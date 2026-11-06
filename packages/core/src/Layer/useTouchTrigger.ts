@@ -80,6 +80,35 @@ export type LayerTouchTrigger = 'auto' | 'tap' | 'none';
  */
 export const TOUCH_POINTER_TYPES = new Set(['touch', 'pen']);
 
+/**
+ * Waits for the tap that a touch or pen press on `trigger` may become: the
+ * press's own `click`. A touch the browser takes for a scroll or a pinch
+ * (`pointercancel`) is no tap. Call it from the press's `pointerdown`; the
+ * returned function forgets the press. Internal.
+ */
+export function awaitTap(
+  trigger: Element,
+  onTap: (tapEvent: Event) => void,
+): () => void {
+  // The tap must belong to this press. A key press or a new pointer press
+  // advances the gesture, so a keyboard activation that later fires `click`
+  // on the trigger (Enter on a button) is not mistaken for it.
+  const gesture = currentGesture();
+  const forget = () => {
+    trigger.removeEventListener('click', handleTap);
+    trigger.removeEventListener('pointercancel', forget);
+  };
+  const handleTap = (tapEvent: Event) => {
+    forget();
+    if (currentGesture() === gesture) {
+      onTap(tapEvent);
+    }
+  };
+  trigger.addEventListener('click', handleTap);
+  trigger.addEventListener('pointercancel', forget);
+  return forget;
+}
+
 export function useTapStop(event: 'click'): {
   onPointerDown: (event: ReactPointerEvent<Element>) => void;
   onClick: (event: ReactMouseEvent<Element>) => void;
@@ -300,7 +329,7 @@ export interface UseTouchTriggerInternalReturn extends UseTouchTriggerReturn {
    * Answers a tap the trigger completed before the layer mounted, by the same
    * rules as a tap it sees, and arms the outside dismissal when it opens.
    */
-  answerTap: () => void;
+  answerTap: (tapEvent: Event | null) => void;
 }
 
 /**
@@ -529,26 +558,12 @@ export function useTouchTriggerInternal(
         return true;
       }
 
-      // The tap must belong to this press. A key press or a new pointer press
-      // advances the gesture, so a keyboard activation that later fires
-      // `click` on the trigger (Enter on a button) is not mistaken for it.
-      const gesture = currentGesture();
-      const forget = () => {
-        trigger.removeEventListener('click', handleTap);
-        trigger.removeEventListener('pointercancel', forget);
+      const forget = awaitTap(trigger, tapEvent => {
         if (forgetPendingTapRef.current === forget) {
           forgetPendingTapRef.current = null;
         }
-      };
-      const handleTap = (tapEvent: Event) => {
-        forget();
-        if (currentGesture() === gesture) {
-          answerTapRef.current(tapEvent);
-        }
-      };
-      trigger.addEventListener('click', handleTap);
-      // The browser took the touch for a scroll or a pinch: no tap is coming.
-      trigger.addEventListener('pointercancel', forget);
+        answerTapRef.current(tapEvent);
+      });
       forgetPendingTapRef.current = forget;
       return true;
     },
@@ -568,8 +583,10 @@ export function useTouchTriggerInternal(
     wasOpenRef.current = isOpen;
   }, [isOpen, disarmOutsideDismiss]);
 
-  // Answers a tap the trigger completed before this layer mounted.
-  const answerTap = useCallback(() => answerTapRef.current(null), []);
+  const answerTap = useCallback(
+    (tapEvent: Event | null) => answerTapRef.current(tapEvent),
+    [],
+  );
 
   return {
     isTouchPointerRef,

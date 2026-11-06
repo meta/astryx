@@ -632,6 +632,74 @@ describe('the truncation tooltip mounts on the first interaction', () => {
     }
   });
 
+  it('opens nothing for a click that follows a scroll with no press of its own', async () => {
+    const {showPopover, restore} = withOverflowAndPopover();
+    try {
+      render(
+        <Text type="body" maxLines={1}>
+          {LABEL}
+        </Text>,
+      );
+      const text = screen.getByText(LABEL);
+      fireEvent.pointerDown(text, {pointerType: 'touch'});
+      fireEvent.pointerCancel(text, {pointerType: 'touch'});
+      fireEvent.click(text);
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 300));
+      });
+      expect(showPopover).not.toHaveBeenCalled();
+    } finally {
+      restore();
+    }
+  });
+
+  it("still mounts on a tap when the caller's handlers prevent the default", async () => {
+    const {showPopover, restore} = withOverflowAndPopover();
+    try {
+      render(
+        <Text
+          type="body"
+          maxLines={1}
+          onPointerDown={event => event.preventDefault()}
+          onClick={event => event.preventDefault()}>
+          {LABEL}
+        </Text>,
+      );
+      tap(screen.getByText(LABEL));
+      await waitFor(
+        () => {
+          expect(showPopover).toHaveBeenCalled();
+        },
+        {timeout: 3000},
+      );
+    } finally {
+      restore();
+    }
+  });
+
+  it('opens for a mouse that leaves and comes back before the tooltip mounts', async () => {
+    const {showPopover, restore} = withOverflowAndPopover();
+    try {
+      render(
+        <Text type="body" maxLines={1}>
+          {LABEL}
+        </Text>,
+      );
+      const text = screen.getByText(LABEL);
+      fireEvent.pointerEnter(text, {pointerType: 'mouse'});
+      fireEvent.pointerLeave(text, {pointerType: 'mouse'});
+      fireEvent.pointerEnter(text, {pointerType: 'mouse'});
+      await waitFor(
+        () => {
+          expect(showPopover).toHaveBeenCalled();
+        },
+        {timeout: 3000},
+      );
+    } finally {
+      restore();
+    }
+  });
+
   it('mounts nothing for a touch that becomes a scroll', async () => {
     const {restore} = withOverflowAndPopover();
     try {

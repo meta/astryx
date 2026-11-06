@@ -323,20 +323,19 @@ export function Heading({
         {...ariaProps}
         {...props}
         onPointerEnter={composeEventHandlers(
-          props.onPointerEnter,
           tooltipInterest.onPointerEnter,
+          props.onPointerEnter,
         )}
         onPointerLeave={composeEventHandlers(
-          props.onPointerLeave,
           tooltipInterest.onPointerLeave,
+          props.onPointerLeave,
         )}
         onPointerDown={composeEventHandlers(
-          props.onPointerDown,
           tooltipInterest.onPointerDown,
+          props.onPointerDown,
         )}
-        onClick={composeEventHandlers(props.onClick, tooltipInterest.onClick)}
-        onFocus={composeEventHandlers(props.onFocus, tooltipInterest.onFocus)}
-        onBlur={composeEventHandlers(props.onBlur, tooltipInterest.onBlur)}>
+        onFocus={composeEventHandlers(tooltipInterest.onFocus, props.onFocus)}
+        onBlur={composeEventHandlers(tooltipInterest.onBlur, props.onBlur)}>
         {children}
       </Component>
       {tooltipEnabled && tooltipInterest.isWanted && (
@@ -348,7 +347,7 @@ export function Heading({
             </span>
           }
           placement={tooltipPlacement}
-          interestBox={tooltipInterest.interestBox}
+          interestRef={tooltipInterest.interestRef}
         />
       )}
     </>

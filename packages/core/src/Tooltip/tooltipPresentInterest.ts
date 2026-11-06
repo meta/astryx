@@ -13,7 +13,7 @@
  *   its trigger attaches, as its own listeners would have.
  */
 
-import {createContext} from 'react';
+import {createContext, type RefObject} from 'react';
 
 /**
  * The interaction on the anchor that mounted the tooltip: a hover from a
@@ -24,12 +24,15 @@ export type TooltipPresentInterest = 'hover' | 'tap' | 'focus' | null;
 
 /**
  * Holds the interaction until the tooltip's trigger attaches. The tooltip
- * reads it once and clears it, so a later remount opens nothing by itself.
+ * reads it once and marks it read, so a later remount opens nothing by itself.
  */
-export interface TooltipPresentInterestBox {
-  current: TooltipPresentInterest;
+export interface TooltipPresentInterestState {
+  interest: TooltipPresentInterest;
+  /** The `click` that completed the tap, for the touch trigger's rules. */
+  tapEvent: Event | null;
+  isRead: boolean;
 }
 
 export const TooltipPresentInterestContext =
-  createContext<TooltipPresentInterestBox | null>(null);
+  createContext<RefObject<TooltipPresentInterestState> | null>(null);
 TooltipPresentInterestContext.displayName = 'TooltipPresentInterestContext';

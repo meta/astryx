@@ -786,16 +786,17 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
 
     // This tooltip mounted after the interaction that wants it. It answers
     // that interaction once, by the same rules as its listeners.
-    const interestBox = latest().presentInterest;
-    const interest = interestBox?.current ?? null;
-    if (interestBox != null) {
-      interestBox.current = null;
+    const state = latest().presentInterest?.current;
+    const interest = state == null || state.isRead ? null : state.interest;
+    const tapEvent = state?.tapEvent ?? null;
+    if (state != null) {
+      state.isRead = true;
     }
     if (isEnabledRef.current && latest().isOpen === undefined) {
       if (interest === 'hover') {
         latest().handleMouseEnter();
       } else if (interest === 'tap') {
-        latest().answerTap();
+        latest().answerTap(tapEvent);
       } else if (
         interest === 'focus' &&
         latest().focusTrigger !== 'never' &&

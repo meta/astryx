@@ -20,16 +20,15 @@ import {
   useRef,
   useState,
   type FocusEvent,
-  type MouseEvent,
   type PointerEvent,
   type ReactNode,
   type RefObject,
 } from 'react';
 import type {LayerPlacement} from '../Layer';
+import {awaitTap} from '../Layer/useTouchTrigger';
 import {
   TooltipPresentInterestContext,
-  type TooltipPresentInterest,
-  type TooltipPresentInterestBox,
+  type TooltipPresentInterestState,
 } from '../Tooltip/tooltipPresentInterest';
 
 const LazyTooltip = lazy(async () =>
@@ -40,39 +39,49 @@ export interface TruncationTooltipInterest {
   /** Whether a hover, tap or focus has reached the element. It stays true. */
   readonly isWanted: boolean;
   /** The interaction that mounted the tooltip, until the tooltip reads it. */
-  readonly interestBox: TooltipPresentInterestBox;
+  readonly interestRef: RefObject<TooltipPresentInterestState>;
   readonly onPointerEnter: (event: PointerEvent<HTMLElement>) => void;
   readonly onPointerLeave: (event: PointerEvent<HTMLElement>) => void;
   readonly onPointerDown: (event: PointerEvent<HTMLElement>) => void;
-  readonly onClick: (event: MouseEvent<HTMLElement>) => void;
   readonly onFocus: (event: FocusEvent<HTMLElement>) => void;
   readonly onBlur: (event: FocusEvent<HTMLElement>) => void;
 }
 
 /**
  * Tracks the interaction that mounts a truncated element's tooltip, while
- * `isEnabled`. A finger's arrival does not count: the browser decides on the
- * press whether it is a tap or a scroll, and only a tap's `click` mounts the
- * tooltip. Once it is mounted, the tooltip's own listeners take over.
+ * `isEnabled`, until the mounted tooltip reads it. A finger's arrival does not
+ * count: only a press that the touch trigger's recognizer takes for a tap
+ * does. Once the tooltip has read the interaction, its own listeners take
+ * over.
  */
 export function useTruncationTooltipInterest(
   isEnabled: boolean,
 ): TruncationTooltipInterest {
   const [isWanted, setIsWanted] = useState(false);
-  const interestRef = useRef<TooltipPresentInterest>(null);
-  const isWantedRef = useRef(false);
-  const pressTypeRef = useRef<string | null>(null);
+  const interestRef = useRef<TooltipPresentInterestState>({
+    interest: null,
+    tapEvent: null,
+    isRead: false,
+  });
+  const forgetTapRef = useRef<(() => void) | null>(null);
   const want = useCallback(
-    (interest: 'hover' | 'tap' | 'focus') => {
-      if (!isEnabled || isWantedRef.current) {
+    (interest: 'hover' | 'tap' | 'focus', tapEvent: Event | null = null) => {
+      const state = interestRef.current;
+      if (!isEnabled || state.isRead) {
         return;
       }
-      interestRef.current = interest;
-      isWantedRef.current = true;
+      state.interest = interest;
+      state.tapEvent = tapEvent;
       setIsWanted(true);
     },
-    [isEnabled, interestRef],
+    [isEnabled],
   );
+  const forget = useCallback((interest: 'hover' | 'focus') => {
+    const state = interestRef.current;
+    if (!state.isRead && state.interest === interest) {
+      state.interest = null;
+    }
+  }, []);
   const onPointerEnter = useCallback(
     (event: PointerEvent<HTMLElement>) => {
       if (event.pointerType !== 'touch') {
@@ -81,36 +90,33 @@ export function useTruncationTooltipInterest(
     },
     [want],
   );
-  const onPointerLeave = useCallback(() => {
-    if (interestRef.current === 'hover') {
-      interestRef.current = null;
-    }
-  }, [interestRef]);
-  const onPointerDown = useCallback((event: PointerEvent<HTMLElement>) => {
-    pressTypeRef.current = event.pointerType;
-  }, []);
-  const onClick = useCallback(() => {
-    const pressType = pressTypeRef.current;
-    pressTypeRef.current = null;
-    if (pressType === 'touch' || pressType === 'pen') {
-      want('tap');
-    }
-  }, [want]);
-  const onFocus = useCallback(() => {
-    want('focus');
-  }, [want]);
-  const onBlur = useCallback(() => {
-    if (interestRef.current === 'focus') {
-      interestRef.current = null;
-    }
-  }, [interestRef]);
+  const onPointerLeave = useCallback(() => forget('hover'), [forget]);
+  const onPointerDown = useCallback(
+    (event: PointerEvent<HTMLElement>) => {
+      forgetTapRef.current?.();
+      forgetTapRef.current = null;
+      if (
+        !isEnabled ||
+        interestRef.current.isRead ||
+        (event.pointerType !== 'touch' && event.pointerType !== 'pen')
+      ) {
+        return;
+      }
+      forgetTapRef.current = awaitTap(event.currentTarget, tapEvent => {
+        forgetTapRef.current = null;
+        want('tap', tapEvent);
+      });
+    },
+    [isEnabled, want],
+  );
+  const onFocus = useCallback(() => want('focus'), [want]);
+  const onBlur = useCallback(() => forget('focus'), [forget]);
   return {
     isWanted,
-    interestBox: interestRef,
+    interestRef,
     onPointerEnter,
     onPointerLeave,
     onPointerDown,
-    onClick,
     onFocus,
     onBlur,
   };
@@ -121,16 +127,16 @@ export function TruncationTooltip({
   anchorRef,
   content,
   placement,
-  interestBox,
+  interestRef,
 }: {
   anchorRef: RefObject<HTMLElement | null>;
   content: ReactNode;
   placement: LayerPlacement;
-  interestBox: TooltipPresentInterestBox;
+  interestRef: RefObject<TooltipPresentInterestState>;
 }): ReactNode {
   return (
     <Suspense fallback={null}>
-      <TooltipPresentInterestContext value={interestBox}>
+      <TooltipPresentInterestContext value={interestRef}>
         <LazyTooltip
           anchorRef={anchorRef}
           content={content}
