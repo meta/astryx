@@ -342,7 +342,11 @@ function confineWrite(target, cwd, options) {
 /** @param {string} file */
 function isExcludedFromCopy(file) {
   return (
-    file.includes('.test.') || file.includes('.doc.') || file === 'README.md'
+    file.includes('.test.') ||
+    file.includes('.doc.') ||
+    file === 'README.md' ||
+    // Browser test harnesses import dev-only packages a consumer cannot resolve.
+    /\.spec\.[cm]?[jt]sx?$/.test(file)
   );
 }
 

@@ -1423,6 +1423,10 @@
     "defaultMessage": "Copy code",
     "description": "\"Code\" = source code. Aria label AND tooltip on the CodeBlock copy button in its default state. Pairs with `codeBlock.copied` (post-click state)."
   },
+  "@astryx.codeBlock.copyFailed": {
+    "defaultMessage": "Failed to copy value to clipboard.",
+    "description": "Aria label, tooltip and screen-reader announcement on the CodeBlock copy button for ~2s after the clipboard write fails. Pairs with `codeBlock.copyCode` and `codeBlock.copied`."
+  },
   "@astryx.codeBlock.code": {
     "defaultMessage": "Code",
     "description": "Screen-reader-only fallback name for a code-snippet scroll container when the code's language is unknown. \"Code\" = source code, not secret code or code of conduct."

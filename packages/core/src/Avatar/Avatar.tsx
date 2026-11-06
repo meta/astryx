@@ -194,8 +194,10 @@ const styles = stylex.create({
     // `.astryx-avatar-fallback` class target (font size through its size
     // variant, `.astryx-avatar-fallback.<size>`), so the defaults here are
     // plain values with no internal-var seam. See Avatar.doc.mjs theming.
+    // Primary text: secondary text on the neutral tint falls below 4.5:1 in
+    // dark mode.
     backgroundColor: colorVars['--color-neutral'],
-    color: colorVars['--color-text-secondary'],
+    color: colorVars['--color-text-primary'],
     fontFamily: typographyVars['--font-family-body'],
     fontWeight: fontWeightVars['--font-weight-medium'],
     textTransform: 'uppercase',
@@ -209,7 +211,7 @@ const styles = stylex.create({
   // only CanvasText is sure to read on it.
   loneFallback: {
     color: {
-      default: colorVars['--color-text-secondary'],
+      default: colorVars['--color-text-primary'],
       '@media (forced-colors: active)': 'currentColor',
     },
   },
