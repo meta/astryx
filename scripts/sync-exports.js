@@ -177,11 +177,6 @@ const STATIC_EXPORTS = {
     types: './dist/utils/interactionOverlay.stylex.d.ts',
     default: './dist/utils/interactionOverlay.stylex.js',
   },
-  './utils/touchHitArea.stylex': {
-    source: './src/utils/touchHitArea.stylex.ts',
-    types: './dist/utils/touchHitArea.stylex.d.ts',
-    default: './dist/utils/touchHitArea.stylex.js',
-  },
   './docs.mjs': './docs.mjs',
   './groups.doc.mjs': './groups.doc.mjs',
   // Rich authoring catalogs keep their existing JSON paths. Generated string
@@ -243,6 +238,7 @@ const FILE_MODULE_SUBPATH_EXPORTS = [
   // public API, and allowed by lint only in Core and Lab
   // (architecture:react-component-runtime INV13).
   'internal/indicatorPress.stylex',
+  'internal/touchHitArea.stylex',
   'internal/touch',
   'internal/selectable-card',
   'internal/spinner-rotor',
