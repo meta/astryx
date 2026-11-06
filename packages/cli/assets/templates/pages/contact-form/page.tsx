@@ -100,7 +100,7 @@ export default function FormSimplePage() {
     timeline: !timeline ? 'Required' : undefined,
     budget: !budget ? 'Required' : undefined,
   };
-  const errors = submitted ? fieldErrors : {};
+  const errors: Partial<typeof fieldErrors> = submitted ? fieldErrors : {};
 
   // A blocked Submit focuses the first field to fix. The goal tokens have no
   // single focus handle, so `goals` is absent here and a blocked Submit

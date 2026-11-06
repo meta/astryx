@@ -86,7 +86,7 @@ export default function FormTwoColumnPage() {
     email: !email.trim() ? 'Required' : undefined,
     details: !details.trim() ? 'Required' : undefined,
   };
-  const errors = submitted ? fieldErrors : {};
+  const errors: Partial<typeof fieldErrors> = submitted ? fieldErrors : {};
 
   // A blocked submit focuses the first field to fix.
   const fieldRefs = {
