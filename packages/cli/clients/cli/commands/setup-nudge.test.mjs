@@ -6,13 +6,13 @@
  * Unit: isAstryxInitialized() detects the Astryx marker across EVERY agent-doc
  * location (including the previously-missed Hermes files) and legacy XDS blocks.
  *
- * Integration: the CLI nudges (stderr) before a command when the project hasn't
- * run init — INCLUDING in --json mode (agents pass --json, and stderr never
- * corrupts the stdout JSON envelope). Quiet once set up, outside a project, and
- * for the installer command itself.
+ * Integration: the CLI reminds (stderr) after a successful command, at most
+ * once a day per project, when the project hasn't run init. Quiet in --json,
+ * under CI, after a failure, once set up, outside a project, and for the
+ * installer command itself.
  */
 
-import {describe, it, expect, beforeEach, afterEach} from 'vitest';
+import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -38,12 +38,23 @@ const MARKER = '<!-- ASTRYX:START -->';
 const NUDGE = /finish setup and install the Astryx agent prompt/;
 
 let tmp;
+/** The per-user folder that records when the reminder last printed. */
+let stateHome;
 beforeEach(() => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-setup-nudge-'));
+  stateHome = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-setup-state-'));
+  vi.stubEnv('XDG_CONFIG_HOME', stateHome);
+  vi.stubEnv('APPDATA', stateHome);
+  vi.stubEnv('CI', '');
 });
 afterEach(() => {
+  vi.unstubAllEnvs();
   fs.rmSync(tmp, {recursive: true, force: true});
+  fs.rmSync(stateHome, {recursive: true, force: true});
 });
+
+/** The per-user state file the reminder records its day in. */
+const stateFile = () => path.join(stateHome, 'astryx', 'state.json');
 
 function write(rel, body) {
   const p = path.join(tmp, rel);
@@ -163,6 +174,60 @@ describe('enforcement layer 3 — per-command setup nudge', () => {
     // nudge must NOT leak into it (json-shim: error envelopes have empty stderr).
     expect(r.stderr).not.toMatch(NUDGE);
     expect(() => JSON.parse(r.stdout)).not.toThrow();
+  });
+
+  // An agent that leaves `init` to its person must not see the reminder
+  // before every command: once a day per project, after a command that
+  // succeeds.
+  it('prints once a day per project: a second command the same day prints none', async () => {
+    asProject();
+    const first = await runCli(['docs', 'tokens'], tmp);
+    expect(first.stderr).toMatch(NUDGE);
+    // After the command's own output, never before it.
+    expect(first.stderr.trimEnd().endsWith('install the Astryx agent prompt.')).toBe(true);
+    expect((await runCli(['docs', 'tokens'], tmp)).stderr).not.toMatch(NUDGE);
+    expect((await runCli(['component', '--list'], tmp)).stderr).not.toMatch(NUDGE);
+  });
+
+  it('prints once again the next day', async () => {
+    asProject();
+    expect((await runCli(['docs', 'tokens'], tmp)).stderr).toMatch(NUDGE);
+    const state = JSON.parse(fs.readFileSync(stateFile(), 'utf8'));
+    const key = Object.keys(state.notifiedAt).find(k => k.startsWith('setup:'));
+    expect(key).toBeDefined();
+    state.notifiedAt[key] = Date.now() - 25 * 60 * 60 * 1000;
+    fs.writeFileSync(stateFile(), JSON.stringify(state));
+    expect((await runCli(['docs', 'tokens'], tmp)).stderr).toMatch(NUDGE);
+    expect((await runCli(['docs', 'tokens'], tmp)).stderr).not.toMatch(NUDGE);
+  });
+
+  it('prints none under CI, and records nothing', async () => {
+    asProject();
+    vi.stubEnv('CI', 'true');
+    expect((await runCli(['docs', 'tokens'], tmp)).stderr).not.toMatch(NUDGE);
+    vi.stubEnv('CI', '');
+    expect((await runCli(['docs', 'tokens'], tmp)).stderr).toMatch(NUDGE);
+  });
+
+  it('prints none after a command that fails', async () => {
+    asProject();
+    const r = await runCli(['component', 'NoSuchComponentAnywhere'], tmp);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).not.toMatch(NUDGE);
+    // The day is not used up: the next command that succeeds prints it.
+    expect((await runCli(['docs', 'tokens'], tmp)).stderr).toMatch(NUDGE);
+  });
+
+  it('doctor reports the missing setup in its own check, every time', async () => {
+    asProject();
+    for (let i = 0; i < 2; i++) {
+      const r = await runCli(['--json', 'doctor'], tmp);
+      const check = JSON.parse(r.stdout).data.checks.find(
+        (/** @type {any} */ c) => c.id === 'agent-docs',
+      );
+      expect(check.message).toMatch(/^No agent docs found/u);
+      expect(check.fix).toMatch(/init --features agents/u);
+    }
   });
 
   it('is quiet once set up (marker present)', async () => {

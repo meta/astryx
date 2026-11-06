@@ -6,7 +6,7 @@
  * bare.
  */
 
-import {afterEach, beforeEach, describe, expect, it} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -71,6 +71,14 @@ describe('the setup nudge in a project with no CLI of its own', () => {
     const app = fs.mkdtempSync(
       path.join(os.tmpdir(), 'astryx-cli-command-nudge-'),
     );
+    // The reminder prints once a day per project and never under CI: give
+    // this run its own per-user state, outside CI.
+    const stateHome = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'astryx-cli-command-state-'),
+    );
+    vi.stubEnv('XDG_CONFIG_HOME', stateHome);
+    vi.stubEnv('APPDATA', stateHome);
+    vi.stubEnv('CI', '');
     try {
       // Only Core, of another release than the CLI that answers, an
       // integration declaring cliCommand, and no agent docs yet.
@@ -105,7 +113,9 @@ describe('the setup nudge in a project with no CLI of its own', () => {
         'Next step: run `npm install @astryxdesign/cli@0.0.1`, then `acme astryx init`',
       );
     } finally {
+      vi.unstubAllEnvs();
       fs.rmSync(app, {recursive: true, force: true});
+      fs.rmSync(stateHome, {recursive: true, force: true});
     }
   });
 });
