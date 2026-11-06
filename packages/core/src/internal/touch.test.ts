@@ -84,6 +84,13 @@ describe('internal/touch', () => {
     }
   });
 
+  it('re-exports by name the finger-scroll watch Lab components read', async () => {
+    const entry: Record<string, unknown> = await import('./touch');
+    const fingerScroll = await import('../gestures/useFingerScroll');
+    expect(entry.useFingerScroll).toBe(fingerScroll.useFingerScroll);
+    expect(typeof entry.useFingerScroll).toBe('function');
+  });
+
   it("re-exports by name what Lab's NavigationStack reads", async () => {
     const entry: Record<string, unknown> = await import('./touch');
     const edgePan = await import('../gestures/ScreenEdgePanGestureRecognizer');
