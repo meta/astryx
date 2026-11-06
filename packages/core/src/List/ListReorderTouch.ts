@@ -108,8 +108,8 @@ export const touchMotion = {
 
   /**
    * The dropped row glides from where its preview was, `shift` from its new
-   * place, to that place on `spring`, starting at the release's y `velocity`
-   * in px/s. Its offset goes once it arrives.
+   * place, to that place on `spring`. It starts at the release's y
+   * `velocity` in px/s. Its offset goes once it arrives.
    */
   glide(
     element: HTMLElement,

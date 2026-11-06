@@ -92,8 +92,9 @@ export const reorder = {
      */
     stepsPt: [2, 2, 3, 3, 4, 6, 8, 10],
     /**
-     * How far inside the edge autoscroll starts (at the first sample's step):
-     * none with the row's edge 12 pt inside, 2 pt per tick at 3 pt inside.
+     * How far inside the edge autoscroll starts, at the first sample's step.
+     * There is none with the row's edge 12 pt inside, and 2 pt per tick at
+     * 3 pt inside.
      * @source GUESS — a point inside the measured bracket (12 to 3 pt)
      * @measure M-RO26
      */
