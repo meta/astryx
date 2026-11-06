@@ -107,12 +107,14 @@ streaming behavior is the released one.
   a prose block — a paragraph, heading, quote, or list item — lays out in the
   direction of its own text rather than the Internationalization provider's,
   so a Hebrew paragraph in a left-to-right document starts at the right edge.
-  A block whose text carries no strongly directional character keeps the
-  direction around it. A list, table, or fence orders its contents in its
-  parent's direction: the provider's at the top level, its item's when
-  nested. The text in each table cell reads in its own direction. Each prose
-  block and table cell whose text has a direction carries it as a `dir`
-  attribute; that markup is the only DOM change. Parsing, styling targets, and
+  A block or table cell whose text carries no strongly directional character
+  takes the provider's direction, at any nesting depth. A list, table, or
+  fence orders its contents in its parent's direction: the provider's at the
+  top level, its item's when nested. The text in each table cell reads in its
+  own direction. Each prose block and table cell whose text has a direction
+  carries it as a `dir` attribute, and a block or cell without one carries
+  the provider's direction as `dir` when the block around it reads the other
+  way; that markup is the only DOM change. Parsing, styling targets, and
   a supplied renderer's contract are unchanged. Fenced code lines keep the frame's
   direction; FR6's per-line rule is a gap this record does not yet close.
 - Default-path headerless layout (`component:CodeBlock` FR11), visual and not
