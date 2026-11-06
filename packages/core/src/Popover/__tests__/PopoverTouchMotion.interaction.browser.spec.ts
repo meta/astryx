@@ -280,9 +280,9 @@ const WINDOW_START_MS = 400;
 /** The shortest rendering window the proof judges, ms: about 18 frames. */
 const MIN_WINDOW_MS = 300;
 
-/** The blocked-thread proof's growth: 600 ms at a constant speed. */
+/** The blocked-thread proof's growth: 1.2 s at a constant speed. */
 const STEADY_GROWTH =
-  '[popover]:has([role="dialog"]) { --duration-medium-min: 600ms; --ease-entrance: linear; }';
+  '[popover]:has([role="dialog"]) { --duration-medium-min: 1200ms; --ease-entrance: linear; }';
 
 /** The page's clock, epoch ms. */
 async function pageNow(page: Page): Promise<number> {
@@ -603,18 +603,18 @@ test('the presentation keeps advancing every frame while the main thread is bloc
   await page.addStyleTag({
     content: '[popover]:has([role="dialog"]) { opacity: 1 !important; }',
   });
-  // The growth runs 600 ms at a constant speed here. Each frame then moves
-  // several pixels, and a block that starts late on a loaded machine still
-  // lands inside the growth.
+  // The growth runs 1.2 s at a constant speed here, so a 1 s block lands
+  // inside it on a loaded machine too. The marker is 240 px wide, and its
+  // width grows by about 3 px in every frame.
   await page.addStyleTag({content: STEADY_GROWTH});
-  await markElement(story.layer, {size: 24, inset: 0});
+  await markElement(story.layer, {size: 240, inset: 0});
   const entrance = await themeTiming(story.layer, POPOVER_ENTRANCE_TOKENS);
-  expect(entrance.ms).toBe(600);
+  expect(entrance.ms).toBe(1200);
   const cast = await startScreencast(page);
   // The page itself blocks once the growth has run a frame. A block sent from
   // here starts later on a busy machine.
   const opened = await pageNow(page);
-  const blocking = blockMainThread(page, 400, {
+  const blocking = blockMainThread(page, 1000, {
     during: story.layer,
     minProgressMs: 16,
   });
@@ -624,7 +624,7 @@ test('the presentation keeps advancing every frame while the main thread is bloc
   await page.waitForTimeout(100);
   const castFrames = await cast.stop();
   const tracked = await trackMarker(page, castFrames);
-  // Up to the end of the growth: until then the marker moves one way only.
+  // Up to the end of the growth: until then the marker only grows.
   const window = {
     from: block.from,
     to: Math.min(block.to, growth + entrance.ms - 20),
@@ -632,7 +632,7 @@ test('the presentation keeps advancing every frame while the main thread is bloc
   // Judging stops within 2 steps of the end, where the screencast's whole
   // pixels show plateaus.
   const proof = busyWindowProof(tracked, window, {
-    axis: 'x',
+    axis: 'width',
     settledWithinSteps: 2,
   });
   await writeEvidence(
@@ -653,7 +653,7 @@ test('the presentation keeps advancing every frame while the main thread is bloc
     to: window.to + 40,
     columns: 8,
     cellScale: 0.35,
-    data: t => ({x: tracked.find(f => f.t === t)?.box?.x ?? -1}),
+    data: t => ({width: tracked.find(f => f.t === t)?.box?.width ?? -1}),
   });
   await film.write(testInfo, {block, growth});
   expect(proof.verdict.failures, proof.summary).toEqual([]);
