@@ -112,7 +112,7 @@ const {detach} = reorderable.attach(listElement, {
   `onReorder({ key, to })`, an optional `isReorderable(key)` predicate, and
   an optional `positions()`, which supplies drop positions for layouts such as a
   fanned hand or a custom grid; collections the measured layout already places
-  do not need it. An optional `feedback` chooses how a drag previews
+  do not need it. An optional `feedbackBehavior` chooses how a drag previews
   its landing place: `'insertion-line'` (default) or `'shift'` (FR9).
   `positions()` returns one `{x, y}` per item, in item order: the center of
   that item's slot, in pixels from the top-left corner of the collection's
@@ -128,7 +128,7 @@ const {detach} = reorderable.attach(listElement, {
   collection's full item order (every item it was given, mounted or not). In a
   tree, `to` is `{ parent, index }`: `parent` is the new parent's key (`null`
   at the root) and `index` is the item's position among that parent's children
-  after the move (DEC-3). Beyond `feedback`, it carries no gesture, animation, or timing settings. An optional
+  after the move (DEC-3). Beyond `feedbackBehavior`, it carries no gesture, animation, or timing settings. An optional
   `isReorderable(key)` predicate keeps a row in place: a row it rejects shows no
   handle and cannot be picked up (DEC-2). A row it rejects at either end of the
   collection also bounds the drop range: nothing drops beyond it, and a
@@ -292,20 +292,20 @@ const {detach} = reorderable.attach(listElement, {
   FR21 and DEC-28 apply only to an API chosen as experimental.
 - **FR7 — Admitted and documented as public API.** `reorderable` is caller
   intent no collection can derive (`spec:AST-002` FR1, DEC-1), and its
-  thresholds stay internal (`spec:AST-002` FR3). `feedback` is caller intent
+  thresholds stay internal (`spec:AST-002` FR3). `feedbackBehavior` is caller intent
   as well (`spec:AST-002` FR5): a settings list and a hand of playing cards
   can share a layout and the same items, yet the list needs a precise
   insertion line for small drop targets and the hand needs its cards to make
   room as physical cards do. Only the caller knows which its content is; the
   layout and `positions()` do not tell them apart. `createReorderable` has its
-  own canonical descriptor, which documents `feedback`, and each adopting
+  own canonical descriptor, which documents `feedbackBehavior`, and each adopting
   collection's descriptor documents `reorderable` (`spec:AST-039` FR1, FR3).
 - **FR8 — One public shape for the job.** A collection that reorders uses
   this object and no other public reorder API.
 
-- **FR9 — Shift feedback is opt-in.** With `feedback: 'insertion-line'`, the
+- **FR9 — Shift feedback is opt-in.** With `feedbackBehavior: 'insertion-line'`, the
   default, a drag previews its landing place as `design:ordered-collection-reordering`
-  DEC-1 states. With `feedback: 'shift'`, the neighbours slide aside live to
+  DEC-1 states. With `feedbackBehavior: 'shift'`, the neighbours slide aside live to
   open the gap where the item will land, on `spec:AST-105` FR4's one shared
   motion, as a compositor translate of the rows already rendered
   (`spec:AST-094` FR5) with no added element and no insertion line; the
@@ -444,7 +444,7 @@ Rejected: a translator-function option, and one flat option per string.
 **Decider:** `cixzhang`, `2026-10-28`
 
 Some collections, such as a hand of playing cards, read better when the items
-shift during the drag, as iOS does. `feedback: 'shift'` opts into that while
+shift during the drag, as iOS does. `feedbackBehavior: 'shift'` opts into that while
 the insertion line stays the default (`design:ordered-collection-reordering`
 DEC-2).
 
