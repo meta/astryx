@@ -172,6 +172,7 @@ async function openFixture(page: Page, storyId: string): Promise<void> {
 interface CaptureWindow extends ReaderWindow {
   __paneAnimations: Animation[];
   __paneAnimate?: Element['animate'];
+  __collapsedTextBefore?: string | null;
 }
 
 /**
@@ -194,6 +195,9 @@ async function captureMotion(
     const capture = window as unknown as CaptureWindow;
     const animations: Animation[] = [];
     capture.__paneAnimations = animations;
+    capture.__collapsedTextBefore = document
+      .querySelector('[role="separator"]')
+      ?.getAttribute('aria-valuetext');
     const animate = Element.prototype.animate;
     capture.__paneAnimate = animate;
     Element.prototype.animate = function (
@@ -216,15 +220,24 @@ async function captureMotion(
     async ({sideArg, moments}) => {
       const capture = window as unknown as CaptureWindow;
       const animations = capture.__paneAnimations;
-      // The change commits in the input's own task; give a later commit time
-      // to land before deciding nothing animates. Nothing it starts can run
-      // meanwhile.
-      for (
-        let waited = 0;
-        waited < 1000 && animations.length === 0;
-        waited += 50
+      // Wait until the change commits: an animation starts, or the handle
+      // says the collapse state changed. Two more frames let a later commit
+      // start its motion. Frames, not time, so a starved page only takes
+      // longer. Nothing it starts can run meanwhile.
+      const nextFrame = async () =>
+        new Promise(resolve => requestAnimationFrame(resolve));
+      const collapsedText = () =>
+        document
+          .querySelector('[role="separator"]')
+          ?.getAttribute('aria-valuetext');
+      while (
+        animations.length === 0 &&
+        collapsedText() === capture.__collapsedTextBefore
       ) {
-        await new Promise(resolve => setTimeout(resolve, 50));
+        await nextFrame();
+      }
+      for (let frame = 0; frame < 2 && animations.length === 0; frame++) {
+        await nextFrame();
       }
       if (capture.__paneAnimate != null) {
         Element.prototype.animate = capture.__paneAnimate;
@@ -297,6 +310,9 @@ async function holdMotionAt(
     const capture = window as unknown as CaptureWindow;
     const animations: Animation[] = [];
     capture.__paneAnimations = animations;
+    capture.__collapsedTextBefore = document
+      .querySelector('[role="separator"]')
+      ?.getAttribute('aria-valuetext');
     const animate = Element.prototype.animate;
     capture.__paneAnimate = animate;
     Element.prototype.animate = function (
@@ -318,12 +334,21 @@ async function holdMotionAt(
   const held = await page.evaluate(async at => {
     const capture = window as unknown as CaptureWindow;
     const animations = capture.__paneAnimations;
-    for (
-      let waited = 0;
-      waited < 1000 && animations.length === 0;
-      waited += 50
+    // As in `captureMotion`: frames until the change commits, then two more.
+    const nextFrame = async () =>
+      new Promise(resolve => requestAnimationFrame(resolve));
+    const collapsedText = () =>
+      document
+        .querySelector('[role="separator"]')
+        ?.getAttribute('aria-valuetext');
+    while (
+      animations.length === 0 &&
+      collapsedText() === capture.__collapsedTextBefore
     ) {
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await nextFrame();
+    }
+    for (let frame = 0; frame < 2 && animations.length === 0; frame++) {
+      await nextFrame();
     }
     if (capture.__paneAnimate != null) {
       Element.prototype.animate = capture.__paneAnimate;
