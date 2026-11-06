@@ -120,7 +120,6 @@ export function fixedContainerOf(element: Element): FixedContainer {
   return dock === 'docked' ? {docked: node} : dock;
 }
 
-// The nearest fixed-position ancestor of `element`, or null.
 function nearestFixedAncestor(element: Element): HTMLElement | null {
   const view = element.ownerDocument.defaultView;
   if (view == null) {
@@ -184,7 +183,6 @@ function hasOwnTranslate(node: HTMLElement, view: Window): boolean {
   return ride == null || ride.get('y') === 0;
 }
 
-// The properties that move a bar on the page.
 const POSITION_PROPERTIES = new Set([
   'transform',
   'translate',
@@ -254,7 +252,6 @@ function isMovedByApp(node: HTMLElement): boolean {
   });
 }
 
-// Whether `node` is a fixed container docked to the viewport's bottom edge.
 function isDockedContainer(node: HTMLElement): boolean {
   const view = node.ownerDocument.defaultView;
   return (
