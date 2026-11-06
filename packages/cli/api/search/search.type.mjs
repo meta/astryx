@@ -63,7 +63,9 @@
  *   contract: they may change in any release, which is why `version` must match.
  * @property {string} [coreSkipped] - Why Core could not be had where the index
  *   was made, when it could not: its components, hooks and templates are then
- *   missing, and `rankSearchIndex()` reports `meta.partial` as `search` does.
+ *   missing, and `rankSearchIndex()` answers as `search` does without Core
+ *   (`meta.partial` for an open search; refused for a domain that reads Core).
+ * @property {string} [coreSkippedCode] - The error code that Core lookup gave.
  */
 
 /**
