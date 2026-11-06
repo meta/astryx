@@ -25,8 +25,8 @@ const styles = stylex.create({
     WebkitUserSelect: 'none',
     userSelect: 'none',
   },
-  // The menu is anchored to this 1px box at the cursor point inside the
-  // trigger, so it follows the content on scroll and flips at viewport edges.
+  // The menu anchors to this 1px box at the cursor point. So it follows
+  // the content on scroll and flips at viewport edges.
   // It owns a box because WebKit counts an empty anchor box as clipped, and
   // the default `position-visibility: anchors-visible` then hides the menu.
   cursorAnchor: {

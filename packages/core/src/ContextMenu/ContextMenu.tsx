@@ -305,10 +305,9 @@ export interface ContextMenuTriggerHandlers {
 }
 
 /**
- * A trigger rendered by the caller: the right-click target, the 1px cursor
- * anchor inside it (positioned absolutely, as `ContextMenu` renders its own),
- * and a callback that receives the trigger's handlers while the menu is
- * mounted (and `null` once it unmounts).
+ * A trigger that the caller renders. It has the right-click target and the
+ * 1px cursor anchor inside it. Its callback receives the trigger's handlers
+ * while the menu is mounted, and `null` after the menu unmounts.
  */
 export interface ContextMenuExternalTrigger {
   triggerRef: React.RefObject<HTMLElement | null>;
@@ -357,9 +356,9 @@ export function ContextMenu(props: ContextMenuProps): ReactNode {
 ContextMenu.displayName = 'ContextMenu';
 
 /**
- * Internal. `ContextMenu` without its own trigger: the menu opens from the
- * trigger and cursor anchor in `trigger`, which the caller renders and keeps
- * mounted, so the caller's content survives this component loading lazily.
+ * Internal. `ContextMenu` without its own trigger. The menu opens from the
+ * trigger and cursor anchor in `trigger`. The caller renders them and keeps
+ * them mounted, so its content survives while this component loads lazily.
  * Until it mounts, the trigger has no handlers. The caller decides what an
  * early invocation does.
  */

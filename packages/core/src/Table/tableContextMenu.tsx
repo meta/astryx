@@ -77,9 +77,8 @@ function toContextMenuOptions(
 /**
  * The menu for a cell whose trigger TableCellContextMenu renders. It loads
  * lazily beside the cell's content, so the content never remounts. A getter
- * is resolved when the menu opens and memoized until it closes, so plugins
- * that pass a getter don't build an action array for every cell on every
- * render.
+ * resolves when the menu opens and stays memoized until the menu closes. So
+ * a plugin that passes a getter builds no action array on each cell render.
  */
 export function TableContextMenuForTrigger({
   actions,

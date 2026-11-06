@@ -5,10 +5,9 @@
  * @output Tests what an invocation before the menu loads does once it loads:
  *   a long press opens the menu, a tap does not, only the last held cell
  *   opens, and a later press or key drops the hold
- * @position Validates the early long press in TableCellContextMenu. Each test
- *   starts from a fresh module registry and a fresh mock that holds the menu
- *   module until the test releases it, so the menu is unloaded during the
- *   touch.
+ * @position Validates early invocations in TableCellContextMenu. Each test
+ *   starts from a fresh module registry and a fresh mock. The mock holds the
+ *   menu module until the test releases it.
  */
 
 import {describe, it, expect, vi, beforeEach} from 'vitest';

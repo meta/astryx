@@ -62,15 +62,16 @@ export function mockPopover(): void {
 }
 
 /**
- * Renders `cell` (a table holding one cell with `scenarioActions` around
- * `<StatefulContent />`) while the menu module is still loading, edits and
- * focuses the content, and lets the menu load. It checks that the content
- * kept its nodes, state and single mount, and that the menu opens from the
- * keyboard (Shift+F10), navigates and returns focus on Escape.
+ * Renders `cell` while the menu module is still loading. `cell` is a table
+ * with one cell that has `scenarioActions` around `<StatefulContent />`. The
+ * scenario edits and focuses the content, then lets the menu load. It checks
+ * that the content kept its nodes, state and single mount. It then checks
+ * that the menu opens from the keyboard (Shift+F10), navigates, and returns
+ * focus on Escape.
  *
- * With `invoke: 'before-load'`, the Shift+F10 arrives while the menu is still
- * loading: the cell holds it, so the browser's menu does not open, and the
- * cell's menu opens once it loads.
+ * With `invoke: 'before-load'`, the Shift+F10 arrives before the menu loads.
+ * The cell holds it, so the browser's menu does not open. The cell's menu
+ * opens after the load.
  */
 export async function expectContentSurvivesMenuLoad(
   cell: ReactNode,
