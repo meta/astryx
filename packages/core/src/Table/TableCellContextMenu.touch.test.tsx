@@ -2,22 +2,68 @@
 
 /**
  * @file TableCellContextMenu.touch.test.tsx
- * @output Tests that a long press on a cell before its menu loads opens the
- *   menu once it loads
- * @position Validates the early long press in TableCellContextMenu; its own
- *   file so the menu starts unloaded
+ * @output Tests that a touch on a cell before its menu loads is handled once
+ *   the menu loads: a long press opens it, a tap does not
+ * @position Validates the early long press in TableCellContextMenu. Each test
+ *   starts from a fresh module registry and holds the menu module until it
+ *   releases it, so the menu is unloaded during the touch.
  */
 
-import {describe, it, expect, beforeEach} from 'vitest';
+import {describe, it, expect, vi, beforeEach} from 'vitest';
 import {act, fireEvent, render, screen} from '@testing-library/react';
-import {Table} from './Table';
-import {TableBody} from './TableBody';
-import {TableRow} from './TableRow';
-import {TableCell} from './TableCell';
-import {loadTableContextMenu} from './TableCellContextMenu';
+import type {ReactNode} from 'react';
 import {mockPopover, scenarioActions} from './__tests__/menuLoadScenario';
 
-beforeEach(mockPopover);
+const gate = vi.hoisted(() => ({
+  release: () => {},
+  opened: Promise.resolve(),
+}));
+vi.mock('./tableContextMenu', async importOriginal => {
+  await gate.opened;
+  return importOriginal();
+});
+
+beforeEach(() => {
+  mockPopover();
+  vi.resetModules();
+  gate.opened = new Promise<void>(resolve => {
+    gate.release = resolve;
+  });
+});
+
+async function renderColdCell(label: string): Promise<{
+  trigger: HTMLElement;
+  loadMenu: () => Promise<void>;
+}> {
+  const [{Table}, {TableBody}, {TableRow}, {TableCell}, menu] =
+    await Promise.all([
+      import('./Table'),
+      import('./TableBody'),
+      import('./TableRow'),
+      import('./TableCell'),
+      import('./TableCellContextMenu'),
+    ]);
+  const cell: ReactNode = (
+    <Table>
+      <TableBody>
+        <TableRow>
+          <TableCell contextMenuActions={scenarioActions}>{label}</TableCell>
+        </TableRow>
+      </TableBody>
+    </Table>
+  );
+  render(cell);
+  return {
+    trigger: screen.getByText(label),
+    loadMenu: async () => {
+      gate.release();
+      await act(async () => {
+        await menu.loadTableContextMenu();
+      });
+      await wait(0);
+    },
+  };
+}
 
 async function wait(ms: number) {
   await act(async () => {
@@ -25,29 +71,17 @@ async function wait(ms: number) {
   });
 }
 
-describe('TableCellContextMenu early long press', () => {
+describe('TableCellContextMenu early touch', () => {
   it('opens the menu for a press held past the deadline and lifted before the menu loads', async () => {
-    render(
-      <Table>
-        <TableBody>
-          <TableRow>
-            <TableCell contextMenuActions={scenarioActions}>Hold me</TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>,
-    );
-    const trigger = screen.getByText('Hold me');
+    const {trigger, loadMenu} = await renderColdCell('Hold me');
     fireEvent.touchStart(trigger, {touches: [{clientX: 10, clientY: 10}]});
-    // A jitter inside the movement tolerance keeps the press.
+    // A move inside the movement tolerance keeps the press.
     fireEvent.touchMove(trigger, {touches: [{clientX: 14, clientY: 12}]});
     await wait(650);
     fireEvent.touchEnd(trigger, {touches: []});
     expect(screen.queryByRole('menu', {hidden: true})).toBeNull();
 
-    await act(async () => {
-      await loadTableContextMenu();
-    });
-    await wait(0);
+    await loadMenu();
 
     expect(
       screen.getByRole('menuitem', {name: 'Copy', hidden: true}),
@@ -55,22 +89,13 @@ describe('TableCellContextMenu early long press', () => {
   });
 
   it('does not open the menu for a tap before the menu loads', async () => {
-    render(
-      <Table>
-        <TableBody>
-          <TableRow>
-            <TableCell contextMenuActions={scenarioActions}>Tap me</TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>,
-    );
-    const trigger = screen.getByText('Tap me');
+    const {trigger, loadMenu} = await renderColdCell('Tap me');
     fireEvent.touchStart(trigger, {touches: [{clientX: 10, clientY: 10}]});
     fireEvent.touchEnd(trigger, {touches: []});
-    await act(async () => {
-      await loadTableContextMenu();
-    });
+
+    await loadMenu();
     await wait(600);
+
     expect(screen.queryByRole('menu', {hidden: true})).toBeNull();
   });
 });
