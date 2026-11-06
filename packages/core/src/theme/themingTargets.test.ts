@@ -348,10 +348,16 @@ describe('extractThemeTargets', () => {
  * one of these exact keys at the top level, so a prop that selects from that
  * map is a visual axis. A gap scale sets none of them and is out of scope.
  *
- * The guard does not count these shapes, so it does not check them:
+ * The guard does not check these shapes:
  * - a key that is not in the list, such as the longhand
  *   `borderInlineStartColor`;
  * - a key inside a nested block, such as a `'::before'` pseudo-element block;
+ * - a namespace written as a function, such as `sm: v => ({fontSize: v})`;
+ * - a map imported from another file;
+ * - a lookup outside a `stylex.props()` call, such as inside
+ *   `focusOutlineProps.focusVisible()`;
+ * - a lookup keyed by an expression, such as `sizeStyles[size ?? 'sm']`, and
+ *   not by a destructured prop name;
  * - a lookup in a nested function that destructures its own props, when the
  *   lookup key is a prop of the function around it.
  */
