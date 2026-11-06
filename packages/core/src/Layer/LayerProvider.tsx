@@ -30,6 +30,8 @@ export interface LayerProviderProps {
   inset?: LayerInset;
 }
 
+const DEFAULT_TOAST_CONFIG = {};
+
 /**
  * App-level provider for layer systems (toast, sheet, imperative modals).
  *
@@ -47,8 +49,6 @@ export interface LayerProviderProps {
  * </LayerProvider>
  * ```
  */
-const DEFAULT_TOAST_CONFIG = {};
-
 export function LayerProvider({
   children,
   toast: toastConfig = DEFAULT_TOAST_CONFIG,
