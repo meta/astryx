@@ -141,9 +141,13 @@ page's own `requestAnimationFrame`, the CSS animation and transition events,
 and `Element.animate` as it is called, pending animations included. So
 `waitForAnimation` also reports one that started after the last
 `waitForRest`, `waitForAnimation` or `watchAnimations` and has already finished (`finishedAt`
-set): a short entrance no longer races the first look on a cold page. When the
-action may be the page's first contact with the harness, take
-`watchAnimations(locator)` before it and read `watch.started()` after.
+set): a short entrance no longer races the first look on a cold page. A run
+that the page cancels while it plays ended there, with no finish event. Core's
+motion animator retires each run with `cancel()` once its curve ends. The
+recorder dates such a run at the cancel, and a wait reports it once it
+presented `minProgressMs`. When the action may be the page's first contact
+with the harness, take `watchAnimations(locator)` before it and read
+`watch.started()` after.
 
 **Busy main thread.** Mark the element, start the screencast, start the
 animation, wait until it runs (`waitForAnimation`: an animation cannot start
