@@ -8,6 +8,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {discoverExternalPackages} from '../../foundation/fs/paths.mjs';
+import {listDir} from '../../foundation/fs/listing-cache.mjs';
 import {
   discoverComponents,
   discoverValidIntegrationComponents,
@@ -103,7 +104,7 @@ async function gatherCoreComponents(coreDir) {
   // A family doc with no component of its own name (Chat) names members too.
   const srcDir = path.join(coreDir, 'src');
   const listed = new Set(names);
-  for (const dir of fs.existsSync(srcDir) ? fs.readdirSync(srcDir) : []) {
+  for (const dir of fs.existsSync(srcDir) ? listDir(srcDir) : []) {
     const doc = path.join(srcDir, dir, `${dir}.doc.mjs`);
     if (listed.has(dir) || !fs.existsSync(doc)) continue;
     for (const [n, place] of familyPlaces(await loadModuleDoc(doc)))

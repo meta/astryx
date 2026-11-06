@@ -141,9 +141,13 @@ page's own `requestAnimationFrame`, the CSS animation and transition events,
 and `Element.animate` as it is called, pending animations included. So
 `waitForAnimation` also reports one that started after the last
 `waitForRest`, `waitForAnimation` or `watchAnimations` and has already finished (`finishedAt`
-set): a short entrance no longer races the first look on a cold page. When the
-action may be the page's first contact with the harness, take
-`watchAnimations(locator)` before it and read `watch.started()` after.
+set): a short entrance no longer races the first look on a cold page. A run
+that the page cancels while it plays ended there, with no finish event. Core's
+motion animator retires each run with `cancel()` once its curve ends. The
+recorder dates such a run at the cancel, and a wait reports it once it
+presented `minProgressMs`. When the action may be the page's first contact
+with the harness, take `watchAnimations(locator)` before it and read
+`watch.started()` after.
 
 **Busy main thread.** Mark the element, start the screencast, start the
 animation, wait until it runs (`waitForAnimation`: an animation cannot start
@@ -286,7 +290,12 @@ and judge the runs pooled (`pooledBusyProof(runs)`, each run with its own
 tracked frames, control and window): the control must move on at least four
 frames over all the runs, the component on every one of them, and in each run
 its longest stall may be no longer than that run's control's, since a stall
-belongs to its run.
+belongs to its run. A run whose control moved on fewer frames than
+`minRunFrames` (1 by default) is too little to judge: the summary names it,
+and the pool leaves it out, so it never counts as a pass. The pool fails with
+fewer than `minJudgedRuns` judged runs (half, rounded up). In each judged run,
+the component must move on every frame its control moved on, so a freeze fails
+its run.
 
 On a loaded machine Chromium's screencast can skip frames the compositor
 still presents. `startCompositorTrace(page)`, started with the screencast and

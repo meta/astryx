@@ -3,6 +3,7 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {stubMatchMedia} from '../__tests__/stubMatchMedia';
 import {holdEntranceInput} from './holdEntranceInput';
+import {subscribeInput} from '../utils/inputStream';
 import {isInHeldLayer, isInputShield} from './inputHold';
 
 function deferred() {
@@ -155,6 +156,42 @@ describe('holdEntranceInput', () => {
     expect(tap(button, 'touch', 1)).toEqual([]);
     expect(tap(button, 'pen', 2)).toEqual([]);
     expect(tap(button, 'mouse', 3)).toEqual([
+      'pointerdown',
+      'pointerup',
+      'click',
+    ]);
+  });
+
+  it("after a finger, leaves open the point where the mouse rests: a still mouse's press reaches the layer, a finger's is held (spec:AST-094 FR35)", () => {
+    // Press feedback hears the page's pointer moves through the stream on any
+    // page with a pressable. The mouse came to rest; then a finger opened the
+    // layer.
+    const stop = subscribeInput(window, 'pointermove', () => {});
+    document.body.dispatchEvent(
+      new PointerEvent('pointermove', {
+        ...INIT,
+        pointerType: 'mouse',
+        clientX: 50,
+        clientY: 30,
+      }),
+    );
+    document.body.dispatchEvent(
+      new PointerEvent('pointermove', {...INIT, pointerType: 'touch'}),
+    );
+    stop();
+    const layer = mountLayer([fakeAnimation(new Promise(() => {}))]);
+    const button = layer.firstElementChild as Element;
+
+    hold(layer);
+    const shield = [...layer.children].find(child =>
+      isInputShield(child),
+    ) as HTMLElement;
+    expect(shield.style.pointerEvents).toBe('auto');
+    expect(shield.style.getPropertyValue('clip-path')).toContain(
+      '48px 28px, 48px 32px, 52px 32px, 52px 28px',
+    );
+    expect(tap(button, 'touch', 1)).toEqual([]);
+    expect(tap(button, 'mouse', 2)).toEqual([
       'pointerdown',
       'pointerup',
       'click',
