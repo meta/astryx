@@ -13,17 +13,13 @@
  * - /packages/core/src/BottomSheet/BottomSheet.tsx
  * - /packages/core/src/BottomSheet/BottomSheetSwitcher.tsx
  * - /packages/core/src/BottomSheet/BottomSheetStacking.test.tsx
- *
- * A sheet rendered in another sheet's content is part of that sheet: it is
- * presented only while its host is open, leaves with it, and comes back with
- * it if its own `isOpen` is still true. Without this a host closing from code
- * would leave the inner dialog open in the top layer with no box to paint —
- * an invisible modal blocking the page. The inner sheet's state is never
- * written by the host: it stays the consumer's, as with a Dialog rendered in
- * a closed Dialog. The context is provided by every host (standalone, modal
- * or not, and each switcher step) and read by every standalone sheet and
- * every switcher flow; at the root it is null, which reads as "open".
  */
+
+// A sheet rendered in another sheet's content is presented only while its
+// host is open. Without this, a host that closes from code would leave the
+// inner dialog open in the top layer with no box: an invisible modal that
+// blocks the page. The host never writes the inner sheet's state. At the
+// root the context is null, which reads as open.
 
 import {createContext} from 'react';
 

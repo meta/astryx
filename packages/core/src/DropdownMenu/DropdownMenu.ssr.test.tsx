@@ -4,7 +4,8 @@
  * @file DropdownMenu.ssr.test.tsx
  * @input DropdownMenu server markup and React hydration
  * @output Proves a bottom-sheet DropdownMenu hydrates without a recoverable
- *   error while its on-demand sheet has not loaded (spec:AST-013 FR9)
+ *   error or a console error while its on-demand sheet has not loaded
+ *   (spec:AST-013 FR9)
  * @position SSR acceptance test for DropdownMenu; it waits for the on-demand
  *   sheet modules each hydration starts, so none loads after teardown
  */
@@ -13,13 +14,25 @@ import {act} from 'react';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import {hydrateRoot} from 'react-dom/client';
 import {renderToString} from 'react-dom/server';
+// The menu and its on-demand sheet, loaded while this file is collected,
+// which is untimed: a first load can take seconds on a busy machine. Each
+// fresh module graph below runs these modules again without that cost.
+import './DropdownMenu';
+import './MenuBottomSheet';
+import './MenuBottomSheetActionList';
 
 afterEach(() => {
   vi.restoreAllMocks();
   document.body.replaceChildren();
 });
 
-async function serverRenderThenHydrate(): Promise<unknown[]> {
+/** What a hydration reported: its recoverable errors and its console errors. */
+interface Hydration {
+  recoverableErrors: unknown[];
+  consoleErrors: unknown[][];
+}
+
+async function serverRenderThenHydrate(): Promise<Hydration> {
   // A fresh module graph is a fresh server process: the sheet has not loaded.
   vi.resetModules();
   const {DropdownMenu} = await import('./DropdownMenu');
@@ -34,7 +47,9 @@ async function serverRenderThenHydrate(): Promise<unknown[]> {
   container.innerHTML = renderToString(tree);
   document.body.appendChild(container);
 
-  vi.spyOn(console, 'error').mockImplementation(() => {});
+  // Watched, not muted: React reports some mismatches (an attribute that
+  // differs, for one) only on the console.
+  const logged = vi.spyOn(console, 'error');
   const recoverableErrors: unknown[] = [];
   let root!: ReturnType<typeof hydrateRoot>;
   await act(async () => {
@@ -55,13 +70,24 @@ async function serverRenderThenHydrate(): Promise<unknown[]> {
     root.unmount();
   });
   container.remove();
-  return recoverableErrors;
+  const consoleErrors = [...logged.mock.calls];
+  logged.mockRestore();
+  return {recoverableErrors, consoleErrors};
 }
 
 describe('DropdownMenu — SSR', () => {
   it('hydrates a bottom-sheet menu cleanly on the first renders of a server process', async () => {
-    expect(await serverRenderThenHydrate()).toEqual([]);
-    expect(await serverRenderThenHydrate()).toEqual([]);
-    expect(await serverRenderThenHydrate()).toEqual([]);
+    expect(await serverRenderThenHydrate()).toEqual({
+      recoverableErrors: [],
+      consoleErrors: [],
+    });
+    expect(await serverRenderThenHydrate()).toEqual({
+      recoverableErrors: [],
+      consoleErrors: [],
+    });
+    expect(await serverRenderThenHydrate()).toEqual({
+      recoverableErrors: [],
+      consoleErrors: [],
+    });
   }, 30000);
 });

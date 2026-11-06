@@ -22,7 +22,7 @@ permissions: {}
 jobs:
   build-previews:
     name: Build Previews
-    runs-on: 2-core-ubuntu-arm
+    runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
     steps:
@@ -56,7 +56,7 @@ jobs:
   screenshot:
     name: Capture Screenshots
     needs: build-previews
-    runs-on: 2-core-ubuntu-arm
+    runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
     steps:

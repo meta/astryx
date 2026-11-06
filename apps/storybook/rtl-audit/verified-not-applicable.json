@@ -110,6 +110,16 @@
     "reason": "IconButton is a thin wrapper that renders Button with `isIconOnly`, adding no layout, no positioning, and no directional affordance of its own, so it inherits `core/Button`'s verification above exactly. Its single icon is centred in a square control, which has no reading direction to mirror."
   },
   {
+    "component": "core/InfoTip",
+    "reason": "InfoTip renders one round icon button holding the registry's `info` glyph, which is symmetric and has no reading direction to mirror; its padding and radius are uniform and it has no control order, scrolling, dragging, or horizontal keyboard behavior. Its help opens in Tooltip's layer on the block axis (above), owned by Tooltip. Under a coarse pointer its invisible hit area grows by insets the shared hit area measures from page rects on each physical side, so the growth follows the mirrored layout and nothing in InfoTip is fixed to left or right.",
+    "evidence": {
+      "apps/storybook/stories/InfoTip.stories.tsx": "sha256:d7c86b16106ac1fbc37e4cfccfbd108969bbfb7da9cbe0ad064943f11af8cb1e",
+      "packages/core/src/InfoTip/InfoTip.tsx": "sha256:8d5ef827f1b5421d42ad420b4aeb1bac9afa617ff640fcdb5b6b37b508e6bd67",
+      "packages/core/src/InfoTip/index.ts": "sha256:0470065a1a899926b2b627db5eaad0d43a41710b0f03ab977b0b8b53ed881ba4",
+      "packages/core/src/utils/hitArea.ts": "sha256:4fccc868c405b1d9f514f0f1089f2ecb2d98de411349feb1b68d58724fc74928"
+    }
+  },
+  {
     "component": "core/SelectableCard",
     "reason": "SelectableCard renders content in normal flow inside a symmetric Card. Its hover overlay and selected ring cover all four edges equally, its source uses no physical left/right positioning or directional glyphs, and its checkbox interaction uses only pointer, Space, Enter, and Tab rather than inline-direction keys. Every current story therefore has no component-owned visual or behavioral RTL difference for the audit to measure.",
     "evidence": {
@@ -432,6 +442,15 @@
       "apps/storybook/stories/DropdownMenuRadioItem.stories.tsx": "sha256:cfe1bd90a8fc189f0f3a94992dee2a148b7256433775c511099b57690c01a614",
       "packages/core/src/DropdownMenu/DropdownMenuRadioItem.tsx": "sha256:7d7ce618b802170660763de820c0551fc3c63530ba1c105cb4bf7146d30ad518",
       "packages/core/src/DropdownMenu/index.ts": "sha256:59bf02be4a577cbecf3ad7e981e2577602375892f74548593aa9b998cae733fa"
+    }
+  },
+  {
+    "component": "core/Kbd",
+    "reason": "Kbd renders one inline-flex group of key badges in the order the caller writes the keys, from inline start to inline end with a logical gap, so the sequence follows the region's direction (design:bidirectionality DR3). Its arrow badges name physical keys, so they stay unchanged (DR5): the left key shows ← in both directions, and the arrow glyphs are not Bidi_Mirrored. It draws no contextual separator, uses no physical inline property, and has no positioned affordance, scroll, drag, overlay, or keyboard behavior. Exact-head frames render the group in RTL and assert each badge's direction and inline order, and that every glyph keeps its text and has no transform.",
+    "evidence": {
+      "apps/storybook/stories/Kbd.stories.tsx": "sha256:b6770be1b6481064d541e9e9f9a75c3e5e0225aed6da242329c64e8102e03440",
+      "packages/core/src/Kbd/Kbd.tsx": "sha256:e64111634e63600c9a145f18b6e3e2a947bf3b39185ffbdffb0db3578d5e4f24",
+      "packages/core/src/Kbd/index.ts": "sha256:9e1e3942034e17a48c67b4a46161e8c44af9c16360a8d42e5fbb570135a975c2"
     }
   }
 ]

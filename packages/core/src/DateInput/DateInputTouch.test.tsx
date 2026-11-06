@@ -29,6 +29,7 @@ import {
   afterEach,
 } from 'vitest';
 import {
+  act,
   render,
   screen,
   fireEvent,
@@ -54,6 +55,7 @@ import {
   rowsIn,
   DEFAULT_MONTH_REACH,
 } from './monthGeometry';
+import {WHEEL_ROW_HEIGHT} from './wheelOptions';
 import {SWIPE_DISTANCE} from './useOwnScrollGesture';
 import {DRAG_SLOP} from './usePointerDragScroll';
 import {SCROLL_QUIET_MS} from './useScrollSettle';
@@ -276,6 +278,81 @@ function weekdayRow(): HTMLElement {
   return row as HTMLElement;
 }
 
+describe('DateInput — open-sheet disablement', () => {
+  it('blocks selection after the open sheet becomes disabled, retaining value and focus', () => {
+    const onChange = vi.fn();
+    const changeAction = vi.fn();
+    const props = {initial: '2026-02-21' as const, onChange, changeAction};
+    withLayout(() => {
+      const {rerender} = render(<Controlled {...props} />);
+      fireEvent.click(field());
+      const day = within(pane('February 2026')).getByRole('button', {
+        name: /February 22, 2026/,
+      });
+      act(() => day.focus());
+      rerender(<Controlled {...props} isDisabled />);
+      expect(day).toHaveFocus();
+      fireEvent.click(day);
+
+      expect(onChange).not.toHaveBeenCalled();
+      expect(changeAction).not.toHaveBeenCalled();
+      expect(field()).toHaveValue('February 21, 2026');
+      expect(field()).toHaveAttribute('aria-expanded', 'true');
+      expect(day).toHaveFocus();
+      expect(
+        document.querySelector('[data-title="month-year"]'),
+      ).toHaveTextContent('February 2026');
+
+      rerender(<Controlled {...props} />);
+      fireEvent.click(day);
+      expect(onChange).toHaveBeenCalledExactlyOnceWith('2026-02-22');
+      expect(changeAction).toHaveBeenCalledExactlyOnceWith('2026-02-22');
+      expect(field()).toHaveAttribute('aria-expanded', 'true');
+    });
+  });
+
+  it('blocks disabled reset but preserves busy-only month navigation', () => {
+    const onChange = vi.fn();
+    const changeAction = vi.fn();
+    const props = {initial: '2026-02-21' as const, onChange, changeAction};
+    withLayout(() => {
+      const {rerender} = render(<Controlled {...props} />);
+      fireEvent.click(field());
+      const reset = screen.getByRole('button', {name: 'Reset'});
+      act(() => reset.focus());
+      rerender(<Controlled {...props} isDisabled />);
+      expect(reset).toHaveFocus();
+      fireEvent.click(reset);
+
+      expect(onChange).not.toHaveBeenCalled();
+      expect(changeAction).not.toHaveBeenCalled();
+      expect(field()).toHaveValue('February 21, 2026');
+      expect(field()).toHaveAttribute('aria-expanded', 'true');
+      expect(reset).toHaveFocus();
+      expect(
+        document.querySelector('[data-title="month-year"]'),
+      ).toHaveTextContent('February 2026');
+
+      rerender(<Controlled {...props} isLoading />);
+      fireEvent.click(reset);
+      expect(onChange).not.toHaveBeenCalled();
+      expect(changeAction).not.toHaveBeenCalled();
+      expect(field()).toHaveValue('February 21, 2026');
+      expect(field()).toHaveAttribute('aria-expanded', 'true');
+      expect(reset).toHaveFocus();
+      expect(
+        document.querySelector('[data-title="month-year"]'),
+      ).toHaveTextContent('March 2026');
+
+      rerender(<Controlled {...props} />);
+      fireEvent.click(reset);
+      expect(onChange).toHaveBeenCalledExactlyOnceWith(undefined);
+      expect(changeAction).toHaveBeenCalledExactlyOnceWith(undefined);
+      expect(field()).toHaveAttribute('aria-expanded', 'true');
+    });
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Which surface, and why
 // ---------------------------------------------------------------------------
@@ -375,11 +452,14 @@ describe('DateInput — surface selection', () => {
       expect(pane('March 2026')).toBeInTheDocument();
 
       rerender(renderDateInput('es-ES'));
+      // The field's date is running text; the sheet's month heading and each
+      // month pane's name stand alone, so they start with a capital
+      // (Calendar FR1).
       expect(field()).toHaveValue('21 de marzo de 2026');
       expect(
         document.querySelector('[data-title="month-year"]'),
-      ).toHaveTextContent('marzo de 2026');
-      expect(pane('marzo de 2026')).toBeInTheDocument();
+      ).toHaveTextContent('Marzo de 2026');
+      expect(pane('Marzo de 2026')).toBeInTheDocument();
 
       const nextButton = document.querySelector<HTMLButtonElement>(
         '[data-arrows="months"] button:last-child',
@@ -388,9 +468,28 @@ describe('DateInput — surface selection', () => {
       fireEvent.click(nextButton!);
       expect(
         document.querySelector('[data-title="month-year"]'),
-      ).toHaveTextContent('abril de 2026');
+      ).toHaveTextContent('Abril de 2026');
     });
   });
+
+  it.each([
+    ['fa-IR', '۲۱'],
+    ['ar-EG', '٢١'],
+    ['en-US', '21'],
+  ])(
+    'shows month-pane day numbers in the locale digits in %s',
+    (locale, day) => {
+      renderAndOpen(
+        <InternationalizationProvider locale={locale}>
+          <Controlled initial="2026-03-21" />
+        </InternationalizationProvider>,
+      );
+      const march21 = document.querySelector(
+        'button[data-date="2026-03-21"]:not([data-outside])',
+      );
+      expect(march21).toHaveTextContent(new RegExp(`^${day}$`));
+    },
+  );
 
   it('forwards ref to the input on both surfaces', () => {
     const desktopRef = {current: null as HTMLInputElement | null};
@@ -1129,15 +1228,11 @@ describe('DateInput — calendar surface', () => {
     [...weekdayRow().children].map(c => c.textContent?.trim());
 
   /**
-   * Three letters, where Calendar's own header uses two.
-   *
-   * The sheet is full width — ~51px a column against Calendar's popover — so
-   * there is room for the form people actually read, and a picker driven by
-   * thumb should not make anyone decode "Tu" against "Th".
+   * The sheet labels its columns with the names Calendar's header uses, so a
+   * locale reads the same in both pickers.
    *
    * Exact equality, not `toHaveTextContent`: that matches substrings, so it
-   * passes against "Sun" while asserting "Su" and would not have noticed this
-   * change at all.
+   * passes against "Sun" while asserting "Su".
    */
   it('labels the columns with three-letter weekday names', () => {
     renderAndOpen();
@@ -1150,6 +1245,46 @@ describe('DateInput — calendar surface', () => {
       'Fri',
       'Sat',
     ]);
+  });
+
+  it.each([
+    ['fr-FR', ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.']],
+    ['pt-PT', ['dom.', 'seg.', 'ter.', 'qua.', 'qui.', 'sex.', 'sáb.']],
+    ['pl-PL', ['nie', 'pon', 'wto', 'śro', 'czw', 'pią', 'sob']],
+    ['id-ID', ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']],
+  ])(
+    'labels the columns in %s with the same names as the Calendar header',
+    (locale, names) => {
+      renderAndOpen(
+        <InternationalizationProvider locale={locale}>
+          <Controlled initial="2026-03-21" />
+        </InternationalizationProvider>,
+      );
+      expect(weekdayNames()).toEqual(names);
+    },
+  );
+
+  it('keeps seven aligned columns when repeated narrow names rotate in an open sheet', () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const ui = (weekStartsOn: 0 | 1) => (
+        <InternationalizationProvider locale="sw-KE">
+          <Controlled initial="2026-03-21" weekStartsOn={weekStartsOn} />
+        </InternationalizationProvider>
+      );
+      withLayout(() => {
+        const {rerender} = render(ui(0));
+        fireEvent.click(field());
+        expect(weekdayNames()).toEqual(['S', 'M', 'T', 'W', 'T', 'F', 'S']);
+        rerender(ui(1));
+      });
+      expect(weekdayNames()).toEqual(['M', 'T', 'W', 'T', 'F', 'S', 'S']);
+      expect(
+        errors.mock.calls.some(call => String(call[0]).includes('same key')),
+      ).toBe(false);
+    } finally {
+      errors.mockRestore();
+    }
   });
 
   it('rotates the weekday header with weekStartsOn', () => {
@@ -2117,6 +2252,19 @@ describe('DateInput — a mouse can drag a wheel', () => {
   const title = () =>
     document.querySelector<HTMLElement>('[data-title="month-year"]')!;
 
+  // Today's column is the fine pointer's (a finger gets the touch column):
+  // a desktop whose field asks for the sheet.
+  beforeEach(() => {
+    setViewport('desktop');
+  });
+
+  function openWheels() {
+    renderAndOpen(
+      <Controlled initial="2026-03-21" presentation="bottom-sheet" />,
+    );
+    fireEvent.click(title());
+  }
+
   /** jsdom has no layout: give the rows a height and the wheel a scrollTop. */
   function withWheelLayout<T>(fn: () => T): T {
     Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
@@ -2173,8 +2321,7 @@ describe('DateInput — a mouse can drag a wheel', () => {
   }
 
   it('scrolls the wheel when a mouse drags it', () => {
-    renderAndOpen();
-    fireEvent.click(title());
+    openWheels();
     withWheelLayout(() => {
       const el = wheel();
       const track = trackable(el);
@@ -2189,8 +2336,7 @@ describe('DateInput — a mouse can drag a wheel', () => {
   });
 
   it('ignores movement too small to be a drag, so a click is still a click', () => {
-    renderAndOpen();
-    fireEvent.click(title());
+    openWheels();
     withWheelLayout(() => {
       const el = wheel();
       const track = trackable(el);
@@ -2201,8 +2347,7 @@ describe('DateInput — a mouse can drag a wheel', () => {
   });
 
   it('leaves touch and pen alone — they pan natively, and better', () => {
-    renderAndOpen();
-    fireEvent.click(title());
+    openWheels();
     withWheelLayout(() => {
       for (const pointerType of ['touch', 'pen']) {
         const el = wheel();
@@ -2216,8 +2361,7 @@ describe('DateInput — a mouse can drag a wheel', () => {
   });
 
   it('ignores a secondary button, which belongs to the context menu', () => {
-    renderAndOpen();
-    fireEvent.click(title());
+    openWheels();
     withWheelLayout(() => {
       const el = wheel();
       const track = trackable(el);
@@ -2234,8 +2378,7 @@ describe('DateInput — a mouse can drag a wheel', () => {
    * jumped a whole one.
    */
   it('suspends snapping for the drag, and restores it after', () => {
-    renderAndOpen();
-    fireEvent.click(title());
+    openWheels();
     withWheelLayout(() => {
       const el = wheel();
       trackable(el);
@@ -2250,14 +2393,62 @@ describe('DateInput — a mouse can drag a wheel', () => {
   });
 
   /**
+   * Every `scrollTop` the drag assigns ends in its own `scrollend` in
+   * Chromium, and the hand can rest with the button still down. Neither is
+   * rest: the month the wheel lands on commits at the release, as it does
+   * when a finger lifts.
+   */
+  it('commits nothing while a mouse drag holds the wheel, and commits at the release', () => {
+    vi.useFakeTimers();
+    try {
+      // A year of months, so May is reachable (the default range ends in April).
+      renderAndOpen(
+        <Controlled
+          initial="2026-03-21"
+          min="2026-01-01"
+          max="2026-12-31"
+          presentation="bottom-sheet"
+        />,
+      );
+      fireEvent.click(title());
+      withWheelLayout(() => {
+        const el = wheel();
+        trackable(el);
+        // March, the committed month, sits under the band.
+        el.scrollTop = 2 * 28;
+        const selected = () =>
+          el.querySelector('[aria-selected="true"]')?.textContent;
+        el.dispatchEvent(pointer('pointerdown', {y: 200}));
+        // Two rows on: May is under the band.
+        el.dispatchEvent(pointer('pointermove', {y: 144}));
+        fireEvent.scroll(el);
+        el.dispatchEvent(new Event('scrollend'));
+        act(() => {
+          vi.advanceTimersByTime(SCROLL_QUIET_MS * 2);
+        });
+        expect(selected()).toBe('March');
+        expect(title()).toHaveTextContent('March 2026');
+
+        el.dispatchEvent(pointer('pointerup', {y: 144}));
+        act(() => {
+          vi.advanceTimersByTime(SCROLL_QUIET_MS * 2);
+        });
+        expect(selected()).toBe('May');
+        expect(title()).toHaveTextContent('May 2026');
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  /**
    * BottomSheet starts its own drag-to-dismiss from a `pointerdown` on its
    * body and CAPTURES the pointer for it, which retargets every later pointer
    * event — including the click. Measured before this: a click on a wheel row
    * that wobbled more than a pixel selected nothing at all.
    */
   it('keeps the press away from the sheet, which would capture the pointer', () => {
-    renderAndOpen();
-    fireEvent.click(title());
+    openWheels();
     withWheelLayout(() => {
       const el = wheel();
       trackable(el);
@@ -2570,6 +2761,29 @@ describe('DateInput — scroll CSS (definition-level)', () => {
     );
     expect(item).not.toContain('animationTimeline');
     expect(item).not.toContain("overflow: 'hidden'");
+  });
+
+  it('keeps the published tokens module to its released names', async () => {
+    // @astryxdesign/core/DateInput/tokens.stylex is a public subpath: the touch
+    // wheel's geometry lives in an unexported module beside it.
+    const tokens = await import('./tokens.stylex');
+    expect(Object.keys(tokens).sort()).toEqual([
+      'WEEKS_PER_PANE',
+      'dateInputTouchGeometry',
+      'dateInputTouchSizes',
+    ]);
+  });
+
+  it('sizes the touch wheels as today’s column, with the large text of the theme', () => {
+    // The wheel's row pitch is today's token, in numbers (`wheelItemSize`),
+    // and its column is today's pane of six day rows.
+    const tokens = read('tokens.stylex.ts');
+    expect(tokens).toContain(`wheelItemSize: '${WHEEL_ROW_HEIGHT}px'`);
+    expect(tokens).toContain("daySize: '44px'");
+    expect(tokens).toContain('export const WEEKS_PER_PANE = 6;');
+    const source = read('PickerWheel.tsx');
+    expect(source).toContain('blockSize: dateInputTouchGeometry.paneBlockSize');
+    expect(source).toContain("fontSize: typeScaleVars['--text-large-size']");
   });
 
   it('insets the sheet content equally on every edge', () => {

@@ -117,7 +117,21 @@ describe('native contracts', () => {
     expect(icon!.core.icon).toMatchObject({type: {kind: 'icon'}});
     expect(icon!.core.icon.optional).toBe(false);
     expect(Object.keys(icon!.core)).toEqual(['icon', 'color', 'size', 'label']);
-    expect(icon!.webOnly.map(prop => prop.name)).toEqual(['xstyle']);
+    // `variant` names come from core's augmentable `IconVariantMap`, which has
+    // no portable definition yet, so the prop stays on the web.
+    expect(icon!.webOnly).toEqual([
+      {
+        name: 'variant',
+        reason: 'type "IconVariant" has no portable definition yet',
+      },
+      {name: 'xstyle', reason: 'web styling input'},
+      {
+        name: 'className',
+        reason: '"className" already means something else in web',
+      },
+      {name: 'style', reason: 'web styling input'},
+      {name: 'ref', reason: 'web element reference'},
+    ]);
 
     const swift = generateSwift(contracts);
     expect(swift['Icon.swift']).toContain('public var icon: IconName');
@@ -134,6 +148,28 @@ describe('native contracts', () => {
       "export type IconName = 'close' | 'chevronDown'",
     );
     expect(types['core.d.ts']).toContain('icon: IconName;');
+  });
+
+  it('gives Icon its semantic colors, and leaves the palette colors on the web', async () => {
+    const {contracts} = await buildContracts(loadCoreDoc);
+    const icon = contracts.find(contract => contract.name === 'Icon');
+    const semantic = [
+      'primary',
+      'secondary',
+      'tertiary',
+      'disabled',
+      'accent',
+      'info',
+      'success',
+      'error',
+      'warning',
+      'inherit',
+    ];
+    expect(icon!.core.color.type).toEqual({kind: 'enum', values: semantic});
+    expect(Object.entries(icon!.projections?.color ?? {})).toEqual(
+      semantic.map(color => [color, color]),
+    );
+    expect(generateSwift(contracts)['Icon.swift']).not.toContain('case blue');
   });
 
   it('gives Avatar its named sizes, a press, and a link, and leaves pixel sizes on the web', async () => {
@@ -196,6 +232,66 @@ describe('native contracts', () => {
     expect(thumbnail!.core.onRemove?.type).toEqual({kind: 'fn', args: []});
     expect(thumbnail!.webOnly.map(prop => prop.name)).toEqual(
       expect.arrayContaining(['xstyle', 'className', 'style', 'data-testid']),
+    );
+  });
+
+  it('gives Item typed text and content slots, a press, and a link, and leaves swipes on the web', async () => {
+    const {contracts} = await buildContracts(loadCoreDoc);
+    const item = contracts.find(contract => contract.name === 'Item');
+    expect(item).toBeDefined();
+    expect(item!.core.label).toMatchObject({
+      type: {kind: 'string'},
+      optional: false,
+    });
+    expect(item!.core.description?.type).toEqual({kind: 'string'});
+    for (const slot of ['marker', 'startContent', 'endContent']) {
+      expect(item!.core[slot]?.type).toEqual({kind: 'content'});
+    }
+    expect(Object.keys(item!.core)).toEqual(
+      expect.arrayContaining([
+        'align',
+        'density',
+        'labelLines',
+        'descriptionLines',
+        'layout',
+        'onClick',
+        'href',
+        'isHighlighted',
+        'isSelected',
+        'isDisabled',
+      ]),
+    );
+    expect(item!.webOnly.map(prop => prop.name)).toEqual(
+      expect.arrayContaining([
+        'swipeActions',
+        'swipeBehavior',
+        'target',
+        'rel',
+        'data-testid',
+        'as',
+        'interactiveRef',
+      ]),
+    );
+  });
+
+  it('gives ListItem the row contract without density or markers, which come from its list', async () => {
+    const {contracts} = await buildContracts(loadCoreDoc);
+    const row = contracts.find(contract => contract.name === 'ListItem');
+    expect(row).toBeDefined();
+    expect(row!.core.label).toMatchObject({
+      type: {kind: 'string'},
+      optional: false,
+    });
+    expect(row!.core.startContent?.type).toEqual({kind: 'content'});
+    expect(Object.keys(row!.core)).not.toContain('density');
+    expect(row!.webOnly.map(prop => prop.name)).toEqual(
+      expect.arrayContaining([
+        'swipeActions',
+        'swipeBehavior',
+        'target',
+        'rel',
+        'interactiveRef',
+      ]),
     );
   });
 

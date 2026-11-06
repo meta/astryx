@@ -1,7 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import * as fs from 'node:fs'; import * as os from 'node:os'; import * as path from 'node:path';
-import {runCli} from '../../../test-utils/run-cli.mjs';
+import {requireNatively} from '../../../test-utils/native-require.mjs';
+
+const require = requireNatively(import.meta.url);
+/** @type {typeof import('../../../test-utils/run-cli.mjs')} */
+const {runCli} = require('../../../test-utils/run-cli.mjs');
+
 let dir;
 beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(),'astryx-ss-')); fs.writeFileSync(path.join(dir,'package.json'),JSON.stringify({name:'s',version:'1.0.0',dependencies:{'@astryxdesign/core':'0.6.3'}})); const c=path.join(dir,'node_modules','@astryxdesign','core'); fs.mkdirSync(c,{recursive:true}); fs.writeFileSync(path.join(c,'package.json'),JSON.stringify({name:'@astryxdesign/core',version:'0.6.3'})); });
 afterEach(() => fs.rmSync(dir, {recursive:true,force:true}));

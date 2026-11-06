@@ -34,6 +34,9 @@ import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {usePopover} from '../Popover/usePopover';
 import {MENU_ITEM_SELECTOR} from '../DropdownMenu/menuItemRoles';
 import {useListFocus} from '../hooks/useListFocus';
+import {useMenuPress} from '../hooks/useMenuPress';
+import {menuTouchActionStyles} from '../DropdownMenu/menuTouchAction.stylex';
+import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {useTabListContext} from './TabListContext';
 import type {TabListSize} from './TabListContext';
 import {tabScope} from './tab.markers.stylex';
@@ -172,6 +175,8 @@ const styles = stylex.create({
     transform: 'rotate(180deg)',
   },
   dropdown: {
+    // A held pointer slides across the items; it selects no text.
+    userSelect: 'none',
     display: 'flex',
     flexDirection: 'column',
     gap: spacingVars['--spacing-0-5'],
@@ -302,6 +307,16 @@ export function TabMenu({
     onEscape: () => popover.hide(),
   });
 
+  // A press that slides across the options picks the one it lifts on, the
+  // highlight following the pointer, as DropdownMenu's does
+  // (`family:action-groups` FR1-FR3, FR5); a mouse released outside closes it.
+  const menuPress = useMenuPress({
+    menuRef: listRef,
+    itemSelector: MENU_ITEM_SELECTOR,
+    onDismiss: popover.hide,
+  });
+  const hasOverflow = useMenuOverflow(listRef, options.length, popover.isOpen);
+
   const handleToggle = useCallback(() => {
     if (popover.isOpen) {
       popover.hide();
@@ -404,11 +419,17 @@ export function TabMenu({
           id={menuId}
           role="menu"
           aria-label={label}
+          {...menuPress.menuProps}
           onKeyDown={handleMenuKeyDown}
           onFocus={handleFocus}
           {...mergeProps(
             themeProps('tab-menu-dropdown'),
-            stylex.props(styles.dropdown),
+            stylex.props(
+              styles.dropdown,
+              hasOverflow
+                ? menuTouchActionStyles.scrolls
+                : menuTouchActionStyles.fits,
+            ),
           )}>
           <span role="presentation" {...stylex.props(styles.menuHeading)}>
             {label}

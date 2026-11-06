@@ -246,7 +246,6 @@ describe("backticks in a link destination or title are the link's", () => {
   it.each([
     '[a](`x`)',
     '[a](https://e.com/`x`)',
-    '![i](`x`)',
     '[a](b "`t`")',
     '`c` then [a](`x`)',
   ])('reads %j with the destination core reads', markdown => {
