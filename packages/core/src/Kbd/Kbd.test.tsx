@@ -91,12 +91,15 @@ describe('Kbd', () => {
     const container = document.createElement('div');
     container.innerHTML = renderToString(<Kbd keys="mod+k" />);
     document.body.appendChild(container);
-    expect(within(container).getByText('Ctrl')).toBeInTheDocument();
-    expect(within(container).queryByText('\u2318')).not.toBeInTheDocument();
-    expect(within(container).getByRole('img')).toHaveAccessibleName(
-      'Control + K',
-    );
-    container.remove();
+    try {
+      expect(within(container).getByText('Ctrl')).toBeInTheDocument();
+      expect(within(container).queryByText('\u2318')).not.toBeInTheDocument();
+      expect(within(container).getByRole('img')).toHaveAccessibleName(
+        'Control + K',
+      );
+    } finally {
+      container.remove();
+    }
   });
 
   it('puts the kbd theme target on the shortcut only, not on a key badge', () => {
