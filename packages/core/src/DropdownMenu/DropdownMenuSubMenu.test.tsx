@@ -1095,7 +1095,7 @@ function TimedMoveMenu({
 
 describe('DropdownMenuSubMenu hover timing', () => {
   it('opens 150 ms after a hover and closes 200 ms after the pointer leaves by default', async () => {
-    vi.useFakeTimers();
+    vi.useFakeTimers({shouldAdvanceTime: true});
     const user = userEvent.setup({advanceTimers: vi.advanceTimersByTime});
     render(<TimedMoveMenu />);
 
