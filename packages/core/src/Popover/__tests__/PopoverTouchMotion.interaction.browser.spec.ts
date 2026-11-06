@@ -1018,7 +1018,9 @@ function outsidePoint(page: Page) {
  * `releaseAnimations`.
  */
 async function openHeldWhileGrowing(page: Page, story: OpenStory) {
-  const armed = await armHold(page, story.layer);
+  const armed = await armHold(page, story.layer, {
+    judges: {target: story.layer, property: 'scale'},
+  });
   await openWithTap(story);
   return armed.held();
 }

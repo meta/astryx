@@ -104,13 +104,20 @@ animations, ones the page paused and ones on a scroll or view timeline are left
 alone; held animations keep their offsets from the first hold's earliest start, and release
 resumes only them. A hold sent from the test reaches the page after a round
 trip, and on a loaded runner a short animation can end first: for one that an
-action starts, `await armHold(page, scope)` before the action arms the page
+action starts, `await armHold(page, scope, {judges})` before the action arms the page
 itself: it looks on every frame and every 4 ms between frames (WebKit can go
 about 70 ms without a frame while it first composites a layer),
 holds everything running under the scope as soon as one of them runs (or
 `count` of them, for parts that start apart; with `newOnly`, only what starts
 after the arm, for a turn that starts mid-motion), and `held()` after the
-action returns that held set. Compare it with an
+action returns that held set. Other animations under the scope (a press, a
+colour change) can meet that count before the motion a test judges starts,
+and a hold that took only them proves nothing about it. So every armed hold
+names the motion it judges, `{judges: {target, property}}` (a list for
+several; `pseudoElement` for a `::before` or `::after`), and `held()` rejects
+when the hold took no animation of it. `judges: 'count-only'` checks nothing:
+it marks a call site whose hold does not take its judged motion yet.
+Compare it with an
 oracle from `math.ts` through `compareCurve`; a tolerance states the error
 budget (for a spring baked into `linear()` stops of `h` ms, chords err by up to
 `h² / 8 · |x''|`). A seek past an animation's end lands half a millisecond

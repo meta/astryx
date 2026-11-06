@@ -837,7 +837,10 @@ test('under Reduce Motion nothing slides or scales, the current indicator and a 
   // holds every animation under the control once one has run 60 ms, past the
   // window's 50 ms delay.
   const current = await indicatorCenter(slider, 25);
-  const hold = await armHold(page, slider, {minProgressMs: 60});
+  const hold = await armHold(page, slider, {
+    judges: {target: slider.locator(':scope > *').first(), property: 'opacity'},
+    minProgressMs: 60,
+  });
   await driver.tap({x: current.x + 12, y: current.y});
   await expect.poll(async () => valueNow(slider)).toBe(27);
   // Every animation is an opacity fade of at most 200 ms. No translate or
@@ -1328,7 +1331,12 @@ test('storyboard: the window slides one slot @storyboard', async ({page}) => {
   // Armed before the tap, the page holds the change's motion as it starts,
   // however late the test reads it. That motion is the old indicator's fade
   // and the slide, which starts 50 ms after the change.
-  const hold = await armHold(page, slider);
+  const hold = await armHold(page, slider, {
+    judges: [
+      {target: slider.locator(':scope > *').first(), property: 'translate'},
+      {target: slider.locator('[data-page="26"]'), property: 'scale'},
+    ],
+  });
   await driver.tap({x: current.x + 12, y: current.y});
   const held = await hold.held();
   const {storyboard} = await animationStoryboard(page, {

@@ -1019,7 +1019,10 @@ test('storyboard: the fill moving from 20% to 80% @storyboard', async ({
   // frame interval at a time through its end. A screencast of the change
   // shows only the frames a loaded runner gets to capture, and one it misses
   // doubles the step between the two around it.
-  const hold = await armHold(page, page.getByRole('progressbar'));
+  const bar = page.getByRole('progressbar');
+  const hold = await armHold(page, bar, {
+    judges: {target: bar.locator(':scope > *').first(), property: 'transform'},
+  });
   await setValue(page, 80);
   const {storyboard} = await animationStoryboard(page, {
     name: 'progress-bar-fill-move',

@@ -560,7 +560,14 @@ test.describe('CheckboxList row press', () => {
       // The page holds the release itself as soon as it runs. A hold the test
       // sends after the lift arrives later on a busy machine, and the release
       // can end first.
-      const hold = await armHold(page, page.locator('li[data-astryx-press]'));
+      const pressed = page.locator('li[data-astryx-press]');
+      const hold = await armHold(page, pressed, {
+        judges: {
+          target: pressed,
+          property: 'opacity',
+          pseudoElement: '::before',
+        },
+      });
       await row.lift(row.label);
       await freezeTimers(page);
       expect(await rowPress(page)).toBe('fading');

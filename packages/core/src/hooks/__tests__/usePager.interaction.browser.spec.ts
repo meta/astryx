@@ -362,7 +362,8 @@ async function playHeld(
   driver: TouchDriver,
   script: TouchScript,
 ): Promise<ArmedHold> {
-  const first = await armHold(page, track);
+  const judges = {target: track, property: 'translate'};
+  const first = await armHold(page, track, {judges});
   const caught = first.held().then(
     held => ({held}),
     () => null,
@@ -376,6 +377,7 @@ async function playHeld(
         return outcome.held;
       }
       const again = await armHold(page, track, {
+        judges,
         timeout: Math.max(0, inputEnd + 5_000 - Date.now()),
       });
       return again.held().catch(() => {
@@ -389,7 +391,9 @@ async function playHeld(
 
 /** Calls `goTo(index)` with the motion it starts held at its first frame. */
 const goToHeld = async (page: Page, track: Locator, index: number) => {
-  const hold = await armHold(page, track);
+  const hold = await armHold(page, track, {
+    judges: {target: track, property: 'translate'},
+  });
   await page.evaluate(next => {
     window.armFrames();
     window.pager.goTo(next);
