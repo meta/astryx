@@ -264,8 +264,10 @@ export function placeLayerExitCopy(
   if (outer?.parentElement == null) {
     element.after(copy);
   } else {
-    outer.after(copy);
+    // keepInherited reads the host's style, so it runs before the insertion:
+    // no style read follows that write.
     keepInherited(copy, outer.parentElement);
+    outer.after(copy);
   }
   copies.set(element, copy);
   const show = (): boolean => {

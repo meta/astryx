@@ -31,6 +31,8 @@ import {
   type PopoverSurfaceRect,
 } from './popoverSurfaceMotion';
 
+// The growth needs where the surface ends and where its source is. Both
+// boxes are read once, in the frame that starts it, before that frame writes.
 function boxOf(element: Element): PopoverSurfaceRect {
   const rect = element.getBoundingClientRect();
   return {

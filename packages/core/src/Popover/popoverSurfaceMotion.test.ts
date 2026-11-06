@@ -333,7 +333,7 @@ describe('createPopoverSurfaceMotion', () => {
     return {endMs, peak};
   };
 
-  it('grows the popover out of its source on the theme\u2019s entrance tokens, without the layer\u2019s CSS entrance', () => {
+  it('grows the popover out of its source on the theme\u2019s entrance tokens, without the layer\u2019s CSS entrance', async () => {
     const {element, motion} = create();
     // The read happens with the CSS entrance already off and no scale left.
     const measure = vi.fn(() => {
@@ -341,6 +341,9 @@ describe('createPopoverSurfaceMotion', () => {
       return GEOMETRY;
     });
     motion.enter(measure);
+    // The opening task ends before the frame, and the CSS entrance goes off
+    // as it does.
+    await Promise.resolve();
     frame();
     expect(measure).toHaveBeenCalledTimes(1);
     const state = popoverCollapsedState(GEOMETRY);
@@ -530,6 +533,104 @@ describe('createPopoverSurfaceMotion', () => {
     expect(element.style.getPropertyValue('animation-name')).toBe('none');
     expect(measure).toHaveBeenCalledTimes(1);
     expect(live('scale')).toHaveLength(1);
+  });
+
+  // Each layout or style read and each style write, in order.
+  const trace: string[] = [];
+  /**
+   * The reads and writes while `run` runs: a write followed by a read lays
+   * the page out again.
+   */
+  const readsAndWrites = (run: () => void): string[] => {
+    trace.length = 0;
+    const log = trace;
+    const setProperty = CSSStyleDeclaration.prototype.setProperty;
+    const removeProperty = CSSStyleDeclaration.prototype.removeProperty;
+    const animate = HTMLElement.prototype.animate;
+    const getComputedStyle = window.getComputedStyle;
+    // jsdom builds a computed style with setProperty: those are not writes.
+    let isReading = false;
+    CSSStyleDeclaration.prototype.setProperty = function (
+      this: CSSStyleDeclaration,
+      ...args: Parameters<CSSStyleDeclaration['setProperty']>
+    ) {
+      if (!isReading) {
+        log.push(`write ${args[0]}`);
+      }
+      return setProperty.apply(this, args);
+    };
+    CSSStyleDeclaration.prototype.removeProperty = function (
+      this: CSSStyleDeclaration,
+      property: string,
+    ) {
+      if (!isReading) {
+        log.push(`write ${property}`);
+      }
+      return removeProperty.call(this, property);
+    };
+    HTMLElement.prototype.animate = function (
+      this: HTMLElement,
+      ...args: Parameters<HTMLElement['animate']>
+    ) {
+      log.push('write animation');
+      return animate.apply(this, args);
+    };
+    window.getComputedStyle = (...args) => {
+      log.push('read style');
+      isReading = true;
+      try {
+        return getComputedStyle(...args);
+      } finally {
+        isReading = false;
+      }
+    };
+    try {
+      run();
+    } finally {
+      CSSStyleDeclaration.prototype.setProperty = setProperty;
+      CSSStyleDeclaration.prototype.removeProperty = removeProperty;
+      HTMLElement.prototype.animate = animate;
+      window.getComputedStyle = getComputedStyle;
+    }
+    return [...log];
+  };
+  const writesBeforeLastRead = (log: ReadonlyArray<string>) => {
+    let lastRead = -1;
+    log.forEach((entry, index) => {
+      if (entry.startsWith('read')) {
+        lastRead = index;
+      }
+    });
+    return log.slice(0, lastRead).filter(entry => entry.startsWith('write'));
+  };
+
+  it('reads both boxes and the theme\u2019s entrance tokens in one pass, before the frame that starts the growth writes anything', async () => {
+    const {motion} = create();
+    motion.enter(() => {
+      trace.push('read boxes');
+      return GEOMETRY;
+    });
+    await Promise.resolve();
+    const log = readsAndWrites(frame);
+    expect(log).toContain('read boxes');
+    expect(log).toContain('read style');
+    expect(log.some(entry => entry.startsWith('write'))).toBe(true);
+    expect(writesBeforeLastRead(log)).toEqual([]);
+  });
+
+  it('presented again during the dismissal, reads the entrance tokens before its first write', () => {
+    const {element, motion} = create();
+    motion.enter(() => GEOMETRY);
+    frame();
+    clock += ENTRANCE.ms;
+    motion.exit();
+    expect(copyOf(element)).not.toBeNull();
+    const log = readsAndWrites(() => motion.enter(() => GEOMETRY));
+    const firstWrite = log.findIndex(entry => entry.startsWith('write'));
+    expect(firstWrite).toBeGreaterThan(0);
+    expect(
+      log.slice(0, firstWrite).every(entry => entry === 'read style'),
+    ).toBe(true);
   });
 
   it('a close before that frame presents nothing and leaves the element as the component styles it, with no compositing layer or timer left on it', async () => {
