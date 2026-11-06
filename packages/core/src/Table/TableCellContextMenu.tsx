@@ -20,6 +20,7 @@ import type {
 } from '../ContextMenu/ContextMenu';
 import {ContextMenuTrigger} from '../ContextMenu/ContextMenuTrigger';
 import {useLongPress} from '../hooks/useLongPress';
+import {currentGesture} from '../Layer/gestureCounter';
 import type {StyleXStyles} from '../theme/types';
 import type {TableContextActions} from './types';
 import type {TableContextMenuForTrigger} from './tableContextMenu';
@@ -48,9 +49,31 @@ const LazyTableContextMenu = lazy(async () =>
 );
 
 /** An invocation that arrived before the menu, replayed when it attaches. */
-type HeldInvocation =
+type HeldInvocation = {
+  owner: object;
+  gesture: number;
+} & (
   | {kind: 'contextmenu'; event: React.MouseEvent<HTMLElement>}
-  | {kind: 'long-press'; point: {x: number; y: number}};
+  | {kind: 'long-press'; point: {x: number; y: number}}
+);
+
+// At most one held invocation for all cells: a later one replaces it, as a
+// second press closes the first menu once the menu has loaded.
+let heldInvocation: HeldInvocation | null = null;
+
+function holdInvocation(held: HeldInvocation): void {
+  heldInvocation = held;
+}
+
+/** Takes the held invocation if `owner` holds it. */
+function takeHeldInvocation(owner: object): HeldInvocation | null {
+  const held = heldInvocation;
+  if (held?.owner !== owner) {
+    return null;
+  }
+  heldInvocation = null;
+  return held;
+}
 
 /**
  * A cell's content, wrapped in a right-click context menu when `actions` can
@@ -88,7 +111,6 @@ function CellTrigger({
   const triggerRef = useRef<HTMLElement>(null);
   const anchorRef = useRef<HTMLSpanElement>(null);
   const handlersRef = useRef<ContextMenuTriggerHandlers | null>(null);
-  const heldRef = useRef<HeldInvocation | null>(null);
   // True from a touch that starts before the menu attaches until it ends. The
   // cell's own detector follows that press to its end, even if the menu
   // attaches during it, because the menu's detector never saw it start.
@@ -99,15 +121,20 @@ function CellTrigger({
     anchorRef,
     onHandlersChange: handlers => {
       handlersRef.current = handlers;
-      const held = heldRef.current;
-      heldRef.current = null;
-      if (handlers == null || held == null) {
+      if (handlers == null) {
+        return;
+      }
+      const held = takeHeldInvocation(triggerRef);
+      if (held == null) {
         return;
       }
       // Replay after the commit that attached the menu, so its layer is
-      // anchored before it opens.
+      // anchored before it opens. A press or key since the hold drops it.
       queueMicrotask(() => {
-        if (handlersRef.current !== handlers) {
+        if (
+          handlersRef.current !== handlers ||
+          currentGesture() !== held.gesture
+        ) {
           return;
         }
         if (held.kind === 'contextmenu') {
@@ -127,7 +154,12 @@ function CellTrigger({
       if (handlers != null) {
         handlers.openFromLongPress(point);
       } else {
-        heldRef.current = {kind: 'long-press', point};
+        holdInvocation({
+          owner: triggerRef,
+          gesture: currentGesture(),
+          kind: 'long-press',
+          point,
+        });
       }
     },
   });
@@ -147,7 +179,12 @@ function CellTrigger({
           // Hold the right-click, Shift+F10 or Menu key until the menu loads,
           // so the browser's own menu does not open in its place.
           event.preventDefault();
-          heldRef.current = {kind: 'contextmenu', event};
+          holdInvocation({
+            owner: triggerRef,
+            gesture: currentGesture(),
+            kind: 'contextmenu',
+            event,
+          });
           void loadTableContextMenu();
         }}
         onTouchStart={event => {

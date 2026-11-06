@@ -360,8 +360,8 @@ ContextMenu.displayName = 'ContextMenu';
  * Internal. `ContextMenu` without its own trigger: the menu opens from the
  * trigger and cursor anchor in `trigger`, which the caller renders and keeps
  * mounted, so the caller's content survives this component loading lazily.
- * Until it mounts, the trigger has no handlers and right-click shows the
- * browser's menu.
+ * Until it mounts, the trigger has no handlers. The caller decides what an
+ * early invocation does.
  */
 export function ContextMenuForTrigger({
   trigger,
