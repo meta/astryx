@@ -132,11 +132,11 @@ export function useAlertMotion({
   // The action that had focus when the exit's hold made the content inert.
   const blurredRef = useRef<HTMLElement | null>(null);
 
+  const wasPresentedRef = useRef(false);
   // Synchronizes the dialog's touch entrance with an opening: its start
   // scale. Dialog styles an open dialog in this commit, before its effect
   // shows the modal. So the box and the entrance exist before the first
   // paint. Dialog holds a touch while the entrance plays.
-  const wasPresentedRef = useRef(false);
   useIsomorphicLayoutEffect(() => {
     const opened = isPresented && !wasPresentedRef.current;
     wasPresentedRef.current = isPresented;
