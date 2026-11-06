@@ -30,8 +30,8 @@
 import {useCallback, useRef, type RefObject} from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {
+  glideOf,
   holdLayoutExit,
-  landLayoutGlide,
   playLayoutChange,
   reportLayoutChange,
   type AnimatedLayout,
@@ -225,15 +225,7 @@ interface Translation {
 
 /**
  * Reads a row's own translation, such as a swipe's, and its children's
- * transforms, as a change is measured. A row that leaves exits on its own
- * box, in view. So `settleTranslation` moves its translation onto its
- * children before the module reads the new places. Its exit's clip then
- * keeps the action that the swipe uncovered and cuts the content that the
- * swipe carried away. With the translation on the row, a row that a swipe
- * carried out of the list's box would lie out of view. Its exit would then
- * clip the action. A row that stays keeps its translation: the module reads
- * it on both sides of the commit, so nothing glides it. Returns null when
- * the row has no translation of its own.
+ * transforms before the commit. Returns null when the row has none.
  */
 function readTranslation(row: HTMLElement): Translation | null {
   const view = row.ownerDocument.defaultView;
@@ -271,7 +263,14 @@ function readTranslation(row: HTMLElement): Translation | null {
   };
 }
 
-/** Moves a row's own translation onto its children. */
+/**
+ * Moves a row's own translation onto its children. The row's box then lies
+ * where the row lies in the list, while it shows the same thing. A row that
+ * leaves exits on that box, in view. Its exit's clip keeps the action that
+ * a swipe uncovered and cuts the content that the swipe carried away. With
+ * the translation on the row, a row that a swipe carried out of the list's
+ * box would lie out of view.
+ */
 function settleTranslation({
   view,
   row,
@@ -290,6 +289,20 @@ function settleTranslation({
         : shift.multiply(new view.DOMMatrix(current));
     child.style.setProperty('transform', moved.toString());
   });
+}
+
+/** Drops the sideways part of `row`'s glide, keeping its vertical move. */
+function keepVerticalGlide(row: HTMLElement): void {
+  const effect = glideOf(row)?.effect as KeyframeEffect | null | undefined;
+  if (effect == null || typeof effect.setKeyframes !== 'function') {
+    return;
+  }
+  effect.setKeyframes(
+    effect.getKeyframes().map(({computedOffset: _, translate, ...frame}) => {
+      const [, y = '0px'] = String(translate ?? '').split(/\s+/);
+      return {...frame, translate: `0px ${y}`};
+    }),
+  );
 }
 
 /**
@@ -518,11 +531,12 @@ export function useListLayoutUpdates(
     }
     if (settled.length > 0) {
       // The module read the row's old place with the translation on it, so
-      // it glides the row by that translation. The row shows where it
-      // showed already, so that glide lands before the frame paints.
+      // its glide adds that translation to the row's move in the list. The
+      // row already shows where it showed, so before the frame paints, the
+      // glide keeps only its move in the list.
       queueMicrotask(() => {
         for (const row of settled) {
-          landLayoutGlide(row);
+          keepVerticalGlide(row);
         }
       });
     }

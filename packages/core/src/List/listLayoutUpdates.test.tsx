@@ -21,8 +21,9 @@ import {ListContext} from './ListContext';
 
 interface Played {
   readonly element: Element;
-  readonly keyframes: Keyframe[];
+  keyframes: Keyframe[];
   readonly animation: Animation;
+  isCancelled?: boolean;
 }
 
 let played: Played[] = [];
@@ -66,7 +67,11 @@ function rectOf(element: Element): DOMRect {
     ) {
       top += takes(row);
     }
-    return new DOMRect(0, top, 400, ROW);
+    // A row's own translation, such as a swipe's, moves its box sideways.
+    const shift = /translate\((-?[\d.]+)px/.exec(
+      (element as HTMLElement).style.transform,
+    );
+    return new DOMRect(Number(shift?.[1] ?? 0), top, 400, ROW);
   }
   if (element !== list && element.id !== 'after') {
     return new DOMRect(0, 0, 0, 0);
@@ -90,13 +95,25 @@ beforeEach(() => {
     this: Element,
     keyframes: Keyframe[] | PropertyIndexedKeyframes | null,
   ) {
+    const entry = {
+      element: this,
+      keyframes: keyframes as Keyframe[],
+    } as Played;
     const animation = {
-      cancel: () => undefined,
+      cancel: () => {
+        entry.isCancelled = true;
+      },
       addEventListener: () => undefined,
       finished: new Promise(() => undefined),
       currentTime: 0,
+      effect: {
+        getKeyframes: () => entry.keyframes,
+        setKeyframes: (next: Keyframe[]) => {
+          entry.keyframes = next;
+        },
+      },
     } as unknown as Animation;
-    played.push({element: this, keyframes: keyframes as Keyframe[], animation});
+    played.push(Object.assign(entry, {animation}));
     return animation;
   };
   Element.prototype.getBoundingClientRect = function (this: Element) {
@@ -694,6 +711,61 @@ describe('List row updates through animatedLayout', () => {
       log.join(' '),
     ).toHaveLength(1);
     expect(log.slice(commit, settle), log.join(' ')).not.toContain('read');
+  });
+
+  it('a swiped row that leaves while the same update moves it down glides down with the rows around it, never sideways', async () => {
+    // jsdom has no DOMMatrix: a 2D one, enough for a translation.
+    class Matrix {
+      a = 1;
+      b = 0;
+      c = 0;
+      d = 1;
+      e = 0;
+      f = 0;
+      is2D = true;
+      constructor(init?: string) {
+        const translate = /translate\(([-\d.]+)px,\s*([-\d.]+)px\)/.exec(
+          init ?? '',
+        );
+        if (translate != null) {
+          this.e = Number(translate[1]);
+          this.f = Number(translate[2]);
+        }
+      }
+      translate(x: number, y: number) {
+        const next = new Matrix();
+        next.e = this.e + x;
+        next.f = this.f + y;
+        return next;
+      }
+      multiply(other: Matrix) {
+        return this.translate(other.e, other.f);
+      }
+      toString() {
+        return `translate(${this.e}px, ${this.f}px)`;
+      }
+    }
+    vi.stubGlobal('DOMMatrix', Matrix);
+    try {
+      render(<Demo initial={['Inbox', 'Sent', 'Drafts', 'Archive']} />);
+      const drafts = [...document.querySelectorAll('li')].find(
+        li => li.textContent === 'Drafts',
+      );
+      drafts?.style.setProperty('transform', 'translate(-40px, 0px)');
+      // Drafts leaves, and a row inserted above it moves it a row down.
+      await change(['New', 'Inbox', 'Sent', 'Archive']);
+      const glide = played.find(
+        entry =>
+          entry.element === drafts &&
+          String(entry.keyframes[0]?.translate ?? '') !== '',
+      );
+      expect(String(glide?.keyframes[0]?.translate)).toBe(`0px ${-ROW}px`);
+      expect(glide?.isCancelled).not.toBe(true);
+      // It exits settled: its box in the list, its content still swiped.
+      expect(drafts?.style.transform).toBe('none');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('a re-render with the same rows in the same order plays nothing', async () => {

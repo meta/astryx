@@ -817,7 +817,7 @@ test('a change with a row swiped open lays the page out no more often than the s
   );
 });
 
-test('a row swiped away lays the page out as often as the same swipe with no translation on the row, and never glides sideways', async ({
+test('a row swiped away lays the page out no more often than the same swipe with no translation on the row, and never glides sideways', async ({
   page,
   browserName,
 }) => {
@@ -840,8 +840,8 @@ test('a row swiped away lays the page out as often as the same swipe with no tra
     if (box == null) {
       throw new Error('no row');
     }
-    // From the frame where Sent is put back for its exit: does a glide on it
-    // move it sideways?
+    // From the frame where Sent is put back for its exit, it counts the glides
+    // that would move it sideways.
     await page.evaluate(() => {
       const state = {sideways: -1};
       (window as unknown as {__exit: typeof state}).__exit = state;
@@ -850,12 +850,17 @@ test('a row swiped away lays the page out as often as the same swipe with no tra
           '#storybook-root li[data-astryx-leaving]',
         );
         if (exit != null) {
+          // A glide that moves it in the list keeps x at 0.
           state.sideways = exit
             .getAnimations()
             .filter(animation =>
               (animation.effect as KeyframeEffect | null)
                 ?.getKeyframes()
-                .some(frame => 'translate' in frame),
+                .some(
+                  frame =>
+                    'translate' in frame &&
+                    !String(frame.translate).startsWith('0px'),
+                ),
             ).length;
           return;
         }
