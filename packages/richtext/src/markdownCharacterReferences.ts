@@ -490,9 +490,8 @@ export function protectRefusedLinks(markdown: string): ProtectedMarkdown {
 }
 
 /**
- * Marks text that holds one image's Markdown source as written. RichText has
- * no image node, so an image shows as that text, and an export writes it
- * back as written, never escaped, so it stays an image.
+ * Marks text that holds one image's Markdown source. Export writes it
+ * unescaped, so it stays an image.
  */
 const imageSourceState = createState('astryxMdImage', {
   parse: (value: unknown): boolean => value === true,

@@ -4,21 +4,19 @@
 
 /**
  * @file ImageSourceCaretPlugin.tsx
- * @input Uses @lexical/react (composer context) and lexical (selection, the
- *   selection-change and text-insertion commands, update listeners), and
+ * @input Uses @lexical/react (composer context), lexical (selection, the
+ *   selection-change and text-insertion commands, the root element), and
  *   $isImageSource from markdownCharacterReferences.ts.
- * @output Exports ImageSourceCaretPlugin, which keeps a collapsed caret out
- *   of the text that holds an image's Markdown source.
- * @position Rendered by RichTextEditor, always on. An image's source is one
- *   token, and Lexical replaces a whole token with the text a person types
- *   inside it. A caret that lands inside one moves to an edge instead: on
- *   through the token when an arrow key moved it in from an edge, and to the
- *   nearer edge when a click or another move put it there. Typing then adds
- *   text beside the image, and the image's source stays as written.
+ * @output Exports ImageSourceCaretPlugin.
+ * @position Rendered by RichTextEditor, always on. Lexical replaces a whole
+ *   token with text typed inside it. So a caret inside an image's source
+ *   moves to an edge: past the image for an arrow key, to the nearer edge
+ *   for a click or any other move.
  */
 
 import {useEffect} from 'react';
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
+import {mergeRegister} from '@lexical/utils';
 import {
   $getNodeByKey,
   $getSelection,
@@ -37,101 +35,120 @@ interface CaretPoint {
   readonly offset: number;
 }
 
+/** The collapsed caret, when it is in text. */
+function $caretPoint(): CaretPoint | null {
+  const selection = $getSelection();
+  return $isRangeSelection(selection) &&
+    selection.isCollapsed() &&
+    selection.anchor.type === 'text'
+    ? {key: selection.anchor.key, offset: selection.anchor.offset}
+    : null;
+}
+
 /**
- * The edge of `token` a caret at `offset` inside it moves to. A caret that
- * was at one edge of the token, or at the end of the text just before it or
- * the start of the text just after it, moves on to the other edge.
+ * The edge of `token` a caret at `offset` inside it moves to. An arrow key
+ * that moved the caret in from one edge, or from the text beside it, moves
+ * it on to the other edge.
  */
 function $edgeFor(
   token: TextNode,
   offset: number,
-  previous: CaretPoint | null,
+  arrowFrom: CaretPoint | null,
 ): number {
   const size = token.getTextContentSize();
   const nearer = offset < size / 2 ? 0 : size;
-  if (previous == null) {
+  if (arrowFrom == null) {
     return nearer;
   }
-  if (previous.key === token.getKey()) {
-    return previous.offset === 0 ? size : previous.offset === size ? 0 : nearer;
+  if (arrowFrom.key === token.getKey()) {
+    return arrowFrom.offset === 0
+      ? size
+      : arrowFrom.offset === size
+        ? 0
+        : nearer;
   }
   const before = token.getPreviousSibling();
   if (
     before != null &&
-    before.getKey() === previous.key &&
-    previous.offset === before.getTextContentSize()
+    before.getKey() === arrowFrom.key &&
+    arrowFrom.offset === before.getTextContentSize()
   ) {
     return size;
   }
   const after = token.getNextSibling();
   if (
     after != null &&
-    after.getKey() === previous.key &&
-    previous.offset === 0
+    after.getKey() === arrowFrom.key &&
+    arrowFrom.offset === 0
   ) {
     return 0;
   }
   return nearer;
 }
 
-/**
- * Moves a collapsed caret inside an image's source to an edge of it. Always
- * returns false, so the command goes on to Lexical's own handler.
- */
-function $moveCaretOutOfImage(previous: CaretPoint | null): false {
-  const selection = $getSelection();
-  if (
-    !$isRangeSelection(selection) ||
-    !selection.isCollapsed() ||
-    selection.anchor.type !== 'text'
-  ) {
-    return false;
+/** Moves a collapsed caret inside an image's source to an edge of it. */
+function $moveCaretOutOfImage(arrowFrom: CaretPoint | null): void {
+  const caret = $caretPoint();
+  if (caret == null) {
+    return;
   }
-  const {key, offset} = selection.anchor;
-  const node = $getNodeByKey<TextNode>(key);
+  const node = $getNodeByKey<TextNode>(caret.key);
   if (
     node == null ||
     !$isImageSource(node) ||
-    offset === 0 ||
-    offset === node.getTextContentSize()
+    caret.offset === 0 ||
+    caret.offset === node.getTextContentSize()
   ) {
-    return false;
+    return;
   }
-  const edge = $edgeFor(node, offset, previous);
-  selection.anchor.set(key, edge, 'text');
-  selection.focus.set(key, edge, 'text');
-  return false;
+  const edge = $edgeFor(node, caret.offset, arrowFrom);
+  const selection = $getSelection();
+  if ($isRangeSelection(selection)) {
+    selection.anchor.set(caret.key, edge, 'text');
+    selection.focus.set(caret.key, edge, 'text');
+  }
 }
 
 function registerImageSourceCaret(editor: LexicalEditor): () => void {
-  let previous: CaretPoint | null = null;
-  const removeSelectionChange = editor.registerCommand(
-    SELECTION_CHANGE_COMMAND,
-    () => $moveCaretOutOfImage(previous),
-    COMMAND_PRIORITY_CRITICAL,
-  );
-  // A key typed before the browser reports the caret's move reaches the
-  // editor with the caret still inside the source: move it there too.
-  const removeInsertion = editor.registerCommand(
-    CONTROLLED_TEXT_INSERTION_COMMAND,
-    () => $moveCaretOutOfImage(previous),
-    COMMAND_PRIORITY_CRITICAL,
-  );
-  const removeListener = editor.registerUpdateListener(({editorState}) => {
-    previous = editorState.read(() => {
-      const selection = $getSelection();
-      return $isRangeSelection(selection) &&
-        selection.isCollapsed() &&
-        selection.anchor.type === 'text'
-        ? {key: selection.anchor.key, offset: selection.anchor.offset}
+  // Where the caret was when an arrow key went down; the next selection
+  // change reads it once. A press is a click, never an arrow key.
+  let arrowFrom: CaretPoint | null = null;
+  const onKeyDown = (event: KeyboardEvent) => {
+    arrowFrom =
+      event.key === 'ArrowLeft' || event.key === 'ArrowRight'
+        ? editor.getEditorState().read($caretPoint)
         : null;
-    });
-  });
-  return () => {
-    removeSelectionChange();
-    removeInsertion();
-    removeListener();
   };
+  const onPointerDown = () => {
+    arrowFrom = null;
+  };
+  return mergeRegister(
+    editor.registerRootListener((root, previousRoot) => {
+      previousRoot?.removeEventListener('keydown', onKeyDown, true);
+      previousRoot?.removeEventListener('pointerdown', onPointerDown, true);
+      root?.addEventListener('keydown', onKeyDown, true);
+      root?.addEventListener('pointerdown', onPointerDown, true);
+    }),
+    editor.registerCommand(
+      SELECTION_CHANGE_COMMAND,
+      () => {
+        $moveCaretOutOfImage(arrowFrom);
+        arrowFrom = null;
+        return false;
+      },
+      COMMAND_PRIORITY_CRITICAL,
+    ),
+    // A key typed before the browser reports a caret move reaches the editor
+    // with the caret still inside the source.
+    editor.registerCommand(
+      CONTROLLED_TEXT_INSERTION_COMMAND,
+      () => {
+        $moveCaretOutOfImage(null);
+        return false;
+      },
+      COMMAND_PRIORITY_CRITICAL,
+    ),
+  );
 }
 
 /** Keeps a collapsed caret out of the text holding an image's source. */

@@ -776,6 +776,17 @@ function markedView(
     if (text.endsWith('!') && $isLinkNode(node.getNextSibling())) {
       text = text.slice(0, -1) + token + '!';
     }
+    // A `(` right after an image that ends in `]` would become its
+    // destination.
+    const before = node.getPreviousSibling();
+    if (
+      text.startsWith('(') &&
+      before != null &&
+      $isImageSource(before) &&
+      before.getTextContent().endsWith(']')
+    ) {
+      text = token + text;
+    }
     const previous = node.getPreviousSibling();
     if (previous == null || $isLineBreakNode(previous)) {
       const ordered = ORDERED_LIST_START.exec(text);

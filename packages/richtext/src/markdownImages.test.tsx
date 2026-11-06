@@ -308,4 +308,65 @@ describe('image Markdown through edits (spec:AST-062)', () => {
       `Before k${IMAGES.emptyAlt} after\n`,
     );
   });
+
+  it('escapes a ( typed right after a reference image, so it never becomes its destination (FR3)', () => {
+    const source = 'See ![logo] here\n\n[logo]: https://example.com/logo.png\n';
+    expect(
+      editAndExport(source, () => {
+        $imageText('![logo]').insertAfter($createTextNode('(beta)'));
+      }),
+    ).toBe(
+      'See ![logo]\\(beta) here\n\n[logo]: https://example.com/logo.png\n',
+    );
+  });
+
+  it('moves a click inside an image to the nearer edge every time, and an arrow key past it (FR5)', async () => {
+    const markdown = `Before ${IMAGES.emptyAlt} after\n`;
+    const ref = createRef<RichTextEditorRef>();
+    render(
+      <RichTextEditor
+        label="Notes"
+        ref={ref}
+        defaultValue={markdownToEditorStateJSON(markdown)}
+      />,
+    );
+    await waitFor(() => expect(ref.current?.getEditor()).toBeTruthy());
+    const editor = ref.current!.getEditor()!;
+    const placeAndType = (offset: number, text: string, arrow = false) => {
+      if (arrow) {
+        editor.update(
+          () => {
+            $imageText(IMAGES.emptyAlt).select(0, 0);
+          },
+          {discrete: true},
+        );
+        editor
+          .getRootElement()
+          ?.dispatchEvent(
+            new KeyboardEvent('keydown', {key: 'ArrowRight', bubbles: true}),
+          );
+      }
+      editor.update(
+        () => {
+          $imageText(IMAGES.emptyAlt).select(offset, offset);
+          editor.dispatchCommand(SELECTION_CHANGE_COMMAND, undefined);
+          const selection = $getSelection();
+          if (!$isRangeSelection(selection)) {
+            throw new Error('no range selection');
+          }
+          selection.insertText(text);
+        },
+        {discrete: true},
+      );
+    };
+    placeAndType(2, 'A');
+    placeAndType(3, 'B');
+    expect(ref.current?.getMarkdown()).toBe(
+      `Before AB${IMAGES.emptyAlt} after\n`,
+    );
+    placeAndType(1, 'Z', true);
+    expect(ref.current?.getMarkdown()).toBe(
+      `Before AB${IMAGES.emptyAlt}Z after\n`,
+    );
+  });
 });
