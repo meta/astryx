@@ -165,6 +165,46 @@ function expectPaintedRide(result: PaintedRide): void {
   }
 }
 
+/** Opens the gliding rows story and marks the first row's toggle and the row after it. */
+async function openTable(page: Page): Promise<void> {
+  await page.goto(
+    `${storybook?.origin ?? ''}/iframe.html?id=core-tablerowexpansion--gliding-rows&viewMode=story`,
+  );
+  const trigger = page.locator('tbody button[aria-expanded="false"]').first();
+  await trigger.waitFor();
+  await trigger.evaluate(button => {
+    button.setAttribute('data-test-id', 'expand');
+    button
+      .closest('tr')
+      ?.nextElementSibling?.setAttribute('data-test-id', 'after-row');
+  });
+}
+
+/**
+ * Opens the marked row. On the next frame, reads whether the panel row's own
+ * motion moves a clip, and how many of its cells move.
+ */
+async function revealOnNextFrame(page: Page) {
+  return page.evaluate(async () => {
+    (document.querySelector('[data-test-id="expand"]') as HTMLElement).click();
+    const panel = () => document.querySelector('[data-expansion-panel]');
+    for (let i = 0; i < 30 && !panel()?.getAnimations().length; i++) {
+      await new Promise(requestAnimationFrame);
+    }
+    return {
+      clips: (panel()?.getAnimations() ?? []).some(animation =>
+        (animation.effect as KeyframeEffect)
+          .getKeyframes()
+          .some(frame => frame.clipPath != null),
+      ),
+      partMotions: [...(panel()?.children ?? [])].reduce(
+        (count, part) => count + part.getAnimations().length,
+        0,
+      ),
+    };
+  });
+}
+
 test.describe('spec:AST-105 FR9: an edge reveal paints its edge on the content beside it', () => {
   test("a Collapsible's revealed content meets the content after it on every painted frame, opening and closing", async ({
     page,
@@ -222,8 +262,10 @@ test.describe('spec:AST-105 FR9: an edge reveal paints its edge on the content b
     });
     await trigger.click();
     const reveal = await page.evaluate(async id => {
-      await new Promise(requestAnimationFrame);
       const region = document.getElementById(id);
+      for (let i = 0; i < 30 && !region?.getAnimations().length; i++) {
+        await new Promise(requestAnimationFrame);
+      }
       return {
         clips: (region?.getAnimations() ?? []).some(animation =>
           (animation.effect as KeyframeEffect)
@@ -239,49 +281,47 @@ test.describe('spec:AST-105 FR9: an edge reveal paints its edge on the content b
     expect(reveal).toEqual({clips: true, partMotions: 0});
   });
 
-  test("a Table row's expanded panel, which paints its own box, keeps the moving clip, and its edge meets the row after it in Chromium", async ({
+  test("a Table row's expanded panel slides its cell on the glide's frames and meets the row after it on every painted frame as it opens", async ({
     page,
-    browserName,
   }) => {
-    await page.goto(
-      `${storybook?.origin ?? ''}/iframe.html?id=core-tablerowexpansion--gliding-rows&viewMode=story`,
-    );
-    const trigger = page.locator('tbody button[aria-expanded="false"]').first();
-    await trigger.waitFor();
-    await trigger.evaluate(button => {
-      button.setAttribute('data-test-id', 'expand');
-      button
-        .closest('tr')
-        ?.nextElementSibling?.setAttribute('data-test-id', 'after-row');
+    await openTable(page);
+    expect(await revealOnNextFrame(page)).toEqual({
+      clips: false,
+      partMotions: 1,
     });
+    await page.waitForTimeout(700);
+    await page.locator('[data-test-id="expand"]').click();
+    await page.waitForTimeout(700);
     const ride = await paintedRide(page, {
       trigger: '[data-test-id="expand"]',
       content: '[data-expansion-panel]',
       after: '[data-test-id="after-row"]',
     });
-    // Its cells never slide, and its own clip moved with the edge.
-    const cells = await page.evaluate(() =>
-      [...document.querySelectorAll('[data-expansion-panel] > *')].map(
-        cell => cell.getAnimations().length,
-      ),
-    );
-    expect(cells.every(count => count === 0)).toBe(true);
-    expect(ride.frames.some(f => f.phase === 'opening' && f.shown > 0.5)).toBe(
-      true,
-    );
-    // WebKit paints that clip on its own clock: the gap Table's record names.
-    test.skip(
-      browserName === 'webkit',
-      "Table's record: panel rows keep the moving clip and can drift in WebKit",
-    );
-    for (const f of ride.frames.filter(
+    // A closing panel leaves at once and only the rows after it glide.
+    const opening = ride.frames.filter(
       f => f.phase === 'opening' && f.shown > 0.5,
-    )) {
+    );
+    expect(opening.length, 'opening frames').toBeGreaterThan(4);
+    for (const f of opening) {
       expect(f.gap, JSON.stringify(f)).toBeLessThan(ride.restGap + 1.5);
       expect(f.gap, JSON.stringify(f)).toBeGreaterThan(
         ride.restGap - ride.beyond - 1.5,
       );
     }
+  });
+
+  test('a Table panel row that paints its own box keeps the moving clip, and its cell stays still', async ({
+    page,
+  }) => {
+    await openTable(page);
+    await page.addStyleTag({
+      content:
+        '[data-expansion-panel] { background-color: rgb(240, 240, 240); }',
+    });
+    expect(await revealOnNextFrame(page)).toEqual({
+      clips: true,
+      partMotions: 0,
+    });
   });
 
   test("a TreeList row's revealed group meets the rows after it on every painted frame, expanding and collapsing", async ({
