@@ -322,6 +322,95 @@ describe('useFocusTrap tabbable model (infra-8)', () => {
     expect(screen.getByTestId('first')).toHaveFocus();
   });
 
+  describe('a radio group is one Tab stop', () => {
+    function RadioTrap({
+      checked,
+      before,
+    }: {
+      checked: 'morning' | 'evening' | null;
+      before?: boolean;
+    }) {
+      const radios = (
+        <>
+          <input
+            type="radio"
+            name="slot"
+            aria-label="Morning"
+            data-testid="morning"
+            defaultChecked={checked === 'morning'}
+          />
+          <input
+            type="radio"
+            name="slot"
+            aria-label="Evening"
+            data-testid="evening"
+            defaultChecked={checked === 'evening'}
+          />
+        </>
+      );
+      const button = (
+        <button type="button" data-testid="button">
+          Button
+        </button>
+      );
+      return (
+        <Trap>
+          {before === true ? radios : button}
+          {before === true ? button : radios}
+        </Trap>
+      );
+    }
+
+    it('wraps Tab from the checked radio of a group that ends the trap', () => {
+      render(<RadioTrap checked="morning" />);
+      const morning = screen.getByTestId('morning');
+      morning.focus();
+
+      expect(fireEvent.keyDown(morning, {key: 'Tab'})).toBe(false);
+      expect(screen.getByTestId('button')).toHaveFocus();
+    });
+
+    it('wraps Tab from the first radio of an unchecked group that ends the trap', () => {
+      render(<RadioTrap checked={null} />);
+      const morning = screen.getByTestId('morning');
+      morning.focus();
+
+      expect(fireEvent.keyDown(morning, {key: 'Tab'})).toBe(false);
+      expect(screen.getByTestId('button')).toHaveFocus();
+    });
+
+    it('wraps Shift+Tab from the checked radio of a group that starts the trap', () => {
+      render(<RadioTrap checked="evening" before />);
+      const evening = screen.getByTestId('evening');
+      evening.focus();
+
+      expect(fireEvent.keyDown(evening, {key: 'Tab', shiftKey: true})).toBe(
+        false,
+      );
+      expect(screen.getByTestId('button')).toHaveFocus();
+    });
+
+    it('wraps Shift+Tab into a group that ends the trap at its checked radio', () => {
+      render(<RadioTrap checked="morning" />);
+      const button = screen.getByTestId('button');
+      button.focus();
+
+      expect(fireEvent.keyDown(button, {key: 'Tab', shiftKey: true})).toBe(
+        false,
+      );
+      expect(screen.getByTestId('morning')).toHaveFocus();
+    });
+
+    it('wraps Tab into a group that starts the trap at its checked radio', () => {
+      render(<RadioTrap checked="evening" before />);
+      const button = screen.getByTestId('button');
+      button.focus();
+
+      expect(fireEvent.keyDown(button, {key: 'Tab'})).toBe(false);
+      expect(screen.getByTestId('evening')).toHaveFocus();
+    });
+  });
+
   it('leaves controls inside a closed dialog out of the Tab cycle', () => {
     render(
       <Trap>

@@ -2104,6 +2104,23 @@ describe('Dialog focus region (DEC-2)', () => {
     expect(notes).toHaveFocus();
   });
 
+  it('wraps Tab from the checked radio of a group that ends the modal', () => {
+    render(
+      <Dialog isOpen onOpenChange={() => {}} aria-label="Visit">
+        <button type="button">First</button>
+        <input type="radio" name="slot" aria-label="Morning" defaultChecked />
+        <input type="radio" name="slot" aria-label="Evening" />
+      </Dialog>,
+    );
+    const modal = screen.getByRole('dialog', {name: 'Visit'});
+    const first = getFocusableElements(modal)[0];
+    const morning = screen.getByRole('radio', {name: 'Morning'});
+    morning.focus();
+
+    expect(fireEvent.keyDown(morning, {key: 'Tab'})).toBe(false);
+    expect(first).toHaveFocus();
+  });
+
   it('wraps Tab and Shift+Tab inside the open modal', () => {
     render(
       <Dialog isOpen onOpenChange={() => {}} aria-label="Settings">

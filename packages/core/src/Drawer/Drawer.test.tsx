@@ -770,6 +770,21 @@ describe('Drawer', () => {
     expect(screen.getByRole('button', {name: 'First action'})).toHaveFocus();
   });
 
+  it('traps Tab from the checked radio of a group that ends a modal drawer', () => {
+    render(
+      <Drawer isOpen onOpenChange={() => {}} label="Visit">
+        <button type="button">First action</button>
+        <input type="radio" name="slot" aria-label="Morning" defaultChecked />
+        <input type="radio" name="slot" aria-label="Evening" />
+      </Drawer>,
+    );
+    const morning = screen.getByRole('radio', {name: 'Morning'});
+    morning.focus();
+
+    expect(fireEvent.keyDown(morning, {key: 'Tab'})).toBe(false);
+    expect(screen.getByRole('button', {name: 'First action'})).toHaveFocus();
+  });
+
   it('focuses the element with data-autofocus on open', () => {
     render(
       <Drawer isOpen onOpenChange={() => {}} label="Details">
