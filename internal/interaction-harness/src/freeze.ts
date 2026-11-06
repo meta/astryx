@@ -144,6 +144,7 @@ const FREEZE_SCRIPT = `(() => {
   // then handles it late, its main thread busy, while the compositor runs on.
   const ONE_FRAME_MS = 1000 / 60;
   let inputHold = null;
+  let holds = 0;
   const placeHeld = type => {
     const held = inputHold;
     held.type = type;
@@ -199,7 +200,8 @@ const FREEZE_SCRIPT = `(() => {
           throw new Error('holdInputUntil: a hold takes only ' + ARMABLE.join(', ') + '; got ' + type);
         }
       }
-      const held = {types, afterMs, resumeAt: null, intended: null, arrivedAt: null, releasedAt: null, stalledMs: null, type: null, outcome: null};
+      holds += 1;
+      const held = {id: holds, types, afterMs, resumeAt: null, intended: null, arrivedAt: null, releasedAt: null, stalledMs: null, type: null, outcome: null};
       inputHold = held;
       const tick = time => {
         if (inputHold !== held || held.outcome != null) return;
@@ -208,6 +210,7 @@ const FREEZE_SCRIPT = `(() => {
         held.intended = held.resumeAt + afterMs;
       };
       nativeFrame(tick);
+      return held.id;
     },
     get held() { return inputHold == null ? null : Object.assign({}, inputHold); },
     get frozen() { return state.frozenAt != null; },
@@ -494,6 +497,7 @@ export interface InputHold {
 }
 
 interface HoldState {
+  id: number;
   afterMs: number;
   resumeAt: number | null;
   intended: number | null;
@@ -532,11 +536,11 @@ export async function holdInputUntil(
       `holdInputUntil: afterResumeMs must be a positive number of ms, got ${afterResumeMs}`,
     );
   }
-  await page.evaluate(
+  const id = await page.evaluate(
     ([types, ms]) => {
       const w = window as unknown as {
         __harnessFreeze?: {
-          holdInput?: (types: readonly string[], ms: number) => void;
+          holdInput?: (types: readonly string[], ms: number) => number;
         };
       };
       if (w.__harnessFreeze?.holdInput == null) {
@@ -544,14 +548,14 @@ export async function holdInputUntil(
           'holdInputUntil: call installPageFreeze before the page loads',
         );
       }
-      w.__harnessFreeze.holdInput(types, ms);
+      return w.__harnessFreeze.holdInput(types, ms);
     },
     [on, afterResumeMs] as const,
   );
   // Waits on the real frames: the page's own stand still while it is frozen.
   const waitFor = (field: 'resumeAt' | 'outcome', timeout: number) =>
     page.evaluate(
-      ([key, wait]) =>
+      ([key, wait, holdId]) =>
         new Promise<HoldState>((resolve, reject) => {
           const freeze = (
             window as unknown as {
@@ -565,7 +569,15 @@ export async function holdInputUntil(
           const deadline = freeze.realNow() + wait;
           const tick = () => {
             const held = freeze.held;
-            if (held != null && held[key] != null) {
+            // One hold at a time: a later call replaces this one, whose
+            // handle would otherwise read the later hold.
+            if (held?.id !== holdId) {
+              reject(
+                new Error(
+                  'holdInputUntil: a later holdInputUntil replaced this hold',
+                ),
+              );
+            } else if (held[key] != null) {
               resolve(held);
             } else if (freeze.realNow() > deadline) {
               reject(
@@ -581,7 +593,7 @@ export async function holdInputUntil(
           };
           tick();
         }),
-      [field, timeout] as const,
+      [field, timeout, id] as const,
     );
   return {
     async resumed({timeout = 5_000} = {}) {

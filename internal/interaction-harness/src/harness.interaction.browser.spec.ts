@@ -5562,6 +5562,12 @@ test.describe('page freeze', () => {
     await expect(
       holdInputUntil(page, {afterResumeMs: 50, on: ['focus']}),
     ).rejects.toThrow(/takes only/);
+    // One hold at a time: a later hold replaces an earlier one, whose handle
+    // then fails by name.
+    const earlier = await holdInputUntil(page, {afterResumeMs: 50});
+    await holdInputUntil(page, {afterResumeMs: 50});
+    await expect(earlier.resumed()).rejects.toThrow(/replaced this hold/);
+    await expect(earlier.landed()).rejects.toThrow(/replaced this hold/);
   });
 
   test('a lift that reaches the page more than a frame after its time fails by name, with the numbers', async ({
