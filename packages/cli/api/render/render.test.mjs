@@ -764,6 +764,24 @@ describe('render(): every write stays inside the current folder', () => {
     expect(back.data.files).toEqual(expect.arrayContaining(['lib/data/cfg.json', 'lib/more/extra.json']));
   }, 60_000);
 
+  it('gives back a nested aliased module under the target it was sent from', async () => {
+    const paths = {compilerOptions: {baseUrl: '.', paths: {'@/*': ['./lib/missing/*', './lib/src/*']}}};
+    put('nested/tsconfig.json', JSON.stringify(paths));
+    put('nested/package.json', '{"name":"nested","private":true}');
+    put('nested/lib/src/c/Header.tsx', "export const Header = () => <b>nested-header</b>;\n");
+    put('nested/lib/src/Top.tsx', "export const Top = () => <i>top-level</i>;\n");
+    put('nested/page.tsx', "import {Header} from '@/c/Header';\nimport {Top} from '@/Top';\nexport default function Page() { return <p><Header /><Top /></p>; }\n");
+    await render('nested/page.tsx', {cwd: dir});
+    expect(fs.readFileSync(path.join(dir, 'nested/page.html'), 'utf8')).toContain('nested-header');
+    fs.mkdirSync(path.join(dir, 'nested-to'), {recursive: true});
+    put('nested-to/tsconfig.json', JSON.stringify(paths));
+    put('nested-to/package.json', '{"name":"nested-to","private":true}');
+    fs.copyFileSync(path.join(dir, 'nested/page.html'), path.join(dir, 'nested-to/page.html'));
+    const back = /** @type {any} */ (await render('page.html', {cwd: path.join(dir, 'nested-to'), reverse: true, out: 'lib/app/page.tsx'}));
+    expect(back.data.files).toEqual(expect.arrayContaining(['lib/src/c/Header.tsx', 'lib/src/Top.tsx']));
+    expect(back.data.files).not.toEqual(expect.arrayContaining(['lib/missing/c/Header.tsx']));
+  }, 60_000);
+
   it('names a package a catch-all key cannot place as not installed, and renders a page whose package stylesheet is missing with a warning', async () => {
     put('catchall2/tsconfig.json', JSON.stringify({compilerOptions: {baseUrl: '.', paths: {'*': ['./types/*']}}}));
     put('catchall2/package.json', '{"name":"catchall2","private":true}');
