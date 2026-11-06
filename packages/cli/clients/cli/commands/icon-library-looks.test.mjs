@@ -521,6 +521,11 @@ describe('generated files a formatter rewrote', () => {
       {singleQuote: true, bracketSpacing: false, trailingComma: 'all'},
     ],
     ['Prettier defaults', {}],
+    ['no semicolons', {semi: false}],
+    [
+      'a house style without semicolons',
+      {semi: false, singleQuote: true, bracketSpacing: false},
+    ],
   ])(
     'pass integration check and take the next command (%s)',
     async (_, options) => {
@@ -560,8 +565,54 @@ describe('generated files a formatter rewrote', () => {
       ]);
       expect(mapped.code, JSON.stringify(mapped.body)).toBe(0);
       expect(generatedOf('brand')).toContain('close: createElement(TrashIcon');
+      const added = await json([
+        'experimental',
+        'icon',
+        'add',
+        'HeartFilled24WGHT400Icon',
+        '--from',
+        '@acme/vector-icons',
+        '--definition',
+        'warning',
+      ]);
+      expect(added.code, JSON.stringify(added.body)).toBe(0);
+      // React is imported once, and the module reads back as it was written.
+      expect(
+        generatedOf('brand').match(/import \{\s*createElement\s*\} from/gu),
+      ).toHaveLength(1);
+      const again = await runCli(['integration', 'check', '--json'], pkg);
+      expect(JSON.stringify(JSON.parse(again.stdout))).not.toContain(
+        'icon_generated_types_mismatch',
+      );
+      const remapped = await json([
+        'experimental',
+        'icon',
+        'map',
+        'close',
+        'x',
+      ]);
+      expect(remapped.code, JSON.stringify(remapped.body)).toBe(0);
     },
   );
+
+  it('fails a declaration file that no longer matches, without semicolons too', async () => {
+    const prettier = await import('prettier');
+    writeVectorLibrary(GLYPHS);
+    await json(NEW_SET);
+    await json(['experimental', 'icon', 'map', 'close', 'x']);
+    const types = path.join(pkg, 'icon-sets', 'brand', 'brand.generated.d.ts');
+    const formatted = await prettier.format(
+      fs
+        .readFileSync(types, 'utf-8')
+        .replace('readonly close', 'readonly shut'),
+      {parser: 'typescript', semi: false},
+    );
+    fs.writeFileSync(types, formatted);
+    const check = await runCli(['integration', 'check', '--json'], pkg);
+    expect(JSON.stringify(JSON.parse(check.stdout))).toContain(
+      'icon_generated_types_mismatch',
+    );
+  });
 });
 
 describe('themeIcons with a component that writes its own size', () => {
@@ -620,5 +671,277 @@ describe('reading a large library', () => {
     const asJson = await runCli([...NEW_SET, '--dry-run', '--json'], pkg);
     expect(asJson.stderr).not.toContain('Reading');
     expect(JSON.parse(asJson.stdout).data.icons).toBe(170);
+  });
+});
+
+describe('reading a large library again', () => {
+  /** 170 glyphs in every look: 1,021 exports. */
+  const manyGlyphs = () => {
+    const letters = 'abcdefghijklmnopqrstuvwxyz';
+    return Array.from(
+      {length: 170},
+      (_, index) =>
+        `Glyph${letters[Math.floor(index / 26)].toUpperCase()}${letters[index % 26]}`,
+    );
+  };
+
+  it('reports progress on a refresh, on an add listing, and names the module as given on add --all', async () => {
+    writeVectorLibrary(manyGlyphs());
+    await json([...NEW_SET, '--variants', 'outline,filled']);
+    const refresh = await runCli([...NEW_SET, '--dry-run'], pkg);
+    expect(refresh.code, refresh.stdout).toBe(0);
+    expect(refresh.stderr).toContain(
+      'Reading 1021 exports of @acme/vector-icons...',
+    );
+    expect(refresh.stderr).toContain('Found 1020 icons in @acme/vector-icons.');
+    const listing = await runCli(
+      [
+        'experimental',
+        'icon',
+        'add',
+        'GlyphAaOutline24WGHT400Icon',
+        '--from',
+        '@acme/vector-icons',
+      ],
+      pkg,
+    );
+    expect(listing.code, listing.stdout).toBe(0);
+    expect(listing.stderr).toContain(
+      'Reading 1021 exports of @acme/vector-icons...',
+    );
+    const all = await runCli(
+      [
+        'experimental',
+        'icon',
+        'add',
+        '--variant',
+        'filled',
+        '--from',
+        '@acme/vector-icons',
+        '--all',
+      ],
+      pkg,
+    );
+    expect(all.code, all.stdout).toBe(0);
+    expect(all.stderr).toContain(
+      'Reading 1021 exports of @acme/vector-icons...',
+    );
+    expect(all.stderr).not.toContain('index.js');
+  });
+});
+
+describe('the default variant over an existing set', () => {
+  it('stays when --variants adds a variant in place without --default-variant', async () => {
+    writeVectorLibrary(GLYPHS);
+    await json([
+      ...NEW_SET,
+      '--variants',
+      'outline,filled',
+      '--default-variant',
+      'filled',
+    ]);
+    const updated = await json([
+      'experimental',
+      'icon',
+      'new-set',
+      'brand',
+      '--variants',
+      'outline,filled,bold',
+    ]);
+    expect(updated.code, JSON.stringify(updated.body)).toBe(0);
+    // The next command it prints names the set, so it runs in a package of
+    // several sets too.
+    expect(updated.body.data.notes.join(' ')).toContain(
+      '`astryx experimental icon add --variant bold --from <module> --all --set brand`',
+    );
+    expect(dataOf('brand')).toMatchObject({
+      variants: ['outline', 'filled', 'bold'],
+      default: {variant: 'filled'},
+    });
+    // A refresh with --variants keeps it too.
+    const refreshed = await json([
+      ...NEW_SET,
+      '--variants',
+      'outline,filled,bold',
+    ]);
+    expect(refreshed.code, JSON.stringify(refreshed.body)).toBe(0);
+    expect(dataOf('brand').default).toEqual({variant: 'filled'});
+    // --default-variant still moves it.
+    const moved = await json([
+      'experimental',
+      'icon',
+      'new-set',
+      'brand',
+      '--variants',
+      'outline,filled,bold',
+      '--default-variant',
+      'outline',
+    ]);
+    expect(moved.code, JSON.stringify(moved.body)).toBe(0);
+    expect(dataOf('brand').default).toEqual({variant: 'outline'});
+  });
+
+  it('heads an in-place update "Icon set updated", and its plan "Icon set update plan"', async () => {
+    writeVectorLibrary(GLYPHS);
+    await json([...NEW_SET, '--variants', 'outline,filled']);
+    const declare = [
+      'experimental',
+      'icon',
+      'new-set',
+      'brand',
+      '--variants',
+      'outline,filled,bold',
+    ];
+    const plan = await runCli([...declare, '--dry-run'], pkg);
+    expect(plan.code, plan.stdout).toBe(0);
+    expect(plan.stdout).toContain('Icon set update plan');
+    expect(plan.stdout).not.toContain('New icon set');
+    const updated = await runCli(declare, pkg);
+    expect(updated.code, updated.stdout).toBe(0);
+    expect(updated.stdout).toContain('Icon set updated');
+    expect(updated.stdout).not.toContain('New icon set');
+    const again = await json(declare);
+    expect(again.body.data.updated).toBe(true);
+    const unchanged = await runCli(declare, pkg);
+    expect(unchanged.stdout).toContain('Icon set unchanged');
+  });
+
+  it('is named in the command add prints to declare a variant, so it runs as printed', async () => {
+    writeVectorLibrary(GLYPHS);
+    await json([
+      ...NEW_SET,
+      '--variants',
+      'outline,filled',
+      '--default-variant',
+      'filled',
+    ]);
+    const declare =
+      'astryx experimental icon new-set brand --variants outline,filled,bold --default-variant filled';
+    const one = await json([
+      'experimental',
+      'icon',
+      'add',
+      'StarOutline24WGHT300Icon',
+      '--from',
+      '@acme/vector-icons',
+      '--id',
+      'star',
+      '--variant',
+      'bold',
+    ]);
+    expect(one.code).not.toBe(0);
+    expect(one.body.suggestions[0].name).toBe(declare);
+    const all = await json([
+      'experimental',
+      'icon',
+      'add',
+      '--variant',
+      'bold',
+      '--from',
+      '@acme/vector-icons',
+      '--all',
+    ]);
+    expect(all.code).not.toBe(0);
+    expect(all.body.suggestions[0].name).toBe(declare);
+    const ran = await json(declare.split(' ').slice(1));
+    expect(ran.code, JSON.stringify(ran.body)).toBe(0);
+    expect(dataOf('brand').default).toEqual({variant: 'filled'});
+  });
+});
+
+describe('add <Export> for a glyph the set already wraps in another look', () => {
+  it('lists commands that run as printed: a definition under the look-kept name, or a variant of the glyph', async () => {
+    writeVectorLibrary(GLYPHS);
+    await json([...NEW_SET, '--variants', 'outline,filled']);
+    expect(generatedOf('brand')).toContain(
+      "export {XOutline24WGHT400Icon as XIcon} from '@acme/vector-icons';",
+    );
+    const base = [
+      'experimental',
+      'icon',
+      'add',
+      'XFilled24WGHT500Icon',
+      '--from',
+      '@acme/vector-icons',
+    ];
+    const listed = await json(base);
+    expect(listed.code, JSON.stringify(listed.body)).toBe(0);
+    expect(listed.body.data.variant).toBe(
+      'astryx experimental icon add XFilled24WGHT500Icon --from @acme/vector-icons --id x --variant filled',
+    );
+    const close = listed.body.data.matches.find(
+      (/** @type {{name: string}} */ each) => each.name === 'close',
+    );
+    expect(close.command).toBe(
+      'astryx experimental icon add XFilled24WGHT500Icon --from @acme/vector-icons --definition close',
+    );
+    const text = await runCli(base, pkg);
+    expect(text.stdout).toContain('Add this one as its variant');
+    const asDefinition = await json(close.command.split(' ').slice(1));
+    expect(asDefinition.code, JSON.stringify(asDefinition.body)).toBe(0);
+    expect(asDefinition.body.data.icon.export).toBe('XFilled24WGHT500Icon');
+    const asVariant = await json(listed.body.data.variant.split(' ').slice(1));
+    expect(asVariant.code, JSON.stringify(asVariant.body)).toBe(0);
+    expect(generatedOf('brand')).toContain(
+      "export {XFilled24WGHT500Icon as XFilledIcon} from '@acme/vector-icons';",
+    );
+  });
+
+  it('names the export from --id', async () => {
+    writeVectorLibrary(GLYPHS);
+    await json(NEW_SET);
+    const added = await json([
+      'experimental',
+      'icon',
+      'add',
+      'XFilled24WGHT500Icon',
+      '--from',
+      '@acme/vector-icons',
+      '--id',
+      'x-filled',
+      '--definition',
+      'close',
+    ]);
+    expect(added.code, JSON.stringify(added.body)).toBe(0);
+    expect(added.body.data.icon).toMatchObject({
+      id: 'x-filled',
+      export: 'XFilledIcon',
+    });
+    expect(generatedOf('brand')).toContain(
+      "export {XFilled24WGHT500Icon as XFilledIcon} from '@acme/vector-icons';",
+    );
+  });
+});
+
+describe('progress lines', () => {
+  it('reach stderr through the CLI’s text-mode output only', async () => {
+    const letters = 'abcdefghijklmnopqrstuvwxyz';
+    writeVectorLibrary(
+      Array.from(
+        {length: 170},
+        (_, index) =>
+          `Glyph${letters[Math.floor(index / 26)].toUpperCase()}${letters[index % 26]}`,
+      ),
+    );
+    await json(NEW_SET);
+    const listing = [
+      'experimental',
+      'icon',
+      'add',
+      'GlyphAaOutline24WGHT400Icon',
+      '--from',
+      '@acme/vector-icons',
+    ];
+    const text = await runCli(listing, pkg);
+    expect(text.stderr).toContain('Reading 1021 exports');
+    const asJson = await runCli([...listing, '--json'], pkg);
+    expect(asJson.stderr).not.toContain('Reading');
+    JSON.parse(asJson.stdout);
+    // The command writes no chatter of its own: humanWarn is the one path.
+    const source = fs.readFileSync(
+      new URL('./experimental/icon.mjs', import.meta.url),
+      'utf-8',
+    );
+    expect(source).not.toMatch(/console\.(?:error|warn|log)/u);
   });
 });

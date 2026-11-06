@@ -58,6 +58,7 @@ export {
   withLibraryProgress,
   moduleNaming,
   iconNamingWithoutLook,
+  splitLook,
   setModuleNote,
   variantExportName,
   writeGeneratedIcons,

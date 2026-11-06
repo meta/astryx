@@ -49,7 +49,7 @@ export const doc = {
       flag: '--default-variant <variant>',
       param: 'options.defaultVariant',
       description:
-        "With --variants: the variant each icon's own export draws (the first variant when omitted)",
+        "With --variants: the variant each icon's own export draws (when omitted, an existing set keeps its default while --variants declares it; else the first variant)",
     },
     {
       flag: '--display-name <text>',

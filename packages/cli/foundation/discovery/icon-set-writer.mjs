@@ -726,18 +726,30 @@ export function modulePrefix(file, options) {
 /**
  * How a module names its icons: the library prefix every icon export shares
  * ({@link modulePrefix}) and the look words its names end in
- * ({@link lookPositions}), read from its icon exports once.
+ * ({@link lookPositions}), read from its icon exports once. A large module
+ * reports its reading, as {@link libraryIcons} does.
  * @param {string} file
- * @param {{adapter?: boolean}} [options]
+ * @param {{adapter?: boolean, module?: string}} [options] `module`: the
+ *   module as the author named it, for progress
  * @returns {{prefix: string[], positions: Array<Set<string>>}}
  */
-export function moduleNaming(file, options) {
-  const candidates = iconCandidates(file, options);
-  const prefix = libraryPrefix(prefixNames(candidates));
-  const positions = lookPositions(
-    candidates.map(each => iconNaming(each.name, prefix).id),
+export function moduleNaming(file, options = {}) {
+  const label = options.module ?? path.basename(file);
+  let count = 0;
+  return readingLibrary(
+    file,
+    label,
+    () => {
+      const candidates = iconCandidates(file, options);
+      count = candidates.length;
+      const prefix = libraryPrefix(prefixNames(candidates));
+      const positions = lookPositions(
+        candidates.map(each => iconNaming(each.name, prefix).id),
+      );
+      return {prefix, positions};
+    },
+    () => `Found ${count} icon exports in ${label}.`,
   );
-  return {prefix, positions};
 }
 
 /**
@@ -926,28 +938,50 @@ export function preferredLook(positions, prefer = []) {
  * @returns {LibraryIcon[]}
  */
 export function libraryIcons(file, options = {}) {
+  const label = options.module ?? path.basename(file);
+  /** @type {LibraryIcon[]} */
+  let all = [];
+  return readingLibrary(
+    file,
+    label,
+    () => {
+      all = collectLibraryIcons(file, options);
+      const grouped = libraryLooks(all, options.prefer);
+      if (grouped.positions.length > 0) {
+        options.summary?.({
+          positions: grouped.positions.map(position => [...position].sort()),
+          preferred: grouped.preferred,
+          exports: all.length,
+        });
+      }
+      return grouped.icons;
+    },
+    icons =>
+      icons.length === all.length
+        ? `Found ${icons.length} icons in ${label}.`
+        : `Found ${icons.length} icons in ${label}, drawn by ${all.length} exports in their looks.`,
+  );
+}
+
+/**
+ * Read a library with its progress reported ({@link withLibraryProgress}):
+ * when a listener hears it and the module has {@link PROGRESS_FROM} exports
+ * or more, a line before `read` runs and the line `found` gives after.
+ * @template T
+ * @param {string} file
+ * @param {string} label the module as the author named it
+ * @param {() => T} read
+ * @param {(result: T) => string} found
+ * @returns {T}
+ */
+function readingLibrary(file, label, read, found) {
   const report = libraryProgress.getStore();
   const exportCount = report ? followedExportNames(file).length : 0;
-  const loud = report != null && exportCount >= PROGRESS_FROM;
-  const label = options.module ?? path.basename(file);
-  if (loud) report(`Reading ${exportCount} exports of ${label}...`);
-  const all = everyLibraryIcon(file, options);
-  const grouped = libraryLooks(all, options.prefer);
-  if (grouped.positions.length > 0) {
-    options.summary?.({
-      positions: grouped.positions.map(position => [...position].sort()),
-      preferred: grouped.preferred,
-      exports: all.length,
-    });
-  }
-  if (loud) {
-    report(
-      grouped.icons.length === all.length
-        ? `Found ${grouped.icons.length} icons in ${label}.`
-        : `Found ${grouped.icons.length} icons in ${label}, drawn by ${all.length} exports in their looks.`,
-    );
-  }
-  return grouped.icons;
+  if (report == null || exportCount < PROGRESS_FROM) return read();
+  report(`Reading ${exportCount} exports of ${label}...`);
+  const result = read();
+  report(found(result));
+  return result;
 }
 
 /**
@@ -1014,12 +1048,30 @@ export function libraryLooks(all, prefer = []) {
 
 /**
  * Every icon a library exports, one per export: {@link libraryIcons} before
- * looks are grouped.
+ * looks are grouped. A large module reports its reading, as
+ * {@link libraryIcons} does.
+ * @param {string} file
+ * @param {{adapter?: boolean, exclude?: string[], module?: string}} [options]
+ *   `module`: the module as the author named it, for progress
+ * @returns {LibraryIcon[]}
+ */
+export function everyLibraryIcon(file, options = {}) {
+  const label = options.module ?? path.basename(file);
+  return readingLibrary(
+    file,
+    label,
+    () => collectLibraryIcons(file, options),
+    icons => `Found ${icons.length} icons in ${label}.`,
+  );
+}
+
+/**
+ * {@link everyLibraryIcon} without progress.
  * @param {string} file
  * @param {{adapter?: boolean, exclude?: string[]}} [options]
  * @returns {LibraryIcon[]}
  */
-export function everyLibraryIcon(file, options = {}) {
+function collectLibraryIcons(file, options = {}) {
   const candidates = iconCandidates(file, options);
   /** @type {Map<string, {names: string[], adapt: boolean, scalar: string | null}>} */
   const byOrigin = new Map();
@@ -1216,9 +1268,10 @@ const GENERATED_HEADER = [
 /**
  * The top-level statements of a generated module, one normalized line each,
  * however a formatter left the file (Prettier's line breaks, double quotes,
- * trailing commas, semicolons between type members): whitespace collapsed,
- * no padding inside braces or parentheses, no trailing comma or member
- * semicolon, and single-quoted strings. Comments are dropped.
+ * trailing commas, semicolons or none): whitespace collapsed, no padding
+ * inside braces or parentheses, no trailing comma, type members separated by
+ * `; ` with none before the closing brace, no statement semicolon, and
+ * single-quoted strings. Comments are dropped.
  * @param {string} text
  * @param {string} label the module's path, for the error
  * @returns {string[]}
@@ -1233,17 +1286,91 @@ function generatedStatements(text, label) {
       'ERR_INVALID_ARGUMENT',
     );
   }
-  return ast.program.body.map(node =>
-    text
-      .slice(
-        /** @type {number} */ (node.start),
-        /** @type {number} */ (node.end),
-      )
-      .replace(/\s+/gu, ' ')
-      .replace(/"((?:[^"'\\]|\\.)*)"/gu, "'$1'")
-      .replace(/([{(]) /gu, '$1')
-      .replace(/[,;]? ?([})])/gu, '$1'),
-  );
+  return ast.program.body.map(node => {
+    const start = /** @type {number} */ (node.start);
+    // A formatter without semicolons ends each type member with a line
+    // break, which collapses to a space: give each member its separator.
+    const separators = typeMemberEnds(node)
+      .filter(end => !/^\s*[;,]/u.test(text.slice(end, end + 1)))
+      .filter(end => !/[;,]$/u.test(text.slice(end - 1, end)))
+      .sort((a, b) => b - a);
+    let statement = text.slice(start, /** @type {number} */ (node.end));
+    for (const end of separators) {
+      const at = end - start;
+      statement = `${statement.slice(0, at)};${statement.slice(at)}`;
+    }
+    return normalizedStatement(statement);
+  });
+}
+
+/**
+ * One statement's text in the normalized form {@link generatedStatements}
+ * gives.
+ * @param {string} statement
+ */
+function normalizedStatement(statement) {
+  return statement
+    .replace(/\s+/gu, ' ')
+    .replace(/"((?:[^"'\\]|\\.)*)"/gu, "'$1'")
+    .replace(/([{(]) /gu, '$1')
+    .replace(/[,;]? ?([})])/gu, '$1')
+    .trim()
+    .replace(/ ?;$/u, '');
+}
+
+/**
+ * Where each type member of a statement ends (the members of every type
+ * literal and interface in it).
+ * @param {any} node
+ * @returns {number[]}
+ */
+function typeMemberEnds(node) {
+  /** @type {number[]} */
+  const ends = [];
+  /** @param {any} each */
+  const visit = each => {
+    if (each == null || typeof each !== 'object') return;
+    if (Array.isArray(each)) {
+      for (const item of each) visit(item);
+      return;
+    }
+    if (typeof each.type !== 'string') return;
+    const members =
+      each.type === 'TSTypeLiteral'
+        ? each.members
+        : each.type === 'TSInterfaceBody'
+          ? each.body
+          : null;
+    if (members) {
+      for (const member of members) ends.push(member.end);
+    }
+    for (const key of Object.keys(each)) {
+      if (
+        key === 'loc' ||
+        key === 'leadingComments' ||
+        key === 'trailingComments' ||
+        key === 'innerComments'
+      ) {
+        continue;
+      }
+      visit(each[key]);
+    }
+  };
+  visit(node);
+  return ends;
+}
+
+/**
+ * A normalized statement as the generated module writes it: with its
+ * semicolon, except after a declaration that ends in its own block.
+ * @param {string} statement
+ */
+function terminated(statement) {
+  return /^(?:export (?:default )?)?(?:declare )?(?:abstract )?(?:async )?(?:function\b|class\b|interface\b|enum\b|namespace\b|module\b)/u.test(
+    statement,
+  )
+    ? statement
+    : `${statement};`;
 }
 
 /**
@@ -1272,7 +1399,7 @@ const ADAPTER_LOCAL = 'adaptIcon';
 export const THEME_MAP_NAME = 'themeIcons';
 
 /** How the generated module imports React for its theme map. */
-const REACT_IMPORT = "import {createElement} from 'react';";
+const REACT_IMPORT = "import {createElement} from 'react'";
 
 /** The built-in icon definitions: the shared names a theme map covers. */
 const BUILT_IN = new Set(ICON_NAMES);
@@ -1314,7 +1441,6 @@ export function generatedModulePath(set, packageDir) {
 const THEME_ELEMENT_PROPS =
   "{'aria-hidden': true, 'width': '1em', 'height': '1em', 'style': {'width': '1em', 'height': '1em'}}";
 
-
 /**
  * The declaration file's text for a generated module's statements: each
  * re-export as written, so a component keeps its library's types; each
@@ -1326,10 +1452,11 @@ export function generatedTypesText(statements) {
   /** @type {string[]} */
   const lines = [];
   const react = new Set();
-  for (const statement of statements) {
+  for (const given of statements) {
+    const statement = normalizedStatement(given);
     if (statement.startsWith('import ')) continue;
     if (/^export (?:\*|\{[^}]*\}) from /u.test(statement)) {
-      lines.push(statement);
+      lines.push(terminated(statement));
       continue;
     }
     const adapted = new RegExp(
@@ -1343,7 +1470,7 @@ export function generatedTypesText(statements) {
       );
       continue;
     }
-    const theme = /^export const (\w+) = \{(.*)\};$/u.exec(statement);
+    const theme = /^export const (\w+) = \{(.*)\}$/u.exec(statement);
     if (
       theme &&
       (theme[1] === THEME_MAP_NAME || statement.includes('createElement('))
@@ -1465,22 +1592,22 @@ export function generatedModuleText(
       const local = `${icon.name}Source`;
       wantImports.push(
         icon.source === 'default'
-          ? `import ${local} from '${specifier}';`
-          : `import {${icon.source === local ? local : `${icon.source} as ${local}`}} from '${specifier}';`,
+          ? `import ${local} from '${specifier}'`
+          : `import {${icon.source === local ? local : `${icon.source} as ${local}`}} from '${specifier}'`,
       );
-      want.push(`export const ${icon.name} = ${ADAPTER_LOCAL}(${local});`);
+      want.push(`export const ${icon.name} = ${ADAPTER_LOCAL}(${local})`);
     } else {
       want.push(
         icon.source === icon.name
-          ? `export {${icon.name}} from '${specifier}';`
-          : `export {${icon.source} as ${icon.name}} from '${specifier}';`,
+          ? `export {${icon.name}} from '${specifier}'`
+          : `export {${icon.source} as ${icon.name}} from '${specifier}'`,
       );
     }
     const prior = existing(icon.name);
     if (prior) {
       if (prior !== want[0]) {
         throw new IconSetAuthoringError(
-          `The generated icons module already exports ${icon.name} as \`${prior}\`. Pass another name, or edit ${generated}.`,
+          `The generated icons module already exports ${icon.name} as \`${terminated(prior)}\`. Pass another name, or edit ${generated}.`,
           'ERR_FILE_EXISTS',
         );
       }
@@ -1525,15 +1652,17 @@ export function generatedModuleText(
   const adapterLine =
     needsAdapter && data.adapter
       ? [
-          `import {${data.adapter.export} as ${ADAPTER_LOCAL}} from '${specifierOf(data.adapter.module)}';`,
+          `import {${data.adapter.export} as ${ADAPTER_LOCAL}} from '${specifierOf(data.adapter.module)}'`,
         ]
       : [];
   const js = [
     ...GENERATED_HEADER,
-    ...(themeName ? [REACT_IMPORT] : []),
-    ...adapterLine,
-    ...[...imports, ...themeImports].sort(),
-    ...[...exports].sort(),
+    ...[
+      ...(themeName ? [REACT_IMPORT] : []),
+      ...adapterLine,
+      ...[...imports, ...themeImports].sort(),
+      ...[...exports].sort(),
+    ].map(terminated),
     ...(themeName
       ? theme.length > 0
         ? [`export const ${themeName} = {`, ...theme, '};']
@@ -1599,7 +1728,7 @@ export function generatedNamesOf(packageDir, generated, from, source) {
       .join('/');
     if (!specifier.startsWith('.')) specifier = `./${specifier}`;
   }
-  const tail = ` from '${specifier}';`;
+  const tail = ` from '${specifier}'`;
   for (const statement of statements) {
     if (!statement.endsWith(tail)) continue;
     const head = statement.slice(0, -tail.length);
@@ -1661,7 +1790,7 @@ export function generatedOrigins(packageDir, generated) {
     return `./${rel}`;
   };
   for (const statement of statements) {
-    const reexport = /^export \{(\w+)(?: as (\w+))?\} from '([^']+)';$/u.exec(
+    const reexport = /^export \{(\w+)(?: as (\w+))?\} from '([^']+)'$/u.exec(
       statement,
     );
     if (reexport) {
@@ -1671,7 +1800,7 @@ export function generatedOrigins(packageDir, generated) {
       });
       continue;
     }
-    const adapted = /^import \{(\w+) as (\w+)Source\} from '([^']+)';$/u.exec(
+    const adapted = /^import \{(\w+) as (\w+)Source\} from '([^']+)'$/u.exec(
       statement,
     );
     if (adapted) {
@@ -1681,7 +1810,7 @@ export function generatedOrigins(packageDir, generated) {
       });
       continue;
     }
-    const adaptedDefault = /^import (\w+)Source from '([^']+)';$/u.exec(
+    const adaptedDefault = /^import (\w+)Source from '([^']+)'$/u.exec(
       statement,
     );
     if (adaptedDefault) {
@@ -1905,10 +2034,28 @@ export function entryWiringNote(packageDir, pkg, generated, options = {}) {
     inside(typesFile) &&
     fs.existsSync(typesFile) &&
     !isBuiltOrCommonJs(packageDir, typesFile) &&
-    !fs.readFileSync(typesFile, 'utf-8').includes(lineFor(typesFile))
+    !hasStatement(typesFile, lineFor(typesFile))
       ? ` and \`${lineFor(typesFile)}\` to ${rel(typesFile)}`
       : '';
   return `Add \`${lineFor(entry)}\` to ${rel(entry)}${alsoTypes}, so the icons import from ${module}.`;
+}
+
+/**
+ * Whether a file has a statement, however a formatter left it
+ * ({@link generatedStatements}); a file that does not parse is searched for
+ * the text as written.
+ * @param {string} file
+ * @param {string} statement
+ */
+function hasStatement(file, statement) {
+  const text = fs.readFileSync(file, 'utf-8');
+  try {
+    return generatedStatements(text, file).includes(
+      normalizedStatement(statement),
+    );
+  } catch {
+    return text.includes(statement);
+  }
 }
 
 /**

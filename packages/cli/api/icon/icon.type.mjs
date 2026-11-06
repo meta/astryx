@@ -250,6 +250,7 @@
  * @property {string} data.id - The id the icon would get.
  * @property {IconDefinitionMatch[]} data.matches - At most 10, best first.
  * @property {string | null} data.newDefinition - The command that adds the set's own definition, when no match fits.
+ * @property {string} [data.variant] - When the set already has an icon for the export's glyph from another export of the library: the command that adds this export as that icon's variant.
  */
 
 /**
@@ -326,6 +327,7 @@
  * @property {string} [from]
  * @property {number} [icons] - With `from`: how many icons it wrote.
  * @property {boolean} [refreshed] - With `from` on an existing set: the set was refreshed, not created.
+ * @property {boolean} [updated] - Without `from` on an existing set: its variants, default variant, display name, or description were updated in place, not created.
  * @property {Array<{from: string, to: string}>} [renamed] - On a refresh: the icons whose id this release's id rule changes, matched by the export the library still has; each keeps its `map` entries, variants, and words.
  * @property {Array<{definition: string, icon: string}>} [mapped] - With `from`: the `map` entries an icon with the definition's exact name gives (on a refresh, every such entry, kept or new); check each.
  * @property {Array<{definition: string, icon: string, word: string}>} [suggestions] - With `from`: for each unmapped Astryx definition, up to three icons it might map to, best first: the definition's name in another spelling or as another name of an icon, ids that start with it, an id or another name that is one of its words, then two-word ids that are a one-word word sized, shaped, or numbered (`grid-2x2`); never a negated form, the opposite direction, or an icon already mapped. `word` is the name or word that matched. Never written.

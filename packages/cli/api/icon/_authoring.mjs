@@ -268,7 +268,7 @@ export async function addIconSet(name, options) {
     });
     if (found.length === 0) {
       throw new AstryxError(
-        `"${from}" exports no icon components this command can read. If its icons are data (objects or SVG strings), run \`astryx experimental icon new-set ${name}\`, declare an "adapter" in ${name}.icons.json, and run this command again; or add icons one at a time with \`astryx experimental icon add <Export> --from ${from}\`.`,
+        `"${from}" exports no icon components this command can read. If its icons are data (objects or SVG strings), run \`astryx experimental icon new-set ${name}\`, declare an "adapter" in ${name}.icons.json, and run this command again; or add icons one at a time with \`astryx experimental icon add <Export> --from ${from} --set ${name}\`.`,
         undefined,
         ERROR_CODES.ERR_NOT_FOUND,
       );
@@ -490,7 +490,7 @@ export async function addIconSet(name, options) {
         ? [`Found ${icons.length} icons in ${from}.`]
         : []),
       ...(from != null && lookFound.summary != null
-        ? lookNotes(lookFound.summary, icons.length, from, looks)
+        ? lookNotes(lookFound.summary, icons.length, from, looks, name)
         : []),
       ...mappedNotes(map),
       ...suggestionNotes(suggestions),
@@ -528,14 +528,15 @@ function describedDoc(source, describe) {
  * are. A variant an icon still has must stay declared, and the default
  * variant is one no icon lists as an extra look.
  * @param {string} name
- * @param {{cwd: string, dryRun: boolean, looks: {variants: string[], default: string} | null, describe: {displayName?: string, description?: string}, packageDir: string, rootPath: string, manifestPath: string}} options
+ * @param {{cwd: string, dryRun: boolean, looks: Looks | null, describe: {displayName?: string, description?: string}, packageDir: string, rootPath: string, manifestPath: string}} options
  */
 async function redeclareIconSet(
   name,
-  {cwd, dryRun, looks, describe, packageDir, rootPath, manifestPath},
+  {cwd, dryRun, looks: given, describe, packageDir, rootPath, manifestPath},
 ) {
   return iconAuthoring(async () => {
     const {set} = await findLocalIconSet(cwd, name);
+    const looks = keepDefaultVariant(given, set.data.default?.variant);
     if (looks) {
       const declared = new Set(looks.variants);
       const dropped = set.data.icons.flatMap(icon =>
@@ -603,6 +604,7 @@ async function redeclareIconSet(
       dryRun,
     );
     result.data.icons = set.data.icons.length;
+    result.data.updated = true;
     const added = (looks?.variants ?? []).filter(
       variant =>
         variant !== looks?.default &&
@@ -614,7 +616,7 @@ async function redeclareIconSet(
         : `Updated icon set "${name}" in place; its icons, map and generated module are unchanged.`,
       ...(added.length > 0
         ? [
-            `Give each icon its ${added.join(', ')} look: ${added.map(variant => `\`astryx experimental icon add --variant ${variant} --from <module> --all\``).join(', ')}, or one icon with \`astryx experimental icon add <Export> --from <module> --id <icon> --variant <name>\`.`,
+            `Give each icon its ${added.join(', ')} look: ${added.map(variant => `\`astryx experimental icon add --variant ${variant} --from <module> --all --set ${name}\``).join(', ')}, or one icon with \`astryx experimental icon add <Export> --from <module> --id <icon> --variant <name> --set ${name}\`.`,
           ]
         : []),
     ];
@@ -630,9 +632,10 @@ async function redeclareIconSet(
  * @param {number} count icons in the set
  * @param {string} from
  * @param {{variants: string[], default: string} | null} looks
+ * @param {string} name the set's name
  * @returns {string[]}
  */
-function lookNotes(summary, count, from, looks) {
+function lookNotes(summary, count, from, looks, name) {
   const described = [...summary.positions]
     .reverse()
     .map(words =>
@@ -649,8 +652,8 @@ function lookNotes(summary, count, from, looks) {
   return [
     `Found ${count} icons in ${from}, each drawn in several looks (${described}) by ${summary.exports} exports. The set wraps each icon once, in the ${taken} look, named without the look words (\`x\`, \`XIcon\`).`,
     others.length > 0
-      ? `Add the ${others.join(', ')} look${others.length > 1 ? 's' : ''} as variant${others.length > 1 ? 's' : ''}: ${others.map(variant => `\`astryx experimental icon add --variant ${variant} --from ${from} --all\``).join(', ')}.`
-      : `To offer another look as a variant, declare it with \`astryx experimental icon new-set <set> --variants ${[...summary.preferred].reverse()[0]},<look>\` (no --from: the set's icons stay as they are) and run \`astryx experimental icon add --variant <look> --from ${from} --all\`.`,
+      ? `Add the ${others.join(', ')} look${others.length > 1 ? 's' : ''} as variant${others.length > 1 ? 's' : ''}: ${others.map(variant => `\`astryx experimental icon add --variant ${variant} --from ${from} --all --set ${name}\``).join(', ')}.`
+      : `To offer another look as a variant, declare it with \`astryx experimental icon new-set ${name} --variants ${[...summary.preferred].reverse()[0]},<look>\` (no --from: the set's icons stay as they are) and run \`astryx experimental icon add --variant <look> --from ${from} --all --set ${name}\`.`,
   ];
 }
 
@@ -735,6 +738,14 @@ function mappedNotes(map) {
   ];
 }
 
+/**
+ * The variants and default variant a command declares.
+ * @typedef {object} Looks
+ * @property {string[]} variants
+ * @property {string} default
+ * @property {boolean} [named] whether `--default-variant` named the default
+ */
+
 /** A variant name: lower-kebab, such as `outline` or `mini-solid`. */
 const VARIANT_NAME_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
 
@@ -743,7 +754,7 @@ const VARIANT_NAME_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
  * declare, or
  * null when neither is given. The default is the first variant unless named.
  * @param {{variants?: string[] | string, defaultVariant?: string}} options
- * @returns {{variants: string[], default: string} | null}
+ * @returns {Looks | null}
  */
 function variantOptions(options) {
   const given =
@@ -788,7 +799,22 @@ function variantOptions(options) {
       ERROR_CODES.ERR_INVALID_ARGUMENT,
     );
   }
-  return {variants, default: chosen || variants[0]};
+  return {variants, default: chosen || variants[0], named: Boolean(chosen)};
+}
+
+/**
+ * The variants `--variants` declares over an existing set. Without
+ * `--default-variant`, the set keeps its default variant while `--variants`
+ * still declares it: each icon's own export draws that look.
+ * @param {Looks | null} looks
+ * @param {string | undefined} current the set's `default.variant`
+ * @returns {Looks | null}
+ */
+function keepDefaultVariant(looks, current) {
+  if (!looks || looks.named || !current || !looks.variants.includes(current)) {
+    return looks;
+  }
+  return {...looks, default: current};
 }
 
 /**
@@ -826,7 +852,7 @@ async function iconAuthoring(step) {
  * them), the generated module gains the new exports, `map` keeps every entry
  * whose icon still exists, and the receipt names the entries that lost theirs.
  * @param {string} name
- * @param {{cwd: string, dryRun: boolean, from: string, exclude: string[], looks: {variants: string[], default: string} | null, describe: {displayName?: string, description?: string}, packageDir: string, rootPath: string, manifestPath: string}} options
+ * @param {{cwd: string, dryRun: boolean, from: string, exclude: string[], looks: Looks | null, describe: {displayName?: string, description?: string}, packageDir: string, rootPath: string, manifestPath: string}} options
  */
 async function refreshIconSet(
   name,
@@ -835,7 +861,7 @@ async function refreshIconSet(
     dryRun,
     from,
     exclude,
-    looks,
+    looks: given,
     describe,
     packageDir,
     rootPath,
@@ -845,6 +871,7 @@ async function refreshIconSet(
   return iconAuthoring(async () => {
     const where = await findLocalIconSet(cwd, name);
     const {set} = where;
+    const looks = keepDefaultVariant(given, set.data.default?.variant);
     const source = resolveIconSource(from, where);
     // Exports left out before stay out; --exclude adds to them.
     const excluded = [
@@ -853,6 +880,7 @@ async function refreshIconSet(
     const everyIcon = everyLibraryIcon(source.file, {
       adapter: Boolean(set.data.adapter),
       exclude: excluded,
+      module: source.module,
     });
 
     // A refresh changes only the icons the refreshed module supplies: those

@@ -539,6 +539,16 @@ describe('a word matches whole words (FR6)', () => {
     ]);
   });
 
+  it('ranks the whole id first when the query is its plural', () => {
+    const set = setOf([{id: 'ai-stars'}, {id: 'star'}, {id: 'stars-shine'}]);
+    const ranked = rankIcons([set], 'stars');
+    expect(ranked[0]).toMatchObject({id: 'star', score: 90});
+    expect(answer(set, 'stars')).toEqual(['star', 'ai-stars', 'stars-shine']);
+    expect(
+      rankIcons([setOf([{id: 'stars'}, {id: 'star-off'}])], 'star')[0].id,
+    ).toBe('stars');
+  });
+
   it('meets a plural and its singular as the same word', () => {
     const set = setOf([{id: 'ai-stars'}, {id: 'start-flag'}]);
     expect(answer(set, 'star')).toEqual(['ai-stars']);
@@ -551,6 +561,27 @@ describe('a word matches whole words (FR6)', () => {
     expect(answer(set, 'the home icon')).toEqual(['house']);
     // A query of filler words alone is read as written.
     expect(answer(set, 'go')).toEqual([]);
+  });
+
+  it('scores a query as typed before it leaves out filler words, so an exact name keeps its score', () => {
+    const set = setOf([
+      {id: 'arrow-up-to-line'},
+      {id: 'arrow-up'},
+      {id: 'line'},
+      {id: 'a-arrow-down'},
+      {id: 'arrow-down'},
+      {id: 'house'},
+    ]);
+    const top = (/** @type {string} */ query) => rankIcons([set], query)[0];
+    expect(top('arrow up to line')).toMatchObject({
+      id: 'arrow-up-to-line',
+      score: 90,
+    });
+    expect(answer(set, 'arrow up to line')).toEqual(['arrow-up-to-line']);
+    expect(top('a arrow down')).toMatchObject({id: 'a-arrow-down', score: 90});
+    expect(answer(set, 'a arrow down')).toEqual(['a-arrow-down']);
+    // With no exact answer as typed, the filler words still drop.
+    expect(answer(set, 'go house')).toEqual(['house']);
   });
 
   it('never matches a letter or two inside a word', () => {

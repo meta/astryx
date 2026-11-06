@@ -56,7 +56,7 @@ export const doc = {
       name: 'options.defaultVariant',
       type: 'string',
       description:
-        "With variants: the variant each icon's own export draws, written to the data file's default; the first variant when absent.",
+        "With variants: the variant each icon's own export draws, written to the data file's default. When absent, an existing set keeps its default while variants declares it; otherwise the first variant.",
     },
     {
       name: 'options.displayName',

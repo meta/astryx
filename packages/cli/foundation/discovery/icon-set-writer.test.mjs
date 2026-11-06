@@ -2,8 +2,15 @@
 
 /** @file Icon ids from export names (AST-084): a dimension stays one word. */
 
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import {describe, expect, it} from 'vitest';
-import {generatedModuleText, iconIdOf} from './icon-set-writer.mjs';
+import {
+  entryWiringNote,
+  generatedModuleText,
+  iconIdOf,
+} from './icon-set-writer.mjs';
 
 describe('iconIdOf', () => {
   it.each([
@@ -61,5 +68,37 @@ describe('generatedModuleText over a large library', () => {
     expect(first.js).toContain(
       "export {Glyph19999Outline24Icon as Glyph19999Icon} from '@acme/big-library';",
     );
+  });
+});
+
+describe('entryWiringNote over a types file a formatter rewrote', () => {
+  it.each([
+    [
+      'double quotes, no semicolon',
+      'export * from "./icon-sets/brand/brand.generated.js"\n',
+    ],
+    [
+      'the line as written',
+      "export * from './icon-sets/brand/brand.generated.js';\n",
+    ],
+  ])('names no line the types file already has (%s)', (_, types) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-wiring-'));
+    try {
+      const pkg = {
+        name: '@acme/icons',
+        type: 'module',
+        exports: {'.': {types: './index.d.ts', default: './index.js'}},
+      };
+      fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify(pkg));
+      fs.writeFileSync(path.join(dir, 'index.js'), 'export {};\n');
+      fs.writeFileSync(path.join(dir, 'index.d.ts'), types);
+      expect(
+        entryWiringNote(dir, pkg, './icon-sets/brand/brand.generated.js'),
+      ).toBe(
+        "Add `export * from './icon-sets/brand/brand.generated.js';` to index.js, so the icons import from @acme/icons.",
+      );
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
   });
 });

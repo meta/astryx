@@ -68,6 +68,7 @@ import {
 } from './module-exports.mjs';
 import {astryxIconDefinitions} from './icon-definition-discovery.mjs';
 import {rankIcons} from './icon-ranking.mjs';
+import {shellArg} from '../text/shell-arg.mjs';
 import {
   issueError,
   issueWarning,
@@ -361,12 +362,12 @@ function checkDefinitions(set) {
     if (mapped.has(doc.name) || !doc.builtIn) continue;
     const suggestion = suggestIcon(set, doc);
     const hint = suggestion
-      ? ` Suggested: astryx experimental icon map ${doc.name} ${suggestion.icon}.`
+      ? ` Suggested: astryx experimental icon map ${doc.name} ${suggestion.icon} --set ${set.name}.`
       : '';
     issues.push(
       issueError(
         ICON_BUILTIN_DEFINITION_MISSING,
-        `${label} maps no icon to the built-in icon definition "${doc.name}" (${doc.description} Words: ${doc.words.join(', ')}.). Every set maps every built-in definition: run \`astryx experimental icon map ${doc.name} <icon id>\` with the icon that draws it${findHint(set, doc)}.${hint}`,
+        `${label} maps no icon to the built-in icon definition "${doc.name}" (${doc.description} Words: ${doc.words.join(', ')}.). Every set maps every built-in definition: run \`astryx experimental icon map ${doc.name} <icon id> --set ${set.name}\` with the icon that draws it${findHint(set, doc)}.${hint}`,
       ),
     );
   }
@@ -384,7 +385,7 @@ function checkDefinitions(set) {
       issues.push(
         issueWarning(
           ICON_DEFINITION_UNUSED,
-          `${label} declares the icon definition "${doc.name}", but "map" names no icon for it. Map it with \`astryx experimental icon map ${doc.name} <icon id>\`, or remove definitions/${doc.name}.doc.mjs.${suggestion ? ` Suggested: astryx experimental icon map ${doc.name} ${suggestion.icon}.` : ''}`,
+          `${label} declares the icon definition "${doc.name}", but "map" names no icon for it. Map it with \`astryx experimental icon map ${doc.name} <icon id> --set ${set.name}\`, or remove definitions/${doc.name}.doc.mjs.${suggestion ? ` Suggested: astryx experimental icon map ${doc.name} ${suggestion.icon} --set ${set.name}.` : ''}`,
         ),
       );
     }
@@ -953,10 +954,10 @@ function findHint(set, doc) {
       each => each.score >= FIND_FLOOR,
     );
     if (found.length > 0) {
-      return ` (icons matching "${query}": \`astryx experimental icon ${query} --set ${set.name}\`)`;
+      return ` (icons matching "${query}": \`astryx experimental icon ${shellArg(query)} --set ${set.name}\`)`;
     }
   }
-  return ' (no icon in the set has its name or words: pick the library icon that draws it; if the library has none, map the closest, or add your own artwork with `astryx experimental icon add <Name> --from ./src/icons/<name>.js --definition <definition>`)';
+  return ` (no icon in the set has its name or words: pick the library icon that draws it; if the library has none, map the closest, or add your own artwork with \`astryx experimental icon add <Name> --from ./src/icons/<name>.js --definition ${doc.name} --set ${set.name}\`)`;
 }
 
 /**
