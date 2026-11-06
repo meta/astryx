@@ -848,7 +848,7 @@ test('past the maximum the edge moves at most 8 px, the pane never reflows, and 
   ).toHaveAttribute('aria-valuenow', '320');
 });
 
-test('the content beside a stretched pane never overlaps it while the edge springs back', async ({
+test('past the maximum the handle alone moves, over the content beside it: the pane and the content keep their places', async ({
   page,
 }) => {
   await openFixture(page, STORY.start);
@@ -860,16 +860,20 @@ test('the content beside a stretched pane never overlaps it while the edge sprin
   await page.mouse.up();
   await waitForSettledMotion(page);
   const frames = await edgeFrames(page);
-  // At rest the pane already reaches under the content's own spacing; no
-  // frame may reach further than that.
-  const [rest] = frames;
-  const restGap = rest.contentStart - rest.drawnEdge;
-  for (const frame of frames) {
-    // Within a pixel: the stretch and the glide round apart by a fraction.
-    expect(frame.contentStart - frame.drawnEdge).toBeGreaterThanOrEqual(
-      restGap - 1,
-    );
-  }
+  const past = frames.filter(frame => frame.laidOut === 320);
+  expect(past.length).toBeGreaterThan(2);
+  const spread = (values: number[]) =>
+    Math.max(...values) - Math.min(...values);
+  // The pane's drawn edge and the content's start stay where they lie.
+  expect(spread(past.map(frame => frame.drawnEdge))).toBeLessThanOrEqual(0.5);
+  expect(spread(past.map(frame => frame.contentStart))).toBeLessThanOrEqual(
+    0.5,
+  );
+  // The handle passes over the content by at most 8 px.
+  const restHandle = past.at(-1)?.handle ?? 0;
+  const furthest = Math.max(...past.map(frame => frame.handle));
+  expect(furthest).toBeGreaterThan(restHandle + 1);
+  expect(furthest).toBeLessThanOrEqual(restHandle + 8.5);
 });
 
 test("a panel at the hook's size alone stops at the maximum, and nothing springs back after the lift", async ({
