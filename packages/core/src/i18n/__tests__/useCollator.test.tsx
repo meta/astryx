@@ -112,4 +112,50 @@ describe('useCollator', () => {
     expect(getByTestId('order').textContent).toBe('ä,z');
     expect(latestCollator).not.toBe(svCollator);
   });
+
+  test('ignores external mutations after hook returns (options immutability)', () => {
+    const mutableOptions = {numeric: true};
+    const {result, rerender} = renderHook(({opts}) => useCollator(opts), {
+      initialProps: {opts: mutableOptions},
+      wrapper: wrapperFor('en'),
+    });
+    const firstCollator = result.current;
+    const sortedBefore = ['item10', 'item2'].sort((a, b) =>
+      firstCollator.compare(a, b),
+    );
+
+    // Mutate the caller's options object after the hook has captured it.
+    // Without cloning, this would change the collator's behavior; with it,
+    // the collator remains stable until the next render with different opts.
+    mutableOptions.numeric = false;
+    // Re-render with same object identity to trigger the dependency check.
+    rerender({opts: mutableOptions});
+    const secondCollator = result.current;
+
+    // Collator should be the same instance (same locale + options identity)
+    expect(secondCollator).toBe(firstCollator);
+    // And its behavior must remain unchanged despite the mutation.
+    const sortedAfter = ['item10', 'item2'].sort((a, b) =>
+      secondCollator.compare(a, b),
+    );
+    expect(sortedBefore).toEqual(sortedAfter);
+  });
+
+  test('new collator is created when cloned options differ', () => {
+    const {result, rerender} = renderHook(({opts}) => useCollator(opts), {
+      initialProps: {opts: {numeric: false}},
+      wrapper: wrapperFor('en'),
+    });
+    const before = ['item2', 'item10'].sort((a, b) =>
+      result.current.compare(a, b),
+    );
+    rerender({opts: {numeric: true}});
+    const after = ['item2', 'item10'].sort((a, b) =>
+      result.current.compare(a, b),
+    );
+    // Different numeric settings produce different ordering.
+    expect(before).not.toEqual(after);
+    expect(before).toEqual(['item10', 'item2']);
+    expect(after).toEqual(['item2', 'item10']);
+  });
 });

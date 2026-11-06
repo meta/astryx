@@ -26,8 +26,30 @@ import {use, useMemo} from 'react';
 import {InternationalizationContext} from './InternationalizationContext';
 
 /**
+ * Deep-clones collation options to guard against mutations after hook call.
+ * Intl.Collator stores a reference to the passed options object; without a
+ * defensive copy, mutating the caller's object after the hook returns would
+ * silently change comparison behavior until the next locale/options change.
+ * The copy is shallow because every option is a primitive or undefined.
+ */
+function cloneCollatorOptions(
+  opts?: Intl.CollatorOptions,
+): Intl.CollatorOptions | undefined {
+  if (opts == null) {
+    return undefined;
+  }
+  // Every known property is a primitive or undefined; JSON round-trip gives
+  // us a frozen, brand-new object with identical values.
+  return Object.freeze(JSON.parse(JSON.stringify(opts)));
+}
+
+/**
  * Returns an `Intl.Collator` for the active provider locale, memoized across
  * renders where the locale and options object are unchanged.
+ *
+ * Options are defensively cloned to prevent external mutations from affecting
+ * the collator once created. This keeps the hook stable even if callers reuse
+ * the same options object across renders.
  *
  * @example
  * ```
@@ -38,7 +60,7 @@ import {InternationalizationContext} from './InternationalizationContext';
 export function useCollator(options?: Intl.CollatorOptions): Intl.Collator {
   const ctx = use(InternationalizationContext);
   return useMemo(
-    () => new Intl.Collator(ctx.locale, options),
+    () => new Intl.Collator(ctx.locale, cloneCollatorOptions(options)),
     [ctx.locale, options],
   );
 }
