@@ -133,45 +133,61 @@ export function getFocusableElements(container: HTMLElement): HTMLElement[] {
 }
 
 /**
- * The radio group a native radio belongs to: the same `name` in the same form
- * owner (or with no form). Null for any other element and for an unnamed radio,
- * which is its own Tab stop.
+ * The name of a named native radio, or null for any other element and for an
+ * unnamed radio, which is its own Tab stop.
  */
-function radioGroupOf(el: Element): string | null {
+function radioNameOf(el: Element): string | null {
   if (!el.matches('input[type="radio"][name]')) {
     return null;
   }
   return (el as HTMLInputElement).name || null;
 }
 
+/**
+ * Whether two radios are one group: the same name and the same form owner (or
+ * both with no form).
+ */
 function isSameRadioGroup(a: Element, b: Element): boolean {
-  const group = radioGroupOf(a);
+  const name = radioNameOf(a);
   return (
-    group != null &&
-    group === radioGroupOf(b) &&
+    name != null &&
+    name === radioNameOf(b) &&
     (a as HTMLInputElement).form === (b as HTMLInputElement).form
   );
 }
 
 /**
- * The container's Tab stops, in document order, as the browser visits them. A
- * same-name native radio group is one stop: its checked radio, or its first
- * when none is checked. Every other focusable element is its own stop.
+ * Collapse each named radio group to the one Tab stop the browser gives it:
+ * the focused radio, else the checked one, else the first radio moving forward
+ * or the last moving backward. The stop takes the group's first position.
+ *
+ * Exported for menus that walk their own Tab stops (DropdownMenu's header and
+ * footer), so they collapse groups exactly as the focus region does.
  */
-function getTabStops(container: HTMLElement): HTMLElement[] {
-  // Sorted, because a selector list is not returned in document order by
-  // every DOM implementation (jsdom groups it by selector).
-  const focusable = getFocusableElements(container).sort((a, b) =>
-    precedes(a, b) ? -1 : 1,
-  );
-  return focusable.filter(el => {
-    if (radioGroupOf(el) == null) {
-      return true;
+export function collapseRadioGroups(
+  elements: HTMLElement[],
+  active: Element | null,
+  isBackward: boolean,
+): HTMLElement[] {
+  const result: HTMLElement[] = [];
+  const placed: HTMLElement[] = [];
+  for (const el of elements) {
+    if (radioNameOf(el) == null) {
+      result.push(el);
+      continue;
     }
-    const group = focusable.filter(other => isSameRadioGroup(el, other));
-    const checked = group.find(radio => (radio as HTMLInputElement).checked);
-    return el === (checked ?? group[0]);
-  });
+    if (placed.some(stop => isSameRadioGroup(stop, el))) {
+      continue;
+    }
+    const members = elements.filter(other => isSameRadioGroup(el, other));
+    const stop =
+      members.find(radio => radio === active) ??
+      members.find(radio => (radio as HTMLInputElement).checked) ??
+      (isBackward ? members[members.length - 1] : members[0]);
+    placed.push(stop);
+    result.push(stop);
+  }
+  return result;
 }
 
 /**
@@ -418,13 +434,15 @@ export function useFocusRegionContainment(
           return;
         }
 
-        const stops = getTabStops(container);
+        // jsdom groups a selector list by selector, not in document order.
+        // Sort it, then give each radio group its one stop.
+        const stops = collapseRadioGroups(
+          [...focusable].sort((a, b) => (precedes(a, b) ? -1 : 1)),
+          active,
+          event.shiftKey,
+        );
         const first = stops[0];
         const last = stops[stops.length - 1];
-        // Focus on any radio of the group that ends (or starts) the cycle is
-        // at that edge: the browser leaves the whole group on the next Tab.
-        const isAt = (edge: HTMLElement) =>
-          active === edge || isSameRadioGroup(active, edge);
 
         if (doc.activeElement === container) {
           // Programmatic initial focus can sit on the trap container itself
@@ -441,12 +459,18 @@ export function useFocusRegionContainment(
         const isProgrammaticStop = !(focusable as Element[]).includes(active);
         if (event.shiftKey) {
           // Shift+Tab: if on (or before) the first element, wrap to last
-          if (isAt(first) || (isProgrammaticStop && precedes(active, first))) {
+          if (
+            active === first ||
+            (isProgrammaticStop && precedes(active, first))
+          ) {
             wrapFocus(event, last);
           }
         } else {
           // Tab: if on (or after) the last element, wrap to first
-          if (isAt(last) || (isProgrammaticStop && precedes(last, active))) {
+          if (
+            active === last ||
+            (isProgrammaticStop && precedes(last, active))
+          ) {
             wrapFocus(event, first);
           }
         }

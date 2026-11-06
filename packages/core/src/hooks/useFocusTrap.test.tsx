@@ -923,6 +923,25 @@ describe('useFocusTrap radio-group Tab stops', () => {
     expect(screen.getByRole('button', {name: 'First'})).toHaveFocus();
   });
 
+  it("wraps Shift+Tab onto an unchecked trailing group's last radio", () => {
+    render(
+      <Trap>
+        <button type="button">First</button>
+        <fieldset>
+          <legend>Plan</legend>
+          <input type="radio" name="plan" value="a" aria-label="Basic" />
+          <input type="radio" name="plan" value="b" aria-label="Pro" />
+        </fieldset>
+      </Trap>,
+    );
+    const first = screen.getByRole('button', {name: 'First'});
+    first.focus();
+    // Entering a group with nothing checked backward lands on its last radio,
+    // as the browser does.
+    expect(fireEvent.keyDown(first, {key: 'Tab', shiftKey: true})).toBe(false);
+    expect(screen.getByRole('radio', {name: 'Pro'})).toHaveFocus();
+  });
+
   it('keeps each unnamed radio its own Tab stop', () => {
     render(
       <Trap>
