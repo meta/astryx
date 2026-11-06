@@ -378,8 +378,6 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   '--_toast-swipe-exit-y',
   '--_toast-swipe-opacity',
   '--_toast-swipe-scale',
-  '--_toast-start-opacity',
-  '--_toast-start-slide',
   // Set by each ChatMessage article from its own content and read as its
   // avatar's top margin, so the avatar lines up with a name row. Content
   // state, not a value a theme author sets.

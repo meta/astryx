@@ -3,10 +3,11 @@
 /**
  * @file bareFixture.ts
  * @input Nothing: bundled by esbuild and injected into a blank page
- * @output A page with nothing attached: the document's gesture host and the
- *   recognizers (pan, screen-edge pan, tap, long press) on `window.__api`, for a test to attach what it needs, and
- *   `window.__pageTouch`, the count of touch listeners on the window and the
- *   document right now
+ * @output A page with nothing attached. `window.__api` holds the document's
+ *   gesture host and the host lookup for another document. It also holds
+ *   the recognizers (pan, screen-edge pan, tap, long press), for a test to
+ *   attach what it needs. `window.__pageTouch` is the count of touch
+ *   listeners on the window and the document right now.
  * @position Browser fixture of gestures.interaction.browser.spec.ts for the
  *   checks that need a page with no other gesture on it (FR19, FR24);
  *   test-only
@@ -26,6 +27,7 @@ declare global {
     __wheelLog: string[];
     __api: {
       host: ReturnType<typeof getGestureHost>;
+      getGestureHost: typeof getGestureHost;
       LongPressGestureRecognizer: typeof LongPressGestureRecognizer;
       PanGestureRecognizer: typeof PanGestureRecognizer;
       PinchGestureRecognizer: typeof PinchGestureRecognizer;
@@ -94,6 +96,7 @@ EventTarget.prototype.removeEventListener = function (
 document.body.style.margin = '0';
 window.__api = {
   host: getGestureHost(document),
+  getGestureHost,
   LongPressGestureRecognizer,
   PanGestureRecognizer,
   PinchGestureRecognizer,
