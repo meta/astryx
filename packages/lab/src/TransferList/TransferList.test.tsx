@@ -144,6 +144,36 @@ afterEach(() => {
 });
 
 describe('TransferList', () => {
+  it('disables every control while keeping them focusable, without option-specific messages', () => {
+    const onChange = vi.fn();
+    render(
+      <TransferList
+        label="Columns"
+        options={LOCKED_OPTIONS}
+        value={['name', 'owner']}
+        onChange={onChange}
+        hasSearch
+        isDisabled
+      />,
+    );
+    const remove = screen.getByRole('button', {name: 'Remove Name'});
+    expect(remove).toHaveAttribute('aria-disabled', 'true');
+    expect(remove).not.toHaveAttribute('disabled');
+    remove.focus();
+    expect(remove).toHaveFocus();
+    fireEvent.click(remove);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole('button', {name: 'Remove Owner'}),
+    ).not.toHaveAccessibleDescription(
+      'Owner is required and fixed in position.',
+    );
+    expect(screen.getByRole('searchbox')).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+  });
+
   describe('semantics and content', () => {
     it('renders a labelled pair of semantic lists without listbox roles', () => {
       render(
@@ -581,6 +611,65 @@ describe('TransferList', () => {
       ]);
     });
 
+    it('takes no change from a drag that drops after the list became disabled', () => {
+      const onValueChange = vi.fn();
+      const {rerender} = render(
+        <ControlledTransferList
+          initialValue={['name', 'owner', 'status']}
+          onValueChange={onValueChange}
+        />,
+      );
+      const handle = screen.getByRole('button', {name: 'Reorder Name'});
+      const list = handle.closest('ul');
+      if (list == null) {
+        throw new Error('no selected list');
+      }
+      // jsdom lays nothing out: 44 px rows from 300 px down the viewport.
+      const place = (row: Element) => Array.from(list.children).indexOf(row);
+      for (const row of Array.from(list.children)) {
+        Object.defineProperty(row, 'offsetParent', {
+          configurable: true,
+          get: () => list,
+        });
+        Object.defineProperty(row, 'offsetTop', {
+          configurable: true,
+          get: () => place(row) * 44,
+        });
+        Object.defineProperty(row, 'offsetHeight', {
+          configurable: true,
+          value: 44,
+        });
+        row.getBoundingClientRect = () =>
+          DOMRect.fromRect({
+            x: 0,
+            y: 300 + place(row) * 44,
+            width: 300,
+            height: 44,
+          });
+      }
+      const mouse = {
+        pointerType: 'mouse',
+        pointerId: 1,
+        button: 0,
+        clientX: 280,
+      };
+      fireEvent.pointerDown(handle, {...mouse, clientY: 322});
+      fireEvent.pointerMove(handle, {...mouse, clientY: 330});
+      fireEvent.pointerMove(handle, {...mouse, clientY: 392});
+
+      rerender(
+        <ControlledTransferList
+          initialValue={['name', 'owner', 'status']}
+          onValueChange={onValueChange}
+          isDisabled
+        />,
+      );
+      act(() => {
+        fireEvent.pointerUp(list, {...mouse, clientY: 392});
+      });
+      expect(onValueChange).not.toHaveBeenCalled();
+    });
+
     it('gives each selected row a List reorder handle and none to available rows', () => {
       render(<ControlledTransferList initialValue={['name', 'status']} />);
       const selected = screen.getByRole('list', {name: 'Selected columns'});
@@ -722,6 +811,48 @@ describe('TransferList', () => {
         'owner',
       ]);
       expect(handle).toHaveFocus();
+    });
+
+    it('ends reorder mode without any change when the list becomes disabled: no handle shows, so none stays pressed', async () => {
+      const user = userEvent.setup();
+      const onValueChange = vi.fn();
+      const {rerender} = render(
+        <ControlledTransferList
+          initialValue={['name', 'owner', 'status']}
+          onValueChange={onValueChange}
+        />,
+      );
+
+      screen.getByRole('button', {name: 'Reorder Owner'}).focus();
+      await user.keyboard('{Enter}{ArrowDown}');
+      expect(onValueChange).toHaveBeenCalledTimes(1);
+
+      rerender(
+        <ControlledTransferList
+          initialValue={['name', 'owner', 'status']}
+          onValueChange={onValueChange}
+          isDisabled
+        />,
+      );
+      expect(screen.queryByRole('button', {name: /^Reorder /})).toBeNull();
+      expect(screen.queryByRole('button', {pressed: true})).toBeNull();
+      await user.keyboard('{Escape}{ArrowUp}');
+      expect(onValueChange).toHaveBeenCalledTimes(1);
+    });
+
+    it("moves the focus from a focused handle to its row's Remove button when the list becomes disabled", () => {
+      const {rerender} = render(
+        <ControlledTransferList initialValue={['name', 'owner', 'status']} />,
+      );
+      screen.getByRole('button', {name: 'Reorder Owner'}).focus();
+
+      rerender(
+        <ControlledTransferList
+          initialValue={['name', 'owner', 'status']}
+          isDisabled
+        />,
+      );
+      expect(screen.getByRole('button', {name: 'Remove Owner'})).toHaveFocus();
     });
 
     it('keeps values from passing a reorder-disabled value at an end, and lets them pass one in the middle', async () => {
