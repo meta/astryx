@@ -316,6 +316,53 @@ describe('moduleExportOrigins', () => {
     }
   });
 
+  it('agrees through an export * cycle', () => {
+    const write = (name, text) => fs.writeFileSync(path.join(dir, name), text);
+    write('c.ts', 'export const w = 1;\nexport const z = 2;\n');
+    write('a.ts', "export * from './b';\nexport * from './c';\n");
+    write('b.ts', "export * from './a';\n");
+    const cycle = path.join(dir, 'cycle.ts');
+    fs.writeFileSync(cycle, "export {w} from './a';\nexport * from './b';\n");
+    const origins = moduleExportOrigins(cycle);
+    for (const name of ['w', 'z']) {
+      expect(origins.get(name) ?? null, name).toEqual(
+        moduleExportOrigin(cycle, name),
+      );
+    }
+    expect(origins.get('z')).toEqual({file: path.join(dir, 'c.ts'), name: 'z'});
+  });
+
+  it('lets a named export shadow export *, even when it cannot be followed', () => {
+    const write = (name, text) => fs.writeFileSync(path.join(dir, name), text);
+    write('other.ts', 'export const x = 1;\n');
+    const shadow = path.join(dir, 'shadow.ts');
+    fs.writeFileSync(
+      shadow,
+      [
+        "import {x} from 'not-installed-pkg';",
+        'export {x};',
+        "export * from './other';",
+        '',
+      ].join('\n'),
+    );
+    expect(moduleExportOrigins(shadow).get('x') ?? null).toEqual(
+      moduleExportOrigin(shadow, 'x'),
+    );
+    expect(moduleExportOrigins(shadow).has('x')).toBe(false);
+  });
+
+  it('keeps value and type reads apart in one memo', () => {
+    const index = path.join(dir, 'index.ts');
+    const memo = new Map();
+    expect(moduleExportOrigins(index, {memo}).has('Shape')).toBe(false);
+    expect(
+      moduleExportOrigins(index, {types: true, memo}).get('Shape'),
+    ).toEqual({
+      file: path.join(dir, 'types.ts'),
+      name: 'Shape',
+    });
+  });
+
   it('follows type-only exports only when asked', () => {
     const index = path.join(dir, 'index.ts');
     expect(moduleExportOrigins(index).has('Shape')).toBe(false);

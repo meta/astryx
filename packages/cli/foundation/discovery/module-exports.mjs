@@ -610,7 +610,8 @@ export function moduleExportNames(file) {
  * Every export of a module with where it is declared, in one pass: the same
  * answers as {@link moduleExportOrigin} for each name, read once per module.
  * Pass one `memo` to calls that read the same package, so a module behind
- * many barrels is read once; nothing is kept between memos.
+ * many barrels is read once; a memo keeps value and type reads apart, and
+ * nothing is kept between memos.
  * @param {string} file
  * @param {{types?: boolean, memo?: Map<string, Map<string, {file: string, name: string}>>}} [options]
  * @returns {Map<string, {file: string, name: string}>}
@@ -619,42 +620,87 @@ export function moduleExportOrigins(
   file,
   {types = false, memo = new Map()} = {},
 ) {
-  const known = memo.get(file);
-  if (known) return known;
+  return exportOriginsOf(file, {types, memo, reading: new Map()}).origins;
+}
+
+/**
+ * @typedef {object} OriginsRead
+ * @property {boolean} types
+ * @property {Map<string, Map<string, {file: string, name: string}>>} memo
+ *   finished maps, keyed by read mode and file
+ * @property {Map<string, {depth: number, origins: Map<string, {file: string, name: string}>}>} reading
+ *   the modules being read now, by memo key
+ */
+
+/**
+ * One module's export map, and the shallowest module still being read that
+ * it depends on (`low`). A map that depends on a module above it in an
+ * `export *` cycle is incomplete until that module finishes, so only a map
+ * whose `low` is its own depth goes in the memo.
+ * @param {string} file
+ * @param {OriginsRead} read
+ * @returns {{origins: Map<string, {file: string, name: string}>, low: number}}
+ */
+function exportOriginsOf(file, read) {
+  const key = `${read.types ? 'type' : 'value'}\0${file}`;
+  const known = read.memo.get(key);
+  if (known) return {origins: known, low: Infinity};
+  const open = read.reading.get(key);
+  // A module reached again through a cycle reads as what is known so far.
+  if (open) return {origins: open.origins, low: open.depth};
+  const depth = read.reading.size;
   /** @type {Map<string, {file: string, name: string}>} */
   const origins = new Map();
-  // A module reached again through a cycle reads as what is known so far.
-  memo.set(file, origins);
-  let ast;
+  let low = Infinity;
+  read.reading.set(key, {depth, origins});
+  /** @param {string} target */
+  const originsOf = target => {
+    const result = exportOriginsOf(target, read);
+    low = Math.min(low, result.low);
+    return result.origins;
+  };
   try {
-    if (!fs.statSync(file).isFile()) return origins;
-    ast = parseModule(file);
-  } catch {
-    return origins;
-  }
-  const {declarations, specifiers} = namedExportIndex(ast.program, types);
-  for (const node of declarations) {
-    for (const name of declaredNames(node.declaration, types)) {
-      if (!origins.has(name)) origins.set(name, {file, name});
+    let ast;
+    try {
+      if (!fs.statSync(file).isFile()) return {origins, low};
+      ast = parseModule(file);
+    } catch {
+      return {origins, low};
     }
-  }
-  for (const [exportName, entries] of specifiers) {
-    if (origins.has(exportName)) continue;
-    for (const {node, specifier} of entries) {
-      const local =
-        specifier.local?.name ?? specifier.local?.value ?? exportName;
-      const origin = node.source
-        ? reexportOrigin(node.source.value, file, local, types, memo)
-        : bindingOrigin(ast, file, local, new Set(), types);
-      if (origin) {
-        origins.set(exportName, origin);
-        break;
+    const {types} = read;
+    // A name the module exports by name shadows every `export *`, even when
+    // its binding cannot be followed.
+    const named = new Set();
+    const {declarations, specifiers} = namedExportIndex(ast.program, types);
+    for (const node of declarations) {
+      for (const name of declaredNames(node.declaration, types)) {
+        named.add(name);
+        if (!origins.has(name)) origins.set(name, {file, name});
       }
-      if (!node.source) break;
     }
-  }
-  if (!origins.has('default')) {
+    for (const [exportName, entries] of specifiers) {
+      named.add(exportName);
+      if (origins.has(exportName)) continue;
+      for (const {node, specifier} of entries) {
+        const local =
+          specifier.local?.name ?? specifier.local?.value ?? exportName;
+        let origin = null;
+        if (node.source) {
+          const target = resolveModuleOrPackage(node.source.value, file);
+          origin = target ? (originsOf(target).get(local) ?? null) : null;
+        } else {
+          origin = bindingOrigin(ast, file, local, new Set(), types);
+        }
+        if (origin) {
+          origins.set(exportName, origin);
+          break;
+        }
+        if (!node.source) break;
+      }
+    }
     for (const node of nodesOfType(ast.program, 'ExportDefaultDeclaration')) {
+      named.add('default');
+      if (origins.has('default')) break;
       const declaration = node.declaration;
       if (!types && !runtimeDefault(declaration)) continue;
       const origin =
@@ -664,31 +710,21 @@ export function moduleExportOrigins(
       if (origin) origins.set('default', origin);
       break;
     }
-  }
-  for (const node of nodesOfType(ast.program, 'ExportAllDeclaration')) {
-    if ((node.exportKind === 'type' && !types) || node.exported) continue;
-    const target = resolveModuleOrPackage(node.source?.value, file);
-    if (!target) continue;
-    for (const [name, origin] of moduleExportOrigins(target, {types, memo})) {
-      if (name !== 'default' && !origins.has(name)) origins.set(name, origin);
+    for (const node of nodesOfType(ast.program, 'ExportAllDeclaration')) {
+      if ((node.exportKind === 'type' && !types) || node.exported) continue;
+      const target = resolveModuleOrPackage(node.source?.value, file);
+      if (!target) continue;
+      for (const [name, origin] of originsOf(target)) {
+        if (name !== 'default' && !named.has(name) && !origins.has(name)) {
+          origins.set(name, origin);
+        }
+      }
     }
+    return {origins, low};
+  } finally {
+    read.reading.delete(key);
+    if (low >= depth) read.memo.set(key, origins);
   }
-  return origins;
-}
-
-/**
- * Where a name re-exported from `source` is declared.
- * @param {unknown} source
- * @param {string} fromFile
- * @param {string} name
- * @param {boolean} types
- * @param {Map<string, Map<string, {file: string, name: string}>>} memo
- * @returns {{file: string, name: string} | null}
- */
-function reexportOrigin(source, fromFile, name, types, memo) {
-  const target = resolveModuleOrPackage(source, fromFile);
-  if (!target) return null;
-  return moduleExportOrigins(target, {types, memo}).get(name) ?? null;
 }
 
 /**
