@@ -3,8 +3,8 @@
 /**
  * @file tabBarModel.ts
  * @input TabBar's UIKit values (uikitTabBar.ts)
- * @output TabBar's pure geometry: the items' widths and centres, the item a
- *   lift commits, and the lens's target and scale.
+ * @output TabBar's pure geometry: the items' widths and centres, and the
+ *   lens's target and scale.
  * @position Math of the lab TabBar; no DOM, no React. Coordinates are the
  *   capsule's own, in px, before its flex scale. x runs from its left edge,
  *   and items go in logical order.
@@ -68,27 +68,6 @@ export function itemCenters(
           (_, i) => first + ((width - 2 * first) * i) / (count - 1),
         );
   return isRtl ? centers.map(center => width - center) : centers;
-}
-
-/**
- * The item a finger lifted at `x` commits: the one whose centre is nearest,
- * the earlier one on a tie. No projection: a flick commits where it lifts.
- */
-export function nearestIndex(
-  x: number,
-  centers: ReadonlyArray<number>,
-): number {
-  let best = 0;
-  let bestDistance = Infinity;
-  centers.forEach((center, index) => {
-    const distance = Math.abs(x - center);
-    // Strictly nearer only: a tie keeps the earlier (leading) item.
-    if (distance < bestDistance - 1e-9) {
-      best = index;
-      bestDistance = distance;
-    }
-  });
-  return best;
 }
 
 /**

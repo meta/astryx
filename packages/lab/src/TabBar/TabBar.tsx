@@ -131,20 +131,17 @@ function hasBadge(badge: string | number | undefined): boolean {
 const px = (value: number) => `${value}px`;
 const INSET = px(tabBar.itemInset);
 
-/** The items' shared width (and the resting lens's), inside a calc(). */
-const size = (count: number) => itemWidthCss(count);
-
 /** The distance between neighbouring items' centres. */
 function pitch(count: number): string {
   return count > 1
-    ? `((100cqw - ${px(2 * tabBar.itemInset)} - ${size(count)}) / ${count - 1})`
+    ? `((100cqw - ${px(2 * tabBar.itemInset)} - ${itemWidthCss(count)}) / ${count - 1})`
     : '0px';
 }
 
 /** An item's centre from the capsule's inline start, inside a calc(). */
 function center(index: number, count: number): string {
   return count > 1
-    ? `${INSET} + ${size(count)} / 2 + ${pitch(count)} * ${index}`
+    ? `${INSET} + ${itemWidthCss(count)} / 2 + ${pitch(count)} * ${index}`
     : '50cqw';
 }
 
@@ -161,18 +158,18 @@ function column(
     return {
       start: '0px',
       width: '100cqw',
-      itemStart: `calc(50cqw - ${size(count)} / 2)`,
+      itemStart: `calc(50cqw - ${itemWidthCss(count)} / 2)`,
     };
   }
   const half = `${pitch(count)} / 2`;
-  const edgeWidth = `calc(${INSET} + ${size(count)} / 2 + ${half})`;
+  const edgeWidth = `calc(${INSET} + ${itemWidthCss(count)} / 2 + ${half})`;
   if (index === 0) {
     return {start: '0px', width: edgeWidth, itemStart: INSET};
   }
   return {
     start: `calc(${center(index, count)} - ${half})`,
     width: index === count - 1 ? edgeWidth : `calc(${pitch(count)})`,
-    itemStart: `calc(${half} - ${size(count)} / 2)`,
+    itemStart: `calc(${half} - ${itemWidthCss(count)} / 2)`,
   };
 }
 
@@ -250,26 +247,34 @@ const styles = stylex.create({
     outlineColor: focusVars['--focus-outline-color'],
     outlineOffset: focusVars['--focus-outline-offset'],
     // With no tab selected, a held finger paints its tab at once
-    // (useTabBarLens.ts writes the attribute). The paint fades out after the
-    // lift on the theme's exit duration and curve. Under Reduce Motion the fade
+    // (useTabBarLens.ts writes the attribute). The paint is a layer, and only
+    // its opacity fades after the lift, so the compositor runs the fade. It
+    // plays the theme's exit duration and curve. Under Reduce Motion the fade
     // stays within 200 ms, whatever the theme's tempo.
-    backgroundColor: {
-      default: null,
-      [stylex.when.ancestor('[data-tab-bar-pressed]', tabBarItemMarker)]:
-        colorVars['--color-overlay-pressed'],
-    },
-    transitionProperty: 'background-color',
-    transitionDuration: {
-      default: durationVars['--duration-exit'],
-      '@media (prefers-reduced-motion: reduce)': `min(${durationVars['--duration-exit']}, 200ms)`,
-      // Repeated inside the Reduce Motion branch, where a media rule outranks
-      // the plain one, so the onset stays at once there too.
-      [stylex.when.ancestor('[data-tab-bar-pressed]', tabBarItemMarker)]: {
-        default: '0s',
-        '@media (prefers-reduced-motion: reduce)': '0s',
+    '::before': {
+      content: '""',
+      position: 'absolute',
+      inset: 0,
+      borderRadius: 'inherit',
+      backgroundColor: colorVars['--color-overlay-pressed'],
+      pointerEvents: 'none',
+      opacity: {
+        default: 0,
+        [stylex.when.ancestor('[data-tab-bar-pressed]', tabBarItemMarker)]: 1,
       },
+      transitionProperty: 'opacity',
+      transitionDuration: {
+        default: durationVars['--duration-exit'],
+        '@media (prefers-reduced-motion: reduce)': `min(${durationVars['--duration-exit']}, 200ms)`,
+        // Repeated inside the Reduce Motion branch, where a media rule
+        // outranks the plain one, so the onset stays at once there too.
+        [stylex.when.ancestor('[data-tab-bar-pressed]', tabBarItemMarker)]: {
+          default: '0s',
+          '@media (prefers-reduced-motion: reduce)': '0s',
+        },
+      },
+      transitionTimingFunction: easeVars['--ease-exit'],
     },
-    transitionTimingFunction: easeVars['--ease-exit'],
   },
   box: (start: string, top: string, width: string, height: string) => ({
     insetInlineStart: start,
@@ -558,7 +563,7 @@ export function TabBar({
 
   const restIndex = Math.max(selectedIndex, 0);
   const capsuleInset = px(tabBar.itemInset);
-  const itemSize = `calc(${size(count)})`;
+  const itemSize = `calc(${itemWidthCss(count)})`;
 
   return (
     <div
@@ -677,7 +682,7 @@ export function TabBar({
                           {...stylex.props(
                             styles.copyItem,
                             styles.box(
-                              `calc(${center(index, count)} - ${size(count)} / 2)`,
+                              `calc(${center(index, count)} - ${itemWidthCss(count)} / 2)`,
                               ITEM_TOP,
                               itemSize,
                               ITEM_HEIGHT,

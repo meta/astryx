@@ -199,14 +199,18 @@ async function lensCenterX(page: Page) {
   return box.x + box.width / 2;
 }
 
-const TRANSPARENT = 'rgba(0, 0, 0, 0)';
-
-/** The background of a tab's item: its press paint, or transparent. */
+/** How strongly a tab's press paint shows: its layer's opacity, 0 when off. */
 async function itemPaint(page: Page, name: string) {
   return tab(page, name)
     .locator('span')
     .first()
-    .evaluate(element => getComputedStyle(element).backgroundColor);
+    .evaluate(element => {
+      const layer = getComputedStyle(element, '::before');
+      // A layer with no color paints nothing, whatever its opacity.
+      return layer.backgroundColor === 'rgba(0, 0, 0, 0)'
+        ? 0
+        : Number(layer.opacity);
+    });
 }
 
 /**
@@ -303,7 +307,7 @@ async function paintTimingAgainst(
         easing: style.transitionTimingFunction,
       });
       const result = {
-        have: read(getComputedStyle(element)),
+        have: read(getComputedStyle(element, '::before')),
         want: read(getComputedStyle(probe)),
       };
       probe.remove();
@@ -329,7 +333,8 @@ async function paintFadeMs(page: Page, name: string) {
     .first()
     .evaluate(
       element =>
-        parseFloat(getComputedStyle(element).transitionDuration) * 1000,
+        parseFloat(getComputedStyle(element, '::before').transitionDuration) *
+        1000,
     );
 }
 
@@ -1121,7 +1126,7 @@ test('with no tab selected, a finger held on a tab paints it, and the paint foll
     onEvent: async (_step, index) => {
       if (index === 0) {
         await expect(tab(page, 'Home')).toHaveAttribute('data-tab-bar-pressed');
-        await expect.poll(() => itemPaint(page, 'Home')).not.toBe(TRANSPARENT);
+        await expect.poll(() => itemPaint(page, 'Home')).toBe(1);
       }
       // The finger is on Library, before the lift.
       if (index === script.length - 2) {
@@ -1137,7 +1142,7 @@ test('with no tab selected, a finger held on a tab paints it, and the paint foll
   await expect(tab(page, 'Library')).toHaveAttribute('aria-selected', 'true');
 });
 
-test('with Reduce Motion a finger paints its tab at once, and its release keeps a fade of 200 ms or less, even on a slow theme (design:reduced-motion DEC-4)', async ({
+test('with Reduce Motion a finger paints its tab at once, and its release keeps a fade of 200 ms or less, even on a slow theme (design:reduced-motion DR2)', async ({
   page,
 }) => {
   await page.emulateMedia({reducedMotion: 'reduce'});
@@ -1148,7 +1153,7 @@ test('with Reduce Motion a finger paints its tab at once, and its release keeps 
     onEvent: async (_step, index) => {
       if (index === 0) {
         await expect(tab(page, 'Home')).toHaveAttribute('data-tab-bar-pressed');
-        expect(await itemPaint(page, 'Home')).not.toBe(TRANSPARENT);
+        expect(await itemPaint(page, 'Home')).toBe(1);
         expect(await paintFadeMs(page, 'Home')).toBe(0);
       }
     },
@@ -1180,6 +1185,38 @@ test('a finger’s release fades the paint on the theme’s exit duration and cu
   });
   expect(want.ms).toBe(90);
   expect(have).toEqual(want);
+});
+
+test('a finger’s release fades only its paint layer’s opacity, which the compositor runs (spec:AST-094 FR5)', async ({
+  page,
+}) => {
+  const {driver} = await openBar(page, 'no-selection');
+  // A slow exit, so the fade still runs when it is read.
+  await setExitDuration(page, '5000ms');
+  const home = await itemCenter(page, 'Home');
+  await driver.play(tapScript(home, {holdMs: 400}));
+  await expect(tab(page, 'Home')).not.toHaveAttribute('data-tab-bar-pressed');
+  const fades = await tab(page, 'Home')
+    .locator('span')
+    .first()
+    .evaluate(box =>
+      box.getAnimations({subtree: true}).flatMap(animation => {
+        const effect = animation.effect as KeyframeEffect | null;
+        if (effect?.target !== box) {
+          return [];
+        }
+        return [
+          {
+            property:
+              animation instanceof CSSTransition
+                ? animation.transitionProperty
+                : 'animation',
+            layer: effect.pseudoElement,
+          },
+        ];
+      }),
+    );
+  expect(fades).toEqual([{property: 'opacity', layer: '::before'}]);
 });
 
 test('past the last item, still on the bar, the lens rubber-bands beyond it and the lift commits the last item; past the bar’s end the lift chooses nothing', async ({

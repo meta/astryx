@@ -20,7 +20,6 @@ import {
   lensTarget,
   liftScale,
   naturalWidth,
-  nearestIndex,
 } from './tabBarModel';
 
 /**
@@ -109,28 +108,6 @@ describe('itemWidth and itemCenters', () => {
     expect(itemWidthCss(4)).toBe(
       'min(1.0659 * 100cqw / 4 + 0.0436 * 100cqw - 14.61px, 100cqw - 8px)',
     );
-  });
-});
-
-describe('nearestIndex: the item a lift commits', () => {
-  const centers = itemCenters(290, 4);
-
-  it('picks the nearest centre', () => {
-    expect(nearestIndex(centers[2] + 20, centers)).toBe(2);
-    expect(nearestIndex(centers[1] - 30, centers)).toBe(1);
-  });
-
-  it('gives a tie to the leading (earlier) item, as UIKit did between items 2 and 3', () => {
-    const midpoint = (centers[1] + centers[2]) / 2;
-    expect(nearestIndex(midpoint, centers)).toBe(1);
-    // In a right-to-left capsule the earlier item is on the right.
-    const rtl = itemCenters(290, 4, true);
-    expect(nearestIndex((rtl[1] + rtl[2]) / 2, rtl)).toBe(1);
-  });
-
-  it('commits the last item for a finger 60 px past it, and the first before it', () => {
-    expect(nearestIndex(centers[3] + 60, centers)).toBe(3);
-    expect(nearestIndex(-40, centers)).toBe(0);
   });
 });
 
