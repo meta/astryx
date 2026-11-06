@@ -633,6 +633,11 @@
       "aliases": []
     },
     {
+      "name": "component-lab-page-control",
+      "path": "components/lab/page-control",
+      "aliases": []
+    },
+    {
       "name": "component-lab-radial-chart",
       "path": "components/lab/radial-chart",
       "aliases": []

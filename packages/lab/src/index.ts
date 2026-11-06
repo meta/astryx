@@ -339,6 +339,9 @@ export {
   type NavigationStackProps,
 } from './NavigationStack';
 
+// PageControl: UIPageControl's row of page indicators.
+export {PageControl, type PageControlProps} from './PageControl';
+
 // TabBar: the floating bottom tab bar of iOS 26's UITabBarController.
 export {
   TabBar,
