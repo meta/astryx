@@ -174,6 +174,8 @@ function pagePlugin(filename) {
           const file = resolvePath(PATHS, raw);
           if (file) p.node.source = t.stringLiteral(file);
         }
+        // A JSON file loads from the target the alias led to, too.
+        if (bare !== raw && /\.json$/i.test(bare)) p.node.source = t.stringLiteral(bare);
         if (!bare.startsWith('.') && !path.isAbsolute(bare) && !isAliased(bare)) {
           packages.add(
             bare.startsWith('@')
@@ -200,7 +202,7 @@ function pagePlugin(filename) {
           p.remove();
           return;
         }
-        if (/\.css$/i.test(bare) && bare === raw && matchPath(PATHS, raw)) {
+        if (/\.css$/i.test(bare) && bare === raw && namesAlias(raw)) {
           // An aliased stylesheet with no target falls back to a package, as in
           // TypeScript; when there is none either, the alias is wrong.
           let found = true;
@@ -360,6 +362,18 @@ const ALIASES = Object.fromEntries(
 
 /** @param {string} spec whether a specifier goes through a project alias */
 const isAliased = spec => resolvePath(PATHS, spec) !== null;
+
+/**
+ * Whether a specifier that resolves to no file was meant for an alias: it
+ * matches a key with a literal prefix. A catch-all key (`"*"`) matches every
+ * package name too, so an import it cannot place is a package that is not
+ * installed.
+ * @param {string} spec
+ */
+const namesAlias = spec => {
+  const match = matchPath(PATHS, spec);
+  return match !== null && match.pattern.prefix !== '';
+};
 
 /**
  * A specifier through a project alias, as the absolute path of the first
@@ -535,7 +549,7 @@ function classify(e) {
   const missing =
     /Cannot find (?:module|package) ['"]([^'"]+)['"]/.exec(message) ??
     /Failed to resolve import ['"]([^'"]+)['"]/.exec(message);
-  if (missing && (matchPath(PATHS, missing[1]) || /^[@~#]\/|^#/.test(missing[1]))) {
+  if (missing && (namesAlias(missing[1]) || /^[@~#]\/|^#/.test(missing[1]))) {
     return fail(
       'ERR_FILE_NOT_FOUND',
       `The page imports ${missing[1]} through a path alias that does not lead to a file. Check \`compilerOptions.paths\` in the project's tsconfig.json, or import it by a relative path.`,
