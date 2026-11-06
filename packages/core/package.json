@@ -848,6 +848,11 @@
       "source": "./src/internal/calendar-system.ts",
       "types": "./dist/internal/calendar-system.d.ts",
       "default": "./dist/internal/calendar-system.js"
+    },
+    "./internal/dialog-context": {
+      "source": "./src/internal/dialog-context.ts",
+      "types": "./dist/internal/dialog-context.d.ts",
+      "default": "./dist/internal/dialog-context.js"
     }
   },
   "files": [
