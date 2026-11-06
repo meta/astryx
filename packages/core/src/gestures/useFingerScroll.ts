@@ -7,7 +7,7 @@
  * @input A scroller (a ref to an element, or the document for the page) and
  *   the document's gesture host
  * @output useFingerScroll: whether the scroller's current scroll is a
- *   finger's, read at any moment
+ *   finger's, read at any moment, and an optional call when one ends
  * @position Gesture hook of packages/core/src/gestures, over the
  *   finger-scroll watch (fingerScroll.ts), kept on the scroller's node by
  *   the gesture hooks' shared attachment (hooks/useAttachment.ts). An internal
@@ -33,11 +33,24 @@ import {useCallback, useRef, type RefObject} from 'react';
 import {isFingerScroll, watchFingerScrolls} from './fingerScroll';
 import {getGestureHost} from './GestureHost';
 import {useAttachment} from '../hooks/useAttachment';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {isDocument} from '../utils/nodeType';
 
 /** The document a scroller is in: itself, for the page's own scroll. */
 function documentOf(node: Element | Document): Document {
   return isDocument(node) ? node : node.ownerDocument;
+}
+
+export interface UseFingerScrollOptions {
+  /**
+   * Runs each time a finger's scroll on the scroller ends, once the reader
+   * says `false`: at its `scrollend` after the lift (the momentum is still
+   * the finger's), at the lift when the scroll ended under a resting finger,
+   * after the quiet fallback where the browser fires no `scrollend`, or when
+   * the primary pointer stops being coarse. Unmounting, or the scroller
+   * changing, does not call it. The latest function is the one called.
+   */
+  onEnd?: () => void;
 }
 
 /**
@@ -48,9 +61,16 @@ function documentOf(node: Element | Document): Document {
  */
 export function useFingerScroll(
   scroller: RefObject<Element | null> | Document,
+  {onEnd}: UseFingerScrollOptions = {},
 ): () => boolean {
   /** The node the watch is on now, for the reader. */
   const watchedRef = useRef<Element | Document | null>(null);
+  // The watch outlives renders, so it calls the latest onEnd through a ref
+  // written at commit.
+  const onEndRef = useRef(onEnd);
+  useIsomorphicLayoutEffect(function keepLatestOnEnd() {
+    onEndRef.current = onEnd;
+  });
   // Keeps the finger-scroll watch on the node the scroller names after each
   // commit (useAttachment): a ref that now points at another element moves
   // the watch to it, and unmounting releases it.
@@ -58,7 +78,11 @@ export function useFingerScroll(
     isDocument(scroller) ? {current: scroller} : scroller,
     node => {
       watchedRef.current = node;
-      const stop = watchFingerScrolls(getGestureHost(documentOf(node)), node);
+      const stop = watchFingerScrolls(
+        getGestureHost(documentOf(node)),
+        node,
+        () => onEndRef.current?.(),
+      );
       return () => {
         stop();
         watchedRef.current = null;
