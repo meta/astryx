@@ -58,6 +58,7 @@ import {MAX_RUN_WORDS} from './_compound.mjs';
 import {scoreQuery} from './_score.mjs';
 import {scoreCandidate} from './_candidate-score.mjs';
 import {fold, nameWords, words} from './_query-words.mjs';
+import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {domainPriority} from './_priority.mjs';
 import {toResult, searchedComponentsOf} from './_result.mjs';
 
@@ -132,23 +133,72 @@ export function namesWhole(candidate, term) {
  * unless it is only a typo-distance match: a near miss of a different name
  * (`SearchInput` and searchIndex) must not hide every entry the words match.
  * A typo match still answers alone when the entry's name spells every word of
- * the identifier in order (`useTableExpansion` and useTableRowExpansion), and
+ * the identifier in order (`useTableExpansion` and useTableRowExpansion), one
+ * of them possibly misspelled by a single edit (`ButtonGrop` and ButtonGroup), and
  * when the words are not read, the near miss keeps its own score beside them.
  * @param {string} term the identifier, lowercased
  * @param {string} spelled the identifier read as its words
  * @param {Candidate} candidate
+ * @param {Set<string>} vocabulary every word the catalog uses
  * @returns {boolean}
  */
-function answersWhole(term, spelled, candidate) {
+function answersWhole(term, spelled, candidate, vocabulary) {
   const hit = scoreCandidate(term, candidate);
   if (!hit) return false;
   if (!TYPO_REASON.test(hit.reason)) return true;
   const want = words(spelled).map(fold);
   const have = nameWords(String(candidate.name)).map(fold);
   let at = 0;
-  for (const w of have) if (at < want.length && w === want[at]) at++;
+  let slips = 0;
+  for (const w of have) {
+    if (at >= want.length) break;
+    if (w === want[at]) at++;
+    else if (slips === 0 && !vocabulary.has(want[at]) && oneSlip(w, want[at])) {
+      slips++;
+      at++;
+    }
+  }
   return at === want.length;
 }
+
+/**
+ * Whether a query word is a name word misspelled by a single edit, for words
+ * of at least SLIP_MIN_LENGTH letters (`grop` for `group`). Below that, one
+ * edit usually makes a different word. The caller counts it only for a word
+ * the catalog never uses: a word it does use (`states` beside Status, `time`
+ * beside Timer) is a different word, not a typo.
+ * @param {string} name
+ * @param {string} typed
+ * @returns {boolean}
+ */
+const oneSlip = (name, typed) =>
+  Math.min(name.length, typed.length) >= SLIP_MIN_LENGTH &&
+  levenshteinDistance(name, typed, 1) === 1;
+
+/** @type {WeakMap<Candidate[], Set<string>>} */
+const vocabularies = new WeakMap();
+
+/**
+ * Every word a catalog uses in its names, keywords and descriptions, folded.
+ * @param {Candidate[]} all
+ * @returns {Set<string>}
+ */
+function vocabularyOf(all) {
+  let vocabulary = vocabularies.get(all);
+  if (!vocabulary) {
+    vocabulary = new Set();
+    for (const c of all) {
+      for (const w of nameWords(String(c.name))) vocabulary.add(fold(w));
+      for (const text of [...(c.keywords ?? []), c.description ?? ''])
+        for (const w of words(String(text))) vocabulary.add(fold(w));
+    }
+    vocabularies.set(all, vocabulary);
+  }
+  return vocabulary;
+}
+
+/** The fewest letters a name word and a query word need for oneSlip. */
+const SLIP_MIN_LENGTH = 4;
 
 /** The reasons scoreCandidate gives a typo-distance match. */
 const TYPO_REASON = /\(distance [1-3]\)$|^similar name \(distance/;
@@ -183,7 +233,9 @@ export function rankLexical(query, options, catalog) {
     !exact &&
     !/\s/.test(term) &&
     spelled !== term &&
-    !all.some(candidate => answersWhole(term, spelled, candidate));
+    !all.some(candidate =>
+      answersWhole(term, spelled, candidate, vocabularyOf(all)),
+    );
   const tokens = tokenizeQuery(split ? spelled : term);
   /** @type {string[]} */
   const words = exact

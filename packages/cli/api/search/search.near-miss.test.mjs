@@ -23,4 +23,9 @@ describe('a near miss of one identifier', () => {
     const {data} = await search('useTableExpansion');
     expect(data.results[0]).toMatchObject({name: 'useTableRowExpansion'});
   });
+
+  it('answers alone when one name word is misspelled by a single edit', async () => {
+    const {data} = await search('ButtonGrop');
+    expect(data.results[0]).toMatchObject({name: 'ButtonGroup'});
+  });
 });
