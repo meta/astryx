@@ -57,6 +57,7 @@ import {tokenizeQuery, phraseWords} from './_query.mjs';
 import {MAX_RUN_WORDS} from './_compound.mjs';
 import {scoreQuery} from './_score.mjs';
 import {scoreCandidate} from './_candidate-score.mjs';
+import {fold, nameWords, words} from './_query-words.mjs';
 import {domainPriority} from './_priority.mjs';
 import {toResult, searchedComponentsOf} from './_result.mjs';
 
@@ -126,6 +127,33 @@ export function namesWhole(candidate, term) {
 }
 
 /**
+ * Whether one identifier, read whole, answers the query by itself, so it is
+ * not read as the words it spells. A match on the whole identifier does,
+ * unless it is only a typo-distance match: a near miss of a different name
+ * (`SearchInput` and searchIndex) must not hide every entry the words match.
+ * A typo match still answers alone when the entry's name spells every word of
+ * the identifier in order (`useTableExpansion` and useTableRowExpansion), and
+ * when the words are not read, the near miss keeps its own score beside them.
+ * @param {string} term the identifier, lowercased
+ * @param {string} spelled the identifier read as its words
+ * @param {Candidate} candidate
+ * @returns {boolean}
+ */
+function answersWhole(term, spelled, candidate) {
+  const hit = scoreCandidate(term, candidate);
+  if (!hit) return false;
+  if (!TYPO_REASON.test(hit.reason)) return true;
+  const want = words(spelled).map(fold);
+  const have = nameWords(String(candidate.name)).map(fold);
+  let at = 0;
+  for (const w of have) if (at < want.length && w === want[at]) at++;
+  return at === want.length;
+}
+
+/** The reasons scoreCandidate gives a typo-distance match. */
+const TYPO_REASON = /\(distance [1-3]\)$|^similar name \(distance/;
+
+/**
  * Today's lexical ranking of a gathered catalog: the search response
  * `searchCore` returns.
  *
@@ -155,7 +183,7 @@ export function rankLexical(query, options, catalog) {
     !exact &&
     !/\s/.test(term) &&
     spelled !== term &&
-    !all.some(candidate => scoreCandidate(term, candidate));
+    !all.some(candidate => answersWhole(term, spelled, candidate));
   const tokens = tokenizeQuery(split ? spelled : term);
   /** @type {string[]} */
   const words = exact
