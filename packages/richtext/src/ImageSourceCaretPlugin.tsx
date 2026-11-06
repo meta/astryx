@@ -5,8 +5,8 @@
 /**
  * @file ImageSourceCaretPlugin.tsx
  * @input Uses @lexical/react (composer context) and lexical (selection, the
- *   selection-change command, update listeners), and $isImageSource from
- *   markdownCharacterReferences.ts.
+ *   selection-change and text-insertion commands, update listeners), and
+ *   $isImageSource from markdownCharacterReferences.ts.
  * @output Exports ImageSourceCaretPlugin, which keeps a collapsed caret out
  *   of the text that holds an image's Markdown source.
  * @position Rendered by RichTextEditor, always on. An image's source is one
@@ -24,6 +24,7 @@ import {
   $getSelection,
   $isRangeSelection,
   COMMAND_PRIORITY_CRITICAL,
+  CONTROLLED_TEXT_INSERTION_COMMAND,
   SELECTION_CHANGE_COMMAND,
   type LexicalEditor,
   type NodeKey,
@@ -73,34 +74,47 @@ function $edgeFor(
   return nearer;
 }
 
+/**
+ * Moves a collapsed caret inside an image's source to an edge of it. Always
+ * returns false, so the command goes on to Lexical's own handler.
+ */
+function $moveCaretOutOfImage(previous: CaretPoint | null): false {
+  const selection = $getSelection();
+  if (
+    !$isRangeSelection(selection) ||
+    !selection.isCollapsed() ||
+    selection.anchor.type !== 'text'
+  ) {
+    return false;
+  }
+  const {key, offset} = selection.anchor;
+  const node = $getNodeByKey<TextNode>(key);
+  if (
+    node == null ||
+    !$isImageSource(node) ||
+    offset === 0 ||
+    offset === node.getTextContentSize()
+  ) {
+    return false;
+  }
+  const edge = $edgeFor(node, offset, previous);
+  selection.anchor.set(key, edge, 'text');
+  selection.focus.set(key, edge, 'text');
+  return false;
+}
+
 function registerImageSourceCaret(editor: LexicalEditor): () => void {
   let previous: CaretPoint | null = null;
-  const removeCommand = editor.registerCommand(
+  const removeSelectionChange = editor.registerCommand(
     SELECTION_CHANGE_COMMAND,
-    () => {
-      const selection = $getSelection();
-      if (
-        !$isRangeSelection(selection) ||
-        !selection.isCollapsed() ||
-        selection.anchor.type !== 'text'
-      ) {
-        return false;
-      }
-      const {key, offset} = selection.anchor;
-      const node = $getNodeByKey<TextNode>(key);
-      if (
-        node == null ||
-        !$isImageSource(node) ||
-        offset === 0 ||
-        offset === node.getTextContentSize()
-      ) {
-        return false;
-      }
-      const edge = $edgeFor(node, offset, previous);
-      selection.anchor.set(key, edge, 'text');
-      selection.focus.set(key, edge, 'text');
-      return false;
-    },
+    () => $moveCaretOutOfImage(previous),
+    COMMAND_PRIORITY_CRITICAL,
+  );
+  // A key typed before the browser reports the caret's move reaches the
+  // editor with the caret still inside the source: move it there too.
+  const removeInsertion = editor.registerCommand(
+    CONTROLLED_TEXT_INSERTION_COMMAND,
+    () => $moveCaretOutOfImage(previous),
     COMMAND_PRIORITY_CRITICAL,
   );
   const removeListener = editor.registerUpdateListener(({editorState}) => {
@@ -114,7 +128,8 @@ function registerImageSourceCaret(editor: LexicalEditor): () => void {
     });
   });
   return () => {
-    removeCommand();
+    removeSelectionChange();
+    removeInsertion();
     removeListener();
   };
 }

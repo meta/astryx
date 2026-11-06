@@ -13,6 +13,7 @@ import {
   $parseSerializedNode,
   $getSelection,
   type TextNode,
+  CONTROLLED_TEXT_INSERTION_COMMAND,
   SELECTION_CHANGE_COMMAND,
 } from 'lexical';
 import {DEFAULT_NODES} from './editorNodes';
@@ -276,6 +277,35 @@ describe('image Markdown through edits (spec:AST-062)', () => {
     typeAt(2, 'x');
     expect(ref.current?.getMarkdown()).toBe(
       `Before x${IMAGES.titled}! after\n`,
+    );
+  });
+
+  it('moves a caret still inside an image when a key arrives, so the key lands beside it (FR5)', async () => {
+    const markdown = `Before ${IMAGES.emptyAlt} after\n`;
+    const ref = createRef<RichTextEditorRef>();
+    render(
+      <RichTextEditor
+        label="Notes"
+        ref={ref}
+        defaultValue={markdownToEditorStateJSON(markdown)}
+      />,
+    );
+    await waitFor(() => expect(ref.current?.getEditor()).toBeTruthy());
+    const editor = ref.current!.getEditor()!;
+    editor.update(
+      () => {
+        $imageText(IMAGES.emptyAlt).select(4, 4);
+      },
+      {discrete: true},
+    );
+    editor.update(
+      () => {
+        editor.dispatchCommand(CONTROLLED_TEXT_INSERTION_COMMAND, 'k');
+      },
+      {discrete: true},
+    );
+    expect(ref.current?.getMarkdown()).toBe(
+      `Before k${IMAGES.emptyAlt} after\n`,
     );
   });
 });
