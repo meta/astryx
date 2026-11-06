@@ -487,12 +487,18 @@ export const TouchTargets: Story = {
     docs: {
       description: {
         story:
-          'A dense toolbar, 4 px apart, above a field with a clear button. Under a coarse pointer each button’s invisible hit area grows toward 44 px, but stops halfway to a neighbor, so a tap lands on the button nearest to it and no box changes size.',
+          'A dense toolbar, 4 px apart, a pair offset 4 px on both axes, and a field with a clear button. Under a coarse pointer each button’s invisible hit area grows toward 44 px, but stops halfway to a neighbor, so a tap lands on the button nearest to it and no box changes size.',
       },
     },
   },
   render: () => {
-    const [taps, setTaps] = useState({bold: 0, italic: 0, underline: 0});
+    const [taps, setTaps] = useState({
+      bold: 0,
+      italic: 0,
+      underline: 0,
+      undo: 0,
+      redo: 0,
+    });
     const [query, setQuery] = useState('quarterly report');
     const count = (key: keyof typeof taps) => () =>
       setTaps(current => ({...current, [key]: current[key] + 1}));
@@ -523,6 +529,32 @@ export const TouchTargets: Story = {
         </HStack>
         <output aria-label="Taps">
           Bold {taps.bold}, Italic {taps.italic}, Underline {taps.underline}
+        </output>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'auto auto',
+            gap: 4,
+          }}>
+          <IconButton
+            label="Undo"
+            size="sm"
+            variant="ghost"
+            icon={<Icon icon={Cog6ToothIcon} />}
+            onClick={count('undo')}
+          />
+          <span />
+          <span />
+          <IconButton
+            label="Redo"
+            size="sm"
+            variant="ghost"
+            icon={<Icon icon={TrashIcon} />}
+            onClick={count('redo')}
+          />
+        </div>
+        <output aria-label="Offset taps">
+          Undo {taps.undo}, Redo {taps.redo}
         </output>
         <TextInput label="Search" value={query} onChange={setQuery} hasClear />
       </VStack>

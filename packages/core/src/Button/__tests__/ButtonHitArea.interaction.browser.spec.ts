@@ -113,7 +113,7 @@ test.describe('Button touch target (spec:AST-094 FR42), under a finger', () => {
     const driver = await touchDriver(page);
     const bold = await measure(page, 'Bold');
     const italic = await measure(page, 'Italic');
-    const taps = page.locator('#storybook-root output');
+    const taps = page.locator('#storybook-root output[aria-label="Taps"]');
     const y = middleY(italic.box);
     await tapAt(driver, {x: italic.box.left - 0.75, y});
     await expect(taps).toHaveText('Bold 0, Italic 1, Underline 0');
@@ -124,6 +124,29 @@ test.describe('Button touch target (spec:AST-094 FR42), under a finger', () => {
       y: italic.box.top - italic.insets.top + 1,
     });
     await expect(taps).toHaveText('Bold 1, Italic 2, Underline 0');
+  });
+
+  test('a tap nearer an offset neighbour never presses the farther button', async ({
+    page,
+  }) => {
+    await openStory(page, storybook(), STORY);
+    await waitForHitArea(page, ['Undo', 'Redo']);
+    const driver = await touchDriver(page);
+    const undo = await measure(page, 'Undo');
+    const redo = await measure(page, 'Redo');
+    const taps = page.locator(
+      '#storybook-root output[aria-label="Offset taps"]',
+    );
+    // Redo sits past Undo's corner on both axes. Every point here is nearer
+    // Redo's box than Undo's.
+    for (const step of [0.7, 0.8, 0.9]) {
+      const at = {
+        x: undo.box.right + (redo.box.left - undo.box.right) * step,
+        y: undo.box.bottom + (redo.box.top - undo.box.bottom) * step,
+      };
+      await tapAt(driver, at);
+    }
+    await expect(taps).toContainText('Undo 0');
   });
 
   test('the clear button’s band stops short of the field’s text', async ({
