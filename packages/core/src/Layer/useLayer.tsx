@@ -579,6 +579,22 @@ function keepAnchorClear(layer: HTMLElement, anchor: HTMLElement | null): void {
   );
 }
 
+/** An element's box in client px, as a rect read or an observer reports it. */
+interface ClientBox {
+  readonly top: number;
+  readonly left: number;
+  readonly right: number;
+  readonly bottom: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+/** The viewport's size in client px, without its scrollbars. */
+interface ViewportSize {
+  readonly width: number;
+  readonly height: number;
+}
+
 /**
  * Call `onMove` when an element moves on screen without changing size: in
  * layout (a sibling above it grows, a margin changes) or because something
@@ -589,18 +605,21 @@ function keepAnchorClear(layer: HTMLElement, anchor: HTMLElement | null): void {
  * ratio and fires the callback, which calls `onMove` and re-arms on the new
  * rectangle. Intersection callbacks run after the frame that moved the
  * element has painted, so the caller corrects that move in the next frame.
+ * The element's box and the viewport are read once, when observing starts.
+ * Each re-arm takes them from the report itself (its target box and its root
+ * box), so following a move reads no layout.
  *
  * A fresh observer's first report can already differ from its threshold: the
  * element is partly outside the viewport, or it kept moving between the
- * rectangle read and the observer's first check, as it does every frame of a
- * smooth scroll. Any such report calls `onMove` and re-arms, at the reported
- * ratio, or at once on the element's new rectangle when the report is 0 and
- * the element moved, so a move that spans many frames is followed frame by
- * frame. A report of 0 for an element that has not moved means a scrolled
- * container clips it wholly; re-arming then would report 0 again every frame.
- * Instead a second IntersectionObserver, rooted at the viewport with a
- * threshold of 0 (it counts every ancestor's overflow clip), waits for the
- * element to come back into view, then calls `onMove` and re-arms. Nothing
+ * rectangle the observer was armed on and its first check, as it does every
+ * frame of a smooth scroll. Any such report calls `onMove` and re-arms, at the
+ * reported ratio, or at once on the element's new rectangle when the report
+ * is 0 and the element moved, so a move that spans many frames is followed
+ * frame by frame. A report of 0 for an element that has not moved means a
+ * scrolled container clips it wholly; re-arming then would report 0 again
+ * every frame. Instead a second IntersectionObserver, rooted at the viewport
+ * with a threshold of 0 (it counts every ancestor's overflow clip), waits for
+ * the element to come back into view, then calls `onMove` and re-arms. Nothing
  * runs on a timer. Returns the function that stops observing.
  */
 function observeMove(element: HTMLElement, onMove: () => void): () => void {
@@ -608,6 +627,7 @@ function observeMove(element: HTMLElement, onMove: () => void): () => void {
   if (typeof IntersectionObserver === 'undefined') {
     return () => {};
   }
+  const root = doc.documentElement;
   let observer: IntersectionObserver | null = null;
   let visibility: IntersectionObserver | null = null;
   const stop = () => {
@@ -616,30 +636,37 @@ function observeMove(element: HTMLElement, onMove: () => void): () => void {
     visibility?.disconnect();
     visibility = null;
   };
-  const moved = (threshold: number) => {
+  const moved = (threshold: number, box: ClientBox, viewport: ViewportSize) => {
     onMove();
-    arm(threshold);
+    arm(threshold, box, viewport);
   };
-  const arm = (threshold: number) => {
+  const arm = (threshold: number, rect: ClientBox, viewport: ViewportSize) => {
     stop();
-    const root = doc.documentElement;
-    const rect = element.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) {
       return;
     }
     const top = Math.floor(rect.top);
     const left = Math.floor(rect.left);
-    const right = Math.floor(root.clientWidth - rect.right);
-    const bottom = Math.floor(root.clientHeight - rect.bottom);
-    const hasMoved = () => {
-      const now = element.getBoundingClientRect();
-      return (
-        now.top !== rect.top ||
-        now.left !== rect.left ||
-        now.width !== rect.width ||
-        now.height !== rect.height
-      );
-    };
+    const right = Math.floor(viewport.width - rect.right);
+    const bottom = Math.floor(viewport.height - rect.bottom);
+    const hasMoved = (now: ClientBox) =>
+      now.top !== rect.top ||
+      now.left !== rect.left ||
+      now.width !== rect.width ||
+      now.height !== rect.height;
+    // A report's root box is the viewport, here shrunk by the root margin.
+    // An engine that reports no root box leaves the size to one read.
+    const viewportOf = (
+      rootBounds: DOMRectReadOnly | null,
+      marginRight: number,
+      marginBottom: number,
+    ): ViewportSize =>
+      rootBounds == null
+        ? {width: root.clientWidth, height: root.clientHeight}
+        : {
+            width: rootBounds.right + marginRight,
+            height: rootBounds.bottom + marginBottom,
+          };
     // Clipped by a scrolled container: wait, without a timer, for the
     // element to come back into view. A first report that already finds it
     // in view only counts if it has moved, so a clip the move observer and
@@ -648,11 +675,18 @@ function observeMove(element: HTMLElement, onMove: () => void): () => void {
       let isFirstVisible = true;
       visibility = new IntersectionObserver(
         entries => {
-          const visible = entries[entries.length - 1]?.isIntersecting ?? false;
+          const entry = entries[entries.length - 1];
           const firstVisible = isFirstVisible;
           isFirstVisible = false;
-          if (visible && (!firstVisible || hasMoved())) {
-            moved(1);
+          if (
+            entry?.isIntersecting &&
+            (!firstVisible || hasMoved(entry.boundingClientRect))
+          ) {
+            moved(
+              1,
+              entry.boundingClientRect,
+              viewportOf(entry.rootBounds, 0, 0),
+            );
           }
         },
         {root: doc, threshold: 0},
@@ -662,23 +696,34 @@ function observeMove(element: HTMLElement, onMove: () => void): () => void {
     let isFirst = true;
     observer = new IntersectionObserver(
       entries => {
-        const ratio = entries[entries.length - 1]?.intersectionRatio ?? 0;
+        const entry = entries[entries.length - 1];
+        if (entry == null) {
+          return;
+        }
+        const ratio = entry.intersectionRatio;
+        const box = entry.boundingClientRect;
         const first = isFirst;
         isFirst = false;
+        const followMove = (nextThreshold: number) =>
+          moved(
+            nextThreshold,
+            box,
+            viewportOf(entry.rootBounds, right, bottom),
+          );
         if (ratio === threshold) {
           // Still over its own rectangle, but a move smaller than the
           // rounding of the root margin can leave the ratio at 1.
-          if (ratio === 1 && hasMoved()) {
-            moved(1);
+          if (ratio === 1 && hasMoved(box)) {
+            followMove(1);
           }
           return;
         }
         if (!first || ratio > 0) {
-          moved(first ? ratio : 1);
+          followMove(first ? ratio : 1);
           return;
         }
-        if (hasMoved()) {
-          moved(1);
+        if (hasMoved(box)) {
+          followMove(1);
           return;
         }
         if (visibility === null) {
@@ -693,7 +738,10 @@ function observeMove(element: HTMLElement, onMove: () => void): () => void {
     );
     observer.observe(element);
   };
-  arm(1);
+  arm(1, element.getBoundingClientRect(), {
+    width: root.clientWidth,
+    height: root.clientHeight,
+  });
   return stop;
 }
 

@@ -2694,6 +2694,38 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
 
   const TRIGGER = rect(300, 400, 30, 100);
 
+  /**
+   * An intersection report as an engine makes it: the target's box, and the
+   * root's box, which is the viewport shrunk by the observer's root margin.
+   */
+  function report(
+    options: IntersectionObserverInit | undefined,
+    box: DOMRect,
+    intersectionRatio: number,
+    isIntersecting = intersectionRatio > 0,
+    viewport = {
+      width: document.documentElement.clientWidth,
+      height: document.documentElement.clientHeight,
+    },
+  ) {
+    const [top = 0, right = 0, bottom = 0, left = 0] = (
+      options?.rootMargin ?? '0px 0px 0px 0px'
+    )
+      .split(' ')
+      .map(value => -parseFloat(value));
+    return {
+      intersectionRatio,
+      isIntersecting,
+      boundingClientRect: box,
+      rootBounds: rect(
+        top,
+        left,
+        viewport.height - bottom - top,
+        viewport.width - right - left,
+      ),
+    } as unknown as IntersectionObserverEntry;
+  }
+
   /** Let the next animation frame run, as the browser does before it paints. */
   async function nextFrame() {
     await act(
@@ -2967,7 +2999,7 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
 
   it('re-reads its geometry when its trigger moves in layout without resizing', async () => {
     const observers: {
-      callback: (entries: {intersectionRatio: number}[]) => void;
+      callback: (entries: IntersectionObserverEntry[]) => void;
       options: IntersectionObserverInit;
       disconnected: boolean;
     }[] = [];
@@ -2976,7 +3008,7 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
       class {
         record: (typeof observers)[number];
         constructor(
-          callback: (entries: {intersectionRatio: number}[]) => void,
+          callback: (entries: IntersectionObserverEntry[]) => void,
           options: IntersectionObserverInit,
         ) {
           this.record = {callback, options, disconnected: false};
@@ -3003,19 +3035,85 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
     );
 
     // Its initial report: fully inside its own rect.
-    act(() => move?.callback([{intersectionRatio: 1}]));
+    act(() => move?.callback([report(move.options, TRIGGER, 1)]));
     expect(layerEl).not.toHaveAttribute('data-astryx-clears-anchor');
 
     // The trigger moves; the standard list now settles over it.
     spy.mockRestore();
     placeBoxes(TRIGGER, rect(16, 350, 688, 300));
     const before = observers.length;
-    act(() => move?.callback([{intersectionRatio: 0.4}]));
+    act(() => move?.callback([report(move.options, TRIGGER, 0.4)]));
     // Re-armed on the new rect at once; read in the next frame.
     expect(move?.disconnected).toBe(true);
     expect(observers.length).toBe(before + 1);
     await nextFrame();
     expect(layerEl).toHaveAttribute('data-astryx-clears-anchor');
+    vi.unstubAllGlobals();
+  });
+
+  it('follows a move from its report alone: no layout read, armed on the reported box', async () => {
+    type Record = {
+      callback: (entries: IntersectionObserverEntry[]) => void;
+      options: IntersectionObserverInit;
+    };
+    const observers: Record[] = [];
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        constructor(
+          callback: (entries: IntersectionObserverEntry[]) => void,
+          options: IntersectionObserverInit,
+        ) {
+          observers.push({callback, options});
+        }
+        observe() {}
+        disconnect() {}
+        unobserve() {}
+      },
+    );
+    const moves = () =>
+      observers.filter(
+        o => o.options?.root === document && o.options.rootMargin != null,
+      );
+    const latest = () => moves()[moves().length - 1];
+    vi.spyOn(document.documentElement, 'clientWidth', 'get').mockReturnValue(
+      1280,
+    );
+    viewport720();
+    const user = userEvent.setup();
+    const spy = placeBoxes(TRIGGER, rect(200, 350, 100, 200));
+    const {getByText} = render(<ClearHarness />);
+    await user.click(getByText('Trigger'));
+    expect(latest().options.rootMargin).toBe('-300px -780px -390px -400px');
+
+    // Every frame of a scroll reports a move. Following it reads no layout:
+    // the box and the viewport come from the report.
+    const width = vi.spyOn(document.documentElement, 'clientWidth', 'get');
+    const height = vi.spyOn(document.documentElement, 'clientHeight', 'get');
+    const triggerReads = () =>
+      spy.mock.contexts.filter(el => !el.hasAttribute('popover')).length;
+    const readsBefore = triggerReads();
+    width.mockClear();
+    height.mockClear();
+    const scrolled = rect(247.5, 400, 30, 100);
+    const screen = {width: 1280, height: 720};
+    act(() =>
+      latest().callback([
+        report(latest().options, scrolled, 0.4, true, screen),
+      ]),
+    );
+    // Armed on the reported box, as a fresh read of it would arm it.
+    expect(latest().options.rootMargin).toBe('-247px -780px -442px -400px');
+    // A move under a pixel leaves the ratio at 1; the reported box shows it.
+    const nudged = rect(247.25, 400, 30, 100);
+    act(() =>
+      latest().callback([report(latest().options, nudged, 1, true, screen)]),
+    );
+    expect(moves().length).toBe(3);
+    expect(latest().options.rootMargin).toBe('-247px -780px -442px -400px');
+    expect(triggerReads()).toBe(readsBefore);
+    expect(width).not.toHaveBeenCalled();
+    expect(height).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
   });
 
@@ -3026,14 +3124,14 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
     // clear from the second painted frame). The read waits for the next
     // frame, before it paints, and several reports in one frame share it.
     const observers: {
-      callback: (entries: {intersectionRatio: number}[]) => void;
+      callback: (entries: IntersectionObserverEntry[]) => void;
       options: IntersectionObserverInit;
     }[] = [];
     vi.stubGlobal(
       'IntersectionObserver',
       class {
         constructor(
-          callback: (entries: {intersectionRatio: number}[]) => void,
+          callback: (entries: IntersectionObserverEntry[]) => void,
           options: IntersectionObserverInit,
         ) {
           observers.push({callback, options});
@@ -3050,7 +3148,10 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
     const {container, getByText} = render(<ClearHarness />);
     await user.click(getByText('Trigger'));
     const layerEl = container.querySelector('[popover]') as HTMLElement;
-    act(() => latestMove()?.callback([{intersectionRatio: 1}]));
+    act(() => {
+      const move = latestMove();
+      move?.callback([report(move.options, TRIGGER, 1)]);
+    });
     await nextFrame();
     expect(layerEl).not.toHaveAttribute('data-astryx-clears-anchor');
 
@@ -3069,8 +3170,10 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
       },
     );
     act(() => {
-      latestMove()?.callback([{intersectionRatio: 0.4}]);
-      latestMove()?.callback([{intersectionRatio: 0.6}]);
+      const first = latestMove();
+      first?.callback([report(first.options, TRIGGER, 0.4)]);
+      const second = latestMove();
+      second?.callback([report(second.options, TRIGGER, 0.6)]);
     });
     expect(layerEl).not.toHaveAttribute('data-astryx-clears-anchor');
     expect(reads).not.toHaveBeenCalled();
@@ -3083,7 +3186,7 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
   });
 
   it('follows a move that spans several frames and never goes idle while a scrolled container clips its trigger', async () => {
-    type Entry = {intersectionRatio: number; isIntersecting?: boolean};
+    type Entry = IntersectionObserverEntry;
     const observers: {
       callback: (entries: Entry[]) => void;
       options: IntersectionObserverInit;
@@ -3129,7 +3232,7 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
     spy.mockRestore();
     spy = placeBoxes(TRIGGER, rect(16, 350, 688, 300));
     let armed = moves().length;
-    act(() => latest().callback([{intersectionRatio: 0.7}]));
+    act(() => latest().callback([report(latest().options, TRIGGER, 0.7)]));
     expect(moves().length).toBe(armed + 1);
     expect(latest().options.threshold).toBe(0.7);
     await nextFrame();
@@ -3138,9 +3241,10 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
     // A first report of 0 for a trigger that moved since the observer read
     // its rectangle re-arms at once on the new rectangle.
     spy.mockRestore();
-    spy = placeBoxes(rect(260, 400, 30, 100), rect(16, 350, 688, 300));
+    const moved = rect(260, 400, 30, 100);
+    spy = placeBoxes(moved, rect(16, 350, 688, 300));
     armed = moves().length;
-    act(() => latest().callback([{intersectionRatio: 0}]));
+    act(() => latest().callback([report(latest().options, moved, 0)]));
     expect(moves().length).toBe(armed + 1);
     expect(latest().options.threshold).toBe(1);
 
@@ -3149,18 +3253,18 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
     // viewport waits for it to come back into view, however long that takes.
     const timers = vi.spyOn(globalThis, 'setTimeout');
     armed = moves().length;
-    act(() => latest().callback([{intersectionRatio: 0}]));
+    act(() => latest().callback([report(latest().options, moved, 0)]));
     expect(moves().length).toBe(armed);
     expect(timers).not.toHaveBeenCalled();
     const visibility = visibilities()[visibilities().length - 1];
     expect(visibility?.options.threshold).toBe(0);
     act(() =>
-      visibility?.callback([{intersectionRatio: 0, isIntersecting: false}]),
+      visibility?.callback([report(visibility.options, moved, 0, false)]),
     );
     expect(moves().length).toBe(armed);
     // Back in view: it re-reads and re-arms, and the visibility observer goes.
     act(() =>
-      visibility?.callback([{intersectionRatio: 0.2, isIntersecting: true}]),
+      visibility?.callback([report(visibility.options, moved, 0.2, true)]),
     );
     expect(moves().length).toBe(armed + 1);
     expect(visibility?.disconnected).toBe(true);
