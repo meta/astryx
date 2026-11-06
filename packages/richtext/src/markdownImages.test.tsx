@@ -1,6 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, it, expect} from 'vitest';
+import {render, waitFor} from '@testing-library/react';
+import {createRef} from 'react';
 import {createHeadlessEditor} from '@lexical/headless';
 import {
   $createTextNode,
@@ -11,8 +13,11 @@ import {
   $parseSerializedNode,
   $getSelection,
   type TextNode,
+  SELECTION_CHANGE_COMMAND,
 } from 'lexical';
 import {DEFAULT_NODES} from './editorNodes';
+import {RichTextEditor, type RichTextEditorRef} from './RichTextEditor';
+import {RichTextEditorAutoLinkPlugin} from './RichTextEditorAutoLinkPlugin';
 import {
   editorStateJSONToMarkdown,
   markdownToEditorStateJSON,
@@ -216,5 +221,45 @@ describe('image Markdown through edits (spec:AST-062)', () => {
         imageParagraph.remove();
       }),
     ).toBe(`Lead ${IMAGES.emptyAlt} after\n`);
+  });
+
+  it('moves a caret placed inside an image to its edge, so typing adds text beside it (FR5)', async () => {
+    const markdown = `Before ${IMAGES.titled} after\n`;
+    const ref = createRef<RichTextEditorRef>();
+    render(
+      <RichTextEditor
+        label="Notes"
+        ref={ref}
+        defaultValue={markdownToEditorStateJSON(markdown)}
+        plugins={<RichTextEditorAutoLinkPlugin />}
+      />,
+    );
+    await waitFor(() => expect(ref.current?.getEditor()).toBeTruthy());
+    const editor = ref.current!.getEditor()!;
+    const typeAt = (offset: number, text: string) => {
+      editor.update(
+        () => {
+          $imageText(IMAGES.titled).select(offset, offset);
+        },
+        {discrete: true},
+      );
+      editor.update(
+        () => {
+          editor.dispatchCommand(SELECTION_CHANGE_COMMAND, undefined);
+          const selection = $getSelection();
+          if (!$isRangeSelection(selection)) {
+            throw new Error('no range selection');
+          }
+          selection.insertText(text);
+        },
+        {discrete: true},
+      );
+    };
+    typeAt(IMAGES.titled.length - 3, '!');
+    expect(ref.current?.getMarkdown()).toBe(`Before ${IMAGES.titled}! after\n`);
+    typeAt(2, 'x');
+    expect(ref.current?.getMarkdown()).toBe(
+      `Before x${IMAGES.titled}! after\n`,
+    );
   });
 });
