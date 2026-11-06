@@ -1156,6 +1156,22 @@ test('a settle keeps advancing every frame through an 800 ms main-thread block',
   // The settle moves on every frame the control moves on, and in each run it
   // stalls no longer than the control.
   expect(proof.verdict.failures, proof.summary).toEqual([]);
+  // The pool judges the ratio. Each run still has to show motion in its own
+  // block. One presented frame cannot show the settle moving. So a run whose
+  // control moved on fewer than two frames is too little to judge.
+  proof.runs.forEach((run, i) => {
+    const read = run.control;
+    const controlFrames = read?.moved ?? 0;
+    const settleFrames = (read?.movedWith ?? 0) - (read?.belowStep ?? 0);
+    expect(
+      controlFrames,
+      `run ${i + 1}: the control moved on ${controlFrames} frames in its block, under 2: too little to judge. ${run.summary}`,
+    ).toBeGreaterThanOrEqual(2);
+    expect(
+      settleFrames,
+      `run ${i + 1}: the settle showed a new position on ${settleFrames} frames in its block. ${run.summary}`,
+    ).toBeGreaterThanOrEqual(1);
+  });
 });
 
 test('no Layout or Paint while it settles', async ({page, browserName}) => {
