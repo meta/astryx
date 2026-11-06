@@ -457,3 +457,42 @@ export const StandingAnchor: Story = {
     );
   },
 };
+
+// Many lists on one page, for measuring what a page pays to mount them. Set
+// the count with the `lists` arg, for example `&args=lists:50`.
+const MANY_LIST_LABELS = [
+  'Overview',
+  'Activity',
+  'Settings',
+  'Members',
+  'Billing',
+  'Integrations',
+  'Security',
+  'Notifications',
+  'Reports',
+  'Archive',
+  'Exports',
+  'Help',
+];
+
+export const ManyLists: StoryObj<{lists: number}> = {
+  args: {lists: 50},
+  argTypes: {lists: {control: {type: 'number', min: 1, max: 200}}},
+  tags: ['!autodocs'],
+  render: ({lists}) => (
+    <div style={{display: 'grid', gap: 8}}>
+      {Array.from({length: lists}, (_, list) => (
+        <div key={list} style={{width: 240 + (list % 5) * 60}}>
+          <OverflowList
+            overflowRenderer={(items: OverflowItem[]) => (
+              <Badge label={`+${items.length}`} />
+            )}>
+            {MANY_LIST_LABELS.map(label => (
+              <Button key={label} label={label} variant="ghost" size="sm" />
+            ))}
+          </OverflowList>
+        </div>
+      ))}
+    </div>
+  ),
+};
