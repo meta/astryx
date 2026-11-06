@@ -34,6 +34,7 @@ verified_by:
   "paths": [
     "packages/core/src/Layer/holdEntranceInput.ts",
     "packages/core/src/Layer/inputHold.ts",
+    "packages/core/src/hooks/usePager.ts",
     "packages/core/src/motion/uikit/segmented.ts",
     "packages/core/src/motion/uikit/slider.ts"
   ]
