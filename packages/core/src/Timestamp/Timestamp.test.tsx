@@ -32,6 +32,11 @@ import {InternationalizationProvider} from '../i18n';
 import type {CalendarSystem} from '../utils/calendarSystem';
 import {withChineseTemporalAheadOfIntl} from '../__tests__/temporalAheadOfIntl';
 import {__resetDevWarnings} from '../utils/devWarning';
+import type {ComponentIconMap} from '../Icon/index';
+import {defineTheme} from '../theme/defineTheme';
+import {Theme} from '../theme/Theme';
+
+let slotThemeCount = 0;
 
 async function openTimestampHoverCard(): Promise<HTMLElement> {
   const timestamp = document.querySelector('time');
@@ -49,6 +54,15 @@ async function openTimestampHoverCard(): Promise<HTMLElement> {
   });
 
   return screen.getByRole('dialog', {hidden: true});
+}
+
+/** The long name of a zone at an instant, as Intl spells it in en-US. */
+function longZoneName(timeZone?: string, at: Date = new Date()): string {
+  return (
+    new Intl.DateTimeFormat('en-US', {timeZoneName: 'long', timeZone})
+      .formatToParts(at)
+      .find(part => part.type === 'timeZoneName')?.value ?? ''
+  );
 }
 
 describe('Timestamp', () => {
@@ -953,7 +967,12 @@ describe('Timestamp', () => {
       // aria-label spells the timezone out in full (WCAG 3.1.4), so the two
       // strings intentionally differ — compare the row against an
       // independently formatted short-form string.
-      expect(card.querySelectorAll('dd')).toHaveLength(1);
+      // Without labels the card is still a description list: the value is
+      // named by its long time-zone name, which is visually hidden.
+      expect(card.querySelectorAll('dl > div > dd')).toHaveLength(1);
+      expect(card.querySelector('dl > div > dt')?.textContent).toBe(
+        longZoneName(),
+      );
       expect(card.querySelectorAll('button')).toHaveLength(1);
 
       const normalize = (s: string) => s.replace(/\s+/g, ' ');
@@ -975,7 +994,7 @@ describe('Timestamp', () => {
     it("copies the default absolute row's value", async () => {
       render(<Timestamp value={Date.now() / 1000 - 3600} format="relative" />);
       const card = await openTimestampHoverCard();
-      const rowValue = card.querySelector('dd')?.textContent ?? '';
+      const rowValue = card.querySelector('dd > span')?.textContent ?? '';
       expect(rowValue).toBeTruthy();
       fireEvent.click(card.querySelector('button')!);
       expect(navigator.clipboard.writeText).toHaveBeenCalledWith(rowValue);
@@ -1012,6 +1031,80 @@ describe('Timestamp', () => {
           }),
         ).toBeInTheDocument(),
       );
+    });
+
+    describe('copy icon slot', () => {
+      // Label each shared icon's artwork, so a test reads which name rendered.
+      const icons = {
+        copy: <span data-icon="copy" />,
+        check: <span data-icon="check" />,
+        clock: <span data-icon="clock" />,
+        checkDouble: <span data-icon="checkDouble" />,
+      };
+
+      async function renderCard(componentIcons?: ComponentIconMap<never>) {
+        const theme = defineTheme({
+          name: `timestamp-copy-slot-${slotThemeCount++}`,
+          icons,
+          componentIcons,
+        });
+        render(
+          <Theme theme={theme}>
+            <Timestamp value={Date.now() / 1000 - 3600} format="relative" />
+          </Theme>,
+        );
+        const card = await openTimestampHoverCard();
+        return card.querySelector('button')!;
+      }
+
+      const glyph = (button: HTMLElement) =>
+        button.querySelector('[data-icon]')?.getAttribute('data-icon') ?? null;
+
+      async function copy(button: HTMLElement) {
+        fireEvent.click(button);
+        await waitFor(() => expect(button).toHaveAccessibleName('Copied'));
+      }
+
+      it('draws copy, then check while copied, when the theme maps nothing', async () => {
+        const button = await renderCard();
+        expect(glyph(button)).toBe('copy');
+        await copy(button);
+        expect(glyph(button)).toBe('check');
+      });
+
+      it('passes `copied` to a slot function and draws the name it returns', async () => {
+        const slot = vi.fn(({copied}: {copied: boolean}) => ({
+          icon: copied ? ('checkDouble' as const) : ('clock' as const),
+        }));
+        const button = await renderCard({'timestamp-copy': slot});
+
+        expect(glyph(button)).toBe('clock');
+        expect(slot).toHaveBeenLastCalledWith({copied: false});
+        await copy(button);
+        expect(glyph(button)).toBe('checkDouble');
+        expect(slot).toHaveBeenLastCalledWith({copied: true});
+      });
+
+      it('hides only the glyph for null; the button keeps its name and copy action', async () => {
+        const button = await renderCard({'timestamp-copy': null});
+
+        expect(button.querySelector('.astryx-icon')).toBeNull();
+        expect(button).toHaveClass('astryx-timestamp-copy-button');
+        expect(button.getAttribute('aria-label')).toMatch(/^Copy /);
+        await copy(button);
+        expect(navigator.clipboard.writeText).toHaveBeenCalled();
+      });
+
+      it('changes only the icon size for a size request, not the button', async () => {
+        const button = await renderCard({'timestamp-copy': {size: 'lg'}});
+
+        expect(button.querySelector('.astryx-icon')).toHaveAttribute(
+          'data-size',
+          'lg',
+        );
+        expect(glyph(button)).toBe('copy');
+        expect(button).toHaveAttribute('data-size', 'sm');
+      });
     });
   });
 
@@ -1342,10 +1435,37 @@ describe('Timestamp', () => {
       );
       const card = await openTimestampHoverCard();
       // An unlabeled entry still emits its label cell, so the grid stays
-      // aligned and the <dl> stays valid markup.
+      // aligned; its zone's long name, visually hidden, names its value.
       expect(card.querySelectorAll('dt')).toHaveLength(3);
       expect(card.querySelectorAll('dd')).toHaveLength(3);
-      expect(card.querySelectorAll('dt')[1].textContent).toBe('');
+      expect(card.querySelectorAll('dt')[1].textContent).toBe(
+        longZoneName('Asia/Tokyo', new Date(VALUE)),
+      );
+    });
+
+    it('keeps a copyable labelled card a valid description list', async () => {
+      render(
+        <Timestamp
+          value={VALUE}
+          format="relative"
+          tooltipEntries={[
+            {timezoneID: 'UTC', label: 'UTC', isCopyable: true},
+            {timezoneID: 'Asia/Tokyo', label: 'Tokyo'},
+          ]}
+        />,
+      );
+      const card = await openTimestampHoverCard();
+      const list = card.querySelector('dl')!;
+      // Each group holds only its dt and dd (WCAG 2.2 1.3.1); the copy
+      // button sits inside the value.
+      for (const group of Array.from(list.children)) {
+        expect(group.tagName).toBe('DIV');
+        expect(Array.from(group.children, el => el.tagName)).toEqual([
+          'DT',
+          'DD',
+        ]);
+      }
+      expect(list.querySelectorAll('dd button')).toHaveLength(1);
     });
 
     it('gives the tab stop back when entries are removed', () => {
