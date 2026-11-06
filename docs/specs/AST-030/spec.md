@@ -265,15 +265,16 @@ they are separately named.
   runs the `release-only` spec files a changed component owns directly, never
   through a shared scope token or an unknown scope; full a11y
   sweeps, whole-repository spec-test contracts, and their evidence uploads MUST
-  run only for `release-check` in this workflow. A release interaction
-  check's throwaway pull request, on an `interaction-check/` branch that the
-  release tooling creates for a named release attempt, runs the full WebKit
-  browser spec scope. The workflow verifies the branch prefix, the creator
-  identity and that the head repository is this one, so a pull request that
-  only picks the prefix, or comes from a fork, does not qualify. Such pull
-  requests stay non-mergeable, and this widens the scope of no other pull
-  request. (Release-gate policy, decided by the Chief and the release owner on
-  2026-11-06.) Missing,
+  run only for `release-check` in this workflow. A release interaction check's
+  throwaway pull request, on an `interaction-check/` branch that the release
+  tooling creates for a named release attempt, runs the full WebKit browser spec
+  scope. The workflow verifies the branch prefix, the creator identity and that
+  the head repository is this one, so a pull request that only picks the prefix,
+  or comes from a fork, does not qualify. The creator check matches the shared
+  automation account, so another automated pull request from that account on an
+  `interaction-check/` branch also qualifies; the prefix is reserved for the
+  release tooling. Such pull requests stay non-mergeable, and this widens the
+  scope of no other pull request (DEC-24). Missing,
   failed, cancelled, or skipped required work MUST block the release-check join.
   The request and join MUST verify that the checked SHA is the dispatch event SHA
   and remains an ancestor of current remote `main` at the start and completion of
@@ -1155,6 +1156,19 @@ unchanged `audit` and `always` specs still do not run on a pull request.
 Rejected: dropping the five-component limit for every audit (the visual,
 accessibility and RTL audits of a wide change do not fit the default check's
 time).
+
+### DEC-24 — Release interaction-check pull requests run the full WebKit scope
+
+**Reference:** `spec:AST-030/DEC-24`
+**Decider:** the Chief with the release owner, `2026-11-06`
+
+A release interaction check's throwaway pull request runs the full WebKit
+browser spec scope (FR12). It qualifies only when its head branch starts with
+`interaction-check/`, the release tooling's account opened it, and its head
+repository is this repository. Such pull requests stay non-mergeable, and the
+rule widens the scope of no other pull request.
+
+Rejected: any pull request on the prefix (a prefix alone is spoofable).
 
 ## Open questions
 
