@@ -26,6 +26,7 @@ export const WithTrend: StoryObj<typeof MetricTile> = {
             xKey="index"
             series={[line('value')]}
             height={48}
+            margin={{top: 4, right: 0, bottom: 4, left: 0}}
             title="Request trend"
           />
         }
