@@ -105,6 +105,9 @@ Consumer migration instructions belong in consumer docs and release notes.
   `architecture:internationalization` INV3a gives it a per-message option.
 - **`shrinkOrder` is inert.** useResizable accepts and documents
   `shrinkOrder`, but no code reads it, so it has no effect.
+- **A press mid-slide on iOS (FR8).** Implementation gap: on iOS WebKit, a
+  press on the Handle during the slide lands on content until animated-layout
+  glides resolve their hit position (Core follow-up).
 
 ## Ownership boundary
 
