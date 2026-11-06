@@ -366,4 +366,36 @@ describe('Theme', () => {
     unmount();
     expect(document.head.querySelector(selector)).toBeNull();
   });
+
+  it('replaces the shared CSS when a theme is redefined under the same name', () => {
+    const redefined = defineTheme({
+      name: 'test',
+      tokens: {
+        '--color-accent': ['#0000AA', '#5555FF'],
+      },
+    });
+    function App({theme}: {theme: typeof testTheme}) {
+      return (
+        <Theme theme={theme}>
+          <Theme theme={theme}>
+            <span>inner</span>
+          </Theme>
+        </Theme>
+      );
+    }
+    const selector = 'style[data-astryx-theme="test"]';
+    const {rerender, unmount} = render(<App theme={testTheme} />);
+    expect(document.head.querySelector(selector)?.textContent).toMatch(
+      /#aa0000/i,
+    );
+
+    rerender(<App theme={redefined} />);
+    const styles = document.head.querySelectorAll(selector);
+    expect(styles).toHaveLength(1);
+    expect(styles[0].textContent).toMatch(/#0000aa/i);
+    expect(styles[0].textContent).not.toMatch(/#aa0000/i);
+
+    unmount();
+    expect(document.head.querySelector(selector)).toBeNull();
+  });
 });

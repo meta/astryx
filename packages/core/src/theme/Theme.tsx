@@ -109,13 +109,46 @@ ThemeNestingContext.displayName = 'ThemeNestingContext';
 // =============================================================================
 
 /**
- * Track which themes have already been injected, with how many mounted
- * `Theme` instances currently rely on each. The CSS is document-wide and
- * shared, so it is removed only when the last instance using it unmounts —
- * never when one of several (a nested or sibling `Theme`) goes away.
+ * The runtime theme CSS in the document, by theme name. The CSS is shared by
+ * the whole document. It is removed only when the last `Theme` that uses it
+ * unmounts.
  */
-const injectedThemes = new Map<string, {count: number; release: () => void}>();
+interface InjectedTheme {
+  count: number;
+  theme: DefinedTheme;
+  styles: HTMLStyleElement[];
+}
+const injectedThemes = new Map<string, InjectedTheme>();
 const THEME_LAYER_ORDER = '@layer reset, astryx-base, astryx-theme;';
+
+/** Write `theme`'s runtime CSS into the document head. */
+function writeThemeStyles(theme: DefinedTheme, id: string): HTMLStyleElement[] {
+  const {prose, component} = generateThemeCSS(theme);
+  const styles: HTMLStyleElement[] = [];
+
+  // Prose defaults go into @layer reset — lowest priority, scoped to
+  // the theme region. Any class-based style (StyleX, .xds-*) wins.
+  if (prose) {
+    const proseStyle = document.createElement('style');
+    proseStyle.setAttribute(dataAttr('theme-prose'), theme.name);
+    proseStyle.setAttribute(dataAttr('id'), id);
+    proseStyle.textContent = `${THEME_LAYER_ORDER}\n@layer reset {\n${prose}\n}`;
+    document.head.appendChild(proseStyle);
+    styles.push(proseStyle);
+  }
+
+  // Component overrides go into @layer astryx-theme — above StyleX layers
+  // so themes can intentionally restyle components.
+  if (component) {
+    const compStyle = document.createElement('style');
+    compStyle.setAttribute(dataAttr('theme'), theme.name);
+    compStyle.setAttribute(dataAttr('id'), id);
+    compStyle.textContent = `${THEME_LAYER_ORDER}\n@layer astryx-theme {\n${component}\n}`;
+    document.head.appendChild(compStyle);
+    styles.push(compStyle);
+  }
+  return styles;
+}
 
 /**
  * Hook to inject theme CSS into the document.
@@ -132,82 +165,43 @@ function useThemeStyleInjection(theme: DefinedTheme): void {
       return;
     }
 
-    // Second and later `Theme`s using this theme do no work at all —
-    // generation included. Its CSS is document-wide and identical for each.
     const themeKey = `astryx-theme-${theme.name}`;
-    const existing = injectedThemes.get(themeKey);
-    if (existing) {
-      existing.count += 1;
-      return () => {
-        existing.count -= 1;
-        if (existing.count === 0) {
-          existing.release();
-        }
-      };
+    let entry = injectedThemes.get(themeKey);
+    if (entry == null) {
+      // One-time perf hint per theme
+      warnOnce(
+        `theme-injection:${theme.name}`,
+        'Theme',
+        `"${theme.name}" is using runtime style injection. ` +
+          `For better performance, use the pre-built theme:\n\n` +
+          `  import {${theme.name}Theme} from '@astryxdesign/theme-${theme.name}/built';\n` +
+          `  import '@astryxdesign/theme-${theme.name}/theme.css';\n\n` +
+          `For custom themes, run \`npx @astryxdesign/cli theme build <file>\` to generate ` +
+          `the built artifacts.`,
+      );
+      entry = {count: 0, theme, styles: writeThemeStyles(theme, id)};
+      injectedThemes.set(themeKey, entry);
+    } else if (entry.theme !== theme) {
+      // A theme redefined under the same name (a live editor, Fast Refresh)
+      // replaces the CSS for every `Theme` that uses it.
+      for (const style of entry.styles) {
+        style.remove();
+      }
+      entry.theme = theme;
+      entry.styles = writeThemeStyles(theme, id);
     }
-
-    // One-time perf hint per theme
-    warnOnce(
-      `theme-injection:${theme.name}`,
-      'Theme',
-      `"${theme.name}" is using runtime style injection. ` +
-        `For better performance, use the pre-built theme:\n\n` +
-        `  import {${theme.name}Theme} from '@astryxdesign/theme-${theme.name}/built';\n` +
-        `  import '@astryxdesign/theme-${theme.name}/theme.css';\n\n` +
-        `For custom themes, run \`npx @astryxdesign/cli theme build <file>\` to generate ` +
-        `the built artifacts.`,
-    );
-
-    const {prose, component} = generateThemeCSS(theme);
-    const cleanups: (() => void)[] = [() => injectedThemes.delete(themeKey)];
-    const entry = {
-      count: 1,
-      release: () => {
-        for (const cleanup of cleanups) {
-          cleanup();
-        }
-      },
-    };
-    injectedThemes.set(themeKey, entry);
-
-    // Prose defaults go into @layer reset — lowest priority, scoped to
-    // the theme region. Any class-based style (StyleX, .xds-*) wins.
-    if (prose) {
-      const proseStyle = document.createElement('style');
-      proseStyle.setAttribute(dataAttr('theme-prose'), theme.name);
-      proseStyle.setAttribute(dataAttr('id'), id);
-      proseStyle.textContent = `${THEME_LAYER_ORDER}\n@layer reset {\n${prose}\n}`;
-      document.head.appendChild(proseStyle);
-    }
-
-    // Component overrides go into @layer astryx-theme — above StyleX layers
-    // so themes can intentionally restyle components.
-    if (component) {
-      const compStyle = document.createElement('style');
-      compStyle.setAttribute(dataAttr('theme'), theme.name);
-      compStyle.setAttribute(dataAttr('id'), id);
-      compStyle.textContent = `${THEME_LAYER_ORDER}\n@layer astryx-theme {\n${component}\n}`;
-      document.head.appendChild(compStyle);
-    }
-
-    if (prose || component) {
-      cleanups.push(() => {
-        // Matched by the astryx id marker, which is always written above.
-        const proseEl = document.querySelector(
-          `style[${dataAttr('theme-prose')}="${theme.name}"][${dataAttr('id')}="${id}"]`,
-        );
-        const compEl = document.querySelector(
-          `style[${dataAttr('theme')}="${theme.name}"][${dataAttr('id')}="${id}"]`,
-        );
-        proseEl?.remove();
-        compEl?.remove();
-      });
-    }
+    // A later `Theme` with the same theme does no generation: the CSS is
+    // already in the document, identical for each.
+    entry.count += 1;
+    const current = entry;
 
     return () => {
-      entry.count -= 1;
-      if (entry.count === 0) {
-        entry.release();
+      current.count -= 1;
+      if (current.count === 0) {
+        for (const style of current.styles) {
+          style.remove();
+        }
+        injectedThemes.delete(themeKey);
       }
     };
   }, [theme, id]);
