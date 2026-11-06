@@ -4,12 +4,8 @@
 
 /**
  * @file AlertDialog.tsx
- * @input Uses React, StyleX, Dialog, Layout, Heading, Text, Button and the
- *   touch presentation resolver. It also uses the action-group tracking
- *   (hooks/useActionGroupTracking), the press-group context
- *   (hooks/pressGroupContext) and the group pointers
- *   (hooks/useGroupPressTracking). It takes its touch motion from
- *   useAlertMotion and the alert entries of the UIKit constants table
+ * @input Uses React, StyleX, Dialog, Layout, Heading, Text, Button, useAlertMotion,
+ *   alertController, useTouchPresentation and the action-group modules in hooks/
  * @output Exports AlertDialog component, AlertDialogProps type
  * @position Core implementation; consumed by index.ts, tested by AlertDialog.test.tsx
  *
