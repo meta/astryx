@@ -82,6 +82,67 @@ export const docs = {
       },
     ],
   },
+  examples: [
+    {
+      label: 'Select every matching row across server pages',
+      code: `
+// The rows load one server page at a time. The app keeps the selection as
+// "every matching row, minus the ones the person unticked", so rows on pages
+// that never loaded are selected too. Table and the toolbar only show it.
+const [isAllMatching, setIsAllMatching] = useState(false);
+const [picked, setPicked] = useState(new Set()); // chosen one by one
+const [excluded, setExcluded] = useState(new Set()); // unticked in all mode
+
+const isSelected = row =>
+  isAllMatching ? !excluded.has(row.id) : picked.has(row.id);
+const isPageSelected = pageRows.every(isSelected);
+const selectedCount = isAllMatching ? total - excluded.size : picked.size;
+
+const selectionPlugin = useTableSelection({
+  getIsItemSelected: isSelected,
+  // setRows adds to or removes from excluded in all mode, picked otherwise.
+  onSelectItem: ({item, isSelected}) => setRows([item], isSelected),
+  onSelectAll: ({isAllSelected}) => setRows(pageRows, isAllSelected),
+  getIsAllSelected: () => isPageSelected,
+});
+
+<TableSelectionToolbar
+  selection={{
+    // Only the loaded rows: the full set is not on the client.
+    selectedKeys: new Set(pageRows.filter(isSelected).map(row => row.id)),
+    selectedCount, // the app's own count
+    hasSelection: selectedCount > 0,
+    clearSelection: () => {
+      setIsAllMatching(false);
+      setPicked(new Set());
+      setExcluded(new Set());
+    },
+  }}
+  renderSelectionLabel={count =>
+    !isAllMatching
+      ? count + ' selected'
+      : excluded.size === 0
+        ? 'All ' + total + ' matching selected'
+        : count + ' of ' + total + ' matching selected'
+  }
+  startContent={
+    !isAllMatching && isPageSelected ? (
+      <Button
+        label={'Select all ' + total + ' matching'}
+        variant="ghost"
+        onClick={() => setIsAllMatching(true)}
+      />
+    ) : (
+      <Button label="Archive" variant="ghost" onClick={archive} />
+    )
+  }
+/>;
+// In this mode the toolbar's selectedKeys holds only the loaded rows, and
+// the count comes from the app. For a bulk action, send the server the
+// query and the excluded ids, not a list of selected ids.
+`,
+    },
+  ],
 };
 
 export const docsDense = {
