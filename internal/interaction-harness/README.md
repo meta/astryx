@@ -46,6 +46,11 @@ newly animated layer). The script keeps Mesa's shader cache on the host
 (`~/.cache/astryx-webkit-shaders/<image>`, or `ASTRYX_WEBKIT_SHADER_CACHE`), so
 only the first run on a machine pays for them.
 
+With `CI` set, the script gives the container the four CPUs of CI's WebKit
+runners as a quota, and llvmpipe as many threads. `ASTRYX_WEBKIT_CPUS` sets
+another count. On Linux the container runs only on the CPUs the script may use,
+so `taskset` limits it too.
+
 Evidence (storyboards, curve traces) is written to
 `test-results/interaction-evidence/` (override with
 `ASTRYX_INTERACTION_EVIDENCE`) and attached to the test report. It is never
