@@ -1,6 +1,6 @@
 {
   "name": "@astryxdesign/core",
-  "version": "0.7.9",
+  "version": "0.7.10",
   "displayName": "Astryx Core",
   "description": "The component library. Accessible, themeable React components with built-in spacing, dark mode, and StyleX styling.",
   "author": "Meta Open Source",
@@ -848,6 +848,11 @@
       "source": "./src/internal/calendar-system.ts",
       "types": "./dist/internal/calendar-system.d.ts",
       "default": "./dist/internal/calendar-system.js"
+    },
+    "./internal/dialog-context": {
+      "source": "./src/internal/dialog-context.ts",
+      "types": "./dist/internal/dialog-context.d.ts",
+      "default": "./dist/internal/dialog-context.js"
     }
   },
   "files": [
