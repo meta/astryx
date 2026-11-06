@@ -108,12 +108,16 @@ interface Frame {
   readonly t: number;
   /** The bottom of the folder's own row. */
   readonly parentBottom: number;
-  /** The group's top, its height, the part of it that shows, its opacity. */
+  /**
+   * The group's top, its height, the part of it that shows, its opacity, and
+   * whether it is inert.
+   */
   readonly group: {
     readonly top: number;
     readonly height: number;
     readonly shown: number;
     readonly opacity: number;
+    readonly isInert: boolean;
   } | null;
   /** The top of the first row below the folder, with its motion. */
   readonly belowTop: number;
@@ -196,6 +200,7 @@ async function recordFrames(
               slide,
           ),
           opacity: Number(style.opacity),
+          isInert: group.inert,
         };
       }
       const column = below
@@ -392,6 +397,12 @@ test('collapse under a finger: the group fades out as the rows below glide up, w
   expect(
     Math.min(...leaving.map(frame => frame.group?.opacity ?? 1)),
   ).toBeLessThan(0.5);
+  // It takes no input while it fades out.
+  const fading = leaving.filter(frame => (frame.group?.opacity ?? 1) < 1);
+  expect(fading.length, 'frames with the group fading').toBeGreaterThan(2);
+  for (const frame of fading) {
+    expect(frame.group?.isInert, JSON.stringify(frame)).toBe(true);
+  }
   for (const [i, band] of blankBands(frames).entries()) {
     expect(band, `frame ${i}: ${JSON.stringify(frames[i])}`).toBeLessThan(1.5);
   }
