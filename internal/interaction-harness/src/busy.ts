@@ -11,6 +11,8 @@
  *   read from its frames, `pooledBusyProof`, which judges several short
  *   blocks as one, and `BusyWindowTooLateError`, for a block that began
  *   after the motion it was meant to catch had ended.
+ *   `BUSY_PROOF_LOOKAROUND_MS` is how far around its judged part a proof
+ *   reads frames.
  *   `trackControl` and `controlClock` read the control's box and its own
  *   clock from the screencast, a second control's too (`ahead`).
  * @position The busy-main-thread proof: an animation that runs on the
@@ -864,6 +866,13 @@ function motionStepPx(values: readonly number[]): number {
  * `maxMedianFrameMs`, when given, still applies; `minMovedFraction` and the
  * absolute stall, frame and motion limits do not.
  */
+/**
+ * How far around its judged part a busy proof reads frames, ms: the rest
+ * before it and the frame cadence on both sides. A proof that decodes only
+ * part of a cast keeps the frames this far after the window.
+ */
+export const BUSY_PROOF_LOOKAROUND_MS = 250;
+
 export function busyWindowProof(
   tracked: readonly TrackedFrame[],
   window: BusyWindow,
@@ -1047,7 +1056,7 @@ export function busyWindowProof(
   const prior = tracked.filter(f => f.box != null && f.t < inner.from);
   let leadFrom = 0;
   prior.forEach((f, i) => {
-    if (f.t < inner.from - 250) {
+    if (f.t < inner.from - BUSY_PROOF_LOOKAROUND_MS) {
       leadFrom = i;
     }
   });
@@ -1104,7 +1113,11 @@ export function busyWindowProof(
   const changes = inWindow.filter(t => t > judged.from || onScreenFrom == null);
   const edges = [judged.from, ...changes, judged.to];
   const around = tracked
-    .filter(f => f.t >= inner.from - 250 && f.t <= inner.to + 250)
+    .filter(
+      f =>
+        f.t >= inner.from - BUSY_PROOF_LOOKAROUND_MS &&
+        f.t <= inner.to + BUSY_PROOF_LOOKAROUND_MS,
+    )
     .map(f => f.t);
   const intervals = around
     .slice(1)
@@ -1121,7 +1134,11 @@ export function busyWindowProof(
   // The compositor's own frames, when recorded: its interval, from the frames
   // around the judged part.
   const draws = [...(presented ?? [])]
-    .filter(t => t >= judged.from - 250 && t <= judged.to + 250)
+    .filter(
+      t =>
+        t >= judged.from - BUSY_PROOF_LOOKAROUND_MS &&
+        t <= judged.to + BUSY_PROOF_LOOKAROUND_MS,
+    )
     .sort((a, b) => a - b);
   const drawIntervals = draws
     .slice(1)

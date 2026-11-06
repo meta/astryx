@@ -315,9 +315,8 @@ export interface PagerEnvironment {
   host?: GestureHost;
   /** The track's animator; `animatorFor(track)` by default. */
   animator?: PagerAnimator;
-  /** Timers for the catch delay; the viewport's window's by default. */
+  /** A task timer; the viewport's window's by default. */
   setTimeout?: (callback: () => void, ms: number) => unknown;
-  clearTimeout?: (handle: unknown) => void;
   /** The next animation frame; the viewport's window's by default. */
   requestFrame?: (callback: () => void) => void;
 }
@@ -396,6 +395,22 @@ class SettleCatcher extends LongPressGestureRecognizer {
 
   override get claimsTouches(): boolean {
     return false;
+  }
+
+  /**
+   * Calls `callback` `ms` after the touch, on the event clock, unless the
+   * touch ends first. The arena runs it before any input stamped later, so a
+   * busy page that delivers the touch and its lift together still runs it
+   * first. It takes the recognizer's one arena timer, which a press with no
+   * duration and no taps leaves free.
+   */
+  armCatch(ms: number, callback: () => void): void {
+    this.setTimer((this.beganAt ?? this.now()) + ms, callback);
+  }
+
+  /** Drops the catch that `armCatch` set, if it has not run. */
+  disarmCatch(): void {
+    this.clearTimer();
   }
 
   protected override touchesBegan(
@@ -486,10 +501,6 @@ export function createPager(
   const setTimer =
     environment.setTimeout ??
     ((callback: () => void, ms: number) => realm().setTimeout(callback, ms));
-  const clearTimer =
-    environment.clearTimeout ??
-    ((handle: unknown) =>
-      realm().clearTimeout(handle as ReturnType<typeof setTimeout>));
   const requestFrame =
     environment.requestFrame ??
     ((callback: () => void) => {
@@ -647,7 +658,7 @@ export function createPager(
   let dragStartIndex = 0;
   let dragPosition = 0;
   let suppressCancelSettle = false;
-  let catchTimer: unknown = null;
+  let isCatchTimerArmed = false;
   // Whether the finger now holding the track stopped a settle (not one that
   // ended on its own inside the catch window).
   let caughtSettle = false;
@@ -701,9 +712,9 @@ export function createPager(
   }
 
   function clearCatchTimer(): void {
-    if (catchTimer != null) {
-      clearTimer(catchTimer);
-      catchTimer = null;
+    if (isCatchTimerArmed) {
+      isCatchTimerArmed = false;
+      catcher.disarmCatch();
     }
   }
 
@@ -1085,18 +1096,22 @@ export function createPager(
       holdSelection(true);
       clearCatchTimer();
       caughtSettle = false;
-      catchTimer = setTimer(() => {
-        catchTimer = null;
+      isCatchTimerArmed = true;
+      catcher.armCatch(paging.catchStopMs, () => {
+        if (!isCatchTimerArmed) {
+          return;
+        }
+        isCatchTimerArmed = false;
         if (settleHandle != null && !isDragging) {
           stopSettle();
           caughtSettle = true;
         }
-      }, paging.catchStopMs);
+      });
       return;
     }
     if (recognizer.state === 'ended' || recognizer.state === 'cancelled') {
       holdSelection(false);
-      if (catchTimer != null) {
+      if (isCatchTimerArmed) {
         // Lifted before the catch took hold: the settle runs on.
         clearCatchTimer();
         return;
