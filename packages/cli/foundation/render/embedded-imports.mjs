@@ -292,8 +292,12 @@ export function reachableFiles(files, {aliases = []} = {}) {
               : ext
                 ? named
                 : named + hit.tail.slice(rest.length);
-          const folder = path.basename(path.dirname(abs));
-          options.push({abs, hit, sent: hit.path.endsWith(`${folder}/${path.basename(abs)}`)});
+          // The folder that holds the target's `*` (or, for a target with
+          // none, the target's own folder) must sit right above the part of
+          // the sent path the alias named.
+          const folder = path.basename(star === -1 ? path.dirname(named) : target.slice(0, cut));
+          const sentTail = star === -1 ? path.basename(abs) : hit.tail;
+          options.push({abs, hit, sent: hit.path.endsWith(`${folder}/${sentTail}`)});
         }
         const chosen = options.find(o => o.sent) ?? options[0];
         if (chosen) {
