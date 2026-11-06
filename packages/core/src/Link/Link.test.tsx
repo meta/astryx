@@ -484,3 +484,20 @@ describe('pressed state', () => {
     expect(hasPressedArm(screen.getByText('Docs').closest('a')!)).toBe(false);
   });
 });
+
+describe('Link label color', () => {
+  it('lets the label inherit the root color, so a theme styles Link through the link target', () => {
+    for (const color of ['accent', 'primary', 'secondary'] as const) {
+      const {container, unmount} = render(
+        <Link href="/docs" color={color}>
+          Docs
+        </Link>,
+      );
+      const anchor = container.querySelector('a')!;
+      expect(anchor).toHaveAttribute('data-color', color);
+      const label = anchor.querySelector('.astryx-text')!;
+      expect(label).toHaveAttribute('data-color', 'inherit');
+      unmount();
+    }
+  });
+});

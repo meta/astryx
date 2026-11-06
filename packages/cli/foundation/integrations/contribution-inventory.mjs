@@ -25,7 +25,7 @@ import {discoverIntegrationTemplatesForOne} from '../discovery/template-adapter.
 import {discoverIntegrationCodemods} from '../../assets/codemods/integration-discovery.mjs';
 import {discoverIntegrationDocs} from '../discovery/docs-discovery.mjs';
 import {discoverIconSetDirectory} from '../discovery/icon-set-discovery.mjs';
-import {generatedTypesPath} from '../discovery/icon-set-writer.mjs';
+import {generatedTypesPath} from '../discovery/icon-set-paths.mjs';
 
 // ── File-walk helpers (no module imports, no execution) ──────────
 

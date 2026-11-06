@@ -1,5 +1,40 @@
 # @astryxdesign/richtext
 
+# 0.7.8
+
+#### New Features
+
+- In `RichTextEditor`, Cmd+A (Ctrl+A on other platforms) in a code block or a table cell now selects the code or the cell text first, and the whole document on the next press. Anywhere else it still selects the whole document at once.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @emilyhorsman
+- @ernestt
+
+---
+
+# 0.7.7
+
+#### Fixes
+
+- RichTextEditorToolbar: Insert link with nothing selected did not insert a link at the caret. In an empty paragraph nothing was inserted, and with the caret inside text the whole text around it was linked, while the dialog closed as if it had worked. Now, with the caret outside a link, Insert link inserts the entered URL as link text at the caret; with a non-empty selection it links the selected text, and with the caret inside a link it updates that link, as before.
+
+#### Performance
+
+- Typing in a `RichTextEditor` code block no longer re-tokenizes the whole block. In TypeScript, JavaScript, Python, and shell code, an edit inside one line re-tokenizes that line, plus at most the line above it, and replaces only the color ranges inside the text node it edited, so a keystroke in a 2,000-line block tokenizes as little code as one in a short block. Edits that open or close a string or comment across lines, and other languages, still re-tokenize the whole block. Colors are unchanged, except that a block whose text nodes are replaced by others with the same text is now recolored instead of left uncolored.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+- @emilyhorsman
+- @ernestt
+
+---
+
 # 0.7.6
 
 #### Fixes

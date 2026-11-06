@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import type {Meta, StoryObj} from '@storybook/react';
-import {useState, useRef, type ReactNode} from 'react';
+import {useEffect, useState, useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Toast, useToast, ToastViewport} from '@astryxdesign/core/Toast';
 import type {
@@ -184,6 +184,43 @@ export const Default: StoryObj = {
       description: {
         story:
           'Plain info toasts are transient by default. Use them for brief, non-critical feedback that is also reflected elsewhere in the UI.',
+      },
+    },
+  },
+};
+
+// =============================================================================
+// Shown on mount
+// =============================================================================
+
+export const ShownOnMount: StoryObj = {
+  // A toast that stays up would cover the docs page, so it shows only here.
+  tags: ['!autodocs'],
+  render: function ShownOnMountStory() {
+    const toast = useToast();
+    // The page can render a story more than once. The uniqueID keeps one
+    // toast, and the toast leaves with the story.
+    useEffect(
+      () =>
+        toast({
+          body: 'Shown as the page mounted',
+          isAutoHide: false,
+          uniqueID: 'shown-on-mount',
+        }),
+      [toast],
+    );
+    return (
+      <Button
+        label="Show another toast"
+        onClick={() => toast({body: 'This is an info toast'})}
+      />
+    );
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'A toast shown as the page mounts. LayerProvider holds it until the toast viewport mounts beside the app, then shows it. It stays up until it is dismissed.',
       },
     },
   },
@@ -827,6 +864,54 @@ export const AppToastOverDrawer: StoryObj = {
       description: {
         story:
           "The app's own `ToastViewport` and a modal `Drawer`: while the drawer is open the viewport moves into it, so a toast fired from the drawer paints above it and its action stays clickable and reachable with Tab.",
+      },
+    },
+  },
+};
+
+export const AppToastOverNonModalDrawer: StoryObj = {
+  render: function AppToastOverNonModalDrawerStory() {
+    const [isOpen, setIsOpen] = useState(false);
+    const [status, setStatus] = useState('The filters are saved.');
+    const toast = useToast();
+    return (
+      <ToastViewport>
+        <Stack gap={2}>
+          <p>{status}</p>
+          <Button
+            label="Save filters"
+            onClick={() =>
+              toast({
+                body: 'Filters saved',
+                isAutoHide: false,
+                endContent: (
+                  <Button
+                    label="Undo"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setStatus('The save is undone.')}
+                  />
+                ),
+              })
+            }
+          />
+          <Button label="Open filters" onClick={() => setIsOpen(true)} />
+        </Stack>
+        <Drawer
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          hasScrim={false}
+          label="Filters">
+          <p>Filter options</p>
+        </Drawer>
+      </ToastViewport>
+    );
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "The app's own `ToastViewport` and a `Drawer` without its scrim: a toast shown before the drawer opens stays above it, so its action stays clickable while the drawer covers its corner.",
       },
     },
   },

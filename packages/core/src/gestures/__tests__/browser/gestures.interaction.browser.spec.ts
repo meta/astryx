@@ -8,7 +8,8 @@
  * @output Browser proof of the negotiation the unit tests cannot see:
  *   touch-action per element, touchmove cancelled exactly while a recognizer
  *   owns the finger, native scrolling untouched otherwise, click suppression
- *   with no ghost click, a drag that began as a scroll staying the browser's, pinch-zoom
+ *   with no ghost click or late mouse event, a drag that began as a scroll
+ *   staying the browser's, pinch-zoom
  *   left to the browser, a second finger that never breaks the first,
  *   timing taken from event timestamps under a blocked main thread, gestures
  *   for every pointer with nothing listening while idle where the primary
@@ -35,7 +36,7 @@ import {webInputDriver, WHEEL_SKIP} from '@astryxdesign/interaction-harness';
  */
 const TRACKPAD_SKIP =
   "Chromium's driver sends each wheel as a mouse wheel's notch (wheelDeltaY -120 whatever its delta); WebKit's driver sends a trackpad's precise deltas";
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 
 interface Entry {
   name: string;
@@ -410,6 +411,7 @@ test('only elements whose recognizers claim a moving touch carry a blocking touc
       'card',
       'onePan',
       'kept',
+      'publicPan',
       'authorNone',
       'authorPanY',
       'authorPinchZoom',
@@ -572,6 +574,123 @@ test('a one-way overlay pan keeps its direction from the page, and leaves the ot
   await driver.play(drag(start, {x: start.x, y: start.y + 60}, 30));
   expect(await page.evaluate(() => window.scrollY)).toBeLessThan(before - 20);
   expect(states(await log(page), 'card')).toEqual(['failed', 'possible']);
+});
+
+test('the public pan reports a finger\u2019s drag along its axis as values (spec:AST-107 FR1)', async ({
+  page,
+  browserName,
+}) => {
+  const driver = await open(page, browserName);
+  await page.evaluate(() => {
+    document.getElementById('publicPan')?.scrollIntoView({block: 'center'});
+  });
+  const start = await center(page, 'publicPan');
+  await driver.play(drag(start, {x: start.x + 120, y: start.y + 6}));
+  const entries = (await log(page)).filter(entry => entry.name === 'publicPan');
+  expect(entries[0]?.state).toBe('began');
+  expect(entries.at(-1)?.state).toBe('ended');
+  // Nothing across its axis.
+  expect(entries.every(entry => entry.y === 0)).toBe(true);
+  // As in UIKit, the travel the drag needed to begin is not part of it.
+  expect(
+    entries.filter(entry => entry.state === 'changed').at(-1)?.x,
+  ).toBeCloseTo(120 - 10, 0);
+});
+
+test('the public pan is driven by a mouse drag and a pen drag where the primary pointer is fine (spec:AST-107 FR1, AST-094 FR43)', async ({
+  browser,
+  browserName,
+}) => {
+  // A desktop context: a fine primary pointer and no touch.
+  const context = await browser.newContext({
+    hasTouch: false,
+    isMobile: false,
+    viewport: {width: 800, height: 900},
+  });
+  try {
+    const page = await context.newPage();
+    await page.goto('about:blank');
+    await page.setContent(
+      '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><body></body>',
+    );
+    await page.addScriptTag({content: bundle});
+    await page.evaluate(() => {
+      document.getElementById('publicPan')?.scrollIntoView({block: 'center'});
+    });
+    const start = await center(page, 'publicPan');
+    const publicPan = async () =>
+      (await log(page))
+        .filter(entry => entry.name === 'publicPan')
+        .map(entry => entry.state);
+    // A mouse drag.
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    for (let step = 1; step <= 8; step++) {
+      await page.mouse.move(start.x + step * 15, start.y + 2);
+    }
+    await page.mouse.up();
+    const byMouse = await publicPan();
+    expect(byMouse[0]).toBe('began');
+    expect(byMouse.at(-1)).toBe('ended');
+    await clearLog(page);
+    // A pen drag, where the engine can make one (Chromium's input domain).
+    if (browserName === 'chromium') {
+      const cdp = await context.newCDPSession(page);
+      const pen = async (
+        type: 'mousePressed' | 'mouseMoved' | 'mouseReleased',
+        x: number,
+        buttons: number,
+      ): Promise<void> => {
+        await cdp.send('Input.dispatchMouseEvent', {
+          type,
+          x,
+          y: start.y,
+          button: 'left',
+          buttons,
+          clickCount: 1,
+          pointerType: 'pen',
+        });
+      };
+      await pen('mousePressed', start.x, 1);
+      for (let step = 1; step <= 8; step++) {
+        await pen('mouseMoved', start.x + step * 15, 1);
+      }
+      await pen('mouseReleased', start.x + 120, 0);
+      const byPen = await publicPan();
+      expect(byPen[0]).toBe('began');
+      expect(byPen.at(-1)).toBe('ended');
+    }
+  } finally {
+    await context.close();
+  }
+});
+
+test('a tap, a long press and a drag across its axis on the public pan report nothing (spec:AST-107 FR1)', async ({
+  page,
+  browserName,
+}) => {
+  const driver = await open(page, browserName);
+  await page.evaluate(() => {
+    document.getElementById('publicPan')?.scrollIntoView({block: 'center'});
+  });
+  const at = await center(page, 'publicPan');
+  const finger = {...at, id: 1};
+  // A tap.
+  await driver.play([
+    {t: 0, down: [finger]},
+    {t: 60, down: []},
+  ]);
+  // A long press: still well past the long-press duration.
+  await driver.play([
+    {t: 0, down: [finger]},
+    {t: 800, down: [finger]},
+    {t: 816, down: []},
+  ]);
+  // A drag across its axis.
+  await driver.play(drag(at, {x: at.x, y: at.y + 60}, 20));
+  expect((await log(page)).filter(entry => entry.name === 'publicPan')).toEqual(
+    [],
+  );
 });
 
 test('a held finger turns text selection off only where the hold does something (a pan that asks), until it lifts; a press-tracked control, a mouse and other pans keep native selection (spec:AST-094 FR41)', async ({
@@ -1049,6 +1168,70 @@ test('a tap recognizer replaces the click: no ghost click, no compatibility mous
   expect(entries.filter(entry => entry.name === 'click:hbutton')).toHaveLength(
     1,
   );
+});
+
+test("a tap a recognizer claims keeps its late mouse events from the page until their click: WebKit sends them after a held tap's cancelled touchend (spec:AST-094 FR21)", async ({
+  page,
+  browserName,
+}) => {
+  const driver = await open(page, browserName);
+  await page.evaluate(() => {
+    const late = window as unknown as {
+      __late: string[];
+      __lateSent: boolean;
+      __sendLate: () => void;
+    };
+    late.__late = [];
+    late.__lateSent = false;
+    for (const type of ['mousedown', 'mouseup', 'click']) {
+      document.body.addEventListener(type, event =>
+        late.__late.push(`${type}:${(event as MouseEvent).detail}`),
+      );
+    }
+    const tapper = document.getElementById('tapper') as HTMLElement;
+    late.__sendLate = () => {
+      for (const type of ['mousedown', 'mouseup', 'click']) {
+        tapper.dispatchEvent(
+          new MouseEvent(type, {bubbles: true, cancelable: true, detail: 1}),
+        );
+      }
+    };
+    // Neither engine here sends a held tap's late compatibility events, so
+    // the page sends them just after the tap's touchend, as iOS WebKit does.
+    window.addEventListener(
+      'touchend',
+      () =>
+        setTimeout(() => {
+          late.__sendLate();
+          late.__lateSent = true;
+        }, 0),
+      {once: true},
+    );
+  });
+  await driver.tap(await center(page, 'tapper'));
+  expect(states(await log(page), 'tap')).toEqual(['ended', 'possible']);
+  await expect
+    .poll(async () =>
+      page.evaluate(
+        () => (window as unknown as {__lateSent: boolean}).__lateSent,
+      ),
+    )
+    .toBe(true);
+  expect(
+    await page.evaluate(() => (window as unknown as {__late: string[]}).__late),
+  ).toEqual([]);
+  // That click spent the guard: the next ones reach the page.
+  expect(
+    await page.evaluate(() => {
+      const late = window as unknown as {
+        __late: string[];
+        __sendLate: () => void;
+      };
+      late.__late.length = 0;
+      late.__sendLate();
+      return [...late.__late];
+    }),
+  ).toEqual(['mousedown:1', 'mouseup:1', 'click:1']);
 });
 
 test('a keyboard activation inside the click window after a claimed drag still clicks: the swallower passes a click whose detail is 0 (FR21)', async ({
@@ -1854,22 +2037,35 @@ test.describe('where the primary pointer is fine', () => {
     });
   }
 
-  /** The pan's log entries after `deltas`, one wheel each, and a quiet 300 ms. */
+  /**
+   * The page's log after `deltas`, one wheel each, and a quiet 300 ms, with
+   * each wheel's time as the page received it.
+   */
   async function trackpadRun(page: Page, deltas: number[]) {
     const driver = await webInputDriver(page);
     test.skip(!driver.wheels, WHEEL_SKIP);
     const at = await center(page, 'card');
+    await page.evaluate(() => {
+      const times: number[] = [];
+      (window as unknown as {__wheelTimes: number[]}).__wheelTimes = times;
+      window.addEventListener('wheel', event => times.push(event.timeStamp), {
+        capture: true,
+        passive: true,
+      });
+    });
     for (const dx of deltas) {
       await driver.wheel({...at, dx});
     }
     await page.waitForTimeout(300);
-    const log = await page.evaluate(() =>
-      window.__wheelLog.filter(entry => entry.startsWith('pan:')),
+    const entries = await page.evaluate(() => window.__wheelLog);
+    const times = await page.evaluate(
+      () => (window as unknown as {__wheelTimes: number[]}).__wheelTimes,
     );
+    const log = entries.filter(entry => entry.startsWith('pan:'));
     const moves = log
       .filter(entry => /^pan:(changed|ended):/.test(entry))
       .map(entry => Number(entry.split(':')[2]));
-    return {log, moves};
+    return {entries, log, moves, times};
   }
 
   test("keeps a trackpad pan moving at the fingers' speed through the splitter's undecided stretch and lets it go at the lift still moving: no stall (spec:AST-094 FR43)", async ({
@@ -1879,11 +2075,29 @@ test.describe('where the primary pointer is fine', () => {
     test.skip(browserName === 'chromium', TRACKPAD_SKIP);
     await trackpadPanPage(page);
     // Four steady wheels, four shrinking ones (the lift is read at the
-    // fourth), then momentum.
-    const {log, moves} = await trackpadRun(
+    // fourth, wheel 7), then momentum.
+    const lift = 7;
+    const {entries, times} = await trackpadRun(
       page,
       [12, 12, 12, 12, 11, 10, 9, 8, 7, 6, 5, 4],
     );
+    // A loaded page can deliver the momentum after a pause of 50 ms or more,
+    // and the proof then judges the wheels before it. Each wheel logs itself
+    // after the host handled it. WebKit's injected wheels carry only real
+    // dispatch time, so a harness that cannot keep pace can still stall the
+    // finger phase and fail this proof.
+    const pause = times.findIndex(
+      (time, i) => i > lift && time - times[i - 1] >= 50,
+    );
+    const wheelAt = entries.flatMap((entry, i) =>
+      entry.startsWith('wheel:') ? [i] : [],
+    );
+    const stream =
+      pause < 0 ? entries : entries.slice(0, wheelAt[pause - 1] + 1);
+    const log = stream.filter(entry => entry.startsWith('pan:'));
+    const moves = log
+      .filter(entry => /^pan:(changed|ended):/.test(entry))
+      .map(entry => Number(entry.split(':')[2]));
     const ended = log.filter(entry => entry.startsWith('pan:ended:'));
     expect(ended).toHaveLength(1);
     // The fingers' travel at their last steady wheel is -38 (48 px past the
@@ -1895,17 +2109,27 @@ test.describe('where the primary pointer is fine', () => {
       }
     }
     expect(moves.at(-1)).toBeLessThan(-38 - 18);
-    // Let go still moving, and the momentum after it moved nothing.
-    expect(Math.abs(Number(ended[0].split(':')[3]))).toBeGreaterThan(100);
-    expect(
-      log.slice(log.indexOf(ended[0]) + 1).map(entry => entry.split(':')[1]),
-    ).toEqual(['possible']);
+    // Let go still moving, and the momentum after it moved nothing. A stall
+    // lets go near 0. The floor is a quarter of the fingers' speed as the page
+    // delivered their shrinking wheels, and at most 100 px/s.
+    const fingers =
+      ((11 + 10 + 9 + 8) / (times[lift] - times[lift - 4])) * 1000;
+    expect(Math.abs(Number(ended[0].split(':')[3]))).toBeGreaterThan(
+      Math.min(100, fingers / 4),
+    );
+    const after = log
+      .slice(log.indexOf(ended[0]) + 1)
+      .map(entry => entry.split(':')[1]);
+    if (pause < 0) {
+      expect(after).toEqual(['possible']);
+    } else {
+      expect(after.filter(state => state !== 'possible')).toEqual([]);
+    }
     // No wheel reached the page, the momentum after the lift included
     // (spec:AST-094 FR43).
-    const wheels = await page.evaluate(() =>
-      window.__wheelLog.filter(entry => entry.startsWith('wheel:')),
+    expect(stream.filter(entry => entry.startsWith('wheel:'))).toEqual(
+      Array.from({length: pause < 0 ? 12 : pause}, () => 'wheel:true'),
     );
-    expect(wheels).toEqual(Array.from({length: 12}, () => 'wheel:true'));
   });
 
   test('absorbs what the undecided stretch showed when the fingers carry on: never a step back, and the pan ends on their travel (spec:AST-094 FR43)', async ({
@@ -1999,6 +2223,365 @@ test.describe('where the primary pointer is fine', () => {
     ).toBeGreaterThan(1);
   });
 
+  /**
+   * A page has text above a card that a pan takes, the card's own text on its
+   * first line only, and text below. The pan's transitions land on
+   * `window.__panStates`. Returns the card's box and its text's.
+   */
+  async function cardPage(page: Page) {
+    await page.goto('about:blank');
+    await page.setContent(
+      '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><body></body>',
+    );
+    await page.addScriptTag({content: bareBundle});
+    await page.evaluate(() => {
+      const {host, PanGestureRecognizer} = window.__api;
+      document.body.style.font = '16px sans-serif';
+      document.body.innerHTML =
+        '<h1 id="heading">A story heading with words</h1><p>A description with several words in it.</p><div id="card" style="margin-top: 24px; width: 320px; height: 120px; background: #ccd"><span id="cardText">Card text a drag selects</span></div><p>Text below the card, with words.</p>';
+      const pan = new PanGestureRecognizer();
+      const states: string[] = [];
+      (window as unknown as {__panStates: string[]}).__panStates = states;
+      pan.addTransitionListener((_current, _from, to) => states.push(to));
+      host.attach(document.getElementById('card') as HTMLElement, pan);
+    });
+    const card = await page.locator('#card').boundingBox();
+    const text = await page.locator('#cardText').boundingBox();
+    if (card == null || text == null) {
+      throw new Error('no box for #card');
+    }
+    return {card, text};
+  }
+
+  /**
+   * The page's selection once `selectionchange`, dispatched as its own
+   * task, has run: as the next frame paints it.
+   */
+  async function paintedSelection(page: Page): Promise<string> {
+    return page.evaluate(
+      async () =>
+        new Promise<string>(resolve => {
+          requestAnimationFrame(() =>
+            resolve(String(window.getSelection() ?? '').trim()),
+          );
+        }),
+    );
+  }
+
+  test("a mouse drag a pan claimed takes no new selection though it carries over text, and the page's existing selection survives it (spec:AST-094 FR41)", async ({
+    page,
+  }) => {
+    const {card} = await cardPage(page);
+    // From the card's lower half, below its text, past the pan's start and
+    // up over the text above the card.
+    const drag = async () => {
+      const x = card.x + 40;
+      const y = card.y + card.height * 0.75;
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      await page.mouse.move(x + 30, y - 10, {steps: 4});
+      await page.mouse.move(x + 60, card.y - 80, {steps: 12});
+      const during = await paintedSelection(page);
+      await page.mouse.up();
+      return {during, after: await paintedSelection(page)};
+    };
+    const fresh = await drag();
+    const kept = await page.evaluate(() => {
+      window
+        .getSelection()
+        ?.selectAllChildren(document.getElementById('heading') as HTMLElement);
+      return String(window.getSelection() ?? '').trim();
+    });
+    expect(kept).toBe('A story heading with words');
+    const overKept = await drag();
+    const states = await page.evaluate(
+      () => (window as unknown as {__panStates: string[]}).__panStates,
+    );
+    expect({
+      fresh,
+      overKept,
+      began: states.filter(state => state === 'began').length,
+    }).toEqual({
+      fresh: {during: '', after: ''},
+      overKept: {during: kept, after: kept},
+      began: 2,
+    });
+  });
+
+  test('a mouse drag that starts on selectable text selects it, and the pan under it never claims the drag (spec:AST-094 FR41)', async ({
+    page,
+  }) => {
+    const {text} = await cardPage(page);
+    const y = text.y + text.height / 2;
+    await page.mouse.move(text.x + 2, y);
+    await page.mouse.down();
+    await page.mouse.move(text.x + text.width * 0.6, y, {steps: 10});
+    await page.mouse.up();
+    const selected = await paintedSelection(page);
+    const states = await page.evaluate(
+      () => (window as unknown as {__panStates: string[]}).__panStates,
+    );
+    expect(selected.length).toBeGreaterThan(3);
+    expect('Card text a drag selects'.includes(selected)).toBe(true);
+    expect(states).not.toContain('began');
+  });
+
+  test("after a pen press a group claims at its own pointerdown, in a row whose long press opens a menu, a mouse drag selects the page's text again (spec:AST-094 FR41)", async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName === 'webkit', 'no pen input in WebKit’s driver');
+    await page.goto('about:blank');
+    await page.setContent(
+      '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><body></body>',
+    );
+    await page.addScriptTag({content: bareBundle});
+    await page.evaluate(() => {
+      const {host, LongPressGestureRecognizer} = window.__api;
+      document.body.style.font = '16px sans-serif';
+      document.body.innerHTML =
+        '<p id="para">A paragraph a later mouse drag selects.</p><div id="row" style="width: 320px; padding: 12px; background: #ccd"><div id="group"><button id="copy" style="width: 120px; height: 40px">Copy</button></div></div>';
+      // The row's context-menu long press brings a selection lock; the
+      // action group's press claims at its own pointerdown.
+      host.attach(
+        document.getElementById('row') as HTMLElement,
+        new LongPressGestureRecognizer({name: 'menu'}),
+      );
+      host.attach(
+        document.getElementById('group') as HTMLElement,
+        new LongPressGestureRecognizer({
+          minimumPressDuration: 0,
+          allowableMovement: Number.POSITIVE_INFINITY,
+        }),
+        {actionGroup: true},
+      );
+    });
+    const copy = await page.locator('#copy').boundingBox();
+    const para = await page.locator('#para').boundingBox();
+    if (copy == null || para == null) {
+      throw new Error('no box for #copy or #para');
+    }
+    const cdp = await page.context().newCDPSession(page);
+    for (const type of ['mousePressed', 'mouseReleased'] as const) {
+      await cdp.send('Input.dispatchMouseEvent', {
+        type,
+        x: copy.x + 20,
+        y: copy.y + 20,
+        button: 'left',
+        buttons: type === 'mousePressed' ? 1 : 0,
+        clickCount: 1,
+        pointerType: 'pen',
+      });
+    }
+    // A task after the lift, the hold has ended: a real mouse drag over the
+    // paragraph selects it.
+    await page.evaluate(
+      async () =>
+        new Promise<void>(resolve => {
+          setTimeout(resolve, 0);
+        }),
+    );
+    const y = para.y + para.height / 2;
+    await page.mouse.move(para.x + 2, y);
+    await page.mouse.down();
+    await page.mouse.move(para.x + para.width * 0.6, y, {steps: 10});
+    await page.mouse.up();
+    const selected = await paintedSelection(page);
+    expect(selected.length).toBeGreaterThan(3);
+    expect('A paragraph a later mouse drag selects.'.includes(selected)).toBe(
+      true,
+    );
+  });
+
+  test("a mouse drag that starts on a native button's label inside a pan pans: the engine starts no selection there (spec:AST-094 FR41)", async ({
+    page,
+  }) => {
+    await page.goto('about:blank');
+    await page.setContent(
+      '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><body></body>',
+    );
+    await page.addScriptTag({content: bareBundle});
+    await page.evaluate(() => {
+      const {host, PanGestureRecognizer} = window.__api;
+      document.body.style.font = '16px sans-serif';
+      document.body.innerHTML =
+        '<div id="card" style="width: 320px; height: 120px; padding: 16px; background: #ccd"><button id="next" style="font: inherit; padding: 8px 16px">Next page</button></div>';
+      const pan = new PanGestureRecognizer({direction: 'horizontal'});
+      const states: string[] = [];
+      (window as unknown as {__panStates: string[]}).__panStates = states;
+      pan.addTransitionListener((_current, _from, to) => states.push(to));
+      host.attach(document.getElementById('card') as HTMLElement, pan);
+    });
+    const label = await page.locator('#next').boundingBox();
+    if (label == null) {
+      throw new Error('no box for #next');
+    }
+    const y = label.y + label.height / 2;
+    await page.mouse.move(label.x + label.width / 2, y);
+    await page.mouse.down();
+    await page.mouse.move(label.x + label.width / 2 + 60, y, {steps: 10});
+    await page.mouse.up();
+    const selected = await paintedSelection(page);
+    const states = await page.evaluate(
+      () => (window as unknown as {__panStates: string[]}).__panStates,
+    );
+    expect({began: states.includes('began'), selected}).toEqual({
+      began: true,
+      selected: '',
+    });
+  });
+
+  test('a mouse drag that starts on text inside an open shadow root in a pan selects it, and the pan never begins (spec:AST-094 FR41)', async ({
+    page,
+  }) => {
+    await page.goto('about:blank');
+    await page.setContent(
+      '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><body></body>',
+    );
+    await page.addScriptTag({content: bareBundle});
+    await page.evaluate(() => {
+      const {host, PanGestureRecognizer} = window.__api;
+      document.body.innerHTML =
+        '<div id="card" style="width: 360px; padding: 16px; background: #ccd"><x-words id="words"></x-words></div>';
+      const words = document.getElementById('words') as HTMLElement;
+      words.attachShadow({mode: 'open'}).innerHTML =
+        '<p style="margin: 0; font: 20px sans-serif">Shadow words to select</p>';
+      const pan = new PanGestureRecognizer({direction: 'horizontal'});
+      const states: string[] = [];
+      (window as unknown as {__panStates: string[]}).__panStates = states;
+      pan.addTransitionListener((_current, _from, to) => states.push(to));
+      host.attach(document.getElementById('card') as HTMLElement, pan);
+    });
+    const words = await page.locator('#words').boundingBox();
+    if (words == null) {
+      throw new Error('no box for #words');
+    }
+    const y = words.y + words.height / 2;
+    await page.mouse.move(words.x + 4, y);
+    await page.mouse.down();
+    await page.mouse.move(words.x + 150, y, {steps: 10});
+    await page.mouse.up();
+    const selected = await paintedSelection(page);
+    const states = await page.evaluate(
+      () => (window as unknown as {__panStates: string[]}).__panStates,
+    );
+    expect({began: states.includes('began'), selected}).toEqual({
+      began: false,
+      selected: expect.stringMatching(/^Shadow/),
+    });
+  });
+
+  test('a selection inside an open shadow root survives a claimed mouse drag on a pan elsewhere (spec:AST-094 FR41)', async ({
+    page,
+  }) => {
+    await page.goto('about:blank');
+    await page.setContent(
+      '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><body></body>',
+    );
+    await page.addScriptTag({content: bareBundle});
+    await page.evaluate(() => {
+      const {host, PanGestureRecognizer} = window.__api;
+      document.body.innerHTML =
+        '<x-words id="words"></x-words><div id="card" style="width: 320px; height: 120px; margin-top: 24px; background: #ccd"></div>';
+      const words = document.getElementById('words') as HTMLElement;
+      words.attachShadow({mode: 'open'}).innerHTML =
+        '<p style="margin: 0; font: 20px sans-serif">Shadow words to keep</p>';
+      const pan = new PanGestureRecognizer({direction: 'horizontal'});
+      const states: string[] = [];
+      (window as unknown as {__panStates: string[]}).__panStates = states;
+      pan.addTransitionListener((_current, _from, to) => states.push(to));
+      host.attach(document.getElementById('card') as HTMLElement, pan);
+    });
+    const words = await page.locator('#words').boundingBox();
+    const card = await page.locator('#card').boundingBox();
+    if (words == null || card == null) {
+      throw new Error('no box for #words or #card');
+    }
+    const y = words.y + words.height / 2;
+    await page.mouse.move(words.x + 2, y);
+    await page.mouse.down();
+    await page.mouse.move(words.x + 160, y, {steps: 8});
+    await page.mouse.up();
+    const before = await paintedSelection(page);
+    expect(before).toMatch(/^Shadow/);
+    await page.mouse.move(card.x + 40, card.y + 60);
+    await page.mouse.down();
+    await page.mouse.move(card.x + 160, card.y + 60, {steps: 10});
+    await page.mouse.up();
+    const states = await page.evaluate(
+      () => (window as unknown as {__panStates: string[]}).__panStates,
+    );
+    expect({
+      began: states.includes('began'),
+      after: await paintedSelection(page),
+    }).toEqual({began: true, after: before});
+  });
+
+  test("a render that shortens the kept selection's text during a claimed drag throws nothing, and the page selects again after the release (spec:AST-094 FR41)", async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await page.goto('about:blank');
+    await page.setContent(
+      '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><body></body>',
+    );
+    await page.addScriptTag({content: bareBundle});
+    await page.evaluate(() => {
+      const {host, PanGestureRecognizer} = window.__api;
+      document.body.innerHTML =
+        '<p id="words" style="margin: 0; font: 20px sans-serif">Hello world text</p><div id="card" style="width: 320px; height: 120px; margin: 24px 0; background: #ccd"></div><p id="other" style="margin: 0; font: 20px sans-serif">Other words to select</p>';
+      const words = (document.getElementById('words') as HTMLElement)
+        .firstChild as Text;
+      const pan = new PanGestureRecognizer({direction: 'horizontal'});
+      const states: string[] = [];
+      (window as unknown as {__panStates: string[]}).__panStates = states;
+      pan.addTransitionListener((_current, _from, to) => {
+        states.push(to);
+        // A render during the drag shortens the selected text.
+        if (to === 'changed' && words.data !== 'Hi') {
+          words.data = 'Hi';
+        }
+      });
+      host.attach(document.getElementById('card') as HTMLElement, pan);
+      const range = document.createRange();
+      range.setStart(words, 6);
+      range.setEnd(words, 16);
+      window.getSelection()?.addRange(range);
+    });
+    expect(await paintedSelection(page)).toBe('world text');
+    const card = await page.locator('#card').boundingBox();
+    const other = await page.locator('#other').boundingBox();
+    if (card == null || other == null) {
+      throw new Error('no box for #card or #other');
+    }
+    await page.mouse.move(card.x + 40, card.y + 60);
+    await page.mouse.down();
+    await page.mouse.move(card.x + 160, card.y + 60, {steps: 10});
+    await page.mouse.up();
+    // The hold ends a task after the lift.
+    await page.evaluate(
+      async () => new Promise(resolve => setTimeout(resolve, 50)),
+    );
+    const y = other.y + other.height / 2;
+    await page.mouse.move(other.x + 2, y);
+    await page.mouse.down();
+    await page.mouse.move(other.x + 120, y, {steps: 8});
+    await page.mouse.up();
+    const states = await page.evaluate(
+      () => (window as unknown as {__panStates: string[]}).__panStates,
+    );
+    expect({
+      began: states.includes('began'),
+      errors,
+      selected: await paintedSelection(page),
+    }).toEqual({
+      began: true,
+      errors: [],
+      selected: expect.stringMatching(/^Other/),
+    });
+  });
+
   test("the host registers no page touch listener while idle and warns for nothing, though the page attaches recognizers: an element keeps only a claiming recognizer's blocking touchmove; a mouse drag pans (spec:AST-094 FR43, FR24, FR19)", async ({
     page,
   }) => {
@@ -2049,6 +2632,7 @@ test.describe('where the primary pointer is fine', () => {
         'edgeWide',
         'edgeZoneRtl',
         'edgeWideRtl',
+        'publicPan',
         'slider',
         'switchRow',
         'onePan',
@@ -2186,6 +2770,10 @@ for (const stop of [
   });
 }
 
+// Upward, so the list (at its top) can scroll along the drag. The finger is
+// held at its travel while the page scrolls the list under it, as the
+// still-finger case does. That scroll is the browser's pan only from 10 px of
+// travel. So each case pins the threshold from its own side.
 for (const travel of [
   {dx: 0, dy: 9, label: '9 px straight', keeps: true},
   {dx: 0, dy: 10, label: '10 px straight', keeps: false},
@@ -2220,6 +2808,70 @@ for (const travel of [
     expect((await readTouchMoves(page)).some(Boolean)).toBe(false);
   });
 }
+
+test("a claimed finger's lift sends no mouse events and no click where the host reads fingers from their pointer events (spec:AST-094 FR21)", async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName !== 'chromium',
+    'WebKit synthesises no click from a raw touch sequence (README: engine limits)',
+  );
+  const driver = await openBare(page, browserName);
+  await page.evaluate(() => {
+    const {host: pageHost, LongPressGestureRecognizer} = window.__api;
+    // A host of its own that reads fingers from their pointer events.
+    const GestureHost = pageHost.constructor as new (
+      doc: Document,
+      options: {inputMode: 'pointer-events'},
+    ) => typeof pageHost;
+    document.body.innerHTML = `
+      <div id="held" style="height: 200px; background: #ccf">held</div>
+      <div id="tapped" style="height: 200px; background: #cfc">tapped</div>`;
+    const log: string[] = [];
+    (window as unknown as {__log: string[]}).__log = log;
+    const held = document.getElementById('held') as HTMLElement;
+    const tapped = document.getElementById('tapped') as HTMLElement;
+    for (const type of ['mousedown', 'mouseup', 'click']) {
+      held.addEventListener(type, () => log.push(`${type}:held`));
+      tapped.addEventListener(type, () => log.push(`${type}:tapped`));
+    }
+    const host = new GestureHost(document, {inputMode: 'pointer-events'});
+    // A hold that claims at 300 ms, before the browser's own long press.
+    const hold = new LongPressGestureRecognizer({
+      name: 'hold',
+      minimumPressDuration: 300,
+    });
+    hold.addTransitionListener((_current, _from, to) => log.push(`hold:${to}`));
+    host.attach(held, hold);
+  });
+  const onHeld = await center(page, 'held');
+  await driver.play([
+    {t: 0, down: [{...onHeld, id: 1}]},
+    {t: 400, down: []},
+  ]);
+  const onTapped = await center(page, 'tapped');
+  await driver.play([
+    {t: 0, down: [{...onTapped, id: 2}]},
+    {t: 60, down: []},
+  ]);
+  await page.waitForTimeout(150);
+  const entries = await page.evaluate(
+    () => (window as unknown as {__log: string[]}).__log,
+  );
+  // The hold claimed the finger, so its lift's touchend was cancelled. The
+  // engine then sends none of the compatibility mouse events nor the click. A
+  // tap on an element with no gesture keeps them all.
+  expect(entries).toContain('hold:began');
+  expect(entries.filter(entry => entry.endsWith(':held'))).toEqual([]);
+  expect(entries).toEqual(
+    expect.arrayContaining([
+      'mousedown:tapped',
+      'mouseup:tapped',
+      'click:tapped',
+    ]),
+  );
+});
 
 /**
  * A screen-edge pan on a strip along the left edge as wide as its band
@@ -2260,6 +2912,53 @@ for (const run of [
     await logTouchMoves(page);
     await driver.play(
       drag({x: 40, y: 150}, {x: 40 + run.travel, y: 150}, 7, false),
+    );
+    await page.waitForTimeout(100);
+    const edges = await page.evaluate(
+      () => (window as unknown as {__edge: string[]}).__edge,
+    );
+    expect(edges.includes('began')).toBe(run.begins);
+    await driver.play([{t: 0, down: []}]);
+  });
+}
+
+/**
+ * A screen-edge pan on an element that reaches beyond its band (200 px wide,
+ * from the left edge), over the same horizontal scroller.
+ */
+async function openWideEdgePan(page: Page, engine: string): Promise<Driver> {
+  const driver = await openBare(page, engine);
+  await page.evaluate(() => {
+    const {host, ScreenEdgePanGestureRecognizer} = window.__api;
+    document.body.innerHTML = `
+      <div id="hscroll" style="height: 300px; overflow-x: auto; overscroll-behavior: contain">
+        <div style="width: 3000px; height: 300px; background: linear-gradient(90deg, #eef, #cce)">wide</div>
+      </div>
+      <div id="edge" style="position: fixed; left: 0; top: 0; width: 200px; height: 300px"></div>`;
+    const edges: string[] = [];
+    (window as unknown as {__edge: string[]}).__edge = edges;
+    const pan = new ScreenEdgePanGestureRecognizer({
+      name: 'edge',
+      edges: ['leading'],
+    });
+    pan.addTransitionListener((_current, _from, to) => edges.push(to));
+    host.attach(document.getElementById('edge') as HTMLElement, pan);
+  });
+  return driver;
+}
+
+for (const run of [
+  {travel: 9, begins: false},
+  {travel: 10, begins: true},
+]) {
+  test(`a screen-edge pan on an element wider than its band ${run.begins ? 'claims at' : 'has not claimed at'} ${run.travel} px of travel from a touch in the band (spec:AST-094 FR18–FR22, DEC-22)`, async ({
+    page,
+    browserName,
+  }) => {
+    const driver = await openWideEdgePan(page, browserName);
+    await logTouchMoves(page);
+    await driver.play(
+      drag({x: 20, y: 150}, {x: 20 + run.travel, y: 150}, 7, false),
     );
     await page.waitForTimeout(100);
     const edges = await page.evaluate(

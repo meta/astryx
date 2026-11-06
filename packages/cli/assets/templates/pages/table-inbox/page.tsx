@@ -82,6 +82,7 @@ import {
   StackItem,
   VStack,
 } from '@astryxdesign/core/Layout';
+import {rtlStyles} from '@astryxdesign/core/utils';
 import {
   durationVars,
   easeVars,
@@ -1391,7 +1392,13 @@ function ConversationPane({
               <Button
                 label="Inbox"
                 variant="ghost"
-                icon={<Icon icon={ArrowLeftIcon} size="sm" />}
+                icon={
+                  <Icon
+                    icon={ArrowLeftIcon}
+                    size="sm"
+                    xstyle={rtlStyles.mirror}
+                  />
+                }
                 onClick={onClose}
               />
             }
@@ -1840,7 +1847,9 @@ function ComposeWindow({
                   // than being rejected for not matching anything.
                   hasCreate
                   // Stamps data-autofocus, which is what the sheet looks for
-                  // once the window is actually visible.
+                  // once the window is actually visible. It applies to the
+                  // inline field: on a compact touch screen the field opens
+                  // its own sheet and ignores it.
                   //
                   // Deliberately without `hasEntriesOnFocus`: the two together
                   // mean the window can never open without the full directory

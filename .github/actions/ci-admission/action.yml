@@ -13,20 +13,24 @@
 #   (`phase: whole`). A waiting run so holds only its one waiting job, plus a
 #   Storybook build that found room. A step that uses this action MUST be named
 #   "Wait for room under the CI ceiling": a waiting run is found by that name.
-# - A pull-request run that finds no room and ten other pull-request runs
-#   already waiting is turned away (`full`): CI is full, and the run stops with
-#   that message. `main` runs are never turned away.
+# - A pull-request run that finds no room waits like the others, on its slim
+#   runner, until its longest wait. One still without room there is turned
+#   away (`full`): CI is full, and the run stops with that message, unless it
+#   is the only pull-request run to start there in ten minutes and no run that
+#   waited longer still waits. `main` runs are never turned away.
 # - A run starts once the other active runs' estimated jobs plus `peak` fit
 #   under the ceiling. Small workflows that are not admitted (one or two slim
 #   jobs a run) always count at least eighteen jobs, which covers all but their
 #   rarest bursts, so the room they can still take is kept free. A pull-request run (`main: false`) also
 #   waits while a
-#   `main` full check or release re-check is waiting, so `main` fits first;
-#   pull-request runs never wait for each other.
-# - It waits at most `max-wait-minutes` (fifteen for `main`, twelve for a pull
-#   request, inside its fifteen-minute job budget), looking at even intervals
+#   `main` full check or release re-check is waiting, for that wait's first
+#   fifteen minutes, so `main` fits first; pull-request runs never wait for
+#   each other.
+# - It waits at most `max-wait-minutes` (120 for `main`, on a standard runner,
+#   since a slim job stops at fifteen minutes; twelve for a pull request,
+#   inside its fifteen-minute job budget), looking at even intervals
 #   plus a random 0-20 s so runs that look together spread out, and then
-#   starts.
+#   starts (a pull request: see above).
 # - Each CI or Main run counts its live jobs, read once per look. A
 #   pull-request run still waiting here counts the jobs it runs, its waiting
 #   job and a Storybook build that found room, so waiting runs never hold each
@@ -37,7 +41,7 @@
 #   stale record GitHub still lists as active, and counts nothing.
 # - A look costs two run listings plus one call per active CI or Main run, and
 #   a run looks at most `max-looks` times: twice for a pull request (at once and
-#   after its longest wait), every two minutes for the rare `main` run. A
+#   after its longest wait), about every four minutes for the rare `main` run. A
 #   pull-request run that would fit but yields to a waiting `main` check looks
 #   again every two minutes while it does, and a run within ten jobs of room
 #   every four, both outside that count and inside the run's longest wait. When the
@@ -134,8 +138,8 @@ runs:
           const MAX_LOOKS = Math.max(1, Number(process.env.MAX_LOOKS || '8'));
           const LOOK_MS = MAX_LOOKS > 1 ? (MAX_WAIT_MS - JITTER_MS) / (MAX_LOOKS - 1) : MAX_WAIT_MS;
           // A run that would fit but yields to a waiting `main` check looks
-          // again this soon, outside its count of looks, since `main` waits
-          // are short.
+          // again this soon, outside its count of looks: the yield lasts at
+          // most MAIN_YIELD_MS.
           const YIELD_LOOK_MS = 2 * 60_000;
           // A run with no room but within this many jobs of it looks again
           // this soon, also outside its count of looks: near-full CI frees
@@ -151,9 +155,30 @@ runs:
             return {spends: true, interval: LOOK_MS};
           };
           const STEP = 'Wait for room under the CI ceiling';
-          // At most this many pull-request runs wait at once; one more finding
-          // no room is turned away (spec:AST-030 DEC-16).
-          const MAX_WAITING = 10;
+          // A pull-request run that reaches its longest wait without room
+          // starts only if no other pull-request run started at its longest
+          // wait in the last ten minutes, about the time one run takes, and
+          // no run that has waited longer still waits; otherwise CI is full
+          // for it. So runs that waited out the same burst start one at a
+          // time, and CI passes ninety by about one run's jobs at most
+          // (spec:AST-030 DEC-16).
+          const AT_LIMIT_SPACING_MS = 10 * 60_000;
+          // A wait this close to the longest wait counts as one that ran out.
+          const AT_LIMIT_SLACK_MS = 30_000;
+          const isPullRun = run => run.event === 'pull_request' && run.path === '.github/workflows/ci.yml';
+          // When a run's wait began and, once admitted, ended: its first wait
+          // step's start and its last wait step's end.
+          const waitSpan = waits => {
+            const times = key => waits.map(step => Date.parse(step[key] ?? '')).filter(Number.isFinite);
+            const began = times('started_at');
+            const ended = times('completed_at');
+            return {began: began.length ? Math.min(...began) : NaN, ended: ended.length ? Math.max(...ended) : NaN};
+          };
+          // A pull-request run yields to a waiting `main` run for the first
+          // fifteen minutes of that wait. After that the `main` run still counts
+          // its whole peak, so a pull-request run starts only when it fits
+          // beside it (spec:AST-030 DEC-16).
+          const MAIN_YIELD_MS = 15 * 60_000;
           const PHASE = process.env.PHASE || 'whole';
           // The most jobs a run holds at once, by workflow: ci.yml's
           // release-check and Main's runs (a push's fast checks or a unit run)
@@ -219,11 +244,13 @@ runs:
               // A look planned past the longest wait comes at its end instead.
               const left = MAX_WAIT_MS - (Date.now() - started);
               const next = Math.min((planned > 0 ? planned : started + Math.max(1, looked) * LOOK_MS) - Date.now(), left - JITTER_MS);
-              if (looked >= MAX_LOOKS || left <= 0) {
+              // At its longest wait, a pull request decides on one more look
+              // whether it may start (AT_LIMIT_SPACING_MS); other runs start.
+              if ((looked >= MAX_LOOKS || left <= 0) && pr == null) {
                 core.warning(`Still no room after ${MAX_WAIT_MS / 60_000} minutes; starting.`);
                 return;
               }
-              if (next > 0) await new Promise(resolve => setTimeout(resolve, next + Math.floor(Math.random() * JITTER_MS)));
+              if (next > 0 && looked < MAX_LOOKS) await new Promise(resolve => setTimeout(resolve, next + Math.floor(Math.random() * JITTER_MS)));
             }
             // Looks that found no room; a look that only yielded to `main` is
             // not one of them.
@@ -237,7 +264,12 @@ runs:
               let large = 0;
               let small = 0;
               let mainWaiting = false;
-              let waitingPulls = 0;
+              // Pull-request runs that started at their longest wait lately,
+              // and those still waiting that began waiting before this one.
+              const startedAtLimit = [];
+              // Pull-request runs still waiting, or out of time and not yet
+              // decided, by when their wait began.
+              const pullWaiters = [];
               // What each run counted, logged on every look.
               const counted = [];
               const smallBy = {};
@@ -272,17 +304,28 @@ runs:
                   const waits = jobs
                     .flatMap(job => job.steps ?? [])
                     .filter(step => step.name === STEP);
+                  const span = waitSpan(waits);
                   if (waits.some(step => step.status === 'in_progress')) {
+                    if (isPullRun(run)) pullWaiters.push({id: run.id, began: span.began});
                     // Still waiting for room. A `main` run holds its whole
                     // peak, ahead of this one. A pull-request run holds what
                     // it runs: the job that waits and its Storybook build,
                     // which starts beside it.
                     const holds = isMain(run) ? estimate(run) : Math.max(1, jobs.filter(job => LIVE.includes(job.status)).length);
-                    if (isMain(run) && !main) mainWaiting = true;
-                    if (run.event === 'pull_request') waitingPulls += 1;
+                    if (isMain(run) && !main && !(Date.now() - span.began >= MAIN_YIELD_MS)) mainWaiting = true;
                     large += holds;
                     counted.push(`${short(run)} ${run.id} ${run.event}: ${holds} waiting`);
                     continue;
+                  }
+                  if (isPullRun(run) && span.ended - span.began >= MAX_WAIT_MS - AT_LIMIT_SLACK_MS) {
+                    // Out of time: it started only once its admission job
+                    // succeeded. Until admission decides, it ranks as a waiter;
+                    // a run CI was full for never started.
+                    const decided = jobs.find(job => job.name === 'admission' && job.status === 'completed');
+                    if (decided == null) pullWaiters.push({id: run.id, began: span.began});
+                    else if (decided.conclusion === 'success' && Date.now() - span.ended < AT_LIMIT_SPACING_MS) {
+                      startedAtLimit.push({id: run.id, ago: Date.now() - span.ended});
+                    }
                   }
                   const live = jobs.filter(job => LIVE.includes(job.status)).length;
                   const ended = waits.map(step => Date.parse(step.completed_at ?? '')).filter(Number.isFinite);
@@ -303,12 +346,6 @@ runs:
                 return;
               }
               if (PHASE === 'room') {
-                // Pull requests only: merge-queue entries and `main` runs are never turned away.
-                if (pr != null && look === 1 && waitingPulls >= MAX_WAITING) {
-                  core.setOutput('full', 'true');
-                  core.warning(`CI is full: ${waitingPulls} pull-request runs are already waiting and there is no room (about ${others} other jobs + ${peak}).`);
-                  return;
-                }
                 if (others + 1 <= CI_CEILING && !mainWaiting) {
                   // The rest of the run carries on this wait from this look.
                   const next = plan(others + peak - CI_CEILING, false);
@@ -327,7 +364,39 @@ runs:
               const left = MAX_WAIT_MS - (Date.now() - started);
               const wait = Math.min(next.interval + Math.floor(Math.random() * JITTER_MS), left);
               if (spent >= MAX_LOOKS || wait <= 0) {
-                core.warning(`Still no room after ${MAX_WAIT_MS / 60_000} minutes (about ${others} other jobs${mainWaiting ? ', a main check waiting' : ''}); starting.`);
+                const why = `Still no room after ${MAX_WAIT_MS / 60_000} minutes (about ${others} other jobs${mainWaiting ? ', a main check waiting' : ''})`;
+                if (pr == null) {
+                  core.warning(`${why}; starting.`);
+                  return;
+                }
+                // Wait starts compared on one clock: this run's own first wait
+                // step as GitHub recorded it (whole seconds), else its clock
+                // floored to the second; a tie goes to the lower run id.
+                let mine = Math.floor(started / 1000) * 1000;
+                try {
+                  calls += 1;
+                  const {data: {jobs: own}} = await github.rest.actions.listJobsForWorkflowRun({
+                    ...context.repo, run_id: context.runId, filter: 'latest', per_page: 100,
+                  });
+                  const began = waitSpan(own.flatMap(job => job.steps ?? []).filter(step => step.name === STEP)).began;
+                  if (Number.isFinite(began)) mine = began;
+                } catch {
+                  // The floored clock stands.
+                }
+                const waitedLonger = pullWaiters.filter(
+                  other => other.began < mine || (other.began === mine && other.id < context.runId),
+                ).length;
+                if (startedAtLimit.length === 0 && waitedLonger === 0) {
+                  core.warning(`${why}; starting, the one pull-request run to start at its longest wait for ${AT_LIMIT_SPACING_MS / 60_000} minutes.`);
+                  // The whole run starts now, not only its Storybook build.
+                  core.setOutput('fits', 'true');
+                  return;
+                }
+                const other = startedAtLimit.length > 0
+                  ? `run ${startedAtLimit[0].id} started at its longest wait ${Math.round(startedAtLimit[0].ago / 60_000)} minutes ago`
+                  : `${waitedLonger} pull-request run${waitedLonger === 1 ? '' : 's'} that waited longer still wait${waitedLonger === 1 ? 's' : ''}`;
+                core.setOutput('full', 'true');
+                core.warning(`CI is full: ${why.charAt(0).toLowerCase()}${why.slice(1)}, and ${other}.`);
                 return;
               }
               core.info(`Waiting for room: about ${others} other jobs + ${peak}${mainWaiting ? ', a main check waiting' : ''}.`);

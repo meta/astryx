@@ -29,7 +29,7 @@ import {TapGestureRecognizer} from '../gestures/TapGestureRecognizer';
 import type {PointerKind} from '../gestures/types';
 import {isRtlElement} from '../hooks/isRtlElement';
 import {
-  createAnimator,
+  createMotionEngine,
   type Animator,
   type MotionCurve,
   type MotionHandle,
@@ -1186,7 +1186,7 @@ export class SliderTouchController {
   private animatorFor(element: HTMLElement): Animator {
     let animator = this.animators.get(element);
     if (animator == null) {
-      animator = createAnimator(element);
+      animator = createMotionEngine(element);
       this.animators.set(element, animator);
     }
     return animator;

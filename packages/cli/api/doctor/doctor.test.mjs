@@ -102,11 +102,15 @@ describe('doctor never reads the carried Core (spec AST-081 FR3)', () => {
     const load = vi.spyOn(Project, 'load');
     const coreDir = vi.spyOn(Project.prototype, 'coreDir');
     try {
-      await doctor({cwd: dir});
+      const r = await doctor({cwd: dir});
       // Doctor's own project reads only the installed Core, and no Core a
       // project read during the run is the carried one.
       expect(load.mock.calls.some(([, options]) => options?.core === 'project')).toBe(true);
-      expect(coreDir).toHaveBeenCalled();
+      // Nothing is installed, so the Core check fails. The carried Core would
+      // pass it.
+      expect(
+        r.data.checks.find(check => check.id === 'core-installed'),
+      ).toMatchObject({status: 'fail'});
       for (const result of coreDir.mock.results) expect(result.value).toBeNull();
     } finally {
       load.mockRestore();

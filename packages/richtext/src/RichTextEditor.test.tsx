@@ -13,6 +13,7 @@
  * SYNC: When the editor components change, update these tests to match.
  */
 
+import {$createLinkNode} from '@lexical/link';
 import {describe, it, expect, vi, beforeAll, afterAll} from 'vitest';
 import {
   render,
@@ -1757,6 +1758,178 @@ describe('RichTextEditorToolbar — links', () => {
         }
       });
       expect(href).toBe('https://example.com/');
+    });
+  });
+
+  describe('with a collapsed selection', () => {
+    /** The paragraph's children as `text` or `link:<href>:<text>`. */
+    function paragraphParts(editor: LexicalEditor): string[] {
+      const parts: string[] = [];
+      editor.getEditorState().read(() => {
+        const paragraph = $getRoot().getFirstChild();
+        if (!$isElementNode(paragraph)) {
+          return;
+        }
+        for (const child of paragraph.getChildren()) {
+          parts.push(
+            'getURL' in child
+              ? `link:${(child as {getURL(): string}).getURL()}:${child.getTextContent()}`
+              : child.getTextContent(),
+          );
+        }
+      });
+      return parts;
+    }
+
+    async function renderWithPrompt() {
+      let editor!: LexicalEditor;
+      render(
+        <RichTextEditor
+          label="Notes"
+          toolbar={<RichTextEditorToolbar promptForUrl={() => 'example.com'} />}
+          plugins={<CaptureEditor onReady={e => (editor = e)} />}
+        />,
+      );
+      await waitFor(() => expect(editor).toBeDefined());
+      return editor;
+    }
+
+    it('inserts the URL as a link in an empty paragraph', async () => {
+      const editor = await renderWithPrompt();
+      editor.update(() => {
+        const root = $getRoot();
+        root.clear();
+        const paragraph = $createParagraphNode();
+        root.append(paragraph);
+        paragraph.select();
+      });
+
+      fireEvent.click(screen.getByRole('button', {name: 'Link'}));
+
+      await waitFor(() =>
+        expect(paragraphParts(editor)).toEqual([
+          'link:https://example.com/:example.com',
+        ]),
+      );
+    });
+
+    it('inserts the link at a caret inside text, linking nothing else', async () => {
+      const editor = await renderWithPrompt();
+      editor.update(() => {
+        const root = $getRoot();
+        root.clear();
+        const paragraph = $createParagraphNode();
+        const textNode = $createTextNode('hello world');
+        paragraph.append(textNode);
+        root.append(paragraph);
+        textNode.select(6, 6);
+      });
+
+      fireEvent.click(screen.getByRole('button', {name: 'Link'}));
+
+      await waitFor(() =>
+        expect(paragraphParts(editor)).toEqual([
+          'hello ',
+          'link:https://example.com/:example.com',
+          'world',
+        ]),
+      );
+    });
+
+    it('inserts the link at a caret from Cmd/Ctrl+K with promptForUrl', async () => {
+      const editor = await renderWithPrompt();
+      editor.update(() => {
+        const root = $getRoot();
+        root.clear();
+        const paragraph = $createParagraphNode();
+        const textNode = $createTextNode('hello world');
+        paragraph.append(textNode);
+        root.append(paragraph);
+        textNode.select(6, 6);
+      });
+      await waitFor(() =>
+        expect(paragraphParts(editor)).toEqual(['hello world']),
+      );
+
+      const textbox = screen.getByRole('textbox');
+      fireEvent.keyDown(textbox, {key: 'k', metaKey: true});
+      fireEvent.keyDown(textbox, {key: 'k', ctrlKey: true});
+
+      await waitFor(() =>
+        expect(paragraphParts(editor)).toContain(
+          'link:https://example.com/:example.com',
+        ),
+      );
+      expect(paragraphParts(editor)[0]).toBe('hello ');
+      expect(paragraphParts(editor)).not.toContain(
+        'link:https://example.com/:hello world',
+      );
+    });
+
+    it('updates the link around a caret instead of splitting it', async () => {
+      let editor!: LexicalEditor;
+      render(
+        <RichTextEditor
+          label="Notes"
+          toolbar={<RichTextEditorToolbar />}
+          plugins={<CaptureEditor onReady={e => (editor = e)} />}
+        />,
+      );
+      await waitFor(() => expect(editor).toBeDefined());
+      editor.update(() => {
+        const root = $getRoot();
+        root.clear();
+        const paragraph = $createParagraphNode();
+        const link = $createLinkNode('https://old.example/');
+        const linkText = $createTextNode('docs');
+        link.append(linkText);
+        paragraph.append($createTextNode('see '), link);
+        root.append(paragraph);
+        linkText.select(2, 2);
+      });
+      await waitFor(() =>
+        expect(paragraphParts(editor)).toEqual([
+          'see ',
+          'link:https://old.example/:docs',
+        ]),
+      );
+
+      fireEvent.click(screen.getByRole('button', {name: 'Link'}));
+      expect(
+        await screen.findByRole('dialog', {name: 'Edit link', ...h}),
+      ).toBeInTheDocument();
+      const url = screen.getByRole('textbox', {name: 'URL', ...h});
+      fireEvent.change(url, {target: {value: 'https://new.example/'}});
+      fireEvent.click(screen.getByRole('button', {name: 'Update link', ...h}));
+
+      await waitFor(() =>
+        expect(paragraphParts(editor)).toEqual([
+          'see ',
+          'link:https://new.example/:docs',
+        ]),
+      );
+    });
+
+    it('still links the selected text when the selection is not empty', async () => {
+      const editor = await renderWithPrompt();
+      editor.update(() => {
+        const root = $getRoot();
+        root.clear();
+        const paragraph = $createParagraphNode();
+        const textNode = $createTextNode('hello world');
+        paragraph.append(textNode);
+        root.append(paragraph);
+        textNode.select(0, 5);
+      });
+
+      fireEvent.click(screen.getByRole('button', {name: 'Link'}));
+
+      await waitFor(() =>
+        expect(paragraphParts(editor)).toEqual([
+          'link:https://example.com/:hello',
+          ' world',
+        ]),
+      );
     });
   });
 
