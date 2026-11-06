@@ -6,17 +6,11 @@
  *   touch input (Chromium CDP / WebKit's input command) and the interaction
  *   harness
  * @output Proofs that NavigationStack moves like UINavigationController on
- *   iOS 26.2. A push follows UIKit's push spring (critically damped, 0.3 s,
- *   starting at 8.773 widths/s) to within half a pixel. The card underneath
- *   moves at 0.3 of its speed. The back swipe tracks the finger 1:1 from the
- *   leading edge and from the content. It finishes or springs back by UIKit's
- *   release rule, and a flick finishes from near the edge. A push keeps
- *   advancing every frame through a blocked main thread and does no Layout
- *   or Paint. Reduce Motion cross-fades. The spec also writes storyboards of
- *   a push and of a released swipe.
+ *   iOS 26.2. They cover the push spring, the parallax, both back swipes and
+ *   their release, and a blocked main thread. They also cover Reduce Motion,
+ *   and write storyboards of a push and of a released swipe.
  * @position Interaction proof for lab NavigationStack (NavigationStack.tsx,
- *   navigationTransition.ts); shape copied from the harness exemplar,
- *   BottomSheetDetent.interaction.browser.spec.ts
+ *   navigationTransition.ts)
  */
 
 import {
@@ -1385,6 +1379,58 @@ test.describe('edge cases', () => {
     // chains to the page as usual.
     expect(await contain()).toBe('auto');
     await page.setViewportSize({width: 400, height: 200});
+    await expect.poll(contain).toBe('contain');
+  });
+
+  test('a large title that grows re-measures its screen', async ({page}) => {
+    await openStack(page, 'large-title');
+    const root = card(page, 'root');
+    const contain = async () =>
+      root.evaluate(
+        element =>
+          getComputedStyle(element.firstElementChild ?? element)
+            .overscrollBehaviorY,
+      );
+    // A viewport just taller than the screen's content: nothing to scroll.
+    const contentHeight = await root.evaluate(
+      element => (element.firstElementChild as HTMLElement).scrollHeight,
+    );
+    await page.setViewportSize({width: 400, height: contentHeight + 40});
+    await expect.poll(contain).toBe('auto');
+    // A font load, the resize and the stack's release of its motion hints
+    // each start a measurement of their own. Let them end first, so that only
+    // the title can start the next one.
+    await page.evaluate(async () => {
+      await document.fonts.ready;
+    });
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.querySelector('[style*="will-change"]') == null,
+        ),
+      )
+      .toBe(true);
+    await page.evaluate(
+      () =>
+        new Promise<void>(resolve => {
+          let frames = 5;
+          const tick = () => {
+            frames -= 1;
+            if (frames === 0) {
+              resolve();
+            } else {
+              requestAnimationFrame(tick);
+            }
+          };
+          requestAnimationFrame(tick);
+        }),
+    );
+    expect(await contain()).toBe('auto');
+    // A taller line makes the title taller, with no font to load. No box but
+    // the title's own changes size, and the screen now overflows.
+    await root
+      .locator('h1')
+      .evaluate(title => title.style.setProperty('line-height', '400px'));
     await expect.poll(contain).toBe('contain');
   });
 });
