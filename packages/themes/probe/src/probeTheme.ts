@@ -6,7 +6,7 @@
 // test fixture. Regenerate with: pnpm visual:probe-theme
 //
 // defineTheme takes six things and this covers all six:
-//   components  275 targets, 892 selectors (generated from the docs)
+//   components  276 targets, 893 selectors (generated from the docs)
 //   tokens      custom properties, read back off the themed element
 //   icons       every registry entry swapped for a marked glyph
 //   indicators  check / radio / checkbox swapped — the swap that reaches furthest
@@ -1058,6 +1058,14 @@ export const probeTheme = defineTheme({
         color: 'hsl(150.4 75% 12%)',
         borderColor: 'hsl(30.5 82% 25%)',
         outlineColor: 'hsl(311.7 74% 25%)',
+      },
+    },
+    'chat-composer-body': {
+      base: {
+        backgroundColor: 'hsl(248.6 75% 48%)',
+        color: 'hsl(335.1 87% 12%)',
+        borderColor: 'hsl(201.8 79% 25%)',
+        outlineColor: 'hsl(214.7 92% 25%)',
       },
     },
     'chat-composer-drawer': {

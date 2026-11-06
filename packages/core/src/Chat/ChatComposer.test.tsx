@@ -51,6 +51,27 @@ describe('ChatComposer elevation', () => {
   it("defaults to 'low' (preserves the raised look)", () => {
     expect(renderBodyClass(undefined)).toBe(renderBodyClass('low'));
   });
+
+  it('puts the body target and its elevation on the body that paints it', () => {
+    for (const elevation of ['low', 'none'] as const) {
+      const {container, unmount} = render(
+        <ChatComposer
+          onSubmit={() => {}}
+          elevation={elevation}
+          input={<div data-testid="composer-input-marker" />}
+        />,
+      );
+      const body = container.querySelector(
+        '[data-testid="composer-input-marker"]',
+      )!.parentElement!.parentElement!;
+      expect(body).toHaveClass('astryx-chat-composer-body');
+      expect(body).toHaveAttribute('data-elevation', elevation);
+      expect(
+        container.querySelectorAll('.astryx-chat-composer-body'),
+      ).toHaveLength(1);
+      unmount();
+    }
+  });
 });
 
 describe('ChatComposer focus indication', () => {
