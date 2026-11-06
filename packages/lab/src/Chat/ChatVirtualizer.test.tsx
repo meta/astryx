@@ -1,8 +1,9 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {describe, it, expect, vi} from 'vitest';
-import {render, act} from '@testing-library/react';
+import {afterEach, beforeEach, describe, it, expect, vi} from 'vitest';
+import {render, act, screen} from '@testing-library/react';
 import {createRef, useLayoutEffect} from 'react';
+import {TOUCH_QUERY} from '@astryxdesign/core/internal/touch';
 import {ChatVirtualizer, type ChatVirtualizerHandle} from './ChatVirtualizer';
 
 // jsdom has no real layout (offsetHeight is 0, ResizeObserver never fires),
@@ -122,9 +123,9 @@ describe('ChatVirtualizer', () => {
     expect(container.querySelector('[style*="overflow"]')).toBeNull();
   });
 
-  it('exposes the declaration handle via apiRef', () => {
+  it('exposes the declaration handle via handleRef', () => {
     const ref = createRef<ChatVirtualizerHandle>();
-    renderList(rows(3), {apiRef: ref});
+    renderList(rows(3), {handleRef: ref});
     expect(typeof ref.current?.scrollToDistanceFromBottomPx).toBe('function');
     expect(typeof ref.current?.anchorToKey).toBe('function');
     // Declarations must not throw without real layout.
@@ -155,11 +156,54 @@ describe('ChatVirtualizer', () => {
     return el;
   };
 
-  const touch = (el: HTMLElement, type: string, remaining = 0): void => {
-    const e = new Event(type, {bubbles: false});
-    Object.defineProperty(e, 'touches', {value: {length: remaining}});
+  // A phone: Core's finger-scroll watch listens only where the primary
+  // pointer is coarse.
+  let restorePointer: () => void = () => {};
+  beforeEach(() => {
+    const matchMedia = window.matchMedia;
+    const coarse = {
+      matches: true,
+      media: TOUCH_QUERY,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    } as unknown as MediaQueryList;
+    window.matchMedia = (media: string) =>
+      media.trim() === TOUCH_QUERY ? coarse : matchMedia(media);
+    restorePointer = () => {
+      window.matchMedia = matchMedia;
+    };
+  });
+  afterEach(() => {
+    restorePointer();
+  });
+
+  /** A finger landing on (`down`) or lifting from the scroller's content. */
+  const finger = (el: HTMLElement, type: string, down: boolean): void => {
+    const target = el.firstElementChild ?? el;
+    const e = new Event(type, {bubbles: true, cancelable: true});
+    const entry = {identifier: 1, clientX: 5, clientY: 5, target};
+    Object.defineProperty(e, 'changedTouches', {value: [entry]});
+    Object.defineProperty(e, 'touches', {value: down ? [entry] : []});
     act(() => {
-      el.dispatchEvent(e);
+      target.dispatchEvent(e);
+    });
+  };
+  /** The finger scrolls the scroller to `at`. */
+  const fingerScrollTo = (el: HTMLElement, at: number): void => {
+    el.scrollTop = at;
+    act(() => {
+      el.dispatchEvent(new Event('scroll'));
+    });
+  };
+  /** The finger lifts and its scroll (momentum included) ends. */
+  const fingerScrollEnds = (el: HTMLElement): void => {
+    finger(el, 'touchend', false);
+    act(() => {
+      el.dispatchEvent(new Event('scrollend'));
     });
   };
 
@@ -265,97 +309,66 @@ describe('ChatVirtualizer', () => {
     const el = tallScroller();
     el.style.overflowAnchor = 'auto';
     const {unmount} = render(attachedTo(rows(50), el));
-    expect(el.hasAttribute('data-astryx-chat-virtualized')).toBe(true);
+    expect(el.getAttribute('data-astryx-scroll-anchoring')).toBe('off');
     expect(el.style.overflowAnchor).toBe('auto');
     const rule = document.head.querySelector(
-      '[data-astryx-chat-virtualized-style]',
+      '[data-astryx-scroll-anchoring="rule"]',
     );
     expect(rule?.textContent).toContain('overflow-anchor:none !important');
     unmount();
-    expect(el.hasAttribute('data-astryx-chat-virtualized')).toBe(false);
+    expect(el.hasAttribute('data-astryx-scroll-anchoring')).toBe(false);
     expect(el.style.overflowAnchor).toBe('auto');
     el.remove();
   });
 
-  it('suppresses scroll writes while a finger is down', () => {
+  it('suppresses scroll writes while a finger scrolls, momentum included', () => {
     const el = scroller();
-    attachedList(el);
-    touch(el, 'touchstart', 1);
-    const at = (el.scrollTop = 1234);
-    act(() => {
-      el.dispatchEvent(new Event('scroll'));
-    });
-    expect(el.scrollTop).toBe(at);
-    touch(el, 'touchend', 0);
+    const handle = createRef<ChatVirtualizerHandle>();
+    renderList(rows(50), {scrollElement: el, handleRef: handle});
+    finger(el, 'touchstart', true);
+    fingerScrollTo(el, 1234);
+    // A declaration while the finger owns the viewport writes nothing.
+    act(() => handle.current?.scrollToDistanceFromBottomPx(0));
+    expect(el.scrollTop).toBe(1234);
+    // The lift starts the momentum: still the finger's.
+    finger(el, 'touchend', false);
+    act(() => handle.current?.scrollToDistanceFromBottomPx(0));
+    expect(el.scrollTop).toBe(1234);
     el.remove();
   });
 
-  it('starts settling only when the last finger lifts', () => {
-    vi.useFakeTimers();
-    try {
-      const el = scroller();
-      attachedList(el);
-      touch(el, 'touchstart', 1);
-      touch(el, 'touchstart', 2);
-      // First lift with a finger still on the glass must NOT settle: a
-      // two-finger drag would take a scroll write under the remaining
-      // finger.
-      touch(el, 'touchend', 1);
-      const held = (el.scrollTop = 900);
-      act(() => {
-        vi.advanceTimersByTime(1000);
-      });
-      expect(el.scrollTop).toBe(held);
-      touch(el, 'touchend', 0);
-      el.remove();
-    } finally {
-      vi.useRealTimers();
-    }
+  it('hands the viewport back when the finger scroll ends', () => {
+    const el = scroller();
+    const handle = createRef<ChatVirtualizerHandle>();
+    renderList(rows(50), {scrollElement: el, handleRef: handle});
+    finger(el, 'touchstart', true);
+    fingerScrollTo(el, 1234);
+    fingerScrollEnds(el);
+    act(() => handle.current?.scrollToDistanceFromBottomPx(0));
+    expect(el.scrollTop).not.toBe(1234);
+    el.remove();
   });
 
-  it('releases the gate on touchcancel (system gesture takeover)', () => {
-    vi.useFakeTimers();
-    try {
-      const el = scroller();
-      attachedList(el);
-      touch(el, 'touchstart', 1);
-      touch(el, 'touchcancel', 0);
-      act(() => {
-        vi.advanceTimersByTime(1000);
-      });
-      // Gate released: a later declaration reaches scrollTop again. Without
-      // the touchcancel binding the gate would hold forever, because no
-      // touchend ever arrives for a system-gesture takeover.
-      expect(() => {
-        act(() => {
-          el.dispatchEvent(new Event('scroll'));
-        });
-      }).not.toThrow();
-      el.remove();
-    } finally {
-      vi.useRealTimers();
-    }
+  it('opens no gate for a scroll with no finger down', () => {
+    const el = scroller();
+    const handle = createRef<ChatVirtualizerHandle>();
+    renderList(rows(50), {scrollElement: el, handleRef: handle});
+    fingerScrollTo(el, 1234);
+    act(() => handle.current?.scrollToDistanceFromBottomPx(0));
+    expect(el.scrollTop).not.toBe(1234);
+    el.remove();
   });
 
-  it('unmounting mid-gesture leaves no pending settle timer', () => {
-    vi.useFakeTimers();
-    try {
-      const el = scroller();
-      const {unmount} = attachedList(el);
-      touch(el, 'touchstart', 1);
-      touch(el, 'touchend', 0);
-      unmount();
-      // The in-flight touch keeps targeting the old element, so the timer
-      // must die with the listeners rather than fire onto a dead tree.
-      expect(() => {
-        act(() => {
-          vi.advanceTimersByTime(2000);
-        });
-      }).not.toThrow();
-      el.remove();
-    } finally {
-      vi.useRealTimers();
-    }
+  it('unmounting mid-gesture leaves nothing pending', () => {
+    const el = scroller();
+    const {unmount} = attachedList(el);
+    finger(el, 'touchstart', true);
+    fingerScrollTo(el, 1500);
+    unmount();
+    expect(() => {
+      fingerScrollEnds(el);
+    }).not.toThrow();
+    el.remove();
   });
 
   it('keeps row identity stable across data replacement', () => {
@@ -433,7 +446,7 @@ describe('ChatVirtualizer', () => {
         renderItem={({item}) => <span>{item.text}</span>}
         estimatedItemSize={100}
         scrollElement={scrollElement}
-        apiRef={ref}
+        handleRef={ref}
       />
     );
     const {container, rerender} = render(list(host));
@@ -454,7 +467,8 @@ describe('ChatVirtualizer', () => {
     try {
       const el = scroller();
       const {rerender} = attachedList(el, rows(5));
-      touch(el, 'touchstart', 1);
+      finger(el, 'touchstart', true);
+      fingerScrollTo(el, 300);
       // The list empties under the finger — the flush has no row to read a
       // reference frame off, and must fall back rather than throw.
       rerender(
@@ -466,8 +480,8 @@ describe('ChatVirtualizer', () => {
           scrollElement={el}
         />,
       );
-      touch(el, 'touchend', 0);
       expect(() => {
+        fingerScrollEnds(el);
         act(() => {
           vi.advanceTimersByTime(500);
         });
@@ -476,5 +490,70 @@ describe('ChatVirtualizer', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  // ---- Keyboard and assistive technology ----------------------------------
+
+  it('names its own scroller as a group keyboard users can reach', () => {
+    const {container, rerender} = renderList(rows(3));
+    const own = container.firstElementChild as HTMLElement;
+    expect(own.getAttribute('role')).toBe('group');
+    expect(own.getAttribute('aria-label')).toBe('Messages');
+    rerender(
+      <ChatVirtualizer<Row>
+        data={rows(3)}
+        keyExtractor={m => String(m.id)}
+        renderItem={({item}) => <span>{item.text}</span>}
+        estimatedItemSize={100}
+        label="Support thread"
+      />,
+    );
+    expect(own.getAttribute('aria-label')).toBe('Support thread');
+  });
+
+  it('keeps a focused row mounted while the window moves away from it', async () => {
+    const el = tallScroller();
+    const {container} = render(
+      <ChatVirtualizer<Row>
+        data={rows(60)}
+        keyExtractor={m => String(m.id)}
+        renderItem={({item}) => <button type="button">{item.text}</button>}
+        estimatedItemSize={100}
+        scrollElement={el}
+      />,
+    );
+    await settled();
+    const button = screen.getByRole('button', {name: 'message 58'});
+    act(() => button.focus());
+    // Scroll to the top: row 58 leaves the window.
+    scrollEvent(el, 0);
+    await settled();
+    expect(button.isConnected).toBe(true);
+    expect(document.activeElement).toBe(button);
+    expect(screen.queryByRole('button', {name: 'message 50'})).toBeNull();
+    // Focus leaves the list: the row is no longer kept.
+    act(() => button.blur());
+    expect(button.isConnected).toBe(false);
+    expect(container.querySelectorAll('[data-pkey]').length).toBeGreaterThan(0);
+    el.remove();
+  });
+
+  it('marks the rows the window moves over as busy for the log, and new tail rows not', async () => {
+    const el = tallScroller();
+    const list = (n: number) => <div role="log">{attachedTo(rows(n), el)}</div>;
+    const {container, rerender} = render(list(60));
+    await settled();
+    const block = container.querySelector('[role="log"]')!
+      .firstElementChild as HTMLElement;
+    expect(block.hasAttribute('aria-busy')).toBe(false);
+    // A message appended at the tail while following: news for the log.
+    act(() => rerender(list(61)));
+    expect(block.hasAttribute('aria-busy')).toBe(false);
+    // Scrolling up mounts history: busy for that commit and the next frame.
+    scrollEvent(el, 0);
+    expect(block.getAttribute('aria-busy')).toBe('true');
+    await settled();
+    expect(block.hasAttribute('aria-busy')).toBe(false);
+    el.remove();
   });
 });

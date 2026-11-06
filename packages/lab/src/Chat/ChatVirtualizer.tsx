@@ -4,8 +4,9 @@
 
 /**
  * @file ChatVirtualizer.tsx
- * @input Uses React only (no DOM libraries); attaches to a caller-owned
- *   scroll container that runs no follow of its own, or renders its own
+ * @input Uses React, Core's scrollable-area hook, finger-scroll watch and
+ *   scroll-anchoring writer; attaches to a caller-owned scroll container
+ *   that runs no follow of its own, or renders its own
  * @output Exports ChatVirtualizer component, ChatVirtualizerProps and
  *   ChatVirtualizerHandle
  * @position Experimental windowing participant for ChatMessageList children:
@@ -39,6 +40,11 @@
  */
 
 import * as React from 'react';
+import * as stylex from '@stylexjs/stylex';
+import {useScrollableArea} from '@astryxdesign/core/hooks';
+import {useTranslator} from '@astryxdesign/core/i18n';
+import {setScrollAnchoringOff} from '@astryxdesign/core/internal/scroll-anchoring';
+import {useFingerScroll} from '@astryxdesign/core/internal/touch';
 
 // "Did the declarative target land?" — a convergence tolerance, deliberately
 // NOT the same knob as `endThreshold` (which is a user-intent question).
@@ -65,45 +71,24 @@ const PRIOR_SAMPLES = 5;
 // column-flex host scroller (attach mode) the block is a
 // flex item and would otherwise be compressed to fit (default shrink 1),
 // silently corrupting the whole geometry.
-const contentStyle: React.CSSProperties = {
-  display: 'flow-root',
-  flexShrink: 0,
-  alignSelf: 'stretch',
-};
-// Momentum ("fling") outlives touchend and emits no further touch events, so
-// the end of a gesture is detected as scroll silence, not as an event. Also
-// the retry interval while the gesture is still settling.
-//
-// No platform test gates this: a programmatic scrollTop write cancels an
-// in-flight fling wherever momentum belongs to the scroll view (iOS WebKit,
-// Android), and where it does not (a macOS trackpad, whose momentum arrives
-// as wheel events) there are no touch events to put the gate in the first
-// place. Sniffing the UA would only have made this path miss touchscreens.
-const TOUCH_SETTLE_MS = 150;
+const styles = stylex.create({
+  content: {
+    display: 'flow-root',
+    flexShrink: 0,
+    alignSelf: 'stretch',
+  },
+  // The own scroller positions nothing itself; `relative` keeps a row's
+  // absolutely positioned parts inside it.
+  scroller: {
+    position: 'relative',
+  },
+});
 
-// The list owns its scroller's position in both modes (follow-at-end and the
-// identity anchor), so the browser's own scroll anchoring must not move it.
-// The switch rides on an attribute and one injected rule rather than the
-// element's inline style: in attach mode the scroller is the caller's, and
-// whatever `overflow-anchor` they set — before or during our tenure — is
-// never read, written or restored; it simply applies again once the
-// attribute is gone. `!important` so an inline `auto` cannot switch native
-// anchoring back on under a list that is anchoring by itself.
-const VIRTUALIZED_ATTR = 'data-astryx-chat-virtualized';
-const VIRTUALIZED_STYLE_ATTR = 'data-astryx-chat-virtualized-style';
-
-function ensureVirtualizedStyle(): void {
-  if (
-    typeof document === 'undefined' ||
-    document.head.querySelector(`[${VIRTUALIZED_STYLE_ATTR}]`)
-  ) {
-    return;
-  }
-  const style = document.createElement('style');
-  style.setAttribute(VIRTUALIZED_STYLE_ATTR, '');
-  style.textContent = `[${VIRTUALIZED_ATTR}]{overflow-anchor:none !important}`;
-  document.head.appendChild(style);
-}
+// While a finger scroll ends in an elastic overscroll, a write would snap the
+// bounce onto the clamp; the flush waits a frame at a time until it is over.
+const isBouncing = (el: HTMLElement): boolean =>
+  el.scrollTop < 0 ||
+  el.scrollTop > Math.max(0, el.scrollHeight - el.clientHeight) + 1;
 
 export type ChatVirtualizerMeasureMode = 'ro' | 'sync';
 
@@ -157,7 +142,7 @@ export interface ChatVirtualizerProps<T> {
    */
   measureMode?: ChatVirtualizerMeasureMode;
   /** Imperative declarations (see ChatVirtualizerHandle). */
-  apiRef?: React.Ref<ChatVirtualizerHandle>;
+  handleRef?: React.Ref<ChatVirtualizerHandle>;
   /**
    * Optional item classifier: measured sizes feed a running average PER
    * TYPE, so a corpus mixing tool-call stubs with long markdown converges
@@ -203,6 +188,12 @@ export interface ChatVirtualizerProps<T> {
   endThreshold?: number;
   overscanTop?: number;
   overscanBottom?: number;
+  /**
+   * Own-container mode only: the accessible name of the scroll container,
+   * which keyboard users can focus and scroll. Defaults to the translated
+   * "Messages".
+   */
+  label?: string;
   /** Own-container mode only. */
   style?: React.CSSProperties;
   /** Own-container mode only. */
@@ -233,15 +224,28 @@ export function ChatVirtualizer<T>(
     renderItem,
     estimatedItemSize = 120,
     measureMode = 'ro',
-    apiRef,
+    handleRef,
     getItemType,
     scrollElement,
     endThreshold = 24,
     overscanTop = 1600,
     overscanBottom = 600,
+    label,
     style,
     className,
   } = props;
+  const t = useTranslator();
+  // Own-container mode: keyboard users reach and scroll the scroller, a
+  // `group` named by this list. It is always a scroll container, so the
+  // machinery's scrollTop writes land before the content first overflows.
+  const {getViewportProps, getContentProps} = useScrollableArea({
+    axis: 'block',
+    stickyContainment: 'always',
+    keyboardAccess: {
+      owner: 'viewport',
+      label: label ?? t('@astryx.chatVirtualizer.label'),
+    },
+  });
 
   const ownScrollerRef = React.useRef<HTMLDivElement | null>(null);
   const attachMode = scrollElement !== undefined;
@@ -265,9 +269,38 @@ export function ChatVirtualizer<T>(
     scrollElementRef.current !== undefined
       ? scrollElementRef.current
       : ownScrollerRef.current;
+  // The live scroller as a ref, for Core's finger-scroll watch, which reads
+  // it after each commit and moves to a replaced element.
+  const liveScrollerRef = React.useRef<React.RefObject<HTMLElement | null>>({
+    get current(): HTMLElement | null {
+      return scrollElementRef.current !== undefined
+        ? scrollElementRef.current
+        : ownScrollerRef.current;
+    },
+  }).current;
   const contentRef = React.useRef<HTMLDivElement | null>(null);
   const spacerTopRef = React.useRef<HTMLDivElement | null>(null);
   const spacerBottomRef = React.useRef<HTMLDivElement | null>(null);
+  // While a focused row sits outside the window it stays mounted (a keyboard
+  // user's focus must not fall to the page), with a gap spacer between it and
+  // the window so the geometry is unchanged.
+  const gapTopRef = React.useRef<HTMLDivElement | null>(null);
+  const gapBottomRef = React.useRef<HTMLDivElement | null>(null);
+  const [focusedKey, setFocusedKey] = React.useState<string | null>(null);
+  // The focused row this render keeps outside the window, read by the passes.
+  const pinnedKeyRef = React.useRef<string | null>(null);
+  // Rows a commit mounts that are not new messages (the window moving over
+  // history, or history loading above) must not reach the transcript's
+  // polite log as news: the content block is marked busy for that commit
+  // and the next frame. A message appended at the tail mounts unmarked.
+  const renderedKeysRef = React.useRef<ReadonlySet<string>>(new Set());
+  // The messages the last data change appended at the tail that have not
+  // mounted yet: the only rows that mount as news.
+  const newsKeysRef = React.useRef(new Set<string>());
+  // This render's rows, and whether they mount history, for its commit.
+  const pendingRenderedRef = React.useRef<ReadonlySet<string>>(new Set());
+  const pendingBusyRef = React.useRef(false);
+  const busyClearRef = React.useRef<number | null>(null);
   const rowEls = React.useRef(new Map<string, HTMLDivElement>());
   const sizes = React.useRef(new Map<string, number>());
   const geo = React.useRef<Geo>({
@@ -301,29 +334,24 @@ export function ChatVirtualizer<T>(
   const rafRetry = React.useRef<number | null>(null);
   const prevScrollerRef = React.useRef<HTMLElement | null>(null);
   // ---- Touch write-gate --------------------------------------------------
-  // While a gesture owns the viewport (finger down, plus the settle window
-  // after lift-off) the machinery writes no scrollTop at all: near the bottom,
-  // per-event restores erase a slow drag's displacement faster than it
-  // accumulates, and a write during momentum cancels the fling. Nothing is
-  // queued as a ledger — the reference frame is declarative, so the flush is
-  // one ordinary syncAndRestore from the re-stated mode.
-  //
-  // Phases: 'idle' → 'down' → 'settling' (lifted, momentum may still run) →
-  // 'idle'. One value, not two booleans: the gate is exactly "not idle".
-  const gesturePhase = React.useRef<'idle' | 'down' | 'settling'>('idle');
-  const touchSettleTimer = React.useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
-  // Timestamp of the last scroll event of ANY origin during the gesture —
-  // the settle clock, which must include momentum's own scrolls.
-  const lastGestureScrollT = React.useRef(0);
+  // While a finger scrolls the viewport (from its first scroll until that
+  // scroll ends, momentum included, as Core's finger-scroll watch reports)
+  // the machinery writes no scrollTop at all: near the bottom, per-event
+  // restores erase a slow drag's displacement faster than it accumulates,
+  // and a write during momentum cancels the fling. Nothing is queued as a
+  // ledger — the reference frame is declarative, so the flush is one
+  // ordinary syncAndRestore from the re-stated mode, when the finger's
+  // scroll ends.
+  const gestureActive = React.useRef(false);
+  // The flush's retry while the scroll ends in an elastic overscroll.
+  const flushRetry = React.useRef<number | null>(null);
   // Did the USER move the viewport this gesture? Only non-echo scrolls count.
   // Kept apart from the clock above because a browser clamp (a spacer shrink
   // near the bottom) is movement for settling purposes but is NOT intent:
   // treating it as such let a plain tap mid-stream re-judge follow against a
   // distance the stream itself had grown, and silently disengage.
   const gestureMoved = React.useRef(false);
-  const gestureHeld = (): boolean => gesturePhase.current !== 'idle';
+  const gestureHeld = (): boolean => gestureActive.current;
   // Spacer-side compensation while the gate holds. Rows measuring in during a
   // drag land their (real - estimate) deltas in the geometry, and with
   // scrollTop untouchable the content would crawl under the finger. Document
@@ -535,21 +563,24 @@ export function ChatVirtualizer<T>(
 
   // Size both spacers so the mounted window occupies its true place in the
   // scroll range, under whatever geometry is current, and move the content
-  // block's floor (contentStyle) to the extent that geometry describes.
+  // block's floor (styles.content) to the extent that geometry describes.
   const writeSpacers = (w: Win): void => {
     const g = geo.current;
     const empty = w.end < w.start || g.offsets.length === 0;
-    // gestureAdj shifts the whole window block without touching scrollTop
+    const offsetAfter = (i: number): number =>
+      i + 1 < g.offsets.length ? g.offsets[i + 1] : g.total;
+    const pinnedKey = pinnedKeyRef.current;
+    const pinned =
+      empty || pinnedKey === null ? undefined : g.index.get(pinnedKey);
+    const pinnedAbove = pinned !== undefined && pinned < w.start;
+    const pinnedBelow = pinned !== undefined && pinned > w.end;
+    const first = pinnedAbove ? pinned : w.start;
+    const last = pinnedBelow ? pinned : w.end;
+    // gestureAdj shifts the whole rendered block without touching scrollTop
     // (0 outside a touch gesture). Clamped at the very top of the list —
     // there is no spacer left to absorb into there.
-    const top = empty
-      ? 0
-      : Math.max(0, g.offsets[w.start] + gestureAdj.current);
-    const belowEnd = empty
-      ? 0
-      : w.end + 1 < g.offsets.length
-        ? g.offsets[w.end + 1]
-        : g.total;
+    const top = empty ? 0 : Math.max(0, g.offsets[first] + gestureAdj.current);
+    const belowEnd = empty ? 0 : offsetAfter(last);
     const write = (
       ref: React.RefObject<HTMLDivElement | null>,
       prop: 'height' | 'minHeight',
@@ -560,6 +591,16 @@ export function ChatVirtualizer<T>(
       }
     };
     write(spacerTopRef, 'height', top);
+    write(
+      gapTopRef,
+      'height',
+      pinnedAbove ? Math.max(0, g.offsets[w.start] - offsetAfter(pinned)) : 0,
+    );
+    write(
+      gapBottomRef,
+      'height',
+      pinnedBelow ? Math.max(0, g.offsets[pinned] - offsetAfter(w.end)) : 0,
+    );
     write(spacerBottomRef, 'height', Math.max(0, g.total - belowEnd));
     // The extent these spacers describe: the model total, plus whatever the
     // top spacer carries beyond its model offset (the gesture adjustment,
@@ -567,7 +608,7 @@ export function ChatVirtualizer<T>(
     write(
       contentRef,
       'minHeight',
-      empty ? g.total : g.total + top - g.offsets[w.start],
+      empty ? g.total : g.total + top - g.offsets[first],
     );
   };
 
@@ -689,7 +730,7 @@ export function ChatVirtualizer<T>(
     // layout below would otherwise place the new rows against stale spacers
     // — every origin and anchor read off it wrong by the swapped rows'
     // height. (The extent itself cannot collapse meanwhile: the content
-    // block's floor holds it, see contentStyle.) Style writes don't force
+    // block's floor holds it, see styles.content.) Style writes don't force
     // layout, so the spacers are consistent BEFORE the first read.
     writeSpacers(winRef.current);
     measureOrigin(el);
@@ -874,6 +915,17 @@ export function ChatVirtualizer<T>(
   if (prevData.current !== data) {
     prevData.current = data;
     geoChanged.current = true;
+    // The rows past the last row the previous data had are this change's
+    // news. The geometry still indexes the previous data here.
+    const previous = geo.current.index;
+    newsKeysRef.current = new Set();
+    for (let i = data.length - 1; i >= 0; i--) {
+      const key = String(keyExtractor(data[i], i));
+      if (previous.has(key)) {
+        break;
+      }
+      newsKeysRef.current.add(key);
+    }
     // HEAD CHANGE (loading older history, or trimming it). Rows arrived above
     // everything placed, so the restore owes a correction the size of the whole
     // page, paid across several passes as those rows measure in. That is a
@@ -897,6 +949,30 @@ export function ChatVirtualizer<T>(
   // declared target on the same commits, attach arrival included.)
   React.useLayoutEffect(() => {
     syncAndRestore();
+  });
+
+  // Marks the content block busy for a commit that mounts history, until
+  // the frame after it, so the log does not read those rows out as new.
+  React.useLayoutEffect(function markHistoryMountsBusy() {
+    // News is news once: a message that has mounted is history after.
+    for (const key of pendingRenderedRef.current) {
+      newsKeysRef.current.delete(key);
+    }
+    renderedKeysRef.current = pendingRenderedRef.current;
+    const block = contentRef.current;
+    if (!pendingBusyRef.current || block === null) {
+      return;
+    }
+    block.setAttribute('aria-busy', 'true');
+    if (busyClearRef.current !== null) {
+      cancelAnimationFrame(busyClearRef.current);
+    }
+    busyClearRef.current = requestAnimationFrame(() => {
+      busyClearRef.current = requestAnimationFrame(() => {
+        busyClearRef.current = null;
+        block.removeAttribute('aria-busy');
+      });
+    });
   });
 
   // In 'sync' mode the RO is only a backstop for out-of-commit size changes
@@ -945,6 +1021,9 @@ export function ChatVirtualizer<T>(
       if (rafRelease.current !== null) {
         cancelAnimationFrame(rafRelease.current);
       }
+      if (busyClearRef.current !== null) {
+        cancelAnimationFrame(busyClearRef.current);
+      }
     },
     [],
   );
@@ -968,7 +1047,7 @@ export function ChatVirtualizer<T>(
   // useImperativeHandle so a discarded concurrent render cannot repoint the
   // handle; created once, reads only refs (see CLOSURE DISCIPLINE).
   React.useImperativeHandle(
-    apiRef,
+    handleRef,
     () => ({
       scrollToDistanceFromBottomPx: (px = 0) =>
         declare({kind: 'end', distance: px}),
@@ -977,6 +1056,65 @@ export function ChatVirtualizer<T>(
     }),
     [],
   );
+
+  // The finger's scroll is over (its scrollend after the lift, momentum
+  // included, or the watch's quiet fallback): hand the gesture back.
+  const flushGesture = (): void => {
+    flushRetry.current = null;
+    const el = getScroller();
+    if (!el || !gestureActive.current) {
+      return;
+    }
+    // Inside an elastic overscroll a write snaps the bounce onto the clamp
+    // and discards where the user let go: wait until it is over.
+    if (isBouncing(el)) {
+      flushRetry.current = requestAnimationFrame(flushGesture);
+      return;
+    }
+    gestureActive.current = false;
+    // Engines report scrollHeight as at least clientHeight, so this is
+    // never negative in practice — clamped anyway to hold the same
+    // invariant targetFor does.
+    const max = Math.max(0, el.scrollHeight - el.clientHeight);
+    // Re-state the reference frame from the resting position. Whether the
+    // gesture MOVED decides the semantics only: a real scroll re-judges
+    // follow against the bottom edge, while a scroll that was only our own
+    // echo under a resting finger keeps the mode it had — re-judging would
+    // read machinery growth as a user pushing away.
+    //
+    // The re-statement is UNCONDITIONAL, because it is also what hands the
+    // gesture adjustment back: the stored viewportOffset is where the
+    // anchored row actually IS, so zeroing the adjustment below leaves the
+    // sync one balancing scrollTop write, spacers and position moving in the
+    // same task. The offset comes from the DOM (anchorFromPaint) rather than
+    // being derived, so a clamped spacer cannot make the two disagree.
+    if (!converging.current) {
+      const atEnd = gestureMoved.current
+        ? max - el.scrollTop <= endThresholdRef.current
+        : mode.current.kind === 'end';
+      mode.current = atEnd
+        ? {kind: 'end', distance: 0}
+        : (anchorFromPaint(el) ?? anchorAt(el.scrollTop));
+      userAway.current = 0;
+      // The fold is a MACHINE repositioning: the adjustment now lives only
+      // in the folded viewportOffset, and the live-anchor refresh — which
+      // re-derives from scrollTop once the adjustment is gone — would
+      // erase it, dropping the balancing write while the spacers revert
+      // (measured: +148px). Machine-driven regime holds the fold until the
+      // user actually scrolls again.
+      userScrolledRef.current = false;
+    }
+    gestureAdj.current = 0;
+    geoChanged.current = true;
+    syncRef.current();
+  };
+  const flushGestureRef = React.useRef(flushGesture);
+  flushGestureRef.current = flushGesture;
+  // Core's finger-scroll watch: whether the scroller's scroll is a finger's
+  // (only under a coarse primary pointer), and when it ends.
+  const isFingerScroll = useFingerScroll(liveScrollerRef, {
+    onEnd: () => flushGestureRef.current(),
+  });
 
   const onScroll = (): void => {
     const el = getScroller();
@@ -1004,11 +1142,23 @@ export function ChatVirtualizer<T>(
     }
     const prevEventST = lastEventST.current;
     lastEventST.current = el.scrollTop;
-    if (gestureHeld()) {
-      lastGestureScrollT.current = performance.now();
-      if (!isEcho) {
-        gestureMoved.current = true;
+    if (isFingerScroll()) {
+      if (!gestureActive.current) {
+        // A finger's scroll begins: an INTENT signal, like a wheel, so it
+        // breaks convergence.
+        gestureActive.current = true;
+        gestureMoved.current = false;
+        converging.current = false;
+        priceFreeze.current = false;
       }
+      // A new finger scroll during a held flush continues the gesture.
+      if (flushRetry.current !== null) {
+        cancelAnimationFrame(flushRetry.current);
+        flushRetry.current = null;
+      }
+    }
+    if (gestureHeld() && !isEcho) {
+      gestureMoved.current = true;
     }
     if (!isEcho && !converging.current) {
       const g = geo.current;
@@ -1082,8 +1232,9 @@ export function ChatVirtualizer<T>(
       progTarget.current = null;
     }
     prevScrollerRef.current = el;
-    // Intent signals break convergence early: wheel/touchstart are USER INPUT,
-    // unlike scroll events, which mix in our own writes and clamps.
+    // Intent signals break convergence early: a wheel, or the start of a
+    // finger's scroll (see onScroll), is USER INPUT, unlike scroll events,
+    // which mix in our own writes and clamps.
     //
     // A wheel does NOT unpin by itself. One this scroller never consumes —
     // over a nested scroller with room above, over one with
@@ -1096,123 +1247,29 @@ export function ChatVirtualizer<T>(
       converging.current = false;
       priceFreeze.current = false;
     };
-    // Touch write-gate state machine (see gesturePhase for why it exists).
-    // touchstart is also an INTENT signal and breaks convergence, the way a
-    // wheel event does; touchcancel is the system-gesture exit (an edge
-    // swipe, an incoming call) and must release the gate like a touchend, or
-    // it holds forever.
-    const clearSettleTimer = (): void => {
-      if (touchSettleTimer.current !== null) {
-        clearTimeout(touchSettleTimer.current);
-        touchSettleTimer.current = null;
-      }
-    };
-    const flushGesture = (): void => {
-      touchSettleTimer.current = null;
-      // Engines report scrollHeight as at least clientHeight, so this is
-      // never negative in practice (verified in both) — clamped anyway to
-      // hold the same invariant targetFor does.
-      const max = Math.max(0, el.scrollHeight - el.clientHeight);
-      // Two ways the gesture is not over yet, both retried by polling:
-      // momentum is still running (no touch events accompany it, so silence
-      // is the only signal), or the list is inside an elastic overscroll,
-      // where a write snaps the bounce onto the clamp and discards where the
-      // user actually let go.
-      const coasting =
-        performance.now() - lastGestureScrollT.current < TOUCH_SETTLE_MS;
-      const bouncing = el.scrollTop < 0 || el.scrollTop > max + 1;
-      if (coasting || bouncing) {
-        touchSettleTimer.current = setTimeout(flushGesture, TOUCH_SETTLE_MS);
-        return;
-      }
-      gesturePhase.current = 'idle';
-      // Re-state the reference frame from the resting position. Whether the
-      // gesture MOVED decides the semantics only: a real scroll re-judges
-      // follow against the bottom edge, while a plain tap keeps the mode it
-      // had — the distance grew under the gate with no writes, and re-judging
-      // would read that machinery growth as a user pushing away.
-      //
-      // The re-statement is UNCONDITIONAL, because it is also what hands the
-      // gesture adjustment back: the stored viewportOffset is where the
-      // anchored row actually IS, so zeroing the adjustment below leaves the
-      // sync one balancing scrollTop write, spacers and position moving in the
-      // same task. Skipping the fold on a tap dropped it on the floor instead.
-      // The offset comes from the DOM (anchorFromPaint) rather than being
-      // derived, so a clamped spacer cannot make the two disagree.
-      if (!converging.current) {
-        const atEnd = gestureMoved.current
-          ? max - el.scrollTop <= endThresholdRef.current
-          : mode.current.kind === 'end';
-        mode.current = atEnd
-          ? {kind: 'end', distance: 0}
-          : (anchorFromPaint(el) ?? anchorAt(el.scrollTop));
-        userAway.current = 0;
-        // The fold is a MACHINE repositioning: the adjustment now lives only
-        // in the folded viewportOffset, and the live-anchor refresh — which
-        // re-derives from scrollTop once the adjustment is gone — would
-        // erase it, dropping the balancing write while the spacers revert
-        // (measured: +148px). Machine-driven regime holds the fold until the
-        // user actually scrolls again.
-        userScrolledRef.current = false;
-      }
-      gestureAdj.current = 0;
-      geoChanged.current = true;
-      syncRef.current();
-    };
-    const onTouchStart = (): void => {
-      converging.current = false;
-      priceFreeze.current = false;
-      // A second finger landing during the settle window re-opens the same
-      // gesture rather than starting a new one: the adjustment the spacer is
-      // carrying belongs to a frame that has not been handed back yet.
-      if (gesturePhase.current === 'idle') {
-        lastGestureScrollT.current = 0;
-        gestureMoved.current = false;
-      }
-      gesturePhase.current = 'down';
-      clearSettleTimer();
-    };
-    const onTouchEnd = (e: Event): void => {
-      // Fingers left on the glass still own the viewport — only the LAST
-      // lift starts settling, or a two-finger drag would get a scrollTop
-      // write under the remaining finger.
-      const remaining = (e as TouchEvent).touches?.length ?? 0;
-      if (gesturePhase.current !== 'down' || remaining > 0) {
-        return;
-      }
-      gesturePhase.current = 'settling';
-      touchSettleTimer.current = setTimeout(flushGesture, TOUCH_SETTLE_MS);
-    };
-    ensureVirtualizedStyle();
-    el.setAttribute(VIRTUALIZED_ATTR, '');
+    setScrollAnchoringOff(el, true);
     const scrollHandler = (): void => onScrollRef.current();
     el.addEventListener('scroll', scrollHandler, {passive: true});
     el.addEventListener('wheel', onWheel, {passive: true});
-    el.addEventListener('touchstart', onTouchStart, {passive: true});
-    el.addEventListener('touchend', onTouchEnd, {passive: true});
-    el.addEventListener('touchcancel', onTouchEnd, {passive: true});
     // Observe the CONTAINER too (rows alone miss clientHeight changes): a
     // window resize or a growing composer moves the end-mode target and the
     // window coverage without any row changing size. Container entries have
     // no data-pkey — the RO callback marks the geometry dirty for them.
     roRef.current?.observe(el);
     return () => {
-      el.removeAttribute(VIRTUALIZED_ATTR);
+      setScrollAnchoringOff(el, false);
       el.removeEventListener('scroll', scrollHandler);
       el.removeEventListener('wheel', onWheel);
-      el.removeEventListener('touchstart', onTouchStart);
-      el.removeEventListener('touchend', onTouchEnd);
-      el.removeEventListener('touchcancel', onTouchEnd);
-      // A mid-gesture unbind would strand the gate: the in-flight touch
-      // keeps targeting the OLD element (implicit touch capture), so the
-      // replacement never delivers the touchend that releases it. Reset the
-      // whole state machine with the listeners that maintained it. The
-      // adjustment is dropped rather than folded — the element carrying it
-      // in its spacer is going away, and the replacement re-derives its own
-      // frame from the mode on its first pass.
-      clearSettleTimer();
-      gesturePhase.current = 'idle';
-      lastGestureScrollT.current = 0;
+      // A replaced or unmounted scroller ends the gesture with it: the
+      // finger-scroll watch moves to the new element and reports no end for
+      // the old one. The adjustment is dropped rather than folded — the
+      // element carrying it in its spacer is going away, and the replacement
+      // re-derives its own frame from the mode on its first pass.
+      if (flushRetry.current !== null) {
+        cancelAnimationFrame(flushRetry.current);
+        flushRetry.current = null;
+      }
+      gestureActive.current = false;
       gestureMoved.current = false;
       gestureAdj.current = 0;
       roRef.current?.unobserve(el);
@@ -1248,26 +1305,100 @@ export function ChatVirtualizer<T>(
     return cb;
   };
 
+  // A focused row outside the window stays mounted beside it. It keeps its
+  // place among its siblings as rows mount and unmount around it, so React
+  // never moves its node (a moved node loses focus).
+  let pinnedIndex = -1;
+  if (focusedKey !== null && win.end >= win.start) {
+    pinnedIndex = data.findIndex(
+      (item, i) => String(keyExtractor(item, i)) === focusedKey,
+    );
+    if (pinnedIndex >= win.start && pinnedIndex <= win.end) {
+      pinnedIndex = -1;
+    }
+  }
+  pinnedKeyRef.current = pinnedIndex < 0 ? null : focusedKey;
+  const renderRow = (i: number): React.ReactNode => {
+    const key = String(keyExtractor(data[i], i));
+    if (getItemType) {
+      typeByKey.current.set(key, getItemType(data[i], i));
+    }
+    return (
+      <div key={key} ref={rowRef(key)} data-pkey={key}>
+        {renderItem({item: data[i], index: i})}
+      </div>
+    );
+  };
   const children: React.ReactNode[] = [
     <div key="__top" ref={spacerTopRef} aria-hidden />,
   ];
+  if (pinnedIndex >= 0 && pinnedIndex < win.start) {
+    children.push(
+      renderRow(pinnedIndex),
+      <div key="__gapTop" ref={gapTopRef} aria-hidden />,
+    );
+  }
   if (win.end >= win.start) {
     for (let i = win.start; i <= Math.min(win.end, data.length - 1); i++) {
-      const key = String(keyExtractor(data[i], i));
-      if (getItemType) {
-        typeByKey.current.set(key, getItemType(data[i], i));
-      }
-      children.push(
-        <div key={key} ref={rowRef(key)} data-pkey={key}>
-          {renderItem({item: data[i], index: i})}
-        </div>,
-      );
+      children.push(renderRow(i));
     }
+  }
+  if (pinnedIndex > win.end) {
+    children.push(
+      <div key="__gapBottom" ref={gapBottomRef} aria-hidden />,
+      renderRow(pinnedIndex),
+    );
   }
   children.push(<div key="__bottom" ref={spacerBottomRef} aria-hidden />);
 
+  // Busy when this render mounts a row that is not news: the window moving
+  // over history, or history loading above.
+  const renderedKeys = new Set<string>();
+  for (const child of children) {
+    const key = (child as React.ReactElement).key;
+    if (key !== null && !key.startsWith('__')) {
+      renderedKeys.add(key);
+    }
+  }
+  let mountsHistory = false;
+  for (const key of renderedKeys) {
+    if (!renderedKeysRef.current.has(key) && !newsKeysRef.current.has(key)) {
+      mountsHistory = true;
+      break;
+    }
+  }
+  pendingRenderedRef.current = renderedKeys;
+  pendingBusyRef.current = mountsHistory;
+
+  // Which row holds focus, for the pinning above.
+  const onContentFocus = (event: React.FocusEvent<HTMLDivElement>): void => {
+    const row = (event.target as Element).closest<HTMLElement>('[data-pkey]');
+    const key =
+      row != null && event.currentTarget.contains(row)
+        ? (row.dataset.pkey ?? null)
+        : null;
+    setFocusedKey(key);
+  };
+  const onContentBlur = (event: React.FocusEvent<HTMLDivElement>): void => {
+    const next = event.relatedTarget as Node | null;
+    if (next == null || !event.currentTarget.contains(next)) {
+      setFocusedKey(null);
+    }
+  };
+
+  const contentProps = {
+    ref: contentRef,
+    onFocus: onContentFocus,
+    onBlur: onContentBlur,
+    xstyle: styles.content,
+  };
+  // In own-container mode the scrollable area measures this block's overflow
+  // to decide whether keyboard users can scroll.
+  const {xstyle: contentXstyle, ...contentDomProps} = attachMode
+    ? contentProps
+    : getContentProps<HTMLDivElement>(contentProps);
   const content = (
-    <div ref={contentRef} style={contentStyle}>
+    <div {...contentDomProps} {...stylex.props(contentXstyle)}>
       {children}
     </div>
   );
@@ -1278,13 +1409,12 @@ export function ChatVirtualizer<T>(
 
   return (
     <div
-      ref={ownScrollerRef}
-      className={className}
-      style={{
-        overflowY: 'auto',
-        position: 'relative',
-        ...style,
-      }}>
+      {...getViewportProps<HTMLDivElement>({
+        ref: ownScrollerRef,
+        className,
+        style,
+        xstyle: styles.scroller,
+      })}>
       {content}
     </div>
   );
