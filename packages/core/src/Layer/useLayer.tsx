@@ -655,7 +655,7 @@ function observeMove(element: HTMLElement, onMove: () => void): () => void {
       now.width !== rect.width ||
       now.height !== rect.height;
     // A report's root box is the viewport, here shrunk by the root margin.
-    // An engine that reports no root box leaves the size to one read.
+    // If the report has no root box, read the viewport's size.
     const viewportOf = (
       rootBounds: DOMRectReadOnly | null,
       marginRight: number,
