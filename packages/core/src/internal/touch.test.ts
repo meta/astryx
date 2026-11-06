@@ -84,6 +84,52 @@ describe('internal/touch', () => {
     }
   });
 
+  it("re-exports by name what Lab's NavigationStack reads", async () => {
+    const entry: Record<string, unknown> = await import('./touch');
+    const edgePan = await import('../gestures/ScreenEdgePanGestureRecognizer');
+    const resolver = await import('../motion/resolveMotion');
+    const spring = await import('../motion/spring');
+    const uikitNavigation = await import('../motion/uikit/navigation');
+    const uikitSprings = await import('../motion/uikit/springs');
+    const focusReturn = await import('../utils/focusReturn');
+    const modality = await import('../utils/interactionModality');
+    expect(entry.ScreenEdgePanGestureRecognizer).toBe(
+      edgePan.ScreenEdgePanGestureRecognizer,
+    );
+    expect(entry.resolveMotion).toBe(resolver.resolveMotion);
+    expect(entry.solveSpring).toBe(spring.solveSpring);
+    expect(entry.toSpring).toBe(spring.toSpring);
+    expect(entry.navigation).toBe(uikitNavigation.navigation);
+    for (const name of [
+      'NAVIGATION_PUSH_SPRING',
+      'NAVIGATION_POP_SPRING',
+      'NAVIGATION_INTERACTIVE_POP_FINISH_SPRING',
+      'NAVIGATION_BAR_ELEMENTS_SPRING',
+    ] as const) {
+      expect(entry[name], name).toBe(uikitSprings[name]);
+      expect(entry[name], name).toBeDefined();
+    }
+    // Only the navigation rows: the whole springs table stays out.
+    expect(entry).not.toHaveProperty('springs');
+    expect(entry.focusForLastInput).toBe(focusReturn.focusForLastInput);
+    expect(entry.isFocusLost).toBe(focusReturn.isFocusLost);
+    expect(entry.useInteractionModalityTracking).toBe(
+      modality.useInteractionModalityTracking,
+    );
+    for (const name of [
+      'ScreenEdgePanGestureRecognizer',
+      'resolveMotion',
+      'solveSpring',
+      'toSpring',
+      'focusForLastInput',
+      'isFocusLost',
+      'useInteractionModalityTracking',
+    ]) {
+      expect(typeof entry[name], name).toBe('function');
+    }
+    expect(entry.navigation).toBeDefined();
+  });
+
   it('attaches no window or document listeners when it loads', async () => {
     vi.resetModules();
     const onWindow = vi.spyOn(window, 'addEventListener');
