@@ -132,7 +132,7 @@ function matches(element: Element, query: string): boolean {
  * The theme's move curve over its shortest medium duration where `area` is:
  * one value for the glide, the changed element and the indicator. The tokens
  * carry the theme's `character` and `tempo`. Null when the duration is zero
- * or the curve does not parse, and then the change lands at once.
+ * or the browser plays no such easing, and then the change lands at once.
  */
 function glideProgress(area: Element): GlideProgress | null {
   const curve = readThemeTiming(area, {
@@ -172,7 +172,6 @@ function layoutMotion(area: Element): LayoutMotion {
   return progress == null ? {kind: 'instant'} : {kind: 'glide', progress};
 }
 
-/** How many keyframes `sampleOver` takes over `durationMs`. */
 function sampleCount(durationMs: number): number {
   return Math.max(2, Math.ceil((durationMs / 1000) * SAMPLES_PER_SECOND) + 1);
 }

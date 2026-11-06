@@ -10,8 +10,10 @@
  *   patterns. In one, the element's own transition carries the token. In the
  *   other, the token is read where the element is. That length is the
  *   element's computed transition. A `calc()` value resolves the same way
- *   for a caller that needs the values. With no stylesheet,
- *   `--duration-exit` reads its declared default where the element is
+ *   for a caller that needs the values. An easing that is not a cubic
+ *   Bézier, `linear()` or `steps()`, plays as the browser plays it in both
+ *   patterns. With no stylesheet, `--duration-exit` reads its declared
+ *   default where the element is
  * @position Browser proof for themeTiming.ts, run by `pnpm test:interaction`;
  *   jsdom resolves no `calc()`
  */
@@ -162,6 +164,32 @@ test('both patterns play the same easing, a calc() argument included', async ({
   });
   expect(outer.ownAt).toHaveLength(2);
   expect(outer.tokensAt).toEqual(outer.ownAt);
+});
+
+test('an easing that is not a cubic Bézier plays as the browser plays it, in both patterns', async ({
+  page,
+}) => {
+  await open(page);
+  // The eased progress at a quarter and three quarters of the length.
+  for (const [easing, expected] of [
+    ['linear(0, 0.8 50%, 1)', [0.4, 0.9]],
+    ['steps(3, jump-end)', [0, 2 / 3]],
+  ] as const) {
+    const {outer, nested} = await readBoth(page, {
+      theme: {'--ease-standard': easing},
+    });
+    for (const at of [
+      outer.ownAt,
+      outer.tokensAt,
+      nested.ownAt,
+      nested.tokensAt,
+    ]) {
+      expect(at, easing).toHaveLength(2);
+      at.forEach((value, i) =>
+        expect(value, easing).toBeCloseTo(expected[i], 6),
+      );
+    }
+  }
 });
 
 test('a duration that is not a positive length gives no curve in either pattern', async ({

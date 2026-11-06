@@ -6,7 +6,8 @@
  *   written inline, real Chromium and WebKit (the interaction projects: a
  *   phone with a coarse pointer) plus a fine-pointer describe
  * @output Proof of which elements glide after a reported size change, by how
- *   much, and on one shared start and the theme's move curve. It checks that
+ *   much, and on one shared start and the theme's move curve. That curve may
+ *   be a `linear()` or `steps()` easing. It checks that
  *   the glide never passes the area or scrolls it, and that nothing moves
  *   without a handle. It checks Reduce Motion by pointer, and the edge reveal:
  *   a block-end and an inline-edge reveal and conceal, and the two-state form.
@@ -299,7 +300,19 @@ function expectOnCurve(
   points: readonly [number, number, number, number],
   ms: number,
 ) {
-  const ease = cubicBezier([...points] as [number, number, number, number]);
+  expectOnEase(
+    curve,
+    cubicBezier([...points] as [number, number, number, number]),
+    ms,
+  );
+}
+
+/** Every keyframe sits on `ease` over `ms`, from the first one's offset. */
+function expectOnEase(
+  curve: {t: number; y: number}[],
+  ease: (x: number) => number,
+  ms: number,
+) {
   const from = curve[0].y;
   // The glide moves the row: a curve read as all zeros proves nothing.
   expect(curve.length).toBeGreaterThan(2);
@@ -2370,6 +2383,34 @@ test.describe('spec:AST-105 FR2–FR4', () => {
         await page.evaluate(() => window.curveOf('#a')),
         theme.points,
         theme.ms,
+      );
+    });
+  }
+
+  for (const theme of [
+    {
+      easing: 'linear(0, 0.8 50%, 1)',
+      // Two straight runs: to 0.8 at half the time, then on to 1.
+      ease: (x: number) => (x < 0.5 ? 1.6 * x : 0.8 + 0.4 * (x - 0.5)),
+    },
+    {
+      easing: 'steps(4, jump-end)',
+      ease: (x: number) => Math.floor(4 * x) / 4,
+    },
+  ]) {
+    test(`a theme whose --ease-move is ${theme.easing}: the glide plays it as the browser plays it (FR4)`, async ({
+      page,
+    }) => {
+      // The motion scale's easing option writes such an easing.
+      await open(page, PAGE, `#area { --ease-move: ${theme.easing}; }`);
+      await change(page);
+      const motions = await page.evaluate(() => window.motionOf('#a'));
+      expect(motions, 'the content after the change glides').toHaveLength(1);
+      expect(motions[0].duration).toBeCloseTo(310, 3);
+      expectOnEase(
+        await page.evaluate(() => window.curveOf('#a')),
+        theme.ease,
+        310,
       );
     });
   }
