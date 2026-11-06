@@ -77,6 +77,9 @@ hover.
   until its fade completes, so a brush out and back in reads as one hover.
 - **Pointer-specific.** Keyboard focus reveals immediately with no dwell. Coarse
   pointers and touch are not gated; they reveal or keep the content visible.
+- **Group hand-off.** Within a group of triggers, a pointer that moves from one
+  open trigger to the next shows the next at once; the entry delay applies to
+  the first open only (`architecture:interaction-modality` INV11).
 - **Default on; stated opt-out.** The delay and guard are on by default. A
   caller may shorten or remove them only for a stated use case, through the
   surface's documented option.
@@ -85,32 +88,35 @@ hover.
   hover-opened menus and flyouts, `useTooltip` and `useHoverCard` (`delay`,
   `hideDelay`) for tooltips and hover cards, and `useContainerReveal`
   (`hoverDelay`, with the exit fade on the `--duration-fast` token) for
-  container reveals. A new hover-to-display surface reuses one of these.
+  container reveals. Each takes its timing from the hover recognizer's intent
+  (`architecture:interaction-modality` INV11). A new hover-to-display surface
+  reuses one of these.
 
 Inventory of hover-to-display surfaces and their defaults:
 
-| Surface                                                                     | Entry delay                     | Exit guard                                   | Conforms                                            |
-| --------------------------------------------------------------------------- | ------------------------------- | -------------------------------------------- | --------------------------------------------------- |
-| `Tooltip` (`useTooltip`)                                                    | `delay` on                      | `hideDelay`, else the hover bridge           | yes                                                 |
-| `HoverCard` (`useHoverCard`)                                                | `delay` on                      | `hideDelay` on                               | yes                                                 |
-| `DropdownMenu` submenu (`useMenuHover`)                                     | `showDelay` on                  | `hideDelay` on                               | yes                                                 |
-| `TopNavMegaMenu` (`useMenuHover`)                                           | `delay` on                      | `hideDelay` on                               | yes                                                 |
-| `TopNavHeading` menu (`useMenuHover`)                                       | `showDelay` set to none         | `hideDelay` on                               | no: entry delay removed without a recorded use case |
-| `SideNavHeading` collapsed flyout (`useMenuHover`)                          | `showDelay` set to none         | `hideDelay` on                               | no: entry delay removed without a recorded use case |
-| `SideNavItem` collapsed flyout (`useMenuHover`)                             | `showDelay` on                  | `hideDelay` on                               | yes                                                 |
-| `useContainerReveal` (`Thumbnail`, `TreeList` rows, Markdown heading links) | `hoverDelay`, off unless passed | exit fade with deferred `position` reset, on | partial: exit guard on, entry delay opt-in          |
+| Surface                                                                     | Entry delay                     | Exit guard                                   | Conforms                                     |
+| --------------------------------------------------------------------------- | ------------------------------- | -------------------------------------------- | -------------------------------------------- |
+| `Tooltip` (`useTooltip`)                                                    | `delay` on                      | `hideDelay`, else the hover bridge           | yes                                          |
+| `HoverCard` (`useHoverCard`)                                                | `delay` on                      | `hideDelay` on                               | yes                                          |
+| `DropdownMenu` submenu (`useMenuHover`)                                     | `showDelay` on                  | `hideDelay` on                               | yes                                          |
+| `TopNavMegaMenu` (`useMenuHover`)                                           | `delay` on                      | `hideDelay` on                               | yes                                          |
+| `TopNavHeading` menu (`useMenuHover`)                                       | `showDelay` set to none         | `hideDelay` on                               | no: first open has no entry delay (gap, FR5) |
+| `SideNavHeading` collapsed flyout (`useMenuHover`)                          | `showDelay` set to none         | `hideDelay` on                               | no: first open has no entry delay (gap, FR5) |
+| `SideNavItem` collapsed flyout (`useMenuHover`)                             | `showDelay` on                  | `hideDelay` on                               | yes                                          |
+| `useContainerReveal` (`Thumbnail`, `TreeList` rows, Markdown heading links) | `hoverDelay`, off unless passed | exit fade with deferred `position` reset, on | partial: exit guard on, entry delay opt-in   |
 
 A surface listed as not conforming is a gap for its owner to close or to justify
 with a recorded use case; this record does not change its shipped behavior.
 
 ### Verification
 
-| Contract | Verification                                                                           | Representative states                                  | Failure signal                                             |
-| -------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------ | ---------------------------------------------------------- |
-| DEC-1    | Hook unit tests with fake timers: a hover shorter than the entry delay renders nothing | brush in and out under the delay; dwell past the delay | content rendered or state updated before the delay elapses |
-| DEC-1    | Hook unit tests: leaving and re-entering within the exit guard keeps the content       | brush out and back in; leave past the guard            | content unmounted or faded out during the guard            |
-| DEC-1    | Keyboard and coarse-pointer tests                                                      | focus-within; coarse pointer                           | any dwell before a focus reveal; touch content hidden      |
-| DEC-1    | Inventory review on a new or changed hover-to-display surface                          | each surface above                                     | a surface with no entry delay and no recorded use case     |
+| Contract | Verification                                                                           | Representative states                                         | Failure signal                                                  |
+| -------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------- | --------------------------------------------------------------- |
+| DEC-1    | Hook unit tests with fake timers: a hover shorter than the entry delay renders nothing | brush in and out under the delay; dwell past the delay        | content rendered or state updated before the delay elapses      |
+| DEC-1    | Hook unit tests: leaving and re-entering within the exit guard keeps the content       | brush out and back in; leave past the guard                   | content unmounted or faded out during the guard                 |
+| DEC-1    | Keyboard and coarse-pointer tests                                                      | focus-within; coarse pointer                                  | any dwell before a focus reveal; touch content hidden           |
+| DEC-1    | Hover recognizer group tests                                                           | move from one open trigger to the next in a group; first open | the next trigger waits the entry delay; the first open skips it |
+| DEC-1    | Inventory review on a new or changed hover-to-display surface                          | each surface above                                            | a surface with no entry delay and no recorded use case          |
 
 ## Accessibility intent
 
@@ -145,14 +151,18 @@ is decided:
 ### DEC-1 — Every hover-to-display interaction is debounced
 
 **Reference:** `design:motion/DEC-1`
-**Decider:** `cixzhang`, `2026-10-11`
+**Decider:** `cixzhang`, `2026-10-11`; the `delay` and `hideDelay` options, `2026-11-06`
 
 Every hover-to-display interaction requires a small delay to prevent brush-over
 eager rendering and updates, and an exit guard so the content does not flicker
 out. The delay exists to prevent users brushing the interface from causing janky
 rerenders while they move their pointer; it is input handling, not motion
 taste. Keyboard focus reveals immediately and coarse pointers are not gated.
-Defaults are on; a caller opts out only for a stated use case. Removing a
+Defaults are on; a caller opts out only for a stated use case. Hover surfaces
+expose the wait as `delay` and the exit guard as `hideDelay` (milliseconds), as
+Tooltip, HoverCard and TopNavMenu already do. Within a group of triggers, a
+pointer moving from one open trigger to the next shows the next at once
+(`architecture:interaction-modality` INV11). Removing a
 surface's default delay is rejected inside this decision: it trades a pointer
 guard for no benefit to keyboard or touch users, who already see the content at
 once.
