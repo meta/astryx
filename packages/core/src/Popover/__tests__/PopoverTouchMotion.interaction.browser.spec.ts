@@ -277,6 +277,9 @@ const LONG_MOTIONS =
 /** Where each rendering window starts, ms after its motion starts. */
 const WINDOW_START_MS = 400;
 
+/** The shortest rendering window the proof judges, ms: about 18 frames. */
+const MIN_WINDOW_MS = 300;
+
 /** The blocked-thread proof's growth: 600 ms at a constant speed. */
 const STEADY_GROWTH =
   '[popover]:has([role="dialog"]) { --duration-medium-min: 600ms; --ease-entrance: linear; }';
@@ -724,6 +727,11 @@ test('the presentation and the dismissal do no Layout or Paint per frame', async
       entry => entry.written >= action && entry.written < end,
     );
     const from = Math.max(base + WINDOW_START_MS, measured?.drawn ?? 0);
+    // A late setup leaves too short a window to judge, so it fails by name.
+    expect(
+      end - from,
+      `${name}: the hit areas drew ${Math.round(from - base)} ms in, too late to leave a window`,
+    ).toBeGreaterThanOrEqual(MIN_WINDOW_MS);
     const during = countBetween(trace, from, end);
     // On failure, every rendering event of the window, in ms after its
     // animation's start.
