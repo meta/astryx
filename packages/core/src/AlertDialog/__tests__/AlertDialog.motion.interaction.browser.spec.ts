@@ -8,7 +8,8 @@
  *   They cover UIKit's look on the theme's dialog entrance and exit, the
  *   viewport start and taps during either transition. They also cover frames
  *   through a blocked main thread, reduced motion, and a mouse's theme
- *   entrance
+ *   entrance. They also cover a toast the alert's action raises: it stays
+ *   live, and it enters once
  * @position Motion lane of AlertDialog, beside the touch-tracking spec. Run
  *   with `pnpm test:interaction AlertDialog`.
  */
@@ -773,6 +774,71 @@ test.describe('under a finger', () => {
         page.evaluate(() => (window as unknown as {__order: string[]}).__order),
       )
       .toEqual(['undo', 'close']);
+  });
+
+  test('a toast the alert raises enters once: repeated alerts move it in and out, and it starts no transition (component:Toast FR12)', async ({
+    page,
+  }) => {
+    await openStory(page, storybook(), 'core-alertdialog--alert-over-a-toast');
+    const driver = await touchDriver(page);
+    const dialog = page.getByRole('alertdialog', {name: 'Delete item?'});
+    const row = page.locator('[data-toast-id]');
+    // Records each transition or animation that starts on the toast's row or
+    // card.
+    await page.evaluate(() => {
+      const starts: string[] = [];
+      (window as unknown as {__starts: string[]}).__starts = starts;
+      const onStart = (event: Event) => {
+        const {target} = event;
+        if (!(target instanceof Element)) {
+          return;
+        }
+        const part = target.matches('[data-toast-id]')
+          ? 'row'
+          : target.matches('[data-toast-id] .astryx-toast')
+            ? 'card'
+            : null;
+        if (part == null) {
+          return;
+        }
+        const property =
+          event instanceof TransitionEvent
+            ? event.propertyName
+            : (event as AnimationEvent).animationName;
+        starts.push(`${part} ${property}`);
+      };
+      document.addEventListener('transitionrun', onStart, true);
+      document.addEventListener('animationstart', onStart, true);
+    });
+    const takeStarts = async () =>
+      page.evaluate(() => {
+        const starts = (window as unknown as {__starts: string[]}).__starts;
+        return starts.splice(0, starts.length);
+      });
+    for (let cycle = 1; cycle <= 3; cycle += 1) {
+      await driver.tap(
+        await centerOf(page.getByRole('button', {name: 'Delete item'})),
+      );
+      await waitForRest(dialog);
+      await driver.tap(
+        await centerOf(dialog.getByRole('button', {name: 'Delete'})),
+      );
+      await expect(dialog).toBeHidden();
+      await waitForRest(row);
+      const starts = await takeStarts();
+      if (cycle === 1) {
+        // The recorder sees the first entrance, so the empty lists below
+        // count.
+        expect(starts).toEqual(
+          expect.arrayContaining(['row grid-template-rows', 'card opacity']),
+        );
+      } else {
+        // The alert moved the toast in and out, and its action updated the
+        // toast in place. Nothing started again.
+        expect(starts).toEqual([]);
+      }
+    }
+    await expect(row).toHaveCount(1);
   });
 
   test('while the alert fades out its content is inert: focus leaves the actions, Tab cannot reach them, and focus returns to the opener', async ({
