@@ -689,13 +689,17 @@ function exportOriginsOf(file, read) {
         let origin = null;
         if (node.source) {
           const target = resolveModuleOrPackage(node.source.value, file);
-          // A module still being read has only part of its map, so one name
-          // from it is followed on its own.
-          origin = !target
-            ? null
-            : read.reading.has(`${read.types ? 'type' : 'value'}\0${target}`)
-              ? moduleExportOrigin(target, local, new Set(), {types})
-              : (originsOf(target).get(local) ?? null);
+          if (target) {
+            const result = exportOriginsOf(target, read);
+            low = Math.min(low, result.low);
+            // A map that depends on a module still being read is partial, so
+            // a name missing from it is followed on its own.
+            origin =
+              result.origins.get(local) ??
+              (result.low < Infinity
+                ? moduleExportOrigin(target, local, new Set(), {types})
+                : null);
+          }
         } else {
           origin = bindingOrigin(ast, file, local, new Set(), types);
         }

@@ -332,6 +332,21 @@ describe('moduleExportOrigins', () => {
     expect(origins.get('z')).toEqual({file: path.join(dir, 'c.ts'), name: 'z'});
   });
 
+  it('agrees when a named re-export reaches back into an open cycle', () => {
+    const write = (name, text) => fs.writeFileSync(path.join(dir, name), text);
+    write('leaf.ts', 'export const leafValue = 1;\n');
+    write('mid.ts', "export * from './outer';\n");
+    const outer = path.join(dir, 'outer.ts');
+    fs.writeFileSync(
+      outer,
+      "export {leafValue as fromRoot} from './mid';\nexport * from './leaf';\n",
+    );
+    expect(moduleExportOrigins(outer).get('fromRoot')).toEqual({
+      file: path.join(dir, 'leaf.ts'),
+      name: 'leafValue',
+    });
+  });
+
   it('agrees through a cycle closed by a named re-export', () => {
     const write = (name, text) => fs.writeFileSync(path.join(dir, name), text);
     write('leaf.ts', 'export const leafValue = 1;\n');
