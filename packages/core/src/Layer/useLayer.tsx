@@ -30,7 +30,7 @@ import type {StyleXStyles} from '@stylexjs/stylex';
 import {createPortal} from 'react-dom';
 import {LayerContentBoundary} from './layerScopedContext';
 import {layerClickBoundary} from './layerClickBoundary';
-import {addAnchorName, removeAnchorName} from './anchorName';
+import {addAnchorName, readAnchorNames, removeAnchorName} from './anchorName';
 import {currentGesture, currentGestureHasClicked} from './gestureCounter';
 import {resolveLayerPortalTarget} from './layerHost';
 import {layerTextReset} from './layerTextReset.stylex';
@@ -519,6 +519,44 @@ function exitAnimations(layer: HTMLElement | null): Animation[] {
         animation.playState === 'running' &&
         animation.effect?.getComputedTiming().endTime !== Infinity,
     );
+}
+
+function toSeconds(time: string): number {
+  const value = Number.parseFloat(time);
+  if (Number.isNaN(value)) {
+    return 0;
+  }
+  return time.endsWith('ms') ? value / 1000 : value;
+}
+
+/**
+ * Whether `layer` stays in view after the browser hides it. Only a transition
+ * of its own `display` or `overlay`, run as a discrete step, keeps a hidden
+ * popover in view, until the transition ends. This reads computed style only,
+ * so it forces no layout. It reads the open style, so it misses a transition
+ * that only the closed style declares.
+ */
+function staysInViewAfterHide(layer: HTMLElement): boolean {
+  const style = getComputedStyle(layer);
+  const list = (value: string | undefined) =>
+    (value ?? '').split(',').map(part => part.trim());
+  const properties = list(style.transitionProperty);
+  const behaviors = list(style.transitionBehavior);
+  const durations = list(style.transitionDuration).map(toSeconds);
+  const delays = list(style.transitionDelay).map(toSeconds);
+  // Shorter lists repeat to match the property list.
+  return properties.some((property, index) => {
+    const behavior = behaviors[index % behaviors.length];
+    const duration = durations[index % durations.length];
+    const delay = delays[index % delays.length];
+    return (
+      (property === 'display' ||
+        property === 'overlay' ||
+        property === 'all') &&
+      behavior === 'allow-discrete' &&
+      duration + delay > 0
+    );
+  });
 }
 
 /**
@@ -1196,6 +1234,11 @@ function useLayerImplementation(
   // during the exit keeps the name, and so does a later exit.
   const releaseAnchor = useCallback(
     (layer: HTMLElement | null) => {
+      // The hide dropped the name already, so no animation needs a read.
+      const holder = triggerRef.current;
+      if (holder != null && !readAnchorNames(holder).includes(anchorId)) {
+        return;
+      }
       const exit = {};
       exitRef.current = exit;
       const release = () => {
@@ -1613,14 +1656,33 @@ function useLayerImplementation(
   // hide starts; the ledger counts the hide from there until the element's
   // own `toggle`, independent of this hook's bindings, which a render inside
   // the hide can replace.
-  const handleBeforeToggle = useCallback((e: Event) => {
-    const toggleEvent = e as ToggleEvent;
-    const el = e.currentTarget as HTMLElement | null;
-    if (toggleEvent.newState === 'closed' && isOpenRef.current && el != null) {
-      observeBrowserHide(el);
-      onCloseStartRef.current?.();
-    }
-  }, []);
+  const handleBeforeToggle = useCallback(
+    (e: Event) => {
+      const toggleEvent = e as ToggleEvent;
+      const el = e.currentTarget as HTMLElement | null;
+      if (toggleEvent.newState !== 'closed' || el == null) {
+        return;
+      }
+      if (isOpenRef.current) {
+        observeBrowserHide(el);
+        onCloseStartRef.current?.();
+      }
+      // A layer that leaves view with the hide drops its trigger's anchor name
+      // here, inside the hide, so the hide's own layout covers the change. A
+      // name dropped after that layout costs one more. A layer that fades out
+      // keeps the name until the fade ends.
+      const trigger = triggerRef.current;
+      if (
+        trigger != null &&
+        readAnchorNames(trigger).includes(anchorId) &&
+        !staysInViewAfterHide(el)
+      ) {
+        exitRef.current = null;
+        removeAnchorName(trigger, anchorId);
+      }
+    },
+    [anchorId],
+  );
 
   const handleToggle = useCallback(
     (e: Event) => {
