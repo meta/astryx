@@ -93,6 +93,28 @@ describe('Avatar', () => {
     }
   });
 
+  it('paints grouped initials in primary text too', () => {
+    // A grouped face skips the lone-avatar colour rule, so the fallback's own
+    // colour is the one it shows.
+    const probe = stylex.create({
+      ink: {color: colorVars['--color-text-primary']},
+    });
+    render(
+      <AvatarGroup>
+        <Avatar name="Ada Lovelace" />
+        <Avatar name="Grace Hopper" />
+      </AvatarGroup>,
+    );
+    const initials = screen.getByText('AL');
+    const classes = (stylex.props(probe.ink).className ?? '')
+      .split(' ')
+      .filter(cls => cls !== '' && !cls.includes('__'));
+    expect(classes.length).toBeGreaterThan(0);
+    for (const cls of classes) {
+      expect(initials.className).toContain(cls);
+    }
+  });
+
   it('puts the avatar box on the element that carries the theme target', () => {
     // T7: `.astryx-avatar` documents a `size` visual prop, so the width and
     // height that prop selects on must live on the targeted element — a theme
