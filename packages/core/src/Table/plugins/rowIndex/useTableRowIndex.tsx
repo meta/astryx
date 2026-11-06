@@ -21,22 +21,20 @@ import type {TableColumn, TablePlugin} from '../../types';
 /**
  * Configuration for {@link useTableRowIndex}.
  *
- * Table gives each body row its position, so the plugin numbers rows without
- * the data. `data` and `getRowKey` are a fallback for an index cell that
- * renders outside Table's body rows.
+ * Without `data`, the plugin numbers each body row from the position Table
+ * gives it. With `data`, numbers follow that array, as before.
  */
 export interface UseTableRowIndexConfig<T extends Record<string, unknown>> {
   /**
-   * The data array the table renders (after sort, filter and pagination).
-   * Only an index cell rendered outside Table's body rows uses it.
+   * Optional: the array whose order the numbers follow. Omit it to number
+   * rows from the positions Table gives them.
    */
   data?: T[];
   /**
-   * Optional key extractor returning a **unique** string per row, for the
-   * `data` fallback. When provided, the fallback matches rows by the returned
-   * string (stable across new object identities); otherwise by reference
-   * identity. For a stable plugin identity across renders, memoize this with
-   * `useCallback`.
+   * Optional key extractor returning a **unique** string per row, used with
+   * `data`. When provided, rows match `data` by the returned string (stable
+   * across new object identities); otherwise by reference identity. For a
+   * stable plugin identity across renders, memoize this with `useCallback`.
    */
   getRowKey?: (item: T) => string;
   /** Header label for the index column. @default '#' */
@@ -73,12 +71,11 @@ export function useTableRowIndex<T extends Record<string, unknown>>(
 ): TablePlugin<T> {
   const {data, getRowKey, label = '#', startFrom = 1} = config;
 
-  // The fallback lookup for an index cell outside Table's body rows. Keyed by
-  // getRowKey when provided (stable across new object identities), otherwise
-  // by object reference.
+  // The lookup into a caller's `data`. Keyed by getRowKey when provided
+  // (stable across new object identities), otherwise by object reference.
   const lookup = useMemo(() => {
     if (data == null) {
-      return () => undefined;
+      return null;
     }
     const map = new Map<unknown, number>();
     for (let i = 0; i < data.length; i++) {
@@ -97,7 +94,7 @@ export function useTableRowIndex<T extends Record<string, unknown>>(
     return {
       rowModel: 'flat',
       transformBodyCell(props, column, item, _columnIndex, _columns, context) {
-        if (column.key === INDEX_COLUMN_KEY && context != null) {
+        if (lookup == null && column.key === INDEX_COLUMN_KEY && context) {
           positions.set(item, context.logicalIndex);
         }
         return props;
@@ -110,7 +107,7 @@ export function useTableRowIndex<T extends Record<string, unknown>>(
           align: 'end',
           resizable: false,
           renderCell: (item: T) => {
-            const idx = positions.get(item) ?? lookup(item);
+            const idx = lookup == null ? positions.get(item) : lookup(item);
             if (idx == null) {
               return null;
             }

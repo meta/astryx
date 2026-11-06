@@ -49,6 +49,25 @@ function ContextHarness({rows = data}: {rows?: Row[]}) {
 }
 
 describe('useTableRowIndex', () => {
+  it('numbers from a passed data array, not from row positions', () => {
+    // The table shows Bob and Carol; the caller's data orders the numbers.
+    function Subset() {
+      const rowIndex = useTableRowIndex<Row>({data});
+      return (
+        <Table
+          data={[data[1], data[2]]}
+          columns={columns}
+          idKey="id"
+          plugins={{rowIndex}}
+        />
+      );
+    }
+    render(<Subset />);
+    const rows = screen.getAllByRole('row');
+    expect(within(rows[1]).getByText('2')).toBeInTheDocument();
+    expect(within(rows[2]).getByText('3')).toBeInTheDocument();
+  });
+
   it('numbers rows from the row context without data, and renumbers after a re-sort', () => {
     const {rerender} = render(<ContextHarness />);
     let rows = screen.getAllByRole('row');

@@ -31,9 +31,9 @@ export function runPluginTransform<R>(plugin: object, transform: () => R): R {
 }
 
 /**
- * A read after the transform returned (from a callback the transform made)
- * is not tracked in time. A row that does not re-render keeps its old
- * context, so the read can return a stale index or count.
+ * Tracking sees only reads made during the transform. A row that does not
+ * re-render keeps its old context, so a later read can return a stale index
+ * or count.
  */
 function warnIfLate(plugin: object, field: string): void {
   if (transformingPlugin !== plugin) {
