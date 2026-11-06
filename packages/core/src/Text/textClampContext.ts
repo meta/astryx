@@ -14,4 +14,8 @@
 
 import {createLayerScopedContext} from '../Layer/layerScopedContext';
 
-export const TextClampContext = createLayerScopedContext(false);
+export const TextClampContext = createLayerScopedContext(
+  'TextClampContext',
+  1,
+  false,
+);

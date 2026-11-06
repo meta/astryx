@@ -51,6 +51,27 @@ describe('contexts shared by a swizzled copy and the package', () => {
     expect(screen.getByTestId('probe').textContent).toBe('true');
   });
 
+  it("the package's English context resolves a copy's English", async () => {
+    const pkg = await freshInstance(
+      async () => import('../i18n/InternationalizationContext'),
+    );
+    const copy = await freshInstance(
+      async () => import('../i18n/englishFallback'),
+    );
+    // A copied component registers the English it names when it loads.
+    copy.registerEnglishFallback({'@astryx.test.copyOnly': 'Copied English'});
+    function CopiedConsumer() {
+      const {translate} = use(pkg.InternationalizationContext);
+      return (
+        <span data-testid="probe">
+          {translate('@astryx.test.copyOnly', undefined)}
+        </span>
+      );
+    }
+    render(<CopiedConsumer />);
+    expect(screen.getByTestId('probe').textContent).toBe('Copied English');
+  });
+
   it("the package's layer boundary resets a copy's layer-scoped context", async () => {
     const pkg = await freshInstance(async () => import('./layerScopedContext'));
     const copy = await freshInstance(
