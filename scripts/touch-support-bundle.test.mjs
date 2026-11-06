@@ -13,7 +13,8 @@
  *   carries only the gesture code its touch components import; two components
  *   that import the touch module share one copy per page; only the internal
  *   `internal/touch` entry reaches it, and no consumer doc or component
- *   `import()` does
+ *   `import()` does; the names that entry gives Lab are not in the root
+ *   entry
  * @position Node test over source, so it needs no build. Its build files
  *   live under the repository's `node_modules/.cache`, never the system temp
  *   directory, whose listing esbuild would read for every build
@@ -100,6 +101,56 @@ function outputsOf(entries) {
   );
 }
 
+/** The names a build of `entry` exports, read from esbuild's metafile. */
+function exportsOf(entry) {
+  const result = esbuild.buildSync({...BUILD_OPTIONS, entryPoints: [entry]});
+  return Object.values(result.metafile.outputs).flatMap(
+    output => output.exports ?? [],
+  );
+}
+
+/**
+ * What the internal entry gives Lab components, none of it public API. Lab's
+ * refresh pull reads the pan, its hook, the motion engine, its motion math and
+ * companion curves, the scroll view's spring and the motion-role parsers.
+ * Other Lab components read the UIKit gesture table, the touch presentation
+ * and its query, and an element's direction. Lab's NavigationStack reads the
+ * screen-edge pan, the spring solver, the motion resolver, UIKit's
+ * navigation table and its four navigation springs. It also reads the focus
+ * helpers that follow the last input. Lab components that watch a finger's
+ * scroll read the finger-scroll watch.
+ */
+const LAB_ONLY_NAMES = [
+  'PanGestureRecognizer',
+  'useGestureRecognizer',
+  'useFingerScroll',
+  'createMotionEngine',
+  'cubicBezier',
+  'mapProgress',
+  'parseCssEasing',
+  'parseMotionRoleValue',
+  'rubberBand',
+  'rubberBandInverse',
+  'rubberBandSlope',
+  'scroll',
+  'isRtlElement',
+  'UIKIT_GESTURES',
+  'useTouchPresentation',
+  'TOUCH_QUERY',
+  'ScreenEdgePanGestureRecognizer',
+  'resolveMotion',
+  'solveSpring',
+  'toSpring',
+  'navigation',
+  'NAVIGATION_PUSH_SPRING',
+  'NAVIGATION_POP_SPRING',
+  'NAVIGATION_INTERACTIVE_POP_FINISH_SPRING',
+  'NAVIGATION_BAR_ELEMENTS_SPRING',
+  'focusForLastInput',
+  'isFocusLost',
+  'useInteractionModalityTracking',
+];
+
 /** The inputs matching `pattern` that put bytes in `bytes`. */
 function bytesOf(bytes, pattern = PRIMITIVE_INPUT) {
   return Object.entries(bytes).filter(
@@ -138,8 +189,12 @@ function filesUnder(dir, pattern) {
  * that reaches it, with a comment naming the gesture.
  */
 const GESTURE_USERS = new Set([
-  // AlertDialog: its actions' press, tracked across both for every pointer.
+  // AlertDialog: its actions' press, tracked across both for a finger and a
+  // pen under the touch presentation.
   'AlertDialog',
+  // ButtonGroup: a finger's or a pen's press, tracked across its buttons
+  // under the touch presentation.
+  'ButtonGroup',
   // Through AlertDialog: Tokenizer's bottom sheet confirms with an alert, and
   // PowerSearch and Table's filtering render a Tokenizer. Both also reach
   // TimeInput's wheels: PowerSearch's edit popover and Table's filtering.
@@ -178,6 +233,15 @@ const GESTURE_USERS = new Set([
   'SideNav',
   'TimeInput',
   'TopNav',
+  // Toast: its swipe's claim, a one-way pan whose first move decides.
+  'Toast',
+  // The public pan, which the root's createPanGesture shares.
+  'hooks: usePanGesture',
+  // The snap-point drag, which moves an element on that pan.
+  'hooks: useDragToSnapPoints',
+  // Snap paging: the pager, under a finger and on a trackpad swipe. Carousel
+  // imports none of it.
+  'SnapPaging',
 ]);
 
 /** Public imports that carry no gesture code, whatever the list above says. */
@@ -359,6 +423,22 @@ describe('the touch module in bundles', () => {
     }
   });
 
+  it('is absent from a component that holds its layer (Layer/inputHold)', () => {
+    // A component in the root entry may hold its layer's input statically
+    // (a popover's presentation): the hold brings no gesture code with it.
+    const holder = entryWith(
+      'Holder.ts',
+      `import {holdInput} from ${JSON.stringify(
+        path.join(CORE_SRC, 'Layer/inputHold.ts'),
+      )};
+export const Holder = holdInput;
+`,
+    );
+    for (const bytes of outputsOf([holder])) {
+      expect(bytesOf(bytes)).toEqual([]);
+    }
+  });
+
   it('is one copy that two components importing it share', () => {
     const component = name =>
       entryWith(
@@ -386,6 +466,17 @@ describe('the touch module internals', () => {
       'node_modules',
     );
   });
+
+  it('give Lab names that the public entry does not export', () => {
+    const internal = new Set(
+      exportsOf(path.join(CORE_SRC, 'internal/touch.ts')),
+    );
+    const root = new Set(exportsOf(path.join(CORE_SRC, 'index.ts')));
+    // The root build reads its exports: a public component is among them.
+    expect(root.has('Button')).toBe(true);
+    expect(LAB_ONLY_NAMES.filter(name => !internal.has(name))).toEqual([]);
+    expect(LAB_ONLY_NAMES.filter(name => root.has(name))).toEqual([]);
+  }, 120_000);
 
   it('have no entry in the exports map beside the internal touch entry', () => {
     const {exports} = JSON.parse(

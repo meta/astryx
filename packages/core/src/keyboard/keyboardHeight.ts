@@ -18,6 +18,7 @@
 
 import {armClickGuard} from '../utils/clickGuard';
 import {subscribeInput} from '../utils/inputStream';
+import {isNode} from '../utils/nodeType';
 import {layoutViewportHeight} from '../utils/layoutViewport';
 import {caretAt} from '../utils/selectionLock';
 
@@ -97,12 +98,6 @@ interface KeyboardStore {
 
 const stores = new WeakMap<Window, KeyboardStore>();
 
-// A window's capture phase also hears its document's events. A window's own
-// event has no node as its target.
-export function isNodeTarget(target: EventTarget | null): boolean {
-  return target != null && typeof (target as Node).nodeType === 'number';
-}
-
 function storeOf(win: Window): KeyboardStore {
   let store = stores.get(win);
   if (store == null) {
@@ -134,9 +129,10 @@ function attach(win: Window, store: KeyboardStore): () => void {
   };
   viewport?.addEventListener('resize', onViewport);
   viewport?.addEventListener('scroll', onViewport);
-  // Only the window's own resize reports.
+  // Only the window's own resize reports: a window's own event has no node as
+  // its target.
   const stopResize = subscribeInput(win, 'resize', event => {
-    if (!isNodeTarget(event.target)) {
+    if (!isNode(event.target)) {
       onViewport(event);
     }
   });
@@ -363,7 +359,7 @@ export function refuseFocusReveal(
     // runs before the browser's own focus step. The window's own blur moves
     // no focus inside the document.
     const stop = subscribeInput(view, 'blur', event => {
-      if (isNodeTarget(event.target)) {
+      if (isNode(event.target)) {
         listener(event);
       }
     });

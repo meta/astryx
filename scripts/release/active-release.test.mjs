@@ -14,6 +14,12 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {afterEach, describe, expect, it} from 'vitest';
 import {
+  createRepository,
+  importCommits,
+  workingTreeFiles,
+} from '../lib/git-fixture.mjs';
+import {isValidatedPreviousReleaseMergeBack} from './changeset-coverage.mjs';
+import {
   buildMarker,
   buildPlan,
   canaryEligibility,
@@ -22,6 +28,7 @@ import {
   mergeBackEntries,
   nextPlannedVersion,
   validateReleaseDiff,
+  validateHistoricalReleaseMergeBack,
   validateReleaseMergeBack,
   validateReleaseState,
   writeAuthority,
@@ -85,12 +92,16 @@ function cutFixture(version = '0.6.5') {
     path.join(root, '.changeset/in-cut.md'),
     "---\n'@astryxdesign/core': patch\n---\n\n[fix] Included\n@person\n",
   );
-  git(root, 'init', '-q');
-  git(root, 'config', 'user.name', 'Release Test');
-  git(root, 'config', 'user.email', 'release@example.com');
-  git(root, 'add', '.');
-  git(root, 'commit', '-qm', 'cut');
-  return {...state, cutSha: git(root, 'rev-parse', 'HEAD')};
+  const {cut} = createRepository(root, [
+    {
+      ref: 'refs/heads/main',
+      name: 'cut',
+      message: 'cut',
+      snapshot: true,
+      files: workingTreeFiles(root),
+    },
+  ]);
+  return {...state, cutSha: cut};
 }
 
 function validate(state, overrides = {}) {
@@ -198,13 +209,16 @@ describe('one branch per release lifecycle', () => {
     ).toThrow(
       /main declares 0\.6\.5 at the cut|release refresh cannot change version/,
     );
-    git(root, 'commit', '-qm', 'later', '--allow-empty');
+    const {later} = importCommits(root, [
+      {
+        ref: 'refs/heads/main',
+        name: 'later',
+        parent: 'refs/heads/main',
+        message: 'later',
+      },
+    ]);
     expect(() =>
-      writeAuthority(
-        root,
-        {...values, 'cut-sha': git(root, 'rev-parse', 'HEAD')},
-        true,
-      ),
+      writeAuthority(root, {...values, 'cut-sha': later}, true),
     ).toThrow('release refresh cannot change cutSha');
   });
 
@@ -769,6 +783,109 @@ describe('published release merge-back (FR50)', () => {
         expect(text).not.toContain('--base origin/main');
       },
     );
+  });
+
+  it('replays a closed trusted merge-back against its immutable tag', () => {
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'astryx-historical-merge-back-'),
+    );
+    roots.push(root);
+    const write = (file, text) => {
+      fs.mkdirSync(path.dirname(path.join(root, file)), {recursive: true});
+      fs.writeFileSync(path.join(root, file), text);
+    };
+    git(root, 'init', '-q', '-b', 'main');
+    git(root, 'config', 'user.name', 'Release Test');
+    git(root, 'config', 'user.email', 'release@example.com');
+    write('pnpm-workspace.yaml', "packages:\n  - 'packages/*'\n");
+    write(
+      '.changeset/config.json',
+      JSON.stringify({fixed: [['@astryxdesign/core']]}),
+    );
+    write(
+      '.changeset/frozen.md',
+      "---\n'@astryxdesign/core': patch\n---\n\n[fix] Included\n\n@person\n",
+    );
+    write(
+      'packages/core/package.json',
+      JSON.stringify({name: '@astryxdesign/core', version: '0.7.8'}),
+    );
+    write('packages/core/CHANGELOG.md', '# Changelog\n');
+    git(root, 'add', '.');
+    git(root, 'commit', '-qm', 'cut');
+    const cutSha = git(root, 'rev-parse', 'HEAD');
+
+    const plan = buildPlan({
+      root,
+      version: '0.7.8',
+      branch: 'release/v0.7.8',
+      cutSha,
+    });
+    const marker = buildMarker(plan);
+    git(root, 'checkout', '-qb', 'release/v0.7.8');
+    write('.release/plan.json', JSON.stringify(plan));
+    write('.release/active.json', JSON.stringify(marker));
+    fs.rmSync(path.join(root, '.changeset/frozen.md'));
+    write('packages/core/CHANGELOG.md', '# Changelog\n\n## 0.7.8\n');
+    git(root, 'add', '-A');
+    git(root, 'commit', '-qm', 'version packages');
+    git(root, 'tag', 'v0.7.8');
+    git(root, 'tag', 'v0.7.7');
+
+    git(root, 'checkout', '-q', 'main');
+    fs.rmSync(path.join(root, '.changeset/frozen.md'));
+    write('packages/core/CHANGELOG.md', '# Changelog\n\n## 0.7.8\n');
+    git(root, 'add', '-A');
+    git(
+      root,
+      'commit',
+      '-qm',
+      'chore: merge v0.7.8 release outputs to main (#1)',
+    );
+    const head = git(root, 'rev-parse', 'HEAD');
+
+    git(root, 'checkout', '-qb', 'invalid-merge-back', `${head}^`);
+    fs.rmSync(path.join(root, '.changeset/frozen.md'));
+    write('packages/core/CHANGELOG.md', '# Changelog\n\n## 0.7.8\n');
+    write('packages/core/src/Unexpected.tsx', 'export const unexpected = true;\n');
+    git(root, 'add', '-A');
+    git(
+      root,
+      'commit',
+      '-qm',
+      'chore: merge v0.7.8 release outputs to main (#2)',
+    );
+    const invalidHead = git(root, 'rev-parse', 'HEAD');
+    const subject = 'chore: merge v0.7.8 release outputs to main (#1)';
+
+    // The replay must use the requested historical head, not the current HEAD.
+    expect(
+      validateHistoricalReleaseMergeBack(root, {
+        head,
+        releaseRef: 'v0.7.8',
+      }),
+    ).toEqual([]);
+    expect(
+      isValidatedPreviousReleaseMergeBack(root, {
+        sha: head,
+        subject,
+        releasedRef: 'v0.7.8',
+      }),
+    ).toBe(true);
+    expect(
+      isValidatedPreviousReleaseMergeBack(root, {
+        sha: invalidHead,
+        subject: 'chore: merge v0.7.8 release outputs to main (#2)',
+        releasedRef: 'v0.7.8',
+      }),
+    ).toBe(false);
+    expect(
+      isValidatedPreviousReleaseMergeBack(root, {
+        sha: head,
+        subject: 'chore: merge v0.7.7 release outputs to main (#1)',
+        releasedRef: 'v0.7.7',
+      }),
+    ).toBe(false);
   });
 
   it('rejects missing frozen deletions and exact-output drift', () => {

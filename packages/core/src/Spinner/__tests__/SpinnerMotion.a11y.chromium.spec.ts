@@ -60,6 +60,59 @@ async function openSizes(page: Page) {
   return spinners;
 }
 
+/**
+ * Records the mount announcement from before the story loads. A Spinner that
+ * first renders before the page has loaded stays silent. Otherwise the polite
+ * live region shows the label, then empties 2 s later. Call it before
+ * `openSizes`.
+ */
+async function recordAnnouncement(page: Page) {
+  await page.addInitScript(() => {
+    const w = window as unknown as {
+      __spinnerAnnouncement?: 'shown' | 'ended';
+      __spinnerIsSilent?: boolean;
+    };
+    new MutationObserver(() => {
+      // The page's state when the first Spinner mounts decides whether it
+      // announces.
+      if (
+        w.__spinnerIsSilent == null &&
+        document.querySelector('.astryx-spinner') != null
+      ) {
+        w.__spinnerIsSilent = document.readyState !== 'complete';
+      }
+      const region = document.querySelector(
+        '[data-astryx-live-region="polite"]',
+      );
+      if (region == null) {
+        return;
+      }
+      if (region.textContent !== '') {
+        w.__spinnerAnnouncement = 'shown';
+      } else if (w.__spinnerAnnouncement === 'shown') {
+        w.__spinnerAnnouncement = 'ended';
+      }
+    }).observe(document, {childList: true, characterData: true, subtree: true});
+  });
+}
+
+/** Resolves once the mount announcement has ended, or was never made. */
+async function waitForAnnouncementToEnd(page: Page, timeout?: number) {
+  await page.waitForFunction(
+    () => {
+      const w = window as unknown as {
+        __spinnerAnnouncement?: string;
+        __spinnerIsSilent?: boolean;
+      };
+      return (
+        w.__spinnerAnnouncement === 'ended' || w.__spinnerIsSilent === true
+      );
+    },
+    undefined,
+    {timeout},
+  );
+}
+
 interface Box {
   x: number;
   y: number;
@@ -132,6 +185,25 @@ async function checksums(
   }
 }
 
+/**
+ * The time of one turn, in ms, and the turns in one iteration. One iteration
+ * holds many turns, so the period is the iteration's duration divided by the
+ * turns its last keyframe makes.
+ */
+async function turnTiming(
+  rotor: ReturnType<Page['locator']>,
+): Promise<{period: number; turns: number}> {
+  return rotor.evaluate(element => {
+    const [animation] = element.getAnimations();
+    const effect = animation.effect as KeyframeEffect;
+    const frames = effect.getKeyframes();
+    const end = String(frames[frames.length - 1].transform);
+    const degrees = Number(/rotate\((-?[\d.]+)deg\)/.exec(end)?.[1]);
+    const turns = degrees / 360;
+    return {period: Number(effect.getTiming().duration) / turns, turns};
+  });
+}
+
 /** The rotor's angle in degrees, from 0 up to 360. */
 function angleOf(transform: string): number {
   return (parseTransform(transform).rotate + 360) % 360;
@@ -182,15 +254,26 @@ test('the ring keeps turning while a script holds the main thread', async ({
 });
 
 test('turning paints nothing on the main thread', async ({page}) => {
+  await recordAnnouncement(page);
   await openSizes(page);
   await page.waitForTimeout(200);
-  // Four rings turn for a second. A paint animation repaints every frame; a
-  // transform animation paints none.
+  // Clearing the mount announcement repaints the shared live region, not the
+  // rotor. The trace starts once that announcement ended, or the Spinner
+  // stayed silent. A check for empty regions alone also passes before the
+  // announcement.
+  await waitForAnnouncementToEnd(page);
+  // Four rings turn for two seconds. A paint animation repaints every frame;
+  // a transform animation paints none. React listens for
+  // `animationiteration`, so Chromium recalculates style a few times at each
+  // iteration boundary. One turn per iteration gives about 14 recalculations
+  // here. With many turns in one iteration, no boundary occurs, and the bound
+  // allows only unrelated single recalculations.
   const trace = await traceRendering(page, async () =>
-    page.waitForTimeout(1000),
+    page.waitForTimeout(2000),
   );
   expect(trace.paint).toBe(0);
   expect(trace.layout).toBe(0);
+  expect(trace.styleRecalc).toBeLessThanOrEqual(2);
 });
 
 test('the arc turns clockwise at a constant rate, once per period', async ({
@@ -198,26 +281,27 @@ test('the arc turns clockwise at a constant rate, once per period', async ({
 }) => {
   const spinners = await openSizes(page);
   const rotor = spinners.first().locator('span[aria-hidden="true"]');
-  const samples = await rotor.evaluate(element => {
+  const {period, turns} = await turnTiming(rotor);
+  const samples = await rotor.evaluate((element, periodMs) => {
     const [animation] = element.getAnimations();
     animation.pause();
-    const duration = Number(animation.effect?.getTiming().duration);
     const out: {t: number; transform: string}[] = [];
     for (let i = 0; i <= 8; i += 1) {
       // Inside the period at both ends: 0, P/8 … P − 1 ms.
-      const t = i === 8 ? duration - 1 : (duration * i) / 8;
+      const t = i === 8 ? periodMs - 1 : (periodMs * i) / 8;
       animation.currentTime = t;
       out.push({t, transform: getComputedStyle(element).transform});
     }
     return {
-      duration,
+      duration: Number(animation.effect?.getTiming().duration),
       cssDuration: getComputedStyle(element).animationDuration,
       easing: animation.effect?.getTiming().easing,
       out,
     };
-  });
+  }, period);
   // The period is the `--duration-slow-min` token the theme resolves.
-  expect(samples.duration).toBeGreaterThan(0);
+  expect(period).toBeGreaterThan(0);
+  expect(Number.isInteger(turns) && turns > 1).toBe(true);
   expect(Number.parseFloat(samples.cssDuration) * 1000).toBeCloseTo(
     samples.duration,
     3,
@@ -225,7 +309,7 @@ test('the arc turns clockwise at a constant rate, once per period', async ({
   expect(samples.easing).toBe('linear');
   // Angle = 360 × t / P, clockwise (positive in CSS), at every sample.
   for (const {t, transform} of samples.out) {
-    const expected = ((360 * t) / samples.duration) % 360;
+    const expected = ((360 * t) / period) % 360;
     const actual = angleOf(transform);
     const error = Math.min(
       Math.abs(actual - expected),
@@ -241,28 +325,27 @@ test('reduced motion slows the ring to 3 s per turn, as before, still clockwise 
   await page.emulateMedia({reducedMotion: 'reduce'});
   const spinners = await openSizes(page);
   const rotor = spinners.first().locator('span[aria-hidden="true"]');
-  const samples = await rotor.evaluate(element => {
+  const {period} = await turnTiming(rotor);
+  const samples = await rotor.evaluate((element, periodMs) => {
     const [animation] = element.getAnimations();
     animation.pause();
-    const duration = Number(animation.effect?.getTiming().duration);
     const out: {t: number; transform: string}[] = [];
     for (let i = 0; i < 4; i += 1) {
-      const t = (duration * i) / 4;
+      const t = (periodMs * i) / 4;
       animation.currentTime = t;
       out.push({t, transform: getComputedStyle(element).transform});
     }
     return {
-      duration,
       iterations: animation.effect?.getTiming().iterations,
       out,
     };
-  });
+  }, period);
   // The reduced-motion period this component had before the change: slowed,
   // never frozen (`Spinner.tsx`, `animationDuration` under the media query).
-  expect(samples.duration).toBe(3000);
+  expect(period).toBeCloseTo(3000, 6);
   expect(samples.iterations).toBe(Infinity);
   for (const {t, transform} of samples.out) {
-    const expected = (360 * t) / samples.duration;
+    const expected = (360 * t) / period;
     const actual = angleOf(transform);
     const error = Math.min(
       Math.abs(actual - expected),
@@ -298,9 +381,7 @@ test('storyboard: one revolution, frame by frame @storyboard', async ({
   const spinners = await openSizes(page);
   const xl = spinners.nth(3);
   const rotor = xl.locator('span[aria-hidden="true"]');
-  const duration = await rotor.evaluate(element =>
-    Number(element.getAnimations()[0].effect?.getTiming().duration),
-  );
+  const {period: duration} = await turnTiming(rotor);
   const {storyboard} = await animationStoryboard(page, {
     name: 'spinner-ring-cycle',
     clip: xl,

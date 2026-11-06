@@ -817,6 +817,14 @@ describe('BreadcrumbItem menu', () => {
     await user.click(trigger);
     const menu = screen.getByRole('menu', {hidden: true});
     const outside = screen.getByRole('button', {name: 'Outside action'});
+    // The menu takes focus in the frame after it opens. Wait for it: jsdom
+    // does not hide a closed popover, so a later frame could still focus an
+    // item in it, where a browser cannot.
+    await waitFor(() => {
+      expect(menu).toContainElement(
+        document.activeElement as HTMLElement | null,
+      );
+    });
 
     outside.focus();
     expect(outside).toHaveFocus();
@@ -902,6 +910,53 @@ describe('BreadcrumbItem menu', () => {
     expect(
       screen.getByRole('menuitem', {name: 'Delete', hidden: true}),
     ).toHaveFocus();
+  });
+
+  it('closes the whole breadcrumb menu on Tab from a submenu flyout row', async () => {
+    render(
+      <Breadcrumbs>
+        <BreadcrumbItem
+          menu={[
+            {label: 'Rename', onClick: vi.fn()},
+            {
+              label: 'Move to',
+              items: [
+                {label: 'Folder A', onClick: vi.fn()},
+                {label: 'Folder B', onClick: vi.fn()},
+              ],
+            },
+          ]}>
+          Teams
+        </BreadcrumbItem>
+        <BreadcrumbItem isCurrent>Overview</BreadcrumbItem>
+      </Breadcrumbs>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Teams'});
+    trigger.focus();
+    fireEvent.keyDown(trigger, {key: 'ArrowDown'});
+    const submenuTrigger = screen.getByRole('menuitem', {
+      name: /Move to/,
+      hidden: true,
+    });
+    await waitFor(() => {
+      expect(
+        screen.getByRole('menuitem', {name: 'Rename', hidden: true}),
+      ).toHaveFocus();
+    });
+    act(() => submenuTrigger.focus());
+    fireEvent.keyDown(submenuTrigger, {key: 'ArrowRight'});
+    const folderA = await screen.findByRole('menuitem', {
+      name: 'Folder A',
+      hidden: true,
+    });
+    await waitFor(() => expect(folderA).toHaveFocus());
+
+    fireEvent.keyDown(folderA, {key: 'Tab'});
+
+    await waitFor(() =>
+      expect(trigger).toHaveAttribute('aria-expanded', 'false'),
+    );
+    expect(submenuTrigger).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('allows menu together with isCurrent (both aria-current and aria-haspopup)', () => {

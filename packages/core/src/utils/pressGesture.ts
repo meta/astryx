@@ -21,10 +21,15 @@
 // primary pointer, so a mouse, trackpad or Space press on such a device comes
 // here as `buttonDown`: painted at once and faded on release.
 //
+// Only a finger inside a scroller waits. The controller tells the machine
+// which touch waits (`down`'s `delayed`), and a touch that does not wait goes
+// straight to `pressed`. After that the machine is the same.
+//
 // The constants were measured against native apps. The machine knows nothing
 // of the DOM, so {@link pressGestureStep}'s cases are the state diagram.
 
-import {pressConsts} from './interactionOverlay.stylex';
+import {resolveTokenReferences} from '../theme/tokenReferences';
+import {durationDefaults} from '../theme/tokens.stylex';
 
 /**
  * How long a finger must stay put before the surface believes it.
@@ -59,14 +64,16 @@ export const PRESS_SLOP_PX = 10;
 export const PRESS_FLASH_MS = 100;
 
 /**
- * How long the paint takes to leave after a release: UIKit's deselect
- * crossfade. The one number, shared with the stylesheet: the release
- * animation in interactionOverlay.stylex.ts runs on the same constant, so the
- * controller's release clock and the fade cannot drift apart. When the clock
- * runs out, the controller waits for a release animation that still runs,
- * then removes the attribute.
+ * How long the paint takes to leave after a release when no theme sets
+ * `--duration-exit`: that token's default. The release plays the theme's
+ * exit motion tokens, so the controller reads the token on
+ * the pressed element (`pressFadeMs` in pressFeedback.ts) and falls back to
+ * this. When the clock runs out, the controller waits for a release
+ * animation that still runs, then removes the attribute.
  */
-export const PRESS_FADE_MS: number = pressConsts.releaseMs;
+export const PRESS_FADE_MS: number = Number.parseFloat(
+  resolveTokenReferences(durationDefaults)['--duration-exit'],
+);
 
 /**
  * How recently a scroller must have moved for a touch on it to be a BRAKE
@@ -105,7 +112,17 @@ export interface PressGesture {
 }
 
 export type PressEvent =
-  | {kind: 'down'; x: number; y: number}
+  | {
+      kind: 'down';
+      x: number;
+      y: number;
+      /**
+       * Whether this touch waits {@link PRESS_ONSET_MS} before it paints:
+       * a surface inside a scroller. Defaults to
+       * `true`.
+       */
+      delayed?: boolean;
+    }
   /**
    * A mouse button or the Space key went down on the surface. The
    * controller sends this only where the stylesheet has dropped `:active`
@@ -167,6 +184,15 @@ export function pressGestureStep(
   event: PressEvent,
 ): PressStep {
   if (event.kind === 'down') {
+    // A surface with no scroller above it: nothing can turn this touch into a
+    // scroll, so it paints in the frame it lands, as a UIControl highlights.
+    if (event.delayed === false) {
+      return {
+        gesture: {originX: event.x, originY: event.y, phase: 'pressed'},
+        paint: 'on',
+        timer: null,
+      };
+    }
     // A new touch always starts armed and painting nothing, whatever the last
     // gesture ended as. This is the only way out of `dead`.
     return {

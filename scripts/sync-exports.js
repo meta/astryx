@@ -240,6 +240,9 @@ const FILE_MODULE_SUBPATH_EXPORTS = [
   'internal/indicatorPress.stylex',
   'internal/touch',
   'internal/selectable-card',
+  'internal/spinner-rotor',
+  'internal/calendar-system',
+  'internal/dialog-context',
 ];
 
 /**

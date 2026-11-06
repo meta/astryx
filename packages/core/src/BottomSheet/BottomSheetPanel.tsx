@@ -26,6 +26,7 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useSyncExternalStore,
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
@@ -60,6 +61,7 @@ import {
   paddingStyles,
   spacingStepToToken,
 } from '../Layout/padding.stylex';
+import {subscribeInput} from '../utils/inputStream';
 import type {SpacingStep} from '../utils/types';
 import {
   isValidSnapPoint,
@@ -82,8 +84,20 @@ const HEIGHT_BUDGETS = {
 export type BottomSheetHeight = keyof typeof HEIGHT_BUDGETS;
 export type {BottomSheetSnapPoint};
 
-// SYNC: must match OVERSCROLL_MAX in useSheetGestures.ts.
-const OVERSCROLL_PADDING = 48;
+// The reserve: how far the sheet's surface reaches below the screen, so a
+// pull past the top never shows the page under it.
+// SYNC: OVERSCROLL_MAX in useSheetGestures.ts must not exceed MIN_RESERVE.
+const MIN_RESERVE = 48;
+// A finger can pull past the top by at most the viewport's height. The rubber
+// band over a sheet as tall as the viewport then shows 35.5% of it.
+const RESERVE_VIEWPORT_SHARE = 0.4;
+
+function sheetReserve(viewportHeight: number): number {
+  return Math.max(
+    MIN_RESERVE,
+    Math.ceil(viewportHeight * RESERVE_VIEWPORT_SHARE),
+  );
+}
 const MOBILE_KEYBOARD_BOTTOM_CLEARANCE = 48;
 const TRANSITION_BACKSTOP_BUFFER_MS = 50;
 // The floating handle bar's height. The bar is out of flow, so this is not
@@ -92,12 +106,36 @@ const TRANSITION_BACKSTOP_BUFFER_MS = 50;
 // padding already provides.
 const HANDLE_BAR_HEIGHT = spacingVars['--spacing-6'];
 
+const BLOCK_SIZE_PROPERTIES = [
+  'height',
+  'minHeight',
+  'maxHeight',
+  'blockSize',
+  'minBlockSize',
+  'maxBlockSize',
+] as const;
+
+/** Whether StyleX styles hold any style: they can nest in arrays. */
+function hasStyles(xstyle: unknown): boolean {
+  return Array.isArray(xstyle)
+    ? xstyle.some(hasStyles)
+    : xstyle != null && typeof xstyle === 'object';
+}
+
 // Measure the viewport that the height budgets use. They are `dvh`, which
 // the virtual keyboard does not shrink, so `visualViewport` would differ by
 // the keyboard's height. `useMobileKeyboard` handles the keyboard and does
 // not change the detents.
 function layoutViewportHeight(): number {
   return typeof window === 'undefined' ? 0 : window.innerHeight;
+}
+
+function subscribeToResize(onChange: () => void): () => void {
+  return subscribeInput(window, 'resize', onChange);
+}
+
+function subscribeToNothing(): () => void {
+  return () => {};
 }
 
 /**
@@ -159,8 +197,8 @@ const styles = stylex.create({
     boxShadow: shadowVars['--shadow-high'],
     outline: 'none',
     overflow: 'hidden',
-    paddingBlockEnd: `calc(env(safe-area-inset-bottom, 0px) + ${OVERSCROLL_PADDING}px)`,
-    marginBlockEnd: `${-OVERSCROLL_PADDING}px`,
+    paddingBlockEnd: `calc(env(safe-area-inset-bottom, 0px) + var(--_sheet-reserve, ${MIN_RESERVE}px))`,
+    marginBlockEnd: `calc(-1 * var(--_sheet-reserve, ${MIN_RESERVE}px))`,
     // Under reduced motion no transform runs. On a coarse primary pointer the
     // entrance is an opacity cross-fade of at most 200 ms. A fine pointer gets
     // the change at once (the 0.01s collapse).
@@ -340,11 +378,11 @@ const styles = stylex.create({
     },
   }),
   budget: {
-    height: `calc(var(--_sheet-budget) + ${OVERSCROLL_PADDING}px)`,
+    height: `calc(var(--_sheet-budget) + var(--_sheet-reserve, ${MIN_RESERVE}px))`,
   },
   hugHeight: {
     height: 'fit-content',
-    maxHeight: `calc(${HEIGHT_BUDGETS.hug} + ${OVERSCROLL_PADDING}px)`,
+    maxHeight: `calc(${HEIGHT_BUDGETS.hug} + var(--_sheet-reserve, ${MIN_RESERVE}px))`,
   },
 });
 
@@ -649,6 +687,24 @@ export function BottomSheetPanel({
 
   // A caller's height owns the element's height: the drag never writes it.
   const consumerHeight = style?.height;
+  // StyleX styles and a class name can size the sheet too. Their rules are
+  // only class names here, so any of them counts as a size.
+  const isSizedByCaller =
+    BLOCK_SIZE_PROPERTIES.some(property => style?.[property] != null) ||
+    hasStyles(xstyle) ||
+    (className != null && className !== '');
+  // Only a finger stretches the sheet past MIN_RESERVE, so a device with no
+  // touch pointer keeps the smallest reserve. So does a sheet the caller
+  // sizes, which nothing extends by the reserve; the stretch stops at it.
+  const hasTouchPointer = useMediaQuery('(any-pointer: coarse)');
+  const tracksViewport = isPresented && hasTouchPointer && !isSizedByCaller;
+  const viewportHeight = useSyncExternalStore(
+    tracksViewport ? subscribeToResize : subscribeToNothing,
+    () => (tracksViewport ? layoutViewportHeight() : 0),
+    () => 0,
+  );
+  const reserve =
+    viewportHeight > 0 ? sheetReserve(viewportHeight) : MIN_RESERVE;
   const {
     contentProps,
     handleProps,
@@ -668,7 +724,7 @@ export function BottomSheetPanel({
     isOpen: isInteractive,
     isOpenRequested: isOpenRequested ?? isInteractive,
     canDismiss: isSwipeDismissAllowed,
-    offscreenBlockEndInset: OVERSCROLL_PADDING,
+    offscreenBlockEndInset: reserve,
     onDismiss,
     snapHeights,
     onTravelStart: () => {
@@ -931,6 +987,7 @@ export function BottomSheetPanel({
         className,
         {
           ['--_sheet-budget' as string]: budget,
+          ['--_sheet-reserve' as string]: `${reserve}px`,
           ...(isInteractive
             ? gestureStyle
             : isRetained || isClosing

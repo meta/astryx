@@ -2,7 +2,8 @@
 
 A gesture recognizer system with UIKit's semantics, for the touch
 presentations of Astryx core components. Components import it from
-`../gestures`; nothing here is exported from the package.
+`../gestures`. The package exports only `createPanGesture` and its types from
+here.
 
 UIKit is the reference throughout: the same recognizer states, the same
 conflict rules, the same thresholds (from `../motion/uikit/gestures.ts`, each
@@ -74,7 +75,10 @@ function Sheet() {
   while a finger that landed inside it is down, until its `scrollend` (the
   momentum is still the finger's), or, where the browser fires none (mobile
   Safari before 26), until its scroll events go quiet. Pass a ref, or the
-  document for the page. Outside React, `watchFingerScrolls(host, scroller)` and
+  document for the page. `options.onEnd` runs each time such a scroll ends,
+  once the reader says `false`; unmounting does not call it. It is
+  re-exported from `@astryxdesign/core/internal/touch` for Lab components
+  that watch a finger's scroll. Outside React, `watchFingerScrolls(host, scroller)` and
   `isFingerScroll(host, scroller)` from `fingerScroll.ts` do the same; that
   module adds passive scroll listeners only while something is watched.
 
@@ -91,7 +95,7 @@ Once a drag has claimed its finger, a second finger never breaks it.
 | -------------------------------- | ---------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `TapGestureRecognizer`           | `UITapGestureRecognizer`           | discrete   | `numberOfTapsRequired`, `numberOfTouchesRequired`; fails past 45 px of travel, on extra fingers, a hold over 1.5 s, a late or far next tap                                                                         |
 | `LongPressGestureRecognizer`     | `UILongPressGestureRecognizer`     | continuous | `minimumPressDuration` 500 ms, `allowableMovement` 10 px (a distance, not per axis), `numberOfTapsRequired`; a zero duration begins on the touch itself (a selection tracker over a group of actions)              |
-| `PanGestureRecognizer`           | `UIPanGestureRecognizer`           | continuous | min/max touches, `direction` (axis or one-way) with `axisRatio`, `lockAxis`, `scrollEdge`; `translation()`, `totalTranslation()`, `velocity()`, `scrollVelocity()`                                                 |
+| `PanGestureRecognizer`           | `UIPanGestureRecognizer`           | continuous | min/max touches, `direction` (axis or one-way) with `axisRatio`, `lockAxis`, `scrollEdge`, `firstMoveDecides`; `translation()`, `totalTranslation()`, `velocity()`, `scrollVelocity()`                             |
 | `SwipeGestureRecognizer`         | `UISwipeGestureRecognizer`         | discrete   | recognized during the motion; one or more directions, `numberOfTouchesRequired`; 50 px along, at most 50 px across, 500 ms                                                                                         |
 | `PinchGestureRecognizer`         | `UIPinchGestureRecognizer`         | continuous | `scale` (settable, to re-base it), `velocity` in scale per second, `focalPoint()`                                                                                                                                  |
 | `ScreenEdgePanGestureRecognizer` | `UIScreenEdgePanGestureRecognizer` | continuous | `edges`: `leading` / `trailing`, resolved against the view's writing direction; attached to an edge zone the view lies within; fails as soon as the touch lands outside every requested edge band; a finger's only |
@@ -118,7 +122,8 @@ The pan reads its numbers the way `UIPanGestureRecognizer` does, as measured
 in the UIKit lab:
 
 - It begins once the centroid has moved `hysteresis` (10 px) along either
-  axis, not as a distance.
+  axis, not as a distance. A function gives each press its own threshold,
+  read from the press's first touch when it lands.
 - `translation()` leaves out the travel the threshold took: a slow drag reads
   zero when the pan begins, and a step that overshoots keeps only the
   overshoot. A dragged surface does not jump. `totalTranslation()` is the
@@ -358,11 +363,13 @@ presses nothing.
 - **Claim at the begin.** A pan claims its touch only as it begins, at
   UIKit's 10 pt (`spec:AST-094` FR19), before WebKit commits a slow drag to
   a scroll at 10–11 px; a drag the browser took first stays the browser's
-  (FR14). One exception: a `scrollEdge` pan cancels its finger's moves from
+  (FR14). Two exceptions: a `scrollEdge` pan cancels its finger's moves from
   the first one while every scroller under the finger is at its edge and
   the finger pulls away from it, the pan's own way (the browser could only
-  rubber-band there); it still begins at 10 pt. It holds only while that is
-  the one finger on the screen: with a second down anywhere, the moves stay
+  rubber-band there); it still begins at 10 pt. A `firstMoveDecides` pan, a
+  toast's swipe (`component:Toast` FR4), holds its finger from a first move
+  its own way and fails on any other first move. Each holds only while that
+  is the one finger on the screen: with a second down anywhere, the moves stay
   the browser's, for its pinch (FR10).
   Measured in Mobile Safari (iOS 26.2): `touchmove` arrives from the first
   pixel; on a scrollable element WebKit commits to scrolling at 10 to 11 px
@@ -434,11 +441,15 @@ subscriber cancels it: the host cancels `touchend` and `contextmenu` there
 while a claiming participant is attached, never a `touchstart` or a
 `touchmove`, and the click guard (`../utils/clickGuard.ts`) keeps a
 cancelling `click` while it is armed, and from the menu press model's first
-arm on. A blocking `touchmove` sits on a claiming
+arm on. A layer's input hold (`../Layer/inputHold.ts`) cancels pointer and
+mouse events, clicks, `touchmove` and `touchend` there while a layer is held,
+never a `touchstart`. A blocking `touchmove` sits on a claiming
 element and on a claimed touch's target, on the document while an element a
 claiming recognizer lives in is moving (Touches on moving elements), or on
-the window only while a page hold is held, so a page of pressables blocks
-no scroll.
+the window only while a page hold or a layer's input hold is held, so a page
+of pressables blocks no scroll. The stream records the type of the latest
+pointer event it delivers (`getLastPointerType`); the input hold reads it as
+a layer opens.
 
 ### Holding the page still
 
@@ -498,7 +509,10 @@ tick over a 40 px delta. A trackpad's precise deltas, a third of their legacy
 A wheel gesture drives a pan as a contact moving with the content, along the
 pan's own axis, and only once every scroller between the pointer and the
 pan's element is at its edge that way, decided at the gesture's first wheel:
-a wheel the pan does not take is never prevented. A watcher
+a wheel the pan does not take is never prevented. The pan's own element is
+the exception on the axis that its derived `touch-action` keeps from the
+browser: a pan on its own scroller takes that scroller's trackpad scroll, as
+it takes a finger's pan there, and a scroller inside it still goes first. A watcher
 (`claimsTouches: false`) never takes one, and a gesture whose first wheel
 another handler already prevented, or that cannot be cancelled, stays the
 page's. A scroll-edge pan (a pull to
@@ -525,7 +539,11 @@ it never moves it; when the fingers carry on instead, their moves absorb
 what the pan showed past their travel, or short of it, so it never steps
 back and ends on their travel. Fingers that stop release still, once the end
 time passes. In momentum, a reversal, a delta that grows
-against the decay, or a 50 ms pause starts a new gesture. A finger, mouse or
+against the decay, or a 50 ms pause starts a new gesture; a late, coalesced
+trackpad wheel that continues the glide's deceleration (at or below the next
+step, or near the sum of the next steps its stall spans) belongs to the same
+flick. When the next wheel grows instead, it starts a new gesture with the late
+wheel's travel. A finger, mouse or
 pen that comes down ends it, and a wheel claim keeps the page's text
 selection. A gesture a
 recognizer took is latched to it, as a browser latches a scroller: while it

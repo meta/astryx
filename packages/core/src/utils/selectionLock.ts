@@ -28,9 +28,14 @@
 //
 // A mouse never takes the lock, so its released behavior stays (AST-017).
 
-import {containsAlongFlatTree, parentAcrossShadow} from './flatTree';
+import {
+  containsAlongFlatTree,
+  deepActiveElement,
+  parentAcrossShadow,
+} from './flatTree';
 import {subscribeInput} from './inputStream';
 import {isIosWebKit} from './touchQueries';
+import {isElement, isNode} from './nodeType';
 
 /** What a held finger must not start on a control or a cell. */
 const SELECTION_LOCK = [
@@ -616,15 +621,6 @@ function openShadowRootsOf(target: EventTarget | null): ShadowRoot[] {
   return roots;
 }
 
-/** The focused element, inside open shadow roots too. */
-function deepActiveElement(doc: Document | null): Element | null {
-  let active = doc?.activeElement ?? null;
-  while (active?.shadowRoot?.activeElement != null) {
-    active = active.shadowRoot.activeElement;
-  }
-  return active;
-}
-
 /**
  * The selection-lock styles on `set`, refcounted per element; idempotent
  * release.
@@ -684,7 +680,7 @@ function lockStyles(set: ReadonlySet<Element>): () => void {
  */
 function isSelectableControl(node: unknown): node is HTMLInputElement {
   return (
-    node instanceof Element &&
+    isElement(node) &&
     node.localName === 'input' &&
     !TEXT_ENTRY_TYPES.has((node as HTMLInputElement).type)
   );
@@ -692,12 +688,11 @@ function isSelectableControl(node: unknown): node is HTMLInputElement {
 
 /** Text a held finger edits: it places the caret there. */
 function isTextEntry(node: EventTarget | null): boolean {
-  const element =
-    node instanceof Element
-      ? node
-      : node instanceof Node
-        ? node.parentElement
-        : null;
+  const element = isElement(node)
+    ? node
+    : isNode(node)
+      ? node.parentElement
+      : null;
   if (element == null) {
     return false;
   }
@@ -710,8 +705,11 @@ function isTextEntry(node: EventTarget | null): boolean {
   return (element as HTMLElement).isContentEditable;
 }
 
-/** An element's inline style, when it has one (HTML and SVG elements). */
+/**
+ * An element's inline style, when it has one (HTML and SVG elements). It is
+ * checked as an object, so another window's style passes too.
+ */
 function styleOf(element: Element): CSSStyleDeclaration | null {
   const style = (element as Partial<ElementCSSInlineStyle>).style;
-  return style instanceof Object ? style : null;
+  return typeof style === 'object' && style !== null ? style : null;
 }

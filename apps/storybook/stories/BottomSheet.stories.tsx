@@ -590,6 +590,71 @@ export const HugHeight: Story = {
   },
 };
 
+/**
+ * A sheet whose height the caller sets. It keeps a 48 px surface below the
+ * screen, so a pull past the top stretches it at most that far.
+ */
+export const CallerHeight: Story = {
+  name: 'Caller height (500 px)',
+  render: () => {
+    const [isOpen, setIsOpen] = useState(false);
+    return (
+      <>
+        <Button label="Open 500 px sheet" onClick={() => setIsOpen(true)} />
+        <BottomSheet
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          label="Caller height"
+          style={{height: 500}}>
+          <Section padding={4}>
+            <VStack gap={4}>
+              <Heading level={3}>Caller height</Heading>
+              <Text type="supporting" color="secondary">
+                The caller sets this sheet's height to 500 px.
+              </Text>
+              <Button label="Done" onClick={() => setIsOpen(false)} />
+            </VStack>
+          </Section>
+        </BottomSheet>
+      </>
+    );
+  },
+};
+
+const callerHeightStyles = stylex.create({
+  sheet: {height: 500},
+});
+
+export const CallerHeightXstyle: Story = {
+  name: 'Caller height through xstyle (500 px)',
+  render: () => {
+    const [isOpen, setIsOpen] = useState(false);
+    return (
+      <>
+        <Button
+          label="Open 500 px xstyle sheet"
+          onClick={() => setIsOpen(true)}
+        />
+        <BottomSheet
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          label="Caller height through xstyle"
+          xstyle={callerHeightStyles.sheet}>
+          <Section padding={4}>
+            <VStack gap={4}>
+              <Heading level={3}>Caller height through xstyle</Heading>
+              <Text type="supporting" color="secondary">
+                The caller sets this sheet's height to 500 px through xstyle.
+              </Text>
+              <Button label="Done" onClick={() => setIsOpen(false)} />
+            </VStack>
+          </Section>
+        </BottomSheet>
+      </>
+    );
+  },
+};
+
 export const HugHeightWithLongContent: Story = {
   name: 'Hug height — Long content',
   render: () => {
@@ -862,8 +927,8 @@ export const NestedPopover: Story = {
 };
 
 /**
- * A no-scrim sheet with a `data-autofocus` field: focus on open follows the
- * native host, which lands on the panel; the field is not focused.
+ * A no-scrim sheet with a `data-autofocus` field: the field is focused when
+ * the sheet opens, in every browser.
  */
 export const NoScrimAutofocus: Story = {
   name: 'No scrim with a data-autofocus field',
@@ -898,7 +963,7 @@ export const NoScrimAutofocus: Story = {
 
 /**
  * A modal sheet with a `data-autofocus` field (a TextInput with hasAutoFocus):
- * what focus lands on when the sheet opens.
+ * the field is focused when the sheet opens, in every browser.
  */
 export const ModalAutofocus: Story = {
   name: 'Modal with a data-autofocus field',
@@ -978,4 +1043,37 @@ export const ExitFocusControlRemoved: Story = {
 export const ExitFocusControlDisabled: Story = {
   tags: ['!autodocs'],
   render: () => <ExitFocusChangeFixture change="disable" />,
+};
+
+/**
+ * A sheet rendered only while it is open. "Done" removes the sheet while it is
+ * still open; focus returns to "Edit filters" (FR20).
+ */
+export const RenderedWhileOpen: Story = {
+  render: () => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [hasScrim, setHasScrim] = useState(true);
+    return (
+      <VStack gap={2}>
+        <CheckboxInput
+          label="Modal (scrim)"
+          value={hasScrim}
+          onChange={setHasScrim}
+        />
+        <Button label="Edit filters" onClick={() => setIsOpen(true)} />
+        {isOpen && (
+          <BottomSheet
+            isOpen
+            onOpenChange={setIsOpen}
+            hasScrim={hasScrim}
+            label="Filters">
+            <VStack gap={2}>
+              <Text>Removing this sheet while it is open returns focus.</Text>
+              <Button label="Done" onClick={() => setIsOpen(false)} />
+            </VStack>
+          </BottomSheet>
+        )}
+      </VStack>
+    );
+  },
 };

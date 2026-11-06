@@ -42,6 +42,7 @@ import {
   inputWrapperStyles,
 } from '../Field';
 import {useKeepLayerOpenProps} from '../Layer/useLayer';
+import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
 import {InternalInputClearButton} from '../Field/InputClearButton';
 import {Divider} from '../Divider';
 import {Spinner} from '../Spinner';
@@ -79,6 +80,7 @@ import {joinAriaIDs} from '../utils/inputAria';
 import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {devWarn, warnOnce} from '../utils/devWarning';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
+import {useKeyboardHighlight} from '../hooks/useKeyboardHighlight';
 import {useAnnounce} from '../hooks/useAnnounce';
 import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
 import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
@@ -318,10 +320,31 @@ const styles = stylex.create({
     borderRadius: radiusVars['--radius-element'],
   },
 
+  // A panel with a search field, capped as a whole.
+  searchPanel: {
+    display: 'flex',
+    flexDirection: 'column',
+    // No taller than its layer's block-size cap, which folds in the software
+    // keyboard's. The search field's row keeps its height, and the list takes
+    // what is left.
+    maxHeight: stylex.firstThatWorks(
+      `calc(${layerViewportInset.maxBlockSize})`,
+      `calc(${layerViewportInset.maxBlockSizeFallback})`,
+    ),
+  },
+
   // Dropdown container
   dropdown: {
     boxSizing: 'border-box',
-    maxHeight: '300px',
+    // In a search panel, the list shrinks below its content to fit the cap.
+    minHeight: 0,
+    // 300 px, and no taller than its layer's block-size cap, which folds in
+    // the software keyboard's: the list ends above the keyboard with the
+    // layer.
+    maxHeight: stylex.firstThatWorks(
+      `min(300px, ${layerViewportInset.maxBlockSize})`,
+      `min(300px, ${layerViewportInset.maxBlockSizeFallback})`,
+    ),
     overflowY: 'auto',
     padding: spacingVars['--spacing-1'],
   },
@@ -1851,23 +1874,12 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     ),
   });
 
-  const [isKeyboardHighlight, setIsKeyboardHighlight] = useState(
-    () => readModality() === 'keyboard',
-  );
-  const onKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLElement>) => {
-      onComboboxKeyDown(event);
-      setIsKeyboardHighlight(readModality() === 'keyboard');
-    },
-    [onComboboxKeyDown, readModality],
-  );
-  const onItemMouseEnter = useCallback(
-    (...args: Parameters<typeof onComboboxItemMouseEnter>) => {
-      onComboboxItemMouseEnter(...args);
-      setIsKeyboardHighlight(readModality() === 'keyboard');
-    },
-    [onComboboxItemMouseEnter, readModality],
-  );
+  const {isKeyboardHighlight, onKeyDown, onItemMouseEnter} =
+    useKeyboardHighlight(
+      readModality,
+      onComboboxKeyDown,
+      onComboboxItemMouseEnter,
+    );
 
   // The trigger button owns its click so a consumer `onClick`, which lands on
   // the button, composes after the built-in toggle. A press elsewhere in the
@@ -2404,7 +2416,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     surface.activePresentation === 'bottom-sheet' || hasExternalTrigger;
 
   const panelContent = hasSearch ? (
-    <div>
+    <div {...stylex.props(styles.searchPanel)}>
       {renderSearch()}
       <Divider />
       <div {...stylex.props(styles.dropdown)}>

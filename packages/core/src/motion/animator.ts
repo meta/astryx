@@ -4,7 +4,7 @@
  * @file animator.ts
  * @input An element, target values, and a spring, momentum curves (coast.ts)
  *   or any closed-form curve
- * @output Exports `createMotionAnimator`, a compositor animator for
+ * @output Exports `createMotionEngine`, a compositor animator for
  *   translate, rotate, scale and opacity, and its option, handle and
  *   transition types. It reads presentation values and velocities from the
  *   analytic curves. It retargets with the velocity kept, freezes in place on
@@ -153,11 +153,12 @@
  * release (`touchRelease`) and at once elsewhere (DR2, DR3).
  *
  * Roles: every spring and curve the animator plays passes through
- * resolveMotion.ts, which names the motion role it plays (`springs.settle`
- * once `registerSpringsTable()` has run, the Reduce Motion fade's curve,
- * which the animator registers alone). The per-role tables stay internal
+ * resolveMotion.ts, which names the motion role it plays. `springs.settle`
+ * registers as its module loads, and the animator registers the Reduce Motion
+ * fade's curve alone. The per-role tables stay internal
  * (`spec:AST-094` DEC-15), so a role plays its table value: nothing reads a
- * CSS variable or the element's style for it. A spring written inline at the call
+ * role's own CSS variable. Its time scales by the tempo of the element's
+ * theme. A spring written inline at the call
  * site, and a table never registered, play as given; the fade's length is not
  * a role.
  *
@@ -299,9 +300,6 @@ export interface MotionCurve {
   readonly isTransition?: boolean;
 }
 
-/**
- * Options of `createMotionAnimator`.
- */
 /** How `set` puts values in place. */
 export interface SetOptions {
   /**
@@ -317,6 +315,9 @@ export interface SetOptions {
   promote?: boolean;
 }
 
+/**
+ * Options of `createMotionEngine`.
+ */
 export interface AnimatorOptions {
   /**
    * Animates a pseudo-element of the element instead (`'::backdrop'` of a
@@ -811,7 +812,7 @@ export function animatorFor(
   const key = options.pseudoElement ?? '';
   let animator = byPseudo.get(key);
   if (animator == null) {
-    animator = createMotionAnimator(element, options);
+    animator = createMotionEngine(element, options);
     byPseudo.set(key, animator);
   }
   return animator;
@@ -928,7 +929,7 @@ const REDUCED_TRANSITION: SpringTransition = {
  *
  * @example
  * ```
- * const animator = createMotionAnimator(sheet);
+ * const animator = createMotionEngine(sheet);
  * // finger lifts at 1200 px/s heading for the detent at 0 (a component
  * // passes the spring of its motion role):
  * animator.animate({y: 0}, {spring: {response: 0.45, dampingRatio: 0.9}, velocity: {y: 1200}});
@@ -937,7 +938,7 @@ const REDUCED_TRANSITION: SpringTransition = {
  * animator.stop(['y']);
  * ```
  */
-export function createMotionAnimator(
+export function createMotionEngine(
   element: HTMLElement | null,
   options: AnimatorOptions = {},
 ): Animator {
@@ -2729,7 +2730,7 @@ export function createMotionAnimator(
     if (from === to && velocity === 0) {
       return null;
     }
-    // The motion role it plays: its table value (DEC-15).
+    // The motion role it plays, at the tempo of the theme it is in.
     const resolved = resolveMotion(target, spring);
     const curve = solveSpring(toSpring(resolved), {from, to, velocity});
     const duration = Math.min(

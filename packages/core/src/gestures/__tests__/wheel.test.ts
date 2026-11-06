@@ -892,6 +892,34 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     expect(states[0]).toBe('began');
   });
 
+  it('takes the trackpad scroll of a pan on its own scroller, whose derived touch-action keeps that axis from the browser; a scroller inside it still takes the wheel first', () => {
+    const {row, inner} = mount(
+      '<div id="row"><div id="inner"><div id="cell">cell</div></div></div>',
+    );
+    scrollableX(row, {scrollLeft: 0, scrollWidth: 600, clientWidth: 200});
+    const pan = new PanGestureRecognizer({
+      direction: 'horizontal',
+      allowedScrollTypes: ['continuous'],
+    });
+    const states = statesOf(pan);
+    detachers.push(host.attach(row, pan));
+    const cell = document.getElementById('cell') as HTMLElement;
+    // The row scrolls, but a finger's horizontal pan on it is the pan's: so
+    // is the trackpad's.
+    const taken = [0, 16, 32].map(time =>
+      wheel(cell, {trackpad: true, dx: 8, time}),
+    );
+    expect(taken.every(event => event.defaultPrevented)).toBe(true);
+    expect(states[0]).toBe('began');
+    clock.runDue(32 + 300);
+    // A scroller inside the row that can scroll that way takes the wheel.
+    scrollableX(inner, {scrollLeft: 0, scrollWidth: 600, clientWidth: 100});
+    const native = [500, 516].map(time =>
+      wheel(cell, {trackpad: true, dx: 8, time}),
+    );
+    expect(native.some(event => event.defaultPrevented)).toBe(false);
+  });
+
   it("tells a mouse wheel's notches from a trackpad: a pan leaves lines and whole notches to the page and takes a trackpad's scroll (spec:AST-094 FR43, DEC-24)", () => {
     const {smooth} = mount('<div id="smooth"></div>');
     const pan = new PanGestureRecognizer({
@@ -1756,6 +1784,37 @@ describe("a trackpad scroll through the splitter's undecided stretch (spec:AST-0
       expect(ended[0].velocity).toBeCloseTo(-750, 6);
     },
   );
+
+  it("follows a swipe that resumes 100 ms after a flick's glide for all of its travel: six 30 px wheels", () => {
+    const {box, seen} = followed();
+    // The lift is read at the 8 px wheel, and the glide goes on at 7 px.
+    let time = stream(box, [12, 12, 12, 12, 11, 10, 9, 8, 7]);
+    // The fingers come back 100 ms after the glide's last wheel.
+    time += 100 - 16;
+    for (let i = 0; i < 6; i++) {
+      wheel(box, {trackpad: true, dx: 30, time});
+      time += 16;
+    }
+    clock.runDue(time + 500);
+    expect(seen.filter(entry => entry.state === 'began')).toHaveLength(2);
+    const ended = seen.filter(entry => entry.state === 'ended');
+    // All 180 px of the swipe, past the 10 px hysteresis.
+    expect(ended[ended.length - 1].x).toBeCloseTo(-170, 6);
+  });
+
+  it("follows a swipe that resumes after a flick's glide for all of its travel when its first two wheels arrive merged", () => {
+    const {box, seen} = followed();
+    let time = stream(box, [12, 12, 12, 12, 11, 10, 9, 8, 7]);
+    time += 100 - 16;
+    const times = [0, 0.5, 16, 32, 48, 64].map(offset => time + offset);
+    for (const at of times) {
+      wheel(box, {trackpad: true, dx: 30, time: at});
+    }
+    clock.runDue(times[times.length - 1] + 500);
+    expect(seen.filter(entry => entry.state === 'began')).toHaveLength(2);
+    const ended = seen.filter(entry => entry.state === 'ended');
+    expect(ended[ended.length - 1].x).toBeCloseTo(-170, 6);
+  });
 
   it("never moves or releases faster than the fingers when a stall's bunch of shrinking wheels arrives 1 ms apart", () => {
     const {box, seen} = followed();

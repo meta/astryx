@@ -295,6 +295,7 @@ component ButtonGroup(props: ButtonGroupProps)
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component Calendar(props: CalendarProps)
+  prop calendar?: CalendarSystem
   prop dateConstraints?: ReadonlyArray<(date: Date) => boolean>
   prop defaultValue?: ISODateString
   prop focusDate?: ISODateString
@@ -336,7 +337,7 @@ component Carousel(props: CarouselProps)
   prop hasButtons?: boolean = true
   prop hasEdgeFade?: boolean = true
   prop hasLoop?: boolean = false
-  prop hasSnap?: boolean = false
+  prop hasSnap?: boolean | SnapPaging = false
   prop padding?: SpacingStep = undefined (no padding)
   prop ref?: React.Ref<HTMLDivElement>
   prop xstyle?: StyleXStyles
@@ -864,6 +865,7 @@ component ContextMenuSubMenu(props: DropdownMenuSubMenuProps)
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component DateInput(props: DateInputProps)
+  prop calendar?: CalendarSystem = the InternationalizationProvider's calendar, else `'gregory'`
   prop changeAction?: (value: ISODateString | undefined) => void | Promise<void>
   prop containerClassName?: string
   prop containerStyle?: CSSProperties
@@ -899,6 +901,7 @@ component DateInput(props: DateInputProps)
   prop width?: SizeValue
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component DateRangeInput(props: DateRangeInputProps)
+  prop calendar?: CalendarSystem = the InternationalizationProvider's calendar, else `'gregory'`
   prop changeAction?: (value: DateRange | null) => void | Promise<void>
   prop containerClassName?: string
   prop containerStyle?: CSSProperties
@@ -934,6 +937,7 @@ component DateRangeInput(props: DateRangeInputProps)
   prop width?: SizeValue
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component DateTimeInput(props: DateTimeInputProps)
+  prop calendar?: CalendarSystem = the InternationalizationProvider's calendar, else `'gregory'`
   prop changeAction?: (value: ISODateTimeString | undefined) => void | Promise<void>
   prop containerClassName?: string
   prop containerStyle?: CSSProperties
@@ -1046,7 +1050,7 @@ component DropdownMenu(props: DropdownMenuProps)
   prop onClick?: () => void
   prop onOpenChange?: (isOpen: boolean) => void
   prop placement?: LayerPlacement = 'below'
-  prop presentation?: DropdownMenuPresentation = 'popover'
+  prop presentation?: DropdownMenuPresentation
   prop renderTrigger?: (props: DropdownMenuTriggerProps) => ReactNode
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
@@ -1362,6 +1366,7 @@ component InputGroupText(props: InputGroupTextProps)
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component InternationalizationProvider(props: InternationalizationProviderProps)
+  prop calendar?: CalendarSystem
   prop children: ReactNode
   prop dir?: 'ltr' | 'rtl'
   prop locale: Locale
@@ -1453,7 +1458,7 @@ component LayoutPanel(props: LayoutPanelProps)
   prop label?: string
   prop padding?: SpacingStep
   prop ref?: React.Ref<HTMLDivElement>
-  prop resizable?: ResizableProps
+  prop resizable?: ResizableRegion | ResizableProps
   prop role?: AriaRole
   prop width?: SizeValue
   prop xstyle?: StyleXStyles
@@ -1600,7 +1605,7 @@ component MoreMenu(props: MoreMenuProps)
   prop label?: string = 'More options'
   prop onOpenChange?: (isOpen: boolean) => void
   prop placement?: LayerPlacement = 'below'
-  prop presentation?: DropdownMenuPresentation = 'popover'
+  prop presentation?: DropdownMenuPresentation
   prop ref?: React.Ref<HTMLButtonElement>
   prop size?: ButtonSize = 'md'
   prop variant?: ButtonVariant = 'ghost'
@@ -1932,7 +1937,7 @@ component ResizeHandle(props: ResizeHandleProps)
   prop pillPlacement?: PillPlacement = 'auto'
   prop position?: 'inline' | 'overlay' = 'inline'
   prop ref?: React.Ref<HTMLDivElement>
-  prop resizable?: ResizableProps
+  prop resizable?: ResizableRegion | ResizableProps
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component ScrollableArea(props: ScrollableAreaProps)
@@ -2076,7 +2081,7 @@ component SideNav(props: SideNavProps)
   prop handleRef?: React.Ref<SideNavImperativeCollapseHandle> @deprecated
   prop header?: ReactNode
   prop ref?: React.Ref<HTMLElement>
-  prop resizable?: boolean | ResizableConfig = false
+  prop resizable?: boolean | ResizableConfig | ResizableRegion = false
   prop style?: React.CSSProperties
   prop topContent?: ReactNode
   prop xstyle?: StyleXStyles
@@ -2878,7 +2883,7 @@ hook useChatLayoutContext: () => ChatLayoutContextValue | null
 hook useChatNewMessages: ({…}: UseChatNewMessagesOptions) => UseChatNewMessagesReturn
 hook useChatPasteAsToken: ({…}: UseChatPasteAsTokenOptions) => UseChatPasteAsTokenReturn
 hook useChatStreamScroll: ({…}: UseChatStreamScrollOptions) => UseChatStreamScrollReturn
-hook useClickableContainer: ({…}: UseClickableContainerOptions) => ClickableContainerResult
+hook useClickableContainer: (options: UseClickableContainerOptions) => ClickableContainerResult
 hook useClipboard: (options?: UseClipboardOptions) => UseClipboardReturn
 hook useCollapsible: (options: UseCollapsibleOptions) => UseCollapsibleReturn
 hook useCollator: (options?: Intl.CollatorOptions) => Intl.Collator
@@ -2887,6 +2892,7 @@ hook useCommandPaletteContext: () => CommandPaletteContextValue | null
 hook useContainerReveal: (options?: UseContainerRevealOptions) => UseContainerRevealReturn
 hook useDevWarning: (component: string, message: string, condition?: boolean) => void
 hook useDirection: () => 'ltr' | 'rtl'
+hook useDragToSnapPoints: (ref: RefObject<HTMLElement | null>, options: DragToSnapPointsOptions) => UseDragToSnapPointsResult
 hook useDropdownMenuContext: () => DropdownMenuContextValue | null
 hook useEntryAnimation: (preset?: EntryAnimationPreset) => StyleXStyles | null
 hook useFocusTrap: <T extends HTMLElement = HTMLElement>(options: UseFocusTrapOptions) => UseFocusTrapReturn<T>
@@ -2926,6 +2932,7 @@ hook useOutlineFromDOM: (containerRef: React.RefObject<HTMLElement | null>) => O
 hook useOutlineFromMarkdown: <Node extends MarkdownExtensionNode = never>(markdown: string, options?: ParseOutlineFromMarkdownOptions<Node>) => OutlineItem[]
 hook useOverflow: (itemCount: number, options?: UseOverflowOptions) => UseOverflowReturn
 hook useOverlay: ({…}?: UseOverlayOptions) => UseOverlayResult
+hook usePanGesture: (ref: RefObject<Element | null>, options: PanGestureOptions) => void
 hook usePopover: (options?: UsePopoverOptions) => UsePopoverReturn
 hook usePowerSearchConfig: <const D extends ReadonlyArray<FieldDefinition>>(definitions: D, configName?: string) => { config: PowerSearchConfig; applyFilters: <T extends InferData<D>>(filters: ReadonlyArray<PowerSearchFilter>, data: ReadonlyArray<T>) => T[] }
 hook usePressFeedback: () => typeof pressableProps
@@ -2939,6 +2946,7 @@ hook useSelectedItemOffset: ({…}: UseSelectedItemOffsetOptions) => UseSelected
 hook useSideNavCollapse: () => SideNavCollapseState
 hook useSideNavRenderMode: () => SideNavRenderMode
 hook useSize: <T extends string = ElementSize>(sizeProp?: T, defaultSize?: T) => T
+hook useSnapPaging: (options?: SnapPagingOptions) => SnapPaging
 hook useSpeechRecognition: (options?: UseSpeechRecognitionOptions) => UseSpeechRecognitionReturn
 hook useStepperContext: () => StepperContextValue
 hook useStreamingText: (targetText: string, isStreaming: boolean, options?: UseStreamingTextOptions) => string
@@ -2988,8 +2996,10 @@ function composeEventHandlers: <E extends SyntheticEvent>(...handlers: (((event:
 function container: ({…}: ContainerOptions) => readonly [Readonly<{ readonly boxSizing: stylex.StyleXClassNameFor<"boxSizing", "border-box">; readonly paddingInlineStart: stylex.StyleXClassNameFor<"paddingIn … #72b9b91f
 function createAnimator: (element: HTMLElement) => Animator
 function createCodeLanguage: ({…}: CreateCodeLanguageOptions) => CodeLanguage
+function createDragToSnapPoints: (element: HTMLElement, options: DragToSnapPointsOptions) => DragToSnapPoints
 function createISOTimeString: (value: string) => ISOTimeString | null
 function createIncrementalState: <MathEnabled extends boolean = false>() => IncrementalState<MathEnabled>
+function createPanGesture: (element: Element, options: PanGestureOptions) => PanGesture
 function createPowerSearchConfig: <const D extends ReadonlyArray<FieldDefinition>>(definitions: D, configName?: string) => { config: PowerSearchConfig; applyFilters: <T extends InferData<D>>(filters: ReadonlyArray<PowerSearchFilter>, data: ReadonlyArray<T>) => T[] }
 function createStaticSource: <T extends SearchableItem>(items: T[], options?: CreateStaticSourceOptions<T>) => SearchSource<T>
 function dateToISO: (pd: PlainDate) => ISODateString
@@ -3011,7 +3021,7 @@ function formatDisplayTime12h: (time: ISOTimeString | undefined, includeSeconds?
 function formatDisplayTime24h: (time: ISOTimeString | undefined, includeSeconds?: boolean) => string
 function formatHex: (r: number, g: number, b: number) => string
 function formatISOTime: (time: ParsedTime, includeSeconds?: boolean) => ISOTimeString
-function formatSharedDate: (pd: PlainDate, format: SharedDateFormat, locale?: Locale) => string
+function formatSharedDate: (pd: PlainDate, format: SharedDateFormat, locale?: Locale, calendar?: CalendarSystem) => string
 function generateAdaptationCSS: (theme: DefinedTheme, warnings?: string[]) => ThemeCSSOutput
 function generateColumns: <T extends Record<string, unknown>>(data: T[]) => TableColumn<T>[]
 function generateOnMediaCSS: (theme: DefinedTheme, warnings?: string[]) => string
@@ -3179,7 +3189,7 @@ const WIDTH_BREAKPOINT_NAMES: readonly ["sm", "md", "lg", "xl", "2xl"]
 const borderDefaults: { readonly '--border-width': "1px" }
 const borderVars: stylex.VarGroup<Readonly<{ readonly '--border-width': "1px" }>, symbol>
 const colorDefaults: object
-  --color-accent: 'light-dark(#0064E0, #2694FE)'
+  --color-accent: 'light-dark(#0064E0, #0171E3)'
   --color-accent-muted: 'light-dark(#0082FB33, #0082FB3F)'
   --color-on-accent: 'light-dark(#FFFFFF, #FFFFFF)'
   --color-neutral: 'light-dark(rgba(5, 54, 89, 0.1), rgba(223, 226, 229, 0.2))'
@@ -3277,7 +3287,7 @@ const colorDefaults: object
   --color-border-yellow: 'light-dark(#C58600, #B47700)'
   --color-icon-yellow: 'light-dark(#FBC02D, #FFEE58)'
   --color-text-yellow: 'light-dark(#753F07, #FBCE03)'
-const colorVars: stylex.VarGroup<Readonly<{ readonly '--color-accent': "light-dark(#0064E0, #2694FE)"; readonly '--color-accent-muted': "light-dark(#0082FB33, #0082FB3F)"; reado … #a042f923
+const colorVars: stylex.VarGroup<Readonly<{ readonly '--color-accent': "light-dark(#0064E0, #0171E3)"; readonly '--color-accent-muted': "light-dark(#0082FB33, #0082FB3F)"; reado … #9de1262f
 const dataTokenDefaults: object
   --color-data-categorical-blue: 'light-dark(#0171E3, #0171E3)'
   --color-data-categorical-orange: 'light-dark(#EB6E00, #EB6E00)'
@@ -3373,7 +3383,7 @@ const inputStatusBorderStyles: Readonly<{ readonly warning: Readonly<{ readonly 
 const inputStatusFocusStyles: Readonly<{ readonly warning: Readonly<{ readonly borderColor: stylex.StyleXClassNameFor<"borderColor", "var(--color-text-warning)"> }>; readonly error: Readonly … #a9ac1cbc
 const inputStatusFocusWithinStyles: Readonly<{ readonly warning: Readonly<{ readonly borderColor: stylex.StyleXClassNameFor<"borderColor", "var(--color-text-warning)" | "Highlight"> }>; readonly e … #739ff723
 const inputStatusHoverShadowStyles: Readonly<{ readonly warning: Readonly<{ readonly boxShadow: stylex.StyleXClassNameFor<"boxShadow", "none" | { readonly '@media (hover: hover)': stylex.StyleXVar … #de6f47e5
-const inputWrapperStyles: Readonly<{ readonly base: Readonly<{ readonly boxSizing: stylex.StyleXClassNameFor<"boxSizing", "border-box">; readonly position: stylex.StyleXClassNameFor<"pos … #90a96087
+const inputWrapperStyles: Readonly<{ readonly base: Readonly<{ readonly boxSizing: stylex.StyleXClassNameFor<"boxSizing", "border-box">; readonly position: stylex.StyleXClassNameFor<"pos … #ba795170
 const interactionOverlayStyles: Readonly<{ readonly backgroundColor: Readonly<{ readonly backgroundColor: stylex.StyleXClassNameFor<"backgroundColor", "light-dark(#0536590C, #FFFFFF0C)" | "lig … #3522ad34
 const overlayPaddingReset: Readonly<{ readonly reset: Readonly<{ readonly '--container-padding-inline-start': stylex.StyleXClassNameFor<"--container-padding-inline-start", "0px">; readonl … #15cd7287
 const radiusDefaults: object
@@ -3759,6 +3769,7 @@ interface CalendarDay
 interface CalendarHandle
   navigateTo: (date: ISODateString) => void
 type CalendarProps = CalendarSingleProps | CalendarRangeProps (props of Calendar)
+type CalendarSystem = 'gregory' | 'iso8601' | 'buddhist' | 'roc' | 'japanese' | 'persian' | 'indian' | 'hebrew' | 'chinese' | 'dangi' | 'coptic' | 'ethiopic' | 'ethioaa' | 'islamic-c … #85e5f84c
 interface CardProps extends BaseProps<HTMLDivElement> (props of Card)
 type CardVariant = keyof CardVariantMap
 interface CardVariantMap
@@ -3871,6 +3882,7 @@ interface ClickableCardProps extends BaseProps (props of ClickableCard)
 interface ClickableContainerResult
   onClick: (event: MouseEvent<HTMLElement>) => void
   onMouseUp: (event: MouseEvent<HTMLElement>) => void
+  onPointerDown: (event: PointerEvent<HTMLElement>) => void
 interface CodeBlockProps extends BaseProps<HTMLPreElement> (props of CodeBlock)
 type CodeColor = 'primary' | 'secondary' | 'inherit'
 type CodeLanguage
@@ -4203,6 +4215,14 @@ interface DividerVariantMap
   strong: true
   subtle: true
 type DomainTokenName = SyntaxTokenName | DataTokenName
+interface DragToSnapPoints
+  destroy: () => void
+  settleTo: (index: number) => void
+interface DragToSnapPointsOptions
+  axis: 'x' | 'y'
+  flickThreshold?: number
+  onSettle: (index: number) => void
+  snapPoints: ReadonlyArray<number>
 interface DrawerHeaderProps extends BaseProps<HTMLDivElement> (props of DrawerHeader)
 interface DrawerProps extends BaseProps<HTMLDialogElement> (props of Drawer)
 type DropdownMenuButtonProps = Omit<ButtonProps, 'onClick'>
@@ -4545,6 +4565,7 @@ interface IntegerOperatorValue
   units?: string
 type InteractiveRole = 'link' | 'button' | 'inert'
 interface InternationalizationContextValue
+  calendar?: CalendarSystem
   direction: 'ltr' | 'rtl'
   locale: Locale
   messages: MessagesByLocale
@@ -4919,6 +4940,16 @@ interface PaginationVariantMap
   input: true
   none: true
   pages: true
+interface PanGesture
+  destroy: () => void
+interface PanGestureEvent
+  state: PanGestureState
+  translation: { x: number; y: number }
+  velocity: { x: number; y: number }
+interface PanGestureOptions
+  axis?: 'x' | 'y'
+  onPan: (event: PanGestureEvent) => void
+type PanGestureState = 'began' | 'changed' | 'ended' | 'cancelled'
 type ParseOptions<Plugins extends ReadonlyArray<MarkdownPluginEntry> = readonly []> = CommonParseOptions<Plugins> & { math?: false | undefined }
 interface ParseOutlineFromMarkdownOptions<Node extends MarkdownExtensionNode = never>
   isFinal?: boolean
@@ -5272,6 +5303,10 @@ interface SliderSingleProps extends SliderBaseProps
   valueDisplay?: 'tooltip' | 'text' | 'none' = "tooltip"
   width?: SizeValue
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
+interface SnapPaging
+  [snapPagingBrand]: true
+interface SnapPagingOptions
+  pages?: 'view' | 'item' = 'view'
 type SourceRange
   end: number
   start: number
@@ -5781,6 +5816,7 @@ interface UseCalendarConstraintsReturn
   maxDate: PlainDate | null
   minDate: PlainDate | null
 interface UseCalendarDaysOptions
+  calendar?: CalendarSystem = 'gregory'
   hasVariableRowCount?: boolean
   month: number
   weekStartsOn?: DayOfWeek
@@ -5791,6 +5827,7 @@ interface UseCalendarDaysReturn
   totalCells: number
   weeks: CalendarDay[][]
 interface UseCalendarNavigationOptions
+  calendar?: CalendarSystem = 'gregory'
   focusDate?: ISODateString
   initialValue?: ISODateString
   numberOfMonths?: 1 | 2
@@ -5801,6 +5838,7 @@ interface UseCalendarNavigationReturn
   monthYearLabel: string
   navigateMonth: (delta: number, focusedDate?: ISODateString, offset?: number) => void
   pendingFocus: ISODateString | null
+  visibleCalendarMonths: { year: number; month: number }[]
   visibleMonths: PlainDate[]
 interface UseChatComposerTokensOptions
   editableRef: React.RefObject<HTMLDivElement | null>
@@ -5892,6 +5930,8 @@ interface UseContainerRevealOptions
 interface UseContainerRevealReturn
   getContainerProps: (options?: ContainerRevealOptions) => { className?: string; style?: CSSProperties }
   getContentRevealProps: (options?: ContentRevealOptions) => { className?: string; style?: CSSProperties }
+interface UseDragToSnapPointsResult
+  settleTo: (index: number) => void
 interface UseFocusTrapOptions
   isActive: boolean
   onEscape?: () => void
@@ -8264,7 +8304,7 @@ usePowerSearchConfig (.)
 ### Functions
 
 ```text
-function formatFilterValue: (_config: InternalConfig, operatorValue: OperatorValue, filterValue: FilterValue, maxLength: number, t: TranslatorFn, locale: Locale, timezoneID?: string) => string
+function formatFilterValue: (_config: InternalConfig, operatorValue: OperatorValue, filterValue: FilterValue, maxLength: number, t: TranslatorFn, locale: Locale, timezoneID?: string, calendar?: CalendarSystem) => string
 ```
 
 ### Types
@@ -8492,6 +8532,16 @@ SliderBaseProps (.)
 SliderProps (.)
 SliderRangeProps (.)
 SliderSingleProps (.)
+```
+
+## `./SnapPaging`
+
+### Also exported from an earlier entry point
+
+```text
+SnapPaging (.)
+SnapPagingOptions (.)
+useSnapPaging (.)
 ```
 
 ## `./Spinner`
@@ -9073,6 +9123,8 @@ AnnouncePoliteness (.)
 ClickableContainerResult (.)
 ContainerRevealOptions (.)
 ContentRevealOptions (.)
+DragToSnapPoints (.)
+DragToSnapPointsOptions (.)
 EntryAnimationPreset (.)
 Hotkey (.)
 INTERACTIVE_SELECTORS (.)
@@ -9087,6 +9139,10 @@ MenuPressEvent (.)
 MenuPressGesture (.)
 MenuPressPointerType (.)
 MenuPressStep (.)
+PanGesture (.)
+PanGestureEvent (.)
+PanGestureOptions (.)
+PanGestureState (.)
 ScrollAxis (.)
 ScrollAxisState (.)
 ScrollKeyboardAccess (.)
@@ -9103,6 +9159,7 @@ UseClipboardOptions (.)
 UseClipboardReturn (.)
 UseContainerRevealOptions (.)
 UseContainerRevealReturn (.)
+UseDragToSnapPointsResult (.)
 UseFocusTrapOptions (.)
 UseFocusTrapReturn (.)
 UseGridFocusOptions (.)
@@ -9141,6 +9198,7 @@ useClickableContainer (.)
 useClipboard (.)
 useContainerReveal (.)
 useDevWarning (.)
+useDragToSnapPoints (.)
 useEntryAnimation (.)
 useFocusTrap (.)
 useGridFocus (.)
@@ -9157,6 +9215,7 @@ useMediaQuery (.)
 useMenuPress (.)
 useMergedRefs (.)
 useOverflow (.)
+usePanGesture (.)
 usePressFeedback (.)
 useScrollLock (.)
 useScrollOverflow (.)
@@ -9171,6 +9230,7 @@ useTypeahead (.)
 ### Also exported from an earlier entry point
 
 ```text
+CalendarSystem (.)
 Catalog (.)
 InternationalizationContext (.)
 InternationalizationContextValue (.)

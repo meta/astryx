@@ -18,12 +18,13 @@ import {
   afterEach,
   onTestFinished,
 } from 'vitest';
-import {act, render, screen, fireEvent} from '@testing-library/react';
+import {act, cleanup, render, screen, fireEvent} from '@testing-library/react';
 import {Profiler, createRef, useState, type ReactNode} from 'react';
 import {BottomSheet} from './BottomSheet';
 import {BottomSheetEscapeContext} from './bottomSheetEscape';
 import {resetBottomSheetStackForTests} from './bottomSheetStack';
 import {BottomSheetSwitcher} from './BottomSheetSwitcher';
+import {getFocusableElements} from '../hooks/useFocusTrap';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 import {__focusTakeoverCallersForTest} from '../keyboard/keyboardHeight';
 import {__resetRevealsAtReportForTest} from '../keyboard/useMobileKeyboard';
@@ -4370,7 +4371,11 @@ describe('BottomSheet', () => {
         finishSheetExit();
 
         expect(opener).toHaveFocus();
-        expect(focus.mock.calls).toEqual([[{focusVisible: false}]]);
+        // The return reveals nothing: the opener was on screen when the sheet
+        // opened and the page has not moved since.
+        expect(focus.mock.calls).toEqual([
+          [{preventScroll: true, focusVisible: false}],
+        ]);
       });
 
       it('leaves the ring to the browser after a keyboard close', () => {
@@ -4379,7 +4384,7 @@ describe('BottomSheet', () => {
         finishSheetExit();
 
         expect(opener).toHaveFocus();
-        expect(focus.mock.calls).toEqual([[]]);
+        expect(focus.mock.calls).toEqual([[{preventScroll: true}]]);
       });
 
       it('clears a ring the native close already drew before refocusing', () => {
@@ -4407,7 +4412,9 @@ describe('BottomSheet', () => {
         finishSheetExit();
 
         expect(blur).toHaveBeenCalledTimes(1);
-        expect(focus.mock.calls.at(-1)).toEqual([{focusVisible: false}]);
+        expect(focus.mock.calls.at(-1)).toEqual([
+          {preventScroll: true, focusVisible: false},
+        ]);
         expect(blur.mock.invocationCallOrder[0]).toBeLessThan(
           focus.mock.invocationCallOrder.at(-1) ?? 0,
         );
@@ -4445,7 +4452,9 @@ describe('BottomSheet', () => {
         finishSheetExit();
 
         expect(target).toHaveFocus();
-        expect(focus.mock.calls).toEqual([[{focusVisible: false}]]);
+        expect(focus.mock.calls).toEqual([
+          [{preventScroll: true, focusVisible: false}],
+        ]);
       });
     });
   });
@@ -4473,6 +4482,111 @@ describe('BottomSheet', () => {
       expect(document.activeElement).toBe(
         screen.getByRole('textbox', {name: 'Search'}),
       );
+    });
+  });
+
+  describe('data-autofocus eligibility on open (AR4)', () => {
+    function openWith(content: ReactNode, hasScrim = true) {
+      render(
+        <BottomSheet
+          isOpen
+          onOpenChange={() => {}}
+          label="Filters"
+          hasScrim={hasScrim}>
+          {content}
+        </BottomSheet>,
+      );
+    }
+    const own = () => screen.getByRole('textbox', {name: 'Own'});
+
+    it('focuses the field over a control placed before it, modal or not', () => {
+      // Land on the first control, as Firefox's native focusing steps do, so
+      // the test shows that the native landing does not count as placed.
+      const landOnFirstControl = function (this: HTMLElement) {
+        this.setAttribute('open', '');
+        this.querySelector<HTMLElement>('button')?.focus();
+      };
+      HTMLDialogElement.prototype.showModal = vi.fn(landOnFirstControl);
+      HTMLElement.prototype.showPopover = vi.fn(landOnFirstControl);
+      for (const hasScrim of [true, false]) {
+        openWith(
+          <>
+            <button type="button">First action</button>
+            <input data-autofocus aria-label="Own" />
+          </>,
+          hasScrim,
+        );
+        expect(document.activeElement).toBe(own());
+        cleanup();
+      }
+    });
+
+    it('skips a field that belongs to a sheet nested in the content', () => {
+      openWith(
+        <>
+          <dialog>
+            <input data-autofocus aria-label="Nested" />
+          </dialog>
+          <input data-autofocus aria-label="Own" />
+        </>,
+      );
+      expect(document.activeElement).toBe(own());
+    });
+
+    it('skips an inert field', () => {
+      openWith(
+        <>
+          <div inert>
+            <input data-autofocus aria-label="Inert" />
+          </div>
+          <input data-autofocus aria-label="Own" />
+        </>,
+      );
+      expect(document.activeElement).toBe(own());
+    });
+
+    it('skips a field that is not rendered', () => {
+      // jsdom has no layout, so the visibility check reads `hidden` here.
+      const original = Object.getOwnPropertyDescriptor(
+        HTMLElement.prototype,
+        'checkVisibility',
+      );
+      Object.defineProperty(HTMLElement.prototype, 'checkVisibility', {
+        configurable: true,
+        value(this: HTMLElement) {
+          return this.closest('[hidden]') == null;
+        },
+      });
+      try {
+        openWith(
+          <>
+            <input data-autofocus aria-label="Hidden" hidden />
+            <input data-autofocus aria-label="Own" />
+          </>,
+        );
+        expect(document.activeElement).toBe(own());
+      } finally {
+        if (original) {
+          Object.defineProperty(
+            HTMLElement.prototype,
+            'checkVisibility',
+            original,
+          );
+        } else {
+          delete (HTMLElement.prototype as {checkVisibility?: unknown})
+            .checkVisibility;
+        }
+      }
+    });
+
+    it('moves on from a candidate that refuses focus', () => {
+      openWith(
+        <>
+          <div data-autofocus>Not focusable</div>
+          <input data-autofocus aria-label="Own" />
+        </>,
+      );
+      expect(document.activeElement).toBe(own());
     });
   });
 
@@ -4716,5 +4830,50 @@ describe('BottomSheet', () => {
         ),
       ).toBe('var(--spacing-2)');
     });
+  });
+});
+
+// Tab from the last tabbable control wraps to the first and Shift+Tab from the
+// first wraps to the last, so focus never leaves the modal for the browser's
+// own UI.
+function expectTabWrapsInside(modal: HTMLElement) {
+  const tabbables = getFocusableElements(modal);
+  expect(tabbables.length).toBeGreaterThan(0);
+  const first = tabbables[0];
+  const last = tabbables[tabbables.length - 1];
+
+  last.focus();
+  expect(last).toHaveFocus();
+  expect(fireEvent.keyDown(last, {key: 'Tab'})).toBe(false);
+  expect(first).toHaveFocus();
+
+  expect(fireEvent.keyDown(first, {key: 'Tab', shiftKey: true})).toBe(false);
+  expect(last).toHaveFocus();
+}
+
+describe('BottomSheet focus region (Dialog DEC-2)', () => {
+  it('wraps Tab and Shift+Tab inside an open modal sheet', () => {
+    render(
+      <BottomSheet isOpen onOpenChange={() => {}} label="Filters">
+        <button type="button">First</button>
+        <button type="button">Last</button>
+      </BottomSheet>,
+    );
+    expectTabWrapsInside(screen.getByRole('dialog'));
+  });
+
+  it('leaves Tab alone in a non-modal sheet', () => {
+    render(
+      <BottomSheet
+        isOpen
+        hasScrim={false}
+        onOpenChange={() => {}}
+        label="Filters">
+        <button type="button">Only</button>
+      </BottomSheet>,
+    );
+    const only = screen.getByRole('button', {name: 'Only'});
+    only.focus();
+    expect(fireEvent.keyDown(only, {key: 'Tab'})).toBe(true);
   });
 });

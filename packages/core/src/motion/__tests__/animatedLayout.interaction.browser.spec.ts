@@ -946,7 +946,8 @@ test.describe('spec:AST-105 Coverage', () => {
     // after it come.
     expect(run.held).toBe(true);
     expect(run.duration).toBeLessThan(1000);
-    expect(run.startTime).toBeGreaterThanOrEqual(run.blockEnd);
+    // A start read back can sit a round-off below an equal clock reading.
+    expect(run.startTime).toBeGreaterThanOrEqual(run.blockEnd - 5e-7);
   });
 
   test('a swap whose parts ride the glide starts them with the glide, on the start read for the change, however late in its frame the change is made', async ({
@@ -1010,8 +1011,11 @@ test.describe('spec:AST-105 Coverage', () => {
     });
     expect(run.glide).not.toBeNull();
     expect(run.copy).not.toBeNull();
-    expect(run.glide).toBe(run.startedAt);
-    expect(run.copy).toBe(run.startedAt);
+    // The browser keeps a start time in its own units, so the one read back
+    // can differ from the one written by round-off. Another start differs by
+    // a clock step or more.
+    expect(run.glide).toBeCloseTo(run.startedAt, 6);
+    expect(run.copy).toBeCloseTo(run.startedAt, 6);
   });
 
   test('a change begun after a block that follows an earlier layout motion, with nothing run between them, still shows its motion', async ({
@@ -2859,6 +2863,110 @@ test.describe('spec:AST-105 FR9 (the edge reveal)', () => {
       expect(Math.abs(f.beside - f.edge), JSON.stringify(f)).toBeLessThan(1.5);
     }
     reportSkew(moving, browserName);
+  });
+
+  test('a copy carries on the CSS animations and transitions running in the old state, from where they were', async ({
+    page,
+  }) => {
+    await open(
+      page,
+      `<div id="area" class="area"><div id="row" style="display: flex; height: 300px">
+        <nav id="panel" style="width: 260px; flex: none; background: #ccf">
+          <span class="pulse">Projects</span>
+          <span class="fade">Inbox</span>
+          <span class="entered">Done</span>
+          <span class="entered-backwards">Later</span>
+          <span class="entered-unfilled">Archive</span>
+          <span class="arrived">Sent</span>
+        </nav>
+        <div id="column" style="flex: 1; background: #efe">The page</div>
+      </div></div>`,
+      `#panel.narrow { width: 48px !important; }
+      @keyframes copy-pulse { from { opacity: 1; } to { opacity: 0.2; } }
+      .pulse { animation: copy-pulse 1000ms linear infinite; }
+      .fade { display: inline-block; transition: opacity 1000ms linear; }
+      .fade.out { opacity: 0; }
+      @keyframes copy-enter { from { translate: 0 20px; } to { translate: 0 0; } }
+      .entered { display: inline-block; animation: copy-enter 100s linear both; }
+      .entered-backwards { display: inline-block; animation: copy-enter 100s linear backwards; }
+      .entered-unfilled { display: inline-block; animation: copy-enter 100s linear; }
+      .arrived { display: inline-block; transition: opacity 1000ms linear; }
+      @starting-style { .arrived { opacity: 0; } }`,
+    );
+    const result = await page.evaluate(async () => {
+      const area = document.querySelector('#area');
+      const row = document.querySelector('#row') as HTMLElement;
+      const panel = document.querySelector('#panel') as HTMLElement;
+      const column = document.querySelector('#column') as HTMLElement;
+      const AL = window.AnimatedLayout;
+      const layout = AL.createAnimatedLayout(() => area);
+      await new Promise<void>(resolve => {
+        requestAnimationFrame(() => resolve());
+      });
+      const pick = (root: ParentNode, name: string) =>
+        root.querySelector(`.${name}`) as HTMLElement;
+      // The old state runs a looping animation 400 ms in, and a transition
+      // 400 ms into its second. Three entrances have played. One holds its
+      // end, and two (backwards-filled and unfilled) have left the element.
+      // Each entrance lasts 100 s, so it still runs here on a loaded machine,
+      // and finish() ends it.
+      const [pulse] = pick(panel, 'pulse').getAnimations();
+      pulse.currentTime = 400;
+      pick(panel, 'fade').classList.add('out');
+      const [fade] = pick(panel, 'fade').getAnimations();
+      fade.currentTime = 400;
+      for (const name of ['entered', 'entered-backwards', 'entered-unfilled']) {
+        pick(panel, name).getAnimations()[0].finish();
+      }
+      // A `@starting-style` fade-in has ended too, and a clone starts it again.
+      for (const animation of pick(panel, 'arrived').getAnimations()) {
+        animation.finish();
+      }
+      // Collapse: the old, wide panel is held as a copy.
+      const hold = AL.holdLayoutEdge(layout, panel, {edge: 'inline-end'});
+      const report = AL.reportLayoutChange(layout, () => panel);
+      report.measureBefore();
+      panel.classList.add('narrow');
+      report.animate();
+      if (hold == null) {
+        throw new Error('the collapse held nothing');
+      }
+      AL.playLayoutEdge(hold, panel, layout, {
+        edge: 'inline-end',
+        rideWith: column,
+      });
+      const copy = row.querySelector<HTMLElement>(
+        ':scope > [inert][aria-hidden="true"]',
+      );
+      if (copy == null) {
+        throw new Error('the collapse held no copy');
+      }
+      const [copiedPulse] = pick(copy, 'pulse').getAnimations();
+      return {
+        pulse: pulse.currentTime,
+        copiedPulse: copiedPulse?.currentTime ?? null,
+        fade: Number(getComputedStyle(pick(panel, 'fade')).opacity),
+        copiedFade: Number(getComputedStyle(pick(copy, 'fade')).opacity),
+        entered: ['entered', 'entered-backwards', 'entered-unfilled'].map(
+          name => getComputedStyle(pick(panel, name)).translate,
+        ),
+        copiedEntered: ['entered', 'entered-backwards', 'entered-unfilled'].map(
+          name => getComputedStyle(pick(copy, name)).translate,
+        ),
+        arrived: Number(getComputedStyle(pick(panel, 'arrived')).opacity),
+        copiedArrived: Number(getComputedStyle(pick(copy, 'arrived')).opacity),
+      };
+    });
+    // Each runs on in the copy from where it was. A clone would start a CSS
+    // animation again and show a transition's end. No entrance plays again,
+    // whether it holds its end or not, a `@starting-style` fade-in included.
+    expect(result.copiedPulse).not.toBeNull();
+    expect(Math.abs(Number(result.copiedPulse) - result.pulse)).toBeLessThan(1);
+    expect(result.fade).toBeGreaterThan(0.1);
+    expect(Math.abs(result.copiedFade - result.fade)).toBeLessThan(0.01);
+    expect(result.copiedEntered).toEqual(result.entered);
+    expect(result.arrived).toBe(1);
+    expect(result.copiedArrived).toBe(1);
   });
 
   for (const [side, direction, collapsed] of [

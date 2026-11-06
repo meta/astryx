@@ -6,7 +6,8 @@
  * @file useMenuPress.ts
  * @input The menu root, its trigger, the enabled-row selector, and callbacks
  *   for opening, highlighting, activating and dismissing
- * @output useMenuPress, the marker attributes, and the activation mark
+ * @output useMenuPress, the marker attributes, the activation mark, and the
+ *   internal useDropdownMenuPress entry with its touch model
  * @position Core hook for DropdownMenu, ContextMenu, DropdownMenuSubMenu,
  *   Selector and MenuBottomSheetActionList. The transition table lives in
  *   menuPressGesture.ts.
@@ -27,12 +28,13 @@ import {
   type RefObject,
 } from 'react';
 import {currentGesture} from '../Layer/gestureCounter';
+import {isInputShield} from '../Layer/inputHold';
 import {
   IDLE_MENU_PRESS,
-  menuPressStep,
-  type MenuPressEffect,
-  type MenuPressEvent,
-  type MenuPressGesture,
+  menuPressTransition,
+  type MenuPressOutcome,
+  type MenuPressInput,
+  type MenuPressState,
   type MenuPressPointerType,
 } from './menuPressGesture';
 import {MENU_PRESS_MARKER} from './menuPressMarker';
@@ -45,6 +47,12 @@ import {edgeAutoscroll} from '../utils/edgeAutoscroll';
 import {focusForLastInput} from '../utils/focusReturn';
 import {useInteractionModalityTrackingFor} from '../utils/interactionModality';
 import {LONG_PRESS_DURATION_MS} from '../motion/uikit/longPress';
+import {
+  clearMenuPressLit,
+  holdMenuPressPaint,
+  markMenuPressLit,
+  releaseMenuPressPaint,
+} from '../privateAttributes/menuPressLit.stylex';
 import {
   __resetClickGuardForTest,
   armClickGuard,
@@ -236,6 +244,44 @@ interface ResolvedPoint {
 }
 
 /**
+ * DropdownMenu's options for the press model: everything the public hook
+ * takes, plus its touch model. DropdownMenu reaches the touch model through
+ * its `presentation`, so the public hook has no such option.
+ *
+ * @internal
+ */
+export interface DropdownMenuPressOptions extends UseMenuPressOptions {
+  /**
+   * How the finger that opened the menu from the trigger picks.
+   * `'pointer'`: its opening press follows the settle rule. `'uikit'`: it
+   * picks only after UIMenu's handoff distance, so the row that appeared
+   * under it never acts on a still lift. A mouse is unaffected.
+   * @default 'pointer'
+   */
+  touchModel?: 'pointer' | 'uikit';
+}
+
+/**
+ * What core's own menus get from {@link useDropdownMenuPress}: the public
+ * return. Not exported from the hooks entry point.
+ *
+ * @internal
+ */
+export type DropdownMenuPressReturn = UseMenuPressReturn;
+
+/**
+ * Where a pointer is, for a finger's handoff distance. Positions reach the
+ * machine only under `touchModel: 'uikit'`. Without them, it keeps the settle
+ * rule.
+ */
+function handoffPosition(
+  event: PointerEvent,
+  hasHandoff: boolean,
+): {x?: number; y?: number} {
+  return hasHandoff ? {x: event.clientX, y: event.clientY} : {};
+}
+
+/**
  * The press model for a menu: the row under the release acts, the highlight
  * follows a held pointer, and a mouse opens the menu on press.
  *
@@ -271,13 +317,30 @@ interface ResolvedPoint {
  * ```
  */
 export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
+  // The touch model is DropdownMenu's alone; an untyped caller's
+  // `touchModel` does not reach the model.
+  const {touchModel: _touchModel, ...publicOptions} =
+    options as DropdownMenuPressOptions;
+  return useDropdownMenuPress({...publicOptions, touchModel: 'pointer'});
+}
+
+/**
+ * The press model with DropdownMenu's touch model
+ * ({@link DropdownMenuPressOptions.touchModel}). Not exported from the hooks
+ * entry point.
+ *
+ * @internal
+ */
+export function useDropdownMenuPress(
+  options: DropdownMenuPressOptions,
+): DropdownMenuPressReturn {
   const optionsRef = useRef(options);
   optionsRef.current = options;
   // The highlight, and the hover focus of the rows in this menu, follow the
   // last input, which this tracks for the menu's own document.
   useInteractionModalityTrackingFor(options.menuRef);
 
-  const gestureRef = useRef<MenuPressGesture<HTMLElement>>(IDLE_MENU_PRESS);
+  const gestureRef = useRef<MenuPressState<HTMLElement>>(IDLE_MENU_PRESS);
   const pointerIdRef = useRef<number | null>(null);
   const detachRef = useRef<(() => void) | null>(null);
   // `useLongPress` detects the held finger, as in ContextMenu, so the hold
@@ -341,13 +404,25 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
         // Hit-test in the menu's own tree: inside a shadow root the document
         // answers with the shadow host, never the row under the pointer.
         const tree = menu?.getRootNode();
-        const scope: Pick<Document, 'elementFromPoint'> =
+        const scope: Pick<Document, 'elementFromPoint' | 'elementsFromPoint'> =
           tree != null &&
           tree !== doc &&
           typeof (tree as ShadowRoot).elementFromPoint === 'function'
             ? (tree as ShadowRoot)
             : doc;
         element = scope.elementFromPoint(event.clientX, event.clientY);
+        if (
+          isInputShield(element) &&
+          typeof scope.elementsFromPoint === 'function'
+        ) {
+          // An input hold's shield covers the viewport while the menu enters.
+          // It keeps new input away, but the press in flight still reaches the
+          // row under it. So the hit test sees through that shield only.
+          element =
+            scope
+              .elementsFromPoint(event.clientX, event.clientY)
+              .find(candidate => !isInputShield(candidate)) ?? null;
+        }
       } else {
         element = event.target instanceof Element ? event.target : null;
       }
@@ -374,8 +449,18 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
     autoscrollRef.current = null;
   }, [autoscroll]);
 
+  const litRowRef = useRef<HTMLElement | null>(null);
+  const heldMenuRef = useRef<HTMLElement | null>(null);
   const endGesture = useCallback(() => {
     longPressApiRef.current?.cancel();
+    if (litRowRef.current != null) {
+      clearMenuPressLit(litRowRef.current);
+      litRowRef.current = null;
+    }
+    if (heldMenuRef.current != null) {
+      releaseMenuPressPaint(heldMenuRef.current);
+      heldMenuRef.current = null;
+    }
     touchMovePreventerRef.current?.();
     touchMovePreventerRef.current = null;
     stopAutoscroll();
@@ -388,7 +473,34 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
 
   const highlight = useCallback(
     (row: HTMLElement | null) => {
+      // A held finger or pen marks the row it lights, for the row's pressed
+      // paint. A held mouse keeps the hover tint, as on a desktop.
+      const gesture = gestureRef.current;
+      const isHeld =
+        gesture.phase !== 'idle' && gesture.pointerType !== 'mouse';
+      const lit = isHeld ? row : null;
+      if (litRowRef.current !== lit) {
+        if (litRowRef.current != null) {
+          clearMenuPressLit(litRowRef.current);
+        }
+        litRowRef.current = lit;
+        if (lit != null) {
+          markMenuPressLit(lit);
+        }
+      }
       const {onHighlight, menuRef} = optionsRef.current;
+      // The row the press began on stays :active where a pointer hovers, so
+      // the menu holds every row but the lit one off that paint.
+      const held = isHeld ? menuRef.current : null;
+      if (heldMenuRef.current !== held) {
+        if (heldMenuRef.current != null) {
+          releaseMenuPressPaint(heldMenuRef.current);
+        }
+        heldMenuRef.current = held;
+        if (held != null) {
+          holdMenuPressPaint(held);
+        }
+      }
       if (onHighlight != null) {
         onHighlight(row);
         return;
@@ -449,13 +561,13 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
 
   // Declared before `step` so the mutual recursion through refs type-checks.
   const stepRef = useRef<
-    (event: MenuPressEvent<HTMLElement>, native?: PointerEvent) => void
+    (event: MenuPressInput<HTMLElement>, native?: PointerEvent) => void
   >(() => {});
 
   const applyEffect = useCallback(
     (
-      effect: MenuPressEffect<HTMLElement>,
-      gesture: MenuPressGesture<HTMLElement>,
+      effect: MenuPressOutcome<HTMLElement>,
+      gesture: MenuPressState<HTMLElement>,
       native: PointerEvent | undefined,
     ) => {
       const doc = getDocument();
@@ -511,8 +623,8 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
   );
 
   const step = useCallback(
-    (event: MenuPressEvent<HTMLElement>, native?: PointerEvent) => {
-      const result = menuPressStep(gestureRef.current, event);
+    (event: MenuPressInput<HTMLElement>, native?: PointerEvent) => {
+      const result = menuPressTransition(gestureRef.current, event);
       gestureRef.current = result.gesture;
       applyEffect(result.effect, result.gesture, native);
     },
@@ -619,6 +731,10 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
             row: point.row,
             isInMenu: point.isInMenu,
             time: Date.now(),
+            ...handoffPosition(
+              event,
+              optionsRef.current.touchModel === 'uikit',
+            ),
           },
           event,
         );
@@ -636,6 +752,10 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
             isInMenu: point.isInMenu,
             isOnTrigger: point.isOnTrigger,
             time: Date.now(),
+            ...handoffPosition(
+              event,
+              optionsRef.current.touchModel === 'uikit',
+            ),
           },
           event,
         );

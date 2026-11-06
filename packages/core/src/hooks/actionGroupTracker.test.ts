@@ -21,9 +21,11 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {__resetClickGuardForTest, isClickGuardArmed} from '../utils/clickGuard';
 import {PRESSED_ATTRIBUTE} from '../utils/pressFeedback';
+import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
 import {PRESS_FADE_MS} from '../utils/pressGesture';
 import {
   createActionGroupTracker,
+  measureActions,
   type ActionGroupTarget,
   type ActionGroupTrackerOptions,
 } from './actionGroupTracker';
@@ -240,26 +242,26 @@ describe('createActionGroupTracker', () => {
     ]);
   });
 
-  it('times the release fade by the tempo its stylesheet reads, as the press controller does (spec:AST-108 FR4)', () => {
-    // A rule writes the tempo; browsers inherit it from the theme, jsdom
+  it("times the release fade by the theme's exit duration, as the press controller does (spec:AST-094 FR5)", () => {
+    // A rule writes the token; browsers inherit it from the theme, jsdom
     // only reads it where it is declared.
     const style = document.createElement('style');
-    style.textContent = '[data-action] { --_astryx-motion-tempo: 1.5; }';
+    style.textContent = '[data-action] { --duration-exit: 333ms; }';
     document.head.append(style);
     try {
       const group = tracker();
       group.begin(100, 20);
       group.end();
-      vi.advanceTimersByTime(PRESS_FADE_MS);
+      vi.advanceTimersByTime(332);
       expect(first.button.getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
-      vi.advanceTimersByTime(PRESS_FADE_MS / 2);
+      vi.advanceTimersByTime(1);
       expect(first.button.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
     } finally {
       style.remove();
     }
   });
 
-  it('under Reduce Motion a tempo may shorten the release fade but never lengthens it past 200 ms (spec:AST-108 FR4)', () => {
+  it("under Reduce Motion the release fade is no longer than design:reduced-motion DR2's bound", () => {
     vi.stubGlobal(
       'matchMedia',
       (query: string): MediaQueryList =>
@@ -275,13 +277,17 @@ describe('createActionGroupTracker', () => {
         }) as MediaQueryList,
     );
     const style = document.createElement('style');
-    style.textContent = '[data-action] { --_astryx-motion-tempo: 1.5; }';
+    style.textContent = '[data-action] { --duration-exit: 333ms; }';
     document.head.append(style);
     try {
       const group = tracker();
       group.begin(100, 20);
       group.end();
-      vi.advanceTimersByTime(PRESS_FADE_MS);
+      vi.advanceTimersByTime(
+        Number.parseFloat(reducedMotionFadeConsts.duration) - 1,
+      );
+      expect(first.button.getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+      vi.advanceTimersByTime(1);
       expect(first.button.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
     } finally {
       style.remove();
@@ -490,5 +496,29 @@ describe('createActionGroupTracker: options for other trackers', () => {
     owned.end();
     expect(onActivate).toHaveBeenCalledWith(left.button);
     expect(isClickGuardArmed(document)).toBe(true);
+  });
+});
+
+describe('measureActions', () => {
+  it('measures the enabled actions the filter keeps, in document order, and reads each box once', () => {
+    const group = document.createElement('div');
+    const kept = action('Kept', {left: 0, top: 0, width: 40, height: 20});
+    const off = action('Off', {left: 40, top: 0, width: 40, height: 20});
+    off.button.disabled = true;
+    const other = action('Other', {left: 80, top: 0, width: 40, height: 20});
+    const last = action('Last', {left: 120, top: 0, width: 40, height: 20});
+    group.append(kept.button, off.button, other.button, last.button);
+    const targets = measureActions(
+      [null, group],
+      '[data-action]',
+      element => element !== other.button,
+    );
+    expect(targets).toEqual([
+      {element: kept.button, left: 0, top: 0, right: 40, bottom: 20},
+      {element: last.button, left: 120, top: 0, right: 160, bottom: 20},
+    ]);
+    expect(
+      [kept, off, other, last].map(({rectSpy}) => rectSpy.mock.calls.length),
+    ).toEqual([1, 0, 0, 1]);
   });
 });

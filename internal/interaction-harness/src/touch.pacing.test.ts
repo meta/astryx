@@ -6,13 +6,14 @@
  *   its pacing errors
  * @output Unit cases: under `'schedule'` an event leaves at its scripted time
  *   from the start; under `'spacing'` its scripted interval after the event
- *   before it left, or after that dispatch returned when it outlasted the
- *   interval. The page's release (the last two move intervals, blended as
- *   core blends them) decides a paced play: an early stall leaves it
- *   intact; a short stall or a bunched pair at the end changes it, a fault
- *   only under a tolerance. A lift more than the stillness interval after
- *   the last move reads as rest, a fault unless the script rests too. A
- *   throw where the script rests is a fault, and so are fewer than two
+ *   before it left. Under `'spacing'`, and on a WebKit `'schedule'` play, it
+ *   also waits its interval, less 2 ms, after the event before was answered,
+ *   so no gap reaches the page more than 2 ms short. The page's release (the
+ *   last two move intervals, blended as core blends them) decides a paced play:
+ *   an early stall leaves it intact; a short stall or a bunched pair at the end
+ *   changes it, a fault only under a tolerance. A lift more than the stillness
+ *   interval after the last move reads as rest, a fault unless the script rests
+ *   too. A throw where the script rests is a fault, and so are fewer than two
  *   moves. A gap the page's own listeners held is the page's; a late send is
  *   the runner's.
  * @position Node unit tests beside the harness's browser self-tests.
@@ -25,6 +26,7 @@
 import {describe, expect, it} from 'vitest';
 import type {TouchEventStep} from './scripts';
 import {
+  ANSWER_SLACK_MS,
   pacedDeadline,
   readRelease,
   touchArrivalsFrom,
@@ -52,17 +54,22 @@ const FLICK: TouchEventStep[] = [0, 16, 32, 48, 64, 80, 96].map((t, i) => {
 /**
  * The harness's loop on a simulated clock: each event leaves once its
  * deadline has come (or at once when it is late), and its dispatch returns
- * `latencyMs[i]` later, when the page has it and has handled it.
+ * `latencyMs[i]` later, when the page has it and has handled it. The page
+ * stamps each event at that answer, the latest WebKit can.
  */
 function simulate(
   pacing: TouchPacing,
   latencyMs: readonly number[],
+  keepsGaps = false,
 ): TouchArrival[] {
   const origin = 1000;
   let now = origin;
   let previous: {sentAt: number; returnedAt: number} | null = null;
   return FLICK.map((_, index) => {
-    now = Math.max(now, pacedDeadline(pacing, origin, FLICK, index, previous));
+    now = Math.max(
+      now,
+      pacedDeadline(pacing, origin, FLICK, index, previous, keepsGaps),
+    );
     const sentAt = now;
     now += latencyMs[index];
     previous = {sentAt, returnedAt: now};
@@ -89,33 +96,106 @@ describe('pacedDeadline', () => {
     ).toBe(1048);
   });
 
+  it("keeps a WebKit 'schedule' play's gap, less 2 ms, after a late answer", () => {
+    // Answered in time: at its scripted time.
+    expect(
+      pacedDeadline(
+        'schedule',
+        1000,
+        FLICK,
+        3,
+        {sentAt: 1032, returnedAt: 1033},
+        true,
+      ),
+    ).toBe(1048);
+    // Answered at 1300: 14 ms after that answer.
+    expect(
+      pacedDeadline(
+        'schedule',
+        1000,
+        FLICK,
+        3,
+        {sentAt: 1190, returnedAt: 1300},
+        true,
+      ),
+    ).toBe(1314);
+  });
+
   it("sends the first event at the start and the rest after the one before, under 'spacing'", () => {
     expect(pacedDeadline('spacing', 1000, FLICK, 0, null)).toBe(1000);
-    // Answered within its 16 ms interval: 16 ms after it left.
+    // Answered within 2 ms: 16 ms after it left.
+    expect(
+      pacedDeadline('spacing', 1000, FLICK, 3, {
+        sentAt: 1200,
+        returnedAt: 1201,
+      }),
+    ).toBe(1216);
+    // Answered after 5 ms: 14 ms after the answer, as the page may have
+    // stamped the event that late.
     expect(
       pacedDeadline('spacing', 1000, FLICK, 3, {
         sentAt: 1200,
         returnedAt: 1205,
       }),
-    ).toBe(1216);
-    // Outlasted it: 16 ms after its answer.
+    ).toBe(1219);
+    // Outlasted its interval: 14 ms after its answer.
     expect(
       pacedDeadline('spacing', 1000, FLICK, 3, {
         sentAt: 1200,
         returnedAt: 1300,
       }),
-    ).toBe(1316);
+    ).toBe(1314);
+  });
+
+  it('never lets a page that stamps on arrival read a gap more than 2 ms short of the script', () => {
+    // The closest two stamps can come is the earlier at its answer and the
+    // later at its send. Answers here take 1 to 30 ms.
+    const latency = [1, 5, 7, 30, 3, 8, 2];
+    const shortest = (pacing: TouchPacing, keepsGaps: boolean) => {
+      const sent: number[] = [];
+      const answered: number[] = [];
+      let now = 1000;
+      for (const index of FLICK.keys()) {
+        const previous =
+          index > 0
+            ? {sentAt: sent[index - 1], returnedAt: answered[index - 1]}
+            : null;
+        now = Math.max(
+          now,
+          pacedDeadline(pacing, 1000, FLICK, index, previous, keepsGaps),
+        );
+        sent.push(now);
+        now += latency[index];
+        answered.push(now);
+      }
+      return Math.min(
+        ...sent
+          .slice(1)
+          .map((at, i) => at - answered[i] - (FLICK[i + 1].t - FLICK[i].t)),
+      );
+    };
+    expect(shortest('spacing', false)).toBeGreaterThanOrEqual(-ANSWER_SLACK_MS);
+    expect(shortest('schedule', true)).toBeGreaterThanOrEqual(-ANSWER_SLACK_MS);
+    // A play that keeps its scripted times sends behind the 30 ms answer.
+    expect(shortest('schedule', false)).toBeLessThan(-ANSWER_SLACK_MS);
   });
 });
 
 describe("touchPacingFault on a paced play's arrivals", () => {
-  it("reads the script's release when every dispatch takes 5 ms", () => {
-    expect(
-      touchPacingFault(FLICK, simulate('spacing', [5, 5, 5, 5, 5, 5, 5])),
-    ).toBeNull();
+  it("reads the script's release when every dispatch is answered within 2 ms", () => {
+    const arrivals = simulate('spacing', [2, 2, 2, 2, 2, 2, 2]);
+    expect(touchPacingFault(FLICK, arrivals, TOLERANCE)).toBeNull();
+    expect(readRelease(FLICK, arrivals)?.pagePxPerS).toBeCloseTo(1000, 6);
   });
 
-  it("reads a far faster release when 'schedule' bursts the events behind a stall", () => {
+  it('reads a slower release, never a faster one, when every dispatch takes 5 ms', () => {
+    // Each event waits 14 ms after the answer before it: 19 ms gaps.
+    const arrivals = simulate('spacing', [5, 5, 5, 5, 5, 5, 5]);
+    expect(touchPacingFault(FLICK, arrivals, TOLERANCE)).toBeNull();
+    expect(readRelease(FLICK, arrivals)?.pagePxPerS).toBeCloseTo(842, 0);
+  });
+
+  it("reads a far faster release when a 'schedule' play that keeps its scripted times bursts the events behind a stall", () => {
     // The third dispatch stalls 100 ms; the four events behind it were due
     // during the stall and reach the page 1 ms apart.
     const fault = touchPacingFault(
@@ -126,6 +206,14 @@ describe("touchPacingFault on a paced play's arrivals", () => {
     expect(fault?.kind).toBe('release');
     expect(fault?.pageReleasePxPerS).toBeGreaterThan(10_000);
     expect(fault?.scriptReleasePxPerS).toBeCloseTo(1000, 6);
+  });
+
+  it("stretches a WebKit 'schedule' play behind a stall instead of bursting it", () => {
+    // The same stall: each event behind it waits 14 ms after the answer
+    // before it, so the release reads 15 ms intervals.
+    const arrivals = simulate('schedule', [1, 1, 100, 1, 1, 1, 1], true);
+    expect(touchPacingFault(FLICK, arrivals, TOLERANCE)).toBeNull();
+    expect(readRelease(FLICK, arrivals)?.pagePxPerS).toBeCloseTo(1067, 0);
   });
 
   it("keeps the release intact behind an early stall under 'spacing'", () => {
@@ -140,17 +228,17 @@ describe("touchPacingFault on a paced play's arrivals", () => {
     ).toBeNull();
   });
 
-  it('reads 554 px/s for a 20 ms stall on the move before the last', () => {
-    // Its gap stretches to 35 ms and the next leaves 16 ms after its answer:
-    // 0.2 × 16 px/17 ms + 0.8 × 16 px/35 ms.
+  it('reads 579 px/s for a 20 ms stall on the move before the last', () => {
+    // Its gap stretches to 35 ms and the next leaves 14 ms after its answer:
+    // 0.2 × 16 px/15 ms + 0.8 × 16 px/35 ms.
     const fault = touchPacingFault(
       FLICK,
       simulate('spacing', [1, 1, 1, 1, 20, 1, 1]),
       TOLERANCE,
     );
     expect(fault?.kind).toBe('release');
-    expect(fault?.pageReleasePxPerS).toBeCloseTo(554, 0);
-    expect(fault?.gapsMs).toEqual([35, 17, 16]);
+    expect(fault?.pageReleasePxPerS).toBeCloseTo(579, 0);
+    expect(fault?.gapsMs).toEqual([35, 15, 16]);
     expect(fault?.scriptedGapsMs).toEqual([16, 16, 16]);
     expect(fault?.heldByPage).toBeNull();
   });
@@ -346,7 +434,7 @@ describe('the pacing errors', () => {
     const error = new TouchPacingError(fault);
     expect(error.name).toBe('TouchPacingError');
     expect(error.message).toMatch(
-      /the page read a release of 554 px\/s where the script throws 1000 px\/s \(gaps 35, 17, 16 ms where the script spaces 16, 16, 16 ms\): a dispatch stalled before the page/,
+      /the page read a release of 579 px\/s where the script throws 1000 px\/s \(gaps 35, 15, 16 ms where the script spaces 16, 16, 16 ms\): a dispatch stalled before the page/,
     );
     expect(error.fault).toBe(fault);
   });

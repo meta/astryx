@@ -20,11 +20,13 @@
  * The touch arms are asserted the same way: the paint reads the press's
  * strength (`--astryx-press-alpha`, see utils/interactionOverlay.stylex.ts)
  * and the element the controller writes to runs the release animation on the
- * machine's own clock.
+ * machine's own clock; a list row's compositor layer (privateAttributes/press.stylex.ts)
+ * runs its own release on the row's `::before`, which these checks leave out.
  *
  * SYNC: When modified, update this header.
  */
 
+import {durationDefaults} from '../theme/tokens.stylex';
 import {PRESS_FADE_MS} from '../utils/pressGesture';
 
 const PRESSED_TOKEN = '--color-overlay-pressed';
@@ -32,6 +34,7 @@ const PRESS_STRENGTH = '--astryx-press-alpha';
 /** The press's paint at its strength, declared once by the shared styles. */
 const PRESS_PAINT = '--_press-paint';
 const FADING_ARM = '[data-astryx-press="fading"]';
+const ON_ARM = '[data-astryx-press="on"]';
 
 const selectorOf = (rule: string) => rule.slice(0, rule.indexOf('{'));
 const onPseudoElement = (rule: string) => selectorOf(rule).includes('::');
@@ -73,6 +76,10 @@ const REDUCED_MEDIA = /prefers-reduced-motion/;
 const UNDER_COARSE: RuleFilter = {
   insideMedia: COARSE_MEDIA,
   outsideMedia: REDUCED_MEDIA,
+};
+/** Rules for any other primary pointer, Reduce Motion's arms left out. */
+const UNDER_FINE: RuleFilter = {
+  outsideMedia: /prefers-reduced-motion|\(pointer: coarse\)/,
 };
 
 /**
@@ -223,15 +230,50 @@ export function declaresPressPaint(el: Element): boolean {
   );
 }
 
-/** `.2s`, `200ms`, `0.2s` → 200; a scaled clock reads its base, at tempo 1. */
+/**
+ * A clock in ms as a page without a theme resolves it: `.2s`, `200ms` → 200;
+ * a duration token (`var(--duration-exit)`) reads its default; `min(a, b)`
+ * is the smaller. The press release plays the exit token, no longer than
+ * DR2's bound under Reduce Motion (`spec:AST-094` FR5).
+ */
 export function durationToMs(value: string): number {
-  // The press release scales its base clock by the theme's tempo, capped under
-  // Reduce Motion: `calc(<ms> * …)`, `min(<ms>, …)` (`spec:AST-108` FR4).
-  const match = value.trim().match(/^(?:(?:calc|min)\(\s*)?([\d.]+)(ms|s)\b/);
+  const css = value.trim();
+  const smaller = /^min\((.*)\)$/u.exec(css);
+  if (smaller != null) {
+    return Math.min(...topLevelArguments(smaller[1]).map(durationToMs));
+  }
+  const token = /^var\((--[\w-]+)\)$/u.exec(css);
+  if (token != null) {
+    const fallback: string | undefined = (
+      durationDefaults as Record<string, string>
+    )[token[1]];
+    return fallback == null ? Number.NaN : durationToMs(fallback);
+  }
+  const match = /^([\d.]+)(ms|s)$/u.exec(css);
   if (match == null) {
     return Number.NaN;
   }
   return Number(match[1]) * (match[2] === 's' ? 1000 : 1);
+}
+
+/** `a, f(b, c)` → `['a', 'f(b, c)']`: the commas outside parentheses split. */
+function topLevelArguments(list: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let index = 0; index < list.length; index++) {
+    const char = list[index];
+    if (char === '(') {
+      depth++;
+    } else if (char === ')') {
+      depth--;
+    } else if (char === ',' && depth === 0) {
+      parts.push(list.slice(start, index));
+      start = index + 1;
+    }
+  }
+  parts.push(list.slice(start));
+  return parts;
 }
 
 /**
@@ -242,7 +284,11 @@ export function durationToMs(value: string): number {
  * on a descendant that merely reads the strength.
  */
 export function hasReleaseFade(el: Element): boolean {
-  const fading = rulesWithSelector(el, FADING_ARM);
+  // The element's own release: a layer of its own (a row's `::before`, a
+  // card's `::after`) runs its clock separately.
+  const fading = rulesWithSelector(el, FADING_ARM).filter(
+    rule => !rule.slice(0, rule.indexOf('{')).includes('::'),
+  );
   const durations = fading.flatMap(rule => {
     const match = rule.match(/animation-duration:\s*([^;}]+)/);
     return match == null ? [] : [durationToMs(match[1])];
@@ -301,5 +347,77 @@ export function releasesOnLayer(
   return (
     animates(coarseLayer).length === animates(layer).length &&
     own(coarseFading).some(stopsAnimation)
+  );
+}
+
+/**
+ * Does the element paint the press on its `::before` compositor layer? The
+ * layer shows the pressed token, exists only while a press does (see
+ * {@link layerOnlyWhilePressed}), and on the on arm shows at once: opacity 1,
+ * no animation.
+ */
+export function showsLayerPress(el: Element): boolean {
+  const layer = rulesDeclaredFor(el).filter(rule =>
+    selectorOf(rule).includes('::before'),
+  );
+  const on = layer.filter(rule => selectorOf(rule).includes(ON_ARM));
+  return (
+    layer.some(rule =>
+      /background-color:[^;}]*--color-overlay-pressed/.test(rule),
+    ) &&
+    layerOnlyWhilePressed(el, '::before') &&
+    on.some(rule => /opacity:\s*1\b/.test(rule)) &&
+    !on.some(runsAnimation)
+  );
+}
+
+/**
+ * Under a coarse primary pointer, does every declaration of the element's
+ * press layer on `pseudo`, and its `isolation`, apply only while a press is
+ * on or fading? At rest the element then has no layer and is no stacking
+ * context, and a caller's own `pseudo` keeps its styles.
+ */
+export function layerOnlyWhilePressed(
+  el: Element,
+  pseudo: '::before' | '::after',
+): boolean {
+  const declarations = (rule: string) => rule.slice(rule.indexOf('{'));
+  const layer = rulesDeclaredFor(el, {insideMedia: COARSE_MEDIA}).filter(
+    rule =>
+      selectorOf(rule).includes(pseudo) ||
+      /(^|[{;\s])isolation:/.test(declarations(rule)),
+  );
+  const onPressArm = (rule: string) =>
+    [ON_ARM, FADING_ARM].some(arm => selectorOf(rule).includes(arm));
+  return layer.length > 0 && layer.every(onPressArm);
+}
+
+/**
+ * Under any pointer but a coarse primary one, does the element keep the
+ * press it always had? Nothing animates `pseudo`, a `::before` is not
+ * created at all (a card's `::after` is the card's own box), there is no
+ * `isolation`, and the strength's release runs on the element on the press
+ * clock.
+ */
+export function keepsPressOutsideCoarse(
+  el: Element,
+  pseudo: '::before' | '::after',
+): boolean {
+  const fine = rulesDeclaredFor(el, UNDER_FINE);
+  const layer = fine.filter(rule => selectorOf(rule).includes(pseudo));
+  const fading = rulesWithSelector(el, FADING_ARM, UNDER_FINE).filter(
+    rule => !onPseudoElement(rule),
+  );
+  const clock = durationsOf(fading);
+  return (
+    (pseudo === '::after' ||
+      !layer.some(rule =>
+        /(^|[{;\s])content:/.test(rule.slice(rule.indexOf('{'))),
+      )) &&
+    !layer.some(rule => /animation-(name|duration):/.test(rule)) &&
+    !fine.some(rule => /isolation:\s*isolate/.test(rule)) &&
+    fading.some(runsAnimation) &&
+    clock.length === 1 &&
+    clock[0] === PRESS_FADE_MS
   );
 }
