@@ -1720,32 +1720,40 @@ function extentOf(element: Element, edge: LayoutEdge): number {
     : rect.height / scale.y;
 }
 
+/** The parts that slide, and the still clip that holds them while they do. */
+interface Sliding {
+  readonly parts: ReadonlyArray<Element>;
+  readonly clip: string;
+}
+
 /**
  * The parts that slide inside an element revealed or concealed from a block
  * edge by `extent` px. They are its child elements that the band can show:
  * the area's visible part plus one viewport, or `extent` if larger, above and
  * below. A part past the band cannot come into view while it moves, so it
- * stays. The
- * walk stops at the first child below the band, so its cost grows with the
- * changed size, never with the length of a list. A translation cannot move
- * text on its own, so an element with text of its own keeps the clip (null).
+ * stays. The walk stops at the first child below the band, so its cost grows
+ * with the changed size, never with the length of a list. A translation
+ * cannot move text on its own, so an element with text of its own keeps the
+ * clip (null).
  */
 function slidingParts(
   element: Element,
   edge: LayoutEdge,
   area: Element,
   extent: number,
-): Element[] | null {
+): Sliding | null {
   if (!edge.startsWith('block') || !(extent > 0)) {
     return null;
   }
   const view = element.ownerDocument.defaultView;
+  const style = view?.getComputedStyle(element);
   // A box the element paints itself would show whole from the first frame
   // under a still clip, so such an element keeps the moving clip. So does one
   // with a generated box, which stays still while its parts slide.
   if (
     view == null ||
-    paintsOwnBox(view.getComputedStyle(element)) ||
+    style == null ||
+    paintsOwnBox(style) ||
     ['::before', '::after'].some(pseudo => {
       const {content} = view.getComputedStyle(element, pseudo);
       return content !== '' && content !== 'none' && content !== 'normal';
@@ -1780,7 +1788,21 @@ function slidingParts(
       parts.push(node as Element);
     }
   }
-  return parts.length > 0 ? parts : null;
+  if (parts.length === 0) {
+    return null;
+  }
+  // The parts come in from one side. The clip holds them inside the content
+  // box there, off what the content before the element draws into its padding.
+  const inner = (side: 'top' | 'bottom') =>
+    (Number.parseFloat(style.getPropertyValue(`border-${side}-width`)) || 0) +
+    (Number.parseFloat(style.getPropertyValue(`padding-${side}`)) || 0);
+  return {
+    parts,
+    clip:
+      edge === 'block-end'
+        ? `inset(${inner('top')}px 0px 0px 0px)`
+        : `inset(0px 0px ${inner('bottom')}px 0px)`,
+  };
 }
 
 /**
@@ -1820,15 +1842,15 @@ function slideFrame(edge: LayoutEdge, hidden: number): Keyframe {
 }
 
 /**
- * Clips `element` to its own box while its parts slide, and returns what puts
+ * Clips `element` with `clip` while its parts slide, and returns what puts
  * its own `clip-path` back. The clip does not move, so it stays in step with
  * the parts and the content beside them on every engine.
  */
-function holdSlideClip(element: Element): () => void {
+function holdSlideClip(element: Element, clip: string): () => void {
   const {style} = element as HTMLElement;
   const value = style.getPropertyValue('clip-path');
   const priority = style.getPropertyPriority('clip-path');
-  style.setProperty('clip-path', 'inset(0px)');
+  style.setProperty('clip-path', clip);
   return () => {
     if (value === '') {
       style.removeProperty('clip-path');
@@ -2173,8 +2195,9 @@ export function playLayoutChange(
   // content after them glides on. A clip that moved would be painted on its
   // own clock in WebKit, and the edge would part from that content.
   const extent = edge.startsWith('block') ? extentOf(element, edge) : 0;
+  const sliding = slidingParts(element, edge, area, extent);
   const partMotions = slideParts(
-    slidingParts(element, edge, area, extent) ?? [],
+    sliding?.parts ?? [],
     progress,
     change,
     remaining => slideFrame(edge, (1 - from) * remaining * extent),
@@ -2200,7 +2223,9 @@ export function playLayoutChange(
       animation,
       t => 1 - (1 - from) * progress.remaining(t),
       partMotions,
-      partMotions.length > 0 ? holdSlideClip(element) : undefined,
+      partMotions.length > 0 && sliding != null
+        ? holdSlideClip(element, sliding.clip)
+        : undefined,
     );
     rideEdge(element, area, edge, rtl, tracked, false);
   }
@@ -2517,8 +2542,9 @@ export function holdLayoutExit(
     const {progress} = motion;
     // As in a reveal, a block edge's parts slide out under its clip.
     const extent = edge.startsWith('block') ? extentOf(element, edge) : 0;
+    const sliding = slidingParts(element, edge, area, extent);
     const partMotions = slideParts(
-      slidingParts(element, edge, area, extent) ?? [],
+      sliding?.parts ?? [],
       progress,
       change,
       remaining => slideFrame(edge, (1 - from * remaining) * extent),
@@ -2545,7 +2571,9 @@ export function holdLayoutExit(
         animation,
         t => from * progress.remaining(t),
         partMotions,
-        partMotions.length > 0 ? holdSlideClip(element) : undefined,
+        partMotions.length > 0 && sliding != null
+          ? holdSlideClip(element, sliding.clip)
+          : undefined,
         true,
       );
       rideEdge(element, area, edge, rtl, tracked, true);

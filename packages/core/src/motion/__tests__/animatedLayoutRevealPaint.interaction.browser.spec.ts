@@ -267,6 +267,45 @@ test.describe('spec:AST-105 FR9: an edge reveal paints its edge on the content b
     }
   });
 
+  test("mid-open a Collapsible's content stays inside the region's content box, below the trigger's label", async ({
+    page,
+  }) => {
+    await openStory(page);
+    const trigger = page.getByRole('button', {name: 'Shipping details'});
+    const contentId = (await trigger.getAttribute('aria-controls')) ?? '';
+    await trigger.click();
+    const held = await page.evaluate(async id => {
+      const region = document.getElementById(id);
+      for (let i = 0; i < 30 && !region?.getAnimations().length; i++) {
+        await new Promise(requestAnimationFrame);
+      }
+      for (const animation of document.getAnimations()) {
+        animation.pause();
+        animation.currentTime = 105;
+      }
+      await new Promise(requestAnimationFrame);
+      if (region == null || region.firstElementChild == null) {
+        return null;
+      }
+      const style = getComputedStyle(region);
+      const box = region.getBoundingClientRect();
+      return {
+        clipTop: Number.parseFloat(
+          /^inset\(([^ )]+)/.exec(style.clipPath)?.[1] ?? 'NaN',
+        ),
+        paddingTop: Number.parseFloat(style.paddingTop),
+        partTop: region.firstElementChild.getBoundingClientRect().top - box.top,
+      };
+    }, contentId);
+    expect(held, 'the region and its content').not.toBeNull();
+    expect(held?.paddingTop ?? 0).toBeGreaterThan(0);
+    // The clip starts where the content box does: the label's descenders
+    // hang into the padding above it.
+    expect(held?.clipTop ?? 0).toBeCloseTo(held?.paddingTop ?? -1, 1);
+    // Mid-open the content still reaches above that edge, so the clip does work.
+    expect(held?.partTop ?? 0).toBeLessThan(held?.paddingTop ?? 0);
+  });
+
   test('a Collapsible region with a generated box of its own keeps the moving clip, and its parts stay still', async ({
     page,
   }) => {

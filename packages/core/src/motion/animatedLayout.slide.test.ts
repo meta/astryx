@@ -143,7 +143,9 @@ describe('a block edge reveal slides its parts under a still clip (spec:AST-105 
       true,
     );
     expect(entrance.keyframes[0].opacity).toBe(0);
-    expect(content.style.getPropertyValue('clip-path')).toBe('inset(0px)');
+    expect(content.style.getPropertyValue('clip-path')).toBe(
+      'inset(0px 0px 0px 0px)',
+    );
     // Both rows start a full content height up, and land in place.
     for (const id of ['a', 'b']) {
       const [slide] = motionsOn(id);
@@ -183,7 +185,9 @@ describe('a block edge reveal slides its parts under a still clip (spec:AST-105 
     expect(holdLayoutExit(layout, content, done)).toBe(true);
     const [exit] = motionsOn('content');
     expect(exit.keyframes.every(frame => frame.clipPath == null)).toBe(true);
-    expect(content.style.getPropertyValue('clip-path')).toBe('inset(0px)');
+    expect(content.style.getPropertyValue('clip-path')).toBe(
+      'inset(0px 0px 0px 0px)',
+    );
     const [slide] = motionsOn('a');
     expect(translates(slide)[0]).toBe('0px 0px');
     expect(translates(slide).at(-1)).toBe('0px -80px');
@@ -202,12 +206,24 @@ describe('a block edge reveal slides its parts under a still clip (spec:AST-105 
     exit.finish();
     expect(done).toHaveBeenCalledTimes(1);
     expect(slide.cancel).not.toHaveBeenCalled();
-    expect(content.style.getPropertyValue('clip-path')).toBe('inset(0px)');
+    expect(content.style.getPropertyValue('clip-path')).toBe(
+      'inset(0px 0px 0px 0px)',
+    );
     releaseLayoutExit(content);
     expect(slide.cancel).toHaveBeenCalledTimes(1);
     expect(content.style.getPropertyValue('clip-path')).toBe('');
     releaseLayoutExit(content);
     expect(slide.cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("holds the parts inside the element's content box on the side they come from", () => {
+    const {content, layout} = setUp({isOpening: true});
+    content.style.paddingTop = '12px';
+    content.style.paddingBottom = '7px';
+    playLayoutChange(layout, content);
+    expect(content.style.getPropertyValue('clip-path')).toBe(
+      'inset(12px 0px 0px 0px)',
+    );
   });
 
   it('keeps the moving clip for an element that paints its own box', () => {
