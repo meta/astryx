@@ -647,8 +647,8 @@ export function Carousel({
         layer.render(
           <>
             <div
-              // A hidden button is never a Tab stop or in the a11y tree; its
-              // disabled state alone keeps it focusable (spec:AST-085 FR1).
+              // A hidden button is never a Tab stop or in the a11y tree. Its
+              // disabled state alone would keep it focusable.
               inert={!canScrollStart || undefined}
               {...stylex.props(
                 styles.buttonPill,
@@ -691,8 +691,8 @@ export function Carousel({
               />
             </div>
             <div
-              // A hidden button is never a Tab stop or in the a11y tree; its
-              // disabled state alone keeps it focusable (spec:AST-085 FR1).
+              // A hidden button is never a Tab stop or in the a11y tree. Its
+              // disabled state alone would keep it focusable.
               inert={!canScrollEnd || undefined}
               {...stylex.props(
                 styles.buttonPill,
