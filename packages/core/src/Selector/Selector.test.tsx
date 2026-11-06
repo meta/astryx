@@ -5540,6 +5540,22 @@ describe('Selector with hasSearch: the closed trigger names the selection', () =
     expect(screen.getByRole('button', {name: 'Team'})).toBeInTheDocument();
   });
 
+  it('keeps a caller aria-label as the first part of the name', () => {
+    render(
+      <Selector
+        label="Team"
+        aria-label="Pick a team"
+        options={OPTIONS}
+        value="Banana"
+        onChange={() => {}}
+        hasSearch
+      />,
+    );
+    expect(
+      screen.getByRole('button', {name: 'Pick a team Banana'}),
+    ).toBeInTheDocument();
+  });
+
   it('keeps the combobox shape named by its label, with the value as its value', () => {
     render(
       <Selector

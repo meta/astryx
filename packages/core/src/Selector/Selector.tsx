@@ -1999,11 +1999,15 @@ export function Selector<T extends SelectorOptionType>(
       </>
     );
 
-  // The searchable trigger is a button, and a button reads no value. So its
-  // name carries the value text after the label, as a select-only button
-  // does. Standalone, the field label then needs an id to be referenced.
+  // A screen reader announces no value for a button. So the searchable
+  // trigger's name holds the value text after the label. A standalone label
+  // needs an id for this reference. A caller aria-label stays the name's first
+  // part: the trigger refers to itself.
+  const callerAriaLabel = (rest as {'aria-label'?: string})['aria-label'];
   const triggerNameLabelId =
-    triggerLabelledBy ?? (inputGroup ? undefined : fieldLabelId);
+    callerAriaLabel != null
+      ? triggerId
+      : (triggerLabelledBy ?? (inputGroup ? undefined : fieldLabelId));
   const isValueInTriggerName =
     hasSearch &&
     !isEffectivelyReadOnly &&
