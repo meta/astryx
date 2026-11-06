@@ -324,6 +324,13 @@ export const DEFAULT_CHECK_BUDGET_MS = 8 * 60 * 1000;
 export const RECORDED_TIME_MARGIN = 1.25;
 export const STARTUP_MS = 30 * 1000;
 
+/**
+ * The most a run spends on the specs of folders that render a touched
+ * component: their share of the projected time, after the changed and owned
+ * specs.
+ */
+export const DEPENDENT_SHARE_MS = 3 * 60 * 1000;
+
 /** The expected time of a file that has no recorded time. */
 const UNRECORDED_FILE_SECONDS = 60;
 
@@ -379,83 +386,166 @@ export function ownedSpecs({specs, components, changedPaths}) {
 
 // The component folders that render a touched component (spec:AST-030 FR12).
 // The CI step runs this file alone from the merge commit, so it imports no
-// repository module. A folder renders a component when its source imports
-// that component's folder: a relative import (`../Spinner/Spinner`) in one
-// package, or a named import from `@astryxdesign/core` in another. Shared
-// folders (`utils`, `hooks`, `internal`) pass the reach on but are never listed.
+// repository module. The graph is file by file over value imports and
+// re-exports (`import type` and `export type` put no code on a page): a
+// relative specifier, a package subpath (`@astryxdesign/core/internal/touch`),
+// or a named import from a package root, through that package's folder
+// barrels. Reach crosses shared files (`utils`, `hooks`, `internal`) without
+// counting a step; each step into another component folder counts one.
+
 const SOURCE = /\.(?:[cm]?[jt]sx?)$/;
 const NOT_RENDERED =
-  /(?:^|\/)__tests__\/|\.(?:test|stories|doc)\.[^/]+$|\.spec\.[^/]+$/;
-const RELATIVE = /from\s+['"]\.\.\/([A-Za-z][\w-]*)\//g;
-const CORE_NAMED =
-  /import\s+(?:type\s+)?\{([^}]*)\}\s+from\s+['"]@astryxdesign\/core['"]/g;
-const CORE_SUBPATH =
-  /from\s+['"]@astryxdesign\/core\/(?:internal\/)?([A-Za-z][\w-]*)['"]/g;
+  /(?:^|\/)__tests__\/|\.(?:test|stories|doc)\.[^/]+$|\.spec\.[^/]+$|\.d\.ts$/;
+const STATEMENT =
+  /(?:^|[\n;])\s*(import|export)\s+(type\s+)?([^'";]*?)\s*from\s*['"]([^'"]+)['"]|(?:^|[\n;])\s*import\s*['"]([^'"]+)['"]/g;
+const RESOLVE_SUFFIXES = [
+  '',
+  '.ts',
+  '.tsx',
+  '.mts',
+  '.js',
+  '.jsx',
+  '.mjs',
+  '/index.ts',
+  '/index.tsx',
+  '/index.js',
+];
 
-const isComponentFolder = name => /^[A-Z]/.test(name);
+const componentFolderOf = file => {
+  const match = /^packages\/([^/]+)\/src\/([A-Z][^/]*)\//.exec(file);
+  return match ? `${match[1]}/${match[2]}` : null;
+};
 
-function sourceFiles(dir) {
+function sourceFiles(root, dir) {
   const out = [];
-  if (!fs.existsSync(dir)) return out;
-  for (const entry of fs.readdirSync(dir, {withFileTypes: true})) {
-    const file = path.join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...sourceFiles(file));
-    else if (SOURCE.test(entry.name)) out.push(file);
+  const full = path.join(root, dir);
+  if (!fs.existsSync(full)) return out;
+  for (const entry of fs.readdirSync(full, {withFileTypes: true})) {
+    const file = `${dir}/${entry.name}`;
+    if (entry.isDirectory()) {
+      if (entry.name !== 'node_modules' && entry.name !== 'dist')
+        out.push(...sourceFiles(root, file));
+    } else if (SOURCE.test(entry.name) && !NOT_RENDERED.test(file)) {
+      out.push(file);
+    }
   }
   return out;
 }
 
 /**
- * Edges `imported -> importers` between the package folders under
- * `packages/<pkg>/src/`, keyed `<pkg>/<Folder>`.
+ * The value imports of one source text: `[{specifier, names}]`, where `names`
+ * lists the named value bindings (empty for a default, namespace or bare
+ * import, which take the whole module).
+ */
+export function valueImports(text) {
+  const out = [];
+  for (const match of text.matchAll(STATEMENT)) {
+    if (match[5]) {
+      out.push({specifier: match[5], names: []});
+      continue;
+    }
+    if (match[2]) continue;
+    const clause = match[3] ?? '';
+    const braced = /\{([^}]*)\}/.exec(clause);
+    const names = braced
+      ? braced[1]
+          .split(',')
+          .map(part => part.trim())
+          .filter(part => part && !part.startsWith('type '))
+          .map(part => part.split(/\s+as\s+/)[0].trim())
+      : [];
+    const outsideBraces = clause
+      .replace(/\{[^}]*\}/, '')
+      .replace(/,/g, '')
+      .trim();
+    // `import {type A, type B} from` imports no value.
+    if (braced && names.length === 0 && !outsideBraces) continue;
+    out.push({specifier: match[4], names: outsideBraces ? [] : names});
+  }
+  return out;
+}
+
+/**
+ * Edges `imported file -> importing files` over the packages' rendered
+ * sources.
  * @param {string} root
  * @returns {Map<string, Set<string>>}
  */
 export function importerGraph(root) {
   const packagesDir = path.join(root, 'packages');
+  const packages = fs.existsSync(packagesDir)
+    ? fs
+        .readdirSync(packagesDir)
+        .filter(pkg => fs.existsSync(path.join(packagesDir, pkg, 'src')))
+    : [];
+  const files = packages.flatMap(pkg =>
+    sourceFiles(root, `packages/${pkg}/src`),
+  );
+  const known = new Set(files);
+  const texts = new Map(
+    files.map(file => [file, fs.readFileSync(path.join(root, file), 'utf8')]),
+  );
+  const resolve = target => {
+    for (const suffix of RESOLVE_SUFFIXES) {
+      if (known.has(`${target}${suffix}`)) return `${target}${suffix}`;
+    }
+    return null;
+  };
+  // Each package root's named exports, through its folder barrels.
+  const barrelOf = new Map();
+  const exportsOf = pkg => {
+    if (barrelOf.has(pkg)) return barrelOf.get(pkg);
+    const names = new Map();
+    const index = resolve(`packages/${pkg}/src/index`);
+    for (const {specifier, names: own} of index
+      ? valueImports(texts.get(index))
+      : []) {
+      if (!specifier.startsWith('.')) continue;
+      const target = resolve(
+        path.posix.normalize(`${path.posix.dirname(index)}/${specifier}`),
+      );
+      if (!target) continue;
+      for (const name of own) names.set(name, target);
+      if (own.length === 0) {
+        for (const inner of valueImports(texts.get(target))) {
+          for (const name of inner.names) names.set(name, target);
+        }
+        for (const match of texts
+          .get(target)
+          .matchAll(/export\s+(?:const|function|class)\s+(\w+)/g)) {
+          names.set(match[1], target);
+        }
+      }
+    }
+    barrelOf.set(pkg, names);
+    return names;
+  };
   const importers = new Map();
   const add = (imported, importer) => {
-    if (imported === importer) return;
+    if (!imported || imported === importer) return;
     if (!importers.has(imported)) importers.set(imported, new Set());
     importers.get(imported).add(importer);
   };
-  const coreDir = path.join(packagesDir, 'core/src');
-  const coreFolders = new Set(
-    fs.existsSync(coreDir)
-      ? fs
-          .readdirSync(coreDir, {withFileTypes: true})
-          .filter(entry => entry.isDirectory())
-          .map(entry => entry.name)
-      : [],
-  );
-  for (const pkg of fs.existsSync(packagesDir)
-    ? fs.readdirSync(packagesDir)
-    : []) {
-    const src = path.join(packagesDir, pkg, 'src');
-    if (!fs.existsSync(src) || !fs.statSync(src).isDirectory()) continue;
-    for (const entry of fs.readdirSync(src, {withFileTypes: true})) {
-      if (!entry.isDirectory()) continue;
-      const importer = `${pkg}/${entry.name}`;
-      for (const file of sourceFiles(path.join(src, entry.name))) {
-        const relative = path.relative(root, file).split(path.sep).join('/');
-        if (NOT_RENDERED.test(relative)) continue;
-        const text = fs.readFileSync(file, 'utf8');
-        for (const match of text.matchAll(RELATIVE))
-          add(`${pkg}/${match[1]}`, importer);
-        if (pkg === 'core') continue;
-        for (const match of text.matchAll(CORE_NAMED)) {
-          for (const name of match[1].split(',')) {
-            const bare = name
-              .replace(/^\s*type\s+/, '')
-              .split(/\s+as\s+/)[0]
-              .trim();
-            if (coreFolders.has(bare)) add(`core/${bare}`, importer);
-          }
-        }
-        for (const match of text.matchAll(CORE_SUBPATH)) {
-          if (coreFolders.has(match[1])) add(`core/${match[1]}`, importer);
-        }
+  for (const file of files) {
+    for (const {specifier, names} of valueImports(texts.get(file))) {
+      if (specifier.startsWith('.')) {
+        add(
+          resolve(
+            path.posix.normalize(`${path.posix.dirname(file)}/${specifier}`),
+          ),
+          file,
+        );
+        continue;
       }
+      const match = /^@astryxdesign\/([^/]+)(?:\/(.+))?$/.exec(specifier);
+      if (!match || !packages.includes(match[1])) continue;
+      const [, pkg, subpath] = match;
+      if (subpath) {
+        add(resolve(`packages/${pkg}/src/${subpath}`), file);
+        continue;
+      }
+      const barrel = exportsOf(pkg);
+      for (const name of names) add(barrel.get(name), file);
     }
   }
   return importers;
@@ -463,29 +553,52 @@ export function importerGraph(root) {
 
 /**
  * The component folders that render a touched folder, nearest first, then in
- * path order. Touched folders and shared (lower-case) folders are left out.
+ * path order. A step from one component folder into another counts one;
+ * steps inside a folder or through shared files count none.
  * @param {Map<string, Set<string>>} importers
  * @param {string[]} touched `<pkg>/<Folder>`
  * @returns {{folder: string, depth: number}[]}
  */
 export function renderingFolders(importers, touched) {
-  const depth = new Map(touched.map(folder => [folder, 0]));
-  const queue = [...touched];
-  while (queue.length > 0) {
-    const folder = queue.shift();
-    for (const importer of importers.get(folder) ?? []) {
-      if (depth.has(importer)) continue;
-      depth.set(importer, depth.get(folder) + 1);
-      queue.push(importer);
+  const touchedSet = new Set(touched);
+  const depth = new Map();
+  const deque = [];
+  for (const file of importers.keys()) {
+    if (touchedSet.has(componentFolderOf(file))) {
+      depth.set(file, 0);
+      deque.push(file);
     }
   }
-  const touchedSet = new Set(touched);
-  return [...depth]
-    .filter(
-      ([folder]) =>
-        !touchedSet.has(folder) &&
-        isComponentFolder(folder.split('/')[1] ?? ''),
-    )
+  for (const [, set] of importers) {
+    for (const file of set) {
+      if (touchedSet.has(componentFolderOf(file)) && !depth.has(file)) {
+        depth.set(file, 0);
+        deque.push(file);
+      }
+    }
+  }
+  while (deque.length > 0) {
+    const file = deque.shift();
+    const here = depth.get(file);
+    const folder = componentFolderOf(file);
+    for (const importer of importers.get(file) ?? []) {
+      const target = componentFolderOf(importer);
+      if (touchedSet.has(target)) continue;
+      const step = target && target !== folder ? 1 : 0;
+      const next = here + step;
+      if (depth.has(importer) && depth.get(importer) <= next) continue;
+      depth.set(importer, next);
+      if (step === 0) deque.unshift(importer);
+      else deque.push(importer);
+    }
+  }
+  const folders = new Map();
+  for (const [file, d] of depth) {
+    const folder = componentFolderOf(file);
+    if (!folder || touchedSet.has(folder)) continue;
+    if (!folders.has(folder) || folders.get(folder) > d) folders.set(folder, d);
+  }
+  return [...folders]
     .map(([folder, d]) => ({folder, depth: d}))
     .sort((a, b) => a.depth - b.depth || a.folder.localeCompare(b.folder));
 }
@@ -560,9 +673,10 @@ function median(values) {
 /**
  * The default check's run. First the changed specs, at most the limit, in path
  * order. Then the owned specs, in path order. Then the dependents' specs, in
- * the order given (nearest first). A file starts only when the run still fits
- * the budget with that file at its recorded time (with the margin). The other
- * files are not run, with the label that runs them.
+ * the order given (nearest first), within their own share of the time. A file
+ * starts only when the run still fits the budget with that file at its
+ * recorded time (with the margin). The other files are not run, with the
+ * label that runs them.
  * @param {object} options
  * @param {{file: string, reason: string}[]} options.changed
  * @param {{file: string, reason: string}[]} options.owned
@@ -570,6 +684,7 @@ function median(values) {
  * @param {Record<string, number>} options.seconds recorded seconds per file
  * @param {number} options.workers
  * @param {number} [options.budgetMs]
+ * @param {number} [options.dependentShareMs]
  */
 export function planDefaultCheck({
   changed,
@@ -578,6 +693,7 @@ export function planDefaultCheck({
   seconds,
   workers,
   budgetMs = DEFAULT_CHECK_BUDGET_MS,
+  dependentShareMs = DEPENDENT_SHARE_MS,
 }) {
   const {run: changedInLimit, notRun} = withinBudget(changed);
   const fallback = median(Object.values(seconds));
@@ -593,17 +709,34 @@ export function planDefaultCheck({
   const after = dependents.filter(
     ({file}) => !planned.has(file) && !ownedFiles.has(file),
   );
-  for (const entry of [...changedInLimit, ...ordered, ...after]) {
+  const tryRun = (entry, fits, limit) => {
     const withFile = [...files, entry.file];
-    if (STARTUP_MS + projectedMs(withFile, msOf, workers) <= budgetMs) {
-      run.push(entry);
-      files.push(entry.file);
-    } else {
+    if (STARTUP_MS + projectedMs(withFile, msOf, workers) > budgetMs) {
       notRun.push({
         file: entry.file,
         reason: `${entry.reason}; its expected ${Math.round(secondsOf(entry.file))} s does not fit the default check's ${budgetMs / 60000}-minute budget; add ci:run-a11y to run it`,
       });
+    } else if (!fits(withFile)) {
+      notRun.push({
+        file: entry.file,
+        reason: `${entry.reason}; its expected ${Math.round(secondsOf(entry.file))} s does not fit the ${limit}; add ci:run-a11y to run it`,
+      });
+    } else {
+      run.push(entry);
+      files.push(entry.file);
     }
+  };
+  for (const entry of [...changedInLimit, ...ordered])
+    tryRun(entry, () => true);
+  const beforeDependents = projectedMs(files, msOf, workers);
+  for (const entry of after) {
+    tryRun(
+      entry,
+      withFile =>
+        projectedMs(withFile, msOf, workers) - beforeDependents <=
+        dependentShareMs,
+      `${dependentShareMs / 60000}-minute share for folders that render a touched component`,
+    );
   }
   return {run, notRun};
 }
@@ -628,7 +761,7 @@ export function summaryMarkdown({
   if (rendering.length) {
     lines.push(
       '',
-      `Folders that render a touched component: ${rendering.length}; their specs run, nearest first, in the time left.`,
+      `Folders that render a touched component: ${rendering.length}; their specs run, nearest first, within ${DEPENDENT_SHARE_MS / 60000} minutes of the time left.`,
     );
   }
   lines.push('');

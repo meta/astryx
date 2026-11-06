@@ -15,8 +15,10 @@
  *   columns — label, value, and a trailing action column for copy buttons —
  *   so the buttons align down a single column no matter how wide each value
  *   is. The action column is only added when at least one row is copyable, so
- *   a fully read-only card carries no dangling gutter. Label-less cards drop
- *   the label column and stack to whatever columns remain.
+ *   a fully read-only card carries no dangling gutter. A copy button sits
+ *   inside its row's value, which spans the value and action columns through
+ *   a subgrid. A row without a label is named by its zone's long name, which
+ *   is visually hidden. A card with no labels drops the label column.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Timestamp/Timestamp.tsx (the lazy() + Suspense wrapper)
@@ -32,6 +34,7 @@ import {IconButton} from '../IconButton/IconButton';
 import {ComponentIcon} from '../Icon/ComponentIcon';
 import {useClipboard} from '../hooks/useClipboard';
 import {themeProps} from '../utils/themeProps';
+import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
 import {
   colorVars,
   spacingVars,
@@ -86,6 +89,19 @@ const styles = stylex.create({
     margin: 0,
     padding: 0,
     whiteSpace: 'nowrap',
+  },
+  // A value carrying the action cell spans the value and action columns and
+  // shares the card's tracks, so the copy buttons still align.
+  // Without subgrid, a flex row keeps the button at the row's end.
+  valueCells: {
+    gridColumn: 'span 2',
+    display: {
+      default: 'flex',
+      '@supports (grid-template-columns: subgrid)': 'grid',
+    },
+    justifyContent: 'space-between',
+    gridTemplateColumns: 'subgrid',
+    alignItems: 'center',
   },
   // The trailing action cell holds the copy button (or nothing, on a
   // read-only row). It lives in its own grid column so buttons align.
@@ -179,17 +195,28 @@ function EntryRow({
   hasLabelColumn: boolean;
   hasActionColumn: boolean;
 }) {
+  // A description list holds only name-value groups, so the action cell lives
+  // inside the value. A row without a label is named by its zone, out of
+  // sight, so the card looks the same.
+  const hasLabel = line.label != null && line.label !== '';
+  const hiddenName = <VisuallyHidden>{line.zoneName}</VisuallyHidden>;
   return (
     <div {...stylex.props(styles.row)}>
-      {hasLabelColumn && (
-        <dt {...stylex.props(styles.label)}>{line.label ?? ''}</dt>
+      {hasLabelColumn ? (
+        <dt {...stylex.props(styles.label)}>
+          {hasLabel ? line.label : hiddenName}
+        </dt>
+      ) : (
+        <VisuallyHidden as="dt">{line.zoneName}</VisuallyHidden>
       )}
-      <dd {...stylex.props(styles.value)}>{line.value}</dd>
-      {hasActionColumn && (
-        <div {...stylex.props(styles.action)}>
-          {line.isCopyable && <CopyButton value={line.value} />}
-        </div>
-      )}
+      <dd {...stylex.props(styles.value, hasActionColumn && styles.valueCells)}>
+        {hasActionColumn ? <span>{line.value}</span> : line.value}
+        {hasActionColumn && (
+          <span {...stylex.props(styles.action)}>
+            {line.isCopyable && <CopyButton value={line.value} />}
+          </span>
+        )}
+      </dd>
     </div>
   );
 }
