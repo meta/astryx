@@ -325,6 +325,14 @@ export function findingChecks(findings) {
     }));
 }
 
+/** Findings apart from advisories, which the report lists on their own. */
+export function splitAdvisories(allFindings) {
+  return {
+    findings: allFindings.filter(finding => !finding.advisory),
+    advisories: allFindings.filter(finding => finding.advisory),
+  };
+}
+
 export function buildReport({
   base = 'origin/main',
   head = null,
@@ -384,7 +392,7 @@ export function buildReport({
       ...files.filter(file => classes[file].specRecord && present.has(file)),
     ]),
   ];
-  const findings = [
+  const allFindings = [
     ...sizeFindings(authoredLines, body),
     ...sharedOwnerFindings(addedLines),
     ...effectFindings(addedLines, readHead),
@@ -398,6 +406,7 @@ export function buildReport({
     }),
     ...mergeFindings(merge.conflicts ?? [], base),
   ];
+  const {findings, advisories} = splitAdvisories(allFindings);
   return {
     base,
     head: head ?? 'working tree',
@@ -406,6 +415,7 @@ export function buildReport({
     authoredLines,
     merge,
     findings,
+    advisories,
     files: files.map(file => ({file, class: fileClass(file, classes[file])})),
     records: [...records].map(([id, recordPath]) => ({id, path: recordPath})),
     claims: [...claims].sort(),
@@ -457,6 +467,13 @@ export function formatReport(report) {
     ...(report.findings.length
       ? report.findings.map(formatFinding)
       : ['  none']),
+    ...(report.advisories?.length
+      ? [
+          '',
+          `Advisory, not yet a finding (${report.advisories.length}):`,
+          ...report.advisories.map(formatFinding),
+        ]
+      : []),
     '',
     'Checklist items that apply:',
     ...report.checks.map(

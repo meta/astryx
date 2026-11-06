@@ -5,7 +5,7 @@
  * @input A unified diff, a reader for the head tree, the Changeset coverage
  *   result, and the pull request description when one is given.
  * @output Findings for checklist items h to l: the item, the file and line,
- *   the rule, and the fix.
+ *   the rule, and the fix. An advisory finding is reported apart.
  * @position Called by `scripts/pre-review.mjs`. SYNC: keep each rule in step
  *   with its item in `docs/contributing/pull-requests.md#pre-review-checklist`.
  */
@@ -403,8 +403,15 @@ export function effectFindings(addedLines, readHead) {
   const findings = [];
   const sources = new Map();
   const renderWrites = new Map();
-  const add = (file, line, rule, fix) =>
-    findings.push({item: 'j', file, line, rule, fix});
+  const add = (file, line, rule, fix, advisory = false) =>
+    findings.push({
+      item: 'j',
+      file,
+      line,
+      rule,
+      fix,
+      ...(advisory && {advisory}),
+    });
   const linesOf = file => {
     if (!sources.has(file)) sources.set(file, readHead(file));
     return sources.get(file)?.split('\n') ?? null;
@@ -441,6 +448,8 @@ export function effectFindings(addedLines, readHead) {
         line,
         `\`${renderWritesOf(file).get(line)}.current\` is written during render`,
         'React can discard a render, and the ref then keeps a value that never committed. Write the ref in the handler that changes it, or keep the latest prop or callback in a one-line layout or insertion Effect with a note. Only lazy initialization (`if (ref.current == null) ref.current = …`) stays in render.',
+        // Advisory until a current record states this rule.
+        true,
       );
     }
     if (!EFFECT.test(text)) continue;

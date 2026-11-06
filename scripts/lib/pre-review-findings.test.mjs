@@ -184,7 +184,7 @@ describe('effectFindings', () => {
     const sourceLines = source.split('\n');
     return effectFindings(addedLinesOf(file, sourceLines), name =>
       name === file ? source : null,
-    ).map(f => [f.line, f.rule]);
+    ).map(f => [f.line, f.rule, ...(f.advisory ? ['advisory'] : [])]);
   }
 
   it('flags a new Effect with no note', () => {
@@ -313,7 +313,7 @@ describe('effectFindings', () => {
     ).toEqual([[2, 'The Effect only copies a value into state']]);
   });
 
-  it('flags a ref write in a component or hook body', () => {
+  it('reports a ref write in a component or hook body as an advisory', () => {
     expect(
       findingsFor(
         [
@@ -335,9 +335,9 @@ describe('effectFindings', () => {
         ].join('\n'),
       ),
     ).toEqual([
-      [2, '`labelRef.current` is written during render'],
-      [7, '`previousRef.current` is written during render'],
-      [12, '`cacheRef.current` is written during render'],
+      [2, '`labelRef.current` is written during render', 'advisory'],
+      [7, '`previousRef.current` is written during render', 'advisory'],
+      [12, '`cacheRef.current` is written during render', 'advisory'],
     ]);
   });
 
@@ -356,7 +356,7 @@ describe('effectFindings', () => {
           '}',
         ].join('\n'),
       ),
-    ).toEqual([[7, '`otherRef.current` is written during render']]);
+    ).toEqual([[7, '`otherRef.current` is written during render', 'advisory']]);
   });
 
   it('accepts a ref write in a handler, a callback ref, or outside a component', () => {
