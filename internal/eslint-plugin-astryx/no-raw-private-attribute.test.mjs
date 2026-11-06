@@ -167,6 +167,33 @@ tester.run('no-raw-private-attribute', rule, {
       code: `import {pressThemeRules} from '../privateAttributes/press';`,
       filename: themeEngine,
     },
+    // ✅ The sibling keeps the attribute's selector literals for its own
+    //    stylex.create calls, directly and through module constants.
+    {
+      code: `
+        import {PRESS_ATTRIBUTE} from './press';
+        const PRESSED_ON = '[data-astryx-press="on"]';
+        const PRESSED_ANY =
+          ':is([data-astryx-press="on"],[data-astryx-press="fading"])';
+        export const layerStyles = stylex.create({
+          base: {
+            opacity: {default: 1, [PRESSED_ON]: 0.8},
+            isolation: {default: null, [PRESSED_ANY]: 'isolate'},
+          },
+          paint: {
+            ':is([data-astryx-press="fading"])': {opacity: 0},
+            [stylex.when.ancestor('[data-astryx-press="on"]', scope)]: {opacity: 1},
+          },
+        });
+        export const pressOn = {[PRESS_ATTRIBUTE]: 'on'};
+      `,
+      filename: plainOwnerSibling,
+    },
+    // ✅ Other files still import the sibling's styles.
+    {
+      code: `import {layerStyles} from '../privateAttributes/press.stylex';`,
+      filename: plainOwnerSite,
+    },
     // ✅ naming.ts builds every data-astryx-* name.
     {
       code: 'export function dataAttr(name) { return `data-${dataAttrNamespace}-${name}`; }',
@@ -359,17 +386,48 @@ tester.run('no-raw-private-attribute', rule, {
       ],
     },
     // ❌ Two owner files for one attribute: the `.stylex.ts` sibling of a
-    //    plain-TS owner writes the raw name too.
+    //    plain-TS owner sets the attribute, exports a selector, or reads it
+    //    outside stylex.create.
     {
       code: `export const pressOn = {'data-astryx-press': 'on'};`,
       filename: plainOwnerSibling,
       errors: [
         {
-          messageId: 'raw',
+          messageId: 'siblingSelector',
           data: {
             attribute: 'data-astryx-press',
             owner: 'packages/core/src/privateAttributes/press.ts',
           },
+        },
+      ],
+    },
+    {
+      code: `export function setPress(el) { el.setAttribute('data-astryx-press', 'on'); }`,
+      filename: plainOwnerSibling,
+      errors: [{messageId: 'siblingSelector'}],
+    },
+    {
+      code: `export const PRESSED_ON = '[data-astryx-press="on"]';`,
+      filename: plainOwnerSibling,
+      errors: [{messageId: 'siblingSelector'}],
+    },
+    {
+      code: `
+        const PRESSED_ON = '[data-astryx-press="on"]';
+        export const styles = stylex.create({base: {opacity: {default: 1, [PRESSED_ON]: 0.8}}});
+        export const isPressed = el => el.matches(PRESSED_ON);
+      `,
+      filename: plainOwnerSibling,
+      errors: [{messageId: 'siblingSelector'}],
+    },
+    // ❌ Only the sibling and the theme engine import a plain-TS owner.
+    {
+      code: `import {PRESS_ATTRIBUTE} from '../privateAttributes/press';`,
+      filename: plainOwnerSite,
+      errors: [
+        {
+          messageId: 'plainOwnerImport',
+          data: {source: '../privateAttributes/press'},
         },
       ],
     },

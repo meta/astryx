@@ -16,10 +16,14 @@
  *
  * In Core, the owner can instead be a plain-TS module,
  * `packages/core/src/privateAttributes/<name>.ts`, that the uncompiled theme
- * engine can import. When it exists, it is the only owner: its `.stylex.ts`
- * sibling is an ordinary file that imports the name and never writes it. A
- * plain-TS owner may export its name and the rule text built on it, because
- * its sibling and the theme engine need them.
+ * engine can import. It may export its name and the selector text built on
+ * it, and only its `.stylex.ts` sibling and the theme engine
+ * (`packages/core/src/theme/`) may import it. When it exists, its
+ * `.stylex.ts` sibling is not an owner. The sibling may write the attribute's
+ * selectors only as literals that reach its own `stylex.create` calls,
+ * directly or through module constants read only there, because StyleX
+ * resolves a selector only where it is written. Any other use in the sibling
+ * is reported.
  *
  * Reported, outside the owner modules:
  *   - a string literal that contains `data-astryx-<name>`, in any position
@@ -118,6 +122,31 @@ const PLAIN_OWNER_MODULE =
   /(?:^|\/)packages\/core\/src\/privateAttributes\/([^/.]+)\.ts$/;
 const PACKAGE_SOURCE = /(?:^|\/)packages\/([^/]+)\/src\//;
 const NAMING_MODULE = /(?:^|\/)packages\/core\/src\/naming\.ts$/;
+const PLAIN_OWNER_TARGET =
+  /^(.*\/packages\/core\/src\/privateAttributes)\/([^/.]+)(?:\.(?:ts|js))?$/;
+const THEME_ENGINE = /(?:^|\/)packages\/core\/src\/theme\//;
+
+/** Is `node` an argument of a `stylex.create` call, at any depth? */
+function insideStylexCreate(node) {
+  let current = node;
+  while (current.parent != null) {
+    const parent = current.parent;
+    if (
+      parent.type === 'CallExpression' &&
+      parent.arguments.includes(current) &&
+      parent.callee.type === 'MemberExpression' &&
+      !parent.callee.computed &&
+      parent.callee.object.type === 'Identifier' &&
+      parent.callee.object.name === 'stylex' &&
+      parent.callee.property.type === 'Identifier' &&
+      parent.callee.property.name === 'create'
+    ) {
+      return true;
+    }
+    current = parent;
+  }
+  return false;
+}
 
 /**
  * Every `data-astryx-*` attribute a piece of text names, as the attribute
@@ -320,6 +349,14 @@ const rule = {
       exportedName:
         'An owner module exports styles, setter props and readers, never its attribute name ' +
         'or a selector on it as a string ({{attribute}}).',
+      siblingSelector:
+        '`{{attribute}}` belongs to {{owner}}. Its `.stylex.ts` sibling writes the attribute ' +
+        'only as a selector literal for its own `stylex.create` calls; it never sets the ' +
+        'attribute or exports the selector.',
+      plainOwnerImport:
+        "'{{source}}' is a plain-TS owner module. Only its `.stylex.ts` sibling and the theme " +
+        'engine in packages/core/src/theme import it; other files spread the styles, setter ' +
+        'props and readers the owner modules export.',
     },
   },
   create(context) {
@@ -351,6 +388,13 @@ const rule = {
         : null);
     const ownedName = ownerStem == null ? null : kebabCase(ownerStem);
     const mayExportName = plainOwnerStem != null;
+    // The `.stylex.ts` sibling of a plain-TS owner: the attribute it may
+    // still write as a `stylex.create` selector.
+    const siblingName =
+      stylexOwnerStem != null && ownerStem == null
+        ? kebabCase(stylexOwnerStem)
+        : null;
+    const siblingValues = [];
     const ownerOf = name => {
       if (name == null) {
         return ownerDirectory;
@@ -373,6 +417,10 @@ const rule = {
         return;
       }
       const attribute = attributeLabel(name);
+      if (siblingName != null && name === siblingName) {
+        siblingValues.push(node);
+        return;
+      }
       if (ownedName != null) {
         if (name === ownedName) {
           return;
@@ -470,7 +518,82 @@ const rule = {
           messageId: 'foreignPackage',
           data: {source: specifier},
         });
+        return;
       }
+      checkPlainOwnerImport(source, specifier);
+    }
+
+    /**
+     * Only a plain-TS owner's `.stylex.ts` sibling and the theme engine may
+     * import it, because it exports the raw name.
+     */
+    function checkPlainOwnerImport(source, specifier) {
+      if (!specifier.startsWith('.')) {
+        return;
+      }
+      const target = path
+        .resolve(
+          path.dirname(context.filename ?? context.getFilename()),
+          specifier,
+        )
+        .split(path.sep)
+        .join('/');
+      const match = PLAIN_OWNER_TARGET.exec(target);
+      if (match == null) {
+        return;
+      }
+      const [, directory, stem] = match;
+      if (
+        !fs.existsSync(`${directory}/${stem}.ts`) ||
+        filename === `${directory}/${stem}.stylex.ts` ||
+        `${directory}/${stem}.ts` === filename ||
+        THEME_ENGINE.test(filename)
+      ) {
+        return;
+      }
+      context.report({
+        node: source,
+        messageId: 'plainOwnerImport',
+        data: {source: specifier},
+      });
+    }
+
+    /**
+     * Does the value of `node` reach only `stylex.create` arguments, directly
+     * or through module constants that are read only there?
+     */
+    function reachesOnlyStylexCreate(node, seen) {
+      if (insideStylexCreate(node)) {
+        return true;
+      }
+      const destination = valueDestination(node);
+      if (
+        destination == null ||
+        destination.exported ||
+        destination.binding.type !== 'VariableDeclarator'
+      ) {
+        return false;
+      }
+      const {binding} = destination;
+      if (seen.has(binding)) {
+        return true;
+      }
+      seen.add(binding);
+      const name = binding.id.name;
+      if (exportedLocals.has(name)) {
+        return false;
+      }
+      return sourceCode
+        .getDeclaredVariables(binding)
+        .filter(variable => variable.name === name)
+        .every(variable =>
+          variable.references.every(
+            reference =>
+              reference.identifier === binding.id ||
+              !reference.isRead() ||
+              reachesOnlyStylexCreate(reference.identifier, seen),
+          ),
+        );
     }
 
     function checkText(node, text) {
@@ -535,6 +658,21 @@ const rule = {
         }
       },
       'Program:exit'() {
+        for (const node of siblingValues) {
+          if (
+            !reachesOnlyStylexCreate(node, new Set()) &&
+            !isAllowed(attributeLabel(siblingName))
+          ) {
+            context.report({
+              node,
+              messageId: 'siblingSelector',
+              data: {
+                attribute: attributeLabel(siblingName),
+                owner: ownerOf(siblingName),
+              },
+            });
+          }
+        }
         for (const node of ownerValues) {
           if (reachesExport(node, new Set())) {
             context.report({

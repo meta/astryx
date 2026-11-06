@@ -225,18 +225,30 @@ runtime readers its package needs; every other file spreads those exports.
 
 In Core, the owner can instead be a plain-TS module,
 `packages/core/src/privateAttributes/<name>.ts`, that the uncompiled theme
-engine can import. When it exists, it is the only owner: its `.stylex.ts`
-sibling imports the name and never writes it raw. A plain-TS owner may export
-its name and the selector text built on it to its sibling and the theme engine;
-a `.stylex.ts` owner never exports them.
+engine can import. It may export its name and the selector text built on it,
+and only its `.stylex.ts` sibling and the theme engine in
+`packages/core/src/theme/` may import it; a `.stylex.ts` owner never exports
+them. When a plain-TS owner exists, its `.stylex.ts` sibling is not an owner:
+it writes the attribute's selectors only as literals that reach its own
+`stylex.create` calls (directly, or through module constants read only there),
+because StyleX resolves a selector only where it is written. It never sets the
+attribute or exports a selector.
 
 ```ts
 // fine in privateAttributes/press.ts, a plain-TS owner
 export const PRESS_ATTRIBUTE = 'data-astryx-press';
 // fine in privateAttributes/press.stylex.ts, its sibling
+const PRESSED_ON = '[data-astryx-press="on"]';
+const styles = stylex.create({
+  base: {opacity: {default: 1, [PRESSED_ON]: 0.8}},
+});
 import {PRESS_ATTRIBUTE} from './press';
+const pressOn = {[PRESS_ATTRIBUTE]: 'on'};
 // flagged in privateAttributes/press.stylex.ts once press.ts exists
 const pressOn = {'data-astryx-press': 'on'};
+el.setAttribute('data-astryx-press', 'on');
+// flagged in any other Core file but the theme engine
+import {PRESS_ATTRIBUTE} from '../privateAttributes/press';
 ```
 
 ```ts
