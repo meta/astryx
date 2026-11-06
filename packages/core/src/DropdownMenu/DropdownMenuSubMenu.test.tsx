@@ -1076,6 +1076,79 @@ describe('DropdownMenuSubMenu theming slots', () => {
   });
 });
 
+function TimedMoveMenu({
+  delay,
+  hideDelay,
+}: {
+  delay?: number;
+  hideDelay?: number;
+}) {
+  return (
+    <DropdownMenu button={{label: 'Actions'}}>
+      <DropdownMenuItem label="Rename" onClick={() => {}} />
+      <DropdownMenuSubMenu label="Move to" delay={delay} hideDelay={hideDelay}>
+        <DropdownMenuItem label="Folder A" onClick={() => {}} />
+      </DropdownMenuSubMenu>
+    </DropdownMenu>
+  );
+}
+
+describe('DropdownMenuSubMenu hover timing', () => {
+  it('waits the `delay` it is given before a hover opens the flyout', async () => {
+    vi.useFakeTimers({shouldAdvanceTime: true});
+    const user = userEvent.setup({advanceTimers: vi.advanceTimersByTime});
+    render(<TimedMoveMenu delay={1000} />);
+
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+    const trigger = screen.getByRole('menuitem', {
+      name: /Move to/,
+      hidden: true,
+    });
+    await user.hover(trigger);
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    act(() => {
+      vi.advanceTimersByTime(700);
+    });
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+    vi.useRealTimers();
+  });
+
+  it('keeps the flyout open for the `hideDelay` it is given after the pointer leaves', async () => {
+    vi.useFakeTimers({shouldAdvanceTime: true});
+    const user = userEvent.setup({advanceTimers: vi.advanceTimersByTime});
+    render(<TimedMoveMenu hideDelay={1000} />);
+
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+    const trigger = screen.getByRole('menuitem', {
+      name: /Move to/,
+      hidden: true,
+    });
+    await user.hover(trigger);
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+    await user.hover(
+      screen.getByRole('menuitem', {name: 'Rename', hidden: true}),
+    );
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    act(() => {
+      vi.advanceTimersByTime(700);
+    });
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+    vi.useRealTimers();
+  });
+});
+
 describe('DropdownMenuSubMenu hover/click guard', () => {
   it('keeps the flyout open when a hover-open is immediately clicked', async () => {
     vi.useFakeTimers({shouldAdvanceTime: true});
