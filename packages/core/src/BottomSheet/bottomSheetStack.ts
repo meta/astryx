@@ -52,7 +52,7 @@
 
 import {notifyTopLayerEntry} from '../Layer/modalOutlet';
 import {focusForLastInput, returnFocusForLastInput} from '../utils/focusReturn';
-import {realmValue} from '../utils/sharedContext';
+import {realmValue} from '../utils/sharedRealm';
 
 export interface BottomSheetStackView {
   /** Another modal sheet is presented alongside this one. */

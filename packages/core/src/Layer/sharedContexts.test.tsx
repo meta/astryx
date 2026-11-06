@@ -158,3 +158,46 @@ describe('every Core context is registered under a versioned key', () => {
     expect(shared).toEqual([]);
   });
 });
+
+describe('shared state in server-safe modules', () => {
+  const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  /** Every module a file reaches through relative imports, itself included. */
+  function reachedFrom(entry: string): string[] {
+    const seen = new Set<string>();
+    const queue = [entry];
+    while (queue.length > 0) {
+      const file = queue.shift() as string;
+      if (seen.has(file)) {
+        continue;
+      }
+      seen.add(file);
+      const text = fs.readFileSync(file, 'utf-8');
+      for (const m of text.matchAll(
+        /^import[^'"]*['"](\.{1,2}\/[^'"]+)['"]/gm,
+      )) {
+        if (/^import\s+type\b/.test(m[0])) {
+          continue;
+        }
+        const base = path.resolve(path.dirname(file), m[1]);
+        const target = ['.ts', '.tsx', '/index.ts']
+          .map(ext => base + ext)
+          .find(f => fs.existsSync(f));
+        if (target) {
+          queue.push(target);
+        }
+      }
+    }
+    return [...seen];
+  }
+
+  it('the English fallback reaches no client module, so it still loads on the server', () => {
+    const client = reachedFrom(path.join(SRC, 'i18n/englishFallback.ts'))
+      .filter(file =>
+        /^(?:\/\/[^\n]*\n|\s)*['"]use client['"]/.test(
+          fs.readFileSync(file, 'utf-8'),
+        ),
+      )
+      .map(file => path.relative(SRC, file));
+    expect(client).toEqual([]);
+  });
+});

@@ -10,11 +10,8 @@
  */
 
 import {useState, type Context, type ReactNode} from 'react';
-import {
-  createSharedContext,
-  realmValue,
-  sharedKey,
-} from '../utils/sharedContext';
+import {createSharedContext} from '../utils/sharedContext';
+import {realmValue, sharedKey} from '../utils/sharedRealm';
 
 type Reset = (children: ReactNode) => ReactNode;
 /**

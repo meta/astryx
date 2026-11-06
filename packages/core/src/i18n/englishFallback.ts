@@ -28,7 +28,7 @@
  */
 
 import type {RuntimeCatalog} from './types';
-import {realmValue, sharedKey} from '../utils/sharedContext';
+import {realmValue, sharedKey} from '../utils/sharedRealm';
 
 // Every copy of Core registers into one map, so a context that one copy
 // created resolves the English of another copy's components.
