@@ -173,7 +173,7 @@ function attemptFocus(element: HTMLElement): boolean {
  */
 function radioGroupOf(
   element: Element,
-  focusable: readonly HTMLElement[],
+  focusable: ReadonlyArray<HTMLElement>,
 ): HTMLInputElement[] | null {
   if (!isNamedRadio(element)) {
     return null;
@@ -199,7 +199,7 @@ function isNamedRadio(element: Element): element is HTMLInputElement {
 function isOnTabStop(
   active: Element,
   edge: HTMLElement,
-  focusable: readonly HTMLElement[],
+  focusable: ReadonlyArray<HTMLElement>,
 ): boolean {
   return (
     active === edge ||
@@ -215,7 +215,7 @@ function isOnTabStop(
  */
 function tabStopTarget(
   edge: HTMLElement,
-  focusable: readonly HTMLElement[],
+  focusable: ReadonlyArray<HTMLElement>,
   isForward: boolean,
 ): HTMLElement {
   const group = radioGroupOf(edge, focusable);
