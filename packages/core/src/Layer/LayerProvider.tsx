@@ -77,11 +77,12 @@ export function LayerProvider({
     return <LayerContext value={nestedValue}>{children}</LayerContext>;
   }
 
-  // The declared inset reaches anchored layers through context — each layer
-  // writes it inline on itself, so a corrective portal cannot escape it — and
-  // the toast viewport through the outlet. Nothing resolves placement through
-  // the provider (spec:AST-059 FR6). With no inset nothing is written, so a
-  // surface with no provider renders as one under the default provider.
+  // The declared inset reaches anchored layers through context. Each layer
+  // writes it inline on itself, so a corrective portal cannot escape it. The
+  // toast viewport gets it through the outlet. Nothing resolves placement
+  // through the provider (spec:AST-059 FR6). With no inset, no layer or toast
+  // viewport gets a layer-inset custom property. A surface with no provider
+  // therefore renders as one under the default provider.
   return (
     <LayerContext value={contextValue}>
       <ToastHostOutlet

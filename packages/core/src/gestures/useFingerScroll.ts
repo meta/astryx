@@ -34,10 +34,7 @@ import {isFingerScroll, watchFingerScrolls} from './fingerScroll';
 import {getGestureHost} from './GestureHost';
 import {useAttachment} from '../hooks/useAttachment';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
-
-function isDocument(value: unknown): value is Document {
-  return typeof Document !== 'undefined' && value instanceof Document;
-}
+import {isDocument} from '../utils/nodeType';
 
 /** The document a scroller is in: itself, for the page's own scroll. */
 function documentOf(node: Element | Document): Document {

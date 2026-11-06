@@ -3,9 +3,8 @@
 /**
  * @file animatedLayout.ts
  * @input The DOM (layout rectangles, computed style) and Web Animations. The
- *   internal `springs.settle` motion role at the area's tempo
- *   (resolveMotion.ts), the Reduce Motion cross-fade clock (uikit/timing.ts)
- *   and the block measure (frameBlock.ts)
+ *   theme's move curve and duration (themeTiming.ts), the Reduce Motion
+ *   cross-fade clock (uikit/timing.ts) and the block measure (frameBlock.ts)
  * @output Exports `createAnimatedLayout`, the opaque `AnimatedLayout` handle,
  *   `reportLayoutChange`, `playLayoutChange` and `layoutStartFor`. It also
  *   exports the exit hold (`holdLayoutExit`, `releaseLayoutExit`), the
@@ -38,8 +37,8 @@
  *   zero-size elements are skipped (an absolute child rides with its moving
  *   parent); a stuck sticky element does not change rectangle, so it stays.
  * - The move is a compositor-only `translate` (replace composition) from the
- *   old place to the new one, sampled from `springs.settle` into linear
- *   keyframes and corrected for a scaled ancestor. An element already gliding
+ *   old place to the new one. Its linear keyframes sample the theme's move
+ *   curve, corrected for a scaled ancestor. An element already gliding
  *   keeps that motion and adds the new move: the rest of its curve and the
  *   new move are summed into one new glide, velocity included. Its place
  *   before the change is read on the clock of every glide that carries it,
@@ -50,8 +49,8 @@
  *   glide the change leaves running cancels out of the move. Nothing
  *   animates height, and nothing scrolls the area.
  * - A measurement no commit claims by the next frame is dropped.
- * - The changed element plays its own entrance on the same spring, started in
- *   the same frame (`playLayoutChange`), or its exit: kept where it is while
+ * - The changed element plays its own entrance on the same curve, started in
+ *   the same frame (`playLayoutChange`). Or it exits, kept where it is while
  *   it gives up its space and conceals (`holdLayoutExit`). Both are FR9's
  *   edge reveal: from its block-end edge by default, or from the block-start
  *   or an inline edge it is given. Once the content on that edge's side
@@ -82,8 +81,6 @@
  */
 
 import {LATE_START_MS} from './frameBlock';
-import {resolveMotion} from './resolveMotion';
-import {motionRole} from './roles';
 import {
   inertCopy,
   isCopyable,
@@ -92,20 +89,21 @@ import {
   visiblePartCopy,
   wrapText,
 } from './transientCopy';
-import {isSpring} from './roleValue';
-import {progressCurve} from './progress';
-import type {SpringDescription} from './spring';
-import {registerSpringsTable, SETTLE_SPRING} from './uikit/springs';
+import {readThemeTiming, readThemeTokenText} from './themeTiming';
 import {themeReducesMotion} from '../privateAttributes/reducedMotion.stylex';
 import {reducedMotionCrossFade} from './uikit/timing';
+import {
+  batchPresented,
+  clearPresentedResolve,
+  registerPresentedOffset,
+  writePresentedResolve,
+} from './presentation';
 
-/** The shared motion role (`spec:AST-105` FR4). */
-const ROLE_ID = 'springs.settle';
 /** Below this many pixels a shift is not worth a move. */
 const MIN_SHIFT_PX = 0.5;
 /** The touch cross-fade's cap (`design:reduced-motion` DR2). */
 const CROSS_FADE_CAP_MS = 200;
-/** Keyframes per second the spring is sampled at. */
+/** Keyframes per second the motion is sampled at. */
 const SAMPLES_PER_SECOND = 60;
 
 // ---------------------------------------------------------------------------
@@ -114,7 +112,7 @@ const SAMPLES_PER_SECOND = 60;
 
 /** How a change plays under the reader's settings. */
 type LayoutMotion =
-  | {readonly kind: 'spring'; readonly progress: SpringProgress}
+  | {readonly kind: 'glide'; readonly progress: GlideProgress}
   | {
       readonly kind: 'fade';
       readonly durationMs: number;
@@ -122,9 +120,11 @@ type LayoutMotion =
     }
   | {readonly kind: 'instant'};
 
-/** The settle spring as remaining distance (1 → 0) over its duration. */
-interface SpringProgress {
+/** The move curve as remaining distance (1 → 0) over its duration. */
+interface GlideProgress {
   readonly durationMs: number;
+  /** The move curve's CSS text, as read where the area is. */
+  readonly easing: string;
   /** Remaining fraction of the move at `t` ms. */
   remaining(t: number): number;
 }
@@ -137,22 +137,24 @@ function matches(element: Element, query: string): boolean {
 }
 
 /**
- * `springs.settle` from the internal role registry: one shared value for the
- * glide, the changed element and the indicator. Motion roles are internal
- * (`spec:AST-094` DEC-11): no page style sets the role. The glide plays it
- * at the tempo of the theme that `area` is in.
+ * The theme's move curve over its shortest medium duration where `area` is:
+ * one value for the glide, the changed element and the indicator. The tokens
+ * carry the theme's `character` and `tempo`. Null when the duration is zero
+ * or the browser plays no such easing, and then the change lands at once.
  */
-function settleSpring(area: Element): SpringDescription {
-  registerSpringsTable();
-  const value = motionRole(ROLE_ID)?.value;
-  return resolveMotion(area, isSpring(value) ? value : SETTLE_SPRING);
-}
-
-function springProgress(description: SpringDescription): SpringProgress {
-  const curve = progressCurve(description, {epsilon: 0.001});
-  const durationMs = Math.max(1, curve.duration * 1000);
+function glideProgress(area: Element): GlideProgress | null {
+  const curve = readThemeTiming(area, {
+    duration: '--duration-medium-min',
+    easing: '--ease-move',
+  });
+  const easing = readThemeTokenText(area, '--ease-move');
+  if (curve == null || easing == null) {
+    return null;
+  }
+  const durationMs = curve.duration * 1000;
   return {
     durationMs,
+    easing,
     remaining: t => (t >= durationMs ? 0 : 1 - curve.at(t / 1000)),
   };
 }
@@ -176,7 +178,12 @@ function layoutMotion(area: Element): LayoutMotion {
       easing: `cubic-bezier(${x1}, ${y1}, ${x2}, ${y2})`,
     };
   }
-  return {kind: 'spring', progress: springProgress(settleSpring(area))};
+  const progress = glideProgress(area);
+  return progress == null ? {kind: 'instant'} : {kind: 'glide', progress};
+}
+
+function sampleCount(durationMs: number): number {
+  return Math.max(2, Math.ceil((durationMs / 1000) * SAMPLES_PER_SECOND) + 1);
 }
 
 /** Linear keyframes over `durationMs`, one per frame, from `frame(t ms)`. */
@@ -184,10 +191,7 @@ function sampleOver(
   durationMs: number,
   frame: (t: number) => Keyframe,
 ): Keyframe[] {
-  const count = Math.max(
-    2,
-    Math.ceil((durationMs / 1000) * SAMPLES_PER_SECOND) + 1,
-  );
+  const count = sampleCount(durationMs);
   const keyframes: Keyframe[] = [];
   for (let i = 0; i < count; i++) {
     const offset = i / (count - 1);
@@ -196,24 +200,12 @@ function sampleOver(
   return keyframes;
 }
 
-/** Linear keyframes sampled from the spring, one per frame. */
+/** Linear keyframes sampled from the move curve, one per frame. */
 function sampleKeyframes(
-  progress: SpringProgress,
+  progress: GlideProgress,
   frame: (remaining: number) => Keyframe,
 ): Keyframe[] {
   return sampleOver(progress.durationMs, t => frame(progress.remaining(t)));
-}
-
-/** The spring as a CSS `linear()` easing, for a CSS transition. */
-function linearEasing(progress: SpringProgress): string {
-  const stops: string[] = [];
-  const count = 24;
-  for (let i = 0; i <= count; i++) {
-    const fraction = i / count;
-    const value = 1 - progress.remaining(fraction * progress.durationMs);
-    stops.push(`${round(value)} ${round(fraction * 100)}%`);
-  }
-  return `linear(${stops.join(', ')})`;
 }
 
 function round(value: number): number {
@@ -224,16 +216,179 @@ function round(value: number): number {
 // Playing
 // ---------------------------------------------------------------------------
 
+/** The glide each element reports now, so that only its end clears it. */
+const presentedGlides = new WeakMap<Element, object>();
+
+/** A glide's report in the presented hit-test registry. */
+interface GlideReport {
+  readonly element: Element;
+  /** Removes the report. A second call does nothing. */
+  readonly remove: () => void;
+}
+
+const glideReports = new Set<GlideReport>();
+
+/** The reports of ended glides, removed together in a later task. */
+const endedReports: GlideReport[] = [];
+
+/**
+ * Removes the reports of ended glides with one notice to the registry's
+ * watchers. A glide in a closed window or out of its document never ends, so
+ * its report goes here too.
+ */
+function removeEndedReports(): void {
+  if (endedReports.length === 0) {
+    return;
+  }
+  batchPresented(() => {
+    for (const report of endedReports.splice(0)) {
+      report.remove();
+    }
+    for (const report of [...glideReports]) {
+      const {element} = report;
+      if (!element.isConnected || element.ownerDocument.defaultView == null) {
+        report.remove();
+      }
+    }
+  });
+}
+
+/** Each keyframe's `translate` in px at its offset, or null if one has none. */
+function translatesOf(
+  keyframes: Keyframe[],
+): {at: number; x: number; y: number}[] | null {
+  const points: {at: number; x: number; y: number}[] = [];
+  for (const [index, frame] of keyframes.entries()) {
+    const match = /^(-?[\d.e+-]+)px (-?[\d.e+-]+)px$/.exec(
+      String(frame.translate ?? ''),
+    );
+    if (match == null) {
+      return null;
+    }
+    points.push({
+      at: frame.offset ?? index / Math.max(1, keyframes.length - 1),
+      x: Number(match[1]),
+      y: Number(match[2]),
+    });
+  }
+  return points.length > 0 ? points : null;
+}
+
+/**
+ * Reports `element` to the presented hit-test registry while its `translate`
+ * glide runs. iOS WebKit hit-tests the element where the glide started. So
+ * the gesture host resolves it at touch-down and lands the touch on what is
+ * drawn. `scale` is its ancestors' scale. An inert element, such as a swap's
+ * copy or a closing element, takes no touch, so it is not reported.
+ */
+function presentGlide(
+  element: Element,
+  animation: Animation,
+  keyframes: Keyframe[],
+  options: KeyframeAnimationOptions,
+  scale: {readonly x: number; readonly y: number},
+): void {
+  const view = element.ownerDocument.defaultView;
+  const durationMs = Number(options.duration);
+  const points =
+    (options.easing ?? 'linear') === 'linear' && options.delay == null
+      ? translatesOf(keyframes)
+      : null;
+  if (
+    view == null ||
+    points == null ||
+    !(durationMs > 0) ||
+    !('style' in element) ||
+    element.closest('[inert]') != null
+  ) {
+    return;
+  }
+  const styled = element as Element & ElementCSSInlineStyle;
+  const now = () => view.performance.now();
+  // The translate drawn at `time`: the keyframes are linear between samples.
+  const drawnAt = (time: number) => {
+    const start = animation.startTime;
+    const progress =
+      start == null
+        ? 0
+        : Math.min(1, Math.max(0, (time - Number(start)) / durationMs));
+    let next = 1;
+    while (next < points.length - 1 && points[next].at < progress) {
+      next += 1;
+    }
+    const from = points[next - 1] ?? points[0];
+    const to = points[next] ?? from;
+    const span = to.at - from.at;
+    const part =
+      span > 0 ? Math.min(1, Math.max(0, (progress - from.at) / span)) : 1;
+    return {
+      x: (from.x + (to.x - from.x) * part) * scale.x,
+      y: (from.y + (to.y - from.y) * part) * scale.y,
+    };
+  };
+  let hitTested = drawnAt(now());
+  let isEnded = false;
+  let isRemoved = false;
+  const glide = {};
+  presentedGlides.set(element, glide);
+  const unregister = registerPresentedOffset(element, {
+    // At its end the engine hit-tests the element at its layout again.
+    offset: (time = now()) => {
+      if (isEnded) {
+        return {x: 0, y: 0};
+      }
+      const drawn = drawnAt(time);
+      return {x: drawn.x - hitTested.x, y: drawn.y - hitTested.y};
+    },
+    resolve: () => {
+      if (!isEnded) {
+        writePresentedResolve(styled);
+        hitTested = drawnAt(now());
+      }
+    },
+  });
+  const report: GlideReport = {
+    element,
+    remove: () => {
+      if (isRemoved) {
+        return;
+      }
+      isRemoved = true;
+      glideReports.delete(report);
+      unregister();
+      if (presentedGlides.get(element) === glide) {
+        presentedGlides.delete(element);
+        clearPresentedResolve(styled);
+      }
+    },
+  };
+  glideReports.add(report);
+  const end = () => {
+    if (isEnded) {
+      return;
+    }
+    isEnded = true;
+    endedReports.push(report);
+    // This module's own timer: a closed frame's timer never fires. The glides
+    // of one change end in one frame, so the first task removes them all.
+    setTimeout(removeEndedReports, 0);
+  };
+  animation.addEventListener?.('finish', end);
+  animation.addEventListener?.('cancel', end);
+}
+
 /**
  * Play `keyframes` on `element`. Every option here (linear easing over sampled
  * keyframes, replace composition) is one any Web Animations engine takes, so
  * a failure means no Web Animations at all: the change then lands at once.
+ * `scale` is the element's ancestors' scale, for a `translate` glide.
  */
 function safeAnimate(
   element: Element,
   keyframes: Keyframe[],
   options: KeyframeAnimationOptions,
   change?: ChangeStart,
+  scale: {readonly x: number; readonly y: number} = {x: 1, y: 1},
 ): Animation | null {
   if (typeof (element as HTMLElement).animate !== 'function') {
     return null;
@@ -272,6 +427,9 @@ function safeAnimate(
         fill: fill === 'forwards' || fill === 'both' ? 'both' : 'backwards',
       });
     }
+  }
+  if (options.pseudoElement == null) {
+    presentGlide(element, animation, keyframes, options, scale);
   }
   return animation;
 }
@@ -514,6 +672,25 @@ function movedByApp(element: Element): boolean {
 type OffsetCurve = (t: number) => {readonly x: number; readonly y: number};
 
 const AT_REST: OffsetCurve = () => ({x: 0, y: 0});
+
+/**
+ * `curve` as the browser draws it from `sampleOver`'s keyframes: a straight
+ * line between each two. A new glide then starts where the old one shows.
+ */
+function drawnCurve(durationMs: number, curve: OffsetCurve): OffsetCurve {
+  const count = sampleCount(durationMs);
+  const points = Array.from({length: count}, (_, i) =>
+    curve((i / (count - 1)) * durationMs),
+  );
+  return t => {
+    const at = Math.min(Math.max(t / durationMs, 0), 1) * (count - 1);
+    const i = Math.min(Math.floor(at), count - 2);
+    const f = at - i;
+    const a = points[i];
+    const b = points[i + 1];
+    return {x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f};
+  };
+}
 
 /** A glide an element is playing, so a new change can retarget it. */
 interface Glide {
@@ -1332,12 +1509,12 @@ function flush(batch: Batch): void {
     const moveX = dx / scale.x - held.x;
     const moveY = dy / scale.y - held.y;
     const {progress} = motion;
-    const offsetAt: OffsetCurve = t => {
+    const durationMs = Math.max(progress.durationMs, carriedMs);
+    const offsetAt = drawnCurve(durationMs, t => {
       const remaining = progress.remaining(t);
       const carry = carried(t);
       return {x: carry.x + moveX * remaining, y: carry.y + moveY * remaining};
-    };
-    const durationMs = Math.max(progress.durationMs, carriedMs);
+    });
     // One replace-composited `translate`: the compositor runs it (INV12).
     const animation = safeAnimate(
       element,
@@ -1347,6 +1524,7 @@ function flush(batch: Batch): void {
       }),
       {duration: durationMs, easing: 'linear'},
       change,
+      scale,
     );
     if (animation != null) {
       const glide: Glide = {
@@ -1466,8 +1644,9 @@ export function reportLayoutChange(
       }
       if (!batch.scheduled) {
         batch.scheduled = true;
-        // After every layout effect of this commit, before paint.
-        queueMicrotask(() => flush(batch));
+        // After every layout effect of this commit, before paint, with one
+        // registry notice for all the glides it starts.
+        queueMicrotask(() => batchPresented(() => flush(batch)));
       }
       return true;
     },
@@ -2334,10 +2513,10 @@ export function playLayoutSwap(
   };
   const {copyText, rideWith} = how;
   const fadedText =
-    copyText != null && motion.kind === 'spring' ? wrapText(copy) : [];
+    copyText != null && motion.kind === 'glide' ? wrapText(copy) : [];
   // Each part as a function of time: its frame, or the copy's with its ride.
   const parts: [Element, (p: number, ride: LayoutRide) => Keyframe][] = [];
-  if (motion.kind === 'spring') {
+  if (motion.kind === 'glide') {
     const moves = rideWith != null && rideWith.isCopyMoved !== false;
     parts.push([
       copy,
@@ -2452,7 +2631,7 @@ export function playLayoutFrames(
   const animations: Animation[] = [];
   for (const {element, frames: shape} of parts) {
     const animation =
-      motion.kind === 'spring'
+      motion.kind === 'glide'
         ? safeAnimate(
             element,
             sampleKeyframes(motion.progress, remaining =>
@@ -2628,9 +2807,9 @@ export function playLayoutEdge(
   const startedAt =
     changeStartIn(areaOf(handle, element), element.ownerDocument)?.at ?? 0;
   const durationMs =
-    motion.kind === 'spring' ? motion.progress.durationMs : motion.durationMs;
+    motion.kind === 'glide' ? motion.progress.durationMs : motion.durationMs;
   const progressAt = (ms: number) =>
-    motion.kind === 'spring'
+    motion.kind === 'glide'
       ? 1 - motion.progress.remaining(Math.min(ms, durationMs))
       : 0;
   const shown = (): {extent: number; progress: number} | null => {
@@ -3051,10 +3230,10 @@ export function reportLayoutEdge(
 
 /**
  * A disclosure's indicator (its chevron) turns on the same motion as the
- * glide: its CSS transition takes the spring as a `linear()` easing, and an
- * immediate change under Reduce Motion. Without a handle the inline values are
- * cleared, so the component's own transition applies. An engine without
- * `linear()` drops that value and keeps the component's easing.
+ * glide. Its CSS transition takes the theme's move curve and duration as the
+ * glide reads them where the area is, and is immediate under Reduce Motion.
+ * Without a handle the inline values are cleared, so the component's own
+ * transition applies.
  */
 export function applyLayoutChangeTransition(
   handle: AnimatedLayout | null | undefined,
@@ -3070,18 +3249,18 @@ export function applyLayoutChangeTransition(
     return;
   }
   const motion = layoutMotion(area);
-  if (motion.kind !== 'spring') {
+  if (motion.kind !== 'glide') {
     element.style.setProperty('transition-duration', '0s');
     element.style.removeProperty('transition-timing-function');
     return;
   }
-  element.style.setProperty(
-    'transition-duration',
-    `${Math.round(motion.progress.durationMs)}ms`,
-  );
+  // Values, not the tokens: a theme scope between the area and the indicator
+  // would retime a token that the indicator reads where it is.
+  const ms = Math.round(motion.progress.durationMs * 1000) / 1000;
+  element.style.setProperty('transition-duration', `${ms}ms`);
   element.style.setProperty(
     'transition-timing-function',
-    linearEasing(motion.progress),
+    motion.progress.easing,
   );
 }
 
