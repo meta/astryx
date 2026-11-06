@@ -21,7 +21,9 @@
 # - A run starts once the other active runs' estimated jobs plus `peak` fit
 #   under the ceiling. Small workflows that are not admitted (one or two slim
 #   jobs a run) always count at least eighteen jobs, which covers all but their
-#   rarest bursts, so the room they can still take is kept free. A pull-request run (`main: false`) also
+#   rarest bursts, so the room they can still take is kept free. Waiting
+#   `main` runs queue by when they began waiting: to a `main` run, one that
+#   began waiting after it counts only its waiting job. A pull-request run (`main: false`) also
 #   waits while a
 #   `main` full check or release re-check is waiting, for that wait's first
 #   fifteen minutes, so `main` fits first; pull-request runs never wait for
@@ -310,8 +312,12 @@ runs:
                     // Still waiting for room. A `main` run holds its whole
                     // peak, ahead of this one. A pull-request run holds what
                     // it runs: the job that waits and its Storybook build,
-                    // which starts beside it.
-                    const holds = isMain(run) ? estimate(run) : Math.max(1, jobs.filter(job => LIVE.includes(job.status)).length);
+                    // which starts beside it. `main` runs queue by when they
+                    // began waiting: a `main` run that began after this one
+                    // holds only what it runs, so two waiting `main` runs
+                    // never each count the other's peak and wait for ever.
+                    const ahead = !main || !(span.began > started || (span.began === started && run.id > context.runId));
+                    const holds = isMain(run) && ahead ? estimate(run) : Math.max(1, jobs.filter(job => LIVE.includes(job.status)).length);
                     if (isMain(run) && !main && !(Date.now() - span.began >= MAIN_YIELD_MS)) mainWaiting = true;
                     large += holds;
                     counted.push(`${short(run)} ${run.id} ${run.event}: ${holds} waiting`);
