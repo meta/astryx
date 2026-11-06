@@ -60,7 +60,6 @@ import {
 } from 'react';
 import {flushSync} from 'react-dom';
 import {moveFocusLeftBehind, noteFocusWithin} from '../utils/focusReturn';
-import {useInteractionModalityTrackingFor} from '../utils/interactionModality';
 import * as stylex from '@stylexjs/stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {BottomSheet} from '../BottomSheet';
@@ -685,9 +684,6 @@ export function TouchDateField({
   const previousArrowRef = useRef<HTMLButtonElement | null>(null);
   const nextArrowRef = useRef<HTMLButtonElement | null>(null);
   const monthYearButtonRef = useRef<HTMLButtonElement | null>(null);
-  // A focus move out of a hidden month arrow shows the ring for the last
-  // input (`moveFocusLeftBehind`), which reads shared modality tracking.
-  useInteractionModalityTrackingFor(sheetBodyRef);
   // Pending focus handoff from the clear button; see handleClear.
   const clearFocusTimerRef = useRef<number | null>(null);
   // Releases the focus timer on unmount.
