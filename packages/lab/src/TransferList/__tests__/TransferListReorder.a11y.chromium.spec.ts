@@ -3,10 +3,12 @@
 /**
  * @file TransferListReorder.a11y.chromium.spec.ts
  * @input The checked-in Lab/TransferList › Default story, a built Storybook and
- *   real Chromium touch input (CDP) on a phone viewport
+ *   real Chromium touch input (CDP) on a phone viewport. The A11y/TransferList
+ *   › Disabled fixture, with a mouse and keys
  * @output Browser evidence that a selected row dragged past the end of its
  *   list stays inside that list, its bottom on the list's end. It never slides
- *   under the next panel's header, and it lands last on release
+ *   under the next panel's header, and it lands last on release. A disabled
+ *   list keeps each handle focusable and disabled, with the focus where it was
  * @position Chromium proof for TransferList's selected panel, which reorders
  *   through core's createReorderable on its List (List/listReorderEngine.tsx
  *   clamps the row)
@@ -229,5 +231,120 @@ test.describe('with a mouse', () => {
     // Past the next row's boundary, not the one after: one place down.
     expect(after[1]).toBe(before[0]);
     expect(after[0]).toBe(before[1]);
+  });
+});
+
+test.describe('a disabled list', () => {
+  test.use({
+    hasTouch: false,
+    isMobile: false,
+    viewport: {width: 1024, height: 768},
+    deviceScaleFactor: 1,
+  });
+
+  test('dims a disabled row once: its label, Remove and handle at half opacity', async ({
+    page,
+  }) => {
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=a11y-transferlist--disabled&viewMode=story`,
+    );
+    await page.getByRole('switch', {name: 'Disable the list'}).click();
+    const row = page.locator('[data-transfer-list-row="owner"]');
+    const handle = 'button[data-astryx-list-reorder]';
+    await expect(row.locator(handle)).toHaveAttribute('aria-disabled', 'true');
+    // The opacity a reader sees: the product of the element's own and its
+    // ancestors' opacity, up to the row.
+    const seen = async (selector: string) =>
+      row
+        .locator(selector)
+        .first()
+        .evaluate(element => {
+          let opacity = 1;
+          for (
+            let node: Element | null = element;
+            node != null && !node.matches('[data-transfer-list-row]');
+            node = node.parentElement
+          ) {
+            opacity *= Number(getComputedStyle(node).opacity);
+          }
+          return Math.round(opacity * 100) / 100;
+        });
+    await expect.poll(() => seen('text=Owner')).toBe(0.5);
+    await expect
+      .poll(() => seen('[data-transfer-list-action="selected"]'))
+      .toBe(0.5);
+    await expect.poll(() => seen(handle)).toBe(0.5);
+  });
+
+  test('keeps each reorder handle focusable and disabled, with the focus where it was', async ({
+    page,
+  }) => {
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=a11y-transferlist--disabled&viewMode=story`,
+    );
+    const handle = page.getByRole('button', {name: 'Reorder Owner'});
+    await expect(handle).toBeVisible();
+    const order = async () =>
+      page.evaluate(
+        selector =>
+          Array.from(document.querySelectorAll(selector)).map(
+            element =>
+              element
+                .closest('[data-transfer-list-row]')
+                ?.getAttribute('data-transfer-list-row') ?? '',
+          ),
+        GRIP,
+      );
+    const before = await order();
+    await handle.focus();
+    // The switch is clicked from script, so the focus stays on the handle.
+    await page
+      .getByRole('switch', {name: 'Disable the list'})
+      .evaluate(element => (element as HTMLElement).click());
+    await expect(page.locator(GRIP)).toHaveCount(before.length);
+    for (const each of await page.locator(GRIP).all()) {
+      await expect(each).toHaveAttribute('aria-disabled', 'true');
+    }
+    await expect(handle).toBeFocused();
+    // A tooltip shows after a short delay. None opens, since the focus stays.
+    await sleep(800);
+    await expect(page.getByRole('tooltip')).toHaveCount(0);
+    // A key or a drag on a disabled handle changes nothing.
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('ArrowDown');
+    await expect(handle).toHaveAttribute('aria-pressed', 'false');
+    const box = (await handle.boundingBox()) as {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    };
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2, box.y + 120, {steps: 8});
+    await page.mouse.up();
+    await sleep(300);
+    expect(await order()).toEqual(before);
+    // The handle says why the row does not move. Its description and a
+    // tooltip on hover and on keyboard focus give the reason.
+    const why = page
+      .getByRole('tooltip')
+      .filter({hasText: 'Owner cannot be reordered'});
+    await expect(handle).toHaveAccessibleDescription(
+      /Owner cannot be reordered/,
+    );
+    await page.mouse.move(0, 0);
+    await expect(why).toHaveCount(0);
+    await handle.hover();
+    await expect(why).toBeVisible();
+    await page.mouse.move(0, 0);
+    await expect(why).toHaveCount(0);
+    // The handle stays in the tab order.
+    await handle.focus();
+    await page.keyboard.press('Shift+Tab');
+    await expect(handle).not.toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(handle).toBeFocused();
+    await expect(why).toBeVisible();
   });
 });

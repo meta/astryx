@@ -13,7 +13,14 @@
 
 import {useMemo, useState} from 'react';
 import {afterEach, describe, expect, it, vi} from 'vitest';
-import {act, fireEvent, render, screen, within} from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  within,
+  waitFor,
+} from '@testing-library/react';
 import fs from 'node:fs';
 import path from 'node:path';
 import userEvent from '@testing-library/user-event';
@@ -813,7 +820,7 @@ describe('TransferList', () => {
       expect(handle).toHaveFocus();
     });
 
-    it('ends reorder mode without any change when the list becomes disabled: no handle shows, so none stays pressed', async () => {
+    it('ends a grab without any change when the list becomes disabled mid-reorder', async () => {
       const user = userEvent.setup();
       const onValueChange = vi.fn();
       const {rerender} = render(
@@ -823,7 +830,8 @@ describe('TransferList', () => {
         />,
       );
 
-      screen.getByRole('button', {name: 'Reorder Owner'}).focus();
+      const handle = screen.getByRole('button', {name: 'Reorder Owner'});
+      handle.focus();
       await user.keyboard('{Enter}{ArrowDown}');
       expect(onValueChange).toHaveBeenCalledTimes(1);
 
@@ -834,17 +842,17 @@ describe('TransferList', () => {
           isDisabled
         />,
       );
-      expect(screen.queryByRole('button', {name: /^Reorder /})).toBeNull();
-      expect(screen.queryByRole('button', {pressed: true})).toBeNull();
-      await user.keyboard('{Escape}{ArrowUp}');
+      expect(handle).toHaveAttribute('aria-pressed', 'false');
+      await user.keyboard('{Escape}');
       expect(onValueChange).toHaveBeenCalledTimes(1);
     });
 
-    it("moves the focus from a focused handle to its row's Remove button when the list becomes disabled", () => {
+    it('keeps a focused handle focused, in the tab order and disabled when the list becomes disabled', async () => {
       const {rerender} = render(
         <ControlledTransferList initialValue={['name', 'owner', 'status']} />,
       );
-      screen.getByRole('button', {name: 'Reorder Owner'}).focus();
+      const handle = screen.getByRole('button', {name: 'Reorder Owner'});
+      handle.focus();
 
       rerender(
         <ControlledTransferList
@@ -852,7 +860,16 @@ describe('TransferList', () => {
           isDisabled
         />,
       );
-      expect(screen.getByRole('button', {name: 'Remove Owner'})).toHaveFocus();
+      expect(handle).toHaveFocus();
+      expect(handle.tabIndex).toBe(0);
+      expect(handle).not.toHaveAttribute('disabled');
+      for (const each of screen.getAllByRole('button', {name: /^Reorder /})) {
+        expect(each).toHaveAttribute('aria-disabled', 'true');
+      }
+      // The handle's description says why the row does not move.
+      await waitFor(() =>
+        expect(handle).toHaveAccessibleDescription(/Owner cannot be reordered/),
+      );
     });
 
     it('keeps values from passing a reorder-disabled value at an end, and lets them pass one in the middle', async () => {
