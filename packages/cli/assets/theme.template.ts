@@ -181,8 +181,8 @@ export const myTheme = defineTheme({
   radius: {base: 4, multiplier: 1},
 
   /**
-   * Motion. Two knobs set how its CSS feels (touch springs don't read them
-   * yet):
+   * Motion. Two knobs set how it feels. tempo also times the touch springs;
+   * character sets only the CSS curves for now:
    *   tempo — 1 is Astryx's own; 0.75 the quickest, 1.5 the slowest.
    *   character — 'crisp' | 'standard' | 'expressive': the entrance and move
    *     curves (--ease-entrance, --ease-move). --ease-exit, the curve for
@@ -345,6 +345,18 @@ export const myTheme = defineTheme({
    * Reference: `astryx docs icons`.
    */
   // iconVariants: ['outline', 'filled'],
+
+  /**
+   * Choose which shared icon a component's own icon role uses, by slot, such
+   * as `code-block-copy` for CodeBlock's copy button. A value is an icon name,
+   * `null` to hide the icon, a partial `{icon, variant, size}` request, or a
+   * pure function of the slot's state that returns one.
+   * Keep a slot function in its own module and import it, so a built theme
+   * can import it too. Here `copySlot` is
+   * `({copied}) => ({icon: copied ? 'checkDouble' : 'copy'})`.
+   * Reference: `astryx docs icons`; each component's docs list its slots.
+   */
+  // componentIcons: {'code-block-copy': copySlot},
 
   /**
    * Replace the small components that DRAW control state — the checkbox box,

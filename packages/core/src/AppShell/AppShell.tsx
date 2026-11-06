@@ -987,10 +987,10 @@ export function AppShell({
           return;
         }
         const motion = layoutMotionFor(main);
-        // Only a spring glides the column; under Reduce Motion the two wraps
+        // Only a glide moves the column; under Reduce Motion the two wraps
         // cross-fade over a steady surface (`design:reduced-motion` DR2).
         let change: LayoutChange | null = null;
-        if (motion.kind === 'spring') {
+        if (motion.kind === 'glide') {
           change = reportLayoutChange(contentLayout, railRef);
           change.measureBefore();
         }
@@ -1000,7 +1000,7 @@ export function AppShell({
         let held = 1;
         let entering = 0;
         const last = lastSwapRef.current;
-        if (last != null && motion.kind === 'spring') {
+        if (last != null && motion.kind === 'glide') {
           // Read at the change's own start, where the glide it retargets
           // carries on. After a block, that is later than the frame the
           // timeline still reads.
@@ -1047,7 +1047,7 @@ export function AppShell({
         const surface = backdropRef.current ?? main;
         const color = getComputedStyle(surface).backgroundColor;
         const isPainted = !/^rgba\(.*,\s*0\)$|^transparent$/.test(color);
-        const glides = layoutMotionFor(main).kind === 'spring';
+        const glides = layoutMotionFor(main).kind === 'glide';
         if ((isRtl ? travel > 0 : travel < 0) && glides && isPainted) {
           cover.push({
             element: surface,

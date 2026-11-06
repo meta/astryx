@@ -96,16 +96,26 @@ describe('WebKit interaction proof routing', () => {
     const guards = new Set([
       "Require this pull request's Storybook build",
       'Skip the WebKit proofs outside their scope',
+      'Leave the proofs to the first leg',
     ]);
-    for (const candidate of webkit.steps.slice(2)) {
-      if (guards.has(candidate.name)) continue;
+    // Every step after the leg count also waits for this leg to have a share.
+    const counted = webkit.steps.indexOf(
+      step(webkit, "Count this run's WebKit legs"),
+    );
+    const share = "steps.legs.outputs.runs == 'true'";
+    for (const [index, candidate] of webkit.steps.entries()) {
+      if (index < 2 || guards.has(candidate.name)) continue;
+      const gate = index <= counted ? applies : `${applies} && ${share}`;
       // A leg whose plan holds no spec file runs no proofs.
       expect(candidate.if, candidate.name ?? candidate.uses).toMatch(
         new RegExp(
-          `^(always\\(\\) && )?${applies.replace(/[.()|]/g, '\\$&')}( && steps\\.plan\\.outputs\\.files != '0')?$`,
+          `^(always\\(\\) && )?${gate.replace(/[.()|]/g, '\\$&')}( && steps\\.plan\\.outputs\\.files != '0')?$`,
         ),
       );
     }
+    expect(step(webkit, 'Leave the proofs to the first leg').if).toBe(
+      `${applies} && steps.legs.outputs.runs != 'true'`,
+    );
   });
 
   it('runs the interaction config in WebKit against the exact PR head', () => {
@@ -224,7 +234,10 @@ describe('WebKit interaction proof routing', () => {
 
   it('runs only the specs whose code its scope covers', () => {
     // Each leg plans its share from these paths and runs only that share.
-    const run = step(webkit, "Plan this leg's WebKit interaction proofs").run;
+    const run = webkit.env.WEBKIT_SPEC_PATHS;
+    expect(
+      step(webkit, "Plan this leg's WebKit interaction proofs").run,
+    ).toContain('"${SPEC_PATHS[@]}"');
     const targets = [
       'packages/core/src/gestures/',
       'packages/core/src/motion/__tests__/animatedLayout.interaction',
@@ -306,8 +319,8 @@ describe('WebKit interaction proof routing', () => {
           {mode: 0o755},
         );
         const script = step(webkit, "Plan this leg's WebKit interaction proofs")
-          .run.replaceAll('${{ matrix.leg }}', '1')
-          .replaceAll('${{ strategy.job-total }}', '2');
+          .run.replaceAll('${{ steps.legs.outputs.leg }}', '1')
+          .replaceAll('${{ steps.legs.outputs.count }}', '2');
         const out = execFileSync('bash', ['-e', '-c', script], {
           cwd: dir,
           encoding: 'utf8',
@@ -316,6 +329,7 @@ describe('WebKit interaction proof routing', () => {
             PATH: `${bin}:${process.env.PATH}`,
             RUNNER_TEMP: dir,
             CHANGED_FILES: list,
+            WEBKIT_SPEC_PATHS: webkit.env.WEBKIT_SPEC_PATHS,
           },
         });
         return out.trim().split('\n');
@@ -411,6 +425,9 @@ describe('WebKit interaction proof routing', () => {
       // brings the outlet into the gesture fixtures and the pager bundle; the
       // scope covers it before that import lands.
       'packages/core/src/Layer/modalOutlet.ts',
+      // The animated-layout glide reads its timing through the theme-timing
+      // reader, which resolves token references, so its bundle carries them.
+      'packages/core/src/theme/tokenReferences.ts',
       'packages/core/src/hooks/useMenuPress.ts',
       'packages/core/src/hooks/menuPressGesture.ts',
       'packages/core/src/hooks/useLongPress.ts',

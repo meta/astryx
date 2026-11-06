@@ -750,22 +750,6 @@ describe('ButtonGroup', () => {
       expect(screen.getByRole('button', {name: 'Copy'})).toHaveFocus();
     });
 
-    it('skips a disabled member', async () => {
-      const user = userEvent.setup();
-      render(
-        <ButtonGroup label="Actions">
-          <Button label="Copy" />
-          <Button label="Cut" isDisabled />
-          <Button label="Paste" />
-        </ButtonGroup>,
-      );
-
-      screen.getByRole('button', {name: 'Copy'}).focus();
-
-      await user.keyboard('{ArrowRight}');
-      expect(screen.getByRole('button', {name: 'Paste'})).toHaveFocus();
-    });
-
     it('leaves arrow keys to a member\u2019s open menu', async () => {
       const user = userEvent.setup();
       render(

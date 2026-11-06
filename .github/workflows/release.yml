@@ -13,7 +13,8 @@
 #     node scripts/npm/setup-trusted-publishing.mjs --setup-trust --replace --workflow release.yml
 #
 # Two jobs, selected by trigger:
-#   - publish (stable): workflow_dispatch only. Publishes the `latest` dist-tag.
+#   - publish (stable): workflow_dispatch with channel=stable (the default)
+#     only. Publishes the `latest` dist-tag.
 #     The release flow is:
 #       1. Cut and mark one release/vX.Y.Z branch from exact window-time main;
 #          X.Y.Z is the version main's package.json declares at that commit.
@@ -31,10 +32,13 @@
 #     waits for this workflow run's conclusion, never the publish job's: while
 #     packages are still propagating, the publish job passes and a follow-up
 #     job decides the run.
-#   - canary: push to main only. Main normally declares the next planned version,
-#     so this publishes <declared>-canary.<short-sha> to the `canary` dist-tag.
-#     The trusted release merge-back briefly leaves main equal to the stable tag;
-#     that push publishes no canary and waits for the separate next-plan PR:
+#   - canary: at most hourly from main's tip (schedule), or on demand from main
+#     (workflow_dispatch with channel=canary, for example the release-time
+#     provenance proof). A tip that already has its canary publishes nothing.
+#     Main normally declares the next planned version, so this publishes
+#     <declared>-canary.<short-sha> to the `canary` dist-tag. The trusted
+#     release merge-back briefly leaves main equal to the stable tag; that tip
+#     publishes no canary and waits for the separate next-plan PR:
 #       npm install @astryxdesign/core@canary
 #
 # Why both jobs live here instead of in deploy.yml:
@@ -46,8 +50,8 @@
 #     published tarball matches the released commit and carries provenance.
 #
 # Concurrency is per-JOB (deliberately NOT a single workflow-level group): a
-# busy main firing many canary pushes must NEVER cancel or starve a pending
-# stable dispatch. Stable and canary therefore use independent concurrency
+# canary run must NEVER cancel or starve a pending stable dispatch, and a
+# stable dispatch never waits for the hourly canary. Stable and canary therefore use independent concurrency
 # groups (see each job below).
 #
 # Provenance requires a PUBLIC repo (meta/astryx is public).
@@ -57,6 +61,11 @@ run-name: Release (${{ github.sha }})
 on:
   workflow_dispatch:
     inputs:
+      channel:
+        description: 'stable publishes the release below; canary publishes main now'
+        type: choice
+        options: [stable, canary]
+        default: stable
       dry-run:
         description: 'Build and resolve what would publish, but do not publish'
         type: boolean
@@ -64,35 +73,37 @@ on:
       release-branch:
         description: 'Single marked release/vX.Y.Z branch'
         type: string
-        required: true
+        required: false
       release-version:
         description: 'Exact X.Y.Z version recorded by the active marker'
         type: string
-        required: true
+        required: false
       release-tag:
         description: 'Exact immutable vX.Y.Z tag checked out by this run'
         type: string
-        required: true
+        required: false
       expected-head:
         description: 'Exact full release branch SHA carried by this tag'
         type: string
-        required: true
+        required: false
       plan-digest:
         description: 'Exact SHA-256 digest recorded by the active marker'
         type: string
-        required: true
-  push:
-    branches: [main]
+        required: false
+  # Hourly canary from main's tip. A pending hourly run is replaced by the
+  # next one rather than queued behind it (the canary concurrency group).
+  schedule:
+    - cron: '17 * * * *'
 
 permissions: {}
 
 jobs:
   # Stable publish — manual dispatch only. Publishes the `latest` dist-tag.
   publish:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && inputs.channel != 'canary'
     runs-on: 4-core-ubuntu
     # Dedicated, non-cancelling group. Independent of the canary group so a
-    # canary push can never cancel or queue ahead of a stable release.
+    # canary run can never cancel or queue ahead of a stable release.
     concurrency:
       group: npm-release-stable
       cancel-in-progress: false
@@ -104,6 +115,28 @@ jobs:
     outputs:
       verified: ${{ steps.publish.outputs.verified }}
     steps:
+      # The release inputs are optional only so a canary dispatch can omit
+      # them; a stable dispatch needs every one.
+      - name: Require every stable release input
+        env:
+          RELEASE_BRANCH: ${{ inputs['release-branch'] }}
+          RELEASE_VERSION: ${{ inputs['release-version'] }}
+          RELEASE_TAG: ${{ inputs['release-tag'] }}
+          EXPECTED_HEAD: ${{ inputs['expected-head'] }}
+          PLAN_DIGEST: ${{ inputs['plan-digest'] }}
+        run: |
+          set -eu
+          missing=""
+          [ -n "$RELEASE_BRANCH" ] || missing="$missing release-branch"
+          [ -n "$RELEASE_VERSION" ] || missing="$missing release-version"
+          [ -n "$RELEASE_TAG" ] || missing="$missing release-tag"
+          [ -n "$EXPECTED_HEAD" ] || missing="$missing expected-head"
+          [ -n "$PLAN_DIGEST" ] || missing="$missing plan-digest"
+          if [ -n "$missing" ]; then
+            echo "::error::A stable release needs every release input; missing:$missing"
+            exit 1
+          fi
+
       - name: Checkout immutable release tag
         uses: actions/checkout@v7
         with:
@@ -333,19 +366,21 @@ jobs:
           fi
           exit "$STATUS"
 
-  # Canary publish — runs on every push to main. The @canary dist-tag always
-  # points to the latest main commit:
+  # Canary publish — hourly from main's tip, or on demand. The @canary
+  # dist-tag points to main's tip as of the last canary:
   #   npm install @astryxdesign/core@canary
   canary:
     name: Publish canary to npm
-    if: github.event_name == 'push'
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && inputs.channel == 'canary')
     runs-on: ubuntu-latest
     # Dedicated group, independent of the stable group, so this can never
     # cancel or starve a stable dispatch. Never cancel in progress: a canary
     # that has started may already have published some packages, and
     # cancelling it mid-loop leaves a partial canary set on npm. Bursts still
-    # coalesce: while one canary runs, a newer push waits as the single pending
-    # run, and a later push replaces that pending run before it starts.
+    # coalesce: while one canary runs, a newer run waits as the single pending
+    # run, and a later one replaces that pending run before it starts.
     concurrency:
       group: npm-release-canary
       cancel-in-progress: false
@@ -358,6 +393,20 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Require main and no dry run
+        env:
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          set -eu
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::Canaries publish only from main, not $GITHUB_REF."
+            exit 1
+          fi
+          if [ "${DRY_RUN:-false}" = "true" ]; then
+            echo "::error::A canary dispatch publishes; it has no dry run."
+            exit 1
+          fi
+
       - name: Decide whether main may publish a canary
         id: canary-scope
         run: |
@@ -365,28 +414,46 @@ jobs:
           git fetch origin 'refs/tags/v*:refs/tags/v*'
           node scripts/release/active-release.mjs canary-eligibility
 
+      # The hourly run publishes nothing when every package the loop would
+      # publish already has this tip's canary. A package still missing, or a
+      # read the registry cannot answer, publishes; the per-package publisher
+      # skips versions already there.
+      - name: Skip a tip whose canaries are all published
+        if: steps.canary-scope.outputs.publish == 'true'
+        id: fresh
+        run: |
+          set -eu
+          CANARY_VERSION="$(node -p "require('./packages/core/package.json').version")-canary.${GITHUB_SHA:0:7}"
+          echo "version=${CANARY_VERSION}" >> "$GITHUB_OUTPUT"
+          node scripts/npm/canary-pending.mjs --version "$CANARY_VERSION"
+          if grep -qx 'pending=0' "$GITHUB_OUTPUT"; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
       # registry-url makes setup-node write the auth config `npm publish` reads.
       # The Node line in .nvmrc must stay >= 24 so npm >= 11.5.1 ships with it,
       # which OIDC trusted publishing requires.
       - name: Setup Node and pnpm
-        if: steps.canary-scope.outputs.publish == 'true'
+        if: steps.fresh.outputs.publish == 'true'
         uses: ./.github/actions/setup
         with:
           registry-url: 'https://registry.npmjs.org'
 
       - name: Build all packages
-        if: steps.canary-scope.outputs.publish == 'true'
+        if: steps.fresh.outputs.publish == 'true'
         run: pnpm build
 
       - name: Publish canary versions
-        if: steps.canary-scope.outputs.publish == 'true'
-        # Pure OIDC trusted publishing — no NPM_TOKEN.
+        if: steps.fresh.outputs.publish == 'true'
+        # Pure OIDC trusted publishing — no NPM_TOKEN. The canary version is
+        # main's declared next version plus this commit, computed once above.
+        env:
+          CANARY_VERSION: ${{ steps.fresh.outputs.version }}
         run: |
           set -eu
-          SHORT_SHA="${GITHUB_SHA:0:7}"
-          # Main's package.json carries the next planned version.
-          DECLARED_VERSION=$(node -p "require('./packages/core/package.json').version")
-          CANARY_VERSION="${DECLARED_VERSION}-canary.${SHORT_SHA}"
+          [ -n "$CANARY_VERSION" ] || { echo "::error::No canary version was computed."; exit 1; }
 
           echo "Publishing canary ${CANARY_VERSION}"
 
@@ -401,7 +468,11 @@ jobs:
           # packages (for example Native) stay `private: true` in git as npm's hard
           # guarantee against a stable publish; here — in the ephemeral CI
           # checkout ONLY — we strip `private` so they publish to @canary.
-          for pkg in packages/*/package.json packages/themes/*/package.json; do
+          # One list of the packages this job publishes drives the stamp, the
+          # publish loop and the skip check above.
+          CANARY_DIRS=$(node scripts/npm/canary-pending.mjs --list-dirs)
+          for pkg_dir in $CANARY_DIRS; do
+            pkg="$pkg_dir/package.json"
             node -e "
               const fs = require('fs');
               const p = JSON.parse(fs.readFileSync('$pkg','utf8'));
@@ -431,7 +502,7 @@ jobs:
           # their canaries. Publishes are per-package and idempotent, so attempting
           # the rest is always safe.
           FAILED=""
-          for pkg_dir in packages/* packages/themes/*; do
+          for pkg_dir in $CANARY_DIRS; do
             [ -f "$pkg_dir/package.json" ] || continue
             # canaryOnly packages are publishable here (the stamp step above
             # already stripped their `private` flag in this ephemeral checkout).
@@ -474,7 +545,7 @@ jobs:
           echo "Canary published: npm install @astryxdesign/core@${CANARY_VERSION}"
 
       - name: Prune old canary versions
-        if: steps.canary-scope.outputs.publish == 'true'
+        if: steps.fresh.outputs.publish == 'true'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |

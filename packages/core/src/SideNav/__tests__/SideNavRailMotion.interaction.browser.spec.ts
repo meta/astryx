@@ -788,10 +788,14 @@ test.describe('component:SideNav FR6 and component:AppShell FR17 under a mouse',
     const reverse = async (blockMs: number) =>
       page.evaluate(async blockMs => {
         const toggle = () =>
-          [...document.querySelectorAll('button')].find(button =>
-            /^(Collapse|Expand) sidebar$/.test(
-              button.getAttribute('aria-label') ?? button.textContent ?? '',
-            ),
+          // The leaving copy is inert and sits before the real rail, so its
+          // cloned toggle comes first in document order.
+          [...document.querySelectorAll('button')].find(
+            button =>
+              button.closest('[inert]') == null &&
+              /^(Collapse|Expand) sidebar$/.test(
+                button.getAttribute('aria-label') ?? button.textContent ?? '',
+              ),
           ) as HTMLElement;
         const frame = async () =>
           new Promise<void>(resolve => {
