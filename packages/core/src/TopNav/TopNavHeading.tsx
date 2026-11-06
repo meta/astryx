@@ -86,6 +86,14 @@ const styles = stylex.create({
   columnsText: {
     gridTemplateColumns: 'minmax(0, 1fr)',
   },
+  // The chevron box plus the gap before it. The track stops there, so a
+  // crowded bar cannot cover the chevron.
+  columnsWithLogoAndMenu: {
+    gridTemplateColumns: `auto minmax(calc(${spacingVars['--spacing-7']} + ${spacingVars['--spacing-1']}), 1fr)`,
+  },
+  columnsWithMenu: {
+    gridTemplateColumns: `minmax(calc(${spacingVars['--spacing-7']} + ${spacingVars['--spacing-1']}), 1fr)`,
+  },
   interactive: {
     cursor: {
       default: 'pointer',
@@ -169,6 +177,13 @@ const styles = stylex.create({
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
+  },
+  // Clip the link itself. The column stays overflow visible, so the link's
+  // own focus ring is not cut off.
+  linkedLine: {
+    minWidth: 0,
+    maxWidth: '100%',
+    overflow: 'hidden',
   },
   chevron: {
     flexShrink: 0,
@@ -417,9 +432,18 @@ export function TopNavHeading({
 
   const showChevron = !!menu;
   const hasAnyHref = !!(headingHref || superheadingHref || subheadingHref);
-  const rootColumns = isRenderable(logo)
-    ? styles.columnsWithLogo
-    : styles.columnsText;
+  // Logo-only has no text column. An empty second track would add the column
+  // gap and widen the heading.
+  const rootColumns =
+    !heading && !menu
+      ? null
+      : isRenderable(logo)
+        ? menu
+          ? styles.columnsWithLogoAndMenu
+          : styles.columnsWithLogo
+        : menu
+          ? styles.columnsWithMenu
+          : styles.columnsText;
 
   // Determine interaction mode
   const isWholeHeadingTrigger = !!menu && !hasAnyHref;
@@ -435,7 +459,8 @@ export function TopNavHeading({
             href={superheadingHref}
             onClick={(e: React.MouseEvent) => e.stopPropagation()}
             color="secondary"
-            size="xsm">
+            size="xsm"
+            xstyle={styles.linkedLine}>
             {superheading}
           </Link>
         ) : (
@@ -460,7 +485,8 @@ export function TopNavHeading({
             href={subheadingHref}
             onClick={(e: React.MouseEvent) => e.stopPropagation()}
             color="secondary"
-            size="xsm">
+            size="xsm"
+            xstyle={styles.linkedLine}>
             {subheading}
           </Link>
         ) : (
@@ -741,14 +767,22 @@ export function TopNavHeading({
         <span {...stylex.props(styles.textContainer)}>
           {superheading &&
             (superheadingHref ? (
-              <Link href={superheadingHref} color="secondary" size="xsm">
+              <Link
+                href={superheadingHref}
+                color="secondary"
+                size="xsm"
+                xstyle={styles.linkedLine}>
                 {superheading}
               </Link>
             ) : (
               <span {...stylex.props(styles.superheading)}>{superheading}</span>
             ))}
           {headingHref ? (
-            <Link href={headingHref} color="primary" weight="semibold">
+            <Link
+              href={headingHref}
+              color="primary"
+              weight="semibold"
+              xstyle={styles.linkedLine}>
               {heading}
             </Link>
           ) : (
@@ -756,7 +790,11 @@ export function TopNavHeading({
           )}
           {subheading &&
             (subheadingHref ? (
-              <Link href={subheadingHref} color="secondary" size="xsm">
+              <Link
+                href={subheadingHref}
+                color="secondary"
+                size="xsm"
+                xstyle={styles.linkedLine}>
                 {subheading}
               </Link>
             ) : (

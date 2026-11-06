@@ -277,6 +277,64 @@ describe('TopNavHeading', () => {
     );
   });
 
+  it('clips each linked line inside its column and leaves the column overflow visible', () => {
+    render(
+      <TopNavHeading
+        superheading="Suite"
+        superheadingHref="/suite"
+        heading="Product"
+        headingHref="/product"
+        subheading="Account"
+        subheadingHref="/account"
+      />,
+    );
+    for (const name of ['Suite', 'Product', 'Account']) {
+      const link = screen.getByRole('link', {name});
+      const style = getComputedStyle(link);
+      expect(style.overflow).toBe('hidden');
+      expect(style.minWidth).toBe('0');
+      expect(style.maxWidth).toBe('100%');
+    }
+    // The column itself is not a clip, so the link's own focus ring can paint.
+    const column = screen.getByRole('link', {name: 'Product'}).parentElement;
+    expect(getComputedStyle(column!).overflow).toBe('');
+  });
+
+  it('counts the chevron row in the text track when the heading has a menu', () => {
+    const {rerender} = render(
+      <TopNavHeading
+        logo={<span>Logo</span>}
+        heading="Product"
+        menu={<div>Menu</div>}
+      />,
+    );
+    const withLogo = document.querySelector('.astryx-top-nav-heading');
+    expect(getComputedStyle(withLogo!).gridTemplateColumns).toBe(
+      'auto minmax(calc(var(--spacing-7) + var(--spacing-1)),1fr)',
+    );
+
+    rerender(<TopNavHeading heading="Product" menu={<div>Menu</div>} />);
+    const textOnly = document.querySelector('.astryx-top-nav-heading');
+    expect(getComputedStyle(textOnly!).gridTemplateColumns).toBe(
+      'minmax(calc(var(--spacing-7) + var(--spacing-1)),1fr)',
+    );
+  });
+
+  it('gives a logo-only heading a single track', () => {
+    render(
+      <TopNavHeading
+        logo={<span>Logo</span>}
+        headingHref="/home"
+        logoLabel="Home"
+      />,
+    );
+    const root = screen.getByRole('link', {name: 'Home'});
+    expect(root).toHaveClass('astryx-top-nav-heading');
+    expect(getComputedStyle(root).display).toBe('grid');
+    expect(getComputedStyle(root).gridTemplateColumns).toBe('');
+    expect(root.childElementCount).toBe(1);
+  });
+
   describe('logo link accessible name', () => {
     const logo = <img src="/logo.png" alt="" />;
 
