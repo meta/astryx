@@ -135,8 +135,9 @@ work.
   preserves the current modality. After pointer input it does not show the shared
   focus indicator; after keyboard input it does. A wrapper whose content would
   cover a ring it draws, such as a masked scroller that is its own stacking
-  context, draws the shared ring as the overlay in Core's internal
-  `internal/focusOutline.stylex`.
+  context, draws the shared ring as the focus-owner overlay
+  (`focusWithinOwnerOverlay` in `privateAttributes/focusOwner.stylex.ts`), keyed
+  on the owner attribute as INV3 says.
 - **INV2 — Modality and focus ownership stay separate.** Shared modality decides
   visibility. Each component family decides the semantic focus owner and the
   element that paints on its behalf.

@@ -829,11 +829,6 @@
       "types": "./dist/internal/indicatorPress.stylex.d.ts",
       "default": "./dist/internal/indicatorPress.stylex.js"
     },
-    "./internal/focusOutline.stylex": {
-      "source": "./src/internal/focusOutline.stylex.ts",
-      "types": "./dist/internal/focusOutline.stylex.d.ts",
-      "default": "./dist/internal/focusOutline.stylex.js"
-    },
     "./internal/touch": {
       "source": "./src/internal/touch.ts",
       "types": "./dist/internal/touch.d.ts",

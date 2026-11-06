@@ -238,7 +238,6 @@ const FILE_MODULE_SUBPATH_EXPORTS = [
   // public API, and allowed by lint only in Core and Lab
   // (architecture:react-component-runtime INV13).
   'internal/indicatorPress.stylex',
-  'internal/focusOutline.stylex',
   'internal/touch',
   'internal/selectable-card',
   'internal/spinner-rotor',
