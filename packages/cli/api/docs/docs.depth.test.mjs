@@ -115,6 +115,59 @@ describe('docs() depth', () => {
   );
 
   it(
+    'lists the docs below each namespace when the list is read with a depth',
+    async () => {
+      const plain = await docs();
+      if (plain.type !== 'docs.list') return;
+      // The list every reader has today: namespaces, and nothing below them.
+      expect(plain.meta?.namespaces?.every(one => one.children == null)).toBe(
+        true,
+      );
+      const one = await docs(undefined, undefined, {depth: 1});
+      if (one.type !== 'docs.list') return;
+      // `data` is the flat topic list it has always been.
+      expect(one.data).toEqual(plain.data);
+      const tokens = (one.meta?.namespaces ?? []).find(
+        each => each.topic === 'tokens',
+      );
+      expect(tokens?.children?.map(child => child.topic)).toContain(
+        'tokens/tokens-color',
+      );
+      // One level only: a child of a child is not there yet.
+      expect(
+        (one.meta?.namespaces ?? [])
+          .flatMap(each => each.children ?? [])
+          .flatMap(child => child.children ?? []),
+      ).toEqual([]);
+    },
+    SLOW,
+  );
+
+  it(
+    'lists the whole tree for a depth of all, each doc by the route that opens it',
+    async () => {
+      const all = await docs(undefined, undefined, {depth: 'all'});
+      if (all.type !== 'docs.list') return;
+      /** @param {import('./docs.type.mjs').DocsListNamespace[]} nodes */
+      const routes = nodes =>
+        nodes.flatMap(node => [node.topic, ...routes(node.children ?? [])]);
+      const listed = routes(all.meta?.namespaces ?? []);
+      // A route the list names opens the doc it names.
+      expect(listed).toContain('authoring/building-blocks/components');
+      const deep = (await docs('authoring/building-blocks/components')).data;
+      expect(deep.route ?? deep.name).toBe(
+        'authoring/building-blocks/components',
+      );
+      // Deeper than one level, and every route is unique.
+      expect(listed.length).toBeGreaterThan(
+        (await docs(undefined, undefined, {depth: 1})).meta?.namespaces?.length,
+      );
+      expect(new Set(listed).size).toBe(listed.length);
+    },
+    SLOW,
+  );
+
+  it(
     'refuses a depth that is not a number of levels, and an unknown detail',
     async () => {
       for (const depth of [-1, 1.5, 'deep', '2']) {
