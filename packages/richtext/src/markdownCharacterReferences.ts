@@ -32,8 +32,11 @@ import {$isLinkNode} from '@lexical/link';
 import {$isTableCellNode} from '@lexical/table';
 import {$dfs, $findMatchingParent} from '@lexical/utils';
 import {
+  $getState,
   $isElementNode,
   $isTextNode,
+  $setState,
+  createState,
   type ElementNode,
   type LexicalNode,
 } from 'lexical';
@@ -484,6 +487,129 @@ export function protectRefusedLinks(markdown: string): ProtectedMarkdown {
     copied = end;
   }
   return {markdown: output + markdown.slice(copied), standIns};
+}
+
+/**
+ * Marks text that holds one image's Markdown source as written. RichText has
+ * no image node, so an image shows as that text, and an export writes it
+ * back as written, never escaped, so it stays an image.
+ */
+const imageSourceState = createState('astryxMdImage', {
+  parse: (value: unknown): boolean => value === true,
+});
+
+/** Whether `node` is text that holds an image's Markdown source. */
+export function $isImageSource(node: LexicalNode): boolean {
+  return $isTextNode(node) && $getState(node, imageSourceState);
+}
+
+/**
+ * Returns `markdown` with every image outside code replaced by a private-use
+ * stand-in, and the source each stand-in replaced. An image is found as core
+ * Markdown reads it: a `!` that is not escaped, the paired brackets of its
+ * text, and the destination and title that close it, read whole by core's
+ * inline parser. A link around an image keeps its own brackets, so the image
+ * stays inside the link's text.
+ */
+export function protectImages(markdown: string): {
+  readonly markdown: string;
+  readonly images: ReadonlyMap<string, string>;
+} {
+  const images = new Map<string, string>();
+  if (!markdown.includes('![')) {
+    return {markdown, images};
+  }
+  const pair = pairedDelimiters(markdown, codeRanges(markdown));
+  const found: Array<{readonly start: number; readonly end: number}> = [];
+  for (
+    let index = markdown.indexOf('](');
+    index !== -1;
+    index = markdown.indexOf('](', index + 1)
+  ) {
+    const open = pair[index];
+    if (open < 1 || markdown[open - 1] !== '!') {
+      continue;
+    }
+    let backslashes = 0;
+    while (markdown[open - 2 - backslashes] === '\\') {
+      backslashes++;
+    }
+    if (backslashes % 2 === 1) {
+      continue;
+    }
+    const angleClose = angleDestinationEnd(markdown, index + 1);
+    const close = typeof angleClose === 'number' ? angleClose : pair[index + 1];
+    if (close === -1 || angleClose === 'refused') {
+      continue;
+    }
+    const start = open - 1;
+    const source = markdown.slice(start, close + 1);
+    const [only, ...rest] = parseInlineAst(source);
+    if (rest.length > 0 || only?.type !== 'image') {
+      continue;
+    }
+    // An image inside another image's text belongs to the outer one.
+    while (found.length > 0 && found[found.length - 1].start >= start) {
+      found.pop();
+    }
+    found.push({start, end: close + 1});
+  }
+  if (found.length === 0) {
+    return {markdown, images};
+  }
+  const available = absentCharacters(markdown);
+  let output = '';
+  let copied = 0;
+  for (const {start, end} of found) {
+    const next = available.next();
+    if (next.done === true) {
+      break;
+    }
+    images.set(next.value, markdown.slice(start, end));
+    output += markdown.slice(copied, start) + next.value;
+    copied = end;
+  }
+  return {markdown: output + markdown.slice(copied), images};
+}
+
+/**
+ * Puts each image's source back where its stand-in sits under `node`, as
+ * text marked as an image's source. The text is a token: a person deletes it
+ * whole and cannot type inside it, and autolinking leaves its URL alone.
+ */
+export function $restoreImages(
+  node: ElementNode,
+  images: ReadonlyMap<string, string>,
+): void {
+  if (images.size === 0) {
+    return;
+  }
+  for (const text of node.getAllTextNodes()) {
+    const content = text.getTextContent();
+    const offsets: number[] = [];
+    let offset = 0;
+    for (const character of content) {
+      if (images.has(character)) {
+        offsets.push(offset, offset + character.length);
+      }
+      offset += character.length;
+    }
+    if (offsets.length === 0) {
+      continue;
+    }
+    const pieces = text.splitText(
+      ...offsets.filter(point => point > 0 && point < content.length),
+    );
+    for (const piece of pieces) {
+      const source = images.get(piece.getTextContent());
+      if (source == null) {
+        continue;
+      }
+      piece.setTextContent(source);
+      piece.setMode('token');
+      $setState(piece, imageSourceState, true);
+    }
+  }
 }
 
 /**

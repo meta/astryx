@@ -162,16 +162,18 @@ describe('image Markdown through edits (spec:AST-062)', () => {
     ).toBe(`Before ${IMAGES.titled} after\n\nTarget ${IMAGES.titled}\n`);
   });
 
-  it('deletes an image whole with Backspace, and keeps the text around it (FR5)', () => {
+  it('deletes an image whole when a selection takes part of it, and keeps the text around it (FR5)', () => {
     const source = `Before ${IMAGES.named} after\n`;
     expect(
       editAndExport(source, () => {
-        $imageText(IMAGES.named).selectEnd();
-        const selection = $getSelection();
-        if (!$isRangeSelection(selection)) {
-          throw new Error('no range selection');
+        const image = $imageText(IMAGES.named);
+        const after = image.getNextSibling();
+        if (!$isTextNode(after)) {
+          throw new Error('no text after the image');
         }
-        selection.deleteCharacter(true);
+        const selection = image.select(5, 5);
+        selection.focus.set(after.getKey(), 0, 'text');
+        selection.removeText();
       }),
     ).toBe('Before  after\n');
   });

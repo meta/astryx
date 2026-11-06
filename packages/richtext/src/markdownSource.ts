@@ -29,6 +29,7 @@
 
 import {$convertFromMarkdownString, type Transformer} from '@lexical/markdown';
 import {$isCodeNode} from '@lexical/code';
+import {$isLinkNode} from '@lexical/link';
 import {$isListItemNode, $isListNode} from '@lexical/list';
 import {
   $createParagraphNode,
@@ -48,11 +49,14 @@ import {
 import {isMarkedHardLineBreak} from './markdownHardLineBreak';
 import {normalizeListIndentation} from './markdownListIndentation';
 import {
+  $isImageSource,
   $restoreCharacterReferences,
   $restoreCodeSpans,
+  $restoreImages,
   protectBackslashEscapes,
   protectCharacterReferences,
   protectCodeSpans,
+  protectImages,
   protectLinkDestinationParentheses,
   protectRefusedLinks,
   $unwrapRefusedLinks,
@@ -396,10 +400,13 @@ export function importMarkdownKeepingSource(
           withoutCarriageReturns(importChunks[index]?.content ?? chunk.content),
           plugins,
         );
-        // Links core refuses go first, on the source as written, so one whose
-        // text holds code (`[`x`](javascript:y)`) shows whole as core shows
-        // it; code spans next, so a safe link's code still reads as code.
-        const refused = protectRefusedLinks(shielded.markdown);
+        // Images go first: RichText has no image node, so each comes back as
+        // its source, whole. Links core refuses go next, on the source as
+        // written, so one whose text holds code (`[`x`](javascript:y)`)
+        // shows whole as core shows it; code spans next, so a safe link's
+        // code still reads as code.
+        const images = protectImages(shielded.markdown);
+        const refused = protectRefusedLinks(images.markdown);
         const code = protectCodeSpans(refused.markdown);
         const escaped = protectBackslashEscapes(code.markdown);
         const destinations = protectLinkDestinationParentheses(
@@ -418,6 +425,7 @@ export function importMarkdownKeepingSource(
           ]),
         );
         $restoreCodeSpans(holder, code.spans);
+        $restoreImages(holder, images.images);
         $unwrapRefusedLinks(holder);
         $restoreExtensionSources(holder, shielded.standIns);
         $joinSoftLineBreaks(holder);
@@ -749,6 +757,11 @@ function markedView(
   if (placeholder != null && $isRichTextExtensionNode(node)) {
     return extensionTextView(node, placeholder);
   }
+  if (placeholder != null && $isTextNode(node)) {
+    const view = Object.create(node) as typeof node;
+    view.getTextContent = () => placeholder;
+    return view;
+  }
   if ($isTextNode(node)) {
     if (node.hasFormat('code') || $isCodeNode(node.getParent())) {
       return node;
@@ -759,6 +772,10 @@ function markedView(
     let text = node
       .getTextContent()
       .replace(INLINE_SYNTAX, match => token + match);
+    // A `!` right before a link would make the link an image.
+    if (text.endsWith('!') && $isLinkNode(node.getNextSibling())) {
+      text = text.slice(0, -1) + token + '!';
+    }
     const previous = node.getPreviousSibling();
     if (previous == null || $isLineBreakNode(previous)) {
       const ordered = ORDERED_LIST_START.exec(text);
@@ -813,13 +830,19 @@ function extensionPlaceholders(
   const sources = new Map<string, string>();
   const free = absentCharacters(text);
   for (const node of nodes) {
-    if ($isRichTextExtensionNode(node) && node.isInline()) {
+    const source =
+      $isRichTextExtensionNode(node) && node.isInline()
+        ? node.getSource()
+        : $isImageSource(node)
+          ? node.getTextContent()
+          : null;
+    if (source != null) {
       const placeholder = free.next().value;
       if (placeholder == null) {
         break;
       }
       placeholders.set(node.getKey(), placeholder);
-      sources.set(placeholder, node.getSource());
+      sources.set(placeholder, source);
     }
   }
   return {placeholders, sources};
