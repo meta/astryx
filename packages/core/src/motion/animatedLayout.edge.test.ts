@@ -6,17 +6,17 @@
  *   Element.animate (its KeyframeEffect's `setKeyframes` and `updateTiming`
  *   included, and a current time read off a stubbed document timeline) and
  *   stubbed layout rectangles (jsdom lays nothing out)
- * @output Checks `spec:AST-105` FR9's edge reveal: the one-state reveal and
- *   conceal from each edge, left to right and right to left; a reversal that
- *   starts from what shows; the moving edge riding the glide of the content
- *   after it, through a reversal too; and the two-state form, which holds the
- *   old state as one copy while the edge rides a gliding element, the element
- *   raised above the copy while it conceals, a reversal starting from the
- *   extent it shows, and Reduce Motion by pointer; and a resized element's
- *   reveal with no copy (a resize controller's pane): held at the extent it
- *   was laid out at while it conceals, its edge's margin freeing the
- *   difference, its padding, overflow and scroll offset kept as laid out,
- *   clipped to its new extent, riding the content beside it
+ * @output Checks `spec:AST-105` FR9's edge reveal. The one-state reveal and
+ *   conceal play from each edge, left to right and right to left. A reversal
+ *   starts from what shows. The moving edge rides the glide of the content
+ *   after it, through a reversal too. The two-state form holds the old state
+ *   as one copy while the edge rides a gliding element. That element stays
+ *   above the copy while it conceals, a reversal starts from the extent it
+ *   shows, and Reduce Motion goes by pointer. A resized element's reveal (a
+ *   resize controller's pane) uses no copy. While it conceals, it holds the
+ *   extent it was laid out at, and its edge's margin frees the difference.
+ *   Its padding, overflow and scroll offset stay as laid out. It is clipped
+ *   to its new extent and rides the content beside it
  * @position Testing; the real geometry is proven in
  *   __tests__/animatedLayout.interaction.browser.spec.ts and, for the SideNav
  *   rail's two-state form, SideNav's rail-motion specs

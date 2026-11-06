@@ -5,8 +5,8 @@
  * @input A LayoutPanel's element, its commits and the width it renders; the
  *   collapse state its resize controller reports; motion/animatedLayout.ts
  * @output The internal channel through which a LayoutPanel lends its element
- *   to the resize controller that sizes it, the edge reveal that controller
- *   plays, and the ResizeHandle a collapsing panel hands focus to
+ *   to the resize controller that sizes it. It also carries that controller's
+ *   edge reveal and the ResizeHandle a collapsing panel hands focus to
  * @position Internal to Resizable and Layout; no entry point exports it. No
  *   React, and no DOM work on import
  */
