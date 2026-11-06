@@ -328,7 +328,7 @@ export const docs = {
           name: 'isDisabled',
           type: 'boolean',
           description:
-            'Disables every transfer, Clear, Add all and search control, which stay focusable, and pauses reordering as a search does.',
+            'Disables every transfer, reorder, Clear, Add all and search control. The row controls and the search field stay focusable.',
           default: 'false',
         },
         {
@@ -795,7 +795,7 @@ export const docsDense = {
         availableLabel: 'Available-list heading and name.',
         hasSearch: 'Shared list filter; default false.',
         isDisabled:
-          'Disable every control, which stays focusable, and pause reordering; default false.',
+          'Disable every control; rows and search stay focusable; default false.',
         searchLabel: 'Accessible search label.',
         searchPlaceholder: 'Search placeholder.',
         reorderable:
