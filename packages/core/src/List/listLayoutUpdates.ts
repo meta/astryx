@@ -30,8 +30,8 @@
 import {useCallback, useRef, type RefObject} from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {
-  glideOf,
   holdLayoutExit,
+  landLayoutGlideSideways,
   playLayoutChange,
   reportLayoutChange,
   type AnimatedLayout,
@@ -192,6 +192,15 @@ export function keepPresentation(row: HTMLElement): void {
  * exit makes it inert. Until then it is marked as leaving and hidden from
  * assistive technology, so no later commit counts it as a row.
  */
+/**
+ * Where each leaving row came back: before the nearest later row as it left.
+ * A row that left at the list's end stays after the rows the list had then.
+ */
+const leavingPlaces = new WeakMap<
+  HTMLElement,
+  {readonly before: Element | null; readonly after: ReadonlySet<Element>}
+>();
+
 function putBack(
   element: HTMLElement,
   list: HTMLElement,
@@ -200,6 +209,10 @@ function putBack(
   markLeaving(element);
   element.setAttribute('aria-hidden', 'true');
   list.insertBefore(element, anchor);
+  leavingPlaces.set(element, {
+    before: anchor,
+    after: new Set(anchor == null ? list.children : []),
+  });
   // Back in the document, its parts' animations would apply again over what
   // they showed as it left: stop them, and show what was on screen.
   if (typeof element.getAnimations === 'function') {
@@ -211,6 +224,53 @@ function putBack(
     part.style.cssText = cssText;
   }
   keptStyles.delete(element);
+}
+
+/**
+ * Puts each leaving row back where it came back. React moves only its own
+ * rows. So a commit that moves rows can carry a leaving row away from its
+ * place, such as to the top of the list.
+ */
+function keepLeavingInPlace(list: HTMLElement): void {
+  const rows = [...list.children].filter(
+    (child): child is HTMLElement =>
+      child instanceof HTMLElement && isLeaving(child),
+  );
+  // A row can come back beside another leaving row, which a pass may move
+  // first: one pass per row is enough.
+  for (let pass = 0; pass < rows.length; pass++) {
+    let isMoved = false;
+    for (const row of rows) {
+      const place = leavingPlaces.get(row);
+      if (place == null) {
+        continue;
+      }
+      if (place.before != null) {
+        if (
+          place.before.parentElement === list &&
+          row.nextElementSibling !== place.before
+        ) {
+          list.insertBefore(row, place.before);
+          isMoved = true;
+        }
+        continue;
+      }
+      // At the end: after the last row the list had as it left.
+      let last: Element | null = null;
+      for (const child of list.children) {
+        if (child !== row && place.after.has(child)) {
+          last = child;
+        }
+      }
+      if (last != null && row.previousElementSibling !== last) {
+        list.insertBefore(row, last.nextElementSibling);
+        isMoved = true;
+      }
+    }
+    if (!isMoved) {
+      break;
+    }
+  }
 }
 
 /** What `readTranslation` reads off a row, before anything is written. */
@@ -289,20 +349,6 @@ function settleTranslation({
         : shift.multiply(new view.DOMMatrix(current));
     child.style.setProperty('transform', moved.toString());
   });
-}
-
-/** Drops the sideways part of `row`'s glide, keeping its vertical move. */
-function keepVerticalGlide(row: HTMLElement): void {
-  const effect = glideOf(row)?.effect as KeyframeEffect | null | undefined;
-  if (effect == null || typeof effect.setKeyframes !== 'function') {
-    return;
-  }
-  effect.setKeyframes(
-    effect.getKeyframes().map(({computedOffset: _, translate, ...frame}) => {
-      const [, y = '0px'] = String(translate ?? '').split(/\s+/);
-      return {...frame, translate: `0px ${y}`};
-    }),
-  );
 }
 
 /**
@@ -485,6 +531,7 @@ export function useListLayoutUpdates(
     if (measured == null || list == null || animatedLayout == null) {
       return;
     }
+    keepLeavingInPlace(list);
     const now = keyedRows(list);
     const order = [...now.keys()];
     if (
@@ -516,6 +563,11 @@ export function useListLayoutUpdates(
         anchor = element;
       }
     }
+    // A row that left now may be one an earlier leaving row came back
+    // before.
+    if (leaving.length > 0) {
+      keepLeavingInPlace(list);
+    }
     for (const change of measured.changes) {
       change.animate();
     }
@@ -536,7 +588,7 @@ export function useListLayoutUpdates(
       // glide keeps only its move in the list.
       queueMicrotask(() => {
         for (const row of settled) {
-          keepVerticalGlide(row);
+          landLayoutGlideSideways(row);
         }
       });
     }

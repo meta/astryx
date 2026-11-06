@@ -24,6 +24,7 @@ interface Played {
   keyframes: Keyframe[];
   readonly animation: Animation;
   isCancelled?: boolean;
+  finishers?: (() => void)[];
 }
 
 let played: Played[] = [];
@@ -103,7 +104,11 @@ beforeEach(() => {
       cancel: () => {
         entry.isCancelled = true;
       },
-      addEventListener: () => undefined,
+      addEventListener: (type: string, listener: () => void) => {
+        if (type === 'finish') {
+          (entry.finishers ??= []).push(listener);
+        }
+      },
       finished: new Promise(() => undefined),
       currentTime: 0,
       effect: {
@@ -161,6 +166,11 @@ function glides(): Map<string, number> {
       continue;
     }
     const element = entry.element as HTMLElement;
+    // A reveal's parts slide inside their row: only rows and the content
+    // after the list glide.
+    if (element.tagName !== 'LI' && element.id === '') {
+      continue;
+    }
     out.set(
       element.id !== '' ? element.id : (element.textContent ?? '').trim(),
       Math.round(Number(match[2])),
@@ -169,11 +179,52 @@ function glides(): Map<string, number> {
   return out;
 }
 
-/** The rows that played an entrance (a reveal), by their text. */
+/** Ends every motion played so far, as each one's end would. */
+function endMotions(): void {
+  for (const entry of [...played]) {
+    for (const finish of entry.finishers ?? []) {
+      finish();
+    }
+  }
+}
+
+/** Whether parts inside `row` play a slide. */
+function slidesInside(row: Element): boolean {
+  return played.some(
+    entry =>
+      entry.element !== row &&
+      row.contains(entry.element) &&
+      entry.keyframes[0]?.translate != null,
+  );
+}
+
+/**
+ * The rows that played an entrance (a reveal), by their text. A reveal moves
+ * a clip on the row, or fades the row in while its parts slide in.
+ */
 function entrances(): string[] {
   return played
-    .filter(entry => entry.keyframes[0]?.clipPath != null)
+    .filter(
+      entry =>
+        entry.keyframes[0]?.clipPath != null ||
+        (entry.element.tagName === 'LI' &&
+          Number(entry.keyframes[0]?.opacity) === 0 &&
+          slidesInside(entry.element)),
+    )
     .map(entry => (entry.element.textContent ?? '').trim());
+}
+
+/**
+ * Whether `row` plays a conceal: a clip that moves on it, or a fade out while
+ * its parts slide out.
+ */
+function conceals(row: Element | undefined): boolean {
+  return played.some(
+    entry =>
+      entry.element === row &&
+      (entry.keyframes[0]?.clipPath != null ||
+        (Number(entry.keyframes.at(-1)?.opacity) === 0 && slidesInside(row))),
+  );
 }
 
 let setRows: (rows: string[]) => void = () => undefined;
@@ -306,6 +357,8 @@ describe('List row updates through animatedLayout', () => {
     );
     await change(['Inbox', 'New', 'Sent']);
     expect(entrances()).toEqual(['New']);
+    // Once its entrance ends, nothing it showed stays written on it.
+    act(() => endMotions());
     const added = [...document.querySelectorAll('li')].find(
       row => row.textContent?.trim() === 'New',
     );
@@ -367,9 +420,11 @@ describe('List row updates through animatedLayout', () => {
     // The rows after the insert glide, and the new row enters.
     expect(glides().get('Sent')).toBe(-ROW);
     expect(entrances()).toEqual(['New']);
-    // A re-render while they move, with the same rows.
+    // A re-render while they move, with the same rows. Once the motions end,
+    // nothing they showed stays written on a row.
     act(() => rerender());
     await flushMicrotasks();
+    act(() => endMotions());
     for (const row of document.querySelectorAll('li')) {
       const label = row.textContent?.trim() ?? '';
       expect(row.style.getPropertyValue('translate'), label).toBe('');
@@ -427,11 +482,7 @@ describe('List row updates through animatedLayout', () => {
     expect(leaving).toHaveAttribute('inert');
     expect(leaving).toHaveAttribute('aria-hidden', 'true');
     // It conceals on the shared motion.
-    expect(
-      played.some(
-        entry => entry.element === leaving && entry.keyframes[0]?.clipPath,
-      ),
-    ).toBe(true);
+    expect(conceals(leaving)).toBe(true);
     const moved = glides();
     expect(moved.get('Drafts')).toBe(ROW);
     expect(moved.get('after')).toBe(ROW);
@@ -496,6 +547,34 @@ describe('List row updates through animatedLayout', () => {
         row.textContent?.trim(),
       ),
     ).toEqual(['Sent', 'Drafts']);
+  });
+
+  it('a reorder while a removed row still exits keeps that row where it was, beside the row after it', async () => {
+    render(<Demo initial={['Inbox', 'Sent', 'Drafts', 'Archive', 'Spam']} />);
+    await change(['Inbox', 'Drafts', 'Archive', 'Spam']);
+    // Sent still exits, before Drafts.
+    expect(document.querySelector('li[data-astryx-leaving]')?.textContent).toBe(
+      'Sent',
+    );
+    // React moves only its own rows, so moving Spam first would leave Sent at
+    // the top of the list.
+    await change(['Spam', 'Inbox', 'Drafts', 'Archive']);
+    expect(
+      [...document.querySelectorAll('li')].map(row => row.textContent?.trim()),
+    ).toEqual(['Spam', 'Inbox', 'Sent', 'Drafts', 'Archive']);
+  });
+
+  it('a removed last row that still exits stays last when the rows before it move, and new rows still land after it', async () => {
+    render(<Demo initial={['Inbox', 'Sent', 'Drafts']} />);
+    await change(['Inbox', 'Sent']);
+    await change(['Sent', 'Inbox']);
+    expect(
+      [...document.querySelectorAll('li')].map(row => row.textContent?.trim()),
+    ).toEqual(['Sent', 'Inbox', 'Drafts']);
+    await change(['Sent', 'Inbox', 'New']);
+    expect(
+      [...document.querySelectorAll('li')].map(row => row.textContent?.trim()),
+    ).toEqual(['Sent', 'Inbox', 'Drafts', 'New']);
   });
 
   it('measuring a change keeps no list of the later rows per row: linear work in the row count', async () => {

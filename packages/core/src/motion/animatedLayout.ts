@@ -10,9 +10,10 @@
  *   exports the exit hold (`holdLayoutExit`, `releaseLayoutExit`), the
  *   in-place swap (`holdLayoutSwap`, `playLayoutSwap`), the edge reveal's
  *   two-state form (`holdLayoutEdge`, `playLayoutEdge`), `playLayoutFrames`
- *   and `applyLayoutChangeTransition`. It is the one module that produces the
- *   size-change glide and the edge reveal `spec:AST-105` defines
- *   (`architecture:react-component-runtime` INV12)
+ *   and `applyLayoutChangeTransition`. It exports `glideOf` and the glide
+ *   landings (`landLayoutGlide`, `landLayoutGlideSideways`) too. It is the one
+ *   module that produces the size-change glide and the edge reveal
+ *   `spec:AST-105` defines (`architecture:react-component-runtime` INV12)
  * @position Motion foundation, internal to core. A handle comes from the
  *   public `useAnimatedLayout` hook; a component that takes it reports its
  *   size changes through this module.
@@ -3275,6 +3276,46 @@ export function landLayoutGlide(element: Element): void {
     glides.delete(element);
     glide.animation.cancel();
   }
+}
+
+/**
+ * Lands the sideways part of `element`'s running glide at once and keeps its
+ * vertical move. It changes the glide's frames, and what a later change
+ * carries from it, together. It is for an adopter that moves the element's
+ * own sideways translation onto its children between the two reads. A list
+ * row that a swipe left open is one.
+ */
+export function landLayoutGlideSideways(element: Element): void {
+  const glide = glides.get(element);
+  const effect = glide?.animation.effect as KeyframeEffect | null | undefined;
+  if (
+    glide == null ||
+    effect == null ||
+    typeof effect.setKeyframes !== 'function'
+  ) {
+    return;
+  }
+  effect.setKeyframes(
+    effect.getKeyframes().map(({computedOffset: _, translate, ...frame}) => {
+      const [, y = '0px'] = String(translate ?? '').split(/\s+/);
+      return {...frame, translate: `0px ${y}`};
+    }),
+  );
+  const vertical: Glide = {
+    animation: glide.animation,
+    offsetAt: t => ({x: 0, y: glide.offsetAt(t).y}),
+    get durationMs() {
+      return glide.durationMs;
+    },
+    shownBefore: {x: 0, y: glide.shownBefore.y},
+    scale: glide.scale,
+  };
+  glides.set(element, vertical);
+  glide.animation.addEventListener?.('finish', () => {
+    if (glides.get(element) === vertical) {
+      glides.delete(element);
+    }
+  });
 }
 
 /**
