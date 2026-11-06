@@ -67,7 +67,7 @@ import {moveRegionsTab} from './menuRegionStops';
 import {Item} from '../Item';
 import {useLayer} from '../Layer/useLayer';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
-import {useListFocus} from '../hooks/useListFocus';
+import {useInternalListFocus} from '../hooks/useListFocus';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useMenuHover} from '../hooks/useMenuHover';
 import {
@@ -107,8 +107,10 @@ import type {BaseProps} from '../BaseProps';
 import {
   MENU_ITEM_ROLES,
   MENU_ITEM_SELECTOR,
+  MENU_ROW_SELECTOR,
   MENU_BOUNDARY_SELECTOR,
   activateMenuItem,
+  keepDisabledRowUnfocused,
 } from './menuItemRoles';
 import {
   DropdownMenuContext,
@@ -658,8 +660,9 @@ export function DropdownMenuSubMenu(
     focusItem,
     ownsEvent,
     getItems,
-  } = useListFocus<HTMLDivElement>({
-    itemSelector: MENU_ITEM_SELECTOR,
+  } = useInternalListFocus<HTMLDivElement>({
+    itemSelector: MENU_ROW_SELECTOR,
+    reachesDisabledItems: true,
     boundarySelector: MENU_BOUNDARY_SELECTOR,
     // Menus wrap.
     wrap: true,
@@ -1196,10 +1199,14 @@ export function DropdownMenuSubMenu(
         // state and wiring are set after them, and its own handlers run
         // before the caller's.
         {...rest}
+        onMouseDown={composeEventHandlers(
+          rest.onMouseDown,
+          isDisabled ? keepDisabledRowUnfocused : undefined,
+        )}
         ref={triggerRowRef}
         id={triggerId}
         role="menuitem"
-        tabIndex={isDisabled ? undefined : -1}
+        tabIndex={-1}
         aria-haspopup={hasRegions ? 'dialog' : 'menu'}
         aria-expanded={isOpen}
         aria-controls={isOpen ? (hasRegions ? frameId : contentId) : undefined}
