@@ -35,7 +35,7 @@
  * ```
  */
 
-import React, {use, useId, useInsertionEffect, useMemo} from 'react';
+import React, {use, useId, useInsertionEffect, useMemo, useState} from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import * as stylex from '@stylexjs/stylex';
 import type {ThemeMode} from './types';
@@ -113,15 +113,19 @@ ThemeNestingContext.displayName = 'ThemeNestingContext';
  * `Theme` that uses it unmounts.
  */
 interface InjectedTheme {
-  /** Each mounted `Theme` that uses this name, by its id, with its theme. */
-  users: Map<string, DefinedTheme>;
-  /** The id of the `Theme` whose theme is in the document. */
-  owner: string;
+  /**
+   * Each mounted `Theme` that uses this name, with its theme and id. The key
+   * is one object per `Theme` instance: `useId` values can repeat across
+   * separate React roots.
+   */
+  users: Map<object, {theme: DefinedTheme; id: string}>;
+  /** The `Theme` whose theme is in the document. */
+  owner: object;
   /**
    * The owner that last handed the CSS over. When the same `Theme` sets up
    * again in the same commit (its own theme changed), it takes the CSS back.
    */
-  formerOwner: string | null;
+  formerOwner: object | null;
   /** The theme whose CSS is in the document. */
   theme: DefinedTheme;
   styles: HTMLStyleElement[];
@@ -177,6 +181,7 @@ function rewriteThemeStyles(
  */
 function useThemeStyleInjection(theme: DefinedTheme): void {
   const id = useId();
+  const [instance] = useState(() => ({}));
 
   // Syncs the document's stylesheets with the runtime theme CSS.
   useInsertionEffect(() => {
@@ -201,7 +206,7 @@ function useThemeStyleInjection(theme: DefinedTheme): void {
       );
       entry = {
         users: new Map(),
-        owner: id,
+        owner: instance,
         formerOwner: null,
         theme,
         styles: writeThemeStyles(theme, id),
@@ -210,10 +215,10 @@ function useThemeStyleInjection(theme: DefinedTheme): void {
     }
     // A later `Theme` does no generation. The CSS of the first `Theme` that
     // injected the name stays in the document.
-    entry.users.set(id, theme);
-    if (entry.formerOwner === id) {
+    entry.users.set(instance, {theme, id});
+    if (entry.formerOwner === instance) {
       // The owner's own theme changed: its new definition paints, as on main.
-      entry.owner = id;
+      entry.owner = instance;
       entry.formerOwner = null;
       if (entry.theme !== theme) {
         rewriteThemeStyles(entry, theme, id);
@@ -222,7 +227,7 @@ function useThemeStyleInjection(theme: DefinedTheme): void {
     const current = entry;
 
     return () => {
-      current.users.delete(id);
+      current.users.delete(instance);
       if (current.users.size === 0) {
         for (const style of current.styles) {
           style.remove();
@@ -230,20 +235,20 @@ function useThemeStyleInjection(theme: DefinedTheme): void {
         injectedThemes.delete(themeKey);
         return;
       }
-      if (current.owner !== id) {
+      if (current.owner !== instance) {
         return;
       }
       // The earliest-mounted `Theme` that remains takes over the CSS. If its
       // theme differs, as after a redefinition under the same name, its CSS
       // replaces the old one.
-      const [nextOwner, nextTheme] = [...current.users][0];
+      const [nextOwner, next] = [...current.users][0];
       current.owner = nextOwner;
-      current.formerOwner = id;
-      if (nextTheme !== current.theme) {
-        rewriteThemeStyles(current, nextTheme, nextOwner);
+      current.formerOwner = instance;
+      if (next.theme !== current.theme) {
+        rewriteThemeStyles(current, next.theme, next.id);
       }
     };
-  }, [theme, id]);
+  }, [theme, id, instance]);
 }
 
 // =============================================================================

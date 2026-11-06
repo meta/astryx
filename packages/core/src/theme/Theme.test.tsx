@@ -1,7 +1,9 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
-import {render, cleanup} from '@testing-library/react';
+import {hydrateRoot, type Root} from 'react-dom/client';
+import {renderToString} from 'react-dom/server';
+import {act, render, cleanup} from '@testing-library/react';
 import React from 'react';
 import {Theme} from './Theme';
 import {defineTheme} from './defineTheme';
@@ -406,6 +408,35 @@ describe('Theme', () => {
 
     unmount();
     expect(document.head.querySelector(selector)).toBeNull();
+  });
+
+  it('keeps the CSS for one root when a Theme in another root with the same id unmounts', () => {
+    const selector = 'style[data-astryx-theme="test"]';
+    const first = document.createElement('div');
+    const second = document.createElement('div');
+    document.body.append(first, second);
+    // Hydrated roots derive useId from tree position, so both Themes get
+    // the same id.
+    const ui = <Theme theme={testTheme}>content</Theme>;
+    first.innerHTML = renderToString(ui);
+    second.innerHTML = renderToString(ui);
+    let rootA: Root | undefined;
+    let rootB: Root | undefined;
+    act(() => {
+      rootA = hydrateRoot(first, ui);
+    });
+    act(() => {
+      rootB = hydrateRoot(second, ui);
+    });
+    expect(document.head.querySelectorAll(selector)).toHaveLength(1);
+
+    act(() => rootB?.unmount());
+    expect(document.head.querySelector(selector)).not.toBeNull();
+
+    act(() => rootA?.unmount());
+    expect(document.head.querySelector(selector)).toBeNull();
+    first.remove();
+    second.remove();
   });
 
   it("paints the owning Theme's new definition when only its theme changes", () => {
