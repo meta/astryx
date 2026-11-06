@@ -3252,9 +3252,9 @@ jobs:
             COMMAND=release
             SCOPE_ARGS=()
           elif [ -n "$COMPONENTS$DEPENDENTS" ] && [ -n "$THEMES" ]; then
-            SCOPE_ARGS=(--tiers 'component,theme-matrix' --components "$COMPONENTS" "${DEPENDENT_ARGS[@]}" --themes "$THEMES")
+            SCOPE_ARGS=(--tiers 'component,theme-matrix' --components "$COMPONENTS" ${DEPENDENT_ARGS[@]+"${DEPENDENT_ARGS[@]}"} --themes "$THEMES")
           elif [ -n "$COMPONENTS$DEPENDENTS" ]; then
-            SCOPE_ARGS=(--tiers component --components "$COMPONENTS" "${DEPENDENT_ARGS[@]}" --no-scout)
+            SCOPE_ARGS=(--tiers component --components "$COMPONENTS" ${DEPENDENT_ARGS[@]+"${DEPENDENT_ARGS[@]}"} --no-scout)
           elif [ -n "$THEMES" ]; then
             SCOPE_ARGS=(--tiers theme-matrix --themes "$THEMES")
           else
@@ -3274,8 +3274,8 @@ jobs:
               --storybook-dir apps/storybook/dist \
               --baseline .github/visual-baseline \
               --out .visual-run \
-              "${SCOPE_ARGS[@]}" \
-              "${OBS_ARGS[@]}" \
+              ${SCOPE_ARGS[@]+"${SCOPE_ARGS[@]}"} \
+              ${OBS_ARGS[@]+"${OBS_ARGS[@]}"} \
               --summary-output visual-summary.md
           }
           set +e
@@ -3303,7 +3303,7 @@ jobs:
               --storybook-dir apps/storybook/dist \
               --baseline .github/visual-baseline \
               --out .visual-run \
-              "${OBS_ARGS[@]}" \
+              ${OBS_ARGS[@]+"${OBS_ARGS[@]}"} \
               --summary-output visual-summary.md
             code=$?
             set -e
@@ -3378,7 +3378,7 @@ jobs:
             --storybook-dir apps/storybook/dist \
             --baseline .github/visual-baseline \
             --out .visual-run \
-            "${OBS_ARGS[@]}" \
+            ${OBS_ARGS[@]+"${OBS_ARGS[@]}"} \
             --summary-output visual-summary.md
           code=$?
           set -e
@@ -3766,7 +3766,7 @@ jobs:
             --output rtl-audit-report.json \
             --packages core \
             --merge-shards rtl-parts \
-            "${FILTER_ARGS[@]}"
+            ${FILTER_ARGS[@]+"${FILTER_ARGS[@]}"}
           code=$?
           set -e
           # 1 is the soft findings signal; anything else is a failed join.
