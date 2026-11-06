@@ -15,7 +15,11 @@ import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import {discoverAllWithErrors} from './template.mjs';
+import {requireNatively} from '../../test-utils/native-require.mjs';
+
+const require = requireNatively(import.meta.url);
+/** @type {typeof import('./template.mjs')} */
+const {discoverAllWithErrors} = require('./template.mjs');
 
 let tmpDir;
 

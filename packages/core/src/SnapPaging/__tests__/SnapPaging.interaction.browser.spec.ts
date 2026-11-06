@@ -386,7 +386,9 @@ async function pressInSettle(
 /** The row's offset once two reads a while apart agree. */
 async function restingOffset(scroller: Locator) {
   await settled(scroller);
-  let at = await offset(scroller);
+  // The first poll only reads. Two reads in one frame agree even while a
+  // native smooth scroll runs.
+  let at = Number.NaN;
   await expect
     .poll(async () => {
       const before = at;
