@@ -14,6 +14,13 @@
  * so the attribute can be renamed or reshaped in one place and never leaks
  * into the public surface by accident.
  *
+ * In Core, the owner can instead be a plain-TS module,
+ * `packages/core/src/privateAttributes/<name>.ts`, that the uncompiled theme
+ * engine can import. When it exists, it is the only owner: its `.stylex.ts`
+ * sibling is an ordinary file that imports the name and never writes it. A
+ * plain-TS owner may export its name and the rule text built on it, because
+ * its sibling and the theme engine need them.
+ *
  * Reported, outside the owner modules:
  *   - a string literal that contains `data-astryx-<name>`, in any position
  *     (an object key, a `setAttribute` argument, a selector inside
@@ -25,8 +32,8 @@
  * A name the rule cannot read (`data-astryx-${part}`, `dataAttr(name)`) is
  * reported as `data-astryx-*`: it cannot be shown to be public.
  *
- * Inside an owner module, only its own attribute may be written, and the
- * module may not export the raw name or a selector as a string: not as an
+ * Inside an owner module, only its own attribute may be written, and a
+ * `.stylex.ts` owner may not export the raw name or a selector as a string: not as an
  * exported or default-exported value, not inside an exported object, array or
  * function's return value, and not through a module constant that one of
  * those uses, including a string built from that constant in a template or
@@ -53,6 +60,7 @@
  * `no-raw-private-attribute.baseline.mjs` writes it.
  */
 
+import fs from 'node:fs';
 import path from 'node:path';
 import {baselineAllowance} from './rule-baseline.mjs';
 
@@ -104,8 +112,10 @@ const NAMESPACE_IDENTIFIERS = new Set(['dataAttrNamespace', 'NAMESPACE']);
 /** Stands in for an interpolated value whose text is unknown. */
 const UNKNOWN = '\u0000';
 
-const OWNER_MODULE =
+const STYLEX_OWNER_MODULE =
   /(?:^|\/)packages\/[^/]+\/src\/privateAttributes\/([^/]+)\.stylex\.ts$/;
+const PLAIN_OWNER_MODULE =
+  /(?:^|\/)packages\/core\/src\/privateAttributes\/([^/.]+)\.ts$/;
 const PACKAGE_SOURCE = /(?:^|\/)packages\/([^/]+)\/src\//;
 const NAMING_MODULE = /(?:^|\/)packages\/core\/src\/naming\.ts$/;
 
@@ -319,16 +329,37 @@ const rule = {
     if (NAMING_MODULE.test(filename)) {
       return {};
     }
+    const packageSource = PACKAGE_SOURCE.exec(filename);
+    const packageName = packageSource?.[1] ?? null;
+    const ownerDirectory = `packages/${packageName ?? '<package>'}/src/privateAttributes`;
+    const ownerDirectoryOnDisk =
+      packageSource == null
+        ? null
+        : `${filename.slice(0, packageSource.index + packageSource[0].length)}privateAttributes`;
+    const hasPlainOwner = stem =>
+      packageName === 'core' &&
+      ownerDirectoryOnDisk != null &&
+      fs.existsSync(`${ownerDirectoryOnDisk}/${stem}.ts`);
     // Owner modules are named in camelCase (`focusOwner.stylex.ts` owns
     // `data-astryx-focus-owner`); compare in the attribute's kebab case.
-    const ownerStem = OWNER_MODULE.exec(filename)?.[1] ?? null;
+    const plainOwnerStem = PLAIN_OWNER_MODULE.exec(filename)?.[1] ?? null;
+    const stylexOwnerStem = STYLEX_OWNER_MODULE.exec(filename)?.[1] ?? null;
+    const ownerStem =
+      plainOwnerStem ??
+      (stylexOwnerStem != null && !hasPlainOwner(stylexOwnerStem)
+        ? stylexOwnerStem
+        : null);
     const ownedName = ownerStem == null ? null : kebabCase(ownerStem);
-    const packageName = PACKAGE_SOURCE.exec(filename)?.[1] ?? null;
-    const ownerDirectory = `packages/${packageName ?? '<package>'}/src/privateAttributes`;
-    const ownerOf = name =>
-      name == null
-        ? ownerDirectory
-        : `${ownerDirectory}/${camelCase(name)}.stylex.ts`;
+    const mayExportName = plainOwnerStem != null;
+    const ownerOf = name => {
+      if (name == null) {
+        return ownerDirectory;
+      }
+      const stem = camelCase(name);
+      return hasPlainOwner(stem)
+        ? `${ownerDirectory}/${stem}.ts`
+        : `${ownerDirectory}/${stem}.stylex.ts`;
+    };
     const sourceCode = context.sourceCode ?? context.getSourceCode();
     // Each listed attribute allows as many sites as it is listed; the next
     // one is reported.
@@ -366,11 +397,11 @@ const rule = {
       });
     }
 
-    // In an owner module: strings (and `dataAttr()` calls) that spell its
-    // own attribute, checked at the end for a path to an export.
+    // In a `.stylex.ts` owner module: strings (and `dataAttr()` calls) that
+    // spell its own attribute, checked at the end for a path to an export.
     const ownerValues = [];
     function noteOwnerValue(node, names) {
-      if (ownedName != null && names.includes(ownedName)) {
+      if (!mayExportName && ownedName != null && names.includes(ownedName)) {
         ownerValues.push(node);
       }
     }
