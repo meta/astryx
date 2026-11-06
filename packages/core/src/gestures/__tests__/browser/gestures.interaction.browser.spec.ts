@@ -3152,3 +3152,52 @@ test("a pan on an element in a same-origin iframe follows a finger: the host rea
   expect(states).toContain('changed');
   expect(states.slice(-2)).toEqual(['ended', 'possible']);
 });
+
+test('a pan on an element the page moves into a same-origin iframe keeps its touch-action and follows a finger', async ({
+  page,
+  browserName,
+}) => {
+  const driver = await openBare(page, browserName);
+  // Document Picture-in-Picture moves the page's own elements into another
+  // window's document, where they keep the page's classes. A pan on the page
+  // gives the expected touch-action.
+  const start = await page.evaluate(() => {
+    const {getGestureHost, PanGestureRecognizer} = window.__api;
+    const reference = document.createElement('div');
+    document.body.append(reference);
+    getGestureHost(document).attach(reference, new PanGestureRecognizer());
+    const expected = getComputedStyle(reference).touchAction;
+    reference.remove();
+    const frame = document.createElement('iframe');
+    frame.style.cssText =
+      'position: absolute; left: 0; top: 0; width: 320px; height: 480px; border: 0';
+    document.body.append(frame);
+    const doc = frame.contentDocument as Document;
+    doc.body.style.margin = '0';
+    const pad = document.createElement('div');
+    pad.style.cssText = 'width: 240px; height: 240px; background: #ddd';
+    doc.body.append(pad);
+    const pan = new PanGestureRecognizer();
+    const states: string[] = [];
+    (window as unknown as {__movedStates: string[]}).__movedStates = states;
+    pan.addTransitionListener((_current, _from, to) => states.push(to));
+    getGestureHost(doc).attach(pad, pan);
+    const box = pad.getBoundingClientRect();
+    return {
+      x: box.left + box.width / 2,
+      y: box.top + box.height / 2,
+      expected,
+      touchAction: (doc.defaultView as Window).getComputedStyle(pad)
+        .touchAction,
+    };
+  });
+  expect(start.expected).not.toBe('auto');
+  expect(start.touchAction).toBe(start.expected);
+  await driver.play(drag(start, {x: start.x + 80, y: start.y + 4}));
+  const states = await page.evaluate(
+    () => (window as unknown as {__movedStates: string[]}).__movedStates,
+  );
+  expect(states[0]).toBe('began');
+  expect(states).toContain('changed');
+  expect(states.slice(-2)).toEqual(['ended', 'possible']);
+});

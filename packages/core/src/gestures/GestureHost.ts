@@ -1283,7 +1283,7 @@ export class GestureHost {
     }
     armClickGuard(this.doc, {takesLateMouse: pointerType === 'touch'});
     if (
-      target instanceof view.HTMLElement &&
+      isHTMLElement(target) &&
       target.matches('input, textarea, select, [contenteditable]')
     ) {
       target.focus();
@@ -2093,7 +2093,7 @@ export class GestureHost {
       // The window's own blur; an element's blur (a Node's) reaches the
       // window's capture phase too and means nothing here.
       subscribeInput(view, 'blur', event => {
-        if (!(event.target instanceof view.Node)) {
+        if (!isNode(event.target)) {
           this.onBlur();
         }
       }),
@@ -2717,7 +2717,7 @@ export class GestureHost {
         // every touch. An element's blur reaches the window's capture phase
         // too and means nothing here.
         subscribeInput(view, 'blur', event => {
-          if (!(event.target instanceof view.Node)) {
+          if (!isNode(event.target)) {
             cancelWheel();
           }
         }),
