@@ -247,11 +247,26 @@ jobs:
 
       # The comment-provenance rule allows only the sites its baseline lists.
       # A change that removes a cited site must also drop its entry, so the
-      # baseline never allows a site that no longer exists. The check reads
-      # the merged tree, so a site that main removed fails here too.
+      # baseline never allows a site that no longer exists. A pull request
+      # runs the check when it changes a file the baseline lists, the
+      # baseline, or the rule; every push to main runs it. The check parses
+      # Core with the type-aware config, so it gets the same heap as ESLint.
       - name: Check the comment-provenance baseline
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
-        run: node internal/eslint-plugin-astryx/no-comment-provenance.baseline.mjs --check
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          MERGE_SHA: ${{ github.sha }}
+          NODE_OPTIONS: '--max-old-space-size=4096'
+        run: |
+          set -eu
+          if [ "$EVENT_NAME" = pull_request ]; then
+            git diff --name-only "$MERGE_SHA^1" "$MERGE_SHA" > "$RUNNER_TEMP/changed-files"
+            if ! node .github/scripts/provenance-baseline-scope.mjs "$RUNNER_TEMP/changed-files"; then
+              echo 'This change touches no file the comment-provenance baseline lists, the baseline, or the rule.'
+              exit 0
+            fi
+          fi
+          node internal/eslint-plugin-astryx/no-comment-provenance.baseline.mjs --check
 
       # The pre-commit hook formats staged files with Prettier, but a commit
       # made without it can land unformatted source. A later local merge of

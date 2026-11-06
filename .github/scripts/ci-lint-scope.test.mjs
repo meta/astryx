@@ -21,6 +21,8 @@ import path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import yaml from 'yaml';
 
+import {touchesBaseline} from './provenance-baseline-scope.mjs';
+
 import {
   createRepository,
   importCommits,
@@ -201,8 +203,14 @@ describe('required lint routing', () => {
     const check = steps.find(
       step => step.name === 'Check the comment-provenance baseline',
     );
-    expect(check.run).toBe(
+    expect(check.run).toContain(
       'node internal/eslint-plugin-astryx/no-comment-provenance.baseline.mjs --check',
+    );
+    expect(check.run).toContain(
+      'node .github/scripts/provenance-baseline-scope.mjs "$RUNNER_TEMP/changed-files"',
+    );
+    expect(check.env.NODE_OPTIONS).toBe(
+      steps.find(step => step.name === 'Run ESLint').env.NODE_OPTIONS,
     );
     // The same lanes as ESLint: everything but the docs and spec fast paths.
     expect(check.if).toBe(steps.find(step => step.name === 'Run ESLint').if);
@@ -215,5 +223,33 @@ describe('required lint routing', () => {
           '{}\n',
       }),
     ).toMatchObject({spec_only: 'false', docsite_only: 'false'});
+  });
+
+  it('runs the baseline check for a change that can make the baseline stale, and skips it otherwise', () => {
+    const baseline = {'packages/core/src/Button/Button.tsx': []};
+    for (const file of [
+      'packages/core/src/Button/Button.tsx',
+      'internal/eslint-plugin-astryx/no-comment-provenance.baseline.json',
+      'internal/eslint-plugin-astryx/no-comment-provenance.js',
+      'internal/eslint-plugin-astryx/rule-baseline.mjs',
+    ]) {
+      expect(touchesBaseline([file], baseline), file).toBe(true);
+    }
+    expect(
+      touchesBaseline(['packages/core/src/Badge/Badge.tsx'], baseline),
+    ).toBe(false);
+    // The repository's own baseline lists real files.
+    const repoBaseline = JSON.parse(
+      fs.readFileSync(
+        path.join(
+          root,
+          'internal/eslint-plugin-astryx/no-comment-provenance.baseline.json',
+        ),
+        'utf8',
+      ),
+    );
+    expect(touchesBaseline([Object.keys(repoBaseline)[0]], repoBaseline)).toBe(
+      true,
+    );
   });
 });
