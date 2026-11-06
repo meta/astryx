@@ -425,6 +425,9 @@ describe('WebKit interaction proof routing', () => {
       // brings the outlet into the gesture fixtures and the pager bundle; the
       // scope covers it before that import lands.
       'packages/core/src/Layer/modalOutlet.ts',
+      // The animated-layout glide reads its timing through the theme-timing
+      // reader, which resolves token references, so its bundle carries them.
+      'packages/core/src/theme/tokenReferences.ts',
       'packages/core/src/hooks/useMenuPress.ts',
       'packages/core/src/hooks/menuPressGesture.ts',
       'packages/core/src/hooks/useLongPress.ts',

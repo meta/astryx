@@ -103,6 +103,16 @@ function down(hook: Hook, y: number, t: number, target: HTMLElement) {
     hook.result.current.handleProps.onPointerDown(pointerEvent(y, t, target)),
   );
 }
+/** A touch press on the handle: a drag's close then plays the close spring. */
+function touchDown(hook: Hook, y: number, t: number, target: HTMLElement) {
+  act(() => hook.result.current.sheetRef(target));
+  act(() =>
+    hook.result.current.handleProps.onPointerDown({
+      ...pointerEvent(y, t, target),
+      pointerType: 'touch',
+    } as unknown as React.PointerEvent),
+  );
+}
 function move(hook: Hook, y: number, t: number, target: HTMLElement) {
   act(() =>
     hook.result.current.handleProps.onPointerMove(pointerEvent(y, t, target)),
@@ -641,6 +651,47 @@ describe('useSheetGestures', () => {
     expect(hook.result.current.isDragging).toBe(false);
     expect(hook.result.current.contentProps.style.transform).toBeUndefined();
     expect(onDismiss).not.toHaveBeenCalled();
+  });
+
+  describe("a drag's close", () => {
+    it('hands the panel the distance left and the release speed after a touch drag closes it', () => {
+      const {hook, onDismiss} = setup();
+      const t = makeTarget();
+      touchDown(hook, 0, 0, t);
+      move(hook, 100, 50, t);
+      move(hook, 200, 100, t);
+      // The host takes the close in the same update, as a controlled host does.
+      act(() => {
+        hook.result.current.handleProps.onPointerUp(pointerEvent(200, 102, t));
+        hook.rerender({isOpen: false, isOpenRequested: false, onDismiss});
+      });
+      expect(onDismiss).toHaveBeenCalledTimes(1);
+      // 200px left to travel, at the release's 2,000 px/s.
+      expect(hook.result.current.dragExit).toEqual({
+        distance: 200,
+        velocity: 2000,
+      });
+    });
+
+    it('keeps the stylesheet exit for a close that no drag started', () => {
+      const {hook, onDismiss} = setup();
+      hook.rerender({isOpen: false, isOpenRequested: false, onDismiss});
+      expect(hook.result.current.dragExit).toBeNull();
+    });
+
+    it('gives a mouse drag that closes the sheet the stylesheet exit', () => {
+      const {hook, onDismiss} = setup();
+      const t = makeTarget();
+      down(hook, 0, 0, t);
+      move(hook, 100, 50, t);
+      move(hook, 200, 100, t);
+      act(() => {
+        hook.result.current.handleProps.onPointerUp(pointerEvent(200, 102, t));
+        hook.rerender({isOpen: false, isOpenRequested: false, onDismiss});
+      });
+      expect(onDismiss).toHaveBeenCalledTimes(1);
+      expect(hook.result.current.dragExit).toBeNull();
+    });
   });
 
   describe('pinch', () => {

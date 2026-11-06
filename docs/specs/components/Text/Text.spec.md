@@ -80,6 +80,11 @@ Consumer migration instructions belong in consumer docs and release notes.
 - Type-based size, weight, and default color; size, color, and weight
   overrides; and the text layout controls on that element.
 - Measuring truncation and deciding when to compose the truncation Tooltip.
+- The clamp it provides to its content. A Link inside a clamped Text lays out
+  inline so the clamp truncates it, and keeps its visible focus ring as an
+  inset ring (`component:Link` FR6); Text provides that clamp through an
+  internal context. Block-level content, such as a Link that composes a
+  stack, is not supported inside a clamped Text, because it breaks the clamp.
 
 **Does not own / non-goals**
 

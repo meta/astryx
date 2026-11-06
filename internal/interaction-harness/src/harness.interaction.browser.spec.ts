@@ -63,6 +63,7 @@ import {
   blockMainThread,
   busyWindowProof,
   BusyWindowTooLateError,
+  castStep,
   compareCurve,
   countBetween,
   cubicBezier,
@@ -914,6 +915,7 @@ test.describe('frame evidence', () => {
   test('against a compositor-only control in the same window, a compositor animation passes and a rAF one fails, whatever the screencast rate', async ({
     page,
   }, testInfo) => {
+    const started = Date.now();
     await busyFixture(page);
     const box = page.locator('#box');
     await markElement(box, {mode: 'outline'});
@@ -937,10 +939,21 @@ test.describe('frame evidence', () => {
             {duration: 1600, easing: 'linear', iterations: Infinity},
           );
         } else {
+          // Each step is logged with its time on the page clock, and when it
+          // ran. A frame can then be traced to the step it shows. The first
+          // entry is the reset.
+          const reset = performance.timeOrigin + performance.now();
+          const steps = [{t: reset, ran: reset, y: 0}];
+          (window as unknown as {__rafSteps: typeof steps}).__rafSteps = steps;
           const start = performance.now();
           const step = (now: number) => {
             const p = ((now - start) / 1600) % 1;
             el.style.transform = `translateY(${560 * p}px)`;
+            steps.push({
+              t: performance.timeOrigin + now,
+              ran: performance.timeOrigin + performance.now(),
+              y: 560 * p,
+            });
             requestAnimationFrame(step);
           };
           requestAnimationFrame(step);
@@ -970,30 +983,105 @@ test.describe('frame evidence', () => {
         type: `busy-main-thread ${driver} 1/${everyNthFrame} against the control`,
         description: `${proof.summary} | without the control: ${alone.verdict.failures.join('; ') || 'pass'}`,
       });
-      return proof;
+      // `before` holds the steps the page set in the 800 ms before the block.
+      // `unset` lists the frames in the judged part that show a new position
+      // set at none of them. On a starved runner, a late frame showed a step
+      // at most 261 ms old. The page runs no step while the block holds the
+      // main thread, which its log shows (`inBlock`).
+      const steps =
+        driver === 'raf'
+          ? await page.evaluate(
+              () =>
+                (
+                  window as unknown as {
+                    __rafSteps: {t: number; ran: number; y: number}[];
+                  }
+                ).__rafSteps,
+            )
+          : [];
+      const before = steps
+        .filter(s => s.t < window.from && s.t >= window.from - 800)
+        .map(s => s.y);
+      const top = await box.evaluate(el => (el as HTMLElement).offsetTop);
+      // Within one cast step: a position reads up to a step off (2 px in
+      // WebKit's cast, 1 px in Chromium's).
+      const step = castStep(tracked, 'y');
+      let shown = tracked
+        .filter(f => f.box != null && f.t < proof.judged.from)
+        .at(-1)?.box?.y;
+      const unset: {atMs: number; y: number}[] = [];
+      for (const f of tracked) {
+        const y = f.box?.y;
+        if (y == null || f.t < proof.judged.from || f.t > proof.judged.to) {
+          continue;
+        }
+        if (
+          shown != null &&
+          Math.abs(y - shown) > 0.25 &&
+          !before.some(set => Math.abs(top + set - y) <= step)
+        ) {
+          unset.push({atMs: f.t - window.from, y: y - top});
+        }
+        shown = y;
+      }
+      // By when each step ran: Chromium stamps a step with its frame's time,
+      // which can fall inside the block though the step ran after it.
+      const inBlock = steps.filter(
+        s => s.ran > window.from && s.ran < window.to,
+      ).length;
+      return {proof, unset: driver === 'raf' ? unset : null, inBlock};
     };
 
-    const compositor = await run('compositor');
+    const armStart = Date.now();
+    const {proof: compositor} = await run('compositor');
+    const armMs = Date.now() - armStart;
     expect(compositor.verdict.failures, compositor.summary).toEqual([]);
     expect(compositor.control?.moved).toBeGreaterThanOrEqual(4);
 
-    // The mutant: a main-thread animation freezes while the control moves. A
-    // frame presented as the block starts can still show its last step, so
-    // it can read as moved on one of the control's frames; never on the rest.
-    const raf = await run('raf');
-    expect(raf.verdict.pass, raf.summary).toBe(false);
-    const rafFailures = raf.verdict.failures.join('\n');
-    expect(rafFailures).toMatch(
-      /moved on [01] of the \d+ frames the control moved/,
-    );
-    expect(rafFailures).toMatch(/longest stall .* longer than the control's/);
+    // A loaded runner presents fewer frames, so the same block holds fewer of
+    // the frames the other arms judge. Each of their blocks is sized from the
+    // cadence this arm measured, to hold ten of them, and never shorter
+    // than on an idle runner. Each arm also takes at most this arm's work
+    // around its block. A machine too slow for them to fit in the test's time
+    // fails here, not at its timeout.
+    const slowNth = 6;
+    const rafMs = Math.max(700, 10 * compositor.cadenceMs);
+    const slowMs = Math.max(1400, 10 * slowNth * compositor.cadenceMs);
+    const needMs =
+      Date.now() - started + rafMs + 2 * slowMs + 3 * (armMs - 700);
+    testInfo.annotations.push({
+      type: 'busy-main-thread blocks',
+      description: `a frame every ${compositor.cadenceMs.toFixed(0)} ms: blocks of ${rafMs.toFixed(0)} and ${slowMs.toFixed(0)} ms, about ${(needMs / 1000).toFixed(0)} s in all`,
+    });
+    if (
+      slowMs > 30_000 ||
+      (testInfo.timeout > 0 && needMs > testInfo.timeout - 5000)
+    ) {
+      throw new Error(
+        `a frame every ${compositor.cadenceMs.toFixed(0)} ms needs blocks of ${(slowMs / 1000).toFixed(1)} s, about ${(needMs / 1000).toFixed(0)} s in all, past ${slowMs > 30_000 ? 'the 30 s cap' : `the test's ${(testInfo.timeout / 1000).toFixed(0)} s`}: this machine presents too little to judge in time`,
+      );
+    }
 
-    // A slower screencast samples the control and the component alike; a
-    // 1.4 s block keeps the control's four frames on a loaded runner.
-    const slow = await run('compositor', 6, 1400);
+    // The mutant: a main-thread animation freezes while the control moves.
+    // The compositor can still present, inside the block, steps the page set
+    // before it. On a loaded runner it showed two such steps, up to 230 ms in.
+    // Every new position it shows there is a step set shortly before the
+    // block, never a step from inside it. How many frames the verdict counts
+    // as moved depends on how many such steps a loaded runner presents.
+    const raf = await run('raf', 1, rafMs);
+    expect(raf.inBlock, raf.proof.summary).toBe(0);
+    expect(raf.proof.verdict.pass, raf.proof.summary).toBe(false);
+    expect(raf.proof.verdict.failures.join('\n')).toMatch(
+      /longest stall .* longer than the control's/,
+    );
+    expect(raf.unset, raf.proof.summary).toEqual([]);
+
+    // A slower screencast samples the control and the component alike.
+    const {proof: slow} = await run('compositor', slowNth, slowMs);
     expect(slow.verdict.failures, slow.summary).toEqual([]);
-    const slowRaf = await run('raf', 6, 1400);
-    expect(slowRaf.verdict.pass, slowRaf.summary).toBe(false);
+    const slowRaf = await run('raf', slowNth, slowMs);
+    expect(slowRaf.inBlock, slowRaf.proof.summary).toBe(0);
+    expect(slowRaf.proof.verdict.pass, slowRaf.proof.summary).toBe(false);
     await control.remove();
   });
 
@@ -3960,6 +4048,105 @@ test.describe('animation state', () => {
     );
     const started = await watch.started();
     expect(started.map(a => a.durationMs)).toEqual([70]);
+  });
+
+  test('a run that the page cancels while it plays is reported, ended where the page cancelled it', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    const watch = await watchAnimations(box);
+    // The page retires the run as Core's motion animator does: it writes the
+    // end and cancels the run, so no finish event comes. It cancels on its
+    // first frame past 200 ms of play. A starved page gets there late, but it
+    // gets there.
+    const calledAt = await box.evaluate(el => {
+      const run = el.animate([{opacity: 0}, {opacity: 1}], {
+        duration: 60_000,
+        fill: 'both',
+      });
+      const retire = () => {
+        if (Number(run.currentTime ?? 0) >= 200) {
+          (el as HTMLElement).style.opacity = '1';
+          run.cancel();
+        } else {
+          requestAnimationFrame(retire);
+        }
+      };
+      requestAnimationFrame(retire);
+      return performance.timeOrigin + performance.now();
+    });
+    // The first look comes after the cancel.
+    await expect
+      .poll(() => box.evaluate(el => el.getAnimations().length))
+      .toBe(0);
+    const [run] = await watch.started();
+    expect(run.kind).toBe('Animation');
+    expect(run.durationMs).toBe(60_000);
+    expect(run.from).toBeGreaterThan(calledAt - 17);
+    // It played at least 200 ms, and it ended long before its curve's end.
+    expect(run.finishedAt).not.toBeNull();
+    expect((run.finishedAt ?? 0) - run.from).toBeGreaterThanOrEqual(199);
+    expect(run.finishedAt ?? 0).toBeLessThan(run.to);
+  });
+
+  test('a run that the page cancels before it presented minProgressMs, or in its start delay, is not reported', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    // Cancelled in the task that made it: it never presented a frame.
+    const unstarted = await watchAnimations(box);
+    await box.evaluate(el => {
+      el.animate([{opacity: 0}, {opacity: 1}], {duration: 60_000}).cancel();
+    });
+    await expect(unstarted.started({timeout: 300})).rejects.toThrow(
+      /no animation started/,
+    );
+    // Cancelled after 200 ms of play, short of the 5 s that the wait asks for.
+    const short = await watchAnimations(box);
+    await box.evaluate(el => {
+      const run = el.animate([{opacity: 0}, {opacity: 1}], {
+        duration: 60_000,
+      });
+      const retire = () => {
+        if (Number(run.currentTime ?? 0) >= 200) {
+          run.cancel();
+        } else {
+          requestAnimationFrame(retire);
+        }
+      };
+      requestAnimationFrame(retire);
+    });
+    await expect
+      .poll(() => box.evaluate(el => el.getAnimations().length))
+      .toBe(0);
+    await expect(
+      short.started({minProgressMs: 5_000, timeout: 300}),
+    ).rejects.toThrow(/no animation started/);
+    // Cancelled in its 30 s start delay: it has a start, but it presented
+    // nothing, even for a wait that asks for no progress.
+    const delayed = await watchAnimations(box);
+    await box.evaluate(el => {
+      const run = el.animate([{opacity: 0}, {opacity: 1}], {
+        duration: 60_000,
+        delay: 30_000,
+      });
+      const retire = () => {
+        if (run.startTime != null) {
+          run.cancel();
+        } else {
+          requestAnimationFrame(retire);
+        }
+      };
+      requestAnimationFrame(retire);
+    });
+    await expect
+      .poll(() => box.evaluate(el => el.getAnimations().length))
+      .toBe(0);
+    await expect(
+      delayed.started({minProgressMs: 0, timeout: 300}),
+    ).rejects.toThrow(/no animation started/);
   });
 
   test('an entrance the page cancels when it ends keeps its start', async ({

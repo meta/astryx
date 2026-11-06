@@ -249,11 +249,9 @@
     "FR2",
     "FR6",
     "FR8",
-    "FR8",
     "INV3",
     "architecture:interaction-modality",
     "design:reduced-motion",
-    "family:input-fields",
     "family:input-fields",
     "spec:AST-059",
     "spec:AST-085",
@@ -267,8 +265,6 @@
     "FR1",
     "FR1",
     "FR1",
-    "FR1",
-    "FR2",
     "FR2",
     "FR2",
     "FR3",
@@ -283,8 +279,6 @@
     "spec:AST-043",
     "spec:AST-043",
     "spec:AST-043",
-    "spec:AST-085",
-    "spec:AST-085",
     "spec:AST-085",
     "spec:AST-085",
     "spec:AST-086"
@@ -329,8 +323,6 @@
     "#2727",
     "#6077",
     "AST-085",
-    "AST-085",
-    "FR1",
     "FR1",
     "FR1",
     "FR1",
@@ -595,7 +587,6 @@
     "component:Layout",
     "spec quote"
   ],
-  "packages/core/src/Layout/padding.stylex.ts": ["#5208"],
   "packages/core/src/Link/Link.tsx": [
     "FR1",
     "FR1",
@@ -734,7 +725,6 @@
     "FR4",
     "FR5",
     "FR5",
-    "INV17",
     "spec:AST-058",
     "spec:AST-058",
     "spec:AST-058",
@@ -908,14 +898,10 @@
     "#4790",
     "AR3",
     "AR3",
-    "FR17",
-    "FR6",
     "FR6",
     "FR6",
     "INV16",
     "architecture:react-component-runtime",
-    "component:AppShell",
-    "component:SideNav",
     "component:SideNav",
     "spec quote",
     "spec quote"
@@ -1172,7 +1158,6 @@
     "AR2",
     "AR6",
     "AR7",
-    "DEC-3",
     "FR1",
     "FR1",
     "FR1",
@@ -1200,8 +1185,6 @@
     "INV6",
     "INV7",
     "INV7",
-    "INV7",
-    "architecture:component-style-authoring",
     "architecture:component-style-authoring",
     "architecture:public-component-api",
     "architecture:react-component-runtime",
@@ -1212,12 +1195,10 @@
     "component:Tokenizer",
     "component:Tokenizer",
     "component:Tokenizer",
-    "component:Tokenizer",
     "family:input-fields",
     "family:input-fields",
     "family:input-fields",
     "family:input-fields",
-    "spec quote",
     "spec quote",
     "spec quote",
     "spec quote",
@@ -1759,7 +1740,6 @@
     "spec quote",
     "spec:AST-094"
   ],
-  "packages/core/src/gestures/nativeScroll.ts": ["FR11", "spec:AST-094"],
   "packages/core/src/gestures/pageHold.ts": [
     "FR19",
     "FR24",
@@ -1982,7 +1962,6 @@
   "packages/core/src/motion/animator.ts": [
     "AST-094",
     "DEC-15",
-    "DEC-15",
     "DEC-2",
     "DEC-2",
     "DEC-2",
@@ -2072,10 +2051,7 @@
   ],
   "packages/core/src/motion/resolveMotion.ts": [
     "DEC-15",
-    "DEC-15",
     "spec quote",
-    "spec quote",
-    "spec:AST-094",
     "spec:AST-094"
   ],
   "packages/core/src/motion/roles.ts": ["FR4", "spec quote", "spec:AST-094"],
@@ -2316,10 +2292,6 @@
     "spec quote"
   ],
   "packages/core/src/utils/inputPresentation.ts": ["AST-043"],
-  "packages/core/src/utils/interactionOverlay.stylex.ts": [
-    "AST-108",
-    "spec quote"
-  ],
   "packages/core/src/utils/plainDate.ts": [
     "AST-067",
     "FR1",
@@ -2428,16 +2400,6 @@
     "INV2",
     "INV2",
     "INV3"
-  ],
-  "packages/lab/src/Comments/useStatusAnnouncement.ts": [
-    "FR2",
-    "FR4",
-    "FR5",
-    "FR6",
-    "spec quote",
-    "spec quote",
-    "spec:AST-086",
-    "spec:AST-086"
   ],
   "packages/lab/src/DiffViewer/DiffViewer.tsx": ["FR13", "FR3", "FR3"],
   "packages/lab/src/LogStream/LogStream.tsx": ["FR3"],
