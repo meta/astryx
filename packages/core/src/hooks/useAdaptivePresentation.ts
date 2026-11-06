@@ -49,7 +49,8 @@ export function useAdaptivePresentation(
   const query = useCompactDefinition().coarsePointerQuery;
   const subscribe = useCallback(
     (onStoreChange: () => void) => {
-      if (!isAdaptive) {
+      // A window with no `matchMedia`, as in a test DOM, is not compact.
+      if (!isAdaptive || typeof window.matchMedia !== 'function') {
         return noSubscription();
       }
       const mql = window.matchMedia(query);
@@ -59,7 +60,10 @@ export function useAdaptivePresentation(
     [isAdaptive, query],
   );
   const getSnapshot = useCallback(
-    () => (isAdaptive ? window.matchMedia(query).matches : false),
+    () =>
+      isAdaptive &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia(query).matches,
     [isAdaptive, query],
   );
   const isCompactTouch = useSyncExternalStore(

@@ -101,12 +101,13 @@ const matchesNothing = () => false;
 
 /**
  * A media query's match, subscribed only while `query` is given. False on
- * the server and while hydrating.
+ * the server, while hydrating, and where the window has no `matchMedia`, as
+ * in a test DOM.
  */
 function useMatchWhileRead(query: string | null): boolean {
   const subscribe = useCallback(
     (onStoreChange: () => void) => {
-      if (query == null) {
+      if (query == null || typeof window.matchMedia !== 'function') {
         return noSubscription();
       }
       const mql = window.matchMedia(query);
@@ -116,7 +117,10 @@ function useMatchWhileRead(query: string | null): boolean {
     [query],
   );
   const getSnapshot = useCallback(
-    () => query != null && window.matchMedia(query).matches,
+    () =>
+      query != null &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia(query).matches,
     [query],
   );
   return useSyncExternalStore(subscribe, getSnapshot, matchesNothing);
