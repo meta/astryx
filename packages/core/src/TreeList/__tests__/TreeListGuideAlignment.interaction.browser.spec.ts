@@ -125,3 +125,78 @@ test('guide visibility does not move chevrons', async ({page}) => {
   expect(withGuides.chevronCenters).toEqual(withoutGuides.chevronCenters);
   expect(withoutGuides.guideCenters).toEqual([]);
 });
+
+/**
+ * The stretches no guide line paints in the bottom row's connector column,
+ * from the top row's bottom edge to the bottom row's middle.
+ */
+async function guideGaps(page: Page, ids: {top: string; bottom: string}) {
+  return page.evaluate(({top, bottom}) => {
+    const row = (id: string) => {
+      const item = document.querySelector(`[data-tree-id="${id}"]`);
+      return item?.querySelector('.astryx-tree-list-item') ?? item;
+    };
+    const topRow = row(top)?.getBoundingClientRect();
+    const bottomRow = row(bottom)?.getBoundingClientRect();
+    // The column of the bottom row's own connector.
+    const own = [
+      ...(document
+        .querySelector(`[data-tree-id="${bottom}"]`)
+        ?.querySelectorAll('.astryx-tree-list-guide') ?? []),
+    ]
+      .map(line => line.getBoundingClientRect())
+      .filter(box => box.height > 0)
+      .sort((a, b) => b.left - a.left)[0];
+    if (topRow == null || bottomRow == null || own == null) {
+      throw new Error('rows or connector not found');
+    }
+    const x = own.left + own.width / 2;
+    const spans = [
+      ...document.querySelectorAll('[role="tree"] .astryx-tree-list-guide'),
+    ]
+      .map(line => line.getBoundingClientRect())
+      .filter(
+        box => box.height > 0 && Math.abs(box.left + box.width / 2 - x) < 1,
+      )
+      .map(box => [box.top, box.bottom] as const)
+      .sort((a, b) => a[0] - b[0]);
+    const from = topRow.bottom;
+    const to = bottomRow.top + bottomRow.height / 2;
+    const gaps: [number, number][] = [];
+    let reached = from;
+    for (const [start, end] of spans) {
+      if (start > reached + 0.5 && start < to) {
+        gaps.push([reached, Math.min(start, to)]);
+      }
+      reached = Math.max(reached, end);
+    }
+    if (reached < to - 0.5) {
+      gaps.push([reached, to]);
+    }
+    return gaps;
+  }, ids);
+}
+
+test("a parent's guide line runs unbroken past an expanded child's rows to its last child, at rest, with a mouse and under a finger", async ({
+  page,
+  browser,
+}) => {
+  // Project is the last row at its level, and src, its expanded child, is not
+  // its last. So the line from src to package.json passes src's own rows.
+  const open = async (target: Page) => {
+    await target.goto(
+      `${storybook.origin}/iframe.html?id=core-treelist--themed-guides&viewMode=story`,
+    );
+    await target.locator('[data-tree-id="pkg"]').waitFor();
+  };
+  await open(page);
+  expect(await guideGaps(page, {top: 'src', bottom: 'pkg'})).toEqual([]);
+  const context = await browser.newContext({hasTouch: true, isMobile: true});
+  try {
+    const touchPage = await context.newPage();
+    await open(touchPage);
+    expect(await guideGaps(touchPage, {top: 'src', bottom: 'pkg'})).toEqual([]);
+  } finally {
+    await context.close();
+  }
+});

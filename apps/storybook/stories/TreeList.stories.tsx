@@ -76,6 +76,25 @@ export const Basic: Story = {
   },
 };
 
+export const WithContentBelow: Story = {
+  render: () => (
+    <VStack gap={4}>
+      <TreeList items={fileTreeItems} />
+      <Button label="Open folder" onClick={() => {}} />
+    </VStack>
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Content after the tree takes its new place by layout when a ' +
+          "folder expands or collapses; under a finger only the tree's own " +
+          'rows animate.',
+      },
+    },
+  },
+};
+
 export const FullyExpanded: Story = {
   args: {
     items: [
