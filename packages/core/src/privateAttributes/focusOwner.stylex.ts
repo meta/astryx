@@ -45,7 +45,43 @@ const styles = stylex.create({
         focusVars['--focus-outline-offset'],
     },
   },
+  // The same ring, drawn as an overlay pseudo-element above the wrapper's
+  // content and inset by the ring's width, for a marked control whose own
+  // painting would cover a ring on the wrapper: a scroller with an edge-fade
+  // mask is its own stacking context. The wrapper must be positioned and must
+  // not use ::after.
+  focusWithinOwnerOverlay: {
+    '::after': {
+      content: '""',
+      position: 'absolute',
+      inset: 0,
+      pointerEvents: 'none',
+      borderRadius: 'inherit',
+      outlineWidth: {
+        default: null,
+        ':has(> [data-astryx-focus-owner]:focus-visible)':
+          focusVars['--focus-outline-width'],
+      },
+      outlineStyle: {
+        default: 'none',
+        ':has(> [data-astryx-focus-owner]:focus-visible)':
+          focusVars['--focus-outline-style'],
+      },
+      outlineColor: {
+        default: null,
+        ':has(> [data-astryx-focus-owner]:focus-visible)':
+          focusVars['--focus-outline-color'],
+      },
+      outlineOffset: {
+        default: null,
+        ':has(> [data-astryx-focus-owner]:focus-visible)': `calc(-1 * ${focusVars['--focus-outline-width']})`,
+      },
+    },
+  },
 });
 
 /** The wrapper's focus ring. */
 export const focusWithinOwner = styles.focusWithinOwner;
+
+/** The wrapper's focus ring, drawn above the wrapper's content. */
+export const focusWithinOwnerOverlay = styles.focusWithinOwnerOverlay;
