@@ -10536,6 +10536,7 @@ target typeahead (Typeahead) props [size, status]
 target typeahead-dropdown (Typeahead)
 target typeahead-empty-state (Typeahead)
 target typeahead-item (Typeahead)
+target typeahead-option (Typeahead) props [size] states [selected]
 ```
 
 ## Public attributes
