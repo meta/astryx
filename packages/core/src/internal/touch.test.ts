@@ -84,6 +84,98 @@ describe('internal/touch', () => {
     }
   });
 
+  it('re-exports by name the finger-scroll watch Lab components read', async () => {
+    const entry: Record<string, unknown> = await import('./touch');
+    const fingerScroll = await import('../gestures/useFingerScroll');
+    expect(entry.useFingerScroll).toBe(fingerScroll.useFingerScroll);
+    expect(typeof entry.useFingerScroll).toBe('function');
+  });
+
+  it("re-exports by name what Lab's NavigationStack reads", async () => {
+    const entry: Record<string, unknown> = await import('./touch');
+    const edgePan = await import('../gestures/ScreenEdgePanGestureRecognizer');
+    const resolver = await import('../motion/resolveMotion');
+    const spring = await import('../motion/spring');
+    const uikitNavigation = await import('../motion/uikit/navigation');
+    const uikitSprings = await import('../motion/uikit/springs');
+    const focusReturn = await import('../utils/focusReturn');
+    const modality = await import('../utils/interactionModality');
+    expect(entry.ScreenEdgePanGestureRecognizer).toBe(
+      edgePan.ScreenEdgePanGestureRecognizer,
+    );
+    expect(entry.resolveMotion).toBe(resolver.resolveMotion);
+    expect(entry.solveSpring).toBe(spring.solveSpring);
+    expect(entry.toSpring).toBe(spring.toSpring);
+    expect(entry.navigation).toBe(uikitNavigation.navigation);
+    for (const name of [
+      'NAVIGATION_PUSH_SPRING',
+      'NAVIGATION_POP_SPRING',
+      'NAVIGATION_INTERACTIVE_POP_FINISH_SPRING',
+      'NAVIGATION_BAR_ELEMENTS_SPRING',
+    ] as const) {
+      expect(entry[name], name).toBe(uikitSprings[name]);
+      expect(entry[name], name).toBeDefined();
+    }
+    // Only the navigation rows: the whole springs table stays out.
+    expect(entry).not.toHaveProperty('springs');
+    expect(entry.focusForLastInput).toBe(focusReturn.focusForLastInput);
+    expect(entry.isFocusLost).toBe(focusReturn.isFocusLost);
+    expect(entry.useInteractionModalityTracking).toBe(
+      modality.useInteractionModalityTracking,
+    );
+    for (const name of [
+      'ScreenEdgePanGestureRecognizer',
+      'resolveMotion',
+      'solveSpring',
+      'toSpring',
+      'focusForLastInput',
+      'isFocusLost',
+      'useInteractionModalityTracking',
+    ]) {
+      expect(typeof entry[name], name).toBe('function');
+    }
+    expect(entry.navigation).toBeDefined();
+  });
+
+  it("re-exports by name what Lab's PageControl also reads", async () => {
+    const entry: Record<string, unknown> = await import('./touch');
+    const animator = await import('../motion/animator');
+    const reduced = await import('../motion/reducedMotion');
+    const hitArea = await import('../utils/touchHitArea');
+    const hitAreaStyles = await import('../utils/touchHitArea.stylex');
+    expect(entry.animatorFor).toBe(animator.animatorFor);
+    expect(entry.reducedMotionFade).toBe(reduced.reducedMotionFade);
+    expect(entry.useTouchHitArea).toBe(hitArea.useTouchHitArea);
+    expect(entry.touchHitAreaStyles).toBe(hitAreaStyles.touchHitAreaStyles);
+    // An identity check passes when both sides are undefined, so each name
+    // must also be defined.
+    for (const name of [
+      'animatorFor',
+      'reducedMotionFade',
+      'useTouchHitArea',
+    ]) {
+      expect(typeof entry[name], name).toBe('function');
+    }
+    expect(entry.touchHitAreaStyles).toBeDefined();
+  });
+
+  it("re-exports by name what NavigationStack's bars and scroll edge effect read", async () => {
+    const entry: Record<string, unknown> = await import('./touch');
+    const host = await import('../gestures/GestureHost');
+    const pointer = await import('../utils/coarsePointer');
+    const fingerScroll = await import('../gestures/useFingerScroll');
+    expect(entry.getGestureHost).toBe(host.getGestureHost);
+    expect(entry.isCoarsePointer).toBe(pointer.isCoarsePointer);
+    expect(entry.useFingerScroll).toBe(fingerScroll.useFingerScroll);
+    for (const name of [
+      'getGestureHost',
+      'isCoarsePointer',
+      'useFingerScroll',
+    ]) {
+      expect(typeof entry[name], name).toBe('function');
+    }
+  });
+
   it('attaches no window or document listeners when it loads', async () => {
     vi.resetModules();
     const onWindow = vi.spyOn(window, 'addEventListener');

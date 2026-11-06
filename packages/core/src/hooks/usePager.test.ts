@@ -17,7 +17,11 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {GestureHost} from '../gestures/GestureHost';
 import {PanGestureRecognizer} from '../gestures/PanGestureRecognizer';
 import {ManualClock} from '../gestures/__tests__/harness';
-import {createMotionEngine, type Animator} from '../motion/animator';
+import {
+  createMotionEngine,
+  END_HOLD_MS,
+  type Animator,
+} from '../motion/animator';
 import {solveAnimatedPageScroll, solvePaging} from '../motion/paging';
 import type * as motionResolution from '../motion/resolveMotion';
 import {resolveMotion} from '../motion/resolveMotion';
@@ -495,6 +499,44 @@ describe('createPager', () => {
     expect(f.calls).toEqual(['index:2:drag', 'settle:2:1']);
   });
 
+  // The settle plays at the tempo of the theme the track is in: from rest it
+  // keeps its shape and takes tempo times as long. At tempo 1 it is UIKit's
+  // measured settle.
+  it.each([1, 3])(
+    "a release's settle plays at the theme's tempo %s",
+    async tempo => {
+      const style = document.createElement('style');
+      style.textContent = `[data-tempo] { --_astryx-motion-tempo: ${tempo}; }`;
+      document.head.append(style);
+      try {
+        const f = setup({defaultIndex: 1});
+        f.track.setAttribute('data-tempo', '');
+        // A silent hold of 100 ms before the lift: the settle starts at rest.
+        await drag(f, {from: 300, dx: -250, step: 4, dt: 8, hold: 100});
+        expect(f.pager.index).toBe(2);
+        const position = -f.x();
+        const measured = solvePaging({
+          from: position,
+          velocity: 0,
+          to: 2 * WIDTH,
+        });
+        await advance(16, f.clock);
+        await advance(100, f.clock);
+        // 116 ms in, it shows where the measured settle is at 116 ÷ tempo ms.
+        expect(-f.x()).toBeCloseTo(measured.at(0.116 / tempo), 0);
+        // The animation holds its end for END_HOLD_MS after the curve.
+        const played = recorded.filter(animation => !animation.cancelled);
+        expect(
+          Number(played.at(-1)?.options.duration) - END_HOLD_MS,
+        ).toBeCloseTo(measured.duration * 1000 * tempo, 6);
+        await settle(f);
+        expect(f.x()).toBe(-2 * WIDTH);
+      } finally {
+        style.remove();
+      }
+    },
+  );
+
   // A sample at the finger's last place is not motion (spec:AST-100's one
   // filter). A finger that keeps reporting while it stands still keeps its
   // speed until the stillness interval runs out.
@@ -853,6 +895,26 @@ describe('createPager', () => {
     touch('touchend', f.page, 300, 100, now);
     await settle(f);
     expect(f.x()).toBe(-2 * WIDTH);
+  });
+
+  it('goTo with an offset ends there as a settle, and a still finger that catches it settles on the nearest page', async () => {
+    const f = setup({defaultIndex: 0});
+    f.pager.goTo(2, {offset: 2.4 * WIDTH});
+    await advance(0, f.clock);
+    const curve = solveAnimatedPageScroll({from: 0, to: 2.4 * WIDTH});
+    await advance(150, f.clock);
+    expect(-f.x()).toBeCloseTo(curve.at(0.15), 0);
+    await settle(f);
+    expect(-f.x()).toBeCloseTo(2.4 * WIDTH, 0);
+    expect(f.calls).toEqual(['index:2:goTo', 'settle:2:0']);
+    f.pager.goTo(4, {offset: 3.6 * WIDTH});
+    await advance(60, f.clock);
+    touch('touchstart', f.page, 300, 100, now);
+    await advance(paging.catchStopMs + 40, f.clock);
+    expect(f.pager.isSettling).toBe(false);
+    touch('touchend', f.page, 300, 100, now);
+    await settle(f);
+    expect(-f.x() / WIDTH).toBe(Math.round(-f.x() / WIDTH));
   });
 
   it('loops: past the last page goes forward to a virtual page, wrapped for callbacks', async () => {

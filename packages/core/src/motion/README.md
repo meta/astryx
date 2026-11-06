@@ -22,6 +22,7 @@ roles through `resolveMotion`.
 | `uikit/alert.ts`                                 | UIAlertController: how a finger is tracked across the actions (highlight onset and bounds).                                                                          |
 | `uikit/navigation.ts`                            | UINavigationController: push velocity, parallax, dimming, transition clock, interactive pop finish rule.                                                             |
 | `uikit/progressBar.ts`                           | UIProgressView's fill: the whole-track duration and curve, its minimum length and empty alpha; the reduced-motion pulse (three roles).                               |
+| `uikit/popover.ts`                               | UIPopoverPresentationController: the scale and the length a popover grows out of and shrinks back into.                                                              |
 | `uikit/gestures.ts`                              | Gesture recognizer thresholds, the velocity filter and haptic stand-ins, as `{value, unit}` entries (sources in JSDoc).                                              |
 | `uikit/picker.ts`                                | UIPickerView: row pitch, height and rubber band, velocity floor, the coast's stop speed, snap at rest, tap spin, tick.                                               |
 | `uikit/segmented.ts`                             | UISegmentedControl: the selection indicator's spring; under Reduce Motion the animator's cross-fade replaces it.                                                     |
@@ -58,12 +59,15 @@ names for their use (`springs.settle`, `timing.stateChangeMs`,
 `timing.curves.move`, …): a shared table lists them when it registers
 (`roles`), and every other value, a component's measured spring included, is
 a plain constant. The per-role tables stay internal (`spec:AST-094` DEC-15): a
-role plays its table value, and nothing reads its CSS variable
-(`--motion-springs-settle`), so no page or theme style sets a role. A table's
-roles exist once its `register<Name>Table()` has run: the animator registers
-the Reduce Motion fade's curve, and code that plays the shared springs calls
-`registerSpringsTable()` before its first motion. The animator resolves each
-role it is handed when the motion starts; code that times something itself
+role plays its table value at the theme's tempo, and nothing reads the
+role's own CSS variable (`--motion-springs-settle`), so no page or theme
+style sets a role. A table's roles exist once its `register<Name>Table()`
+has run. A page that plays no spring ships no springs registry; each spring
+role registers itself when the module that plays it loads (one idempotent
+in-memory write, no DOM). The navigation, paging and picker tables register
+themselves at import, and the animator registers the Reduce Motion fade's
+curve. The animator resolves each role it is handed when the
+motion starts; code that times something itself
 calls `resolveMotion(element, timing, 'stateChangeMs')`. Gesture thresholds and
 the timings that decide who gets a touch are not roles.
 
@@ -74,10 +78,7 @@ import {createMotionEngine} from '../motion/animator';
 import {coast} from '../motion/coast';
 import {solveSpringTowardRamp, toSpring} from '../motion/spring';
 import {resolveMotion} from '../motion/resolveMotion';
-import {registerSpringsTable, springs} from '../motion/uikit';
-
-// Once, so the springs are registered as their roles:
-registerSpringsTable();
+import {springs} from '../motion/uikit';
 
 const animator = createMotionEngine(sheet);
 // The animator plays a motion role (spec:AST-094 FR4), its table value, as the

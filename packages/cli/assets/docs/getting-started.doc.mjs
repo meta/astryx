@@ -65,6 +65,26 @@ export const docs = {
       ],
     },
     {
+      id: 'upgrade',
+      title: 'Upgrade',
+      content: [
+        {
+          type: 'prose',
+          text: 'Upgrade every Astryx package your app lists in one command, to the same release. Each theme names the exact Core release it works with, so a theme left on an older release no longer matches the new Core.',
+        },
+        {
+          type: 'code',
+          lang: 'bash',
+          label: 'Terminal',
+          code: `{@pm install @astryxdesign/core@latest @astryxdesign/theme-neutral@latest @astryxdesign/cli@latest}\n{@command upgrade --from <old Core version> --apply}`,
+        },
+        {
+          type: 'prose',
+          text: "Add every other Astryx package your app lists to the same command, and pass the Core version you had before to `--from`. If your package manager holds new releases back, exempt the whole `@astryxdesign/*` scope; in pnpm, `minimumReleaseAgeExclude: ['@astryxdesign/*']`. Exempting only some of its packages installs packages from different releases side by side.",
+        },
+      ],
+    },
+    {
       id: 'install-once',
       title: 'Install once, use everywhere',
       content: [

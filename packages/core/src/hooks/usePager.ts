@@ -44,6 +44,7 @@ import {
   solvePaging,
 } from '../motion/paging';
 import {resolveMotion} from '../motion/resolveMotion';
+import {themeTempo} from '../motion/themeTempo';
 import {resolveSnapPoint} from '../motion/resolveSnapPoint';
 import {rubberBandClamp, rubberBandUnclamp} from '../motion/rubberBand';
 import {paging, registerPagingTable} from '../motion/uikit/paging';
@@ -166,6 +167,12 @@ export interface PagerOptions {
    * @default 'viewport'
    */
   pages?: 'viewport' | 'children';
+  /**
+   * With `pages: 'children'`: the pages, measured by the owner in place of
+   * the children's rects. Snap paging moves the children themselves, so it
+   * reads their stops from layout.
+   */
+  measurePages?: () => ReadonlyArray<number>;
   /** Starting page. @default 0 */
   defaultIndex?: number;
   /**
@@ -202,6 +209,12 @@ export interface GoToOptions {
   animated?: boolean;
   /** @default 'goTo' */
   reason?: PagerChangeReason;
+  /**
+   * The content offset (px) the move ends at, in place of the page's own.
+   * The page stays the target: a finger that catches the move settles on the
+   * nearest page.
+   */
+  offset?: number;
 }
 
 export interface Pager {
@@ -290,12 +303,18 @@ function toTrackCurve(curve: MotionCurve, sign: number): MotionCurve {
   };
 }
 
+/** The animator calls a pager makes on its track. */
+export type PagerAnimator = Pick<
+  Animator,
+  'get' | 'getVelocity' | 'set' | 'play' | 'stop'
+>;
+
 /** What a pager runs on; tests pass their own clocked host and animator. */
 export interface PagerEnvironment {
   /** The gesture host; the document's shared host by default. */
   host?: GestureHost;
   /** The track's animator; `animatorFor(track)` by default. */
-  animator?: Animator;
+  animator?: PagerAnimator;
   /** Timers for the catch delay; the viewport's window's by default. */
   setTimeout?: (callback: () => void, ms: number) => unknown;
   clearTimeout?: (handle: unknown) => void;
@@ -413,8 +432,8 @@ function isScrollContact(recognizer: PanGestureRecognizer): boolean {
  *   move, no layout read and no React render. Past the first or last page,
  *   the track follows UIKit's rubber band, with d = the page width.
  * - At the lift, `pageForRelease` picks the page with UIKit's measured rule.
- *   The track then settles on UIKit's paging integrator (`solvePaging`),
- *   baked into keyframes.
+ *   The track then settles on UIKit's paging integrator (`solvePaging`), at
+ *   the tempo of the theme the track is in, baked into keyframes.
  * - A finger that lands on a settling pager catches it `paging.catchStopMs`
  *   after the touch, as in UIKit. A drag catches it at once, from the value
  *   on screen. While the pan is off, a touch does not stop the motion.
@@ -484,7 +503,7 @@ export function createPager(
   let options: PagerOptions = {...initial};
   let viewport: HTMLElement | null = null;
   let trackElement: HTMLElement | null = null;
-  let animator: Animator | null = null;
+  let animator: PagerAnimator | null = null;
   let pageWidth = 0;
   let isRtl = false;
   // With `pages: 'children'`, each page's offset (px, ascending), once
@@ -576,6 +595,10 @@ export function createPager(
    * scale: the rect's width over the track's used width.
    */
   function measureChildOffsets(): ReadonlyArray<number> {
+    if (options.measurePages != null) {
+      const measured = options.measurePages();
+      return measured.length > 0 ? measured : [0];
+    }
     const track = trackElement;
     if (viewport == null || track == null || track.children.length === 0) {
       return [0];
@@ -885,8 +908,15 @@ export function createPager(
     touchRelease: boolean,
   ): void {
     const to = offsetOf(target);
-    // UIKit's integrator, as a playable curve (touch motion stays internal).
-    const curve = solvePaging({from: position, velocity, to});
+    // UIKit's integrator, as a playable curve (touch motion stays internal),
+    // at the theme's tempo. No motion role names it, so it reads the tempo
+    // itself.
+    const curve = solvePaging({
+      from: position,
+      velocity,
+      to,
+      tempo: themeTempo(trackElement),
+    });
     if (curve.steps === 0) {
       animator?.set({x: positionToX(to)});
       rest();
@@ -1094,7 +1124,7 @@ export function createPager(
       deferringCallbacks(() => goTo(index, goToOptions));
       return;
     }
-    const {animated = true, reason = 'goTo'} = goToOptions;
+    const {animated = true, reason = 'goTo', offset} = goToOptions;
     let next = Math.round(index);
     if (isLooping()) {
       next = nearestLoopCopy(next, target, count());
@@ -1117,7 +1147,7 @@ export function createPager(
     }
     stopSettle();
     setTarget(next, reason);
-    const to = offsetOf(next);
+    const to = offset ?? offsetOf(next);
     if (!animated || animator == null || from === to) {
       animator?.set({x: positionToX(to)});
       rest();

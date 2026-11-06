@@ -20,7 +20,7 @@ import {
   vi,
 } from 'vitest';
 import {act, cleanup, fireEvent, render, screen} from '@testing-library/react';
-import {rulesDeclaredFor} from '../__tests__/pressState';
+import {layerOnlyWhilePressed, rulesDeclaredFor} from '../__tests__/pressState';
 import {swipeLayerLoaded} from './__tests__/swipeLayerLoaded';
 import userEvent from '@testing-library/user-event';
 import {LinkProvider} from '../Link/LinkProvider';
@@ -872,6 +872,16 @@ describe('Item', () => {
       expect(item).toHaveClass('astryx-item');
       expect(item).toHaveAttribute('data-align', align);
     }
+  });
+
+  it('keeps its touch press layer to a press: on or fading', () => {
+    render(<Item label="Row" onClick={() => {}} data-testid="row" />);
+    // Under a coarse pointer the row's `::before` layer and its isolation
+    // apply only on a press arm; at rest a caller's own `::before` keeps its
+    // styles.
+    expect(layerOnlyWhilePressed(screen.getByTestId('row'), '::before')).toBe(
+      true,
+    );
   });
 
   it('truncates the label and description to the lines it is given', () => {
