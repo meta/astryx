@@ -1094,6 +1094,41 @@ function TimedMoveMenu({
 }
 
 describe('DropdownMenuSubMenu hover timing', () => {
+  it('opens 150 ms after a hover and closes 200 ms after the pointer leaves by default', async () => {
+    vi.useFakeTimers();
+    const user = userEvent.setup({advanceTimers: vi.advanceTimersByTime});
+    render(<TimedMoveMenu />);
+
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+    const trigger = screen.getByRole('menuitem', {
+      name: /Move to/,
+      hidden: true,
+    });
+    await user.hover(trigger);
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+    await user.hover(
+      screen.getByRole('menuitem', {name: 'Rename', hidden: true}),
+    );
+    act(() => {
+      vi.advanceTimersByTime(150);
+    });
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+    vi.useRealTimers();
+  });
+
   it('waits the `delay` it is given before a hover opens the flyout', async () => {
     vi.useFakeTimers({shouldAdvanceTime: true});
     const user = userEvent.setup({advanceTimers: vi.advanceTimersByTime});
