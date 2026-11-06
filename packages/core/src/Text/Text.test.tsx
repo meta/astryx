@@ -7,6 +7,7 @@
 
 import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {describe, it, expect, vi} from 'vitest';
+import userEvent from '@testing-library/user-event';
 import {Text} from './Text';
 // Loaded up front, so the truncation tooltip's lazy import resolves at once.
 import '../Tooltip/Tooltip';
@@ -624,6 +625,32 @@ describe('the truncation tooltip mounts on the first interaction', () => {
       await waitFor(
         () => {
           expect(hidePopover).toHaveBeenCalled();
+        },
+        {timeout: 3000},
+      );
+    } finally {
+      restore();
+    }
+  });
+
+  // Focus inside the clamped text mounts the tooltip. Whether it then opens
+  // is Tooltip's own focus rule: focus on a descendant of a trigger that is
+  // not itself focusable does not open it.
+  it('mounts on keyboard focus inside the clamped text', async () => {
+    const {restore} = withOverflowAndPopover();
+    try {
+      const user = userEvent.setup();
+      render(
+        <Text type="body" maxLines={1}>
+          <a href="#details">{LABEL}</a>
+        </Text>,
+      );
+      expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
+      await user.tab();
+      expect(screen.getByRole('link', {name: LABEL})).toHaveFocus();
+      await waitFor(
+        () => {
+          expect(screen.queryByRole('tooltip', {hidden: true})).not.toBeNull();
         },
         {timeout: 3000},
       );
