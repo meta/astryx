@@ -409,7 +409,7 @@ describe('the interaction proof legs in ci.yml', () => {
       webkitTimes,
       changed = [],
       unrecorded = [],
-      {deleted = [], sources = {}, perTest} = {},
+      {deleted = [], sources = {}, perTest, env = {}} = {},
     ) {
       // The real path: the planner runs only when invoked as its own file.
       const dir = fs.realpathSync(
@@ -489,6 +489,7 @@ describe('the interaction proof legs in ci.yml', () => {
               CHANGED_FILES: list,
               GITHUB_OUTPUT: output,
               WEBKIT_SPEC_PATHS: job.env.WEBKIT_SPEC_PATHS,
+              ...env,
             },
           },
         );
@@ -510,6 +511,23 @@ describe('the interaction proof legs in ci.yml', () => {
         fs.rmSync(dir, {recursive: true, force: true});
       }
     }
+
+    it("plans every WebKit spec for a release check's interaction-check/ branch", () => {
+      expect(job.env.WEBKIT_ALL_SPECS).toBe(
+        "${{ startsWith(github.head_ref, 'interaction-check/') }}",
+      );
+      // A spec outside the WebKit paths, long enough for two legs.
+      const times = {
+        'packages/core/src/Button/__tests__/Button.interaction.browser.spec.ts': 700,
+      };
+      expect(countFor(1, times)).toEqual({count: '1', runs: 'true', leg: '1'});
+      expect(
+        countFor(1, times, [], [], {env: {WEBKIT_ALL_SPECS: 'true'}}),
+      ).toEqual({count: '2', runs: 'true', leg: '1'});
+      expect(
+        countFor(1, times, [], [], {env: {WEBKIT_ALL_SPECS: 'false'}}),
+      ).toEqual({count: '1', runs: 'true', leg: '1'});
+    });
 
     it('writes the test counts it read for the plan, and skips a deleted spec', () => {
       const times = {
@@ -606,7 +624,7 @@ describe('the interaction proof legs in ci.yml', () => {
     ]) {
       const {run} = step(job, name);
       expect(run, name).toContain(
-        'read -ra SPEC_PATHS <<< "$WEBKIT_SPEC_PATHS"',
+        'if [ "${WEBKIT_ALL_SPECS:-}" = true ]; then SPEC_PATHS=(packages/ internal/); else read -ra SPEC_PATHS <<< "$WEBKIT_SPEC_PATHS"; fi',
       );
       expect(run, name).toContain('"${SPEC_PATHS[@]}"');
     }

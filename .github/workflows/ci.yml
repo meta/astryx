@@ -2703,8 +2703,12 @@ jobs:
       run:
         shell: bash
     env:
-      # The specs the WebKit legs run, besides each interaction spec the pull
-      # request changes.
+      # A release check's throwaway pull request, from an interaction-check/
+      # branch, runs every interaction spec in WebKit: the release receipt
+      # needs the whole suite, which the leg count spreads over the matrix.
+      WEBKIT_ALL_SPECS: ${{ startsWith(github.head_ref, 'interaction-check/') }}
+      # The specs the WebKit legs run otherwise, besides each interaction spec
+      # the pull request changes.
       WEBKIT_SPEC_PATHS: >-
         packages/core/src/gestures/
         packages/core/src/motion/__tests__/animatedLayout.interaction
@@ -2783,7 +2787,7 @@ jobs:
         env:
           CHANGED_FILES: ${{ steps.scope.outputs.changed_files_path }}
         run: |
-          read -ra SPEC_PATHS <<< "$WEBKIT_SPEC_PATHS"
+          if [ "${WEBKIT_ALL_SPECS:-}" = true ]; then SPEC_PATHS=(packages/ internal/); else read -ra SPEC_PATHS <<< "$WEBKIT_SPEC_PATHS"; fi
           git -C .test-scope ls-tree -r --name-only HEAD > "$RUNNER_TEMP/interaction-legs/listed.txt"
           node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" legs \
             --listed "$RUNNER_TEMP/interaction-legs/listed.txt" --source .test-scope \
@@ -2876,7 +2880,7 @@ jobs:
         env:
           CHANGED_FILES: ${{ steps.scope.outputs.changed_files_path }}
         run: |
-          read -ra SPEC_PATHS <<< "$WEBKIT_SPEC_PATHS"
+          if [ "${WEBKIT_ALL_SPECS:-}" = true ]; then SPEC_PATHS=(packages/ internal/); else read -ra SPEC_PATHS <<< "$WEBKIT_SPEC_PATHS"; fi
           CHANGED_SPECS=()
           if [ -n "${CHANGED_FILES:-}" ] && [ -s "$CHANGED_FILES" ]; then
             while IFS= read -r file; do
