@@ -139,8 +139,8 @@ export function observeContent(
 
 /**
  * Deliver at once the records that the shared observer for `options` holds
- * but has not yet delivered. A mutation is delivered in a microtask, so a
- * read in the same task as the mutation calls this first to see it.
+ * but has not yet delivered. The observer delivers a mutation in a microtask.
+ * A read in the same task calls this first to see it.
  */
 export function flushMutations(options: MutationObserverInit): void {
   const shared = observers.get(optionsKey(options));

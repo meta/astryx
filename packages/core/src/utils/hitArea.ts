@@ -367,9 +367,8 @@ let visibility: IntersectionObserver | null = null;
 let resize: ResizeObserver | null = null;
 let isCoarse = false;
 /**
- * The page's interactive elements, as a pass last found them. They are kept
- * until a mutation or a change of the watched set can change them, so a pass
- * does not match the selector against the whole page again.
+ * The page's interactive elements, as the last pass found them. A pass keeps
+ * them until a mutation or a watch change can change them.
  */
 let interactive: Element[] | null = null;
 let interactiveDocument: Document | null = null;
