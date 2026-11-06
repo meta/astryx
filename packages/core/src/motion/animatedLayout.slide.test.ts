@@ -12,6 +12,7 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
   createAnimatedLayout,
+  glideOf,
   holdLayoutExit,
   playLayoutChange,
   releaseLayoutExit,
@@ -159,6 +160,16 @@ describe('a block edge reveal slides its parts under a still clip (spec:AST-105 
     // Once it ends, the element's own clip comes back.
     entrance.finish();
     expect(content.style.getPropertyValue('clip-path')).toBe('');
+  });
+
+  it("makes each part's slide its glide, so a later change carries it, and forgets it when the motion ends", () => {
+    const {content, layout} = setUp({isOpening: true});
+    playLayoutChange(layout, content);
+    const part = document.getElementById('a') as HTMLElement;
+    expect(glideOf(part)).not.toBeNull();
+    const [entrance] = motionsOn('content');
+    entrance.finish();
+    expect(glideOf(part)).toBeNull();
   });
 
   it('leaves a child the band cannot show where it is', () => {

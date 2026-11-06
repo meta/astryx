@@ -379,6 +379,74 @@ test.describe('spec:AST-105 FR9: an edge reveal paints its edge on the content b
     });
   });
 
+  test("a nested row expanded while its parent's group still slides: the rows after it keep meeting it, and none jumps", async ({
+    page,
+  }) => {
+    await openStory(page);
+    const result = await page.evaluate(async () => {
+      const toggle = (id: string) =>
+        document.querySelector<HTMLElement>(
+          `[data-tree-id="${id}"] [data-tree-toggle]`,
+        );
+      const row = (id: string) =>
+        document.querySelector<HTMLElement>(`[data-tree-id="${id}"]`);
+      const group = () =>
+        document.querySelector<HTMLElement>(
+          '[data-tree-id="trips"] > [role="group"]',
+        );
+      const frame = async () =>
+        new Promise<void>(resolve => {
+          requestAnimationFrame(() => resolve());
+        });
+      // Where Trips' group shows its bottom: its box, or its lowest part.
+      const shownEdge = (element: HTMLElement) => {
+        let lowest = Number.NEGATIVE_INFINITY;
+        for (
+          let part = element.firstElementChild;
+          part != null;
+          part = part.nextElementSibling
+        ) {
+          lowest = Math.max(lowest, part.getBoundingClientRect().bottom);
+        }
+        return Math.min(element.getBoundingClientRect().bottom, lowest);
+      };
+      toggle('photos')?.click();
+      for (let i = 0; i < 7; i++) {
+        await frame();
+      }
+      toggle('trips')?.click();
+      const frames: {gap: number; overlap: number}[] = [];
+      for (let i = 0; i < 30; i++) {
+        await frame();
+        const trips = group();
+        const party = row('party')?.getBoundingClientRect();
+        const docs = row('docs')?.getBoundingClientRect();
+        if (trips == null || party == null || docs == null) {
+          continue;
+        }
+        frames.push({
+          gap: party.top - shownEdge(trips),
+          overlap: party.bottom - docs.top,
+        });
+      }
+      for (let i = 0; i < 60; i++) {
+        await frame();
+      }
+      const trips = group();
+      const party = row('party')?.getBoundingClientRect();
+      return {
+        frames,
+        restGap: (party?.top ?? 0) - (trips == null ? 0 : shownEdge(trips)),
+      };
+    });
+    expect(result.frames.length).toBeGreaterThan(4);
+    for (const [i, f] of result.frames.entries()) {
+      const at = `frame ${i}: ${JSON.stringify(f)}`;
+      expect(Math.abs(f.gap - result.restGap), at).toBeLessThan(1.5);
+      expect(f.overlap, at).toBeLessThan(0.5);
+    }
+  });
+
   test("a TreeList row's revealed group meets the rows after it on every painted frame, expanding and collapsing", async ({
     page,
   }) => {

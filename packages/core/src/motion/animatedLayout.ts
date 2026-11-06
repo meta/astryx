@@ -2006,7 +2006,7 @@ function trackEdgeMotion(
       if (!isReleased) {
         isReleased = true;
         for (const slide of slides) {
-          slide.cancel();
+          stopGlideOf(slide);
         }
         release();
       }
@@ -2075,13 +2075,20 @@ function rideNeighbour(
     // it shares with the neighbour (an item above them closing): the edge
     // rides the neighbour's offset from the element, not from the page.
     const own = glideMoving(element, neighbour, area);
-    const durationMs = Math.max(glide.durationMs, own?.durationMs ?? 0);
+    // Each glide is read on its own clock. A glide an earlier change started,
+    // such as a part's slide, is already some way in.
+    const glideAt = startedBefore(glide, animation);
+    const ownAt = own == null ? 0 : startedBefore(own, animation);
+    const durationMs = Math.max(
+      glide.durationMs - glideAt,
+      own == null ? 0 : own.durationMs - ownAt,
+    );
     // The neighbour's offset from its place relative to the element's,
     // towards the edge's side.
     const sign = isEnd ? 1 : -1;
     const hidden = (t: number): number => {
-      const offset = glide.offsetAt(t);
-      const moved = own?.offsetAt(t) ?? {x: 0, y: 0};
+      const offset = glide.offsetAt(glideAt + t);
+      const moved = own?.offsetAt(ownAt + t) ?? {x: 0, y: 0};
       return hiddenAt(
         sign *
           (edge.startsWith('inline')
@@ -2253,9 +2260,80 @@ function slideParts(
     );
     if (motion != null) {
       motions.push(motion);
+      // A slide is the part's glide. A later change in the area then carries
+      // its rest into the part's next glide, as it carries any glide.
+      const glide: Glide = {
+        animation: motion,
+        offsetAt: t => drawnOffset(motion, t),
+        durationMs: progress.durationMs,
+        shownBefore: {x: 0, y: 0},
+        scale: {x: 1, y: 1},
+      };
+      glides.set(part, glide);
+      slideTargets.set(motion, part);
+      motion.addEventListener?.('finish', () => {
+        if (glides.get(part) === glide) {
+          glides.delete(part);
+        }
+      });
     }
   }
   return motions;
+}
+
+/**
+ * The offset `animation` draws `t` ms in, read off its keyframes, a straight
+ * line between each two. A slide that rides another glide reads that glide's
+ * frames, so this follows it.
+ */
+function drawnOffset(
+  animation: Animation,
+  t: number,
+): {readonly x: number; readonly y: number} {
+  const effect = animation.effect as KeyframeEffect | null;
+  if (effect == null || typeof effect.getKeyframes !== 'function') {
+    return {x: 0, y: 0};
+  }
+  const frames = effect.getKeyframes();
+  const duration = Number(effect.getTiming().duration);
+  const at = duration > 0 ? Math.min(1, Math.max(0, t / duration)) : 1;
+  const offsetOf = (frame: ComputedKeyframe | undefined) => {
+    const [x = 0, y = 0] = numbersIn(String(frame?.translate ?? ''));
+    return {x, y, offset: frame?.computedOffset ?? 0};
+  };
+  let from = offsetOf(frames[0]);
+  let to = offsetOf(frames[frames.length - 1]);
+  for (const frame of frames) {
+    const point = offsetOf(frame);
+    if (point.offset <= at) {
+      from = point;
+    }
+    if (point.offset >= at) {
+      to = point;
+      break;
+    }
+  }
+  const span = to.offset - from.offset;
+  const k = span > 0 ? (at - from.offset) / span : 0;
+  return {x: from.x + (to.x - from.x) * k, y: from.y + (to.y - from.y) * k};
+}
+
+/** How many ms before `animation` started `glide` started: 0 in one change. */
+function startedBefore(glide: Glide, animation: Animation): number {
+  const shift = Number(animation.startTime) - Number(glide.animation.startTime);
+  return Number.isFinite(shift) ? Math.max(0, shift) : 0;
+}
+
+/** Each part's slide, by its motion: a stopped slide is no glide. */
+const slideTargets = new WeakMap<Animation, Element>();
+
+/** Cancels a part's slide, and forgets it as the part's glide. */
+function stopGlideOf(animation: Animation): void {
+  const part = slideTargets.get(animation);
+  if (part != null && glides.get(part)?.animation === animation) {
+    glides.delete(part);
+  }
+  animation.cancel();
 }
 
 /** The inline properties an exit sets, so a release removes exactly them. */
