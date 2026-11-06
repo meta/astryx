@@ -277,8 +277,8 @@ Rejected: the measured spring as the glide; a platform-measured opt-in, such as 
 
 The glide plays over `--duration-medium`, the middle of the theme's medium
 durations: 300 ms in the Neutral theme and 410 ms with no theme, both scaled
-by `tempo`. Collapsible, TreeList, Table's row expansion and AppShell's
-content area share it, as one motion.
+by `tempo`. Collapsible, TreeList, Table's row expansion, AppShell's content
+area and List share it, as one motion.
 
 Rejected: `--duration-medium-min`.
 
