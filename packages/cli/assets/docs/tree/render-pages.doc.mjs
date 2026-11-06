@@ -57,7 +57,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: 'What it cannot keep: anything that needs a browser while running. State, effects, click handlers and data loaded after the first paint are gone, and a chart sized by its container is empty, so give charts a fixed size. Read browser-only values such as window inside an effect, or the render stops with ERR_RENDER_BROWSER_API.',
+          text: 'What it cannot keep: anything that needs a browser while running. State, effects, click handlers and data loaded after the first paint are gone. Charts made with recharts are the exception: the render draws each chart and ResponsiveContainer a module imports from recharts by name (`import {LineChart} from \'recharts\'`), inside the page, so a custom tick, label or shape sees the page\'s React context. A chart sized by its container scales to the width the page gives it, and a legend keeps the place its props give it. When the page cannot be drawn again without a browser, each chart is drawn by itself and its parts see React context defaults. Every chart it cannot draw (one used through `import * as R`, say) is named in a `chart-size` warning. Read browser-only values such as window inside an effect, or the render stops with ERR_RENDER_BROWSER_API.',
         },
       ],
     },
