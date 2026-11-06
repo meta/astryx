@@ -19,13 +19,15 @@
 
 import {
   type BlockedWindow,
+  BUSY_PROOF_LOOKAROUND_MS,
   busyWindowProof,
   castStep,
   CONTROL_RGB,
+  MARKER_RGB,
   markElement,
   startBusyControl,
   startScreencast,
-  trackMarker,
+  trackMarkers,
   writeEvidence,
 } from '@astryxdesign/interaction-harness';
 import {
@@ -62,9 +64,10 @@ test.afterAll(async () => {
 const BLOCK_MS = 700;
 
 /**
- * The glide's length here, ms. The module plays `--duration-medium-min`, set
- * longer than the theme's, so the judged part spans about 20 frames. The
- * length changes nothing the proof judges.
+ * The glide's length here, ms. `--duration-medium-min` and `--duration-medium`
+ * are both set to it, whichever the module plays. It is longer than the
+ * theme's, so the judged part spans about 20 frames. The length changes
+ * nothing the proof judges.
  */
 const GLIDE_MS = 1000;
 
@@ -96,7 +99,7 @@ async function openStory(page: Page, story: string): Promise<void> {
     .first()
     .waitFor({state: 'attached'});
   await page.addStyleTag({
-    content: `* { --duration-medium-min: ${GLIDE_MS}ms !important; }`,
+    content: `* { --duration-medium-min: ${GLIDE_MS}ms !important; --duration-medium: ${GLIDE_MS}ms !important; }`,
   });
   await page.evaluate(async () => {
     await document.fonts.ready;
@@ -270,9 +273,13 @@ async function busyGlide(
     return along === 'x' ? box.x : box.y;
   }, axis);
   const frames = await cast.stop();
-  const tracked = await trackMarker(page, frames);
-  const control = await trackMarker(page, frames, {rgb: CONTROL_RGB});
-  const step = castStep(tracked, axis);
+  // The cast's step, from one frame in the block.
+  const [probe] = await trackMarkers(
+    page,
+    [frames.find(f => f.t >= busy.from) ?? frames[frames.length - 1]],
+    {colors: [MARKER_RGB]},
+  );
+  const step = castStep(probe, axis);
   // Where the glide's keyframes first move the follower by less than a cast
   // step in a frame, from the block's start on.
   let readable = busy.from;
@@ -287,6 +294,13 @@ async function busyGlide(
   }
   // The part of the block the judgment reads ends there.
   const judgedWindow = {...busy, to: Math.min(busy.to, readable)};
+  // Only the frames the proof reads are decoded, each once for both colors.
+  // On a loaded machine every decode counts.
+  const [tracked, control] = await trackMarkers(
+    page,
+    frames.filter(f => f.t <= judgedWindow.to + BUSY_PROOF_LOOKAROUND_MS),
+    {colors: [MARKER_RGB, CONTROL_RGB]},
+  );
   const proof = busyWindowProof(tracked, judgedWindow, {
     axis,
     settledWithinSteps: 2,
