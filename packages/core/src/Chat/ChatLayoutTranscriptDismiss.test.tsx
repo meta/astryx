@@ -649,13 +649,14 @@ describe('ChatLayout dismisses the keyboard from a transcript drag (FR10)', () =
 });
 
 describe('what the drag-to-dismiss loads', () => {
-  it('goes through the gesture system’s pan, page hold and scroll test, with no listener of its own', () => {
+  it('goes through the gesture system’s pan, state checks, page hold and scroll test, with no listener of its own', () => {
     const here = path.dirname(fileURLToPath(import.meta.url));
     const dismissal = fs.readFileSync(
       path.join(here, 'transcriptDismiss.ts'),
       'utf8',
     );
     expect(dismissal.match(/from '\.\.\/gestures\/[^']*'/g)).toEqual([
+      "from '../gestures/GestureRecognizer'",
       "from '../gestures/PanGestureRecognizer'",
       "from '../gestures/nativeScroll'",
       "from '../gestures/pageHold'",

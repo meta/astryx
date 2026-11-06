@@ -2,9 +2,9 @@
 
 /**
  * @file transcriptDismiss.ts
- * @input The gesture system's pan recognizer, page hold and scroll test, the
- *   keyboard module's height, bringsUpKeyboard, the composer and the line
- *   where a drag dismisses
+ * @input The gesture system's pan recognizer, state checks, page hold and
+ *   scroll test, the keyboard module's height, bringsUpKeyboard, the composer
+ *   and the dismiss line
  * @output createKeyboardDismissPan and dismissKeyboardAtCrossing: a drag
  *   down a transcript dismisses the software keyboard as it reaches the
  *   composer. createComposerDismissPan and dismissKeyboardOnComposerDrag: a
@@ -18,6 +18,7 @@
  * SYNC: When modified, update /packages/core/src/Chat/ChatLayout.tsx
  */
 
+import {isActive, isTerminal} from '../gestures/GestureRecognizer';
 import {PanGestureRecognizer} from '../gestures/PanGestureRecognizer';
 import {canElementScroll, dragAxes} from '../gestures/nativeScroll';
 import {holdPageScroll} from '../gestures/pageHold';
@@ -102,13 +103,6 @@ function startsDismissDrag(
   return touch.startY < line ? {doc, line} : null;
 }
 
-/** Whether the pan's drag is over: released, cancelled or failed. */
-function isFinished(pan: PanGestureRecognizer): boolean {
-  return (
-    pan.state === 'ended' || pan.state === 'cancelled' || pan.state === 'failed'
-  );
-}
-
 /**
  * A pan for a transcript: a drag down it dismisses the software keyboard as
  * it reaches the composer. Attach it to the transcript, with
@@ -163,10 +157,9 @@ export function dismissKeyboardAtCrossing(
   }
   // The lift counts too: the finger can reach the line between its last move
   // and the lift.
-  const isMoving =
-    pan.state === 'began' || pan.state === 'changed' || pan.state === 'ended';
+  const isMoving = isActive(pan.state) || pan.state === 'ended';
   const reachesLine = isMoving && pan.location().y >= drag.line;
-  if (isFinished(pan) || reachesLine) {
+  if (isTerminal(pan.state) || reachesLine) {
     drags.delete(pan);
   }
   if (!reachesLine) {
@@ -252,7 +245,7 @@ export function dismissKeyboardOnComposerDrag(pan: PanGestureRecognizer): void {
   }
   const touch = pan.trackedTouches[0];
   if (
-    isFinished(pan) ||
+    isTerminal(pan.state) ||
     (pan.state === 'began' &&
       touch != null &&
       touch.time - touch.startTime >=
@@ -261,7 +254,7 @@ export function dismissKeyboardOnComposerDrag(pan: PanGestureRecognizer): void {
     composerDrags.delete(pan);
     return;
   }
-  if (pan.state !== 'began' && pan.state !== 'changed') {
+  if (!isActive(pan.state)) {
     return;
   }
   const {x, y} = pan.translation();
