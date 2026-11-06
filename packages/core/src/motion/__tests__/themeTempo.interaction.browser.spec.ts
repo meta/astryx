@@ -8,8 +8,9 @@
  * @output Proof that the springs follow the tempo of the theme they play
  *   in. A spring the animator plays inside a scope at tempo 1.5 is
  *   inherited through a nested element. At 1.5 × t it draws what the same
- *   spring draws at t outside the scope. Finger tracking draws the same in
- *   both. Under three real themes that set only `motion.tempo`, the
+ *   spring draws at t outside the scope. A page that imports only the
+ *   springs and the engine, and never registers them, plays at its tempo
+ *   too. Finger tracking draws the same in both. Under three real themes that set only `motion.tempo`, the
  *   animated-layout glide lasts 0.75, 1 and 1.5 times as long, with a
  *   finger or a mouse. A theme with only a duration scale, nested in one at
  *   tempo 1.5, glides at its own pace
@@ -53,19 +54,21 @@ test.afterAll(async () => {
 
 const TRAVEL = 300;
 
-// A real navigation (not setContent): the page keeps its own window. The
+// A real navigation (not setContent): the page keeps its own window. Each
 // scope writes the private property a theme that sets `tempo` writes.
-async function openScopes(page: Page) {
+async function openScopes(page: Page, {register = true} = {}) {
   const html = `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
   html, body { margin: 0; background: #fff; }
   .box { position: relative; width: 48px; height: 48px; margin: 8px 0; background: #36c; }
   .slow { --_astryx-motion-tempo: 1.5; }
+  .quick { --_astryx-motion-tempo: 0.75; }
 </style>
 <div class="box" id="base"></div>
 <div class="slow"><section><div class="box" id="slowed"></div></section></div>
+<div class="quick"><section><div class="box" id="quick"></div></section></div>
 <script>${script}</script>
-<script>Motion.registerSpringsTable();</script>`;
+${register ? '<script>Motion.registerSpringsTable();</script>' : ''}`;
   await page.route('http://tempo.test/', async route =>
     route.fulfill({contentType: 'text/html', body: html}),
   );
@@ -73,18 +76,19 @@ async function openScopes(page: Page) {
 }
 
 /**
- * Plays `role` on both boxes and reads each one's travel, paused at each of
- * `times` (ms), the slowed box at its time times `scale`.
+ * Plays `role` on the base box and the `scaled` one. Reads each one's travel,
+ * paused at each of `times` (ms), the scaled box at its time times `scale`.
  */
 async function travels(
   page: Page,
   role: 'settle' | 'fingerTracking',
   times: number[],
   scale: number,
+  scaled: 'slowed' | 'quick' = 'slowed',
 ): Promise<{base: number; slowed: number}[]> {
   return page.evaluate(
-    async ({role, times, scale, travel}) => {
-      const boxes = ['base', 'slowed'].map(
+    async ({role, times, scale, travel, scaled}) => {
+      const boxes = ['base', scaled].map(
         id => document.getElementById(id) as HTMLElement,
       );
       const handles = boxes.map(box =>
@@ -108,7 +112,7 @@ async function travels(
         return {base: xOf(boxes[0]), slowed: xOf(boxes[1])};
       });
     },
-    {role, times, scale, travel: TRAVEL},
+    {role, times, scale, travel: TRAVEL, scaled},
   );
 }
 
@@ -123,6 +127,24 @@ test.describe('the springs follow the theme tempo (spec:AST-108 FR3)', () => {
     expect(read[0].base).toBeLessThan(TRAVEL - 5);
     for (const {base, slowed} of read) {
       expect(Math.abs(slowed - base)).toBeLessThan(1.5);
+    }
+  });
+
+  test('a page that imports only the springs and the engine, with no register call, plays settle at 0.75 and 1.5 × t', async ({
+    page,
+  }) => {
+    // A page whose only motion is one spring role, as a Lightbox is.
+    for (const [scaled, scale] of [
+      ['slowed', 1.5],
+      ['quick', 0.75],
+    ] as const) {
+      await openScopes(page, {register: false});
+      const read = await travels(page, 'settle', [40, 120, 240], scale, scaled);
+      expect(read[0].base).toBeGreaterThan(5);
+      expect(read[0].base).toBeLessThan(TRAVEL - 5);
+      for (const {base, slowed} of read) {
+        expect(Math.abs(slowed - base), scaled).toBeLessThan(1.5);
+      }
     }
   });
 
