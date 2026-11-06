@@ -744,6 +744,29 @@ test('past the maximum the edge follows with resistance, and springs back after 
   ).toHaveAttribute('aria-valuenow', '320');
 });
 
+test("a panel at the hook's size alone stops at the maximum, and nothing springs back after the lift", async ({
+  page,
+}) => {
+  await openFixture(page, 'core-resizable--horizontal-split');
+  const handle = page.getByRole('separator', {name: 'Resize sidebar'});
+  await expect(handle).toHaveAttribute('aria-valuenow', '250');
+  const start = await handle.boundingBox();
+  if (start == null) {
+    throw new Error('the handle is not laid out');
+  }
+  const at = {x: start.x + start.width / 2, y: start.y + start.height / 2};
+  await page.mouse.move(at.x, at.y);
+  await page.mouse.down();
+  // 250 px plus 400 px of pull would be 650 px against a 500 px maximum.
+  await page.mouse.move(at.x + 400, at.y, {steps: 6});
+  const pulled = await handle.boundingBox();
+  expect(Math.round((pulled?.x ?? 0) - start.x)).toBe(250);
+  await page.mouse.up();
+  const lifted = await handle.boundingBox();
+  expect(Math.round((lifted?.x ?? 0) - start.x)).toBe(250);
+  await expect(handle).toHaveAttribute('aria-valuenow', '500');
+});
+
 test('a spring-back past a limit lays out no frame: the edge glides back over the held pane', async ({
   page,
 }) => {
