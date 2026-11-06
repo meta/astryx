@@ -1387,6 +1387,86 @@ export default function Page() {
     expect(html).not.toContain('a items');
   }, 60_000);
 
+  it('draws inside a page that uses Core scrolling components, so context still reaches the chart', async () => {
+    put(
+      'charts-core.tsx',
+      `import {createContext, useContext} from 'react';
+import {ScrollableArea} from '@astryxdesign/core/ScrollableArea';
+import {BarChart, Bar, XAxis} from 'recharts';
+${DATA}
+const Units = createContext('items');
+function Tick(props: any) {
+  return <text x={props.x} y={props.y + 12}>{props.payload.value} {useContext(Units)}</text>;
+}
+export default function Page() {
+  console.log('rendered once');
+  return (
+    <Units.Provider value="km">
+      <ScrollableArea>
+        <BarChart width={300} height={150} data={data}><XAxis dataKey="d" tick={<Tick />} /><Bar dataKey="v" /></BarChart>
+      </ScrollableArea>
+    </Units.Provider>
+  );
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('charts-core.tsx', {cwd: dir}));
+    const html = fs.readFileSync(path.join(dir, 'charts-core.html'), 'utf8');
+    expect(html).toContain('a km');
+    expect(result.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('chart-size');
+    // What the page prints is reported once, from the server render.
+    const printed = result.data.warnings.filter((/** @type {any} */ w) => w.code === 'page-output');
+    expect(printed.filter((/** @type {any} */ w) => w.message.includes('rendered once'))).toHaveLength(1);
+  }, 60_000);
+
+  it('says so when it draws each chart by itself', async () => {
+    put(
+      'charts-alone.tsx',
+      `import {BarChart, Bar} from 'recharts';
+${DATA}
+function OnlyOnServer() {
+  // Throws only once a document exists, so the page draws on the server but not again.
+  if (typeof document !== 'undefined') throw new Error('no second draw');
+  return null;
+}
+export default function Page() {
+  return <div><OnlyOnServer /><BarChart width={300} height={150} data={data}><Bar dataKey="v" /></BarChart></div>;
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('charts-alone.tsx', {cwd: dir}));
+    const html = fs.readFileSync(path.join(dir, 'charts-alone.html'), 'utf8');
+    expect(html).toContain('recharts-bar-rectangle');
+    const warning = result.data.warnings.find((/** @type {any} */ w) => w.code === 'chart-size');
+    expect(warning?.message).toContain('each chart was drawn by itself');
+  }, 60_000);
+
+  it('keeps room for a legend that wraps onto more rows', async () => {
+    put(
+      'charts-wrap.tsx',
+      `import {LineChart, Line, XAxis, Legend} from 'recharts';
+const data = [{d: 'Mon', a: 1, b: 2, c: 3, e: 4, f: 5}, {d: 'Tue', a: 2, b: 3, c: 1, e: 2, f: 3}];
+export default function Page() {
+  return (
+    <LineChart width={480} height={240} data={data}>
+      <XAxis dataKey="d" />
+      <Line dataKey="a" name="Northern region" /><Line dataKey="b" name="Southern region" />
+      <Line dataKey="c" name="Eastern region" /><Line dataKey="e" name="Western region" />
+      <Line dataKey="f" name="Central region" />
+      <Legend />
+    </LineChart>
+  );
+}
+`,
+    );
+    await render('charts-wrap.tsx', {cwd: dir});
+    const html = fs.readFileSync(path.join(dir, 'charts-wrap.html'), 'utf8');
+    const axis = /<line\b[^>]*class="recharts-cartesian-axis-line"[^>]*>/.exec(html)?.[0] ?? '';
+    // Five names of about 120 px each wrap into two rows in 470 px, so the
+    // axis sits two legend rows up: 240 - 5 - 48 - 30 = 157.
+    expect(Number(/\by1="([\d.]+)"/.exec(axis)?.[1])).toBe(157);
+  }, 60_000);
+
   it('names a chart of fixed size it cannot draw', async () => {
     put(
       'charts-ns-fixed.tsx',

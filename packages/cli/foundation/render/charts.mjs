@@ -90,9 +90,13 @@ function legendBox(el) {
   const items = [...el.querySelectorAll('.recharts-legend-item')];
   const widths = items.map(item => 14 + 4 + 7 * (item.textContent ?? '').length + 10);
   const vertical = items.some(item => /display:\s*block/.test(item.getAttribute('style') ?? ''));
-  return vertical
-    ? box(Math.max(0, ...widths), 20 * items.length + 10)
-    : box(widths.reduce((a, b) => a + b, 0), 24);
+  if (vertical) return box(Math.max(0, ...widths), 20 * items.length + 10);
+  // A row as wide as the legend's own width holds the items it can; the rest
+  // wrap onto more rows.
+  const total = widths.reduce((a, b) => a + b, 0);
+  const room = Number(/(?:^|;)\s*width\s*:\s*([\d.]+)px/.exec(el.getAttribute('style') ?? '')?.[1]);
+  const rows = room > 0 ? Math.max(1, Math.ceil(total / room)) : 1;
+  return box(Math.min(total, room > 0 ? room : total), 24 * rows);
 }
 
 /** @param {number} width @param {number} height */
@@ -139,7 +143,8 @@ export async function chartDocument() {
   });
   Object.assign(window, {
     matchMedia: quiet,
-    getComputedStyle: () => ({getPropertyValue: () => ''}),
+    // Every style property reads as empty, as for an element with no CSS.
+    getComputedStyle: () => new Proxy({getPropertyValue: () => ''}, {get: (o, k) => (k in o ? /** @type {any} */ (o)[k] : '')}),
     requestAnimationFrame: (/** @type {(t: number) => void} */ cb) => setTimeout(() => cb(Date.now()), 0),
     cancelAnimationFrame: (/** @type {any} */ id) => clearTimeout(id),
     ResizeObserver: class {
