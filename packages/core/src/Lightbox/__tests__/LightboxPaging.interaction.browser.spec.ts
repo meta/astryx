@@ -116,7 +116,9 @@ async function openGallery(
   await driver.tap({x: t.x + t.width / 2, y: t.y + t.height / 2});
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
-  const viewport = dialog.getByRole('button', {name: 'Zoom'});
+  // The pager's viewport. In a gallery the keyboard's zoom button is the
+  // current page's photo box inside it.
+  const viewport = dialog.locator('[data-lightbox-viewport]');
   const track = viewport.locator(':scope > div').first();
   await expect
     .poll(async () =>
@@ -234,6 +236,383 @@ test("a drag past half a photo pages to the next one, Photos' 40 pt gap between 
   expect(await g.counter()).toBe('2 / 4');
   expect(await g.trackX()).toBeCloseTo(-(g.box.width + GAP), 0);
   await expect(g.dialog).toHaveAccessibleName('Mountain lake');
+});
+
+test('every page centres its photo on the same box, with or without a caption', async ({
+  page,
+}) => {
+  // The story's first photo has a caption and the second none. The pages
+  // share one caption row, so the photos line up mid-swipe and the next
+  // photo rests where the first one did.
+  const g = await openGallery(page);
+  const centres = async () =>
+    g.track.evaluate(el =>
+      ([...el.children] as HTMLElement[]).map(p => {
+        const img = p.querySelector('img');
+        const r = img?.getBoundingClientRect();
+        return {
+          current: p.hasAttribute('data-current'),
+          y: r == null ? Number.NaN : r.top + r.height / 2,
+        };
+      }),
+    );
+  const before = await centres();
+  expect(before.length).toBeGreaterThan(1);
+  const first = before.find(c => c.current)?.y ?? Number.NaN;
+  for (const c of before) {
+    expect(Math.abs(c.y - first)).toBeLessThan(1);
+  }
+  const mid = {x: g.box.x + g.box.width * 0.8, y: g.box.y + g.box.height / 2};
+  let spread = Number.NaN;
+  await g.driver.play(slowDrag(mid, -g.box.width * 0.6), {
+    onEvent: async step => {
+      if (step.type === 'touchMove' && Number.isNaN(spread)) {
+        const ys = (await centres()).map(c => c.y);
+        spread = Math.max(...ys) - Math.min(...ys);
+      }
+    },
+  });
+  expect(spread).toBeLessThan(1);
+  await waitForRest(g.track);
+  expect(await g.counter()).toBe('2 / 4');
+  const after = (await centres()).find(c => c.current)?.y ?? Number.NaN;
+  expect(Math.abs(after - first)).toBeLessThan(1);
+});
+
+test('every page keeps a two-line caption band, so the photo keeps its box', async ({
+  page,
+}) => {
+  // The story's captions run long, about two lines, none and short. Each
+  // page's band under its photo is two caption lines tall, so the photo box
+  // neither grows nor moves from page to page.
+  const g = await openGallery(page, {
+    story: 'core-lightbox--gallery-with-captions',
+    trigger: 'Open gallery with captions',
+  });
+  const shown = async () =>
+    g.track.evaluate(el => {
+      const current = el.querySelector(':scope > [data-current]');
+      const media = current?.querySelector('[data-lightbox-page-media]');
+      const band = media?.nextElementSibling;
+      if (media == null || band == null) {
+        return null;
+      }
+      const r = media.getBoundingClientRect();
+      // The band's lines, above the padding that clears the screen's edge.
+      const pad = parseFloat(getComputedStyle(band).paddingBottom);
+      return {top: r.top, height: r.height, band: band.clientHeight - pad};
+    });
+  // Two lines of the caption's text, under its top padding.
+  const twoLines = await g.track.evaluate(el => {
+    const caption = el.querySelector(
+      ':scope > [data-current] [data-lightbox-caption]',
+    );
+    const text = caption?.querySelector('.astryx-text') ?? caption;
+    if (text == null) {
+      throw new Error('no caption');
+    }
+    const style = getComputedStyle(text);
+    return 2 * parseFloat(style.lineHeight) + parseFloat(style.paddingTop);
+  });
+  const more = g.dialog.getByRole('button', {name: 'more'});
+  const first = await shown();
+  expect(first).not.toBeNull();
+  expect(Math.abs((first?.band ?? 0) - twoLines)).toBeLessThan(1);
+  await expect(more).toHaveCount(1);
+  const mid = {x: g.box.x + g.box.width * 0.8, y: g.box.y + g.box.height / 2};
+  for (const counter of ['2 / 4', '3 / 4', '4 / 4']) {
+    await g.driver.play(slowDrag(mid, -g.box.width * 0.6));
+    await waitForRest(g.track);
+    expect(await g.counter()).toBe(counter);
+    const now = await shown();
+    expect(Math.abs((now?.band ?? 0) - twoLines)).toBeLessThan(1);
+    expect(Math.abs((now?.top ?? Number.NaN) - (first?.top ?? 0))).toBeLessThan(
+      0.5,
+    );
+    expect(
+      Math.abs((now?.height ?? Number.NaN) - (first?.height ?? 0)),
+    ).toBeLessThan(0.5);
+  }
+  // The last caption fits its band, so it has no "more".
+  await expect(more).toHaveCount(0);
+});
+
+test('the caption is body Text on the media surface: its lines start at one edge, and "more" is a ghost Button that ends the last', async ({
+  page,
+}) => {
+  const g = await openGallery(page, {
+    story: 'core-lightbox--gallery-with-captions',
+    trigger: 'Open gallery with captions',
+  });
+  const caption = await g.track.evaluate(el => {
+    const text = el.querySelector<HTMLElement>(
+      ':scope > [data-current] [data-lightbox-caption] .astryx-text',
+    );
+    if (text == null) {
+      return null;
+    }
+    // Each line's start: the leftmost fragment on each line, top to bottom,
+    // from the caption's text nodes only.
+    const fragments: DOMRect[] = [];
+    const walker = document.createTreeWalker(text, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node != null; node = walker.nextNode()) {
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      fragments.push(...range.getClientRects());
+    }
+    const starts = new Map<number, number>();
+    for (const r of fragments) {
+      if (r.width > 1) {
+        const top = Math.round(r.top);
+        starts.set(top, Math.min(starts.get(top) ?? Infinity, r.left));
+      }
+    }
+    const lines = [...starts.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([, left]) => left);
+    const box = text.getBoundingClientRect();
+    return {
+      lines,
+      right: box.right - parseFloat(getComputedStyle(text).paddingRight),
+      bottom: box.bottom,
+      lineHeight: parseFloat(getComputedStyle(text).lineHeight),
+      isText: text.classList.contains('astryx-text'),
+      type: text.getAttribute('data-type'),
+      isOnMedia: text.closest('[data-astryx-media="dark"]') != null,
+    };
+  });
+  expect(caption).not.toBeNull();
+  expect(caption?.isText).toBe(true);
+  expect(caption?.type).toBe('body');
+  expect(caption?.isOnMedia).toBe(true);
+  // Present first: two lines or more, then the shared start edge.
+  expect(caption?.lines.length ?? 0).toBeGreaterThanOrEqual(2);
+  const [first = Number.NaN, second = Number.NaN] = caption?.lines ?? [];
+  expect(Math.abs(second - first)).toBeLessThan(1);
+  const more = g.dialog.getByRole('button', {name: 'more'});
+  await expect(more).toHaveClass(/astryx-button/);
+  await expect(more).toHaveAttribute('data-variant', 'ghost');
+  const m = await more.boundingBox();
+  expect(m).not.toBeNull();
+  // It ends the last line: inside the text's end, centred on that line.
+  expect((m?.x ?? 0) + (m?.width ?? 0)).toBeLessThanOrEqual(
+    (caption?.right ?? 0) + 0.5,
+  );
+  expect(
+    Math.abs(
+      (m?.y ?? 0) +
+        (m?.height ?? 0) / 2 -
+        ((caption?.bottom ?? 0) - (caption?.lineHeight ?? 0) / 2),
+    ),
+  ).toBeLessThan(1);
+});
+
+test("the caption band clears the screen's bottom edge", async ({page}) => {
+  const g = await openGallery(page, {
+    story: 'core-lightbox--gallery-with-captions',
+    trigger: 'Open gallery with captions',
+  });
+  const placed = await g.track.evaluate(el => {
+    const band = el.querySelector(
+      ':scope > [data-current] [data-lightbox-page-media]',
+    )?.nextElementSibling;
+    const dialog = el.closest('dialog');
+    if (band == null || dialog == null) {
+      return null;
+    }
+    return {
+      pad: parseFloat(getComputedStyle(band).paddingBottom),
+      gap:
+        dialog.getBoundingClientRect().bottom -
+        band.getBoundingClientRect().bottom,
+    };
+  });
+  expect(placed).not.toBeNull();
+  // At least the theme's 12 px spacing under the lines, inside the viewer.
+  expect(placed?.pad ?? 0).toBeGreaterThanOrEqual(12);
+  expect(placed?.gap ?? -1).toBeGreaterThanOrEqual(0);
+});
+
+test("a tap that opens the viewer paints no ring on its first control; a key's opening does", async ({
+  page,
+}) => {
+  const g = await openGallery(page);
+  const focused = async () =>
+    page.evaluate(() => {
+      const active = document.activeElement;
+      return {
+        isInViewer: active?.closest('dialog') != null,
+        hasRing: active?.matches(':focus-visible') ?? false,
+      };
+    });
+  expect(await focused()).toEqual({isInViewer: true, hasRing: false});
+  await page.keyboard.press('Escape');
+  await expect(g.dialog).toBeHidden();
+  const trigger = page.getByRole('button', {name: 'Open gallery with zoom'});
+  await trigger.focus();
+  await page.keyboard.press('Enter');
+  await expect(g.dialog).toBeVisible();
+  expect(await focused()).toEqual({isInViewer: true, hasRing: true});
+});
+
+test('"more" opens a long caption in full over the photo, on a scrim, and "less" closes it', async ({
+  page,
+}) => {
+  const g = await openGallery(page, {
+    story: 'core-lightbox--gallery-with-captions',
+    trigger: 'Open gallery with captions',
+  });
+  // The viewer's description is the whole caption, clamped or not.
+  await expect(g.dialog).toHaveAccessibleDescription(
+    /^A winding path through the forest.*the last hill home\.$/,
+  );
+  const clamp = await g.track.evaluate(el => {
+    const text = el.querySelector(
+      ':scope > [data-current] [data-lightbox-caption] .astryx-text',
+    );
+    return text == null
+      ? null
+      : {scroll: text.scrollHeight, client: text.clientHeight};
+  });
+  expect(clamp?.scroll ?? 0).toBeGreaterThan((clamp?.client ?? 0) + 1);
+  const more = g.dialog.getByRole('button', {name: 'more'});
+  const m = await more.boundingBox();
+  if (m == null) {
+    throw new Error('no more button');
+  }
+  // A finger's tap just below the label still lands on the toggle, which
+  // takes taps out toward 44 px, short of the line above.
+  await g.driver.tap({x: m.x + m.width / 2, y: m.y + m.height + 6});
+  const less = g.dialog.getByRole('button', {name: 'less'});
+  await expect(less).toHaveAttribute('aria-expanded', 'true');
+  const id = await less.getAttribute('aria-controls');
+  const full = page.locator(`[id="${id}"]`);
+  await expect(full).toBeVisible();
+  const placed = await full.evaluate(panel => {
+    const media = panel
+      .closest('[data-current]')
+      ?.querySelector('[data-lightbox-page-media]');
+    const text = panel.querySelector('.astryx-text');
+    const r = panel.getBoundingClientRect();
+    const dialog = panel.closest('dialog');
+    const described = dialog?.getAttribute('aria-describedby');
+    return {
+      top: r.top,
+      photoBottom: media?.getBoundingClientRect().bottom ?? Number.NaN,
+      fits: text != null && text.scrollHeight <= text.clientHeight + 1,
+      backing: getComputedStyle(panel).backgroundColor,
+      text: text?.textContent ?? '',
+      // The caption renders once: one caption on the page, and the
+      // description is that caption.
+      captions:
+        panel
+          .closest('[data-current]')
+          ?.querySelectorAll('[data-lightbox-caption]').length ?? 0,
+      isDescription:
+        described != null &&
+        text?.id === described &&
+        dialog?.querySelectorAll(`[id="${described}"]`).length === 1,
+    };
+  });
+  // Over the photo's bottom, all of it shown, on a backing.
+  expect(placed.top).toBeLessThan(placed.photoBottom);
+  expect(placed.fits).toBe(true);
+  expect(placed.backing).not.toBe('rgba(0, 0, 0, 0)');
+  expect(placed.text).toMatch(/the last hill home\.$/);
+  expect(placed.captions).toBe(1);
+  expect(placed.isDescription).toBe(true);
+  await expect(g.dialog).toBeVisible();
+  expect(await g.counter()).toBe('1 / 4');
+  const l = await less.boundingBox();
+  if (l == null) {
+    throw new Error('no less button');
+  }
+  await g.driver.tap({x: l.x + l.width / 2, y: l.y + l.height + 6});
+  await expect(more).toHaveAttribute('aria-expanded', 'false');
+  // Back in the band: clamped again, with no backing.
+  await expect
+    .poll(async () =>
+      full.evaluate(panel => getComputedStyle(panel).backgroundColor),
+    )
+    .toBe('rgba(0, 0, 0, 0)');
+  const reclamped = await full.evaluate(panel => {
+    const text = panel.querySelector('.astryx-text');
+    return text != null && text.scrollHeight > text.clientHeight + 1;
+  });
+  expect(reclamped).toBe(true);
+  await expect(g.dialog).toBeVisible();
+});
+
+test('a swipe that pages from a focused "more" keeps focus in the viewer', async ({
+  page,
+}) => {
+  const g = await openGallery(page, {
+    story: 'core-lightbox--gallery-with-captions',
+    trigger: 'Open gallery with captions',
+  });
+  // A tap leaves focus on a button in Chromium and on Android.
+  const more = g.dialog.getByRole('button', {name: 'more'});
+  await more.focus();
+  await expect(more).toBeFocused();
+  const mid = {x: g.box.x + g.box.width * 0.8, y: g.box.y + g.box.height / 2};
+  await g.driver.play(slowDrag(mid, -g.box.width * 0.6));
+  await waitForRest(g.track);
+  expect(await g.counter()).toBe('2 / 4');
+  const isFocusInViewer = await g.dialog.evaluate(
+    element =>
+      element.ownerDocument.activeElement !== element.ownerDocument.body &&
+      element.contains(element.ownerDocument.activeElement),
+  );
+  expect(isFocusInViewer).toBe(true);
+});
+
+test('a finger scrolls an open caption too long for its panel, and the gallery stays put', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName === 'webkit',
+    'needs native scrolling from injected touches (Mobile Safari on the simulator)',
+  );
+  const g = await openGallery(page, {
+    story: 'core-lightbox--gallery-with-captions',
+    trigger: 'Open gallery with captions',
+  });
+  // A short viewport, so the long caption overflows its panel (60 % of the
+  // viewport's height) at the body type's size.
+  await page.setViewportSize({width: 402, height: 200});
+  await frames(page, 2);
+  const more = g.dialog.getByRole('button', {name: 'more'});
+  const m = await more.boundingBox();
+  if (m == null) {
+    throw new Error('no more button');
+  }
+  await g.driver.tap({x: m.x + m.width / 2, y: m.y + m.height / 2});
+  const less = g.dialog.getByRole('button', {name: 'less'});
+  await expect(less).toHaveAttribute('aria-expanded', 'true');
+  const full = page.locator(
+    `[id="${await less.getAttribute('aria-controls')}"]`,
+  );
+  // The open caption's text scrolls; the toggle stays at its end.
+  const text = full.locator('.astryx-text').first();
+  const overflow = await text.evaluate(
+    element => element.scrollHeight - element.clientHeight,
+  );
+  expect(overflow).toBeGreaterThan(20);
+  const r = await text.boundingBox();
+  if (r == null) {
+    throw new Error('no caption text');
+  }
+  const from = {x: r.x + r.width / 2, y: r.y + r.height * 0.7};
+  await g.driver.play(
+    drag(from, {x: from.x, y: from.y - 80}, {durationMs: 600, restMs: 150}),
+  );
+  await expect
+    .poll(async () => text.evaluate(element => element.scrollTop))
+    .toBeGreaterThan(10);
+  expect(await g.counter()).toBe('1 / 4');
+  await expect(full).toBeVisible();
+  await expect(g.dialog).toBeVisible();
 });
 
 test('a zoomed photo keeps the drag until its edge; the next drag from the edge pages', async ({
