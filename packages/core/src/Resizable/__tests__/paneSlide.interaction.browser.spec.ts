@@ -993,9 +993,18 @@ test('a re-grab while the panel slides shut catches it where it shows, and its e
   await expectPresent(page);
   const pane = page.getByTestId('sliding-panel');
   const handle = page.getByRole('separator', {name: 'Resize panel'});
+  const content = page.getByTestId('sliding-content');
+  // The pane's drawn edge less the content's start, at rest and later.
+  const gap = async () =>
+    ((await content.boundingBox())?.x ?? 0) -
+    (await pane.evaluate(node => node.getBoundingClientRect().right));
+  const restGap = await gap();
   const at = await pressHandle(page);
   // 200 px less 190 px is 10 px: under the 40 px collapse threshold.
   await page.mouse.move(at.x - 190, at.y, {steps: 4});
+  // Still before the lift, so it releases with no velocity: the slide plays
+  // the settle spring alone.
+  await page.waitForTimeout(200);
   // The close holds 120 ms in, so the grab lands mid-slide on any host.
   await holdMotionAt(page, 120, async () => {
     await page.mouse.up();
@@ -1017,12 +1026,35 @@ test('a re-grab while the panel slides shut catches it where it shows, and its e
   expect(
     Math.abs((caught?.x ?? 0) + (caught?.width ?? 0) / 2 - (grab.x + 1)),
   ).toBeLessThan(1);
+  // The pane is drawn to the edge it shows, not under the content.
+  expect(await gap()).toBeGreaterThanOrEqual(restGap - 1);
   await page.mouse.move(grab.x + 30, grab.y, {steps: 3});
   const moved = await handle.boundingBox();
   expect(
     Math.abs((moved?.x ?? 0) + (moved?.width ?? 0) / 2 - (grab.x + 30)),
   ).toBeLessThan(1);
+  expect(await gap()).toBeGreaterThanOrEqual(restGap - 1);
   await page.mouse.up();
+});
+
+test('an arrow key at the maximum moves nothing past it: no band, no spring-back', async ({
+  page,
+}) => {
+  await openFixture(page, STORY.start);
+  await expectPresent(page);
+  const handle = page.getByRole('separator', {name: 'Resize panel'});
+  await handle.focus();
+  await page.keyboard.press('End');
+  const max = await handle.getAttribute('aria-valuemax');
+  await expect(handle).toHaveAttribute('aria-valuenow', max ?? '');
+  await page.keyboard.press('ArrowRight');
+  // The handle carries no drawn offset and plays no motion of its own.
+  const drawn = await handle.evaluate(node => ({
+    translate: getComputedStyle(node).translate,
+    motions: node.getAnimations().length,
+  }));
+  expect(drawn).toEqual({translate: 'none', motions: 0});
+  await expect(handle).toHaveAttribute('aria-valuenow', max ?? '');
 });
 
 test('below the minimum the edge moves at most 8 px, the pane keeps its minimum, and a slow lift above the threshold springs the edge back', async ({
