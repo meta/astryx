@@ -1,5 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-// @pr-a11y scope DateInput
+// @pr-a11y scope core/DateInput
 
 /**
  * @file BottomSheetCommitLayout.a11y.chromium.spec.ts
