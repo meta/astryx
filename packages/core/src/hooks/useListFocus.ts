@@ -416,7 +416,7 @@ export function useInternalListFocus<T extends HTMLElement = HTMLElement>(
    * A `.focus()` call on such an element silently no-ops, so navigation must
    * skip these to avoid freezing on a disabled item (menus-4, navigation-5).
    */
-  const isItemDisabled = useCallback(isDisabledItem, []);
+  const isItemDisabled = isDisabledItem;
 
   /**
    * Get all focusable items in the list.
