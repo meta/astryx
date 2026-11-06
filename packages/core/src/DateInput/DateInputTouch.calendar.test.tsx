@@ -213,9 +213,12 @@ describe('the bottom sheet in a calendar', () => {
     ).not.toContain('Adar I 5785');
   });
 
+  // English names the Ethiopic era "ERA1" in CLDR 47, which has no name for
+  // it, and "AM" in CLDR 48. Any other version expects "AM".
+  const era = process.versions.cldr?.startsWith('47.') ? 'ERA1' : 'AM';
   it.each([
-    ['a common year', '2026-09-08', 'Pagumen 2018 AM', 5, '2026-09-06'],
-    ['a leap year', '2027-09-08', 'Pagumen 2019 AM', 6, '2027-09-06'],
+    ['a common year', '2026-09-08', `Pagumen 2018 ${era}`, 5, '2026-09-06'],
+    ['a leap year', '2027-09-08', `Pagumen 2019 ${era}`, 6, '2027-09-06'],
   ])(
     'keeps six rows for the Ethiopic thirteenth month in %s',
     (_name, value, label, length, first) => {
