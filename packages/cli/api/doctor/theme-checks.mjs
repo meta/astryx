@@ -135,8 +135,12 @@ function walkAst(value, visit) {
   }
 }
 
-/** @param {string} source */
-function moduleSpecifiers(source) {
+/**
+ * @param {string} source
+ * @param {{runtimeOnly?: boolean}} [options] - skip type-only imports and
+ *   re-exports, which the build erases
+ */
+function moduleSpecifiers(source, options = {}) {
   const values = new Set();
   walkAst(parseModule(source), node => {
     if (
@@ -145,7 +149,11 @@ function moduleSpecifiers(source) {
         'ExportNamedDeclaration',
         'ExportAllDeclaration',
       ].includes(node.type) &&
-      typeof node.source?.value === 'string'
+      typeof node.source?.value === 'string' &&
+      !(
+        options.runtimeOnly &&
+        (node.importKind === 'type' || node.exportKind === 'type')
+      )
     ) {
       values.add(node.source.value);
     }
@@ -407,17 +415,510 @@ function appPackageNamesTheme(cwd) {
 }
 
 /**
+ * The `@import` specifiers of a stylesheet.
+ * @param {string} css
+ * @returns {Set<string>}
+ */
+function stylesheetImports(css) {
+  const values = new Set();
+  postcss.parse(css).walkAtRules('import', rule => {
+    const match = /^\s*(?:url\(\s*)?(['"])([^'"]+)\1/u.exec(rule.params);
+    if (match) values.add(/** @type {string} */ (match[2]));
+  });
+  return values;
+}
+
+/**
+ * Whether one import specifier names a theme's built module or stylesheet.
+ * @param {string} specifier
+ * @param {string} file - the importing file
+ * @param {ResolvedAppTheme} theme
+ */
+function importsTheme(specifier, file, theme) {
+  if (theme.source === 'local') {
+    return (
+      specifierTargets(specifier, file, theme.moduleFile) ||
+      specifierTargets(specifier, file, theme.stylesheetFile)
+    );
+  }
+  return specifier === theme.module || specifier === theme.stylesheet;
+}
+
+const CORE_THEME_SOURCES = new Set([
+  '@astryxdesign/core',
+  '@astryxdesign/core/theme',
+]);
+const MAX_THEME_TRACE_DEPTH = 6;
+const THEME_PATH_RE = /\/themes\/([^/]+?)(?:\.css)?$/u;
+
+/**
+ * The file a relative module specifier names, if it exists.
+ * @param {string} specifier
+ * @param {string} fromFile
+ * @returns {string | null}
+ */
+function relativeModuleFile(specifier, fromFile) {
+  if (!specifier.startsWith('.')) return null;
+  const base = path.resolve(path.dirname(fromFile), specifier);
+  const candidates = [
+    base,
+    ...[...SOURCE_EXTENSIONS].map(extension => `${base}${extension}`),
+    ...[...SOURCE_EXTENSIONS].map(extension =>
+      path.join(base, `index${extension}`),
+    ),
+  ];
+  return (
+    candidates.find(candidate => readTextFileIfExists(candidate) != null) ??
+    null
+  );
+}
+
+/**
+ * @typedef {{source: string, imported: string}} ImportBinding
+ * @typedef {{local?: string, source?: string, imported?: string}} ExportBinding
+ * @typedef {{
+ *   ast: any,
+ *   imports: Map<string, ImportBinding>,
+ *   variables: Map<string, any>,
+ *   exports: Map<string, ExportBinding>,
+ * }} ModuleBindings
+ */
+
+/** @param {any} node */
+function bindingName(node) {
+  return node?.type === 'Identifier' ? node.name : (node?.value ?? null);
+}
+
+/**
+ * A module's runtime imports, its exports, and every variable it declares
+ * once (a name declared twice is left untraceable).
+ * @param {string} source
+ * @returns {ModuleBindings}
+ */
+function moduleBindings(source) {
+  const ast = parseModule(source);
+  /** @type {Map<string, ImportBinding>} */
+  const imports = new Map();
+  /** @type {Map<string, ExportBinding>} */
+  const exports = new Map();
+  /** @type {Map<string, any>} */
+  const variables = new Map();
+  for (const node of ast.program.body) {
+    if (node.type === 'ImportDeclaration' && node.importKind !== 'type') {
+      for (const specifier of /** @type {any[]} */ (node.specifiers)) {
+        if (specifier.importKind === 'type') continue;
+        imports.set(specifier.local.name, {
+          source: node.source.value,
+          imported:
+            specifier.type === 'ImportDefaultSpecifier'
+              ? 'default'
+              : specifier.type === 'ImportNamespaceSpecifier'
+                ? '*'
+                : bindingName(specifier.imported),
+        });
+      }
+    } else if (
+      node.type === 'ExportNamedDeclaration' &&
+      node.exportKind !== 'type'
+    ) {
+      if (node.declaration?.type === 'VariableDeclaration') {
+        for (const declarator of node.declaration.declarations) {
+          const name = bindingName(declarator.id);
+          if (name) exports.set(name, {local: name});
+        }
+      }
+      for (const specifier of /** @type {any[]} */ (node.specifiers ?? [])) {
+        const exported = bindingName(specifier.exported);
+        if (!exported) continue;
+        exports.set(
+          exported,
+          node.source
+            ? {
+                source: node.source.value,
+                imported: bindingName(specifier.local),
+              }
+            : {local: bindingName(specifier.local)},
+        );
+      }
+    } else if (
+      node.type === 'ExportDefaultDeclaration' &&
+      node.declaration?.type === 'Identifier'
+    ) {
+      exports.set('default', {local: node.declaration.name});
+    }
+  }
+  walkAst(ast, node => {
+    if (node.type !== 'VariableDeclarator' || node.id?.type !== 'Identifier') {
+      return;
+    }
+    const name = node.id.name;
+    variables.set(name, variables.has(name) ? null : (node.init ?? null));
+  });
+  return {ast, imports, variables, exports};
+}
+
+/**
+ * The `theme` values a module passes to Core's `Theme`. A `Theme` with no
+ * `theme` prop inherits its parent's and is not evidence either way.
+ * @param {ModuleBindings} bindings
+ * @returns {any[]}
+ */
+function themeElementValues(bindings) {
+  const names = new Set(
+    [...bindings.imports]
+      .filter(
+        ([, binding]) =>
+          CORE_THEME_SOURCES.has(binding.source) &&
+          binding.imported === 'Theme',
+      )
+      .map(([local]) => local),
+  );
+  if (names.size === 0) return [];
+  /** @type {any[]} */
+  const values = [];
+  walkAst(bindings.ast, node => {
+    if (
+      node.type !== 'JSXOpeningElement' ||
+      node.name?.type !== 'JSXIdentifier' ||
+      !names.has(node.name.name)
+    ) {
+      return;
+    }
+    const attribute = (node.attributes ?? []).find(
+      (/** @type {any} */ item) =>
+        item.type === 'JSXAttribute' && item.name?.name === 'theme',
+    );
+    if (!attribute) return;
+    values.push(
+      attribute.value?.type === 'JSXExpressionContainer'
+        ? attribute.value.expression
+        : null,
+    );
+  });
+  return values;
+}
+
+/**
+ * @typedef {{
+ *   load: (file: string) => ModuleBindings | null,
+ *   packageTheme: (source: string, imported: string) => {slug: string, owner: string} | null,
+ *   localTheme: (file: string) => {slug: string, owner: string} | null,
+ * }} ThemeTraceContext
+ */
+
+/**
+ * Follow a `theme` value through local variables, `defineTheme({extends})`
+ * and relative re-exports to the theme package or local theme it comes from.
+ * Null when the value cannot be traced statically.
+ * @param {any} node
+ * @param {string} file
+ * @param {ModuleBindings} bindings
+ * @param {ThemeTraceContext} context
+ * @param {number} depth
+ * @returns {{slug: string, owner: string} | null}
+ */
+function traceThemeValue(node, file, bindings, context, depth) {
+  if (node == null || depth > MAX_THEME_TRACE_DEPTH) return null;
+  if (
+    [
+      'TSAsExpression',
+      'TSSatisfiesExpression',
+      'TSNonNullExpression',
+      'ParenthesizedExpression',
+    ].includes(node.type)
+  ) {
+    return traceThemeValue(node.expression, file, bindings, context, depth + 1);
+  }
+  if (node.type === 'CallExpression' && node.callee?.type === 'Identifier') {
+    const callee = bindings.imports.get(node.callee.name);
+    if (
+      !callee ||
+      !CORE_THEME_SOURCES.has(callee.source) ||
+      callee.imported !== 'defineTheme'
+    ) {
+      return null;
+    }
+    const options = node.arguments?.[0];
+    const base =
+      options?.type === 'ObjectExpression'
+        ? options.properties.find(
+            (/** @type {any} */ property) =>
+              property.type === 'ObjectProperty' &&
+              bindingName(property.key) === 'extends',
+          )
+        : null;
+    return base
+      ? traceThemeValue(base.value, file, bindings, context, depth + 1)
+      : null;
+  }
+  if (node.type !== 'Identifier') return null;
+  const imported = bindings.imports.get(node.name);
+  if (imported) {
+    return traceThemeImport(
+      imported.source,
+      imported.imported,
+      file,
+      context,
+      depth + 1,
+    );
+  }
+  if (bindings.variables.has(node.name)) {
+    return traceThemeValue(
+      bindings.variables.get(node.name),
+      file,
+      bindings,
+      context,
+      depth + 1,
+    );
+  }
+  return null;
+}
+
+/**
+ * @param {string} source
+ * @param {string} imported
+ * @param {string} file
+ * @param {ThemeTraceContext} context
+ * @param {number} depth
+ * @returns {{slug: string, owner: string} | null}
+ */
+function traceThemeImport(source, imported, file, context, depth) {
+  if (depth > MAX_THEME_TRACE_DEPTH) return null;
+  if (!source.startsWith('.')) return context.packageTheme(source, imported);
+  const target = relativeModuleFile(source, file);
+  if (!target) return null;
+  const local = context.localTheme(target);
+  if (local) return local;
+  const bindings = context.load(target);
+  const exported = bindings?.exports.get(imported);
+  if (!bindings || !exported) return null;
+  if (exported.source && exported.imported) {
+    return traceThemeImport(
+      exported.source,
+      exported.imported,
+      target,
+      context,
+      depth + 1,
+    );
+  }
+  return exported.local
+    ? traceThemeValue(
+        {type: 'Identifier', name: exported.local},
+        target,
+        bindings,
+        context,
+        depth + 1,
+      )
+    : null;
+}
+
+/**
+ * The themes the app wires itself, without a generated theme module or a
+ * package.json `astryx.theme`. A theme is wired when the app's own source
+ * imports its built module or stylesheet ({@link resolveDoctorThemeImports}
+ * names them: the imports `theme add` writes), or when the app passes it to
+ * Core's `Theme`: the `theme` value is followed through local variables,
+ * `defineTheme({extends})` and relative re-exports to the theme package or
+ * local theme it comes from. A `theme` value that cannot be traced that way
+ * (a prop, a function result, a lookup) is reported as unconfirmed, never as
+ * missing. The scan reads app source only (no dependencies, build output,
+ * links or type-only imports) within the bounded source walk, and executes
+ * nothing.
+ * @param {string} cwd
+ * @returns {Promise<{
+ *   wired: Array<{slug: string, owner: string, file: string}>,
+ *   unconfirmed: Array<{file: string}>,
+ * }>}
+ */
+export async function themeImportWiring(cwd) {
+  const none = {wired: [], unconfirmed: []};
+  let state;
+  try {
+    state = readThemeState(cwd);
+  } catch {
+    return none;
+  }
+  // A generated module or `astryx.theme` already decides the result.
+  if (state.configured || appPackageNamesTheme(cwd)) return none;
+  const projectDir = state.projectDir;
+  /** @type {DiscoveredTheme[]} */
+  let available;
+  try {
+    available = await discoverDoctorThemes(projectDir);
+  } catch {
+    return none;
+  }
+  if (available.length === 0) return none;
+  const ownerCounts = new Map();
+  for (const theme of available) {
+    const owner = themeRecordOwner(theme);
+    ownerCounts.set(owner, (ownerCounts.get(owner) ?? 0) + 1);
+  }
+  /** @type {ResolvedAppTheme[]} */
+  const themes = [];
+  for (const theme of available) {
+    try {
+      themes.push(
+        resolveDoctorThemeImports(theme, {
+          cwd: projectDir,
+          ownerThemeCount: ownerCounts.get(themeRecordOwner(theme)) ?? 1,
+        }),
+      );
+    } catch {
+      // A theme without built imports cannot be wired by importing them.
+    }
+  }
+  /** @type {Map<string, {slug: string, owner: string, file: string}>} */
+  const wired = new Map();
+  const keyOf = (/** @type {string} */ owner, /** @type {string} */ slug) =>
+    `${owner}\u0000${slug}`;
+  /** @type {Set<string>} */
+  const unconfirmed = new Set();
+  /** @type {Map<string, ModuleBindings | null>} */
+  const parsed = new Map();
+  /** @type {ThemeTraceContext} */
+  const context = {
+    load(file) {
+      if (!parsed.has(file)) {
+        const text = readTextFileIfExists(file);
+        /** @type {ModuleBindings | null} */
+        let bindings;
+        try {
+          bindings = text == null ? null : moduleBindings(text);
+        } catch {
+          bindings = null;
+        }
+        parsed.set(file, bindings);
+      }
+      return parsed.get(file) ?? null;
+    },
+    packageTheme(source, imported) {
+      const owned = available.filter(theme => {
+        const owner = themeRecordOwner(theme);
+        return (
+          !isLocalThemeOwner(owner) &&
+          (source === owner || source.startsWith(`${owner}/`))
+        );
+      });
+      if (owned.length === 0) return null;
+      const bySlug = THEME_PATH_RE.exec(source)?.[1];
+      const pick =
+        (bySlug && owned.find(theme => theme.slug === bySlug)) ||
+        (owned.filter(theme => theme.exportName === imported).length === 1
+          ? owned.find(theme => theme.exportName === imported)
+          : null) ||
+        (owned.length === 1 ? owned[0] : null);
+      return pick ? {slug: pick.slug, owner: themeRecordOwner(pick)} : null;
+    },
+    localTheme(file) {
+      const theme = themes.find(
+        item =>
+          item.source === 'local' &&
+          path.resolve(item.moduleFile) === path.resolve(file),
+      );
+      return theme ? {slug: theme.slug, owner: theme.owner} : null;
+    },
+  };
+
+  for (const file of listProjectSourceFiles(projectDir, '', {
+    stylesheets: true,
+  })) {
+    let source;
+    try {
+      source = readTextFile(file);
+    } catch {
+      continue;
+    }
+    const shown = relative(projectDir, file);
+    const candidates = themes.filter(
+      theme =>
+        !wired.has(keyOf(theme.owner, theme.slug)) &&
+        (theme.source === 'local'
+          ? source.includes(path.basename(theme.moduleFile)) ||
+            source.includes(path.basename(theme.stylesheetFile))
+          : source.includes(theme.module) || source.includes(theme.stylesheet)),
+    );
+    if (candidates.length > 0) {
+      let specifiers;
+      try {
+        specifiers =
+          path.extname(file) === '.css'
+            ? stylesheetImports(source)
+            : moduleSpecifiers(source, {runtimeOnly: true});
+      } catch {
+        specifiers = new Set();
+      }
+      for (const theme of candidates) {
+        if ([...specifiers].some(spec => importsTheme(spec, file, theme))) {
+          wired.set(keyOf(theme.owner, theme.slug), {
+            slug: theme.slug,
+            owner: theme.owner,
+            file: shown,
+          });
+        }
+      }
+    }
+    if (
+      path.extname(file) === '.css' ||
+      !source.includes('Theme') ||
+      !source.includes('theme=')
+    ) {
+      continue;
+    }
+    const bindings = context.load(file);
+    if (!bindings) continue;
+    for (const value of themeElementValues(bindings)) {
+      const traced = traceThemeValue(value, file, bindings, context, 0);
+      if (!traced) {
+        unconfirmed.add(shown);
+        continue;
+      }
+      const key = keyOf(traced.owner, traced.slug);
+      if (!wired.has(key)) wired.set(key, {...traced, file: shown});
+    }
+  }
+  // In discovery order, so the report does not depend on the file walk.
+  const ordered = available.flatMap(theme => {
+    const found = wired.get(keyOf(themeRecordOwner(theme), theme.slug));
+    return found ? [found] : [];
+  });
+  return {
+    wired: ordered,
+    unconfirmed: [...unconfirmed].sort().map(file => ({file})),
+  };
+}
+
+/**
+ * The pass message's list of themes wired by import, each with the file that
+ * imports it.
+ * @param {Array<{slug: string, file: string}>} wired
+ */
+function wiredByImportList(wired) {
+  const shown = wired.slice(0, 5).map(({slug, file}) => `${slug} (${file})`);
+  const more = wired.length - shown.length;
+  return more > 0 ? `${shown.join(', ')} and ${more} more` : shown.join(', ');
+}
+
+/**
  * The `themes` check that every released doctor report carries. Its id is
  * stable, so it stays beside the app-theme checks. Without a generated theme
  * module it reports what it always has: whether an `@astryxdesign/theme-*`
  * package is installed, and whether the app's package.json names a theme in
- * `astryx.theme`. With a generated module it reports the overall result of the
- * app-theme checks.
+ * `astryx.theme`, or else whether the app's own source imports a theme's built
+ * module or stylesheet ({@link themeImportWiring}). With a generated module it
+ * reports the overall result of the app-theme checks.
  * @param {string} cwd
  * @param {DoctorCheck[]} appChecks - the checks {@link checkAppThemes} returned
+ * @param {{wired: Array<{slug: string, file: string}>, unconfirmed: Array<{file: string}>}} [wiring] -
+ *   what {@link themeImportWiring} returned
  * @returns {DoctorCheck}
  */
-export function checkThemes(cwd, appChecks) {
+export function checkThemes(
+  cwd,
+  appChecks,
+  wiring = {wired: [], unconfirmed: []},
+) {
+  const wiredByImport = wiring.wired;
   const label = 'Theme packages';
   const managed = appChecks.some(
     check => APP_THEME_CHECK_IDS.has(check.id) && check.status !== 'info',
@@ -475,6 +976,14 @@ export function checkThemes(cwd, appChecks) {
 
   const run = getCliInvocation(cwd);
   const packages = listDoctorThemePackages(cwd);
+  if (packages.length === 0 && wiredByImport.length > 0) {
+    return {
+      id: 'themes',
+      label,
+      status: 'pass',
+      message: `Themes wired by import: ${wiredByImportList(wiredByImport)}.`,
+    };
+  }
   if (packages.length === 0) {
     return {
       id: 'themes',
@@ -485,6 +994,24 @@ export function checkThemes(cwd, appChecks) {
     };
   }
   const names = packages.join(', ');
+  if (!appPackageNamesTheme(cwd) && wiredByImport.length > 0) {
+    return {
+      id: 'themes',
+      label,
+      status: 'pass',
+      message: `Theme package(s) installed (${names}); wired by import: ${wiredByImportList(wiredByImport)}.`,
+    };
+  }
+  if (!appPackageNamesTheme(cwd) && wiring.unconfirmed.length > 0) {
+    const files = wiring.unconfirmed.map(({file}) => file).join(', ');
+    return {
+      id: 'themes',
+      label,
+      status: 'info',
+      message: `Theme package(s) installed (${names}); ${files} pass${wiring.unconfirmed.length === 1 ? 'es' : ''} a theme to Theme that doctor could not trace to a theme import, so it could not confirm which theme is wired.`,
+      fix: `If no theme is applied, add one with \`${run} theme add <slug>\`.`,
+    };
+  }
   if (!appPackageNamesTheme(cwd)) {
     return {
       id: 'themes',

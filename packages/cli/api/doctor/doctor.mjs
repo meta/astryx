@@ -65,7 +65,11 @@ import {typedEdges} from '../docs/node/node.mjs';
 import {detailView, indexView} from '../../foundation/doc-compiler/lenses.mjs';
 import {isExperimentalTreeNode} from '../../foundation/doc-compiler/tree.mjs';
 import {semverCompare, isValidSemver, satisfiesRange} from '../../foundation/env/semver.mjs';
-import {checkAppThemes, checkThemes} from './theme-checks.mjs';
+import {
+  checkAppThemes,
+  checkThemes,
+  themeImportWiring,
+} from './theme-checks.mjs';
 import {availableLine, RUN_FROM_PROJECT, upgradeLine} from '../../foundation/release/notices.mjs';
 import {COMPUTER_COMMAND, COMPUTER_INSTALL_STEP} from '../../foundation/agent-docs/computer-agent-text.mjs';
 import {alignCommand, addCliCommandFor, computerAgentTextState, installCommandFor, insideProjectElsewhere, projectCoreVersion, projectHasOwnCli, computerIntegrationsOutside, computerIntegrationsToAdd, displayHomePath, outsideProject, releaseFacts, builtIntegrationPackages} from './_adapter.mjs';
@@ -2190,7 +2194,10 @@ export async function runChecks(options = {}) {
     if (check) checks.push(check);
     if (fn === checkVersionAlignment) {
       const appThemeChecks = await checkAppThemes(cwd);
-      checks.push(checkThemes(cwd, appThemeChecks), ...appThemeChecks);
+      checks.push(
+        checkThemes(cwd, appThemeChecks, await themeImportWiring(cwd)),
+        ...appThemeChecks,
+      );
       checks.push(await checkConfig(ctx));
     }
   }

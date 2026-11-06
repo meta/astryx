@@ -113,8 +113,9 @@ export function readTextFileIfExists(file) {
  * links. The doctor parses the returned bytes without executing app code.
  * @param {string} root
  * @param {string} generatedModule
+ * @param {{stylesheets?: boolean}} [options] - also list `.css` files
  */
-export function listProjectSourceFiles(root, generatedModule) {
+export function listProjectSourceFiles(root, generatedModule, options = {}) {
   /** @type {string[]} */
   const files = [];
   /** @type {string[]} */
@@ -137,7 +138,8 @@ export function listProjectSourceFiles(root, generatedModule) {
       } else if (
         entry.isFile() &&
         file !== generatedModule &&
-        SOURCE_EXTENSIONS.has(path.extname(entry.name))
+        (SOURCE_EXTENSIONS.has(path.extname(entry.name)) ||
+          (options.stylesheets === true && path.extname(entry.name) === '.css'))
       ) {
         files.push(file);
       }
