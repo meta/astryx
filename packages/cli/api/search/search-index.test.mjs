@@ -4,7 +4,8 @@
  * @file A stored search index ranks as the folder's search does: an index of
  * the whole project, and per-package indexes plus a Core index when no package
  * replaces another's docs, ranked by `rankSearchIndex`, answer every golden
- * query with the results, order, and scores `search` gives in that project.
+ * query with the whole response `search` gives in that project, linked
+ * descriptions of an integration's components included.
  */
 
 import fs from 'node:fs';
@@ -37,23 +38,63 @@ const GOLDEN = [
   'chart',
   'settings page',
   'comment thread',
+  'AcmeButton',
+  'branded press target',
 ];
+const ACME = '@acme/ui';
+
+/** An integration whose component description holds inline doc tokens. */
+function writeAcme(dir) {
+  const root = path.join(dir, 'node_modules', '@acme', 'ui');
+  fs.mkdirSync(path.join(root, 'src'), {recursive: true});
+  fs.writeFileSync(
+    path.join(root, 'package.json'),
+    JSON.stringify({
+      name: ACME,
+      version: '1.0.0',
+      type: 'module',
+      exports: {'./AcmeButton': './src/AcmeButton.tsx'},
+    }),
+  );
+  fs.writeFileSync(
+    path.join(root, 'astryx.integration.mjs'),
+    "export default {components: './src'};\n",
+  );
+  fs.writeFileSync(
+    path.join(root, 'src', 'AcmeButton.tsx'),
+    'export function AcmeButton() { return null; }\n',
+  );
+  fs.writeFileSync(
+    path.join(root, 'src', 'AcmeButton.doc.mjs'),
+    `export const docs = ${JSON.stringify({
+      name: 'AcmeButton',
+      displayName: 'Acme Button',
+      category: 'Actions',
+      description:
+        'AcmeButton is a branded press target. Add it with {@command component AcmeButton}.',
+      keywords: ['acme button', 'branded button'],
+      props: [],
+    })};\n`,
+  );
+}
 
 /**
  * @param {string} name
  * @param {string[]} linked
  */
-function project(name, linked) {
+function project(name, linked, acme = false) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), `astryx-${name}-`));
   fs.writeFileSync(
     path.join(dir, 'package.json'),
     JSON.stringify({
       name,
-      dependencies: Object.fromEntries(
-        linked.map(pkg => [`@astryxdesign/${pkg}`, '*']),
-      ),
+      dependencies: Object.fromEntries([
+        ...linked.map(pkg => [`@astryxdesign/${pkg}`, '*']),
+        ...(acme ? [[ACME, '*']] : []),
+      ]),
     }),
   );
+  if (acme) writeAcme(dir);
   const scope = path.join(dir, 'node_modules', '@astryxdesign');
   fs.mkdirSync(scope, {recursive: true});
   for (const pkg of linked)
@@ -61,11 +102,11 @@ function project(name, linked) {
   return dir;
 }
 
-/** @param {{data: {results: any[], matchCount: number}}} response */
-const ranked = response => ({
-  matchCount: response.data.matchCount,
-  results: response.data.results.map(r => [r.domain, r.package, r.name, r.score]),
-});
+/**
+ * The whole response, as JSON carries it.
+ * @param {unknown} response
+ */
+const ranked = response => JSON.parse(JSON.stringify(response));
 
 describe('rankSearchIndex over stored indexes', () => {
   /** @type {string[]} */
@@ -75,7 +116,7 @@ describe('rankSearchIndex over stored indexes', () => {
   /** @type {import('./search.type.mjs').SearchIndex[]} */
   let indexes;
   beforeAll(async () => {
-    full = project('full', ['core', ...INTEGRATIONS]);
+    full = project('full', ['core', ...INTEGRATIONS], true);
     const coreOnly = project('core-only', ['core']);
     dirs.push(full, coreOnly);
     indexes = [JSON.parse(JSON.stringify(await exportSearchIndex({cwd: coreOnly})))];
@@ -89,6 +130,13 @@ describe('rankSearchIndex over stored indexes', () => {
       // Stored and read back, as a catalog keeps it.
       indexes.push(JSON.parse(JSON.stringify(index)));
     }
+    const acme = project('acme', ['core'], true);
+    dirs.push(acme);
+    indexes.push(
+      JSON.parse(
+        JSON.stringify(await exportSearchIndex({cwd: acme, package: ACME})),
+      ),
+    );
   }, SLOW);
   afterAll(() => {
     for (const dir of dirs) fs.rmSync(dir, {recursive: true, force: true});
@@ -128,6 +176,31 @@ describe('rankSearchIndex over stored indexes', () => {
     },
     SLOW,
   );
+
+  it(
+    "an integration component's description prints with its tokens resolved",
+    async () => {
+      const {results} = (await rankSearchIndex('AcmeButton', indexes)).data;
+      expect(results[0]).toMatchObject({package: ACME, name: 'AcmeButton'});
+      expect(results[0].description).not.toContain('{@');
+      expect(results[0].description).toContain('astryx component AcmeButton');
+    },
+    SLOW,
+  );
+
+  it('reports meta.partial when no index had Core, as search() does', async () => {
+    const docsOnly = {
+      ...indexes[0],
+      candidates: indexes[0].candidates.filter(c => c.domain === 'doc'),
+      coreSkipped: 'Core is not installed here.',
+    };
+    const response = await rankSearchIndex('button', [docsOnly]);
+    expect(response.meta?.partial).toMatchObject({
+      reason: 'Core is not installed here.',
+    });
+    const withCore = await rankSearchIndex('button', [docsOnly, indexes[1]]);
+    expect(withCore.meta?.partial).toBeUndefined();
+  });
 
   it('a package index holds only that package, with no folder paths', () => {
     const index = indexes[1];
