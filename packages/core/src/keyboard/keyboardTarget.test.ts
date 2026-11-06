@@ -529,6 +529,64 @@ describe('keepFieldAboveKeyboard', () => {
     expect(scrollBy).not.toHaveBeenCalled();
   });
 
+  it('reads every box before it moves a container that turns too tall, and reveals its field from where the move leaves it', () => {
+    const bottom = window.innerHeight;
+    vi.stubGlobal('scrollBy', vi.fn());
+    // A full-height drawer below a 56 px header, docked to the bottom edge.
+    const drawer = element(
+      'div',
+      {top: 56, height: bottom - 56},
+      {position: 'fixed'},
+    );
+    const list = element(
+      'div',
+      {top: 56, height: bottom - 56},
+      {overflowY: 'auto'},
+    );
+    Object.defineProperty(list, 'scrollHeight', {value: 1400});
+    Object.defineProperty(list, 'clientHeight', {value: bottom - 56});
+    // Each layout read records the drawer's translate at that moment.
+    const reads: string[] = [];
+    let listTop = 0;
+    Object.defineProperty(list, 'scrollTop', {
+      configurable: true,
+      get: () => {
+        reads.push(drawer.style.translate);
+        return listTop;
+      },
+      set: (value: number) => {
+        listTop = Math.max(0, Math.min(1400 - (bottom - 56), value));
+      },
+    });
+    const input = element('input', {top: bottom - 68, height: 40});
+    list.append(input);
+    drawer.append(list);
+    document.body.append(drawer);
+    vi.mocked(Element.prototype.getBoundingClientRect).mockImplementation(
+      function (this: Element) {
+        if (this === input || this === list) {
+          reads.push(drawer.style.translate);
+        }
+        return boxOf(this);
+      },
+    );
+    track(keepFieldAboveKeyboard(input));
+    focusOn(input);
+    // A short keyboard lifts the drawer by the part of it the keyboard covers.
+    keyboard(40);
+    const lifted = drawer.style.translate;
+    expect(animatorFor(drawer).get('y')).toBeLessThan(0);
+    // A tall keyboard leaves the drawer too tall. It goes back to rest, and
+    // its scroller reveals the field. Every read comes before that move.
+    reads.length = 0;
+    keyboard(300);
+    expect(drawer.style.translate).toBe('');
+    expect(reads.length).toBeGreaterThan(0);
+    expect(reads.filter(translate => translate !== lifted)).toEqual([]);
+    const keyboardTop = bottom - 300;
+    expect(listTop).toBe(bottom - 28 - (keyboardTop - FIELD_OFFSET));
+  });
+
   it("leaves a field on a page with nothing to scroll to the browser's own reveal", () => {
     const scrollBy = vi.fn();
     vi.stubGlobal('scrollBy', scrollBy);

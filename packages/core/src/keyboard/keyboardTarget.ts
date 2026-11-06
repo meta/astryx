@@ -351,13 +351,14 @@ function scrollBy(scroller: Element, distance: number, win: Window): void {
 
 // How far `field` sits outside the band it must be in. The band is inside its
 // scroller's box and the viewport, and `offset` above the keyboard while one
-// shows.
+// shows. A move not yet written shifts the field and its scroller by `shift`.
 function revealDistance(
   field: Element,
   scroller: Element,
   height: number,
   offset: number,
   win: Window,
+  shift = 0,
 ): number {
   const doc = field.ownerDocument;
   const keyboardTop = layoutViewportHeight(win) - height;
@@ -366,11 +367,16 @@ function revealDistance(
     height > KEYBOARD_EPSILON ? keyboardTop - offset : keyboardTop;
   if (scroller !== (doc.scrollingElement ?? doc.documentElement)) {
     const box = scroller.getBoundingClientRect();
-    safeTop = Math.max(safeTop, box.top);
-    safeBottom = Math.min(safeBottom, box.bottom);
+    safeTop = Math.max(safeTop, box.top + shift);
+    safeBottom = Math.min(safeBottom, box.bottom + shift);
   }
   const box = field.getBoundingClientRect();
-  return distanceIntoBand(box.top, box.bottom, safeTop, safeBottom);
+  return distanceIntoBand(
+    box.top + shift,
+    box.bottom + shift,
+    safeTop,
+    safeBottom,
+  );
 }
 
 // Scrolls `field` into its band with its nearest scroller, the document
@@ -677,15 +683,29 @@ function rideWithKeyboard(
         : 0;
     // Rest is y 0, never -0, so the animator releases its translate there.
     const y = lift > 0 ? -lift : 0;
+    // Every box is read before anything is written. The scroller moves with
+    // the container, so the reveal measures the field where the move leaves
+    // it.
+    const revealBy =
+      inside == null
+        ? 0
+        : revealDistance(
+            inside.field,
+            inside.scroller,
+            height,
+            offset,
+            win,
+            y - animator.get('y'),
+          );
+    if (inside != null && Math.abs(revealBy) > KEYBOARD_EPSILON) {
+      scrollBy(inside.scroller, revealBy, win);
+    }
     if (y !== 0 || animator.get('y') !== 0) {
       if (transition == null) {
         animator.set({y});
       } else {
         rideKeyboard(animator, {y}, transition);
       }
-    }
-    if (inside != null) {
-      reveal(inside.field, inside.scroller, height, offset, win);
     }
     // The target is now at rest, or rides there on the keyboard's slide, so
     // a stopped ride only stops listening. A set here would cut the slide.

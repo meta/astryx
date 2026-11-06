@@ -41,6 +41,7 @@ import {
 import {
   bringsUpKeyboard,
   getKeyboardLayoutGuide,
+  hidesField,
   keyboardProfileOf,
 } from './keyboardLayoutGuide';
 import type {KeyboardTransition} from './keyboardModel';
@@ -137,6 +138,13 @@ function overlapOf(bodyBottom: number, obstructionTop: number): number {
 // Under half a pixel is rounding, not a keyboard.
 function isVisualViewportRecovered(): boolean {
   return getKeyboardHeight(window) <= 0.5;
+}
+
+// Whether focus on `target` may keep the keyboard up. A control that brings
+// one up does, and so can a frame, an open shadow host or a custom element,
+// through its own field.
+function mayKeepKeyboard(target: Element | null): boolean {
+  return target != null && (bringsUpKeyboard(target) || hidesField(target));
 }
 
 /**
@@ -530,11 +538,12 @@ export function useMobileKeyboard(
             settle();
             // Focus left for a control that brings up no keyboard, so the
             // keyboard goes down now. A select's picker takes the keyboard's
-            // place instead.
+            // place instead. A frame, an open shadow host or a custom element
+            // can hold a field that keeps it up.
             if (
               isExpandedRef.current &&
               hasKeyboardLayoutRef.current &&
-              !bringsUpKeyboard(document.activeElement)
+              !mayKeepKeyboard(document.activeElement)
             ) {
               holdThroughUnguidedHide();
             }
@@ -683,6 +692,8 @@ export function useMobileKeyboard(
       // So nothing moves then. A ride not yet landed goes on from there at the
       // same speed. A control that takes focus first and brings up a keyboard
       // or a picker keeps that space covered, so the content rides back up.
+      // Focus moving into a frame, an open shadow host or a custom element
+      // does too: a field there can keep the keyboard.
       const holdThroughUnguidedHide = () => {
         const animator = unguidedAnimator();
         if (animator == null || heldHide != null) {
@@ -703,7 +714,7 @@ export function useMobileKeyboard(
             if (
               active instanceof HTMLElement &&
               body.contains(active) &&
-              bringsUpKeyboard(active)
+              mayKeepKeyboard(active)
             ) {
               hold.release();
               void rideKeyboardSpring(animator, 0);

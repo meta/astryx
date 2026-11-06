@@ -144,10 +144,11 @@ that times motion with it. Everything here is internal to
   keyboard gone with no ride under way, as after a downward dismissal, glides
   the content to its place on the same spring. A field focused before the
   keyboard is down rides it back up. Focus moving to a select starts no ride:
-  iOS puts the select's picker where the keyboard was. Firefox for Android
-  takes the same path, but reports the hide once, at its end, and the content
-  moves at that report (AST-099 Gap 12). Safari's and Firefox's reveals are
-  unchanged.
+  iOS puts the select's picker where the keyboard was. Nor does focus moving
+  into a frame, an open shadow host or a custom element, whose own field can
+  keep the keyboard up. Firefox for Android takes the same path, but reports
+  the hide once, at its end, and the content moves at that report (AST-099
+  Gap 12). Safari's and Firefox's reveals are unchanged.
 - **When the keyboard goes:** the body's scroll goes back to where it was
   when the keyboard came up, within the range left once the inset drops. A
   field that keeps focus, as after iOS's downward keyboard dismissal, is then

@@ -96,9 +96,12 @@ function opensPickerOverPage(target: EventTarget | null): boolean {
   );
 }
 
-// Whether `target` can hold a field the guide cannot see: a frame, an open
-// shadow host or a custom element.
-function hidesField(target: Element): boolean {
+/**
+ * Whether `target` can hold a field the page cannot see: a frame, an open
+ * shadow host or a custom element. Focus on a field inside one leaves
+ * `document.activeElement` on it.
+ */
+export function hidesField(target: Element): boolean {
   return (
     target.tagName === 'IFRAME' ||
     target.tagName === 'FRAME' ||

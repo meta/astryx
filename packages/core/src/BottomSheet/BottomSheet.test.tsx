@@ -3714,6 +3714,51 @@ describe('BottomSheet', () => {
         expect(body.scrollTop).toBe(248);
       });
 
+      // A field the sheet cannot see: one in an open shadow host or in a frame.
+      // Focus on it leaves `document.activeElement` on its holder.
+      const hiddenFields = [
+        ['an open shadow host', 'shadow host'],
+        ['a frame', 'frame'],
+      ] as const;
+      function renderWithHiddenField(kind: 'shadow host' | 'frame') {
+        const sheet = renderIOSSheet({
+          picker:
+            kind === 'frame' ? (
+              <iframe title="Editor" sandbox="" />
+            ) : (
+              <div title="Editor" />
+            ),
+        });
+        const holder = screen.getByTitle('Editor');
+        const field: HTMLElement =
+          kind === 'frame'
+            ? holder
+            : holder
+                .attachShadow({mode: 'open'})
+                .appendChild(document.createElement('input'));
+        const focusHiddenField = () => {
+          act(() => field.focus());
+          expect(document.activeElement).toBe(holder);
+        };
+        return {...sheet, focusHiddenField};
+      }
+
+      it.each(hiddenFields)(
+        'starts no ride when focus moves from a field into %s, whose own field can keep the keyboard up',
+        async (_, kind) => {
+          const {body, input, report, drawnTop, focusHiddenField} =
+            renderWithHiddenField(kind);
+          act(() => input.focus());
+          report(500);
+          const settled = drawnTop();
+          focusHiddenField();
+          await nextFrame();
+          expect(drawnTop(performance.now() + 450)).toBe(settled);
+          expect(keyboardInsetOf(body)).toBe(348);
+          expect(body.scrollTop).toBe(248);
+        },
+      );
+
       it('rides the content back up when a field takes focus before the keyboard is gone', async () => {
         const {body, input, report, drawnTop} = renderIOSSheet();
         act(() => input.focus());
@@ -3727,6 +3772,25 @@ describe('BottomSheet', () => {
         expect(keyboardInsetOf(body)).toBe(348);
         expect(body.scrollTop).toBe(248);
       });
+
+      it.each(hiddenFields)(
+        'rides the content back up when focus moves into %s before the keyboard is gone',
+        async (_, kind) => {
+          const {body, input, report, drawnTop, focusHiddenField} =
+            renderWithHiddenField(kind);
+          act(() => input.focus());
+          report(500);
+          act(() => input.blur());
+          await nextFrame();
+          // Focus moves to a field inside the holder mid-slide, so the
+          // keyboard stays.
+          focusHiddenField();
+          await nextFrame();
+          expect(drawnTop(performance.now() + 450)).toBeCloseTo(-248, 0);
+          expect(keyboardInsetOf(body)).toBe(348);
+          expect(body.scrollTop).toBe(248);
+        },
+      );
 
       it('glides the content to its new place when the keyboard goes while its field keeps focus, as a downward dismissal leaves it', () => {
         const {body, input, report, drawnTop} = renderIOSSheet();
