@@ -1499,6 +1499,44 @@ describe('useLayer', () => {
       expect(onTooltipShow).toHaveBeenCalledTimes(1);
     });
 
+    it('reports a close start as a hide starts, before its toggle: the browser\u2019s own hide and hide() alike', () => {
+      const {browserHide, runToggleTasks} = installBrowserHidePopoverApi();
+      const events: string[] = [];
+      function CloseStartHarness() {
+        const layer = useLayerInternal({
+          mode: 'context',
+          onCloseStart: () => events.push('close-start'),
+          onHide: () => events.push('hide'),
+        });
+        return (
+          <>
+            <button type="button" ref={layer.ref} onClick={layer.show}>
+              Trigger
+            </button>
+            <button type="button" onClick={layer.hide}>
+              Close
+            </button>
+            {layer.render(<span>Content</span>)}
+          </>
+        );
+      }
+      const {getByRole, getByText} = render(<CloseStartHarness />);
+      fireEvent.click(getByRole('button', {name: 'Trigger'}));
+      act(() => runToggleTasks());
+      expect(events).toEqual([]);
+      // The browser hides the popover itself, as a close watcher's Escape.
+      const popover = getByText('Content').closest<HTMLElement>('[popover]')!;
+      act(() => browserHide(popover));
+      expect(events).toEqual(['close-start']);
+      act(() => runToggleTasks());
+      expect(events).toEqual(['close-start', 'hide']);
+      // The hook's own hide() starts a close the same way, before its hide.
+      fireEvent.click(getByRole('button', {name: 'Trigger'}));
+      act(() => runToggleTasks());
+      fireEvent.click(getByRole('button', {name: 'Close'}));
+      expect(events).toEqual(['close-start', 'hide', 'close-start', 'hide']);
+    });
+
     it('opens a layer at once when the press that closed another one opens it after the hide has returned', () => {
       // A light dismiss runs at pointerup and the click that follows opens the
       // next layer in the same gesture: the browser accepts that show (its
