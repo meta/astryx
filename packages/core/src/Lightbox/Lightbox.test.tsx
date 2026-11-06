@@ -1482,6 +1482,24 @@ describe('Lightbox gestures for a mouse and a pen (spec:AST-094 FR43)', () => {
     expect(stage).not.toHaveAttribute('data-zoom-dragging');
   });
 
+  it('takes the zoom pan\u2019s begin threshold from the shared pan, with no pointerdown listener of its own on the stage', () => {
+    const added = vi.spyOn(EventTarget.prototype, 'addEventListener');
+    try {
+      const {stage} = renderPhoto();
+      // The gesture host's own press listener is passive. Any other press
+      // listener on the stage would be Lightbox's own.
+      const ownPress = added.mock.calls.filter(
+        ([type, , options], index) =>
+          added.mock.contexts[index] === stage &&
+          type === 'pointerdown' &&
+          !(typeof options === 'object' && options.passive === true),
+      );
+      expect(ownPress).toHaveLength(0);
+    } finally {
+      added.mockRestore();
+    }
+  });
+
   it('leaves the viewer open on a caption click after a zoomed drag from above the photo', async () => {
     const onOpenChange = vi.fn();
     render(

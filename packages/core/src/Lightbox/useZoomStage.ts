@@ -27,7 +27,6 @@ import {PinchGestureRecognizer} from '../gestures/PinchGestureRecognizer';
 import {TapGestureRecognizer} from '../gestures/TapGestureRecognizer';
 import type {Point} from '../gestures/types';
 import {useGestureRecognizer} from '../gestures/useGestureRecognizer';
-import {useAttachment} from '../hooks/useAttachment';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {UIKIT_PAN} from '../motion/uikit/gestures';
 import {coast as coastCurves} from '../motion/coast';
@@ -106,11 +105,6 @@ const DOUBLE_TAP_POINTERS = ['touch'] as const;
 /** A mouse's or a pen's click beside the photo is the browser's `click`. */
 const TAP_POINTERS = ['touch'] as const;
 
-/** Sets the zoom pan's begin threshold for the press that just landed. */
-function setBeginThreshold(pan: PanGestureRecognizer, px: number): void {
-  pan.hysteresis = px;
-}
-
 /**
  * Lightbox's zoom gestures. They take every pointer: a mouse, a pen and a
  * finger alike. The pinch is the fingers', and a ctrl-wheel pinches too. The
@@ -150,8 +144,8 @@ function setBeginThreshold(pan: PanGestureRecognizer, px: number): void {
  * It follows UIKit's measured behavior (motion/uikit/zoomMedia.ts). Inside the
  * limits the zoom follows the pinch 1:1. The content point under the centroid
  * stays under it, past the limits too. No scale momentum follows the lift.
- * Past a limit, the return is one eased animation anchored at the last
- * centroid. In the touch presentation, a zoomed pan coasts and bounces like a
+ * Past a limit, the return springs from the pinch's velocity, anchored at
+ * the last centroid. In the touch presentation, a zoomed pan coasts and bounces like a
  * scroll view. A two-finger tap does nothing.
  */
 export function useZoomStage(
@@ -253,6 +247,14 @@ export function useZoomStage(
       allowedPointerTypes: EVERY_POINTER,
       allowedScrollTypes: ['continuous'],
       shouldBegin: recognizer => panShouldBeginRef.current(recognizer),
+      // A mouse's or a pen's drag on a zoomed photo pans from its first move.
+      // A finger keeps UIKit's begin threshold, which tells a tap from a pan.
+      hysteresis: touch =>
+        touch.pointerType !== 'touch' &&
+        geometryRef.current != null &&
+        isZoomed(geometryRef.current, current())
+          ? 0
+          : UIKIT_PAN.hysteresis.value,
     });
     // A finger's double tap. A mouse's or a pen's double-click is the
     // browser's `dblclick`, which keeps the system's double-click speed.
@@ -286,29 +288,6 @@ export function useZoomStage(
 
   const recognizerOptions = {isEnabled: options.isEnabled, manageStyle: false};
   const surfaceRef = options.surfaceRef ?? options.stageRef;
-  // A mouse's or a pen's drag on a zoomed photo pans from its first move. A
-  // finger keeps UIKit's begin threshold, which tells a tap from a pan. Each
-  // press sets it, before the pan can begin.
-  useAttachment(
-    surfaceRef,
-    element => {
-      const onPress = (event: PointerEvent) => {
-        const geometry = geometryRef.current;
-        setBeginThreshold(
-          recognizers.pan,
-          event.pointerType !== 'touch' &&
-            geometry != null &&
-            isZoomed(geometry, current())
-            ? 0
-            : UIKIT_PAN.hysteresis.value,
-        );
-      };
-      element.addEventListener('pointerdown', onPress, {capture: true});
-      return () =>
-        element.removeEventListener('pointerdown', onPress, {capture: true});
-    },
-    recognizers,
-  );
 
   useGestureRecognizer(
     surfaceRef,
