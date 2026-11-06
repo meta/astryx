@@ -232,6 +232,35 @@ async function observe(page: Page) {
       probe.remove();
       return tokens;
     }
+    function channels(color: string) {
+      const [r, g, b, a = 1] = (color.match(/[\d.]+/g) ?? []).map(Number);
+      return {r, g, b, a: color.startsWith('rgba') ? a : 1};
+    }
+    // The badge fill is a translucent tint, so composite every background
+    // from the element up to the first opaque one.
+    function compositeBackground(element: Element) {
+      const layers: ReturnType<typeof channels>[] = [];
+      let node: Element | null = element;
+      while (node) {
+        const layer = channels(getComputedStyle(node).backgroundColor);
+        if (layer.a > 0) {
+          layers.push(layer);
+        }
+        if (layer.a >= 1) {
+          break;
+        }
+        node = node.parentElement;
+      }
+      let result = {r: 255, g: 255, b: 255};
+      for (const layer of layers.reverse()) {
+        result = {
+          r: layer.r * layer.a + result.r * (1 - layer.a),
+          g: layer.g * layer.a + result.g * (1 - layer.a),
+          b: layer.b * layer.a + result.b * (1 - layer.a),
+        };
+      }
+      return `rgb(${result.r}, ${result.g}, ${result.b})`;
+    }
     function luminance(color: string) {
       const [r, g, b] = (color.match(/[\d.]+/g) ?? []).map(Number);
       const channel = (value: number) => {
@@ -305,7 +334,8 @@ async function observe(page: Page) {
                 lineHeight: px(style.lineHeight),
                 transform: style.transform,
               },
-              contrast: contrast(style.color, style.backgroundColor),
+              surface: compositeBackground(badge),
+              contrast: contrast(style.color, compositeBackground(badge)),
             };
           }),
         };
@@ -463,6 +493,11 @@ for (const item of cases) {
           `${at} font size ${paint.fontSize}, expected ${tokens.fontSize}`,
         );
         check(paint.transform === 'none', `${at} transform ${paint.transform}`);
+        // WCAG 1.4.3: the glyph is normal-size text on the badge surface.
+        check(
+          badge.contrast >= 4.5,
+          `${at} text contrast ${badge.contrast} on ${badge.surface}`,
+        );
         // A badge is never shorter than the theme's badge size or one line
         // of its glyph. At the default text size it keeps the theme's size.
         const expectedHeight = Math.max(tokens.spacing5, paint.lineHeight);
@@ -506,7 +541,7 @@ for (const item of cases) {
         layout:
           'each badge is at least spacing-5 wide and exactly max(spacing-5, one line of its glyph) tall; the glyph stays inside the badge; badges run from inline start to inline end; no sideways document scroll',
         contrast:
-          'badge text-on-background contrast is recorded for information; the token pair is owned by the token layer',
+          'badge text reaches 4.5:1 against the composited badge surface (WCAG 1.4.3)',
       },
       observed: {
         build: storybookSha,
