@@ -33,14 +33,15 @@ export interface LayerProviderProps {
 const DEFAULT_TOAST_CONFIG = {};
 
 /**
- * App-level provider for layer systems (toast, sheet, imperative modals).
+ * App-level configuration for toasts and the viewport inset.
  *
  * Optional — hooks fall back to a lazy self-mounting viewport when no
  * provider exists. The provider renders the toast viewport once Toast is
- * imported; without Toast it renders no empty viewport. Nested providers are
- * no-ops, except that one declaring an `inset` narrows it for the anchored
- * layers in its subtree. `inset` declares a persistent bar floating over a
- * viewport edge once; anchored layers and toasts both clear it.
+ * imported; without Toast it renders no empty viewport. A nested provider
+ * keeps the outer toast configuration and mounts no second viewport. One that
+ * declares an `inset` applies its declared edges to the anchored layers in its
+ * subtree. `inset` declares a persistent bar floating over a viewport edge
+ * once; anchored layers and toasts both clear it.
  *
  * @example
  * ```
@@ -66,8 +67,8 @@ export function LayerProvider({
     [existingContext, inset],
   );
 
-  // Nested provider — pass through. One that declares an inset narrows it
-  // for the anchored layers in its subtree (an app hosted inside another
+  // Nested provider — pass through. One that declares an inset applies it
+  // to the anchored layers in its subtree (an app hosted inside another
   // provider can still declare its own bar); the toast viewport is the
   // root's and reads the root's declaration.
   if (existingContext) {

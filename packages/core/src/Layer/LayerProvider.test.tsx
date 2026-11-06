@@ -171,6 +171,7 @@ describe('LayerProvider toast configuration', () => {
   it('keeps one toast viewport and the outer toast configuration under a nested provider without inset', async () => {
     const {container} = render(
       <LayerProvider toast={{maxVisible: 1}}>
+        <span data-testid="outer">outer</span>
         <LayerProvider toast={{maxVisible: 5}}>
           <span data-testid="app">app</span>
           <ShowsThree />
@@ -183,6 +184,8 @@ describe('LayerProvider toast configuration', () => {
       container.querySelectorAll('[popover="manual"]:not([id])'),
     ).toHaveLength(1);
     // The nested provider adds no element around its children.
-    expect(screen.getByTestId('app').parentElement).toBe(container);
+    expect(screen.getByTestId('app').parentElement).toBe(
+      screen.getByTestId('outer').parentElement,
+    );
   });
 });
