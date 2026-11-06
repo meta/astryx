@@ -405,6 +405,35 @@ describe('Dialog', () => {
     );
   });
 
+  it('focuses the title of a header that mounts with the opening commit only after the dialog is modal', () => {
+    const order: string[] = [];
+    const showModal = HTMLDialogElement.prototype.showModal;
+    HTMLDialogElement.prototype.showModal = vi.fn(function (
+      this: HTMLDialogElement,
+    ) {
+      order.push(`showModal open=${this.open}`);
+      showModal.call(this);
+    });
+    const focus = vi
+      .spyOn(HTMLElement.prototype, 'focus')
+      .mockImplementation(function (this: HTMLElement) {
+        if (this.tagName === 'H2') {
+          order.push(`title focus open=${this.closest('dialog')?.open}`);
+        }
+      });
+    function Harness({open}: {open: boolean}) {
+      return (
+        <Dialog isOpen={open} onOpenChange={() => {}}>
+          {open ? <DialogHeader title="Review" /> : null}
+        </Dialog>
+      );
+    }
+    const harness = render(<Harness open={false} />);
+    harness.rerender(<Harness open />);
+    focus.mockRestore();
+    expect(order).toEqual(['showModal open=false', 'title focus open=true']);
+  });
+
   it('restores focus to the opener when content mounts in the open commit', () => {
     function Harness({
       open,
