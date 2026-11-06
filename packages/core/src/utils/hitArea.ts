@@ -8,8 +8,10 @@
  *   the element and the page around it)
  * @output The touch hit area: how far a target may grow toward 44 px on each
  *   side without taking a tap that is nearer a neighbour. `clampedHitInsets`
- *   and `resolveHitTarget` answer from rects; `watchHitArea` keeps a control's
- *   insets live where the primary pointer is coarse
+ *   and `resolveHitTarget` answer from rects. `watchHitArea` keeps a control's
+ *   insets live where the primary pointer is coarse. `groupGrowth` sizes a
+ *   group's box from its edge members, and shrinks a side the members do not
+ *   reach. `INTERACTIVE_SELECTOR` names what a touch can land on
  * @position Core-internal utility, not exported from `@astryxdesign/core/utils`.
  *   Groups that measure their actions at press start pass `resolveHitTarget`;
  *   a standalone control writes `watchHitArea`'s insets to an invisible
@@ -97,12 +99,50 @@ function growth(rect: HitRect, minSize: number): HitInsets {
 }
 
 /**
+ * How far a group's box grows on each side before any neighbour stops it: as
+ * far as its members on that edge grow toward `minSize`. So an end member's
+ * target reaches past the group, as a lone control's would. A side that
+ * reaches past its edge member shrinks to that member's grown edge, a
+ * negative growth. So a box wider than its members covers only their targets.
+ */
+export function groupGrowth(
+  group: HitRect,
+  members: ReadonlyArray<HitRect>,
+  minSize: number = MIN_TOUCH_TARGET,
+): HitInsets {
+  if (members.length === 0) {
+    return NO_HIT_INSETS;
+  }
+  const insets = {
+    top: -Infinity,
+    right: -Infinity,
+    bottom: -Infinity,
+    left: -Infinity,
+  };
+  for (const member of members) {
+    const own = growth(member, minSize);
+    insets.top = Math.max(insets.top, own.top - (member.top - group.top));
+    insets.right = Math.max(
+      insets.right,
+      own.right - (group.right - member.right),
+    );
+    insets.bottom = Math.max(
+      insets.bottom,
+      own.bottom - (group.bottom - member.bottom),
+    );
+    insets.left = Math.max(insets.left, own.left - (member.left - group.left));
+  }
+  return insets;
+}
+
+/**
  * How far `target` may grow on each side: toward `minSize` on each axis,
  * centered, and on each side no further than half the gap to a neighbour.
  * A neighbour counts when either one, at full growth toward `minSize`, would
  * reach into the other's half of the gap, or their full areas would meet; it
  * stops the side facing it, or,
  * for a neighbour apart on both axes (diagonal), the side with the larger gap.
+ * `full` replaces the centered growth, as `groupGrowth` gives a group's box.
  * That decision rests on the two rects alone, so the neighbour decides the
  * same about this target and the two areas never overlap. A neighbour
  * overlapping the target (an ancestor, an overlay) is not beside it and stops
@@ -112,9 +152,14 @@ export function clampedHitInsets(
   target: HitRect,
   neighbours: ReadonlyArray<HitRect>,
   minSize: number = MIN_TOUCH_TARGET,
+  full: HitInsets = growth(target, minSize),
 ): HitInsets {
-  const full = growth(target, minSize);
-  if (full.top === 0 && full.left === 0) {
+  if (
+    full.top === 0 &&
+    full.right === 0 &&
+    full.bottom === 0 &&
+    full.left === 0
+  ) {
     return NO_HIT_INSETS;
   }
   const insets = {...full};
@@ -212,7 +257,7 @@ export function writeHitInsets(element: HTMLElement, insets: HitInsets): void {
 // --- Live controls -----------------------------------------------------------
 
 /** What a touch can land on: the neighbours a hit area must not take from. */
-const INTERACTIVE = [
+export const INTERACTIVE_SELECTOR = [
   'a[href]',
   'area[href]',
   'button',
@@ -268,6 +313,11 @@ interface Watch {
   readonly element: Element;
   readonly minSize: number;
   readonly ownsDescendantTouches: boolean;
+  readonly growth?: (
+    target: HitRect,
+    toLayout: (rect: HitRect) => HitRect,
+  ) => HitInsets;
+  readonly checkAtPress: boolean;
   readonly onInsets: (insets: HitInsets) => void;
   isVisible: boolean;
   last: HitInsets;
@@ -452,7 +502,7 @@ function watchedOwner(element: Element): Element | null {
 function readCandidates(doc: Document): Candidate[] {
   const seen = new Set<Element>();
   const candidates: Candidate[] = [];
-  for (const found of doc.querySelectorAll(INTERACTIVE)) {
+  for (const found of doc.querySelectorAll(INTERACTIVE_SELECTOR)) {
     const element = watchedOwner(found) ?? found;
     if (!seen.has(element)) {
       seen.add(element);
@@ -498,6 +548,9 @@ function measureOne(
       inLayout(target, target, scale),
       neighbours.map(rect => inLayout(rect, target, scale)),
       watch.minSize,
+      watch.growth?.(inLayout(target, target, scale), rect =>
+        inLayout(rect, target, scale),
+      ),
     ),
     neighbours,
   };
@@ -559,7 +612,8 @@ function scheduleAll(): void {
  * touch is outside the fresh area (a neighbour moved nearer since the last
  * measurement), the control's click is swallowed. The tap then does
  * nothing rather than toggle the wrong control; nothing is re-sent to the
- * neighbour, and the next tap uses the fresh insets.
+ * neighbour, and the next tap uses the fresh insets. A watch whose owner reads
+ * its own targets when a press begins skips this (`checkAtPress`).
  */
 function onPress(event: Event): void {
   // One listener on the document for every watched control, so a control, row
@@ -589,6 +643,10 @@ function checkPress(element: Element, event: PointerEvent): void {
   if (!isCoarse || press.pointerType !== 'touch') {
     return;
   }
+  const checked = [...entry.watches].filter(watch => watch.checkAtPress);
+  if (checked.length === 0) {
+    return;
+  }
   const candidates = readCandidates(element.ownerDocument);
   const x = press.clientX;
   const y = press.clientY;
@@ -596,7 +654,7 @@ function checkPress(element: Element, event: PointerEvent): void {
   // fresh area too (a corner beside an offset or diagonal neighbour), and
   // a few px past it, where a browser's own touch adjustment reaches.
   let isNearerNeighbour = false;
-  for (const watch of entry.watches) {
+  for (const watch of checked) {
     const {target, insets, neighbours} = measureOne(watch, candidates);
     deliver(watch, insets);
     const own = distanceTo(target, x, y);
@@ -800,6 +858,24 @@ export interface WatchHitAreaOptions {
    * grown input is its descendant leaves it off. @default false
    */
   readonly ownsDescendantTouches?: boolean;
+  /**
+   * How far the control grows on each side before any neighbour stops it,
+   * read in the measure pass. A group passes `groupGrowth` of its members.
+   * It gets the control's box in layout px, and `toLayout` maps a rect the
+   * owner reads into the same px.
+   * @default toward `minSize` on each axis, centered
+   */
+  readonly growth?: (
+    target: HitRect,
+    toLayout: (rect: HitRect) => HitRect,
+  ) => HitInsets;
+  /**
+   * Whether a finger's press on the control re-measures it against every
+   * interactive element on the page, at once. An owner that reads its own
+   * targets when a press begins, such as a group's tracker, turns it off.
+   * @default true
+   */
+  readonly checkAtPress?: boolean;
 }
 
 /**
@@ -834,6 +910,8 @@ export function watchHitArea(
   {
     minSize = MIN_TOUCH_TARGET,
     ownsDescendantTouches = false,
+    growth: growthOf,
+    checkAtPress = true,
   }: WatchHitAreaOptions = {},
 ): () => void {
   const owner = element.ownerDocument.defaultView;
@@ -855,6 +933,8 @@ export function watchHitArea(
     element,
     minSize,
     ownsDescendantTouches,
+    growth: growthOf,
+    checkAtPress,
     onInsets,
     isVisible: isCoarse && visibility == null,
     last: NO_HIT_INSETS,

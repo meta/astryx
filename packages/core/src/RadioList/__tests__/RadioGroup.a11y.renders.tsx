@@ -16,6 +16,7 @@ import {
   DropdownMenuRadioItem,
 } from '../../DropdownMenu';
 import {SegmentedControl, SegmentedControlItem} from '../../SegmentedControl';
+import {Pagination} from '../../Pagination/Pagination';
 import {RadioList, RadioListItem} from '../index';
 import type {RadioGroupStateId} from './RadioGroup.a11y.states';
 
@@ -148,6 +149,13 @@ function MenuRadioFixture({
   );
 }
 
+function PaginationDotsFixture() {
+  const [page, setPage] = useState(1);
+  return (
+    <Pagination page={page} onChange={setPage} totalPages={3} variant="dots" />
+  );
+}
+
 export type RadioGroupStateRender = () => ReactElement;
 
 export const RADIO_GROUP_STATE_RENDERS: Record<
@@ -212,6 +220,9 @@ export const RADIO_GROUP_STATE_RENDERS: Record<
     />
   ),
   'segmented-option-unselected': () => <SegmentedFixture />,
+  'pagination-dots-group': () => <PaginationDotsFixture />,
+  'pagination-dot-unselected': () => <PaginationDotsFixture />,
+  'pagination-dot-selected': () => <PaginationDotsFixture />,
   'segmented-option-selected-hidden-label': () => (
     <SegmentedFixture hideSelectedLabel />
   ),
