@@ -203,9 +203,14 @@ describe('WheelPageStallError', () => {
   it("names the page's handling, the gap and the bound, and is not a pacing error", () => {
     const error = new WheelPageStallError(100, {gapMs: 152, handlingMs: 150});
     expect(error.name).toBe('WheelPageStallError');
-    expect(error.message).toMatch(/took 150 ms to handle a step/);
+    expect(error.message).toMatch(
+      /took 150 ms of page wall time to handle a step/,
+    );
     expect(error.message).toMatch(/152 ms later, over its 100 ms/);
-    expect(error.message).toMatch(/the page split the run, not the runner/);
+    expect(error.message).toMatch(
+      /the page split the run\. On a starved runner that time includes the page's wait for a CPU: judge a page stall from a run with CI's CPU limits/,
+    );
+    expect(error.message).not.toMatch(/not the runner/);
     expect(error).not.toBeInstanceOf(WheelPacingError);
   });
 });
