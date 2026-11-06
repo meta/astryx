@@ -161,11 +161,11 @@ function childTrack(element: HTMLElement, onHeld?: HeldRowListener) {
     if (onHeld == null || !isMoving) {
       return;
     }
-    const shown =
+    const offset =
       lead == null
         ? heldOffset
         : -heldSign * (animatorFor(lead).get('x') - heldSign * heldOffset);
-    onHeld({shown, travel: heldTravel});
+    onHeld({offset, travel: heldTravel});
     followFrame = requestAnimationFrame(follow);
   }
 
@@ -241,7 +241,7 @@ function childTrack(element: HTMLElement, onHeld?: HeldRowListener) {
     element.scrollTo({left: isRtl() ? -at : at, behavior: 'instant'});
     if (onHeld != null) {
       cancelAnimationFrame(followFrame);
-      onHeld({shown: at, travel: heldTravel});
+      onHeld({offset: at, travel: heldTravel});
       onHeld(null);
     }
   }

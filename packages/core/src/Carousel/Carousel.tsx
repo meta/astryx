@@ -53,7 +53,7 @@ import {Button} from '../Button';
 import {Icon} from '../Icon';
 import {useLayer} from '../Layer';
 import {useAttachment} from '../hooks/useAttachment';
-import {useScrollOverflow} from '../hooks/useScrollOverflow';
+import {useShownScrollOverflow} from '../hooks/useScrollOverflow';
 import {isRtlElement} from '../hooks/isRtlElement';
 import type {BaseProps} from '../BaseProps';
 import {mergeProps, rtlStyles} from '../utils';
@@ -408,20 +408,8 @@ export function Carousel({
   // transition it is allowed to act on.
   const focusedNavRef = useRef<'start' | 'end' | null>(null);
   const prevCanScrollRef = useRef<{start: boolean; end: boolean} | null>(null);
-  const {
-    scrollRef,
-    overflowStart: scrollOverflowStart,
-    overflowEnd: scrollOverflowEnd,
-    hasOverflow,
-  } = useScrollOverflow();
-  // While snap paging holds the row, its scroll offset stays where the hold
-  // began and its items move. The edges then follow the row as shown.
-  const [heldEdges, setHeldEdges] = useState<{
-    start: boolean;
-    end: boolean;
-  } | null>(null);
-  const overflowStart = heldEdges?.start ?? scrollOverflowStart;
-  const overflowEnd = heldEdges?.end ?? scrollOverflowEnd;
+  const {scrollRef, followShown, overflowStart, overflowEnd, hasOverflow} =
+    useShownScrollOverflow();
 
   // Children.toArray drops null/undefined/boolean children and assigns
   // stable keys, so slide numbering ("Slide N of M") matches what actually
@@ -459,36 +447,13 @@ export function Carousel({
     setAttachedPaging(snapPaging);
   }
   // Attaches snap paging to the scroll area, and follows a replaced one.
+  // While the paging holds the row, the edges follow the row as shown.
   useAttachment(
     scrollElRef,
-    scroller => {
-      if (attachedPaging == null) {
-        return () => {};
-      }
-      let releaseFrame = 0;
-      const detach = attachSnapPaging(attachedPaging, scroller, held => {
-        cancelAnimationFrame(releaseFrame);
-        if (held == null) {
-          // The scroll measure reads the handed-back offset by the next
-          // frame. The held edges stand until then, so no button flickers.
-          releaseFrame = requestAnimationFrame(() => setHeldEdges(null));
-          return;
-        }
-        // The scroll measure's tolerance.
-        const start = held.shown > 1;
-        const end = held.shown < held.travel - 1;
-        setHeldEdges(previous =>
-          previous != null && previous.start === start && previous.end === end
-            ? previous
-            : {start, end},
-        );
-      });
-      return () => {
-        cancelAnimationFrame(releaseFrame);
-        detach();
-        setHeldEdges(null);
-      };
-    },
+    scroller =>
+      attachedPaging == null
+        ? () => {}
+        : attachSnapPaging(attachedPaging, scroller, followShown),
     attachedPaging,
   );
   // React's wheel listener is passive, so it can't stop the browser's own

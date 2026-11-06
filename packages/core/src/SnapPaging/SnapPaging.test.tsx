@@ -273,18 +273,18 @@ describe('Carousel with hasSnap', () => {
       const {report, start, end} = renderHeld();
       // jsdom lays nothing out, so at rest the scroll offset gives no room.
       expect([start.disabled, end.disabled]).toEqual([true, true]);
-      report({shown: 0, travel: 600});
+      report({offset: 0, travel: 600});
       expect([start.disabled, end.disabled]).toEqual([true, false]);
-      report({shown: 300, travel: 600});
+      report({offset: 300, travel: 600});
       expect([start.disabled, end.disabled]).toEqual([false, false]);
-      report({shown: 599.5, travel: 600});
+      report({offset: 599.5, travel: 600});
       expect([start.disabled, end.disabled]).toEqual([false, true]);
     });
 
     it('keeps the held edges for one frame after the hand-back, then reads the scroll offset again', async () => {
       const {report, start} = renderHeld();
-      report({shown: 300, travel: 600});
-      report({shown: 300, travel: 600});
+      report({offset: 300, travel: 600});
+      report({offset: 300, travel: 600});
       report(null);
       expect(start.disabled).toBe(false);
       await act(
@@ -298,13 +298,13 @@ describe('Carousel with hasSnap', () => {
 
     it('hands focus to the scroll area once, when the held row reaches the edge of the focused button', () => {
       const {report, end} = renderHeld();
-      report({shown: 300, travel: 600});
+      report({offset: 300, travel: 600});
       act(() => end.focus());
       const focus = vi.spyOn(scroller(), 'focus');
-      report({shown: 600, travel: 600});
+      report({offset: 600, travel: 600});
       expect(focus).toHaveBeenCalledTimes(1);
       expect(document.activeElement).toBe(scroller());
-      report({shown: 600, travel: 600});
+      report({offset: 600, travel: 600});
       expect(focus).toHaveBeenCalledTimes(1);
     });
   });

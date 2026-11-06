@@ -43,7 +43,7 @@ export interface SnapPagingAttachment {
  * travel it was taken over with.
  */
 export interface HeldRow {
-  readonly shown: number;
+  readonly offset: number;
   readonly travel: number;
 }
 
