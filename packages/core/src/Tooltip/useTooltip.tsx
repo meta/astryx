@@ -14,6 +14,7 @@
  */
 
 import {
+  use,
   useCallback,
   useEffect,
   useRef,
@@ -21,6 +22,7 @@ import {
   type ReactNode,
   type RefCallback,
 } from 'react';
+import {TooltipPresentInterestContext} from './tooltipPresentInterest';
 import {createTriggerFocusGate, isFocusOnTrigger} from '../utils/triggerFocus';
 import * as stylex from '@stylexjs/stylex';
 import {
@@ -313,6 +315,8 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   const triggerRef = useRef<HTMLElement | null>(null);
   // Whether the tooltip is enabled now, for a show that runs after a render
   // (a pending hover show) and for the trigger ref callback.
+  // Set only by a Core component that mounts the tooltip on interaction.
+  const presentInterest = use(TooltipPresentInterestContext);
   const isEnabledRef = useRef(isEnabled);
   isEnabledRef.current = isEnabled;
   // Counts the renders in which the tooltip is disabled. A pending show
@@ -683,6 +687,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     hideNow,
     showNow,
     opensOnFocus,
+    presentInterest,
   });
   handlersRef.current = {
     handleMouseEnter,
@@ -698,6 +703,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     hideNow,
     showNow,
     opensOnFocus,
+    presentInterest,
   };
 
   // Removes the attached trigger's listeners (the trigger ref callback's
@@ -773,6 +779,26 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       latest().opensOnFocus(focused, el)
     ) {
       latest().showNow();
+    }
+
+    // A tooltip mounted by the interaction that wants it missed that
+    // interaction, so it answers it now, by the same rules: a hover waits for
+    // the delay, a tap opens at once, and focus opens only if it would.
+    const interest = latest().presentInterest;
+    if (isEnabledRef.current && latest().isOpen === undefined) {
+      if (interest === 'hover') {
+        latest().handleMouseEnter();
+      } else if (interest === 'tap') {
+        latest().showNow();
+      } else if (
+        interest === 'focus' &&
+        latest().focusTrigger !== 'never' &&
+        focused instanceof HTMLElement &&
+        el.contains(focused) &&
+        latest().opensOnFocus(focused, el)
+      ) {
+        latest().showNow();
+      }
     }
 
     const detach = () => {

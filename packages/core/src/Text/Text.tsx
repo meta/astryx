@@ -16,7 +16,7 @@
  * - /packages/cli/assets/templates/blocks/components/Text/ (showcase blocks)
  */
 
-import {lazy, Suspense, use, useRef, type ReactNode} from 'react';
+import {use, useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {
   TextType,
@@ -47,16 +47,17 @@ import {
   truncationTooltipStyles,
 } from './text.stylex';
 import {useTruncation} from './useTruncation';
+import {
+  TruncationTooltip,
+  useTruncationTooltipInterest,
+} from './TruncationTooltip';
+import {composeEventHandlers} from '../utils/composeEventHandlers';
 import type {LayerPlacement} from '../Layer';
 import {mergeProps} from '../utils/mergeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {TextClampContext} from './textClampContext';
-
-const LazyXDSTooltip = lazy(async () =>
-  import('../Tooltip/Tooltip').then(mod => ({default: mod.Tooltip})),
-);
 
 export type {TextType, TextSize};
 
@@ -273,6 +274,8 @@ export function Text({
     typeof hasTruncateTooltip === 'string' ? hasTruncateTooltip : 'above';
   const tooltipEnabled =
     maxLines > 0 && hasTruncateTooltip !== false && truncation.isTruncated;
+  // The tooltip mounts on the first hover, tap or focus, not with the text.
+  const tooltipInterest = useTruncationTooltipInterest(tooltipEnabled);
 
   // Ref for the text element (used as tooltip anchor)
   const textRef = useRef<HTMLElement>(null);
@@ -321,24 +324,33 @@ export function Text({
           className,
           {...style, ...inlineStyle},
         )}
-        {...props}>
+        {...props}
+        onPointerEnter={composeEventHandlers(
+          props.onPointerEnter,
+          tooltipInterest.onPointerEnter,
+        )}
+        onPointerLeave={composeEventHandlers(
+          props.onPointerLeave,
+          tooltipInterest.onPointerLeave,
+        )}
+        onFocus={composeEventHandlers(props.onFocus, tooltipInterest.onFocus)}
+        onBlur={composeEventHandlers(props.onBlur, tooltipInterest.onBlur)}>
         {/* Always mounted, so a change of maxLines keeps every child mounted. */}
         <TextClampContext value={isClamped || isInClampedText}>
           {children}
         </TextClampContext>
       </Component>
-      {tooltipEnabled && (
-        <Suspense fallback={null}>
-          <LazyXDSTooltip
-            anchorRef={textRef}
-            content={
-              <span {...stylex.props(truncationTooltipStyles.content)}>
-                {truncation.fullText}
-              </span>
-            }
-            placement={tooltipPlacement}
-          />
-        </Suspense>
+      {tooltipEnabled && tooltipInterest.isWanted && (
+        <TruncationTooltip
+          anchorRef={textRef}
+          content={
+            <span {...stylex.props(truncationTooltipStyles.content)}>
+              {truncation.fullText}
+            </span>
+          }
+          placement={tooltipPlacement}
+          interest={tooltipInterest.interest}
+        />
       )}
     </>
   );

@@ -7,9 +7,11 @@
 
 import * as stylex from '@stylexjs/stylex';
 import {typeScaleVars} from '../theme/tokens.stylex';
-import {act, render, screen} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {describe, it, expect, vi} from 'vitest';
 import {Heading} from './Heading';
+// Loaded up front, so the truncation tooltip's lazy import resolves at once.
+import '../Tooltip/Tooltip';
 
 const headingStyles = stylex.create({
   // Overrides a property Heading's own level styles set, so the consumer
@@ -462,6 +464,67 @@ describe('Heading outline, passthrough, and styling-input precedence', () => {
     } finally {
       restoreProperty(proto, 'scrollWidth', scrollWidth);
       restoreProperty(proto, 'offsetWidth', offsetWidth);
+    }
+  });
+});
+
+// A truncated Heading mounts its tooltip on the first interaction, as Text does.
+describe('the truncation tooltip mounts on the first interaction', () => {
+  const TITLE = 'A heading far wider than the space it has been given';
+
+  function withOverflowAndPopover() {
+    const proto = window.HTMLElement.prototype;
+    const original = {
+      scrollWidth: Object.getOwnPropertyDescriptor(proto, 'scrollWidth'),
+      offsetWidth: Object.getOwnPropertyDescriptor(proto, 'offsetWidth'),
+      showPopover: proto.showPopover,
+    };
+    Object.defineProperty(proto, 'scrollWidth', {
+      configurable: true,
+      get: () => 400,
+    });
+    Object.defineProperty(proto, 'offsetWidth', {
+      configurable: true,
+      get: () => 100,
+    });
+    const showPopover = vi.fn();
+    proto.showPopover = showPopover;
+    return {
+      showPopover,
+      restore: () => {
+        if (original.scrollWidth) {
+          Object.defineProperty(proto, 'scrollWidth', original.scrollWidth);
+        }
+        if (original.offsetWidth) {
+          Object.defineProperty(proto, 'offsetWidth', original.offsetWidth);
+        }
+        proto.showPopover = original.showPopover;
+      },
+    };
+  }
+
+  it('mounts no tooltip layer before any interaction, and one on the first hover', async () => {
+    const {showPopover, restore} = withOverflowAndPopover();
+    try {
+      render(
+        <Heading level={2} maxLines={1}>
+          {TITLE}
+        </Heading>,
+      );
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 300));
+      });
+      expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
+
+      fireEvent.pointerEnter(screen.getByText(TITLE), {pointerType: 'mouse'});
+      await waitFor(
+        () => {
+          expect(showPopover).toHaveBeenCalled();
+        },
+        {timeout: 3000},
+      );
+    } finally {
+      restore();
     }
   });
 });
