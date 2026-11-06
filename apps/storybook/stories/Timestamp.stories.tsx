@@ -241,6 +241,32 @@ export const DateTimeWithTimezone: Story = {
   },
 };
 
+export const ExplicitTimeZone: Story = {
+  name: 'Explicit time zone',
+  render: () => (
+    <div style={{display: 'flex', flexDirection: 'column', gap: '8px'}}>
+      <Timestamp
+        value="2026-02-19T17:00:00Z"
+        format="date_time"
+        timezoneID="UTC"
+        isTimezoneShown
+      />
+      <Timestamp
+        value="2026-02-19T17:00:00Z"
+        format="date_time"
+        timezoneID="America/Los_Angeles"
+        isTimezoneShown
+      />
+      <Timestamp
+        value="2026-02-19T17:00:00Z"
+        format="date_time"
+        timezoneID="Asia/Tokyo"
+        isTimezoneShown
+      />
+    </div>
+  ),
+};
+
 export const TimeFormat: Story = {
   args: {
     value: '2026-02-19T17:00:00Z',

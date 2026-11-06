@@ -1255,6 +1255,10 @@ test.describe('frame evidence', () => {
     const box = page.locator('#box');
     await markElement(box, {mode: 'outline'});
     const control = await startBusyControl(page);
+    const rest = await box.boundingBox();
+    if (rest == null) {
+      throw new Error('no box');
+    }
 
     // Six 70 ms blocks: each judged part (20 ms margins, 30 ms) holds at most
     // three frames even at WebKit's 14 ms cast, under the four one window
@@ -1307,8 +1311,18 @@ test.describe('frame evidence', () => {
         await page.waitForTimeout(150);
       }
       const frames = await cast.stop();
-      const tracked = await trackMarker(page, frames);
-      const controlFrames = await trackMarker(page, frames, {rgb: CONTROL_RGB});
+      // Each search reads only the strip its box crosses. On a loaded machine
+      // a search of every pixel, four drivers by two tracks, held most of the
+      // test's time. The box travels 560 px down from where it rests.
+      const tracked = await trackMarker(page, frames, {
+        region: {
+          x: rest.x - 20,
+          y: rest.y - 16,
+          width: rest.width + 40,
+          height: rest.height + 560 + 32,
+        },
+      });
+      const controlFrames = await trackControl(page, frames);
       return windows.map(window => ({tracked, control: controlFrames, window}));
     };
 
@@ -1328,6 +1342,34 @@ test.describe('frame evidence', () => {
     });
     expect(pooled.verdict.failures, pooled.summary).toEqual([]);
 
+    // The same runs with the control taken out of the last blocks. A starved
+    // run is named and left out. With too few judged runs, the pool fails.
+    const starve = (count: number) =>
+      pooledBusyProof(
+        compositor.map((run, i) =>
+          i < compositor.length - count
+            ? run
+            : {
+                ...run,
+                control: run.control.map(frame =>
+                  frame.t >= run.window.from && frame.t <= run.window.to
+                    ? {...frame, box: null}
+                    : frame,
+                ),
+              },
+        ),
+        {axis: 'y'},
+      );
+    const lastStarved = starve(1);
+    expect(lastStarved.judged[5], lastStarved.summary).toBe(false);
+    expect(lastStarved.summary).toMatch(
+      /; run 6: too little to judge, the control moved on 0 frames/,
+    );
+    const oneLeft = starve(5);
+    expect(oneLeft.verdict.failures.join('\n'), oneLeft.summary).toMatch(
+      /[01] of 6 runs judged, under 3/,
+    );
+
     // The mutant: a main-thread animation freezes in every block.
     const raf = pooledBusyProof(await runs('raf'), {axis: 'y'});
     testInfo.annotations.push({
@@ -1336,7 +1378,7 @@ test.describe('frame evidence', () => {
     });
     expect(raf.verdict.pass, raf.summary).toBe(false);
     expect(raf.verdict.failures.join('\n')).toMatch(
-      /moved on \d+ of the \d+ frames the control moved over 6 runs/,
+      /moved on \d+ of the \d+ frames the control moved over (6 runs|the \d judged runs of 6)/,
     );
 
     // A frame-counted loop stalls in every block too and then steps on, one
@@ -4048,6 +4090,105 @@ test.describe('animation state', () => {
     );
     const started = await watch.started();
     expect(started.map(a => a.durationMs)).toEqual([70]);
+  });
+
+  test('a run that the page cancels while it plays is reported, ended where the page cancelled it', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    const watch = await watchAnimations(box);
+    // The page retires the run as Core's motion animator does: it writes the
+    // end and cancels the run, so no finish event comes. It cancels on its
+    // first frame past 200 ms of play. A starved page gets there late, but it
+    // gets there.
+    const calledAt = await box.evaluate(el => {
+      const run = el.animate([{opacity: 0}, {opacity: 1}], {
+        duration: 60_000,
+        fill: 'both',
+      });
+      const retire = () => {
+        if (Number(run.currentTime ?? 0) >= 200) {
+          (el as HTMLElement).style.opacity = '1';
+          run.cancel();
+        } else {
+          requestAnimationFrame(retire);
+        }
+      };
+      requestAnimationFrame(retire);
+      return performance.timeOrigin + performance.now();
+    });
+    // The first look comes after the cancel.
+    await expect
+      .poll(() => box.evaluate(el => el.getAnimations().length))
+      .toBe(0);
+    const [run] = await watch.started();
+    expect(run.kind).toBe('Animation');
+    expect(run.durationMs).toBe(60_000);
+    expect(run.from).toBeGreaterThan(calledAt - 17);
+    // It played at least 200 ms, and it ended long before its curve's end.
+    expect(run.finishedAt).not.toBeNull();
+    expect((run.finishedAt ?? 0) - run.from).toBeGreaterThanOrEqual(199);
+    expect(run.finishedAt ?? 0).toBeLessThan(run.to);
+  });
+
+  test('a run that the page cancels before it presented minProgressMs, or in its start delay, is not reported', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    // Cancelled in the task that made it: it never presented a frame.
+    const unstarted = await watchAnimations(box);
+    await box.evaluate(el => {
+      el.animate([{opacity: 0}, {opacity: 1}], {duration: 60_000}).cancel();
+    });
+    await expect(unstarted.started({timeout: 300})).rejects.toThrow(
+      /no animation started/,
+    );
+    // Cancelled after 200 ms of play, short of the 5 s that the wait asks for.
+    const short = await watchAnimations(box);
+    await box.evaluate(el => {
+      const run = el.animate([{opacity: 0}, {opacity: 1}], {
+        duration: 60_000,
+      });
+      const retire = () => {
+        if (Number(run.currentTime ?? 0) >= 200) {
+          run.cancel();
+        } else {
+          requestAnimationFrame(retire);
+        }
+      };
+      requestAnimationFrame(retire);
+    });
+    await expect
+      .poll(() => box.evaluate(el => el.getAnimations().length))
+      .toBe(0);
+    await expect(
+      short.started({minProgressMs: 5_000, timeout: 300}),
+    ).rejects.toThrow(/no animation started/);
+    // Cancelled in its 30 s start delay: it has a start, but it presented
+    // nothing, even for a wait that asks for no progress.
+    const delayed = await watchAnimations(box);
+    await box.evaluate(el => {
+      const run = el.animate([{opacity: 0}, {opacity: 1}], {
+        duration: 60_000,
+        delay: 30_000,
+      });
+      const retire = () => {
+        if (run.startTime != null) {
+          run.cancel();
+        } else {
+          requestAnimationFrame(retire);
+        }
+      };
+      requestAnimationFrame(retire);
+    });
+    await expect
+      .poll(() => box.evaluate(el => el.getAnimations().length))
+      .toBe(0);
+    await expect(
+      delayed.started({minProgressMs: 0, timeout: 300}),
+    ).rejects.toThrow(/no animation started/);
   });
 
   test('an entrance the page cancels when it ends keeps its start', async ({

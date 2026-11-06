@@ -1541,8 +1541,13 @@ export interface PooledBusyProof {
    */
   readonly runs: readonly BusyProof[];
   /**
-   * The control's new positions over every run's judged part, and those the
-   * component moved on too.
+   * Whether each run was judged. A run whose control moved on fewer than
+   * `minRunFrames` frames is too little to judge, and the pool leaves it out.
+   */
+  readonly judged: readonly boolean[];
+  /**
+   * The control's new positions over the judged runs' judged parts, and those
+   * the component moved on too.
    */
   readonly control: {readonly moved: number; readonly movedWith: number};
   /** The judgment over the pool (see `pooledBusyProof`). */
@@ -1556,12 +1561,20 @@ export interface PooledBusyProof {
  * control. An animation that lasts a fraction of a second leaves a block only
  * a few frames to judge: in WebKit, or on a loaded machine, the control can
  * present fewer than `minJudgedFrames` in one run, and one run cannot decide.
- * Pooled, the runs are judged as one long window is:
- * - the control moved on at least `minJudgedFrames` frames over all the runs;
- * - the component moved on every one of those frames;
- * - in each run, its longest stall is no longer than that run's control's: a
- *   stall belongs to its run and is never pooled.
- * `maxMedianFrameMs`, when given, applies to each run. A main-thread
+ * A run whose control moved on fewer than `minRunFrames` frames (1 by
+ * default) is too little to judge: the machine starved it. The summary names
+ * it, and the pool leaves it out, so it never counts as a pass.
+ * The judged runs are judged as one long window is:
+ * - at least `minJudgedRuns` runs are judged (by default, half the runs,
+ *   rounded up);
+ * - the control moved on at least `minJudgedFrames` frames over them;
+ * - in each judged run, the component moved on every frame its control moved
+ *   on, so a freeze fails its run and is never pooled. A run of unchanged
+ *   frames counts as motion only where the cast cannot show the motion (see
+ *   `busyWindowProof`).
+ * - in each judged run, its longest stall is no longer than that run's
+ *   control's.
+ * `maxMedianFrameMs`, when given, applies to every run. A main-thread
  * animation still fails: in every run the control moves and it does not.
  */
 export function pooledBusyProof(
@@ -1569,37 +1582,64 @@ export function pooledBusyProof(
   options: Omit<
     NonNullable<Parameters<typeof busyWindowProof>[2]>,
     'control' | 'minMovedFraction'
-  > = {},
+  > & {
+    /** The fewest frames a run's control must move on for the run to count. */
+    minRunFrames?: number;
+    /** The fewest judged runs the pool needs. */
+    minJudgedRuns?: number;
+  } = {},
 ): PooledBusyProof {
   if (runs.length === 0) {
     throw new Error('pooledBusyProof: no runs to judge');
   }
-  const {minJudgedFrames = 4, maxMedianFrameMs = Infinity} = options;
+  const {
+    minRunFrames = 1,
+    minJudgedRuns = Math.ceil(runs.length / 2),
+    ...windowOptions
+  } = options;
+  const {minJudgedFrames = 4, maxMedianFrameMs = Infinity} = windowOptions;
+  if (minJudgedRuns < 1 || minJudgedRuns > runs.length) {
+    throw new Error(
+      `pooledBusyProof: minJudgedRuns ${minJudgedRuns} is not between 1 and the ${runs.length} runs`,
+    );
+  }
   const proofs = runs.map(run =>
     busyWindowProof(run.tracked, run.window, {
-      ...options,
+      ...windowOptions,
       control: run.control,
     }),
   );
   const reads = proofs.map(proof => proof.control as BusyControlRead);
-  const moved = reads.reduce((sum, read) => sum + read.moved, 0);
-  const movedWith = reads.reduce((sum, read) => sum + read.movedWith, 0);
+  const judged = reads.map(read => read.moved >= minRunFrames);
+  const judgedReads = reads.filter((_, i) => judged[i]);
+  const total = (key: 'moved' | 'movedWith' | 'belowStep') =>
+    judgedReads.reduce((sum, read) => sum + read[key], 0);
+  const moved = total('moved');
+  const movedWith = total('movedWith');
+  const over =
+    judgedReads.length === runs.length
+      ? `${runs.length} runs`
+      : `the ${judgedReads.length} judged runs of ${runs.length}`;
   const failures: string[] = [];
-  if (moved < minJudgedFrames) {
+  if (judgedReads.length < minJudgedRuns) {
     failures.push(
-      `the control moved on ${moved} frames over ${runs.length} runs, under ${minJudgedFrames}: the compositor presented too little in these windows to judge`,
+      `${judgedReads.length} of ${runs.length} runs judged, under ${minJudgedRuns}: the compositor presented too little in the others to judge`,
     );
   }
-  const visible =
-    movedWith - reads.reduce((sum, read) => sum + read.belowStep, 0);
-  if (visible < minJudgedFrames) {
+  if (judgedReads.length > 0 && moved < minJudgedFrames) {
     failures.push(
-      `the component showed a new position on ${visible} of the control's frames over ${runs.length} runs, under ${minJudgedFrames}: too little motion in these windows to judge`,
+      `the control moved on ${moved} frames over ${over}, under ${minJudgedFrames}: the compositor presented too little in these windows to judge`,
+    );
+  }
+  const visible = movedWith - total('belowStep');
+  if (judgedReads.length > 0 && visible < minJudgedFrames) {
+    failures.push(
+      `the component showed a new position on ${visible} of the control's frames over ${over}, under ${minJudgedFrames}: too little motion in these windows to judge`,
     );
   }
   if (movedWith < moved) {
     failures.push(
-      `moved on ${movedWith} of the ${moved} frames the control moved over ${runs.length} runs (${((movedWith / Math.max(1, moved)) * 100).toFixed(0)}%)`,
+      `moved on ${movedWith} of the ${moved} frames the control moved over ${over} (${((movedWith / Math.max(1, moved)) * 100).toFixed(0)}%)`,
     );
   }
   proofs.forEach((proof, i) => {
@@ -1608,7 +1648,15 @@ export function pooledBusyProof(
         `run ${i + 1}: median frame interval ${proof.medianFrameMs.toFixed(1)} ms > ${maxMedianFrameMs} ms`,
       );
     }
+    if (!judged[i]) {
+      return;
+    }
     const read = reads[i];
+    if (read.movedWith < read.moved) {
+      failures.push(
+        `run ${i + 1}: moved on ${read.movedWith} of the ${read.moved} frames its control moved`,
+      );
+    }
     if (read.componentStallMs > read.longestStallMs) {
       failures.push(
         `run ${i + 1}: longest stall ${read.componentStallMs.toFixed(1)} ms, longer than the control's ${read.longestStallMs.toFixed(1)} ms`,
@@ -1616,10 +1664,21 @@ export function pooledBusyProof(
     }
   });
   const summary =
-    `${runs.length} runs pooled: moved on ${movedWith} of the control's ${moved} frames` +
-    proofs.map((proof, i) => `; run ${i + 1}: ${proof.summary}`).join('');
+    `${runs.length} runs pooled` +
+    (judgedReads.length === runs.length
+      ? ''
+      : `, ${judgedReads.length} judged`) +
+    `: moved on ${movedWith} of the control's ${moved} frames` +
+    proofs
+      .map((proof, i) =>
+        judged[i]
+          ? `; run ${i + 1}: ${proof.summary}`
+          : `; run ${i + 1}: too little to judge, the control moved on ${reads[i].moved} frames, under ${minRunFrames}: ${proof.summary}`,
+      )
+      .join('');
   return {
     runs: proofs,
+    judged,
     control: {moved, movedWith},
     verdict: {pass: failures.length === 0, failures},
     summary,
