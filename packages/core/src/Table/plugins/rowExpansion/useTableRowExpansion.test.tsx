@@ -7,6 +7,9 @@ import {Table} from '../../Table';
 import type {TableColumn} from '../../types';
 import {useTableRowExpansion} from './useTableRowExpansion';
 import {InternationalizationProvider} from '../../../i18n';
+import type {ComponentIconMap} from '../../../Icon/index';
+import {defineTheme} from '../../../theme/defineTheme';
+import {Theme} from '../../../theme/Theme';
 
 // popover mock for context-menu tests
 beforeEach(() => {
@@ -64,6 +67,7 @@ function Harness({
   panelVariant,
   dividers,
   isStriped,
+  getRowLabel,
 }: {
   initialExpanded?: Set<string>;
   isItemExpandable?: (item: Row) => boolean;
@@ -74,6 +78,7 @@ function Harness({
   panelVariant?: 'muted' | 'transparent';
   dividers?: 'rows' | 'columns' | 'grid' | 'none';
   isStriped?: boolean;
+  getRowLabel?: (item: Row) => string;
 }) {
   const [expandedKeys, setExpandedKeys] = useState(initialExpanded);
   const expansion = useTableRowExpansion<Row>({
@@ -93,6 +98,7 @@ function Harness({
     getIsItemExpandable: isItemExpandable,
     hasRowClickExpansion,
     panelVariant,
+    getRowLabel,
   });
   return (
     <Table
@@ -108,11 +114,122 @@ function Harness({
 }
 
 describe('useTableRowExpansion (detail panel)', () => {
+  it.each(['omitted', 'blank', 'named'] as const)(
+    'resolves %s labels inside the Table provider and follows locale changes',
+    mode => {
+      function LocalizedTable({locale}: {locale: 'fr' | 'de'}) {
+        const [expandedKeys, setExpandedKeys] = useState(EMPTY_KEYS);
+        const expansion = useTableRowExpansion<Row>({
+          expandedKeys,
+          onToggle: key =>
+            setExpandedKeys(prev =>
+              prev.has(key) ? EMPTY_KEYS : new Set([key]),
+            ),
+          getRowKey: item => item.id,
+          renderExpanded: defaultRenderExpanded,
+          getRowLabel:
+            mode === 'omitted'
+              ? undefined
+              : mode === 'blank'
+                ? () => '   '
+                : item => item.name,
+        });
+        return (
+          <InternationalizationProvider
+            locale={locale}
+            overrides={{
+              fr: {
+                '@astryx.tableRowExpansion.expandRow': 'Développer la ligne',
+                '@astryx.tableRowExpansion.collapseRow': 'Réduire la ligne',
+                '@astryx.tableRowExpansion.expandRowNamed':
+                  'Développer {label}',
+                '@astryx.tableRowExpansion.collapseRowNamed': 'Réduire {label}',
+              },
+              de: {
+                '@astryx.tableRowExpansion.expandRow': 'Zeile öffnen',
+                '@astryx.tableRowExpansion.collapseRow': 'Zeile schließen',
+                '@astryx.tableRowExpansion.expandRowNamed': '{label} öffnen',
+                '@astryx.tableRowExpansion.collapseRowNamed':
+                  '{label} schließen',
+              },
+            }}>
+            <Table
+              data={rows}
+              columns={columns}
+              idKey="id"
+              plugins={{expansion}}
+            />
+          </InternationalizationProvider>
+        );
+      }
+      const named = mode === 'named';
+      const view = render(<LocalizedTable locale="fr" />);
+      const trigger = screen.getAllByRole('button', {
+        name: named ? 'Développer Ada' : 'Développer la ligne',
+      })[0];
+      fireEvent.click(trigger);
+      expect(
+        screen.getByRole('button', {
+          name: named ? 'Réduire Ada' : 'Réduire la ligne',
+        }),
+      ).toHaveAttribute('aria-expanded', 'true');
+      view.rerender(<LocalizedTable locale="de" />);
+      expect(
+        screen.getByRole('button', {
+          name: named ? 'Ada schließen' : 'Zeile schließen',
+        }),
+      ).toHaveAttribute('aria-expanded', 'true');
+    },
+  );
   it('renders an "Expand row" chevron button for every expandable row', () => {
     render(<Harness />);
     expect(screen.getAllByRole('button', {name: /expand row/i})).toHaveLength(
       3,
     );
+  });
+
+  it('names each expansion control when getRowLabel is provided', () => {
+    render(<Harness getRowLabel={item => item.name} />);
+
+    expect(
+      screen.getByRole('button', {name: 'Expand Ada'}),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', {name: 'Expand Bo'})).toBeInTheDocument();
+    expect(screen.getByRole('button', {name: 'Expand Cy'})).toBeInTheDocument();
+  });
+
+  it('keeps the row identity when the expansion state changes', () => {
+    render(
+      <Harness
+        initialExpanded={new Set(['a'])}
+        getRowLabel={item => item.name}
+      />,
+    );
+
+    expect(screen.getByRole('button', {name: 'Collapse Ada'})).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(screen.getByRole('button', {name: 'Expand Bo'})).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+  });
+
+  it('falls back to the generic label when getRowLabel returns blank text', () => {
+    render(<Harness getRowLabel={() => '   '} />);
+
+    expect(screen.getAllByRole('button', {name: 'Expand row'})).toHaveLength(3);
+  });
+
+  it('keeps the context-menu action generic when row-specific labels are enabled', () => {
+    render(<Harness getRowLabel={item => item.name} />);
+
+    fireEvent.contextMenu(screen.getByText('Ada'));
+    expect(
+      screen.getAllByRole('menuitem', {name: 'Expand row', hidden: true})
+        .length,
+    ).toBeGreaterThan(0);
   });
 
   it('does not render the detail panel while collapsed', () => {
@@ -224,7 +341,9 @@ describe('useTableRowExpansion (detail panel)', () => {
     // has to sit on the glyph instead.
     render(<Harness initialExpanded={new Set(['a'])} />);
     const button = screen.getAllByRole('button', {name: /collapse row/i})[0];
-    const glyph = button.querySelector('svg')?.parentElement;
+    // The glyph's box, the button's first child, turns with the glyph in it.
+    const glyph = button.querySelector<HTMLElement>(':scope > *');
+    expect(glyph?.querySelector('svg')).not.toBeNull();
     expect(glyph).toHaveStyle({transform: 'rotate(90deg)'});
     expect(button).not.toHaveStyle({transform: 'rotate(90deg)'});
   });
@@ -296,9 +415,10 @@ describe('useTableRowExpansion (detail panel)', () => {
       for (const cell of cellsOf('Ada')) {
         expect(cell).toHaveStyle({borderBottomWidth: '0'});
       }
-      expect(panelCell()).toHaveStyle({
-        borderBottomWidth: 'var(--border-width)',
-      });
+      // The token width, unless the row hands down its own.
+      expect(getComputedStyle(panelCell()).borderBottomWidth).toMatch(
+        /var\(--_table-panel-divider-width,\s*var\(--border-width\)\)/,
+      );
     });
 
     it('leaves collapsed rows keeping their own divider', () => {
@@ -310,16 +430,97 @@ describe('useTableRowExpansion (detail panel)', () => {
 
     it('draws no panel divider on a table without row dividers', () => {
       render(<Harness initialExpanded={new Set(['a'])} dividers="none" />);
-      expect(panelCell()).not.toHaveStyle({
-        borderBottomWidth: 'var(--border-width)',
-      });
+      expect(getComputedStyle(panelCell()).borderBottomWidth).not.toMatch(
+        /--border-width/,
+      );
+    });
+
+    it('reads the colour mode once per table, however many panels are open', () => {
+      const original = window.matchMedia;
+      const listeners = (open: Set<string>) => {
+        let count = 0;
+        window.matchMedia = (query: string) => {
+          const list = original
+            ? original(query)
+            : ({matches: false, media: query} as MediaQueryList);
+          return {
+            ...list,
+            matches: list.matches,
+            media: query,
+            addEventListener: () => {
+              count += 1;
+            },
+            removeEventListener: () => {},
+            addListener: () => {
+              count += 1;
+            },
+            removeListener: () => {},
+          } as MediaQueryList;
+        };
+        const {unmount} = render(<Harness initialExpanded={open} />);
+        unmount();
+        return count;
+      };
+      try {
+        expect(listeners(new Set(['a', 'b', 'c']))).toBe(
+          listeners(new Set(['a'])),
+        );
+      } finally {
+        window.matchMedia = original;
+      }
+    });
+
+    it("carries the row's own divider onto the panel (Table FR14)", () => {
+      render(<Harness />);
+      const row = cellsOf('Ada')[0].parentElement as HTMLTableRowElement;
+      // An app's (or a theme's) border on the row's cells.
+      for (const cell of row.cells) {
+        cell.style.borderBottomColor = 'rgb(255, 0, 0)';
+        cell.style.borderBottomStyle = 'dashed';
+      }
+      fireEvent.click(screen.getAllByRole('button', {name: /expand/i})[0]);
+      const cell = panelCell();
+      expect(cell.style.getPropertyValue('--_table-panel-divider-color')).toBe(
+        'rgb(255, 0, 0)',
+      );
+      expect(cell.style.getPropertyValue('--_table-panel-divider-style')).toBe(
+        'dashed',
+      );
+      // The panel keeps its own width (a value, never inherited from a panel
+      // around it) while the row's own border does not win.
+      expect(cell.style.getPropertyValue('--_table-panel-divider-width')).toBe(
+        'initial',
+      );
+      // A width set on the row's cells is the divider's too.
+      for (const rowCell of row.cells) {
+        rowCell.style.borderBottomWidth = '3px';
+      }
+      fireEvent.click(screen.getAllByRole('button', {name: /expand/i})[0]);
+      expect(cell.style.getPropertyValue('--_table-panel-divider-width')).toBe(
+        '3px',
+      );
+      fireEvent.click(screen.getAllByRole('button', {name: /collapse/i})[1]);
+      for (const rowCell of row.cells) {
+        rowCell.style.borderBottomWidth = '';
+      }
+      // An app's wider border on the row itself wins; the next commit
+      // (opening another row) reads it.
+      row.style.borderBottom = '3px solid rgb(0, 0, 255)';
+      fireEvent.click(screen.getAllByRole('button', {name: /expand/i})[0]);
+      expect(cell.style.getPropertyValue('--_table-panel-divider-width')).toBe(
+        '3px',
+      );
+      expect(cell.style.getPropertyValue('--_table-panel-divider-color')).toBe(
+        'rgb(0, 0, 255)',
+      );
     });
 
     it('draws the panel divider under grid dividers too', () => {
       render(<Harness initialExpanded={new Set(['a'])} dividers="grid" />);
-      expect(panelCell()).toHaveStyle({
-        borderBottomWidth: 'var(--border-width)',
-      });
+      // The token width, unless the row hands down its own.
+      expect(getComputedStyle(panelCell()).borderBottomWidth).toMatch(
+        /var\(--_table-panel-divider-width,\s*var\(--border-width\)\)/,
+      );
     });
   });
 
@@ -595,5 +796,84 @@ describe('useTableRowExpansion (detail panel)', () => {
     expect(
       screen.getAllByRole('button', {name: 'Développer la ligne'}).length,
     ).toBeGreaterThan(0);
+  });
+});
+
+describe('row expansion icon slot', () => {
+  // Label each shared icon's artwork, so a test reads which name rendered.
+  const icons = {
+    chevronRight: <span data-icon="chevronRight" />,
+    chevronDown: <span data-icon="chevronDown" />,
+    menu: <span data-icon="menu" />,
+  };
+  let themeCount = 0;
+
+  function renderInTheme(componentIcons?: ComponentIconMap<never>) {
+    const theme = defineTheme({
+      name: `table-row-expand-slot-${themeCount++}`,
+      icons,
+      componentIcons,
+    });
+    render(
+      <Theme theme={theme}>
+        <Harness initialExpanded={new Set(['a'])} />
+      </Theme>,
+    );
+  }
+
+  const toggles = () =>
+    screen.getAllByRole('button', {name: /(expand|collapse) row/i});
+  const glyph = (button: HTMLElement) =>
+    button.querySelector('[data-icon]')?.getAttribute('data-icon') ?? null;
+
+  it('draws chevronRight in both states when the theme maps nothing, turned while expanded', () => {
+    renderInTheme();
+    const [expanded, collapsed] = toggles();
+
+    expect(glyph(expanded)).toBe('chevronRight');
+    expect(glyph(collapsed)).toBe('chevronRight');
+    // The component keeps the turn on the toggle's first child, the element
+    // the glide gives its spring: the two states style it apart.
+    const turned = (toggle: HTMLElement) => toggle.querySelector(':scope > *');
+    expect(turned(expanded)?.className).not.toBe(turned(collapsed)?.className);
+    expect(
+      turned(expanded)?.contains(expanded.querySelector('.astryx-icon')),
+    ).toBe(true);
+  });
+
+  it('passes `expanded` to a slot function and draws the name it returns', () => {
+    const slot = vi.fn(({expanded}: {expanded: boolean}) => ({
+      icon: expanded ? ('menu' as const) : ('chevronRight' as const),
+    }));
+    renderInTheme({'table-row-expand': slot});
+    const [expanded, collapsed] = toggles();
+
+    expect(glyph(expanded)).toBe('menu');
+    expect(glyph(collapsed)).toBe('chevronRight');
+    expect(slot).toHaveBeenCalledWith({expanded: true});
+    expect(slot).toHaveBeenCalledWith({expanded: false});
+    fireEvent.click(collapsed);
+    expect(glyph(toggles()[1])).toBe('menu');
+  });
+
+  it('hides only the glyph for null; the toggle keeps its name, state, and action', () => {
+    renderInTheme({'table-row-expand': null});
+    const [expanded, collapsed] = toggles();
+
+    expect(expanded.querySelector('.astryx-icon')).toBeNull();
+    expect(expanded).toHaveAttribute('aria-expanded', 'true');
+    expect(collapsed).toHaveAccessibleName(/expand row/i);
+    fireEvent.click(collapsed);
+    expect(screen.getAllByTestId('panel')).toHaveLength(2);
+  });
+
+  it('changes only the icon size for a size request', () => {
+    renderInTheme({'table-row-expand': {size: 'sm'}});
+
+    expect(toggles()[0].querySelector('.astryx-icon')).toHaveAttribute(
+      'data-size',
+      'sm',
+    );
+    expect(glyph(toggles()[0])).toBe('chevronRight');
   });
 });

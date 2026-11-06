@@ -168,3 +168,53 @@ import Testing
   #expect(P.showsBubble(hasText: true, isHovering: false, isHoveringBubble: false, isFocused: true, focusIsKeyboard: true, focus: .tabStop))
 }
 
+@Test func aPointerLeavingLetsAKeyboardFocusedBubbleHide() {
+  typealias P = TooltipPresenter
+  #expect(!P.keyboardFocusHolds(afterHover: false, holds: true))
+  #expect(P.keyboardFocusHolds(afterHover: true, holds: true))
+  #expect(!P.keyboardFocusHolds(afterHover: true, holds: false))
+}
+
+/// Rows the bubble's dark fill covers, and rows the view shows, in a render
+/// of a 36-point view with a placed bubble.
+@MainActor
+private func placedRows(isAbove: Bool, text: String = "Ada Lovelace") -> (bubble: ClosedRange<Int>?, view: ClosedRange<Int>) {
+  let theme = Theme.default.light
+  let probe = ZStack(alignment: .topLeading) {
+    Color.white
+    Color.blue.frame(width: 36, height: 36)
+      .overlay(alignment: isAbove ? .top : .bottom) {
+        TooltipBubble(text: text).modifier(TooltipPlacement(isAbove: isAbove, gap: 4, slide: 0))
+      }
+      .offset(x: 150, y: 100)
+  }
+  .frame(width: 400, height: 240)
+  let pixels = Pixels(probe.astryxTheme())
+  let ink = rgba(theme.color.textPrimary)
+  func rows(_ match: ([Int]) -> Bool) -> [Int] {
+    (0..<pixels.height).filter { y in (0..<pixels.width).contains { x in match(pixels.at(x, y)) } }
+  }
+  let dark = rows { close($0, ink, within: 12) }
+  let blue = rows { $0[2] > 200 && $0[0] < 60 && $0[1] < 140 }
+  return (dark.isEmpty ? nil : dark.first!...dark.last!, blue.first!...blue.last!)
+}
+
+// INV1: the bubble sits `gap` above the view, or below it, and never on it.
+@MainActor
+@Test func theBubbleSitsAboveOrBelowTheViewNotOnIt() throws {
+  let above = placedRows(isAbove: true)
+  let bubble = try #require(above.bubble)
+  #expect(above.view == 100...135)
+  #expect(bubble.upperBound == 95)
+  #expect(bubble.count >= 20)
+  let below = placedRows(isAbove: false)
+  let under = try #require(below.bubble)
+  #expect(below.view == 100...135)
+  #expect(under.lowerBound == 140)
+  // Long words wrap upward from the same edge.
+  let long = placedRows(isAbove: true, text: String(repeating: "A long tooltip ", count: 6))
+  let wrapped = try #require(long.bubble)
+  #expect(wrapped.upperBound == 95)
+  #expect(wrapped.count > bubble.count)
+}
+

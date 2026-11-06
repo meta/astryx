@@ -29,13 +29,18 @@ import {describe, it, expect, beforeAll, beforeEach, afterEach} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import {fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
+import {createRequire} from 'node:module';
 import {ensureCoreBuilt} from './ensure-core-built.mjs';
 import {runCli} from '../../../test-utils/run-cli.mjs';
+import {
+  makeLinkedFixture,
+  removeLinkedFixture,
+} from '../../../test-utils/linked-fixture.mjs';
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const CLI_ROOT = path.resolve(HERE, '../../..');
+const TSC = createRequire(import.meta.url).resolve('typescript/bin/tsc');
+// A consumer project type-checks against core and React's types.
+const CONSUMER_PACKAGES = ['@astryxdesign', 'react', '@types/react'];
 
 function writeTheme(dir, contents) {
   fs.mkdirSync(dir, {recursive: true});
@@ -92,6 +97,33 @@ describe('theme build custom-variant augmentations', () => {
     expect(dts).toContain("'accentOutline': true;");
     // …and NOT the old, non-existent XDS-prefixed interface.
     expect(dts).not.toMatch(/XDSButtonVariantMap/);
+  });
+
+  it('targets CustomTextTypes in core/theme for a custom text type', async () => {
+    const themeFile = writeTheme(
+      tmpDir,
+      `export default {
+        name: 'variants-theme',
+        tokens: { '--color-bg': '#fff' },
+        components: {
+          text: { 'type:customTextType': { fontSize: '24px' } },
+        },
+      };\n`,
+    );
+
+    const result = await runCli(
+      ['theme', 'build', path.relative(tmpDir, themeFile)],
+      tmpDir,
+    );
+    expect(result.code).toBe(0);
+
+    const variantsPath = path.join(tmpDir, 'variants-theme.variants.d.ts');
+    expect(fs.existsSync(variantsPath)).toBe(true);
+    const dts = fs.readFileSync(variantsPath, 'utf-8');
+
+    expect(dts).toContain("declare module '@astryxdesign/core/theme'");
+    expect(dts).toMatch(/interface CustomTextTypes\b/);
+    expect(dts).toContain("'customTextType': true;");
   });
 
   it('emits Heading custom types and skips props with no augmentation point', async () => {
@@ -207,12 +239,10 @@ describe('theme build custom-variant augmentations', () => {
     expect(variantsDts).toContain("'editorial': true;");
     expect(variantsDts).toContain("'shared': true;");
 
-    const projectDir = path.join(
-      CLI_ROOT,
-      `.tmp-surface-heading-consumer-${process.pid}`,
+    const projectDir = makeLinkedFixture(
+      'astryx-surface-heading-consumer-',
+      CONSUMER_PACKAGES,
     );
-    fs.rmSync(projectDir, {recursive: true, force: true});
-    fs.mkdirSync(projectDir);
     fs.copyFileSync(
       path.join(tmpDir, 'variants-theme.d.ts'),
       path.join(projectDir, 'variants-theme.d.ts'),
@@ -254,12 +284,12 @@ describe('theme build custom-variant augmentations', () => {
 
     try {
       execFileSync(
-        'pnpm',
-        ['exec', 'tsc', '--project', 'tsconfig.json', '--noEmit'],
+        process.execPath,
+        [TSC, '--project', 'tsconfig.json', '--noEmit'],
         {cwd: projectDir, stdio: 'pipe'},
       );
     } finally {
-      fs.rmSync(projectDir, {recursive: true, force: true});
+      removeLinkedFixture(projectDir);
     }
   });
 
@@ -425,7 +455,10 @@ describe('theme build custom-variant augmentations', () => {
           section: { 'variant:customSection': { backgroundColor: 'transparent' } },
           'status-dot': { 'variant:customStatusDot': { backgroundColor: 'transparent' } },
           heading: { 'type:customHeading': { fontSize: '3rem' } },
-          text: { 'color:customTextColor': { color: 'currentColor' } },
+          text: {
+            'color:customTextColor': { color: 'currentColor' },
+            'type:customTextType': { fontSize: '24px' },
+          },
           token: { 'color:customTokenColor': { backgroundColor: 'transparent' } },
         },
       };
@@ -438,12 +471,10 @@ describe('theme build custom-variant augmentations', () => {
     );
     expect(result.code).toBe(0);
 
-    const projectDir = path.join(
-      CLI_ROOT,
-      `.tmp-variant-consumer-${process.pid}`,
+    const projectDir = makeLinkedFixture(
+      'astryx-variant-consumer-',
+      CONSUMER_PACKAGES,
     );
-    fs.rmSync(projectDir, {recursive: true, force: true});
-    fs.mkdirSync(projectDir);
     fs.copyFileSync(
       path.join(tmpDir, 'variants-theme.d.ts'),
       path.join(projectDir, 'variants-theme.d.ts'),
@@ -490,7 +521,7 @@ describe('theme build custom-variant augmentations', () => {
         `      <Section variant="customSection">Section</Section>\n` +
         `      <StatusDot label="Status" variant="customStatusDot" />\n` +
         `      <Heading level={2} type="customHeading">Heading</Heading>\n` +
-        `      <Text color="customTextColor">Text</Text>\n` +
+        `      <Text color="customTextColor" type="customTextType">Text</Text>\n` +
         `      <Token label="Token" color="customTokenColor" />\n` +
         `    </>\n` +
         `  );\n` +
@@ -517,15 +548,15 @@ describe('theme build custom-variant augmentations', () => {
 
     try {
       execFileSync(
-        'pnpm',
-        ['exec', 'tsc', '--project', 'tsconfig.json', '--noEmit'],
+        process.execPath,
+        [TSC, '--project', 'tsconfig.json', '--noEmit'],
         {
           cwd: projectDir,
           stdio: 'pipe',
         },
       );
     } finally {
-      fs.rmSync(projectDir, {recursive: true, force: true});
+      removeLinkedFixture(projectDir);
     }
   });
 

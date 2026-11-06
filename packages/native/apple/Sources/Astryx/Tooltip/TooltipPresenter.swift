@@ -13,6 +13,16 @@ enum TooltipFocus: Equatable, Sendable {
   /// The view is made a tab stop so focus can show the tooltip, as core gives
   /// a static element with a tooltip a tab stop.
   case tabStop
+  /// The view holds controls that take focus; `true` while one of them has
+  /// it. Focus there shows the tooltip, as core's tooltip on a wrapper shows
+  /// on focus within it.
+  case inside(Bool)
+
+  /// Whether a control inside the view has focus.
+  var isInsideFocused: Bool {
+    if case .inside(let focused) = self { return focused }
+    return false
+  }
 }
 
 /// What a direct tap on a touch screen does, as core's `touchTrigger`.
@@ -181,6 +191,14 @@ struct TooltipPresenter: ViewModifier {
       isFocused: holdsByFocus(isFocused: isFocused, focusIsKeyboard: focusIsKeyboard), focus: focus)
   }
 
+  /// Whether keyboard focus still holds the bubble after the pointer enters
+  /// or leaves the view or the bubble: a pointer leaving lets the bubble hide
+  /// even though focus opened it, as core's `mouseleave` schedules the hide
+  /// whatever brought it up, until focus leaves and returns.
+  nonisolated static func keyboardFocusHolds(afterHover inside: Bool, holds: Bool) -> Bool {
+    inside && holds
+  }
+
   /// Whether focus came from the keyboard, as core's `:focus-visible`: not
   /// while a pointer rests on the view, and not within a press of it.
   nonisolated static func isKeyboardFocus(isHovering: Bool, sincePress: TimeInterval) -> Bool {
@@ -195,11 +213,12 @@ struct TooltipPresenter: ViewModifier {
       .simultaneousGesture(TapGesture().onEnded { pressed() })
       .onHover { inside in
         isHovering = inside
+        focusIsKeyboard = Self.keyboardFocusHolds(afterHover: inside, holds: focusIsKeyboard)
         update()
       }
-      .onChange(of: isFocused) {
+      .onChange(of: anyFocused) {
         focusIsKeyboard =
-          isFocused && Self.isKeyboardFocus(isHovering: isHovering, sincePress: Date().timeIntervalSince(pressedAt))
+          anyFocused && Self.isKeyboardFocus(isHovering: isHovering, sincePress: Date().timeIntervalSince(pressedAt))
         update()
       }
       .onChange(of: text) {
@@ -208,23 +227,20 @@ struct TooltipPresenter: ViewModifier {
       }
       .overlay(alignment: above ? .top : .bottom) {
         if isShown || isTapShown, let text {
-          let gap = astryx.tokens.space.s1
-          let isAbove = above
           TooltipBubble(text: text)
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { bubbleFrame = $0 }
             .background(TooltipWindowReader { window = $0 })
             .onHover { inside in
               isHoveringBubble = inside
+              focusIsKeyboard = Self.keyboardFocusHolds(afterHover: inside, holds: focusIsKeyboard)
               update()
             }
-            .offset(x: sideways)
             .background(TooltipEscape(hide: hideAll))
             .background(
               TooltipOutsideTap(isActive: isTapShown, viewFrame: viewFrame, bubbleFrame: bubbleFrame) {
                 isTapShown = false
               })
-            // `space.s1` between the bubble and the view, above or below it.
-            .alignmentGuide(isAbove ? .top : .bottom) { d in isAbove ? d[.bottom] + gap : d[.top] - gap }
+            .modifier(TooltipPlacement(isAbove: above, gap: astryx.tokens.space.s1, slide: sideways))
         }
       }
       .zIndex(isShown || isTapShown ? 1 : 0)
@@ -262,12 +278,15 @@ struct TooltipPresenter: ViewModifier {
     isTapShown = false
   }
 
+  /// Focus on the view itself, or on a control inside it (`inside`).
+  private var anyFocused: Bool { isFocused || focus.isInsideFocused }
+
   /// Shows the bubble after the delay; hides it after the bridge.
   private func update() {
     pending?.cancel()
-    let keyboardFocused = Self.holdsByFocus(isFocused: isFocused, focusIsKeyboard: focusIsKeyboard)
+    let keyboardFocused = Self.holdsByFocus(isFocused: anyFocused, focusIsKeyboard: focusIsKeyboard)
     let wants = Self.showsBubble(
-      hasText: text != nil, isHovering: isHovering, isHoveringBubble: isHoveringBubble, isFocused: isFocused,
+      hasText: text != nil, isHovering: isHovering, isHoveringBubble: isHoveringBubble, isFocused: anyFocused,
       focusIsKeyboard: focusIsKeyboard, focus: focus)
     guard wants != isShown else { return }
     let byFocus = keyboardFocused && focus != .none && !isHovering && !isHoveringBubble
@@ -339,6 +358,22 @@ private struct TooltipWindowProbe: View {
   var body: some View { Color.clear }
 }
 #endif
+
+/// Places the bubble `gap` above the view it decorates, or below it, slid
+/// sideways by `slide`. The bubble hangs from a zero-height frame on the
+/// view's top or bottom edge, so it needs no measured height and sits in
+/// place on its first frame. Used inside an overlay aligned to that edge.
+struct TooltipPlacement: ViewModifier {
+  let isAbove: Bool
+  let gap: CGFloat
+  let slide: CGFloat
+
+  func body(content: Content) -> some View {
+    content
+      .frame(height: 0, alignment: isAbove ? .bottom : .top)
+      .offset(x: slide, y: isAbove ? -gap : gap)
+  }
+}
 
 /// Escape hides a shown bubble wherever focus is, as core's top-most layer
 /// takes the press: a hidden button bound to Escape lives while the bubble

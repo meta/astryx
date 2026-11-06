@@ -424,7 +424,7 @@ export default function MarkdownPerfPage() {
           </HStack>
         </Section>
 
-        <Grid columns={2} gap={4}>
+        <Grid columns={{minWidth: 360, max: 2}} gap={4}>
           <Card padding={3}>
             <VStack gap={3}>
               <Heading level={3}>Run metrics</Heading>

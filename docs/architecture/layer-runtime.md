@@ -28,10 +28,15 @@ verified_by:
   [
     packages/core/src/Layer/useLayer.test.tsx,
     packages/core/src/Layer/layerViewportInset.test.ts,
+    packages/core/src/Layer/useLayerKeyboardClearance.test.tsx,
     packages/core/src/Layer/LayerProvider.test.tsx,
+    packages/core/src/Layer/toastHost.test.tsx,
+    packages/core/src/Layer/toastHost.lateRegistration.test.tsx,
+    scripts/layer-toast-bundle.test.mjs,
     packages/core/src/Layer/layerHost.test.ts,
     packages/core/src/Layer/anchorName.test.ts,
     packages/core/src/Layer/useLayerDismissal.test.tsx,
+    packages/core/src/Layer/layerClickBoundary.test.tsx,
     packages/core/src/Layer/layerDismissalInvariants.test.tsx,
     packages/core/src/Popover/Popover.test.tsx,
     packages/core/src/DropdownMenu/DropdownMenu.test.tsx,
@@ -43,6 +48,7 @@ verified_by:
     packages/core/src/hooks/useMenuHover.test.tsx,
     packages/core/src/Toast/ToastViewport.test.tsx,
     packages/core/src/Toast/ToastViewport.modalHost.test.tsx,
+    packages/core/src/Tooltip/__tests__/TooltipClosedTriggerAnchor.interaction.browser.spec.ts,
   ]
 deciding_specs: [spec:AST-038, spec:AST-059]
 ---
@@ -55,14 +61,28 @@ deciding_specs: [spec:AST-038, spec:AST-059]
 {
   "scope": "global",
   "triggers": {
-    "layering": ["INV2", "INV5", "INV6", "INV7", "INV11", "INV12"],
+    "layering": [
+      "INV2",
+      "INV5",
+      "INV6",
+      "INV7",
+      "INV11",
+      "INV12",
+      "INV14",
+      "INV15",
+      "INV17",
+      "INV18"
+    ],
     "layout": ["INV3", "INV11", "INV12"]
   }
 }
 ```
 
-This record describes the layer runtime shipped on current `main`. Accepted but
-unimplemented changes live in `spec:AST-003`; they are not current architecture.
+This record describes the layer runtime shipped on current `main`, except
+INV14, INV15, and INV17, which state required ownership the runtime does not
+yet meet;
+Current gaps lists where it falls short. Other accepted but unimplemented
+changes live in `spec:AST-003`; they are not current architecture.
 
 ## Purpose
 
@@ -286,6 +306,15 @@ during a press so native light dismissal does not mistake them for outside
 interaction. Their click action is cancelled as an invoker toggle so the control
 can perform its own action without closing the layer.
 
+A text input cannot be an invoker, so BaseTypeahead's list, DateInput's
+calendar, DateTimeInput's time list and ChatComposerInput's trigger menu, which
+their text fields own, are manual popovers. A press that starts and ends on the
+field's input or its buttons (and DateInput's label), or in the layer, is
+inside, judged across open shadow roots; a press that starts and ends anywhere
+else closes the layer, a scroll or pinch that starts outside does not, and
+Escape stays on the shared stack. Focus leaving the field stays each owner's to
+handle (`family:overlay-dismissal` AV4).
+
 ### Current dismissal plumbing
 
 `family:overlay-dismissal` owns the shipped Escape/platform-close membership
@@ -300,19 +329,37 @@ stack. Tooltip and HoverCard report current DOM presence; Popover and
 DropdownMenu register through `useFocusTrap`; Dialog, Lightbox, MobileNav,
 BottomSheet, BottomSheetSwitcher, and Drawer additionally ask
 `shouldDismissOnCloseRequest()` before acting on native platform close
-requests. Other family members still use local Escape handling as listed in
+requests. A BottomSheet covered by, or being replaced by, another sheet of its
+stack reports itself absent to the shared stack while that lasts
+(`component:BottomSheet` FR7): the shared stack stays the one dismissal
+registry, and only the order among sheets is the sheet stack's to state. Other family members still use local Escape handling as listed in
 `family:overlay-dismissal`.
 
-Outside interaction is not coordinated by the shared stack. Current paths are
-independent:
+Outside interaction is not coordinated by the shared stack. Current paths
+close their own layers independently:
 
 - auto popovers use native light dismiss;
+- BaseTypeahead's list, DateInput's calendar, DateTimeInput's time list and
+  ChatComposerInput's trigger menu, manual popovers, use Layer's outside-press
+  watch,
+  which closes on a press that starts and ends outside the field and the list
+  and forgets a cancelled press (a scroll);
 - native dialogs handle backdrop clicks locally;
-- ContextMenu uses a local outside `mousedown` listener;
+- ContextMenu uses a local outside `mousedown` listener, which skips the
+  compatibility mouse events of the finger press that opened the menu;
 - Tooltip and HoverCard use hover/focus loss plus a touch-only outside listener;
 - sheets own scrim and swipe behavior; and
 - dropdown submenus encode their root-close relationship locally through
   `DropdownMenuContext`.
+
+One fact joins these paths, for a modal host's backdrop press
+(`family:overlay-dismissal` FR11). The outside-press watch, the touch-only
+outside listener, the text fields' blur closes, ContextMenu's `mousedown` close,
+and a held Tooltip's focus-out release each record their close in a
+per-document count. A Dialog or Drawer backdrop press that sees the count
+change, or an auto popover close, between its pointer-down and its click leaves
+the host open. The count orders nothing else: each path still closes only its
+own layer.
 
 The shared stack exposes `isTopmostLayer()`, but current outside, backdrop, touch,
 and swipe paths do not use it. There is no shared interaction-owner role,
@@ -360,22 +407,53 @@ text inheritance and visual appearance.
 
 ### Current global and nonparticipating surfaces
 
-LayerProvider supplies Toast configuration and mounts ToastViewport. It is not a
-general portal host for all layers. Without a provider, `useToast` creates a
-separate React root under `document.body` and mirrors root theme attributes onto
-it.
+LayerProvider supplies Toast configuration and an outlet for ToastViewport.
+LayerProvider alone renders no empty viewport; Toast registers its viewport when
+imported. The outlet then renders the viewport after the app, on the client
+only, and a toast shown before that waits in the outlet. It is not a general
+portal host for all layers. Without a provider, `useToast` creates a separate
+React root under `document.body` and mirrors root theme attributes onto it.
 
 ToastViewport uses `popover="manual"` for top-layer promotion. Each open modal
-Dialog and each open scrim BottomSheet supplies its `<dialog>` as an outlet
-through the private `Layer/modalOutlet.ts` registry. A BottomSheet releases its
+Dialog, each open modal Drawer, and each open scrim BottomSheet supplies its
+`<dialog>` as an outlet
+through the private `Layer/modalOutlet.ts` registry (`spec:AST-003` FR18:
+every active native modal supplies one, a covered sheet included); a modal
+BottomSheetSwitcher flow supplies its active step's dialog, following each
+handoff. The registry orders outlets; it mounts nothing (INV14 names the
+mounting the runtime is to own). Which outlet is the latest — the one a
+global host renders into — follows the sheet stack's order among sheets, not
+the order they were supplied in: the top sheet is the latest, so a toast
+lands in the top sheet and never in a covered, inert one, also when the
+covered flow beneath it changes step and supplies its new step's dialog
+(that supply goes beneath the top sheet); when the top sheet closes the
+sheet it reveals is the latest again and takes the host back; a sheet is
+raised only among sheet outlets, so a Dialog opened from a sheet and
+supplied later stays the latest until it closes. A BottomSheet releases its
 outlet when it starts closing: its dialog stays modal through the exit
-animation, but inert. A top-layer viewport renders into a host element
+animation, but inert. A closing BottomSheet with focus inside is not yet inert or hidden (`component:BottomSheet` FR9); it becomes inert and hidden when focus leaves it or its exit ends. A modal Drawer also releases its outlet when it starts closing, so toasts
+do not slide out with it. A top-layer viewport renders into a host element
 it owns, moves that host into the latest open outlet, returns it to the
 viewport's tree position when no outlet is open, and enters the top layer again
 after each move. Toasts therefore paint above the modal and stay operable inside
 it. Moving the host does not remount the rows, so entries, timers, and focus
-handoff survive. Toast state lives inside the viewport. A viewport rendered with
-`isTopLayer={false}` stays in place.
+handoff survive. The rule is one of order, not of modality, and it reaches
+the surfaces that tell the registry they entered the top layer: the modal
+outlets, and a non-modal top-layer surface that blocks nothing and announces
+itself — a `hasScrim={false}` BottomSheet in the top layer with no backdrop
+(while a modal that does not contain it is open it stays beneath that modal,
+outside the top layer, and enters — announcing then — once that modal has
+gone), and a `hasScrim={false}` Drawer, which announces once its
+`showPopover()` has put it in the top layer. How such a surface is put in the
+top layer is the component's own today, inside the INV14 gap below; the rule
+here is only that it announces its entry through the same registry, and that
+the viewport then leaves and re-enters the top layer in place, keeping focus
+inside it, so toasts paint above it too. A non-modal surface shown with
+`show()` below the Popover API support floor is not in the top layer and
+announces nothing. In a stack of scrim BottomSheets the latest
+outlet is the top sheet, so toasts paint above the whole stack. Toast state
+lives inside the viewport. A viewport rendered with `isTopLayer={false}` stays
+in place.
 
 CommandPalette composes native Dialog. Its normal launcher presentation therefore
 uses `showModal()`; its documentation/showcase `isInline` path does not. The
@@ -411,11 +489,17 @@ layers use Layer rendering without joining Escape/platform dismissal.
 - **INV8 — Current Escape delivery follows registered layers.** The shared stack
   uses present `close` and `block` entries in its current depth, containment, and
   stable-registration order.
-- **INV9 — Outside channels remain component-owned and uncoordinated.** Current
-  backdrop, pointer, touch, hover/focus, and swipe handlers act through their
-  owning component or browser mechanism rather than one shared branch operation.
+- **INV9 — Outside channels remain component-owned.** Current backdrop,
+  pointer, touch, hover/focus, and swipe handlers act through their owning
+  component or browser mechanism rather than one shared branch operation. Their
+  one shared fact is the per-document count of outside closes in
+  `Layer/outsidePress.ts`: a modal backdrop press reads it, so a press that
+  closed a layer above the host does not also close the host
+  (`family:overlay-dismissal` FR11).
 - **INV10 — LayerProvider is configuration, not a universal layer host.** It
-  carries Toast configuration and the app-declared viewport inset. Trigger-
+  carries Toast configuration and the app-declared viewport inset.
+  LayerProvider alone renders no empty viewport; Toast registers its viewport
+  when imported. Trigger-
   associated layers resolve near their JSX position independently of the
   provider; the inset reaches them as a context value each layer carries on
   itself, never by resolving placement through the provider, and a layer with
@@ -424,20 +508,82 @@ layers use Layer rendering without joining Escape/platform dismissal.
   app-declared inset have one definition in the runtime; every anchor-mode layer
   inherits them, the layer box never exceeds the caps, the toast viewport reads
   the same inset, no consumer defines its own, no size is capped to the span
-  beside the trigger, and a consumer minimum is clamped by the runtime's cap.
+  beside the trigger, except that a later list for the same query keeps an open
+  Typeahead popup on its side and grows it only within the room there
+  (`spec:AST-092` FR6); the first list for a query places it normally, and a
+  consumer minimum is clamped by the runtime's cap. The software keyboard's cap
+  is one of those caps (`spec:AST-059` FR9). While a software keyboard covers
+  the bottom of the viewport, an anchor-mode layer whose block-end edge would
+  run under it keeps its block-start edge and ends 10 px above the keyboard.
+  The keyboard's height is the keyboard module's one height
+  (`architecture:react-component-runtime` INV11). Each layer carries its own
+  keyboard cap on its own element, folded into its block-axis cap, so a layer
+  opened inside a capped layer is never capped by its host. Beside the cap,
+  each layer carries the overflow its surface takes under it, so a surface
+  that reads it scrolls from the frame the cap lands, and its content never
+  paints past the capped box. A layer the keyboard does not reach, a layer
+  placed above its trigger, and a layer in custom or fixed mode stay as they
+  are.
 - **INV12 — The first frame is the settled frame.** No input to a layer's
-  viewport geometry is measured after paint and then applied, with one
-  exception. The runtime observes anchor visibility for every layer, and,
+  viewport geometry is measured after paint and then applied, with two
+  exceptions. The runtime observes anchor visibility for every layer, and,
   for a layer that keeps its anchor clear, whether it covers its anchor or
   leaves the viewport and whether its content overflows; each is read before
   first paint and, while the layer is open, from callbacks that run before the
-  frame paints. The exception is a same-size anchor that moves on screen, in
+  frame paints. The first is a same-size anchor that moves on screen, in
   layout or by a scroll, which only an intersection observer reports, after
   paint: at most one painted frame shows the layer over its anchor before the
-  correction. Otherwise a layer never paints at a geometry it is about to
+  correction. The second is the software keyboard's cap (`spec:AST-059` FR10).
+  A box's height cannot change on the compositor, so the cap changes once per
+  keyboard movement: when a rising keyboard has arrived, at once as a falling
+  keyboard starts down, and at once for a keyboard that changes without
+  moving. A change that would move the layer under a press in progress inside
+  it waits for that press's click. The cap is read from the layer's own box
+  without its entrance transform. It is read before the first paint of a layer
+  that opens with a keyboard up, when the keyboard moves, and before the first
+  paint of a layer element the runtime swaps in while the layer is open.
+  Otherwise a layer never paints at a geometry it is about to
   correct, and the runtime polls nothing: an anchor that a scrolled
   container hides is followed again when an intersection observer reports it
   back in view.
+- **INV14 — The runtime owns every layer's shared mechanism.** Internally, the layer runtime owns the shared
+  mechanism layers use: top-layer mounting, close-request delivery, the
+  presentation hold (keeping a layer's chosen presentation from the open until
+  the close settles), the one shared exit copy (the single Core mechanism
+  `architecture:component-style-authoring` INV7 names), and the backdrop tint,
+  drawn with `::backdrop`. A component that needs one of these uses the
+  runtime's rather than building its own. Each component still decides when it
+  dismisses, how it is hosted, and how it is presented, including the
+  backdrop's color and every other visual treatment (INV9;
+  `family:overlay-dismissal` AV3, AV4, AV6; `spec:AST-003` FR10). The runtime's
+  public exports are unchanged.
+- **INV15 — One lift-from-trigger module, opt-in per surface.** Lift-from-trigger presentation lives in one
+  internal module separate from the layer runtime: the lift from the trigger,
+  using the real trigger or a clone, whichever keeps the motion on the
+  compositor (`spec:AST-094` FR5);
+  the grow from the trigger's rectangle through the shared rectangle morph
+  (one Core animation from one rectangle to another); and
+  the exit, played through the runtime's exit copy (INV14). A clone of the
+  trigger is the one transient copy `architecture:component-style-authoring`
+  INV7 allows: inert, hidden from assistive technology, and removed when the
+  lift settles. Surfaces opt in;
+  any surface that lifts uses this module and never its own copy, and layers
+  that do not lift do not use it. It is internal and unexported
+  (`spec:AST-017` FR21).
+- **INV17 — A click inside a layer stops at the layer root.** A pointer,
+  mouse, touch, or click event that starts inside a layer root (both
+  `useLayer` renderers and the Dialog, Drawer, Lightbox, MobileNav,
+  BottomSheetPanel, and ToastViewport content roots) runs the handlers inside
+  the layer, then stops propagating through the React tree: no bubble-phase
+  handler on an ancestor of the layer's JSX position receives it, including a
+  caller's own element. An ancestor's capture-phase handler runs before the
+  stop and still receives it. A nested
+  layer stops at its own root. The native event is not stopped, so document
+  and window listeners and light dismiss still receive it. Keyboard, focus,
+  input, wheel, and drag events are out of scope.
+- **INV18 — Only a shown layer's trigger is an anchor.**
+  A trigger carries its CSS anchor name only while its layer is shown; a closed trigger is not an anchor, so a surface that moves around it keeps its transform animation off the main thread.
+  A layer that animates out counts as shown until its animations end.
 
 This record does not make future eligible-owner, branch-association, global-host,
 or browser-support requirements current. It does not own component focus entry or
@@ -457,7 +603,7 @@ Current gaps are observable facts, not current target behavior:
 - Backdrop, manual outside, touch, and swipe paths do not share the existing
   gesture claim or one association model.
 - Toast's root and fallback hosts remain behind the other native modals:
-  Lightbox, MobileNav, and a scrim BottomSheetSwitcher.
+  Lightbox and MobileNav.
 - The reduced browser fallback is not documented as non-equivalent.
 - Existing tests simulate Popover `toggle` and DOM nesting; they do not prove
   native pointer light dismissal, top-layer/modal ordering, real anchor geometry,
@@ -466,6 +612,35 @@ Current gaps are observable facts, not current target behavior:
 `spec:AST-003` is the accepted, unimplemented change that owns requirements,
 migration, verification, and completion criteria for these gaps. This record must
 be updated only as that work ships.
+
+INV14 and INV15 are not met yet, and `spec:AST-003` does not cover them: no
+shared presentation hold, exit copy, runtime backdrop tint, or lift module
+exists, and Dialog, Drawer, BottomSheet, Lightbox, MobileNav, ToastViewport,
+and Selector each build their own top-layer mounting, exit, or backdrop, and
+Popover builds its own presentation hold for its sheet presentation.
+BottomSheet's own includes its sheet stack's mounting — the re-show that
+keeps a document's sheets in open order, a step dialog's modal present, and
+the non-modal sheet's popover host — alongside its scrim; the ordering rules
+above are the stack's, the mounting under them is this gap's.
+
+INV17 is met through one seam, `Layer/layerClickBoundary.ts`, which every
+listed root spreads; BottomSheetPanel's root is the BottomSheet dialog that
+hosts it, so a BottomSheetSwitcher's forwarded handlers there still receive
+presses on sheet content (`component:BottomSheetSwitcher` FR9); Dialog's
+inline rendering mode layers nothing and is not a layer root. The per-component Tooltip and HoverCard guards
+(`component:Tooltip` FR11, `component:HoverCard` FR11) remain beside it until
+they are removed. Compatibility: the owner ruled on 2026-11-01 that the
+boundary ships as a patch `[fix]` (`spec:AST-017` FR5's fix class) for every
+caller no released record covered: no record promised that a press inside a
+layer reaches the layer's JSX ancestors, and a handler that needs those presses
+belongs on the layer content. The one released promise is
+`component:SelectableCard` FR2, whose caller `onClick` also runs for clicks
+that do not toggle, including a click inside an open Tooltip or HoverCard
+surface. Until the next minor, SelectableCard keeps it by calling the caller's
+`onClick` from a capture-phase handler on the card root for a click that starts
+inside a layer within the card, so before the layer's own handlers; the change
+is staged as `[breaking]` (`spec:AST-017` FR32) and `component:SelectableCard`
+`CLN-0026` removes that handler.
 
 ## Change coupling
 
@@ -480,12 +655,22 @@ be updated only as that work ships.
   where neither side fits, a layer wider than the viewport, an anchor that
   leaves the viewport or is already out of view, an app-declared inset arriving
   or changing, and the first painted frame against the settled one.
+- A software keyboard cap change verifies the cap's timing (a rising keyboard
+  that arrives, a falling one, one that changes at once, and a press in
+  progress inside the layer), a layer opened with the keyboard up in its first
+  frame, capped and with its content clipped, a layer element swapped in while
+  open, a pinch zoom, and the layers it leaves alone:
+  one clear of the keyboard, one placed above its trigger, and one in another
+  positioning.
 - A Popover lifecycle change verifies programmatic and browser closes, controlled
   state, temporary invoker association, and same-gesture trigger behavior.
 - A dismissal-stack change updates `family:overlay-dismissal` when membership or
   Escape/platform delivery changes.
 - A local outside, backdrop, touch, hover, or swipe change preserves the owning
   component's policy and verifies interactions with nested surfaces.
+- A change to a layer content root or to the INV17 seam verifies that a press
+  inside each kind of root reaches no ancestor bubble-phase handler and still reaches
+  document listeners and light dismiss.
 - A Toast host change preserves queued and visible toasts, timers, focus handoff,
   theme context, and ordering.
 - A CommandPalette host change preserves native modality, search state, focus
@@ -509,10 +694,23 @@ be updated only as that work ships.
   `Layer/layerInset.ts` owns the `--astryx-layer-inset-*` properties a layer or
   the toast viewport writes on itself to carry it; `Layer/clampInlineSize.ts`
   owns the clamp a consumer applies to a size of its own.
+- `Layer/useLayerKeyboardClearance.ts` owns the software keyboard's cap on an
+  open anchor-mode layer; the runtime imports it through `Layer/LayerTouch.ts`,
+  its one touch module. `Layer/layerKeyboardClearance.ts` holds the clearance
+  and the cap's arithmetic. `Layer/settledBox.ts` reads a layer's box without
+  its entrance transform, for the fallback order and the keyboard's cap.
 - `Layer/preserveAnimations.ts` owns carrying the CSS animations and
   transitions of a layer and its content across the re-placement's display
   reset.
 - `Layer/gestureCounter.ts` owns physical pointer/key gesture identity.
+- `Layer/layerClickBoundary.ts` owns the INV17 seam: the React-tree stop every
+  layer content root spreads, with the layer-root mark that
+  `privateAttributes/layerRoot.stylex.ts` owns.
+- One shared seam in the layer runtime owns INV17's stop on every layer content
+  root. It stops propagation through the React tree only. React's
+  `stopPropagation()` also stops the native event in React 19, which would
+  break ContextMenu's outside `mousedown`, Typeahead's pending click, and the
+  layer's keep-open `pointerup`, so the seam never stops the native event.
 - `Layer/layerStack.ts`, `Layer/useLayerDismissal.ts`, and
   `Layer/LayerDepthContext.tsx` own current registration, presence, ordering, and
   Escape/platform routing.
@@ -524,13 +722,19 @@ be updated only as that work ships.
   menu focus, and exposure-induced re-hover suppression.
 - `Layer/useTouchTrigger.ts` owns touch trigger classification and the current
   touch-only outside listener for Tooltip/HoverCard.
+- `Layer/outsidePress.ts` owns the outside-press watch for a text field's
+  manual layer, used by BaseTypeahead, DateInput, DateTimeInput and
+  ChatComposerInput's trigger menu, and the per-document count of outside
+  closes that a modal backdrop press reads (`family:overlay-dismissal` FR11).
 - `DropdownMenuContext` and `DropdownMenuSubMenu` own the current local
   menu-cascade parent-close chain.
 - Dialog families own native modal/backdrop presentation and their local channel
   policies.
 - Drawer owns modal `showModal()` and non-modal `showPopover()` hosting while the
   shared dismissal stack owns Escape and platform close routing.
-- `LayerProvider`, `ToastContext`, `useToast`, and `ToastViewport` own current
+- `Layer/toastHost.tsx` owns `ToastContext`, Toast's viewport registration, and
+  the toast queue that LayerProvider's outlet and `useToast`'s fallback root
+  both use. `LayerProvider`, `useToast`, and `ToastViewport` own current
   notification state, dispatch, and viewport rendering; the viewport sits at
   the provider's inset on each edge unless its own `toast.inset` overrides that
   edge.
@@ -556,16 +760,20 @@ this current architecture record.
 
 ## Verification
 
-| Invariant  | Evidence                                                                                                                                                    | Failure signal                                                                                                                                                                                                |
-| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| INV1, INV2 | `useLayer.test.tsx` and `layerHost.test.ts`                                                                                                                 | Invalid DOM, stale host, lost theme/writing context, or portal mistaken for top-layer promotion                                                                                                               |
-| INV3–INV5  | `useLayer.test.tsx` and `anchorName.test.ts`                                                                                                                | A mode leaks geometry, RTL resolves from the wrong context, fallback clips, or a sibling anchor is lost                                                                                                       |
-| INV11      | `layerViewportInset.test.ts`, `useLayer.test.tsx`, and the `Core/Layer` viewport-inset stories under the story play guard at a desktop and a phone viewport | A second gutter definition, a `100%`-of-span cap, a layer narrower than its explicit size, a layer box wider than the viewport, a layer inside the gutter, or a layer that slides toward an off-screen anchor |
-| INV12      | The `Core/Layer` viewport-inset stories' first-frame comparison, and `useLayer.test.tsx`'s synchronous anchor read                                          | A layer whose first painted rectangle differs from its settled one                                                                                                                                            |
-| INV6, INV7 | `useLayer.test.tsx`, `Popover.test.tsx`, `DropdownMenu.test.tsx`, and `useMenuHover.test.tsx`                                                               | Duplicate close callback or the same press/re-hover reopens a surface                                                                                                                                         |
-| INV8       | `useLayerDismissal.test.tsx`, `layerDismissalInvariants.test.tsx`, and `useFocusTrap.test.tsx`                                                              | Current top registered layer is skipped, two layers close, or a blocker leaks through                                                                                                                         |
-| INV9       | Representative Dialog, ContextMenu, Tooltip/HoverCard, and BottomSheet source/tests                                                                         | A current local channel silently changes ownership or policy                                                                                                                                                  |
-| INV10      | `LayerProvider.tsx`, `LayerProvider.test.tsx`, `useToast.tsx`, `ToastViewport.test.tsx`, and `ToastViewport.modalHost.test.tsx`                             | Provider begins relocating ordinary layers, Toast fallback loses its current lifecycle, or a default provider renders differently from no provider                                                            |
+| Invariant    | Evidence                                                                                                                                                                                                                                                                             | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| INV1, INV2   | `useLayer.test.tsx` and `layerHost.test.ts`                                                                                                                                                                                                                                          | Invalid DOM, stale host, lost theme/writing context, or portal mistaken for top-layer promotion                                                                                                                                                                                                                                                                                                                              |
+| INV3–INV5    | `useLayer.test.tsx` and `anchorName.test.ts`                                                                                                                                                                                                                                         | A mode leaks geometry, RTL resolves from the wrong context, fallback clips, or a sibling anchor is lost                                                                                                                                                                                                                                                                                                                      |
+| INV11        | `layerViewportInset.test.ts`, `useLayer.test.tsx`, and the `Core/Layer` viewport-inset stories under the story play guard at a desktop and a phone viewport; `BaseTypeahead.incremental.test.tsx` and the Typeahead incremental-results stories for the `spec:AST-092` FR6 exception | A second gutter definition, a `100%`-of-span cap, a layer narrower than its explicit size, a layer box wider than the viewport, a layer inside the gutter, or a layer that slides toward an off-screen anchor; for an open Typeahead popup, a later list for the same query that flips it to the other side or grows it past the room on its side, or a first list for a query that is capped to the span beside the trigger |
+| INV12        | The `Core/Layer` viewport-inset stories' first-frame comparison, and `useLayer.test.tsx`'s synchronous anchor read                                                                                                                                                                   | A layer whose first painted rectangle differs from its settled one                                                                                                                                                                                                                                                                                                                                                           |
+| INV11, INV12 | The software keyboard's cap: `useLayerKeyboardClearance.test.tsx` for its rule, its timing, and its read before first paint; `PopoverKeyboard.interaction.browser.spec.ts` and `keyboardCappedLists.interaction.browser.spec.ts` for its rendered geometry in Chromium and WebKit    | A layer that runs under the keyboard, or is capped though the keyboard does not reach it; a cap that changes more than once per keyboard movement or under a press; a layer opened with the keyboard up whose first frame is uncapped or paints its content past its box                                                                                                                                                     |
+| INV6, INV7   | `useLayer.test.tsx`, `Popover.test.tsx`, `DropdownMenu.test.tsx`, and `useMenuHover.test.tsx`                                                                                                                                                                                        | Duplicate close callback or the same press/re-hover reopens a surface                                                                                                                                                                                                                                                                                                                                                        |
+| INV8         | `useLayerDismissal.test.tsx`, `layerDismissalInvariants.test.tsx`, and `useFocusTrap.test.tsx`                                                                                                                                                                                       | Current top registered layer is skipped, two layers close, or a blocker leaks through                                                                                                                                                                                                                                                                                                                                        |
+| INV9         | Representative Dialog, ContextMenu, Tooltip/HoverCard, and BottomSheet source/tests; `useBackdropPress.test.tsx`; `outsidePress.test.ts`                                                                                                                                             | A current local channel silently changes ownership or policy                                                                                                                                                                                                                                                                                                                                                                 |
+| INV10        | `LayerProvider.tsx`, `toastHost.tsx`, `LayerProvider.test.tsx`, `toastHost.test.tsx`, `toastHost.lateRegistration.test.tsx`, `useToast.tsx`, `ToastViewport.test.tsx`, `ToastViewport.modalHost.test.tsx`, and `scripts/layer-toast-bundle.test.mjs`                                 | Provider begins relocating ordinary layers, Toast fallback loses its current lifecycle, a default provider renders differently from no provider, a Layer import loads a Toast module, or a toast added before Toast loads is lost                                                                                                                                                                                            |
+| INV14, INV15 | Source boundary check over Core for top-layer hosts, exit copies, backdrop elements, lift, and rectangle-morph code outside the runtime and the lift module                                                                                                                          | A component building its own copy of a mechanism INV14 lists (top-layer mounting, close-request delivery, hold, exit copy, or backdrop element), or re-implementing the lift or the grow                                                                                                                                                                                                                                     |
+| INV17        | One runtime suite over every kind of layer root: a `useLayer` layer, inline and portaled, and the Dialog, Drawer, Lightbox, MobileNav, BottomSheetPanel, and ToastViewport content roots, each inside a plain `onClick` wrapper and a Core clickable container; nested layers        | A click inside a layer root that reaches an ancestor bubble-phase handler, a caller's wrapper included; an outer layer's handler that receives an inner layer's press; or a document listener or light dismiss that no longer receives it                                                                                                                                                                                    |
+| INV18        | `useLayer.test.tsx` (a closed trigger has no anchor-name, and the trigger of a shown or fading layer does) and `TooltipClosedTriggerAnchor.interaction.browser.spec.ts` in Chromium and WebKit                                                                                       | A closed trigger with an anchor-name, a shown or fading layer placed away from its anchor, or a surface around a closed trigger that stops while the main thread is busy                                                                                                                                                                                                                                                     |
 
 Current unit coverage proves emitted styles, reducers, state transitions, and DOM
 placement. Native Popover, `<dialog>`, focus, top-layer ordering, and rendered

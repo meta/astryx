@@ -40,6 +40,8 @@ function tsType(type: PropType, content = 'AstryxContentNode'): string {
       return `ReadonlyArray<${content}>`;
     case 'icon':
       return 'IconName';
+    case 'textOrBoolean':
+      return 'string | boolean';
     case 'named':
       return type.name;
   }

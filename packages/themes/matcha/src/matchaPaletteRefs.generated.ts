@@ -20,7 +20,7 @@ export const matchaPaletteRefs = {
   },
   blue: {
     light: {35: '#2e4a6e', 50: '#3a5e8c'},
-    dark: {50: '#3a5e8c', 70: '#7ba8d4', 75: '#8dbce0'},
+    dark: {50: '#3a5e8c', 70: '#7ba8d4', 75: '#8dbce0', 80: '#a7c9e3'},
   },
   purple: {
     light: {35: '#553a70', 50: '#6b4a8c'},

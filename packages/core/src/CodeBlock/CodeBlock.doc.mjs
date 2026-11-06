@@ -28,9 +28,9 @@ export const docs = {
     },
     {
       name: 'language',
-      type: 'string',
+      type: 'string | CodeLanguage',
       description:
-        'Language for syntax highlighting. Use "plaintext" to disable.',
+        'Language for syntax highlighting. A string selects a built-in: ts, js, tsx, jsx, json, html, xml, svg, css, scss, less, python, bash/sh/zsh/shell, php, hack, yaml, markdown, c, cpp (c++, cc, cxx, hpp, hh), sql, rust, kotlin, swift, go. Any other language is a value you import on its own and pass here: graphql, java, thrift, objectiveC, toml, powershell, ruby, lua, dockerfile from @astryxdesign/core/CodeBlock/languages/<path> (e.g. languages/graphql, languages/objective-c), or your own made with createCodeLanguage({name, identifiers, tokenize}). A value labels with its name and reflects its first identifier as data-language. Use "plaintext" to disable.',
       default: "'plaintext'",
     },
     {
@@ -52,9 +52,17 @@ export const docs = {
       default: 'false',
     },
     {
+      name: 'startLineNumber',
+      type: 'number',
+      description:
+        'First line number shown in the gutter. The gutter shows file coordinates (startLineNumber + index) so a code excerpt reads with its real line numbers. highlightLines uses the same file coordinates. Values below 1 clamp to 1.',
+      default: '1',
+    },
+    {
       name: 'highlightLines',
       type: 'number[]',
-      description: '1-indexed line numbers to highlight.',
+      description:
+        '1-indexed line numbers to highlight, in the same file coordinates as the gutter (see startLineNumber). Out-of-range entries render no highlight.',
     },
     {
       name: 'isDiff',
@@ -78,7 +86,7 @@ export const docs = {
       name: 'endContent',
       type: 'ReactNode',
       description:
-        'Your own controls, shown just before Copy: in the header when the block has one, otherwise beside the code in the top inline-end corner, never over it. It never creates a header and never collapses the block. Use ghost sm IconButtons to match Copy.',
+        'Your own controls, shown just before Copy: in the header when the block has one, otherwise beside the code in the top inline-end corner, never over it. It never creates a header and never collapses the block. Ghost sm IconButtons match Copy’s size and variant.',
       slotElements: [
         {
           __element: 'IconButton',
@@ -124,7 +132,8 @@ export const docs = {
     {
       name: 'tokenizer',
       type: '(code: string, language: string) => Array<{type: string; start: number; end: number}>',
-      description: 'Custom tokenizer override for unsupported languages.',
+      description:
+        'Deprecated: pass language={createCodeLanguage({name, identifiers, tokenize})} with this same function instead. Still works exactly as released and wins over the language; astryx upgrade rewrites static uses.',
     },
     {
       name: 'syntaxTheme',
@@ -208,6 +217,23 @@ export const docs = {
           'Width of the line-number gutter, computed from the digit count of the last line so the code column starts at a stable offset.',
         default: '2ch',
         private: true,
+      },
+    ],
+    componentIcons: [
+      {
+        slot: 'code-block-copy',
+        description: 'The copy button icon.',
+        fallback: '`copy`; `check` while copied',
+        state: [
+          {
+            name: 'copied',
+            type: 'boolean',
+            description:
+              'True while the copied feedback shows after a successful copy.',
+          },
+        ],
+        whenNull:
+          'Hides the glyph. The button keeps its size, name, tooltip, and copy action.',
       },
     ],
   },

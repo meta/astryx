@@ -25,7 +25,7 @@ deciding_specs: []
 | System behavior         | One internal modifier, `astryxTooltip`, shows every Swift component's tooltip as core's: above the view, on a resting pointer, keyboard focus, or a direct tap; hidden by a press, Escape, or leaving; never seen by VoiceOver. |
 | End-user impact         | A person on an iPhone, an iPad, or a Mac reads a tooltip the same way in every component and as on the web, and a VoiceOver user hears its words once.                                                                          |
 | Builder impact          | A component passes its words, its hint, and how focus and touch reach it; it does not build its own tooltip.                                                                                                                    |
-| Compatibility/readiness | Internal; no public API. Draft; hover, focus, Escape, and tap are tested as logic until an app-hosted UI test exists.                                                                                                           |
+| Compatibility/readiness | Internal; no public API. Draft; hover, focus, Escape, and tap are tested as logic; the host app has no Tooltip screen yet (gap).                                                                                                |
 | Review checks           | Reject a component tooltip built outside `astryxTooltip`, SwiftUI's `.help` anywhere in the package, a bubble VoiceOver reads, a tap that keeps an enclosing row from running, or a change that rebuilds the decorated view.    |
 | Governing rules         | `spec:AST-082` FR3; `spec:AST-093` FR2, FR4.                                                                                                                                                                                    |
 
@@ -51,6 +51,9 @@ on the view the tooltip describes.
   focusable), `control` (the view is a control that takes focus already), or
   `tabStop` (a static view is made a tab stop while it has words, as core gives
   a static element with a tooltip a tab stop).
+  `inside` marks a view that holds controls of its own, such as a thumbnail's
+  open and remove buttons, and carries whether one of them has focus: focus
+  there shows the tooltip, as focus within core's tooltip wrapper does.
 - `touch` says what a direct tap does, as core's `touchTrigger`: `auto` (the
   default) opens the tooltip unless the view is a control, `tap` always opens
   it, and `none` never does.
@@ -69,10 +72,13 @@ shows with the system's own look and delay, never on keyboard focus or a tap.
   300-point width. The bubble draws in the view's own layer, so a scroll view
   or another clipping container around the view cuts it off, where core's top
   layer is never clipped.
-  On its first show, before the window's safe area and the bubble's own size are known, the bubble opens above the view, or below it when even the gap does not fit under the `space.s4` floor, with no slide, and moves into place on the next frame.
+  The bubble hangs from the view's top or bottom edge, so it sits `space.s1` clear of the view from its first frame. On that first show, before the window's safe area and the bubble's own size are known, it opens above the view, or below it when even the gap does not fit under the `space.s4` floor, with no slide, and flips or slides into place on the next frame.
 - **INV2 — Pointer.** A pointer resting on the view shows the bubble after
   core's 200 ms. It stays while the pointer is on the view or on the bubble,
   hides 100 ms after the pointer leaves both, and a press hides it.
+  A pointer that leaves the view or the bubble hides it after the bridge even
+  when keyboard focus opened it, as core's `mouseleave` does, until focus
+  leaves and returns.
 - **INV3 — Keyboard focus.** Where focus reaches the tooltip, focus the
   keyboard brings shows the bubble at once, as core's `focusin` does, and it
   hides 100 ms after focus leaves. Whether the keyboard brought focus is
@@ -122,12 +128,12 @@ tooltip tests prove it stays current.
 
 | Invariant  | Evidence                                                                                                                                                                                                                                        | Failure signal                                                                                                                            |
 | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| INV1       | `TooltipPresenterTests.swift`: above unless no room; slides inside the window; long words wrap within 300 points                                                                                                                                | a bubble below with room above, or one line past 300 points                                                                               |
-| INV2       | `TooltipPresenterTests.swift`: delay and bridge; the pointer on the view or the bubble keeps it up                                                                                                                                              | a bubble that hides while hovered or shows at once on a pointer                                                                           |
+| INV1       | `TooltipPresenterTests.swift`: above unless no room; slides inside the window; long words wrap within 300 points; a render puts the bubble 4 points above or below a view, never on it                                                          | a bubble below with room above, or one line past 300 points                                                                               |
+| INV2       | `TooltipPresenterTests.swift`: delay and bridge; the pointer on the view or the bubble keeps it up; the rule that a pointer leaving lets a keyboard-opened bubble hide, as logic only, since the hover path needs an app-hosted test            | a bubble that hides while hovered or shows at once on a pointer                                                                           |
 | INV3       | `TooltipPresenterTests.swift`: focus shows at once for `control` and `tabStop`, never for `none`; only keyboard focus opens or holds it                                                                                                         | a delayed focus bubble, one on a view focus does not reach, or one a click's focus opens or holds                                         |
 | INV5       | `TooltipPresenterTests.swift`: `auto` resolves as core's; only a direct touch on a tap trigger opens it; a tap elsewhere closes it, a tap on the view toggles it, a scroll or pinch on the view closes it, and a gesture on the bubble does not | a bubble from a pointer click, under VoiceOver, or on a control under `auto`; one a gesture elsewhere or a scroll on the view leaves open |
 | INV6       | `TooltipPresenterTests.swift`: blank words and a disabled view show nothing                                                                                                                                                                     | a tooltip on a disabled view                                                                                                              |
 | INV8       | `TooltipPresenterTests.swift`: the bubble's colors and padding in two themes                                                                                                                                                                    | a bubble in other colors                                                                                                                  |
 | INV9       | `TooltipPresenterTests.swift`: a view with a tooltip draws as it did without                                                                                                                                                                    | a decorated view that draws differently                                                                                                   |
 | No `.help` | `TooltipPresenterTests.swift`: no Swift source uses `.help(`                                                                                                                                                                                    | a view that shows tooltip words through `.help`                                                                                           |
-| INV2–INV7  | Not measured: hover, focus, Escape, and tap need an app-hosted UI test, which the package lacks                                                                                                                                                 | none until that test exists                                                                                                               |
+| INV2–INV7  | Implementation gap: hover, focus, Escape, and tap need a host-app Tooltip screen, which does not exist yet                                                                                                                                      | none until that screen exists                                                                                                             |

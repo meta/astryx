@@ -22,6 +22,7 @@ import {
   COMPACT_TOUCH_PRESENTATION_QUERY,
   useAdaptivePresentation,
 } from '../hooks/useAdaptivePresentation';
+import {reducedMotionKeys} from '../motion/reducedMotion.stylex';
 import {DEFAULT_COMPACT_DEFINITION} from '../theme/themeAdaptations';
 import {Theme, defineTheme} from '../theme';
 import {
@@ -33,6 +34,7 @@ import {
   readTouchPresentation,
   useTouchPresentation,
 } from './touchPresentation';
+import {touchKeys} from './touchPresentation.stylex';
 
 /**
  * A device: what its primary pointer is, how big its viewport is, and
@@ -89,6 +91,32 @@ afterEach(() => {
   listeners.clear();
   vi.unstubAllGlobals();
 });
+
+/**
+ * The Levenshtein distance between two strings, or more than `limit` as soon
+ * as it must exceed it: how many characters a spelling is off another.
+ */
+function editDistance(a: string, b: string, limit: number): number {
+  if (Math.abs(a.length - b.length) > limit) {
+    return limit + 1;
+  }
+  let previous = Array.from({length: b.length + 1}, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const current = [i];
+    for (let j = 1; j <= b.length; j++) {
+      current[j] = Math.min(
+        previous[j] + 1,
+        current[j - 1] + 1,
+        previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+    }
+    if (Math.min(...current) > limit) {
+      return limit + 1;
+    }
+    previous = current;
+  }
+  return previous[b.length];
+}
 
 describe('touch presentation', () => {
   it('keys touch on the primary pointer and compact on the width', () => {
@@ -181,6 +209,116 @@ describe('touch presentation', () => {
     });
   });
 
+  it('holds the same keys the resolver defines', () => {
+    expect(touchKeys.touch).toBe(`@media ${TOUCH_QUERY}`);
+    expect(touchKeys.compact).toBe(`@media ${COMPACT_QUERY}`);
+    expect(touchKeys.compactTouch).toBe(`@media ${COMPACT_TOUCH_QUERY}`);
+    expect(touchKeys.iosSupports).toBe(`@supports ${IOS_SUPPORTS_QUERY}`);
+    expect(IOS_TOUCH_STYLE_KEYS).toEqual([
+      touchKeys.touch,
+      touchKeys.iosSupports,
+    ]);
+  });
+
+  it('keeps every touch and Reduce Motion key literal in core: no computed StyleX key', () => {
+    // An imported defineConsts at-rule key compiles to a different StyleX
+    // priority than the same literal (6000 vs 3200), which reorders the
+    // cascade; core spells the keys and matches them to the constants.
+    const root = path.resolve(__dirname, '..');
+    const computed: string[] = [];
+    const walk = (dir: string): void => {
+      for (const entry of fs.readdirSync(dir, {withFileTypes: true})) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          if (entry.name !== '__tests__' && entry.name !== 'node_modules') {
+            walk(full);
+          }
+        } else if (
+          /\.(ts|tsx)$/.test(entry.name) &&
+          !/\.test\.|\.spec\./.test(entry.name)
+        ) {
+          fs.readFileSync(full, 'utf8')
+            .split('\n')
+            .forEach((line, index) => {
+              if (
+                !/^\s*(\*|\/\/)/.test(line) &&
+                /\[(touchKeys|reducedMotionKeys)\.[a-zA-Z]+\]\s*:/.test(line)
+              ) {
+                computed.push(`${path.relative(root, full)}:${index + 1}`);
+              }
+            });
+        }
+      }
+    };
+    walk(root);
+    expect(computed).toEqual([]);
+  });
+
+  it('keeps every quoted at-rule key in core that names the pointer, the touch callout or a compact size, or that is a few characters off a reference spelling, one of the reference spellings', () => {
+    // Every quoted string that starts with `@` is read, whatever its at-rule
+    // is spelled. Two rules, so no drift depends on which character moved:
+    // - one that names the pointer or the touch callout (any word of either
+    //   query, any case), or a compact size with its breakpoint, is one of
+    //   the resolver's own spellings or a query the presentation does not
+    //   decide (a second pointer, a fine pointer, Reduce Motion split by
+    //   pointer);
+    // - one within three characters of any of those spellings, case aside,
+    //   is that spelling exactly: a capital, a digit or a typo anywhere, in
+    //   the at-rule, a feature or a value, fails.
+    const pointerKeys = new Set<string>([
+      touchKeys.touch,
+      touchKeys.compactTouch,
+      touchKeys.iosSupports,
+      '@media (any-pointer: coarse)',
+      '@media (pointer: fine)',
+      reducedMotionKeys.fade,
+      reducedMotionKeys.instant,
+    ]);
+    const references = new Set<string>([...pointerKeys, touchKeys.compact]);
+    const lowered = [...references].map(reference => reference.toLowerCase());
+    const root = path.resolve(__dirname, '..');
+    const drifted: string[] = [];
+    let pointerLiterals = 0;
+    const walk = (dir: string): void => {
+      for (const entry of fs.readdirSync(dir, {withFileTypes: true})) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          if (entry.name !== '__tests__' && entry.name !== 'node_modules') {
+            walk(full);
+          }
+        } else if (
+          /\.(ts|tsx)$/.test(entry.name) &&
+          !/\.(test|spec|stories)\./.test(entry.name)
+        ) {
+          const source = fs.readFileSync(full, 'utf8');
+          for (const match of source.matchAll(/'(@[^'\n]*)'/g)) {
+            const key = match[1];
+            if (references.has(key)) {
+              if (pointerKeys.has(key)) {
+                pointerLiterals++;
+              }
+              continue;
+            }
+            const names =
+              /pointer|coarse|fine|touch|callout/i.test(key) ||
+              (/\b(width|height)\b/i.test(key) && /\b(768|500)px\b/.test(key));
+            const lower = key.toLowerCase();
+            const isNear = lowered.some(
+              reference => editDistance(lower, reference, 3) <= 3,
+            );
+            if (names || isNear) {
+              drifted.push(`${path.relative(root, full)}: ${key}`);
+            }
+          }
+        }
+      }
+    };
+    walk(root);
+    expect(drifted).toEqual([]);
+    // Core writes the touch key as a literal in many places.
+    expect(pointerLiterals).toBeGreaterThan(50);
+  });
+
   it('keeps every iOS gate in core spelled and nested as the resolver', () => {
     // The gate is the media query outside and the supports query inside; a
     // single supports query that names the pointer never matches anywhere.
@@ -201,7 +339,8 @@ describe('touch presentation', () => {
         } else if (
           /\.(ts|tsx)$/.test(entry.name) &&
           !/\.test\.|\.spec\./.test(entry.name) &&
-          entry.name !== 'touchPresentation.ts'
+          entry.name !== 'touchPresentation.ts' &&
+          entry.name !== 'touchPresentation.stylex.ts'
         ) {
           const lines = fs.readFileSync(full, 'utf8').split('\n');
           lines.forEach((line, index) => {
