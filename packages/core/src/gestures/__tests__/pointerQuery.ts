@@ -25,10 +25,20 @@ export interface PointerQuery {
 
 /**
  * The primary pointer is coarse (`isCoarse`) or fine until `restore` runs;
- * `set` changes it as a tablet docking a mouse would.
+ * `set` changes it as a tablet docking a mouse would. `view` is the window
+ * that answers: this one, or an iframe's.
  */
-export function pointerQuery(isCoarse: boolean): PointerQuery {
-  const matchMedia = window.matchMedia;
+export function pointerQuery(
+  isCoarse: boolean,
+  view: Window = window,
+): PointerQuery {
+  const own: Window['matchMedia'] | undefined = view.matchMedia;
+  // jsdom gives an iframe's window no matchMedia: its other queries go to
+  // this window's.
+  const answerOther =
+    own == null
+      ? (media: string) => window.matchMedia(media)
+      : (media: string) => own.call(view, media);
   const listeners = new Set<() => void>();
   let coarse = isCoarse;
   const query = {
@@ -51,8 +61,8 @@ export function pointerQuery(isCoarse: boolean): PointerQuery {
     },
     dispatchEvent: () => false,
   } as unknown as MediaQueryList;
-  window.matchMedia = (media: string) =>
-    media.trim() === TOUCH_QUERY ? query : matchMedia(media);
+  view.matchMedia = (media: string) =>
+    media.trim() === TOUCH_QUERY ? query : answerOther(media);
   return {
     set(next) {
       if (next === coarse) {
@@ -64,7 +74,11 @@ export function pointerQuery(isCoarse: boolean): PointerQuery {
       }
     },
     restore: () => {
-      window.matchMedia = matchMedia;
+      if (own == null) {
+        Reflect.deleteProperty(view, 'matchMedia');
+      } else {
+        view.matchMedia = own;
+      }
     },
   };
 }
