@@ -119,7 +119,9 @@ describe('rankSearchIndex over stored indexes', () => {
     full = project('full', ['core', ...INTEGRATIONS], true);
     const coreOnly = project('core-only', ['core']);
     dirs.push(full, coreOnly);
-    indexes = [JSON.parse(JSON.stringify(await exportSearchIndex({cwd: coreOnly})))];
+    indexes = [
+      JSON.parse(JSON.stringify(await exportSearchIndex({cwd: coreOnly}))),
+    ];
     for (const pkg of INTEGRATIONS) {
       const alone = project(pkg, ['core', pkg]);
       dirs.push(alone);
@@ -145,7 +147,9 @@ describe('rankSearchIndex over stored indexes', () => {
   it.each(GOLDEN)(
     '`%s` from the whole-project index answers as search() does there',
     async query => {
-      const whole = JSON.parse(JSON.stringify(await exportSearchIndex({cwd: full})));
+      const whole = JSON.parse(
+        JSON.stringify(await exportSearchIndex({cwd: full})),
+      );
       const expected = ranked(await search(query, {cwd: full, limit: 50}));
       const actual = ranked(await rankSearchIndex(query, whole, {limit: 50}));
       expect(actual).toEqual(expected);
@@ -200,6 +204,13 @@ describe('rankSearchIndex over stored indexes', () => {
     });
     const withCore = await rankSearchIndex('button', [docsOnly, indexes[1]]);
     expect(withCore.meta?.partial).toBeUndefined();
+    // A docs-only search never reads Core, so it reports nothing skipped.
+    const docs = await rankSearchIndex('button', [docsOnly], {type: 'doc'});
+    expect(docs.meta?.partial).toBeUndefined();
+    // A domain that reads Core, asked for by name, is refused as search() is.
+    await expect(
+      rankSearchIndex('button', [docsOnly], {type: 'component'}),
+    ).rejects.toMatchObject({code: 'ERR_CORE_NOT_FOUND'});
   });
 
   it('a package index holds only that package, with no folder paths', () => {
@@ -225,8 +236,8 @@ describe('rankSearchIndex over stored indexes', () => {
   });
 
   it('refuses an empty package name', async () => {
-    await expect(exportSearchIndex({cwd: full, package: ' '})).rejects.toMatchObject(
-      {code: 'ERR_INVALID_ARGUMENT'},
-    );
+    await expect(
+      exportSearchIndex({cwd: full, package: ' '}),
+    ).rejects.toMatchObject({code: 'ERR_INVALID_ARGUMENT'});
   });
 });

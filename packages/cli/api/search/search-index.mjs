@@ -22,6 +22,7 @@ import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {linkSearchResponse} from '../component/_adapter.mjs';
 import {AstryxError} from '../error.mjs';
 import {gatherCandidates, loadSearchData} from './_adapter.mjs';
+import {CORELESS_DOMAINS} from './_query.mjs';
 import {checkSearchArgs} from './_result.mjs';
 import {SEARCH_TREE} from './tree.mjs';
 
@@ -88,7 +89,12 @@ export async function exportSearchIndex(options = {}) {
         candidates,
         ...(gathered.coreSkipped == null
           ? {}
-          : {coreSkipped: gathered.coreSkipped}),
+          : {
+              coreSkipped: gathered.coreSkipped,
+              ...(gathered.coreSkippedCode == null
+                ? {}
+                : {coreSkippedCode: gathered.coreSkippedCode}),
+            }),
       };
     }),
   );
@@ -121,10 +127,12 @@ async function addDisplayDescriptions(candidates, cwd) {
     }),
     cwd,
   );
-  response.data.results.forEach((/** @type {any} */ result, /** @type {number} */ i) => {
-    if (result.description !== linkable[i].description)
-      linkable[i][DISPLAY_FIELD] = result.description;
-  });
+  response.data.results.forEach(
+    (/** @type {any} */ result, /** @type {number} */ i) => {
+      if (result.description !== linkable[i].description)
+        linkable[i][DISPLAY_FIELD] = result.description;
+    },
+  );
 }
 
 /**
@@ -173,26 +181,55 @@ export async function rankSearchIndex(query, indexes, options = {}) {
   const {type} = options;
   const wanted =
     type == null ? all : all.filter(candidate => candidate.domain === type);
-  // Core is missing only when no index had it.
-  const coreSkipped = list.every(index => typeof index.coreSkipped === 'string')
-    ? /** @type {string} */ (list[0]?.coreSkipped ?? null)
-    : null;
+  const {searchedComponents, coreSkipped} = coreFlags(list, type);
   const response = /** @type {import('./search.type.mjs').SearchResponse} */ (
     await runTree(
       SEARCH_TREE,
       {query, options: {type, limit: options.limit}},
       {
         all: wanted,
-        components: wanted.filter(candidate => candidate.domain === 'component'),
-        searchedComponents:
-          coreSkipped == null && (type == null || type === 'component'),
+        components: wanted.filter(
+          candidate => candidate.domain === 'component',
+        ),
+        searchedComponents,
         outside: false,
         coreSkipped,
+        coreSkippedCode: null,
         data: loadSearchData(),
       },
     )
   );
   return withDisplayDescriptions(response, wanted);
+}
+
+/**
+ * The catalog flags `search` derives from Core for a request of `type`, from
+ * the indexes: Core is missing only when no index had it. An open search then
+ * answers from the docs and themes and names what it skipped; a docs-only or
+ * themes-only search never reads Core; a domain that reads Core, asked for by
+ * name, is refused with the error `search` gives.
+ * @param {import('./search.type.mjs').SearchIndex[]} list
+ * @param {import('./search.type.mjs').SearchDomain | undefined} type
+ * @returns {{searchedComponents: boolean, coreSkipped: string | null}}
+ */
+function coreFlags(list, type) {
+  const missing =
+    list.length > 0 &&
+    list.every(index => typeof index.coreSkipped === 'string');
+  const reason = missing ? /** @type {string} */ (list[0].coreSkipped) : null;
+  if (type != null && CORELESS_DOMAINS.includes(type))
+    return {searchedComponents: false, coreSkipped: null};
+  if (type != null && reason != null)
+    throw new AstryxError(
+      reason,
+      undefined,
+      list[0].coreSkippedCode ?? ERROR_CODES.ERR_CORE_NOT_FOUND,
+    );
+  return {
+    searchedComponents:
+      reason == null && (type == null || type === 'component'),
+    coreSkipped: type == null ? reason : null,
+  };
 }
 
 /**
@@ -206,7 +243,10 @@ function withDisplayDescriptions(response, candidates) {
   /** @type {Map<string, string>} */
   const display = new Map();
   for (const candidate of candidates) {
-    if (candidate.domain === 'component' && typeof candidate[DISPLAY_FIELD] === 'string')
+    if (
+      candidate.domain === 'component' &&
+      typeof candidate[DISPLAY_FIELD] === 'string'
+    )
       display.set(
         `${candidate._package}\u0000${candidate._resultName ?? candidate.name}`,
         candidate[DISPLAY_FIELD],

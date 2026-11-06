@@ -43,7 +43,7 @@ export function requireSearchCoreDir(cwd) {
  * in the CLI's searches. A caller that runs its own operation shares it.
  *
  * @param {{cwd?: string, type?: string}} options
- * @returns {Promise<{all: Candidate[], components: Candidate[], searchedComponents: boolean, outside: boolean, coreSkipped: string | null}>}
+ * @returns {Promise<{all: Candidate[], components: Candidate[], searchedComponents: boolean, outside: boolean, coreSkipped: string | null, coreSkippedCode: string | null}>}
  */
 export function gatherCandidates(options) {
   return withListingCache(() => gatherDomains(options));
@@ -69,6 +69,8 @@ async function gatherDomains(options) {
   let coreDir = null;
   /** @type {string | null} */
   let coreSkipped = null;
+  /** @type {string | null} */
+  let coreSkippedCode = null;
   if (needsCore && type) {
     coreDir = coreDirOrThrow(requireSearchCoreDir, cwd);
   } else if (needsCore) {
@@ -76,6 +78,8 @@ async function gatherDomains(options) {
       coreDir = requireSearchCoreDir(cwd);
     } catch (error) {
       coreSkipped = /** @type {Error} */ (error).message;
+      const code = /** @type {any} */ (error)?.code;
+      coreSkippedCode = typeof code === 'string' ? code : null;
     }
   }
 
@@ -103,6 +107,7 @@ async function gatherDomains(options) {
     searchedComponents: wants('component'),
     outside,
     coreSkipped,
+    coreSkippedCode,
   };
 }
 
