@@ -74,8 +74,9 @@ type XstyleNamespaces = {
 /**
  * The style namespaces that go through `stylex.props`, not `xstyle`. A style
  * that sets only custom properties shares no property with the `xstyle` type,
- * and `displayStyles` sets `overflowWrap` to a `var()`, which StyleX's
- * `overflowWrap` type does not list.
+ * `displayStyles` sets `overflowWrap` to a `var()`, which StyleX's
+ * `overflowWrap` type does not list, and `touchHitAreaStyles` styles only a
+ * pseudo-element.
  */
 type PropsOnlyNamespaces = {
   containerPaddingBlockEndVarStyles: typeof padding.containerPaddingBlockEndVarStyles;
@@ -88,6 +89,7 @@ type PropsOnlyNamespaces = {
   overlayPaddingReset: typeof padding.overlayPaddingReset;
   sectionPaddingPropagationStyles: typeof padding.sectionPaddingPropagationStyles;
   displayStyles: typeof text.displayStyles;
+  touchHitAreaStyles: typeof touchHitArea.touchHitAreaStyles;
   focusOutlineStylesPublishedVars: Pick<
     typeof focusOutline.focusOutlineStyles,
     'publishFocusVisibleVars'
