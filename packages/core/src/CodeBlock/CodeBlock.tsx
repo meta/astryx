@@ -35,7 +35,7 @@ import {
   focusVars,
 } from '../theme/tokens.stylex';
 import {isRenderable, mergeProps, rtlStyles} from '../utils';
-import {useClipboard} from '../hooks/useClipboard';
+import {useClipboardCopy} from '../hooks/useClipboard';
 import {useScrollableArea} from '../hooks/useScrollableArea';
 import {Icon} from '../Icon';
 import {ComponentIcon} from '../Icon/ComponentIcon';
@@ -606,6 +606,12 @@ export interface CodeBlockProps extends BaseProps<HTMLPreElement> {
   hasCopyButton?: boolean;
   onCopy?: () => void;
   /**
+   * Called once with the rejection when the clipboard write fails. The copy
+   * control then shows a cross and is named and announced as the localized
+   * "Failed to copy value to clipboard."; the error itself is not shown.
+   */
+  onCopyError?: (error: unknown) => void;
+  /**
    * Your own controls, shown just before Copy: in the header when the block
    * has one, otherwise beside the code in the top inline-end corner, never
    * over it. It never creates a header, and activating it never collapses the
@@ -1005,6 +1011,7 @@ export function CodeBlock({
   isDiff = false,
   hasCopyButton = true,
   onCopy,
+  onCopyError,
   endContent,
   isWrapped = false,
   maxHeight,
@@ -1026,8 +1033,17 @@ export function CodeBlock({
   // Owns the clipboard write, the transient copied flag, its reset timer, and
   // the polite copy announcement (a swapped aria-label alone is not reliably
   // announced) — shared with Timestamp via the same hook.
-  const {copy, isCopied: copied} = useClipboard({
+  // A failed write shows a cross for as long as a copy shows the check, and
+  // is named and announced as the localized failure (Owner decision, Nov 6
+  // 2026). The error itself goes only to `onCopyError`.
+  const {
+    copy,
+    isCopied: copied,
+    isFailed: copyFailed,
+  } = useClipboardCopy({
     announce: t('@astryx.codeBlock.copied'),
+    announceFailure: t('@astryx.codeBlock.copyFailed'),
+    onError: onCopyError,
   });
 
   const useSpans =
@@ -1151,18 +1167,30 @@ export function CodeBlock({
       icon={
         <ComponentIcon
           slot="code-block-copy"
-          state={{copied}}
-          fallback={{icon: copied ? 'check' : 'copy', size: 'sm'}}
+          state={{copied: copied && !copyFailed}}
+          fallback={{
+            icon: copyFailed ? 'close' : copied ? 'check' : 'copy',
+            size: 'sm',
+          }}
           color="inherit"
         />
       }
       // A visible "Copy" hover/focus hint via Button's built-in tooltip. It
       // stays "Copy" after copying — the copy → check icon flip is the
-      // confirmation, not a tooltip change. The aria-label still swaps to the
-      // localized "Copied" for assistive tech, backed by the announcement.
-      tooltip={t('@astryx.codeBlock.copyCode')}
+      // confirmation — and says the failure while a failed copy shows. The
+      // aria-label swaps to the localized "Copied" or failure text, backed by
+      // the announcement.
+      tooltip={
+        copyFailed
+          ? t('@astryx.codeBlock.copyFailed')
+          : t('@astryx.codeBlock.copyCode')
+      }
       label={
-        copied ? t('@astryx.codeBlock.copied') : t('@astryx.codeBlock.copyCode')
+        copyFailed
+          ? t('@astryx.codeBlock.copyFailed')
+          : copied
+            ? t('@astryx.codeBlock.copied')
+            : t('@astryx.codeBlock.copyCode')
       }
       onClick={e => {
         // Stop propagation so copying does not toggle the collapsible header.

@@ -123,6 +123,25 @@ describe('discoverComponents (real core)', () => {
     expect(discoverComponents(core)).toEqual({});
   });
 
+  it('reads the docs once per operation and fresh outside one', () => {
+    const core = mkTmp('as-cd-once-');
+    const dir = path.join(core, 'src', 'Foo');
+    fs.mkdirSync(dir, {recursive: true});
+    fs.writeFileSync(path.join(dir, 'XDSFoo.tsx'), 'x');
+    const doc = path.join(dir, 'Foo.doc.mjs');
+    fs.writeFileSync(doc, 'export default {};\n');
+    withListingCache(() => {
+      const first = discoverComponents(core);
+      expect(first).toEqual({Foo: ['Foo']});
+      first.Foo.push('Bar');
+      fs.writeFileSync(doc, "export default {\n  group: 'Widgets',\n};\n");
+      // The operation read the doc once, so the edit does not reach it. A
+      // change to one caller's result does not reach the next caller.
+      expect(discoverComponents(core)).toEqual({Foo: ['Foo']});
+    });
+    expect(discoverComponents(core)).toEqual({Widgets: ['Foo']});
+  });
+
   it('lists HStack, VStack and Heading, whose docs live in their family folders', () => {
     // Each has its own folder and import path; Stack's doc documents HStack and
     // VStack as members, and Heading's own doc sits in the Text folder.
