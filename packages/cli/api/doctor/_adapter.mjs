@@ -39,6 +39,7 @@ import {
 } from '../../foundation/agent-docs/computer-agent-text.mjs';
 import {computerAgentTextSettings} from '../../foundation/env/user-settings.mjs';
 import * as fs from 'node:fs';
+import {elementPropOrigins} from '../../foundation/discovery/module-exports.mjs';
 import * as path from 'node:path';
 import {
   Project,
@@ -166,6 +167,29 @@ export function resolveDoctorThemeImports(theme, options) {
 /** @param {string} projectDir */
 export function discoverDoctorUnmigratedCopies(projectDir) {
   return discoverUnmigratedThemeCopies(projectDir);
+}
+
+/**
+ * The real path of a file, links resolved; null when it does not exist.
+ * @param {string} file
+ * @returns {string | null}
+ */
+export function realDoctorFile(file) {
+  try {
+    return fs.realpathSync(file);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Where each `<Name prop={value}>` value of a module is declared (see
+ * `elementPropOrigins`).
+ * @param {string} file
+ * @param {Parameters<typeof elementPropOrigins>[1]} element
+ */
+export function doctorElementPropOrigins(file, element) {
+  return elementPropOrigins(file, element);
 }
 
 /** @param {string} projectDir */

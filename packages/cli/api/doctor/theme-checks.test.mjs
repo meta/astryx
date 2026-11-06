@@ -310,6 +310,7 @@ describe('the released themes check', () => {
           version: CLI_VERSION,
           type: 'module',
           exports: {
+            '.': './dist/index.js',
             './built': `./dist/${slug}.js`,
             './theme.css': './dist/theme.css',
           },
@@ -318,6 +319,10 @@ describe('the released themes check', () => {
       write(
         path.join(packageDir, `dist/${slug}.js`),
         `export const ${slug}Theme = {name: '${slug}', tokens: {}};\n`,
+      );
+      write(
+        path.join(packageDir, 'dist/index.js'),
+        `export {${slug}Theme} from './${slug}.js';\n`,
       );
       write(
         path.join(packageDir, 'dist/theme.css'),
@@ -501,6 +506,59 @@ describe('the released themes check', () => {
       },
       {slug: 'stone', owner: '@astryxdesign/theme-stone', file: 'src/App.tsx'},
     ]);
+  });
+
+  it('never counts a theme whose package is not installed', async () => {
+    // The CLI bundles a descriptor for every official theme; that is not the
+    // package being installed.
+    const dir = emptyApp('themes-not-installed');
+    write(
+      path.join(dir, 'package.json'),
+      JSON.stringify({name: 'app', private: true}),
+    );
+    write(
+      path.join(dir, 'node_modules/@astryxdesign/core/package.json'),
+      JSON.stringify({name: '@astryxdesign/core', version: CLI_VERSION}),
+    );
+    write(
+      path.join(dir, 'app/providers.tsx'),
+      [
+        "import {Theme} from '@astryxdesign/core/theme';",
+        "import {neutralTheme} from '@astryxdesign/theme-neutral/built';",
+        "import '@astryxdesign/theme-neutral/theme.css';",
+        'export const Providers = ({children}: any) => (',
+        '  <Theme theme={neutralTheme}>{children}</Theme>',
+        ');',
+        '',
+      ].join('\n'),
+    );
+
+    expect((await themeImportWiring(dir)).wired).toEqual([]);
+    expect(await themesCheck(dir)).toMatchObject({
+      status: 'warn',
+      message: 'No @astryxdesign/theme-* packages are installed.',
+    });
+  });
+
+  it('leaves a theme declared inside a component unconfirmed, like other module readers', async () => {
+    const dir = appWithBuiltThemes('themes-inner-scope', ['matcha']);
+    write(
+      path.join(dir, 'app/providers.tsx'),
+      [
+        "import {Theme} from '@astryxdesign/core/theme';",
+        "import {matchaTheme} from '@astryxdesign/theme-matcha';",
+        'export function Providers({children}: any) {',
+        '  const theme = matchaTheme;',
+        '  return <Theme theme={theme}>{children}</Theme>;',
+        '}',
+        '',
+      ].join('\n'),
+    );
+
+    expect(await themeImportWiring(dir)).toEqual({
+      wired: [],
+      unconfirmed: [{file: 'app/providers.tsx'}],
+    });
   });
 
   it('says it could not confirm a theme passed to Theme that it cannot trace', async () => {
