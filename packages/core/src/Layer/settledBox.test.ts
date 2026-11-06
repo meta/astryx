@@ -47,8 +47,7 @@ function layerIn(engine: Engine): HTMLElement {
     layer.style.getPropertyValue('transform') === 'none';
   const applied = (): Matrix =>
     isOverridden() ? [1, 0, 0, 1, 0, 0] : engine.matrix;
-  const laidOut = (): Matrix =>
-    engine.stale ? [1, 0, 0, 1, 0, 0] : applied();
+  const laidOut = (): Matrix => (engine.stale ? [1, 0, 0, 1, 0, 0] : applied());
   vi.spyOn(window, 'getComputedStyle').mockImplementation(element => {
     if (element !== layer) {
       throw new Error('read of another element');

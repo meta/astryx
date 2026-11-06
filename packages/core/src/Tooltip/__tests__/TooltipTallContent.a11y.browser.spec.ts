@@ -344,11 +344,11 @@ test('desktop: a tall tooltip opens beside its trigger and stays open', async ({
   await expectScrollsInside(page);
 });
 
-test('desktop, with motion allowed: a tall tooltip that opens while its entrance is pending is read without that entrance, and opens beside its trigger', async ({
+test('desktop, with motion allowed: a tall tooltip opens beside its trigger, and no frame of its entrance covers the trigger', async ({
   page,
 }) => {
-  // The read in the call that shows the tooltip sees its entrance before it
-  // starts. No frame of the entrance paints it over its trigger.
+  // The reads while the tooltip enters take its entrance transform out. No
+  // frame of the entrance paints it over its trigger.
   const viewport = {width: 1280, height: 720};
   const {trigger} = await hoverTallTrigger(page, viewport, 360, '', 'allowed');
   await page.waitForTimeout(500);

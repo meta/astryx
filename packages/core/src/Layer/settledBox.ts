@@ -22,12 +22,10 @@ type Matrix2D = readonly [number, number, number, number, number, number];
 const IDENTITY: Matrix2D = [1, 0, 0, 1, 0, 0];
 
 /**
- * Chromium and WebKit lay boxes out on a grid of 1/64 px. The computed
- * transform is rounded to a few digits when it is serialized, so a box derived
- * from it can be off the grid by a few millionths of a px. A value that close
- * to the grid is moved onto it, so the derived box equals the layout box
- * exactly. Firefox's grid of 1/60 px is never that close to a 1/64 px point,
- * so its values stay as derived.
+ * Chromium and WebKit place layout boxes on a 1/64 px grid. The computed
+ * transform keeps six digits, so a derived edge can miss that grid by
+ * millionths of a px. An edge that close moves onto the grid. Firefox uses a
+ * 1/60 px grid, so its edges stay as derived.
  */
 const LAYOUT_UNITS_PER_PX = 64;
 const GRID_TOLERANCE_PX = 1 / 2048;
@@ -71,7 +69,8 @@ function transformOf(style: CSSStyleDeclaration): Matrix2D | null {
   let matrix = IDENTITY;
   if (isSet(translate)) {
     const [x = '0', y = '0', z] = translate.split(' ');
-    if (z != null) {
+    // The computed `translate` keeps a percentage, which is not a length.
+    if (z != null || ![x, y].every(value => value.endsWith('px'))) {
       return null;
     }
     matrix = multiply(matrix, [1, 0, 0, 1, parseFloat(x), parseFloat(y)]);
@@ -117,35 +116,28 @@ function isAxisAligned([a, b, c, d]: Matrix2D): boolean {
  * Not while one of its animations is pending: Chromium can then report the
  * first keyframe before the box carries it. Not under a CSS zoom other than 1:
  * the computed translation and origin are then in the layer's own px, not in
- * the box's. Not for a `translate` given as a percentage, which the computed
- * value keeps.
+ * the box's.
  */
-function canUndoByCalculation(
-  layer: HTMLElement,
-  style: CSSStyleDeclaration,
-): boolean {
+function canUndoByCalculation(layer: HTMLElement): boolean {
   const zoom = (layer as {currentCSSZoom?: number}).currentCSSZoom ?? 1;
   if (zoom !== 1) {
-    return false;
-  }
-  const translate = style.getPropertyValue('translate');
-  if (
-    isSet(translate) &&
-    !translate.split(' ').every(value => value.endsWith('px'))
-  ) {
     return false;
   }
   return !(layer.getAnimations?.() ?? []).some(animation => animation.pending);
 }
 
 /** The layer's border-box size in layout px, unrounded, from its used size. */
-function layoutSize(style: CSSStyleDeclaration): {width: number; height: number} {
+function layoutSize(style: CSSStyleDeclaration): {
+  width: number;
+  height: number;
+} {
   const px = (name: string) => parseFloat(style.getPropertyValue(name)) || 0;
   const isContentBox = style.getPropertyValue('box-sizing') !== 'border-box';
   const extra = (sides: [string, string]) =>
     isContentBox
       ? sides.reduce(
-          (sum, side) => sum + px(`padding-${side}`) + px(`border-${side}-width`),
+          (sum, side) =>
+            sum + px(`padding-${side}`) + px(`border-${side}-width`),
           0,
         )
       : 0;
@@ -235,17 +227,15 @@ function untransform(
  * entry animation (or anything else) applies to it. A Tooltip enters from a
  * few pixels toward its trigger, scaled down. So the transformed box of a
  * tooltip that fits beside its trigger can read as covering it while it
- * enters. A transform that only translates and scales, as a running
- * entrance does, is undone from the one box read (`untransform`) where
- * `canUndoByCalculation` allows it and the box carries the scale
- * (`carriesScale`): nothing is written, so the read forces no extra style or
- * layout work. A layer that transitions a transform property is
- * also only read, since restoring an overridden value would start that
- * transition. Otherwise the layer's transforms are overridden with
- * `none !important` for one read, which outranks an animation. They are restored in the same task, so no frame
- * paints in between and the animation keeps running. Where the engine still
- * applies an animated transform under that override (WebKit), the read box
- * has that transform undone instead.
+ * enters. When the transform only translates and scales, `untransform` takes
+ * it out of one box read, if `canUndoByCalculation` and `carriesScale` allow
+ * it. Nothing is written, so the read forces no extra style or layout work.
+ * A layer that transitions a transform is also only read: restoring an
+ * overridden value would start that transition. Otherwise one read overrides
+ * the layer's transforms with `none !important`, which outranks an animation.
+ * The same task restores them, so no frame paints in between and the
+ * animation keeps running. WebKit still applies an animated transform under
+ * that override, so there the read box has that transform undone instead.
  */
 export function settledBox(layer: HTMLElement): DOMRect {
   const view = layer.ownerDocument.defaultView;
@@ -254,11 +244,7 @@ export function settledBox(layer: HTMLElement): DOMRect {
     return layer.getBoundingClientRect();
   }
   const matrix = transformOf(style);
-  if (
-    matrix != null &&
-    isAxisAligned(matrix) &&
-    canUndoByCalculation(layer, style)
-  ) {
+  if (matrix != null && isAxisAligned(matrix) && canUndoByCalculation(layer)) {
     const rect = layer.getBoundingClientRect();
     if (carriesScale(rect, style, matrix)) {
       return untransform(rect, layer, style, matrix);
