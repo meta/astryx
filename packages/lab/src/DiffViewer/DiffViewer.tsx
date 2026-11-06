@@ -875,6 +875,8 @@ const styles = stylex.create({
   },
   gutterButton: {
     display: 'inline',
+    // The press band below is positioned against the button.
+    position: 'relative',
     padding: 0,
     margin: 0,
     borderWidth: 0,
@@ -890,6 +892,15 @@ const styles = stylex.create({
     textDecorationLine: {
       default: 'none',
       ':hover:where(:not(:disabled,[aria-disabled="true"]))': 'underline',
+    },
+    // An invisible band gives a narrow line number a press area at least
+    // 24px wide. The band keeps the row height, so it takes no presses
+    // from other rows.
+    '::before': {
+      content: '""',
+      position: 'absolute',
+      insetBlock: 0,
+      insetInline: 'min(0px, calc((100% - 24px) / 2))',
     },
   },
   marker: {
