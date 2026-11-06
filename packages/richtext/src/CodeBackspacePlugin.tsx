@@ -8,16 +8,9 @@
  *   lexical.
  * @output Exports CodeBackspacePlugin, which makes Backspace at the very start
  *   of a code block turn the block into a paragraph holding its lines.
- * @position Rendered by RichTextEditor; always on, and not exported from the
- *   package. Lexical's own Backspace there merges the whole block into the
- *   block above: a heading above takes the code in, and its Markdown reads
- *   back as a longer heading and a stray paragraph. The paragraph puts a line
- *   break between the lines, which exports as a hard break, so it reads back
- *   as shown; the caret goes to its start. It handles the backward character
- *   deletion that Backspace dispatches, as do the input events some keyboards
- *   send instead. Backspace anywhere else in a code block, or over a
- *   selection, keeps Lexical's behavior. Read-only and disabled editors are
- *   unchanged.
+ * @position Rendered by RichTextEditor; always on, not exported. Lexical's
+ *   own Backspace there merges the code into the block above, and a heading
+ *   above reads back as a longer heading and a stray paragraph.
  */
 
 import {useEffect} from 'react';
@@ -34,7 +27,7 @@ import {
   type ParagraphNode,
 } from 'lexical';
 
-/** The code block whose very start holds a collapsed caret, or null. */
+/** Start is offset 0 of the block or of its first child, not the start of a later line. */
 function $codeBlockAtCaretStart(): CodeNode | null {
   const selection = $getSelection();
   if (
@@ -53,14 +46,16 @@ function $codeBlockAtCaretStart(): CodeNode | null {
 }
 
 /**
- * A paragraph holding a code block's lines with a line break node between
- * each: a newline left inside text would export as a soft break, and the
- * lines would read back as one.
+ * A newline inside text exports as a soft break, and the lines read back as
+ * one. A line break node exports as a hard break. Empty lines at the end of
+ * the code are dropped: a hard break that ends a paragraph reads back as a
+ * literal backslash.
  */
 function $paragraphOfLines(code: CodeNode): ParagraphNode {
   const paragraph = $createParagraphNode();
   code
     .getTextContent()
+    .replace(/\n+$/, '')
     .split('\n')
     .forEach((line, index) => {
       if (index > 0) {
