@@ -628,11 +628,17 @@ describe('Selector', () => {
       const popover = screen
         .getByRole('listbox', {hidden: true})
         .closest('[popover]');
+      // The measured shift, or higher by the software keyboard's term. With
+      // no keyboard inset the term falls back to the room below the anchor,
+      // so it is 0 and the shift stands.
       await waitFor(() => {
         expect(popover?.getAttribute('style')).toContain(
-          'margin-block-start: -110px',
+          '--_selector-overlay-margin: min(-110px, max(-190px, calc(-110px - var(--_layer-keyboard-inset-block-end, -110px))))',
         );
       });
+      expect(popover?.getAttribute('style')).toContain(
+        'margin-block-start: var(--_selector-overlay-margin)',
+      );
     } finally {
       restoreRects();
     }
@@ -673,7 +679,7 @@ describe('Selector', () => {
       await waitFor(() => {
         // 68px geometric alignment plus the 1px optical correction.
         expect(popover?.getAttribute('style')).toContain(
-          'margin-block-start: -69px',
+          '--_selector-overlay-margin: min(-69px,',
         );
       });
     } finally {
@@ -826,7 +832,7 @@ describe('Selector', () => {
           .closest('[popover]') as HTMLElement;
         await waitFor(() => {
           expect(popover.getAttribute('style')).toContain(
-            'margin-block-start: -110px',
+            '--_selector-overlay-margin: min(-110px,',
           );
         });
         expect(popover.style.getPropertyValue('--x-marginBlockStart')).toBe('');
