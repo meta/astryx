@@ -54,8 +54,10 @@ import {
   type RegionPaneSlot,
   type ResizablePane,
   isScriptMotion,
+  showTargetLine,
   shownSizeReader,
   slideMotionsOf,
+  tryIt,
   slideNextOnRelease,
 } from './resizablePane';
 import {separatorAttributes} from './separatorAttributes';
@@ -188,6 +190,8 @@ const QUIET = {current: true};
 
 /** How far a pull past a size bound can move the handle, in px. */
 const RUBBER_BAND_TRAVEL_PX = 8;
+// NOT FOR LANDING: how far the try-it's peek lets a collapsed pane's edge out.
+const PEEK_TRAVEL_PX = 24;
 
 /**
  * The state a region with `options` starts in, before its handle exists: the
@@ -672,7 +676,11 @@ export function createResizableAs(
         chosenSize = clampSize(chosenSize, min, max, snaps());
       }
     }
-    const restsOn = isGestureActive && isCarryingToSnap ? [] : snaps();
+    // NOT FOR LANDING: the try-it's free drag rests between snap points.
+    const restsOn =
+      isGestureActive && (isCarryingToSnap || tryIt().snapOnLift === true)
+        ? []
+        : snaps();
     const size = clampSize(chosenSize ?? defaultPx, min, max, restsOn);
     const isCollapsed =
       collapsible() &&
@@ -1042,17 +1050,28 @@ export function createResizableAs(
       // A collapsed pane opens once the pointer passes the collapsed size.
       // An open one never collapses mid-drag: the lift decides.
       if (derived.isCollapsed && raw < collapsedSize) {
+        // NOT FOR LANDING: the try-it's feedback for a drag out of collapsed.
+        if (pane != null) {
+          const {expandFeedback} = tryIt();
+          showTargetLine(pane, expandFeedback == null ? null : derived.min);
+          if (expandFeedback === 'peek') {
+            overshoot = rubberBand(Math.max(raw, 0), PEEK_TRAVEL_PX);
+            drawing?.draw(overshoot);
+          }
+        }
         return;
       }
       const reopens = derived.isCollapsed && raw >= collapsedSize;
       if (reopens) {
         setCollapsed(false);
       }
+      // NOT FOR LANDING: the try-it's free drag between snap points.
+      const isFreeDrag = tryIt().snapOnLift === true && snaps().length > 0;
       const clamped = clampSize(
         raw,
         derived.min,
         derived.max,
-        isCarryingToSnap ? [] : snaps(),
+        isFreeDrag || isCarryingToSnap ? [] : snaps(),
       );
       chosenSize = clamped;
       // Only a pointer on a pane a LayoutPanel lends shows the rubber band. A
@@ -1062,6 +1081,18 @@ export function createResizableAs(
           ? 0
           : overshootPast(raw);
       drawing?.draw(overshoot);
+      if (pane != null) {
+        const closes =
+          collapsible() && !derived.isCollapsed && raw < collapsedSize;
+        showTargetLine(
+          pane,
+          closes
+            ? 0
+            : isFreeDrag
+              ? clampSize(raw, derived.min, derived.max, snaps())
+              : null,
+        );
+      }
       // Only a pointer reopens without a reveal; a key's step plays one.
       isPointerReopening = reopens && regionSlot?.isPointerDragging() === true;
       commit();
@@ -1074,6 +1105,9 @@ export function createResizableAs(
     // The lift decides a close: past the collapsed size, or released fast
     // enough to come to rest past it. Anything else springs back.
     end(velocity = 0) {
+      if (pane != null) {
+        showTargetLine(pane, null);
+      }
       if (held != null) {
         letGoOfHeldSlide(velocity);
         endGesture();
@@ -1088,6 +1122,8 @@ export function createResizableAs(
         closeOnRelease(velocity);
       } else if (isCarryingToSnap) {
         settleOnNearestSnap(velocity);
+      } else if (tryIt().snapOnLift === true && snaps().length > 0) {
+        settleOnSnap(velocity);
       } else {
         settleOvershoot(velocity);
       }
@@ -1096,6 +1132,9 @@ export function createResizableAs(
     // A cancelled gesture is still over: the basis it held comes back, and
     // the size it reached is saved once, like a completed one.
     cancel() {
+      if (pane != null) {
+        showTargetLine(pane, null);
+      }
       if (held != null) {
         letGoOfHeldSlide(-Infinity);
         endGesture();
@@ -1239,6 +1278,35 @@ export function createResizableAs(
     const distance = Math.abs(target - shown);
     if (row != null && distance > 0) {
       slideNextOnRelease(row, Math.sign(target - shown) * velocity, distance);
+    }
+    chosenSize = target;
+    commit();
+    opts.onSizeChange?.(target);
+  }
+
+  /**
+   * NOT FOR LANDING: the try-it's lift between snap points. The pane glides
+   * from where it is to the snap nearest to where the lift would carry it.
+   */
+  function settleOnSnap(velocity: number): void {
+    settleOvershoot(velocity);
+    if (derived.isCollapsed) {
+      return;
+    }
+    const target = clampSize(
+      project(pointerSize, velocity),
+      derived.min,
+      derived.max,
+      snaps(),
+    );
+    const row = pane?.element.parentElement;
+    const distance = Math.abs(target - derived.size);
+    if (row != null && distance > 0) {
+      slideNextOnRelease(
+        row,
+        Math.sign(target - derived.size) * velocity,
+        distance,
+      );
     }
     chosenSize = target;
     commit();

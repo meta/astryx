@@ -414,6 +414,92 @@ export function slideNextOnRelease(
 }
 
 /**
+ * NOT FOR LANDING: the try-it stories' choices. `closeLine` draws an accent
+ * line where the edge will land. `snapOnLift` lets a drag move freely and
+ * settles on the nearest snap at the lift. `expandFeedback` shows a drag out
+ * of a collapsed pane: a peek of the edge, or the line at the open size.
+ */
+export interface ResizeTryIt {
+  closeLine?: boolean;
+  snapOnLift?: boolean;
+  expandFeedback?: 'peek' | 'line';
+}
+
+/** NOT FOR LANDING: the choices the try-it stories set. */
+export function tryIt(): ResizeTryIt {
+  return (
+    (globalThis as {__astryxResizeTryIt?: ResizeTryIt}).__astryxResizeTryIt ??
+    {}
+  );
+}
+
+const targetLines = new WeakMap<
+  HTMLElement,
+  {line: HTMLElement; far: number; sign: number; isInline: boolean}
+>();
+
+/**
+ * NOT FOR LANDING: an accent line, from the reorder insertion line's tokens,
+ * where the pane's edge will land: `size` px from the pane's far side. Null
+ * takes it away. The pane is measured once, when the line first shows.
+ */
+export function showTargetLine(pane: ResizablePane, size: number | null): void {
+  const element = pane.element;
+  let shown = targetLines.get(element);
+  if (size == null || tryIt().closeLine !== true) {
+    shown?.line.remove();
+    targetLines.delete(element);
+    return;
+  }
+  if (shown == null) {
+    const edge = pane.contentFacingEdge();
+    const isInline = edge.startsWith('inline');
+    const isTowardEnd = edge.endsWith('end');
+    const isRtl =
+      isInline &&
+      element.ownerDocument.defaultView?.getComputedStyle(element).direction ===
+        'rtl';
+    const isForward = isInline ? isTowardEnd !== isRtl : isTowardEnd;
+    const rect = element.getBoundingClientRect();
+    const far = isInline
+      ? isForward
+        ? rect.left
+        : rect.right
+      : isForward
+        ? rect.top
+        : rect.bottom;
+    const line = element.ownerDocument.createElement('div');
+    Object.assign(line.style, {
+      position: 'fixed',
+      pointerEvents: 'none',
+      zIndex: '2',
+      background: 'var(--color-accent)',
+      borderRadius: 'var(--radius-full)',
+      ...(isInline
+        ? {
+            top: `${rect.top}px`,
+            height: `${rect.height}px`,
+            width: 'var(--spacing-0-5)',
+          }
+        : {
+            left: `${rect.left}px`,
+            width: `${rect.width}px`,
+            height: 'var(--spacing-0-5)',
+          }),
+    });
+    element.ownerDocument.body.append(line);
+    shown = {line, far, sign: isForward ? 1 : -1, isInline};
+    targetLines.set(element, shown);
+  }
+  const at = `calc(${shown.far + shown.sign * size}px - var(--spacing-0-5) / 2)`;
+  if (shown.isInline) {
+    shown.line.style.left = at;
+  } else {
+    shown.line.style.top = at;
+  }
+}
+
+/**
  * Reads the size the pane's edge shows from its handle's drawn middle,
  * glides included. Measured while the pane shows `size`.
  */

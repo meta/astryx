@@ -851,15 +851,23 @@ export const CollapsingScrollPanelFixture: Story = {
 function SlidingPanelSplit({
   side,
   lineCount = 0,
+  snaps,
+  isInitiallyCollapsed = false,
+  maxSize = 320,
 }: {
   side: 'start' | 'end';
   lineCount?: number;
+  snaps?: number[];
+  isInitiallyCollapsed?: boolean;
+  maxSize?: number;
 }) {
   const resizable = useResizable({
     defaultSize: 200,
     minSize: 120,
-    maxSize: 320,
+    maxSize,
     collapsible: true,
+    snaps,
+    defaultIsCollapsed: isInitiallyCollapsed,
   });
   const pane = (
     <LayoutPanel resizable={resizable} data-testid="sliding-panel">
@@ -925,6 +933,89 @@ export const SlidingStartPanel: Story = {
 
 export const SlidingEndPanel: Story = {
   render: () => <SlidingPanelSplit side="end" />,
+};
+
+/**
+ * NOT FOR LANDING: try-it stories. `closeLine` draws an accent line where
+ * the edge will land. `snapOnLift`
+ * lets a drag move freely between snap points and settles on the nearest at
+ * the lift. `expandFeedback` shows a drag out of a collapsed panel: a peek
+ * of its edge, or the line at the size it opens to.
+ */
+interface TryItArgs {
+  closeLine: boolean;
+  snapOnLift: boolean;
+  expandFeedback: 'none' | 'peek' | 'line';
+}
+
+const TRY_IT: TryItArgs = {
+  closeLine: true,
+  snapOnLift: false,
+  expandFeedback: 'none',
+};
+
+const TRY_IT_CONTROLS = {
+  expandFeedback: {control: 'inline-radio', options: ['none', 'peek', 'line']},
+} as const;
+
+function TryItPanel({
+  closeLine,
+  snapOnLift,
+  expandFeedback,
+  snaps,
+  isInitiallyCollapsed,
+}: TryItArgs & {snaps?: number[]; isInitiallyCollapsed?: boolean}) {
+  (globalThis as {__astryxResizeTryIt?: object}).__astryxResizeTryIt = {
+    closeLine,
+    snapOnLift,
+    expandFeedback: expandFeedback === 'none' ? undefined : expandFeedback,
+  };
+  return (
+    <SlidingPanelSplit
+      side="start"
+      snaps={snaps}
+      isInitiallyCollapsed={isInitiallyCollapsed}
+    />
+  );
+}
+
+/**
+ * NOT FOR LANDING: the slide as it ships, on a phone. The maximum is 55% of
+ * the viewport, up to 320 px, so the content beside the panel keeps room to
+ * read past the limit.
+ */
+export const TryItSlideOnAPhone: Story = {
+  name: 'Try it: the slide on a phone',
+  render: () => {
+    (globalThis as {__astryxResizeTryIt?: object}).__astryxResizeTryIt = {};
+    return (
+      <SlidingPanelSplit
+        side="start"
+        maxSize={Math.min(320, Math.round(window.innerWidth * 0.55))}
+      />
+    );
+  },
+};
+
+export const TryItSnapPoints: StoryObj<typeof TryItPanel> = {
+  name: 'Try it: snap points 120, 200, 280, settled on lift',
+  args: {...TRY_IT, snapOnLift: true},
+  argTypes: TRY_IT_CONTROLS,
+  render: args => <TryItPanel {...args} snaps={[120, 200, 280]} />,
+};
+
+export const TryItDragToOpenPeek: StoryObj<typeof TryItPanel> = {
+  name: 'Try it: drag to open, with a peek',
+  args: {...TRY_IT, expandFeedback: 'peek'},
+  argTypes: TRY_IT_CONTROLS,
+  render: args => <TryItPanel {...args} isInitiallyCollapsed />,
+};
+
+export const TryItDragToOpenLine: StoryObj<typeof TryItPanel> = {
+  name: 'Try it: drag to open, with the line at the open size',
+  args: {...TRY_IT, expandFeedback: 'line'},
+  argTypes: TRY_IT_CONTROLS,
+  render: args => <TryItPanel {...args} isInitiallyCollapsed />,
 };
 
 /** A sliding start panel with more lines than fit, for a scrolled slide. */
