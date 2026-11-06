@@ -488,12 +488,18 @@ test.describe('a toast in a top-layer viewport', () => {
     await dialog.getByRole('button', {name: 'Save'}).click();
     await expect(dialog).toBeHidden();
     await waitForRest(toastRow(page));
-    const {frames} = await stopRecording(page);
+    const {frames, starts} = await stopRecording(page);
     await expect(toastRow(page).getByText('Saving the item.')).toBeVisible();
     await expectRowShown(page);
     expect(placesOf(frames)).toEqual(['dialog', 'page']);
     // No DOM change left the card in a dialog that no longer displays.
     expect(await hiddenCardCount(page)).toBe(0);
     expect(frames.every(frame => frame.hasBox)).toBe(true);
+    // At 1×, the card's opacity and the row's grid each start once.
+    // Transition events arrive however late the frames are.
+    expect(starts.filter(start => start === 'card opacity')).toHaveLength(1);
+    expect(
+      starts.filter(start => start === 'row grid-template-rows'),
+    ).toHaveLength(1);
   });
 });
