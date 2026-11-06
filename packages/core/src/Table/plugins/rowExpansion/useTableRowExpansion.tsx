@@ -255,7 +255,11 @@ const expansionStyles = stylex.create({
       ':is([dir="rtl"] *)': 'scaleX(-1) rotate(0deg)',
     },
   },
-  expandedRow: {
+  // The wash goes on the panel's cell, not on its row. A row that paints its
+  // own box plays in under a clip that moves with its edge. On iOS that clip
+  // can trail the rows that glide below it. The cell slides in with the
+  // panel's content.
+  mutedPanel: {
     backgroundColor: colorVars['--color-background-muted'],
   },
   expandedCell: {
@@ -506,10 +510,12 @@ function PanelDividerModeWatch({
 function ExpansionPanelCell({
   colSpan,
   cellsRef,
+  isMuted,
   children,
 }: {
   colSpan: number;
   cellsRef: RefObject<Set<HTMLTableCellElement>>;
+  isMuted: boolean;
   children: ReactNode;
 }) {
   const ctx = useTableContext();
@@ -559,6 +565,7 @@ function ExpansionPanelCell({
       colSpan={colSpan}
       {...stylex.props(
         expansionStyles.expandedCell,
+        isMuted && expansionStyles.mutedPanel,
         panelIndentStyles[ctx?.density ?? 'balanced'],
         hasRowDividers && dividerStyles.panelCell,
         glidingDividerStyles.cell,
@@ -1104,12 +1111,12 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
               // Carries the marker so the panel cell's divider can ask whether
               // this row is the table's last, the same way TableCell does.
               tableRowMarker,
-              panelVariant === 'muted' && expansionStyles.expandedRow,
               glidingDividerStyles.row,
             )}>
             <ExpansionPanelCell
               colSpan={columnCountRef.current}
-              cellsRef={panelCellsRef}>
+              cellsRef={panelCellsRef}
+              isMuted={panelVariant === 'muted'}>
               {renderExpanded(item)}
             </ExpansionPanelCell>
           </tr>
