@@ -692,6 +692,7 @@ export function Item({
   );
 
   const isInteractive = onClick != null || href != null || isDelegate;
+  const hasStateFill = isHighlighted || isSelected;
   const {target, rel} = computeTargetAndRel(targetFromProps, relFromProps);
   // When a semantic role is provided (e.g. "menuitem"), a parent component
   // handles keyboard access. Skip the invisible button/anchor and put
@@ -1019,11 +1020,23 @@ export function Item({
           align === 'start' && styles.alignStart,
           align === 'first-line' && styles.alignFirstLine,
           isInteractive && styles.interactive,
-          isInteractive && interactionOverlayStyles.backgroundColor,
+          // A row with a state fill keeps the fill as its background colour.
+          // Its overlay paints as an image layer over the fill.
+          isInteractive &&
+            (hasStateFill
+              ? interactionOverlayStyles.backgroundImage
+              : interactionOverlayStyles.backgroundColor),
           // The touch press on a compositor layer (after the overlay, whose
           // own touch paint it turns off): the release keeps fading while
           // script runs.
           isInteractive && rowPressLayerStyles.cell,
+          // A highlighted row's fill is already the hover tone, so it shows
+          // only its press. A selected row also shows its hover.
+          isInteractive &&
+            hasStateFill &&
+            (isSelected
+              ? rowPressLayerStyles.cellOnImage
+              : rowPressLayerStyles.cellOnImagePressOnly),
           isLinkRoot && styles.linkRoot,
           isHighlighted && styles.highlighted,
           isSelected && styles.selected,

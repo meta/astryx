@@ -1,8 +1,17 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import {readFileSync} from 'node:fs';
+import {fileURLToPath} from 'node:url';
 import {describe, expect, it} from 'vitest';
 
-import {buildProbeComponents, probeColor, unionValues} from './probe-theme.mjs';
+import {
+  buildProbeComponents,
+  colorDistance,
+  paint,
+  probeColor,
+  unionValues,
+} from './probe-theme.mjs';
+import {PROBE_TOKENS} from './probe-axes.mjs';
 
 describe('unionValues', () => {
   it('reads an inline string union', () => {
@@ -117,5 +126,39 @@ describe('buildProbeComponents', () => {
     expect(buildProbeComponents(targets, props)).toEqual(
       buildProbeComponents(targets, props),
     );
+  });
+});
+
+describe('paint', () => {
+  // A background that matches the fixed probe text colour hides the text of a
+  // child that keeps the token, so the gate cannot see that text reach the
+  // pixels.
+  const fixedText = PROBE_TOKENS['--color-text-primary'];
+
+  it('keeps an open Collapsible content background distinct from the fixed probe text colour', () => {
+    const {backgroundColor} = paint('collapsible-content.open');
+    expect(colorDistance(backgroundColor, fixedText)).toBeGreaterThanOrEqual(
+      60,
+    );
+  });
+
+  it('keeps every background in the generated probe theme distinct from the fixed probe text colour', () => {
+    const source = readFileSync(
+      fileURLToPath(
+        new URL(
+          '../../../../packages/themes/probe/src/probeTheme.ts',
+          import.meta.url,
+        ),
+      ),
+      'utf8',
+    );
+    const backgrounds = [...source.matchAll(/backgroundColor: '([^']+)'/g)].map(
+      match => match[1],
+    );
+    expect(backgrounds.length).toBeGreaterThan(100);
+    const collisions = backgrounds.filter(
+      color => colorDistance(color, fixedText) < 60,
+    );
+    expect(collisions).toEqual([]);
   });
 });

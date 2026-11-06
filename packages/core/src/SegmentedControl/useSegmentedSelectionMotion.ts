@@ -492,9 +492,9 @@ export class SegmentedSelectionMotion {
     }),
     options: SegmentedSelectionMotionOptions = {},
   ) {
-    // The chase plays the shared `springs.fingerTracking` role, and the slide
-    // plays the segmented role. Both register before the first animation,
-    // because nothing registers on import. A second call does nothing.
+    // The chase plays the shared `springs.fingerTracking` role, which
+    // registers as its module loads. The slide plays the segmented role, which
+    // registers here before the first animation. A second call does nothing.
     registerSpringsTable();
     registerSegmentedTable();
     this.now = options.now ?? defaultNow;
