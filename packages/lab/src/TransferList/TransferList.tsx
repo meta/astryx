@@ -21,6 +21,7 @@ import {
   Fragment,
   useCallback,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -108,6 +109,11 @@ export interface TransferListProps<T extends string = string> extends Omit<
   description?: string;
   /** Complete option catalog. Option values must be unique. */
   options: readonly TransferListOption<T>[];
+  /**
+   * Disables every transfer, Clear, Add all and search control, which stay
+   * focusable, and pauses reordering as a search does. @default false
+   */
+  isDisabled?: boolean;
   /** Ordered selected values. This array is the single source of truth. */
   value: readonly T[];
   /** Called with the next ordered selection after a committed change. */
@@ -129,8 +135,8 @@ export interface TransferListProps<T extends string = string> extends Omit<
    * options move. One it rejects at either end of the list also keeps the
    * others from moving past it. Each move goes to its `onReorder({key, to})`,
    * `to` being the value's index in `value` after the move. Paused while a
-   * search filters the panel. Without it, the selected options keep their
-   * order.
+   * search filters the panel or the list is disabled. Without it, the
+   * selected options keep their order.
    */
   reorderable?: Reorderable<T>;
   /** Shows an Add all action. @default false */
@@ -333,7 +339,8 @@ export function TransferList<T extends string = string>({
   label,
   isLabelHidden = false,
   description,
-  options,
+  options: optionsFromProps,
+  isDisabled = false,
   value,
   onChange,
   selectedLabel: selectedLabelFromProps,
@@ -383,6 +390,44 @@ export function TransferList<T extends string = string>({
   const announce = useAnnounce();
 
   currentValueRef.current = value;
+  const isDisabledRef = useRef(isDisabled);
+  isDisabledRef.current = isDisabled;
+
+  // An option's own message names its own constraint.
+  // It does not apply to a disabled list.
+  const options = useMemo(
+    () =>
+      isDisabled
+        ? optionsFromProps.map(option => ({
+            ...option,
+            isTransferDisabled: true,
+            disabledMessage: undefined,
+          }))
+        : optionsFromProps,
+    [isDisabled, optionsFromProps],
+  );
+
+  // A disabled list shows no reorder handle. A focused handle unmounts, so
+  // focus goes to its row's Remove button, which stays focusable. The focus
+  // is read during render: by the time an effect runs, the handle is gone.
+  const wasDisabledRef = useRef(isDisabled);
+  const handoffRef = useRef<{element: Element; row: Element} | null>(null);
+  if (isDisabled && !wasDisabledRef.current) {
+    const active = rootRef.current?.ownerDocument.activeElement;
+    const row = active?.closest('[data-transfer-list-row]');
+    handoffRef.current =
+      active != null && row != null ? {element: active, row} : null;
+  }
+  wasDisabledRef.current = isDisabled;
+  useLayoutEffect(() => {
+    const handoff = handoffRef.current;
+    handoffRef.current = null;
+    if (handoff != null && !handoff.element.isConnected) {
+      handoff.row
+        .querySelector<HTMLElement>('[data-transfer-list-action="selected"]')
+        ?.focus();
+    }
+  }, [isDisabled]);
 
   const optionByValue = useMemo(() => {
     const map = new Map<T, TransferListOption<T>>();
@@ -531,8 +576,9 @@ export function TransferList<T extends string = string>({
   }, [announce, commit, optionByValue, t]);
 
   // Reordering is off while a search filters the panel. A hidden row could
-  // otherwise move past the shown rows.
-  const isOrdering = reorderableProp != null && normalizedQuery === '';
+  // otherwise move past the shown rows. It is off in a disabled list too.
+  const isOrdering =
+    reorderableProp != null && normalizedQuery === '' && !isDisabled;
   // The owner's object decides which values move and takes each move.
   const owner =
     reorderableProp == null ? undefined : reorderableOptions(reorderableProp);
@@ -542,6 +588,11 @@ export function TransferList<T extends string = string>({
   );
   const reorderSelected = useCallback(
     ({key, to: toIndex}: ReorderMove) => {
+      // A move or a cancel that ends after the list became disabled changes
+      // nothing.
+      if (isDisabledRef.current) {
+        return;
+      }
       const shown = selectedOptions.map(option => option.value);
       const fromIndex = shown.indexOf(key as T);
       if (fromIndex < 0 || fromIndex === toIndex || shown[toIndex] == null) {
@@ -732,6 +783,7 @@ export function TransferList<T extends string = string>({
             hasClear
             width="100%"
             controlXstyle={styles.search}
+            isDisabled={isDisabled}
             onChange={handleSearch}
           />
         </div>
