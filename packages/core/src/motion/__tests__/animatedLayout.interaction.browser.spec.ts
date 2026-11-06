@@ -946,7 +946,8 @@ test.describe('spec:AST-105 Coverage', () => {
     // after it come.
     expect(run.held).toBe(true);
     expect(run.duration).toBeLessThan(1000);
-    expect(run.startTime).toBeGreaterThanOrEqual(run.blockEnd);
+    // A start read back can sit a round-off below an equal clock reading.
+    expect(run.startTime).toBeGreaterThanOrEqual(run.blockEnd - 5e-7);
   });
 
   test('a swap whose parts ride the glide starts them with the glide, on the start read for the change, however late in its frame the change is made', async ({
@@ -1010,8 +1011,11 @@ test.describe('spec:AST-105 Coverage', () => {
     });
     expect(run.glide).not.toBeNull();
     expect(run.copy).not.toBeNull();
-    expect(run.glide).toBe(run.startedAt);
-    expect(run.copy).toBe(run.startedAt);
+    // The browser keeps a start time in its own units, so the one read back
+    // can differ from the one written by round-off. Another start differs by
+    // a clock step or more.
+    expect(run.glide).toBeCloseTo(run.startedAt, 6);
+    expect(run.copy).toBeCloseTo(run.startedAt, 6);
   });
 
   test('a change begun after a block that follows an earlier layout motion, with nothing run between them, still shows its motion', async ({

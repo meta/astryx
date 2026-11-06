@@ -41,7 +41,13 @@ import {
   radiusVars,
   durationVars,
   easeVars,
+  focusVars,
 } from '../theme/tokens.stylex';
+import {focusOutlineStyles} from '../utils/focusOutline.stylex';
+import {
+  focusOwnerProps,
+  focusWithinOwnerOverlay,
+} from '../privateAttributes/focusOwner.stylex';
 import {Button} from '../Button';
 import {Icon} from '../Icon';
 import {useLayer} from '../Layer';
@@ -591,7 +597,13 @@ export function Carousel({
       {...htmlProps}
       {...mergeProps(
         themeProps('carousel'),
-        stylex.props(styles.root, xstyle),
+        stylex.props(
+          styles.root,
+          // The scroller is the focus owner. Its edge-fade mask would cover a
+          // ring the root draws itself.
+          focusWithinOwnerOverlay,
+          xstyle,
+        ),
         className,
         style,
       )}
@@ -608,6 +620,7 @@ export function Carousel({
         aria-label={ariaLabel}
         tabIndex={hasOverflow ? 0 : -1}
         onWheel={handleWheel}
+        {...focusOwnerProps}
         {...mergeProps(
           themeProps('carousel-scroller', {
             gap,
@@ -617,6 +630,8 @@ export function Carousel({
           }),
           stylex.props(
             styles.scroller,
+            // A tab stop whose shared ring the root paints.
+            focusOutlineStyles.suppressed,
             gapStyles[gap],
             padding != null && paddingStyles[padding],
             hasSnap && styles.snap,
