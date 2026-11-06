@@ -71,6 +71,26 @@ test.describe('a touch tap on the info button', () => {
     // field (which on a phone would raise the keyboard over the help).
     expect(await focusedId(page)).not.toBe(FIELD_ID);
   });
+
+  test('a hidden label’s focused info button keeps its touch band on itself, adding no page scroll', async ({
+    page,
+  }) => {
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=core-fieldlabel--hidden-label-info&viewMode=story`,
+    );
+    const field = page.getByRole('textbox', {name: 'Search people'});
+    await field.focus();
+    await page.keyboard.press('Shift+Tab');
+    await expect(
+      page.getByRole('button', {name: 'About Search people'}),
+    ).toBeFocused();
+    const overflow = await page.evaluate(() => ({
+      x: document.documentElement.scrollWidth - innerWidth,
+      y: document.documentElement.scrollHeight - innerHeight,
+    }));
+    expect(overflow.x).toBeLessThanOrEqual(0);
+    expect(overflow.y).toBeLessThanOrEqual(0);
+  });
 });
 
 test.describe('a mouse click or a key on the info button', () => {

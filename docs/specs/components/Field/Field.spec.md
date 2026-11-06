@@ -170,7 +170,9 @@ spacing tokens.
   "Input clear icon": {"target": "input-clear-icon"},
   "Optional/Required indicator": {"inherits": "field-label"},
   "Label tooltip trigger": {
-    "delegatesTo": {"owner": "component:Icon", "target": "icon"}
+    "none": {
+      "reason": "unsettled: the trigger is component:InfoTip's button, which has no public theming target yet; its info icon stays on Icon/icon through InfoTip"
+    }
   },
   "Label tooltip surface": {
     "delegatesTo": {"owner": "component:Tooltip", "target": "tooltip"}
@@ -178,7 +180,7 @@ spacing tokens.
 }
 ```
 
-The ordinary description remains stable consumer anatomy without a Field-owned target. A visible horizontal-label description delegates to `Text/text`; when `isLabelHidden` is true, the same content delegates to `VisuallyHidden` and exposes no painted target. The label tooltip splits its visible `Icon/icon` trigger from its layer-hosted `Tooltip/tooltip` surface.
+The ordinary description remains stable consumer anatomy without a Field-owned target. A visible horizontal-label description delegates to `Text/text`; when `isLabelHidden` is true, the same content delegates to `VisuallyHidden` and exposes no painted target. The label tooltip splits its `component:InfoTip` trigger button, which has no public target yet, from its layer-hosted `Tooltip/tooltip` surface.
 
 ## Family and system relationships
 
