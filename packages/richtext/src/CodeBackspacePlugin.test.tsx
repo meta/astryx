@@ -1,7 +1,14 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {beforeAll, describe, expect, it} from 'vitest';
-import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import {createRef} from 'react';
 import {$isCodeNode, type CodeNode} from '@lexical/code';
 import {$isHeadingNode} from '@lexical/rich-text';
@@ -171,6 +178,29 @@ describe('Backspace at the very start of a code block', () => {
       'paragraph: After',
     ]);
     expect(handle.getMarkdown()).toBe('alpha\\\nbeta\n\nAfter\n');
+  });
+
+  it('drops the empty last line, under a heading and with nothing above', async () => {
+    const underHeading = await renderMarkdown(
+      '## Title\n\n```\nalpha\n\n```\n\nAfter\n',
+    );
+    selectInCode(underHeading.editor, 0);
+    pressBackspace(underHeading.editor, underHeading.textbox);
+    expect(blocks(underHeading.editor)).toEqual([
+      'h2: Title',
+      'paragraph: |alpha',
+      'paragraph: After',
+    ]);
+    expect(underHeading.handle.getMarkdown()).toBe(
+      '## Title\n\nalpha\n\nAfter\n',
+    );
+    cleanup();
+
+    const alone = await renderMarkdown('```\nalpha\nbeta\n\n```\n');
+    selectInCode(alone.editor, 0);
+    pressBackspace(alone.editor, alone.textbox);
+    expect(blocks(alone.editor)).toEqual(['paragraph: |alpha⏎beta']);
+    expect(alone.handle.getMarkdown()).toBe('alpha\\\nbeta\n');
   });
 
   it('turns an empty block into an empty paragraph', async () => {
