@@ -35,6 +35,7 @@ import {
 } from './flatTree';
 import {subscribeInput} from './inputStream';
 import {isIosWebKit} from './touchQueries';
+import {isElement, isNode} from './nodeType';
 
 /** What a held finger must not start on a control or a cell. */
 const SELECTION_LOCK = [
@@ -679,7 +680,7 @@ function lockStyles(set: ReadonlySet<Element>): () => void {
  */
 function isSelectableControl(node: unknown): node is HTMLInputElement {
   return (
-    node instanceof Element &&
+    isElement(node) &&
     node.localName === 'input' &&
     !TEXT_ENTRY_TYPES.has((node as HTMLInputElement).type)
   );
@@ -687,12 +688,11 @@ function isSelectableControl(node: unknown): node is HTMLInputElement {
 
 /** Text a held finger edits: it places the caret there. */
 function isTextEntry(node: EventTarget | null): boolean {
-  const element =
-    node instanceof Element
-      ? node
-      : node instanceof Node
-        ? node.parentElement
-        : null;
+  const element = isElement(node)
+    ? node
+    : isNode(node)
+      ? node.parentElement
+      : null;
   if (element == null) {
     return false;
   }

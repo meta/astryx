@@ -4263,8 +4263,12 @@ describe('an action group under a fine pointer (family:action-groups FR5; spec:A
     const one = frameDocument.getElementById('one') as HTMLElement;
     const row = frameDocument.getElementById('row') as HTMLElement;
     const added = vi.spyOn(frameWindow, 'addEventListener');
-    const clickListeners = () =>
-      added.mock.calls.filter(call => call[0] === 'click').length;
+    const removed = vi.spyOn(frameWindow, 'removeEventListener');
+    const count = (spy: typeof added | typeof removed) =>
+      spy.mock.calls.filter(call => call[0] === 'click').length;
+    // The click listeners on the window now: the guard's goes when the next
+    // press disarms it.
+    const clickListeners = () => count(added) - count(removed);
     try {
       const send = (type: 'pointerdown' | 'pointerup', time: number) => {
         const event = new frameWindow.PointerEvent(type, {
@@ -4290,9 +4294,10 @@ describe('an action group under a fine pointer (family:action-groups FR5; spec:A
       });
       send('pointerdown', 0);
       send('pointerup', 80);
-      // At most the click guard's own listener, while it is armed.
-      const afterFirst = clickListeners();
-      expect(afterFirst).toBeLessThanOrEqual(1);
+      // The group claimed the press, so the guard is armed. Its listener is
+      // the only one.
+      expect(isClickGuardArmed(frameDocument)).toBe(true);
+      expect(clickListeners()).toBe(1);
       // A per-event recognizer installs the host mid-press: still no click
       // listener of the press's own.
       send('pointerdown', 1000);
@@ -4300,11 +4305,13 @@ describe('an action group under a fine pointer (family:action-groups FR5; spec:A
         perEventPointer: true,
       });
       send('pointerup', 1080);
-      expect(clickListeners()).toBe(afterFirst);
+      expect(isClickGuardArmed(frameDocument)).toBe(true);
+      expect(clickListeners()).toBe(1);
       detachRow();
       detachGroup();
     } finally {
       added.mockRestore();
+      removed.mockRestore();
       frame.remove();
     }
   });
@@ -7448,5 +7455,107 @@ describe('nothing left after the last detach (spec:AST-094 FR21, FR24)', () => {
     detach();
     await settle();
     expectNothingLeft(subject);
+  });
+});
+
+describe("an element in another window's document", () => {
+  /**
+   * A same-origin iframe's document, as a component rendered into another
+   * window's document has: its nodes and events belong to that window.
+   */
+  function frame(html: string) {
+    const element = document.createElement('iframe');
+    document.body.append(element);
+    const doc = element.contentDocument as Document;
+    const view = doc.defaultView as Window & typeof globalThis;
+    doc.body.innerHTML = html;
+    const subject = new GestureHost(doc, {
+      clock,
+      isPrimaryPointerCoarse: () => true,
+    });
+    // The finger-scroll watch reads the iframe's own window: a phone there.
+    detachers.push(pointerQuery(true, view).restore);
+    /** A touch event made by the iframe's own window. */
+    const send = (
+      type: 'touchstart' | 'touchmove' | 'touchend',
+      target: EventTarget,
+      changed: Contact[],
+      all: Contact[],
+      time: number,
+    ) => {
+      const event = new view.Event(type, {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+      });
+      const toTouch = (contact: Contact) => ({
+        identifier: contact.id,
+        clientX: contact.x,
+        clientY: contact.y,
+        target: contact.target ?? target,
+      });
+      Object.defineProperty(event, 'changedTouches', {
+        value: changed.map(toTouch),
+      });
+      Object.defineProperty(event, 'touches', {value: all.map(toTouch)});
+      Object.defineProperty(event, 'timeStamp', {value: time});
+      target.dispatchEvent(event);
+    };
+    detachers.push(() => element.remove());
+    return {doc, view, subject, send};
+  }
+
+  it('recognizes a finger on an element in a same-origin iframe', () => {
+    const {doc, subject, send} = frame('<div id="pad"></div>');
+    const pad = doc.getElementById('pad') as HTMLElement;
+    // Another realm: this window's classes do not match the iframe's nodes.
+    expect(pad instanceof Element).toBe(false);
+    const pan = new PanGestureRecognizer({name: 'pan'});
+    const states: string[] = [];
+    pan.addTransitionListener((_current, _from, to) => states.push(to));
+    detachers.push(subject.attach(pad, pan));
+    const down = {id: 1, x: 20, y: 20};
+    send('touchstart', pad, [down], [down], 0);
+    for (let step = 1; step <= 6; step++) {
+      const at = {...down, x: 20 + step * 10};
+      send('touchmove', pad, [at], [at], step * 16);
+    }
+    const up = {...down, x: 80};
+    send('touchend', pad, [up], [], 112);
+    expect(states[0]).toBe('began');
+    expect(states).toContain('changed');
+    expect(states.slice(-2)).toEqual(['ended', 'possible']);
+  });
+
+  it('reads a scroll in a same-origin iframe while a finger that landed inside is down as the finger’s', () => {
+    const {doc, view, subject, send} = frame(
+      '<div id="list"><div id="row"></div></div>',
+    );
+    const list = doc.getElementById('list') as HTMLElement;
+    const row = doc.getElementById('row') as HTMLElement;
+    detachers.push(watchFingerScrolls(subject, list));
+    const finger = {id: 1, x: 10, y: 10};
+    send('touchstart', row, [finger], [finger], 0);
+    list.dispatchEvent(new view.Event('scroll'));
+    expect(isFingerScroll(subject, list)).toBe(true);
+    send('touchend', row, [finger], [], 120);
+    list.dispatchEvent(new view.Event('scrollend'));
+    expect(isFingerScroll(subject, list)).toBe(false);
+  });
+
+  it('compares a finger inside an open shadow root in a same-origin iframe along the flat tree', () => {
+    const {doc, view, subject, send} = frame(
+      '<div id="list"><div id="outer"></div></div>',
+    );
+    const list = doc.getElementById('list') as HTMLElement;
+    const outer = doc.getElementById('outer') as HTMLElement;
+    const shadow = outer.attachShadow({mode: 'open'});
+    shadow.innerHTML = '<div id="row">x</div>';
+    const row = shadow.getElementById('row') as HTMLElement;
+    detachers.push(watchFingerScrolls(subject, list));
+    const finger = {id: 1, x: 10, y: 10, target: outer};
+    send('touchstart', row, [finger], [finger], 0);
+    list.dispatchEvent(new view.Event('scroll'));
+    expect(isFingerScroll(subject, list)).toBe(true);
   });
 });

@@ -3062,3 +3062,39 @@ test('a watcher follows a touch the browser scrolls with to the lift, and cancel
     'possible',
   ]);
 });
+
+test("a pan on an element in a same-origin iframe follows a finger: the host reads that window's nodes and touches", async ({
+  page,
+  browserName,
+}) => {
+  const driver = await openBare(page, browserName);
+  // The page's code drives an iframe's document, as a component rendered into
+  // another window's document does. The iframe's nodes and touch events
+  // belong to its own window.
+  const start = await page.evaluate(() => {
+    const frame = document.createElement('iframe');
+    frame.style.cssText =
+      'position: absolute; left: 0; top: 0; width: 320px; height: 480px; border: 0';
+    document.body.append(frame);
+    const doc = frame.contentDocument as Document;
+    doc.body.style.margin = '0';
+    doc.body.innerHTML =
+      '<div id="pad" style="width: 240px; height: 240px; background: #ddd"></div>';
+    const pad = doc.getElementById('pad') as HTMLElement;
+    const {getGestureHost, PanGestureRecognizer} = window.__api;
+    const pan = new PanGestureRecognizer();
+    const states: string[] = [];
+    (window as unknown as {__frameStates: string[]}).__frameStates = states;
+    pan.addTransitionListener((_current, _from, to) => states.push(to));
+    getGestureHost(doc).attach(pad, pan);
+    const box = pad.getBoundingClientRect();
+    return {x: box.left + box.width / 2, y: box.top + box.height / 2};
+  });
+  await driver.play(drag(start, {x: start.x + 80, y: start.y + 4}));
+  const states = await page.evaluate(
+    () => (window as unknown as {__frameStates: string[]}).__frameStates,
+  );
+  expect(states[0]).toBe('began');
+  expect(states).toContain('changed');
+  expect(states.slice(-2)).toEqual(['ended', 'possible']);
+});

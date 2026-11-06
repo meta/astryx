@@ -24,6 +24,7 @@
 import {subscribeInput} from '../utils/inputStream';
 import {isCoarsePointer, watchCoarsePointer} from '../utils/coarsePointer';
 import type {GestureHost} from './GestureHost';
+import {isNode} from '../utils/nodeType';
 
 /**
  * Where the browser sends no `scrollend`, how long a finger-driven scroller
@@ -49,7 +50,7 @@ function start(host: GestureHost, watch: Watch): () => void {
   const doc = host.document;
   const scrollerOf = (event: Event): Node | null => {
     const target = event.target === doc ? doc : event.target;
-    return target instanceof Node ? target : null;
+    return isNode(target) ? target : null;
   };
   // A finger's scroll ends at the scroller's scrollend, or, where the
   // browser sends none, after a quiet spell.
