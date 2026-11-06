@@ -34,6 +34,7 @@
  */
 
 import {parentAcrossShadow} from '../utils/flatTree';
+import {isElement} from '../utils/nodeType';
 
 /** How far an element is drawn from where the engine hit-tests it, CSS px. */
 export interface PresentedOffset {
@@ -128,7 +129,7 @@ export function presentedOffsetOf(
     node != null;
     node = parentAcrossShadow(node)
   ) {
-    const source = node instanceof Element ? sources.get(node) : undefined;
+    const source = isElement(node) ? sources.get(node) : undefined;
     if (source != null) {
       const offset = source.offset(time);
       x += offset.x;
