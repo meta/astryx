@@ -22,6 +22,7 @@ import {fileURLToPath} from 'node:url';
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {build} from 'esbuild';
 import {cubicBezier} from '../bezier';
+import {LATE_START_MS} from '../frameBlock';
 import type * as Bundle from './animatedLayoutBundle';
 import {stylexDeclarations} from './stylexDeclarationsPlugin';
 
@@ -64,6 +65,15 @@ declare global {
      * keyframes: the same clock the module rides on.
      */
     glideBoxOf: (element: Element) => DOMRect;
+    /**
+     * A glide's translate at `time` ms of its own clock, from its keyframes.
+     * `glideBoxOf` reads it at the glide's current time. A retarget proof
+     * reads a replaced glide at the change's start, where it would show then.
+     */
+    glideOffsetAt: (
+      animation: Animation,
+      time: number,
+    ) => {x: number; y: number};
     /**
      * The px an element's `inset()` clip hides from each side, from its clip
      * animation's own keyframes at its current time (the computed clip when
@@ -141,6 +151,22 @@ window.resumeAll = () => {
     }
   }
 };
+window.glideOffsetAt = (animation, time) => {
+  const numbers = value =>
+    [...String(value).matchAll(/(-?[\\d.e+-]+)px/g)].map(m => Number(m[1]));
+  const frames = animation.effect.getKeyframes();
+  const duration = Number(animation.effect.getTiming().duration);
+  const at = Math.min(1, Math.max(0, time / duration));
+  let i = 0;
+  while (i < frames.length - 2 && frames[i + 1].computedOffset < at) {
+    i += 1;
+  }
+  const [x0 = 0, y0 = 0] = numbers(frames[i].translate);
+  const [x1 = 0, y1 = 0] = numbers(frames[i + 1].translate);
+  const span = frames[i + 1].computedOffset - frames[i].computedOffset;
+  const f = span > 0 ? (at - frames[i].computedOffset) / span : 1;
+  return {x: x0 + (x1 - x0) * f, y: y0 + (y1 - y0) * f};
+};
 window.glideBoxOf = element => {
   // Where layout puts it (offsets ignore transforms; this page lays out on
   // whole pixels), plus its glide's translate from the glide's keyframes at
@@ -158,21 +184,9 @@ window.glideBoxOf = element => {
     .filter(a => a.effect.getKeyframes().some(k => k.translate != null))
     .at(-1);
   if (animation != null) {
-    const numbers = value =>
-      [...String(value).matchAll(/(-?[\\d.e+-]+)px/g)].map(m => Number(m[1]));
-    const frames = animation.effect.getKeyframes();
-    const duration = Number(animation.effect.getTiming().duration);
-    const at = Math.min(1, Math.max(0, Number(animation.currentTime) / duration));
-    let i = 0;
-    while (i < frames.length - 2 && frames[i + 1].computedOffset < at) {
-      i += 1;
-    }
-    const [x0 = 0, y0 = 0] = numbers(frames[i].translate);
-    const [x1 = 0, y1 = 0] = numbers(frames[i + 1].translate);
-    const span = frames[i + 1].computedOffset - frames[i].computedOffset;
-    const f = span > 0 ? (at - frames[i].computedOffset) / span : 1;
-    x += x0 + (x1 - x0) * f;
-    y += y0 + (y1 - y0) * f;
+    const offset = window.glideOffsetAt(animation, Number(animation.currentTime));
+    x += offset.x;
+    y += offset.y;
   }
   return new DOMRect(x, y, element.offsetWidth, element.offsetHeight);
 };
@@ -284,6 +298,25 @@ async function change(
     mutate: OPEN_GROW,
     ...options,
   });
+}
+
+/**
+ * A change starts at its frame's time. One made more than LATE_START_MS past
+ * its frame starts on the live clock, while the change runs. The no-jump
+ * checks read the old place at that start, so a start the module dates
+ * anywhere else fails here first.
+ */
+function expectStartInChange(run: {
+  start: number;
+  frameTime: number;
+  changeFrom: number;
+  changedBy: number;
+}) {
+  if (run.start !== run.frameTime) {
+    expect(run.start - run.frameTime).toBeGreaterThan(LATE_START_MS);
+    expect(run.start).toBeGreaterThanOrEqual(run.changeFrom);
+    expect(run.start).toBeLessThanOrEqual(run.changedBy);
+  }
 }
 
 /** Until every animation on the page has finished. */
@@ -632,46 +665,87 @@ test.describe('spec:AST-105 Coverage', () => {
    * 1.8 times its speed.
    */
   async function retarget(page: Page, lateMs: number) {
+    // The row glides longer than the setup below can be late, so it still
+    // moves at the second change on a loaded runner.
     await open(
       page,
       `<div id="area" class="area"><div id="grow" class="grow"></div>
         <div id="second" class="grow"></div><div id="after" class="row"></div></div>`,
+      '#area { --duration-medium: 1000ms; }',
     );
-    await change(page);
-    await page.waitForTimeout(100);
-    const [first] = await page.evaluate(() => window.motionOf('#after'));
-    // The row's speed over the frame before the second change and the frame
-    // after it, and its place either side of the change.
-    const run = await page.evaluate(
-      async ({mutate, late}) => {
+    // The row's speed over the frame before the second change and from the
+    // change's start to the frame after it, and its place either side.
+    return page.evaluate(
+      async ({opening, mutate, late}) => {
         const row = document.querySelector('#after') as HTMLElement;
         const frame = async () =>
           new Promise<number>(resolve => requestAnimationFrame(resolve));
+        await window.change({changed: '#grow', mutate: opening});
+        const [first] = window.motionOf('#after');
+        await new Promise<void>(resolve => {
+          setTimeout(resolve, 100);
+        });
         const t0 = await frame();
         const y0 = window.glideBoxOf(row).top;
         const t1 = await frame();
         const y1 = window.glideBoxOf(row).top;
+        const glide = row
+          .getAnimations()
+          .filter(a =>
+            (a.effect as KeyframeEffect)
+              .getKeyframes()
+              .some(k => k.translate != null),
+          )
+          .at(-1);
+        // Its clock as read now: a glide the change replaces loses both.
+        const time = Number(glide?.currentTime);
+        const startTime = Number(glide?.startTime);
+        const frameTime = Number(document.timeline.currentTime);
         const until = performance.now() + late;
         while (performance.now() < until) {
           // The change comes `late` ms into the frame.
         }
+        const changeFrom = performance.now();
         await window.change({changed: '#second', mutate});
+        const changedBy = performance.now();
         const y1After = window.glideBoxOf(row).top;
-        const t2 = await frame();
+        // A change made late in its frame starts on the live clock. The
+        // glide it replaces moved on until then, so the new one starts there.
+        const start = window.AnimatedLayout.layoutStartFor(document);
+        const shownAt = Math.max(time, start - startTime);
+        const y1AtStart =
+          glide?.playState === 'idle'
+            ? y1 +
+              window.glideOffsetAt(glide, shownAt).y -
+              window.glideOffsetAt(glide, time).y
+            : y1;
+        // The first frame after the new glide's start: a late change starts it
+        // after the frame its task ran in.
+        let t2 = await frame();
+        while (t2 <= start) {
+          t2 = await frame();
+        }
         const y2 = window.glideBoxOf(row).top;
         return {
-          before: (y1 - y0) / (t1 - t0),
-          after: (y2 - y1After) / (t2 - t1),
-          y1,
-          y1After,
+          first,
+          run: {
+            before: (y1 - y0) / (t1 - t0),
+            after: (y2 - y1After) / (t2 - start),
+            y1AtStart,
+            y1After,
+            start,
+            frameTime,
+            changeFrom,
+            changedBy,
+          },
         };
       },
       {
+        opening: OPEN_GROW,
         mutate: `document.querySelector('#second').classList.add('open')`,
         late: lateMs,
       },
     );
-    return {first, run};
   }
 
   test('an element already moving keeps its motion and adds the new move: no jump, no lost speed', async ({
@@ -684,7 +758,8 @@ test.describe('spec:AST-105 Coverage', () => {
     expect(motions[0].startTime).not.toBe(first.startTime);
     // No jump: the new glide starts where the old one is drawn, which is a
     // straight line between two of its keyframes.
-    expect(Math.abs(run.y1After - run.y1)).toBeLessThan(0.01);
+    expectStartInChange(run);
+    expect(Math.abs(run.y1After - run.y1AtStart)).toBeLessThan(0.01);
     // Still gliding down at least as fast: the new move adds to the motion.
     expect(run.before).toBeGreaterThan(0);
     expect(run.after).toBeGreaterThan(run.before * 0.9);
@@ -698,7 +773,7 @@ test.describe('spec:AST-105 Coverage', () => {
     expect(landed).toBeCloseTo(160, 0);
   });
 
-  for (const lateMs of [1, 9]) {
+  for (const lateMs of [1, 9, 40, 100]) {
     test(`a change made ${lateMs} ms into its frame retargets a glide where it is drawn`, async ({
       page,
     }) => {
@@ -707,7 +782,8 @@ test.describe('spec:AST-105 Coverage', () => {
       // started that many ms of motion ahead (0.3 px at 1 ms, about 3 px at
       // 9 ms).
       const {run} = await retarget(page, lateMs);
-      expect(Math.abs(run.y1After - run.y1)).toBeLessThan(0.01);
+      expectStartInChange(run);
+      expect(Math.abs(run.y1After - run.y1AtStart)).toBeLessThan(0.01);
       expect(run.after).toBeGreaterThan(run.before * 0.9);
     });
   }
@@ -725,11 +801,11 @@ test.describe('spec:AST-105 Coverage', () => {
     body = `<div id="area" class="area"><div id="grow" class="grow"></div>
         <div id="card"><div id="inner" class="grow"></div><div id="row" class="row"></div></div></div>`,
   ) {
-    await open(page, body);
-    await change(page);
-    await page.waitForTimeout(100);
+    // The card glides longer than the setup below can be late, so it still
+    // moves at the second change on a loaded runner.
+    await open(page, body, '#area { --duration-medium: 1000ms; }');
     return page.evaluate(
-      async ({mutate, late}) => {
+      async ({first, mutate, late}) => {
         const card = document.querySelector('#card') as HTMLElement;
         const row = document.querySelector('#row') as HTMLElement;
         const layoutTop = (element: HTMLElement) => {
@@ -756,34 +832,88 @@ test.describe('spec:AST-105 Coverage', () => {
         };
         const frame = async () =>
           new Promise<number>(resolve => requestAnimationFrame(resolve));
+        // The first change sets the card gliding, then its glide runs 100 ms.
+        await window.change({changed: '#grow', mutate: first});
+        await new Promise<void>(resolve => {
+          setTimeout(resolve, 100);
+        });
         await frame();
         await frame();
         const cardGlidingBefore = card.getAnimations().length > 0;
         const cardGlide = card.getAnimations().at(-1) ?? null;
         const y1 = drawnTop(row);
+        // Each glide that carries the row, with its clock as read now: a
+        // glide the change replaces loses both.
+        const carriers: {
+          glide: Animation;
+          time: number;
+          startTime: number;
+        }[] = [];
+        for (
+          let node: HTMLElement | null = row;
+          node != null && node !== document.body;
+          node = node.parentElement
+        ) {
+          const glide = node
+            .getAnimations()
+            .filter(a =>
+              (a.effect as KeyframeEffect)
+                .getKeyframes()
+                .some(k => k.translate != null),
+            )
+            .at(-1);
+          if (glide != null) {
+            carriers.push({
+              glide,
+              time: Number(glide.currentTime),
+              startTime: Number(glide.startTime),
+            });
+          }
+        }
+        const frameTime = Number(document.timeline.currentTime);
         const until = performance.now() + late;
         while (performance.now() < until) {
           // The change comes `late` ms into the frame.
         }
+        const changeFrom = performance.now();
         await window.change({changed: '#inner', mutate});
+        const changedBy = performance.now();
         const y1After = drawnTop(row);
+        // A change made late in its frame starts on the live clock. A glide
+        // it replaces moved on until then, while one it keeps reads the same
+        // on both sides of the change.
+        const start = window.AnimatedLayout.layoutStartFor(document);
+        let y1AtStart = y1;
+        for (const {glide, time, startTime} of carriers) {
+          if (glide.playState === 'idle') {
+            const shownAt = Math.max(time, start - startTime);
+            y1AtStart +=
+              window.glideOffsetAt(glide, shownAt).y -
+              window.glideOffsetAt(glide, time).y;
+          }
+        }
         return {
           cardGlidingBefore,
           cardGlidingAfter: card.getAnimations().length > 0,
           cardRetargeted: card.getAnimations().at(-1) !== cardGlide,
           rowGlidingAfter: row.getAnimations().length > 0,
-          y1,
+          y1AtStart,
           y1After,
+          start,
+          frameTime,
+          changeFrom,
+          changedBy,
         };
       },
       {
+        first: OPEN_GROW,
         mutate: `document.querySelector('#inner').classList.add('open')`,
         late: lateMs,
       },
     );
   }
 
-  for (const lateMs of [0, 1, 9]) {
+  for (const lateMs of [0, 1, 9, 30, 40, 60, 100]) {
     test(`a row inside a gliding card, moved by a change in the card ${lateMs} ms into its frame, starts where it is drawn`, async ({
       page,
     }) => {
@@ -795,11 +925,12 @@ test.describe('spec:AST-105 Coverage', () => {
       expect(run.cardGlidingAfter).toBe(true);
       expect(run.cardRetargeted).toBe(true);
       expect(run.rowGlidingAfter).toBe(true);
-      expect(Math.abs(run.y1After - run.y1)).toBeLessThan(0.01);
+      expectStartInChange(run);
+      expect(Math.abs(run.y1After - run.y1AtStart)).toBeLessThan(0.01);
     });
   }
 
-  for (const lateMs of [0, 1, 9]) {
+  for (const lateMs of [0, 1, 9, 30, 40, 60, 100]) {
     test(`a row inside a gliding card that keeps its glide (an absolutely positioned panel), moved by a change in the card ${lateMs} ms into its frame, starts where it is drawn`, async ({
       page,
     }) => {
@@ -817,7 +948,8 @@ test.describe('spec:AST-105 Coverage', () => {
       expect(run.cardGlidingAfter).toBe(true);
       expect(run.cardRetargeted).toBe(false);
       expect(run.rowGlidingAfter).toBe(true);
-      expect(Math.abs(run.y1After - run.y1)).toBeLessThan(0.01);
+      expectStartInChange(run);
+      expect(Math.abs(run.y1After - run.y1AtStart)).toBeLessThan(0.01);
     });
   }
 
@@ -3009,6 +3141,16 @@ test.describe('spec:AST-105 FR9 (the edge reveal)', () => {
         edge: 'inline-end',
         rideWith: column,
       });
+      await new Promise<void>(resolve => {
+        queueMicrotask(resolve);
+      });
+      // Hold the expand at fixed times on its own clock, once it rides. Late
+      // frames then cannot end it before these reads.
+      for (const ms of [20, 40, 60, 80, 100, 120]) {
+        window.holdAt(ms);
+        read('expanding held');
+      }
+      window.resumeAll();
       for (let i = 0; i < 60; i++) {
         await frame();
         read('expanding');
