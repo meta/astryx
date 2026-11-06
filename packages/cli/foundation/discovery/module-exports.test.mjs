@@ -11,9 +11,11 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {
   elementPropOrigins,
+  followedExportNames,
   moduleExportOrigin,
   moduleExportOrigins,
   moduleExportSource,
+  moduleExportsName,
   staticExportObject,
 } from './module-exports.mjs';
 
@@ -275,6 +277,20 @@ describe('elementPropOrigins', () => {
       "import {Theme} from '@acme/core';\nimport {gone} from '@acme/missing';\nexport const A = () => <Theme theme={gone} />;\n",
     );
     expect(elementPropOrigins(app, THEME)).toEqual([null]);
+describe('an export declared inside a namespace', () => {
+  const NAMESPACE =
+    'export namespace Button {\n  export function Inner() { return null; }\n}\n';
+
+  it('counts for the stable reader, as it always has', () => {
+    const file = write('button.ts', NAMESPACE);
+    expect(moduleExportSource(file, 'Inner')).toBe(file);
+    expect(moduleExportsName(file, 'Inner')).toBe(true);
+  });
+
+  it('is no export of the module for the icon-set reader, which reads only its top level', () => {
+    const file = write('button.ts', NAMESPACE);
+    expect(moduleExportOrigin(file, 'Inner')).toBeNull();
+    expect(followedExportNames(file)).not.toContain('Inner');
   });
 });
 

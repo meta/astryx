@@ -19,7 +19,8 @@ import {
   formatCliCommand,
   getCliInvocation,
 } from '../../../../foundation/env/package-manager.mjs';
-import {humanWarn, jsonOut} from '../../../../foundation/response/json.mjs';
+import {jsonOut} from '../../../../foundation/response/json.mjs';
+import {logger} from '../../../../api/logger.mjs';
 import {resultSet} from '../../../../foundation/debug/index.mjs';
 import {
   emit,
@@ -308,6 +309,9 @@ export function registerExperimentalIcon(group, program) {
    * @param {(result: any) => void} print
    */
   const run = async (call, print) => {
+    // Reading a large library reports its progress through the shared
+    // logger: on stderr in text mode, never under --json.
+    logger.setSilent(Boolean(program.opts().json));
     let result;
     try {
       result = await call();
@@ -415,7 +419,6 @@ export function registerExperimentalIcon(group, program) {
             variant: /** @type {string | undefined} */ (options.variant),
             id: /** @type {string | undefined} */ (options.id),
             all: options.all === true,
-            progress: humanWarn,
           }),
         result => {
           const cli = getCliInvocation();
@@ -583,7 +586,6 @@ export function registerExperimentalIcon(group, program) {
             defaultVariant: options.defaultVariant,
             displayName: options.displayName,
             description: options.description,
-            progress: humanWarn,
           }),
         printNew('icon set'),
       ),

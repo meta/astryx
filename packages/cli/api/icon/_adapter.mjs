@@ -55,7 +55,6 @@ export {
   iconExportName,
   iconNaming,
   modulePrefix,
-  withLibraryProgress,
   moduleNaming,
   iconNamingWithoutLook,
   splitLook,

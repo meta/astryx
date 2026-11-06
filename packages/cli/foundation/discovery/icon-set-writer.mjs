@@ -729,8 +729,9 @@ export function modulePrefix(file, options) {
  * ({@link lookPositions}), read from its icon exports once. A large module
  * reports its reading, as {@link libraryIcons} does.
  * @param {string} file
- * @param {{adapter?: boolean, module?: string}} [options] `module`: the
- *   module as the author named it, for progress
+ * @param {{adapter?: boolean, module?: string, progress?: (line: string) => void}} [options]
+ *   `module`: the module as the author named it, for progress; `progress`:
+ *   hears the reading of a large module
  * @returns {{prefix: string[], positions: Array<Set<string>>}}
  */
 export function moduleNaming(file, options = {}) {
@@ -738,7 +739,7 @@ export function moduleNaming(file, options = {}) {
   let count = 0;
   return readingLibrary(
     file,
-    label,
+    {label, progress: options.progress},
     () => {
       const candidates = iconCandidates(file, options);
       count = candidates.length;
@@ -769,22 +770,6 @@ export function iconNamingWithoutLook(name, {prefix, positions}) {
     .join('');
   return {id: base.join('-'), name: iconExportName(pascal)};
 }
-
-/**
- * Reports the progress of reading a large library while `fn` runs: a line
- * before its exports are read and one with what was found. The CLI prints
- * them on stderr in text mode; nothing else hears them.
- * @template T
- * @param {(line: string) => void} report
- * @param {() => T} fn
- * @returns {T}
- */
-export function withLibraryProgress(report, fn) {
-  return libraryProgress.run(report, fn);
-}
-
-/** @type {AsyncLocalStorage<(line: string) => void>} */
-const libraryProgress = new AsyncLocalStorage();
 
 /** A library with at least this many exports reports its reading. */
 const PROGRESS_FROM = 1000;
@@ -988,10 +973,11 @@ export function preferredLook(positions, prefer = []) {
  * and name without the look words (`XOutline24WGHT500Icon` is `x`,
  * `XIcon`), and its `looks`, every export that draws the glyph.
  * @param {string} file
- * @param {{adapter?: boolean, exclude?: string[], prefer?: string[], module?: string, summary?: (summary: LibraryLookSummary) => void}} [options]
+ * @param {{adapter?: boolean, exclude?: string[], prefer?: string[], module?: string, progress?: (line: string) => void, summary?: (summary: LibraryLookSummary) => void}} [options]
  *   `adapter`: whether the set declares one; `exclude`: export names that
  *   are not icons; `prefer`: look words to prefer (the set's default
  *   variant); `module`: the module as the author named it, for progress;
+ *   `progress`: hears the reading of a large module;
  *   `summary`: hears the looks found, when the library has any
  * @returns {LibraryIcon[]}
  */
@@ -1001,7 +987,7 @@ export function libraryIcons(file, options = {}) {
   let all = [];
   return readingLibrary(
     file,
-    label,
+    {label, progress: options.progress},
     () => {
       all = collectLibraryIcons(file, options);
       const grouped = libraryLooks(all, options.prefer);
@@ -1022,23 +1008,23 @@ export function libraryIcons(file, options = {}) {
 }
 
 /**
- * Read a library with its progress reported ({@link withLibraryProgress}):
- * when a listener hears it and the module has {@link PROGRESS_FROM} exports
- * or more, a line before `read` runs and the line `found` gives after.
+ * Read a library with its progress reported: when `progress` is given and
+ * the module has {@link PROGRESS_FROM} exports or more, a line before `read`
+ * runs and the line `found` gives after.
  * @template T
  * @param {string} file
- * @param {string} label the module as the author named it
+ * @param {{label: string, progress?: (line: string) => void}} reading
+ *   `label`: the module as the author named it
  * @param {() => T} read
  * @param {(result: T) => string} found
  * @returns {T}
  */
-function readingLibrary(file, label, read, found) {
-  const report = libraryProgress.getStore();
-  const exportCount = report ? followedExportNames(file).length : 0;
-  if (report == null || exportCount < PROGRESS_FROM) return read();
-  report(`Reading ${exportCount} exports of ${label}...`);
+function readingLibrary(file, {label, progress}, read, found) {
+  const exportCount = progress ? followedExportNames(file).length : 0;
+  if (progress == null || exportCount < PROGRESS_FROM) return read();
+  progress(`Reading ${exportCount} exports of ${label}...`);
   const result = read();
-  report(found(result));
+  progress(found(result));
   return result;
 }
 
@@ -1109,15 +1095,16 @@ export function libraryLooks(all, prefer = []) {
  * looks are grouped. A large module reports its reading, as
  * {@link libraryIcons} does.
  * @param {string} file
- * @param {{adapter?: boolean, exclude?: string[], module?: string}} [options]
- *   `module`: the module as the author named it, for progress
+ * @param {{adapter?: boolean, exclude?: string[], module?: string, progress?: (line: string) => void}} [options]
+ *   `module`: the module as the author named it, for progress; `progress`:
+ *   hears the reading of a large module
  * @returns {LibraryIcon[]}
  */
 export function everyLibraryIcon(file, options = {}) {
   const label = options.module ?? path.basename(file);
   return readingLibrary(
     file,
-    label,
+    {label, progress: options.progress},
     () => collectLibraryIcons(file, options),
     icons => `Found ${icons.length} icons in ${label}.`,
   );

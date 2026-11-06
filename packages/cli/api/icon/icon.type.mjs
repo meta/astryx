@@ -190,7 +190,6 @@
  * @property {string} [variant] - Add the export as this declared variant of an existing icon.
  * @property {string} [id] - The icon's id, instead of the one its name gives.
  * @property {boolean} [all] - With `variant` and `from`, and no export name: add that variant for every icon whose id an export of `from` has.
- * @property {(line: string) => void} [progress] - Hears a line before a module of a thousand exports or more is read and one with what it found; the CLI prints them on stderr in text mode.
  */
 
 /**
@@ -298,7 +297,6 @@
  * @property {string} [defaultVariant] - With `variants`: the variant each icon's own export draws; the first variant when absent.
  * @property {string} [displayName] - The descriptor's display name; the set name in title case when absent.
  * @property {string} [description] - The descriptor's one-line description; `<Display name> icons.` when absent.
- * @property {(line: string) => void} [progress] - Hears a line before a module of a thousand exports or more is read and one with what it found; the CLI prints them on stderr in text mode.
  */
 
 /**

@@ -70,12 +70,6 @@ export const doc = {
       description:
         "The descriptor's one-line description; '<Display name> icons.' when absent.",
     },
-    {
-      name: 'options.progress',
-      type: '(line: string) => void',
-      description:
-        'Hears a line before a module of a thousand exports or more is read, and one with what it found. The CLI prints them on stderr in text mode.',
-    },
   ],
   returns: [
     {

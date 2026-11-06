@@ -13,6 +13,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {AstryxError} from '../error.mjs';
+import {logger} from '../logger.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
   assertWithin,
@@ -34,6 +35,7 @@ import {
   generatedModulePath,
   generatedModuleText,
   generatedOrigins,
+  iconIdOf,
   sameIconModule,
   generatedTypesPath,
   THEME_MAP_NAME,
@@ -262,6 +264,7 @@ export async function addIconSet(name, options) {
       exclude,
       prefer: looks ? [looks.default] : [],
       module: source.module,
+      progress: line => logger.warn(line),
       summary: each => {
         lookFound.summary = each;
       },
@@ -527,7 +530,8 @@ function describedDoc(source, describe) {
  * description, in place. Its icons, map and generated module stay as they
  * are. A variant an icon still has must stay declared, and the default
  * variant is one no icon lists as an extra look. A set with icons keeps its
- * default variant: only a refresh with `--from` moves it.
+ * default variant: only a refresh with `--from` moves it. With none declared,
+ * its default is the look its icons' exports draw.
  * @param {string} name
  * @param {{cwd: string, dryRun: boolean, looks: Looks | null, describe: {displayName?: string, description?: string}, packageDir: string, rootPath: string, manifestPath: string}} options
  */
@@ -538,7 +542,35 @@ async function redeclareIconSet(
   return iconAuthoring(async () => {
     const {set} = await findLocalIconSet(cwd, name);
     const current = set.data.default?.variant;
-    const looks = keepDefaultVariant(given, current);
+    let looks = keepDefaultVariant(given, current);
+    // A set with icons and no declared default has a default all the same:
+    // the look its icons' exports draw.
+    if (looks && current == null && set.data.icons.length > 0) {
+      const drawn = drawnLook(set, packageDir, looks.variants);
+      if (drawn == null && !looks.named) {
+        throw new AstryxError(
+          `Icon set "${name}" declares no default variant, and its icons' exports draw none of ${looks.variants.join(', ')}. Name the look its ${set.data.icons.length} icons draw with --default-variant.`,
+          looks.variants.map(variant => ({
+            name: `astryx experimental icon new-set ${name} --variants ${looks?.variants.join(',')} --default-variant ${variant}`,
+            reason: `if each icon draws ${variant}`,
+          })),
+          ERROR_CODES.ERR_INVALID_OPTION,
+        );
+      }
+      if (drawn != null && looks.named && looks.default !== drawn) {
+        throw new AstryxError(
+          `Icon set "${name}" can't take "${looks.default}" as its default variant in place: its icons' exports draw "${drawn}". Wrap the library again with the new default, so each icon takes that look.`,
+          [
+            {
+              name: `astryx experimental icon new-set ${name} --from <module> --variants ${looks.variants.join(',')} --default-variant ${looks.default}`,
+              reason: 'wrap the library again in the new default look',
+            },
+          ],
+          ERROR_CODES.ERR_INVALID_ARGUMENT,
+        );
+      }
+      if (drawn != null) looks = {...looks, default: drawn};
+    }
     // Each icon's own export draws the current default look, and only a
     // refresh from the library re-picks those exports.
     if (
@@ -657,14 +689,7 @@ async function redeclareIconSet(
  * @returns {string[]}
  */
 function lookNotes(summary, count, from, looks, name) {
-  const described = [...summary.positions]
-    .reverse()
-    .map(words =>
-      words.length > 3
-        ? `${words[0]} to ${words.at(-1)}`
-        : words.join(words.length === 2 ? ' or ' : ', '),
-    )
-    .join('; ');
+  const described = describedLooks(summary.positions);
   const taken = [...summary.preferred].reverse().join(' ');
   const styles = new Set(summary.positions.flat());
   const others = (looks?.variants ?? []).filter(
@@ -676,6 +701,23 @@ function lookNotes(summary, count, from, looks, name) {
       ? `Add the ${others.join(', ')} look${others.length > 1 ? 's' : ''} as variant${others.length > 1 ? 's' : ''}: ${others.map(variant => `\`astryx experimental icon add --variant ${variant} --from ${from} --all --set ${name}\``).join(', ')}.`
       : `To offer another look as a variant, declare it with \`astryx experimental icon new-set ${name} --variants ${[...summary.preferred].reverse()[0]},<look>\` (no --from: the set's icons stay as they are) and run \`astryx experimental icon add --variant <look> --from ${from} --all --set ${name}\`.`,
   ];
+}
+
+/**
+ * A library's look words in the order its names write them, one position
+ * after another: `filled or outline; 24; wght300, wght400, wght500`.
+ * @param {string[][]} positions each position's words, sorted, the last
+ *   word of a name first
+ */
+function describedLooks(positions) {
+  return [...positions]
+    .reverse()
+    .map(words =>
+      words.length > 3
+        ? `${words[0]} to ${words.at(-1)}`
+        : words.join(words.length === 2 ? ' or ' : ', '),
+    )
+    .join('; ');
 }
 
 /**
@@ -824,6 +866,45 @@ function variantOptions(options) {
 }
 
 /**
+ * The declared variant the set's icons draw: the one whose word is in the
+ * names of the most library exports the generated module re-exports
+ * (`XOutline24WGHT400Icon` draws `outline`); null when no icon's export
+ * names one.
+ * @param {Parameters<typeof generatedModulePath>[0]} set
+ * @param {string} packageDir
+ * @param {string[]} variants
+ * @returns {string | null}
+ */
+function drawnLook(set, packageDir, variants) {
+  const origins = generatedOrigins(
+    packageDir,
+    generatedModulePath(set, packageDir),
+  );
+  /** @type {Map<string, number>} */
+  const counts = new Map();
+  for (const icon of set.data.icons) {
+    const origin = origins.get(icon.export);
+    if (!origin || origin.source === 'default') continue;
+    const words = new Set(iconIdOf(origin.source).split('-'));
+    for (const variant of variants) {
+      if (words.has(variant)) {
+        counts.set(variant, (counts.get(variant) ?? 0) + 1);
+      }
+    }
+  }
+  let drawn = null;
+  let most = 0;
+  for (const variant of variants) {
+    const count = counts.get(variant) ?? 0;
+    if (count > most) {
+      drawn = variant;
+      most = count;
+    }
+  }
+  return drawn;
+}
+
+/**
  * The variants `--variants` declares over an existing set. Without
  * `--default-variant`, the set keeps its default variant while `--variants`
  * still declares it: each icon's own export draws that look.
@@ -918,6 +999,7 @@ async function refreshIconSet(
       adapter: Boolean(set.data.adapter),
       exclude: excluded,
       module: source.module,
+      progress: line => logger.warn(line),
     });
 
     // A refresh changes only the icons the refreshed module supplies: those
@@ -954,7 +1036,31 @@ async function refreshIconSet(
     // default variant moves each glyph's own icon to the look it names, so
     // its export draws the default; the icon keeps its id, name and fields.
     const preferred = looks?.default ?? current;
-    const looksOf = libraryLooks(everyIcon, preferred ? [preferred] : []).icons;
+    const {icons: looksOf, positions} = libraryLooks(
+      everyIcon,
+      preferred ? [preferred] : [],
+    );
+    // A default no look position names would re-pick every glyph to the
+    // library's usual look while the set records the new name.
+    if (
+      moved &&
+      positions.length > 0 &&
+      !positions.some(position => position.has(looks.default))
+    ) {
+      const words = positions.map(position => [...position].sort());
+      const own = words.find(each => each.includes(current ?? ''));
+      const offered =
+        own ??
+        words.filter(each => each.some(word => /^[a-z-]+$/u.test(word))).flat();
+      throw new AstryxError(
+        `"${looks.default}" is no look of ${source.module}: its exports name their looks with ${describedLooks(words)}. Name one of these words as the default variant, so each icon takes that look.`,
+        offered.map(word => ({
+          name: `--default-variant ${word}`,
+          reason: `a look ${source.module} names`,
+        })),
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+      );
+    }
     const iconByExport = new Map(everyIcon.map(icon => [icon.export, icon]));
     /** @type {string[]} the set's exports whose statement now names another look */
     const repicked = [];

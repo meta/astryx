@@ -1109,11 +1109,178 @@ describe('progress lines', () => {
     const asJson = await runCli([...listing, '--json'], pkg);
     expect(asJson.stderr).not.toContain('Reading');
     JSON.parse(asJson.stdout);
-    // The command writes no chatter of its own: humanWarn is the one path.
+    // The command writes no chatter of its own: the logger is the one path.
     const source = fs.readFileSync(
       new URL('./experimental/icon.mjs', import.meta.url),
       'utf-8',
     );
     expect(source).not.toMatch(/console\.(?:error|warn|log)/u);
+  });
+});
+
+describe('a refresh to a default the library names no look by', () => {
+  it('refuses, writes nothing, and names the look words it found', async () => {
+    writeVectorLibrary(GLYPHS);
+    await json([
+      ...NEW_SET,
+      '--variants',
+      'filled,outline',
+      '--default-variant',
+      'filled',
+    ]);
+    const dir = path.join(pkg, 'icon-sets', 'brand');
+    const snapshot = () =>
+      Object.fromEntries(
+        fs
+          .readdirSync(dir)
+          .sort()
+          .map(file => [file, fs.readFileSync(path.join(dir, file), 'utf-8')]),
+      );
+    const before = snapshot();
+    const refused = await json([
+      ...NEW_SET,
+      '--variants',
+      'solid,outline',
+      '--default-variant',
+      'solid',
+    ]);
+    expect(refused.code).not.toBe(0);
+    expect(refused.body.code).toBe('ERR_INVALID_ARGUMENT');
+    expect(refused.body.error).toContain('"solid"');
+    expect(refused.body.error).toContain('filled or outline');
+    expect(
+      refused.body.suggestions.map((/** @type {any} */ each) => each.name),
+    ).toEqual(['--default-variant filled', '--default-variant outline']);
+    expect(snapshot()).toEqual(before);
+    expect(generatedOf('brand')).toContain(
+      "export {XFilled24WGHT400Icon as XIcon} from '@acme/vector-icons';",
+    );
+  });
+});
+
+describe('--variants over a set with icons and no declared default', () => {
+  it('takes the look the icons draw as the default, so add gives no second export of it', async () => {
+    writeVectorLibrary(GLYPHS);
+    await json(NEW_SET);
+    expect(generatedOf('brand')).toContain(
+      "export {XOutline24WGHT400Icon as XIcon} from '@acme/vector-icons';",
+    );
+    const declared = await json([
+      'experimental',
+      'icon',
+      'new-set',
+      'brand',
+      '--variants',
+      'filled,outline',
+    ]);
+    expect(declared.code, JSON.stringify(declared.body)).toBe(0);
+    expect(dataOf('brand')).toMatchObject({
+      variants: ['filled', 'outline'],
+      default: {variant: 'outline'},
+    });
+    await json([
+      'experimental',
+      'icon',
+      'add',
+      '--variant',
+      'outline',
+      '--from',
+      '@acme/vector-icons',
+      '--all',
+    ]);
+    const generated = generatedOf('brand');
+    expect(generated.match(/XOutline24WGHT400Icon/gu)).toHaveLength(1);
+    expect(generated).not.toContain('XOutlineIcon');
+    expect(dataOf('brand').default).toEqual({variant: 'outline'});
+  });
+
+  it('refuses a --default-variant other than the look the icons draw', async () => {
+    writeVectorLibrary(GLYPHS);
+    await json(NEW_SET);
+    const before = fs.readFileSync(
+      path.join(pkg, 'icon-sets', 'brand', 'brand.icons.json'),
+      'utf-8',
+    );
+    const refused = await json([
+      'experimental',
+      'icon',
+      'new-set',
+      'brand',
+      '--variants',
+      'filled,outline',
+      '--default-variant',
+      'filled',
+    ]);
+    expect(refused.code).not.toBe(0);
+    expect(refused.body.code).toBe('ERR_INVALID_ARGUMENT');
+    expect(refused.body.error).toContain('draw "outline"');
+    expect(
+      fs.readFileSync(
+        path.join(pkg, 'icon-sets', 'brand', 'brand.icons.json'),
+        'utf-8',
+      ),
+    ).toBe(before);
+  });
+});
+
+describe('progress through the logger', () => {
+  const manyGlyphs = () => {
+    const letters = 'abcdefghijklmnopqrstuvwxyz';
+    return Array.from(
+      {length: 170},
+      (_, index) =>
+        `Glyph${letters[Math.floor(index / 26)].toUpperCase()}${letters[index % 26]}`,
+    );
+  };
+
+  /** @param {() => Promise<unknown>} fn */
+  async function stderrOf(fn) {
+    /** @type {string[]} */
+    const lines = [];
+    const original = console.error;
+    console.error = (/** @type {unknown[]} */ ...args) => {
+      lines.push(args.join(' '));
+    };
+    try {
+      await fn();
+    } finally {
+      console.error = original;
+    }
+    return lines;
+  }
+
+  it('reaches stderr from a direct API call once the logger is on, and stays quiet while it is silent', async () => {
+    writeVectorLibrary(manyGlyphs());
+    const {iconNewSet} = await import('../../../api/icon/new-set/new-set.mjs');
+    const {logger} = await import('../../../api/logger.mjs');
+    const call = () =>
+      iconNewSet('brand', {
+        cwd: pkg,
+        from: '@acme/vector-icons',
+        dryRun: true,
+      });
+    try {
+      logger.setSilent(true);
+      expect(await stderrOf(call)).toEqual([]);
+      logger.setSilent(false);
+      const heard = await stderrOf(call);
+      expect(heard).toContain('Reading 1021 exports of @acme/vector-icons...');
+    } finally {
+      logger.setSilent(true);
+    }
+  });
+
+  it('is no option of the API calls', async () => {
+    writeVectorLibrary(GLYPHS);
+    const {iconNewSet} = await import('../../../api/icon/new-set/new-set.mjs');
+    await expect(
+      iconNewSet('brand', {
+        cwd: pkg,
+        from: '@acme/vector-icons',
+        dryRun: true,
+        // @ts-expect-error the option is gone
+        progress: () => {},
+      }),
+    ).rejects.toThrow('Option "progress" does not apply');
   });
 });

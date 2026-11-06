@@ -334,7 +334,9 @@ icon, and the CLI verifies it, writes the files, and checks the set.
     the set already wraps keeps its icon and `id`, so a set wrapped one look
     at a time loses and renames nothing, and a new glyph comes in once; a
     new `--default-variant` moves each glyph's own icon to the look it
-    names, and the icon keeps its `id` and export.
+    names, and the icon keeps its `id` and export. A new
+    `--default-variant` that is none of the library's look words is
+    refused, the look words named, and nothing is written.
   - `experimental icon add <Export> --from <module>` verifies the export,
     lists the definitions that fit it, and with `--definition` or
     `--new-definition` adds it and maps it; `--variant <name>` adds it as

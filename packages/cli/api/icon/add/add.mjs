@@ -31,7 +31,6 @@ import {
   astryxIconDefinitions,
   authoring,
   checkNewDefinition,
-  withLibraryProgress,
   definitionNameFromInput,
   closestNames,
   findLocalIconSet,
@@ -63,6 +62,7 @@ import {
   refuseOutsideProject,
 } from '../_adapter.mjs';
 import {passed, refuseIgnoredPairs} from '../_options.mjs';
+import {logger} from '../../logger.mjs';
 import {shellArg} from '../../../foundation/text/shell-arg.mjs';
 
 /** The lowest score a definition match needs: an exact word or name. */
@@ -94,16 +94,7 @@ export async function iconAdd(exportName, options) {
     variant,
     id: givenId,
     all = false,
-    progress,
   } = options ?? {};
-  if (progress != null && typeof progress !== 'function') {
-    throw new TypeError('options.progress must be a function.');
-  }
-  if (progress) {
-    return withLibraryProgress(progress, () =>
-      iconAdd(exportName, {...options, progress: undefined}),
-    );
-  }
   refuseOutsideProject(cwd, 'experimental icon add', 'the icon-set package');
   // The docs' kebab-case (`ai-helper`) names the same new definition.
   const newDefinition =
@@ -210,6 +201,7 @@ export async function iconAdd(exportName, options) {
         : moduleNaming(source.file, {
             adapter: Boolean(set.data.adapter),
             module: source.module,
+            progress: line => logger.warn(line),
           });
     const nameWords = iconIdOf(exportName).split('-');
     const shared = libraryNaming.prefix;
@@ -615,6 +607,7 @@ async function addVariantForAll({cwd, from, selector, variant}) {
     adapter: Boolean(set.data.adapter),
     prefer: [variant],
     module: source.module,
+    progress: line => logger.warn(line),
   });
   const byId = new Map(found.map(each => [each.id, each]));
   const byLook = new Map(

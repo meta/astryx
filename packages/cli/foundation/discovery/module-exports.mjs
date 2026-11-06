@@ -161,32 +161,45 @@ const nodesByTree = new WeakMap();
  * @returns {readonly any[]}
  */
 function nodesOfType(node, type) {
+  return cachedNodes(node, `all\0${type}`, () =>
+    collectNodesOfType(node, type, []),
+  );
+}
+
+/**
+ * The module declarations of `type` at a program's top level, in source
+ * order: a library file is read without a walk of every function in it. A
+ * declaration nested in a namespace is not one of them. Only the icon-set
+ * readers use this; the other readers walk the whole tree.
+ * @param {any} program
+ * @param {string} type
+ * @returns {readonly any[]}
+ */
+function moduleDeclarations(program, type) {
+  return cachedNodes(program, `top\0${type}`, () =>
+    program.body.filter((/** @type {any} */ each) => each.type === type),
+  );
+}
+
+/**
+ * @param {any} node
+ * @param {string} key
+ * @param {() => readonly any[]} find
+ * @returns {readonly any[]}
+ */
+function cachedNodes(node, key, find) {
   if (node == null || typeof node !== 'object') return [];
   let byType = nodesByTree.get(node);
   if (!byType) {
     byType = new Map();
     nodesByTree.set(node, byType);
   }
-  const cached = byType.get(type);
+  const cached = byType.get(key);
   if (cached) return cached;
-  // Module declarations live only at a program's top level, so they are
-  // read from its body: no walk of every function in a library file.
-  /** @type {readonly any[]} */
-  const found =
-    node.type === 'Program' && MODULE_DECLARATIONS.has(type)
-      ? node.body.filter((/** @type {any} */ each) => each.type === type)
-      : collectNodesOfType(node, type, []);
-  byType.set(type, found);
+  const found = find();
+  byType.set(key, found);
   return found;
 }
-
-/** Statement types that appear only at a module's top level. */
-const MODULE_DECLARATIONS = new Set([
-  'ExportNamedDeclaration',
-  'ExportDefaultDeclaration',
-  'ExportAllDeclaration',
-  'ImportDeclaration',
-]);
 
 /**
  * @param {any} node
@@ -328,7 +341,7 @@ export function moduleParseFailure(file) {
       };
     }
     for (const type of ['ExportNamedDeclaration', 'ExportAllDeclaration']) {
-      for (const node of nodesOfType(ast.program, type)) {
+      for (const node of moduleDeclarations(ast.program, type)) {
         const specifier = node.source?.value;
         if (typeof specifier !== 'string' || !specifier.startsWith('.')) {
           continue;
@@ -357,7 +370,7 @@ export function unfollowedReexports(file) {
   /** @type {Set<string>} */
   const missing = new Set();
   for (const type of ['ExportNamedDeclaration', 'ExportAllDeclaration']) {
-    for (const node of nodesOfType(ast.program, type)) {
+    for (const node of moduleDeclarations(ast.program, type)) {
       const specifier = node.source?.value;
       if (typeof specifier !== 'string' || node.exportKind === 'type') continue;
       if (!resolveModuleOrPackage(specifier, file)) missing.add(specifier);
@@ -1116,7 +1129,7 @@ function namedExportIndex(program, types = false) {
   const declarations = [];
   /** @type {Map<string, Array<{node: any, specifier: any}>>} */
   const specifiers = new Map();
-  for (const node of nodesOfType(program, 'ExportNamedDeclaration')) {
+  for (const node of moduleDeclarations(program, 'ExportNamedDeclaration')) {
     if (node.exportKind === 'type' && !types) continue;
     if (node.declaration) declarations.push(node);
     for (const specifier of node.specifiers ?? []) {
@@ -1184,7 +1197,10 @@ export function moduleExportOrigin(
     return bindingOrigin(ast, file, local, seen, types);
   }
   if (exportName === 'default') {
-    for (const node of nodesOfType(ast.program, 'ExportDefaultDeclaration')) {
+    for (const node of moduleDeclarations(
+      ast.program,
+      'ExportDefaultDeclaration',
+    )) {
       const declaration = node.declaration;
       if (!types && !runtimeDefault(declaration)) continue;
       if (declaration.type === 'Identifier') {
@@ -1193,7 +1209,7 @@ export function moduleExportOrigin(
       return {file, name: 'default'};
     }
   }
-  for (const node of nodesOfType(ast.program, 'ExportAllDeclaration')) {
+  for (const node of moduleDeclarations(ast.program, 'ExportAllDeclaration')) {
     if ((node.exportKind === 'type' && !types) || node.exported) continue;
     const target = resolveModuleOrPackage(node.source?.value, file);
     const origin = target
@@ -1253,7 +1269,10 @@ function originGapReason(file, exportName, seen = new Set()) {
   }
   /** @type {string | null} */
   let local = null;
-  for (const node of nodesOfType(ast.program, 'ExportNamedDeclaration')) {
+  for (const node of moduleDeclarations(
+    ast.program,
+    'ExportNamedDeclaration',
+  )) {
     for (const specifier of node.specifiers ?? []) {
       const exported = specifier.exported?.name ?? specifier.exported?.value;
       if (exported !== exportName) continue;
@@ -1274,7 +1293,10 @@ function originGapReason(file, exportName, seen = new Set()) {
     }
   }
   if (exportName === 'default') {
-    for (const node of nodesOfType(ast.program, 'ExportDefaultDeclaration')) {
+    for (const node of moduleDeclarations(
+      ast.program,
+      'ExportDefaultDeclaration',
+    )) {
       if (node.declaration?.type === 'Identifier') {
         local = node.declaration.name;
       }
@@ -1282,7 +1304,10 @@ function originGapReason(file, exportName, seen = new Set()) {
   }
   if (!local) {
     // Bound behind `export *`: the module it comes from says why.
-    for (const node of nodesOfType(ast.program, 'ExportAllDeclaration')) {
+    for (const node of moduleDeclarations(
+      ast.program,
+      'ExportAllDeclaration',
+    )) {
       if (node.exportKind === 'type' || node.exported) continue;
       const target = resolveModuleOrPackage(node.source?.value, file);
       if (
@@ -1343,7 +1368,10 @@ export function followedExportNames(
   }
   /** @type {Set<string>} */
   const names = new Set();
-  for (const node of nodesOfType(ast.program, 'ExportNamedDeclaration')) {
+  for (const node of moduleDeclarations(
+    ast.program,
+    'ExportNamedDeclaration',
+  )) {
     if (node.exportKind === 'type' && !types) continue;
     const declaration = node.declaration;
     if (declaration && (declaration.declare !== true || types)) {
@@ -1373,7 +1401,7 @@ export function followedExportNames(
       }
     }
   }
-  for (const node of nodesOfType(ast.program, 'ExportAllDeclaration')) {
+  for (const node of moduleDeclarations(ast.program, 'ExportAllDeclaration')) {
     if ((node.exportKind === 'type' && !types) || node.exported) continue;
     const target = resolveModuleOrPackage(node.source?.value, file);
     if (target) {
@@ -1435,7 +1463,7 @@ export function exportValueKind(file, exportName) {
     return 'unknown';
   };
   if (origin.name === 'default') {
-    const [node] = nodesOfType(ast.program, 'ExportDefaultDeclaration');
+    const [node] = moduleDeclarations(ast.program, 'ExportDefaultDeclaration');
     return node ? kindOf(node.declaration) : 'unknown';
   }
   for (const statement of ast.program.body) {
@@ -1492,7 +1520,7 @@ export function exportScalarType(file, exportName) {
     return null;
   };
   if (origin.name === 'default') {
-    const [node] = nodesOfType(ast.program, 'ExportDefaultDeclaration');
+    const [node] = moduleDeclarations(ast.program, 'ExportDefaultDeclaration');
     return node ? typeOf(node.declaration) : null;
   }
   for (const statement of ast.program.body) {
