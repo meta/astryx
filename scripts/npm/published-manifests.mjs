@@ -8,14 +8,15 @@
  *   from `packages/` and `packages/themes/` (public ones, and private ones
  *   marked canary-only, which the canary job publishes).
  * @output Prints each problem and exits 1 when there is one.
- * @position `pnpm check:published-manifests` runs it on every change, and
+ * @position `pnpm check:published-manifests` runs it on every change,
  *   scripts/npm/publish-package.mjs runs `alignmentProblems` on each package
- *   just before it publishes. A dependency, peer or optional dependency on an
- *   `@astryxdesign` package must name the version of that package in the same
- *   release (exact, or `^` and that version). `*` and other ranges let a
- *   package manager keep an older release next to the new one: an app that
- *   upgraded Core could keep a theme from the release before, whose exact Core
- *   peer then no longer matches.
+ *   just before it publishes, and the canary loops publish `publishedPackages`.
+ *   A dependency, peer or optional dependency on an `@astryxdesign` package
+ *   must name that package's exact version in the same release, the only
+ *   spec the release's version sync moves. `*` and other ranges let a package
+ *   manager keep an older release next to the new one: an app that upgraded
+ *   Core could keep a theme from the release before, whose exact Core peer then
+ *   no longer matches.
  */
 
 import fs from 'node:fs';
@@ -23,6 +24,7 @@ import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 
 const FIELDS = ['dependencies', 'peerDependencies', 'optionalDependencies'];
+const PACKAGE_PARENTS = ['packages', 'packages/themes'];
 
 // Entries that may keep another spec until a minor release. Narrowing a
 // published range is a breaking change, so the CLI keeps its optional `*`
@@ -45,19 +47,20 @@ function isPending(name, field, dependency, spec) {
       entry.spec === spec,
   );
 }
-const PACKAGE_PARENTS = ['packages', 'packages/themes'];
 
-/** The directories under `root` that hold a package manifest. */
-export function packageDirs(root) {
+/** Each package under `root`, as its directory relative to `root` and its manifest. */
+function workspacePackages(root) {
   return PACKAGE_PARENTS.flatMap(parent => {
-    const dir = path.join(root, parent);
-    if (!fs.existsSync(dir)) return [];
+    const parentDir = path.join(root, parent);
+    if (!fs.existsSync(parentDir)) return [];
     return fs
-      .readdirSync(dir, {withFileTypes: true})
+      .readdirSync(parentDir, {withFileTypes: true})
       .filter(entry => entry.isDirectory())
-      .map(entry => path.join(dir, entry.name))
-      .filter(pkgDir => fs.existsSync(path.join(pkgDir, 'package.json')));
-  });
+      .map(entry => `${parent}/${entry.name}`)
+      .sort();
+  })
+    .filter(dir => fs.existsSync(path.join(root, dir, 'package.json')))
+    .map(dir => ({dir, manifest: readManifest(path.join(root, dir))}));
 }
 
 function readManifest(dir) {
@@ -72,11 +75,18 @@ export function isPublished(manifest) {
   );
 }
 
+/**
+ * The packages npm receives from `root`: public `@astryxdesign` packages and
+ * private canary-only ones. The canary loops publish exactly this list.
+ */
+export function publishedPackages(root) {
+  return workspacePackages(root).filter(({manifest}) => isPublished(manifest));
+}
+
 /** Each `@astryxdesign` package under `root`, by name, with its version. */
 export function releaseVersions(root) {
   const versions = new Map();
-  for (const dir of packageDirs(root)) {
-    const manifest = readManifest(dir);
+  for (const {manifest} of workspacePackages(root)) {
     if (manifest.name?.startsWith('@astryxdesign/')) {
       versions.set(manifest.name, manifest.version);
     }
@@ -101,7 +111,6 @@ export function alignmentProblems(manifest, versions) {
         );
       } else if (
         spec !== version &&
-        spec !== `^${version}` &&
         !isPending(manifest.name, field, name, spec)
       ) {
         problems.push(
@@ -117,9 +126,10 @@ function main() {
   const root = process.cwd();
   const versions = releaseVersions(root);
   const dirs = process.argv.slice(2);
-  const manifests = (dirs.length > 0 ? dirs : packageDirs(root))
-    .map(readManifest)
-    .filter(isPublished);
+  const manifests =
+    dirs.length > 0
+      ? dirs.map(readManifest).filter(isPublished)
+      : publishedPackages(root).map(({manifest}) => manifest);
   const problems = manifests.flatMap(manifest =>
     alignmentProblems(manifest, versions),
   );

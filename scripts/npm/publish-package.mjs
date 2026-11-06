@@ -34,7 +34,8 @@
  *     small and answers 404 for a missing package, and never its full
  *     document, which grows with every canary and can outlast a read's time
  *     limit. (A missing scoped package's dist-tags answer 401, not 404.) An
- *     unknown answer is asked again and never skips. *   - A package whose `@astryxdesign` dependencies or peers do not name this
+ *     unknown answer is asked again and never skips.
+ *   - A package whose `@astryxdesign` dependencies or peers do not name this
  *     release's versions is never published (see published-manifests.mjs).
  */
 

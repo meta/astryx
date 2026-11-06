@@ -15,6 +15,7 @@ import {
   alignmentProblems,
   isPublished,
   PENDING_ALIGNMENT,
+  publishedPackages,
   releaseVersions,
 } from './published-manifests.mjs';
 
@@ -31,8 +32,8 @@ afterEach(() => {
 });
 
 describe('alignmentProblems', () => {
-  it("accepts this release's exact version, or a caret on it", () => {
-    for (const spec of ['0.7.9', '^0.7.9']) {
+  it("accepts this release's exact version", () => {
+    for (const spec of ['0.7.9']) {
       expect(
         alignmentProblems(
           {
@@ -46,7 +47,14 @@ describe('alignmentProblems', () => {
   });
 
   it('refuses "*", another release and any other range', () => {
-    for (const spec of ['*', '0.7.0', '>=0.7.0', '^0.7.0', 'workspace:*']) {
+    for (const spec of [
+      '*',
+      '0.7.0',
+      '>=0.7.0',
+      '^0.7.0',
+      '^0.7.9',
+      'workspace:*',
+    ]) {
       expect(
         alignmentProblems(
           {
@@ -126,6 +134,20 @@ describe('the pending exception', () => {
     for (const manifest of cases) {
       expect(alignmentProblems(manifest, versions)).toHaveLength(1);
     }
+  });
+});
+
+describe('publishedPackages', () => {
+  it("lists the canary loops' packages: public ones and private canary-only ones", () => {
+    const byName = new Map(
+      publishedPackages(ROOT).map(pkg => [pkg.manifest.name, pkg.dir]),
+    );
+    expect(byName.get('@astryxdesign/core')).toBe('packages/core');
+    expect(byName.get('@astryxdesign/theme-neutral')).toBe(
+      'packages/themes/neutral',
+    );
+    expect(byName.has('@astryxdesign/vega')).toBe(true);
+    expect(byName.has('@astryxdesign/theme-probe')).toBe(false);
   });
 });
 
