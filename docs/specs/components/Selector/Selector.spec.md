@@ -78,6 +78,13 @@ connection between the closed trigger and its selection surface.
 - Migration decision: replace the removed theme key and CSS class with
   `input-clear-icon` and `.astryx-input-clear-icon`, or run
   `astryx upgrade --from 0.6.3 --apply --path .`.
+- A list of more than 40 options renders only the rows that cover its
+  scrollport (PR4). Undocumented markup is not a released contract
+  (`spec:AST-017` FR3), and the documented selection, keyboard, accessibility,
+  and form behavior stays the same, so no caller must change source
+  (`spec:AST-017` FR1). It ships as a victim-free patch `[fix]`
+  (`spec:AST-017` FR5, FR7). A product test that queries a far option of a long
+  open list scrolls to it or moves the highlight to it first.
 
 ### DEP-0011 — Deprecate the `popover` default presentation
 
@@ -108,6 +115,16 @@ connection between the closed trigger and its selection surface.
 | delta     | With no `presentation`, a compact coarse-pointer screen opens a modal bottom sheet (trigger `aria-haspopup="dialog"`, focus moves in and returns on close); every other device keeps the anchored popover. Compound DropdownMenus are unchanged |
 | rollback  | Restore the `popover` default from the final-patch baseline                                                                                                                                                                                     |
 | state     | `pending` — lands in a declared minor with its `[breaking]` Changeset                                                                                                                                                                           |
+
+## Current-state impact
+
+- **A long option list renders every option on open (PR4).** The open freezes
+  the page longer as the option count grows. A list of more than 40 options
+  renders all of its rows.
+- **The bottom sheet misses the 100 ms freeze budget at every option count.**
+  The cause is a fixed cost of opening the sheet, not its rows, so windowing
+  does not remove it. It is a separate gap; no requirement in this record
+  governs it.
 
 ## Ownership boundary
 
@@ -202,6 +219,34 @@ These requirements describe shipped behavior on current `main`.
 - **PR2 — Geometry work is scoped to the open popover.** Selected-item alignment
   may read browser layout while opening; it does not impose document-wide or
   persistent observation while closed.
+- **PR4 — Long option lists open windowed.** With 40 options or fewer in the
+  list (after search filtering, ORD1), every option renders. With more than
+  40, the list renders only the option rows that cover the visible scrollport,
+  an overscan of rows past each edge, and the active option (DEC-3).
+  - **One anchor.** One anchor computation sets both the rendered rows and the
+    initial scroll position before the first paint: the top of the list for a
+    plain open, the bottom for an open by ArrowUp, and the selected
+    option for an open with a value (FR2 alignment applies). From the first
+    frame, the scrollbar is sized for the full list.
+  - **No blank rows.** During wheel scrolling, a trackpad fling, a scrollbar
+    drag, a held PageDown, and a touch fling, every painted frame shows the
+    scrollport fully covered by option rows. No row shows blank or flashes.
+  - **Accessibility.** The active option is always rendered, so the
+    `aria-activedescendant` reference always resolves. Every rendered option
+    carries `aria-setsize` with the full option count and `aria-posinset` with
+    its 1-based position in the full list. When `spec:AST-058`'s grid popup
+    becomes current, its windowed grid carries `aria-rowcount` with the full
+    row count and `aria-rowindex` on each rendered row; until then PR4 covers
+    the listbox popup only. PageUp and PageDown reach options that
+    are not yet rendered, and so do Home, End, and typeahead in a list without
+    search (AR3). A screen reader's "n of total" announcement depends on the
+    screen reader (`spec:AST-009` FR8); the accessibility tree proves the
+    exposure. Options outside the window are absent from the accessibility
+    tree, so whether a virtual-cursor user in the popover or a swipe user in
+    the bottom sheet reaches them depends on the screen reader scrolling the
+    list in time (`spec:AST-009` FR8); the per-frame coverage checks are the
+    nearest browser evidence (FR19).
+  - Implementation gap: not built (Current-state impact).
 
 ## Accessibility contract
 
@@ -360,6 +405,14 @@ new theming target.
 | FR6, AR4                           | read-only interaction, form, ARIA, and theme-state tests                                                                                                                                                                                                                          | search/non-search, clearable, open→read-only, disabled precedence                                    | A value changes, popup or edit affordance remains, form value disappears, or read-only semantics are absent                                                                                                                                                      | `audit:Selector/accessibility`   |
 | FR7                                | `Selector.test.tsx` press model suite                                                                                                                                                                                                                                             | finger release over another option, finger/mouse release outside, listbox marker                     | The press option is selected, the listbox takes focus, a finger release outside closes the list, or the stray click selects                                                                                                                                      | `audit:Selector/behavior`        |
 | AR5                                | `Selector.activeOption.test.tsx`: the ring after keyboard input, no ring after pointer input, the ring again when keyboard input follows a pointer highlight; the active option's indicator measured against the listbox in light and dark                                        | keyboard-active option, pointer-active option                                                        | Removing the ring, or drawing it after pointer input, fails; an indicator under 3:1 against the listbox in either mode fails (the fill alone measures 1.09:1 light and 1.15:1 dark)                                                                              | `audit:Selector/accessibility`   |
+| PR4                                | `Selector.test.tsx` windowing suite                                                                                                                                                                                                                                               | 40 and 41 options, 41 options filtered by search to 40 or fewer                                      | A list of 40 options or fewer leaves an option unrendered, or a list of more than 40 renders every option                                                                                                                                                        | `audit:Selector/behavior`        |
+| PR4, FR2                           | Chromium and WebKit first-frame anchor checks                                                                                                                                                                                                                                     | plain open, ArrowUp open, selected value near the end, popover and bottom sheet                      | The first painted frame shows rows or a scroll position that differ from the settled open, or the scrollbar is not sized for the full list                                                                                                                       | `audit:Selector/behavior`        |
+| PR4                                | Per-frame coverage checks in Chromium (4× CPU slowdown) and WebKit at 249 and 1,000 options                                                                                                                                                                                       | wheel, trackpad fling, scrollbar drag, held PageDown, touch fling                                    | On any frame, the rendered option rows leave part of the scrollport uncovered, or a frame's pixels show an empty band taller than one row inside the scrollport                                                                                                  | `audit:Selector/behavior`        |
+| PR4                                | Real Safari on macOS and iOS (evidence gap: not yet checked)                                                                                                                                                                                                                      | touch fling, scrollbar thumb drag at 249 and 1,000 options                                           | A painted frame shows a blank or flashing row                                                                                                                                                                                                                    | `audit:Selector/behavior`        |
+| PR4, AR3                           | `Selector.combobox.a11y.test.tsx` and the windowing suite                                                                                                                                                                                                                         | PageUp, PageDown, and (without search) Home, End, typeahead to an unrendered option                  | The active option is not rendered, `aria-activedescendant` names a missing element, a rendered option lacks full-list `aria-setsize` or `aria-posinset`, or a key fails to reach an unrendered option                                                            | `audit:Selector/accessibility`   |
+| PR4, AR3                           | Real screen reader, `spec:AST-009` FR8 (evidence gap: not yet checked)                                                                                                                                                                                                            | an option deep in a 249-option list                                                                  | The option is announced with a position or total other than its place in the full list                                                                                                                                                                           | `audit:Selector/accessibility`   |
+| PR4, AR3                           | Real screen reader browse and touch swipe, `spec:AST-009` FR8 (evidence gap: not yet checked)                                                                                                                                                                                     | virtual cursor in the popover, swipe in the bottom sheet, 249 options                                | The screen reader stops at the last rendered option or skips an option                                                                                                                                                                                           | `audit:Selector/accessibility`   |
+| PR4, AR3                           | Grid popup windowing (evidence gap: `spec:AST-058` is not current)                                                                                                                                                                                                                | grid popup (options with an action)                                                                  | A windowed grid lacks the full `aria-rowcount`, or a rendered row lacks its full-list `aria-rowindex`                                                                                                                                                            | `audit:Selector/accessibility`   |
 | source-build contract              | `Selector.source-build.test.mjs`                                                                                                                                                                                                                                                  | package source compiled by consumer Babel                                                            | Moving evaluated StyleX values outside the supported source form fails compilation                                                                                                                                                                               | `audit:Selector/code-health`     |
 
 ## Decision log
@@ -378,6 +431,18 @@ through `spec:AST-094` FR13: a coarse primary pointer and the `spec:AST-012` FR9
 compact definition.
 Rejected: keeping `popover` as the default, because a phone then gets a
 pointer-sized anchored list unless the caller opts in.
+
+### DEC-3 — Long option lists open windowed above 40 options
+
+**Reference:** `component:Selector/DEC-3`
+**Decider:** `cixzhang`, `2026-11-02`
+
+A Selector with more than 40 options renders only the rows a person can see,
+and fast scrolling never shows a blank or flashing row (PR4); a shorter list
+renders every option. The binding budget is a longest freeze under 100 ms on
+first open: a full render crosses it at about 50 options in Chromium with a 4×
+CPU slowdown, and 40 leaves margin for noise and slower devices. A windowed
+open holds a flat freeze up to 1,000 options.
 
 ## Open questions
 
