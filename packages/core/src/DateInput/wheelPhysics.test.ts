@@ -4,9 +4,10 @@
  * @file wheelPhysics.test.ts
  * @input wheelPhysics.ts and per-frame offsets recorded from a UIPickerView,
  *   with the release velocity UIKit handed its delegate
- * @output Proves the Wheel's curves reproduce UIKit's measured picker: the
- *   projected target, the coast onto the row, the coast into an end, the
- *   snap, the rubber band, a turn from rest and the ticks
+ * @output Proves the Wheel's curves reproduce UIKit's measured picker. They
+ *   cover the projected target, the coast onto the row, the coast into an
+ *   end and the snap. They also cover the rubber band, a turn from rest and
+ *   the ticks
  * @position Unit coverage for DateInput/wheelPhysics.ts
  *
  * The recordings are of a 216 pt UIPickerView column of 60 rows, 32 pt each.

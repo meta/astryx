@@ -5,10 +5,10 @@
  * @input The built "Bottom Sheet Wheels" TimeInput story, real touch input
  *   and the interaction harness
  * @output Interaction proofs for the sheet's time wheels under a finger, in
- *   Chromium and WebKit: an hour drag from 11 to 12 turns AM to PM on the
- *   AM/PM column's own spring; the turn advances through a blocked main thread;
- *   it cross-fades under Reduce Motion; a finger stops it mid-turn. With a
- *   mouse, 11 to 12 stays AM.
+ *   Chromium and WebKit. An hour drag from 11 to 12 turns AM to PM on the
+ *   AM/PM column's own spring. The turn advances through a blocked main
+ *   thread. It cross-fades under Reduce Motion, and a finger stops it
+ *   mid-turn. With a mouse, 11 to 12 stays AM.
  * @position Interaction tests of TimeWheels.tsx, run by
  *   `pnpm test:interaction`
  */
