@@ -145,9 +145,9 @@ const isLocal = file =>
 const charts = [];
 /** React's createElement, once the page's React has loaded. @type {any} */
 let createElement = null;
-/** React's useContext, and a context that marks a chart's own parts. @type {any} */
+/** React's useContext. @type {any} */
 let useContext = null;
-/** @type {any} */
+/** Set inside a drawn chart, so a chart inside it is not wrapped again. @type {any} */
 let InChart = null;
 /**
  * `aside` while the server render sets charts aside; `page` while the whole
@@ -745,7 +745,13 @@ try {
   let chartsAlone = false;
   try {
     markup = server.renderToStaticMarkup(React.createElement(Page));
-    if (charts.length > 0) ({markup, failed: chartsFailed, alone: chartsAlone} = await drawCharts(markup, Page));
+    if (charts.length > 0) {
+      // Drawing the page again re-runs its code: what it prints then was
+      // already reported by the server render.
+      const printed = logs.length;
+      ({markup, failed: chartsFailed, alone: chartsAlone} = await drawCharts(markup, Page));
+      logs.length = printed;
+    }
   } catch (e) {
     classify(e);
     throw null;

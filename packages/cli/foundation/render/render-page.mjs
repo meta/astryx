@@ -535,6 +535,13 @@ export async function renderPage(entry, options = {}) {
       message: `${blankCharts === 1 ? 'A chart' : `${blankCharts} charts`} could not be drawn without a browser, so ${blankCharts === 1 ? 'it is' : 'they are'} empty here: the render draws a chart only when the module that uses it imports the chart, and its ResponsiveContainer, from recharts by name (\`import {LineChart} from 'recharts'\`).`,
     });
   }
+  if (message.chartsAlone) {
+    warnings.push({
+      code: 'chart-size',
+      message:
+        'The page could not be drawn again without a browser, so each chart was drawn by itself: a custom tick, label or shape in a chart sees React context defaults, not the values the page provides.',
+    });
+  }
   for (const sheet of /** @type {string[]} */ (message.skippedCss ?? [])) {
     warnings.push({
       code: 'missing-asset',
