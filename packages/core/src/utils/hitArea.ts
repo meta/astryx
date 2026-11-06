@@ -30,7 +30,11 @@
 // layout px. A layer that opens from a smaller scale then keeps the insets of
 // the size it settles at.
 
-import {observeContent} from './sharedMutationObserver';
+import {
+  flushMutations,
+  observeContent,
+  observeMutations,
+} from './sharedMutationObserver';
 
 /** A rect in client pixels. */
 export interface HitRect {
@@ -305,6 +309,24 @@ const CONTENT_SETTLE_MS = 100;
 
 const PASSIVE_CAPTURE = {capture: true, passive: true} as const;
 
+/**
+ * The mutations that can change which elements `INTERACTIVE_SELECTOR`
+ * matches: elements added, removed or moved, and the attributes it reads.
+ */
+const CANDIDATE_MUTATIONS: MutationObserverInit = {
+  childList: true,
+  subtree: true,
+  attributes: true,
+  attributeFilter: [
+    'href',
+    'type',
+    'for',
+    'contenteditable',
+    'role',
+    'tabindex',
+  ],
+};
+
 function now(): number {
   return typeof performance === 'undefined' ? Date.now() : performance.now();
 }
@@ -344,6 +366,25 @@ let pointer: MediaQueryList | null = null;
 let visibility: IntersectionObserver | null = null;
 let resize: ResizeObserver | null = null;
 let isCoarse = false;
+/**
+ * The page's interactive elements, as a pass last found them. They are kept
+ * until a mutation or a change of the watched set can change them, so a pass
+ * does not match the selector against the whole page again.
+ */
+let interactive: Element[] | null = null;
+let interactiveDocument: Document | null = null;
+let stopInteractiveWatch: (() => void) | null = null;
+
+function forgetInteractive(): void {
+  interactive = null;
+}
+
+function stopWatchingInteractive(): void {
+  stopInteractiveWatch?.();
+  stopInteractiveWatch = null;
+  interactiveDocument = null;
+  interactive = null;
+}
 
 function sameInsets(a: HitInsets, b: HitInsets): boolean {
   return (
@@ -495,21 +536,48 @@ function watchedOwner(element: Element): Element | null {
 }
 
 /**
- * The page's interactive elements and their rects: one read. A watched
- * control counts by its own box, never by a part inside it (its invisible
- * input is grown by its hit area, which must not shrink a neighbour's).
+ * The page's interactive elements. A watched control counts by its own box,
+ * never by a part inside it (its invisible input is grown by its hit area,
+ * which must not shrink a neighbour's).
  */
-function readCandidates(doc: Document): Candidate[] {
+function interactiveElements(doc: Document): Element[] {
+  if (typeof MutationObserver === 'undefined') {
+    // Nothing reports a change, so nothing is kept.
+    interactive = null;
+  } else if (interactiveDocument !== doc) {
+    stopWatchingInteractive();
+    interactiveDocument = doc;
+    stopInteractiveWatch = observeMutations(
+      doc,
+      CANDIDATE_MUTATIONS,
+      forgetInteractive,
+    );
+  } else {
+    // A mutation earlier in this task is not delivered yet.
+    flushMutations(CANDIDATE_MUTATIONS);
+  }
+  if (interactive != null) {
+    return interactive;
+  }
   const seen = new Set<Element>();
-  const candidates: Candidate[] = [];
+  const elements: Element[] = [];
   for (const found of doc.querySelectorAll(INTERACTIVE_SELECTOR)) {
     const element = watchedOwner(found) ?? found;
     if (!seen.has(element)) {
       seen.add(element);
-      candidates.push({element, rect: plainRect(element)});
+      elements.push(element);
     }
   }
-  return candidates;
+  interactive = elements;
+  return elements;
+}
+
+/** The page's interactive elements and their rects: one read. */
+function readCandidates(doc: Document): Candidate[] {
+  return interactiveElements(doc).map(element => ({
+    element,
+    rect: plainRect(element),
+  }));
 }
 
 /** A control's rect and clamped insets, from candidates already read. */
@@ -824,6 +892,7 @@ function stopObserving(): void {
   resize = null;
   scopeTimers.forEach(timer => clearTimeout(timer));
   scopeTimers.clear();
+  stopWatchingInteractive();
   if (frame != null && typeof cancelAnimationFrame === 'function') {
     cancelAnimationFrame(frame);
   }
@@ -943,6 +1012,7 @@ export function watchHitArea(
   if (entry == null) {
     entry = {watches: new Set(), release: null, disarm: null};
     watched.set(element, entry);
+    forgetInteractive();
     entry.watches.add(watch);
     if (isCoarse) {
       observe(element, entry);
@@ -964,6 +1034,7 @@ export function watchHitArea(
     if (own.watches.size === 0) {
       own.release?.();
       watched.delete(element);
+      forgetInteractive();
     }
     if (watched.size === 0) {
       stopObserving();

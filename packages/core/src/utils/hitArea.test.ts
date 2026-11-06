@@ -399,6 +399,87 @@ describe('watchHitArea', () => {
     stop();
   });
 
+  it('matches the page against its selector once, and again only after a mutation can change what it matches', () => {
+    const control = byId('switch');
+    place(control, rect(100, 100, 24, 24));
+    place(byId('link'), rect(132, 100, 60, 24));
+    place(byId('other'), rect(400, 400, 24, 24));
+    const queries = vi.spyOn(document, 'querySelectorAll');
+    const heard: HitInsets[] = [];
+    const stop = watchHitArea(control, insets => heard.push(insets));
+    show(control);
+    flush();
+    expect(queries).toHaveBeenCalledTimes(1);
+    expect(heard).toEqual([{top: 10, right: 4, bottom: 10, left: 10}]);
+
+    // A later pass reads every rect again, but finds the elements kept.
+    place(byId('link'), rect(140, 100, 60, 24));
+    log.length = 0;
+    window.dispatchEvent(new Event('resize'));
+    flush();
+    expect(queries).toHaveBeenCalledTimes(1);
+    expect(log).toContain('read link');
+    expect(heard.at(-1)).toEqual({top: 10, right: 8, bottom: 10, left: 10});
+
+    // A neighbour added in the same task as the pass counts in it.
+    const above = document.createElement('button');
+    above.id = 'above';
+    document.body.append(above);
+    place(above, rect(100, 80, 24, 12));
+    window.dispatchEvent(new Event('resize'));
+    flush();
+    expect(queries).toHaveBeenCalledTimes(2);
+    expect(heard.at(-1)).toEqual({top: 4, right: 8, bottom: 10, left: 10});
+
+    // An attribute the selector reads makes an element a neighbour.
+    const below = document.createElement('span');
+    below.id = 'below';
+    document.body.append(below);
+    place(below, rect(100, 130, 24, 12));
+    window.dispatchEvent(new Event('resize'));
+    flush();
+    expect(heard.at(-1)).toEqual({top: 4, right: 8, bottom: 10, left: 10});
+    below.setAttribute('role', 'button');
+    window.dispatchEvent(new Event('resize'));
+    flush();
+    expect(heard.at(-1)).toEqual({top: 4, right: 8, bottom: 3, left: 10});
+
+    // A neighbour removed stops counting.
+    above.remove();
+    window.dispatchEvent(new Event('resize'));
+    flush();
+    expect(heard.at(-1)).toEqual({top: 10, right: 8, bottom: 3, left: 10});
+    stop();
+  });
+
+  it('counts a control watched after the last pass by its own box, not by a part inside it', () => {
+    // A group whose box reaches nearer the control than the input inside it.
+    const group = document.createElement('div');
+    const input = document.createElement('input');
+    group.append(input);
+    document.body.append(group);
+    place(group, rect(100, 60, 24, 30));
+    place(input, rect(100, 20, 24, 10));
+    const control = byId('switch');
+    place(control, rect(100, 100, 24, 24));
+    place(byId('link'), rect(132, 100, 60, 24));
+    place(byId('other'), rect(400, 400, 24, 24));
+    const heard: HitInsets[] = [];
+    const stop = watchHitArea(control, insets => heard.push(insets));
+    show(control);
+    flush();
+    // The input is too far away to stop the control's growth.
+    expect(heard.at(-1)).toEqual({top: 10, right: 4, bottom: 10, left: 10});
+    // The group starts a watch. No element changes, but its box, not its
+    // input, is now the neighbour.
+    const stopGroup = watchHitArea(group, () => {});
+    window.dispatchEvent(new Event('resize'));
+    flush();
+    expect(heard.at(-1)).toEqual({top: 5, right: 4, bottom: 10, left: 10});
+    stopGroup();
+    stop();
+  });
+
   it('measures nothing off screen', () => {
     const control = byId('switch');
     place(control, rect(100, 100, 24, 24));
