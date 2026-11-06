@@ -944,7 +944,7 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   (a touchscreen laptop), a finger's tap or drag during the entrance is not
   held. After a finger, the first press of a mouse that has not moved since
   passes the entering presentation's shield where the page last heard the
-  mouse. A mouse that has sent no pointer event since the page loaded still
+  mouse. A mouse whose last move the page's input stream did not hear still
   lands on the shield, and its press does nothing. A move of the mouse lowers
   the shield first.
 - BottomSheet, Toast, Lightbox, NavigationStack and keyboard dismissal: a

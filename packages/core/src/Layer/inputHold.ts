@@ -264,8 +264,7 @@ function addShield(layer: Element, isFull: boolean): HTMLElement {
   return shield;
 }
 
-/** Half the side of the opening a presentation's shield leaves the mouse. */
-const MOUSE_OPENING_PX = 2;
+const MOUSE_OPENING_HALF_SIDE_PX = 2;
 
 /**
  * Leaves the mouse a way through a presentation's shield that takes hits.
@@ -296,10 +295,10 @@ function openToMouse(state: HeldLayer, doc: Document): void {
     shield.style.pointerEvents = 'none';
     return;
   }
-  const left = point.x - MOUSE_OPENING_PX;
-  const right = point.x + MOUSE_OPENING_PX;
-  const top = point.y - MOUSE_OPENING_PX;
-  const bottom = point.y + MOUSE_OPENING_PX;
+  const left = point.x - MOUSE_OPENING_HALF_SIDE_PX;
+  const right = point.x + MOUSE_OPENING_HALF_SIDE_PX;
+  const top = point.y - MOUSE_OPENING_HALF_SIDE_PX;
+  const bottom = point.y + MOUSE_OPENING_HALF_SIDE_PX;
   // The viewport, then the opening drawn the other way round. The nonzero
   // rule leaves the opening out, and a clipped-out area takes no hits.
   const outline = [
