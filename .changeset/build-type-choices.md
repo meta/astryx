@@ -2,6 +2,6 @@
 '@astryxdesign/cli': patch
 ---
 
-[docs] `astryx build --type` takes component, hook and template. `doc` and `theme` are deprecated: a kit has no doc or theme group, so they return an empty kit, and build now prints a hint to use `astryx search <query> --type doc` or `--type theme` instead. The next minor release refuses them. The help text, the CLI choices, the API doc and the invalid-type error name the same values.
+[feat] `astryx build --type` takes component, hook and template, and still accepts `doc` and `theme`, now deprecated (DEP-0018): a build kit has no doc or theme group, so they return an empty kit. Use `astryx search <query> --type doc` or `astryx search <query> --type theme` instead. In text mode build warns once on stderr; JSON output carries `meta.deprecations`; the kit itself is unchanged. The next minor release refuses `doc` and `theme`.
 
 @josephfarina

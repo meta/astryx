@@ -88,7 +88,7 @@
  * Options for `build()`.
  * @typedef {object} BuildOptions
  * @property {string} [cwd]
- * @property {'component' | 'hook' | 'template' | 'doc' | 'theme'} [type] Narrow the kit to one domain. `doc` and `theme` are deprecated: a kit has no doc or theme group, so they return an empty kit; use search's `type` for them. The next minor release removes them.
+ * @property {'component' | 'hook' | 'template' | 'doc' | 'theme'} [type] Narrow the kit to one domain. `doc` and `theme` are deprecated (DEP-0018): a kit has no doc or theme group, so they return an empty kit; use `search(query, {type: 'doc' | 'theme'})` instead. The next minor release removes them.
  * @property {number} [limit]
  */
 

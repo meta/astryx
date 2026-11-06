@@ -3,12 +3,12 @@
 /**
  * @file `--type` on build and search: for each command the help text, the CLI
  * choices, the API doc and the invalid-type error name the same set, so they
- * cannot drift apart. Build's doc and theme are deprecated: they still run,
- * print a hint naming search, and must be refused from the next minor release.
+ * cannot drift apart. Build's doc and theme are deprecated (DEP-0018): they
+ * still run with unchanged output, warn once on stderr in text mode, and carry
+ * the lifecycle entry in JSON.
  */
 
 import {spawnSync} from 'node:child_process';
-import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {describe, expect, it} from 'vitest';
 import {SEARCH_DOMAINS} from '../../../api/search/_query.mjs';
@@ -18,15 +18,13 @@ import {doc as buildFn} from '../../../api/build/build.doc.mjs';
 import {doc as searchFn} from '../../../api/search/search.doc.mjs';
 import {
   BUILD_DOMAINS,
+  DEPRECATED_BUILD_DOMAIN_ID,
   DEPRECATED_BUILD_DOMAINS,
   build,
 } from '../../../api/build/build.mjs';
 import {search} from '../../../api/search/search.mjs';
 
 const BIN = fileURLToPath(new URL('../bin/astryx.mjs', import.meta.url));
-const {version} = JSON.parse(
-  readFileSync(new URL('../../../package.json', import.meta.url), 'utf8'),
-);
 
 /** @param {any} d */
 const typeOption = d =>
@@ -120,25 +118,44 @@ describe.each([
 });
 
 describe('build --type doc|theme deprecation', () => {
+  /** @param {string[]} args */
+  const cli = args =>
+    spawnSync(process.execPath, [BIN, 'build', 'neutral', ...args], {
+      encoding: 'utf8',
+    });
+
   it.each(DEPRECATED_BUILD_DOMAINS)(
-    'prints a hint naming search for %s',
+    'warns once on stderr for %s and leaves stdout alone',
     type => {
-      const run = spawnSync(
-        process.execPath,
-        [BIN, 'build', 'neutral', '--type', type],
-        {encoding: 'utf8'},
-      );
+      const run = cli(['--type', type]);
       expect(run.status).toBe(0);
-      expect(run.stdout).toContain(`--type ${type} is deprecated for build`);
-      expect(run.stdout).toContain(`search <query> --type ${type}`);
+      const notes = run.stderr.match(/is deprecated/g) ?? [];
+      expect(notes).toHaveLength(1);
+      expect(run.stderr).toContain(`search <query> --type ${type}`);
+      expect(run.stdout).not.toContain('deprecated');
     },
     60_000,
   );
 
-  it('is refused from the next minor release', () => {
-    // Deprecated in 0.7.x. From 0.8.0 on, remove DEPRECATED_BUILD_DOMAINS and
-    // refuse doc and theme with an error naming search (a [breaking] change).
-    const [major, minor] = String(version).split('.').map(Number);
-    if (major > 0 || minor >= 8) expect(DEPRECATED_BUILD_DOMAINS).toEqual([]);
-  });
+  it.each(DEPRECATED_BUILD_DOMAINS)(
+    'carries the lifecycle entry in JSON for %s',
+    type => {
+      const run = cli(['--type', type, '--json']);
+      expect(run.status).toBe(0);
+      expect(run.stderr).not.toContain('deprecated');
+      expect(JSON.parse(run.stdout).meta.deprecations).toEqual([
+        {
+          id: DEPRECATED_BUILD_DOMAIN_ID,
+          replacements: [`astryx search <query> --type ${type}`],
+        },
+      ]);
+    },
+    60_000,
+  );
+
+  it('adds nothing for a current kind', () => {
+    const run = cli(['--type', 'component', '--json']);
+    expect(run.stderr).not.toContain('deprecated');
+    expect(JSON.parse(run.stdout).meta.deprecations).toBeUndefined();
+  }, 60_000);
 });

@@ -31,7 +31,11 @@ import {
 import {cliError} from '../lib/cli-error.mjs';
 import {firstSentence} from '../../../foundation/text/string-utils.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
-import {build as buildApi} from '../../../api/build/build.mjs';
+import {
+  DEPRECATED_BUILD_DOMAIN_ID,
+  DEPRECATED_BUILD_DOMAINS,
+  build as buildApi,
+} from '../../../api/build/build.mjs';
 import {doc as buildCommand} from './build.doc.mjs';
 import {doc as buildFn} from '../../../api/build/build.doc.mjs';
 
@@ -146,26 +150,43 @@ export function registerBuild(program) {
         fallbackKind: options.type ?? 'mixed',
       });
 
+      // doc and theme are deprecated for build (a kit has no doc or theme
+      // group): JSON carries the lifecycle entry, text warns once on stderr,
+      // and the command's own output is unchanged.
+      const deprecated =
+        options.type != null && DEPRECATED_BUILD_DOMAINS.includes(options.type)
+          ? options.type
+          : null;
       if (json) {
-        jsonOut(result);
+        jsonOut(
+          deprecated
+            ? {
+                ...result,
+                meta: {
+                  deprecations: [
+                    {
+                      id: DEPRECATED_BUILD_DOMAIN_ID,
+                      replacements: [
+                        `astryx search <query> --type ${deprecated}`,
+                      ],
+                    },
+                  ],
+                },
+              }
+            : result,
+        );
         return answered;
       }
-
-      // doc and theme are deprecated for build: a kit has no doc or theme
-      // group. The next minor release refuses them (DEPRECATED_BUILD_DOMAINS).
-      const deprecatedType =
-        options.type === 'doc' || options.type === 'theme'
-          ? text(
-              `--type ${options.type} is deprecated for build and is refused from the next minor release: a kit has no ${options.type}s. Find them with ${formatCliCommand(`search <query> --type ${options.type}`)}`,
-            )
-          : null;
+      if (deprecated) {
+        console.error(
+          `Note: \`build --type ${deprecated}\` is deprecated: a kit has no ${deprecated}s, and the next minor release refuses it. Run \`${formatCliCommand(`search <query> --type ${deprecated}`)}\` instead.`,
+        );
+      }
 
       if (!hasResults && !start) {
         emit(
           text(`No matches for "${q}".`),
-          ...(deprecatedType
-            ? [deprecatedType]
-            : [text(`Try a broader term, or browse: ${run} component --list`)]),
+          text(`Try a broader term, or browse: ${run} component --list`),
         );
         return answered;
       }
@@ -222,7 +243,6 @@ export function registerBuild(program) {
             : 'This kit is narrowed by --type, so it names no template.',
         ),
       ];
-      if (deprecatedType) out.push(deprecatedType);
 
       if (start) {
         out.push(

@@ -46,7 +46,7 @@ export const doc = {
       name: 'options.type',
       type: "'component' | 'hook' | 'template' | 'doc' | 'theme'",
       description:
-        'Restrict the underlying search to a single domain. doc and theme are deprecated.',
+        'Restrict the underlying search to a single domain. doc and theme are deprecated (DEP-0018): use search with type doc or theme.',
     },
     {
       name: 'options.limit',

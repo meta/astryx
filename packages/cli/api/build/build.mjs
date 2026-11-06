@@ -35,12 +35,14 @@ export {buildHelp, buildKit};
 export const BUILD_DOMAINS = Object.freeze(['component', 'hook', 'template']);
 
 /**
- * Domains `type` still accepts but deprecates: a kit has no doc or theme
- * group, so they return an empty kit. Search's own `type` finds them. The
- * next minor release refuses them (type-choices.test.mjs fails from 0.8.0 on
- * while they remain).
+ * Domains `type` still accepts but deprecates (DEP-0018): a kit has no doc or
+ * theme group, so they return an empty kit. Search's own `type` finds them.
+ * The next minor release refuses them.
  */
 export const DEPRECATED_BUILD_DOMAINS = Object.freeze(['doc', 'theme']);
+
+/** The lifecycle id of the doc and theme deprecation. */
+export const DEPRECATED_BUILD_DOMAIN_ID = 'DEP-0018';
 
 /**
  * The page-building assistant. No query → the playbook signal; a query → the
