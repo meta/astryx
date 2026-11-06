@@ -133,6 +133,48 @@ export function getFocusableElements(container: HTMLElement): HTMLElement[] {
 }
 
 /**
+ * The radio group a native radio belongs to: the same `name` in the same form
+ * owner (or with no form). Null for any other element and for an unnamed radio,
+ * which is its own Tab stop.
+ */
+function radioGroupOf(el: Element): string | null {
+  if (!el.matches('input[type="radio"][name]')) {
+    return null;
+  }
+  return (el as HTMLInputElement).name || null;
+}
+
+function isSameRadioGroup(a: Element, b: Element): boolean {
+  const group = radioGroupOf(a);
+  return (
+    group != null &&
+    group === radioGroupOf(b) &&
+    (a as HTMLInputElement).form === (b as HTMLInputElement).form
+  );
+}
+
+/**
+ * The container's Tab stops, in document order, as the browser visits them. A
+ * same-name native radio group is one stop: its checked radio, or its first
+ * when none is checked. Every other focusable element is its own stop.
+ */
+function getTabStops(container: HTMLElement): HTMLElement[] {
+  // Sorted, because a selector list is not returned in document order by
+  // every DOM implementation (jsdom groups it by selector).
+  const focusable = getFocusableElements(container).sort((a, b) =>
+    precedes(a, b) ? -1 : 1,
+  );
+  return focusable.filter(el => {
+    if (radioGroupOf(el) == null) {
+      return true;
+    }
+    const group = focusable.filter(other => isSameRadioGroup(el, other));
+    const checked = group.find(radio => (radio as HTMLInputElement).checked);
+    return el === (checked ?? group[0]);
+  });
+}
+
+/**
  * The document a trap lives in: its container's. An app that renders into a
  * same-origin iframe or a Document Picture-in-Picture window through a portal
  * puts the trap in that window's document, whose key presses and focus
@@ -376,8 +418,13 @@ export function useFocusRegionContainment(
           return;
         }
 
-        const first = focusable[0];
-        const last = focusable[focusable.length - 1];
+        const stops = getTabStops(container);
+        const first = stops[0];
+        const last = stops[stops.length - 1];
+        // Focus on any radio of the group that ends (or starts) the cycle is
+        // at that edge: the browser leaves the whole group on the next Tab.
+        const isAt = (edge: HTMLElement) =>
+          active === edge || isSameRadioGroup(active, edge);
 
         if (doc.activeElement === container) {
           // Programmatic initial focus can sit on the trap container itself
@@ -394,18 +441,12 @@ export function useFocusRegionContainment(
         const isProgrammaticStop = !(focusable as Element[]).includes(active);
         if (event.shiftKey) {
           // Shift+Tab: if on (or before) the first element, wrap to last
-          if (
-            active === first ||
-            (isProgrammaticStop && precedes(active, first))
-          ) {
+          if (isAt(first) || (isProgrammaticStop && precedes(active, first))) {
             wrapFocus(event, last);
           }
         } else {
           // Tab: if on (or after) the last element, wrap to first
-          if (
-            active === last ||
-            (isProgrammaticStop && precedes(last, active))
-          ) {
+          if (isAt(last) || (isProgrammaticStop && precedes(last, active))) {
             wrapFocus(event, first);
           }
         }
