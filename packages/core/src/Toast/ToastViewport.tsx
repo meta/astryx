@@ -4,9 +4,10 @@
 
 /**
  * @file ToastViewport.tsx
- * @input Uses React state/effects, ToastContext, content-provider boundary, useAnnounce, viewport tokens,
- *   shared layer text reset, the active modal outlet, the layer toast host
- *   registry, and placement-derived motion variables
+ * @input Uses React state and effects, ToastContext, the content-provider
+ *   boundary, useAnnounce and viewport tokens. It also uses the shared layer
+ *   text reset, the active modal outlet, the layer toast host registry and
+ *   placement-derived motion variables
  * @output Exports the ToastViewport provider, stack, live announcement dispatch,
  *   focus handoff, safe-area-aware edge gutters, modal rehosting, and motion context
  * @position Core provider/imperative viewport for useToast()

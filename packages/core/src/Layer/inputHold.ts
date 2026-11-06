@@ -21,6 +21,7 @@ import {
   parentAcrossShadow,
 } from '../utils/flatTree';
 import {getLastPointerType, subscribeInput} from '../utils/inputStream';
+import {isDocument, isElement, isHTMLElement, isNode} from '../utils/nodeType';
 import {isModalOutletHost, notifyTopLayerEntry} from './modalOutlet';
 
 /**
@@ -102,7 +103,7 @@ export function isInHeldLayer(target: Node | null): boolean {
     node != null;
     node = parentAcrossShadow(node)
   ) {
-    if (node instanceof Element && held.has(node)) {
+    if (isElement(node) && held.has(node)) {
       return true;
     }
   }
@@ -135,7 +136,7 @@ function isInGlobalHost(target: EventTarget | null): boolean {
  * code. With nothing held, this answers false.
  */
 export function holdsTouch(target: Node): boolean {
-  const doc = target instanceof Document ? target : target.ownerDocument;
+  const doc = isDocument(target) ? target : target.ownerDocument;
   // The gesture host asks for every touch: with nothing held, answer at once.
   if (doc == null || !heldDocuments.has(doc)) {
     return false;
@@ -151,7 +152,7 @@ export function holdsTouch(target: Node): boolean {
     node != null;
     node = parentAcrossShadow(node)
   ) {
-    const state = node instanceof Element ? held.get(node) : undefined;
+    const state = isElement(node) ? held.get(node) : undefined;
     if (state != null) {
       if (state.layer > 0 && !isOnGlobalHost) {
         return true;
@@ -504,7 +505,7 @@ function createPressHold(doc: Document): PressHold | null {
       }
       if (
         state.surface > 0 &&
-        target instanceof Node &&
+        isNode(target) &&
         containsAlongFlatTree(layer, target)
       ) {
         return true;
@@ -743,7 +744,7 @@ function makeContentInert(
   }
   const focused = deepActiveElement(layer.ownerDocument);
   if (
-    focused instanceof HTMLElement &&
+    isHTMLElement(focused) &&
     [...content.keys()].some(child => containsAlongFlatTree(child, focused))
   ) {
     focused.blur();

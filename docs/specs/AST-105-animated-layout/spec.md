@@ -216,13 +216,17 @@ Out of coverage, each taking its final place at once:
 - `architecture:react-component-runtime` INV12 produces the glide.
 - `architecture:react-component-runtime` INV12 also gains the in-place swap
   (FR8); no component swaps yet.
-- The glide, the in-place swap and the edge reveal play `springs.settle`
-  today; FR4 moves them to `--ease-move` over `--duration-medium-min`. The
-  SideNav rail and AppShell's content area, which share that motion
-  (`component:SideNav` FR6, `component:AppShell` FR17), follow with them.
 - INV12 also produces the edge reveal (FR9). SideNav's rail clip and ride move
   into it from SideNav's own code, and a resizable LayoutPanel's collapse and
   open, which today jump, adopt it; LayoutPanel's docs say a collapse slides.
+- Each running glide that moves a hit-testable element's `translate` reports
+  it to `motion/presentation.ts`, as the animator's moves do. An inert copy or
+  closing element is not reported. So on iOS WebKit, a touch that the gesture
+  host handles goes to what is drawn under the finger (`spec:AST-094` FR11,
+  FR19). Implementation gap: on iOS WebKit, a plain tap that no gesture
+  handles, on an element mid-glide, still goes to what was at that spot before
+  the glide, until the glide ends (glides last at most the theme's move
+  duration).
 
 ## Verification
 
