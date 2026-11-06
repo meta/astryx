@@ -444,9 +444,9 @@ describe('Text keeps its children mounted when maxLines changes', () => {
         Lead text <input aria-label="Note" defaultValue="" />
       </Text>,
     );
-    const input = screen.getByRole('textbox', {
+    const input = screen.getByRole<HTMLInputElement>('textbox', {
       name: 'Note',
-    }) as HTMLInputElement;
+    });
     input.value = 'typed';
     input.focus();
 
@@ -455,9 +455,9 @@ describe('Text keeps its children mounted when maxLines changes', () => {
         Lead text <input aria-label="Note" defaultValue="" />
       </Text>,
     );
-    const after = screen.getByRole('textbox', {
+    const after = screen.getByRole<HTMLInputElement>('textbox', {
       name: 'Note',
-    }) as HTMLInputElement;
+    });
     expect(after).toBe(input);
     expect(after.value).toBe('typed');
     expect(document.activeElement).toBe(after);

@@ -74,7 +74,9 @@ async function pixel(page: Page, x: number, y: number) {
     const blob = await (await fetch(`data:image/png;base64,${base64}`)).blob();
     const bitmap = await createImageBitmap(blob);
     const canvas = new OffscreenCanvas(1, 1);
-    const context = canvas.getContext('2d')!;
+    const context = canvas.getContext(
+      '2d',
+    ) as OffscreenCanvasRenderingContext2D;
     context.drawImage(bitmap, 0, 0);
     const [r, g, b] = context.getImageData(0, 0, 1, 1).data;
     return [r, g, b] as const;
@@ -102,8 +104,7 @@ for (const [testId, tabs] of [
       const probe = document.createElement('span');
       probe.style.color = style.outlineColor;
       document.body.append(probe);
-      const color = getComputedStyle(probe)
-        .color.match(/[\d.]+/g)!
+      const color = (getComputedStyle(probe).color.match(/[\d.]+/g) ?? [])
         .slice(0, 3)
         .map(Number);
       probe.remove();

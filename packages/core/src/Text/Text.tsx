@@ -280,7 +280,7 @@ export function Text({
   // Keep the merged ref stable across rerenders.
   const mergedRef = useMergedRefs(ref, truncation.ref, textRef);
   const isInClampedText = use(TextClampContext);
-  // A capsize block removes a multi-line clamp (FR4).
+  // A capsize block removes a multi-line clamp.
   const isClamped = maxLines === 1 || (maxLines > 1 && !hasCapsize);
 
   // Build inline style for -webkit-line-clamp (dynamic value)
