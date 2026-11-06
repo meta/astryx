@@ -770,7 +770,9 @@ is staged as `[breaking]` (`spec:AST-017` FR32) and `component:SelectableCard`
   policies.
 - Drawer owns modal `showModal()` and non-modal `showPopover()` hosting while the
   shared dismissal stack owns Escape and platform close routing.
-- `LayerProvider`, `ToastContext`, `useToast`, and `ToastViewport` own current
+- `Layer/toastHost.tsx` owns `ToastContext`, Toast's viewport registration, and
+  the toast queue that LayerProvider's outlet and `useToast`'s fallback root
+  both use. `LayerProvider`, `useToast`, and `ToastViewport` own current
   notification state, dispatch, and viewport rendering; the viewport sits at
   the provider's inset on each edge unless its own `toast.inset` overrides that
   edge.
