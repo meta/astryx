@@ -19,6 +19,11 @@ import {
   paddingBlockStyles,
   paddingInlineStyles,
 } from '../Layout/padding.stylex';
+import {readFileSync} from 'node:fs';
+import {foldableMarker, foldingLaneMarker} from '../internal/foldable.stylex';
+import * as coreEntry from '../index';
+import {rulesWithSelector} from '../__tests__/pressState';
+import {OverflowList} from '../OverflowList';
 
 describe('Toolbar', () => {
   it('renders with toolbar role', () => {
@@ -596,5 +601,101 @@ describe('Toolbar', () => {
     await user.keyboard('{ArrowRight}');
 
     expect(buttons[0]).toHaveFocus();
+  });
+});
+
+describe('Toolbar lanes with foldable content (FR2)', () => {
+  it('lets a start or end lane that holds foldable content take the shrinking', () => {
+    render(
+      <Toolbar
+        label="Bulk actions"
+        startContent={
+          <OverflowList
+            overflowRenderer={items => <span>+{items.length}</span>}>
+            <button type="button">Save</button>
+            <button type="button">Edit</button>
+          </OverflowList>
+        }
+        endContent={<button type="button">Clear</button>}
+      />,
+    );
+    const toolbar = screen.getByRole('toolbar');
+    const markerClass = (stylex.props(foldableMarker).className ?? '').split(
+      ' ',
+    )[0];
+    for (const lane of Array.from(toolbar.children).slice(0, 2)) {
+      const rules = rulesWithSelector(lane, ':has(');
+      expect(
+        rules.some(
+          rule => rule.includes(markerClass) && /flex-shrink:\s*1\b/.test(rule),
+        ),
+        lane.textContent ?? '',
+      ).toBe(true);
+    }
+  });
+
+  it('keeps the other lanes from shrinking while a lane holds foldable content', () => {
+    render(
+      <Toolbar
+        label="Bulk actions"
+        startContent={
+          <OverflowList
+            overflowRenderer={items => <span>+{items.length}</span>}>
+            <button type="button">Save</button>
+          </OverflowList>
+        }
+        endContent={<span>3 selected</span>}
+      />,
+    );
+    const toolbar = screen.getByRole('toolbar');
+    const markerClass = (stylex.props(foldableMarker).className ?? '').split(
+      ' ',
+    )[0];
+    expect(
+      rulesWithSelector(toolbar, ':has(').some(
+        rule =>
+          rule.includes(markerClass) &&
+          /--_toolbar-lane-shrink:\s*0/.test(rule),
+      ),
+    ).toBe(true);
+  });
+
+  it('marks its start and end lanes, and lets a lane with foldable content go below its content', () => {
+    render(
+      <Toolbar
+        label="Bulk actions"
+        startContent={
+          <OverflowList
+            overflowRenderer={items => <span>+{items.length}</span>}>
+            <button type="button">Save</button>
+          </OverflowList>
+        }
+        endContent={<button type="button">Clear</button>}
+      />,
+    );
+    const toolbar = screen.getByRole('toolbar');
+    const laneClass = (stylex.props(foldingLaneMarker).className ?? '').split(
+      ' ',
+    )[0];
+    const markerClass = (stylex.props(foldableMarker).className ?? '').split(
+      ' ',
+    )[0];
+    const lanes = Array.from(toolbar.children).slice(0, 2);
+    for (const lane of lanes) {
+      expect(lane.classList.contains(laneClass)).toBe(true);
+      expect(
+        rulesWithSelector(lane, ':has(').some(
+          rule => rule.includes(markerClass) && /min-width:\s*0/.test(rule),
+        ),
+      ).toBe(true);
+    }
+  });
+
+  it('keeps the foldable marker internal: no public entry exports it, and the API report has no row', () => {
+    expect(Object.keys(coreEntry)).not.toContain('foldableMarker');
+    expect(Object.keys(coreEntry)).not.toContain('foldingLaneMarker');
+    const report = readFileSync('packages/core/api-report.md', 'utf8');
+    expect(report).not.toContain('foldableMarker');
+    expect(report).not.toContain('foldingLaneMarker');
   });
 });

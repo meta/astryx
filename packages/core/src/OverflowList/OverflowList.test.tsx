@@ -21,6 +21,9 @@ import {render, screen, within, act, waitFor} from '@testing-library/react';
 import {useState} from 'react';
 import {OverflowList} from './OverflowList';
 import type {OverflowItem} from './OverflowList';
+import * as stylex from '@stylexjs/stylex';
+import {foldableMarker, foldingLaneMarker} from '../internal/foldable.stylex';
+import {rulesDeclaredFor} from '../__tests__/pressState';
 
 const originalOffsetWidth = Object.getOwnPropertyDescriptor(
   HTMLElement.prototype,
@@ -1072,5 +1075,132 @@ describe('OverflowList', () => {
       expect(indicesOf(onOverflowChange)).toEqual([1, 2]);
       expect(visibleContainer().textContent).toBe('Amore:1,2');
     });
+  });
+});
+
+function carriesFoldableMarker(el: Element): boolean {
+  const classes = (stylex.props(foldableMarker).className ?? '')
+    .split(' ')
+    .filter(Boolean);
+  return classes.length > 0 && classes.every(cls => el.classList.contains(cls));
+}
+
+describe('OverflowList in a Toolbar lane (component:Toolbar FR2)', () => {
+  const items = ['A', 'B', 'C'].map(name => (
+    <button key={name} type="button" data-w="40">
+      {name}
+    </button>
+  ));
+  const trigger = (overflow: {index: number}[]) => (
+    <button type="button" data-w="40">
+      more:{overflow.map(item => item.index).join(',')}
+    </button>
+  );
+
+  it('marks itself foldable only while it can fold', () => {
+    const {rerender} = render(
+      <OverflowList
+        gap={0}
+        data-w="1000"
+        data-testid="ov"
+        overflowRenderer={trigger}>
+        {items}
+      </OverflowList>,
+    );
+    expect(carriesFoldableMarker(visibleContainer())).toBe(true);
+    rerender(
+      <OverflowList
+        gap={0}
+        data-w="1000"
+        data-testid="ov"
+        minVisibleItems={3}
+        overflowRenderer={trigger}>
+        {items}
+      </OverflowList>,
+    );
+    expect(carriesFoldableMarker(visibleContainer())).toBe(false);
+  });
+
+  it('never gets narrower than its trigger plus the items minVisibleItems keeps', () => {
+    const {rerender} = render(
+      <OverflowList
+        gap={0}
+        data-w="1000"
+        data-testid="ov"
+        overflowRenderer={trigger}>
+        {items}
+      </OverflowList>,
+    );
+    expect(visibleContainer().getAttribute('style') ?? '').toContain('40px');
+    rerender(
+      <OverflowList
+        gap={0}
+        data-w="1000"
+        data-testid="ov"
+        minVisibleItems={1}
+        overflowRenderer={trigger}>
+        {items}
+      </OverflowList>,
+    );
+    expect(visibleContainer().getAttribute('style') ?? '').toContain('80px');
+  });
+
+  it('asks for the width that shows every item, but only inside a Toolbar lane', () => {
+    render(
+      <OverflowList
+        gap={0}
+        data-w="1000"
+        data-testid="ov"
+        overflowRenderer={trigger}>
+        {items}
+      </OverflowList>,
+    );
+    const vis = visibleContainer();
+    // Three 40px items with no gap.
+    expect(vis.getAttribute('style') ?? '').toContain('120px');
+    const laneClass = (stylex.props(foldingLaneMarker).className ?? '').split(
+      ' ',
+    )[0];
+    expect(
+      rulesDeclaredFor(vis).some(
+        rule =>
+          rule.includes(laneClass) &&
+          /width:\s*var\(--_overflow-list-natural-width\)/.test(rule),
+      ),
+    ).toBe(true);
+  });
+
+  it('moves focus to the trigger when the focused item folds away', async () => {
+    render(
+      <OverflowList
+        gap={0}
+        data-w="1000"
+        data-testid="ov"
+        overflowRenderer={trigger}>
+        {items}
+      </OverflowList>,
+    );
+    const vis = visibleContainer();
+    act(() => {
+      within(vis).getByText('C').focus();
+    });
+    vis.setAttribute('data-w', '100');
+    await triggerResize(vis);
+    expect(within(vis).queryByText('C')).not.toBeInTheDocument();
+    expect(document.activeElement).toBe(within(vis).getByText('more:1,2'));
+  });
+
+  it("keeps its hidden measuring copies out of a Toolbar's arrow-key order", () => {
+    // The copies sit in an inert container, which the roving order skips.
+    render(
+      <OverflowList
+        gap={0}
+        data-w="1000"
+        data-testid="ov"
+        overflowRenderer={trigger}>
+        {items}
+      </OverflowList>,
+    );
+    expect(measureContainer().hasAttribute('inert')).toBe(true);
   });
 });

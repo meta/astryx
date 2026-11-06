@@ -15,6 +15,7 @@ import {Layout} from '@astryxdesign/core/Layout';
 import {LayoutHeader} from '@astryxdesign/core/Layout';
 import {LayoutContent} from '@astryxdesign/core/Layout';
 import {MoreMenu} from '@astryxdesign/core/MoreMenu';
+import {OverflowList} from '@astryxdesign/core/OverflowList';
 import {Heading} from '@astryxdesign/core/Text';
 import {
   Cog6ToothIcon,
@@ -483,6 +484,101 @@ export const WithCenterTabNavigation: Story = {
           <Text type="body">Content for the center tab navigation</Text>
         </Section>
       </Card>
+    );
+  },
+};
+
+const FOLD_ACTIONS = ['Save', 'Edit', 'Share', 'Archive', 'Move', 'Delete'];
+const FOLD_VIEWS = ['Board', 'List', 'Timeline', 'Calendar'];
+
+function FoldingList({labels, label}: {labels: string[]; label: string}) {
+  return (
+    <OverflowList
+      gap={1}
+      aria-label={label}
+      overflowRenderer={overflowItems => (
+        <Button label={`+${overflowItems.length}`} variant="ghost" />
+      )}>
+      {labels.map(name => (
+        <Button key={name} label={name} variant="ghost" />
+      ))}
+    </OverflowList>
+  );
+}
+
+/**
+ * Lanes whose content can fold shrink first: an OverflowList folds its items
+ * into "+N" and a TabList scrolls, so the content beside them keeps its width.
+ * Each row is drawn at the width set by `?width=` (default 480 px).
+ */
+export const FoldingLanes: Story = {
+  name: 'Composition: Folding Lanes',
+  render: () => {
+    const width =
+      Number(new URLSearchParams(window.location.search).get('width')) || 480;
+    const [tab, setTab] = useState('overview');
+    const frame = {width, outline: '1px dashed currentColor'};
+    return (
+      <div style={{display: 'flex', flexDirection: 'column', gap: 24}}>
+        <div style={frame} data-case="selection">
+          <Toolbar
+            label="Bulk actions"
+            size="sm"
+            variant="muted"
+            startContent={<FoldingList labels={FOLD_ACTIONS} label="Actions" />}
+            endContent={
+              <>
+                <span>3 selected</span>
+                <Button label="Clear" variant="ghost" />
+              </>
+            }
+          />
+        </div>
+        <div style={frame} data-case="two-lanes">
+          <Toolbar
+            label="Issues"
+            size="sm"
+            startContent={<FoldingList labels={FOLD_ACTIONS} label="Actions" />}
+            endContent={
+              <>
+                <FoldingList labels={FOLD_VIEWS} label="Views" />
+                <Button label="New issue" />
+              </>
+            }
+          />
+        </div>
+        <div style={frame} data-case="tabs">
+          <Toolbar
+            label="Tabs"
+            size="sm"
+            dividers={['bottom']}
+            startContent={
+              <TabList value={tab} onChange={setTab} aria-label="Sections">
+                <Tab value="overview" label="Overview" />
+                <Tab value="analytics" label="Analytics" />
+                <Tab value="settings" label="Settings" />
+                <Tab value="members" label="Members" />
+              </TabList>
+            }
+            endContent={<Button label="New item" />}
+          />
+        </div>
+        <div style={frame} data-case="fixed">
+          <Toolbar
+            label="Fixed"
+            size="sm"
+            startContent={
+              <>
+                <Button label="Save" variant="ghost" />
+                <Button label="Edit" variant="ghost" />
+                <Button label="Share" variant="ghost" />
+                <Button label="Archive" variant="ghost" />
+              </>
+            }
+            endContent={<Button label="New item" />}
+          />
+        </div>
+      </div>
     );
   },
 };

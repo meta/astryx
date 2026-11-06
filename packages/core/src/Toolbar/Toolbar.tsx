@@ -31,6 +31,7 @@ import {useKeyboardHint} from '../hooks/useKeyboardHint';
 import {SizeProvider} from '../SizeContext/SizeContext';
 import {edgeCompSlot} from '../Layout/edgeCompensation.stylex';
 import {themeProps} from '../utils/themeProps';
+import {foldableMarker, foldingLaneMarker} from '../internal/foldable.stylex';
 
 /**
  * Map SpacingStep values to spacingVars keys.
@@ -55,6 +56,13 @@ const styles = stylex.create({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
+    // While a lane holds foldable content, the other lanes do not shrink at
+    // all, so their text never wraps to make room; the foldable lane gives up
+    // the width instead. Set on every toolbar, so a nested one starts over.
+    '--_toolbar-lane-shrink': {
+      default: '1',
+      [stylex.when.descendant(':is(*)', foldableMarker)]: '0',
+    },
   },
   // Three-slot layout (with centerContent): CSS grid 1fr auto 1fr
   baseGrid: {
@@ -86,6 +94,23 @@ const styles = stylex.create({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'flex-end',
+  },
+  // A start or end lane holding content that folds (an OverflowList, or a
+  // TabList that handles overflow) takes the shrinking, so the lanes beside it
+  // keep their width; folding lanes share it in proportion to their content.
+  foldableLane: {
+    // Every start and end lane carries this style, so its default is the
+    // toolbar's lane shrink: 0 beside a foldable lane, 1 otherwise.
+    flexShrink: {
+      default: 'var(--_toolbar-lane-shrink)',
+      [stylex.when.descendant(':is(*)', foldableMarker)]: 1,
+    },
+    // The foldable content keeps its own floor (an OverflowList's "+N"), so
+    // the lane itself may go below its content's width.
+    minWidth: {
+      default: null,
+      [stylex.when.descendant(':is(*)', foldableMarker)]: 0,
+    },
   },
   // When only startContent is present, let it fill
   startOnly: {
@@ -341,6 +366,8 @@ export function Toolbar({
               <div
                 {...stylex.props(
                   styles.startSlot,
+                  styles.foldableLane,
+                  foldingLaneMarker,
                   edgeCompSlot.inset(edgeCompInsetForSize[size]),
                   dynamicStyles.gap(gapVar),
                 )}>
@@ -353,6 +380,8 @@ export function Toolbar({
               <div
                 {...stylex.props(
                   styles.endSlot,
+                  styles.foldableLane,
+                  foldingLaneMarker,
                   edgeCompSlot.inset(edgeCompInsetForSize[size]),
                   dynamicStyles.gap(gapVar),
                 )}>
@@ -366,6 +395,8 @@ export function Toolbar({
                 <div
                   {...stylex.props(
                     styles.startSlot,
+                    styles.foldableLane,
+                    foldingLaneMarker,
                     !hasEndContent && styles.startOnly,
                     edgeCompSlot.inset(edgeCompInsetForSize[size]),
                     dynamicStyles.gap(gapVar),
@@ -377,6 +408,8 @@ export function Toolbar({
                 <div
                   {...stylex.props(
                     styles.endSlot,
+                    styles.foldableLane,
+                    foldingLaneMarker,
                     !hasStartContent && styles.endOnly,
                     edgeCompSlot.inset(edgeCompInsetForSize[size]),
                     dynamicStyles.gap(gapVar),

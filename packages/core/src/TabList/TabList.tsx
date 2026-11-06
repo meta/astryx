@@ -53,6 +53,7 @@ import {isRtlElement} from '../hooks/isRtlElement';
 import {Icon} from '../Icon';
 import {EDGE_COMP_ATTR} from '../Layout/edgeCompensation.stylex';
 import {themeProps} from '../utils/themeProps';
+import {foldableMarker} from '../internal/foldable.stylex';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {devWarn} from '../utils/devWarning';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
@@ -697,6 +698,8 @@ export function TabList({
           themeProps('tab-list', {size}),
           stylex.props(
             styles.nav,
+            // Tabs that scroll can give up width.
+            hasScroll && foldableMarker,
             layout === 'fill' && styles.fill,
             hasDivider && styles.divider,
             isFullBleed && styles.fullBleed,

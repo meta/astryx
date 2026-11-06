@@ -12,6 +12,9 @@ import {render, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Button} from '../Button';
 import {TableSelectionToolbar} from './TableSelectionToolbar';
+import {OverflowList} from '../OverflowList';
+import * as stylex from '@stylexjs/stylex';
+import {foldableMarker} from '../internal/foldable.stylex';
 import type {TableSelectionState} from './plugins/selection/useTableSelectionState';
 
 function createSelectionState(
@@ -105,5 +108,33 @@ describe('TableSelectionToolbar', () => {
     expect(
       screen.getByRole('button', {name: 'Clear invoices'}),
     ).toBeInTheDocument();
+  });
+});
+
+describe('TableSelectionToolbar with folding actions (FR4)', () => {
+  it('folds the actions in startContent while the count and Clear stay outside any foldable content', () => {
+    render(
+      <TableSelectionToolbar
+        selection={createSelectionState(new Set(['a', 'b', 'c']))}
+        startContent={
+          <OverflowList
+            overflowRenderer={items => <span>+{items.length}</span>}>
+            <Button label="Export" variant="ghost" />
+            <Button label="Delete" variant="ghost" />
+          </OverflowList>
+        }
+      />,
+    );
+    const markerSelector = (stylex.props(foldableMarker).className ?? '')
+      .split(' ')
+      .filter(Boolean)
+      .map(cls => `.${cls}`)
+      .join('');
+    const [startLane, endLane] = Array.from(
+      screen.getByRole('toolbar').children,
+    );
+    expect(startLane.querySelector(markerSelector)).not.toBeNull();
+    expect(endLane.querySelector(markerSelector)).toBeNull();
+    expect(endLane).toHaveTextContent('3 selected');
   });
 });

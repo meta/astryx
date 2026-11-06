@@ -87,6 +87,25 @@ export interface UseOverflowReturn {
   rowHeight: number;
 }
 
+/**
+ * {@link useOverflowInternal}'s return: the public one plus the narrowest
+ * width the list can fold to.
+ */
+export interface UseOverflowInternalReturn extends UseOverflowReturn {
+  /**
+   * The narrowest width the single-row list can fold to, in pixels: the
+   * `minVisibleItems` floor plus the overflow indicator. 0 until measured, for
+   * the multi-row path, and for a host that does not track it.
+   */
+  foldMinWidth: number;
+  /**
+   * The width the single-row list needs to show every item, in pixels: the
+   * item widths plus their gaps. 0 under the same conditions as
+   * `foldMinWidth`.
+   */
+  foldNaturalWidth: number;
+}
+
 // A measurement either applies its result at once or returns the update to
 // apply after the frame paints.
 type Measure = (timing: 'now' | 'beforePaint') => (() => void) | undefined;
@@ -264,7 +283,12 @@ export function useOverflow(
   itemCount: number,
   options: UseOverflowOptions = {},
 ): UseOverflowReturn {
-  return useOverflowInternal(itemCount, options, {tracksRows: true});
+  const {
+    foldMinWidth: _foldMinWidth,
+    foldNaturalWidth: _foldNaturalWidth,
+    ...overflow
+  } = useOverflowInternal(itemCount, options, {tracksRows: true});
+  return overflow;
 }
 
 /**
@@ -277,8 +301,11 @@ export function useOverflow(
 export function useOverflowInternal(
   itemCount: number,
   options: UseOverflowOptions,
-  {tracksRows}: {tracksRows: boolean},
-): UseOverflowReturn {
+  {
+    tracksRows,
+    tracksFoldMin = false,
+  }: {tracksRows: boolean; tracksFoldMin?: boolean},
+): UseOverflowInternalReturn {
   const {
     gap = 0,
     minVisibleItems = 0,
@@ -301,6 +328,8 @@ export function useOverflowInternal(
   const [visibleCount, setVisibleCount] = useState(itemCount);
   const [rows, setRows] = useState(1);
   const [rowHeight, setRowHeight] = useState(0);
+  const [fold, setFold] = useState({minWidth: 0, naturalWidth: 0});
+  const appliedFoldRef = useRef({minWidth: 0, naturalWidth: 0});
   // The values last written to state. A measurement that matches them writes
   // nothing, so a resize that changes nothing renders nothing.
   const appliedRef = useRef({visibleCount: itemCount, rows: 1, rowHeight: 0});
@@ -374,6 +403,34 @@ export function useOverflowInternal(
       }
 
       const widths = children.map(child => child.offsetWidth);
+      // The narrowest the row can fold to: the items `minVisibleItems` keeps,
+      // plus the indicator while anything is left to fold.
+      if (tracksFoldMin && (maxRows ?? 1) <= 1) {
+        const floor = Math.min(minVisibleItems, children.length);
+        const kept =
+          collapseFrom === 'end'
+            ? widths.slice(0, floor)
+            : widths.slice(widths.length - floor);
+        const parts =
+          floor < children.length && hasIndicator
+            ? [...kept, indicatorWidth]
+            : kept;
+        const sumWithGaps = (list: number[]) =>
+          list.reduce((sum, width) => sum + width, 0) +
+          gap * Math.max(0, list.length - 1);
+        const next = {
+          minWidth: sumWithGaps(parts),
+          naturalWidth: sumWithGaps(widths),
+        };
+        const applied = appliedFoldRef.current;
+        if (
+          applied.minWidth !== next.minWidth ||
+          applied.naturalWidth !== next.naturalWidth
+        ) {
+          appliedFoldRef.current = next;
+          setFold(next);
+        }
+      }
       const measuredRowHeight = children.reduce(
         (max, child) => Math.max(max, child.offsetHeight || 0),
         0,
@@ -456,6 +513,7 @@ export function useOverflowInternal(
       collapseFrom,
       observeParent,
       apply,
+      tracksFoldMin,
     ],
   );
 
@@ -512,5 +570,7 @@ export function useOverflowInternal(
     // the return uses the fixed values.
     rows: tracksRows ? rows : 1,
     rowHeight: tracksRows ? rowHeight : 0,
+    foldMinWidth: fold.minWidth,
+    foldNaturalWidth: fold.naturalWidth,
   };
 }

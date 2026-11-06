@@ -37,6 +37,7 @@ import {spacingVars} from '../theme/tokens.stylex';
 import {themeProps} from '../utils/themeProps';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {foldableMarker, foldingLaneMarker} from '../internal/foldable.stylex';
 const styles = stylex.create({
   container: {
     display: 'flex',
@@ -70,6 +71,30 @@ const styles = stylex.create({
     display: 'inline-flex',
   },
 });
+
+// The list never gets narrower than the narrowest row it can fold to, so a
+// lane that shrinks around it keeps its "+N" trigger.
+const foldMin = stylex.create({
+  minWidth: (px: number) => ({minWidth: `${px}px`}),
+});
+
+// In a Toolbar lane the list asks for the width that shows every item, so the
+// lane sizes to all of it and shrinks from there; elsewhere it keeps its
+// usual width. `--_overflow-list-natural-width` is set per list below.
+const foldNatural = stylex.create({
+  width: (px: number) => ({'--_overflow-list-natural-width': `${px}px`}),
+  inLane: {
+    width: {
+      default: null,
+      [stylex.when.ancestor(':is(*)', foldingLaneMarker)]:
+        'var(--_overflow-list-natural-width)',
+    },
+  },
+});
+
+/** What can take focus inside the "+N" trigger the caller renders. */
+const FOCUSABLE =
+  'button, a[href], input, select, [tabindex]:not([tabindex="-1"])';
 
 const multiRowHeight = stylex.create({
   height: (maxRows: number, rowHeight: number, gapPx: number) => ({
@@ -276,6 +301,7 @@ export function OverflowList({
   ref,
   ...props
 }: OverflowListProps) {
+  const {onFocus: _onFocus, onBlur: _onBlur, ...propsWithoutFocus} = props;
   const childArray = Children.toArray(children) as ReactElement[];
   const itemCount = childArray.length;
 
@@ -286,19 +312,26 @@ export function OverflowList({
 
   // Only the multi-row path renders from `rowHeight` (it caps the
   // container's height), so only that path tracks it.
-  const {containerRef, measureRef, visibleCount, hasOverflow, rowHeight} =
-    useOverflowInternal(
-      itemCount,
-      {
-        gap: gapPx,
-        minVisibleItems,
-        maxVisibleItems,
-        maxRows,
-        collapseFrom,
-        behavior,
-      },
-      {tracksRows: isMultiRow},
-    );
+  const {
+    containerRef,
+    measureRef,
+    visibleCount,
+    hasOverflow,
+    rowHeight,
+    foldMinWidth,
+    foldNaturalWidth,
+  } = useOverflowInternal(
+    itemCount,
+    {
+      gap: gapPx,
+      minVisibleItems,
+      maxVisibleItems,
+      maxRows,
+      collapseFrom,
+      behavior,
+    },
+    {tracksRows: isMultiRow, tracksFoldMin: !isMultiRow},
+  );
 
   const allItems: OverflowItem[] = childArray.map((child, index) => ({
     child,
@@ -356,6 +389,39 @@ export function OverflowList({
   const overflowItemsRef = useRef(overflowItems);
   overflowItemsRef.current = overflowItems;
 
+  // An item that holds focus and folds away unmounts, which would drop focus
+  // to the page. Focus moves to the "+N" trigger instead, the control that
+  // now reaches that item. Measurement drives the fold, so no handler sees it.
+  const visibleRef = useRef<HTMLElement | null>(null);
+  const hadFocusRef = useRef(false);
+  useIsomorphicLayoutEffect(
+    function moveFocusToTriggerWhenItsItemFolds() {
+      const container = visibleRef.current;
+      if (!hadFocusRef.current || container == null) {
+        return;
+      }
+      const active = container.ownerDocument.activeElement;
+      if (active != null && active !== container.ownerDocument.body) {
+        return;
+      }
+      if (!hasOverflow) {
+        return;
+      }
+      const trigger =
+        collapseFrom === 'end'
+          ? container.lastElementChild
+          : container.firstElementChild;
+      const target =
+        trigger == null
+          ? null
+          : trigger.matches(FOCUSABLE)
+            ? trigger
+            : trigger.querySelector(FOCUSABLE);
+      (target as HTMLElement | null)?.focus();
+    },
+    [visibleCount],
+  );
+
   // Reports the measured overflow to `onOverflowChange`. A ResizeObserver
   // drives the measurement, so no event handler can report it.
   useIsomorphicLayoutEffect(() => {
@@ -388,11 +454,31 @@ export function OverflowList({
 
       {/* Visible container */}
       <div
-        ref={useMergedRefs(ref, containerRef)}
+        ref={useMergedRefs(ref, containerRef, visibleRef)}
+        onFocus={event => {
+          hadFocusRef.current = true;
+          props.onFocus?.(event);
+        }}
+        onBlur={event => {
+          const next = event.relatedTarget as Node | null;
+          if (next != null && !event.currentTarget.contains(next)) {
+            hadFocusRef.current = false;
+          }
+          props.onBlur?.(event);
+        }}
         {...mergeProps(
           themeProps('overflow-list'),
           stylex.props(
             isMultiRow ? styles.containerMultiRow : styles.container,
+            // A list that can fold gives up width in a Toolbar lane; one
+            // whose floor keeps every item cannot.
+            minVisibleItems < itemCount && foldableMarker,
+            !isMultiRow && foldMinWidth > 0 && foldMin.minWidth(foldMinWidth),
+            !isMultiRow &&
+              foldNaturalWidth > 0 && [
+                foldNatural.width(foldNaturalWidth),
+                foldNatural.inLane,
+              ],
             gapStyles[gap],
             isMultiRow &&
               rowHeight > 0 &&
@@ -404,7 +490,7 @@ export function OverflowList({
           className,
           style,
         )}
-        {...props}>
+        {...propsWithoutFocus}>
         {collapseFrom === 'start' &&
           hasOverflow &&
           overflowRenderer?.(overflowItems)}

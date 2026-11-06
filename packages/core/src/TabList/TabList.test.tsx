@@ -24,6 +24,8 @@ import type {TabListProps} from './TabList';
 import {Tab} from './Tab';
 import {TabMenu} from './TabMenu';
 import {LinkProvider} from '../Link/LinkProvider';
+import * as stylex from '@stylexjs/stylex';
+import {foldableMarker} from '../internal/foldable.stylex';
 
 function CustomLink({
   children,
@@ -1879,5 +1881,38 @@ describe('pressed state', () => {
     expect(hasReleaseFade(tab)).toBe(true);
     expect(readsPressStrength(surface, '[data-astryx-press="on"]')).toBe(true);
     expect(readsPressStrength(surface)).toBe(true);
+  });
+});
+
+function carriesFoldableMarker(el: Element): boolean {
+  const classes = (stylex.props(foldableMarker).className ?? '')
+    .split(' ')
+    .filter(Boolean);
+  return classes.length > 0 && classes.every(cls => el.classList.contains(cls));
+}
+
+describe('TabList in a Toolbar lane (component:Toolbar FR2)', () => {
+  it('marks its root foldable while it handles overflow, and not with overflow="visible"', () => {
+    const {container, rerender} = render(
+      <TabList value="a" onChange={() => {}} aria-label="Sections">
+        <Tab value="a" label="A" />
+        <Tab value="b" label="B" />
+      </TabList>,
+    );
+    const root = container.firstElementChild as HTMLElement;
+    expect(carriesFoldableMarker(root)).toBe(true);
+    rerender(
+      <TabList
+        value="a"
+        onChange={() => {}}
+        aria-label="Sections"
+        overflow="visible">
+        <Tab value="a" label="A" />
+        <Tab value="b" label="B" />
+      </TabList>,
+    );
+    expect(
+      carriesFoldableMarker(container.firstElementChild as HTMLElement),
+    ).toBe(false);
   });
 });
