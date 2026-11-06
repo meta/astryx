@@ -45,6 +45,20 @@ function readPackage(repoRoot, file, manifests) {
 const CHANGESET = /^\.changeset\/(?!README\.md$)[^/]+\.md$/;
 
 /**
+ * The visual gate's probe theme: a private fixture that styles every theming
+ * target. The release plan's probe tier shoots every story in it, so a change
+ * to its source changes those shots and needs the whole plan.
+ * @param {string} repoRoot
+ */
+function probeThemeName(repoRoot) {
+  const config = path.join(
+    repoRoot,
+    '.github/scripts/visual-gate/visual-gate.config.json',
+  );
+  return fs.existsSync(config) ? (readJSON(config).probeTheme ?? null) : null;
+}
+
+/**
  * @param {string[]} files
  * @param {string} repoRoot
  * @param {Record<string, object>} manifests - trusted snapshots keyed by repo-relative path
@@ -81,7 +95,11 @@ export function classifyVisualScope(
       ),
     ) ||
     paths.includes('packages/core/package.json');
-  let broadStableVisual = stableVisualInfrastructure;
+  const probe = probeThemeName(repoRoot);
+  const probeChanged =
+    probe != null &&
+    paths.some(file => file.startsWith(`packages/themes/${probe}/src/`));
+  let broadStableVisual = stableVisualInfrastructure || probeChanged;
 
   for (const file of stableCoreFiles) {
     const match = file.match(/^packages\/core\/src\/([^/]+)\//);
@@ -145,6 +163,7 @@ export function classifyVisualScope(
   return {
     hasStableVisual:
       stableVisualInfrastructure ||
+      probeChanged ||
       stableCoreFiles.length > 0 ||
       stableThemes.size > 0,
     broadStableVisual,
