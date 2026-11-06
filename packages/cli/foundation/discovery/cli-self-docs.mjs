@@ -18,6 +18,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {CLI_ROOT} from '../fs/paths.mjs';
+import {listDirEntries} from '../fs/listing-cache.mjs';
 import {readDocView} from '../doc-compiler/read.mjs';
 import {AUTHORING_SELF_DOCS, selfDocSection} from './authoring-self-docs.mjs';
 import {
@@ -66,7 +67,7 @@ export function discoverCliSelfDocSources(root = CLI_ROOT) {
   /** @param {string} dir */
   const walk = dir => {
     if (!fs.existsSync(dir)) return;
-    for (const entry of fs.readdirSync(dir, {withFileTypes: true})) {
+    for (const entry of listDirEntries(dir)) {
       if (
         entry.name === 'node_modules' ||
         entry.name.startsWith('__') ||

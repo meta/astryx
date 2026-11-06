@@ -223,6 +223,37 @@ one owner module in the package that writes it,
 name and selectors once and exports ready-made styles, setter props and the
 runtime readers its package needs; every other file spreads those exports.
 
+In Core, the owner can instead be a plain-TS module,
+`packages/core/src/privateAttributes/<name>.ts`, that the uncompiled theme
+engine can import. It may export its name and the selector text built on it,
+and only its `.stylex.ts` sibling and the theme engine in
+`packages/core/src/theme/` may import it; a `.stylex.ts` owner never exports
+them. When a plain-TS owner exists, its `.stylex.ts` sibling is not an owner:
+it writes the attribute's selectors only as literals that reach its own
+`stylex.create` calls (directly, or through module constants read only there),
+because StyleX resolves a selector only where it is written. It never sets the
+attribute or exports a selector, through a literal or through the name it
+imports from its owner, and it never re-exports the owner.
+
+```ts
+// fine in privateAttributes/press.ts, a plain-TS owner
+export const PRESS_ATTRIBUTE = 'data-astryx-press';
+// fine in privateAttributes/press.stylex.ts, its sibling
+const PRESSED_ON = '[data-astryx-press="on"]';
+const styles = stylex.create({
+  base: {opacity: {default: 1, [PRESSED_ON]: 0.8}},
+});
+import {PRESS_ATTRIBUTE} from './press';
+const isPressed = element => element.hasAttribute(PRESS_ATTRIBUTE);
+// flagged in privateAttributes/press.stylex.ts once press.ts exists
+const pressOn = {'data-astryx-press': 'on'};
+el.setAttribute('data-astryx-press', 'on');
+export const pressOn = {[PRESS_ATTRIBUTE]: 'on'};
+export {PRESS_ATTRIBUTE} from './press';
+// flagged in any other Core file but the theme engine, neighbours included
+import {PRESS_ATTRIBUTE} from '../privateAttributes/press';
+```
+
 ```ts
 // flagged outside the owner module
 el.setAttribute('data-astryx-popover-fallback-close', '');
@@ -243,7 +274,7 @@ selectors inside `stylex.create` and `stylex.when.*`),
 template literals (including `data-${dataAttrNamespace}-…`), JSX attribute
 names, and `dataAttr()` calls. A name it cannot read (`data-astryx-${part}`,
 `dataAttr(name)`) is reported as `data-astryx-*`. Inside an owner module only
-its own attribute may be written, and the module may not export the raw name or
+its own attribute may be written, and a `.stylex.ts` owner may not export the raw name or
 a selector as a string: not as an exported or default-exported value, not inside
 an exported object, array or function's return value, and not through a module
 constant one of those uses, including a selector built from that constant in a

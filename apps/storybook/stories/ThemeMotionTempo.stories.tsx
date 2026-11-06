@@ -133,7 +133,7 @@ const durationScaleTheme = defineTheme({
 
 /**
  * A theme with only a duration scale, nested in a theme at tempo 1.5. Its
- * glide plays its own scale's `--duration-medium-min`, which the outer tempo
+ * glide plays its own scale's `--duration-medium`, which the outer tempo
  * does not reach.
  */
 export const NestedDurationScale: Story = {
