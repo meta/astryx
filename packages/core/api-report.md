@@ -641,6 +641,7 @@ component CodeBlock(props: CodeBlockProps)
   prop language?: string | CodeLanguage = 'plaintext'
   prop maxHeight?: number | string
   prop onCopy?: () => void
+  prop onCopyError?: (error: unknown) => void
   prop ref?: React.Ref<HTMLPreElement>
   prop size?: 'sm' | 'md'
   prop startLineNumber?: number = 1
