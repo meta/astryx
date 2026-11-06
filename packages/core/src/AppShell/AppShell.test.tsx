@@ -238,6 +238,45 @@ describe('AppShell', () => {
     expect(document.activeElement).toBe(main);
   });
 
+  it('gives a second shell its own main id; the first keeps the fixed id', () => {
+    const view = render(
+      <div>
+        <AppShell key="first">
+          <div>First</div>
+        </AppShell>
+        <AppShell key="second">
+          <div>Second</div>
+        </AppShell>
+      </div>,
+    );
+    const [firstMain, secondMain] = screen.getAllByRole('main');
+    const [firstSkip, secondSkip] = screen.getAllByTestId('skip-to-content');
+    expect(firstMain).toHaveAttribute('id', 'astryx-app-shell-main');
+    expect(secondMain.id).not.toBe('astryx-app-shell-main');
+    expect(secondMain.id).not.toBe('');
+    expect(document.querySelectorAll(`[id="${secondMain.id}"]`)).toHaveLength(
+      1,
+    );
+    expect(firstSkip).toHaveAttribute('href', '#astryx-app-shell-main');
+    expect(secondSkip).toHaveAttribute('href', `#${secondMain.id}`);
+
+    fireEvent.click(secondSkip);
+    expect(document.activeElement).toBe(secondMain);
+
+    // When the first shell leaves, the remaining shell takes the fixed id.
+    view.rerender(
+      <div>
+        <AppShell key="second">
+          <div>Second</div>
+        </AppShell>
+      </div>,
+    );
+    expect(screen.getByRole('main')).toHaveAttribute(
+      'id',
+      'astryx-app-shell-main',
+    );
+  });
+
   it('skip link text comes from the i18n catalog', () => {
     render(
       <InternationalizationProvider
