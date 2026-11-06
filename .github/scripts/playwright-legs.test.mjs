@@ -258,7 +258,7 @@ describe('the interaction proof legs in ci.yml', () => {
     {
       id: 'pr-interaction',
       project: 'chromium',
-      legs: [1, 2, 3, 4],
+      legs: [1, 2, 3, 4, 5, 6],
       run: 'Run interaction proofs',
       plan: "Plan this leg's interaction proofs",
       evidence: 'interaction-evidence-${{ matrix.leg }}',
