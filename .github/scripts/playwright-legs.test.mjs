@@ -286,7 +286,7 @@ describe('the interaction proof legs in ci.yml', () => {
     {
       id: 'pr-interaction-webkit',
       project: 'webkit',
-      legs: [1, 2, 3, 4, 5, 6],
+      legs: [1, 2, 3, 4, 5],
       run: 'Run WebKit interaction proofs',
       plan: "Plan this leg's WebKit interaction proofs",
       evidence: 'interaction-evidence-webkit-${{ matrix.leg }}',
