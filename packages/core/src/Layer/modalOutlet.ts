@@ -5,7 +5,8 @@
 /**
  * @file modalOutlet.ts
  * @input The open Dialog and scrim BottomSheet `<dialog>` elements
- * @output Exports useModalOutlet (a modal supplies its outlet),
+ * @output Exports useModalOutlet (a modal supplies its outlet, and withdraws
+ *   it through the ref it returns),
  *   getActiveModalOutlet, subscribeModalOutlets (a global host follows the
  *   latest one), and notifyTopLayerEntry (a non-modal surface entered the
  *   top layer above the hosts)
@@ -30,7 +31,13 @@
  * - /docs/architecture/layer-runtime.md
  */
 
-import {useEffect, useLayoutEffect, useRef, type RefObject} from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  type RefCallback,
+  type RefObject,
+} from 'react';
 
 const outlets: HTMLDialogElement[] = [];
 // Outlets whose order among themselves is decided by their caller (a stack of
@@ -168,6 +175,10 @@ export function notifyTopLayerEntry(): void {
  * above an outlet of another group supplied later, such as a Dialog opened
  * from the sheet — and when it turns false the outlet stays supplied (every
  * open modal supplies one) but is no longer the group's latest.
+ *
+ * Returns a callback ref that withdraws the outlet in the commit that closes
+ * or unmounts the modal. Attach it to an element the modal owns that stays
+ * mounted while the modal is open and has no other ref.
  */
 export function useModalOutlet(
   ref: RefObject<HTMLDialogElement | null>,
@@ -175,7 +186,7 @@ export function useModalOutlet(
   isLatest: boolean = true,
   group?: string,
   hostKey?: string | null,
-): void {
+): RefCallback<HTMLElement> {
   // `hostKey` names which element `ref` currently resolves to, for a caller
   // whose ref moves between dialogs while it stays active (a switcher flow
   // whose host dialog changes on a handoff): a change re-supplies the outlet
@@ -235,19 +246,24 @@ export function useModalOutlet(
     raiseWithinGroup(element);
   }, [ref, isActive, isLatest, hostKey]);
 
-  // Syncs the outlet registry in the commit that closes or unmounts the modal.
-  // That commit hides the dialog, so a host still inside it paints nothing. A
-  // passive cleanup can run after the next paint, or after React detaches the
-  // dialog.
-  useLayoutEffect(() => {
-    if (!isActive) {
-      return;
-    }
-    return () => {
-      const supplied = suppliedRef.current;
-      if (supplied != null) {
-        removeOutlet(supplied);
+  // The commit that closes the modal hides the dialog, so a host still inside
+  // it paints nothing. The passive cleanup above can run after the next paint,
+  // or after React removes the dialog. The ref changes with `isActive`, so
+  // React detaches the open modal's ref in the closing commit, before the
+  // paint. On unmount, React detaches it before it removes the dialog, so
+  // hosts leave while they are still in the document.
+  return useCallback(
+    (element: HTMLElement | null) => {
+      if (!isActive || element == null) {
+        return;
       }
-    };
-  }, [isActive]);
+      return () => {
+        const supplied = suppliedRef.current;
+        if (supplied != null) {
+          removeOutlet(supplied);
+        }
+      };
+    },
+    [isActive],
+  );
 }

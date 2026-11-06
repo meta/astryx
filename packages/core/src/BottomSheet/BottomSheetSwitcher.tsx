@@ -540,13 +540,19 @@ export function BottomSheetSwitcher({
   // `hostSheet` across a handoff, and the fading retained dialog is never the
   // outlet. A closing flow stops supplying at once. Passive: it runs after the
   // layout effects that present the step dialogs.
-  useModalOutlet(
+  const outletRef = useModalOutlet(
     hostDialogRef,
     isModal && isFlowOpen,
     stackView.isTop || !stackView.isStacked,
     'bottom-sheet',
     hostSheet,
   );
+  // Syncs the modal outlet registry: the flow's outlet is withdrawn in the
+  // commit that closes or unmounts the flow, before the paint. The flow cannot
+  // attach the outlet's ref to an element. The ref of its wrapper is the sheet
+  // stack's tree-order anchor, which the stack reads in that same commit. The
+  // element of its host step changes on a handoff while the flow stays open.
+  useLayoutEffect(() => outletRef(flowRef.current), [outletRef]);
 
   // Focus return is native per dialog: each showModal() records the focused
   // element and close() focuses it again. That serves a one-sheet flow, but

@@ -28,6 +28,7 @@ import {
   useRef,
   useSyncExternalStore,
   type ReactNode,
+  type Ref,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
@@ -497,6 +498,11 @@ interface BottomSheetPanelProps extends BaseProps<HTMLDivElement> {
    */
   onScrimFadeDuration?: (panel: HTMLElement, ms: number | null) => void;
   onElementChange?: (element: HTMLDivElement | null) => void;
+  /**
+   * A ref for the grab handle's element. The handle stays mounted with the
+   * panel and carries no other ref.
+   */
+  handleRef?: Ref<HTMLDivElement>;
   onMotionStart?: (motion: BottomSheetPanelMotion) => void;
   onMotionComplete?: (motion: BottomSheetPanelMotion) => void;
 }
@@ -675,6 +681,7 @@ export function BottomSheetPanel({
   onScrimOpacity,
   onScrimFadeDuration,
   onElementChange,
+  handleRef,
   onMotionStart,
   onMotionComplete,
   ...props
@@ -1149,6 +1156,7 @@ export function BottomSheetPanel({
         },
       )}>
       <div
+        ref={handleRef}
         {...stylex.props(styles.handleBar)}
         {...handleProps}
         aria-hidden="true"
