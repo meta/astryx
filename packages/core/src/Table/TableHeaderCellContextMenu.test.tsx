@@ -23,7 +23,7 @@ import {
 beforeEach(mockPopover);
 
 describe('TableHeaderCell context menu loading', () => {
-  it('keeps a focused header control’s node, focus and state while the menu loads', async () => {
+  it('holds a Shift+F10 sent before the menu loads, opens the menu, and keeps the focused header control’s node and state', async () => {
     await expectContentSurvivesMenuLoad(
       <Table>
         <TableHeader>
@@ -35,6 +35,7 @@ describe('TableHeaderCell context menu loading', () => {
         </TableHeader>
       </Table>,
       'button',
+      'before-load',
     );
   });
 });

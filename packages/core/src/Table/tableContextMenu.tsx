@@ -5,28 +5,27 @@
 /**
  * @file tableContextMenu.tsx
  * @input React, ContextMenu, Icon, types
- * @output wrapInTableContextMenu helper, TableContextMenuForTrigger component
- * @position Renders the aggregated `contextMenuActions` for a header cell / row
+ * @output TableContextMenuForTrigger
+ * @position The lazily loaded context menu for a body or header cell with
+ * `contextMenuActions`
  *
  * SYNC: When modified, update these files to stay in sync:
- * - /packages/core/src/Table/BaseTable.tsx (call sites)
  * - /packages/core/src/Table/TableCellContextMenu.tsx (lazy loader)
  * - /packages/core/src/Table/tableContextActions.ts (resolveContextActions)
  * - /packages/core/src/Table/types.ts (TableContextAction)
  */
 
 import {useState, type ReactNode} from 'react';
-import {ContextMenu, type ContextMenuOption} from '../ContextMenu';
 import {
   ContextMenuForTrigger,
   type ContextMenuExternalTrigger,
+  type ContextMenuOption,
 } from '../ContextMenu/ContextMenu';
-import {Icon} from '../Icon';
-import type {StyleXStyles} from '../theme/types';
+import {Icon} from '../Icon/Icon';
 import type {TableContextAction, TableContextActions} from './types';
 
-// Kept here for existing imports; the dependency-free copy lives in
-// tableContextActions so cells and plugins can read actions without the menu.
+// Re-exported for existing imports. Cells and plugins import
+// tableContextActions, which does not load the menu.
 export {resolveContextActions} from './tableContextActions';
 
 /**
@@ -76,83 +75,11 @@ function toContextMenuOptions(
 }
 
 /**
- * Wrap a table element (a header cell's content or a row) in a right-click
- * context menu rendering the aggregated `actions`. When no plugin contributes
- * actions the element is returned untouched so the native browser menu passes
- * through.
- */
-/**
- * A context menu whose actions are resolved lazily — only when the user opens
- * the menu (right-click). Deferring the work means plugins that pass a getter
- * don't build an action array (with its closures) for every cell on every
- * render; it's computed on demand and memoized until the menu closes.
- */
-function LazyTableContextMenu({
-  element,
-  getActions,
-  triggerXstyle,
-}: {
-  element: ReactNode;
-  getActions: () => TableContextAction[];
-  triggerXstyle?: StyleXStyles | StyleXStyles[];
-}): ReactNode {
-  const [options, setOptions] = useState<ContextMenuOption[] | null>(null);
-  return (
-    <ContextMenu
-      items={options ?? []}
-      triggerXstyle={triggerXstyle}
-      onOpenChange={open => {
-        // Resolve actions when opening; clear on close so state derived later
-        // (e.g. current sort direction) is always fresh next open.
-        setOptions(open ? toContextMenuOptions(getActions()) : null);
-      }}>
-      {element}
-    </ContextMenu>
-  );
-}
-
-/**
- * Wrap a table element (a header cell's content or a body cell) in a right-click
- * context menu rendering the aggregated `actions`. Accepts a static array or a
- * getter (resolved lazily on open). When there are no actions the element is
- * returned untouched so the native browser menu passes through.
- *
- * `triggerXstyle` styles the right-click target wrapper. Cells pass a fill +
- * padding style so the entire cell (padding included) opens the menu.
- */
-export function wrapInTableContextMenu(
-  element: ReactNode,
-  actions: TableContextActions | undefined,
-  triggerXstyle?: StyleXStyles | StyleXStyles[],
-): ReactNode {
-  // Getter form → resolve lazily on open.
-  if (typeof actions === 'function') {
-    return (
-      <LazyTableContextMenu
-        element={element}
-        getActions={actions}
-        triggerXstyle={triggerXstyle}
-      />
-    );
-  }
-  if (!actions || actions.length === 0) {
-    return element;
-  }
-  // item (it looked like "ascending" was always selected). Focus moves only
-  // when the user arrow-keys into the menu.
-  return (
-    <ContextMenu
-      items={toContextMenuOptions(actions)}
-      triggerXstyle={triggerXstyle}>
-      {element}
-    </ContextMenu>
-  );
-}
-
-/**
  * The menu for a cell whose trigger TableCellContextMenu renders. It loads
  * lazily beside the cell's content, so the content never remounts. A getter
- * is resolved when the menu opens, as in `wrapInTableContextMenu`.
+ * is resolved when the menu opens and memoized until it closes, so plugins
+ * that pass a getter don't build an action array for every cell on every
+ * render.
  */
 export function TableContextMenuForTrigger({
   actions,

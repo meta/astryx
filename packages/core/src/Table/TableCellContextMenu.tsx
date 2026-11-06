@@ -4,23 +4,21 @@
 
 /**
  * @file TableCellContextMenu.tsx
- * @input React (lazy, Suspense), StyleX, tableContextActions
+ * @input React (lazy, Suspense), ContextMenuTrigger, tableContextActions
  * @output TableCellContextMenu, loadTableContextMenu
  * @position Renders a cell's `contextMenuActions` for TableCell and
  * TableHeaderCell. The menu code loads only for cells that have actions. The
- * cell renders the trigger and cursor anchor, and the menu loads beside them,
- * so the content keeps its node, focus and state.
- *
- * SYNC: /packages/core/src/Table/tableContextMenu.tsx,
- * /packages/core/src/ContextMenu/ContextMenu.tsx (trigger styles)
+ * cell renders the trigger, and the menu loads beside it, so the content
+ * keeps its node, focus and state. An invocation before the load is held and
+ * replayed when the menu arrives.
  */
 
 import {lazy, Suspense, useRef, type ReactNode} from 'react';
-import * as stylex from '@stylexjs/stylex';
 import type {
   ContextMenuExternalTrigger,
   ContextMenuTriggerHandlers,
 } from '../ContextMenu/ContextMenu';
+import {ContextMenuTrigger} from '../ContextMenu/ContextMenuTrigger';
 import type {StyleXStyles} from '../theme/types';
 import type {TableContextActions} from './types';
 import type {TableContextMenuForTrigger} from './tableContextMenu';
@@ -48,22 +46,10 @@ const LazyTableContextMenu = lazy(async () =>
   })),
 );
 
-// Mirror ContextMenu's trigger wrapper and cursor anchor, which the menu
-// positions itself against once it loads.
-const styles = stylex.create({
-  trigger: {
-    position: 'relative',
-    WebkitTouchCallout: 'none',
-    WebkitUserSelect: 'none',
-    userSelect: 'none',
-  },
-  cursorAnchor: {
-    position: 'absolute',
-    width: '1px',
-    height: '1px',
-    pointerEvents: 'none',
-  },
-});
+/** An invocation that arrived before the menu, replayed when it attaches. */
+type HeldInvocation =
+  | {kind: 'contextmenu'; event: React.MouseEvent<HTMLElement>}
+  | {kind: 'touch'; event: React.TouchEvent<HTMLElement>};
 
 /**
  * A cell's content, wrapped in a right-click context menu when `actions` can
@@ -79,42 +65,89 @@ export function TableCellContextMenu({
   actions: TableContextActions | undefined;
   triggerXstyle?: StyleXStyles | StyleXStyles[];
 }): ReactNode {
-  const triggerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLElement>(null);
   const anchorRef = useRef<HTMLSpanElement>(null);
   const handlersRef = useRef<ContextMenuTriggerHandlers | null>(null);
+  const heldRef = useRef<HeldInvocation | null>(null);
   const triggerHandle = useRef<ContextMenuExternalTrigger>({
     triggerRef,
     anchorRef,
     onHandlersChange: handlers => {
       handlersRef.current = handlers;
+      const held = heldRef.current;
+      heldRef.current = null;
+      if (handlers == null || held == null) {
+        return;
+      }
+      // Replay after the commit that attached the menu, so its layer is
+      // anchored before it opens.
+      queueMicrotask(() => {
+        if (handlersRef.current !== handlers) {
+          return;
+        }
+        if (held.kind === 'contextmenu') {
+          handlers.onContextMenu(held.event);
+        } else {
+          handlers.onTouchStart(held.event);
+        }
+      });
     },
   }).current;
 
   if (actions === undefined || !hasContextActions(actions)) {
     return children;
   }
-  const extra = triggerXstyle
-    ? Array.isArray(triggerXstyle)
-      ? triggerXstyle
-      : [triggerXstyle]
-    : [];
   return (
     <>
-      <div
+      <ContextMenuTrigger
         ref={triggerRef}
-        onContextMenu={event => handlersRef.current?.onContextMenu(event)}
-        onTouchStart={event => handlersRef.current?.onTouchStart(event)}
-        onTouchMove={event => handlersRef.current?.onTouchMove(event)}
-        onTouchEnd={event => handlersRef.current?.onTouchEnd(event)}
-        onTouchCancel={event => handlersRef.current?.onTouchCancel(event)}
-        {...stylex.props(styles.trigger, ...extra)}>
+        anchorRef={anchorRef}
+        xstyle={triggerXstyle}
+        onContextMenu={event => {
+          const handlers = handlersRef.current;
+          if (handlers != null) {
+            handlers.onContextMenu(event);
+            return;
+          }
+          // Hold the right-click, Shift+F10 or Menu key until the menu loads,
+          // so the browser's own menu does not open in its place.
+          event.preventDefault();
+          heldRef.current = {kind: 'contextmenu', event};
+          void loadTableContextMenu();
+        }}
+        onTouchStart={event => {
+          const handlers = handlersRef.current;
+          if (handlers != null) {
+            handlers.onTouchStart(event);
+            return;
+          }
+          heldRef.current =
+            event.touches.length === 1 ? {kind: 'touch', event} : null;
+          void loadTableContextMenu();
+        }}
+        onTouchMove={event => {
+          if (handlersRef.current == null) {
+            heldRef.current = null;
+            return;
+          }
+          handlersRef.current.onTouchMove(event);
+        }}
+        onTouchEnd={event => {
+          if (handlersRef.current == null) {
+            heldRef.current = null;
+            return;
+          }
+          handlersRef.current.onTouchEnd(event);
+        }}
+        onTouchCancel={event => {
+          if (handlersRef.current == null) {
+            heldRef.current = null;
+            return;
+          }
+          handlersRef.current.onTouchCancel(event);
+        }}>
         {children}
-        <span
-          ref={anchorRef}
-          aria-hidden="true"
-          {...stylex.props(styles.cursorAnchor)}
-        />
-      </div>
+      </ContextMenuTrigger>
       <Suspense fallback={null}>
         <LazyTableContextMenu actions={actions} trigger={triggerHandle} />
       </Suspense>

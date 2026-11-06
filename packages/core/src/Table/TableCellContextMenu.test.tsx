@@ -63,6 +63,7 @@ describe('TableCellContextMenu', () => {
     await expectContentSurvivesMenuLoad(
       bodyCell(scenarioActions, <StatefulContent />),
       'input',
+      'after-load',
     );
     expect(loads.count).toBe(1);
   });

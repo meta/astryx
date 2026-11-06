@@ -31,10 +31,8 @@
  * The trigger wrapper is a `div` by default; `triggerAs` makes it an inline
  * `span`, so a reference inside prose can own a context menu without
  * breaking the text flow.
- * `ContextMenuForTrigger` (internal, not exported from index.ts) runs the same
- * menu against a trigger and cursor anchor its caller renders, so a caller can
- * load the menu after its content without remounting that content (Table
- * cells do; see Table/TableCellContextMenu.tsx).
+ * `ContextMenuForTrigger` runs this menu on a trigger its caller renders.
+ * Table cells use it to load the menu after their content.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/ContextMenu/ContextMenu.doc.mjs
@@ -42,8 +40,7 @@
  * - /packages/core/src/ContextMenu/index.ts
  * - /apps/storybook/stories/ContextMenu.stories.tsx
  * - /packages/cli/assets/templates/blocks/components/ContextMenu/ (showcase blocks)
- * - /packages/core/src/Table/TableCellContextMenu.tsx (external trigger mirrors
- *   the trigger and cursorAnchor styles)
+ * - /packages/core/src/ContextMenu/ContextMenuTrigger.tsx (trigger and anchor)
  */
 
 import React, {
@@ -109,6 +106,7 @@ import type {
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {ContextMenuTrigger} from './ContextMenuTrigger';
 import {
   useAdaptivePresentation,
   type AdaptivePresentation,
@@ -127,29 +125,6 @@ const LazyMenuBottomSheet = lazy(async () =>
   })),
 );
 const styles = stylex.create({
-  // Trigger wrapper: suppress the iOS long-press callout/selection so the
-  // long-press opens our context menu instead of the native text/callout UI.
-  // `position: relative` establishes the containing block for the absolutely
-  // positioned cursor anchor below, so the anchor point tracks the trigger
-  // (and scrolls with it) instead of the page.
-  trigger: {
-    position: 'relative',
-    WebkitTouchCallout: 'none',
-    WebkitUserSelect: 'none',
-    userSelect: 'none',
-  },
-  // 1px anchor placed at the cursor point within the trigger. The menu is
-  // anchored to this element, so it sits under the cursor yet is positioned
-  // relative to the trigger's context — it follows the content on scroll and
-  // the browser can auto-flip it against the viewport edges. It owns a box
-  // because WebKit counts an empty anchor box as clipped, and the default
-  // `position-visibility: anchors-visible` then hides the menu.
-  cursorAnchor: {
-    position: 'absolute',
-    width: '1px',
-    height: '1px',
-    pointerEvents: 'none',
-  },
   menu: {
     boxSizing: 'border-box',
     display: 'flex',
@@ -951,21 +926,10 @@ function useContextMenuElement(
     ],
   );
   const layerAnchorRef = layer.ref;
-  // Syncs the caller's trigger element with this menu: it receives the
-  // trigger handlers while the menu is mounted, and none after unmount.
-  useIsomorphicLayoutEffect(() => {
-    if (externalTrigger == null) {
-      return;
-    }
-    const {onHandlersChange} = externalTrigger;
-    onHandlersChange(triggerHandlers);
-    return () => {
-      onHandlersChange(null);
-    };
-  }, [externalTrigger, triggerHandlers]);
   // Syncs the menu's popover anchoring with the caller's DOM: the layer
   // anchors to the caller's cursor anchor, and the open handlers measure the
-  // caller's trigger.
+  // caller's trigger. It runs before the handlers below are published, so a
+  // trigger that replays a held invocation finds both in place.
   useIsomorphicLayoutEffect(() => {
     if (externalTrigger == null) {
       return;
@@ -979,6 +943,18 @@ function useContextMenuElement(
       cursorAnchorRef.current = null;
     };
   }, [externalTrigger, layerAnchorRef]);
+  // Syncs the caller's trigger element with this menu: it receives the
+  // trigger handlers while the menu is mounted, and none after unmount.
+  useIsomorphicLayoutEffect(() => {
+    if (externalTrigger == null) {
+      return;
+    }
+    const {onHandlersChange} = externalTrigger;
+    onHandlersChange(triggerHandlers);
+    return () => {
+      onHandlersChange(null);
+    };
+  }, [externalTrigger, triggerHandlers]);
 
   const menuSurface = usesBottomSheet ? (
     <Suspense fallback={null}>
@@ -1001,41 +977,23 @@ function useContextMenuElement(
     return menuSurface;
   }
 
-  // An inline trigger (`span`) lets prose own a context menu without
-  // breaking its flow.
-  const TriggerElement = triggerAs === 'div' ? 'div' : 'span';
-
   return (
     <>
-      <TriggerElement
+      <ContextMenuTrigger
+        as={triggerAs}
         ref={mergedTriggerRef}
+        anchorRef={mergedAnchorRef}
+        anchorPoint={positionRef.current}
+        xstyle={triggerXstyle}
         {...triggerProps}
         onContextMenu={handleTriggerContextMenu}
         onTouchStart={handleTriggerTouchStart}
         onTouchMove={handleTriggerTouchMove}
         onTouchEnd={handleTriggerTouchEnd}
         onTouchCancel={handleTriggerTouchCancel}
-        data-testid={testId}
-        {...stylex.props(
-          styles.trigger,
-          ...(triggerXstyle
-            ? Array.isArray(triggerXstyle)
-              ? triggerXstyle
-              : [triggerXstyle]
-            : []),
-        )}>
+        data-testid={testId}>
         {children}
-        <span
-          ref={mergedAnchorRef}
-          aria-hidden="true"
-          {...mergeProps(stylex.props(styles.cursorAnchor), {
-            style: {
-              left: `${positionRef.current.x}px`,
-              top: `${positionRef.current.y}px`,
-            },
-          })}
-        />
-      </TriggerElement>
+      </ContextMenuTrigger>
       {menuSurface}
     </>
   );

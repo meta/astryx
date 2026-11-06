@@ -64,13 +64,18 @@ export function mockPopover(): void {
 /**
  * Renders `cell` (a table holding one cell with `scenarioActions` around
  * `<StatefulContent />`) while the menu module is still loading, edits and
- * focuses the content, lets the menu load, and checks that the content kept
- * its nodes, state, focus and single mount, and that the menu then opens from
- * the keyboard, navigates, and returns focus on Escape.
+ * focuses the content, and lets the menu load. It checks that the content
+ * kept its nodes, state and single mount, and that the menu opens from the
+ * keyboard (Shift+F10), navigates and returns focus on Escape.
+ *
+ * With `invoke: 'before-load'`, the Shift+F10 arrives while the menu is still
+ * loading: the cell holds it, so the browser's menu does not open, and the
+ * cell's menu opens once it loads.
  */
 export async function expectContentSurvivesMenuLoad(
   cell: ReactNode,
   focus: 'button' | 'input',
+  invoke: 'before-load' | 'after-load',
 ): Promise<void> {
   mounts.count = 0;
   render(cell);
@@ -80,9 +85,14 @@ export async function expectContentSurvivesMenuLoad(
   fireEvent.change(input, {target: {value: 'draft'}});
   const focused = focus === 'button' ? button : input;
   focused.focus();
-  const trigger = button.parentElement as HTMLElement;
-  // Not loaded yet: right-click still shows the browser's menu.
-  expect(fireEvent.contextMenu(trigger)).toBe(true);
+  // Shift+F10 / the Menu key: a contextmenu at (0, 0) with no click count.
+  const openFromKeyboard = () =>
+    fireEvent.contextMenu(focused, {clientX: 0, clientY: 0, detail: 0});
+
+  if (invoke === 'before-load') {
+    expect(openFromKeyboard()).toBe(false);
+    expect(screen.queryByRole('menu', {hidden: true})).toBeNull();
+  }
 
   await act(async () => {
     await loadTableContextMenu();
@@ -94,13 +104,12 @@ export async function expectContentSurvivesMenuLoad(
   expect(screen.getByRole('button', {name: 'Count 1'})).toBe(button);
   expect(screen.getByRole('textbox', {name: 'Edit'})).toBe(input);
   expect(input).toHaveValue('draft');
-  expect(focused).toHaveFocus();
   expect(mounts.count).toBe(1);
 
-  // Shift+F10 / the Menu key: a contextmenu at (0, 0) with no click count.
-  expect(
-    fireEvent.contextMenu(focused, {clientX: 0, clientY: 0, detail: 0}),
-  ).toBe(false);
+  if (invoke === 'after-load') {
+    expect(focused).toHaveFocus();
+    expect(openFromKeyboard()).toBe(false);
+  }
   await waitFor(() => {
     expect(
       screen.getByRole('menuitem', {name: 'Copy', hidden: true}),
