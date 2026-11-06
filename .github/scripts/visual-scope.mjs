@@ -23,6 +23,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 import changeScope from './change-scope.cjs';
+import {loadConfig} from './visual-gate/lib/sources.mjs';
 
 const ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -81,7 +82,14 @@ export function classifyVisualScope(
       ),
     ) ||
     paths.includes('packages/core/package.json');
-  let broadStableVisual = stableVisualInfrastructure;
+  // The gate's probe theme: a private fixture that styles every theming
+  // target. The release plan's probe tier shoots every story in it, so a
+  // change to its source changes those shots and needs the whole plan.
+  const probe = loadConfig(repoRoot).probeTheme;
+  const probeChanged = paths.some(file =>
+    file.startsWith(`packages/themes/${probe}/src/`),
+  );
+  let broadStableVisual = stableVisualInfrastructure || probeChanged;
 
   for (const file of stableCoreFiles) {
     const match = file.match(/^packages\/core\/src\/([^/]+)\//);
@@ -145,6 +153,7 @@ export function classifyVisualScope(
   return {
     hasStableVisual:
       stableVisualInfrastructure ||
+      probeChanged ||
       stableCoreFiles.length > 0 ||
       stableThemes.size > 0,
     broadStableVisual,

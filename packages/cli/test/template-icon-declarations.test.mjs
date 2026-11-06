@@ -10,8 +10,17 @@
 
 import * as fs from 'node:fs';
 import {describe, expect, it} from 'vitest';
-import {discoverCoreTemplates} from '../foundation/discovery/template-adapter.mjs';
-import {astryxDefinitionsByName} from '../foundation/discovery/icon-definition-discovery.mjs';
+import {requireNatively} from '../test-utils/native-require.mjs';
+
+const require = requireNatively(import.meta.url);
+/** @type {typeof import('../foundation/discovery/template-adapter.mjs')} */
+const {
+  discoverCoreTemplates,
+} = require('../foundation/discovery/template-adapter.mjs');
+/** @type {typeof import('../foundation/discovery/icon-definition-discovery.mjs')} */
+const {
+  astryxDefinitionsByName,
+} = require('../foundation/discovery/icon-definition-discovery.mjs');
 
 /** The icon libraries the bundled templates import. */
 const ICON_MODULE_RE =

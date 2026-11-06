@@ -13,7 +13,11 @@ import http from 'node:http';
 import https from 'node:https';
 import net from 'node:net';
 import {fileURLToPath} from 'node:url';
-import {search, searchCore} from './search.mjs';
+import {requireNatively} from '../../test-utils/native-require.mjs';
+
+const require = requireNatively(import.meta.url);
+/** @type {typeof import('./search.mjs')} */
+const {search, searchCore} = require('./search.mjs');
 
 const REPO = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),

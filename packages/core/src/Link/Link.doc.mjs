@@ -182,10 +182,13 @@ export const docs = {
     bestPractices: [
       { guidance: true, description: 'Write descriptive, concise link text that clearly communicates the destination.' },
       { guidance: true, description: 'Set `isStandalone` when the link appears outside of inline text, so it receives proper base font sizing.' },
+      { guidance: true, description: 'Put a Link inside a <Text maxLines> to truncate it with the surrounding text; inside a clamped Text the link flows in the text\'s lines.' },
       { guidance: true, description: 'Only set `label` when the link content is not descriptive text (e.g. an icon-only link). For text links, the visible text is already the accessible name; adding `label` overrides it for screen readers, which is harmful.' },
       { guidance: false, description: 'Use Link for actions that do not navigate; use a Button instead.' },
       { guidance: false, description: 'Use generic text like "click here" or "read more"; describe the destination.' },
       { guidance: false, description: 'Set `label` on text links; `aria-label` prevents assistive technology from reading the actual link content.' },
+      { guidance: false, description: 'Give a Link inside a clamped Text its own `display` or `maxLines`, or render it as a button (`onClick` with no `href`), and expect the outer clamp to cut it; that Link keeps its own box.' },
+      { guidance: false, description: 'Put a Link with block-level content, such as an HStack with an icon, inside a clamped Text; block content breaks the clamp. Clamp a text-only Link, or place the composed Link outside the clamp.' },
     ],
     anatomy: [
       {name: 'Label', required: true, description: 'The visible text of the link.'},
@@ -314,10 +317,13 @@ export const docsZh = {
     bestPractices: [
       { guidance: true, description: 'Write descriptive, concise link text that clearly communicates the destination.' },
       { guidance: true, description: 'Set `isStandalone` when the link appears outside of inline text, so it receives proper base font sizing.' },
+      { guidance: true, description: 'Put a Link inside a <Text maxLines> to truncate it with the surrounding text; inside a clamped Text the link flows in the text\'s lines.' },
       { guidance: true, description: 'Only set `label` when the link content is not descriptive text (e.g. an icon-only link). For text links, the visible text is already the accessible name; adding `label` overrides it for screen readers, which is harmful.' },
       { guidance: false, description: 'Use Link for actions that do not navigate; use a Button instead.' },
       { guidance: false, description: 'Use generic text like "click here" or "read more"; describe the destination.' },
       { guidance: false, description: 'Set `label` on text links; `aria-label` prevents assistive technology from reading the actual link content.' },
+      { guidance: false, description: 'Give a Link inside a clamped Text its own `display` or `maxLines`, or render it as a button (`onClick` with no `href`), and expect the outer clamp to cut it; that Link keeps its own box.' },
+      { guidance: false, description: 'Put a Link with block-level content, such as an HStack with an icon, inside a clamped Text; block content breaks the clamp. Clamp a text-only Link, or place the composed Link outside the clamp.' },
     ],
     anatomy: [
       {name: 'Label', required: true, description: 'The visible text of the link.'},
@@ -337,10 +343,13 @@ export const docsDense = {
     bestPractices: [
       { guidance: true, description: 'Write descriptive, concise link text that clearly communicates the destination.' },
       { guidance: true, description: 'Set `isStandalone` when the link appears outside of inline text, so it receives proper base font sizing.' },
+      { guidance: true, description: 'Put a Link inside a <Text maxLines> to truncate it with the surrounding text; inside a clamped Text the link flows in the text\'s lines.' },
       { guidance: true, description: 'Only set `label` when the link content is not descriptive text (e.g. an icon-only link). For text links, the visible text is already the accessible name; adding `label` overrides it for screen readers, which is harmful.' },
       { guidance: false, description: 'Use Link for actions that do not navigate; use a Button instead.' },
       { guidance: false, description: 'Use generic text like "click here" or "read more"; describe the destination.' },
       { guidance: false, description: 'Set `label` on text links; `aria-label` prevents assistive technology from reading the actual link content.' },
+      { guidance: false, description: 'Give a Link inside a clamped Text its own `display` or `maxLines`, or render it as a button (`onClick` with no `href`), and expect the outer clamp to cut it; that Link keeps its own box.' },
+      { guidance: false, description: 'Put a Link with block-level content, such as an HStack with an icon, inside a clamped Text; block content breaks the clamp. Clamp a text-only Link, or place the composed Link outside the clamp.' },
     ],
     anatomy: [
       {name: 'Label', required: true, description: 'The visible text of the link.'},

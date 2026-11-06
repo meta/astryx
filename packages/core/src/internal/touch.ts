@@ -2,12 +2,12 @@
 
 /**
  * @file touch.ts
- * @input The gesture core: the arena, the recognizers, and their geometry;
- *   the pan, the motion engine and math, and the touch-presentation and
- *   direction helpers that Lab components read
+ * @input The gesture core: the arena, the recognizers and their geometry.
+ *   Also the pan, the motion engine and math, and the touch-presentation,
+ *   direction, focus and hit-area helpers that Lab components read
  * @output `@astryxdesign/core/internal/touch`: the gesture core's primitives
- *   and the motion, touch-presentation and direction modules for Lab
- *   components, re-exported by name
+ *   and the motion, touch-presentation, direction, focus and hit-area
+ *   modules for Lab components, re-exported by name
  * @position An internal entry reserved for Astryx's own packages:
  *   undocumented, outside the public API and its compatibility promise
  *   (spec:AST-017 FR21), versioned in lockstep with Core, and allowed only in
@@ -80,3 +80,36 @@ export {isRtlElement} from '../hooks/isRtlElement';
 export {UIKIT_GESTURES} from '../motion/uikit/gestures';
 export {useTouchPresentation} from '../utils/touchPresentation';
 export {TOUCH_QUERY} from '../utils/touchQueries';
+
+// Lab's NavigationStack reads these.
+export {ScreenEdgePanGestureRecognizer} from '../gestures/ScreenEdgePanGestureRecognizer';
+export {resolveMotion} from '../motion/resolveMotion';
+export {solveSpring, toSpring} from '../motion/spring';
+export type {SpringDescription} from '../motion/spring';
+export {navigation} from '../motion/uikit/navigation';
+export {
+  NAVIGATION_BAR_ELEMENTS_SPRING,
+  NAVIGATION_INTERACTIVE_POP_FINISH_SPRING,
+  NAVIGATION_POP_SPRING,
+  NAVIGATION_PUSH_SPRING,
+} from '../motion/uikit/springs';
+export {focusForLastInput, isFocusLost} from '../utils/focusReturn';
+export {useInteractionModalityTracking} from '../utils/interactionModality';
+
+// Lab components that watch a finger's scroll read whether a scroller's
+// scroll is a finger's, and act when that scroll ends.
+export {useFingerScroll} from '../gestures/useFingerScroll';
+export type {UseFingerScrollOptions} from '../gestures/useFingerScroll';
+
+// Lab's NavigationStack scroll edge effect reads the finger-scroll hook
+// above, and drops the veil's compositing layer when a finger's scroll ends.
+// It reads the gesture host for a finger's landing. The stack's bars read the
+// coarse-pointer check.
+export {getGestureHost} from '../gestures/GestureHost';
+export {isCoarsePointer} from '../utils/coarsePointer';
+// Lab's PageControl also reads an element's shared animator, the Reduce
+// Motion cross-fade, and the touch hit area's hook and layer.
+export {animatorFor} from '../motion/animator';
+export {reducedMotionFade} from '../motion/reducedMotion';
+export {useTouchHitArea} from '../utils/touchHitArea';
+export {touchHitAreaStyles} from '../utils/touchHitArea.stylex';

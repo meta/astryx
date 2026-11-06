@@ -98,7 +98,7 @@ export const docs = {
     },
   ],
   theming: {
-    targets: [{className: 'astryx-code', visualProps: ['color']}],
+    targets: [{className: 'astryx-code', visualProps: ['color', 'size']}],
   },
 };
 

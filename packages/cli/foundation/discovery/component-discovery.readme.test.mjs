@@ -25,25 +25,64 @@ const CORE = path.resolve(
   '../../../core',
 );
 
+/**
+ * Where `findComponentReadme` found the doc for `name`: in the name's own
+ * folder, in a parent folder, as its family's doc, or nowhere.
+ * @param {string} name
+ * @param {string | null} doc
+ * @returns {string}
+ */
+function matchKind(name, doc) {
+  if (doc == null) return 'none';
+  const parts = path.relative(path.join(CORE, 'src'), doc).split(path.sep);
+  const file = parts.at(-1);
+  const isOwn = file === `${name}.doc.mjs` || file === `XDS${name}.doc.mjs`;
+  if (parts.length === 2 && parts[0] === name && isOwn) return 'own folder';
+  if (parts.length === 3 && parts[1] === name && isOwn) return 'nested';
+  if (parts.length === 2 && isOwn) return 'parent folder';
+  return 'family doc';
+}
+
 describe('findComponentReadme inside an operation', () => {
-  it('finds the doc it finds outside one, for a sample of Core names', () => {
-    // Every eighth name keeps the probes outside an operation short.
-    const names = Object.values(discoverComponents(CORE))
-      .flat()
-      .sort()
-      .filter((_, index) => index % 8 === 0);
-    const sample = [
-      ...names,
-      ...names.map(name => name.toLowerCase()),
-      ...names.map(name => `XDS${name}`),
-      'Nope',
-    ];
-    const outside = sample.map(name => findComponentReadme(CORE, name));
+  it('finds the doc it finds outside one, for a Core name of each kind of match', () => {
+    const names = Object.values(discoverComponents(CORE)).flat().sort();
+    /** @type {Record<string, (name: string) => string>} */
+    const forms = {
+      name: name => name,
+      lowercase: name => name.toLowerCase(),
+      prefixed: name => `XDS${name}`,
+    };
+    const queries = Object.entries(forms).flatMap(([form, spell]) =>
+      names.map(name => ({form, name: spell(name)})),
+    );
+    queries.push({form: 'absent', name: 'Nope'});
     const inside = withListingCache(() =>
-      sample.map(name => findComponentReadme(CORE, name)),
+      queries.map(({name}) => findComponentReadme(CORE, name)),
     );
     expect(inside.filter(Boolean).length).toBeGreaterThan(20);
-    expect(inside).toEqual(outside);
+    // Outside an operation every probe reads the disk again, so one query of
+    // each form and kind of match stands for the rest there.
+    /** @type {Map<string, number>} */
+    const firstOfKind = new Map();
+    queries.forEach(({form, name}, index) => {
+      const kind = `${form}: ${matchKind(name, inside[index])}`;
+      if (!firstOfKind.has(kind)) firstOfKind.set(kind, index);
+    });
+    expect([...firstOfKind.keys()]).toEqual(
+      expect.arrayContaining([
+        'name: own folder',
+        'name: parent folder',
+        'name: family doc',
+        'lowercase: none',
+        'prefixed: none',
+        'absent: none',
+      ]),
+    );
+    for (const index of firstOfKind.values()) {
+      expect(findComponentReadme(CORE, queries[index].name)).toBe(
+        inside[index],
+      );
+    }
   });
 
   it('keeps the first folder in listing order when several hold the name', () => {

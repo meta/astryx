@@ -20,7 +20,7 @@ import {
   vi,
 } from 'vitest';
 import {act, cleanup, fireEvent, render, screen} from '@testing-library/react';
-import {rulesDeclaredFor} from '../__tests__/pressState';
+import {layerOnlyWhilePressed, rulesDeclaredFor} from '../__tests__/pressState';
 import {swipeLayerLoaded} from './__tests__/swipeLayerLoaded';
 import userEvent from '@testing-library/user-event';
 import {LinkProvider} from '../Link/LinkProvider';
@@ -872,6 +872,101 @@ describe('Item', () => {
       expect(item).toHaveClass('astryx-item');
       expect(item).toHaveAttribute('data-align', align);
     }
+  });
+
+  it('keeps its touch press layer to a press: on or fading', () => {
+    render(<Item label="Row" onClick={() => {}} data-testid="row" />);
+    // Under a coarse pointer the row's `::before` layer and its isolation
+    // apply only on a press arm; at rest a caller's own `::before` keeps its
+    // styles.
+    expect(layerOnlyWhilePressed(screen.getByTestId('row'), '::before')).toBe(
+      true,
+    );
+  });
+
+  it('truncates the label and description to the lines it is given', () => {
+    // The clamp count reaches CSS through a custom property, so resolve it.
+    const lineClamp = (element: HTMLElement) => {
+      const value = getComputedStyle(element)
+        .getPropertyValue('-webkit-line-clamp')
+        .trim();
+      const variable = /^var\((--[^),]+)\)$/.exec(value)?.[1];
+      return variable == null
+        ? value
+        : getComputedStyle(element).getPropertyValue(variable).trim() ||
+            element.style.getPropertyValue(variable).trim();
+    };
+    // A node label wraps by default, so one line comes from labelLines.
+    const {rerender} = render(
+      <Item
+        label={<span>A long label</span>}
+        labelLines={1}
+        description={<span>A long description</span>}
+        descriptionLines={1}
+      />,
+    );
+    for (const text of ['A long label', 'A long description']) {
+      const style = getComputedStyle(screen.getByText(text).parentElement!);
+      expect(style.overflow).toBe('hidden');
+      expect(style.textOverflow).toBe('ellipsis');
+      expect(style.whiteSpace).toBe('nowrap');
+    }
+    rerender(
+      <Item
+        label="A long label"
+        labelLines={3}
+        description="A long description"
+        descriptionLines={2}
+      />,
+    );
+    const label = screen.getByText('A long label');
+    const description = screen.getByText('A long description');
+    for (const element of [label, description]) {
+      const style = getComputedStyle(element);
+      expect(style.overflow).toBe('hidden');
+      expect(style.display).toBe('-webkit-box');
+      expect(style.whiteSpace).not.toBe('nowrap');
+    }
+    expect(lineClamp(label)).toBe('3');
+    expect(lineClamp(description)).toBe('2');
+  });
+
+  it('reflects highlighted, selected, and disabled on the item theme target', () => {
+    const {rerender} = render(<Item label="Item" data-testid="item" />);
+    const item = () => screen.getByTestId('item');
+    for (const state of ['highlighted', 'selected', 'disabled']) {
+      expect(item()).not.toHaveAttribute(`data-${state}`);
+    }
+    rerender(
+      <Item
+        label="Item"
+        isHighlighted
+        isSelected
+        isDisabled
+        onClick={() => {}}
+        data-testid="item"
+      />,
+    );
+    expect(item()).toHaveClass('astryx-item');
+    expect(item()).toHaveAttribute('data-highlighted', 'highlighted');
+    expect(item()).toHaveAttribute('data-selected', 'selected');
+    expect(item()).toHaveAttribute('data-disabled', 'disabled');
+    rerender(<Item label="Item" role="option" isSelected data-testid="item" />);
+    expect(item()).toHaveAttribute('data-selected', 'selected');
+    expect(item()).not.toHaveAttribute('data-highlighted');
+    expect(item()).not.toHaveAttribute('data-disabled');
+    rerender(
+      <Item label="Item" role="option" isHighlighted data-testid="item" />,
+    );
+    expect(item()).toHaveAttribute('data-highlighted', 'highlighted');
+    expect(item()).not.toHaveAttribute('data-selected');
+    expect(item()).not.toHaveAttribute('data-disabled');
+    rerender(
+      <Item label="Item" isDisabled onClick={() => {}} data-testid="item" />,
+    );
+    expect(item()).toHaveAttribute('data-disabled', 'disabled');
+    expect(item()).not.toHaveAttribute('data-highlighted');
+    expect(item()).not.toHaveAttribute('data-selected');
   });
 
   it('aligns the row on first baselines only under first-line', () => {
