@@ -478,6 +478,16 @@ export interface TablePlugin<
     index: number,
   ) => BodyRowRenderProps;
   /**
+   * Internal: this plugin reads Table's resolved canonical row key from the
+   * internal fourth `transformBodyRow` argument. Declared explicitly instead
+   * of sniffing the transform's arity, so an unrelated four-parameter
+   * transform never opts a table in and a wrapped transform keeps working.
+   * Absorbed by the parent `TableRowContext` protocol when it lands.
+   *
+   * @internal
+   */
+  usesCanonicalRowKey?: boolean;
+  /**
    * Transform each body `<td>` props.
    *
    * `columnIndex` and the full `columns` list are provided for plugins that

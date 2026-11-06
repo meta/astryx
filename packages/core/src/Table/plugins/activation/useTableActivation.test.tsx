@@ -9,14 +9,14 @@
  */
 
 import {describe, it, expect, vi, afterEach} from 'vitest';
-import {useState} from 'react';
+import {useMemo, useState} from 'react';
 import {render, renderHook, screen, fireEvent} from '@testing-library/react';
 import {createPortal} from 'react-dom';
 import {Table} from '../../Table';
 import {useTableActivation} from './useTableActivation';
 import {selectionEndsIntersectRow} from './useTableActivation';
 import {useTableSelection} from '../selection/useTableSelection';
-import type {TableColumn, TablePlugin} from '../../types';
+import type {BodyRowRenderProps, TableColumn, TablePlugin} from '../../types';
 import {__resetDevWarnings} from '../../../utils/devWarning';
 
 // =============================================================================
@@ -1416,6 +1416,164 @@ describe('review follow-ups, round two', () => {
       expect(
         warn.mock.calls.some(call =>
           String(call[0]).includes('no usable idKey value'),
+        ),
+      ).toBe(true);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});
+
+// =============================================================================
+// Review follow-ups, round three
+// =============================================================================
+
+describe('review follow-ups, round three', () => {
+  it('leaves canonical identity off for an unrelated four-parameter transform', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    __resetDevWarnings();
+    const dupes: Member[] = [
+      {id: '1', name: 'Ada', team: 'Core'},
+      {id: '1', name: 'Ada 2', team: 'Infra'},
+    ];
+    // Four declared parameters, but no identity opt-in: the arity alone
+    // must not switch the table onto canonical keys and diagnostics.
+    function nosyPlugin(): TablePlugin<Member> {
+      return {
+        transformBodyRow: ((
+          props: BodyRowRenderProps,
+          _item: Member,
+          _index: number,
+          _extra: unknown,
+        ) => props) as TablePlugin<Member>['transformBodyRow'],
+      };
+    }
+    try {
+      render(
+        <Table
+          data={dupes}
+          columns={memberColumns}
+          idKey="id"
+          plugins={{nosy: nosyPlugin()}}
+        />,
+      );
+      expect(bodyRows()).toHaveLength(2);
+      expect(
+        warn.mock.calls.some(call =>
+          String(call[0]).includes('share an idKey value'),
+        ),
+      ).toBe(false);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('keeps canonical identity when the activation transform is wrapped', () => {
+    const onActivate = vi.fn();
+    function Harness() {
+      const activation = useTableActivation<Member>({
+        activeKey: null,
+        onActivate,
+      });
+      // A rest-argument wrapper reports zero declared parameters, so an
+      // arity gate would leave every row inert; the plugin-level opt-in
+      // survives the wrap.
+      const wrapped = useMemo<TablePlugin<Member>>(() => {
+        const inner = activation.transformBodyRow;
+        type FourArgTransform = (
+          ...args: [
+            BodyRowRenderProps,
+            Member,
+            number,
+            (string | number | undefined)?,
+          ]
+        ) => BodyRowRenderProps;
+        const fourArg: FourArgTransform | undefined = inner;
+        const transformBodyRow: FourArgTransform = (...args) =>
+          fourArg == null ? args[0] : fourArg(...args);
+        return {...activation, transformBodyRow};
+      }, [activation]);
+      return (
+        <Table
+          data={members}
+          columns={memberColumns}
+          idKey="id"
+          plugins={{activation: wrapped}}
+        />
+      );
+    }
+    render(<Harness />);
+    fireEvent.click(bodyRows()[0]);
+    expect(onActivate).toHaveBeenCalledTimes(1);
+    expect(onActivate).toHaveBeenCalledWith(members[0], '1');
+  });
+
+  it('admits a row the predicate later allows without a row update', () => {
+    const onActivate = vi.fn();
+    const renderCell = vi.fn((item: Member) => item.name);
+    const columns: TableColumn<Member>[] = [{key: 'name', renderCell}];
+    function Harness({allowSecond}: {allowSecond: boolean}) {
+      const plugin = useTableActivation<Member>({
+        activeKey: '2',
+        onActivate,
+        getIsItemActivatable: item => allowSecond || item.id !== '2',
+      });
+      // A stable plugins record keeps row props identical across the flip,
+      // so convergence below rides the store subscription, not a re-render.
+      const plugins = useMemo(() => ({activation: plugin}), [plugin]);
+      return (
+        <Table data={members} columns={columns} idKey="id" plugins={plugins} />
+      );
+    }
+    const {rerender} = render(<Harness allowSecond={false} />);
+    expect(renderCell).toHaveBeenCalledTimes(3);
+    expect(bodyRows()[1].hasAttribute('tabindex')).toBe(false);
+    rerender(<Harness allowSecond={true} />);
+    // No row re-rendered for the flip.
+    expect(renderCell).toHaveBeenCalledTimes(3);
+    const rows = bodyRows();
+    // The admitted row converges: tab stop, key metadata, and activation.
+    expect(rows[1].getAttribute('tabindex')).toBe('0');
+    expect(rows[1].getAttribute('aria-keyshortcuts')).toContain('Enter');
+    fireEvent.click(rows[1]);
+    expect(onActivate).toHaveBeenCalledTimes(1);
+    expect(onActivate).toHaveBeenCalledWith(members[1], '2');
+    expect(rows[1].getAttribute('data-active')).toBe('true');
+  });
+
+  it('warns when an earlier current-state owner keeps a row inert', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    __resetDevWarnings();
+    function currentOwnerPlugin(): TablePlugin<Member> {
+      return {
+        transformBodyRow: props => ({
+          ...props,
+          htmlProps: {
+            ...props.htmlProps,
+            'aria-current': 'page' as const,
+          },
+        }),
+      };
+    }
+    function Harness() {
+      const plugin = useTableActivation<Member>({
+        activeKey: '1',
+        onActivate: () => {},
+      });
+      return (
+        <Table
+          data={members}
+          columns={memberColumns}
+          idKey="id"
+          plugins={{currentOwner: currentOwnerPlugin(), activation: plugin}}
+        />
+      );
+    }
+    try {
+      render(<Harness />);
+      expect(
+        warn.mock.calls.some(call =>
+          String(call[0]).includes('already exposes its own aria-current'),
         ),
       ).toBe(true);
     } finally {

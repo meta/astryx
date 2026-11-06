@@ -147,11 +147,12 @@ interface TableRowProps<T extends Record<string, unknown>> {
   rowKey: string | number;
   /**
    * The resolved canonical key for first-party plugin consumption. Passed as
-   * an internal fourth `transformBodyRow` argument until the parent
-   * `TableRowContext` protocol lands; external transforms keep three args.
-   * `undefined` when the table has no explicit `idKey` — index-keyed rows
-   * carry no stable identity, so identity-dependent plugins stay inert
-   * instead of keying by position.
+   * an internal fourth `transformBodyRow` argument to plugins that declare
+   * the `usesCanonicalRowKey` opt-in, until the parent `TableRowContext`
+   * protocol lands; external transforms keep three args. `undefined` when
+   * the table has no explicit `idKey` — index-keyed rows carry no stable
+   * identity, so identity-dependent plugins stay inert instead of keying
+   * by position.
    */
   resolvedRowKey: string | number | undefined;
   columns: TableColumn<T>[];
@@ -251,7 +252,8 @@ function TableRowInner<T extends Record<string, unknown>>({
   // Seed `aria-rowindex` (when the table opts into ARIA row indexing) as a
   // base htmlProp so plugins compose over it and can still override.
   // First-party transforms may read a fourth argument, the resolved canonical
-  // key, which stays out of the public `transformBodyRow` type until the
+  // key, when their plugin declares the `usesCanonicalRowKey` opt-in; the
+  // argument stays out of the public `transformBodyRow` type until the
   // parent `TableRowContext` protocol lands.
   const rowRenderProps = applyPlugins(
     plugins,
@@ -601,12 +603,12 @@ function BaseTableInner<T extends Record<string, unknown>>({
       : mergedStyle;
 
   // Canonical identity for the new-capability path. A plugin consumes
-  // identity by declaring the internal fourth `transformBodyRow` argument;
-  // until the parent row-context protocol lands, that arity is the opt-in
-  // signal. Tables without such a plugin keep released key behavior exactly,
+  // identity by declaring the internal `usesCanonicalRowKey` opt-in; until
+  // the parent row-context protocol lands, that flag is the opt-in signal.
+  // Tables without such a plugin keep released key behavior exactly,
   // with no diagnostics.
   const canonicalIdentityOptIn = plugins.some(
-    p => p.transformBodyRow != null && p.transformBodyRow.length >= 4,
+    p => p.transformBodyRow != null && p.usesCanonicalRowKey === true,
   );
   const isFunctionIdKey = typeof idKey === 'function';
   // Property-name keys convert valid strings and finite numbers with

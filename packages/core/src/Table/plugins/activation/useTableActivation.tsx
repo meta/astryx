@@ -8,24 +8,6 @@
  * @output Exports useTableActivation hook and UseTableActivationConfig type
  * @position Row-activation plugin; consumed by Table via plugins prop
  *
- * Gives a data-driven Table one controlled current product-row state for
- * master-detail, preview, and inspector layouts. The caller owns the active
- * key and the response to activation; the plugin owns one whole-row press
- * path (primary click, Enter/Space) and active-state reflection on the
- * existing row anatomy.
- *
- * Activation is not selection, navigation, or focus ownership: the plugin
- * never emits aria-selected, and it never moves focus or
- * loads detail content. Those stay with their respective owners. It owns
- * only `aria-current="true"` on the eligible active row.
- *
- * Row identity comes from Table's resolved canonical key (an internal fourth
- * `transformBodyRow` argument until the parent `TableRowContext` protocol
- * lands), compared with `activeKey` by strict
- * equality. The plugin adds no key extractor of its own. Without an explicit
- * `idKey` on the Table, rows carry no stable identity and activation stays
- * inert with one development warning.
- *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Table/useTableActivation.doc.mjs (config prop table)
  * - /packages/core/src/Table/Table.doc.mjs (activation documentation)
@@ -499,6 +481,11 @@ export function useTableActivation<T extends Record<string, unknown>>(
 
   return useMemo(
     (): TablePlugin<T> => ({
+      // Canonical identity opt-in: Table computes resolved keys and hands
+      // this transform the internal fourth argument. Kept on the plugin
+      // object (not the transform's arity) so wrapping the transform keeps
+      // the opt-in; absorbed by the parent row-context protocol when it lands.
+      usesCanonicalRowKey: true,
       transformBodyRow(
         props: BodyRowRenderProps,
         item: T,
@@ -506,12 +493,10 @@ export function useTableActivation<T extends Record<string, unknown>>(
         rowKey?: string | number,
       ): BodyRowRenderProps {
         const {getIsItemActivatable} = store.getConfig();
-        // Eligibility resolves once per row update; the result below closes
-        // over it rather than re-invoking the caller predicate.
+        // Eligibility resolves once per row update; the first subscriber
+        // apply below reuses this result rather than re-invoking the caller
+        // predicate, while later applies and every press re-resolve it live.
         const eligible = getIsItemActivatable?.(item) ?? true;
-        if (!eligible) {
-          return props;
-        }
         // No stable identity without an explicit idKey: stay inert rather
         // than keying activation by row position. The parent owns the
         // missing-idKey diagnostic, so an invalid value under an explicit
@@ -524,6 +509,14 @@ export function useTableActivation<T extends Record<string, unknown>>(
         // stop and key affordances that would do nothing. Presses and paint
         // shed competing owners independently of plugin order.
         if (props.htmlProps['aria-current'] != null) {
+          // The module stays off rows another owner marked current, so it
+          // says so out loud instead of returning the row back silently.
+          warnOnce(
+            'table-activation-current-owner-early',
+            'useTableActivation',
+            'Table row already exposes its own aria-current state, so row activation stays inert for it. ' +
+              'Remove the competing state or the activation plugin for this row.',
+          );
           return props;
         }
         const key: string | number = rowKey;
@@ -598,7 +591,11 @@ export function useTableActivation<T extends Record<string, unknown>>(
         };
 
         // Declarative snapshot of the active state for this render; the
-        // imperative applies above keep it fresh between renders.
+        // imperative applies above keep it fresh between renders. Rows the
+        // predicate excludes keep the press handlers — inert through the
+        // live eligibility check — so a later flip converges on store
+        // notify without waiting for a row update; only the static
+        // affordances stay gated on the render-time value.
         const activeNow = eligible && key === store.getConfig().activeKey;
 
         return {
@@ -620,8 +617,15 @@ export function useTableActivation<T extends Record<string, unknown>>(
                   'data-active': 'true' as const,
                 }
               : null),
-            tabIndex,
-            'aria-keyshortcuts': keyShortcuts,
+            // Ineligible rows are no tab stop and announce no keys until
+            // the subscriber promotes them; the handlers below stay
+            // attached and self-guard on the live eligibility check.
+            ...(eligible
+              ? {
+                  tabIndex,
+                  'aria-keyshortcuts': keyShortcuts,
+                }
+              : null),
             onClick: (event: React.MouseEvent<HTMLTableRowElement>) => {
               const row = event.currentTarget;
               // Earlier accumulated handlers run first and may cancel the
