@@ -37,15 +37,15 @@ system_specs:
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                                                                                                     |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | Each `TreeListItemData` may carry the standard `className`, `style`, and `xstyle` styling inputs for its Item row.                                                                                                                                                           |
-| Behavior                | All supplied styling inputs compose on the same Item row box—the element that paints the row, owns its hover state, and contains its visible content. They do not target the outer semantic `<li>`.                                                                          |
-| End-user impact         | A builder can reveal or style content for one row without causing every row in the tree to react.                                                                                                                                                                            |
-| Builder impact          | The three standard styling mechanisms remain interchangeable parts of one row-styling seam. A builder may use one or combine them; no existing callsite must opt in.                                                                                                         |
-| Compatibility/readiness | The contract is additive and preserves default output, except FR8's group motion under a coarse pointer. Its authority is current; implementation support may arrive separately, but the durable API is incomplete until all three mechanisms are supported on the same row. |
-| Review checks           | Reject an implementation that omits one mechanism from the durable API, sends the mechanisms to different elements, drops a supplied value, targets the semantic `<li>`, or moves the promised row target without an explicit compatibility decision.                        |
-| Governing rules         | [Public component API INV5–INV6](../../../architecture/public-component-api.md) and [AST-002 FR1, FR4, FR7–FR10, FR12, and DEC-1](../../AST-002/spec.md) govern admission, predictability, and composition of the component-local styling seam.                              |
+| Area                    | Contract                                                                                                                                                                                                                                                                   |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | Each `TreeListItemData` may carry the standard `className`, `style`, and `xstyle` styling inputs for its Item row.                                                                                                                                                         |
+| Behavior                | All supplied styling inputs compose on the same Item row box—the element that paints the row, owns its hover state, and contains its visible content. They do not target the outer semantic `<li>`.                                                                        |
+| End-user impact         | A builder can reveal or style content for one row without causing every row in the tree to react.                                                                                                                                                                          |
+| Builder impact          | The three standard styling mechanisms remain interchangeable parts of one row-styling seam. A builder may use one or combine them; no existing callsite must opt in.                                                                                                       |
+| Compatibility/readiness | The contract is additive and keeps default output, except FR8's coarse-pointer glide and DD5's Guides. Its authority is current; implementation support may arrive separately, but the durable API is incomplete until all three mechanisms are supported on the same row. |
+| Review checks           | Reject an implementation that omits one mechanism from the durable API, sends the mechanisms to different elements, drops a supplied value, targets the semantic `<li>`, or moves the promised row target without an explicit compatibility decision.                      |
+| Governing rules         | [Public component API INV5–INV6](../../../architecture/public-component-api.md) and [AST-002 FR1, FR4, FR7–FR10, FR12, and DEC-1](../../AST-002/spec.md) govern admission, predictability, and composition of the component-local styling seam.                            |
 
 This table is a review projection; the body below is authoritative.
 
@@ -58,12 +58,15 @@ requiring product code to reconstruct TreeList behavior.
 
 ## Compatibility and migration
 
-- Released default preserved: `no` under a coarse primary pointer, where the
-  rows below a toggled group glide as it fades (FR8); fine pointers are
-  unchanged without an `animatedLayout` handle
+- Released default preserved: `no`. Under a coarse primary pointer, the rows
+  below a toggled group glide as it fades (FR8). Under every pointer, a Guide
+  line ends at the last row it joins instead of running on beside an expanded
+  last row's children (DD5). With a fine pointer and no `animatedLayout` handle,
+  rows still change at once
 - Compatibility class: additive optional public API, plus FR8's group motion
-  under a coarse pointer; no other default rendering, DOM, styling, or
-  interaction changes when the inputs are absent
+  under a coarse pointer and DD5's Guide lines under every pointer; no other
+  default rendering, DOM, styling, or interaction changes when the inputs are
+  absent
 - Controlled/uncontrolled behavior: unchanged
 - Migration decision: none; existing callsites remain valid
 
