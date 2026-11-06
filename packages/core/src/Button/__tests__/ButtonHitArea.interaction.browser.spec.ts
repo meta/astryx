@@ -126,7 +126,7 @@ test.describe('Button touch target (spec:AST-094 FR42), under a finger', () => {
     await expect(taps).toHaveText('Bold 1, Italic 2, Underline 0');
   });
 
-  test('the clear button’s band stops short of the field’s text, and a tap on it clears', async ({
+  test('the clear button’s band stops short of the field’s text', async ({
     page,
   }) => {
     await openStory(page, storybook(), STORY);
@@ -142,17 +142,24 @@ test.describe('Button touch target (spec:AST-094 FR42), under a finger', () => {
     expect(clear.insets.left).toBeLessThanOrEqual(
       Math.max(0, (clear.box.left - inputBox.right) / 2) + 0.5,
     );
-    // A tap in the text, just left of the gap's middle, places the caret.
-    const y = middleY(clear.box);
-    await tapAt(driver, {x: inputBox.right - 2, y});
+    // A tap in the text, beside the gap, places the caret and clears nothing.
+    await tapAt(driver, {x: inputBox.right - 2, y: middleY(clear.box)});
     await expect(input).toHaveValue('quarterly report');
     await expect(input).toBeFocused();
-    // A tap on the band just past the button's own edge clears.
+  });
+
+  test('a tap on the band just past the clear button’s edge clears', async ({
+    page,
+  }) => {
+    await openStory(page, storybook(), STORY);
+    await waitForHitArea(page, [CLEAR]);
+    const driver = await touchDriver(page);
+    const clear = await measure(page, CLEAR);
     expect(clear.insets.bottom).toBeGreaterThan(1);
     await tapAt(driver, {
       x: (clear.box.left + clear.box.right) / 2,
       y: clear.box.bottom + clear.insets.bottom - 1,
     });
-    await expect(input).toHaveValue('');
+    await expect(page.locator('#storybook-root input')).toHaveValue('');
   });
 });
