@@ -57,22 +57,20 @@ type HeldInvocation = {
   | {kind: 'long-press'; point: {x: number; y: number}}
 );
 
-// At most one held invocation for all cells: a later one replaces it, as a
-// second press closes the first menu once the menu has loaded.
+// One hold serves all cells. A later invocation replaces it, as a second
+// press closes the first menu after the load.
 let heldInvocation: HeldInvocation | null = null;
 
 function holdInvocation(held: HeldInvocation): void {
   heldInvocation = held;
 }
 
-/** Drops the held invocation if `owner` holds it. */
 function dropHeldInvocation(owner: object): void {
   if (heldInvocation?.owner === owner) {
     heldInvocation = null;
   }
 }
 
-/** Takes the held invocation if `owner` holds it. */
 function takeHeldInvocation(owner: object): HeldInvocation | null {
   const held = heldInvocation;
   if (held?.owner !== owner) {
