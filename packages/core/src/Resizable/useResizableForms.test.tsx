@@ -115,9 +115,14 @@ describe('size and isCollapsed land in the same commit as onCollapseChange (comp
         fireEvent.doubleClick(separator());
         expect(region?.isCollapsed).toBe(false);
         expectInStep();
+        // The lift past the threshold closes, in step with its report.
         fireEvent.pointerDown(grabZone(), {pointerId: 1, clientX: 300});
         fireEvent.pointerMove(grabZone(), {pointerId: 1, clientX: 110});
+        expect(region?.isCollapsed).toBe(false);
+        fireEvent.pointerUp(grabZone(), {pointerId: 1, clientX: 110});
         expect(region?.isCollapsed).toBe(true);
+        expectInStep();
+        fireEvent.pointerDown(grabZone(), {pointerId: 1, clientX: 110});
         fireEvent.pointerMove(grabZone(), {pointerId: 1, clientX: 320});
         fireEvent.pointerUp(grabZone(), {pointerId: 1, clientX: 320});
         expect(region?.isCollapsed).toBe(false);
