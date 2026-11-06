@@ -10,6 +10,8 @@ import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
 
 import {
+  costsFor,
+  countTests,
   estimateSeconds,
   folderSpecs,
   isInteractionSpec,
@@ -17,6 +19,7 @@ import {
   planLegs,
   recordLog,
   selectProofs,
+  testsReader,
 } from './playwright-legs.mjs';
 
 const root = path.resolve(
@@ -108,17 +111,57 @@ describe('estimateSeconds and legCount', () => {
     // then the median of this suite's times.
     expect(
       estimateSeconds(times, ['internal/'], {
-        listed,
+        listed: [...listed, 'new.spec.ts'],
         changed: ['new.spec.ts'],
         fallback: {'new.spec.ts': 12},
       }),
     ).toBe(182);
     expect(
       estimateSeconds(times, ['internal/'], {
-        listed,
+        listed: [...listed, 'other.spec.ts'],
         changed: ['other.spec.ts'],
       }),
     ).toBe(170 + 50);
+    // A changed spec the merge commit no longer holds (deleted, or renamed
+    // from) costs nothing, and its tests are never read.
+    expect(
+      estimateSeconds(times, ['internal/'], {
+        listed,
+        changed: ['gone.spec.ts'],
+        testsOf: () => {
+          throw new Error('read a deleted spec');
+        },
+        perTest: 1.5,
+      }),
+    ).toBe(170);
+  });
+
+  it('costs a spec with no recorded time by its tests at the mean time a test', () => {
+    // A spec with 50 tests at 1.56 s a test, not the 10.7 s median file.
+    const source = Array.from(
+      {length: 50},
+      (_, i) => `  test('case ${i}', async () => {});`,
+    ).join('\n');
+    expect(countTests(source)).toBe(50);
+    expect(
+      countTests(
+        "test.describe('group', () => {\n  test.skip('a', () => {});\n  it('b', () => {});\n  test.use({});\n});",
+      ),
+    ).toBe(2);
+    const estimate = estimateSeconds(times, ['packages/lab/'], {
+      listed: [...listed, 'packages/lab/TabBar.spec.ts'],
+      testsOf: file => (file === 'packages/lab/TabBar.spec.ts' ? 50 : 0),
+      perTest: 1.56,
+    });
+    expect(estimate).toBeCloseTo(78, 5);
+    // With no tests to count, the file median stands.
+    expect(
+      estimateSeconds(times, ['packages/lab/'], {
+        listed: ['packages/lab/Empty.spec.ts'],
+        testsOf: () => 0,
+        perTest: 1.56,
+      }),
+    ).toBe(50);
   });
 
   it('counts a listed spec in the lane that has no recorded time yet', () => {
@@ -231,13 +274,16 @@ describe('the interaction proof legs in ci.yml', () => {
     {
       id: 'pr-interaction',
       project: 'chromium',
-      legs: [1, 2],
+      legs: [1, 2, 3, 4, 5, 6],
       run: 'Run interaction proofs',
       plan: "Plan this leg's interaction proofs",
       evidence: 'interaction-evidence-${{ matrix.leg }}',
-      gate: "steps.scope.outputs.applies == 'true'",
-      leg: '${{ matrix.leg }}',
-      of: '${{ strategy.job-total }}',
+      // As few legs as fit; see the leg counts below.
+      gate: "steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'",
+      leg: '${{ steps.legs.outputs.leg }}',
+      of: '${{ steps.legs.outputs.count }}',
+      count: "Count this run's legs",
+      fallback: 'webkit',
     },
     {
       id: 'pr-interaction-webkit',
@@ -250,6 +296,8 @@ describe('the interaction proof legs in ci.yml', () => {
       gate: "steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'",
       leg: '${{ steps.legs.outputs.leg }}',
       of: '${{ steps.legs.outputs.count }}',
+      count: "Count this run's WebKit legs",
+      fallback: 'chromium',
     },
   ];
 
@@ -298,7 +346,10 @@ describe('the interaction proof legs in ci.yml', () => {
           `cp .test-scope/${file} "$RUNNER_TEMP/interaction-legs/${dir}"`,
         );
       expect(plan.run).toContain(
-        `--key interaction-${lane.project} --config playwright.interaction.config.ts --project ${lane.project}`,
+        `--key interaction-${lane.project} --fallback-key interaction-${lane.fallback} --tests "$RUNNER_TEMP/interaction-legs/tests.json"`,
+      );
+      expect(plan.run).toContain(
+        `--config playwright.interaction.config.ts --project ${lane.project}`,
       );
       expect(plan.run).toContain(
         '--durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json"',
@@ -349,7 +400,7 @@ describe('the interaction proof legs in ci.yml', () => {
         '--leg ${{ matrix.leg }} --max-legs ${{ strategy.job-total }}',
         // Every spec file in the merge commit, recorded or not.
         'git -C .test-scope ls-tree -r --name-only HEAD > "$RUNNER_TEMP/interaction-legs/listed.txt"',
-        '--listed "$RUNNER_TEMP/interaction-legs/listed.txt"',
+        '--listed "$RUNNER_TEMP/interaction-legs/listed.txt" --source .test-scope',
       ])
         expect(count.run).toContain(part);
     });
@@ -362,6 +413,7 @@ describe('the interaction proof legs in ci.yml', () => {
       webkitTimes,
       changed = gestureChange,
       unrecorded = [],
+      {deleted = [], sources = {}, perTest} = {},
     ) {
       // The real path: the planner runs only when invoked as its own file.
       const dir = fs.realpathSync(
@@ -382,13 +434,24 @@ describe('the interaction proof legs in ci.yml', () => {
           JSON.stringify({
             'interaction-webkit': webkitTimes,
             'interaction-chromium': {},
+            ...(perTest
+              ? {'seconds-per-test': {'interaction-webkit': perTest}}
+              : {}),
           }),
         );
         // The scope checkout: a repository whose tree holds the spec files.
         const scope = path.join(dir, '.test-scope');
-        for (const file of [...Object.keys(webkitTimes), ...unrecorded]) {
+        // A changed spec is in the merge commit too, unless it was deleted.
+        const present = (changed ?? []).filter(
+          file => isInteractionSpec(file) && !deleted.includes(file),
+        );
+        for (const file of [
+          ...Object.keys(webkitTimes),
+          ...unrecorded,
+          ...present,
+        ]) {
           fs.mkdirSync(path.join(scope, path.dirname(file)), {recursive: true});
-          fs.writeFileSync(path.join(scope, file), '');
+          fs.writeFileSync(path.join(scope, file), sources[file] ?? '');
         }
         const git = args =>
           execFileSync('git', ['-C', scope, ...args], {stdio: 'ignore'});
@@ -431,17 +494,41 @@ describe('the interaction proof legs in ci.yml', () => {
             },
           },
         );
-        return Object.fromEntries(
+        const result = Object.fromEntries(
           fs
             .readFileSync(output, 'utf8')
             .trim()
             .split('\n')
             .map(line => line.split('=')),
         );
+        // The counts the plan step reads after the head checkout.
+        const testsFile = path.join(dir, 'interaction-legs/tests.json');
+        if (fs.existsSync(testsFile))
+          Object.defineProperty(result, 'tests', {
+            value: JSON.parse(fs.readFileSync(testsFile, 'utf8')),
+          });
+        return result;
       } finally {
         fs.rmSync(dir, {recursive: true, force: true});
       }
     }
+
+    it('writes the test counts it read for the plan, and skips a deleted spec', () => {
+      const times = {
+        'internal/interaction-harness/src/harness.interaction.browser.spec.ts': 100,
+      };
+      const fresh =
+        'internal/interaction-harness/src/fresh.interaction.browser.spec.ts';
+      const gone =
+        'packages/core/src/List/__tests__/Gone.interaction.browser.spec.ts';
+      const result = countFor(2, times, [fresh, gone], [], {
+        deleted: [gone],
+        sources: {[fresh]: "test('a', () => {});\ntest('b', () => {});\n"},
+        perTest: 2,
+      });
+      expect(result).toEqual({count: '1', runs: 'false', leg: '2'});
+      expect(result.tests).toEqual({[fresh]: 2});
+    });
 
     it('gives the whole suite to the first leg at today’s recorded times', () => {
       const times = durations['interaction-webkit'];
@@ -596,14 +683,132 @@ describe('the interaction proof legs in ci.yml', () => {
       expect(leg.seconds).toBeLessThanOrEqual(6 * 60);
   });
 
-  it('records a time for each project the legs plan, each under the legs\u2019 per-runner budget', () => {
+  it("pins the Chromium count's arguments: every spec, the matrix's legs, the shared costs", () => {
+    const job = ci.jobs['pr-interaction'];
+    const count = step(job, "Count this run's legs");
+    expect(count.id).toBe('legs');
+    expect(count.if).toBe("steps.scope.outputs.applies == 'true'");
+    for (const part of [
+      'git -C .test-scope ls-tree -r --name-only HEAD > "$RUNNER_TEMP/interaction-legs/listed.txt"',
+      '--listed "$RUNNER_TEMP/interaction-legs/listed.txt" --source .test-scope',
+      '--tests-out "$RUNNER_TEMP/interaction-legs/tests.json"',
+      '--key interaction-chromium --fallback-key interaction-webkit',
+      '--durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json"',
+      '--setup-seconds 90 --max-seconds 600',
+      '--leg ${{ matrix.leg }} --max-legs ${{ strategy.job-total }}',
+    ])
+      expect(count.run).toContain(part);
+    // No path filter: the Chromium lane counts every spec.
+    expect(count.run).not.toContain(' -- ');
+    const at = job.steps.indexOf(count);
+    expect(at).toBeGreaterThan(
+      job.steps.indexOf(
+        step(job, "Keep the leg planner from the workflow's commit"),
+      ),
+    );
+    expect(at).toBeLessThan(
+      job.steps.indexOf(step(job, 'Check out the heavy-suite caps')),
+    );
+    // Both plans cost an unrecorded spec as their counts do, from the
+    // counts the count step wrote: the head checkout has replaced the scope
+    // checkout by then.
+    expect(step(job, "Plan this leg's interaction proofs").run).toContain(
+      '--key interaction-chromium --fallback-key interaction-webkit --tests "$RUNNER_TEMP/interaction-legs/tests.json"',
+    );
+    const webkit = ci.jobs['pr-interaction-webkit'];
+    expect(step(webkit, "Count this run's WebKit legs").run).toContain(
+      '--tests-out "$RUNNER_TEMP/interaction-legs/tests.json"',
+    );
+    expect(
+      step(webkit, "Plan this leg's WebKit interaction proofs").run,
+    ).toContain(
+      '--key interaction-webkit --fallback-key interaction-chromium --tests "$RUNNER_TEMP/interaction-legs/tests.json"',
+    );
+    // The scope checkout is gone by the plan step.
+    for (const [id, name] of [
+      ['pr-interaction', "Plan this leg's interaction proofs"],
+      ['pr-interaction-webkit', "Plan this leg's WebKit interaction proofs"],
+    ])
+      expect(step(ci.jobs[id], name).run).not.toContain('.test-scope');
+  });
+
+  it('splits by the same costs it counts, and stops on a spec it cannot read', () => {
+    const times = {'a.spec.ts': 100};
+    expect(
+      costsFor(['a.spec.ts', 'b.spec.ts', 'c.spec.ts', 'd.spec.ts'], times, {
+        fallback: {'b.spec.ts': 40},
+        testsOf: file => (file === 'c.spec.ts' ? 10 : 0),
+        perTest: 1.5,
+      }),
+    ).toEqual({'a.spec.ts': 100, 'b.spec.ts': 40, 'c.spec.ts': 15});
+    const read = testsReader(root);
+    expect(read('.github/scripts/playwright-legs.test.mjs')).toBeGreaterThan(5);
+    expect(() => read('no/such.spec.ts')).toThrow(
+      /cannot read no\/such\.spec\.ts/,
+    );
+    expect(testsReader(undefined)('anything.spec.ts')).toBe(0);
+  });
+
+  it('fits every leg in ten minutes at today’s recorded times, within the matrix', () => {
+    // Every interaction spec in the tree, as the count steps list them.
+    const specs = execFileSync('git', ['ls-files'], {
+      cwd: root,
+      encoding: 'utf8',
+    })
+      .split('\n')
+      .filter(isInteractionSpec);
     for (const lane of lanes) {
       const times = durations[`interaction-${lane.project}`];
-      expect(Object.keys(times).length, lane.project).toBeGreaterThan(0);
-      const plan = planLegs(Object.keys(times), times, lane.legs.length);
-      // About six minutes a leg under load; the recorded run was a loaded one.
-      for (const leg of plan)
-        expect(leg.seconds, lane.project).toBeLessThanOrEqual(6 * 60);
+      const fallback = durations[`interaction-${lane.fallback}`];
+      const count = step(ci.jobs[lane.id], lane.count);
+      const filters =
+        lane.project === 'webkit'
+          ? ci.jobs[lane.id].env.WEBKIT_SPEC_PATHS.split(' ')
+          : [];
+      const perTest =
+        durations['seconds-per-test'][`interaction-${lane.project}`];
+      const testsOf = file =>
+        countTests(fs.readFileSync(path.join(root, file), 'utf8'));
+      const seconds = estimateSeconds(times, filters, {
+        listed: specs,
+        fallback,
+        testsOf,
+        perTest,
+      });
+      const limits = {
+        setupSeconds: 90,
+        maxSeconds: 600,
+        maxLegs: lane.legs.length,
+      };
+      expect(count.run, lane.id).toContain(
+        '--setup-seconds 90 --max-seconds 600',
+      );
+      // The matrix still has room: the count stays under its legs.
+      const needed = Math.ceil(
+        seconds / (limits.maxSeconds - limits.setupSeconds),
+      );
+      expect(
+        needed,
+        `${lane.id}: ${Math.round(seconds)} s of proofs`,
+      ).toBeLessThan(lane.legs.length);
+      const legsNow = legCount({seconds, ...limits});
+      const planned = planLegs(
+        specs.filter(
+          file =>
+            filters.length === 0 || filters.some(each => file.includes(each)),
+        ),
+        Object.fromEntries(
+          specs.map(file => [
+            file,
+            times[file] ?? fallback[file] ?? testsOf(file) * perTest,
+          ]),
+        ),
+        legsNow,
+      );
+      for (const leg of planned)
+        expect(leg.seconds + limits.setupSeconds, lane.id).toBeLessThanOrEqual(
+          limits.maxSeconds + 60,
+        );
     }
   });
 

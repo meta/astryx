@@ -329,15 +329,37 @@ test('the chevron turns on the glide; column lines and Reduce Motion change at o
 }) => {
   await mount(page, 'gliding-rows');
   await page.locator('[data-expansion-toggle]').first().click();
+  // The values the rows glide on, as read where the area is.
   const timing = await page
     .locator('[data-expansion-toggle] > *')
     .first()
-    .evaluate(glyph =>
-      (glyph as HTMLElement).style.getPropertyValue(
+    .evaluate(glyph => {
+      const row = document.querySelectorAll('tr[data-expansion-key]')[1];
+      const glide = row
+        ?.getAnimations()
+        .find(animation =>
+          (animation.effect as KeyframeEffect)
+            .getKeyframes()
+            .some(frame => frame.translate != null),
+        );
+      const style = (glyph as HTMLElement).style;
+      // The theme's curve as an inline style serializes it (`.24` as `0.24`).
+      const theme = document.createElement('i').style;
+      theme.setProperty(
         'transition-timing-function',
-      ),
-    );
-  expect(timing.startsWith('linear(')).toBe(true);
+        getComputedStyle(glyph).getPropertyValue('--ease-move'),
+      );
+      return {
+        easing: style.getPropertyValue('transition-timing-function'),
+        duration: style.getPropertyValue('transition-duration'),
+        theme: theme.getPropertyValue('transition-timing-function'),
+        glideMs: Number(glide?.effect?.getComputedTiming().duration),
+      };
+    });
+  expect(timing.glideMs).toBeGreaterThan(0);
+  expect(parseFloat(timing.duration)).toBeCloseTo(timing.glideMs, 3);
+  expect(timing.theme).toMatch(/^cubic-bezier\(/);
+  expect(timing.easing).toBe(timing.theme);
 
   for (const dividers of ['columns', 'grid']) {
     await mount(page, 'gliding-rows', `&args=dividers:${dividers}`);

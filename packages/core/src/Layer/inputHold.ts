@@ -20,7 +20,12 @@ import {
   deepActiveElement,
   parentAcrossShadow,
 } from '../utils/flatTree';
-import {getLastPointerType, subscribeInput} from '../utils/inputStream';
+import {
+  getLastMousePoint,
+  getLastPointerType,
+  subscribeInput,
+} from '../utils/inputStream';
+import {isDocument, isElement, isHTMLElement, isNode} from '../utils/nodeType';
 
 /**
  * What a hold does. `'viewport'` and `'layer'` add one shield over the whole
@@ -99,7 +104,7 @@ export function isInHeldLayer(target: Node | null): boolean {
     node != null;
     node = parentAcrossShadow(node)
   ) {
-    if (node instanceof Element && held.has(node)) {
+    if (isElement(node) && held.has(node)) {
       return true;
     }
   }
@@ -115,7 +120,7 @@ export function isInHeldLayer(target: Node | null): boolean {
  * held, this answers false.
  */
 export function holdsTouch(target: Node): boolean {
-  const doc = target instanceof Document ? target : target.ownerDocument;
+  const doc = isDocument(target) ? target : target.ownerDocument;
   // The gesture host asks for every touch: with nothing held, answer at once.
   if (doc == null || !heldDocuments.has(doc)) {
     return false;
@@ -130,7 +135,7 @@ export function holdsTouch(target: Node): boolean {
     node != null;
     node = parentAcrossShadow(node)
   ) {
-    const state = node instanceof Element ? held.get(node) : undefined;
+    const state = isElement(node) ? held.get(node) : undefined;
     if (state != null) {
       if (state.layer > 0) {
         return true;
@@ -259,6 +264,59 @@ function addShield(layer: Element, isFull: boolean): HTMLElement {
   return shield;
 }
 
+/** Half the side of the opening a presentation's shield leaves the mouse. */
+const MOUSE_OPENING_PX = 2;
+
+/**
+ * Leaves the mouse a way through a presentation's shield that takes hits.
+ * The browser hit-tests a press before any script reads its pointer. So a
+ * mouse that has not moved since a finger raised the shield would press the
+ * shield. A full shield leaves open the point where the stream last heard
+ * the mouse. A shield over the layer's box alone stops taking hits, because
+ * the box moves with the layer's entrance. A finger's press there is still
+ * held, because the press hold judges each press by its own pointer. A
+ * dismissal's shield keeps every hit.
+ */
+function openToMouse(state: HeldLayer, doc: Document): void {
+  const {shield} = state;
+  if (shield == null) {
+    return;
+  }
+  const view = doc.defaultView;
+  const point = view == null ? null : getLastMousePoint(view);
+  if (
+    point == null ||
+    state.layer > 0 ||
+    shield.style.pointerEvents === 'none'
+  ) {
+    shield.style.removeProperty('clip-path');
+    return;
+  }
+  if (!state.isShieldFull) {
+    shield.style.pointerEvents = 'none';
+    return;
+  }
+  const left = point.x - MOUSE_OPENING_PX;
+  const right = point.x + MOUSE_OPENING_PX;
+  const top = point.y - MOUSE_OPENING_PX;
+  const bottom = point.y + MOUSE_OPENING_PX;
+  // The viewport, then the opening drawn the other way round. The nonzero
+  // rule leaves the opening out, and a clipped-out area takes no hits.
+  const outline = [
+    '0 0',
+    '100% 0',
+    '100% 100%',
+    '0 100%',
+    `0 ${top}px`,
+    `${left}px ${top}px`,
+    `${left}px ${bottom}px`,
+    `${right}px ${bottom}px`,
+    `${right}px ${top}px`,
+    `0 ${top}px`,
+  ];
+  shield.style.clipPath = `polygon(${outline.join(', ')})`;
+}
+
 /**
  * Holds input away from `layer` until `until` settles. Returns the release
  * (idempotent), for a hold that ends early. Holds on one layer stack, and
@@ -311,6 +369,7 @@ export function holdInput(
       state.inertContent = makeContentInert(layer, state.shield);
     }
   }
+  openToMouse(state, layer.ownerDocument);
   let isReleased = false;
   const release = () => {
     if (isReleased) {
@@ -479,7 +538,7 @@ function createPressHold(doc: Document): PressHold | null {
       }
       if (
         state.surface > 0 &&
-        target instanceof Node &&
+        isNode(target) &&
         containsAlongFlatTree(layer, target)
       ) {
         return true;
@@ -505,6 +564,7 @@ function createPressHold(doc: Document): PressHold | null {
       if (state.shield.style.pointerEvents !== value) {
         state.shield.style.pointerEvents = value;
       }
+      openToMouse(state, doc);
     }
   };
 
@@ -717,7 +777,7 @@ function makeContentInert(
   }
   const focused = deepActiveElement(layer.ownerDocument);
   if (
-    focused instanceof HTMLElement &&
+    isHTMLElement(focused) &&
     [...content.keys()].some(child => containsAlongFlatTree(child, focused))
   ) {
     focused.blur();

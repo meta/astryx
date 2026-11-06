@@ -243,7 +243,7 @@ export interface TimeInputProps extends Omit<
   /**
    * The selected time in ISO format (HH:MM or HH:MM:SS).
    */
-  value?: ISOTimeString;
+  value?: ISOTimeString | undefined;
 
   /**
    * Callback fired when the time changes.
