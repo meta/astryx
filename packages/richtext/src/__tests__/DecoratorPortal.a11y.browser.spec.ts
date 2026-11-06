@@ -28,7 +28,9 @@ for (const isReadOnly of [false, true]) {
       const errors: string[] = [];
       page.on('pageerror', error => errors.push(error.message));
       page.on('console', message => {
-        if (message.type() === 'error') {errors.push(message.text());}
+        if (message.type() === 'error') {
+          errors.push(message.text());
+        }
       });
       const story = isReadOnly ? 'integrated-read-only' : 'integrated-editor';
       await page.goto(
