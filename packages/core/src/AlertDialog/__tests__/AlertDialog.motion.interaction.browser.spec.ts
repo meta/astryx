@@ -9,7 +9,7 @@
  *   viewport start and taps during either transition. They also cover frames
  *   through a blocked main thread, reduced motion, and a mouse's theme
  *   entrance. They also cover a toast the alert's action raises: it stays
- *   live, and it enters once
+ *   live, it enters once, and it stays painted when the alert closes
  * @position Motion lane of AlertDialog, beside the touch-tracking spec. Run
  *   with `pnpm test:interaction AlertDialog`.
  */
@@ -837,6 +837,68 @@ test.describe('under a finger', () => {
         // toast in place. Nothing started again.
         expect(starts).toEqual([]);
       }
+    }
+    await expect(row).toHaveCount(1);
+  });
+
+  test('a toast the alert raises stays painted when the alert closes: it leaves the alert in the commit that closes it (component:Toast FR12)', async ({
+    page,
+  }) => {
+    await openStory(page, storybook(), 'core-alertdialog--alert-over-a-toast');
+    const driver = await touchDriver(page);
+    const dialog = page.getByRole('alertdialog', {name: 'Delete item?'});
+    const row = page.locator('[data-toast-id]');
+    // Counts each DOM change after which the toast's card sits in a dialog,
+    // and each one after which that dialog no longer displays. A frame
+    // painted then shows no toast.
+    await page.evaluate(() => {
+      const watch = {inDialog: 0, hidden: 0};
+      (window as unknown as {__toastPlace: typeof watch}).__toastPlace = watch;
+      new MutationObserver(() => {
+        const host = document
+          .querySelector('[data-toast-id] .astryx-toast')
+          ?.closest('dialog');
+        if (host == null) {
+          return;
+        }
+        watch.inDialog += 1;
+        if (getComputedStyle(host).display === 'none') {
+          watch.hidden += 1;
+        }
+      }).observe(document.body, {
+        subtree: true,
+        childList: true,
+        attributes: true,
+        attributeFilter: ['class', 'open'],
+      });
+    });
+    const takePlace = async () =>
+      page.evaluate(() => {
+        const watch = (
+          window as unknown as {
+            __toastPlace: {inDialog: number; hidden: number};
+          }
+        ).__toastPlace;
+        const counts = {...watch};
+        watch.inDialog = 0;
+        watch.hidden = 0;
+        return counts;
+      });
+    for (let cycle = 1; cycle <= 3; cycle += 1) {
+      await driver.tap(
+        await centerOf(page.getByRole('button', {name: 'Delete item'})),
+      );
+      await waitForRest(dialog);
+      await driver.tap(
+        await centerOf(dialog.getByRole('button', {name: 'Delete'})),
+      );
+      // The alert closes when its exit ends, outside the tap.
+      await expect(dialog).toBeHidden();
+      await waitForRest(row);
+      const {inDialog, hidden} = await takePlace();
+      // The toast was in the alert, so a hidden count of 0 counts.
+      expect(inDialog).toBeGreaterThan(0);
+      expect(hidden).toBe(0);
     }
     await expect(row).toHaveCount(1);
   });
