@@ -63,6 +63,7 @@ import {
   blockMainThread,
   busyWindowProof,
   BusyWindowTooLateError,
+  castStep,
   compareCurve,
   countBetween,
   cubicBezier,
@@ -937,10 +938,15 @@ test.describe('frame evidence', () => {
             {duration: 1600, easing: 'linear', iterations: Infinity},
           );
         } else {
+          // Each step is logged with its time on the page clock. A frame can
+          // then be traced to the step it shows. The first entry is the reset.
+          const steps = [{t: performance.timeOrigin + performance.now(), y: 0}];
+          (window as unknown as {__rafSteps: typeof steps}).__rafSteps = steps;
           const start = performance.now();
           const step = (now: number) => {
             const p = ((now - start) / 1600) % 1;
             el.style.transform = `translateY(${560 * p}px)`;
+            steps.push({t: performance.timeOrigin + now, y: 560 * p});
             requestAnimationFrame(step);
           };
           requestAnimationFrame(step);
@@ -970,30 +976,71 @@ test.describe('frame evidence', () => {
         type: `busy-main-thread ${driver} 1/${everyNthFrame} against the control`,
         description: `${proof.summary} | without the control: ${alone.verdict.failures.join('; ') || 'pass'}`,
       });
-      return proof;
+      // `before` holds the steps the page set in the 800 ms before the block.
+      // `unset` lists the frames in the judged part that show a new position
+      // set at none of them. On a starved runner, a late frame showed a step
+      // at most 261 ms old. The 800 ms of steps span 280 px of the 560 px
+      // loop. A step from inside the 700 ms block lies at most 238 px past
+      // them, so the two never meet.
+      const steps =
+        driver === 'raf'
+          ? await page.evaluate(
+              () =>
+                (window as unknown as {__rafSteps: {t: number; y: number}[]})
+                  .__rafSteps,
+            )
+          : [];
+      const before = steps
+        .filter(s => s.t < window.from && s.t >= window.from - 800)
+        .map(s => s.y);
+      const top = await box.evaluate(el => (el as HTMLElement).offsetTop);
+      // Within one cast step: a position reads up to a step off (2 px in
+      // WebKit's cast, 1 px in Chromium's).
+      const step = castStep(tracked, 'y');
+      let shown = tracked
+        .filter(f => f.box != null && f.t < proof.judged.from)
+        .at(-1)?.box?.y;
+      const unset: {atMs: number; y: number}[] = [];
+      for (const f of tracked) {
+        const y = f.box?.y;
+        if (y == null || f.t < proof.judged.from || f.t > proof.judged.to) {
+          continue;
+        }
+        if (
+          shown != null &&
+          Math.abs(y - shown) > 0.25 &&
+          !before.some(set => Math.abs(top + set - y) <= step)
+        ) {
+          unset.push({atMs: f.t - window.from, y: y - top});
+        }
+        shown = y;
+      }
+      return {proof, unset: driver === 'raf' ? unset : null};
     };
 
-    const compositor = await run('compositor');
+    const {proof: compositor} = await run('compositor');
     expect(compositor.verdict.failures, compositor.summary).toEqual([]);
     expect(compositor.control?.moved).toBeGreaterThanOrEqual(4);
 
-    // The mutant: a main-thread animation freezes while the control moves. A
-    // frame presented as the block starts can still show its last step, so
-    // it can read as moved on one of the control's frames; never on the rest.
+    // The mutant: a main-thread animation freezes while the control moves.
+    // The compositor can still present, inside the block, steps the page set
+    // before it. On a loaded runner it showed two such steps, up to 230 ms in.
+    // Every new position it shows there is a step set shortly before the
+    // block, never a step from inside it. How many frames the verdict counts
+    // as moved depends on how many such steps a loaded runner presents.
     const raf = await run('raf');
-    expect(raf.verdict.pass, raf.summary).toBe(false);
-    const rafFailures = raf.verdict.failures.join('\n');
-    expect(rafFailures).toMatch(
-      /moved on [01] of the \d+ frames the control moved/,
+    expect(raf.proof.verdict.pass, raf.proof.summary).toBe(false);
+    expect(raf.proof.verdict.failures.join('\n')).toMatch(
+      /longest stall .* longer than the control's/,
     );
-    expect(rafFailures).toMatch(/longest stall .* longer than the control's/);
+    expect(raf.unset, raf.proof.summary).toEqual([]);
 
     // A slower screencast samples the control and the component alike; a
     // 1.4 s block keeps the control's four frames on a loaded runner.
-    const slow = await run('compositor', 6, 1400);
+    const {proof: slow} = await run('compositor', 6, 1400);
     expect(slow.verdict.failures, slow.summary).toEqual([]);
     const slowRaf = await run('raf', 6, 1400);
-    expect(slowRaf.verdict.pass, slowRaf.summary).toBe(false);
+    expect(slowRaf.proof.verdict.pass, slowRaf.proof.summary).toBe(false);
     await control.remove();
   });
 
@@ -1409,32 +1456,63 @@ test.describe('frame evidence', () => {
 
   test('rect sampling reads one rect per animation frame while the main thread is free', async ({
     page,
-    browserName,
   }) => {
     await fixture(page);
     const box = page.locator('#box');
+    // The box slides at 1/3 px per ms for a minute, longer than the test may
+    // run, so the sampling always reads it mid-slide. The slide starts in this
+    // call and the sampling in the next. A loaded machine can take longer
+    // between the two than a short slide lasts. The page also reads the box
+    // first in each animation frame it draws. The samples are judged against
+    // those reads, not against a frame rate the machine may not reach.
     await box.evaluate(el => {
-      el.animate(
-        [{transform: 'translateX(0px)'}, {transform: 'translateX(200px)'}],
-        {duration: 600, easing: 'linear'},
+      const animation = el.animate(
+        [{transform: 'translateX(0px)'}, {transform: 'translateX(20000px)'}],
+        {duration: 60_000, easing: 'linear'},
       );
+      const drawn: {t: number; x: number}[] = [];
+      (window as unknown as {drawn: typeof drawn}).drawn = drawn;
+      const read = (now: number) => {
+        drawn.push({
+          t: performance.timeOrigin + now,
+          x: el.getBoundingClientRect().x,
+        });
+        if (animation.playState === 'running') {
+          requestAnimationFrame(read);
+        }
+      };
+      requestAnimationFrame(read);
     });
     const samples = await sampleRects(box, 400);
-    const xs = samples.map(s => s.box?.x ?? NaN);
-    const gaps = samples
-      .slice(1)
-      .map((s, i) => s.t - samples[i].t)
-      .sort((a, b) => a - b);
-    const cadence = gaps[Math.floor(gaps.length / 2)];
-    expect(cadence).toBeLessThan(34);
-    expect(samples.length).toBeGreaterThanOrEqual(10);
-    if (browserName === 'chromium') {
-      // One sample per presented frame at 60 Hz. (Headless WebKit's animation
-      // frames are irregular, so only the cadence is checked there.)
-      expect(samples.length).toBeGreaterThanOrEqual(20);
-    }
-    expect(xs.every((x, i) => i === 0 || x >= xs[i - 1])).toBe(true);
-    expect(xs.at(-1) ?? 0).toBeGreaterThan(xs[0] + 80);
+    // One frame more, so the page has also read the frame after the last
+    // sample.
+    const drawn = await page.evaluate(
+      () =>
+        new Promise<{t: number; x: number}[]>(resolve => {
+          requestAnimationFrame(() => {
+            const w = window as unknown as {drawn: {t: number; x: number}[]};
+            resolve(w.drawn.slice());
+          });
+        }),
+    );
+    const times = samples.map(s => s.t);
+    expect(times.length).toBeGreaterThanOrEqual(2);
+    // One sample on each frame the page drew while sampling, and no other.
+    const first = drawn.findIndex(frame => frame.t === times[0]);
+    expect(times).toEqual(
+      drawn.slice(first, first + times.length).map(frame => frame.t),
+    );
+    // Each sample is its own frame's rect. It is read after the page's read
+    // in that frame and before its read in the next. WebKit reads a rect when
+    // it is read, which a loaded machine can put well past the frame's start.
+    samples.forEach((sample, i) => {
+      const x = sample.box?.x ?? NaN;
+      expect(x).toBeGreaterThanOrEqual(drawn[first + i].x);
+      expect(x).toBeLessThanOrEqual(drawn[first + i + 1].x);
+    });
+    expect(samples.at(-1)?.box?.x ?? NaN).toBeGreaterThan(
+      samples[0].box?.x ?? NaN,
+    );
   });
 
   test('the trace counts no Layout for a transform animation and one per frame for `top`', async ({

@@ -22,7 +22,7 @@ export const docs = {
     {
       name: 'ButtonGroup',
       displayName: 'Button Group',
-      description: 'Groups multiple buttons together with connected styling: shared borders, proper border-radius handling (only on outer edges), and horizontal or vertical orientation.',
+      description: 'Groups multiple buttons together with connected styling: shared borders, proper border-radius handling (only on outer edges), and horizontal or vertical orientation. Under the touch presentation a press tracks like a menu: press a button and slide across the others, and the highlight follows. The button you lift on runs, and lifting outside the group runs nothing. A mouse press acts as a native button\'s. With a finger, each button\'s target grows toward 44 px, up to half the gap to a neighbour, without the buttons growing. A menu trigger in the group keeps its own opening.',
       props: [
         {name: 'children', type: 'ReactNode', description: 'Button or IconButton children.', required: true, slotElements: [{__element: 'Button', props: {label: 'Action'}}]},
         {name: 'label', type: 'string', description: 'Accessible label for the group (aria-label).', required: true},
@@ -110,7 +110,7 @@ export const docsZh = {
     {
       name: 'ButtonGroup',
       displayName: 'Button Group',
-      description: '将多个按钮组合在一起，带有连接样式：共享边框、正确的圆角处理（仅外边缘），以及水平或垂直方向。',
+      description: '将多个按钮组合在一起，带有连接样式：共享边框、正确的圆角处理（仅外边缘），以及水平或垂直方向。在触摸呈现下（主要指针为粗指针时），按下时按钮组像菜单一样跟踪按压：按下一个按钮并滑过其他按钮，高亮随之移动。松开时所在的按钮执行，在组外松开则什么都不执行。鼠标按下与原生按钮相同。使用手指时，每个按钮的触控目标向 44 px 扩展，最多到与相邻按钮间距的一半，按钮本身不变大。组内的菜单触发器保留自己的打开方式。',
       propDescriptions: {
         children: 'Button 或 IconButton 子元素。',
         label: '按钮组的无障碍标签 (aria-label)。',
@@ -160,6 +160,7 @@ export const docsDense = {
       {guidance: false, description: "Don't nest ButtonGroups."},
       {guidance: true, description: 'Label the group for what its buttons act on; it is the accessible name.'},
       {guidance: true, description: 'Single Tab stop; arrows move between members, Home/End to ends, disabled skipped (APG roving tabindex).'},
+      {guidance: true, description: 'Under the touch presentation a press tracks like a menu: slide across, the lifted button runs, a lift outside runs nothing. A mouse press acts as a native button\'s. Finger targets grow toward 44 px, up to half the gap to a neighbour; a menu trigger keeps its own opening.'},
       {guidance: false, description: "Don't disable the group for an in-flight action; a disabled member drops focus."},
     ],
   },

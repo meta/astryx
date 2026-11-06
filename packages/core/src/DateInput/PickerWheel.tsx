@@ -159,9 +159,9 @@ const styles = stylex.create({
 
 /**
  * The motion tables the wheel resolves internal roles from: the timing curve,
- * the scroll bounce and the picker's tap spin. Nothing registers on import
- * (motion/roles.ts) and each register is idempotent, so the wheel calls this
- * right before it resolves a role.
+ * the scroll bounce and the picker's tap spin. The picker table registers as
+ * its module loads, but the timing and scroll tables do not. Each register is
+ * idempotent, so the wheel calls this right before it resolves a role.
  */
 function registerWheelTables(): void {
   registerTimingTable();
