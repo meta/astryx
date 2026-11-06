@@ -109,7 +109,7 @@ describe('WebKit interaction proof routing', () => {
       // A leg whose plan holds no spec file runs no proofs.
       expect(candidate.if, candidate.name ?? candidate.uses).toMatch(
         new RegExp(
-          `^(always\\(\\) && )?${gate.replace(/[.()|]/g, '\\$&')}( && steps\\.plan\\.outputs\\.files != '0')?$`,
+          `^((always|failure)\\(\\) && )?${gate.replace(/[.()|]/g, '\\$&')}( && steps\\.plan\\.outputs\\.files != '0')?$`,
         ),
       );
     }
@@ -437,6 +437,9 @@ describe('WebKit interaction proof routing', () => {
       'packages/core/src/hooks/useAttachment.ts',
       'packages/core/src/utils/sharedResizeObserver.ts',
       'packages/core/src/utils/scrollView.ts',
+      // The gesture host reads how old an input is, so the gesture specs'
+      // fixture bundles it.
+      'packages/core/src/utils/inputAge.ts',
       'packages/core/src/hooks/__tests__/usePager.interaction.browser.spec.ts',
       'packages/core/src/hooks/__tests__/pagerBundle.ts',
       'internal/interaction-harness/src/webInput.ts',
