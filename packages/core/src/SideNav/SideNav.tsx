@@ -38,6 +38,7 @@ import type {StyleXStyles} from '@stylexjs/stylex';
 import {focusVars, spacingVars} from '../theme/tokens.stylex';
 import {mergeProps} from '../utils';
 import {
+  findExternalCollapseToggle,
   SideNavCollapseContext,
   type SideNavCollapseState,
   type SideNavCollapsibleConfig,
@@ -238,6 +239,10 @@ const styles = stylex.create({
   },
   rootCollapsed: {
     width: spacingVars['--spacing-12'],
+  },
+  // `collapsedWidth: 0`: the collapsed nav takes no width.
+  rootHidden: {
+    width: 0,
   },
   stickyTop: {
     display: 'flex',
@@ -544,6 +549,7 @@ export function SideNav({
   // Parse collapsible prop
   const collapsibleConfig = typeof collapsible === 'object' ? collapsible : {};
   const hasCollapseButton = collapsibleConfig.hasButton ?? true;
+  const collapsedWidth = collapsibleConfig.collapsedWidth ?? 'rail';
 
   // useResizable's output: the caller's region owns the width and collapse.
   const ownerRegion = isResizableRegion(resizable) ? resizable : null;
@@ -623,6 +629,7 @@ export function SideNav({
 
   const region = ownerRegion ?? resizableHook;
   const collapsed = region.isCollapsed;
+  const isHidden = collapsed && collapsedWidth === 0;
 
   // A collapse or expand plays the rail's motion, except an app's change
   // before the rail's first paint. It is measured in the commit before the
@@ -780,6 +787,16 @@ export function SideNav({
     (pending: PendingRailFocus, isCollapsed: boolean) => {
       const nav = navRef.current;
       if (!isCollapsed || nav == null) {
+        return;
+      }
+      // A nav that hides completely keeps no control to hold focus, so focus
+      // moves to its toggle outside the nav.
+      if (collapsedWidth === 0) {
+        const toggle = findExternalCollapseToggle(nav, {
+          onCollapsedChange: collapsibleConfig.onCollapsedChange,
+          handleRef,
+        });
+        moveFocusLeftBehind(pending.focus, toggle, nav);
         return;
       }
       // Collapsed, every row the nav renders is one the rail keeps, in order.
@@ -961,14 +978,21 @@ export function SideNav({
       data-testid={testId}
       {...mergeProps(
         themeProps('side-nav'),
-        stylex.props(styles.root, collapsed && styles.rootCollapsed, xstyle),
+        stylex.props(
+          styles.root,
+          collapsed && (isHidden ? styles.rootHidden : styles.rootCollapsed),
+          xstyle,
+        ),
         className,
         resizableNavStyle,
       )}
       {...props}
       // After the spread: a wrapper forwarding `id={undefined}` must not erase
       // the id the resize handle's aria-controls points at.
-      id={navId}>
+      id={navId}
+      // A hidden nav's contents take no focus and no pointer; a caller's own
+      // `inert` still applies.
+      inert={isHidden || props.inert || undefined}>
       {hasStickyTop && (
         <div
           {...stylex.props(

@@ -98,8 +98,8 @@ export const docs = {
     },
     {
       name: 'collapsible',
-      type: 'boolean | { defaultIsCollapsed?: boolean; isCollapsed?: boolean; onCollapsedChange?: (isCollapsed: boolean) => void; hasButton?: boolean; buttonLabel?: string }',
-      description: 'Enables collapse behavior. true for uncontrolled with default toggle button, or an object for controlled mode and advanced config (defaultIsCollapsed, isCollapsed + onCollapsedChange, hasButton, buttonLabel). A controlled config can also be passed to a SideNavCollapseButton rendered outside this SideNav, so both share one state.',
+      type: 'boolean | { defaultIsCollapsed?: boolean; isCollapsed?: boolean; onCollapsedChange?: (isCollapsed: boolean) => void; hasButton?: boolean; buttonLabel?: string; collapsedWidth?: \'rail\' | 0 }',
+      description: 'Enables collapse behavior. true for uncontrolled with default toggle button, or an object for controlled mode and advanced config (defaultIsCollapsed, isCollapsed + onCollapsedChange, hasButton, buttonLabel, collapsedWidth). A controlled config can also be passed to a SideNavCollapseButton rendered outside this SideNav, so both share one state. collapsedWidth sets the collapsed width: \'rail\' (default) keeps the icon rail; 0 hides the nav completely (no width, inert, slides out), so render a SideNavCollapseButton outside the nav with the same config; focus inside the nav moves to it on collapse.',
       default: 'false',
     },
     {

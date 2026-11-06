@@ -5,6 +5,7 @@ import type {Meta, StoryObj} from '@storybook/react';
 import {AppShell} from '@astryxdesign/core/AppShell';
 import {
   SideNav,
+  SideNavCollapseButton,
   SideNavHeading,
   SideNavItem,
   SideNavSection,
@@ -725,6 +726,60 @@ export const CollapsibleSidebar: Story = {
       </SideNavSection>
     </SideNav>
   ),
+};
+
+// =============================================================================
+// Collapsed width 0
+// =============================================================================
+
+function CollapsedWidthZeroDemo() {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const collapsible = {isCollapsed, onCollapsedChange: setIsCollapsed};
+  return (
+    <AppShell
+      contentPadding={6}
+      sideNav={
+        <SideNav
+          collapsible={{...collapsible, collapsedWidth: 0}}
+          header={
+            <SideNavHeading
+              icon={
+                <NavIcon icon={<CubeIcon style={{width: 16, height: 16}} />} />
+              }
+              heading="My App"
+            />
+          }>
+          <SideNavSection title="Main">
+            <SideNavItem
+              label="Dashboard"
+              icon={HomeIcon}
+              selectedIcon={HomeIconSolid}
+              isSelected
+              href="/dashboard"
+            />
+            <SideNavItem label="Projects" icon={FolderIcon} href="/projects" />
+            <SideNavItem
+              label="Analytics"
+              icon={ChartBarIcon}
+              href="/analytics"
+            />
+          </SideNavSection>
+        </SideNav>
+      }>
+      <SideNavCollapseButton collapsible={collapsible} />
+      <Text type="body">
+        Collapsed, the navigation takes no width. Its toggle stays here.
+      </Text>
+    </AppShell>
+  );
+}
+
+export const CollapsedWidthZero: Story = {
+  name: 'Collapsed width 0',
+  parameters: {
+    layout: 'fullscreen',
+  },
+  render: () => <CollapsedWidthZeroDemo />,
 };
 
 // =============================================================================

@@ -17,7 +17,7 @@
  * - /packages/cli/assets/templates/blocks/components/SideNav/ (showcase blocks)
  */
 
-import React, {use, useCallback, type ReactNode} from 'react';
+import React, {use, useCallback, useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {durationVars, easeVars} from '../theme/tokens.stylex';
 import {Icon} from '../Icon';
@@ -25,7 +25,9 @@ import {Button} from '../Button';
 import type {BaseProps} from '../BaseProps';
 import {composeEventHandlers, rtlStyles} from '../utils';
 import {
+  registerExternalCollapseToggle,
   useSideNavCollapse,
+  type SideNavCollapseAssociation,
   type SideNavCollapseState,
   type SideNavControlledCollapsible,
   type SideNavImperativeCollapseHandle,
@@ -165,7 +167,22 @@ export function SideNavCollapseButton({
         : focusTargets.registerToggle(element),
     [focusTargets, isInSideNav],
   );
-  const mergedRef = useMergedRefs(ref, registerToggle);
+  // A toggle wired to the state from outside the SideNav registers with that
+  // state, so a nav that hides completely (`collapsedWidth: 0`) can hand it
+  // focus. The association is read when the nav looks it up, so it is kept
+  // current here rather than registered again.
+  const associationRef = useRef<SideNavCollapseAssociation>({});
+  associationRef.current.onCollapsedChange = collapsible?.onCollapsedChange;
+  associationRef.current.handleRef = handleRef;
+  const isOutsideSideNav = collapsible != null || handleRef != null;
+  const registerExternal = useCallback(
+    (element: HTMLButtonElement | null) =>
+      element == null || !isOutsideSideNav
+        ? undefined
+        : registerExternalCollapseToggle(element, associationRef.current),
+    [isOutsideSideNav],
+  );
+  const mergedRef = useMergedRefs(ref, registerToggle, registerExternal);
 
   // Hide when not collapsible, or when in mobile mode (sidenav is in
   // the mobile drawer — collapse doesn't apply there)

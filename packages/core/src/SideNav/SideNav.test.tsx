@@ -3009,6 +3009,55 @@ describe('SideNav audit regressions', () => {
       await screen.findByRole('button', {name: 'Collapse sidebar'}),
     ).toBeInTheDocument();
   });
+
+  describe('collapsedWidth', () => {
+    function HidingApp({collapsedWidth}: {collapsedWidth?: 'rail' | 0}) {
+      const [isCollapsed, setIsCollapsed] = useState(false);
+      const collapsible = {isCollapsed, onCollapsedChange: setIsCollapsed};
+      return (
+        <>
+          <SideNavCollapseButton collapsible={collapsible} label="Outside" />
+          <SideNav collapsible={{...collapsible, collapsedWidth}}>
+            <SideNavItem
+              label="Dashboard"
+              href="/dashboard"
+              icon={<span>D</span>}
+            />
+          </SideNav>
+        </>
+      );
+    }
+
+    it('keeps the icon rail by default: a collapsed nav is not inert', async () => {
+      const user = userEvent.setup();
+      render(<HidingApp />);
+      await user.click(screen.getByRole('button', {name: 'Outside'}));
+      expect(screen.getByRole('navigation')).not.toHaveAttribute('inert');
+    });
+
+    it('makes a nav collapsed to 0 inert, and not while it is expanded', async () => {
+      const user = userEvent.setup();
+      render(<HidingApp collapsedWidth={0} />);
+      const nav = screen.getByRole('navigation');
+      expect(nav).not.toHaveAttribute('inert');
+      await user.click(screen.getByRole('button', {name: 'Outside'}));
+      expect(nav).toHaveAttribute('inert');
+      await user.click(screen.getByRole('button', {name: 'Outside'}));
+      expect(nav).not.toHaveAttribute('inert');
+    });
+
+    it('moves focus inside a nav collapsing to 0 to the toggle outside it', async () => {
+      const user = userEvent.setup();
+      render(<HidingApp collapsedWidth={0} />);
+      const inside = within(screen.getByRole('navigation')).getByRole(
+        'button',
+        {name: 'Collapse sidebar'},
+      );
+      act(() => inside.focus());
+      await user.keyboard('{Enter}');
+      expect(screen.getByRole('button', {name: 'Outside'})).toHaveFocus();
+    });
+  });
 });
 
 // =============================================================================

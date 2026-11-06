@@ -5190,12 +5190,14 @@ interface SideNavCollapseState
   toggle: () => void
 interface SideNavCollapsibleConfig
   buttonLabel?: string
+  collapsedWidth?: 'rail' | 0
   defaultIsCollapsed?: boolean
   hasButton?: boolean
   isCollapsed?: boolean
   onCollapsedChange?: (isCollapsed: boolean) => void
 interface SideNavControlledCollapsible extends SideNavCollapsibleConfig
   buttonLabel?: string
+  collapsedWidth?: 'rail' | 0
   defaultIsCollapsed?: boolean
   hasButton?: boolean
   isCollapsed: boolean
