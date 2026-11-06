@@ -311,6 +311,11 @@ const opacitiesOf = (frames: Frame[]) => frames.map(frame => frame.opacity);
 test.describe('a toast in a top-layer viewport', () => {
   test('a new toast plays its entrance once', async ({page}) => {
     await openStory(page, storybook(), STORY);
+    // A slow entrance, so the recorder sees its first frames on a busy runner.
+    await page.addStyleTag({
+      content:
+        '[data-toast-id], [data-toast-id] * { --duration-fast: 1500ms !important; }',
+    });
     const dialog = await openDialog(page);
     await startRecording(page);
     await dialog.getByRole('button', {name: 'Show toast'}).click();
@@ -390,7 +395,11 @@ test.describe('a toast in a top-layer viewport', () => {
     const {frames} = await stopRecording(page);
     await expectRowShown(page);
     expect(placesOf(frames)).toEqual(['dialog', 'page']);
-    // What a person sees: the card fades in once and stays at full opacity.
+    // What a person sees: the card fades in once on the page and stays at
+    // full opacity. The frame recorded in the Dialog reads before paint.
+    expect(
+      Math.min(...opacitiesOf(frames.filter(frame => !frame.isInDialog))),
+    ).toBeLessThan(0.5);
     expect(fadesBack(frames)).toBe(false);
     expect(frames.at(-1)?.opacity).toBeGreaterThan(0.99);
   });
