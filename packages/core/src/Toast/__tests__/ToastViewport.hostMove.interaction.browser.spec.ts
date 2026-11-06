@@ -2,9 +2,11 @@
 
 /**
  * @file ToastViewport.hostMove.interaction.browser.spec.ts
- * @input The AppToastOverDialog story, recorded frame by frame
- * @output Tests that a toast plays its entrance once. A Dialog that opens or
- *   closes over it moves the viewport, and the toast does not enter again
+ * @input The AppToastOverDialog and AppToastOverDrawer stories, recorded
+ *   frame by frame
+ * @output Tests that a toast plays its entrance once. A Dialog or a modal
+ *   Drawer that opens or closes over it moves the viewport. The toast does not
+ *   enter again: its row and card start no transition
  * @position Testing; validates ToastViewport.tsx and Toast.tsx in a real
  *   browser
  */
@@ -19,6 +21,7 @@ import {
 const storybook = withStorybook(test);
 
 const STORY = 'core-toast--app-toast-over-dialog';
+const DRAWER_STORY = 'core-toast--app-toast-over-drawer';
 const MESSAGE = 'Toast from inside the dialog!';
 
 /** The toast's card on one frame. */
@@ -34,11 +37,17 @@ interface Recording {
   frames: Frame[];
   /** The opacity transitions the card ran: one for each entrance. */
   entrances: number;
+  /**
+   * Each CSS transition or animation that started on the toast's row or card,
+   * as `part property`: `card transform`.
+   */
+  starts: string[];
 }
 
 interface Recorder {
   frames: Frame[];
   transitions: Set<Animation>;
+  starts: string[];
   isRecording: boolean;
 }
 
@@ -48,10 +57,34 @@ async function startRecording(page: Page): Promise<void> {
     const recorder: Recorder = {
       frames: [],
       transitions: new Set(),
+      starts: [],
       isRecording: true,
     };
     (window as unknown as {__toastRecorder: Recorder}).__toastRecorder =
       recorder;
+    // A move that renders the toast again from its starting style starts a
+    // transition, even toward the values it already shows.
+    const onStart = (event: Event) => {
+      const {target} = event;
+      if (!recorder.isRecording || !(target instanceof Element)) {
+        return;
+      }
+      const part = target.matches('[data-toast-id]')
+        ? 'row'
+        : target.matches('[data-toast-id] .astryx-toast')
+          ? 'card'
+          : null;
+      if (part == null) {
+        return;
+      }
+      const property =
+        event instanceof TransitionEvent
+          ? event.propertyName
+          : (event as AnimationEvent).animationName;
+      recorder.starts.push(`${part} ${property}`);
+    };
+    document.addEventListener('transitionrun', onStart, true);
+    document.addEventListener('animationstart', onStart, true);
     const record = () => {
       const card = document.querySelector('[data-toast-id] .astryx-toast');
       if (card != null) {
@@ -84,6 +117,7 @@ async function stopRecording(page: Page): Promise<Recording> {
     return {
       frames: recorder.frames,
       entrances: recorder.transitions.size,
+      starts: recorder.starts,
     };
   });
 }
@@ -190,13 +224,17 @@ test.describe('a toast in a top-layer viewport', () => {
     await dialog.getByRole('button', {name: 'Show toast'}).click();
     await expect(toastText(page)).toBeVisible();
     await waitForRest(toastRow(page));
-    const {frames, entrances} = await stopRecording(page);
+    const {frames, entrances, starts} = await stopRecording(page);
     await expectRowShown(page);
     expect(placesOf(frames)).toEqual(['dialog']);
     // It fades in from nearly clear to fully shown.
     expect(Math.min(...opacitiesOf(frames))).toBeLessThan(0.5);
     expect(Math.max(...opacitiesOf(frames))).toBeGreaterThan(0.99);
     expect(entrances).toBe(1);
+    // The start recorder sees an entrance, so its empty lists below count.
+    expect(starts).toEqual(
+      expect.arrayContaining(['row grid-template-rows', 'card opacity']),
+    );
   });
 
   test('a toast moved during its entrance finishes it once and settles', async ({
@@ -236,11 +274,12 @@ test.describe('a toast in a top-layer viewport', () => {
     await dialog.getByRole('button', {name: 'Close'}).click();
     await expect(dialog).toBeHidden();
     await waitForRest(toastRow(page));
-    const {frames, entrances} = await stopRecording(page);
+    const {frames, entrances, starts} = await stopRecording(page);
     await expectRowShown(page);
     expect(placesOf(frames)).toEqual(['dialog', 'page']);
     expect(Math.min(...opacitiesOf(frames))).toBeGreaterThan(0.99);
     expect(entrances).toBe(0);
+    expect(starts).toEqual([]);
   });
 
   test('a toast already shown stays still when a Dialog opens over it', async ({
@@ -256,11 +295,41 @@ test.describe('a toast in a top-layer viewport', () => {
     await expect.poll(async () => frameCount(page)).toBeGreaterThan(0);
     await openDialog(page);
     await waitForRest(toastRow(page));
-    const {frames, entrances} = await stopRecording(page);
+    const {frames, entrances, starts} = await stopRecording(page);
     await expectRowShown(page);
     // The toast moved into the dialog that opened.
     expect(placesOf(frames)).toEqual(['page', 'dialog']);
     expect(Math.min(...opacitiesOf(frames))).toBeGreaterThan(0.99);
     expect(entrances).toBe(0);
+    expect(starts).toEqual([]);
+  });
+
+  test('a toast already shown stays still when a modal Drawer closes over it and opens again', async ({
+    page,
+  }) => {
+    await openStory(page, storybook(), DRAWER_STORY);
+    await page
+      .getByRole('button', {name: 'Open candidate', exact: true})
+      .click();
+    const drawer = page.getByRole('dialog', {name: 'Candidate'});
+    await waitForRest(drawer);
+    await drawer.getByRole('button', {name: 'Move to Interview'}).click();
+    await waitForRest(toastRow(page));
+    await startRecording(page);
+    await expect.poll(async () => framesInDialog(page)).toBeGreaterThan(0);
+    await page.keyboard.press('Escape');
+    await expect(drawer).toBeHidden();
+    await waitForRest(toastRow(page));
+    await page
+      .getByRole('button', {name: 'Open candidate', exact: true})
+      .click();
+    await waitForRest(drawer);
+    await waitForRest(toastRow(page));
+    const {frames, entrances, starts} = await stopRecording(page);
+    await expectRowShown(page);
+    expect(placesOf(frames)).toEqual(['dialog', 'page', 'dialog']);
+    expect(Math.min(...opacitiesOf(frames))).toBeGreaterThan(0.99);
+    expect(entrances).toBe(0);
+    expect(starts).toEqual([]);
   });
 });

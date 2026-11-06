@@ -1,0 +1,244 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+/**
+ * @file SnapPaging.test.tsx
+ * @input vitest (jsdom), Testing Library, SnapPaging, Carousel
+ * @output Proves the hook in Carousel. It claims the row's pans under every
+ *   pointer, and dropping the value or unmounting removes every listener it
+ *   added. Its entry has no `create…` equivalent. The value is stable, and
+ *   Carousel attaches it once and snaps as `hasSnap` does
+ * @position Testing; the paging motion itself is in the browser proofs
+ */
+
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {act, render, renderHook, screen} from '@testing-library/react';
+import {Carousel} from '../Carousel/Carousel';
+import {useSnapPaging} from './SnapPaging';
+import {
+  isSnapPaging,
+  makeSnapPaging,
+  nearestStop,
+  type SnapPagingAttachment,
+} from './snapPagingValue';
+
+class MockResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+/** The primary pointer each case runs under, read live by every list. */
+const pointer = {coarse: false};
+const listeners = new Set<() => void>();
+
+beforeEach(() => {
+  pointer.coarse = false;
+  listeners.clear();
+  vi.stubGlobal('ResizeObserver', MockResizeObserver);
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn((query: string) => ({
+      get matches() {
+        return query.includes('pointer: coarse') ? pointer.coarse : false;
+      },
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: (_type: string, listener: () => void) =>
+        listeners.add(listener),
+      removeEventListener: (_type: string, listener: () => void) =>
+        listeners.delete(listener),
+      dispatchEvent: vi.fn(),
+    })),
+  );
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  document.body.innerHTML = '';
+});
+
+const attachment = (detach = () => {}): SnapPagingAttachment => ({
+  detach,
+  moveHeld: () => false,
+});
+
+/** The touch-action the gesture host derived for `element`, '' for none. */
+const touchAction = (element: HTMLElement) =>
+  element.getAttribute('data-astryx-touch-action') ?? '';
+
+describe('useSnapPaging', () => {
+  it('returns one value for the component\u2019s life, which only Carousel reads', () => {
+    const {result, rerender} = renderHook(
+      ({pages}: {pages: 'view' | 'item'}) => useSnapPaging({pages}),
+      {initialProps: {pages: 'view'}},
+    );
+    const first = result.current;
+    expect(isSnapPaging(first)).toBe(true);
+    rerender({pages: 'item'});
+    expect(result.current).toBe(first);
+    expect(isSnapPaging({})).toBe(false);
+  });
+
+  it('is the entry\u2019s only export: no create\u2026 equivalent feeds anything else', async () => {
+    const entry = await import('./index');
+    expect(Object.keys(entry)).toEqual(['useSnapPaging']);
+  });
+});
+
+describe('Carousel with hasSnap', () => {
+  function scroller() {
+    return screen
+      .getByRole('region', {name: 'Items'})
+      .querySelector('[role="group"]') as HTMLElement;
+  }
+
+  it('hands its scroll area to the hook\u2019s value under every pointer, a fine one included', () => {
+    function Paging() {
+      return (
+        <Carousel aria-label="Items" hasSnap={useSnapPaging()}>
+          <div>One</div>
+          <div>Two</div>
+        </Carousel>
+      );
+    }
+    const {unmount} = render(<Paging />);
+    expect(touchAction(scroller())).toBe('pan-y pinch-zoom');
+    unmount();
+  });
+
+  it('removes every listener it added to the scroll area when Carousel drops the value or unmounts', () => {
+    // Every listener added to or removed from any target, in order.
+    const log: {
+      isAdd: boolean;
+      target: EventTarget;
+      type: string;
+      listener: unknown;
+    }[] = [];
+    const realAdd = EventTarget.prototype.addEventListener;
+    const realRemove = EventTarget.prototype.removeEventListener;
+    const add = vi
+      .spyOn(EventTarget.prototype, 'addEventListener')
+      .mockImplementation(function (this: EventTarget, type, listener, opts) {
+        log.push({isAdd: true, target: this, type, listener});
+        realAdd.call(this, type, listener, opts);
+      });
+    const remove = vi
+      .spyOn(EventTarget.prototype, 'removeEventListener')
+      .mockImplementation(function (this: EventTarget, type, listener, opts) {
+        log.push({isAdd: false, target: this, type, listener});
+        realRemove.call(this, type, listener, opts);
+      });
+    try {
+      function Toggle({isPaging}: {isPaging: boolean}) {
+        const paging = useSnapPaging();
+        return (
+          <Carousel aria-label="Items" hasSnap={isPaging ? paging : true}>
+            <div>One</div>
+            <div>Two</div>
+          </Carousel>
+        );
+      }
+      const {rerender, unmount} = render(<Toggle isPaging={false} />);
+      const element = scroller();
+      // The listeners added to the scroll area since `since` and still on it.
+      const live = (since: number) => {
+        const ids = new Map<unknown, number>();
+        const keyOf = (type: string, listener: unknown) => {
+          if (!ids.has(listener)) {
+            ids.set(listener, ids.size);
+          }
+          return `${type}|${ids.get(listener)}`;
+        };
+        const keys = new Set<string>();
+        for (const entry of log.slice(since)) {
+          if (entry.target !== element) {
+            continue;
+          }
+          const key = keyOf(entry.type, entry.listener);
+          if (entry.isAdd) {
+            keys.add(key);
+          } else {
+            keys.delete(key);
+          }
+        }
+        return [...keys];
+      };
+      let since = log.length;
+      rerender(<Toggle isPaging />);
+      expect(touchAction(element)).toBe('pan-y pinch-zoom');
+      expect(live(since).length).toBeGreaterThan(0);
+      rerender(<Toggle isPaging={false} />);
+      expect(touchAction(element)).toBe('');
+      expect(live(since)).toEqual([]);
+      since = log.length;
+      rerender(<Toggle isPaging />);
+      expect(live(since).length).toBeGreaterThan(0);
+      act(() => unmount());
+      expect(live(since)).toEqual([]);
+    } finally {
+      add.mockRestore();
+      remove.mockRestore();
+    }
+  });
+
+  it('runs no gesture code with hasSnap alone', () => {
+    pointer.coarse = true;
+    render(
+      <Carousel aria-label="Items" hasSnap>
+        <div>One</div>
+        <div>Two</div>
+      </Carousel>,
+    );
+    expect(touchAction(scroller())).toBe('');
+  });
+
+  it('snaps alike with hasSnap and with a paging value, and not without either', () => {
+    const value = makeSnapPaging(() => attachment());
+    const classes = (hasSnap?: boolean | typeof value) => {
+      const {unmount} = render(
+        <Carousel aria-label="Items" hasSnap={hasSnap}>
+          <div>One</div>
+        </Carousel>,
+      );
+      const className = scroller().className;
+      unmount();
+      return className;
+    };
+    const snapped = classes(true);
+    expect(classes(value)).toBe(snapped);
+    expect(classes(false)).not.toBe(snapped);
+    expect(classes(undefined)).toBe(classes(false));
+  });
+
+  it('nearestStop picks the nearest stop, and keeps the offset with no items', () => {
+    expect(nearestStop([0, 103, 205], 120)).toBe(103);
+    expect(nearestStop([], 42)).toBe(42);
+  });
+
+  it('attaches once: a new paging value on a later render attaches nothing again', () => {
+    const attached: string[] = [];
+    const first = makeSnapPaging(() => {
+      attached.push('first');
+      return attachment(() => attached.push('first detached'));
+    });
+    const second = makeSnapPaging(() => {
+      attached.push('second');
+      return attachment(() => attached.push('second detached'));
+    });
+    const {rerender, unmount} = render(
+      <Carousel aria-label="Items" hasSnap={first}>
+        <div>One</div>
+      </Carousel>,
+    );
+    rerender(
+      <Carousel aria-label="Items" hasSnap={second}>
+        <div>One</div>
+      </Carousel>,
+    );
+    expect(attached).toEqual(['first']);
+    act(() => unmount());
+    expect(attached).toEqual(['first', 'first detached']);
+  });
+});
