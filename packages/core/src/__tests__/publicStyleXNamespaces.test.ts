@@ -31,6 +31,7 @@ import * as stack from '@astryxdesign/core/Stack/stack.stylex';
 import * as stackItem from '@astryxdesign/core/Stack/stackItem.stylex';
 import * as text from '@astryxdesign/core/Text/text.stylex';
 import * as indicatorPress from '@astryxdesign/core/internal/indicatorPress.stylex';
+import * as touchHitArea from '@astryxdesign/core/internal/touchHitArea.stylex';
 import * as dataTokens from '@astryxdesign/core/theme/dataTokens.stylex';
 import * as tokens from '@astryxdesign/core/theme/tokens.stylex';
 import * as focusOutline from '@astryxdesign/core/utils/focusOutline.stylex';
@@ -190,6 +191,7 @@ const styleNamespacesBySubpath = {
     'wordBreakStyles',
   ],
   './internal/indicatorPress.stylex': [],
+  './internal/touchHitArea.stylex': ['touchHitAreaStyles'],
   './theme/dataTokens.stylex': [],
   './theme/tokens.stylex': [],
   './utils/focusOutline.stylex': ['focusOutlineStyles'],
@@ -214,6 +216,7 @@ const modulesBySubpath: Readonly<
   './Stack/stackItem.stylex': stackItem,
   './Text/text.stylex': text,
   './internal/indicatorPress.stylex': indicatorPress,
+  './internal/touchHitArea.stylex': touchHitArea,
   './theme/dataTokens.stylex': dataTokens,
   './theme/tokens.stylex': tokens,
   './utils/focusOutline.stylex': focusOutline,

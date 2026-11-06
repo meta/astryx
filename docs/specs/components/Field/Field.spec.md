@@ -211,6 +211,10 @@ The ordinary description remains stable consumer anatomy without a Field-owned t
   OQ1.
 - **Label tooltip (FieldLabel FR8).** A `labelTooltip` is reachable only by
   pointer, as `component:FieldLabel` FR8 records, against WCAG 2.2 SC 2.1.1.
+- **Clear button reach in WebKit (`spec:AST-094` FR42).** Implementation gap:
+  in WebKit (iOS Safari), a tap just outside the clear ✕ may go to the text
+  field (engine touch adjustment toward the larger focusable target); the band
+  geometry matches Chromium.
 
 ## Decision log
 
