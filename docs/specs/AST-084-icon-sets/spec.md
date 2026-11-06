@@ -278,7 +278,9 @@ icon, and the CLI verifies it, writes the files, and checks the set.
     opposite direction (`ellipsis-vertical` for `moreHorizontal`).
     A library whose export names end in look words (a style, a size, a
     weight: `XOutline24WGHT500Icon`), read from its trailing words that a few
-    values fill on nearly every export, gives one icon per glyph, named
+    values fill on nearly every export and that are numbered or include a
+    style word, never a direction word (`ArrowUp` and `ArrowDown` are two
+    glyphs), gives one icon per glyph, named
     without them (`x`, `XIcon`), in the look the default variant names, else
     the library's usual default (`outline`, `regular`), else the middle of a
     numbered series; the receipt names the looks it found and how many
@@ -306,8 +308,9 @@ icon, and the CLI verifies it, writes the files, and checks the set.
     `default`; `--display-name` and `--description` fill the descriptor.
     Without `--from`, over an existing set, those four options update it in
     place and leave its icons, `map`, and generated module as they are; a
-    variant an icon has must stay declared, and the receipt carries
-    `updated`. Over an existing set, `--variants` without
+    variant an icon has must stay declared, a set with icons keeps its
+    default variant (the refusal names the `--from` run that moves it), and
+    the receipt carries `updated`. Over an existing set, `--variants` without
     `--default-variant` keeps the set's default variant while it stays
     declared. Run again with `--from`, it
     refreshes the icons that module supplies (those the generated
@@ -329,7 +332,9 @@ icon, and the CLI verifies it, writes the files, and checks the set.
     receipt names both. Later runs keep the descriptor's `license`. The
     package's own `license` is never written. In a library of looks, a look
     the set already wraps keeps its icon and `id`, so a set wrapped one look
-    at a time loses and renames nothing, and a new glyph comes in once.
+    at a time loses and renames nothing, and a new glyph comes in once; a
+    new `--default-variant` moves each glyph's own icon to the look it
+    names, and the icon keeps its `id` and export.
   - `experimental icon add <Export> --from <module>` verifies the export,
     lists the definitions that fit it, and with `--definition` or
     `--new-definition` adds it and maps it; `--variant <name>` adds it as
@@ -341,8 +346,9 @@ icon, and the CLI verifies it, writes the files, and checks the set.
     in camelCase. From a library of looks it names the icon by its glyph;
     when the set already exports that glyph's name for another export of the
     library, the export keeps its look words in its id and name, or takes
-    its name from `--id`, and the listing adds the command that adds it as
-    that icon's variant. With
+    its name from `--id`, and when its first look word that differs from
+    the wrapped export's is a declared variant other than the default, the
+    listing adds the command that adds it as that icon's variant. With
     `--variant <name> --all` and no export, it adds that variant for every
     icon from that module's package whose `id` an export of the module has
     (in a library of looks, the glyph's look of that name), in one write; an

@@ -170,6 +170,68 @@ describe('the looks a library names its exports by', () => {
   });
 });
 
+describe('a library whose names end in directions', () => {
+  it('groups no looks, and maps each arrow and chevron definition by its exact name', async () => {
+    const lib = path.join(pkg, 'node_modules', '@acme', 'arrow-icons');
+    fs.mkdirSync(lib, {recursive: true});
+    fs.writeFileSync(
+      path.join(lib, 'package.json'),
+      JSON.stringify({
+        name: '@acme/arrow-icons',
+        version: '1.0.0',
+        type: 'module',
+        exports: {'.': './index.js'},
+      }),
+    );
+    const names = ['Arrow', 'Chevron', 'Caret', 'Triangle', 'Hand', 'Pointer']
+      .flatMap(glyph =>
+        ['Up', 'Down', 'Left', 'Right'].map(way => `${glyph}${way}Icon`),
+      )
+      .sort();
+    fs.writeFileSync(
+      path.join(lib, 'index.js'),
+      names
+        .map(name => `export function ${name}(props) { return null; }`)
+        .join('\n') + '\n',
+    );
+    expect(libraryIcons(path.join(lib, 'index.js'))).toHaveLength(24);
+    expect(
+      lookPositions(
+        names.map(name =>
+          name
+            .replace(/Icon$/u, '')
+            .replace(/([a-z])([A-Z])/gu, '$1-$2')
+            .toLowerCase(),
+        ),
+      ),
+    ).toEqual([]);
+    const {code, body} = await json([
+      'experimental',
+      'icon',
+      'new-set',
+      'arrows',
+      '--from',
+      '@acme/arrow-icons',
+    ]);
+    expect(code, JSON.stringify(body)).toBe(0);
+    const data = dataOf('arrows');
+    expect(data.icons).toHaveLength(24);
+    expect(data.map).toMatchObject({
+      arrowUp: 'arrow-up',
+      arrowDown: 'arrow-down',
+      arrowLeft: 'arrow-left',
+      arrowRight: 'arrow-right',
+      chevronUp: 'chevron-up',
+      chevronDown: 'chevron-down',
+      chevronLeft: 'chevron-left',
+      chevronRight: 'chevron-right',
+    });
+    expect(generatedOf('arrows')).toContain(
+      "export {ArrowUpIcon} from '@acme/arrow-icons';",
+    );
+  });
+});
+
 describe('new-set --from a library of looks', () => {
   it('wraps each glyph once by its glyph id, says what it found, and suggests only the default look', async () => {
     writeVectorLibrary(GLYPHS);
@@ -766,19 +828,79 @@ describe('the default variant over an existing set', () => {
     ]);
     expect(refreshed.code, JSON.stringify(refreshed.body)).toBe(0);
     expect(dataOf('brand').default).toEqual({variant: 'filled'});
-    // --default-variant still moves it.
-    const moved = await json([
+  });
+
+  it('moves in place only on a set with no icons; a set with icons names the refresh that moves it', async () => {
+    writeVectorLibrary(GLYPHS);
+    await json([
+      ...NEW_SET,
+      '--variants',
+      'outline,filled',
+      '--default-variant',
+      'filled',
+    ]);
+    const before = fs.readFileSync(
+      path.join(pkg, 'icon-sets', 'brand', 'brand.icons.json'),
+      'utf-8',
+    );
+    const move = [
       'experimental',
       'icon',
       'new-set',
       'brand',
       '--variants',
-      'outline,filled,bold',
+      'outline,filled',
       '--default-variant',
       'outline',
-    ]);
-    expect(moved.code, JSON.stringify(moved.body)).toBe(0);
+    ];
+    const refused = await json(move);
+    expect(refused.code).not.toBe(0);
+    expect(refused.body.code).toBe('ERR_INVALID_ARGUMENT');
+    expect(refused.body.error).toContain(
+      'each of its 6 icons still draws "filled"',
+    );
+    const refresh = refused.body.suggestions[0].name;
+    expect(refresh).toBe(
+      'astryx experimental icon new-set brand --from <module> --variants outline,filled --default-variant outline',
+    );
+    expect(
+      fs.readFileSync(
+        path.join(pkg, 'icon-sets', 'brand', 'brand.icons.json'),
+        'utf-8',
+      ),
+    ).toBe(before);
+    expect(generatedOf('brand')).toContain(
+      "export {XFilled24WGHT400Icon as XIcon} from '@acme/vector-icons';",
+    );
+    const refreshed = await json(
+      refresh.replace('<module>', '@acme/vector-icons').split(' ').slice(1),
+    );
+    expect(refreshed.code, JSON.stringify(refreshed.body)).toBe(0);
     expect(dataOf('brand').default).toEqual({variant: 'outline'});
+    expect(generatedOf('brand')).toContain(
+      "export {XOutline24WGHT400Icon as XIcon} from '@acme/vector-icons';",
+    );
+
+    await json([
+      'experimental',
+      'icon',
+      'new-set',
+      'empty',
+      '--variants',
+      'outline,filled',
+    ]);
+    const emptyMoved = await json([
+      'experimental',
+      'icon',
+      'new-set',
+      'empty',
+      '--variants',
+      'outline,filled',
+      '--default-variant',
+      'filled',
+    ]);
+    expect(emptyMoved.code, JSON.stringify(emptyMoved.body)).toBe(0);
+    expect(dataOf('empty').default).toEqual({variant: 'filled'});
   });
 
   it('heads an in-place update "Icon set updated", and its plan "Icon set update plan"', async () => {
@@ -885,6 +1007,56 @@ describe('add <Export> for a glyph the set already wraps in another look', () =>
     expect(generatedOf('brand')).toContain(
       "export {XFilled24WGHT500Icon as XFilledIcon} from '@acme/vector-icons';",
     );
+  });
+
+  it('lists a variant command only for a declared look other than the default, and every listed command runs as printed', async () => {
+    writeVectorLibrary(GLYPHS);
+    await json([...NEW_SET, '--variants', 'outline,filled']);
+    expect(dataOf('brand').default).toEqual({variant: 'outline'});
+    const snapshot = path.join(tmp, 'snapshot');
+    fs.cpSync(pkg, snapshot, {recursive: true});
+    const restore = () => {
+      fs.rmSync(pkg, {recursive: true, force: true});
+      fs.cpSync(snapshot, pkg, {recursive: true});
+    };
+    /** @param {string} exportName */
+    const listedCommands = async exportName => {
+      const listed = await json([
+        'experimental',
+        'icon',
+        'add',
+        exportName,
+        '--from',
+        '@acme/vector-icons',
+      ]);
+      expect(listed.code, JSON.stringify(listed.body)).toBe(0);
+      const {data} = listed.body;
+      return {
+        variant: data.variant ?? null,
+        commands: [
+          ...data.matches.map(
+            (/** @type {{command: string}} */ m) => m.command,
+          ),
+          ...(data.newDefinition ? [data.newDefinition] : []),
+          ...(data.variant ? [data.variant] : []),
+        ].filter(command => !command.includes('<')),
+      };
+    };
+    // Same style as the wrapped export, another weight: the weight word is
+    // no declared variant, so no variant command is listed.
+    const sameStyle = await listedCommands('XOutline24WGHT500Icon');
+    expect(sameStyle.variant).toBeNull();
+    // Another style: the style word is a declared variant, not the default.
+    const otherStyle = await listedCommands('XFilled24WGHT500Icon');
+    expect(otherStyle.variant).toBe(
+      'astryx experimental icon add XFilled24WGHT500Icon --from @acme/vector-icons --id x --variant filled',
+    );
+    for (const command of [...sameStyle.commands, ...otherStyle.commands]) {
+      restore();
+      const ran = await json(command.split(' ').slice(1));
+      expect(ran.code, `${command}\n${JSON.stringify(ran.body)}`).toBe(0);
+    }
+    expect(sameStyle.commands.length).toBeGreaterThan(0);
   });
 
   it('names the export from --id', async () => {

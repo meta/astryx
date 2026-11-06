@@ -272,13 +272,15 @@ export async function iconAdd(exportName, options) {
         set: selector,
         useDefault,
         id: givenId,
-        look: glyphTaken
-          ? lookVariantOf(
-              iconNaming(exportName, prefix).id,
-              libraryNaming.positions,
-              set.data.variants ?? [],
-            )
-          : null,
+        look:
+          glyphTaken && origin != null
+            ? lookVariantOf(
+                iconNaming(exportName, prefix).id,
+                iconNaming(origin.source, prefix).id,
+                libraryNaming.positions,
+                set,
+              )
+            : null,
         glyphId: glyph.id,
       });
     }
@@ -741,21 +743,34 @@ function nameFromId(id) {
 }
 
 /**
- * The variant an export of a library of looks draws: the look word of its
- * name that the set declares as a variant, else its style (the look word
- * first in its name), or null when its name has no look words.
+ * The variant an export of a library of looks is of the icon the set
+ * already wraps for its glyph: its word at the first look position, in name
+ * order, where it differs from the wrapped export. That word is a variant
+ * only when the set declares it and it is not the default, which the icon's
+ * own export draws. Otherwise null, so the listing offers no variant
+ * command that the set's data would refuse.
  * @param {string} id the export's id, look words kept
- * @param {Array<Set<string>>} positions the library's look positions
- * @param {string[]} declared the set's variants
+ * @param {string} wrappedId the wrapped export's id, look words kept
+ * @param {Array<Set<string>>} positions the library's look positions, the
+ *   last word first
+ * @param {import('../../../foundation/discovery/icon-set-discovery.mjs').DiscoveredIconSet} set
  * @returns {string | null}
  */
-function lookVariantOf(id, positions, declared) {
+function lookVariantOf(id, wrappedId, positions, set) {
   const {look} = splitLook(id.split('-'), positions);
-  return (
-    look.find(word => word != null && declared.includes(word)) ??
-    [...look].reverse().find(word => word != null) ??
-    null
-  );
+  const {look: wrapped} = splitLook(wrappedId.split('-'), positions);
+  let word = null;
+  for (let index = look.length - 1; index >= 0; index--) {
+    if (look[index] !== wrapped[index]) {
+      word = look[index];
+      break;
+    }
+  }
+  return word != null &&
+    (set.data.variants ?? []).includes(word) &&
+    word !== set.data.default?.variant
+    ? word
+    : null;
 }
 
 /**

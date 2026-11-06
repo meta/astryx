@@ -526,7 +526,8 @@ function describedDoc(source, describe) {
  * variants and default variant, and rewrite its display name and
  * description, in place. Its icons, map and generated module stay as they
  * are. A variant an icon still has must stay declared, and the default
- * variant is one no icon lists as an extra look.
+ * variant is one no icon lists as an extra look. A set with icons keeps its
+ * default variant: only a refresh with `--from` moves it.
  * @param {string} name
  * @param {{cwd: string, dryRun: boolean, looks: Looks | null, describe: {displayName?: string, description?: string}, packageDir: string, rootPath: string, manifestPath: string}} options
  */
@@ -536,7 +537,27 @@ async function redeclareIconSet(
 ) {
   return iconAuthoring(async () => {
     const {set} = await findLocalIconSet(cwd, name);
-    const looks = keepDefaultVariant(given, set.data.default?.variant);
+    const current = set.data.default?.variant;
+    const looks = keepDefaultVariant(given, current);
+    // Each icon's own export draws the current default look, and only a
+    // refresh from the library re-picks those exports.
+    if (
+      looks &&
+      current != null &&
+      looks.default !== current &&
+      set.data.icons.length > 0
+    ) {
+      throw new AstryxError(
+        `Icon set "${name}" can't move its default variant from "${current}" to "${looks.default}" in place: each of its ${set.data.icons.length} icons still draws "${current}". Wrap the library again with the new default, so each icon takes that look.`,
+        [
+          {
+            name: `astryx experimental icon new-set ${name} --from <module> --variants ${looks.variants.join(',')} --default-variant ${looks.default}`,
+            reason: 'wrap the library again in the new default look',
+          },
+        ],
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+      );
+    }
     if (looks) {
       const declared = new Set(looks.variants);
       const dropped = set.data.icons.flatMap(icon =>
@@ -871,7 +892,23 @@ async function refreshIconSet(
   return iconAuthoring(async () => {
     const where = await findLocalIconSet(cwd, name);
     const {set} = where;
-    const looks = keepDefaultVariant(given, set.data.default?.variant);
+    const current = set.data.default?.variant;
+    const looks = keepDefaultVariant(given, current);
+    const moved = looks != null && current != null && looks.default !== current;
+    if (moved) {
+      const asExtra = set.data.icons
+        .filter(icon =>
+          (icon.variants ?? []).some(each => each.variant === looks.default),
+        )
+        .map(icon => icon.id);
+      if (asExtra.length > 0) {
+        throw new AstryxError(
+          `"${looks.default}" can't be the default variant: ${asExtra.length} icons list it as another look (${asExtra.slice(0, 8).join(', ')}${asExtra.length > 8 ? ', …' : ''}), and each icon's own export draws the default.`,
+          undefined,
+          ERROR_CODES.ERR_INVALID_ARGUMENT,
+        );
+      }
+    }
     const source = resolveIconSource(from, where);
     // Exports left out before stay out; --exclude adds to them.
     const excluded = [
@@ -913,17 +950,25 @@ async function refreshIconSet(
     // glyph. A look the set already wraps keeps its icon as it is (a set an
     // earlier release wrapped one look at a time keeps every icon and id);
     // only a glyph the set has no look of comes in once, in the look the
-    // set's default variant or the library's usual default prefers.
-    const looksOf = libraryLooks(
-      everyIcon,
-      set.data.default?.variant ? [set.data.default.variant] : [],
-    ).icons;
+    // set's default variant or the library's usual default prefers. A new
+    // default variant moves each glyph's own icon to the look it names, so
+    // its export draws the default; the icon keeps its id, name and fields.
+    const preferred = looks?.default ?? current;
+    const looksOf = libraryLooks(everyIcon, preferred ? [preferred] : []).icons;
     const iconByExport = new Map(everyIcon.map(icon => [icon.export, icon]));
+    /** @type {string[]} the set's exports whose statement now names another look */
+    const repicked = [];
     const found = looksOf.flatMap(icon => {
       const wrapped = (icon.looks ?? []).filter(look => bySource.has(look));
       if (wrapped.length === 0) return [icon];
       return wrapped.map(look => {
-        const prior = /** @type {{id: string}} */ (bySource.get(look));
+        const prior = /** @type {{id: string, export: string}} */ (
+          bySource.get(look)
+        );
+        if (moved && prior.id === icon.id && !bySource.has(icon.export)) {
+          repicked.push(prior.export);
+          return icon;
+        }
         const own = /** @type {(typeof everyIcon)[number]} */ (
           iconByExport.get(look)
         );
@@ -1086,8 +1131,9 @@ async function refreshIconSet(
           }))
           .filter(icon => publicName.has(icon.source)),
         // The icons the library no longer exports leave the module too; a
-        // renamed icon keeps its export.
-        gone.map(icon => icon.export),
+        // renamed icon keeps its export. An icon moved to the new default
+        // look keeps its export, which now names that look.
+        [...gone.map(icon => icon.export), ...repicked],
       );
       files.push(...written.files);
       try {

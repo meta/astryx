@@ -795,16 +795,73 @@ const LOOK_MIN_ICONS = 20;
 /** More words than this in one trailing position are glyph names. */
 const LOOK_MAX_VALUES = 12;
 
+/** Words that name a look's style, never a glyph. */
+const LOOK_STYLE_WORDS = new Set([
+  'default',
+  'regular',
+  'outline',
+  'outlined',
+  'line',
+  'linear',
+  'stroke',
+  'filled',
+  'fill',
+  'solid',
+  'bold',
+  'light',
+  'thin',
+  'duotone',
+  'twotone',
+  'mini',
+  'micro',
+  'sharp',
+  'round',
+  'rounded',
+  'bulk',
+  'broken',
+]);
+
+/** Words that name a glyph's direction (`ArrowUp`), never a look. */
+const DIRECTION_WORDS = new Set([
+  'up',
+  'down',
+  'left',
+  'right',
+  'top',
+  'bottom',
+  'start',
+  'end',
+  'north',
+  'south',
+  'east',
+  'west',
+]);
+
+/**
+ * Whether the words that fill a trailing position name a look: each is
+ * numbered (`24`, `wght500`) or one is a style word, and none is a
+ * direction word. `ArrowUp` and `ArrowDown` are two glyphs, not two looks.
+ * @param {string[]} words
+ */
+function namesLook(words) {
+  if (words.some(word => DIRECTION_WORDS.has(word))) return false;
+  return (
+    words.every(word => /^[a-z]*\d+$/u.test(word)) ||
+    words.some(word => LOOK_STYLE_WORDS.has(word))
+  );
+}
+
 /**
  * The trailing words a library encodes its looks with: a style, a size, a
  * weight (`XOutline24WGHT500Icon` is `x` in the `outline`, `24`, `wght500`
  * look). A trailing position is a look position when, across at least
  * {@link LOOK_MIN_ICONS} icons, at most {@link LOOK_MAX_VALUES} words fill
- * it, each on at least 5% of the icons and together on at least 90%; the
- * positions are read from the end while they hold. Glyph names never meet
- * that bar (`trash-2` and `clock-10` are a few icons each), so a library
- * that encodes no looks has none. Reads each id once per position and
- * keeps only counts.
+ * it, each on at least 5% of the icons and together on at least 90%, and
+ * those words name a look ({@link namesLook}); the positions are read from
+ * the end while they hold. Glyph names never meet that bar (`trash-2` and
+ * `clock-10` are a few icons each, and `up` and `down` are directions), so
+ * a library that encodes no looks has none. Reads each id once per
+ * position and keeps only counts.
  * @param {string[]} ids every icon's id
  * @returns {Array<Set<string>>} the look positions, the last word first
  */
@@ -829,6 +886,7 @@ export function lookPositions(ids) {
     if (values.length === 0 || values.length > LOOK_MAX_VALUES) break;
     const covered = values.reduce((sum, [, count]) => sum + count, 0);
     if (covered < ids.length * 0.9) break;
+    if (!namesLook(values.map(([value]) => value))) break;
     positions.push(new Set(values.map(([value]) => value)));
   }
   return positions;
