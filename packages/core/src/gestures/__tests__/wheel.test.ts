@@ -892,6 +892,34 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     expect(states[0]).toBe('began');
   });
 
+  it('takes the trackpad scroll of a pan on its own scroller, whose derived touch-action keeps that axis from the browser; a scroller inside it still takes the wheel first', () => {
+    const {row, inner} = mount(
+      '<div id="row"><div id="inner"><div id="cell">cell</div></div></div>',
+    );
+    scrollableX(row, {scrollLeft: 0, scrollWidth: 600, clientWidth: 200});
+    const pan = new PanGestureRecognizer({
+      direction: 'horizontal',
+      allowedScrollTypes: ['continuous'],
+    });
+    const states = statesOf(pan);
+    detachers.push(host.attach(row, pan));
+    const cell = document.getElementById('cell') as HTMLElement;
+    // The row scrolls, but a finger's horizontal pan on it is the pan's: so
+    // is the trackpad's.
+    const taken = [0, 16, 32].map(time =>
+      wheel(cell, {trackpad: true, dx: 8, time}),
+    );
+    expect(taken.every(event => event.defaultPrevented)).toBe(true);
+    expect(states[0]).toBe('began');
+    clock.runDue(32 + 300);
+    // A scroller inside the row that can scroll that way takes the wheel.
+    scrollableX(inner, {scrollLeft: 0, scrollWidth: 600, clientWidth: 100});
+    const native = [500, 516].map(time =>
+      wheel(cell, {trackpad: true, dx: 8, time}),
+    );
+    expect(native.some(event => event.defaultPrevented)).toBe(false);
+  });
+
   it("tells a mouse wheel's notches from a trackpad: a pan leaves lines and whole notches to the page and takes a trackpad's scroll (spec:AST-094 FR43, DEC-24)", () => {
     const {smooth} = mount('<div id="smooth"></div>');
     const pan = new PanGestureRecognizer({
