@@ -250,6 +250,95 @@ describe('required lint routing', () => {
     ).toBe(false);
     // An empty list is not a known change.
     expect(canSkipBaselineCheck([], baseline)).toBe(false);
+    // ESLint skips what an ignore file names, and reads the rule from the
+    // plugin entry.
+    for (const file of [
+      '.gitignore',
+      'packages/core/.gitignore',
+      'internal/eslint-plugin-astryx/index.js',
+    ]) {
+      expect(canSkipBaselineCheck([file], baseline), file).toBe(false);
+    }
+  });
+
+  // Runs the step's own script in a scratch repository whose merge commit
+  // changes `files`, with a stub baseline script that prints a marker.
+  function runBaselineStep({event = 'pull_request', files, baseline = '{}'}) {
+    const check = steps.find(
+      step => step.name === 'Check the comment-provenance baseline',
+    );
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'provenance-step-'));
+    scratch.push(repo);
+    const write = (file, text) => {
+      fs.mkdirSync(path.dirname(path.join(repo, file)), {recursive: true});
+      fs.writeFileSync(path.join(repo, file), text);
+    };
+    write(
+      '.github/scripts/provenance-baseline-scope.mjs',
+      fs.readFileSync(
+        path.join(root, '.github/scripts/provenance-baseline-scope.mjs'),
+        'utf8',
+      ),
+    );
+    write(
+      'internal/eslint-plugin-astryx/no-comment-provenance.baseline.json',
+      baseline,
+    );
+    write(
+      'internal/eslint-plugin-astryx/no-comment-provenance.baseline.mjs',
+      "console.log('BASELINE CHECK RAN');\n",
+    );
+    write('docs/README.md', 'base\n');
+    write('packages/core/src/Button/Button.tsx', 'base\n');
+    const g = (...args) =>
+      execFileSync(
+        'git',
+        ['-C', repo, '-c', 'user.name=t', '-c', 'user.email=t@t', ...args],
+        {
+          encoding: 'utf8',
+        },
+      );
+    g('init', '-q');
+    g('add', '-A');
+    g('commit', '-qm', 'base', '--no-verify');
+    for (const file of files) write(file, 'changed\n');
+    g('add', '-A');
+    g('commit', '-qm', 'change', '--allow-empty', '--no-verify');
+    const merge = g('rev-parse', 'HEAD').trim();
+    const runnerTemp = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'provenance-tmp-'),
+    );
+    scratch.push(runnerTemp);
+    return execFileSync('bash', ['-e', '-c', check.run], {
+      cwd: repo,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        EVENT_NAME: event,
+        MERGE_SHA: merge,
+        RUNNER_TEMP: runnerTemp,
+      },
+    });
+  }
+
+  it('runs the baseline check for a push, a baselined change, a helper failure and an empty list, and skips an unrelated change', () => {
+    const baseline = JSON.stringify({
+      'packages/core/src/Button/Button.tsx': [],
+    });
+    const ran = options =>
+      runBaselineStep(options).includes('BASELINE CHECK RAN');
+    expect(ran({event: 'push', files: ['docs/README.md'], baseline})).toBe(
+      true,
+    );
+    expect(
+      ran({files: ['packages/core/src/Button/Button.tsx'], baseline}),
+    ).toBe(true);
+    expect(ran({files: ['.gitignore'], baseline})).toBe(true);
+    // A baseline the helper cannot parse: the helper fails, the check runs.
+    expect(ran({files: ['docs/README.md'], baseline: '{not json'})).toBe(true);
+    // A merge commit that changes nothing: an empty list runs the check.
+    expect(ran({files: [], baseline})).toBe(true);
+    expect(ran({files: ['docs/README.md'], baseline})).toBe(false);
   });
 
   it('runs the baseline check when the helper fails or the file list is empty', () => {

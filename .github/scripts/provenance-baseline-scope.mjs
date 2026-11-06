@@ -6,7 +6,8 @@
  *   rename), and optionally `--baseline <file>`.
  * @output Exit 0 only when the change cannot make the comment-provenance
  *   baseline stale: a non-empty list that touches no file the baseline lists,
- *   not the baseline, and not the rule or its baseline tooling. Any other
+ *   not the baseline, not the rule or its baseline tooling, and no
+ *   `.gitignore` (ESLint skips the files those name). Any other
  *   answer, an error included, exits non-zero, and the check runs.
  * @position The lint job's "Check the comment-provenance baseline" step reads
  *   it, so a pull request that cannot change the baseline skips the check.
@@ -27,6 +28,7 @@ export const RULE_FILES = [
   'internal/eslint-plugin-astryx/no-comment-provenance.js',
   'internal/eslint-plugin-astryx/no-comment-provenance.baseline.mjs',
   'internal/eslint-plugin-astryx/rule-baseline.mjs',
+  'internal/eslint-plugin-astryx/index.js',
   'eslint.config.js',
 ];
 
@@ -39,7 +41,11 @@ export const RULE_FILES = [
 export function canSkipBaselineCheck(changed, baseline) {
   if (changed.length === 0) return false;
   const listed = new Set([...Object.keys(baseline), ...RULE_FILES]);
-  return !changed.some(file => listed.has(file));
+  // ESLint skips what an ignore file names, so an ignore change can make a
+  // listed site disappear.
+  return !changed.some(
+    file => listed.has(file) || path.posix.basename(file) === '.gitignore',
+  );
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
