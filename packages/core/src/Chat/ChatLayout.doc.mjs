@@ -6,7 +6,7 @@ export const docs = {
   name: 'ChatLayout',
   subComponentOf: 'Chat',
   displayName: 'Chat Layout',
-  description: 'Layout shell for full chat interfaces. Messages flow in normal page flow, composer is fixed to the bottom with a frosted glass dock. Set density (compact/balanced/spacious) to control spacing, message max-width, and blur layer sizing. Includes built-in auto-scroll, a "New messages" scroll-to-bottom button, and a frosted glass blur layer behind the composer. By default the layout root is the scroll container; pass scrollRef to delegate scrolling to a parent element or the document body. With a software keyboard up in a top-level page (not under `interactive-widget=resizes-content`), dragging the conversation down to the composer with a finger or a pen and lifting there dismisses the keyboard; once the finger is over the composer, the composer follows it down to show the drag is armed. A release moving back up keeps the keyboard, and a mouse drag still selects text (no caller control).',
+  description: 'Layout shell for full chat interfaces. Messages flow in normal page flow, composer is fixed to the bottom with a frosted glass dock. Set density (compact/balanced/spacious) to control spacing, message max-width, and blur layer sizing. Includes built-in auto-scroll, a "New messages" scroll-to-bottom button, and a frosted glass blur layer behind the composer. By default the layout root is the scroll container; pass scrollRef to delegate scrolling to a parent element or the document body. With a software keyboard up in a top-level page (not under `interactive-widget=resizes-content`), dragging the conversation down to the composer with a finger or a pen dismisses the keyboard as the finger reaches the composer, and the composer and the scroll-to-bottom button give one small bounce together. A drag down that starts on the composer dismisses it too, and a drag on the composer never scrolls the conversation under the keyboard. A mouse drag still selects text (no caller control).',
   props: [
     {
       name: 'children',
@@ -131,7 +131,7 @@ export const docsZh = {
 export const docsDense = {
   name: 'ChatLayout',
   displayName: 'Chat Layout',
-  description: 'layout shell for full chat; msgs in page flow, composer fixed bottom w/ frosted glass dock; density prop (default balanced); scrollRef delegates to parent/body; with a software keyboard up in a top-level page (not under `interactive-widget=resizes-content`), a finger or pen drag down the transcript lifted at the composer dismisses it, the composer following the finger once it is over it; a mouse drag still selects text (no prop)',
+  description: 'layout shell for full chat; msgs in page flow, composer fixed bottom w/ frosted glass dock; density prop (default balanced); scrollRef delegates to parent/body; with a software keyboard up in a top-level page (not under `interactive-widget=resizes-content`), a finger or pen drag down the transcript dismisses it as it reaches the composer (one small bounce of composer + scroll button), as does a drag down that starts on the composer, which never scrolls the transcript; a mouse drag still selects text (no prop)',
   usage: {
     bestPractices: [
       {guidance: true, description: 'Pass ChatMessageList as children and ChatComposer as composer prop for complete chat.'},

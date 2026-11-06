@@ -2,22 +2,27 @@
 
 /**
  * @file transcriptDismiss.test.ts
- * @input vitest, jsdom, a stand-in visual viewport, the arena harness and
- *   createKeyboardDismissPan with timestamped contacts
- * @output Tests the pan's one decision at the release: where the drag lifts
- *   against the line, flicks, and a release that moves back up. It covers a
- *   cancelled touch, a touch the browser scrolls with, a zoomed page and the
- *   browser's pan to the field. It also covers which contacts it follows.
+ * @input vitest, jsdom, a stand-in visual viewport, the arena harness and the
+ *   dismissal pans with timestamped contacts
+ * @output Tests that a transcript drag dismisses the keyboard as it reaches
+ *   the line, once, before its lift, and that flicks above it do not. It
+ *   covers a cancelled touch, a touch the browser scrolls with and a zoomed
+ *   page. It also covers the browser's pan to the field and which contacts
+ *   each pan follows. A drag down that starts on the composer dismisses too.
+ *   A drag up or across, or one in a part that scrolls on its own, keeps the
+ *   keyboard.
  * @position Unit tests for Chat/transcriptDismiss.ts
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import type {PointerKind} from '../gestures/types';
+import type {PanGestureRecognizer} from '../gestures/PanGestureRecognizer';
 import {createHarness, type Finger} from '../gestures/__tests__/harness';
 import {
+  createComposerDismissPan,
   createKeyboardDismissPan,
-  dismissDragOf,
-  dismissKeyboardAtRelease,
+  dismissKeyboardAtCrossing,
+  dismissKeyboardOnComposerDrag,
 } from './transcriptDismiss';
 
 type FakeViewport = EventTarget & {
@@ -43,6 +48,7 @@ let bar: HTMLElement;
 let harness: ReturnType<typeof createHarness>;
 let line: () => number;
 let pan: ReturnType<typeof createKeyboardDismissPan>;
+let dismissals: number[];
 
 function showKeyboard() {
   viewport.height = window.innerHeight - COVER;
@@ -54,6 +60,9 @@ interface DragOptions {
   pxPerFrame?: number;
   id?: number;
   pointerType?: PointerKind;
+  x?: number;
+  toX?: number;
+  recognizer?: PanGestureRecognizer;
 }
 
 // A contact down at `from` on `target`, then one sample per 60 Hz frame to
@@ -62,16 +71,29 @@ function drag(
   target: Element,
   from: number,
   to: number,
-  {start = 0, pxPerFrame = 8, id = 1, pointerType = 'touch'}: DragOptions = {},
+  {
+    start = 0,
+    pxPerFrame = 8,
+    id = 1,
+    pointerType = 'touch',
+    x = 100,
+    toX = x,
+    recognizer = pan,
+  }: DragOptions = {},
 ): {finger: Finger; last: number} {
   const finger = harness
     .finger(id)
-    .down(100, from, start, {recognizers: [pan], target, pointerType});
-  const steps = Math.max(1, Math.ceil(Math.abs(to - from) / pxPerFrame));
+    .down(x, from, start, {recognizers: [recognizer], target, pointerType});
+  const distance = Math.max(Math.abs(to - from), Math.abs(toX - x));
+  const steps = Math.max(1, Math.ceil(distance / pxPerFrame));
   let last = start;
   for (let i = 1; i <= steps; i++) {
     last = start + i * 16;
-    finger.move(100, from + ((to - from) * i) / steps, last);
+    finger.move(
+      x + ((toX - x) * i) / steps,
+      from + ((to - from) * i) / steps,
+      last,
+    );
   }
   return {finger, last};
 }
@@ -95,7 +117,10 @@ describe('createKeyboardDismissPan', () => {
     harness = createHarness();
     line = () => TRIGGER;
     pan = createKeyboardDismissPan(() => line());
-    pan.addListener(() => dismissKeyboardAtRelease(pan));
+    dismissals = [];
+    pan.addListener(() =>
+      dismissKeyboardAtCrossing(pan, speed => dismissals.push(speed)),
+    );
     field.focus();
     showKeyboard();
   });
@@ -106,15 +131,35 @@ describe('createKeyboardDismissPan', () => {
     document.body.innerHTML = '';
   });
 
-  describe('one decision, at the release (spec:AST-094 FR36, FR37)', () => {
-    it('dismisses when a slow drag lifts past the line, and not on the move that crosses it', () => {
+  describe('one decision, as the finger reaches the line (FR10)', () => {
+    it('dismisses on the move that reaches the line, before the lift', () => {
       const {finger, last} = drag(row, 200, TRIGGER + 20);
-      // The move crossed the line, but nothing decides until the lift.
-      expect(document.activeElement).toBe(field);
-      finger.up(last + 8);
       expect(document.activeElement).not.toBe(field);
+      expect(dismissals).toHaveLength(1);
+      finger.up(last + 8);
+      expect(dismissals).toHaveLength(1);
       // The pan watches: it never takes the touch from the browser.
       expect(harness.claims).toEqual([]);
+    });
+
+    it('keeps the keyboard while the drag stays above the line, and after its lift there', () => {
+      const {finger, last} = drag(row, 200, TRIGGER - 1);
+      expect(document.activeElement).toBe(field);
+      finger.up(last + REST_MS);
+      expect(document.activeElement).toBe(field);
+      expect(dismissals).toEqual([]);
+    });
+
+    it('dismisses when the finger reaches the line itself', () => {
+      drag(row, 200, TRIGGER);
+      expect(document.activeElement).not.toBe(field);
+    });
+
+    it('dismisses when the lift itself is the first contact on the line', () => {
+      const {finger, last} = drag(row, 200, TRIGGER - 4);
+      expect(document.activeElement).toBe(field);
+      finger.up(last + 8, 100, TRIGGER + 4);
+      expect(document.activeElement).not.toBe(field);
     });
 
     it('keeps the keyboard for a tap that lands just above the line and drifts onto it', () => {
@@ -124,76 +169,57 @@ describe('createKeyboardDismissPan', () => {
         .finger(1)
         .down(100, TRIGGER - 4, 0, {recognizers: [pan], target: row})
         .move(100, TRIGGER + 4, 16);
+      expect(document.activeElement).toBe(field);
       finger.up(16 + REST_MS);
       expect(document.activeElement).toBe(field);
     });
 
-    it('dismisses once the drag has travelled the 10 px pan hysteresis', () => {
-      const finger = harness
+    it('dismisses on the move that completes the 10 px pan hysteresis past the line', () => {
+      harness
         .finger(1)
         .down(100, TRIGGER - 6, 0, {recognizers: [pan], target: row})
         .move(100, TRIGGER + 4, 16);
-      finger.up(16 + REST_MS);
-      expect(document.activeElement).not.toBe(field);
-    });
-
-    it('keeps the keyboard when the finger lifts at rest short of the line', () => {
-      const {finger, last} = drag(row, 200, TRIGGER - 1);
-      finger.up(last + REST_MS);
-      expect(document.activeElement).toBe(field);
-    });
-
-    it('dismisses when the finger lifts at rest on the line', () => {
-      const {finger, last} = drag(row, 200, TRIGGER);
-      finger.up(last + REST_MS);
       expect(document.activeElement).not.toBe(field);
     });
 
     it('keeps the keyboard for a flick that lifts above the line, however fast', () => {
-      // In UIKit the keyboard never moves until the finger reaches it. So a
-      // fast flick that lifts above it never dismisses it.
+      // Only where the finger is decides: nothing projects the drag past its
+      // lift.
       const {finger, last} = drag(row, 100, TRIGGER - 10, {pxPerFrame: 24});
       finger.up(last + 4);
       expect(document.activeElement).toBe(field);
+      expect(dismissals).toEqual([]);
     });
 
-    it('dismisses a fast drag that lifts just past the line', () => {
-      const {finger, last} = drag(row, 100, TRIGGER + 20, {pxPerFrame: 24});
-      finger.up(last + 4);
-      expect(document.activeElement).not.toBe(field);
+    it('hands over the finger’s downward speed, in px/s', () => {
+      // 8 px a 16 ms frame is 500 px/s.
+      drag(row, 200, TRIGGER + 20);
+      expect(dismissals[0]).toBeGreaterThan(400);
+      expect(dismissals[0]).toBeLessThan(600);
     });
 
-    it('keeps the keyboard for a release moving back up, however far the finger went', () => {
-      const result = drag(row, 200, TRIGGER + 80);
+    it('dismisses once per drag, however often the finger crosses the line', () => {
+      const result = drag(row, 200, TRIGGER + 40);
+      expect(dismissals).toHaveLength(1);
+      // The field takes focus again while the finger stays down.
+      field.focus();
       let last = result.last;
-      for (let y = TRIGGER + 72; y >= TRIGGER + 40; y -= 8) {
+      for (const y of [TRIGGER - 40, TRIGGER + 40]) {
         last += 16;
         result.finger.move(100, y, last);
       }
-      result.finger.up(last + 8);
       expect(document.activeElement).toBe(field);
+      result.finger.up(last + 8);
+      expect(dismissals).toHaveLength(1);
     });
 
-    it('dismisses when the finger moves back up, then rests before lifting past the line', () => {
-      // The release velocity is 0 after a still rest, so the release does not
-      // move back up.
-      const result = drag(row, 200, TRIGGER + 80);
-      let last = result.last;
-      for (let y = TRIGGER + 72; y >= TRIGGER + 40; y -= 8) {
-        last += 16;
-        result.finger.move(100, y, last);
-      }
-      result.finger.up(last + REST_MS);
-      expect(document.activeElement).not.toBe(field);
-    });
-
-    it('decides nothing for a touch the browser cancels', () => {
-      const {finger, last} = drag(row, 200, TRIGGER + 20);
+    it('decides nothing for a touch the browser cancels short of the line', () => {
+      const {finger, last} = drag(row, 200, TRIGGER - 20);
       finger.cancel(last + 8);
       expect(document.activeElement).toBe(field);
     });
 
-    it('follows a touch the browser takes for a scroll until it lifts', () => {
+    it('follows a touch the browser takes for a scroll until it reaches the line', () => {
       const {finger, last} = drag(row, 200, 260);
       finger.takenByBrowser(last + 1);
       let time = last + 1;
@@ -201,11 +227,10 @@ describe('createKeyboardDismissPan', () => {
         time += 16;
         finger.move(100, y, time);
       }
-      finger.up(time + 8);
       expect(document.activeElement).not.toBe(field);
     });
 
-    it('commits at the line on a page WebKit pinch-zooms', () => {
+    it('dismisses at the line on a page WebKit pinch-zooms', () => {
       // WebKit reports innerWidth and innerHeight in the zoomed visual
       // viewport's px. clientY and the composer's box stay in layout px, and
       // the keyboard still reads as up.
@@ -217,11 +242,10 @@ describe('createKeyboardDismissPan', () => {
         height: (768 - COVER) / 2,
       });
       viewport.dispatchEvent(new Event('resize'));
-      let result = drag(row, 200, TRIGGER - 1);
-      result.finger.up(result.last + REST_MS);
+      const result = drag(row, 200, TRIGGER - 1);
       expect(document.activeElement).toBe(field);
-      result = drag(row, 200, TRIGGER, {start: result.last + 1000});
       result.finger.up(result.last + REST_MS);
+      drag(row, 200, TRIGGER, {start: result.last + 1000});
       expect(document.activeElement).not.toBe(field);
     });
 
@@ -233,11 +257,10 @@ describe('createKeyboardDismissPan', () => {
       viewport.dispatchEvent(new Event('scroll'));
       const composerTop = 768 - COMPOSER;
       line = () => composerTop;
-      let result = drag(row, 300, composerTop - 1);
-      result.finger.up(result.last + REST_MS);
+      const result = drag(row, 300, composerTop - 1);
       expect(document.activeElement).toBe(field);
-      result = drag(row, 300, composerTop + 4, {start: result.last + 1000});
       result.finger.up(result.last + REST_MS);
+      drag(row, 300, composerTop + 4, {start: result.last + 1000});
       expect(document.activeElement).not.toBe(field);
     });
   });
@@ -343,24 +366,187 @@ describe('createKeyboardDismissPan', () => {
       expect(document.activeElement).not.toBe(field);
     });
   });
+});
 
-  describe('the drag the composer follows', () => {
-    it('names its line and the keyboard’s height until its release, and forgets a cancelled drag', () => {
-      const first = drag(row, 200, TRIGGER + 20);
-      expect(dismissDragOf(pan)).toEqual({
-        doc: document,
-        line: TRIGGER,
-        travel: COVER,
-      });
-      first.finger.cancel(first.last + 8);
-      expect(dismissDragOf(pan)).toBeNull();
-      expect(document.activeElement).toBe(field);
-      line = () => TRIGGER - 40;
-      const second = drag(row, 200, TRIGGER - 20, {start: first.last + 1000});
-      expect(dismissDragOf(pan)?.line).toBe(TRIGGER - 40);
-      second.finger.up(second.last + REST_MS);
-      expect(dismissDragOf(pan)).toBeNull();
-      expect(document.activeElement).not.toBe(field);
+describe('createComposerDismissPan', () => {
+  let composer: HTMLElement;
+  let composerPan: ReturnType<typeof createComposerDismissPan>;
+
+  beforeEach(() => {
+    viewport = Object.assign(new EventTarget(), {
+      height: window.innerHeight,
+      offsetTop: 0,
+      scale: 1,
     });
+    Object.defineProperty(window, 'visualViewport', {
+      configurable: true,
+      value: viewport,
+    });
+    document.body.innerHTML =
+      '<div id="row">message</div><div id="composer"><button id="send">Send</button><textarea id="field"></textarea></div>';
+    row = document.getElementById('row')!;
+    composer = document.getElementById('composer')!;
+    field = document.getElementById('field') as HTMLTextAreaElement;
+    harness = createHarness();
+    composerPan = createComposerDismissPan(() => composer);
+    composerPan.addListener(() => dismissKeyboardOnComposerDrag(composerPan));
+    field.focus();
+    showKeyboard();
+  });
+
+  afterEach(() => {
+    Reflect.deleteProperty(window, 'visualViewport');
+    document.body.innerHTML = '';
+  });
+
+  // The drag options for a contact the composer's pan receives.
+  const onComposer = () => ({recognizer: composerPan});
+
+  it('dismisses once a drag down that starts on the composer travels the 10 px pan hysteresis', () => {
+    const finger = harness
+      .finger(1)
+      .down(100, TRIGGER + 20, 0, {
+        recognizers: [composerPan],
+        target: composer,
+      })
+      .move(100, TRIGGER + 26, 16);
+    expect(document.activeElement).toBe(field);
+    finger.move(100, TRIGGER + 31, 32);
+    expect(document.activeElement).not.toBe(field);
+    // The pan watches: the composer's scroll hold keeps the page still.
+    expect(harness.claims).toEqual([]);
+  });
+
+  it('keeps the keyboard for a drag down that starts after a press held for a long press (the caret loupe)', () => {
+    // UIKit's long press takes 500 ms.
+    harness
+      .finger(1)
+      .down(100, TRIGGER + 20, 0, {recognizers: [composerPan], target: field})
+      .move(100, TRIGGER + 20, 300)
+      .move(100, TRIGGER + 32, 520)
+      .move(100, TRIGGER + 60, 536);
+    expect(document.activeElement).toBe(field);
+  });
+
+  it('dismisses a drag down that starts before the long press', () => {
+    harness
+      .finger(1)
+      .down(100, TRIGGER + 20, 0, {recognizers: [composerPan], target: field})
+      .move(100, TRIGGER + 32, 480);
+    expect(document.activeElement).not.toBe(field);
+  });
+
+  it('dismisses from a drag down that starts on the focused text or a button', () => {
+    const first = drag(field, TRIGGER + 20, TRIGGER + 60, onComposer());
+    expect(document.activeElement).not.toBe(field);
+    first.finger.up(first.last + 8);
+    field.focus();
+    const send = document.getElementById('send')!;
+    drag(send, TRIGGER + 20, TRIGGER + 60, {
+      ...onComposer(),
+      start: first.last + 1000,
+    });
+    expect(document.activeElement).not.toBe(field);
+  });
+
+  it('keeps the keyboard for a drag up or across that starts on the composer', () => {
+    let result = drag(composer, TRIGGER + 60, TRIGGER + 10, onComposer());
+    result.finger.up(result.last + REST_MS);
+    expect(document.activeElement).toBe(field);
+    result = drag(composer, TRIGGER + 30, TRIGGER + 40, {
+      ...onComposer(),
+      x: 100,
+      toX: 160,
+      start: result.last + 1000,
+    });
+    result.finger.up(result.last + REST_MS);
+    expect(document.activeElement).toBe(field);
+  });
+
+  it('leaves a drag down to a long draft that can scroll down, and dismisses one at the draft’s top', () => {
+    field.style.overflowY = 'auto';
+    Object.defineProperty(field, 'scrollHeight', {value: 400});
+    Object.defineProperty(field, 'clientHeight', {value: 100});
+    field.scrollTop = 120;
+    const first = drag(field, TRIGGER + 20, TRIGGER + 60, onComposer());
+    first.finger.up(first.last + REST_MS);
+    expect(document.activeElement).toBe(field);
+    // At its top the draft has no room to scroll down, so the page would.
+    field.scrollTop = 0;
+    drag(field, TRIGGER + 20, TRIGGER + 60, {
+      ...onComposer(),
+      start: first.last + 1000,
+    });
+    expect(document.activeElement).not.toBe(field);
+  });
+
+  it('leaves a drag down to a long draft made in another window, which can scroll down', () => {
+    const frame = document.createElement('iframe');
+    document.body.append(frame);
+    // Made by the frame's document, the draft keeps that window's realm here.
+    const draft = (frame.contentDocument as Document).createElement('div');
+    expect(draft instanceof Element).toBe(false);
+    draft.style.overflowY = 'auto';
+    Object.defineProperty(draft, 'scrollHeight', {value: 400});
+    Object.defineProperty(draft, 'clientHeight', {value: 100});
+    draft.scrollTop = 120;
+    composer.append(draft);
+    drag(draft, TRIGGER + 20, TRIGGER + 60, onComposer());
+    expect(document.activeElement).toBe(field);
+  });
+
+  it('dismisses from a drag down on a strip of attachments, which scrolls only sideways', () => {
+    const strip = document.createElement('div');
+    strip.style.overflowX = 'auto';
+    Object.defineProperty(strip, 'scrollWidth', {value: 600});
+    Object.defineProperty(strip, 'clientWidth', {value: 200});
+    composer.prepend(strip);
+    drag(strip, TRIGGER + 20, TRIGGER + 60, onComposer());
+    expect(document.activeElement).not.toBe(field);
+  });
+
+  it('dismisses from a drag down on that strip that drifts a little sideways, as the browser locks to the major axis', () => {
+    const strip = document.createElement('div');
+    strip.style.overflowX = 'auto';
+    Object.defineProperty(strip, 'scrollWidth', {value: 600});
+    Object.defineProperty(strip, 'clientWidth', {value: 200});
+    composer.prepend(strip);
+    // One move past the hysteresis, 30 px down and 12 px across: the pan
+    // reads it as mostly down.
+    drag(strip, TRIGGER + 20, TRIGGER + 50, {
+      ...onComposer(),
+      x: 100,
+      toX: 88,
+      pxPerFrame: 40,
+    });
+    expect(document.activeElement).not.toBe(field);
+  });
+
+  it('ignores a contact outside the composer', () => {
+    drag(row, 200, 260, onComposer());
+    expect(document.activeElement).toBe(field);
+  });
+
+  it('does nothing while the keyboard module measures none (a hardware keyboard)', () => {
+    viewport.height = window.innerHeight;
+    viewport.dispatchEvent(new Event('resize'));
+    drag(composer, TRIGGER + 20, TRIGGER + 60, onComposer());
+    expect(document.activeElement).toBe(field);
+  });
+
+  it('takes a pen, and a mouse never reaches it (spec:AST-094 FR43)', () => {
+    const result = drag(composer, TRIGGER + 20, TRIGGER + 60, {
+      ...onComposer(),
+      pointerType: 'mouse',
+    });
+    expect(composerPan.numberOfTouches).toBe(0);
+    result.finger.up(result.last + REST_MS);
+    expect(document.activeElement).toBe(field);
+    drag(composer, TRIGGER + 20, TRIGGER + 60, {
+      ...onComposer(),
+      pointerType: 'pen',
+      start: result.last + 1000,
+    });
+    expect(document.activeElement).not.toBe(field);
   });
 });

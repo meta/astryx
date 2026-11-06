@@ -4,10 +4,12 @@
  * @file ChatLayoutTranscriptDismiss.test.tsx
  * @input vitest, jsdom, ChatLayout, the gesture host, a stand-in visual
  *   viewport and timestamped touch and pointer events
- * @output Tests that ChatLayout attaches the drag-to-dismiss to its root. A
- *   touch or pen drag lifted at or past the composer's top blurs the field,
- *   and a mouse drag changes nothing. It covers a replaced row and the
- *   listeners the dismissal adds.
+ * @output Tests that ChatLayout attaches the drag-to-dismiss to its root and
+ *   composer. A touch or pen drag blurs the field as it reaches the
+ *   composer's top, and the dock container bounces once. A drag down that
+ *   starts on the composer blurs it too, and a drag there never scrolls the
+ *   page under the keyboard. A mouse drag changes nothing. It covers a
+ *   replaced row and the listeners the dismissal adds.
  * @position Unit tests for ChatLayout's use of Chat/transcriptDismiss.ts
  */
 
@@ -66,7 +68,7 @@ function finger(
   type: 'touchstart' | 'touchmove' | 'touchend',
   clientY: number,
   time: number,
-) {
+): Event {
   const point = {identifier: 0, clientX: 100, clientY, target};
   const event = new Event(type, {bubbles: true, cancelable: true});
   Object.defineProperty(event, 'changedTouches', {value: [point]});
@@ -77,6 +79,33 @@ function finger(
   act(() => {
     target.dispatchEvent(event);
   });
+  return event;
+}
+
+// Fingers on `target` as one touch event at `time`, every one of them changed;
+// returns the event, to read what it prevented.
+function fingersAt(
+  target: EventTarget,
+  type: 'touchstart' | 'touchmove' | 'touchend',
+  down: {id: number; x: number; y: number}[],
+  time: number,
+): Event {
+  const points = down.map(({id, x, y}) => ({
+    identifier: id,
+    clientX: x,
+    clientY: y,
+    target,
+  }));
+  const event = new Event(type, {bubbles: true, cancelable: true});
+  Object.defineProperty(event, 'changedTouches', {value: points});
+  Object.defineProperty(event, 'touches', {
+    value: type === 'touchend' ? [] : points,
+  });
+  Object.defineProperty(event, 'timeStamp', {value: clock + time});
+  act(() => {
+    target.dispatchEvent(event);
+  });
+  return event;
 }
 
 // A finger's drag from `from` to `to`, a sample per 60 Hz frame: returns the
@@ -106,10 +135,22 @@ function moveFinger(
   return time + steps * 16;
 }
 
-// The composer's offset as its inline `translate` shows it. jsdom has no Web
-// Animations, so the animator writes each target at once.
-function composerOffset(composer: HTMLElement): number {
-  const [, y = '0'] = composer.style.translate.split(' ');
+// jsdom has no Web Animations: records each `animate` call instead.
+function recordAnimations(): {target: Element; keyframes: Keyframe[]}[] {
+  const calls: {target: Element; keyframes: Keyframe[]}[] = [];
+  Object.defineProperty(HTMLElement.prototype, 'animate', {
+    configurable: true,
+    value(this: Element, keyframes: Keyframe[]) {
+      calls.push({target: this, keyframes});
+      return {} as Animation;
+    },
+  });
+  return calls;
+}
+
+// A keyframe's vertical offset, from its `translate`.
+function offsetOf(keyframe: Keyframe): number {
+  const [, y = '0'] = String(keyframe.translate).split(' ');
   return Number.parseFloat(y) || 0;
 }
 
@@ -191,16 +232,18 @@ describe('ChatLayout dismisses the keyboard from a transcript drag (FR10)', () =
     restorePointer();
     restorePointer = () => {};
     Reflect.deleteProperty(window, 'visualViewport');
+    Reflect.deleteProperty(HTMLElement.prototype, 'animate');
     vi.restoreAllMocks();
   });
 
-  it('blurs the composer when a finger’s drag lifts at the composer’s top, and moves focus nowhere else', () => {
+  it('blurs the composer as a finger’s drag reaches the composer’s top, before the lift, and moves focus nowhere else', () => {
     primaryPointer('coarse');
     const {field, line, transcript} = renderLayout();
     showKeyboard(field);
-    const last = fingerDrag(transcript, 100, line);
-    // The drag decides at the lift (spec:AST-094 FR36).
+    let last = fingerDrag(transcript, 100, line - 1);
     expect(document.activeElement).toBe(field);
+    last = moveFinger(transcript, line - 1, line, last);
+    expect(document.activeElement).toBe(document.body);
     finger(transcript, 'touchend', line, last + 100);
     expect(document.activeElement).toBe(document.body);
   });
@@ -232,17 +275,14 @@ describe('ChatLayout dismisses the keyboard from a transcript drag (FR10)', () =
     expect(document.activeElement).toBe(document.body);
   });
 
-  it('dismisses when the finger moves back up, then rests before lifting past the composer’s top', () => {
-    // After a still rest the release velocity is 0, as every pan reads it.
+  it('keeps the dismissal when the finger moves back up above the composer before the lift', () => {
     primaryPointer('coarse');
     const {field, line, transcript} = renderLayout();
     showKeyboard(field);
-    let last = fingerDrag(transcript, 100, line + 80);
-    for (let y = line + 72; y >= line + 40; y -= 8) {
-      last += 16;
-      finger(transcript, 'touchmove', y, last);
-    }
-    finger(transcript, 'touchend', line + 40, last + 100);
+    let last = fingerDrag(transcript, 100, line + 40);
+    expect(document.activeElement).toBe(document.body);
+    last = moveFinger(transcript, line + 40, line - 40, last);
+    finger(transcript, 'touchend', line - 40, last + 100);
     expect(document.activeElement).toBe(document.body);
   });
 
@@ -339,7 +379,7 @@ describe('ChatLayout dismisses the keyboard from a transcript drag (FR10)', () =
       expect(events.map(event => event.defaultPrevented)).not.toContain(true);
       expect(capture).not.toHaveBeenCalled();
       expect(document.activeElement).toBe(field);
-      // Nothing moves, and no armed cue shows.
+      // Nothing moves.
       expect(composer.style.translate).toBe('');
       expect(composer.className).toBe(atRest);
     } finally {
@@ -347,7 +387,7 @@ describe('ChatLayout dismisses the keyboard from a transcript drag (FR10)', () =
     }
   });
 
-  it('adds one passive pointerdown on the layout’s root where the primary pointer is fine, and nothing on the composer (spec:AST-094 FR24)', () => {
+  it('adds one passive pointerdown on the layout’s root and one on the composer where the primary pointer is fine, and no touch listener (spec:AST-094 FR24)', () => {
     primaryPointer('fine');
     const added: {target: EventTarget; type: string; options: unknown}[] = [];
     const add = EventTarget.prototype.addEventListener;
@@ -365,9 +405,12 @@ describe('ChatLayout dismisses the keyboard from a transcript drag (FR10)', () =
           entry.target === target &&
           (entry.type.startsWith('touch') || entry.type.startsWith('pointer')),
       );
-    expect(inputOn(root).map(entry => entry.type)).toEqual(['pointerdown']);
-    expect(inputOn(root)[0]?.options).toMatchObject({passive: true});
-    expect(inputOn(composer)).toEqual([]);
+    for (const element of [root, composer]) {
+      expect(inputOn(element).map(entry => entry.type)).toEqual([
+        'pointerdown',
+      ]);
+      expect(inputOn(element)[0]?.options).toMatchObject({passive: true});
+    }
     expect(inputOn(window)).toEqual([]);
     expect(inputOn(document)).toEqual([]);
   });
@@ -391,82 +434,222 @@ describe('ChatLayout dismisses the keyboard from a transcript drag (FR10)', () =
     expect(touchTypes.filter(type => type === 'touchstart')).toHaveLength(1);
   });
 
-  describe('the composer follows the drag', () => {
+  describe('the bounce at the crossing', () => {
     beforeEach(() => primaryPointer('coarse'));
 
-    it('stays at rest above the composer, follows past its top, and returns to rest on a move back up and a lift there', () => {
+    it('bounces the dock container once, which holds the scroll button, the frosted layer and the composer', () => {
+      const animations = recordAnimations();
       const {composer, field, line, transcript} = renderLayout();
-      showKeyboard(field);
-      let last = fingerDrag(transcript, 100, line - 20);
-      expect(composerOffset(composer)).toBe(0);
-      last = moveFinger(transcript, line - 20, line + 40, last);
-      // Past the top the composer moves down, slower than the finger, and the
-      // frosted layer under it moves with it.
-      const armed = composerOffset(composer);
-      expect(armed).toBeGreaterThan(0);
-      expect(armed).toBeLessThan(40);
-      const edge = composer.previousElementSibling as HTMLElement;
-      expect(composerOffset(edge)).toBe(armed);
-      last = moveFinger(transcript, line + 40, line - 20, last);
-      expect(composerOffset(composer)).toBe(0);
-      expect(composerOffset(edge)).toBe(0);
-      finger(transcript, 'touchend', line - 20, last + 100);
-      expect(composerOffset(composer)).toBe(0);
-      expect(document.activeElement).toBe(field);
-    });
-
-    it('returns the composer to rest when an armed lift dismisses the keyboard', () => {
-      const {composer, field, line, transcript} = renderLayout();
+      composer.style.paddingBottom = '12px';
       showKeyboard(field);
       const last = fingerDrag(transcript, 100, line + 40);
-      expect(composerOffset(composer)).toBeGreaterThan(0);
       finger(transcript, 'touchend', line + 40, last + 100);
-      expect(document.activeElement).toBe(document.body);
-      expect(composerOffset(composer)).toBe(0);
+      expect(animations).toHaveLength(1);
+      const [{target, keyframes}] = animations;
+      // One transform for all three: the composer and the button never part.
+      expect(target).toBe(composer.parentElement);
+      expect(target.contains(screen.getByRole('button', {hidden: true}))).toBe(
+        true,
+      );
+      const offsets = keyframes.map(offsetOf);
+      expect(offsets[0]).toBe(0);
+      expect(offsets.at(-1)).toBe(0);
+      // One dip, down and back, no deeper than the composer's bottom padding.
+      const deepest = Math.max(...offsets);
+      expect(deepest).toBeGreaterThan(0);
+      expect(deepest).toBeLessThanOrEqual(12);
+      const turn = offsets.indexOf(deepest);
+      offsets.forEach((offset, index) => {
+        if (index > 0) {
+          const step = offset - offsets[index - 1];
+          expect(index <= turn ? step >= 0 : step <= 0).toBe(true);
+        }
+      });
     });
 
-    it('moves nothing under Reduce Motion and shows the pressed overlay while the drag is armed', () => {
+    it('moves nothing for a drag that stays above the composer, and nothing under Reduce Motion', () => {
+      const animations = recordAnimations();
+      const {composer, field, line, transcript} = renderLayout();
+      composer.style.paddingBottom = '12px';
+      showKeyboard(field);
+      let last = fingerDrag(transcript, 100, line - 20);
+      finger(transcript, 'touchend', line - 20, last + 100);
+      expect(animations).toEqual([]);
       const restoreMotion = reduceMotion();
       try {
-        const {composer, field, line, transcript} = renderLayout();
-        showKeyboard(field);
-        const atRest = composer.className;
-        let last = fingerDrag(transcript, 100, line + 40);
-        expect(composerOffset(composer)).toBe(0);
-        const armed = composer.className;
-        expect(armed).not.toBe(atRest);
-        last = moveFinger(transcript, line + 40, line - 20, last);
-        expect(composer.className).toBe(atRest);
-        last = moveFinger(transcript, line - 20, line + 40, last);
-        expect(composer.className).toBe(armed);
+        clock += 10_000;
+        last = fingerDrag(transcript, 100, line + 40);
         finger(transcript, 'touchend', line + 40, last + 100);
-        expect(composer.className).toBe(atRest);
-        expect(composerOffset(composer)).toBe(0);
         expect(document.activeElement).toBe(document.body);
+        expect(animations).toEqual([]);
       } finally {
         restoreMotion();
       }
     });
+  });
 
-    it('leaks nothing between drags: ten drags, alternating armed lifts and lifts above, each start from rest', () => {
-      const {composer, field, line, transcript} = renderLayout();
-      for (let cycle = 0; cycle < 10; cycle++) {
-        clock += 10_000;
-        showKeyboard(field);
-        const isArmed = cycle % 2 === 0;
-        const end = isArmed ? line + 40 : line - 20;
-        const last = fingerDrag(transcript, 100, end);
-        expect(composerOffset(composer) > 0).toBe(isArmed);
-        finger(transcript, 'touchend', end, last + 100);
-        expect(composerOffset(composer)).toBe(0);
-        expect(document.activeElement).toBe(isArmed ? document.body : field);
+  describe('a drag that starts on the composer', () => {
+    beforeEach(() => primaryPointer('coarse'));
+
+    // One finger from (x, y) by (dx, dy) in five 60 Hz steps, then lifted;
+    // returns the moves.
+    const swipe = (
+      target: EventTarget,
+      [x, y]: [number, number],
+      [dx, dy]: [number, number],
+    ): Event[] => {
+      fingersAt(target, 'touchstart', [{id: 0, x, y}], 0);
+      const moves: Event[] = [];
+      for (let i = 1; i <= 5; i++) {
+        const at = {id: 0, x: x + (dx * i) / 5, y: y + (dy * i) / 5};
+        moves.push(fingersAt(target, 'touchmove', [at], i * 16));
       }
+      fingersAt(target, 'touchend', [{id: 0, x: x + dx, y: y + dy}], 200);
+      return moves;
+    };
+    const prevented = (moves: Event[]) =>
+      moves.map(event => event.defaultPrevented);
+
+    it('blurs the field once it moves down, and the page’s scroll never starts', () => {
+      const {composer, field, line} = renderLayout();
+      showKeyboard(field);
+      // Each step clears the page hold's 5 px slop.
+      const moves = swipe(composer, [100, line + 10], [0, 40]);
+      expect(document.activeElement).toBe(document.body);
+      expect(prevented(moves)).not.toContain(false);
+    });
+
+    it('keeps the keyboard for a drag up, and still keeps the page still under it', () => {
+      const {composer, field, line} = renderLayout();
+      showKeyboard(field);
+      const moves = swipe(composer, [100, line + 50], [0, -40]);
+      expect(document.activeElement).toBe(field);
+      expect(prevented(moves)).not.toContain(false);
+    });
+
+    it('holds the page under a drag that starts on a node made in another window', () => {
+      const {composer, field, line} = renderLayout();
+      showKeyboard(field);
+      const frame = document.createElement('iframe');
+      document.body.append(frame);
+      // Made by the frame's document, the node keeps that window's realm here.
+      const chip = (frame.contentDocument as Document).createElement('span');
+      expect(chip instanceof Node).toBe(false);
+      composer.append(chip);
+      const moves = swipe(chip, [100, line + 50], [0, -40]);
+      expect(prevented(moves)).not.toContain(false);
+      frame.remove();
+    });
+
+    it('leaves a two-finger pinch that starts on the composer to the browser (spec:AST-094 FR10)', () => {
+      const {composer, field, line} = renderLayout();
+      showKeyboard(field);
+      const at = (i: number) => [
+        {id: 0, x: 100 - i * 8, y: line + 10 - i * 8},
+        {id: 1, x: 200 + i * 8, y: line + 30 + i * 8},
+      ];
+      fingersAt(composer, 'touchstart', at(0), 0);
+      const moves: Event[] = [];
+      for (let i = 1; i <= 5; i++) {
+        moves.push(fingersAt(composer, 'touchmove', at(i), i * 16));
+      }
+      fingersAt(composer, 'touchend', at(5), 200);
+      expect(prevented(moves)).not.toContain(true);
+      expect(document.activeElement).toBe(field);
+    });
+
+    it('lets a drag pan a pinch-zoomed page', () => {
+      const {composer, field, line} = renderLayout();
+      showKeyboard(field);
+      viewport.scale = 2;
+      const moves = swipe(composer, [100, line + 50], [0, -40]);
+      expect(prevented(moves)).not.toContain(true);
+    });
+
+    it('leaves a part of the composer that scrolls sideways its own swipe, and dismisses from a drag down on it', () => {
+      render(
+        <ChatLayout
+          composer={
+            <div>
+              <div data-testid="strip" style={{overflowX: 'auto'}}>
+                <span>attachment</span>
+              </div>
+              <textarea aria-label="Message" />
+            </div>
+          }>
+          <p>Hello</p>
+        </ChatLayout>,
+      );
+      const field = screen.getByRole('textbox', {name: 'Message'});
+      const strip = screen.getByTestId('strip');
+      Object.defineProperty(strip, 'scrollWidth', {value: 600});
+      Object.defineProperty(strip, 'clientWidth', {value: 200});
+      showKeyboard(field);
+      const sideways = swipe(strip, [300, 600], [-80, 0]);
+      expect(prevented(sideways)).not.toContain(true);
+      expect(document.activeElement).toBe(field);
+      // The strip cannot scroll down, so the drag is the composer's.
+      clock += 10_000;
+      const down = swipe(strip, [300, 600], [0, 40]);
+      expect(prevented(down)).not.toContain(false);
+      expect(document.activeElement).toBe(document.body);
+    });
+
+    it('holds the page under a drag up that drifts sideways on that strip, and leaves the strip a swipe at least half sideways', () => {
+      render(
+        <ChatLayout
+          composer={
+            <div>
+              <div data-testid="strip" style={{overflowX: 'auto'}}>
+                <span>attachment</span>
+              </div>
+              <textarea aria-label="Message" />
+            </div>
+          }>
+          <p>Hello</p>
+        </ChatLayout>,
+      );
+      const field = screen.getByRole('textbox', {name: 'Message'});
+      const strip = screen.getByTestId('strip');
+      Object.defineProperty(strip, 'scrollWidth', {value: 600});
+      Object.defineProperty(strip, 'clientWidth', {value: 200});
+      showKeyboard(field);
+      // The browser locks a mostly vertical drag to the vertical axis, which
+      // the strip cannot scroll: the page would.
+      const drifting = swipe(strip, [300, 600], [-20, -120]);
+      expect(prevented(drifting)).not.toContain(false);
+      expect(document.activeElement).toBe(field);
+      clock += 10_000;
+      const diagonal = swipe(strip, [300, 600], [-60, -100]);
+      expect(prevented(diagonal)).not.toContain(true);
+    });
+
+    it('leaves the page its scroll when no software keyboard is up, and again once it goes down', () => {
+      const {composer, field, line} = renderLayout();
+      act(() => field.focus());
+      expect(
+        prevented(swipe(composer, [100, line + 10], [0, 40])),
+      ).not.toContain(true);
+      expect(document.activeElement).toBe(field);
+      clock += 10_000;
+      showKeyboard(field);
+      expect(
+        prevented(swipe(composer, [100, line + 50], [0, -40])),
+      ).not.toContain(false);
+      viewport.height = window.innerHeight;
+      act(() => {
+        viewport.dispatchEvent(new Event('resize'));
+      });
+      clock += 10_000;
+      expect(
+        prevented(swipe(composer, [100, line + 50], [0, -40])),
+      ).not.toContain(true);
     });
   });
 });
 
 describe('what the drag-to-dismiss loads', () => {
-  it('goes through the gesture system’s pan, with no listener of its own', () => {
+  it('goes through the gesture system’s pan, page hold and scroll test, with no listener of its own', () => {
     const here = path.dirname(fileURLToPath(import.meta.url));
     const dismissal = fs.readFileSync(
       path.join(here, 'transcriptDismiss.ts'),
@@ -474,8 +657,18 @@ describe('what the drag-to-dismiss loads', () => {
     );
     expect(dismissal.match(/from '\.\.\/gestures\/[^']*'/g)).toEqual([
       "from '../gestures/PanGestureRecognizer'",
+      "from '../gestures/nativeScroll'",
+      "from '../gestures/pageHold'",
       "from '../gestures/types'",
     ]);
     expect(dismissal).not.toMatch(/addEventListener|subscribeInput/);
+  });
+
+  it('loads no animator: the bounce is one Web Animation of solved keyframes', () => {
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    for (const file of ['ChatLayout.tsx', 'composerBounce.ts']) {
+      const source = fs.readFileSync(path.join(here, file), 'utf8');
+      expect(source).not.toMatch(/motion\/animator|motion\/rubberBand/);
+    }
   });
 });

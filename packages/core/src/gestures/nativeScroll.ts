@@ -5,7 +5,7 @@
  * @input An element a touch landed on
  * @output Exports createNativeScrollProbe (the NativeScrollProbe a host gives
  *   each touch, and each wheel gesture without the touch-action narrowing)
- *   and parseTouchAction
+ *   and parseTouchAction. Also dragAxes: the axes a drag moves along.
  * @position DOM half of the scroll coordination in packages/core/src/gestures
  *
  * Answers one question for a recognizer without letting it touch the DOM:
@@ -195,6 +195,17 @@ export function canElementScroll(
 }
 
 /**
+ * The axes a drag of (`dx`, `dy`) moves along. The minor axis of a mostly
+ * straight drag is the hand's wobble, not a direction: the browser locks to
+ * the major one. So an axis counts only at half the other's travel or more.
+ */
+export function dragAxes(dx: number, dy: number): {x: boolean; y: boolean} {
+  const ax = Math.abs(dx);
+  const ay = Math.abs(dy);
+  return {x: ax > 0 && ax >= ay / 2, y: ay > 0 && ay >= ax / 2};
+}
+
+/**
  * A probe of the native scrollers under `target`. A wheel scrolls whatever
  * `touch-action` says, which narrows only a finger's pan: a wheel's probe
  * passes `readsTouchAction: false`.
@@ -212,12 +223,7 @@ export function createNativeScrollProbe(
   };
   return {
     canScroll(dx: number, dy: number): boolean {
-      const ax = Math.abs(dx);
-      const ay = Math.abs(dy);
-      // The minor axis of a mostly-straight drag is the hand's wobble, not
-      // a direction: the browser locks to the major one.
-      const considerX = ax > 0 && ax >= ay / 2;
-      const considerY = ay > 0 && ay >= ax / 2;
+      const {x: considerX, y: considerY} = dragAxes(dx, dy);
       for (const entry of getChain()) {
         if (considerY && entry.y && canMoveY(entry.element, dy)) {
           return true;

@@ -5,10 +5,12 @@
  * @input The Core/ChatLayout full AI chat story, a visual viewport the test
  *   drives as Mobile Safari's keyboard does, and the harness's touch driver
  * @output Proves the drag-to-dismiss in real browsers. A finger's drag down
- *   the transcript that lifts at the composer dismisses the keyboard. One that
- *   stays above it, or starts in the composer's text, keeps it. The composer
- *   follows a drag past its top and returns to rest after any lift. A mouse
- *   drag selects the transcript's text, with nothing prevented or captured.
+ *   the transcript dismisses the keyboard as it reaches the composer, before
+ *   the lift. The composer bounces once with the scroll-to-bottom button.
+ *   One that stays above it keeps the keyboard. A drag down that starts on
+ *   the composer dismisses it too, and no drag there scrolls the page under
+ *   the keyboard. A mouse drag selects the transcript's text, with nothing
+ *   prevented or captured.
  * @position Interaction proofs for ChatLayout's FR10, run in Chromium and
  *   WebKit
  */
@@ -22,7 +24,7 @@ import {
 import {
   drag,
   openStory,
-  path,
+  pinch,
   touchDriver,
   withStorybook,
 } from '@astryxdesign/interaction-harness';
@@ -70,6 +72,7 @@ interface Chat {
 
 async function openChat(page: Page): Promise<Chat> {
   await installKeyboard(page);
+  await installInputRecorder(page);
   await openStory(page, storybook(), 'core-chatlayout--full-ai-chat');
   const editable = page.locator('[contenteditable="true"]').first();
   await expect(editable).toBeVisible();
@@ -144,17 +147,126 @@ test('a drag that stays above the composer scrolls and keeps the keyboard', asyn
   }
 });
 
-test('a drag that reaches the composer dismisses the keyboard, and focus moves nowhere else', async ({
+/** What `recordInput` saw, read back by `inputLog`. */
+interface InputLog {
+  /** Each blur of the composer's text: the input event then in progress. */
+  blurs: {during: string; y: number; line: number}[];
+  /**
+   * Each one-finger touchmove of a touch that started on the composer, once
+   * it is past the page hold's 5 px slop: whether it was cancelled.
+   */
+  composerMoves: boolean[];
+  /** Each two-finger touchmove on the composer: whether it was cancelled. */
+  pinchMoves: boolean[];
+}
+
+/**
+ * Records the input event in progress, from before the page loads, so these
+ * listeners run before the page's own on the same target.
+ */
+async function installInputRecorder(page: Page) {
+  await page.addInitScript(() => {
+    const w = window as unknown as {__last: {type: string; y: number}};
+    w.__last = {type: '', y: 0};
+    const note = (event: Event) => {
+      const y =
+        event instanceof PointerEvent
+          ? event.clientY
+          : ((event as TouchEvent).changedTouches[0]?.clientY ?? 0);
+      w.__last = {type: event.type, y};
+    };
+    for (const type of [
+      'touchstart',
+      'touchmove',
+      'touchend',
+      'pointerdown',
+      'pointermove',
+      'pointerup',
+    ]) {
+      window.addEventListener(type, note, {capture: true, passive: true});
+    }
+  });
+}
+
+/**
+ * Records, from here on, what each blur of the composer's text happens
+ * during, and whether each touchmove on the composer was cancelled. The
+ * window's listeners see a move's `defaultPrevented` after the page's own.
+ */
+async function recordInput(page: Page, {composer, editable}: Chat) {
+  await editable.evaluate(
+    (field, box) => {
+      const log: InputLog = {blurs: [], composerMoves: [], pinchMoves: []};
+      const w = window as unknown as {
+        __input: InputLog;
+        __last: {type: string; y: number};
+      };
+      w.__input = log;
+      field.addEventListener('blur', () =>
+        log.blurs.push({
+          during: w.__last.type,
+          y: w.__last.y,
+          line: (box as Element).getBoundingClientRect().top,
+        }),
+      );
+      const onComposer = (event: Event) =>
+        (box as Element).contains(event.target as Node);
+      let start: {x: number; y: number} | null = null;
+      window.addEventListener(
+        'touchstart',
+        event => {
+          const [finger] = Array.from(event.touches);
+          start =
+            event.touches.length === 1 && finger != null && onComposer(event)
+              ? {x: finger.clientX, y: finger.clientY}
+              : null;
+        },
+        {passive: true},
+      );
+      window.addEventListener(
+        'touchmove',
+        event => {
+          if (!onComposer(event)) {
+            return;
+          }
+          if (event.touches.length > 1) {
+            log.pinchMoves.push(event.defaultPrevented);
+            return;
+          }
+          const [finger] = Array.from(event.touches);
+          if (
+            start != null &&
+            finger != null &&
+            Math.max(
+              Math.abs(finger.clientX - start.x),
+              Math.abs(finger.clientY - start.y),
+            ) >= 6
+          ) {
+            log.composerMoves.push(event.defaultPrevented);
+          }
+        },
+        {passive: true},
+      );
+    },
+    await composer.elementHandle(),
+  );
+}
+
+const inputLog = async (page: Page) =>
+  page.evaluate(() => (window as unknown as {__input: InputLog}).__input);
+
+test('a drag that reaches the composer blurs its text as it crosses, before the lift, and focus moves nowhere else', async ({
   page,
 }) => {
   const chat = await openChat(page);
   const rows = await keyboardUp(page, chat);
+  await recordInput(page, chat);
   const driver = await touchDriver(page);
   await driver.play(
     drag(
       {x: rows.x, y: 120},
       {x: rows.x, y: rows.inComposer},
-      {durationMs: 300},
+      {durationMs: 300, restMs: 200},
     ),
   );
   await expect(chat.editable).not.toBeFocused();
@@ -162,13 +274,229 @@ test('a drag that reaches the composer dismisses the keyboard, and focus moves n
   expect(await page.evaluate(() => document.activeElement?.tagName)).toBe(
     'BODY',
   );
+  const {blurs} = await inputLog(page);
+  expect(blurs).toHaveLength(1);
+  // A move blurred it, at or past the composer's top: not the lift.
+  expect(blurs[0].during).toMatch(/move$/);
+  expect(blurs[0].y).toBeGreaterThanOrEqual(blurs[0].line);
 });
 
-test('a drag that starts in the composer’s text keeps the keyboard', async ({
+/**
+ * The dock's motion, as `traceDock` records it: the composer's top every
+ * frame, and the bounce the field's blur started, if any.
+ */
+interface DockTrace {
+  frames: number[];
+  bounce: {
+    /** The running animations that move something in the container's subtree. */
+    count: number;
+    /** Whether the first of them is the dock container's own. */
+    isContainers: boolean;
+    /** The composer's and the button's offsets, frame by frame along it. */
+    samples: {composer: number; button: number}[];
+    /** Whether it has finished, with the composer back where it started. */
+    isAtRest: boolean;
+  } | null;
+  /** Moving animations a frame found other than the sampled one. */
+  others: number;
+}
+
+/**
+ * Records the composer's top every frame. When the field loses focus, it
+ * samples the animation that the blur started and that moves something in
+ * the dock container's subtree. Paused at each frame along it, it reads the
+ * composer's and the scroll-to-bottom button's offsets from their tops at its
+ * start. Then it plays the animation on from where it was. A transition of a
+ * color or a shadow moves nothing, so it doesn't count. `dockTrace` reads the
+ * record back.
+ */
+async function traceDock(page: Page, composer: Locator, button: Locator) {
+  await composer.evaluate(
+    (dock, pill) => {
+      const container = dock.parentElement as HTMLElement;
+      const trace: DockTrace = {frames: [], bounce: null, others: 0};
+      (window as unknown as {__dock: DockTrace}).__dock = trace;
+      const moves = (animation: Animation) =>
+        (animation.effect as KeyframeEffect | null)
+          ?.getKeyframes()
+          .some(keyframe =>
+            Object.keys(keyframe).some(name =>
+              /^(translate|transform|scale|rotate|top|bottom|left|right|inset|margin)/.test(
+                name,
+              ),
+            ),
+          ) === true;
+      const moving = () =>
+        container.getAnimations({subtree: true}).filter(moves);
+      const tops = () => [
+        dock.getBoundingClientRect().top,
+        (pill as Element).getBoundingClientRect().top,
+      ];
+      let sampled: Animation | null = null;
+      const sample = () => {
+        const running = moving();
+        if (trace.bounce != null || running.length === 0) {
+          return;
+        }
+        const [animation] = running;
+        sampled = animation;
+        const effect = animation.effect as KeyframeEffect;
+        const resumeAt = animation.currentTime ?? 0;
+        const end = Number(effect.getComputedTiming().endTime);
+        // WebKit reads a running animation at each call, so two reads in turn
+        // can see two moments of it. Paused, both reads see the same one.
+        animation.pause();
+        animation.currentTime = 0;
+        const [composerStart, buttonStart] = tops();
+        const samples = [];
+        for (let time = 0; time <= end; time += 1000 / 60) {
+          animation.currentTime = time;
+          const [composerTop, buttonTop] = tops();
+          samples.push({
+            composer: composerTop - composerStart,
+            button: buttonTop - buttonStart,
+          });
+        }
+        animation.currentTime = resumeAt;
+        animation.play();
+        const bounce = {
+          count: running.length,
+          isContainers: effect.target === container,
+          samples,
+          isAtRest: false,
+        };
+        trace.bounce = bounce;
+        void animation.finished.then(() => {
+          bounce.isAtRest = tops()[0] === composerStart;
+        });
+      };
+      // The blur and the bounce it starts run in one task. So a microtask from
+      // the blur runs after the bounce has begun, whatever the frame rate.
+      dock.addEventListener('focusout', () => queueMicrotask(sample));
+      const tick = () => {
+        trace.others += moving().filter(
+          animation => animation !== sampled,
+        ).length;
+        trace.frames.push(dock.getBoundingClientRect().top);
+        if (trace.frames.length < 2000) {
+          requestAnimationFrame(tick);
+        }
+      };
+      requestAnimationFrame(tick);
+    },
+    await button.elementHandle(),
+  );
+}
+
+const dockTrace = async (page: Page) =>
+  page.evaluate(() => (window as unknown as {__dock: DockTrace}).__dock);
+
+/** Each frame's offset from the first one's. */
+const offsets = (frames: number[]) => frames.map(top => top - frames[0]);
+
+/** The scroll-to-bottom button, shown and at rest above the composer. */
+async function showScrollButton(composer: Locator) {
+  const dock = composer.locator('xpath=..');
+  await dock.evaluate(el => {
+    let scroller: HTMLElement | null = el.parentElement;
+    while (
+      scroller != null &&
+      !/(auto|scroll)/.test(getComputedStyle(scroller).overflowY)
+    ) {
+      scroller = scroller.parentElement;
+    }
+    (scroller ?? document.scrollingElement)?.scrollBy(0, -600);
+  });
+  const button = dock.getByRole('button', {name: 'Scroll to bottom'});
+  await expect(button).toBeVisible();
+  // Its own fade and slide in have ended.
+  await expect
+    .poll(async () =>
+      dock.evaluate(
+        el =>
+          el
+            .getAnimations({subtree: true})
+            .filter(animation => animation.playState === 'running').length,
+      ),
+    )
+    .toBe(0);
+  return button;
+}
+
+test('the crossing bounces the composer once, and the scroll-to-bottom button moves with it', async ({
   page,
 }) => {
   const chat = await openChat(page);
   const rows = await keyboardUp(page, chat);
+  const button = await showScrollButton(chat.composer);
+  await traceDock(page, chat.composer, button);
+  const driver = await touchDriver(page);
+  await driver.play(
+    drag(
+      {x: rows.x, y: 120},
+      {x: rows.x, y: rows.inComposer},
+      {durationMs: 300, restMs: 600},
+    ),
+  );
+  await expect(chat.editable).not.toBeFocused();
+  // It ends with the composer back where it started.
+  await expect
+    .poll(async () => (await dockTrace(page)).bounce?.isAtRest)
+    .toBe(true);
+  const {bounce, others} = await dockTrace(page);
+  // One transform moves both. The dock container's own animation is the only
+  // one in its subtree that moves anything. At every frame of it, the two are
+  // offset alike.
+  expect(bounce?.count).toBe(1);
+  expect(bounce?.isContainers).toBe(true);
+  expect(others).toBe(0);
+  const samples = bounce?.samples ?? [];
+  // Presence first: the composer moves.
+  expect(Math.max(...samples.map(sample => sample.composer))).toBeGreaterThan(
+    0,
+  );
+  expect(
+    samples.filter(sample => Math.abs(sample.composer - sample.button) > 0.01),
+  ).toEqual([]);
+  // One bounce: the composer leaves rest once.
+  const departures = samples.filter(
+    (sample, index) =>
+      index > 0 && sample.composer > 0 && samples[index - 1].composer <= 0,
+  );
+  expect(departures).toHaveLength(1);
+});
+
+test('under Reduce Motion the crossing blurs the text and moves nothing', async ({
+  page,
+}) => {
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  const chat = await openChat(page);
+  const rows = await keyboardUp(page, chat);
+  const button = await showScrollButton(chat.composer);
+  await traceDock(page, chat.composer, button);
+  const driver = await touchDriver(page);
+  await driver.play(
+    drag(
+      {x: rows.x, y: 120},
+      {x: rows.x, y: rows.inComposer},
+      {durationMs: 300, restMs: 600},
+    ),
+  );
+  await expect(chat.editable).not.toBeFocused();
+  const {bounce, frames} = await dockTrace(page);
+  const moved = offsets(frames);
+  expect(moved.length).toBeGreaterThan(20);
+  expect(moved.filter(offset => offset !== 0)).toEqual([]);
+  expect(bounce).toBeNull();
+});
+
+test('a drag down that starts on the composer blurs its text and scrolls nothing under the keyboard', async ({
+  page,
+}) => {
+  const chat = await openChat(page);
+  const rows = await keyboardUp(page, chat);
+  await recordInput(page, chat);
+  const before = await transcriptScroll(chat.composer);
   const driver = await touchDriver(page);
   await driver.play(
     drag(
@@ -177,172 +505,161 @@ test('a drag that starts in the composer’s text keeps the keyboard', async ({
       {durationMs: 300},
     ),
   );
-  await expect(chat.editable).toBeFocused();
+  await expect(chat.editable).not.toBeFocused();
+  const {composerMoves} = await inputLog(page);
+  expect(composerMoves.length).toBeGreaterThan(0);
+  expect(composerMoves, 'defaultPrevented of each move').not.toContain(false);
+  if (driver.drivesNativeGestures) {
+    expect(await transcriptScroll(chat.composer)).toBe(before);
+  }
 });
 
-/** One frame of the composer's motion, as `traceMotion` records it. */
-interface MotionFrame {
-  composer: number;
-  edge: number;
-  curves: [string, string];
-  cue: number;
-}
-
-/**
- * Records the composer's offset, the curves the composer and the frosted
- * layer play, and the armed cue's opacity, every frame. `motionTrace` reads
- * them back.
- */
-async function traceMotion(page: Page, composer: Locator) {
-  await composer.evaluate(dock => {
-    const edge = dock.previousElementSibling as HTMLElement;
-    const offset = (element: Element) => {
-      const translate = getComputedStyle(element).translate;
-      const [, y = '0'] = translate === 'none' ? [] : translate.split(' ');
-      return Number.parseFloat(y) || 0;
-    };
-    // A curve's start time and keyframes, the same for two elements on one
-    // clock. Two computed styles read in turn can sample a running curve a
-    // millisecond apart in WebKit, so the offsets alone cannot compare them.
-    const curves = (element: Element) =>
-      JSON.stringify(
-        element
-          .getAnimations()
-          .map(animation => [
-            animation.startTime,
-            (animation.effect as KeyframeEffect | null)?.getKeyframes(),
-          ]),
-      );
-    const frames: MotionFrame[] = [];
-    (window as unknown as {__frames: MotionFrame[]}).__frames = frames;
-    const tick = () => {
-      frames.push({
-        composer: offset(dock),
-        edge: offset(edge),
-        curves: [curves(dock), curves(edge)],
-        cue: Number(getComputedStyle(dock, '::after').opacity),
-      });
-      if (frames.length < 2000) {
-        requestAnimationFrame(tick);
-      }
-    };
-    requestAnimationFrame(tick);
-  });
-}
-
-const motionTrace = async (page: Page) =>
-  page.evaluate(
-    () => (window as unknown as {__frames: MotionFrame[]}).__frames,
+test('a drag up that starts on the composer keeps the keyboard and scrolls nothing under it', async ({
+  page,
+}) => {
+  const chat = await openChat(page);
+  const rows = await keyboardUp(page, chat);
+  await recordInput(page, chat);
+  const before = await transcriptScroll(chat.composer);
+  const driver = await touchDriver(page);
+  await driver.play(
+    drag(
+      {x: rows.x, y: rows.inComposer + 30},
+      {x: rows.x, y: rows.inComposer - 60},
+      {durationMs: 300},
+    ),
   );
+  await expect(chat.editable).toBeFocused();
+  const {composerMoves} = await inputLog(page);
+  expect(composerMoves.length).toBeGreaterThan(0);
+  expect(composerMoves, 'defaultPrevented of each move').not.toContain(false);
+  if (driver.drivesNativeGestures) {
+    expect(await transcriptScroll(chat.composer)).toBe(before);
+  }
+});
 
-// Waits until the composer and its cue have rested for 10 frames in a row.
-const composerAtRest = async (page: Page) =>
-  expect
-    .poll(async () =>
-      (await motionTrace(page)).slice(-10).every(f => f.composer + f.cue === 0),
-    )
-    .toBe(true);
-
-test.describe('the composer follows a drag that can dismiss the keyboard', () => {
-  test('past its top the composer and the frosted layer move down together, and return to rest after a move back up and a lift there', async ({
-    page,
-  }) => {
-    const chat = await openChat(page);
-    const rows = await keyboardUp(page, chat);
-    await traceMotion(page, chat.composer);
-    const driver = await touchDriver(page);
-    // Down past the composer's top, then back up above it.
-    const low = rows.inComposer + 30;
-    const high = rows.aboveComposer;
-    const y = (p: number) =>
-      p < 0.6
-        ? 120 + (low - 120) * (p / 0.6)
-        : low - (low - high) * ((p - 0.6) / 0.4);
-    await driver.play(path(p => ({x: rows.x, y: y(p)}), {durationMs: 900}));
-    await composerAtRest(page);
-    const frames = await motionTrace(page);
-    // Presence first: the composer moved while the finger was over it.
-    expect(Math.max(...frames.map(frame => frame.composer))).toBeGreaterThan(4);
-    // The frosted layer plays the composer's curves, on the same clock.
-    expect(frames.filter(frame => frame.curves[0] !== frame.curves[1])).toEqual(
-      [],
-    );
-    await expect(chat.editable).toBeFocused();
-  });
-
-  test('an armed lift dismisses the keyboard and the composer returns to rest', async ({
-    page,
-  }) => {
-    const chat = await openChat(page);
-    const rows = await keyboardUp(page, chat);
-    await traceMotion(page, chat.composer);
-    const driver = await touchDriver(page);
-    await driver.play(
-      drag(
-        {x: rows.x, y: 120},
-        {x: rows.x, y: rows.inComposer + 20},
-        {durationMs: 400},
-      ),
-    );
-    await expect(chat.editable).not.toBeFocused();
-    await composerAtRest(page);
-    const frames = await motionTrace(page);
-    expect(Math.max(...frames.map(frame => frame.composer))).toBeGreaterThan(4);
-  });
-
-  test('under Reduce Motion nothing moves, and an armed drag fades the pressed overlay in over the composer until the lift', async ({
-    page,
-  }) => {
-    await page.emulateMedia({reducedMotion: 'reduce'});
-    const chat = await openChat(page);
-    const rows = await keyboardUp(page, chat);
-    await traceMotion(page, chat.composer);
-    const driver = await touchDriver(page);
-    await driver.play(
-      drag(
-        {x: rows.x, y: 120},
-        {x: rows.x, y: rows.inComposer + 20},
-        {durationMs: 400, restMs: 150},
-      ),
-    );
-    await expect(chat.editable).not.toBeFocused();
-    const frames = await motionTrace(page);
-    expect(frames.filter(frame => frame.cue > 0).length).toBeGreaterThan(0);
-    expect(frames.filter(frame => frame.composer !== 0)).toEqual([]);
-    // It changes opacity only, over the Reduce Motion fade's 200 ms.
-    const fade = await chat.composer.evaluate(dock => {
-      const style = getComputedStyle(dock, '::after');
-      return `${style.transitionProperty} ${style.transitionDuration}`;
-    });
-    expect(fade).toBe('opacity 0.2s');
-    await composerAtRest(page);
-  });
-
-  test('ten drags in a row, alternating lifts on the composer and above it, each dismiss or keep as their lift says', async ({
-    page,
-  }) => {
-    const chat = await openChat(page);
-    const driver = await touchDriver(page);
-    for (let cycle = 0; cycle < 10; cycle++) {
-      const rows = await keyboardUp(page, chat);
-      const isArmed = cycle % 3 !== 1;
-      await driver.play(
-        drag(
-          {x: rows.x, y: 120},
-          {
-            x: rows.x,
-            y: isArmed ? rows.inComposer + 20 : rows.aboveComposer,
-          },
-          {durationMs: 300},
-        ),
-      );
-      if (isArmed) {
-        await expect(chat.editable).not.toBeFocused();
-      } else {
-        await expect(chat.editable).toBeFocused();
-      }
+/** Puts a strip of attachments wider than the composer at its top. */
+async function addAttachmentStrip(composer: Locator) {
+  await composer.evaluate(box => {
+    const strip = document.createElement('div');
+    strip.dataset.testid = 'attachment-strip';
+    strip.style.cssText = 'overflow-x: auto; white-space: nowrap; height: 40px';
+    for (let i = 0; i < 12; i++) {
+      const item = document.createElement('span');
+      item.style.cssText = 'display: inline-block; width: 80px; height: 36px';
+      item.textContent = `File ${i}`;
+      strip.append(item);
     }
+    box.prepend(strip);
   });
+}
+
+test('a part of the composer that scrolls sideways keeps its swipe while the keyboard is up', async ({
+  page,
+}) => {
+  const chat = await openChat(page);
+  // A strip of attachments wider than the composer, as a caller can put there.
+  await addAttachmentStrip(chat.composer);
+  await keyboardUp(page, chat);
+  await recordInput(page, chat);
+  const strip = page.getByTestId('attachment-strip');
+  const stripBox = await strip.boundingBox();
+  if (stripBox == null) {
+    throw new Error('The strip has no box.');
+  }
+  const y = stripBox.y + stripBox.height / 2;
+  const driver = await touchDriver(page);
+  await driver.play(
+    drag(
+      {x: stripBox.x + stripBox.width - 20, y},
+      {x: stripBox.x + 20, y},
+      {durationMs: 300},
+    ),
+  );
+  await expect(chat.editable).toBeFocused();
+  const {composerMoves} = await inputLog(page);
+  expect(composerMoves.length).toBeGreaterThan(0);
+  expect(composerMoves, 'defaultPrevented of each move').not.toContain(true);
+  if (driver.drivesNativeGestures) {
+    expect(await strip.evaluate(el => el.scrollLeft)).toBeGreaterThan(0);
+  }
+});
+
+test('a drag up that drifts sideways on that strip scrolls nothing under the keyboard', async ({
+  page,
+}) => {
+  const chat = await openChat(page);
+  await addAttachmentStrip(chat.composer);
+  await keyboardUp(page, chat);
+  await recordInput(page, chat);
+  const strip = page.getByTestId('attachment-strip');
+  const stripBox = await strip.boundingBox();
+  if (stripBox == null) {
+    throw new Error('The strip has no box.');
+  }
+  const from = {
+    x: stripBox.x + stripBox.width - 40,
+    y: stripBox.y + stripBox.height / 2,
+  };
+  const before = await transcriptScroll(chat.composer);
+  const driver = await touchDriver(page);
+  // Mostly up, with the hand's drift to the side: the browser locks it to
+  // the vertical axis, which the strip cannot scroll.
+  await driver.play(
+    drag(from, {x: from.x - 24, y: from.y - 120}, {durationMs: 300}),
+  );
+  await expect(chat.editable).toBeFocused();
+  const {composerMoves} = await inputLog(page);
+  expect(composerMoves.length).toBeGreaterThan(0);
+  expect(composerMoves, 'defaultPrevented of each move').not.toContain(false);
+  if (driver.drivesNativeGestures) {
+    expect(await transcriptScroll(chat.composer)).toBe(before);
+  }
+});
+
+test('a two-finger pinch that starts on the composer stays the browser’s (spec:AST-094 FR10)', async ({
+  page,
+}) => {
+  const chat = await openChat(page);
+  const rows = await keyboardUp(page, chat);
+  await recordInput(page, chat);
+  const driver = await touchDriver(page);
+  await driver.play(
+    pinch({
+      center: {x: rows.x, y: rows.inComposer + 8},
+      fromDistance: 40,
+      toDistance: 140,
+      durationMs: 300,
+    }),
+  );
+  const {pinchMoves} = await inputLog(page);
+  expect(pinchMoves.length).toBeGreaterThan(0);
+  expect(pinchMoves, 'defaultPrevented of each two-finger move').not.toContain(
+    true,
+  );
+});
+
+test('ten drags in a row, alternating ends on the composer and above it, each dismiss or keep as they reach it', async ({
+  page,
+}) => {
+  const chat = await openChat(page);
+  const driver = await touchDriver(page);
+  for (let cycle = 0; cycle < 10; cycle++) {
+    const rows = await keyboardUp(page, chat);
+    const reaches = cycle % 3 !== 1;
+    await driver.play(
+      drag(
+        {x: rows.x, y: 120},
+        {x: rows.x, y: reaches ? rows.inComposer : rows.aboveComposer},
+        {durationMs: 300},
+      ),
+    );
+    if (reaches) {
+      await expect(chat.editable).not.toBeFocused();
+    } else {
+      await expect(chat.editable).toBeFocused();
+    }
+  }
 });
 
 test.describe('a finger where the primary pointer is fine, as on a touch-screen laptop', () => {

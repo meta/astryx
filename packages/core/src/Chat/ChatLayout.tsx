@@ -5,7 +5,8 @@
 /**
  * @file ChatLayout.tsx
  * @input Uses React, StyleX, theme tokens, useChatStreamScroll, useChatNewMessages,
- *   useGestureRecognizer, the keyboard dismissal pan and the composer's follow
+ *   useGestureRecognizer, useAttachment, the keyboard dismissal pans and the
+ *   composer's bounce
  * @output Exports ChatLayout component and ChatLayoutProps
  * @position Layout shell for full chat interfaces — messages in page flow, composer fixed to bottom
  *
@@ -29,12 +30,12 @@
  * - /apps/storybook/stories/ChatLayout.stories.tsx
  * - /packages/cli/assets/templates/blocks/components/ChatLayout/ (block examples)
  * - /packages/core/src/Chat/transcriptDismiss.ts (the dismiss line)
- * - /packages/core/src/Chat/composerFollow.ts (the composer and frosted layer)
+ * - /packages/core/src/Chat/composerBounce.ts (the dock container's bounce)
  */
 
-import {type ReactNode, useMemo, useRef, useState} from 'react';
+import {type ReactNode, useMemo, useRef} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {colorVars, spacingVars} from '../theme/tokens.stylex';
+import {spacingVars} from '../theme/tokens.stylex';
 import type {BaseProps} from '../BaseProps';
 import {mergeProps} from '../utils';
 import {useChatStreamScroll} from './useChatStreamScroll';
@@ -42,13 +43,15 @@ import {useChatNewMessages} from './useChatNewMessages';
 import {ChatLayoutScrollButton} from './ChatLayoutScrollButton';
 import {ChatLayoutContext} from './ChatContext';
 import {
+  createComposerDismissPan,
   createKeyboardDismissPan,
-  dismissKeyboardAtRelease,
+  dismissKeyboardAtCrossing,
+  dismissKeyboardOnComposerDrag,
+  holdPageUnderComposer,
 } from './transcriptDismiss';
+import {bounceComposer} from './composerBounce';
 import {useGestureRecognizer} from '../gestures/useGestureRecognizer';
-import {useAttachmentPair} from '../hooks/useAttachment';
-import {createComposerFollow} from './composerFollow';
-import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
+import {useAttachment} from '../hooks/useAttachment';
 import {themeProps} from '../utils/themeProps';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
@@ -201,31 +204,6 @@ const styles = stylex.create({
     paddingBlockEnd: spacingVars['--spacing-3'],
   },
 
-  // The armed cue under Reduce Motion: the pressed overlay over the composer,
-  // which only fades in and out, as touch presentations do there.
-  dockArmedCue: {
-    '::after': {
-      content: '""',
-      position: 'absolute',
-      inset: 0,
-      pointerEvents: 'none',
-      backgroundColor: colorVars['--color-overlay-pressed'],
-      opacity: 0,
-      transitionProperty: 'opacity',
-      transitionDuration: {
-        default: reducedMotionFadeConsts.duration,
-        '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
-          '0s',
-      },
-      transitionTimingFunction: reducedMotionFadeConsts.easing,
-    },
-  },
-  dockArmed: {
-    '::after': {
-      opacity: 1,
-    },
-  },
-
   dockInner: {
     marginInline: 'auto',
     width: '100%',
@@ -340,8 +318,8 @@ export function ChatLayout({
 }: ChatLayoutProps) {
   const t = useComponentTranslator();
   const rootRef = useRef<HTMLDivElement>(null);
+  const dockContainerRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLDivElement>(null);
-  const edgeRef = useRef<HTMLDivElement>(null);
 
   const scrollContainerRef = externalScrollRef ?? rootRef;
   const isSelfScrolling = !externalScrollRef;
@@ -366,19 +344,6 @@ export function ChatLayout({
     />
   );
 
-  // Under Reduce Motion an armed drag shows the pressed overlay instead of
-  // moving the composer.
-  const [isArmedCue, setArmedCue] = useState(false);
-  const [composerFollow] = useState(() => createComposerFollow(setArmedCue));
-  useAttachmentPair(
-    composerRef,
-    edgeRef,
-    (composer, edge) => {
-      composerFollow.attach({composer, edge});
-      return () => composerFollow.attach(null);
-    },
-    null,
-  );
   useGestureRecognizer(
     rootRef,
     () =>
@@ -389,11 +354,24 @@ export function ChatLayout({
           composerRef.current?.getBoundingClientRect().top ??
           Number.POSITIVE_INFINITY,
       ),
-    pan => {
-      composerFollow.update(pan);
-      dismissKeyboardAtRelease(pan);
-    },
+    pan =>
+      dismissKeyboardAtCrossing(pan, fingerSpeed => {
+        const container = dockContainerRef.current;
+        const composer = composerRef.current;
+        if (container != null && composer != null) {
+          // No deeper than the composer's bottom padding.
+          const depth =
+            Number.parseFloat(getComputedStyle(composer).paddingBottom) || 0;
+          bounceComposer(container, fingerSpeed, depth);
+        }
+      }),
   );
+  useGestureRecognizer(
+    composerRef,
+    () => createComposerDismissPan(() => composerRef.current),
+    dismissKeyboardOnComposerDrag,
+  );
+  useAttachment(composerRef, holdPageUnderComposer, null);
 
   // --- Layout context ---
   const layoutContext = useMemo(
@@ -452,8 +430,10 @@ export function ChatLayout({
           )}
         </div>
 
-        {/* Dock container — sticky/fixed, holds blur + scroll button + composer */}
+        {/* Dock container — sticky/fixed, holds blur + scroll button + composer.
+            Its bounce moves all three as one. */}
         <div
+          ref={dockContainerRef}
           {...stylex.props(
             styles.dockContainer,
             isSelfScrolling
@@ -464,21 +444,13 @@ export function ChatLayout({
           {scrollButton === undefined ? defaultScrollButton : scrollButton}
 
           {/* Frosted glass layer */}
-          <div
-            ref={edgeRef}
-            {...stylex.props(styles.blurLayer, currentDensity.blurLayer)}
-          />
+          <div {...stylex.props(styles.blurLayer, currentDensity.blurLayer)} />
 
-          {/* Composer: a transcript drag lifted at its top dismisses the
-              software keyboard. */}
+          {/* Composer: a transcript drag that reaches its top, or a drag down
+              that starts on it, dismisses the software keyboard. */}
           <div
             ref={composerRef}
-            {...stylex.props(
-              styles.dock,
-              currentDensity.dock,
-              styles.dockArmedCue,
-              isArmedCue && styles.dockArmed,
-            )}>
+            {...stylex.props(styles.dock, currentDensity.dock)}>
             <div {...stylex.props(styles.dockInner, currentDensity.dockInner)}>
               {composer}
             </div>
