@@ -96,6 +96,10 @@ export {
 export {focusForLastInput, isFocusLost} from '../utils/focusReturn';
 export {useInteractionModalityTracking} from '../utils/interactionModality';
 
+// Lab components that watch a finger's scroll read whether a scroller's
+// scroll is a finger's, and act when that scroll ends.
+export {useFingerScroll} from '../gestures/useFingerScroll';
+export type {UseFingerScrollOptions} from '../gestures/useFingerScroll';
 // Lab's PageControl also reads an element's shared animator, the Reduce
 // Motion cross-fade, and the touch hit area's hook and layer.
 export {animatorFor} from '../motion/animator';
