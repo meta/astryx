@@ -7,7 +7,7 @@
  * @position Browser-only regression for corrective layer portals in editors.
  */
 
-import {expect, test} from '@playwright/test';
+import {expect, test} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,

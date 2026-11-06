@@ -5,7 +5,7 @@
  * @output Repeated decorator deselection and editor teardown remain error-free.
  * @position Browser E2E regression for renderer-owned corrective portals.
  */
-import {expect, test} from '@playwright/test';
+import {expect, test} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
