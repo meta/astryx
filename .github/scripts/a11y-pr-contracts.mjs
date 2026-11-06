@@ -52,7 +52,7 @@
  * first), in the time left. It reads no title and runs no component audit; a
  * changed `audit` spec still waits for its audit pull request. To stay inside the job's 15-minute budget
  * it takes at most CHANGED_SPEC_LIMIT changed files, starts each file only
- * when the run still fits DEFAULT_CHECK_BUDGET_MS at that file's recorded time
+ * when the run still fits PLAN_BUDGET_MS at that file's recorded time
  * (.github/a11y-contract-durations.json), and stops at that budget. Each file
  * it leaves out is reported as not run, never as passed or failed. Locally,
  * `pnpm test:a11y-contract:pr origin/main --dry-run` prints what a PR from
@@ -315,6 +315,14 @@ export const CHANGED_SPEC_LIMIT = 4;
 
 /** The default check's wall-clock bound, inside the job's 15 minutes. */
 export const DEFAULT_CHECK_BUDGET_MS = 8 * 60 * 1000;
+
+/**
+ * The time the default check plans: three quarters of its stop. A
+ * pull-request runner can run a file slower than its recorded time even with
+ * the margin, and a file that the stop cuts fails the run, so the plan keeps
+ * the last quarter free.
+ */
+export const PLAN_BUDGET_MS = 6 * 60 * 1000;
 
 /**
  * The times come from the release legs. A pull-request runner can be slower,
@@ -703,7 +711,7 @@ export function planDefaultCheck({
   dependents = [],
   seconds,
   workers,
-  budgetMs = DEFAULT_CHECK_BUDGET_MS,
+  budgetMs = PLAN_BUDGET_MS,
   dependentShareMs = DEPENDENT_SHARE_MS,
 }) {
   const {run: changedInLimit, notRun} = withinBudget(changed);
@@ -725,7 +733,7 @@ export function planDefaultCheck({
     if (STARTUP_MS + projectedMs(withFile, msOf, workers) > budgetMs) {
       notRun.push({
         file: entry.file,
-        reason: `${entry.reason}; its expected ${Math.round(secondsOf(entry.file))} s does not fit the default check's ${budgetMs / 60000}-minute budget; add ci:run-a11y to run it`,
+        reason: `${entry.reason}; its expected ${Math.round(secondsOf(entry.file))} s does not fit the default check's ${budgetMs / 60000}-minute plan; add ci:run-a11y to run it`,
       });
     } else if (!fits(withFile)) {
       notRun.push({

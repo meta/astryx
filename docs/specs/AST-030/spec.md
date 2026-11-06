@@ -253,8 +253,9 @@ they are separately named.
   MUST NOT become the pull request's critical path: it starts after the
   Storybook build and MUST finish before the slowest unit-test job, so the
   time until the required `test` join reports does not grow. It stops after
-  eight minutes: it starts a file only when that file's recorded duration fits
-  the time left. A contract file that cannot finish within the budget is
+  eight minutes and plans six of them: it starts a file only when that file's
+  recorded duration fits what is left of those six, so a slower runner still
+  finishes every file it starts. A contract file that cannot finish within the budget is
   reported as not run, not split. Each file it does not run, for that budget
   or the four-file limit, is reported as not run in the check's summary and
   annotations, with the label that runs it. A spec that starts and does not
