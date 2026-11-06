@@ -29,10 +29,11 @@
  * SYNC: When modified, update __tests__/useFingerScroll.test.tsx.
  */
 
-import {useCallback, useLayoutEffect, useRef, type RefObject} from 'react';
+import {useCallback, useRef, type RefObject} from 'react';
 import {isFingerScroll, watchFingerScrolls} from './fingerScroll';
 import {getGestureHost} from './GestureHost';
 import {useAttachment} from '../hooks/useAttachment';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 
 function isDocument(value: unknown): value is Document {
   return typeof Document !== 'undefined' && value instanceof Document;
@@ -70,7 +71,7 @@ export function useFingerScroll(
   // The watch outlives renders, so it calls the latest onEnd through a ref
   // written at commit.
   const onEndRef = useRef(onEnd);
-  useLayoutEffect(function keepLatestOnEnd() {
+  useIsomorphicLayoutEffect(function keepLatestOnEnd() {
     onEndRef.current = onEnd;
   });
   // Keeps the finger-scroll watch on the node the scroller names after each
