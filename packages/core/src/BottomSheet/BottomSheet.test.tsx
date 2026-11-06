@@ -3797,13 +3797,22 @@ describe('BottomSheet', () => {
         act(() => input.focus());
         report(500);
         expect(drawnTop()).toBe(-248);
+        // The clock holds still through the report, so the glide starts at
+        // `reportAt` however slowly the test runs.
         const reportAt = performance.now();
-        report(800);
+        const clock = vi
+          .spyOn(window.performance, 'now')
+          .mockReturnValue(reportAt);
+        try {
+          report(800);
+        } finally {
+          clock.mockRestore();
+        }
         expect(keyboardInsetOf(body)).toBe(0);
         expect(body.scrollTop).toBe(0);
         // Drawn where it was at the report, then down on the keyboard's spring:
-        // a frame or two in, it has hardly moved.
-        expect(drawnTop()).toBeLessThan(-200);
+        // two frames in, it has hardly moved.
+        expect(drawnTop(reportAt + 32)).toBeLessThan(-200);
         expect(drawnTop(reportAt + 450)).toBeCloseTo(0, 0);
       });
     });
