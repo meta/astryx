@@ -34,7 +34,7 @@ system_specs: [spec:AST-102]
 | Behavior                | Kbd splits `keys` on `+`, draws one hidden key badge per key with platform-aware glyphs, and names the whole shortcut once with spoken key names.                                                   |
 | End-user impact         | Sighted people see familiar key glyphs; screen-reader users hear the shortcut as words. Those words are English in every locale.                                                                    |
 | Builder impact          | None.                                                                                                                                                                                               |
-| Compatibility/readiness | Records shipped behavior; no API, default, or DOM change. Badges hold a fixed height; listed under Current-state impact.                                                                            |
+| Compatibility/readiness | Records shipped behavior; no API, default, or DOM change. The `kbd` target sits on the non-painting shortcut group; listed under Current-state impact.                                              |
 | Review checks           | Reject a badge that is exposed to assistive technology, a caller `role` or `aria-label` that replaces the computed one, duplicate React keys for repeated keys, or `mod` that ignores the platform. |
 | Governing rules         | `architecture:component-theming-surface`; `architecture:internationalization` INV1, INV1a; `architecture:public-component-api` INV5; `spec:AST-102` FR4.                                            |
 
