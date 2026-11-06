@@ -127,9 +127,12 @@ function isVisiblyFocusable(el: HTMLElement): boolean {
  * the trap does. Not re-exported from the package's `hooks` entry.
  */
 export function getFocusableElements(container: HTMLElement): HTMLElement[] {
-  return Array.from(
-    container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
-  ).filter(isVisiblyFocusable);
+  // The edges of the Tab cycle come from document order. Browsers return a
+  // selector list in document order, but some DOM implementations (jsdom)
+  // return it one selector at a time, so the order is set here.
+  return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
+    .filter(isVisiblyFocusable)
+    .sort((a, b) => (precedes(a, b) ? -1 : precedes(b, a) ? 1 : 0));
 }
 
 /**
@@ -161,6 +164,68 @@ function attemptFocus(element: HTMLElement): boolean {
     // Some elements may throw on focus
   }
   return element.ownerDocument.activeElement === element;
+}
+
+/**
+ * The radios in `focusable` that share one Tab stop with `element`: its native
+ * radio group, the same `name` in the same form and tree. Null for anything
+ * that is not a named radio.
+ */
+function radioGroupOf(
+  element: Element,
+  focusable: readonly HTMLElement[],
+): HTMLInputElement[] | null {
+  if (!isNamedRadio(element)) {
+    return null;
+  }
+  return focusable.filter(
+    (candidate): candidate is HTMLInputElement =>
+      isNamedRadio(candidate) &&
+      candidate.name === element.name &&
+      candidate.form === element.form &&
+      candidate.getRootNode() === element.getRootNode(),
+  );
+}
+
+function isNamedRadio(element: Element): element is HTMLInputElement {
+  return (
+    element.localName === 'input' &&
+    (element as HTMLInputElement).type === 'radio' &&
+    (element as HTMLInputElement).name !== ''
+  );
+}
+
+/** Whether `active` is on the same Tab stop as `edge`. */
+function isOnTabStop(
+  active: Element,
+  edge: HTMLElement,
+  focusable: readonly HTMLElement[],
+): boolean {
+  return (
+    active === edge ||
+    (radioGroupOf(edge, focusable)?.includes(active as HTMLInputElement) ??
+      false)
+  );
+}
+
+/**
+ * The element Tab focuses for the stop `edge` belongs to. A radio group's
+ * stop is its checked radio. With none checked, the browser enters the group
+ * at its first radio going forward and at its last going backward.
+ */
+function tabStopTarget(
+  edge: HTMLElement,
+  focusable: readonly HTMLElement[],
+  isForward: boolean,
+): HTMLElement {
+  const group = radioGroupOf(edge, focusable);
+  if (group == null || group.length === 0) {
+    return edge;
+  }
+  return (
+    group.find(radio => radio.checked) ??
+    (isForward ? group[0] : group[group.length - 1])
+  );
 }
 
 /**
@@ -383,7 +448,12 @@ export function useFocusRegionContainment(
           // Programmatic initial focus can sit on the trap container itself
           // (for example a dialog panel with no content controls). Move into
           // the tabbable cycle instead of letting Tab escape to the page.
-          wrapFocus(event, event.shiftKey ? last : first);
+          wrapFocus(
+            event,
+            event.shiftKey
+              ? tabStopTarget(last, focusable, false)
+              : tabStopTarget(first, focusable, true),
+          );
           return;
         }
 
@@ -395,18 +465,18 @@ export function useFocusRegionContainment(
         if (event.shiftKey) {
           // Shift+Tab: if on (or before) the first element, wrap to last
           if (
-            active === first ||
+            isOnTabStop(active, first, focusable) ||
             (isProgrammaticStop && precedes(active, first))
           ) {
-            wrapFocus(event, last);
+            wrapFocus(event, tabStopTarget(last, focusable, false));
           }
         } else {
           // Tab: if on (or after) the last element, wrap to first
           if (
-            active === last ||
+            isOnTabStop(active, last, focusable) ||
             (isProgrammaticStop && precedes(last, active))
           ) {
-            wrapFocus(event, first);
+            wrapFocus(event, tabStopTarget(first, focusable, true));
           }
         }
       }
