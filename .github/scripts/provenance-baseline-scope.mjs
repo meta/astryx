@@ -2,10 +2,12 @@
 
 /**
  * @file provenance-baseline-scope.mjs
- * @input A file that lists changed paths, one per line.
- * @output Exit 0 when a change can make the comment-provenance baseline
- *   stale: it touches a file the baseline lists, the baseline, or the rule
- *   and its baseline tooling. Exit 1 otherwise.
+ * @input A file that lists changed paths, one per line (both paths of a
+ *   rename), and optionally `--baseline <file>`.
+ * @output Exit 0 only when the change cannot make the comment-provenance
+ *   baseline stale: a non-empty list that touches no file the baseline lists,
+ *   not the baseline, and not the rule or its baseline tooling. Any other
+ *   answer, an error included, exits non-zero, and the check runs.
  * @position The lint job's "Check the comment-provenance baseline" step reads
  *   it, so a pull request that cannot change the baseline skips the check.
  */
@@ -29,22 +31,30 @@ export const RULE_FILES = [
 ];
 
 /**
+ * Whether the check may be skipped: only for a known, non-empty file list
+ * that touches nothing the baseline depends on.
  * @param {string[]} changed
  * @param {Record<string, unknown>} baseline
  */
-export function touchesBaseline(changed, baseline) {
+export function canSkipBaselineCheck(changed, baseline) {
+  if (changed.length === 0) return false;
   const listed = new Set([...Object.keys(baseline), ...RULE_FILES]);
-  return changed.some(file => listed.has(file));
+  return !changed.some(file => listed.has(file));
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const args = process.argv.slice(2);
+  const flag = args.indexOf('--baseline');
+  const baselinePath =
+    flag === -1 ? path.join(ROOT, BASELINE) : path.resolve(args[flag + 1]);
+  const listFile = args.find(
+    (arg, i) => !arg.startsWith('--') && args[i - 1] !== '--baseline',
+  );
   const changed = fs
-    .readFileSync(process.argv[2], 'utf8')
+    .readFileSync(listFile, 'utf8')
     .split('\n')
     .map(line => line.trim())
     .filter(Boolean);
-  const baseline = JSON.parse(
-    fs.readFileSync(path.join(ROOT, BASELINE), 'utf8'),
-  );
-  process.exitCode = touchesBaseline(changed, baseline) ? 0 : 1;
+  const baseline = JSON.parse(fs.readFileSync(baselinePath, 'utf8'));
+  process.exitCode = canSkipBaselineCheck(changed, baseline) ? 0 : 1;
 }

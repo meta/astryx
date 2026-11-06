@@ -259,12 +259,13 @@ jobs:
           NODE_OPTIONS: '--max-old-space-size=4096'
         run: |
           set -eu
-          if [ "$EVENT_NAME" = pull_request ]; then
-            git diff --name-only "$MERGE_SHA^1" "$MERGE_SHA" > "$RUNNER_TEMP/changed-files"
-            if ! node .github/scripts/provenance-baseline-scope.mjs "$RUNNER_TEMP/changed-files"; then
-              echo 'This change touches no file the comment-provenance baseline lists, the baseline, or the rule.'
-              exit 0
-            fi
+          # Skip only on the helper's explicit answer: an empty list, an
+          # error or a crash runs the check. Both paths of a rename count.
+          if [ "$EVENT_NAME" = pull_request ] &&
+            git diff --name-only --no-renames "$MERGE_SHA^1" "$MERGE_SHA" > "$RUNNER_TEMP/changed-files" &&
+            node .github/scripts/provenance-baseline-scope.mjs "$RUNNER_TEMP/changed-files"; then
+            echo 'This change touches no file the comment-provenance baseline lists, the baseline, or the rule.'
+            exit 0
           fi
           node internal/eslint-plugin-astryx/no-comment-provenance.baseline.mjs --check
 

@@ -21,7 +21,7 @@ import path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import yaml from 'yaml';
 
-import {touchesBaseline} from './provenance-baseline-scope.mjs';
+import {canSkipBaselineCheck} from './provenance-baseline-scope.mjs';
 
 import {
   createRepository,
@@ -225,7 +225,7 @@ describe('required lint routing', () => {
     ).toMatchObject({spec_only: 'false', docsite_only: 'false'});
   });
 
-  it('runs the baseline check for a change that can make the baseline stale, and skips it otherwise', () => {
+  it('skips the baseline check only for a known change that cannot make the baseline stale', () => {
     const baseline = {'packages/core/src/Button/Button.tsx': []};
     for (const file of [
       'packages/core/src/Button/Button.tsx',
@@ -233,23 +233,58 @@ describe('required lint routing', () => {
       'internal/eslint-plugin-astryx/no-comment-provenance.js',
       'internal/eslint-plugin-astryx/rule-baseline.mjs',
     ]) {
-      expect(touchesBaseline([file], baseline), file).toBe(true);
+      expect(canSkipBaselineCheck([file], baseline), file).toBe(false);
     }
     expect(
-      touchesBaseline(['packages/core/src/Badge/Badge.tsx'], baseline),
-    ).toBe(false);
-    // The repository's own baseline lists real files.
-    const repoBaseline = JSON.parse(
-      fs.readFileSync(
-        path.join(
-          root,
-          'internal/eslint-plugin-astryx/no-comment-provenance.baseline.json',
-        ),
-        'utf8',
+      canSkipBaselineCheck(['packages/core/src/Badge/Badge.tsx'], baseline),
+    ).toBe(true);
+    // A rename lists both paths, so moving a baselined file runs the check.
+    expect(
+      canSkipBaselineCheck(
+        [
+          'packages/core/src/Button/Button.tsx',
+          'packages/core/src/Button/BaseButton.tsx',
+        ],
+        baseline,
       ),
+    ).toBe(false);
+    // An empty list is not a known change.
+    expect(canSkipBaselineCheck([], baseline)).toBe(false);
+  });
+
+  it('runs the baseline check when the helper fails or the file list is empty', () => {
+    const check = steps.find(
+      step => step.name === 'Check the comment-provenance baseline',
     );
-    expect(touchesBaseline([Object.keys(repoBaseline)[0]], repoBaseline)).toBe(
-      true,
+    expect(check.run).toContain('git diff --name-only --no-renames');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'provenance-scope-'));
+    scratch.push(dir);
+    const helper = path.join(
+      root,
+      '.github/scripts/provenance-baseline-scope.mjs',
     );
+    const exitOf = (list, baseline) => {
+      fs.writeFileSync(path.join(dir, 'changed'), list);
+      fs.writeFileSync(path.join(dir, 'baseline.json'), baseline);
+      return spawnSync(
+        'node',
+        [
+          helper,
+          path.join(dir, 'changed'),
+          '--baseline',
+          path.join(dir, 'baseline.json'),
+        ],
+        {encoding: 'utf8'},
+      ).status;
+    };
+    // Exit 0, the only answer that skips: a known list that touches nothing.
+    expect(exitOf('docs/README.md\n', '{}')).toBe(0);
+    expect(exitOf('', '{}')).not.toBe(0);
+    expect(exitOf('docs/README.md\n', '{not json')).not.toBe(0);
+    expect(
+      spawnSync('node', [helper, path.join(dir, 'missing')], {
+        encoding: 'utf8',
+      }).status,
+    ).not.toBe(0);
   });
 });
