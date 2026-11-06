@@ -83,6 +83,12 @@ export const docs = {
       description: 'Callback after the code is copied.',
     },
     {
+      name: 'onCopyError',
+      type: '(error: unknown) => void',
+      description:
+        'Called once with the rejection when the clipboard write fails. The copy button shows a cross and is named and announced as "Failed to copy value to clipboard."; the error is not shown.',
+    },
+    {
       name: 'endContent',
       type: 'ReactNode',
       description:

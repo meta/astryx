@@ -90,8 +90,33 @@ export interface UseClipboardReturn {
 export function useClipboard(
   options: UseClipboardOptions = {},
 ): UseClipboardReturn {
-  const {announce: announceMessage, resetAfterMs = DEFAULT_RESET_AFTER_MS} =
-    options;
+  return useClipboardCopy(options);
+}
+
+/**
+ * Options of {@link useClipboardCopy}: the public options plus `onError`.
+ */
+export interface UseClipboardCopyOptions extends UseClipboardOptions {
+  /**
+   * Called once with the rejection when a clipboard write fails. The copied
+   * state is unchanged and `copy` still resolves `false`.
+   */
+  onError?: (error: unknown) => void;
+}
+
+/**
+ * The body of {@link useClipboard}, with an `onError` option for a component
+ * that reports a failed write (CodeBlock's `onCopyError`). Not exported from
+ * the package: the public hook's options and return type stay as they are.
+ */
+export function useClipboardCopy(
+  options: UseClipboardCopyOptions = {},
+): UseClipboardReturn {
+  const {
+    announce: announceMessage,
+    resetAfterMs = DEFAULT_RESET_AFTER_MS,
+    onError,
+  } = options;
   const announce = useAnnounce();
   const [isCopied, setIsCopied] = useState(false);
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -123,12 +148,13 @@ export function useClipboard(
           setIsCopied(false);
         }, resetAfterMs);
         return true;
-      } catch {
+      } catch (error) {
         // Clipboard failures leave the copied state unchanged.
+        onError?.(error);
         return false;
       }
     },
-    [announce, announceMessage, resetAfterMs],
+    [announce, announceMessage, resetAfterMs, onError],
   );
 
   return {copy, isCopied};

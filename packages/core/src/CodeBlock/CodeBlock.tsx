@@ -35,7 +35,8 @@ import {
   focusVars,
 } from '../theme/tokens.stylex';
 import {isRenderable, mergeProps, rtlStyles} from '../utils';
-import {useClipboard} from '../hooks/useClipboard';
+import {useClipboardCopy} from '../hooks/useClipboard';
+import {useAnnounce} from '../hooks/useAnnounce';
 import {useScrollableArea} from '../hooks/useScrollableArea';
 import {Icon} from '../Icon';
 import {ComponentIcon} from '../Icon/ComponentIcon';
@@ -458,6 +459,12 @@ const styles = stylex.create({
 // Line rendering
 // ---------------------------------------------------------------------------
 
+/**
+ * How long the copied check or the failure cross shows: the shared clipboard
+ * hook's default, named here because the failure keeps its own timer.
+ */
+const COPY_FEEDBACK_MS = 2000;
+
 const LINE_CHUNK_SIZE = 20;
 const LINE_CHUNK_THRESHOLD = 100;
 
@@ -605,6 +612,12 @@ export interface CodeBlockProps extends BaseProps<HTMLPreElement> {
   isDiff?: boolean;
   hasCopyButton?: boolean;
   onCopy?: () => void;
+  /**
+   * Called once with the rejection when the clipboard write fails. The copy
+   * control then shows a cross and is named and announced as the localized
+   * "Failed to copy value to clipboard."; the error itself is not shown.
+   */
+  onCopyError?: (error: unknown) => void;
   /**
    * Your own controls, shown just before Copy: in the header when the block
    * has one, otherwise beside the code in the top inline-end corner, never
@@ -1005,6 +1018,7 @@ export function CodeBlock({
   isDiff = false,
   hasCopyButton = true,
   onCopy,
+  onCopyError,
   endContent,
   isWrapped = false,
   maxHeight,
@@ -1026,8 +1040,45 @@ export function CodeBlock({
   // Owns the clipboard write, the transient copied flag, its reset timer, and
   // the polite copy announcement (a swapped aria-label alone is not reliably
   // announced) — shared with Timestamp via the same hook.
-  const {copy, isCopied: copied} = useClipboard({
+  const announce = useAnnounce();
+  // A failed write shows a cross for as long as a copy shows the check, and
+  // is named and announced as the localized failure (Owner decision, Nov 6
+  // 2026). The error itself goes only to `onCopyError`.
+  const [copyFailed, setCopyFailed] = useState(false);
+  const copyFailedResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearCopyFailed = useCallback(() => {
+    if (copyFailedResetRef.current != null) {
+      clearTimeout(copyFailedResetRef.current);
+      copyFailedResetRef.current = null;
+    }
+    setCopyFailed(false);
+  }, []);
+  const handleCopyError = useCallback(
+    (error: unknown) => {
+      setCopyFailed(true);
+      announce(t('@astryx.codeBlock.copyFailed'));
+      if (copyFailedResetRef.current != null) {
+        clearTimeout(copyFailedResetRef.current);
+      }
+      copyFailedResetRef.current = setTimeout(() => {
+        copyFailedResetRef.current = null;
+        setCopyFailed(false);
+      }, COPY_FEEDBACK_MS);
+      onCopyError?.(error);
+    },
+    [announce, t, onCopyError],
+  );
+  useEffect(function clearCopyFailedResetOnUnmount() {
+    return () => {
+      if (copyFailedResetRef.current != null) {
+        clearTimeout(copyFailedResetRef.current);
+      }
+    };
+  }, []);
+  const {copy, isCopied: copied} = useClipboardCopy({
     announce: t('@astryx.codeBlock.copied'),
+    resetAfterMs: COPY_FEEDBACK_MS,
+    onError: handleCopyError,
   });
 
   const useSpans =
@@ -1071,9 +1122,10 @@ export function CodeBlock({
   const handleCopy = useCallback(async () => {
     const didCopy = await copy(code);
     if (didCopy) {
+      clearCopyFailed();
       onCopy?.();
     }
-  }, [code, copy, onCopy]);
+  }, [code, copy, onCopy, clearCopyFailed]);
 
   const sizeStyle = size === 'sm' ? styles.sizeSm : styles.sizeMd;
   // Digits in the largest visible line number — sizes the gutter column width.
@@ -1151,8 +1203,11 @@ export function CodeBlock({
       icon={
         <ComponentIcon
           slot="code-block-copy"
-          state={{copied}}
-          fallback={{icon: copied ? 'check' : 'copy', size: 'sm'}}
+          state={{copied: copied && !copyFailed}}
+          fallback={{
+            icon: copyFailed ? 'close' : copied ? 'check' : 'copy',
+            size: 'sm',
+          }}
           color="inherit"
         />
       }
@@ -1160,9 +1215,17 @@ export function CodeBlock({
       // stays "Copy" after copying — the copy → check icon flip is the
       // confirmation, not a tooltip change. The aria-label still swaps to the
       // localized "Copied" for assistive tech, backed by the announcement.
-      tooltip={t('@astryx.codeBlock.copyCode')}
+      tooltip={
+        copyFailed
+          ? t('@astryx.codeBlock.copyFailed')
+          : t('@astryx.codeBlock.copyCode')
+      }
       label={
-        copied ? t('@astryx.codeBlock.copied') : t('@astryx.codeBlock.copyCode')
+        copyFailed
+          ? t('@astryx.codeBlock.copyFailed')
+          : copied
+            ? t('@astryx.codeBlock.copied')
+            : t('@astryx.codeBlock.copyCode')
       }
       onClick={e => {
         // Stop propagation so copying does not toggle the collapsible header.
