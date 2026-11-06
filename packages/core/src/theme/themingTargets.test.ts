@@ -1011,9 +1011,7 @@ const UNREFLECTED_STYLE_AXIS_EXCEPTIONS: ReadonlyMap<string, string> = new Map([
   [
     'Skeleton.radius',
     'component:Skeleton FR2: radius is callsite geometry, like width and ' +
-      'height, and is not reflected. A theme changes the token-mapped steps ' +
-      'only through the shared radius tokens FR2 names; none and the split ' +
-      'between 3 and 4 are not themeable.',
+      'height, and is not reflected.',
   ],
 ]);
 
