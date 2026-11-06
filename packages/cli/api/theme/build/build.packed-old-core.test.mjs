@@ -37,6 +37,12 @@ import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 import {findInstalledPackage} from '../../../foundation/fs/paths.mjs';
+import {
+  cliTarball,
+  releasePackedCli,
+  runFolder,
+  tarballFiles,
+} from '../../../test-utils/global-local-fixtures.mjs';
 import {CLI_VERSION} from '../../../test-utils/release-fixtures.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -45,8 +51,69 @@ const CLI_PKG = path.join(REPO_ROOT, 'packages/cli');
 const CORE_DIST = path.join(REPO_ROOT, 'packages/core/dist');
 const CORE_THEME_ENTRY = path.join(CORE_DIST, 'theme/index.js');
 
-/** The CLI's published file set (packages/cli package.json `files`). */
-const PACKED_DIRS = ['clients', 'api', 'assets', 'authoring', 'foundation'];
+/**
+ * Published asset folders that theme build never reads: page templates, the
+ * docs corpus and icon data, three quarters of the CLI's files. Each is one
+ * link to the package's own folder. Every published path still resolves, and
+ * the fixture writes and deletes only the files the CLI can run.
+ */
+const LINKED_ASSET_FOLDERS = [
+  'assets/docs',
+  'assets/icons',
+  'assets/templates',
+];
+
+/** @param {string} file - A path in the CLI package, with `/` separators. */
+function inLinkedFolder(file) {
+  return LINKED_ASSET_FOLDERS.some(folder => file.startsWith(`${folder}/`));
+}
+
+/**
+ * Put the folder `from` at `to` as one link. Where the system refuses the
+ * link, copy the folder instead.
+ * @param {string} from
+ * @param {string} to
+ * @param {(target: string, at: string, type: 'junction') => void} [link]
+ */
+function linkFolder(from, to, link = fs.symlinkSync) {
+  fs.mkdirSync(path.dirname(to), {recursive: true});
+  try {
+    // A junction needs no special right on Windows; elsewhere the type is
+    // ignored and this is a plain symbolic link.
+    link(from, to, 'junction');
+  } catch (error) {
+    if (/** @type {NodeJS.ErrnoException} */ (error).code !== 'EPERM') {
+      throw error;
+    }
+    fs.cpSync(from, to, {recursive: true});
+  }
+}
+
+/**
+ * Delete a fixture. `rmSync` removes a link and never follows it, so the
+ * folders that the asset links point to stay whole.
+ * @param {string} dir
+ */
+function removeFixture(dir) {
+  fs.rmSync(dir, {recursive: true, force: true});
+}
+
+/**
+ * The regular files under `dir` by their path below it, links not followed.
+ * @param {string} dir
+ * @param {string} [rel]
+ * @returns {string[]}
+ */
+function filesHeld(dir, rel = '') {
+  return fs.readdirSync(dir, {withFileTypes: true}).flatMap(entry => {
+    const entryRel = rel ? `${rel}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) {
+      return filesHeld(path.join(dir, entry.name), entryRel);
+    }
+    return entry.isFile() ? [entryRel] : [];
+  });
+}
+
 /** Runtime dependencies the packed CLI resolves from its install root. */
 const RUNTIME_DEPS = [
   '@babel/parser',
@@ -426,26 +493,31 @@ beforeAll(() => {
     'packages/core must be built before this suite (vitest.global-setup.node.mjs)',
   ).toBe(true);
 
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-packed-old-core-'));
+  // In a run's folder, the global teardown removes the fixture with
+  // everything else, even when this worker stops before its afterAll.
+  root = fs.mkdtempSync(
+    path.join(runFolder() ?? os.tmpdir(), 'astryx-packed-old-core-'),
+  );
   consumer = path.join(root, 'app');
   fs.mkdirSync(consumer, {recursive: true});
   const modules = path.join(root, 'node_modules');
 
-  // The packed CLI, as published.
+  // The packed CLI, as published: the files `npm pack` puts in its tarball.
   const cli = path.join(modules, '@astryxdesign/cli');
-  fs.mkdirSync(cli, {recursive: true});
-  for (const dir of PACKED_DIRS) {
-    fs.cpSync(path.join(CLI_PKG, dir), path.join(cli, dir), {recursive: true});
+  /** @type {Set<string>} */
+  const made = new Set();
+  for (const file of tarballFiles(cliTarball())) {
+    if (inLinkedFolder(file)) continue;
+    const target = path.join(cli, file);
+    if (!made.has(path.dirname(target))) {
+      fs.mkdirSync(path.dirname(target), {recursive: true});
+      made.add(path.dirname(target));
+    }
+    fs.copyFileSync(path.join(CLI_PKG, file), target);
   }
-  fs.mkdirSync(path.join(cli, 'scripts'), {recursive: true});
-  fs.copyFileSync(
-    path.join(CLI_PKG, 'scripts/postinstall.mjs'),
-    path.join(cli, 'scripts/postinstall.mjs'),
-  );
-  fs.copyFileSync(
-    path.join(CLI_PKG, 'package.json'),
-    path.join(cli, 'package.json'),
-  );
+  for (const folder of LINKED_ASSET_FOLDERS) {
+    linkFolder(path.join(CLI_PKG, folder), path.join(cli, folder));
+  }
 
   // Its runtime dependencies, resolved from the install root like a real one.
   // Found from the CLI package rather than the repo root: only a hoisted
@@ -1105,7 +1177,78 @@ export const authorThrowsTheme = defineTheme({
 }, 120_000);
 
 afterAll(() => {
-  if (root) fs.rmSync(root, {recursive: true, force: true});
+  if (root && !runFolder()) removeFixture(root);
+  releasePackedCli();
+});
+
+describe('the packed CLI fixture', () => {
+  it("holds the CLI's packed files, three asset folders as links", () => {
+    const cli = path.join(root, 'node_modules/@astryxdesign/cli');
+    const published = tarballFiles(cliTarball());
+    const unresolved = published.filter(
+      file => !fs.existsSync(path.join(cli, file)),
+    );
+    expect(unresolved).toEqual([]);
+    expect(
+      filesHeld(cli)
+        .filter(file => !inLinkedFolder(file))
+        .sort(),
+    ).toEqual(published.filter(file => !inLinkedFolder(file)).sort());
+    for (const folder of LINKED_ASSET_FOLDERS) {
+      const at = path.join(cli, folder);
+      if (fs.lstatSync(at).isSymbolicLink()) {
+        expect(fs.realpathSync(at)).toBe(
+          fs.realpathSync(path.join(CLI_PKG, folder)),
+        );
+      } else {
+        expect(filesHeld(at).sort()).toEqual(
+          filesHeld(path.join(CLI_PKG, folder)).sort(),
+        );
+      }
+    }
+  });
+
+  it('deletes the asset links and never what they point to', () => {
+    const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-links-'));
+    try {
+      const pkg = path.join(scratch, 'package');
+      const fixture = path.join(scratch, 'fixture');
+      for (const folder of LINKED_ASSET_FOLDERS) {
+        fs.mkdirSync(path.join(pkg, folder), {recursive: true});
+        fs.writeFileSync(path.join(pkg, folder, 'planted.txt'), folder);
+        linkFolder(path.join(pkg, folder), path.join(fixture, folder));
+      }
+      removeFixture(fixture);
+      expect(fs.existsSync(fixture)).toBe(false);
+      for (const folder of LINKED_ASSET_FOLDERS) {
+        const planted = path.join(pkg, folder, 'planted.txt');
+        expect(fs.readFileSync(planted, 'utf8')).toBe(folder);
+      }
+    } finally {
+      fs.rmSync(scratch, {recursive: true, force: true});
+    }
+  });
+
+  it('copies an asset folder where the system refuses a link', () => {
+    const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-links-'));
+    try {
+      const from = path.join(scratch, 'package/assets/docs');
+      const to = path.join(scratch, 'fixture/assets/docs');
+      fs.mkdirSync(from, {recursive: true});
+      fs.writeFileSync(path.join(from, 'planted.txt'), 'docs');
+      linkFolder(from, to, () => {
+        throw Object.assign(new Error('operation not permitted'), {
+          code: 'EPERM',
+        });
+      });
+      expect(fs.lstatSync(to).isDirectory()).toBe(true);
+      expect(fs.readFileSync(path.join(to, 'planted.txt'), 'utf8')).toBe(
+        'docs',
+      );
+    } finally {
+      fs.rmSync(scratch, {recursive: true, force: true});
+    }
+  });
 });
 
 describe('packed CLI against a core that predates adaptations', () => {

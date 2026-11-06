@@ -21,6 +21,8 @@ import path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import yaml from 'yaml';
 
+import {canSkipBaselineCheck} from './provenance-baseline-scope.mjs';
+
 import {
   createRepository,
   importCommits,
@@ -195,5 +197,185 @@ describe('required lint routing', () => {
       // Only the classifier writes full_suite, so the classifier answered.
       full_suite: 'false',
     });
+  });
+
+  it('checks the comment-provenance baseline in full lint, and a baseline-only change runs it', () => {
+    const check = steps.find(
+      step => step.name === 'Check the comment-provenance baseline',
+    );
+    expect(check.run).toContain(
+      'node internal/eslint-plugin-astryx/no-comment-provenance.baseline.mjs --check',
+    );
+    expect(check.run).toContain(
+      'node .github/scripts/provenance-baseline-scope.mjs "$RUNNER_TEMP/changed-files"',
+    );
+    expect(check.env.NODE_OPTIONS).toBe(
+      steps.find(step => step.name === 'Run ESLint').env.NODE_OPTIONS,
+    );
+    // The same lanes as ESLint: everything but the docs and spec fast paths.
+    expect(check.if).toBe(steps.find(step => step.name === 'Run ESLint').if);
+    expect(steps.indexOf(check)).toBeGreaterThan(
+      steps.findIndex(step => step.uses === './.github/actions/setup'),
+    );
+    expect(
+      classifyPullRequest({
+        'internal/eslint-plugin-astryx/no-comment-provenance.baseline.json':
+          '{}\n',
+      }),
+    ).toMatchObject({spec_only: 'false', docsite_only: 'false'});
+  });
+
+  it('skips the baseline check only for a known change that cannot make the baseline stale', () => {
+    const baseline = {'packages/core/src/Button/Button.tsx': []};
+    for (const file of [
+      'packages/core/src/Button/Button.tsx',
+      'internal/eslint-plugin-astryx/no-comment-provenance.baseline.json',
+      'internal/eslint-plugin-astryx/no-comment-provenance.js',
+      'internal/eslint-plugin-astryx/no-comment-provenance.baseline.mjs',
+      'internal/eslint-plugin-astryx/rule-baseline.mjs',
+      'eslint.config.js',
+    ]) {
+      expect(canSkipBaselineCheck([file], baseline), file).toBe(false);
+    }
+    expect(
+      canSkipBaselineCheck(['packages/core/src/Badge/Badge.tsx'], baseline),
+    ).toBe(true);
+    // A rename lists both paths, so moving a baselined file runs the check.
+    expect(
+      canSkipBaselineCheck(
+        [
+          'packages/core/src/Button/Button.tsx',
+          'packages/core/src/Button/BaseButton.tsx',
+        ],
+        baseline,
+      ),
+    ).toBe(false);
+    // An empty list is not a known change.
+    expect(canSkipBaselineCheck([], baseline)).toBe(false);
+    // ESLint skips what an ignore file names, and reads the rule from the
+    // plugin entry.
+    for (const file of [
+      '.gitignore',
+      'packages/core/.gitignore',
+      'internal/eslint-plugin-astryx/index.js',
+    ]) {
+      expect(canSkipBaselineCheck([file], baseline), file).toBe(false);
+    }
+  });
+
+  // Runs the step's own script in a scratch repository whose merge commit
+  // changes `files`, with a stub baseline script that prints a marker.
+  function runBaselineStep({event = 'pull_request', files, baseline = '{}'}) {
+    const check = steps.find(
+      step => step.name === 'Check the comment-provenance baseline',
+    );
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'provenance-step-'));
+    scratch.push(repo);
+    const write = (file, text) => {
+      fs.mkdirSync(path.dirname(path.join(repo, file)), {recursive: true});
+      fs.writeFileSync(path.join(repo, file), text);
+    };
+    write(
+      '.github/scripts/provenance-baseline-scope.mjs',
+      fs.readFileSync(
+        path.join(root, '.github/scripts/provenance-baseline-scope.mjs'),
+        'utf8',
+      ),
+    );
+    write(
+      'internal/eslint-plugin-astryx/no-comment-provenance.baseline.json',
+      baseline,
+    );
+    write(
+      'internal/eslint-plugin-astryx/no-comment-provenance.baseline.mjs',
+      "console.log('BASELINE CHECK RAN');\n",
+    );
+    write('docs/README.md', 'base\n');
+    write('packages/core/src/Button/Button.tsx', 'base\n');
+    const g = (...args) =>
+      execFileSync(
+        'git',
+        ['-C', repo, '-c', 'user.name=t', '-c', 'user.email=t@t', ...args],
+        {
+          encoding: 'utf8',
+        },
+      );
+    g('init', '-q');
+    g('add', '-A');
+    g('commit', '-qm', 'base', '--no-verify');
+    for (const file of files) write(file, 'changed\n');
+    g('add', '-A');
+    g('commit', '-qm', 'change', '--allow-empty', '--no-verify');
+    const merge = g('rev-parse', 'HEAD').trim();
+    const runnerTemp = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'provenance-tmp-'),
+    );
+    scratch.push(runnerTemp);
+    return execFileSync('bash', ['-e', '-c', check.run], {
+      cwd: repo,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        EVENT_NAME: event,
+        MERGE_SHA: merge,
+        RUNNER_TEMP: runnerTemp,
+      },
+    });
+  }
+
+  it('runs the baseline check for a push, a baselined change, a helper failure and an empty list, and skips an unrelated change', () => {
+    const baseline = JSON.stringify({
+      'packages/core/src/Button/Button.tsx': [],
+    });
+    const ran = options =>
+      runBaselineStep(options).includes('BASELINE CHECK RAN');
+    expect(ran({event: 'push', files: ['docs/README.md'], baseline})).toBe(
+      true,
+    );
+    expect(
+      ran({files: ['packages/core/src/Button/Button.tsx'], baseline}),
+    ).toBe(true);
+    expect(ran({files: ['.gitignore'], baseline})).toBe(true);
+    // A baseline the helper cannot parse: the helper fails, the check runs.
+    expect(ran({files: ['docs/README.md'], baseline: '{not json'})).toBe(true);
+    // A merge commit that changes nothing: an empty list runs the check.
+    expect(ran({files: [], baseline})).toBe(true);
+    expect(ran({files: ['docs/README.md'], baseline})).toBe(false);
+  });
+
+  it('runs the baseline check when the helper fails or the file list is empty', () => {
+    const check = steps.find(
+      step => step.name === 'Check the comment-provenance baseline',
+    );
+    expect(check.run).toContain('git diff --name-only --no-renames');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'provenance-scope-'));
+    scratch.push(dir);
+    const helper = path.join(
+      root,
+      '.github/scripts/provenance-baseline-scope.mjs',
+    );
+    const exitOf = (list, baseline) => {
+      fs.writeFileSync(path.join(dir, 'changed'), list);
+      fs.writeFileSync(path.join(dir, 'baseline.json'), baseline);
+      return spawnSync(
+        'node',
+        [
+          helper,
+          path.join(dir, 'changed'),
+          '--baseline',
+          path.join(dir, 'baseline.json'),
+        ],
+        {encoding: 'utf8'},
+      ).status;
+    };
+    // Exit 0, the only answer that skips: a known list that touches nothing.
+    expect(exitOf('docs/README.md\n', '{}')).toBe(0);
+    expect(exitOf('', '{}')).not.toBe(0);
+    expect(exitOf('docs/README.md\n', '{not json')).not.toBe(0);
+    expect(
+      spawnSync('node', [helper, path.join(dir, 'missing')], {
+        encoding: 'utf8',
+      }).status,
+    ).not.toBe(0);
   });
 });

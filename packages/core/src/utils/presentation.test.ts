@@ -366,6 +366,25 @@ describe('presentation: a caller choice wins over touch defaults', () => {
     });
   });
 
+  it('answers the default presentation where the window has no matchMedia, as in a test DOM', () => {
+    vi.stubGlobal('matchMedia', undefined);
+    expect(resolve(undefined, 'touch')).toEqual({
+      surface: 'popover',
+      touchModes: false,
+    });
+    expect(resolve('adaptive')).toEqual({
+      surface: 'popover',
+      touchModes: false,
+    });
+    expect(resolve('bottom-sheet')).toEqual({
+      surface: 'bottom-sheet',
+      touchModes: false,
+    });
+    expect(
+      renderHook(() => useAdaptivePresentation('adaptive')).result.current,
+    ).toBe('popover');
+  });
+
   it('reads the compact definition it is given, so a theme that moves md moves the sheet (spec:AST-012 FR9)', () => {
     setDevice({...IPHONE, width: 900, height: 1024});
     expect(
