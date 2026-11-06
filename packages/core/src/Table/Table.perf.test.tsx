@@ -451,10 +451,17 @@ describe('Table render performance', () => {
 
   describe('render benchmarks', () => {
     // An untimed render first: a run's first Table render also pays one-off
-    // module and compiler work, which is not what these budgets measure.
+    // module and compiler work, which is not what these budgets measure. The
+    // warm-up unmounts and uses other rows, so the timed render is a fresh
+    // mount that reuses nothing.
     const warmUp = () => {
+      const rows = createTestData(100).map(row => ({
+        ...row,
+        id: `warm-${row.id}`,
+        name: `Warm ${row.name}`,
+      }));
       const {unmount} = render(
-        <Table data={createTestData(100)} columns={testColumns} idKey="id" />,
+        <Table data={rows} columns={testColumns} idKey="id" />,
       );
       unmount();
     };
