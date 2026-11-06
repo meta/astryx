@@ -14,7 +14,12 @@ export type AuthoredDocKind =
   | 'schema'
   | 'command'
   | 'enum'
-  | 'namespace';
+  | 'namespace'
+  /**
+   * An icon definition (spec:AST-084 FR4).
+   * @experimental May change or be removed in a patch release.
+   */
+  | 'icon-definition';
 
 /** Visibility of an authored doc in a compiled audience-specific bundle. */
 export type DocAudience = 'public' | 'internal';
@@ -31,17 +36,24 @@ export interface DocPlacement {
 }
 
 /**
- * Graph metadata shared by every authored doc kind. Reserved for the docs
- * graph, which is not built yet: nothing reads these fields, and a reference
- * topic that sets one fails to load.
+ * Tree metadata shared by every authored doc kind. The docs tree reads
+ * `placement` for every guide, the CLI's and each integration's
+ * (spec:AST-046); nothing reads `aliases` or `audience` yet. A reference topic
+ * outside the docs tree that sets one fails to load.
  */
 export interface AuthoredDocGraphFields {
-  /** Requested canonical parent in the docs graph. Not read yet. */
+  /** The doc's one parent in the docs tree: a namespace of its own package. */
   placement?: DocPlacement;
-  /** Prior routes or names the docs graph will keep resolving. Not read yet. */
+  /** Reserved: prior routes or names the docs tree will keep resolving.
+   *  Nothing reads it yet. */
   aliases?: string[];
-  /** Docs bundle audience; omit for public docs. Not read yet. */
+  /** Reserved: docs bundle audience; omit for public docs. Nothing reads it
+   *  yet. */
   audience?: DocAudience;
+  /** Set on the doc of an experimental surface (spec:AST-017 FR21, FR27),
+   *  whose text then says it may change or be removed in a patch release. A
+   *  command's help shows it as `[experimental]`. Omit for stable surfaces. */
+  stability?: 'experimental';
 }
 
 /**
@@ -380,6 +392,12 @@ export interface ComponentPropDoc {
    *  ```
    */
   slotElements?: ComponentSlotElement[];
+  /** Lifecycle marker for a prop outside the stable compatibility promise
+   *  (spec:AST-017 FR21). Set `'experimental'` on a stable component's
+   *  optional `experimental` prop object, and say in `description` that its
+   *  contents may change or be removed in a patch release. Omit for stable
+   *  props. */
+  stability?: 'experimental';
 }
 
 /**
@@ -497,15 +515,6 @@ export interface ComponentThemingTarget {
    *  selectors such as `[data-checked="checked"]`. Omit if the element has no
    *  state-driven selectors. */
   states?: string[];
-  /** Set when this target has been renamed and this entry is the old name.
-   *  The component continues emitting the class through `themeProps`'s
-   *  `legacyNames`, so existing themes keep working while discovery and build
-   *  guidance prefer the replacement. The value is the canonical target key
-   *  without the `astryx-` prefix — e.g. `"checkbox-indicator"`.
-   *
-   *  A theme target is public API; deprecation alone does not authorize
-   *  removing either this metadata or runtime support. */
-  deprecatedFor?: string;
 }
 
 /**
@@ -538,6 +547,47 @@ export interface ComponentThemingVar {
    * `astryx theme build` errors if a theme sets a private var directly.
    */
   private?: boolean;
+}
+
+/**
+ * A component icon slot: a themeable icon role the component owns, which a
+ * theme maps to a shared icon name through `defineTheme({componentIcons})`.
+ * Each entry corresponds to a slot in `ComponentIconSlotMap`.
+ *
+ * @example
+ * ```
+ * {
+ *   slot: 'code-block-copy',
+ *   description: 'The copy button icon.',
+ *   fallback: '`copy`; `check` while copied',
+ *   state: [{name: 'copied', type: 'boolean', description: 'True while the copied feedback shows.'}],
+ *   whenNull: 'Hides the glyph. The button keeps its size, name, and tooltip.',
+ * }
+ * ```
+ */
+// SYNC: When adding a field here, add it to the docsite's generated-registry
+// copy too — apps/docsite/scripts/generate-data.mjs (interface ComponentIconSlot).
+export interface ComponentIconSlotDoc {
+  /** The slot name, `<component-kebab>-<semantic-role>`. */
+  slot: string;
+  /** The icon's role in the component. */
+  description: string;
+  /** The icon the component renders when the theme maps nothing, per state. */
+  fallback: string;
+  /** The state a slot function receives. Omit for a stateless slot. */
+  state?: ComponentIconSlotStateDoc[];
+  /** What a slot value of `null` does for this component. */
+  whenNull: string;
+}
+
+/** One field of the state a component passes to a slot function. */
+export interface ComponentIconSlotStateDoc {
+  /** The field name. */
+  name: string;
+  /** The field's TypeScript type. */
+  type: string;
+  /** When the field has each value. */
+  description: string;
 }
 
 /**

@@ -7,7 +7,7 @@ export const docs = {
   subComponentOf: 'CommandPalette',
   displayName: 'Command Palette List',
   isHiddenFromOverview: true,
-  description: 'Scrollable results container. Renders as a listbox for ARIA. Contains CommandPaletteItem and CommandPaletteGroup children.',
+  description: 'Scrollable results container. Renders as a listbox standalone, and inside CommandPalette while selectable results exist. Contains CommandPaletteItem and CommandPaletteGroup children.',
   props: [
     {
       name: 'children',
@@ -42,7 +42,7 @@ export const docsZh = {
   name: 'CommandPaletteList',
   isHiddenFromOverview: true,
   displayName: 'Command Palette List',
-  description: '可滚动的结果容器。作为 listbox 渲染以符合 ARIA 规范。',
+  description: '可滚动的结果容器。独立使用时，以及在 CommandPalette 中存在可选结果时，作为 listbox 渲染。',
   propDescriptions: {
     children: '条目、分组和空状态。',
     label: 'listbox 的无障碍标签。',
@@ -54,7 +54,7 @@ export const docsDense = {
   name: 'CommandPaletteList',
   isHiddenFromOverview: true,
   displayName: 'Command Palette List',
-  description: 'scrollable results container; role=listbox',
+  description: 'scrollable results container; role=listbox standalone, and in CommandPalette only while results exist',
   propDescriptions: {
     children: 'items, groups, empty states',
     label: 'a11y label for listbox',

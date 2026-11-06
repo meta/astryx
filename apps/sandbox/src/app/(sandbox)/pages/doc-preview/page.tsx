@@ -25,7 +25,9 @@ const styles = stylex.create({
     top: 0,
     zIndex: 10,
     backgroundColor: 'var(--color-background-body)',
-    borderBottom: '1px solid var(--color-border)',
+    borderBottomWidth: '1px',
+    borderBottomStyle: 'solid',
+    borderBottomColor: 'var(--color-border)',
     padding: '12px 32px',
   },
   loading: {

@@ -346,4 +346,30 @@ describe('Layout', () => {
       expect(root(container).style.outline).toBe('1px solid red');
     });
   });
+
+  describe('pass-through props', () => {
+    it('forwards pass-through props to the root element', () => {
+      const {container} = render(
+        <Layout
+          aria-label="Records workspace"
+          id="records-layout"
+          data-testid="layout-root"
+          data-zone="admin"
+          content={<div>c</div>}
+        />,
+      );
+      const el = root(container);
+      expect(el).toHaveAttribute('aria-label', 'Records workspace');
+      expect(el).toHaveAttribute('id', 'records-layout');
+      expect(el).toHaveAttribute('data-testid', 'layout-root');
+      expect(el).toHaveAttribute('data-zone', 'admin');
+    });
+
+    it('keeps component-owned theme metadata over a colliding pass-through', () => {
+      const {container} = render(
+        <Layout height="fill" data-height="auto" content={<div>c</div>} />,
+      );
+      expect(root(container)).toHaveAttribute('data-height', 'fill');
+    });
+  });
 });

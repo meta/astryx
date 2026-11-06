@@ -108,12 +108,6 @@ export function configureMonaco(
     'file:///globals.d.ts',
   );
 
-  // Lucide icons wildcard stub so named imports don't show as errors.
-  ts.addExtraLib(
-    `declare module 'lucide-react' { const icons: Record<string, React.ComponentType<{size?: number | string; color?: string; strokeWidth?: number | string; className?: string}>>; export = icons; }`,
-    'file:///node_modules/lucide-react/index.d.ts',
-  );
-
   // Load real type definitions from the pre-built JSON bundle
   fetch('/playground-types.json')
     .then(r => r.json())
@@ -158,6 +152,27 @@ export function configureMonaco(
         ts.addExtraLib(content, `file:///node_modules/recharts/${fileName}`);
       }
 
+      // Every other package in the bundle (lucide-react, the theme packages,
+      // next/image, the bare `stylex` alias) is an ambient `declare module`,
+      // so the file path only has to be unique. Registering them generically
+      // keeps the editor in step with whatever generate-playground-types.mjs
+      // emits for the preview scope.
+      const AMBIENT_HANDLED = new Set([
+        'react',
+        '@stylexjs/stylex',
+        '@heroicons/react',
+        'recharts',
+        '@astryxdesign/core',
+      ]);
+      for (const [pkg, files] of Object.entries(packages)) {
+        if (AMBIENT_HANDLED.has(pkg)) {
+          continue;
+        }
+        for (const [fileName, content] of Object.entries(files)) {
+          ts.addExtraLib(content, `file:///node_modules/${pkg}/${fileName}`);
+        }
+      }
+
       const coreFiles = packages['@astryxdesign/core'] ?? {};
       const submoduleReexports: string[] = [];
 
@@ -167,13 +182,16 @@ export function configureMonaco(
           `file:///node_modules/@astryxdesign/core/dist/${relPath}`,
         );
 
+        // Mount at the package root as well, so every subpath the preview
+        // scope serves resolves the way it would from node_modules: a
+        // directory through its index.d.ts, a flat file such as
+        // `BaseProps` or `theme/tokens.stylex` through its own .d.ts.
+        ts.addExtraLib(
+          content,
+          `file:///node_modules/@astryxdesign/core/${relPath}`,
+        );
         if (relPath.endsWith('/index.d.ts')) {
-          const moduleName = relPath.replace('/index.d.ts', '');
-          ts.addExtraLib(
-            content,
-            `file:///node_modules/@astryxdesign/core/${moduleName}/index.d.ts`,
-          );
-          submoduleReexports.push(moduleName);
+          submoduleReexports.push(relPath.replace('/index.d.ts', ''));
         }
       }
 

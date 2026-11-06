@@ -52,7 +52,7 @@ describe('theme build install-instructions import path', () => {
     const themeFile = writeTheme(project, 'cwd-theme');
 
     const result = await runCli(
-      ['theme', 'build', path.relative(project, themeFile)],
+      ['--detail', 'full', 'theme', 'build', path.relative(project, themeFile)],
       project,
     );
 
@@ -70,7 +70,7 @@ describe('theme build install-instructions import path', () => {
     const themeFile = writeTheme(path.join(project, 'themes'), 'sub-theme');
 
     const result = await runCli(
-      ['theme', 'build', path.relative(project, themeFile)],
+      ['--detail', 'full', 'theme', 'build', path.relative(project, themeFile)],
       project,
     );
 
@@ -89,7 +89,7 @@ describe('theme build install-instructions import path', () => {
     );
 
     const result = await runCli(
-      ['theme', 'build', path.relative(project, themeFile)],
+      ['--detail', 'full', 'theme', 'build', path.relative(project, themeFile)],
       project,
     );
 

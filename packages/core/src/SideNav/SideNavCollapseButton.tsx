@@ -17,7 +17,7 @@
  * - /packages/cli/assets/templates/blocks/components/SideNav/ (showcase blocks)
  */
 
-import React, {useCallback, type ReactNode} from 'react';
+import React, {use, useCallback, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {durationVars, easeVars} from '../theme/tokens.stylex';
 import {Icon} from '../Icon';
@@ -31,8 +31,16 @@ import {
   type SideNavImperativeCollapseHandle,
 } from './SideNavCollapseContext';
 import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
-import {useTranslator} from '../i18n';
+import {useMergedRefs} from '../hooks/useMergedRefs';
+import {SideNavFocusTargetsContext} from './SideNavFocusTargetsContext';
 import type {ElementSize} from '../SizeContext/SizeContext';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/SideNav/SideNavCollapseButton.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Styles
@@ -138,12 +146,26 @@ export function SideNavCollapseButton({
   onClick: onClickProp,
   ...props
 }: SideNavCollapseButtonProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const {isCollapsed, toggle, isCollapsible} = useSideNavCollapseState(
     collapsible,
     handleRef,
   );
   const {isMobile} = useAppShellMobile();
+  // A toggle inside its SideNav registers there, so a collapse that removes
+  // the focused row can hand focus to it (`component:SideNav` AR3). One wired
+  // to state outside the SideNav (`collapsible`, `handleRef`) does not.
+  const focusTargets = use(SideNavFocusTargetsContext);
+  const isInSideNav =
+    focusTargets != null && collapsible == null && handleRef == null;
+  const registerToggle = useCallback(
+    (element: HTMLButtonElement | null) =>
+      element == null || !isInSideNav || focusTargets == null
+        ? undefined
+        : focusTargets.registerToggle(element),
+    [focusTargets, isInSideNav],
+  );
+  const mergedRef = useMergedRefs(ref, registerToggle);
 
   // Hide when not collapsible, or when in mobile mode (sidenav is in
   // the mobile drawer — collapse doesn't apply there)
@@ -153,7 +175,7 @@ export function SideNavCollapseButton({
 
   return (
     <Button
-      ref={ref}
+      ref={mergedRef}
       label={
         label ??
         (isCollapsed

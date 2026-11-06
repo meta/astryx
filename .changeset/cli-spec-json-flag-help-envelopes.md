@@ -1,7 +1,0 @@
----
-'@astryxdesign/cli': patch
----
-
-[fix] The `--json` option's description in `astryx --help`, in the manifest, and in the CLI README now lists every envelope field: `{ apiVersion, type, data, meta? }` on success and `{ apiVersion, error, code, suggestions? }` on failure. It used to omit `apiVersion`, `meta`, and the stable `code` field that consumers branch on. (#6549)
-
-@josephfarina

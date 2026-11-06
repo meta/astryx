@@ -10,10 +10,49 @@ import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import {
   accept,
   assertPromotableVerdict,
+  compactBaselineManifest,
   incomparable,
   readBaseline,
 } from './baseline.mjs';
 
+describe('compact baseline manifest', () => {
+  it('keeps comparison and ownership fields without generated story metadata', () => {
+    const compact = compactBaselineManifest({
+      version: 1,
+      platform: 'linux-arm64',
+      browser: 'chromium-149',
+      viewport: {width: 1024, height: 768},
+      shots: {
+        a: {
+          sha256: 'aa',
+          storyId: 'core-button--primary',
+          theme: 'neutral',
+          mode: 'light',
+          packageName: '@astryxdesign/core',
+          themePackageName: '@astryxdesign/theme-neutral',
+          title: 'Core/Button',
+          name: 'Primary',
+          reasons: ['surface'],
+          packageNames: ['@astryxdesign/core'],
+          stableVisual: true,
+          stableThemeVisual: true,
+          membershipSource: 'current-story',
+          width: 1024,
+          height: 768,
+        },
+      },
+    });
+    expect(compact.shots.a).toEqual({
+      sha256: 'aa',
+      storyId: 'core-button--primary',
+      theme: 'neutral',
+      mode: 'light',
+      packageName: '@astryxdesign/core',
+      themePackageName: '@astryxdesign/theme-neutral',
+    });
+    expect(JSON.stringify(compact)).not.toContain('Core/Button');
+  });
+});
 let root;
 let baselineDir;
 let captureDir;

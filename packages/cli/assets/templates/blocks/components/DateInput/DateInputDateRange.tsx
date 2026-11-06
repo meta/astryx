@@ -41,7 +41,7 @@ export default function DateInputDateRange() {
         max={max}
         description={description}
         placeholder="Select a booking date"
-        nativePicker="never"
+        presentation="adaptive-bottom-sheet"
         value={value}
         onChange={setValue}
       />

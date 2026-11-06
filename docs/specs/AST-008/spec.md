@@ -23,52 +23,69 @@ affects_consumer_docs: [color, theme]
 
 Theme authors need a repeatable way to make complete tonal palette candidates.
 Generation is authoring work: it produces colors for people to inspect, adjust,
-and accept. The accepted result is saved as a private, theme-owned palette file.
-A theme may explicitly reference reviewed values from that committed file, but
-ordinary theme builds do not rerun the generator.
+and accept. The accepted result is saved as private, theme-owned palette data.
+Ordinary theme builds do not rerun the generator.
 
-Current `main` has an experimental Palette Generator Lab. It compares candidate
-recipes, complete families, modes, anchors, and existing themes, then lets an
-author copy candidate JSON. The latest OKLCH implementation is the visual basis
-for the first production recipe. This record freezes that intent before a
-follow-up extracts it into supported tooling. AST-018 separately proposes the
-shape, ownership, and validation boundary for accepted palette data.
+The Palette Generator Lab compares candidate recipes, complete families, modes,
+anchors, and existing themes, then lets an author copy candidate JSON. The
+versioned OKLCH recipe is the visual basis for supported generation. A later
+current authority—AST-018 only if amended and accepted—owns the shape and
+lifecycle of accepted palette data and any first-class palette/theme integration.
 
-The first supported consumer is the Astryx CLI's theme-authoring workflow. This
-record accepts a pure `generateTonalPalette()` authoring API and the
-`astryx theme palette generate` command. Both use one versioned engine and remain
-outside Core theme normalization and runtime behavior.
+The Astryx CLI theme-authoring workflow exposes the pure
+`generateTonalPalette()` authoring API and the
+`astryx theme palette generate` command. Both use one versioned engine. Neither
+implicitly rewrites a theme.
+
+New-authoring interfaces recommend the palette workflow and do not present the
+legacy color-scale helper as though choosing one accent were an isolated edit or
+an approved palette. The Playground omits its `Create from accent` affordance
+while retaining explicit token editing.
+
+`DefineThemeInput.color`, `ThemeAdaptationValue.color`, and
+`expandColorScale()` are legacy authoring surfaces. They remain `stable` until a
+replacement-first patch ships the complete modernization route described below;
+that patch moves them to `deprecated`. Their existing runtime behavior remains
+supported and byte-equivalent throughout the deprecation window. Deprecation is
+static and source-level: declarations, authoring validation, and documentation
+identify the replacement, with no compatibility flag, runtime branch,
+rendered-app warning, or added executable production-bundle bytes. Static
+TypeScript declaration metadata is not executable runtime behavior.
 
 ## Non-goals
 
-- Add palette data, generation, or mapping to `DefineThemeInput`, `DefinedTheme`,
-  `defineTheme`, `expandColorScale`, runtime mounting, or theme compilation.
+- Choose the public API, accepted data shape, semantic-role reference model,
+  compiler integration, or runtime projection for a future first-class palette.
+  A later current authority—AST-018 only if amended and accepted—owns those choices.
+- Remove `DefineThemeInput.color`, `ThemeAdaptationValue.color`, or
+  `expandColorScale()` before their separately identified cleanup items are
+  approved for a minor release.
+- Add a runtime compatibility setting, runtime warning, executable production
+  branch, or executable production-bundle bytes solely for deprecation.
 - Require generated palettes or provenance for hand-authored or imported data.
-- Define palette shape, validation, association, inheritance, or artifacts.
-- Make a palette stop a semantic token, live lookup, design approval, or
-  accessibility guarantee.
+- Treat a palette stop as design approval or an accessibility guarantee.
 
 ## Ownership
 
-| Owner                      | Contract                                                                                                             |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| AST-008                    | Candidate generation needs, recipe reproducibility, and the candidate-to-acceptance boundary.                        |
-| Ruby                       | The visual recipe and recommendation, after the required comparison evidence.                                        |
-| AST-018, if accepted       | Accepted palette shape, ownership, validation boundary, and separation from runtime themes.                          |
-| `theme:<name>`             | Accepted exact palette values, saved mappings and deviations, required states, compatibility, and rendered evidence. |
-| Current theme architecture | Productive `defineTheme` normalization and compilation; AST-008 does not change them.                                |
-| CLI authoring surface      | The generation command, pure API, candidate serialization, receipts, and safe writes.                                |
+| Owner                           | Contract                                                                                                                         |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| AST-008                         | Candidate generation, the new-authoring recommendation, and the three legacy color-scale deprecation lifecycles.                 |
+| Ruby                            | The visual recipe and recommendation, after the required comparison evidence.                                                    |
+| Later current palette authority | Accepted palette shape, stable semantic-role references, validation, and any first-class authoring or compilation integration.   |
+| `theme:<name>`                  | Accepted exact palette values, mappings and deviations, required states, compatibility, and rendered evidence.                   |
+| Current theme architecture      | Productive `defineTheme` normalization and compilation, including byte-equivalent legacy behavior during the deprecation window. |
+| CLI authoring surface           | The generation command, pure API, candidate serialization, receipts, safe writes, migration tooling, and authoring diagnostics.  |
 
 ## Authoring lifecycle
 
-| Stage             | Required result                                                                                                    |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Create            | Generate, hand-author, or import a complete candidate palette.                                                     |
-| Review            | Inspect complete families, modes, diagnostics, comparisons, and rendered contexts; adjust or reject freely.        |
-| Accept            | Save the final exact palette data as a reviewed snapshot under the accepted palette contract.                      |
-| Suggest, optional | Produce a read-only candidate mapping from accepted palette data to one explicit theme role.                       |
-| Save mapping      | After human acceptance, save a literal CSS color or an intentional reference to its exact committed palette value. |
-| Verify            | Record contextual evidence for the exact saved values in the owning theme record.                                  |
+| Stage      | Required result                                                                                                                   |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Create     | Generate, hand-author, or import a complete candidate palette.                                                                    |
+| Review     | Inspect complete families, modes, diagnostics, comparisons, and rendered contexts; adjust or reject freely.                       |
+| Accept     | Save the final exact palette data under the accepted palette contract.                                                            |
+| Map        | Record an inspectable, stable semantic-role mapping under the authority that owns accepted palette/theme integration.             |
+| Verify     | Record contextual evidence for the exact palette, role mapping, and rendered values in the owning theme record.                   |
+| Regenerate | Update mapped roles coherently from the accepted palette without an implicit generator run or a manual recopy of unrelated roles. |
 
 ## Requirements
 
@@ -138,13 +155,15 @@ outside Core theme normalization and runtime behavior.
   performance. Fixtures cover blue-to-purple, yellow-to-brown, disproportionate
   family strength, and blue/purple, yellow/green, and red/orange distinction.
   Output remains a candidate until an author accepts it.
-- **FR9 — Mapping suggestions are future read-only assistance.** If proposed, a
-  suggestion MUST take an accepted palette artifact and digest, explicit mode and
-  role, current saved value, and versioned method. It returns an inspectable
-  family, stop, exact color, rationale, and measured differences without editing.
-  A separate explicit apply action shows the target and patch, preserves author
-  edits, saves a literal CSS value or an intentional committed-palette reference,
-  and permits adjustment or rejection.
+- **FR9 — Accepted mapping is explicit, inspectable, and coherent.** The current
+  authority that admits accepted palette/theme integration MUST define stable
+  semantic-role references or an equivalently deterministic authoring-time mapping
+  contract. Once an edited or regenerated palette is explicitly accepted, every
+  role mapped to it MUST update coherently without requiring authors to recopy
+  unrelated values by hand. Tooling MAY suggest a mapping, but a separate explicit
+  apply action MUST show the target and patch, preserve author edits, and permit
+  adjustment or rejection. This requirement does not choose the final
+  `DefineThemeInput`, compiler, or artifact shape.
 - **FR10 — Regeneration never recolors themes implicitly.** Generating a new
   candidate MUST NOT replace an adopted palette or change saved theme values,
   normalized tokens, CSS, built runtime modules, or mounted behavior. A committed
@@ -162,12 +181,16 @@ outside Core theme normalization and runtime behavior.
   dependencies, candidates, reproducibility data, and suggestion logic MUST NOT
   enter Core component runtime, theme mounting, default theme CSS or JavaScript,
   or a theme package's default runtime export.
-- **FR14 — The supported surfaces stay narrow.** `generateTonalPalette(request)`
-  is a pure authoring function that returns candidate data without reading or
-  writing files. `astryx theme palette generate <config>` is its non-interactive
-  file adapter. TypeScript is the primary committed output so exact family and
-  stop keys remain checkable; JSON MAY be requested for interoperable tooling.
-  Neither surface changes `defineTheme()` or performs semantic mapping.
+- **FR14 — Supported generation surfaces stay narrow.**
+  `generateTonalPalette(request)` is a pure authoring function that returns
+  candidate data without reading or writing files.
+  `astryx theme palette generate <config>` is its non-interactive file adapter.
+  TypeScript is the primary committed output so exact family and stop keys remain
+  checkable; JSON MAY be requested for interoperable tooling. These surfaces MUST
+  NOT rewrite a theme or perform semantic mapping implicitly. A future explicit
+  first-class palette input, stable mapping contract, or compiler integration
+  requires separate current authority; this requirement neither approves nor
+  forbids one.
 - **FR15 — Visual review uses one standard artifact.** The CLI MAY explicitly
   write a self-contained HTML preview from the same candidate data. The preview
   MUST identify itself as `palette-preview-v1`, show every generated family,
@@ -179,11 +202,131 @@ outside Core theme normalization and runtime behavior.
   preserve explicit decimal and custom layouts; omit an accent when none is
   requested; and ask whether an ambiguous accent is one theme value or a light
   and dark family rather than guessing.
+- **FR17 — New authoring uses palettes; legacy expansion remains compatible.** A
+  theme-authoring interface MUST NOT present one accent input as an isolated edit
+  when it also replaces neutral, surface, text, border, or other derived values.
+  The Playground MUST omit `Create from accent` and retain direct editing of
+  explicit color tokens. The CLI theme docs and generated theme template MUST
+  recommend the supported palette workflow for new authoring. In the
+  replacement-first patch, explicit reference documentation MUST identify
+  `DefineThemeInput.color`, `ThemeAdaptationValue.color`, and
+  `expandColorScale()` as deprecated legacy authoring APIs while documenting their
+  existing behavior accurately for unmigrated themes. `ColorScaleConfig` and
+  `ColorScaleTokens` remain stable public types during this lifecycle; this record
+  does not schedule their removal.
+- **FR18 — Color-scale deprecation is static, replacement-first, and lossless.**
+  Before the replacement-first patch, all three surfaces remain `stable` and no
+  declaration or warning labels them deprecated. That patch MUST ship the working
+  palette replacement, stable versioned instructions, the exact modernization
+  command, maintained-source migration, declaration `@deprecated` metadata, and
+  authoring/build diagnostics together. Every diagnostic MUST name the applicable
+  `DEP-*` id, exact replacement, stable instructions, and migration command.
+  Deprecation MUST NOT add a runtime compatibility flag, runtime branch,
+  rendered-app warning, or executable production-bundle bytes. For unmigrated
+  source, existing token value strings (including CSS references), normalization,
+  adaptation layers, inheritance, generated CSS, builds, and mounted behavior
+  remain byte-equivalent during the deprecation window. The previewable and
+  idempotent migration follows `spec:AST-040`, preserves those observables as its
+  baseline, and reports dynamic, inherited, adaptation-bearing, or otherwise
+  uncertain cases without rewriting them unless it can prove the replacement
+  preserves the same behavior. Migration never invokes the palette generator: it
+  writes the exact current token value strings as imported, theme-owned palette
+  data or literal token values and references them through `tokens`. Removal
+  requires the separate cleanup ids and minor-release approval in the lifecycle
+  table below.
+
+## Deprecation lifecycle
+
+The three legacy surfaces follow `spec:AST-017` FR28–FR31 and FR29a–FR29d.
+They share one authoring mechanism but are distinct public contracts, so each is
+described and removed separately. Their direct authority is `spec:AST-008/FR18`.
+
+### `DefineThemeInput.color`
+
+- **Package / surface:** `@astryxdesign/core` type field.
+- **Deprecation / cleanup:** `DEP-AST-008-COLOR-INPUT` /
+  `CLN-AST-008-COLOR-INPUT`.
+- **Old contract:** a `color` seed derives broad theme token values during
+  `defineTheme()` normalization and remains inheritable by descendant themes.
+- **Replacement:** `astryx theme palette generate` produces reviewed,
+  theme-owned TypeScript palette data; the AST-040 codemod may instead import the
+  exact existing token value strings as equivalent palette data. The theme writes
+  semantic roles through existing `tokens` entries that reference that committed
+  data. A later current authority may replace this authoring projection with
+  first-class integration.
+- **Warning:** `@deprecated` plus exact-source theme build or validation diagnostics,
+  each naming the deprecation id, stable versioned instructions, and
+  `astryx upgrade --from <installed-version> --apply`.
+- **Migration / proof:** the AST-040 codemod materializes byte-equal token value
+  strings, including CSS references, and proves equivalent normalized tokens,
+  generated CSS, adaptation layers, inheritance, and extension behavior. It
+  reports and leaves unchanged dynamic or inheritable uses it cannot prove.
+- **State / target:** `stable` until the replacement-first patch ships, then
+  `deprecated`; cleanup is unscheduled and requires the exact cleanup id in a
+  frozen minor plan.
+- **Rollback:** before cleanup, revert the migration patch or keep the deprecated
+  field; after cleanup, a compatible recovery patch restores the field and its
+  byte-equivalent normalization.
+
+### `ThemeAdaptationValue.color`
+
+- **Package / surface:** `@astryxdesign/core` nested type field.
+- **Deprecation / cleanup:** `DEP-AST-008-ADAPTATION-COLOR` /
+  `CLN-AST-008-ADAPTATION-COLOR`.
+- **Old contract:** an adaptation rule supplies a partial color-scale configuration
+  completed from the effective root color axis.
+- **Replacement:** adaptation rules write condition-specific semantic roles through
+  existing `value.tokens` entries that reference the same committed theme-owned
+  palette data.
+- **Warning:** `@deprecated` plus exact-source theme validation diagnostics carrying
+  the same instruction and migration fields.
+- **Migration / proof:** the AST-040 codemod preserves each lowered adaptation token
+  string and rule order. It reports and leaves unchanged partial, inherited, or
+  dynamic rules unless it can prove equivalent completion and CSS.
+- **State / target:** `stable` until the replacement-first patch ships, then
+  `deprecated`; cleanup is unscheduled and independent of the root field cleanup.
+- **Rollback:** before cleanup, retain or restore the deprecated field; after cleanup,
+  a compatible recovery patch restores its completion and lowering behavior.
+
+### `expandColorScale()`
+
+- **Package / surface:** `@astryxdesign/core` function export.
+- **Deprecation / cleanup:** `DEP-AST-008-EXPAND-COLOR-SCALE` /
+  `CLN-AST-008-EXPAND-COLOR-SCALE`.
+- **Old contract:** a public authoring helper expands `ColorScaleConfig` into broad
+  token overrides, including live CSS references.
+- **Replacement:** the AST-040 codemod inlines the exact returned token map as a
+  committed TypeScript module whose strings are imported directly, or migrates a
+  theme callsite to existing `tokens` / adaptation `value.tokens` references backed
+  by that committed data.
+- **Warning:** `@deprecated` plus exact-source authoring or build diagnostics carrying
+  the same instruction and migration fields.
+- **Migration / proof:** the AST-040 codemod materializes byte-equal returned token
+  strings when the call is statically resolvable. Dynamic calls are reported and
+  left unchanged. Old helper output and migrated theme output are compared for
+  representative and downstream usage.
+- **State / target:** `stable` until the replacement-first patch ships, then
+  `deprecated`; cleanup is unscheduled and independent of both field cleanups.
+- **Rollback:** before cleanup, retain or restore the deprecated export; after cleanup,
+  a compatible recovery patch restores the export and its byte-equivalent output.
+
+`ColorScaleConfig` and `ColorScaleTokens` remain stable public types and are not
+assigned cleanup ids by this record.
+
+The replacement-first patch ships the working palette path, stable versioned
+instructions, AST-040 codemod, static declaration metadata, exact-source theme
+build or validation diagnostics, maintained-source migration, and old/new
+compatibility proof together. FR17's Playground and new-authoring guidance
+requirements apply immediately and do not wait for the replacement-first patch.
+The patch's maintained-source migration covers remaining uses of the three legacy
+surfaces in examples, stories, tests, and repository-owned themes. `defineTheme`,
+theme mounting, and rendered applications never emit deprecation warnings. Cleanup
+approval for one id does not authorize removal of another.
 
 ## Implementation contract
 
-1. The implementation PR defines `astryx-oklch-v1` in one owned production
-   engine and pins its constants, transformations, and exact regression vectors.
+1. `astryx-oklch-v1` is defined in one owned production engine that pins its
+   constants, transformations, and exact regression vectors.
 2. The pure authoring API and CLI adapter use one deterministic engine and agree
    on recipe semantics. The CLI follows `architecture:cli-surface` for its
    command, response, error, documentation, support, and write contract.
@@ -258,25 +401,33 @@ not become universal accessibility or contrast guarantees for isolated colors.
 
 ## Current-state impact
 
-| State                   | Required result                                                                                   |
-| ----------------------- | ------------------------------------------------------------------------------------------------- |
-| Generation absent       | Existing themes, builds, runtime bytes, and supported package ranges stay unchanged.              |
-| Candidate produced      | No source, theme, package, or runtime output changes.                                             |
-| Palette accepted        | Exact values enter the AST-018-owned shape, if accepted; the theme record owns adoption evidence. |
-| Suggestion produced     | Source and output stay unchanged.                                                                 |
-| Mapping accepted        | One reviewed patch saves explicit values; failure leaves no partial edit.                         |
-| New candidate generated | Adopted palettes and rendered output stay unchanged until an explicit review and save.            |
-| Adopted palette edited  | Literal mappings stay unchanged; explicit references change intentionally and are reviewed.       |
+| State                       | Required result                                                                                                           |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Generation absent           | Existing themes, builds, runtime bytes, and supported package ranges stay unchanged.                                      |
+| Candidate produced          | No source, theme, package, or runtime output changes.                                                                     |
+| Palette accepted            | Exact values enter theme-owned palette data under `theme:<name>`; a later current authority may standardize the shape.    |
+| Mapping accepted            | Under that authority, stable semantic-role references are inspectable, reviewable, and update coherently.                 |
+| New candidate generated     | Adopted palettes and rendered output stay unchanged until an explicit review and save.                                    |
+| Adopted palette edited      | Under that authority, explicitly accepting the edit updates mapped roles coherently; unrelated literal values stay fixed. |
+| Playground color edit       | Explicit token editing remains; no accent edit silently expands into unrelated color tokens.                              |
+| Legacy surface before patch | Stable, fully supported, and unlabeled; Playground and maintained new-authoring guidance follow FR17 immediately.         |
+| Replacement-first patch     | Replacement, guidance, migration, static metadata, diagnostics, source migration, and compatibility proof ship together.  |
+| Deprecated API used         | Normalization, token strings, inheritance, CSS, builds, and mounted behavior remain byte-equivalent.                      |
+| Migration run               | Proven uses preserve exact observables; uncertain dynamic, inherited, or adaptation-bearing cases remain unchanged.       |
 
 ## Verification
 
 Verification MUST cover cross-platform deterministic vectors; hard failures;
 every candidate source and provenance state; complete-family regression/CVD
-evidence; candidate-versus-accepted identity; optional atomic suggest/apply;
-runtime/default-bundle absence; and real-Chromium evidence for accepted mappings.
-
-This specification-only pull request changes no runtime, build, theme, or package
-behavior and carries no Changeset.
+evidence; candidate-versus-accepted identity; inspectable stable role mappings;
+runtime/default-bundle absence; real-Chromium evidence for accepted mappings;
+Playground evidence that accent editing does not invoke legacy color-scale
+expansion or mutate unrelated tokens; static `@deprecated` declaration metadata;
+exact-source theme build or validation diagnostics; absence of deprecation-only
+runtime branches, logs, executable bytes, or output changes; maintained-source
+migration; and AST-040 preview, idempotence, and refusal fixtures. Migration proof
+MUST compare token value strings including CSS references, normalized root and
+adaptation layers, generated CSS, inheritance, and descendant extension behavior.
 
 ## Decision log
 
@@ -292,11 +443,13 @@ do not define the production recipe.
 
 **Decider:** `cixzhang`, `2026-09-03`
 
-FR7, FR9, and FR10 replace former draft DEC-8 and its palette-aware
-`defineTheme` / `expandColorScale` direction. Accepted palettes are committed
-snapshots. Theme mappings use literal CSS values or explicit references to those
-snapshots; generation never runs implicitly. OQ3 is removed with the rejected
-automatic mapping and runtime coupling.
+Accepted palettes are committed snapshots. Theme mappings use literal CSS values
+or explicit references to committed palette data; generation never runs implicitly.
+A generated candidate changes no accepted source or rendered output until an author
+explicitly accepts it.
+
+Rejected: an implicit generator run during ordinary theme normalization or build,
+because it would recolor a theme without an explicit accepted source change.
 
 ### DEC-11 — Generation has one authoring engine and two adapters
 
@@ -305,7 +458,8 @@ automatic mapping and runtime coupling.
 The CLI theme-authoring workflow is the first supported consumer. The pure
 `generateTonalPalette()` API enables programmatic authoring without filesystem
 effects; `astryx theme palette generate` adds preview and explicit file output.
-Both use the same `astryx-oklch-v1` engine. Neither enters Core or `defineTheme()`.
+Both use the same `astryx-oklch-v1` engine. Neither enters Core or
+`defineTheme()`.
 
 ### DEC-12 — The generator defaults without restricting palette authors
 
@@ -344,8 +498,43 @@ Rejected: restricting palette authors to two stop counts, renumbering stops when
 the layout changes, or adding a runtime `family.get(12.5)` that creates an
 unreviewed color after authoring.
 
+### DEC-14 — Playground color editing does not imply palette generation
+
+**Decider:** `rubyycheung`, `2026-09-30`
+
+The Playground keeps direct semantic-token editing and omits `Create from
+accent`. A one-accent control is not palette authoring when it also replaces
+neutral, surface, text, border, and related values without exposing a candidate
+palette or a separate mapping decision. Maintained authoring surfaces recommend
+the supported palette workflow instead.
+
+Rejected: replacing the control with another generator while retaining automatic
+token rewrites, because that still collapses generation, review, and mapping.
+
+### DEC-15 — Legacy color-scale authoring follows static replacement-first deprecation
+
+**Decider:** `cixzhang`, `2026-10-07`
+
+`DefineThemeInput.color`, `ThemeAdaptationValue.color`, and
+`expandColorScale()` remain stable until one patch ships the complete replacement,
+versioned guidance, AST-040 modernization, static metadata, exact-source
+diagnostics, maintained-source migration, and compatibility proof. They then
+enter `deprecated` with byte-equivalent executable behavior and no runtime warning
+or branch. Each public surface owns a separate deprecation and cleanup id.
+
+Future first-class palette input, stable semantic-role mapping, and compiler
+integration remain open to AST-018 if amended and accepted, or to a later current
+authority. AST-008 requires explicit acceptance, coherent mapped updates, and no
+implicit generator run without selecting that future API shape.
+
+Rejected: a runtime compatibility flag or deprecation warning, or a permanent ban
+on first-class palette/theme integration.
+
 ## Open questions
 
-None. The implementation PR must still pin and verify the exact recipe before it
-becomes a supported public tool; that is implementation evidence, not an open
-visual-direction decision.
+- **OQ1 — What is the first-class accepted palette/theme contract?** A later
+  current authority—AST-018 only if amended and accepted—must settle the public
+  input shape, stable semantic-role references, authoring and compilation
+  behavior, validation, and artifact lifecycle. AST-008 requires explicit review,
+  coherent mapped updates, and no implicit generator run without selecting among
+  those API shapes.

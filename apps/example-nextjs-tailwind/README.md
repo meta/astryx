@@ -60,7 +60,7 @@ Import `@astryxdesign/core/tailwind-theme.css` to register Astryx tokens as Tail
 </div>
 ```
 
-The bridge uses Tailwind v4's `@theme inline`: it tells Tailwind to generate utilities from Astryx's existing CSS custom properties without emitting duplicate declarations. Theme switching just works.
+The bridge uses Tailwind v4's `@theme reference inline`: `reference` prevents runtime token declarations, while `inline` generates utilities that read Astryx's existing CSS custom properties. Theme switching just works.
 
 Available utilities include `text-primary`, `text-secondary`, `bg-surface`, `bg-card`, `border-strong`, `text-error`, `bg-success`, `bg-blue-subtle`, `text-blue-vivid`, `border-blue-ring`, and 80+ more.
 

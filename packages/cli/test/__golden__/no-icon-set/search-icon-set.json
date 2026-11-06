@@ -1,0 +1,255 @@
+{
+  "apiVersion": 1,
+  "type": "search",
+  "data": {
+    "query": "icon set",
+    "matchCount": 385,
+    "results": [
+      {
+        "domain": "doc",
+        "name": "authoring/building-blocks/templates/build-the-template/template-assets/template-icons",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs authoring/building-blocks/templates/build-the-template/template-assets/template-icons use-astryx-icon",
+        "parent": "astryx docs authoring/building-blocks/templates/build-the-template/template-assets/template-icons --index",
+        "mentions": []
+      },
+      {
+        "domain": "doc",
+        "name": "icons",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs icons theme-overrides",
+        "parent": "astryx docs icons --index",
+        "mentions": [
+          "This lets you swap the icon set (e.g."
+        ]
+      },
+      {
+        "domain": "doc",
+        "name": "icons",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs icons icon-variants",
+        "parent": "astryx docs icons --index",
+        "mentions": []
+      },
+      {
+        "domain": "doc",
+        "name": "theme",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs theme icon-sizes",
+        "parent": "astryx docs theme --index",
+        "mentions": []
+      },
+      {
+        "domain": "template",
+        "name": "ToolbarTableFilter",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "displayName": "<text>",
+        "kind": "block",
+        "command": "astryx template ToolbarTableFilter --type block",
+        "mentions": []
+      },
+      {
+        "domain": "component",
+        "name": "Icon",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/Icon",
+        "command": "astryx component Icon",
+        "mentions": []
+      },
+      {
+        "domain": "doc",
+        "name": "icons",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "title": "<text>",
+        "command": "astryx docs icons --index",
+        "parent": "astryx docs foundations",
+        "mentions": []
+      },
+      {
+        "domain": "component",
+        "name": "IconButton",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/IconButton",
+        "command": "astryx component IconButton",
+        "mentions": []
+      },
+      {
+        "domain": "component",
+        "name": "InfoTip",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/InfoTip",
+        "command": "astryx component InfoTip",
+        "mentions": []
+      },
+      {
+        "domain": "hook",
+        "name": "useIcon",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/Icon",
+        "command": "astryx hook useIcon",
+        "mentions": []
+      },
+      {
+        "domain": "hook",
+        "name": "useInputContainer",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/hooks",
+        "command": "astryx hook useInputContainer",
+        "mentions": []
+      },
+      {
+        "domain": "hook",
+        "name": "useInputStatusIcon",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/hooks",
+        "command": "astryx hook useInputStatusIcon",
+        "mentions": []
+      },
+      {
+        "domain": "doc",
+        "name": "icons",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs icons component-icon-slots",
+        "parent": "astryx docs icons --index",
+        "mentions": []
+      },
+      {
+        "domain": "component",
+        "name": "NavIcon",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/NavIcon",
+        "command": "astryx component NavIcon",
+        "mentions": []
+      },
+      {
+        "domain": "component",
+        "name": "BottomSheet",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/BottomSheet",
+        "command": "astryx component BottomSheet",
+        "mentions": []
+      },
+      {
+        "domain": "component",
+        "name": "BottomSheetSwitcher",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/BottomSheet",
+        "command": "astryx component BottomSheetSwitcher",
+        "deprecated": {
+          "replacement": "<text>",
+          "description": "<text>"
+        },
+        "mentions": []
+      },
+      {
+        "domain": "component",
+        "name": "Carousel",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/Carousel",
+        "command": "astryx component Carousel",
+        "mentions": []
+      },
+      {
+        "domain": "component",
+        "name": "ChatLayout",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/Chat",
+        "command": "astryx component ChatLayout",
+        "mentions": []
+      },
+      {
+        "domain": "component",
+        "name": "ChatMessageList",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/Chat",
+        "command": "astryx component ChatMessageList",
+        "mentions": []
+      },
+      {
+        "domain": "component",
+        "name": "InternationalizationProvider",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/i18n",
+        "command": "astryx component InternationalizationProvider",
+        "mentions": []
+      }
+    ]
+  },
+  "meta": {
+    "answeredBy": {
+      "cli": "<version>",
+      "core": "<version>",
+      "copy": "project"
+    }
+  }
+}

@@ -2,11 +2,14 @@
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 /**
- * @file Guards `theming.targets` against the real `themeProps()` call sites (#3741).
+ * @file Guards `theming.targets` against the real `themeProps()` call sites,
+ *   and guards that each prop that selects painted styles reaches
+ *   `themeProps()`.
  * @input Core/Lab component sources (*.tsx/*.ts), their `{Name}.doc.mjs`
  *   files, and the Lab promotion-candidate manifest.
- * @output Vitest failures naming each undocumented class / visual prop on the
- *   stable Core surface or a capability-participating Lab component.
+ * @output Vitest failures naming each undocumented class / visual prop, and
+ *   each painted prop axis that no `themeProps()` call passes, on the stable
+ *   Core surface or a capability-participating Lab component.
  * @position Sibling of derivedVarRegistry.test.ts, which already validates the
  *   OTHER fields of the same `theming` block (`vars`, `derived`). `targets` was
  *   the one field with no machine check, so it drifted — twice (#3652, #3680).
@@ -39,6 +42,7 @@ import {stableClassName} from '../naming';
 
 const CORE_SRC_DIR = join(__dirname, '..');
 const LAB_SRC_DIR = join(__dirname, '../../../lab/src');
+const RICHTEXT_SRC_DIR = join(__dirname, '../../../richtext/src');
 const LAB_PROMOTION_MANIFEST = join(
   __dirname,
   '../../../../internal/lab-readiness/manifest.mjs',
@@ -213,32 +217,32 @@ function extractThemeTargets(
 
 describe('extractThemeTargets', () => {
   it('reads a bare call with no props', () => {
-    expect(extractThemeTargets(`themeProps('progressbar-track')`)).toEqual([
-      {className: 'astryx-progressbar-track', propKeys: [], isOpaque: false},
+    expect(extractThemeTargets(`themeProps('progress-bar-track')`)).toEqual([
+      {className: 'astryx-progress-bar-track', propKeys: [], isOpaque: false},
     ]);
   });
 
   it('reads shorthand props', () => {
-    expect(extractThemeTargets(`themeProps('progressbar', {variant})`)).toEqual(
-      [
-        {
-          className: 'astryx-progressbar',
-          propKeys: ['variant'],
-          isOpaque: false,
-        },
-      ],
-    );
+    expect(
+      extractThemeTargets(`themeProps('progress-bar', {variant})`),
+    ).toEqual([
+      {
+        className: 'astryx-progress-bar',
+        propKeys: ['variant'],
+        isOpaque: false,
+      },
+    ]);
   });
 
   it('records the KEY, not the value, when a prop is renamed', () => {
     // The trap a regex falls into: `fillVariant` is a local, not a prop.
     expect(
       extractThemeTargets(
-        `themeProps('progressbar-fill', {variant: fillVariant})`,
+        `themeProps('progress-bar-fill', {variant: fillVariant})`,
       ),
     ).toEqual([
       {
-        className: 'astryx-progressbar-fill',
+        className: 'astryx-progress-bar-fill',
         propKeys: ['variant'],
         isOpaque: false,
       },
@@ -324,6 +328,396 @@ describe('extractThemeTargets', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Painted prop axes: a prop that selects painted styles must reach themeProps()
+// ---------------------------------------------------------------------------
+
+/**
+ * The shared catalog of style keys that a target can guarantee to a theme. A
+ * style map that sets one of these keys paints, so a prop that selects from it
+ * is a visual axis. A map that sets none of them, for example a gap scale,
+ * changes only layout and does not need a selector.
+ */
+const GUARANTEED_STYLE_KEYS: ReadonlySet<string> = new Set([
+  // Paint
+  'color',
+  'backgroundColor',
+  'opacity',
+  'outlineColor',
+  'outlineOffset',
+  'outlineStyle',
+  'outlineWidth',
+  'boxShadow',
+  'textShadow',
+  // Border and shape
+  'borderColor',
+  'borderStyle',
+  'borderWidth',
+  'borderRadius',
+  // Typography
+  'fontFamily',
+  'fontSize',
+  'fontStyle',
+  'fontWeight',
+  'letterSpacing',
+  'lineHeight',
+  'textAlign',
+  'textDecorationColor',
+  'textDecorationLine',
+  'textDecorationStyle',
+  'textDecorationThickness',
+  'textTransform',
+  // Padding
+  'padding',
+  'paddingBlock',
+  'paddingBlockStart',
+  'paddingBlockEnd',
+  'paddingInline',
+  'paddingInlineStart',
+  'paddingInlineEnd',
+]);
+
+interface UnreflectedStyleAxis {
+  /** The function that destructures the prop, e.g. 'ChatComposer'. */
+  component: string;
+  /** The prop name, not its local binding, e.g. 'elevation'. */
+  prop: string;
+  /** The `stylex.create()` map the prop indexes, e.g. 'elevationStyles'. */
+  styleMap: string;
+  line: number;
+}
+
+type FunctionNode =
+  ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction;
+
+function isFunctionNode(node: ts.Node): node is FunctionNode {
+  return (
+    ts.isFunctionDeclaration(node) ||
+    ts.isFunctionExpression(node) ||
+    ts.isArrowFunction(node)
+  );
+}
+
+function isStylexCall(node: ts.Node, method: string): boolean {
+  return (
+    ts.isCallExpression(node) &&
+    ts.isPropertyAccessExpression(node.expression) &&
+    ts.isIdentifier(node.expression.expression) &&
+    node.expression.expression.text === 'stylex' &&
+    node.expression.name.text === method
+  );
+}
+
+/** Names of the `stylex.create()` maps in a file that set a guaranteed key. */
+function paintingStyleMaps(sourceFile: ts.SourceFile): Set<string> {
+  const maps = new Set<string>();
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.initializer != null &&
+      isStylexCall(node.initializer, 'create')
+    ) {
+      const [namespaces] = (node.initializer as ts.CallExpression).arguments;
+      const paints =
+        namespaces != null &&
+        ts.isObjectLiteralExpression(namespaces) &&
+        namespaces.properties.some(
+          namespace =>
+            ts.isPropertyAssignment(namespace) &&
+            ts.isObjectLiteralExpression(namespace.initializer) &&
+            namespace.initializer.properties.some(
+              style =>
+                style.name != null &&
+                (ts.isIdentifier(style.name) ||
+                  ts.isStringLiteralLike(style.name)) &&
+                GUARANTEED_STYLE_KEYS.has(style.name.text),
+            ),
+        );
+      if (paints) {
+        maps.add(node.name.text);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return maps;
+}
+
+/**
+ * Local binding -> prop name for the props a function destructures, from its
+ * first parameter or from `const {...} = props` at the top of its body.
+ */
+function destructuredProps(fn: FunctionNode): Map<string, string> {
+  const bindings = new Map<string, string>();
+  const read = (pattern: ts.ObjectBindingPattern): void => {
+    for (const element of pattern.elements) {
+      if (element.dotDotDotToken != null || !ts.isIdentifier(element.name)) {
+        continue;
+      }
+      const propName = element.propertyName ?? element.name;
+      if (ts.isIdentifier(propName) || ts.isStringLiteralLike(propName)) {
+        bindings.set(element.name.text, propName.text);
+      }
+    }
+  };
+  const [first] = fn.parameters;
+  if (first == null) {
+    return bindings;
+  }
+  if (ts.isObjectBindingPattern(first.name)) {
+    read(first.name);
+  } else if (
+    ts.isIdentifier(first.name) &&
+    fn.body != null &&
+    ts.isBlock(fn.body)
+  ) {
+    const propsName = first.name.text;
+    for (const statement of fn.body.statements) {
+      if (!ts.isVariableStatement(statement)) {
+        continue;
+      }
+      for (const declaration of statement.declarationList.declarations) {
+        if (
+          ts.isObjectBindingPattern(declaration.name) &&
+          declaration.initializer != null &&
+          ts.isIdentifier(declaration.initializer) &&
+          declaration.initializer.text === propsName
+        ) {
+          read(declaration.name);
+        }
+      }
+    }
+  }
+  return bindings;
+}
+
+function functionName(fn: FunctionNode): string {
+  if (fn.name != null) {
+    return fn.name.text;
+  }
+  const {parent} = fn;
+  if (ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name)) {
+    return parent.name.text;
+  }
+  return '(anonymous)';
+}
+
+/**
+ * Each prop that indexes a painting style map inside `stylex.props()` while no
+ * `themeProps()` call in the same function passes that prop. A theme can then
+ * restyle the target but cannot tell the prop's values apart.
+ *
+ * A function that destructures props is one component. A nested function that
+ * destructures its own props is a separate component and is checked by
+ * itself; a nested callback that does not, such as a render callback, belongs
+ * to the function around it.
+ */
+function findUnreflectedStyleAxes(
+  sourceText: string,
+  fileName = 'source.tsx',
+): UnreflectedStyleAxis[] {
+  const sourceFile = ts.createSourceFile(
+    fileName,
+    sourceText,
+    ts.ScriptTarget.Latest,
+    /* setParentNodes */ true,
+    fileName.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  );
+  const paintingMaps = paintingStyleMaps(sourceFile);
+  const findings: UnreflectedStyleAxis[] = [];
+
+  const checkComponent = (fn: FunctionNode, props: Map<string, string>) => {
+    const reflected = new Set<string>();
+    let reflectsUnknownKeys = false;
+    const lookups: Omit<UnreflectedStyleAxis, 'component'>[] = [];
+
+    const visit = (node: ts.Node, isInStyleCall: boolean): void => {
+      if (
+        node !== fn &&
+        isFunctionNode(node) &&
+        destructuredProps(node).size > 0
+      ) {
+        return;
+      }
+      if (
+        ts.isCallExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === 'themeProps'
+      ) {
+        const propsArg = node.arguments[1];
+        if (propsArg != null && ts.isObjectLiteralExpression(propsArg)) {
+          for (const property of propsArg.properties) {
+            const keys = ts.isSpreadAssignment(property)
+              ? conditionalSpreadKeys(property.expression)
+              : property.name != null &&
+                  (ts.isIdentifier(property.name) ||
+                    ts.isStringLiteralLike(property.name))
+                ? [property.name.text]
+                : null;
+            if (keys == null) {
+              reflectsUnknownKeys = true;
+            } else {
+              keys.forEach(key => reflected.add(key));
+            }
+          }
+        } else if (propsArg != null) {
+          reflectsUnknownKeys = true;
+        }
+      }
+      const isStyleCall = isInStyleCall || isStylexCall(node, 'props');
+      if (
+        isStyleCall &&
+        ts.isElementAccessExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        paintingMaps.has(node.expression.text) &&
+        ts.isIdentifier(node.argumentExpression)
+      ) {
+        const prop = props.get(node.argumentExpression.text);
+        if (prop != null) {
+          lookups.push({
+            prop,
+            styleMap: node.expression.text,
+            line:
+              sourceFile.getLineAndCharacterOfPosition(node.getStart()).line +
+              1,
+          });
+        }
+      }
+      ts.forEachChild(node, child => visit(child, isStyleCall));
+    };
+    visit(fn, false);
+
+    // An opaque props bag may carry the prop; reading it would be a guess.
+    if (reflectsUnknownKeys) {
+      return;
+    }
+    const component = functionName(fn);
+    for (const lookup of lookups) {
+      if (!reflected.has(lookup.prop)) {
+        findings.push({component, ...lookup});
+      }
+    }
+  };
+
+  const visit = (node: ts.Node): void => {
+    if (isFunctionNode(node)) {
+      const props = destructuredProps(node);
+      if (props.size > 0) {
+        checkComponent(node, props);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return findings;
+}
+
+describe('findUnreflectedStyleAxes', () => {
+  it('flags a painted axis that no themeProps() call passes', () => {
+    const source = `
+      const elevationStyles = stylex.create({low: {boxShadow: 'x'}});
+      export function Banner({container, status, elevation = 'low'}) {
+        return (
+          <div {...stylex.props(styles.root, elevationStyles[elevation])}>
+            <div {...mergeProps(themeProps('banner', {container, status}))} />
+          </div>
+        );
+      }
+    `;
+    expect(findUnreflectedStyleAxes(source)).toEqual([
+      {
+        component: 'Banner',
+        prop: 'elevation',
+        styleMap: 'elevationStyles',
+        line: 5,
+      },
+    ]);
+  });
+
+  it('accepts the axis once a themeProps() call passes it', () => {
+    const source = `
+      const elevationStyles = stylex.create({low: {boxShadow: 'x'}});
+      export function Card({elevation}) {
+        return <div {...mergeProps(themeProps('card', {elevation}), stylex.props(elevationStyles[elevation]))} />;
+      }
+    `;
+    expect(findUnreflectedStyleAxes(source)).toEqual([]);
+  });
+
+  it('matches the prop name, not its local binding', () => {
+    const source = `
+      const radiusStyles = stylex.create({3: {borderRadius: 'x'}});
+      export function Skeleton({radius: radiusProp = 3}) {
+        return <div {...mergeProps(themeProps('skeleton', {radius: radiusProp}), stylex.props(radiusStyles[radiusProp]))} />;
+      }
+      export function Broken({radius: radiusProp = 3}) {
+        return <div {...mergeProps(themeProps('broken'), stylex.props(radiusStyles[radiusProp]))} />;
+      }
+    `;
+    expect(
+      findUnreflectedStyleAxes(source).map(f => `${f.component}.${f.prop}`),
+    ).toEqual(['Broken.radius']);
+  });
+
+  it('reads props destructured from a props parameter', () => {
+    const source = `
+      const sizeStyles = stylex.create({sm: {fontSize: 'x'}});
+      export function Code(props) {
+        const {size} = props;
+        return <code {...mergeProps(themeProps('code'), stylex.props(size && sizeStyles[size]))} />;
+      }
+    `;
+    expect(
+      findUnreflectedStyleAxes(source).map(f => `${f.component}.${f.prop}`),
+    ).toEqual(['Code.size']);
+  });
+
+  it('ignores a map that sets only layout keys', () => {
+    const source = `
+      const gapStyles = stylex.create({2: {gap: 'x'}});
+      export function List({gap}) {
+        return <div {...mergeProps(themeProps('list'), stylex.props(gapStyles[gap]))} />;
+      }
+    `;
+    expect(findUnreflectedStyleAxes(source)).toEqual([]);
+  });
+
+  it('ignores a lookup keyed by a value that is not a prop', () => {
+    const source = `
+      const sizeStyles = stylex.create({sm: {fontSize: 'x'}});
+      export function Field({label}) {
+        const size = useContextSize();
+        return <div {...mergeProps(themeProps('field'), stylex.props(sizeStyles[size]))}>{label}</div>;
+      }
+    `;
+    expect(findUnreflectedStyleAxes(source)).toEqual([]);
+  });
+
+  it('counts a lookup inside a render callback for the function around it', () => {
+    const source = `
+      const itemSizeStyles = stylex.create({md: {paddingBlock: 'x'}});
+      export function Menu({items, size}) {
+        const renderItem = item => <div {...stylex.props(itemSizeStyles[size])}>{item}</div>;
+        return <div {...themeProps('menu')}>{items.map(renderItem)}</div>;
+      }
+    `;
+    expect(
+      findUnreflectedStyleAxes(source).map(f => `${f.component}.${f.prop}`),
+    ).toEqual(['Menu.size']);
+  });
+
+  it('skips a function whose themeProps() keys it cannot read', () => {
+    const source = `
+      const sizeStyles = stylex.create({sm: {fontSize: 'x'}});
+      export function Opaque({size, ...rest}) {
+        return <div {...mergeProps(themeProps('opaque', rest), stylex.props(sizeStyles[size]))} />;
+      }
+    `;
+    expect(findUnreflectedStyleAxes(source)).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Discovery: every component dir's rendered classes vs its documented targets
 // ---------------------------------------------------------------------------
 
@@ -337,9 +731,11 @@ type DocBlock = {theming?: {targets?: DocTarget[]}};
 type ComponentDocModule = {docs?: DocBlock; docsZh?: DocBlock};
 
 interface ComponentInfo {
-  packageName: 'core' | 'lab';
+  packageName: 'core' | 'lab' | 'richtext';
   dir: string;
   sites: ThemeTargetSite[];
+  /** Absolute paths of the source files in `dir`, without tests. */
+  sourceFiles: string[];
   /** The doc blocks that carry theming.targets, by the key they live under. */
   docBlocks: {key: 'docs' | 'docsZh'; file: string; targets: DocTarget[]}[];
 }
@@ -402,6 +798,10 @@ function sourceDirs(srcDir: string): string[] {
     }
   };
   walk('');
+  // The package root itself. A package that keeps its components as flat
+  // files rather than one directory each (richtext) has no subdirectory to
+  // find, so without this it is silently discovered as zero components.
+  out.push('');
   return out;
 }
 
@@ -480,7 +880,13 @@ function discoverComponents(
       continue;
     }
 
-    results.push({packageName, dir, sites, docBlocks});
+    results.push({
+      packageName,
+      dir,
+      sites,
+      sourceFiles: sourceFiles.map(f => join(dirPath, f)),
+      docBlocks,
+    });
   }
   return results;
 }
@@ -489,11 +895,14 @@ function discoverComponents(
 // The guard
 // ---------------------------------------------------------------------------
 
+const participatingComponents = [
+  ...discoverComponents(CORE_SRC_DIR, 'core'),
+  ...discoverComponents(LAB_SRC_DIR, 'lab', LAB_PROMOTION_DIRS),
+  ...discoverComponents(RICHTEXT_SRC_DIR, 'richtext'),
+];
+
 describe('theming.targets matches the themeProps() call sites', () => {
-  const components = [
-    ...discoverComponents(CORE_SRC_DIR, 'core'),
-    ...discoverComponents(LAB_SRC_DIR, 'lab', LAB_PROMOTION_DIRS),
-  ];
+  const components = participatingComponents;
 
   it('finds participating Core and Lab components', () => {
     // A refactor that renames themeProps or drops the Lab package from this
@@ -504,6 +913,12 @@ describe('theming.targets matches the themeProps() call sites', () => {
     expect(components.some(component => component.packageName === 'lab')).toBe(
       true,
     );
+    // richtext keeps its components as flat files, so a regression in
+    // directory discovery would enroll zero of them and the guard would pass
+    // on an unchecked package rather than fail.
+    expect(
+      components.some(component => component.packageName === 'richtext'),
+    ).toBe(true);
   });
 
   it('enrolls every Lab promotion candidate and explicit theming capability', () => {
@@ -574,4 +989,77 @@ describe('theming.targets matches the themeProps() call sites', () => {
       });
     }
   }
+});
+
+/**
+ * Painted axes that do not reach themeProps() yet. Each key is
+ * `Component.prop`; each value says why. Remove the entry when the axis
+ * reaches themeProps(). A stale entry fails the guard.
+ */
+const UNREFLECTED_STYLE_AXIS_EXCEPTIONS: ReadonlyMap<string, string> = new Map([
+  [
+    'BaseTypeahead.size',
+    'The size pads the result row, and the result row has no target. The ' +
+      'missing row target is a recorded reachability gap.',
+  ],
+  [
+    'ChatComposer.elevation',
+    'The composer body paints the elevation but has no target. How to expose ' +
+      'the body to themes is an open owner decision.',
+  ],
+  [
+    'Code.size',
+    'The code target paints the size. Adding the prop to its themeProps() ' +
+      'call is a product change that ships separately.',
+  ],
+  [
+    'Skeleton.radius',
+    'The skeleton target paints the radius. Adding the prop to its ' +
+      'themeProps() call is a product change that ships separately.',
+  ],
+]);
+
+describe('every painted prop axis reaches themeProps()', () => {
+  const findings = participatingComponents.flatMap(
+    ({packageName, dir, sourceFiles}) =>
+      sourceFiles
+        .filter(file => !file.includes('.stories.'))
+        .flatMap(file =>
+          findUnreflectedStyleAxes(readFileSync(file, 'utf-8'), file).map(
+            finding => ({
+              ...finding,
+              key: `${finding.component}.${finding.prop}`,
+              where: `${packageName}/${dir}/${basename(file)}:${finding.line}`,
+            }),
+          ),
+        ),
+  );
+
+  it('reflects every painted axis or lists it as an exception', () => {
+    const unexplained = findings
+      .filter(finding => !UNREFLECTED_STYLE_AXIS_EXCEPTIONS.has(finding.key))
+      .map(
+        finding =>
+          `${finding.where}: ${finding.component} selects painted styles ` +
+          `with \`${finding.styleMap}[${finding.prop}]\`, but no themeProps() ` +
+          `call passes \`${finding.prop}\`. A theme cannot select the ` +
+          `\`${finding.prop}\` values. Add \`${finding.prop}\` to the ` +
+          `themeProps() call on the target that paints it. If no target ` +
+          `paints it, add an UNREFLECTED_STYLE_AXIS_EXCEPTIONS entry that ` +
+          `says why.`,
+      );
+    expect(unexplained).toEqual([]);
+  });
+
+  it('has no stale exceptions', () => {
+    const found = new Set(findings.map(finding => finding.key));
+    const stale = [...UNREFLECTED_STYLE_AXIS_EXCEPTIONS.keys()].filter(
+      key => !found.has(key),
+    );
+    expect(
+      stale,
+      'These exceptions no longer match an unreflected painted axis. ' +
+        'Remove them.',
+    ).toEqual([]);
+  });
 });

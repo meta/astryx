@@ -7,6 +7,7 @@
  * dynamic `import()` specifiers had none, breaking strict-ESM consumers).
  */
 
+import {spawnSync} from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -125,10 +126,15 @@ describe('findOffenders', () => {
       path.join(distDir, 'Text', 'Text.js'),
       `const L = lazy(() => import('../Tooltip/Tooltip'));\n`,
     );
-    // Non-runtime files are not scanned.
+    // Declarations are scanned too: NodeNext consumers need the extension
+    // (#7702). Other non-runtime files are not scanned.
     fs.writeFileSync(
       path.join(distDir, 'Text', 'Text.d.ts'),
-      `export * from '../types';\n`,
+      `export * from '../types';\nexport * from '.';\n`,
+    );
+    fs.writeFileSync(
+      path.join(distDir, 'Text', 'Text.d.ts.map'),
+      `{"sources":["../types"]}\n`,
     );
   });
 
@@ -136,16 +142,18 @@ describe('findOffenders', () => {
     fs.rmSync(distDir, {recursive: true, force: true});
   });
 
-  it('reports offending runtime files with their bad specifiers', () => {
-    expect(findOffenders(distDir)).toEqual({
-      // clean.js + Text/Text.js — the .d.ts file must not be scanned.
-      checked: 2,
-      offenders: [
-        {
-          file: path.join('Text', 'Text.js'),
-          specifiers: ['../Tooltip/Tooltip'],
-        },
-      ],
+  it('reports offending runtime and declaration files with their bad specifiers', () => {
+    const {checked, offenders} = findOffenders(distDir);
+    // clean.js + Text/Text.js + Text/Text.d.ts — the source map is not scanned.
+    expect(checked).toBe(3);
+    expect(offenders).toHaveLength(2);
+    expect(offenders).toContainEqual({
+      file: path.join('Text', 'Text.js'),
+      specifiers: ['../Tooltip/Tooltip'],
+    });
+    expect(offenders).toContainEqual({
+      file: path.join('Text', 'Text.d.ts'),
+      specifiers: ['../types', '.'],
     });
   });
 
@@ -172,6 +180,43 @@ describe('findOffenders', () => {
     } finally {
       fs.rmSync(dir, {recursive: true, force: true});
     }
+  });
+});
+
+describe('declaration scan by package type', () => {
+  const SCRIPT = path.join(ROOT, 'scripts', 'check-fully-specified.mjs');
+
+  /** Run the check in a package of `type` whose only dist file is a .d.ts. */
+  const runIn = type => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fully-specified-pkg-'));
+    try {
+      fs.writeFileSync(
+        path.join(dir, 'package.json'),
+        JSON.stringify(type ? {name: 'example', type} : {name: 'example'}),
+      );
+      fs.mkdirSync(path.join(dir, 'dist'));
+      fs.writeFileSync(
+        path.join(dir, 'dist', 'index.d.ts'),
+        `export * from './theme';\n`,
+      );
+      return spawnSync(process.execPath, [SCRIPT], {
+        cwd: dir,
+        encoding: 'utf-8',
+      });
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  };
+
+  it('passes extensionless declarations in a CommonJS package', () => {
+    expect(runIn(undefined).status).toBe(0);
+  });
+
+  it('fails extensionless declarations in an ESM package', () => {
+    const result = runIn('module');
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('dist/index.d.ts: ./theme');
+    expect(result.stderr).toContain('add-declaration-extensions.mjs');
   });
 });
 

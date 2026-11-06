@@ -438,5 +438,5 @@ export function generateFamilyCSS(members) {
     parts.push(`@layer astryx-base {\n${base.join('\n\n')}\n}`);
   if (themed.length > 0)
     parts.push(`@layer astryx-theme {\n${themed.join('\n\n')}\n}`);
-  return `${parts.join('\n\n')}\n`;
+  return `@layer reset, astryx-base, astryx-theme;\n\n${parts.join('\n\n')}\n`;
 }

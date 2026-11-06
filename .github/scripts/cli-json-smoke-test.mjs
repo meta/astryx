@@ -143,13 +143,21 @@ function checkJson(label, args, {expectError = false, expectType = null} = {}) {
   }
 
   // Envelope success keys are limited to the contract's fields: the
-  // apiVersion stamp, the type discriminator, the data payload, and an
-  // optional sidecar `meta` (emitted as a sibling of data, never merged in).
-  const allowedKeys = new Set(['apiVersion', 'type', 'data', 'meta']);
+  // apiVersion stamp, the type discriminator, the optional `package` that
+  // owns what the result is about (cli-surface INV28), the data payload, and
+  // an optional sidecar `meta` (emitted as a sibling of data, never merged in).
+  const allowedKeys = new Set(['apiVersion', 'type', 'package', 'data', 'meta']);
   const extraKeys = Object.keys(parsed).filter(k => !allowedKeys.has(k));
   if (extraKeys.length > 0) {
     console.log(`  FAIL  ${label}  (extra fields in envelope: ${extraKeys.join(', ')})`);
     failures.push({label, reason: `extra envelope fields: ${extraKeys.join(', ')}`});
+    failed++;
+    return;
+  }
+
+  if ('package' in parsed && (typeof parsed.package !== 'string' || !parsed.package)) {
+    console.log(`  FAIL  ${label}  (envelope package is not a package name)`);
+    failures.push({label, reason: 'envelope package is not a package name'});
     failed++;
     return;
   }

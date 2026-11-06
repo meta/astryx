@@ -11,6 +11,7 @@
  *
  * @typedef {object} SwizzleListResponse
  * @property {'swizzle.list'} type
+ * @property {string} package `@astryxdesign/core`, the package the listed components come from.
  * @property {string[]} data
  */
 
@@ -27,12 +28,13 @@
  *
  * @typedef {object} SwizzleCopyResponse
  * @property {'swizzle.copy'} type
+ * @property {string} package Owner package the component source was copied from (as `data.package`).
  * @property {object} data
  * @property {string} data.component
  * @property {string} data.package Owner package the component source was copied from.
  * @property {string} data.outputDir
  * @property {number} data.filesCopied
- * @property {string[]} data.files
+ * @property {string[]} data.files Copied file names, relative to the component folder; owner modules and their unexported style modules copied beside it start with `../` (spec:AST-110 FR4).
  * @property {boolean} data.usesStyleX Whether any copied file uses StyleX (requires build-time setup).
  * @property {SwizzleFeedback} [data.feedback]
  */

@@ -22,8 +22,11 @@ import {
   findComponentReadme,
 } from '../discovery/component-discovery.mjs';
 import {discoverHooks, findHookDoc} from '../discovery/hook-discovery.mjs';
+import {themeImportPackage} from '../discovery/theme-discovery.mjs';
+import {astryxIconDefinitions} from '../discovery/icon-definition-discovery.mjs';
 import {CLI_ROOT, findCoreDir} from '../fs/paths.mjs';
 import {packageSource} from './source.mjs';
+import {treeDocFiles} from './tree.mjs';
 
 export {packageSource};
 
@@ -42,7 +45,7 @@ const NON_DESCRIPTOR_DIRS = new Set([
 ]);
 
 /**
- * @typedef {'components' | 'hooks' | 'templates' | 'themes' | 'docs' | 'self-docs'} DocRoot
+ * @typedef {'components' | 'hooks' | 'templates' | 'themes' | 'icon-definitions' | 'docs' | 'self-docs' | 'tree'} DocRoot
  */
 
 /**
@@ -79,12 +82,38 @@ const NON_DESCRIPTOR_DIRS = new Set([
 export async function collectDocInputs(project) {
   const list = new InputList();
 
+  // A component documented as a member of its family's doc (HStack and VStack
+  // in Stack's doc) is read through the family's own entry: one descriptor,
+  // one reader. Own docs go first so the family keeps its name.
+  /** @type {Array<{name: string, package: string, docPath: string}>} */
+  const ownDocs = [];
+  /** @type {Array<{name: string, package: string, docPath: string}>} */
+  const familyDocs = [];
   for (const record of await project.components()) {
     if (record.docPath == null) continue;
+    const stem = path
+      .basename(record.docPath)
+      .replace(/\.doc\.[cm]?[jt]s$/u, '')
+      .replace(/^XDS/u, '');
+    const entry = {
+      name: record.name,
+      package: record.package,
+      docPath: record.docPath,
+    };
+    (stem === record.name ? ownDocs : familyDocs).push(entry);
+  }
+  for (const record of ownDocs) {
+    list.add('components', record.name, record.package, record.docPath);
+  }
+  for (const record of familyDocs) {
+    if (list.claims(record.docPath)) continue;
     list.add('components', record.name, record.package, record.docPath);
   }
 
-  const coreDir = findCoreDir(project.cwd);
+  const coreDir =
+    typeof project.coreDir === 'function'
+      ? project.coreDir()
+      : findCoreDir(project.cwd);
   if (coreDir != null) {
     for (const name of Object.values(discoverHooks(coreDir)).flat()) {
       const file = findHookDoc(coreDir, name);
@@ -109,7 +138,22 @@ export async function collectDocInputs(project) {
   }
 
   for (const theme of await project.themes()) {
-    list.add('themes', theme.slug, theme.package, theme.docPath);
+    list.add('themes', theme.slug, themeImportPackage(theme), theme.docPath);
+  }
+
+  // Icon definitions: Astryx's, then each installed set's own.
+  for (const {doc, file} of astryxIconDefinitions().definitions) {
+    list.add('icon-definitions', doc.name, CLI_PACKAGE, file);
+  }
+  for (const set of (await project.iconSets()).sets) {
+    for (const {doc, file} of set.definitions) {
+      list.add(
+        'icon-definitions',
+        `${set.name}/${doc.name}`,
+        set.package,
+        file,
+      );
+    }
   }
 
   for (const topic of (await project.docs()).entries()) {
@@ -125,6 +169,10 @@ export async function collectDocInputs(project) {
     }
   }
 
+  // The docs tree's own files: its namespaces and the guides it places.
+  for (const file of treeDocFiles()) {
+    list.add('tree', path.basename(file, '.doc.mjs'), CLI_PACKAGE, file);
+  }
   for (const file of selfDocFiles()) {
     const name = path
       .relative(CLI_ROOT, file)

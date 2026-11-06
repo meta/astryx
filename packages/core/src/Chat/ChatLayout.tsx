@@ -39,9 +39,15 @@ import {useChatNewMessages} from './useChatNewMessages';
 import {ChatLayoutScrollButton} from './ChatLayoutScrollButton';
 import {ChatLayoutContext} from './ChatContext';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Chat/ChatLayout.generated';
+
+registerEnglishFallback(english);
 // =============================================================================
 // Types
 // =============================================================================
@@ -119,12 +125,6 @@ const styles = stylex.create({
   rootScrollable: {
     overflowY: 'auto',
     overflowX: 'hidden',
-    // Hide scrollbar during programmatic scroll animation
-    // to prevent flash. Restored when animation settles.
-    scrollbarWidth: {
-      default: null,
-      ':is([data-astryx-scrolling])': 'none',
-    },
   },
 
   messageArea: {
@@ -255,6 +255,7 @@ const styles = stylex.create({
 // =============================================================================
 
 function hasVisibleContent(children: ReactNode): boolean {
+  // eslint-disable-next-line @astryx/no-nullish-jsx-guard -- component:ChatLayout FR5 names exactly null, undefined, false and an empty array as empty children; '' and true are not
   if (children == null || children === false) {
     return false;
   }
@@ -301,7 +302,7 @@ export function ChatLayout({
   ref,
   ...rest
 }: ChatLayoutProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const rootRef = useRef<HTMLDivElement>(null);
 
   const scrollContainerRef = externalScrollRef ?? rootRef;

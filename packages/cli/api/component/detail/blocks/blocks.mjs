@@ -9,7 +9,7 @@
  */
 
 import * as path from 'node:path';
-import {findRelatedBlocks} from '../../../template/template.mjs';
+import {findRelatedBlocks, pkgOf} from '../../../template/template.mjs';
 
 /**
  * Project a component's related blocks into the `component.detail.blocks`
@@ -17,12 +17,14 @@ import {findRelatedBlocks} from '../../../template/template.mjs';
  * and broader related blocks.
  * @param {string} componentName
  * @param {string} cwd - project to discover blocks from; never the process cwd
+ * @param {string} ownerPackage - the npm package that owns the component
  * @returns {Promise<import('../../component.type.mjs').ComponentDetailBlocksResponse>}
  */
-export async function componentDetailBlocks(componentName, cwd) {
+export async function componentDetailBlocks(componentName, cwd, ownerPackage) {
   const allBlocks = await findRelatedBlocks(componentName, cwd);
   const toEntry = (/** @type {any} */ b) => ({
     name: b.dirName,
+    package: pkgOf(b),
     displayName: b.name,
     description: b.description,
     isShowcase: b.isShowcase ?? false,
@@ -46,6 +48,7 @@ export async function componentDetailBlocks(componentName, cwd) {
 
   return {
     type: 'component.detail.blocks',
+    package: ownerPackage,
     data: {
       component: componentName,
       showcase: showcaseBlock ? toEntry(showcaseBlock) : null,

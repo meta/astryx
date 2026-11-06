@@ -4,7 +4,7 @@
 
 /**
  * @file Field.tsx
- * @input Uses React, HTMLAttributes, ReactNode, FieldLabel, IconType
+ * @input Uses React, StyleX, BaseProps, FieldLabel/FieldStatus, FormLayoutContext, Text, VisuallyHidden, theme/status utilities
  * @output Exports Field component, FieldProps
  * @position Core implementation; consumed by index.ts, tested by Field.test.tsx
  *
@@ -22,14 +22,16 @@ import type {BaseProps} from '../BaseProps';
 import type {SizeValue} from '../utils/types';
 import {FieldLabel} from './FieldLabel';
 import {FieldStatus} from '../FieldStatus/FieldStatus';
-import type {FieldStatusVariant} from '../FieldStatus/FieldStatus';
+import {useFieldStatusAnnouncement} from '../FieldStatus/useFieldStatusAnnouncement';
 import {spacingVars, borderVars, sizeVars} from '../theme/tokens.stylex';
 import type {IconType} from '../Icon';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {FormLayoutContext} from '../FormLayout/FormLayoutContext';
-import {Text} from '../Text';
+import {Text} from '../Text/Text';
+import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
 import {themeProps} from '../utils/themeProps';
+import type {FieldStatusPlacement} from './fieldStatusPlacement';
 
 const styles = stylex.create({
   container: {
@@ -41,6 +43,11 @@ const styles = stylex.create({
     // detached/tooltip fields — whose input wrapper renders outside the
     // attached-status wrapper — compete with page-level stacking (#5689).
     isolation: 'isolate',
+    // The Field root is the flex/grid item a row actually sizes. With the
+    // automatic minimum it held a filter bar at its controls' intrinsic
+    // widths (a native input's ~20ch, a Selector's full value), so the row
+    // overflowed on phones; the reset lets the row shrink the whole field.
+    minWidth: 0,
   },
   containerGap: {
     gap: spacingVars['--spacing-1'],
@@ -180,7 +187,7 @@ export interface FieldProps extends Omit<
    * - 'tooltip': No message box; the input surfaces status through a tooltip on its on-field icon
    * @default 'attached'
    */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusPlacement;
   /**
    * Width of the field. Numbers are treated as pixels, strings are used as-is
    * (e.g. `'100%'`). Sizes the whole field — label, control, and status — so
@@ -262,7 +269,14 @@ export function Field({
   );
 
   // The 'tooltip' variant surfaces status through the input's on-field icon
-  // tooltip, so Field renders no message box for it.
+  // tooltip, so Field renders no message box for it. Without a FieldStatus
+  // nothing would speak the message, so Field announces it on the same
+  // channel and timing FieldStatus uses: placement changes where the message
+  // is shown, not whether a screen-reader user hears it.
+  useFieldStatusAnnouncement(
+    statusVariant === 'tooltip' ? status?.message : undefined,
+    status?.type,
+  );
   const statusNode =
     status?.message && statusVariant !== 'tooltip' ? (
       <FieldStatus
@@ -285,20 +299,28 @@ export function Field({
     return (
       <div
         ref={ref}
+        {...props}
         {...mergeProps(
           themeProps('field', {layout: 'horizontal-labels'}),
           stylex.props(styles.horizontalLabels, xstyle),
           className,
           style,
-        )}
-        {...props}>
+        )}>
         <div {...stylex.props(styles.horizontalLabelAlign)}>{labelNode}</div>
         <div {...stylex.props(styles.inputStatusWrapper)}>
-          {description && (
-            <Text type="supporting" display="block" id={resolvedDescriptionID}>
-              {description}
-            </Text>
-          )}
+          {description &&
+            (isLabelHidden ? (
+              <VisuallyHidden id={resolvedDescriptionID}>
+                {description}
+              </VisuallyHidden>
+            ) : (
+              <Text
+                type="supporting"
+                display="block"
+                id={resolvedDescriptionID}>
+                {description}
+              </Text>
+            ))}
           {children}
           {statusNode}
         </div>

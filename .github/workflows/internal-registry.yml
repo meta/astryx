@@ -5,20 +5,43 @@ name: Internal Registry
 # Verifies every pinned dependency is available from the registry before it can
 # break a build. Temporarily advisory: the check still runs and surfaces
 # annotations, but a failure no longer fails the job (continue-on-error), so it
-# warns instead of blocking. Re-enable gating by removing continue-on-error and
-# marking the merge_group run ("Internal Registry / dependency-check") as a
-# REQUIRED status check; fork PRs are skipped and enforced by that run.
+# warns instead of blocking. The pull_request trigger is path-filtered
+# (spec:AST-030 FR14), so this check never starts on a pull request that
+# touches no dependency file: never make it a required status check as it
+# stands. Re-enabling gating means removing continue-on-error and the path
+# filter, so the workflow reports on every pull request and skips its work
+# inside the job when no dependency changed.
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: ['main']
+    # Runs only when a dependency declaration or the lockfile can change what
+    # the registry must serve (spec:AST-030 FR14). A merge-group entry, which
+    # cannot filter by path, keeps running.
+    paths:
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '**/package.json'
+      - '**/package-lock.json'
+      - '.github/workflows/internal-registry.yml'
   merge_group:
 
 permissions: {}
 
+# A new push to a pull request cancels its superseded run; merge-queue entries
+# keep their own uncancelled groups.
+concurrency:
+  group: 'internal-registry-${{ github.event.pull_request.number || github.event.merge_group.head_sha || github.run_id }}'
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  dependency-check:
-    runs-on: 4-core-ubuntu
+  # test-deps: its scope is the dependency files the trigger lists, so a pull
+  # request that starts it always changed one; a merge-group entry always runs
+  # it. Nothing inside reclassifies.
+  test-deps:
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')))
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
@@ -27,38 +50,5 @@ jobs:
         with:
           fetch-depth: 50
 
-      - name: Classify changed files
-        if: github.event_name == 'pull_request'
-        id: scope
-        run: |
-          git fetch origin ${{ github.base_ref }} --depth=50
-          MERGE_BASE=$(git merge-base HEAD origin/${{ github.base_ref }} 2>/dev/null || echo "")
-          if [ -z "$MERGE_BASE" ]; then
-            printf 'docsite_only=false\nspec_only=false\ntooling_only=false\n' >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          CLASSIFIER_ROOT="$RUNNER_TEMP/change-scope"
-          CLASSIFIER_DIR="$CLASSIFIER_ROOT/.github/scripts"
-          REGISTRY_DIR="$CLASSIFIER_ROOT/scripts"
-          mkdir -p "$CLASSIFIER_DIR" "$REGISTRY_DIR"
-          CLASSIFIER="$CLASSIFIER_DIR/change-scope.cjs"
-          MATCHER="$CLASSIFIER_DIR/knowledge-paths.cjs"
-          REGISTRY="$REGISTRY_DIR/component-packages.cjs"
-          if git show "origin/${{ github.base_ref }}:.github/scripts/change-scope.cjs" > "$CLASSIFIER" 2>/dev/null \
-            && git show "origin/${{ github.base_ref }}:.github/scripts/knowledge-paths.cjs" > "$MATCHER" 2>/dev/null \
-            && git show "origin/${{ github.base_ref }}:scripts/component-packages.cjs" > "$REGISTRY" 2>/dev/null; then
-            git diff --name-status "$MERGE_BASE"...HEAD \
-              | node "$CLASSIFIER" --github-output
-          else
-            # Missing trusted policy cannot grant a specialized lane.
-            printf 'docsite_only=false\nspec_only=false\ntooling_only=false\n' \
-              >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Skip dependency checks for spec-only changes
-        if: steps.scope.outputs.spec_only == 'true'
-        run: echo "Spec-only PR — package dependencies cannot change"
-
-      - uses: facebook/lexical/.github/actions/internal-registry/dependency-check@internal-registry-dependency-check-v1
-        if: steps.scope.outputs.spec_only != 'true'
+      - uses: meta/lexical/.github/actions/internal-registry/dependency-check@internal-registry-dependency-check-v1
         continue-on-error: true

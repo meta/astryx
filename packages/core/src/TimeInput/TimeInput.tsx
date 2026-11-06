@@ -18,6 +18,7 @@
  */
 
 import {
+  use,
   useId,
   useState,
   useCallback,
@@ -30,6 +31,7 @@ import {
   type FocusEvent,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {
   colorVars,
   sizeVars,
@@ -44,16 +46,12 @@ import {
   inputStatusBorderStyles,
   inputStatusHoverShadowStyles,
   inputStatusFocusWithinStyles,
-  type FieldStatusVariant,
 } from '../Field';
 import {Icon} from '../Icon';
 import {Spinner} from '../Spinner';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {
   type ISOTimeString,
-  parseTimeInput,
-  formatDisplayTime12h,
-  formatDisplayTime24h,
   formatISOTime,
   adjustTime,
   isImeKeyEvent,
@@ -61,22 +59,49 @@ import {
   mergeProps,
   getInputARIA,
 } from '../utils';
-import type {BaseProps} from '../BaseProps';
+import {chainEventHandlers} from '../utils/chainEventHandlers';
+import {joinAriaIDs} from '../utils/inputAria';
+import {
+  useFieldInputStyling,
+  type FieldInputBaseProps,
+} from '../Field/fieldParts';
 import type {SizeValue} from '../utils/types';
 import {useSize} from '../SizeContext/SizeContext';
 import {useAnnounce} from '../hooks/useAnnounce';
+import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useInputContainer} from '../hooks/useInputContainer';
 import {useMediaQuery} from '../hooks/useMediaQuery';
 import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
-import {groupStyles} from '../InputGroup/groupStyles';
+import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
+import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useTooltip} from '../Tooltip';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
+import {useLocale} from '../i18n';
+import {
+  formatLocaleTime,
+  parseLocaleTime,
+  resolveHourFormat,
+} from '../utils/timeFormat';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {NativeTimeSegment} from '../DateTimeInput/NativeTimeSegment';
+import {TouchTimeField} from './TouchTimeField';
+import {
+  effectiveInputPresentation,
+  resolveInputPresentation,
+  type InputPresentation,
+} from '../utils/inputPresentation';
+import {useDevWarning} from '../hooks/useDevWarning';
+import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/TimeInput/TimeInput.generated';
+
+registerEnglishFallback(english);
 
 const TOUCH_POINTER_QUERY = '(pointer: coarse)';
 
@@ -139,8 +164,11 @@ export type TimeInputSize = keyof typeof sizeStyles;
 
 export type TimeInputHourFormat = '12h' | '24h';
 
-/** Which surface TimeInput uses for time selection. */
+/** @deprecated Use {@link TimeInputPresentation} via the `presentation` prop. */
 export type TimeInputNativePicker = 'touch' | 'always' | 'never';
+
+/** Which surface TimeInput uses for time selection (`spec:AST-043` FR1). */
+export type TimeInputPresentation = InputPresentation;
 
 // Re-export shared types for convenience
 
@@ -150,10 +178,10 @@ export type {
 } from '../Field';
 
 export interface TimeInputProps extends Omit<
-  BaseProps,
+  FieldInputBaseProps<HTMLInputElement>,
   'onChange' | 'defaultValue'
 > {
-  /** Ref forwarded to the root element */
+  /** Ref forwarded to the time input (the field's semantic control) */
   ref?: React.Ref<HTMLInputElement>;
   /**
    * Label text for the input (required for accessibility).
@@ -192,12 +220,12 @@ export interface TimeInputProps extends Omit<
   /**
    * Explains why the input is disabled. When set together with
    * `isDisabled`, the input shows a tooltip with this text on hover and
-   * keyboard focus, and the field stays focusable (via `aria-disabled`)
-   * so the reason is discoverable by keyboard and assistive technology.
-   * Typing and arrow-key adjustment stay blocked.
+   * keyboard focus, and the input is described by it, so the reason is
+   * discoverable by keyboard and assistive technology. Typing and arrow-key
+   * adjustment stay blocked.
    *
-   * Use this instead of wrapping a disabled input in `Tooltip` — disabled
-   * controls don't emit the pointer events an external tooltip needs.
+   * Use this instead of wrapping a disabled input in `Tooltip`, so the
+   * reason is tied to the field.
    *
    * @example
    * ```
@@ -264,14 +292,19 @@ export interface TimeInputProps extends Omit<
 
   /**
    * Hour format for display.
-   * - '12h': Display as 12-hour with AM/PM (e.g., "2:30 PM")
+   * - '12h': Display as 12-hour with the locale's day period (e.g., "2:30 PM")
    * - '24h': Display as 24-hour (e.g., "14:30")
-   * @default '12h'
+   *
+   * When unset, follows the `InternationalizationProvider` locale's hour
+   * cycle: `en-US` reads 12-hour, `en-GB` and `de-DE` read 24-hour. A
+   * per-user preference rides on the locale tag (`en-US-u-hc-h23`).
+   * @default the locale's hour cycle
    */
   hourFormat?: TimeInputHourFormat;
 
   /**
-   * Increment in minutes when using arrow keys.
+   * Increment in minutes when using arrow keys. Steps are whole minutes: a
+   * fractional value leaves the time unchanged.
    * @default 1
    */
   increment?: number;
@@ -287,8 +320,31 @@ export interface TimeInputProps extends Omit<
    * Native time pickers cannot preserve seconds or Astryx's arrow-key cadence,
    * so `hasSeconds` or `increment !== 1` keeps the typed field.
    * @default 'touch'
+   * @deprecated Use `presentation` (`spec:AST-043` FR3):
+   * `'touch'` → `'adaptive-native'`, `'always'` → `'native'`,
+   * `'never'` → `'text-input'`. Still works exactly as released;
+   * `presentation` wins when both are set.
    */
   nativePicker?: TimeInputNativePicker;
+
+  /**
+   * Which surface selects the time (`spec:AST-043` FR1).
+   *
+   * - `'text-input'`: Astryx's typed field only (today's `nativePicker="never"`)
+   * - `'popover'`: no distinct popover exists for TimeInput; resolves to the
+   *   typed field (FR1 surface table)
+   * - `'bottom-sheet'`: Astryx's bottom-sheet time wheels on every pointer
+   * - `'native'`: the browser/OS `<input type="time">` on every pointer, with
+   *   no Astryx fallback (FR2)
+   * - `'adaptive-bottom-sheet'`: typed field on a fine pointer, bottom sheet
+   *   on a coarse pointer
+   * - `'adaptive-native'` (default): typed field on a fine pointer, browser/OS
+   *   picker on a coarse pointer, keeping the released Astryx fallback
+   *   (`hasSeconds` or `increment !== 1`) where native cannot express it (FR2)
+   *
+   * @default 'adaptive-native'
+   */
+  presentation?: TimeInputPresentation;
 
   /**
    * Placeholder text shown when no time is selected.
@@ -317,12 +373,12 @@ export interface TimeInputProps extends Omit<
    * - 'tooltip': no message box; the status icon becomes a focusable info-tip button that reveals the message on hover, keyboard focus, or tap
    * @default 'attached'
    */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusPlacement;
 
   /**
    * Width of the field. Numbers are treated as pixels, strings are used as-is
    * (e.g. `'100%'`). Sizes the whole field (label, control, and status) so they
-   * stay aligned, unlike setting width via `xstyle`/`className`/`style`.
+   * stay aligned, unlike setting width via `containerXstyle` or `controlXstyle`.
    */
   width?: SizeValue;
   /**
@@ -345,7 +401,7 @@ export interface TimeInputProps extends Omit<
  * />
  * ```
  */
-export function TimeInput({
+function TimeField({
   label,
   isLabelHidden = false,
   description,
@@ -364,32 +420,56 @@ export function TimeInput({
   hasAutoFocus = false,
   hourFormat = '12h',
   increment = 1,
-  nativePicker = 'touch',
   placeholder: placeholderFromProps,
   size: sizeProp,
   status,
   statusVariant = 'attached',
   labelTooltip,
   width,
-  xstyle,
-  className,
-  style,
+  containerXstyle,
+  containerClassName,
+  containerStyle,
+  controlXstyle,
+  controlClassName,
+  controlStyle,
   ref,
-}: TimeInputProps) {
-  const t = useTranslator();
+  nativeMode = 'off',
+  ...restProps
+}: TimeInputProps & {nativeMode?: 'off' | 'adaptive' | 'forced' | 'legacy'}) {
+  const {rest, container} = useFieldInputStyling('TimeInput', restProps, {
+    containerXstyle,
+    containerClassName,
+    containerStyle,
+  });
+  const {
+    id: idProp,
+    'aria-describedby': ariaDescribedByProp,
+    'aria-labelledby': ariaLabelledByProp,
+    onFocus: onFocusProp,
+    onBlur: onBlurProp,
+    onKeyDown: onKeyDownProp,
+    ...controlProps
+  } = rest;
+  const t = useComponentTranslator();
+  const locale = useLocale();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const placeholder =
     placeholderFromProps ?? t('@astryx.timeInput.placeholder');
   const size = useSize(sizeProp, 'md');
-  const isTouch = useMediaQuery(TOUCH_POINTER_QUERY);
-  const requestsNativePicker =
-    nativePicker === 'always' || (nativePicker === 'touch' && isTouch);
-  // iOS has no seconds wheel and treats step as validation rather than wheel
-  // cadence. Preserve those explicit Astryx contracts instead of degrading them.
+  // `forced` (explicit `presentation="native"`, FR2): always native, no
+  // fallback. `adaptive` (`adaptive-native` coarse) and `legacy` (deprecated
+  // `nativePicker="always"`): iOS has no seconds wheel and treats step as
+  // validation rather than wheel cadence, so those keep the typed field —
+  // `legacy` on every pointer, exactly as released.
   const usesNativeTimePicker =
-    requestsNativePicker && !hasSeconds && increment === 1;
+    nativeMode === 'forced' ||
+    ((nativeMode === 'adaptive' || nativeMode === 'legacy') &&
+      !hasSeconds &&
+      increment === 1);
 
-  const id = useId();
+  const generatedID = useId();
+  const id = idProp ?? generatedID;
+  const fieldLabelID = useId();
   const inputLabelID = useId();
   const descriptionID = useId();
   const statusMessageID = useId();
@@ -401,6 +481,9 @@ export function TimeInput({
   const [, startTransition] = useTransition();
   const [optimisticValue, setOptimisticValue] = useOptimistic(value);
   const isBusy = isLoading || optimisticValue !== value;
+  // The busy Spinner is decorative; this control announces its busy start
+  // (spec:AST-086 FR8).
+  useBusyAnnouncement(isBusy, t('@astryx.spinner.loading'), containerRef);
 
   // In grouped mode the status message renders as a visually-hidden node that
   // exists only for aria-describedby. Announce it through the persistent
@@ -408,6 +491,8 @@ export function TimeInput({
   // region mounted together with its content is not reliably announced.
   // Ungrouped mode delegates to Field -> FieldStatus, which announces itself.
   const announce = useAnnounce();
+  // Syncs the live region with `status.message` when the field is in an
+  // InputGroup.
   useEffect(() => {
     if (inputGroup && status?.message) {
       announce(
@@ -417,10 +502,10 @@ export function TimeInput({
     }
   }, [announce, inputGroup, status?.message, status?.type]);
 
-  // Disabled-reason tooltip. Disabled controls swallow pointer events, so the
-  // tooltip listeners attach to the input container (which already exists) and
-  // the input stays perceivable via aria-disabled instead of the disabled
-  // attribute. Typing is blocked with readOnly and value mutation guards.
+  // A disabled field never renders native `disabled` (spec:AST-085 FR1): the
+  // input stays focusable via aria-disabled, and readOnly plus the value
+  // mutation guards block typing. The disabled-reason tooltip's listeners
+  // attach to the input container.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
   const disabledMessageTooltip = useTooltip({
     placement: 'above',
@@ -447,17 +532,26 @@ export function TimeInput({
       // tooltip's content instead so the status is still announced.
       statusTooltipDescribedBy,
       showsDisabledMessage ? disabledMessageTooltip.describedBy : null,
+      ariaDescribedByProp,
     ],
     inputGroup,
   );
+  // A caller aria-labelledby names the control together with the field's own
+  // label (the Field label standalone, the group and input labels in a group).
+  const controlLabelledBy =
+    ariaLabelledByProp != null
+      ? joinAriaIDs(ariaLabelledBy ?? fieldLabelID, ariaLabelledByProp)
+      : ariaLabelledBy;
 
   // Pending input while user is typing (null = show formatted value)
   const [pendingInput, setPendingInput] = useState<string | null>(null);
   const [isFocused, setIsFocused] = useState(false);
 
-  // Format function based on hourFormat
-  const formatDisplayTime =
-    hourFormat === '12h' ? formatDisplayTime12h : formatDisplayTime24h;
+  const formatDisplayTime = useCallback(
+    (time: ISOTimeString, includeSeconds: boolean) =>
+      formatLocaleTime(time, locale, hourFormat, includeSeconds),
+    [locale, hourFormat],
+  );
 
   // Unified change handler that fires both onChange and changeAction
   const fireChange = useCallback(
@@ -489,27 +583,29 @@ export function TimeInput({
     if (pendingInput === null || !pendingInput.trim()) {
       return true;
     }
-    const parsed = parseTimeInput(pendingInput, hasSeconds);
+    const parsed = parseLocaleTime(pendingInput, locale, hasSeconds);
     if (!parsed) {
       return false;
     }
     // Also check min/max range
     return isTimeInRange(parsed, min, max);
-  }, [pendingInput, hasSeconds, min, max]);
+  }, [pendingInput, locale, hasSeconds, min, max]);
 
   // Placeholder that shows format hint when focused and empty
   const displayPlaceholder = useMemo(() => {
     if (isFocused && !displayValue) {
-      return hourFormat === '12h' ? 'e.g., 2:30 PM' : 'e.g., 14:30';
+      return hourFormat === '12h'
+        ? t('@astryx.dateTimeInput.timeHint12h')
+        : t('@astryx.dateTimeInput.timeHint24h');
     }
     return placeholder;
-  }, [isFocused, displayValue, hourFormat, placeholder]);
+  }, [isFocused, displayValue, hourFormat, placeholder, t]);
 
   // Handle input text change - update immediately if valid
   const handleInputChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      // With a disabledMessage the input drops `disabled` for focusability, so
-      // guard value mutation explicitly (readOnly also blocks typing).
+      // The input is never natively disabled (spec:AST-085 FR1), so guard
+      // value mutation explicitly (readOnly also blocks typing).
       if (isDisabled) {
         return;
       }
@@ -517,12 +613,12 @@ export function TimeInput({
       setPendingInput(newValue);
 
       // If the input is valid, update immediately (don't wait for blur)
-      const parsed = parseTimeInput(newValue, hasSeconds);
+      const parsed = parseLocaleTime(newValue, locale, hasSeconds);
       if (parsed && isTimeInRange(parsed, min, max) && parsed !== value) {
         fireChange(parsed);
       }
     },
-    [hasSeconds, min, max, value, fireChange, isDisabled],
+    [locale, hasSeconds, min, max, value, fireChange, isDisabled],
   );
 
   // Handle focus
@@ -544,6 +640,11 @@ export function TimeInput({
       if (pendingInput === null) {
         return;
       }
+      // Disabled: keep the value, drop the draft (spec:AST-085 FR2).
+      if (isDisabled) {
+        setPendingInput(null);
+        return;
+      }
 
       if (!pendingInput.trim()) {
         // Empty input clears the value
@@ -554,7 +655,7 @@ export function TimeInput({
         return;
       }
 
-      const parsed = parseTimeInput(pendingInput, hasSeconds);
+      const parsed = parseLocaleTime(pendingInput, locale, hasSeconds);
       if (parsed && isTimeInRange(parsed, min, max)) {
         // Valid time - update if different
         if (parsed !== value) {
@@ -564,10 +665,17 @@ export function TimeInput({
       // Clear pending input - display will revert to formatted value
       setPendingInput(null);
     },
-    [pendingInput, value, fireChange, hasSeconds, min, max],
+    [pendingInput, isDisabled, value, fireChange, locale, hasSeconds, min, max],
   );
 
   // Handle keyboard navigation on input
+  // Enter in a focused disabled field would submit a surrounding form (FR2).
+  const preventDisabledEnter = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (isDisabled && e.key === 'Enter') {
+      e.preventDefault();
+    }
+  };
+
   const handleInputKeyDown = useCallback(
     (e: KeyboardEvent<HTMLInputElement>) => {
       // ArrowUp/ArrowDown step the time and preventDefault; an IME candidate
@@ -577,8 +685,7 @@ export function TimeInput({
       if (isImeKeyEvent(e.nativeEvent)) {
         return;
       }
-      // Arrow-key adjustment mutates the value; block it while showing a
-      // disabled reason (the input keeps focusability via aria-disabled).
+      // Arrow-key adjustment mutates the value; block it while disabled.
       if (isDisabled) {
         return;
       }
@@ -665,6 +772,7 @@ export function TimeInput({
       }}
       onClick={usesNativeTimePicker ? undefined : handleWrapperClick}
       onMouseUp={usesNativeTimePicker ? undefined : handleWrapperMouseUp}
+      {...(inputGroup ? inputGroupItemProps : undefined)}
       {...mergeProps(
         themeProps('time-input', {
           size,
@@ -675,14 +783,15 @@ export function TimeInput({
           inputWrapperStyles.base,
           sizeStyles[size],
           isDisabled && inputWrapperStyles.disabled,
+          isDisabled && inputDisabledFocusStyles.withinRing,
           status && inputStatusBorderStyles[status.type],
           status && !isDisabled && inputStatusHoverShadowStyles[status.type],
           status && inputStatusFocusWithinStyles[status.type],
           inputGroup && groupStyles.inGroup,
-          xstyle,
+          controlXstyle,
         ),
-        className,
-        style,
+        controlClassName,
+        controlStyle,
       )}>
       {inputGroup && <VisuallyHidden id={inputLabelID}>{label}</VisuallyHidden>}
       {inputGroup && description && (
@@ -703,17 +812,24 @@ export function TimeInput({
           onChange={fireChange}
           placeholder={placeholder}
           openPickerLabel={t('@astryx.timeInput.openPicker', {label})}
-          ariaLabelledBy={ariaLabelledBy}
+          ariaLabelledBy={controlLabelledBy}
           hasAutoFocus={hasAutoFocus}
           min={min}
           max={max}
           hourFormat={hourFormat}
           isEffectivelyDisabled={isDisabled}
-          hasDisabledMessage={showsDisabledMessage}
+          isFocusableDisabled
           isEffectivelyRequired={isEffectivelyRequired}
           isBusy={isBusy}
           statusType={status?.type}
           ariaDescribedBy={ariaDescribedBy}
+          controlProps={{
+            ...controlProps,
+            onFocus: onFocusProp,
+            onBlur: onBlurProp,
+            onKeyDown: chainEventHandlers(preventDisabledEnter, onKeyDownProp),
+            onClick: isDisabled ? undefined : controlProps.onClick,
+          }}
         />
       ) : (
         <>
@@ -721,21 +837,25 @@ export function TimeInput({
             <Icon icon="clock" size="sm" color="secondary" />
           </div>
           <input
+            {...controlProps}
             ref={mergedInputRef}
             id={id}
             type="text"
             value={displayValue}
             onChange={handleInputChange}
-            onFocus={handleFocus}
-            onBlur={handleBlur}
-            onKeyDown={handleInputKeyDown}
+            onFocus={chainEventHandlers(handleFocus, onFocusProp)}
+            onBlur={chainEventHandlers(handleBlur, onBlurProp)}
+            onKeyDown={chainEventHandlers(
+              preventDisabledEnter,
+              handleInputKeyDown,
+              onKeyDownProp,
+            )}
             placeholder={displayPlaceholder}
-            // With a disabledMessage the input keeps focusability via
-            // aria-disabled so the reason is focus-discoverable; typing and
-            // arrow-key adjustment are blocked with readOnly and the guards.
-            disabled={isDisabled && !showsDisabledMessage}
-            aria-disabled={showsDisabledMessage ? 'true' : undefined}
-            readOnly={showsDisabledMessage || undefined}
+            aria-disabled={isDisabled ? 'true' : undefined}
+            readOnly={isDisabled || undefined}
+            // The browser still dispatches a click on an aria-disabled input,
+            // so a caller's onClick is skipped too (spec:AST-085 FR2).
+            onClick={isDisabled ? undefined : controlProps.onClick}
             autoFocus={hasAutoFocus}
             data-autofocus={hasAutoFocus || undefined}
             aria-describedby={ariaDescribedBy}
@@ -744,7 +864,7 @@ export function TimeInput({
               status?.type === 'error' || !isInputValid ? 'true' : undefined
             }
             aria-busy={isBusy || undefined}
-            aria-labelledby={ariaLabelledBy}
+            aria-labelledby={controlLabelledBy}
             {...stylex.props(
               styles.input,
               isDisabled && styles.inputDisabled,
@@ -761,7 +881,7 @@ export function TimeInput({
           </VisuallyHidden>
         </>
       )}
-      {isBusy && <Spinner size="sm" />}
+      {isBusy && <Spinner size="sm" aria-hidden="true" />}
       {hasClear && optimisticValue && !isDisabled && (
         <InputClearButton
           label={t('@astryx.timeInput.clearLabel', {label})}
@@ -784,10 +904,12 @@ export function TimeInput({
 
   return (
     <Field
+      {...container}
       label={label}
       isLabelHidden={isLabelHidden}
       description={description}
       inputID={id}
+      labelID={ariaLabelledByProp != null ? fieldLabelID : undefined}
       descriptionID={description ? descriptionID : undefined}
       isOptional={isOptional}
       isRequired={isRequired}
@@ -809,6 +931,73 @@ export function TimeInput({
         disabledMessageTooltip.renderTooltip(disabledMessage)}
     </Field>
   );
+}
+
+TimeField.displayName = 'TimeField';
+
+/**
+ * A time input whose `presentation` prop chooses the selection surface
+ * (`spec:AST-043`); the deprecated `nativePicker` maps to the same surfaces
+ * (FR3).
+ *
+ * Base props (`ref`, `id`, `data-*`, `aria-*`, DOM event handlers) go to the time input.
+ * A DOM handler runs after the component's own handler for the same event
+ * and still receives events the component handled, even ones it called
+ * `preventDefault` on, so it cannot cancel built-in behavior.
+ */
+export function TimeInput(props: TimeInputProps) {
+  const inputGroupState = use(InputGroupInternalContext);
+  const isDisabled = props.isDisabled || inputGroupState.isDisabled;
+  const isTouch = useMediaQuery(TOUCH_POINTER_QUERY);
+  useDevWarning(
+    'TimeInput',
+    '`nativePicker` is deprecated; use `presentation` instead (`touch` → `adaptive-native`, `always` → `native`, `never` → `text-input`). `presentation` wins when both are set.',
+    props.nativePicker !== undefined,
+  );
+  const effective = effectiveInputPresentation(
+    props.presentation,
+    props.nativePicker,
+    'time',
+  );
+  const locale = useLocale();
+  const {
+    presentation: _presentation,
+    nativePicker: _nativePicker,
+    ...surfaceProps
+  } = props;
+  // Every surface gets the resolved hour format, so the typed text, the
+  // native field's resting text, and the sheet wheels agree.
+  const rest = {
+    ...surfaceProps,
+    hourFormat: resolveHourFormat(locale, props.hourFormat),
+  };
+  if (effective === 'native') {
+    // Deprecated `always` keeps released fallbacks (FR2 legacy); only an
+    // explicit `presentation="native"` is forced.
+    return (
+      <TimeField
+        {...rest}
+        isDisabled={isDisabled}
+        nativeMode={
+          props.presentation === undefined && props.nativePicker === 'always'
+            ? 'legacy'
+            : 'forced'
+        }
+      />
+    );
+  }
+  switch (resolveInputPresentation(effective, isTouch)) {
+    case 'native':
+      // Only `adaptive-native` on a coarse pointer resolves here (FR2).
+      return (
+        <TimeField {...rest} isDisabled={isDisabled} nativeMode="adaptive" />
+      );
+    case 'sheet':
+      return <TouchTimeField {...rest} isDisabled={isDisabled} />;
+    case 'text-input':
+    case 'desktop':
+      return <TimeField {...rest} isDisabled={isDisabled} />;
+  }
 }
 
 TimeInput.displayName = 'TimeInput';

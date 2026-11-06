@@ -4,7 +4,7 @@
 
 /**
  * @file FormLayoutContext.ts
- * @input Uses React createContext
+ * @input Layer-scoped React context
  * @output Exports FormLayoutContext, FormLayoutDirection, and FormOptionality types
  * @position Context for form layout direction + default-optionality detection
  *
@@ -14,15 +14,15 @@
  * - /packages/core/src/FormLayout/index.ts (exports if types change)
  */
 
-import {createContext} from 'react';
+import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
 
 /**
  * Direction of form field arrangement.
  *
  * - `'vertical'` — Fields stack top-to-bottom (default). Most common.
- * - `'horizontal'` — Fields arrange left-to-right, wrapping when needed.
- * - `'horizontal-labels'` — Fields stack vertically but labels sit to the left
- *   of their inputs (settings/admin panel pattern).
+ * - `'horizontal'` — Fields occupy one `1fr` grid track per child in logical inline order.
+ * - `'horizontal-labels'` — Fields stack vertically while labels sit beside
+ *   their inputs on the inline-start side (settings/admin panel pattern).
  */
 export type FormLayoutDirection =
   'vertical' | 'horizontal' | 'horizontal-labels';

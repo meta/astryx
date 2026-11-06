@@ -12,6 +12,7 @@
  * - Banner frame (themeProps 'banner-frame'): owns the resting elevation and,
  *   for elevated card banners, the outer radius that shapes that shadow
  * - Header area (themeProps 'banner'): colored status background with icon, title, description, actions, dismiss
+ * - End area restores the ordinary text context for consumer `endContent`; built-in controls opt back into the status foreground
  * - Content area (themeProps 'banner-content'): card background for additional content (children)
  * - Status icon (themeProps 'banner-icon'): the target rides on the default
  *   <Icon> itself — the element that paints — so 'status:X' overrides reach
@@ -29,9 +30,11 @@
  *   default / controlled) lives on that one prop and is driven by the shared
  *   `useCollapsible` hook rather than local state.
  *
- * A status added through `BannerStatusMap` augmentation has no entry in the
- * status lookups, so it renders with no status fill, no default glyph and the
- * polite `role="status"` rather than losing its ARIA role entirely.
+ * Status controls visual treatment only. The root carries no live-region role by
+ * default: an async outcome is announced from its transition handler through
+ * `useAnnounce`, while a caller that needs a persistent semantic mirror may
+ * provide `role="status"` through BaseProps. `role="alert"` is explicit and
+ * reserved for genuinely urgent content that should interrupt current speech.
  *
  * Title and description render as <div> (not <p>): they accept arbitrary
  * ReactNode content, and <p> cannot legally contain block-level children
@@ -71,8 +74,14 @@ import {composeEventHandlers, isRenderable, mergeProps} from '../utils';
 import type {Elevation} from '../utils/types';
 import {edgeCompSlot} from '../Layout/edgeCompensation.stylex';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
 import type {BannerStatusMap, BannerContainerMap} from './index';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Banner/Banner.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Types
@@ -195,8 +204,8 @@ export interface BannerProps extends BaseProps<HTMLDivElement> {
 // `BannerStatus` is `keyof BannerStatusMap`, and index.ts documents augmenting
 // that interface to add a status. Every lookup below is therefore partial: an
 // augmented status the library has never heard of falls through to the base
-// treatment (no status fill, no glyph, the polite role) instead of resolving to
-// `undefined` and dropping the ARIA role along with it.
+// visual treatment: no status fill and no default glyph. Announcement semantics
+// remain caller-owned for every status.
 
 const defaultIconNames: Partial<Record<BannerStatus, IconName>> = {
   info: 'info',
@@ -205,21 +214,11 @@ const defaultIconNames: Partial<Record<BannerStatus, IconName>> = {
   success: 'success',
 };
 
-const statusRole: Partial<Record<BannerStatus, 'alert' | 'status'>> = {
-  info: 'status',
-  warning: 'alert',
-  error: 'alert',
-  success: 'status',
-};
-
-/** An unknown status is not urgent by definition, so it announces politely. */
-const FALLBACK_ROLE = 'status';
-
 const statusIconColor: Partial<Record<BannerStatus, IconColor>> = {
-  info: 'accent',
-  warning: 'warning',
-  error: 'error',
-  success: 'success',
+  info: 'inherit',
+  warning: 'inherit',
+  error: 'inherit',
+  success: 'inherit',
 };
 
 // =============================================================================
@@ -293,6 +292,8 @@ const styles = stylex.create({
     // the flex item's min-content width and pushes the page into horizontal
     // scrolling at 320px, which is a WCAG 1.4.10 reflow failure.
     overflowWrap: 'anywhere',
+    // Text inside keeps `anywhere` too (Text FR3).
+    '--_astryx-text-overflow-wrap': 'anywhere',
   },
   description: {
     margin: 0,
@@ -302,6 +303,14 @@ const styles = stylex.create({
     lineHeight: typeScaleVars['--text-supporting-leading'],
     color: colorVars['--color-text-secondary'],
     overflowWrap: 'anywhere',
+    // Text inside keeps `anywhere` too (Text FR3).
+    '--_astryx-text-overflow-wrap': 'anywhere',
+  },
+  // Built-in status title, description, and icon inherit the header's on-muted
+  // color. Built-in controls receive the same context on their Button element
+  // only, so the sibling tooltip bubble keeps the theme's ordinary text color.
+  statusForeground: {
+    color: 'inherit',
   },
   iconWrapper: {
     display: 'flex',
@@ -315,6 +324,10 @@ const styles = stylex.create({
     justifyContent: 'flex-end',
     gap: spacingVars['--spacing-2'],
     flexShrink: 0,
+    // The status surface owns an inherited on-muted foreground, but consumer
+    // endContent does not. Reset the end area's ordinary text context, then let
+    // the built-in controls below opt back into the status foreground.
+    color: colorVars['--color-text-primary'],
     // Bounded so a group of actions wider than the row wraps within itself
     // rather than pushing the banner past the viewport (WCAG 1.4.10).
     maxWidth: '100%',
@@ -357,16 +370,73 @@ const styles = stylex.create({
 
 const statusStyles = stylex.create({
   info: {
-    backgroundColor: colorVars['--color-accent-muted'],
+    backgroundColor: colorVars['--color-info-muted'],
+    color: colorVars['--color-on-info-muted'],
+    // Forced colors replace status fills with Canvas; this boundary keeps the
+    // fill's shape visible (architecture:theme-tokens INV11).
+    outlineWidth: {default: null, '@media (forced-colors: active)': '1px'},
+    outlineStyle: {default: null, '@media (forced-colors: active)': 'solid'},
+    outlineColor: {
+      default: null,
+      '@media (forced-colors: active)': 'CanvasText',
+    },
+    outlineOffset: {default: null, '@media (forced-colors: active)': '-1px'},
   },
   warning: {
     backgroundColor: colorVars['--color-warning-muted'],
+    color: colorVars['--color-on-warning-muted'],
+    // Forced colors replace status fills with Canvas; this boundary keeps the
+    // fill's shape visible (architecture:theme-tokens INV11).
+    outlineWidth: {default: null, '@media (forced-colors: active)': '1px'},
+    outlineStyle: {default: null, '@media (forced-colors: active)': 'solid'},
+    outlineColor: {
+      default: null,
+      '@media (forced-colors: active)': 'CanvasText',
+    },
+    outlineOffset: {default: null, '@media (forced-colors: active)': '-1px'},
   },
   error: {
     backgroundColor: colorVars['--color-error-muted'],
+    color: colorVars['--color-on-error-muted'],
+    // Forced colors replace status fills with Canvas; this boundary keeps the
+    // fill's shape visible (architecture:theme-tokens INV11).
+    outlineWidth: {default: null, '@media (forced-colors: active)': '1px'},
+    outlineStyle: {default: null, '@media (forced-colors: active)': 'solid'},
+    outlineColor: {
+      default: null,
+      '@media (forced-colors: active)': 'CanvasText',
+    },
+    outlineOffset: {default: null, '@media (forced-colors: active)': '-1px'},
   },
   success: {
     backgroundColor: colorVars['--color-success-muted'],
+    color: colorVars['--color-on-success-muted'],
+    // Forced colors replace status fills with Canvas; this boundary keeps the
+    // fill's shape visible (architecture:theme-tokens INV11).
+    outlineWidth: {default: null, '@media (forced-colors: active)': '1px'},
+    outlineStyle: {default: null, '@media (forced-colors: active)': 'solid'},
+    outlineColor: {
+      default: null,
+      '@media (forced-colors: active)': 'CanvasText',
+    },
+    outlineOffset: {default: null, '@media (forced-colors: active)': '-1px'},
+  },
+});
+
+// Scope status text context to each built-in Button. Its tooltip is a sibling,
+// so it does not inherit these control-only variables.
+const statusControlStyles = stylex.create({
+  info: {
+    '--color-text-primary': colorVars['--color-on-info-muted'],
+  },
+  warning: {
+    '--color-text-primary': colorVars['--color-on-warning-muted'],
+  },
+  error: {
+    '--color-text-primary': colorVars['--color-on-error-muted'],
+  },
+  success: {
+    '--color-text-primary': colorVars['--color-on-success-muted'],
   },
 });
 
@@ -413,7 +483,9 @@ const elevationStyles = stylex.create({
  * even if `onDismiss` is not provided, so product teams don't need to wire
  * up state management for basic dismiss behavior.
  *
- * Uses `role="alert"` for error/warning and `role="status"` for info/success.
+ * Status controls visual meaning only. The component adds no live-region role;
+ * announce async outcomes from their transition handler with `useAnnounce`, or
+ * pass an explicit role when a persistent semantic mirror is appropriate.
  *
  * @example
  * ```
@@ -469,7 +541,7 @@ export function Banner({
   onPointerDownCapture,
   ...rest
 }: BannerProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const [isDismissed, setIsDismissed] = useState(false);
   // The disclosure state machine is the shared one — Banner owns no collapse
   // state of its own. `collapsible={false}` disables it, and that is what
@@ -503,7 +575,6 @@ export function Banner({
   // non-collapsible banner has no toggle, so neither end of the link is used.
   const contentId = useId();
   const defaultIconName = defaultIconNames[status];
-  const role = statusRole[status] ?? FALLBACK_ROLE;
   const iconColor = statusIconColor[status];
   const hasChildren = isRenderable(children);
   // Keep the default tooltip concise while the accessible name identifies
@@ -571,7 +642,6 @@ export function Banner({
   return (
     <div
       ref={ref}
-      role={role}
       onFocusCapture={composeEventHandlers(onFocusCapture, handleFocusCapture)}
       onPointerDownCapture={composeEventHandlers(
         onPointerDownCapture,
@@ -636,12 +706,21 @@ export function Banner({
             styles.headerContent,
             isRenderable(endContent) && styles.headerContentWithEndContent,
           )}>
-          <div {...stylex.props(styles.title)}>{title}</div>
+          <div
+            {...stylex.props(
+              styles.title,
+              hasStatusStyle(status) && styles.statusForeground,
+            )}>
+            {title}
+          </div>
           {isRenderable(description) && (
             <div
               {...mergeProps(
                 themeProps('banner-description'),
-                stylex.props(styles.description),
+                stylex.props(
+                  styles.description,
+                  hasStatusStyle(status) && styles.statusForeground,
+                ),
               )}>
               {description}
             </div>
@@ -680,6 +759,11 @@ export function Banner({
                   />
                 }
                 onClick={handleToggleExpand}
+                className={
+                  hasStatusStyle(status)
+                    ? stylex.props(statusControlStyles[status]).className
+                    : undefined
+                }
                 aria-expanded={isExpanded}
                 aria-controls={showContent ? contentId : undefined}
                 isIconOnly
@@ -693,6 +777,11 @@ export function Banner({
                 tooltip={dismissTooltip}
                 icon={<Icon icon="close" size="sm" color="inherit" />}
                 onClick={handleDismiss}
+                className={
+                  hasStatusStyle(status)
+                    ? stylex.props(statusControlStyles[status]).className
+                    : undefined
+                }
                 isIconOnly
               />
             )}

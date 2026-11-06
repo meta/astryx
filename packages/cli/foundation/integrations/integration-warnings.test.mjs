@@ -37,7 +37,12 @@ afterEach(() => {
  * Build a loaded-integration-shaped object. Roots are absolute (mirrors
  * loadIntegrations' resolveRoot).
  */
-function loaded({name = '@acme/widgets', components, templates, codemods} = {}) {
+function loaded({
+  name = '@acme/widgets',
+  components,
+  templates,
+  codemods,
+} = {}) {
   return {
     name,
     version: '1.0.0',
@@ -56,9 +61,28 @@ describe('warnOnIntegrationIssues', () => {
     await warnOnIntegrationIssues([integration], {json: false});
 
     expect(errLines).toHaveLength(1);
-    expect(errLines[0]).toBe(
-      'Warning: @acme/widgets has 1 integration issue(s). ' +
-        'Run: astryx doctor integration validate @acme/widgets',
+    expect(errLines[0]).toMatch(
+      /^Warning: @acme\/widgets has 1 integration issue\(s\)\. Run: .+ doctor integration validate @acme\/widgets$/,
+    );
+  });
+
+  it('surfaces cross-package issues collected by Project', async () => {
+    const project = {
+      issues: async () => [
+        {
+          package: '@acme/later',
+          code: 'ambiguous_template_replacement',
+          severity: 'warning',
+          message: 'Later configured replacement wins.',
+        },
+      ],
+    };
+
+    await warnOnIntegrationIssues(project, {json: false});
+
+    expect(errLines).toHaveLength(1);
+    expect(errLines[0]).toMatch(
+      /^Warning: @acme\/later has 1 integration issue\(s\)\. Run: .+ doctor$/,
     );
   });
 
@@ -79,9 +103,8 @@ describe('warnOnIntegrationIssues', () => {
     await warnOnIntegrationIssues([integration], {json: false});
 
     expect(errLines).toHaveLength(1);
-    expect(errLines[0]).toBe(
-      'Warning: @acme/stale has 1 integration issue(s). ' +
-        'Run: astryx doctor integration validate @acme/stale',
+    expect(errLines[0]).toMatch(
+      /^Warning: @acme\/stale has 1 integration issue\(s\)\. Run: .+ doctor integration validate @acme\/stale$/,
     );
   });
 
@@ -115,5 +138,54 @@ describe('warnOnIntegrationIssues', () => {
       warnOnIntegrationIssues([null, 'nope', 42], {json: false}),
     ).resolves.toBeUndefined();
     expect(errLines).toHaveLength(0);
+  });
+
+  it('prints the specific provider-conflict message via the array path', async () => {
+    const conflict = {
+      name: '@acme/charts',
+      version: '2.0.0',
+      __spec: '@acme/charts',
+      __packageDir: tmpDir,
+      __providerConflict: {
+        providerId: '@acme/lab',
+        claimedBy: '@acme/lab',
+        message:
+          '@acme/charts@2.0.0 and @acme/lab@1.0.0 both claim provider ID ' +
+          '"@acme/lab". @acme/lab@1.0.0 loads first and is used; ' +
+          '@acme/charts@2.0.0 contributes nothing until one package changes ' +
+          'its providerId.',
+      },
+    };
+    await warnOnIntegrationIssues([conflict], {json: false});
+
+    expect(errLines).toHaveLength(1);
+    expect(errLines[0]).toBe(`Warning: ${conflict.__providerConflict.message}`);
+    // Must NOT print the generic validate pointer for a provider conflict.
+    expect(errLines[0]).not.toContain('integration issue(s)');
+  });
+
+  it('prints the specific provider-conflict message via the Project path', async () => {
+    const conflictMessage =
+      '@acme/charts@2.0.0 and @acme/lab@1.0.0 both claim provider ID ' +
+      '"@acme/lab". @acme/lab@1.0.0 loads first and is used; ' +
+      '@acme/charts@2.0.0 contributes nothing until one package changes ' +
+      'its providerId.';
+    const project = {
+      issues: async () => [
+        {
+          package: '@acme/charts@2.0.0',
+          code: 'duplicate_provider',
+          severity: 'warning',
+          message: conflictMessage,
+        },
+      ],
+    };
+
+    await warnOnIntegrationIssues(project, {json: false});
+
+    expect(errLines).toHaveLength(1);
+    expect(errLines[0]).toBe(`Warning: ${conflictMessage}`);
+    // Must NOT print the generic validate pointer for a provider conflict.
+    expect(errLines[0]).not.toContain('integration issue(s)');
   });
 });

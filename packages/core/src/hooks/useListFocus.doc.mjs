@@ -69,6 +69,14 @@ export const docs = {
       required: false,
     },
     {
+      name: 'options.hasPaging',
+      type: 'boolean',
+      description:
+        'Whether PageDown/PageUp page through a scrolling list: PageDown moves to the last enabled item fully visible in the container, and pressed there again one viewport further; PageUp mirrors it. Neither wraps; in a list that does not scroll they act as End/Home.',
+      default: 'false',
+      required: false,
+    },
+    {
       name: 'options.hasRovingTabIndex',
       type: 'boolean',
       description:
@@ -179,6 +187,8 @@ export const docsDense = {
     'options.orientation':
       "navigation orientation. 'horizontal' uses ArrowLeft/ArrowRight, 'vertical' uses ArrowUp/ArrowDown, 'both' accepts all four arrows.",
     'options.hasHomeEnd': 'whether Home/End jump to first/last enabled item.',
+    'options.hasPaging':
+      'whether PageDown/PageUp page through a scrolling list (last/first fully visible item, then one viewport further; never wraps).',
     'options.hasRovingTabIndex':
       'opt into roving-tabindex ownership: hook stamps + repairs a single tab stop across items.',
     'options.hasCaretGuard':

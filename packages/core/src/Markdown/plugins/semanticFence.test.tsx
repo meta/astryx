@@ -270,12 +270,121 @@ describe('createMarkdownFenceTransform', () => {
     });
   });
 
-  it('lets components.code win without invoking the proposal renderer', () => {
-    const renderFence = vi.fn(() => <div>Semantic</div>);
+  it('renders a claimed fence through its plugin and an unclaimed fence through components.code', () => {
+    const renderFence = vi.fn(() => <div data-testid="semantic">Semantic</div>);
     const plugin = createFencePlugin('override-fences', renderFence);
+    const codeOverride = vi.fn(
+      ({code, language}: {code: string; language?: string}) => (
+        <div data-testid="code-override">
+          {language}: {code}
+        </div>
+      ),
+    );
+
+    render(
+      <Markdown plugins={[plugin]} components={{code: codeOverride}}>
+        {'```diagram\nstart --> finish\n```\n\n```ts\nconst x = 1;\n```'}
+      </Markdown>,
+    );
+
+    expect(screen.getByTestId('semantic')).toHaveTextContent('Semantic');
+    expect(renderFence).toHaveBeenCalledOnce();
+    expect(screen.getAllByTestId('code-override')).toHaveLength(1);
+    expect(screen.getByTestId('code-override')).toHaveTextContent(
+      'ts: const x = 1;',
+    );
+    expect(codeOverride.mock.calls.map(([props]) => props.language)).toEqual([
+      'ts',
+    ]);
+  });
+
+  it('falls back to components.code when a claimed fence is declined or its renderer returns nothing', () => {
     const CodeOverride = ({code}: {code: string; language?: string}) => (
       <div data-testid="code-override">Override: {code}</div>
     );
+    const declining = createFencePlugin(
+      'declining-override-fences',
+      () => <div>Semantic</div>,
+      () => null,
+    );
+    const empty = createFencePlugin('empty-override-fences', () => null);
+    const source = '```diagram\nstart --> finish\n```';
+
+    const {rerender} = render(
+      <Markdown plugins={[declining]} components={{code: CodeOverride}}>
+        {source}
+      </Markdown>,
+    );
+    expect(screen.getByTestId('code-override')).toHaveTextContent(
+      'Override: start --> finish',
+    );
+
+    rerender(
+      <Markdown plugins={[empty]} components={{code: CodeOverride}}>
+        {source}
+      </Markdown>,
+    );
+    expect(screen.getByTestId('code-override')).toHaveTextContent(
+      'Override: start --> finish',
+    );
+    expect(document.querySelector('pre')).toBeNull();
+  });
+
+  it('falls back to components.code when a claimed fence renderer throws', () => {
+    const CodeOverride = ({code}: {code: string; language?: string}) => (
+      <div data-testid="code-override">Override: {code}</div>
+    );
+    const throwing = createFencePlugin('throwing-override-fences', () => {
+      throw new Error('broken semantic fence');
+    });
+    const descendant = createFencePlugin('descendant-override-fences', () => (
+      <ThrowingFenceChild />
+    ));
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const source = '```diagram\nstart --> finish\n```';
+
+    const {rerender} = render(
+      <Markdown plugins={[throwing]} components={{code: CodeOverride}}>
+        {source}
+      </Markdown>,
+    );
+    expect(screen.getByTestId('code-override')).toHaveTextContent(
+      'Override: start --> finish',
+    );
+
+    rerender(
+      <Markdown plugins={[descendant]} components={{code: CodeOverride}}>
+        {source}
+      </Markdown>,
+    );
+    expect(screen.getByTestId('code-override')).toHaveTextContent(
+      'Override: start --> finish',
+    );
+    expect(
+      renderToString(
+        <Markdown plugins={[descendant]} components={{code: CodeOverride}}>
+          {source}
+        </Markdown>,
+      ),
+    ).toContain('Override: <!-- -->start --&gt; finish');
+
+    warning.mockRestore();
+    error.mockRestore();
+  });
+
+  it('shows components.code while a claimed fence renderer suspends', () => {
+    const CodeOverride = ({code}: {code: string; language?: string}) => (
+      <div data-testid="code-override">Override: {code}</div>
+    );
+    const pending = new Promise<never>(() => {});
+    function Suspending(): never {
+      // eslint-disable-next-line @typescript-eslint/only-throw-error
+      throw pending;
+    }
+    const plugin = createFencePlugin('suspending-override-fences', () => (
+      <Suspending />
+    ));
 
     render(
       <Markdown plugins={[plugin]} components={{code: CodeOverride}}>
@@ -286,7 +395,6 @@ describe('createMarkdownFenceTransform', () => {
     expect(screen.getByTestId('code-override')).toHaveTextContent(
       'Override: start --> finish',
     );
-    expect(renderFence).not.toHaveBeenCalled();
   });
 
   it('uses CodeBlock for undeclared or declined fences', () => {
@@ -304,9 +412,10 @@ describe('createMarkdownFenceTransform', () => {
     expect(createNode).not.toHaveBeenCalled();
     expect(document.querySelector('pre')).toHaveTextContent('plain source');
     expect(screen.getByRole('button', {name: 'Copy code'})).toBeInTheDocument();
+    // CodeBlock's named viewport; its tab stop follows overflow (none in jsdom).
     expect(screen.getByRole('group', {name: 'text'})).toHaveAttribute(
-      'tabindex',
-      '0',
+      'data-scroll-axis',
+      'both',
     );
 
     rerender(

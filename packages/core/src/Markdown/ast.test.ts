@@ -6,6 +6,7 @@ import {
   parseMarkdown,
   parseMarkdownAst,
 } from './parser';
+import {markdownAstText} from './ast';
 import {createMarkdownPlugin} from './plugins';
 import type {
   MarkdownExtensionNode,
@@ -147,6 +148,72 @@ describe('canonical Markdown AST', () => {
       language: 'plaintext',
       content: 'plain',
     });
+  });
+
+  it('keeps lazy continuation text and source provenance in its owning block', () => {
+    const source = '> quoted\ncontinued lazily';
+    const ast = parseMarkdownAst(source);
+    const quote = ast.children[0];
+
+    expect(ast.children).toHaveLength(1);
+    expect(quote).toMatchObject({
+      type: 'blockquote',
+      position: {start: {offset: 0}, end: {offset: source.length}},
+      children: [
+        {
+          type: 'paragraph',
+          children: [{type: 'text', value: 'quoted\ncontinued lazily'}],
+        },
+      ],
+    });
+    if (quote?.type !== 'blockquote') {
+      throw new Error('Expected blockquote');
+    }
+    const paragraph = quote.children[0];
+    if (paragraph?.type !== 'paragraph') {
+      throw new Error('Expected paragraph');
+    }
+    expect(markdownAstText(paragraph.children, () => '')).toBe(
+      'quoted\ncontinued lazily',
+    );
+    expect(parseMarkdown(source, {sourceRanges: true})[0]?.range).toEqual({
+      start: 0,
+      end: source.length,
+    });
+
+    const listSource = '- listed\ncontinued lazily';
+    const list = parseMarkdownAst(listSource).children[0];
+    expect(list).toMatchObject({
+      type: 'list',
+      position: {start: {offset: 0}, end: {offset: listSource.length}},
+      children: [
+        {
+          type: 'listItem',
+          children: [
+            {
+              type: 'paragraph',
+              children: [{type: 'text', value: 'listed\ncontinued lazily'}],
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  it('lets block plugin syntax interrupt a lazy continuation', () => {
+    const ast = parseMarkdownAst('> quoted\n:::note\nBody\n:::', {
+      plugins: [demoNotes],
+    });
+
+    expect(ast.children).toMatchObject([
+      {type: 'blockquote'},
+      {
+        type: 'extension',
+        plugin: 'demo-notes',
+        name: 'note',
+        data: {body: 'Body'},
+      },
+    ]);
   });
 
   it('keeps source provenance canonical while projecting the released range', () => {

@@ -4,12 +4,13 @@
 
 /**
  * @file ButtonGroupContext.ts
- * @input None (pure context definition)
+ * @input Layer-scoped React context
  * @output Exports ButtonGroup context and useButtonGroup hook
  * @position Shared context; consumed by Button for group-aware styling
  */
 
-import {createContext, use} from 'react';
+import {use} from 'react';
+import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
 
 export type ButtonGroupOrientation = 'horizontal' | 'vertical';
 
@@ -18,8 +19,9 @@ export interface ButtonGroupContextValue {
   isDisabled: boolean;
 }
 
-export const ButtonGroupContext =
-  createContext<ButtonGroupContextValue | null>(null);
+export const ButtonGroupContext = createContext<ButtonGroupContextValue | null>(
+  null,
+);
 ButtonGroupContext.displayName = 'ButtonGroupContext';
 
 /**

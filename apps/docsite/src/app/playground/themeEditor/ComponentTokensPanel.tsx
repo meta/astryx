@@ -189,7 +189,7 @@ export function ComponentTokensPanel({
                         label={v.name}
                         isLabelHidden
                         size="sm"
-                        xstyle={styles.fullWidthField}
+                        controlXstyle={styles.fullWidthField}
                         options={[
                           ...v.options.map(o => ({
                             value: o.value,

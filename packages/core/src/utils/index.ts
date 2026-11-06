@@ -76,7 +76,7 @@ export {characterCount, firstCharacter, truncateCharacters} from './characters';
 
 export {mergeProps} from './mergeProps';
 export {mergeRefs} from './mergeRefs';
-export {isFocusDetached} from './focusReturn';
+export {isFocusDetached} from './isFocusDetached';
 export {composeEventHandlers} from './composeEventHandlers';
 export {themeProps, themeDataAttributes} from './themeProps';
 export type {
@@ -111,3 +111,10 @@ export {rtlStyles} from './rtlStyles';
 export {focusOutlineStyles, focusOutlineProps} from './focusOutline.stylex';
 
 export {isImeKeyEvent} from './ime';
+
+// The touch press model's one composable: the shared hover and pressed overlay
+// styles, which carry the press's strength, its release and its paint. A local
+// pressable spreads the result of the `usePressFeedback` hook on the element
+// that paints and composes one of these on it; the controller, its attributes
+// and its clocks are internals.
+export {interactionOverlayStyles} from './interactionOverlay.stylex';

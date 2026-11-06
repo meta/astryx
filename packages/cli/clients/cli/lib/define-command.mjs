@@ -25,6 +25,9 @@
  */
 
 import {recordCommandResult} from '../../../foundation/debug/index.mjs';
+import {routeSegment} from '../../../foundation/discovery/docs-section-key.mjs';
+import {formatCliCommand} from '../../../foundation/env/package-manager.mjs';
+import {renderTokens} from '../../../foundation/doc-compiler/links.mjs';
 import {text} from '../formatters/index.mjs';
 
 /**
@@ -61,10 +64,10 @@ export function reportsResultVia(cmd) {
 /**
  * Mark a hand-registered command as reporting its result.
  *
- * For the handful of commands that cannot come from a CommandDoc — the root
- * program, `manifest` (it introspects the live program, so it cannot be
- * declared by one), `postinstall`, and the stub left behind when a command
- * module fails to load. They call {@link recordCommandResult} themselves; this
+ * For what does not come from a CommandDoc: the root program, and the stub
+ * left behind when a command module fails to load. Every command, `manifest`
+ * and the hidden `postinstall` hook included, registers through
+ * {@link defineCommand}. These call {@link recordCommandResult} themselves; this
  * says so, and the coverage test pins the set of commands allowed to, so the
  * mark cannot become a quiet way around the contract.
  *
@@ -103,10 +106,12 @@ export function commandDocsOf(cmd) {
  *   fn?: import('@astryxdesign/cli/authoring').FunctionDoc,
  *   action?: (...args: any[]) => import('../../../foundation/debug/command-result.mjs').CommandResult
  *     | Promise<import('../../../foundation/debug/command-result.mjs').CommandResult>,
- * }} [impl]
+ *   hidden?: boolean,
+ * }} [impl] `hidden` keeps the command out of help and the manifest (a
+ *   package-script hook, not a command for people or agents).
  * @returns {import('commander').Command} the created command.
  */
-export function defineCommand(parent, doc, {fn, action} = {}) {
+export function defineCommand(parent, doc, {fn, action, hidden} = {}) {
   // The command token is the last path segment ("theme build" -> "build"),
   // since subcommands are added to their group command, not the program.
   const token = doc.name.split(' ').pop() ?? doc.name;
@@ -117,9 +122,21 @@ export function defineCommand(parent, doc, {fn, action} = {}) {
     })
     .join(' ');
 
-  const cmd = parent.command(argSpec ? `${token} ${argSpec}` : token);
+  const cmd = parent.command(
+    argSpec ? `${token} ${argSpec}` : token,
+    hidden ? {hidden: true} : {},
+  );
   Object.defineProperty(cmd, COMMAND_DOCS, {value: {doc, fn}, configurable: true});
-  if (doc.summary) cmd.description(doc.summary);
+  // Help shows doc tokens as commands, the way `astryx docs` does.
+  if (doc.summary) cmd.description(renderTokens(doc.summary));
+  // An experimental command says so wherever its name is listed in help.
+  if (doc.stability === 'experimental') {
+    cmd.description(`[experimental] ${cmd.description() || ''}`.trimEnd());
+  }
+  if (doc.deprecated) {
+    const base = cmd.description() || '';
+    cmd.description(`${base} [DEPRECATED: ${doc.deprecated}]`);
+  }
 
   const paramDesc = (/** @type {string | undefined} */ name) =>
     (fn?.params ?? []).find(p => p.name === name)?.description ?? '';
@@ -132,21 +149,22 @@ export function defineCommand(parent, doc, {fn, action} = {}) {
     // its description instead.)
     if (arg.description) {
       const argument = cmd.registeredArguments?.find(a => a.name() === arg.name);
-      if (argument) argument.description = arg.description;
+      if (argument) argument.description = renderTokens(arg.description);
     }
   }
 
   for (const o of doc.options ?? []) {
     const desc = o.description ?? (o.param ? paramDesc(o.param) : '');
-    const option = cmd.createOption(o.flag, desc);
+    const option = cmd.createOption(o.flag, renderTokens(desc));
     if (o.default != null) option.default(o.default);
     cmd.addOption(option);
   }
 
-  // Help ends with the documented exit codes. `choices` stay in the option
-  // text: Commander `.choices()` would replace the api layer's
-  // ERR_INVALID_ARGUMENT validation.
-  addExitCodesHelp(cmd, doc.exitCodes);
+  // Help ends with the documented exit codes, the examples, and the docs
+  // route that reads the whole command. `choices` stay in the option text:
+  // Commander `.choices()` would replace the api layer's ERR_INVALID_ARGUMENT
+  // validation.
+  addDocHelp(cmd, doc);
 
   if (action) {
     // The recording seam. An action's job ends at "here is what I answered
@@ -163,6 +181,27 @@ export function defineCommand(parent, doc, {fn, action} = {}) {
     });
   }
   return cmd;
+}
+
+/**
+ * End `cmd`'s help with what its CommandDoc says: the exit codes, then the
+ * examples, then `More:`, the `astryx docs` route that reads the whole command.
+ * @param {import('commander').Command} cmd
+ * @param {import('@astryxdesign/cli/authoring').CommandDoc} doc
+ */
+export function addDocHelp(cmd, doc) {
+  addExitCodesHelp(cmd, doc.exitCodes);
+  // Rendered when help is shown, so the run prefix (pnpm exec astryx, yarn
+  // astryx, ...) is looked up then, not on every start.
+  cmd.addHelpText('after', () => {
+    const examples = (doc.examples ?? []).flatMap(({label, cli}) => [
+      ...(label ? [`  # ${label}`] : []),
+      `  ${formatCliCommand(cli)}`,
+    ]);
+    const more = `More: ${formatCliCommand(`docs cli/commands/${routeSegment(doc.name)}`)}`;
+    const blocks = examples.length > 0 ? [['Examples:', ...examples].join('\n'), more] : [more];
+    return `\n${text(blocks.join('\n\n')).toString()}`;
+  });
 }
 
 /**

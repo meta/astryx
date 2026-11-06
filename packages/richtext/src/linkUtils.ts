@@ -5,7 +5,7 @@
  * @input Uses only the DOM URL constructor (guarded via try/catch for SSR/edge).
  * @output Exports `sanitizeUrl`, `validateUrl`, and the URL/email matcher regexes
  *   used by the AutoLink wiring.
- * @position Experimental (lab) helper shared by RichTextEditorToolbar (link
+ * @position @astryxdesign/richtext helper shared by RichTextEditorToolbar (link
  *   button) and the AutoLink matchers in RichTextEditor. Kept dependency-free so
  *   both can import it without pulling in extra `@lexical/*` surface.
  *

@@ -141,7 +141,7 @@ export const docs = {
       name: 'padding',
       type: '0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10',
       description:
-        "Padding at the layout's outer edges using the spacing scale.",
+        "Padding at the layout's outer edges using the spacing scale. Applies to this Layout's own header, footer, panels, and content. A nested Layout does not inherit it: without `padding`, its regions use the enclosing Card, Section, or Dialog padding, or the default inset (spacing 4). That keeps a page Layout inside AppShell inset even though AppShell's own regions are full bleed.",
     },
     {
       name: 'defaultHasDividers',
@@ -169,6 +169,56 @@ export const docs = {
     ],
     anatomy,
   },
+  examples: [
+    {
+      label: 'Page with a details panel inside AppShell',
+      code: `
+function OrdersPage() {
+  return (
+    <AppShell
+      sideNav={
+        <SideNav>
+          <SideNavItem label="Orders" isSelected />
+          <SideNavItem label="Customers" />
+          <SideNavItem label="Settings" />
+        </SideNav>
+      }>
+      {/* No padding props needed: the page Layout's regions keep their
+          default inset inside AppShell's full-bleed content area. */}
+      <Layout
+        header={
+          <LayoutHeader hasDivider>
+            <Heading level={1}>Orders</Heading>
+          </LayoutHeader>
+        }
+        end={
+          <LayoutPanel
+            hasDivider
+            width={320}
+            role="complementary"
+            label="Order details">
+            <VStack gap={2}>
+              <Heading level={2}>Order #1042</Heading>
+              <Text type="body" color="secondary">
+                Shipped · 3 items · $184.00
+              </Text>
+            </VStack>
+          </LayoutPanel>
+        }
+        content={
+          <LayoutContent>
+            <Text type="body">
+              Select an order to see its shipping and payment details.
+            </Text>
+          </LayoutContent>
+        }
+      />
+    </AppShell>
+  );
+}
+`,
+    },
+  ],
 };
 
 /** @type {import('@astryxdesign/cli/authoring').ComponentTranslationDoc} */

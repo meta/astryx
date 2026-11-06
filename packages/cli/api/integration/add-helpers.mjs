@@ -4,9 +4,12 @@
  * @file Shared helpers for integration contribution writers.
  *
  * Hosts the atomic staged-write transaction, package.json files-array
- * maintenance, package-dir resolution, and project-path normalization that
- * every `integration add <kind>` command needs. Stateless and side-effect-free
- * outside of {@link applyWrites}.
+ * maintenance, package-dir resolution, project-path normalization, and the
+ * package and manifest plumbing (resolve the package, load its manifest, the
+ * receipt shape, name grammar) that every `integration add <kind>` command
+ * and the icon authoring writes (`experimental icon new-set`,
+ * `new-definition`) need. `theme add` and `theme build` write through the
+ * same transaction. Side-effect-free outside of {@link applyWrites}.
  */
 
 import * as fs from 'node:fs';
@@ -15,6 +18,8 @@ import {randomUUID} from 'node:crypto';
 import {AstryxError} from '../error.mjs';
 import {publishNewFile} from '../../foundation/fs/publish-file.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
+import {findLocalIntegrationManifestOrNull} from '../../foundation/integrations/manifest-writer.mjs';
+import {loadManifestObject} from '../../foundation/integrations/integrations.mjs';
 
 /** @param {string} value */
 export function projectPath(value) {
@@ -40,7 +45,7 @@ export function findPackageDir(startDir) {
 /**
  * @typedef {object} WritePlan
  * @property {string} path
- * @property {string} contents
+ * @property {string | Buffer} contents a Buffer is written byte for byte
  * @property {boolean} createOnly
  * @property {Buffer} [expectedOriginal] bytes captured before validation;
  *   a different current file is a concurrent edit and must never be overwritten
@@ -59,19 +64,29 @@ export function findPackageDir(startDir) {
  */
 
 /**
- * Compute one package.json update for an existing `files` allowlist and existing
- * `exports` map. Neither field is created: adding an exports map to a package
- * that has none would make every previously-open deep import private.
+ * @typedef {object} PackageJsonUpdateOptions
+ * @property {boolean} [createExports] create a subpath map when the package has
+ *   no exports field
+ * @property {string[]} [sideEffects] side-effect glob patterns to preserve when
+ *   package.json currently declares `sideEffects: false` or a pattern array
+ */
+
+/**
+ * Compute one package.json update for an existing `files` allowlist and an
+ * optional exports map. An exports map is created only when `createExports` is
+ * explicit because doing so makes every unlisted deep import private.
  *
  * @param {string} packageFile
  * @param {string[]} entries project-relative files or directories
  * @param {PackageExportEntry[]} [publicExports]
+ * @param {PackageJsonUpdateOptions} [options]
  * @returns {PackageJsonUpdate|null}
  */
 export function packageJsonFilesUpdate(
   packageFile,
   entries,
   publicExports = [],
+  {createExports = false, sideEffects = []} = {},
 ) {
   const expectedOriginal = fs.readFileSync(packageFile);
   const original = expectedOriginal.toString('utf-8');
@@ -116,11 +131,13 @@ export function packageJsonFilesUpdate(
     }
   }
 
-  if (pkg.exports !== undefined && publicExports.length > 0) {
+  if ((pkg.exports !== undefined || createExports) && publicExports.length > 0) {
     const authored = pkg.exports;
     /** @type {Record<string, unknown>} */
     let exportsMap;
-    if (
+    if (authored === undefined) {
+      exportsMap = {};
+    } else if (
       authored == null ||
       typeof authored !== 'object' ||
       Array.isArray(authored)
@@ -159,6 +176,36 @@ export function packageJsonFilesUpdate(
     if (changed || exportsMap !== authored) pkg.exports = exportsMap;
   }
 
+  if (sideEffects.length > 0 && pkg.sideEffects !== undefined) {
+    if (pkg.sideEffects === false) {
+      pkg.sideEffects = [...sideEffects];
+      changed = true;
+    } else if (Array.isArray(pkg.sideEffects)) {
+      if (
+        pkg.sideEffects.some(
+          (/** @type {unknown} */ item) => typeof item !== 'string',
+        )
+      ) {
+        throw new AstryxError(
+          'package.json sideEffects must be a boolean or an array of strings before Astryx can add theme CSS.',
+          undefined,
+          ERROR_CODES.ERR_INVALID_ARGUMENT,
+        );
+      }
+      for (const pattern of sideEffects) {
+        if (pkg.sideEffects.includes(pattern)) continue;
+        pkg.sideEffects.push(pattern);
+        changed = true;
+      }
+    } else if (pkg.sideEffects !== true) {
+      throw new AstryxError(
+        'package.json sideEffects must be a boolean or an array of strings before Astryx can add theme CSS.',
+        undefined,
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+      );
+    }
+  }
+
   if (!changed) return null;
   const indent = original.match(/\n([ \t]+)"/u)?.[1] ?? '  ';
   return {
@@ -175,6 +222,7 @@ export function packageJsonFilesUpdate(
  * @param {string} rootPath
  * @param {string} manifestName
  * @param {PackageExportEntry[]} [publicExports]
+ * @param {PackageJsonUpdateOptions} [options]
  * @returns {PackageJsonUpdate|null}
  */
 export function packageJsonUpdate(
@@ -182,31 +230,41 @@ export function packageJsonUpdate(
   rootPath,
   manifestName,
   publicExports = [],
+  options = {},
 ) {
   return packageJsonFilesUpdate(
     packageFile,
     [rootPath, manifestName],
     publicExports,
+    options,
   );
 }
 
 // ── Atomic staged-write transaction ─────────────────────────────────
 
-/** @param {string} file */
+/**
+ * @param {string} file
+ * @returns {boolean} false when the file is still there
+ */
 function removeTemporary(file) {
   try {
     fs.rmSync(file, {force: true});
+    return true;
   } catch {
     // Best effort. The transaction error remains the actionable failure.
+    return false;
   }
 }
 
 /**
  * Restore writes that already published.  Best-effort so callers preserve
- * the original actionable error.
+ * the original actionable error; returns every path it could not put back.
  * @param {Array<WritePlan & {temporary: string, original: Buffer|null, mode: number}>} published
+ * @returns {string[]}
  */
 function rollbackWrites(published) {
+  /** @type {string[]} */
+  const unrestored = [];
   for (const plan of [...published].reverse()) {
     let restore = null;
     try {
@@ -225,12 +283,18 @@ function rollbackWrites(published) {
         fs.renameSync(restore, plan.path);
         restore = null;
       }
-    } catch {
-      // Best effort. A concurrent edit belongs to its writer, not this rollback.
+    } catch (error) {
+      // A created file that is already gone needs nothing. Any other failure
+      // leaves this call's bytes, or no bytes, where the original was.
+      const gone =
+        error instanceof Error &&
+        /** @type {NodeJS.ErrnoException} */ (error).code === 'ENOENT';
+      if (!(gone && plan.original == null)) unrestored.push(plan.path);
     } finally {
       if (restore != null) removeTemporary(restore);
     }
   }
+  return unrestored;
 }
 
 /** @param {string} file */
@@ -325,10 +389,120 @@ export function applyWrites(plans) {
       }
       published.push(plan);
     }
-    return () => rollbackWrites(published);
+    return () => {
+      rollbackWrites(published);
+    };
   } catch (error) {
-    for (const plan of staged) removeTemporary(plan.temporary);
-    rollbackWrites(published);
+    const leftovers = staged
+      .filter(plan => !removeTemporary(plan.temporary))
+      .map(plan => plan.temporary);
+    const unrestored = rollbackWrites(published);
+    if (error instanceof Error) {
+      if (unrestored.length > 0) {
+        error.message += ` Could not restore: ${unrestored.join(', ')}.`;
+      }
+      if (leftovers.length > 0) {
+        error.message += ` Could not remove temporary files: ${leftovers.join(', ')}.`;
+      }
+    }
     throw error;
   }
+}
+
+// ── Shared by every contribution writer (integration add, icon authoring) ──
+
+/** A lower-kebab name: an item id, a set name. */
+export const KEBAB_NAME_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
+
+/**
+ * Read package identity + resolve the manifest path.
+ * @param {string} cwd
+ */
+export function resolvePackage(cwd) {
+  const packageDir = findPackageDir(cwd);
+  const packageFile = path.join(packageDir, 'package.json');
+  /** @type {any} */
+  let pkg;
+  try {
+    pkg = JSON.parse(fs.readFileSync(packageFile, 'utf-8'));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new AstryxError(
+      `Cannot read package.json: ${message}`,
+      undefined,
+      ERROR_CODES.ERR_INVALID_ARGUMENT,
+    );
+  }
+  const owner = typeof pkg.name === 'string' ? pkg.name : '(local integration)';
+  const existingManifest = findLocalIntegrationManifestOrNull(packageDir);
+  // The nearest package.json above the cwd may belong to another package (an
+  // app that contains the folder). Only a package that is already an
+  // integration is found from a subfolder; the first add runs in the package.
+  const here = path.resolve(cwd ?? process.cwd());
+  if (existingManifest == null && path.resolve(packageDir) !== here) {
+    throw new AstryxError(
+      `${here} has no package.json. The nearest is ${packageFile} (${owner}), which is not an Astryx integration yet. Run this in your integration package's own directory, next to its package.json.`,
+      undefined,
+      ERROR_CODES.ERR_INVALID_ARGUMENT,
+    );
+  }
+  const manifestFile =
+    existingManifest ?? path.join(packageDir, 'astryx.integration.mjs');
+  return {
+    packageDir,
+    packageFile,
+    pkg,
+    owner,
+    manifestFile,
+    manifestExists: existingManifest != null,
+  };
+}
+
+/**
+ * Load the current manifest's parsed object (or an empty object when no
+ * manifest exists yet).
+ * @param {string} manifestFile
+ * @param {boolean} manifestExists
+ * @returns {Promise<import('../../authoring/integration/type').AstryxIntegration>}
+ */
+export async function loadCurrentManifest(manifestFile, manifestExists) {
+  if (!manifestExists) return {};
+  return loadManifestObject(
+    manifestFile,
+    `Integration manifest ${path.basename(manifestFile)}`,
+    {fresh: true},
+  );
+}
+
+/**
+ * Build and return the common receipt shape.
+ * @template {import('./integration-authoring.type.mjs').IntegrationAddData['kind'] | import('../icon/icon.type.mjs').IconNewData['kind']} K
+ * @param {K} kind
+ * @param {string} name
+ * @param {{path: string, created: boolean}|null} root
+ * @param {string} manifestPath
+ * @param {string[]} files
+ * @param {boolean} dryRun
+ * @returns {{type: 'integration.add', data: Omit<import('./integration-authoring.type.mjs').IntegrationAddData, 'kind'> & {kind: K, icons?: number, refreshed?: boolean, renamed?: Array<{from: string, to: string}>, mapped?: Array<{definition: string, icon: string}>, suggestions?: Array<{definition: string, icon: string, word: string}>, notes?: string[]}}}
+ */
+export function receipt(kind, name, root, manifestPath, files, dryRun) {
+  return {
+    type: 'integration.add',
+    data: {
+      kind,
+      name,
+      root,
+      manifest: manifestPath,
+      files,
+      written: !dryRun,
+      dryRun,
+    },
+  };
+}
+
+/** @param {string} slug */
+export function kebabToTitle(slug) {
+  const words = slug.split(/[-_]+/u).filter(Boolean);
+  if (words.length === 0) return slug;
+  return words.map(word => word[0].toUpperCase() + word.slice(1)).join(' ');
 }

@@ -3,7 +3,8 @@
 /**
  * @file Real package-boundary coverage for integration authoring. Authors a
  * provider through the CLI, packs it, installs the tarball into a separate
- * no-config consumer, then exercises packed docs, codemods, and source themes.
+ * no-config consumer, then exercises packed docs, codemods, built themes, and
+ * explicit source ejection.
  */
 
 import {afterEach, describe, expect, it} from 'vitest';
@@ -201,6 +202,15 @@ export const oceanTheme = defineTheme({
 });
 `,
     );
+    const providerBuild = await runCli(
+      ['theme', 'build', 'themes/ocean/oceanTheme.ts', '--json'],
+      providerDir,
+    );
+    expect(providerBuild.status, providerBuild.stderr).toBe(0);
+    expect(parseEnvelope(providerBuild.stdout)).toMatchObject({
+      type: 'theme.build',
+      data: {name: 'ocean'},
+    });
 
     const providerPackage = JSON.parse(
       fs.readFileSync(path.join(providerDir, 'package.json'), 'utf-8'),
@@ -214,7 +224,7 @@ export const oceanTheme = defineTheme({
     ]);
 
     const checked = await runCli(
-      ['integration', 'pack', '--check', '--json'],
+      ['integration', 'verify', '--json'],
       providerDir,
     );
     expect(checked.status, checked.stderr).toBe(0);
@@ -313,8 +323,8 @@ export const oceanTheme = defineTheme({
     expect(fs.lstatSync(alternateInstalledDir).isSymbolicLink()).toBe(false);
 
     // The consumer installs both providers from tarballs. Link this checkout's
-    // Core package as the consumer's normal app dependency so the copied source
-    // can resolve the same peer it would get from `npm install @astryxdesign/core`.
+    // Core package as the consumer's normal app dependency so an ejected source
+    // can build against the same peer it would get from `npm install @astryxdesign/core`.
     const coreScope = path.join(consumerDir, 'node_modules', '@astryxdesign');
     const coreLink = path.join(coreScope, 'core');
     fs.mkdirSync(coreScope, {recursive: true});
@@ -427,7 +437,7 @@ export const oceanTheme = defineTheme({
     }
 
     const ambiguous = await runCli(
-      ['theme', 'add', 'ocean', 'src/themes/ambiguous', '--json'],
+      ['theme', 'add', 'ocean', '--json'],
       consumerDir,
     );
     expect(ambiguous.status).not.toBe(0);
@@ -435,11 +445,50 @@ export const oceanTheme = defineTheme({
       code: 'ERR_AMBIGUOUS_THEME',
     });
 
+    const addedTheme = await runCli(
+      [
+        'theme',
+        'add',
+        'ocean',
+        '--import',
+        '--package',
+        '@acme/brand-integration',
+        '--json',
+      ],
+      consumerDir,
+    );
+    expect(addedTheme.status, addedTheme.stderr).toBe(0);
+    expect(parseEnvelope(addedTheme.stdout)).toMatchObject({
+      type: 'theme.app',
+      data: {
+        default: 'ocean',
+        change: {action: 'add', slug: 'ocean', changed: true},
+        themes: [
+          {
+            slug: 'ocean',
+            owner: '@acme/brand-integration',
+            module: '@acme/brand-integration/themes/ocean',
+            stylesheet: '@acme/brand-integration/themes/ocean.css',
+          },
+        ],
+      },
+    });
+    const generatedModule = fs.readFileSync(
+      path.join(consumerDir, 'src', 'astryx-themes.js'),
+      'utf-8',
+    );
+    expect(generatedModule).toContain(
+      'from "@acme/brand-integration/themes/ocean"',
+    );
+    expect(generatedModule).toContain(
+      'import "@acme/brand-integration/themes/ocean.css"',
+    );
+
     const target = path.join('src', 'themes', 'acme-ocean');
     const copied = await runCli(
       [
         'theme',
-        'add',
+        'eject',
         'ocean',
         target,
         '--package',
@@ -450,17 +499,17 @@ export const oceanTheme = defineTheme({
     );
     expect(copied.status, copied.stderr).toBe(0);
     expect(parseEnvelope(copied.stdout)).toMatchObject({
-      type: 'theme.add',
+      type: 'theme.eject',
       data: {
         slug: 'ocean',
         package: '@acme/brand-integration',
         outputDir: target,
-        files: [
+        files: expect.arrayContaining([
           'oceanTheme.ts',
           'oceanTheme.doc.mjs',
           'tokens/ocean.palette.receipt.json',
           'tokens/ocean.palette.ts',
-        ],
+        ]),
       },
     });
     expect(
@@ -501,7 +550,7 @@ export const oceanTheme = defineTheme({
     const duplicate = await runCli(
       [
         'theme',
-        'add',
+        'eject',
         'ocean',
         target,
         '--package',
@@ -517,7 +566,7 @@ export const oceanTheme = defineTheme({
     const overwritten = await runCli(
       [
         'theme',
-        'add',
+        'eject',
         'ocean',
         target,
         '--package',
@@ -528,7 +577,7 @@ export const oceanTheme = defineTheme({
       consumerDir,
     );
     expect(overwritten.status, overwritten.stderr).toBe(0);
-    expect(parseEnvelope(overwritten.stdout).type).toBe('theme.add');
+    expect(parseEnvelope(overwritten.stdout).type).toBe('theme.eject');
 
     const installedCodemod = path.join(
       installedDir,
@@ -594,7 +643,7 @@ export const oceanTheme = defineTheme({
     const corruptedInstall = await runCli(
       [
         'theme',
-        'add',
+        'eject',
         'ocean',
         'src/themes/corrupted',
         '--package',

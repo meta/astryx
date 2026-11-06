@@ -20,7 +20,6 @@
     "generate-a11y-manifest": "tsx src/generate-a11y-manifest.ts",
     "report:build": "tsx src/build-report.ts",
     "report:dev": "tsx src/build-report.ts --dev",
-    "report:deploy": "tsx src/deploy-report.ts",
     "preview:dev": "vite --config app/vite.config.preview.ts",
     "preview:build": "vite build --config app/vite.config.preview.ts",
     "screenshot:previews": "tsx src/screenshot-previews.ts",

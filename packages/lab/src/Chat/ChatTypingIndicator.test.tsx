@@ -1,9 +1,20 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {describe, it, expect} from 'vitest';
+import {StrictMode} from 'react';
+import {beforeEach, describe, it, expect, vi} from 'vitest';
 import {render, screen} from '@testing-library/react';
 import {ChatTypingIndicator} from './ChatTypingIndicator';
 import {InternationalizationProvider} from '@astryxdesign/core/i18n';
+
+const announce = vi.fn();
+vi.mock('@astryxdesign/core/hooks', async importOriginal => ({
+  ...(await importOriginal<typeof import('@astryxdesign/core/hooks')>()),
+  useAnnounce: () => announce,
+}));
+
+beforeEach(() => {
+  announce.mockClear();
+});
 
 describe('ChatTypingIndicator', () => {
   it('renders "X is typing…" for one name', () => {
@@ -83,5 +94,59 @@ describe('ChatTypingIndicator', () => {
     expect(screen.getByTestId('typing').className).toContain(
       'astryx-chat-typing-indicator',
     );
+  });
+
+  describe('status announcement (spec:AST-086)', () => {
+    it('mounts with its label but carries no live role (FR2)', () => {
+      const {container} = render(<ChatTypingIndicator names={['Ana']} />);
+      const root = container.firstElementChild as HTMLElement;
+      expect(root).toHaveTextContent('Ana is typing…');
+      expect(root).not.toHaveAttribute('role');
+      expect(root).not.toHaveAttribute('aria-live');
+      expect(screen.queryByRole('status')).toBeNull();
+    });
+
+    it('announces a mounted label once through the polite channel, even under StrictMode (FR2, FR6)', () => {
+      const {rerender} = render(
+        <StrictMode>
+          <ChatTypingIndicator names={['Ana']} />
+        </StrictMode>,
+      );
+      rerender(
+        <StrictMode>
+          <ChatTypingIndicator names={['Ana']} />
+        </StrictMode>,
+      );
+      expect(announce.mock.calls).toEqual([['Ana is typing…', 'polite']]);
+    });
+
+    it('announces each new label, nothing on clear, and the same people again as a new occasion (FR6)', () => {
+      const {rerender} = render(<ChatTypingIndicator names={[]} />);
+      expect(announce).not.toHaveBeenCalled();
+      rerender(<ChatTypingIndicator names={['Ana']} />);
+      rerender(<ChatTypingIndicator names={['Ana', 'Ben']} />);
+      rerender(<ChatTypingIndicator names={[]} />);
+      rerender(<ChatTypingIndicator names={['Ana', 'Ben']} />);
+      expect(announce.mock.calls).toEqual([
+        ['Ana is typing…', 'polite'],
+        ['Ana and Ben are typing…', 'polite'],
+        ['Ana and Ben are typing…', 'polite'],
+      ]);
+    });
+
+    it('leaves delivery to an enclosing chat log (FR4)', () => {
+      const {rerender} = render(
+        <div role="log">
+          <ChatTypingIndicator names={['Ana']} />
+        </div>,
+      );
+      rerender(
+        <div role="log">
+          <ChatTypingIndicator names={['Ana', 'Ben']} />
+        </div>,
+      );
+      expect(announce).not.toHaveBeenCalled();
+      expect(screen.queryByRole('status')).toBeNull();
+    });
   });
 });

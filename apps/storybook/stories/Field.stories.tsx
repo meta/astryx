@@ -4,7 +4,12 @@ import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import * as stylex from '@stylexjs/stylex';
 import {Field} from '@astryxdesign/core/Field';
+import {FormLayout} from '@astryxdesign/core/FormLayout';
 import {TextInput} from '@astryxdesign/core/TextInput';
+import {HStack} from '@astryxdesign/core/HStack';
+import {Icon} from '@astryxdesign/core/Icon';
+import {Selector} from '@astryxdesign/core/Selector';
+import {StackItem} from '@astryxdesign/core/Stack';
 import {EnvelopeIcon} from '@heroicons/react/24/outline';
 import {
   colorVars,
@@ -307,4 +312,139 @@ export const StatusVariants: Story = {
       </div>
     );
   },
+};
+
+function OrdersFilterBar({wrap = 'wrap'}: {wrap?: 'wrap' | 'nowrap'}) {
+  const [query, setQuery] = useState('');
+  const [status, setStatus] = useState('Awaiting fulfillment');
+  const [region, setRegion] = useState('All regions');
+  const [sort, setSort] = useState('Newest first');
+  return (
+    <HStack gap={2} wrap={wrap} vAlign="center">
+      <StackItem size="fill">
+        <TextInput
+          label="Search orders"
+          isLabelHidden
+          placeholder="Search by order or customer"
+          startIcon={<Icon icon="search" />}
+          value={query}
+          onChange={setQuery}
+        />
+      </StackItem>
+      <Selector
+        label="Status"
+        isLabelHidden
+        options={[
+          'All statuses',
+          'Awaiting fulfillment',
+          'Shipped',
+          'Delivered',
+          'Returned',
+        ]}
+        value={status}
+        onChange={setStatus}
+      />
+      <Selector
+        label="Region"
+        isLabelHidden
+        options={['All regions', 'North America', 'Europe', 'Asia Pacific']}
+        value={region}
+        onChange={setRegion}
+      />
+      <Selector
+        label="Sort"
+        isLabelHidden
+        options={['Newest first', 'Oldest first', 'Highest total']}
+        value={sort}
+        onChange={setSort}
+      />
+    </HStack>
+  );
+}
+
+const frameCaption = {
+  fontSize: 12,
+  color: 'var(--color-text-secondary)',
+  marginBottom: 8,
+};
+
+/**
+ * Comparison fixture for Field-owned structural states: horizontal labels,
+ * a detached status with explicit description/status wiring, and a group label.
+ */
+export const StructuralStates: Story = {
+  render: () => {
+    const [value, setValue] = useState('');
+    return (
+      <div style={{maxWidth: 560}}>
+        <FormLayout direction="horizontal-labels">
+          <Field
+            label="Workspace name"
+            inputID="audit-workspace"
+            description="Used in navigation and invitations."
+            descriptionID="audit-workspace-help"
+            status={{
+              type: 'warning',
+              message: 'Choose a name before continuing.',
+              messageID: 'audit-workspace-status',
+            }}
+            statusVariant="detached">
+            <NativeInput
+              id="audit-workspace"
+              describedBy="audit-workspace-help audit-workspace-status"
+              placeholder="Design systems"
+              value={value}
+              onChange={setValue}
+            />
+          </Field>
+          <Field
+            label="Visibility"
+            inputID="audit-visibility"
+            labelID="audit-visibility-label"
+            isGroupLabel>
+            <div
+              id="audit-visibility"
+              role="radiogroup"
+              aria-labelledby="audit-visibility-label">
+              <label>
+                <input type="radio" name="audit-visibility" defaultChecked />
+                Private
+              </label>{' '}
+              <label>
+                <input type="radio" name="audit-visibility" /> Public
+              </label>
+            </div>
+          </Field>
+        </FormLayout>
+      </div>
+    );
+  },
+};
+
+/**
+ * The Field.doc.mjs "Filter bar" example (a search TextInput and three
+ * Selectors) in a 390px phone frame, a 768px tablet frame, and at full width.
+ * The last frame is the same bar without `wrap` at 390px: its fields now
+ * shrink inside the frame instead of pushing past it, which is why filter bars
+ * should wrap on phones.
+ */
+export const FilterBar: Story = {
+  render: () => (
+    <div style={{display: 'flex', flexDirection: 'column', gap: 24}}>
+      {[390, 768].map(width => (
+        <div key={width} style={{width, outline: '1px dashed #ccc'}}>
+          <p style={frameCaption}>{width}px, wrap</p>
+          <OrdersFilterBar />
+        </div>
+      ))}
+      <div>
+        <p style={frameCaption}>Full width, wrap</p>
+        <OrdersFilterBar />
+      </div>
+      <div style={{width: 390, outline: '1px dashed #ccc'}}>
+        <p style={frameCaption}>390px, no wrap: fields shrink inside the row</p>
+        <OrdersFilterBar wrap="nowrap" />
+      </div>
+    </div>
+  ),
 };

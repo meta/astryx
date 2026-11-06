@@ -7,6 +7,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';
+import {createHash} from 'node:crypto';
+import {undefinedGeneratedVariables} from './undefinedVariables';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -14,9 +16,11 @@ const LIBRARY_PATTERN = 'node_modules/@astryxdesign/';
 const STYLEX_CSS_PATH = '/virtual:stylex.css';
 
 /**
- * Browser targets for lightningcss (opt-in).
- * Only needed if your StyleX version lowers light-dark() without them.
- * Exported for consumers who want to opt in explicitly.
+ * Browser targets matching Astryx's native `light-dark()` support floor.
+ *
+ * These are the source-build default so Lightning CSS preserves
+ * `light-dark()` instead of lowering it into helper variables. Consumers may
+ * supply a stricter supported floor when their product requires one.
  */
 export const LIGHTNINGCSS_TARGETS = {
   chrome: 123 << 16,
@@ -69,10 +73,12 @@ export interface AstryxVitePluginOptions {
   };
 
   /**
-   * LightningCSS browser targets. Only needed if your StyleX version
-   * lowers light-dark() without them. Most recent versions preserve
-   * light-dark() by default.
-   * @default undefined (no targets set)
+   * Lightning CSS browser targets.
+   *
+   * Defaults to Astryx's native `light-dark()` support floor. Older targets
+   * may lower `light-dark()` and are outside the supported theme contract.
+   *
+   * @default LIGHTNINGCSS_TARGETS
    */
   lightningcssTargets?: Record<string, number>;
 
@@ -124,27 +130,41 @@ export function astryxStylex(
     rootDir = process.cwd(),
     libraryPattern = LIBRARY_PATTERN,
     layers = {},
-    lightningcssTargets,
+    lightningcssTargets = LIGHTNINGCSS_TARGETS,
     stylexPrefix = 'astryx',
     stylexOverrides = {},
   } = opts;
 
   const libraryLayer = layers.library ?? 'astryx-base';
   const productLayer = layers.product ?? 'product';
+  // Library files compile with `stylexPrefix`, product files with StyleX's
+  // `classNamePrefix` (the babel wrapper routes them).
+  const classNamePrefixes = [
+    stylexPrefix,
+    (stylexOverrides as {classNamePrefix?: string}).classNamePrefix ?? 'x',
+  ];
 
-  // Build StyleX options with sensible defaults
+  const overrideLightningcssOptions = (
+    stylexOverrides as {lightningcssOptions?: Record<string, unknown>}
+  ).lightningcssOptions;
+
+  // Build StyleX options with sensible defaults. Merge Lightning CSS options
+  // separately so an unrelated override cannot silently discard the browser
+  // floor that keeps theme values native.
   const stylexOptions: Record<string, unknown> = {
     dev,
     runtimeInjection: false,
+    propertyValidationMode: 'throw',
     treeshakeCompensation: true,
     unstable_moduleResolution: {
       type: 'commonJS',
       rootDir,
     },
-    ...(lightningcssTargets && {
-      lightningcssOptions: {targets: lightningcssTargets},
-    }),
     ...stylexOverrides,
+    lightningcssOptions: {
+      targets: lightningcssTargets,
+      ...overrideLightningcssOptions,
+    },
   };
 
   // Inject our babel wrapper as a user plugin — it runs before the
@@ -202,18 +222,35 @@ export function astryxStylex(
         // Fallback to just @astryxdesign/core if discovery fails
       }
 
+      const corePackageDir = path.resolve(
+        rootDir,
+        'node_modules/@astryxdesign/core',
+      );
+      const coreSourceDir = path.join(corePackageDir, 'src');
+
       return {
         resolve: {
-          alias: {
-            '@astryxdesign/core/theme/tokens.stylex': path.resolve(
-              rootDir,
-              'node_modules/@astryxdesign/core/src/theme/tokens.stylex.ts',
-            ),
-            '@astryxdesign/core': path.resolve(
-              rootDir,
-              'node_modules/@astryxdesign/core/src',
-            ),
-          },
+          alias: [
+            {
+              find: /^@astryxdesign\/core\/locales\/(.+)\.generated\.js$/,
+              replacement: path.join(
+                coreSourceDir,
+                'i18n/generated-locales/$1.generated.ts',
+              ),
+            },
+            {
+              find: /^@astryxdesign\/core\/locales\/(.+)\.json$/,
+              replacement: path.join(corePackageDir, 'locales/$1.json'),
+            },
+            {
+              find: '@astryxdesign/core/theme/tokens.stylex',
+              replacement: path.join(coreSourceDir, 'theme/tokens.stylex.ts'),
+            },
+            {
+              find: '@astryxdesign/core',
+              replacement: coreSourceDir,
+            },
+          ],
         },
         optimizeDeps: {
           exclude: xdsPackages,
@@ -254,6 +291,7 @@ export function astryxStylex(
                 libraryPattern,
                 libraryLayer,
                 productLayer,
+                classNamePrefixes,
               }),
             );
           },
@@ -272,6 +310,7 @@ export function astryxStylex(
       libraryLayer,
       productLayer,
       lightningcssOptions: stylexOptions.lightningcssOptions,
+      classNamePrefixes,
     }),
   ];
 }
@@ -281,6 +320,10 @@ export function astryxStylex(
  * render each half into its cascade layer: Astryx's own styles into the library
  * layer (below `astryx-theme`, so a theme can override them), product styles
  * into the product layer (above it, so an app always wins).
+ *
+ * The split output is written to one dedicated shared stylesheet. Keeping the
+ * collected rules out of an entry-owned CSS asset lets every HTML entry load
+ * the same StyleX output without also importing another page's authored CSS.
  *
  * This is the one implementation. The dev middleware and the build hook differ
  * only in when they run and what they do with the string — the partition itself
@@ -296,24 +339,43 @@ function renderSplitLayers(
     libraryPattern: string;
     libraryLayer: string;
     productLayer: string;
+    /** The StyleX class-name prefixes in play: library, then product. */
+    classNamePrefixes: readonly string[];
   },
 ): string {
   if (!rulesById || rulesById.size === 0) return '';
 
   const libraryRules: unknown[] = [];
   const productRules: unknown[] = [];
+  // `defineConsts` values. A file that reads a constant compiles it to a
+  // placeholder, `var(--<prefix><hash>)`, and `processStylexRules` substitutes
+  // the value from the defining file's rules, but only among the rules it is
+  // given. The defining file and the reading one can sit on opposite sides of
+  // the split, so every layer gets every constant, under every class-name
+  // prefix (see constantRulesForEveryPrefix). Constant rules emit no CSS of
+  // their own, so repeating them adds nothing to the output.
+  const collectedConstants: unknown[] = [];
 
   for (const [filePath, rules] of rulesById.entries()) {
-    if (filePath.includes(options.libraryPattern)) {
-      libraryRules.push(...rules);
-    } else {
-      productRules.push(...rules);
+    const own = filePath.includes(options.libraryPattern)
+      ? libraryRules
+      : productRules;
+    for (const rule of rules) {
+      if (isConstantRule(rule)) {
+        collectedConstants.push(rule);
+      } else {
+        own.push(rule);
+      }
     }
   }
 
+  const constantRules = constantRulesForEveryPrefix(
+    collectedConstants,
+    options.classNamePrefixes,
+  );
   const render = (rules: unknown[], layer: string) =>
     rules.length
-      ? `@layer ${layer} {\n${stylexBabelPlugin.processStylexRules(rules as never, {useLayers: true})}\n}`
+      ? `@layer ${layer} {\n${stylexBabelPlugin.processStylexRules([...constantRules, ...rules] as never, {useLayers: true})}\n}`
       : '';
 
   return [
@@ -325,6 +387,56 @@ function renderSplitLayers(
 }
 
 /**
+ * Each `defineConsts` rule once under every class-name prefix in play.
+ *
+ * StyleX keys a constant by its defining file's prefix, `<prefix><hash>` (or
+ * `<name>-<prefix><hash>` with debug class names), where the hash depends on
+ * the export and key alone, and a file that reads it writes the placeholder
+ * with its own prefix. An Astryx package compiles with the library prefix and
+ * an app with the product one, so an app reading a package's constant writes
+ * `var(--x<hash>)` while the package's rule is keyed `astryx<hash>`; the
+ * copies make every prefix's placeholder resolve. A key StyleX took verbatim
+ * (`'--name'`) carries no prefix and is kept as it is.
+ */
+function constantRulesForEveryPrefix(
+  rules: readonly unknown[],
+  prefixes: readonly string[],
+): unknown[] {
+  const ordered = [...new Set(prefixes)]
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+  const out: unknown[] = [];
+  const keys = new Set<string>();
+  const add = (rule: unknown[], key: string) => {
+    if (keys.has(key)) return;
+    keys.add(key);
+    const [, body, ...rest] = rule;
+    out.push([key, {...(body as object), constKey: key}, ...rest]);
+  };
+  for (const rule of rules as unknown[][]) {
+    const key = String((rule[1] as {constKey: unknown}).constKey);
+    add(rule, key);
+    for (const prefix of ordered) {
+      const match = new RegExp(`^(|.*-)${prefix}([0-9a-z]+)$`).exec(key);
+      if (match == null) continue;
+      for (const other of ordered) {
+        add(rule, `${match[1]}${other}${match[2]}`);
+      }
+      break;
+    }
+  }
+  return out;
+}
+
+/** A `defineConsts` value as StyleX collects it: a rule with `constKey`/`constVal`. */
+function isConstantRule(rule: unknown): boolean {
+  const body = Array.isArray(rule)
+    ? (rule[1] as {constKey?: unknown; constVal?: unknown} | undefined)
+    : undefined;
+  return body?.constKey != null && body?.constVal != null;
+}
+
+/**
  * The build half of the split. StyleX appends one merged block of CSS to the
  * build's stylesheet, in its own top-level `@layer priority1…priorityN` — which
  * is declared after `@layer reset, astryx-base, astryx-theme, product;` and so
@@ -333,11 +445,12 @@ function renderSplitLayers(
  * component overrides were silently dropped in the built app while working in
  * dev.
  *
- * This replaces that merged block with the partitioned pair. It runs in
- * `writeBundle` because StyleX emits through two different paths depending on
- * whether the bundle already has a stylesheet to append to (`generateBundle`)
- * or has to write its own file (`writeBundle`) — on disk, after both, there is
- * one case instead of two.
+ * This removes that merged block from the entry-owned stylesheet, writes the
+ * partitioned pair to a dedicated shared stylesheet, and links it from every
+ * built HTML page. It runs in `writeBundle` because StyleX emits through two
+ * different paths depending on whether the bundle already has a stylesheet to
+ * append to (`generateBundle`) or has to write its own file (`writeBundle`) —
+ * on disk, after both, there is one case instead of two.
  *
  * The block is located by an exact match against StyleX's own collector rather
  * than by looking for `@layer priority1`: a wrong guess about where the block
@@ -352,6 +465,8 @@ function buildLayerSplitPlugin(
     libraryLayer: string;
     productLayer: string;
     lightningcssOptions?: unknown;
+    /** The StyleX class-name prefixes in play: library, then product. */
+    classNamePrefixes: readonly string[];
   },
 ): Plugin {
   const stylex = basePlugin as {
@@ -367,7 +482,7 @@ function buildLayerSplitPlugin(
     configResolved(config) {
       base = config.base ?? '/';
     },
-    writeBundle(outputOptions) {
+    writeBundle(outputOptions, bundle) {
       const rulesById = stylex.__stylexGetSharedStore?.().rulesById;
       if (!rulesById || rulesById.size === 0) return;
 
@@ -379,6 +494,42 @@ function buildLayerSplitPlugin(
         options.lightningcssOptions,
       );
 
+      // An app's own stylesheets declare its own custom properties.
+      const emittedCss = Object.values(bundle)
+        .filter(
+          (output): output is Extract<typeof output, {type: 'asset'}> =>
+            output.type === 'asset' && output.fileName.endsWith('.css'),
+        )
+        .map(asset =>
+          typeof asset.source === 'string'
+            ? asset.source
+            : Buffer.from(asset.source).toString('utf8'),
+        );
+      const undeclared = undefinedGeneratedVariables(
+        split,
+        options.classNamePrefixes,
+        emittedCss,
+      );
+      if (undeclared.length > 0) {
+        this.warn(
+          'astryx-build-layer-split: the StyleX stylesheet reads ' +
+            `${undeclared.length} generated custom ` +
+            `propert${undeclared.length === 1 ? 'y' : 'ies'} ` +
+            'that no stylesheet in the build declares:\n' +
+            undeclared
+              .map(
+                name =>
+                  `  ${name}, read by: ${rulesReading(split, name).join(' ') || '(rule not found)'}`,
+              )
+              .join('\n') +
+            '\nWith no declaration, browsers drop the declarations that read ' +
+            'it. A `.stylex.ts` export read in a style must be a ' +
+            '`defineVars`/`defineConsts` value whose module reaches the build; ' +
+            'a property the app sets at runtime (an inline style) needs a name ' +
+            'outside the StyleX class-name prefixes.',
+        );
+      }
+
       const outDir = outputOptions.dir
         ? outputOptions.dir
         : outputOptions.file
@@ -388,19 +539,16 @@ function buildLayerSplitPlugin(
       // patch and nothing was shipped, so this is not a failure.
       if (!outDir || !fs.existsSync(outDir)) return;
 
-      const patched: string[] = [];
+      const containingFiles: Array<{file: string; css: string; at: number}> =
+        [];
       for (const file of listCssFiles(outDir)) {
         const css = fs.readFileSync(file, 'utf-8');
         const at = css.lastIndexOf(merged);
         if (at === -1) continue;
-        fs.writeFileSync(
-          file,
-          css.slice(0, at) + split + css.slice(at + merged.length),
-        );
-        patched.push(file);
+        containingFiles.push({file, css, at});
       }
 
-      if (patched.length === 0) {
+      if (containingFiles.length === 0) {
         this.error(
           'astryx-build-layer-split: StyleX emitted rules but its CSS block ' +
             `was not found in any stylesheet under ${outDir}, so Astryx and ` +
@@ -412,9 +560,40 @@ function buildLayerSplitPlugin(
         return;
       }
 
-      linkOrphanStylesheets(outDir, patched, base);
+      if (listHtmlFiles(outDir).length === 0) {
+        for (const {file, css, at} of containingFiles) {
+          fs.writeFileSync(
+            file,
+            css.slice(0, at) + split + css.slice(at + merged.length),
+          );
+        }
+        return;
+      }
+
+      for (const {file, css, at} of containingFiles) {
+        fs.writeFileSync(
+          file,
+          css.slice(0, at) + css.slice(at + merged.length),
+        );
+      }
+
+      const hash = createHash('sha256').update(split).digest('hex').slice(0, 8);
+      const sharedStylesheet = path.join(
+        path.dirname(containingFiles[0].file),
+        `astryx-stylex-${hash}.css`,
+      );
+      fs.writeFileSync(sharedStylesheet, split);
+      linkStylesheetsForEveryPage(outDir, [sharedStylesheet], base);
     },
   };
+}
+
+/** The rules of `css` that read `name`, for the failure message. */
+function rulesReading(css: string, name: string): string[] {
+  return [...css.matchAll(/[^{}]+\{[^{}]*\}/g)]
+    .map(match => match[0].trim().replace(/\s+/g, ' '))
+    .filter(rule => rule.includes(`var(${name}`))
+    .slice(0, 3);
 }
 
 /** Every `.css` file under a directory, recursively. */
@@ -440,20 +619,21 @@ function listHtmlFiles(dir: string): string[] {
 }
 
 /**
- * Link a stylesheet the build wrote but no page loads.
+ * Ensure every built page loads the stylesheet containing StyleX's rules.
  *
  * When an app imports no CSS of its own, StyleX has no bundle asset to append
  * to, so it writes `assets/stylex.css` itself — outside Rollup's graph, which
- * means Vite's HTML plugin never learns about it and emits no `<link>`. The app
- * ships every Astryx style correctly split into layers, and a completely
- * unstyled page. Importing any stylesheet hides it, which is why it survives:
- * the moment a project has one line of its own CSS the symptom disappears.
+ * means Vite's HTML plugin never learns about it and emits no `<link>`. In a
+ * multi-page build, Vite can also attach the one merged StyleX stylesheet to
+ * only one entry. The other pages then ship valid compiled classes but load no
+ * rules for them.
  *
- * Only orphans are linked. A stylesheet already referenced by a page is Vite's,
- * and touching it would duplicate the load. A build with no HTML at all —
- * library mode — is left alone: its consumer imports the CSS themselves.
+ * Check each page independently. A stylesheet already referenced by that page
+ * is left alone; a missing reference is inserted exactly once. A build with no
+ * HTML at all — library mode — is left alone because its consumer imports the
+ * CSS themselves.
  */
-function linkOrphanStylesheets(
+function linkStylesheetsForEveryPage(
   outDir: string,
   cssFiles: string[],
   base: string,
@@ -461,25 +641,23 @@ function linkOrphanStylesheets(
   const pages = listHtmlFiles(outDir);
   if (pages.length === 0) return;
 
-  const orphans = cssFiles.filter(css => {
-    const name = path.basename(css);
-    return !pages.some(page => fs.readFileSync(page, 'utf-8').includes(name));
-  });
-  if (orphans.length === 0) return;
-
-  const links = orphans
-    .map(css => {
-      const href =
-        base.replace(/\/$/, '') +
-        '/' +
-        path.relative(outDir, css).split(path.sep).join('/');
-      return `<link rel="stylesheet" crossorigin href="${href}">`;
-    })
-    .join('\n    ');
-
   for (const page of pages) {
     const html = fs.readFileSync(page, 'utf-8');
     if (!html.includes('</head>')) continue;
+
+    const missing = cssFiles.filter(css => !html.includes(path.basename(css)));
+    if (missing.length === 0) continue;
+
+    const links = missing
+      .map(css => {
+        const href =
+          base.replace(/\/$/, '') +
+          '/' +
+          path.relative(outDir, css).split(path.sep).join('/');
+        return `<link rel="stylesheet" crossorigin href="${href}">`;
+      })
+      .join('\n    ');
+
     fs.writeFileSync(page, html.replace('</head>', `  ${links}\n  </head>`));
   }
 }
@@ -527,19 +705,43 @@ function astryxStylexLegacy(options: AstryxVitePluginLegacyOptions): Plugin[] {
   const libraryLayer = layers.library ?? 'astryx-base';
   const productLayer = layers.product ?? 'product';
 
+  const legacyLightningcssOptions = (
+    stylexOptions as {lightningcssOptions?: Record<string, unknown>}
+  ).lightningcssOptions;
+  const validatedStylexOptions = {
+    propertyValidationMode: 'throw',
+    // The unplugin applies its Vite default (true) only to its own StyleX
+    // instance, which runs after the babel wrapper below has already compiled
+    // every StyleX call. Without it here, a file that reads only `defineConsts`
+    // from a `.stylex.ts` module loses that import once `stylex.create` is
+    // compiled (the TypeScript transform drops it as unused), the module is
+    // never loaded, and its constants never reach the CSS: a media-query key
+    // fails the build and a value ships as an undefined custom property.
+    treeshakeCompensation: true,
+    ...(stylexOptions as any),
+    lightningcssOptions: {
+      targets: LIGHTNINGCSS_TARGETS,
+      ...legacyLightningcssOptions,
+    },
+  };
+  const classNamePrefixes = [
+    stylexPrefix,
+    (validatedStylexOptions as {classNamePrefix?: string}).classNamePrefix ??
+      'x',
+  ];
   const astryxBabelPlugin = path.resolve(__dirname, 'babel.js');
-  const existingPlugins = (stylexOptions as any).babelConfig?.plugins ?? [];
+  const existingPlugins = validatedStylexOptions.babelConfig?.plugins ?? [];
 
   const basePlugin = stylex.vite({
-    ...(stylexOptions as any),
+    ...validatedStylexOptions,
     useCSSLayers: true,
     babelConfig: {
-      ...(stylexOptions as any).babelConfig,
+      ...validatedStylexOptions.babelConfig,
       plugins: [
         [
           astryxBabelPlugin,
           {
-            ...(stylexOptions as any),
+            ...validatedStylexOptions,
             libraryPrefix: stylexPrefix,
             babelConfig: undefined,
           },
@@ -593,6 +795,7 @@ function astryxStylexLegacy(options: AstryxVitePluginLegacyOptions): Plugin[] {
                 libraryPattern,
                 libraryLayer,
                 productLayer,
+                classNamePrefixes,
               }),
             );
           },
@@ -609,8 +812,10 @@ function astryxStylexLegacy(options: AstryxVitePluginLegacyOptions): Plugin[] {
       libraryPattern,
       libraryLayer,
       productLayer,
-      lightningcssOptions: (stylexOptions as {lightningcssOptions?: unknown})
-        ?.lightningcssOptions,
+      lightningcssOptions: (
+        validatedStylexOptions as {lightningcssOptions?: unknown}
+      ).lightningcssOptions,
+      classNamePrefixes,
     }),
   ];
 }

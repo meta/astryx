@@ -98,6 +98,21 @@ function assertGeometry(label: string, actual: number, expected: number) {
 const px = (value: string) => Number.parseFloat(value);
 
 /**
+ * A length-valued custom property as the px length it resolves to. The
+ * computed value of a custom property is the token as written (`1rem`), so it
+ * is measured on a probe that inherits it rather than parsed.
+ */
+const resolvedPx = (element: HTMLElement, name: string) => {
+  const probe = document.createElement('div');
+  probe.style.position = 'absolute';
+  probe.style.width = `var(${name})`;
+  element.append(probe);
+  const width = px(getComputedStyle(probe).width);
+  probe.remove();
+  return width;
+};
+
+/**
  * Browser geometry guard for `isFullBleed`. The strip must escape the
  * wrapper's padding while the first label returns to the content inset. The
  * strip-pad assertion also pins TabList's restated stop-padding token to the
@@ -456,15 +471,9 @@ export const FullBleedGeometry: Story = {
         padStart: px(innerStyle.paddingInlineStart),
         padEnd: px(innerStyle.paddingInlineEnd),
         padBlockEnd: px(innerStyle.paddingBlockEnd),
-        varStart: px(
-          innerStyle.getPropertyValue('--container-padding-inline-start'),
-        ),
-        varEnd: px(
-          innerStyle.getPropertyValue('--container-padding-inline-end'),
-        ),
-        varBlockEnd: px(
-          innerStyle.getPropertyValue('--container-padding-block-end'),
-        ),
+        varStart: resolvedPx(inner, '--container-padding-inline-start'),
+        varEnd: resolvedPx(inner, '--container-padding-inline-end'),
+        varBlockEnd: resolvedPx(inner, '--container-padding-block-end'),
         nav,
         navRect: nav.getBoundingClientRect(),
         strip,
