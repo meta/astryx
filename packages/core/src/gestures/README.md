@@ -92,7 +92,7 @@ Once a drag has claimed its finger, a second finger never breaks it.
 | -------------------------------- | ---------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `TapGestureRecognizer`           | `UITapGestureRecognizer`           | discrete   | `numberOfTapsRequired`, `numberOfTouchesRequired`; fails past 45 px of travel, on extra fingers, a hold over 1.5 s, a late or far next tap                                                                         |
 | `LongPressGestureRecognizer`     | `UILongPressGestureRecognizer`     | continuous | `minimumPressDuration` 500 ms, `allowableMovement` 10 px (a distance, not per axis), `numberOfTapsRequired`; a zero duration begins on the touch itself (a selection tracker over a group of actions)              |
-| `PanGestureRecognizer`           | `UIPanGestureRecognizer`           | continuous | min/max touches, `direction` (axis or one-way) with `axisRatio`, `lockAxis`, `scrollEdge`; `translation()`, `totalTranslation()`, `velocity()`, `scrollVelocity()`                                                 |
+| `PanGestureRecognizer`           | `UIPanGestureRecognizer`           | continuous | min/max touches, `direction` (axis or one-way) with `axisRatio`, `lockAxis`, `scrollEdge`, `firstMoveDecides`; `translation()`, `totalTranslation()`, `velocity()`, `scrollVelocity()`                             |
 | `SwipeGestureRecognizer`         | `UISwipeGestureRecognizer`         | discrete   | recognized during the motion; one or more directions, `numberOfTouchesRequired`; 50 px along, at most 50 px across, 500 ms                                                                                         |
 | `PinchGestureRecognizer`         | `UIPinchGestureRecognizer`         | continuous | `scale` (settable, to re-base it), `velocity` in scale per second, `focalPoint()`                                                                                                                                  |
 | `ScreenEdgePanGestureRecognizer` | `UIScreenEdgePanGestureRecognizer` | continuous | `edges`: `leading` / `trailing`, resolved against the view's writing direction; attached to an edge zone the view lies within; fails as soon as the touch lands outside every requested edge band; a finger's only |
@@ -360,11 +360,13 @@ presses nothing.
 - **Claim at the begin.** A pan claims its touch only as it begins, at
   UIKit's 10 pt (`spec:AST-094` FR19), before WebKit commits a slow drag to
   a scroll at 10–11 px; a drag the browser took first stays the browser's
-  (FR14). One exception: a `scrollEdge` pan cancels its finger's moves from
+  (FR14). Two exceptions: a `scrollEdge` pan cancels its finger's moves from
   the first one while every scroller under the finger is at its edge and
   the finger pulls away from it, the pan's own way (the browser could only
-  rubber-band there); it still begins at 10 pt. It holds only while that is
-  the one finger on the screen: with a second down anywhere, the moves stay
+  rubber-band there); it still begins at 10 pt. A `firstMoveDecides` pan, a
+  toast's swipe (`component:Toast` FR4), holds its finger from a first move
+  its own way and fails on any other first move. Each holds only while that
+  is the one finger on the screen: with a second down anywhere, the moves stay
   the browser's, for its pinch (FR10).
   Measured in Mobile Safari (iOS 26.2): `touchmove` arrives from the first
   pixel; on a scrollable element WebKit commits to scrolling at 10 to 11 px
@@ -504,7 +506,10 @@ tick over a 40 px delta. A trackpad's precise deltas, a third of their legacy
 A wheel gesture drives a pan as a contact moving with the content, along the
 pan's own axis, and only once every scroller between the pointer and the
 pan's element is at its edge that way, decided at the gesture's first wheel:
-a wheel the pan does not take is never prevented. A watcher
+a wheel the pan does not take is never prevented. The pan's own element is
+the exception on the axis that its derived `touch-action` keeps from the
+browser: a pan on its own scroller takes that scroller's trackpad scroll, as
+it takes a finger's pan there, and a scroller inside it still goes first. A watcher
 (`claimsTouches: false`) never takes one, and a gesture whose first wheel
 another handler already prevented, or that cannot be cancelled, stays the
 page's. A scroll-edge pan (a pull to

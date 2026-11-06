@@ -1903,6 +1903,60 @@ test.describe('under a fine primary pointer (spec:AST-094 FR43, FR24)', () => {
 
 test.describe('where the primary pointer is fine', () => {
   test.use({hasTouch: false, isMobile: false});
+  test('a pan on its own scroller takes the trackpad scroll a finger would pan, a scroller inside it takes the wheel first, and a mouse wheel scrolls natively (spec:AST-094 FR43)', async ({
+    page,
+    browserName,
+  }) => {
+    await page.goto('about:blank');
+    await page.setContent(
+      '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><body style="margin: 0"></body>',
+    );
+    await page.addScriptTag({content: bareBundle});
+    await page.evaluate(() => {
+      const {host, PanGestureRecognizer} = window.__api;
+      document.body.innerHTML =
+        '<div id="row" style="width: 300px; overflow-x: auto; white-space: nowrap"><div id="inner" style="display: inline-block; width: 150px; overflow-x: auto"><div style="width: 600px; height: 60px">inner</div></div><div style="display: inline-block; width: 900px; height: 60px">row</div></div>';
+      const pan = new PanGestureRecognizer({
+        direction: 'horizontal',
+        allowedScrollTypes: ['continuous'],
+      });
+      pan.addTransitionListener((_recognizer, _from, to) =>
+        window.__wheelLog.push(`pan:${to}`),
+      );
+      host.attach(document.getElementById('row') as HTMLElement, pan);
+    });
+    const driver = await webInputDriver(page);
+    test.skip(!driver.wheels, WHEEL_SKIP);
+    const read = async () =>
+      page.evaluate(() => ({
+        row: (document.getElementById('row') as HTMLElement).scrollLeft,
+        inner: (document.getElementById('inner') as HTMLElement).scrollLeft,
+        log: window.__wheelLog.splice(0),
+      }));
+    const swipe = async (x: number) => {
+      for (let step = 0; step < 4; step += 1) {
+        await driver.wheel({x, y: 30, dx: 16});
+      }
+      await page.waitForTimeout(250);
+      return read();
+    };
+    if (browserName === 'chromium') {
+      // Chromium's driver wheels read as a mouse's: the row scrolls natively.
+      const mouse = await swipe(250);
+      expect(mouse.row).toBeGreaterThan(0);
+      expect(mouse.log).toEqual([]);
+      return;
+    }
+    // On the row itself, a trackpad scroll is the pan's, and the row holds.
+    const own = await swipe(250);
+    expect(own.log[0]).toBe('pan:began');
+    expect(own.row).toBe(0);
+    // Over the scroller inside it, the inner scroller scrolls first.
+    const inner = await swipe(50);
+    expect(inner.inner).toBeGreaterThan(0);
+    expect(inner.log).toEqual([]);
+  });
+
   test('a scroll-edge pan takes a trackpad scroll only at the top of the page that scrolls it, pulling the content down; mid-page the page scrolls (spec:AST-094 FR43, FR19)', async ({
     page,
     browserName,
