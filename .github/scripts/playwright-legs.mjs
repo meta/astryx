@@ -89,6 +89,54 @@ export function estimateSeconds(
   return seconds;
 }
 
+/**
+ * Reads a spec's test count from the repository at `source`'s HEAD. A spec
+ * that cannot be read stops the leg: one leg guessing while another reads
+ * would count different legs and leave a share of the proofs to no leg.
+ */
+export function testsReader(source) {
+  return file => {
+    if (!source) return 0;
+    let text;
+    try {
+      text = execFileSync('git', ['-C', source, 'show', `HEAD:${file}`], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+    } catch (error) {
+      throw new Error(
+        `cannot read ${file} from ${source} to count its tests: ${String(error.stderr ?? error.message).trim()}`,
+      );
+    }
+    return countTests(text);
+  };
+}
+
+/**
+ * Each file's seconds for the split: its recorded time, else its time in
+ * `fallback`, else its test count times `perTest`. A file with none of them
+ * is left out, so the splitter counts it at the median.
+ */
+export function costsFor(
+  files,
+  times,
+  {fallback = {}, testsOf = () => 0, perTest} = {},
+) {
+  const costs = {};
+  for (const file of files) {
+    const tests =
+      times[file] == null && fallback[file] == null && perTest > 0
+        ? testsOf(file)
+        : 0;
+    const cost =
+      times[file] ??
+      fallback[file] ??
+      (tests > 0 ? tests * perTest : undefined);
+    if (cost != null) costs[file] = cost;
+  }
+  return costs;
+}
+
 // A test declaration at the start of a line: test(), test.only() and the
 // like, not test.describe() or test.use().
 const TEST_CALL = /^\s*(?:test|it)(?:\.(?:only|skip|fixme|fail|slow))?\s*\(/gm;
@@ -249,13 +297,23 @@ function plan(args) {
     leg > legs
   ) {
     throw new Error(
-      'usage: plan --key <times key> --config <file> [--project <name>] --leg <i> --of <n> --out <file> [--durations <file>] [-- <filters...>]',
+      'usage: plan --key <times key> [--fallback-key <times key>] [--source <git dir>] --config <file> [--project <name>] --leg <i> --of <n> --out <file> [--durations <file>] [-- <filters...>]',
     );
   }
   const files = list(suite, out, filters);
   if (files.length === 0)
     throw new Error(`Playwright listed no ${key} spec files`);
-  const legsPlan = planLegs(files, readDurations(durations)[key] ?? {}, legs);
+  const recorded = readDurations(durations);
+  // The same costs the leg count used, so the split matches its estimate.
+  const legsPlan = planLegs(
+    files,
+    costsFor(files, recorded[key] ?? {}, {
+      fallback: recorded[option(own, '--fallback-key')] ?? {},
+      testsOf: testsReader(option(own, '--source')),
+      perTest: recorded['seconds-per-test']?.[key],
+    }),
+    legs,
+  );
   const mine = legsPlan[leg - 1];
   fs.writeFileSync(out, mine.files.map(file => `${file}\n`).join(''));
   // Playwright runs nothing, and passes, for a test list that matches no
@@ -326,19 +384,7 @@ function legs(args) {
   // A spec with no recorded time counts its tests, read from the merge
   // commit (the scope checkout) without a checkout of its own.
   const source = option(own, '--source');
-  const testsOf = file => {
-    if (!source) return 0;
-    try {
-      return countTests(
-        execFileSync('git', ['-C', source, 'show', `HEAD:${file}`], {
-          encoding: 'utf8',
-          stdio: ['ignore', 'pipe', 'ignore'],
-        }),
-      );
-    } catch {
-      return 0;
-    }
-  };
+  const testsOf = testsReader(source);
   const seconds = estimateSeconds(durations[key] ?? {}, filters, {
     listed,
     changed: changedFile ? specs(changedFile) : [],

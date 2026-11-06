@@ -2537,13 +2537,11 @@ jobs:
           cp .test-scope/.github/scripts/lane-environment.mjs "$RUNNER_TEMP/interaction-legs/.github/scripts/"
           cp .test-scope/.github/lane-environments.json "$RUNNER_TEMP/interaction-legs/.github/"
 
-      # The caps step comes from the merge commit, not the pull request's
-      # head: a head that predates the step does not have it. The head
-      # checkout below replaces this directory.
       # The legs this run needs: every spec file in the merge commit, which the
-      # scope checkout fetched whole, at its recorded time (a WebKit time or
-      # the median for one with none), plus 90 s of setup a leg, within ten
-      # minutes a leg. Each leg decides the same way before its own setup.
+      # scope checkout fetched whole, at its recorded time (a WebKit time, or
+      # its test count times the mean time a test, for one with none), plus
+      # 90 s of setup a leg, within ten minutes a leg. Each leg decides the
+      # same way before its own setup.
       - name: Count this run's legs
         id: legs
         if: steps.scope.outputs.applies == 'true'
@@ -2560,6 +2558,9 @@ jobs:
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs != 'true'
         run: echo "This run's interaction proofs fit ${{ steps.legs.outputs.count }} legs, so this leg runs none."
 
+      # The caps step comes from the merge commit, not the pull request's
+      # head: a head that predates the step does not have it. The head
+      # checkout below replaces this directory.
       - name: Check out the heavy-suite caps
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         uses: actions/checkout@v7
@@ -2625,7 +2626,8 @@ jobs:
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         run: |
           node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" plan \
-            --key interaction-chromium --config playwright.interaction.config.ts --project chromium \
+            --key interaction-chromium --fallback-key interaction-webkit --source .test-scope \
+            --config playwright.interaction.config.ts --project chromium \
             --leg ${{ steps.legs.outputs.leg }} --of ${{ steps.legs.outputs.count }} \
             --durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json" \
             --out "$RUNNER_TEMP/interaction-leg.txt"
@@ -2667,7 +2669,7 @@ jobs:
     # Frame evidence measures timing: four cores, one Playwright worker.
     # One leg runs every spec while the planner's estimate fits; past that two
     # legs share the spec files by their recorded times, as the Chromium
-    # proofs' two do.
+    # proofs' legs do.
     strategy:
       fail-fast: false
       matrix:
@@ -2869,7 +2871,8 @@ jobs:
             echo "::warning title=Changed specs not planned::The scope step could not list the changed files, so a changed interaction spec outside this lane's paths does not run here."
           fi
           node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" plan \
-            --key interaction-webkit --config playwright.interaction.config.ts --project webkit \
+            --key interaction-webkit --fallback-key interaction-chromium --source .test-scope \
+            --config playwright.interaction.config.ts --project webkit \
             --leg ${{ steps.legs.outputs.leg }} --of ${{ steps.legs.outputs.count }} \
             --durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json" \
             --out "$RUNNER_TEMP/interaction-leg.txt" -- \

@@ -10,12 +10,14 @@ import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
 
 import {
+  costsFor,
   countTests,
   estimateSeconds,
   isInteractionSpec,
   legCount,
   planLegs,
   recordLog,
+  testsReader,
 } from './playwright-legs.mjs';
 
 const root = path.resolve(
@@ -330,7 +332,10 @@ describe('the interaction proof legs in ci.yml', () => {
           `cp .test-scope/${file} "$RUNNER_TEMP/interaction-legs/${dir}"`,
         );
       expect(plan.run).toContain(
-        `--key interaction-${lane.project} --config playwright.interaction.config.ts --project ${lane.project}`,
+        `--key interaction-${lane.project} --fallback-key interaction-${lane.fallback} --source .test-scope`,
+      );
+      expect(plan.run).toContain(
+        `--config playwright.interaction.config.ts --project ${lane.project}`,
       );
       expect(plan.run).toContain(
         '--durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json"',
@@ -626,6 +631,62 @@ describe('the interaction proof legs in ci.yml', () => {
     const legs = ci.jobs['docsite-browser'].strategy.matrix.leg.length;
     for (const leg of planLegs(Object.keys(times), times, legs))
       expect(leg.seconds).toBeLessThanOrEqual(6 * 60);
+  });
+
+  it("pins the Chromium count's arguments: every spec, the matrix's legs, the shared costs", () => {
+    const job = ci.jobs['pr-interaction'];
+    const count = step(job, "Count this run's legs");
+    expect(count.id).toBe('legs');
+    expect(count.if).toBe("steps.scope.outputs.applies == 'true'");
+    for (const part of [
+      'git -C .test-scope ls-tree -r --name-only HEAD > "$RUNNER_TEMP/interaction-legs/listed.txt"',
+      '--listed "$RUNNER_TEMP/interaction-legs/listed.txt" --source .test-scope',
+      '--key interaction-chromium --fallback-key interaction-webkit',
+      '--durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json"',
+      '--setup-seconds 90 --max-seconds 600',
+      '--leg ${{ matrix.leg }} --max-legs ${{ strategy.job-total }}',
+    ])
+      expect(count.run).toContain(part);
+    // No path filter: the Chromium lane counts every spec.
+    expect(count.run).not.toContain(' -- ');
+    const at = job.steps.indexOf(count);
+    expect(at).toBeGreaterThan(
+      job.steps.indexOf(
+        step(job, "Keep the leg planner from the workflow's commit"),
+      ),
+    );
+    expect(at).toBeLessThan(
+      job.steps.indexOf(step(job, 'Check out the heavy-suite caps')),
+    );
+    // Both plans cost an unrecorded spec as their counts do.
+    expect(step(job, "Plan this leg's interaction proofs").run).toContain(
+      '--key interaction-chromium --fallback-key interaction-webkit --source .test-scope',
+    );
+    expect(
+      step(
+        ci.jobs['pr-interaction-webkit'],
+        "Plan this leg's WebKit interaction proofs",
+      ).run,
+    ).toContain(
+      '--key interaction-webkit --fallback-key interaction-chromium --source .test-scope',
+    );
+  });
+
+  it('splits by the same costs it counts, and stops on a spec it cannot read', () => {
+    const times = {'a.spec.ts': 100};
+    expect(
+      costsFor(['a.spec.ts', 'b.spec.ts', 'c.spec.ts', 'd.spec.ts'], times, {
+        fallback: {'b.spec.ts': 40},
+        testsOf: file => (file === 'c.spec.ts' ? 10 : 0),
+        perTest: 1.5,
+      }),
+    ).toEqual({'a.spec.ts': 100, 'b.spec.ts': 40, 'c.spec.ts': 15});
+    const read = testsReader(root);
+    expect(read('.github/scripts/playwright-legs.test.mjs')).toBeGreaterThan(5);
+    expect(() => read('no/such.spec.ts')).toThrow(
+      /cannot read no\/such\.spec\.ts/,
+    );
+    expect(testsReader(undefined)('anything.spec.ts')).toBe(0);
   });
 
   it('fits every leg in ten minutes at today’s recorded times, within the matrix', () => {
