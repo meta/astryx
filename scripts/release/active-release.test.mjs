@@ -682,7 +682,37 @@ describe('published release merge-back (FR50)', () => {
     );
   });
 
-  it('rejects changed post-cut Changesets and missing frozen bytes', () => {
+  it('accepts a frozen Changeset already removed from current main', () => {
+    expect(
+      mergeBack({
+        base: mainAt('0.7.0'),
+        head: mainAt('0.7.0'),
+        entries: ['M\tpackages/core/CHANGELOG.md'],
+        baseChangesets: new Map([['.changeset/post-cut.md', digest('c')]]),
+        headChangesets: new Map([['.changeset/post-cut.md', digest('c')]]),
+      }),
+    ).toEqual([]);
+  });
+
+  it('preserves a changed frozen path as post-cut work', () => {
+    expect(
+      mergeBack({
+        base: mainAt('0.7.0'),
+        head: mainAt('0.7.0'),
+        entries: ['M\tpackages/core/CHANGELOG.md'],
+        baseChangesets: new Map([
+          ['.changeset/frozen.md', digest('z')],
+          ['.changeset/post-cut.md', digest('c')],
+        ]),
+        headChangesets: new Map([
+          ['.changeset/frozen.md', digest('z')],
+          ['.changeset/post-cut.md', digest('c')],
+        ]),
+      }),
+    ).toEqual([]);
+  });
+
+  it('rejects changed post-cut Changesets', () => {
     expect(
       mergeBack({
         base: mainAt('0.7.0'),
@@ -697,7 +727,7 @@ describe('published release merge-back (FR50)', () => {
     ).toEqual(
       expect.arrayContaining([
         'release merge-back may only delete frozen Changesets: .changeset/post-cut.md',
-        'release merge-back cannot verify frozen Changeset on current main: .changeset/frozen.md',
+        'release merge-back changed post-cut Changeset: .changeset/frozen.md',
         'release merge-back changed post-cut Changeset: .changeset/post-cut.md',
       ]),
     );
@@ -847,7 +877,10 @@ describe('published release merge-back (FR50)', () => {
     git(root, 'checkout', '-qb', 'invalid-merge-back', `${head}^`);
     fs.rmSync(path.join(root, '.changeset/frozen.md'));
     write('packages/core/CHANGELOG.md', '# Changelog\n\n## 0.7.8\n');
-    write('packages/core/src/Unexpected.tsx', 'export const unexpected = true;\n');
+    write(
+      'packages/core/src/Unexpected.tsx',
+      'export const unexpected = true;\n',
+    );
     git(root, 'add', '-A');
     git(
       root,

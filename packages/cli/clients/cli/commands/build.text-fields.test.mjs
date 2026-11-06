@@ -8,7 +8,11 @@
 import {describe, it, expect} from 'vitest';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {runCli} from '../../../test-utils/run-cli.mjs';
+import {requireNatively} from '../../../test-utils/native-require.mjs';
+
+const require = requireNatively(import.meta.url);
+/** @type {typeof import('../../../test-utils/run-cli.mjs')} */
+const {runCli} = require('../../../test-utils/run-cli.mjs');
 
 // Run against the monorepo root so @astryxdesign/core is discoverable.
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
