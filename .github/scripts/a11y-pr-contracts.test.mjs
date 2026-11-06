@@ -27,6 +27,9 @@ import {
   changedOnly,
   changedSinceMergeBase,
   DEFAULT_CHECK_BUDGET_MS,
+  dependentSpecs,
+  importerGraph,
+  renderingFolders,
   fileSeconds,
   kebab,
   ownedSpecs,
@@ -477,6 +480,151 @@ describe('the default check of the touched components', () => {
     );
     expect(runner).toContain('seconds: readDurations(root, policySha)');
     expect(runner).toContain('workers: contractWorkers()');
+  });
+});
+
+describe('the folders that render a touched component (spec:AST-030 FR12)', () => {
+  const write = (root, file, text) => {
+    fs.mkdirSync(path.dirname(path.join(root, file)), {recursive: true});
+    fs.writeFileSync(path.join(root, file), text);
+  };
+  // #7910's shape: Spinner changes; TextInput renders it, CommandPalette
+  // renders TextInput, a Lab component imports Spinner from Core, and a
+  // shared folder passes the reach on.
+  const repo = () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'render-graph-'));
+    write(
+      root,
+      'packages/core/src/Spinner/Spinner.tsx',
+      'export function Spinner() {}\n',
+    );
+    write(
+      root,
+      'packages/core/src/TextInput/TextInput.tsx',
+      "import {Spinner} from '../Spinner/Spinner';\n",
+    );
+    write(
+      root,
+      'packages/core/src/CommandPalette/CommandPaletteInput.tsx',
+      "import {TextInput} from '../TextInput/TextInput';\n",
+    );
+    write(
+      root,
+      'packages/core/src/internal/loading.ts',
+      "import {Spinner} from '../Spinner/Spinner';\n",
+    );
+    write(
+      root,
+      'packages/core/src/Banner/Banner.tsx',
+      "import {loading} from '../internal/loading';\n",
+    );
+    write(
+      root,
+      'packages/core/src/Avatar/__tests__/Avatar.test.tsx',
+      "import {Spinner} from '../../Spinner/Spinner';\n",
+    );
+    write(
+      root,
+      'packages/core/src/Avatar/Avatar.stories.tsx',
+      "import {Spinner} from '../Spinner/Spinner';\n",
+    );
+    write(
+      root,
+      'packages/lab/src/Schedule/shared.tsx',
+      "import {Button, Spinner as Busy} from '@astryxdesign/core';\n",
+    );
+    return root;
+  };
+
+  it('lists every folder that renders a touched one, nearest first, never a shared folder or a test', () => {
+    const root = repo();
+    try {
+      expect(renderingFolders(importerGraph(root), ['core/Spinner'])).toEqual([
+        {folder: 'core/TextInput', depth: 1},
+        {folder: 'lab/Schedule', depth: 1},
+        {folder: 'core/Banner', depth: 2},
+        {folder: 'core/CommandPalette', depth: 2},
+      ]);
+      // Nothing renders an untouched leaf.
+      expect(
+        renderingFolders(importerGraph(root), ['core/CommandPalette']),
+      ).toEqual([]);
+    } finally {
+      fs.rmSync(root, {recursive: true, force: true});
+    }
+  });
+
+  it("selects the rendering folders' scoped and release-only specs, nearest first, leaving out what is planned", () => {
+    const at = (folder, name, lines = []) =>
+      spec(`packages/${folder}/__tests__/${name}.a11y.chromium.spec.ts`, lines);
+    const specs = [
+      at('core/src/CommandPalette', 'CommandPalettePending'),
+      at('core/src/CommandPalette', 'CommandPalette', [
+        '// @pr-a11y audit CommandPalette',
+      ]),
+      at('core/src/TextInput', 'TextInput', ['// @pr-a11y release-only']),
+      at('core/src/TextInput', 'TextInputAlways', ['// @pr-a11y always']),
+      at('core/src/Spinner', 'SpinnerMotion'),
+    ];
+    const rendering = [
+      {folder: 'core/TextInput', depth: 1},
+      {folder: 'core/CommandPalette', depth: 2},
+    ];
+    expect(dependentSpecs(specs, rendering, new Set())).toEqual([
+      {
+        file: 'packages/core/src/TextInput/__tests__/TextInput.a11y.chromium.spec.ts',
+        reason: 'renders a touched component',
+      },
+      {
+        file: 'packages/core/src/CommandPalette/__tests__/CommandPalettePending.a11y.chromium.spec.ts',
+        reason: 'renders a touched component (2 folders away)',
+      },
+    ]);
+    expect(
+      dependentSpecs(
+        specs,
+        rendering,
+        new Set([
+          'packages/core/src/TextInput/__tests__/TextInput.a11y.chromium.spec.ts',
+        ]),
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("runs the dependents' specs after the owned ones, in the time left, and reports the rest as not run", () => {
+    const own =
+      'packages/core/src/Spinner/__tests__/SpinnerMotion.a11y.chromium.spec.ts';
+    const near =
+      'packages/core/src/TextInput/__tests__/TextInput.a11y.chromium.spec.ts';
+    const far = 'packages/core/src/Aaa/__tests__/Far.a11y.chromium.spec.ts';
+    const {run, notRun} = planDefaultCheck({
+      changed: [],
+      owned: [{file: own, reason: 'component core/Spinner'}],
+      // Given nearest first: the far one is not sorted ahead by its path.
+      dependents: [
+        {file: near, reason: 'renders a touched component'},
+        {file: far, reason: 'renders a touched component (3 folders away)'},
+      ],
+      seconds: {[own]: 60, [near]: 60, [far]: 400},
+      workers: 1,
+    });
+    expect(run.map(({file}) => file)).toEqual([own, near]);
+    expect(notRun.map(({file}) => file)).toEqual([far]);
+    expect(notRun[0].reason).toContain(
+      'renders a touched component (3 folders away)',
+    );
+    expect(notRun[0].reason).toContain('add ci:run-a11y to run it');
+  });
+
+  it('says in the summary how many folders render a touched component', () => {
+    expect(
+      summaryMarkdown({
+        components: ['core/Spinner'],
+        selected: [],
+        notRun: [],
+        rendering: [{folder: 'core/TextInput', depth: 1}],
+      }),
+    ).toContain('Folders that render a touched component: 1');
   });
 });
 

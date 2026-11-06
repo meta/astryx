@@ -41,14 +41,16 @@
  * component folder changes, or a component it is named after is in scope;
  * never for a `scope` token or an unknown scope.
  *
- * `--changed-only <specs> --changed-files <files> --owned-by <components>`
- * (the default check of the components a pull request touches): run the
- * browser specs the pull request adds or modifies, listed one per line in
- * <specs>, then the `scoped` and `release-only` specs that the comma-separated
- * touched components own (`ownedSpecs`; <files> lists every changed path, one
- * per line, for the folder-change rule). It reads no title, runs no component
- * audit, and runs no spec of a reverse dependent; a changed `audit` spec still
- * waits for its audit pull request. To stay inside the job's 15-minute budget
+ * `--changed-only <specs> --changed-files <files> --owned-by <components>
+ * [--dependents-of <folders>]` (the default check of the components a pull
+ * request touches, a wide change included): run the browser specs the pull
+ * request adds or modifies, listed one per line in <specs>, then the `scoped`
+ * and `release-only` specs that the comma-separated touched components own
+ * (`ownedSpecs`; <files> lists every changed path, one per line, for the
+ * folder-change rule), then the `scoped` and `release-only` specs of the
+ * component folders that render a touched folder (`dependentSpecs`, nearest
+ * first), in the time left. It reads no title and runs no component audit; a
+ * changed `audit` spec still waits for its audit pull request. To stay inside the job's 15-minute budget
  * it takes at most CHANGED_SPEC_LIMIT changed files, starts each file only
  * when the run still fits DEFAULT_CHECK_BUDGET_MS at that file's recorded time
  * (.github/a11y-contract-durations.json), and stops at that budget. Each file
@@ -375,6 +377,147 @@ export function ownedSpecs({specs, components, changedPaths}) {
   });
 }
 
+// The component folders that render a touched component (spec:AST-030 FR12).
+// The CI step runs this file alone from the merge commit, so it imports no
+// repository module. A folder renders a component when its source imports
+// that component's folder: a relative import (`../Spinner/Spinner`) in one
+// package, or a named import from `@astryxdesign/core` in another. Shared
+// folders (`utils`, `hooks`, `internal`) pass the reach on but are never listed.
+const SOURCE = /\.(?:[cm]?[jt]sx?)$/;
+const NOT_RENDERED =
+  /(?:^|\/)__tests__\/|\.(?:test|stories|doc)\.[^/]+$|\.spec\.[^/]+$/;
+const RELATIVE = /from\s+['"]\.\.\/([A-Za-z][\w-]*)\//g;
+const CORE_NAMED =
+  /import\s+(?:type\s+)?\{([^}]*)\}\s+from\s+['"]@astryxdesign\/core['"]/g;
+const CORE_SUBPATH =
+  /from\s+['"]@astryxdesign\/core\/(?:internal\/)?([A-Za-z][\w-]*)['"]/g;
+
+const isComponentFolder = name => /^[A-Z]/.test(name);
+
+function sourceFiles(dir) {
+  const out = [];
+  if (!fs.existsSync(dir)) return out;
+  for (const entry of fs.readdirSync(dir, {withFileTypes: true})) {
+    const file = path.join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...sourceFiles(file));
+    else if (SOURCE.test(entry.name)) out.push(file);
+  }
+  return out;
+}
+
+/**
+ * Edges `imported -> importers` between the package folders under
+ * `packages/<pkg>/src/`, keyed `<pkg>/<Folder>`.
+ * @param {string} root
+ * @returns {Map<string, Set<string>>}
+ */
+export function importerGraph(root) {
+  const packagesDir = path.join(root, 'packages');
+  const importers = new Map();
+  const add = (imported, importer) => {
+    if (imported === importer) return;
+    if (!importers.has(imported)) importers.set(imported, new Set());
+    importers.get(imported).add(importer);
+  };
+  const coreDir = path.join(packagesDir, 'core/src');
+  const coreFolders = new Set(
+    fs.existsSync(coreDir)
+      ? fs
+          .readdirSync(coreDir, {withFileTypes: true})
+          .filter(entry => entry.isDirectory())
+          .map(entry => entry.name)
+      : [],
+  );
+  for (const pkg of fs.existsSync(packagesDir)
+    ? fs.readdirSync(packagesDir)
+    : []) {
+    const src = path.join(packagesDir, pkg, 'src');
+    if (!fs.existsSync(src) || !fs.statSync(src).isDirectory()) continue;
+    for (const entry of fs.readdirSync(src, {withFileTypes: true})) {
+      if (!entry.isDirectory()) continue;
+      const importer = `${pkg}/${entry.name}`;
+      for (const file of sourceFiles(path.join(src, entry.name))) {
+        const relative = path.relative(root, file).split(path.sep).join('/');
+        if (NOT_RENDERED.test(relative)) continue;
+        const text = fs.readFileSync(file, 'utf8');
+        for (const match of text.matchAll(RELATIVE))
+          add(`${pkg}/${match[1]}`, importer);
+        if (pkg === 'core') continue;
+        for (const match of text.matchAll(CORE_NAMED)) {
+          for (const name of match[1].split(',')) {
+            const bare = name
+              .replace(/^\s*type\s+/, '')
+              .split(/\s+as\s+/)[0]
+              .trim();
+            if (coreFolders.has(bare)) add(`core/${bare}`, importer);
+          }
+        }
+        for (const match of text.matchAll(CORE_SUBPATH)) {
+          if (coreFolders.has(match[1])) add(`core/${match[1]}`, importer);
+        }
+      }
+    }
+  }
+  return importers;
+}
+
+/**
+ * The component folders that render a touched folder, nearest first, then in
+ * path order. Touched folders and shared (lower-case) folders are left out.
+ * @param {Map<string, Set<string>>} importers
+ * @param {string[]} touched `<pkg>/<Folder>`
+ * @returns {{folder: string, depth: number}[]}
+ */
+export function renderingFolders(importers, touched) {
+  const depth = new Map(touched.map(folder => [folder, 0]));
+  const queue = [...touched];
+  while (queue.length > 0) {
+    const folder = queue.shift();
+    for (const importer of importers.get(folder) ?? []) {
+      if (depth.has(importer)) continue;
+      depth.set(importer, depth.get(folder) + 1);
+      queue.push(importer);
+    }
+  }
+  const touchedSet = new Set(touched);
+  return [...depth]
+    .filter(
+      ([folder]) =>
+        !touchedSet.has(folder) &&
+        isComponentFolder(folder.split('/')[1] ?? ''),
+    )
+    .map(([folder, d]) => ({folder, depth: d}))
+    .sort((a, b) => a.depth - b.depth || a.folder.localeCompare(b.folder));
+}
+
+/**
+ * The `scoped` and `release-only` specs of the component folders that render a
+ * touched folder, nearest first, then in path order, leaving out `planned`.
+ * @param {{file: string, routing: {mode: string}}[]} specs
+ * @param {{folder: string, depth: number}[]} rendering
+ * @param {Set<string>} planned
+ */
+export function dependentSpecs(specs, rendering, planned) {
+  const depthOf = new Map(rendering.map(({folder, depth}) => [folder, depth]));
+  const folderOf = file => {
+    const match = /^packages\/([^/]+)\/src\/([^/]+)\//.exec(file);
+    return match ? `${match[1]}/${match[2]}` : null;
+  };
+  return specs
+    .filter(
+      ({file, routing}) =>
+        (routing.mode === 'scoped' || routing.mode === 'release-only') &&
+        !planned.has(file) &&
+        depthOf.has(folderOf(file)),
+    )
+    .map(({file}) => ({file, depth: depthOf.get(folderOf(file))}))
+    .sort((a, b) => a.depth - b.depth || a.file.localeCompare(b.file))
+    .map(({file, depth}) => ({
+      file,
+      reason: `renders a touched component${depth > 1 ? ` (${depth} folders away)` : ''}`,
+    }));
+}
+
 /**
  * Recorded seconds per spec file. Test entries (file and title path) are left
  * out.
@@ -416,12 +559,14 @@ function median(values) {
 
 /**
  * The default check's run. First the changed specs, at most the limit, in path
- * order. Then the owned specs, in path order. A file starts only when the run
- * still fits the budget with that file at its recorded time (with the margin).
- * The other files are not run, with the label that runs them.
+ * order. Then the owned specs, in path order. Then the dependents' specs, in
+ * the order given (nearest first). A file starts only when the run still fits
+ * the budget with that file at its recorded time (with the margin). The other
+ * files are not run, with the label that runs them.
  * @param {object} options
  * @param {{file: string, reason: string}[]} options.changed
  * @param {{file: string, reason: string}[]} options.owned
+ * @param {{file: string, reason: string}[]} [options.dependents]
  * @param {Record<string, number>} options.seconds recorded seconds per file
  * @param {number} options.workers
  * @param {number} [options.budgetMs]
@@ -429,6 +574,7 @@ function median(values) {
 export function planDefaultCheck({
   changed,
   owned,
+  dependents = [],
   seconds,
   workers,
   budgetMs = DEFAULT_CHECK_BUDGET_MS,
@@ -443,7 +589,11 @@ export function planDefaultCheck({
   const ordered = [...owned]
     .filter(({file}) => !planned.has(file))
     .sort((a, b) => a.file.localeCompare(b.file));
-  for (const entry of [...changedInLimit, ...ordered]) {
+  const ownedFiles = new Set(ordered.map(({file}) => file));
+  const after = dependents.filter(
+    ({file}) => !planned.has(file) && !ownedFiles.has(file),
+  );
+  for (const entry of [...changedInLimit, ...ordered, ...after]) {
     const withFile = [...files, entry.file];
     if (STARTUP_MS + projectedMs(withFile, msOf, workers) <= budgetMs) {
       run.push(entry);
@@ -463,13 +613,24 @@ export function planDefaultCheck({
  * run, so it never reads as passed.
  * @param {{components: string[], selected: {file: string, reason: string}[], notRun: {file: string, reason: string}[]}} plan
  */
-export function summaryMarkdown({components, selected, notRun}) {
+export function summaryMarkdown({
+  components,
+  selected,
+  notRun,
+  rendering = [],
+}) {
   const lines = ['### Component accessibility contracts', ''];
   lines.push(
     components.length
       ? `Touched components: ${components.map(c => `\`${c}\``).join(', ')}.`
       : 'No touched component.',
   );
+  if (rendering.length) {
+    lines.push(
+      '',
+      `Folders that render a touched component: ${rendering.length}; their specs run, nearest first, in the time left.`,
+    );
+  }
   lines.push('');
   if (selected.length === 0 && notRun.length === 0) {
     lines.push('No accessibility contract to run.');
@@ -720,11 +881,17 @@ function main() {
   const changedFilesFile = flagValue(argv, '--changed-files');
   const ownedByValue = flagValue(argv, '--owned-by');
   const ownedBy = (ownedByValue ?? '').split(',').filter(Boolean);
+  const dependentsOfValue = flagValue(argv, '--dependents-of');
+  const dependentsOf = (dependentsOfValue ?? '').split(',').filter(Boolean);
   if (
-    (ownedByValue != null || changedFilesFile != null) &&
+    (ownedByValue != null ||
+      changedFilesFile != null ||
+      dependentsOfValue != null) &&
     changedOnlyFile == null
   ) {
-    throw new Error('--owned-by and --changed-files need --changed-only');
+    throw new Error(
+      '--owned-by, --changed-files and --dependents-of need --changed-only',
+    );
   }
   // Without every changed path the folder rule selects nothing, and the
   // dropped contracts would read as passed.
@@ -733,7 +900,12 @@ function main() {
       '--owned-by needs --changed-files with the list of changed paths',
     );
   }
-  const flagValues = new Set([changedOnlyFile, changedFilesFile, ownedByValue]);
+  const flagValues = new Set([
+    changedOnlyFile,
+    changedFilesFile,
+    ownedByValue,
+    dependentsOfValue,
+  ]);
   // Outside CI, a run with no base compares with origin/main.
   const base =
     process.env.BASE_SHA ||
@@ -764,19 +936,27 @@ function main() {
     components,
     title,
   });
-  const budgeted =
-    changedOnlyFile != null
-      ? planDefaultCheck({
-          changed: changedOnly(routed, changedPaths),
-          owned: ownedSpecs({
-            specs,
-            components: ownedBy,
-            changedPaths: readLines(changedFilesFile) ?? changedPaths,
-          }),
-          seconds: readDurations(root, policySha),
-          workers: contractWorkers(),
-        })
-      : {run: routed, notRun: []};
+  const rendering =
+    changedOnlyFile != null && dependentsOf.length > 0
+      ? renderingFolders(importerGraph(root), dependentsOf)
+      : [];
+  const budgeted = (() => {
+    if (changedOnlyFile == null) return {run: routed, notRun: []};
+    const changed = changedOnly(routed, changedPaths);
+    const owned = ownedSpecs({
+      specs,
+      components: ownedBy,
+      changedPaths: readLines(changedFilesFile) ?? changedPaths,
+    });
+    const planned = new Set([...changed, ...owned].map(({file}) => file));
+    return planDefaultCheck({
+      changed,
+      owned,
+      dependents: dependentSpecs(specs, rendering, planned),
+      seconds: readDurations(root, policySha),
+      workers: contractWorkers(),
+    });
+  })();
   const selected = budgeted.run;
   const notRun = budgeted.notRun;
   const [audited] = auditedComponents(title);
@@ -820,7 +1000,7 @@ function main() {
   if (changedOnlyFile != null && process.env.GITHUB_STEP_SUMMARY) {
     fs.appendFileSync(
       process.env.GITHUB_STEP_SUMMARY,
-      summaryMarkdown({components: ownedBy, selected, notRun}),
+      summaryMarkdown({components: ownedBy, selected, notRun, rendering}),
     );
   }
   if (process.argv.includes('--dry-run')) return 0;
