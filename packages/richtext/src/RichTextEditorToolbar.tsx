@@ -507,6 +507,12 @@ function ToolbarLinkForm({
 }: ToolbarLinkFormProps) {
   const t = useTranslator();
   const inputRef = useRef<HTMLInputElement | null>(null);
+  // The field takes focus as the form opens, a frame later so the popover is
+  // shown by then.
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => inputRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, []);
   const apply = () => {
     if (!onApply()) {
       inputRef.current?.focus();
@@ -886,7 +892,7 @@ export function RichTextEditorToolbar({
     // Cmd/Ctrl+K can open the form while the Link button is scrolled out of
     // view, in the page or in the toolbar's own row. Bring it back so the
     // popover opens beside it.
-    linkButtonRef.current?.scrollIntoView({
+    linkButtonRef.current?.scrollIntoView?.({
       block: 'nearest',
       inline: 'nearest',
     });
@@ -1173,7 +1179,8 @@ export function RichTextEditorToolbar({
           isOpen={isLinkPopoverOpen}
           onOpenChange={handleLinkPopoverOpenChange}
           isModal={false}
-          // Cancel is the form's close control.
+          // The form focuses its field, and Cancel is its close control.
+          hasAutoFocus={false}
           hasCloseButton={false}
           // Above the toolbar, so the popover does not cover the editor's
           // first lines, where the linked words often are. It flips below
