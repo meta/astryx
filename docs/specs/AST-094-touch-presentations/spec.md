@@ -673,9 +673,10 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   reaches the use's commit point, the action commits; otherwise the surface
   springs back. The decision MUST NOT change while the surface settles. The
   same rule backs dismissing a BottomSheet, a Toast or a Lightbox, popping a
-  NavigationStack, and dismissing the keyboard (except ChatLayout's
-  transcript-drag dismissal, which follows `component:ChatLayout` FR10/DEC-1:
-  it dismisses when the drag reaches the composer); each use's commit point and
+  NavigationStack, and dismissing the keyboard (except ChatLayout's keyboard
+  dismissals, which follow `component:ChatLayout` FR10/DEC-1: a transcript drag
+  dismisses when it reaches the composer, and a drag down that starts on the
+  composer dismisses once it moves); each use's commit point and
   projection are measured values (FR1, FR2). A BottomSheet's touch release takes
   UIKit's measured sheet values. Its projection is 0.1 s of the release
   velocity, and its commit point is halfway from its lowest detent to closed. A
@@ -685,7 +686,7 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   `spec:AST-057`'s own release rule.
 - **FR37 — Moving back cancels.** A release whose velocity points back
   toward the start MUST cancel, whatever the travel so far (except
-  ChatLayout's transcript-drag dismissal, which follows `component:ChatLayout`
+  ChatLayout's keyboard dismissals, which follow `component:ChatLayout`
   FR10/DEC-1, as in FR36).
 - **FR38 — The settle continues the pointer.** The commit or the spring-back
   MUST start at the release velocity (FR6), under every pointer (FR43), on a

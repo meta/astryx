@@ -60,7 +60,6 @@ interface ComposerDrag {
 // gives way to a scroller in the composer, or ends.
 const composerDrags = new WeakMap<PanGestureRecognizer, ComposerDrag>();
 
-/** The focused element, when it is one that brings up the keyboard. */
 function focusedEditable(doc: Document): HTMLElement | null {
   const active = deepActiveElement(doc);
   return bringsUpKeyboard(active) ? (active as HTMLElement) : null;
