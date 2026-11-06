@@ -231,7 +231,9 @@ describe('required lint routing', () => {
       'packages/core/src/Button/Button.tsx',
       'internal/eslint-plugin-astryx/no-comment-provenance.baseline.json',
       'internal/eslint-plugin-astryx/no-comment-provenance.js',
+      'internal/eslint-plugin-astryx/no-comment-provenance.baseline.mjs',
       'internal/eslint-plugin-astryx/rule-baseline.mjs',
+      'eslint.config.js',
     ]) {
       expect(canSkipBaselineCheck([file], baseline), file).toBe(false);
     }

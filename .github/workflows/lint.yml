@@ -249,7 +249,8 @@ jobs:
       # A change that removes a cited site must also drop its entry, so the
       # baseline never allows a site that no longer exists. A pull request
       # runs the check when it changes a file the baseline lists, the
-      # baseline, or the rule; every push to main runs it. The check parses
+      # baseline, the rule or its tooling, the ESLint config, or an ignore
+      # file; every push to main runs it. The check parses
       # Core with the type-aware config, so it gets the same heap as ESLint.
       - name: Check the comment-provenance baseline
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
@@ -264,7 +265,7 @@ jobs:
           if [ "$EVENT_NAME" = pull_request ] &&
             git diff --name-only --no-renames "$MERGE_SHA^1" "$MERGE_SHA" > "$RUNNER_TEMP/changed-files" &&
             node .github/scripts/provenance-baseline-scope.mjs "$RUNNER_TEMP/changed-files"; then
-            echo 'This change touches no file the comment-provenance baseline lists, the baseline, or the rule.'
+            echo 'This change touches no file the comment-provenance baseline lists, the baseline, the rule, the ESLint config or an ignore file.'
             exit 0
           fi
           node internal/eslint-plugin-astryx/no-comment-provenance.baseline.mjs --check
