@@ -63,7 +63,6 @@ import {createPortal} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
 import {Spinner} from '../Spinner';
-import {MenuRegionsContext} from './menuRegionsContext';
 import {moveRegionsTab} from './menuRegionStops';
 import {Item} from '../Item';
 import {useLayer} from '../Layer/useLayer';
@@ -520,7 +519,6 @@ export function DropdownMenuSubMenu(
   const t = useComponentTranslator();
   const menuCtx = useDropdownMenuContext();
   const rootSurface = use(DropdownMenuSurfaceContext);
-  const rootHasRegions = use(MenuRegionsContext);
   const menuSize = menuCtx?.menuSize ?? 'md';
   const canOpen = !isDisabled;
   // With a header or footer the sub-menu's surface holds controls that are not
@@ -928,14 +926,13 @@ export function DropdownMenuSubMenu(
           );
           return;
         }
-        // In a menu with a header or footer above this level, Tab leaves the
-        // flyout stack: every open level closes as the key bubbles past it,
-        // this one's own rows or a deeper level's, and the level with the
-        // regions moves focus on.
-        if (rootHasRegions) {
-          close({focusTrigger: false});
-          return;
-        }
+        // Otherwise Tab leaves the flyout stack: every open level closes as
+        // the key bubbles past it, this one's own rows or a deeper level's.
+        // In a menu with a header or footer above this level, that level
+        // moves focus on; in a plain menu the root closes the whole menu,
+        // and focus moves on from its trigger (APG menu button).
+        close({focusTrigger: false});
+        return;
       }
       if (!ownsEvent(e)) {
         return;
@@ -984,15 +981,7 @@ export function DropdownMenuSubMenu(
       }
       listNavKeyDown(e);
     },
-    [
-      ownsEvent,
-      close,
-      listNavKeyDown,
-      typeahead,
-      menuRef,
-      rootHasRegions,
-      hasRegions,
-    ],
+    [ownsEvent, close, listNavKeyDown, typeahead, menuRef, hasRegions],
   );
 
   // A region keeps its own keys: arrows move a field's caret and letters type.
@@ -1105,9 +1094,6 @@ export function DropdownMenuSubMenu(
       </DropdownMenuSurfaceContext>
     </DropdownMenuContext>
   );
-  // A level with its own header or footer tells the levels below it, so Tab
-  // from a deeper flyout closes that flyout and this level walks on.
-  //
   // Nested rows live in this level's flyout, a layer of their own where the
   // layer-scoped signal resets; re-provide it, as whether every level above
   // them is open, so their pending hover intent dies with the root menu or
@@ -1115,11 +1101,7 @@ export function DropdownMenuSubMenu(
   // leave a flyout with a header or footer shown beside the root's menu.
   const nestedContent = (
     <DropdownMenuRootOpenContext value={isRootMenuOpen && isOpen}>
-      {hasRegions ? (
-        <MenuRegionsContext value={true}>{nestedRows}</MenuRegionsContext>
-      ) : (
-        nestedRows
-      )}
+      {nestedRows}
     </DropdownMenuRootOpenContext>
   );
 

@@ -2,9 +2,12 @@
 
 /**
  * @file ToastViewport.hostMove.interaction.browser.spec.ts
- * @input The AppToastOverDialog story, recorded frame by frame
- * @output Tests that a toast plays its entrance once. A Dialog that opens or
- *   closes over it moves the viewport, and the toast does not enter again
+ * @input The AppToastOverDialog, AppToastOverDialogClosedAfterSave and
+ *   AppToastOverDrawer stories, recorded frame by frame
+ * @output Tests that a toast plays its entrance once. A Dialog or a modal
+ *   Drawer that opens or closes over it moves the viewport. The toast does not
+ *   enter again: its row and card start no transition. A Dialog that closes
+ *   after a save does not hide the toast for a frame
  * @position Testing; validates ToastViewport.tsx and Toast.tsx in a real
  *   browser
  */
@@ -19,6 +22,8 @@ import {
 const storybook = withStorybook(test);
 
 const STORY = 'core-toast--app-toast-over-dialog';
+const DRAWER_STORY = 'core-toast--app-toast-over-drawer';
+const SAVE_STORY = 'core-toast--app-toast-over-dialog-closed-after-save';
 const MESSAGE = 'Toast from inside the dialog!';
 
 /** The toast's card on one frame. */
@@ -26,6 +31,8 @@ interface Frame {
   opacity: number;
   /** Whether the card was inside a dialog, the viewport's modal outlet. */
   isInDialog: boolean;
+  /** Whether the card had a box. A dialog that no longer displays has none. */
+  hasBox: boolean;
 }
 
 /** What the recorder saw of the toast's card. */
@@ -34,11 +41,17 @@ interface Recording {
   frames: Frame[];
   /** The opacity transitions the card ran: one for each entrance. */
   entrances: number;
+  /**
+   * Each CSS transition or animation that started on the toast's row or card,
+   * as `part property`: `card transform`.
+   */
+  starts: string[];
 }
 
 interface Recorder {
   frames: Frame[];
   transitions: Set<Animation>;
+  starts: string[];
   isRecording: boolean;
 }
 
@@ -48,16 +61,41 @@ async function startRecording(page: Page): Promise<void> {
     const recorder: Recorder = {
       frames: [],
       transitions: new Set(),
+      starts: [],
       isRecording: true,
     };
     (window as unknown as {__toastRecorder: Recorder}).__toastRecorder =
       recorder;
+    // A move that renders the toast again from its starting style starts a
+    // transition, even toward the values it already shows.
+    const onStart = (event: Event) => {
+      const {target} = event;
+      if (!recorder.isRecording || !(target instanceof Element)) {
+        return;
+      }
+      const part = target.matches('[data-toast-id]')
+        ? 'row'
+        : target.matches('[data-toast-id] .astryx-toast')
+          ? 'card'
+          : null;
+      if (part == null) {
+        return;
+      }
+      const property =
+        event instanceof TransitionEvent
+          ? event.propertyName
+          : (event as AnimationEvent).animationName;
+      recorder.starts.push(`${part} ${property}`);
+    };
+    document.addEventListener('transitionrun', onStart, true);
+    document.addEventListener('animationstart', onStart, true);
     const record = () => {
       const card = document.querySelector('[data-toast-id] .astryx-toast');
       if (card != null) {
         recorder.frames.push({
           opacity: Number(getComputedStyle(card).opacity),
           isInDialog: card.closest('dialog') != null,
+          hasBox: card.getClientRects().length > 0,
         });
         for (const animation of card.getAnimations()) {
           if (
@@ -84,6 +122,7 @@ async function stopRecording(page: Page): Promise<Recording> {
     return {
       frames: recorder.frames,
       entrances: recorder.transitions.size,
+      starts: recorder.starts,
     };
   });
 }
@@ -130,6 +169,37 @@ function fadesBack(frames: Frame[]): boolean {
     }
   }
   return false;
+}
+
+/**
+ * Counts each DOM change after which the card sits in a dialog that no longer
+ * displays. A frame painted then shows no toast.
+ */
+async function watchHiddenCard(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const watch = {count: 0};
+    (window as unknown as {__hiddenCard: {count: number}}).__hiddenCard = watch;
+    new MutationObserver(() => {
+      const dialog = document
+        .querySelector('[data-toast-id] .astryx-toast')
+        ?.closest('dialog');
+      if (dialog != null && getComputedStyle(dialog).display === 'none') {
+        watch.count += 1;
+      }
+    }).observe(document.body, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ['class', 'open'],
+    });
+  });
+}
+
+async function hiddenCardCount(page: Page): Promise<number> {
+  return page.evaluate(
+    () =>
+      (window as unknown as {__hiddenCard: {count: number}}).__hiddenCard.count,
+  );
 }
 
 async function openDialog(page: Page) {
@@ -190,13 +260,17 @@ test.describe('a toast in a top-layer viewport', () => {
     await dialog.getByRole('button', {name: 'Show toast'}).click();
     await expect(toastText(page)).toBeVisible();
     await waitForRest(toastRow(page));
-    const {frames, entrances} = await stopRecording(page);
+    const {frames, entrances, starts} = await stopRecording(page);
     await expectRowShown(page);
     expect(placesOf(frames)).toEqual(['dialog']);
     // It fades in from nearly clear to fully shown.
     expect(Math.min(...opacitiesOf(frames))).toBeLessThan(0.5);
     expect(Math.max(...opacitiesOf(frames))).toBeGreaterThan(0.99);
     expect(entrances).toBe(1);
+    // The start recorder sees an entrance, so its empty lists below count.
+    expect(starts).toEqual(
+      expect.arrayContaining(['row grid-template-rows', 'card opacity']),
+    );
   });
 
   test('a toast moved during its entrance finishes it once and settles', async ({
@@ -236,11 +310,12 @@ test.describe('a toast in a top-layer viewport', () => {
     await dialog.getByRole('button', {name: 'Close'}).click();
     await expect(dialog).toBeHidden();
     await waitForRest(toastRow(page));
-    const {frames, entrances} = await stopRecording(page);
+    const {frames, entrances, starts} = await stopRecording(page);
     await expectRowShown(page);
     expect(placesOf(frames)).toEqual(['dialog', 'page']);
     expect(Math.min(...opacitiesOf(frames))).toBeGreaterThan(0.99);
     expect(entrances).toBe(0);
+    expect(starts).toEqual([]);
   });
 
   test('a toast already shown stays still when a Dialog opens over it', async ({
@@ -256,11 +331,63 @@ test.describe('a toast in a top-layer viewport', () => {
     await expect.poll(async () => frameCount(page)).toBeGreaterThan(0);
     await openDialog(page);
     await waitForRest(toastRow(page));
-    const {frames, entrances} = await stopRecording(page);
+    const {frames, entrances, starts} = await stopRecording(page);
     await expectRowShown(page);
     // The toast moved into the dialog that opened.
     expect(placesOf(frames)).toEqual(['page', 'dialog']);
     expect(Math.min(...opacitiesOf(frames))).toBeGreaterThan(0.99);
     expect(entrances).toBe(0);
+    expect(starts).toEqual([]);
+  });
+
+  test('a toast already shown stays still when a modal Drawer closes over it and opens again', async ({
+    page,
+  }) => {
+    await openStory(page, storybook(), DRAWER_STORY);
+    await page
+      .getByRole('button', {name: 'Open candidate', exact: true})
+      .click();
+    const drawer = page.getByRole('dialog', {name: 'Candidate'});
+    await waitForRest(drawer);
+    await drawer.getByRole('button', {name: 'Move to Interview'}).click();
+    await waitForRest(toastRow(page));
+    await startRecording(page);
+    await expect.poll(async () => framesInDialog(page)).toBeGreaterThan(0);
+    await page.keyboard.press('Escape');
+    await expect(drawer).toBeHidden();
+    await waitForRest(toastRow(page));
+    await page
+      .getByRole('button', {name: 'Open candidate', exact: true})
+      .click();
+    await waitForRest(drawer);
+    await waitForRest(toastRow(page));
+    const {frames, entrances, starts} = await stopRecording(page);
+    await expectRowShown(page);
+    expect(placesOf(frames)).toEqual(['dialog', 'page', 'dialog']);
+    expect(Math.min(...opacitiesOf(frames))).toBeGreaterThan(0.99);
+    expect(entrances).toBe(0);
+    expect(starts).toEqual([]);
+  });
+
+  test('a toast stays painted when the Dialog that hosts it closes after a save', async ({
+    page,
+  }) => {
+    await openStory(page, storybook(), SAVE_STORY);
+    const dialog = await openDialog(page);
+    await watchHiddenCard(page);
+    await startRecording(page);
+    // Save shows the toast, then closes the dialog when the save finishes.
+    // That close is outside a click, so the browser can paint before the
+    // passive effects run.
+    await dialog.getByRole('button', {name: 'Save'}).click();
+    await expect(dialog).toBeHidden();
+    await waitForRest(toastRow(page));
+    const {frames} = await stopRecording(page);
+    await expect(toastRow(page).getByText('Saving the item.')).toBeVisible();
+    await expectRowShown(page);
+    expect(placesOf(frames)).toEqual(['dialog', 'page']);
+    // No DOM change left the card in a dialog that no longer displays.
+    expect(await hiddenCardCount(page)).toBe(0);
+    expect(frames.every(frame => frame.hasBox)).toBe(true);
   });
 });
