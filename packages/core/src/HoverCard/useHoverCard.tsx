@@ -138,8 +138,7 @@ export interface HoverCardOptions {
   /**
    * Controlled open state. When provided, overrides the hover trigger:
    * - `true`: force-show the hover card (hover/focus hide is suppressed)
-   * - `false`: hide the hover card and keep hover from opening it; focus on
-   *   the trigger still opens it
+   * - `false`: hide the hover card and keep hover and focus from opening it
    * - `undefined`: uncontrolled — hover/focus triggers manage visibility
    *
    * A controlled hover card still takes Escape when it is the top-most layer,
@@ -419,13 +418,7 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
 
   const handleFocusIn = useCallback(
     (e: Event) => {
-      // A controlled `isOpen={false}` keeps the card closed: keyboard focus on
-      // the trigger opens it no more than hover does.
-      if (
-        !focusGate.focusIn(e, focusTrigger) ||
-        !isEnabled ||
-        isOpen === false
-      ) {
+      if (!focusGate.focusIn(e, focusTrigger) || !isEnabled) {
         return;
       }
       // A tap focuses the trigger it activates. Opening on that focus would
@@ -437,6 +430,10 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
       // Skip showing if we're in the middle of an Escape dismiss
       if (isEscapeDismissingRef.current) {
         isEscapeDismissingRef.current = false;
+        return;
+      }
+      // The caller owns a controlled `false`, so no focus opens the card.
+      if (isOpen === false) {
         return;
       }
       clearTimeouts();

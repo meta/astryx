@@ -214,8 +214,7 @@ export interface HoverCardProps extends Pick<
   /**
    * Controlled open state. When provided, overrides the hover trigger:
    * - `true`: force-show the hover card (hover/focus hide is suppressed)
-   * - `false`: hide the hover card and keep hover from opening it; focus on
-   *   the trigger still opens it
+   * - `false`: hide the hover card and keep hover and focus from opening it
    * - `undefined`: uncontrolled — hover/focus triggers manage visibility
    *
    * A controlled hover card still takes Escape when it is the top-most layer,
