@@ -134,7 +134,7 @@ export const docs = {
       name: 'hiddenRegions',
       type: "ReadonlyArray<'topNav' | 'sideNav'>",
       description:
-        "The navigation regions to hide while they stay mounted, such as ['topNav', 'sideNav'] for a focus mode. A hidden region takes no space, its contents are inert and keep their state, and focus inside it moves to the main content. It slides out by its edge as the content takes its space, in one motion. On a phone the drawer and its toggle follow 'sideNav'. The banner and content cannot be hidden. Controlled: render your own control in the content to show the regions again.",
+        "The navigation regions to hide while they stay mounted, such as ['topNav', 'sideNav'] for a focus mode. A hidden region takes no space, its contents are inert and keep their state, and focus inside it moves to the main content. It slides out by its edge as the content takes its space, in one motion. On a phone, the drawer leaves out each hidden region, and its menu button goes when nothing is left to show. The banner and content cannot be hidden. Controlled: render your own control in the content to show the regions again.",
     },
     {
       name: 'sideNav',
@@ -286,7 +286,7 @@ export const docsZh = {
       name: 'hiddenRegions',
       type: "ReadonlyArray<'topNav' | 'sideNav'>",
       description:
-        "要隐藏但保持挂载的导航区域，例如专注模式使用 ['topNav', 'sideNav']。隐藏的区域不占空间，其内容不可交互并保留状态，区域内的焦点移到主内容。区域沿边缘滑出，内容同时占用其空间，二者为同一个动效。在手机上，抽屉及其切换按钮跟随 'sideNav'。横幅和内容不能隐藏。受控：请在内容中提供你自己的控件以再次显示这些区域。",
+        "要隐藏但保持挂载的导航区域，例如专注模式使用 ['topNav', 'sideNav']。隐藏的区域不占空间，其内容不可交互并保留状态，区域内的焦点移到主内容。区域沿边缘滑出，内容同时占用其空间，二者为同一个动效。在手机上，抽屉不显示被隐藏的区域；当没有剩余内容时，其菜单按钮也会消失。横幅和内容不能隐藏。受控：请在内容中提供你自己的控件以再次显示这些区域。",
     },
     {
       name: 'sideNav',
@@ -391,7 +391,7 @@ export const docsDense = {
     children: 'main content area, rendered inside <main>',
     topNav: 'top nav slot, typically TopNav',
     hiddenRegions:
-      "regions to hide, kept mounted: 'topNav', 'sideNav' (focus mode); inert, focus to main, one slide with the content",
+      "regions to hide, kept mounted: 'topNav', 'sideNav' (focus mode); inert, focus to main, one slide with the content; phone drawer leaves hidden regions out",
     sideNav: 'side nav slot, typically SideNav',
     mobileNav:
       'mobile nav config: false | ReactNode | config with theme-resolved sm|md|lg|xl|2xl|none breakpoint (exclusive upper edge); none is always non-mobile and ignores defaultIsMobile',

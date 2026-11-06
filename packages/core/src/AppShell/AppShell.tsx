@@ -330,8 +330,9 @@ export interface AppShellProps extends BaseProps<HTMLDivElement> {
    * takes no space, its contents are inert and keep their state, and focus
    * inside it moves to the main content when it hides. The region slides out
    * by its edge as the content takes its space, in one motion. On a phone,
-   * the navigation drawer and its toggle follow `'sideNav'`. Only the top nav
-   * and the side nav can be hidden. The state is yours: render your own
+   * the drawer leaves out each hidden region, and its menu button goes when
+   * nothing is left to show. Only the top nav and the side nav can be
+   * hidden. The state is yours: render your own
    * control to show the regions again.
    *
    * @example
@@ -724,8 +725,32 @@ export function AppShell({
     (showsTopNav && topNavHasDrawerItems(topNav));
 
   const [uncontrolledMobileOpen, setUncontrolledMobileOpen] = useState(false);
+  const isMobileNavOpenRequested =
+    mobileNavConfig?.isOpen ?? uncontrolledMobileOpen;
+  // A region that hides while the drawer is open closes the drawer, and the
+  // drawer stays shut until the app opens it again, so revealing the region
+  // never reopens it. The app's own open state is not written. The hold is
+  // adjusted during render from what this render sees.
+  const [isDrawerHeldShut, setIsDrawerHeldShut] = useState(false);
+  const hiddenKey = `${isTopNavHidden ? 'topNav' : ''}|${isSideNavHidden ? 'sideNav' : ''}`;
+  const [seenHiddenKey, setSeenHiddenKey] = useState(hiddenKey);
+  if (hiddenKey !== seenHiddenKey) {
+    setSeenHiddenKey(hiddenKey);
+    const isNewlyHidden =
+      (isTopNavHidden && !seenHiddenKey.includes('topNav')) ||
+      (isSideNavHidden && !seenHiddenKey.includes('sideNav'));
+    if (isNewlyHidden && isMobileNavOpenRequested && !isDrawerHeldShut) {
+      setIsDrawerHeldShut(true);
+    }
+  }
+  if (isMobileNavOpenRequested && !drawerHasContent && !isDrawerHeldShut) {
+    setIsDrawerHeldShut(true);
+  }
+  if (!isMobileNavOpenRequested && isDrawerHeldShut) {
+    setIsDrawerHeldShut(false);
+  }
   const isMobileNavOpen =
-    (mobileNavConfig?.isOpen ?? uncontrolledMobileOpen) && drawerHasContent;
+    isMobileNavOpenRequested && drawerHasContent && !isDrawerHeldShut;
 
   // Holds the mobile nav's `Activity` boundary visible for a beat after a
   // close, so MobileNav's own close effect gets a real chance to run its
@@ -760,6 +785,10 @@ export function AppShell({
   const mobileNavOnOpenChange = mobileNavConfig?.onOpenChange;
   const setMobileNavOpen = useCallback(
     (open: boolean) => {
+      // The app asks for the drawer again: the hold after a hide ends.
+      if (open) {
+        setIsDrawerHeldShut(false);
+      }
       if (!mobileNavIsControlled) {
         setUncontrolledMobileOpen(open);
       }

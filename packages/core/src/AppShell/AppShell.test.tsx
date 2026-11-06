@@ -1831,6 +1831,60 @@ describe('AppShell hiddenRegions', () => {
     expect(screen.queryByTestId('mobile-nav-toggle')).toBeNull();
   });
 
+  it('on a phone, keeps the drawer closed when a region hidden while it was open shows again', async () => {
+    stubPhone();
+    const user = userEvent.setup();
+    const topNav = (
+      <TopNav heading={<TopNavHeading heading="App" />}>
+        <TopNavItem label="Home" href="/home" />
+      </TopNav>
+    );
+    function Shell({hidden}: {hidden?: boolean}) {
+      return (
+        <AppShell
+          hiddenRegions={hidden ? ['sideNav'] : undefined}
+          topNav={topNav}
+          sideNav={<CountingSideNav />}
+          mobileNav={{defaultIsMobile: true}}>
+          <MobileProbe />
+        </AppShell>
+      );
+    }
+    const {rerender} = render(<Shell />);
+    await user.click(screen.getByTestId('mobile-nav-toggle'));
+    expect(probedMobile).toMatchObject({isMobileNavOpen: true});
+    rerender(<Shell hidden />);
+    expect(probedMobile).toMatchObject({isMobileNavOpen: false});
+    rerender(<Shell />);
+    expect(probedMobile).toMatchObject({isMobileNavOpen: false});
+    // The menu button opens it again.
+    await user.click(screen.getByTestId('mobile-nav-toggle'));
+    expect(probedMobile).toMatchObject({isMobileNavOpen: true});
+  });
+
+  it('on a phone, reports a controlled drawer closed after a hide without writing its state', () => {
+    stubPhone();
+    const onOpenChange = vi.fn();
+    function Shell({hidden}: {hidden?: boolean}) {
+      return (
+        <AppShell
+          hiddenRegions={hidden ? ['sideNav'] : undefined}
+          topNav={<AppTopNav />}
+          sideNav={<CountingSideNav />}
+          mobileNav={{defaultIsMobile: true, isOpen: true, onOpenChange}}>
+          <MobileProbe />
+        </AppShell>
+      );
+    }
+    const {rerender} = render(<Shell />);
+    expect(probedMobile).toMatchObject({isMobileNavOpen: true});
+    rerender(<Shell hidden />);
+    expect(probedMobile).toMatchObject({isMobileNavOpen: false});
+    rerender(<Shell />);
+    expect(probedMobile).toMatchObject({isMobileNavOpen: false});
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
+
   it('on a phone, keeps an app drawer that hides nothing as it is', () => {
     stubPhone();
     render(
