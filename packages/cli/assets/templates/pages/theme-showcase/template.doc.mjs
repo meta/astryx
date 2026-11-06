@@ -6,7 +6,8 @@ export const doc = {
   name: 'Theme Showcase',
   displayName: 'Theme Showcase',
   description:
-    'Several unrelated product surfaces rendered together on one canvas so a token change can be judged across contexts at once. A comparison harness rather than a layout to ship.',
+    'Multi-surface comparison shell: preview palettes, typography, icons and control states across a storefront, checkout, chat and inventory on one responsive canvas. A theme preview and design-system showcase, with an embeddable content view for an existing app shell.',
+  category: 'Shell - Top Nav',
   keywords: [
     'theme',
     'tokens',
@@ -16,10 +17,8 @@ export const doc = {
     'design system preview',
   ],
   isReady: true,
-  // Surfaced via the Themes page "Open in Playground" action, not the
-  // Templates gallery, so keep it out of the overview + playground menu.
-  // No `category` — it's hidden from the overview gallery (the only consumer
-  // of `category`), and 'Showcase' isn't part of the TemplateCategory taxonomy.
+  // The standalone entry demonstrates an application shell; the named preview
+  // composes into its host without nesting AppShell. Keep it out of the gallery.
   isHiddenFromOverview: true,
   icons: {
     Banknote: 'money',
