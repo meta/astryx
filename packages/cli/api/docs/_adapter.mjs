@@ -1779,7 +1779,9 @@ export function nameOwner(tree, catalog, name) {
  * `tokens-color`, so the route is `tokens/tokens-color`, while the namespace
  * listing shows the bare `tokens-color`. Both spellings name one child, so
  * that child answers. Two or more children answering is ambiguous, and the
- * read falls through to the suggestion list, unchanged.
+ * read falls through to the suggestion list, unchanged. An experimental doc
+ * never answers to a bare name: its project reaches it only by a marked route
+ * (spec:AST-017 FR27).
  * @param {DocsTree} tree
  * @param {string} name
  * @returns {{kind: 'node', node: TreeNode} | null}
@@ -1796,6 +1798,9 @@ function childOwner(tree, name) {
     node =>
       node.ref?.flatTopic == null &&
       node.route.includes('/') &&
+      // An experimental doc is reachable only by a route its project marked
+      // as experimental (spec:AST-017 FR27): a bare name never opens one.
+      !isExperimentalTreeNode(tree, node) &&
       (node.name?.toLowerCase() === wanted ||
         (unstuttered != null && node.route.toLowerCase() === unstuttered)),
   );
