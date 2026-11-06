@@ -38,6 +38,7 @@ import {spacingVars} from '../theme/tokens.stylex';
 import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation';
 import {MENU_PRESS_LONG_PRESS_MS} from '../hooks/useMenuPress';
 import {MENU_PRESS_SETTLE_MS} from '../hooks/menuPressGesture';
+import {isInHeldLayer} from '../Layer/inputHold';
 import {TOUCH_QUERY} from '../utils/touchPresentation';
 import {UIKIT_GESTURES} from '../motion/uikit/gestures';
 
@@ -3001,6 +3002,115 @@ describe('DropdownMenu data/compound parity', () => {
     expect(item).toContainElement(screen.getByTestId('rich'));
     // Still typeahead- and screen-reader-addressable: both read text content.
     expect(item).toHaveAccessibleName('Rename');
+  });
+});
+
+describe('DropdownMenu entrance under a finger', () => {
+  function renderMenu(presentation?: 'popover') {
+    render(
+      <DropdownMenu
+        button={{label: 'Actions'}}
+        presentation={presentation}
+        items={[
+          {label: 'Edit', onClick: () => {}},
+          {label: 'Delete', onClick: () => {}},
+        ]}
+      />,
+    );
+    return screen.getByRole('button', {name: /Actions/});
+  }
+
+  const item = (name: string) =>
+    screen.getByRole('menuitem', {name, hidden: true});
+
+  // The primary pointer: a phone's finger, or a desktop's mouse.
+  function stubPointer(pointer: 'coarse' | 'fine') {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockImplementation((query: string) => ({
+        matches: pointer === 'coarse' && query === TOUCH_QUERY,
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    );
+  }
+
+  /**
+   * Gives each popover a running entrance (Web Animations' `getAnimations()`,
+   * which jsdom lacks) whose end the test decides.
+   */
+  function stubEntrance() {
+    let end = () => {};
+    const finished = new Promise<void>(resolve => {
+      end = resolve;
+    });
+    const entrance = {
+      playState: 'running',
+      finished,
+      effect: {getComputedTiming: () => ({endTime: 165})},
+    };
+    Object.defineProperty(Element.prototype, 'getAnimations', {
+      configurable: true,
+      value(this: Element) {
+        return this.matches('[popover]') ? [entrance] : [];
+      },
+    });
+    return {
+      async end() {
+        await act(async () => {
+          end();
+        });
+      },
+    };
+  }
+
+  afterEach(() => {
+    Reflect.deleteProperty(Element.prototype, 'getAnimations');
+  });
+
+  it('takes no touch while it enters: the layer is held until the entrance ends (spec:AST-094 FR35)', async () => {
+    stubPointer('coarse');
+    const entrance = stubEntrance();
+    const user = userEvent.setup();
+    await user.click(renderMenu());
+    expect(isInHeldLayer(item('Edit'))).toBe(true);
+
+    await entrance.end();
+    expect(isInHeldLayer(item('Edit'))).toBe(false);
+  });
+
+  it('lets go at once when it closes during its entrance', async () => {
+    stubPointer('coarse');
+    stubEntrance();
+    const user = userEvent.setup();
+    const trigger = renderMenu();
+    await user.click(trigger);
+    expect(isInHeldLayer(item('Edit'))).toBe(true);
+
+    await user.keyboard('{Escape}');
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(isInHeldLayer(item('Edit'))).toBe(false);
+  });
+
+  it('under a fine primary pointer (a mouse, or a finger on a touchscreen laptop), holds nothing: the layer\u2019s own entrance plays', async () => {
+    stubPointer('fine');
+    stubEntrance();
+    const user = userEvent.setup();
+    await user.click(renderMenu());
+    expect(isInHeldLayer(item('Edit'))).toBe(false);
+  });
+
+  it('pinned to presentation="popover", holds nothing under a finger', async () => {
+    stubPointer('coarse');
+    stubEntrance();
+    const user = userEvent.setup();
+    await user.click(renderMenu('popover'));
+    expect(isInHeldLayer(item('Edit'))).toBe(false);
   });
 });
 
