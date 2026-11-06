@@ -129,6 +129,11 @@ export interface TransferListProps<T extends string = string> extends Omit<
   description?: string;
   /** Complete option catalog. Option values must be unique. */
   options: readonly TransferListOption<T>[];
+  /**
+   * Disables every transfer, reorder, Clear, Add all and search control. The
+   * row controls and the search field stay focusable. @default false
+   */
+  isDisabled?: boolean;
   /** Ordered selected values. This array is the single source of truth. */
   value: readonly T[];
   /** Called with the next ordered selection after a committed change. */
@@ -389,7 +394,8 @@ export function TransferList<T extends string = string>({
   label,
   isLabelHidden = false,
   description,
-  options,
+  options: optionsFromProps,
+  isDisabled = false,
   value,
   onChange,
   selectedLabel: selectedLabelFromProps,
@@ -458,6 +464,21 @@ export function TransferList<T extends string = string>({
       setReorderSessionState(nextSession);
     },
     [],
+  );
+
+  // An option's own message names its own constraint.
+  // It does not apply to a disabled list.
+  const options = useMemo(
+    () =>
+      isDisabled
+        ? optionsFromProps.map(option => ({
+            ...option,
+            isTransferDisabled: true,
+            isReorderDisabled: true,
+            disabledMessage: undefined,
+          }))
+        : optionsFromProps,
+    [isDisabled, optionsFromProps],
   );
 
   const optionByValue = useMemo(() => {
@@ -748,6 +769,12 @@ export function TransferList<T extends string = string>({
       if (!session) {
         return;
       }
+      // A list disabled mid-reorder takes no change from it, not even the
+      // cancel that restores the order from before the grab.
+      if (isDisabled) {
+        setReorderSession(null);
+        return;
+      }
       if (session.mode === 'pointer') {
         if (cancelled || !session.hasPointerMoved) {
           setReorderSession(null);
@@ -805,7 +832,7 @@ export function TransferList<T extends string = string>({
       }
       setReorderSession(null);
     },
-    [announce, commit, setReorderSession, t],
+    [announce, commit, isDisabled, setReorderSession, t],
   );
 
   const handleReorderClick = useCallback(
@@ -1106,7 +1133,7 @@ export function TransferList<T extends string = string>({
       <IconButton
         label={t('@astryx.transferList.reorderOption', {label: option.label})}
         aria-describedby={reorderInstructionsId}
-        aria-pressed={active}
+        aria-pressed={active && !isDisabled}
         icon={<Icon icon={GripVerticalIcon} size="sm" />}
         size="sm"
         variant="ghost"
@@ -1241,6 +1268,7 @@ export function TransferList<T extends string = string>({
             hasClear
             width="100%"
             controlXstyle={styles.search}
+            isDisabled={isDisabled}
             onChange={handleSearch}
           />
         </div>

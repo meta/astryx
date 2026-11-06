@@ -19,10 +19,10 @@
  */
 
 import fs from 'node:fs';
-import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 
 import {packageExists, registryHas} from './publish-package.mjs';
+import {publishedPackages} from './published-manifests.mjs';
 
 /**
  * The packages the canary loop publishes: public `@astryxdesign` packages,
@@ -30,31 +30,11 @@ import {packageExists, registryHas} from './publish-package.mjs';
  * which the loop skips while their npm name does not exist.
  */
 export function canaryPackages(root) {
-  const dirs = ['packages', 'packages/themes'].flatMap(parent =>
-    fs
-      .readdirSync(path.join(root, parent), {withFileTypes: true})
-      .filter(entry => entry.isDirectory())
-      .map(entry => `${parent}/${entry.name}`)
-      .sort(),
-  );
-  return dirs
-    .filter(dir => fs.existsSync(path.join(root, dir, 'package.json')))
-    .map(dir => ({
-      dir,
-      manifest: JSON.parse(
-        fs.readFileSync(path.join(root, dir, 'package.json'), 'utf8'),
-      ),
-    }))
-    .filter(
-      ({manifest}) =>
-        manifest.name?.startsWith('@astryxdesign/') &&
-        (!manifest.private || manifest.astryx?.canaryOnly),
-    )
-    .map(({dir, manifest}) => ({
-      dir,
-      name: manifest.name,
-      privateCanary: Boolean(manifest.private),
-    }));
+  return publishedPackages(root).map(({dir, manifest}) => ({
+    dir,
+    name: manifest.name,
+    privateCanary: Boolean(manifest.private),
+  }));
 }
 
 /**
