@@ -758,8 +758,8 @@ export function Button({
     }
   };
 
-  // When aria-disabled, suppress activation keys (Enter/Space) but allow
-  // other keys (Escape, arrows) to reach consumer handlers (AST-085 FR2).
+  // A disabled button cancels Enter and Space, its activation keys. Other
+  // keys, such as Escape and the arrows, still reach the caller's handler.
   const handleKeyDown = buttonDisabled
     ? (e: React.KeyboardEvent<HTMLButtonElement>) => {
         if (e.key === 'Enter' || e.key === ' ') {
