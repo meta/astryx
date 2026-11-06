@@ -466,8 +466,8 @@ export function TransferList<T extends string = string>({
     [],
   );
 
-  // A disabled list treats every option as fixed. An option's own message
-  // describes its own constraint, so it does not apply here.
+  // An option's own message names its own constraint.
+  // It does not apply to a disabled list.
   const options = useMemo(
     () =>
       isDisabled
@@ -769,6 +769,12 @@ export function TransferList<T extends string = string>({
       if (!session) {
         return;
       }
+      // A list disabled mid-reorder takes no change from it, not even the
+      // cancel that restores the order from before the grab.
+      if (isDisabled) {
+        setReorderSession(null);
+        return;
+      }
       if (session.mode === 'pointer') {
         if (cancelled || !session.hasPointerMoved) {
           setReorderSession(null);
@@ -826,7 +832,7 @@ export function TransferList<T extends string = string>({
       }
       setReorderSession(null);
     },
-    [announce, commit, setReorderSession, t],
+    [announce, commit, isDisabled, setReorderSession, t],
   );
 
   const handleReorderClick = useCallback(
@@ -1127,7 +1133,7 @@ export function TransferList<T extends string = string>({
       <IconButton
         label={t('@astryx.transferList.reorderOption', {label: option.label})}
         aria-describedby={reorderInstructionsId}
-        aria-pressed={active}
+        aria-pressed={active && !isDisabled}
         icon={<Icon icon={GripVerticalIcon} size="sm" />}
         size="sm"
         variant="ghost"

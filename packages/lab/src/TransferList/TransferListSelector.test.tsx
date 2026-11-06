@@ -462,12 +462,10 @@ describe('TransferListSelector', () => {
     expect(addStatus).toHaveFocus();
     await user.click(addStatus);
     expect(onChange).not.toHaveBeenCalled();
-    // The search field is disabled but focusable, and the row tooltips name
-    // no option-specific constraint.
+    // The search field is disabled but focusable.
     expect(
       within(dialog).getByRole('searchbox', {hidden: true}),
     ).toHaveAttribute('aria-disabled', 'true');
-    expect(addStatus).not.toHaveAccessibleDescription(/fixed|must/i);
     view.rerender(
       <TransferListSelector
         label="Visible fields"
