@@ -16,7 +16,7 @@ import {renderToString} from 'react-dom/server';
 import {Calendar} from '@astryxdesign/core';
 
 const meta = {
-  title: 'Fixtures/Calendar Today Hydration',
+  title: 'Core/CalendarHydration',
   tags: ['no-visual', '!autodocs'],
   parameters: {layout: 'padded'},
 } satisfies Meta;

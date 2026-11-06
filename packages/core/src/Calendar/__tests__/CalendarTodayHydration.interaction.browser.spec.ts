@@ -2,7 +2,7 @@
 
 /**
  * @file CalendarTodayHydration.interaction.browser.spec.ts
- * @input The built Calendar Today Hydration fixture stories and the page clock
+ * @input The built CalendarHydration fixture stories and the page clock
  * @output In a real browser, Calendar markup rendered on 30 November hydrates
  *   on 1 December with no recoverable error, then shows December with
  *   1 December as today; in a two-month view a pick in the second month keeps
@@ -42,7 +42,7 @@ test('Calendar markup from one date hydrates on the next date without an error, 
 }) => {
   const host = await serverThenHydrate(
     page,
-    'fixtures-calendar-today-hydration--one-month',
+    'core-calendarhydration--one-month',
   );
   await expect(host.getByRole('grid')).toHaveAttribute(
     'aria-label',
@@ -61,7 +61,7 @@ test('a pick in the second month of a hydrated two-month Calendar keeps both mon
 }) => {
   const host = await serverThenHydrate(
     page,
-    'fixtures-calendar-today-hydration--two-months',
+    'core-calendarhydration--two-months',
   );
   const grids = host.getByRole('grid');
   await expect(grids).toHaveCount(2);
