@@ -66,12 +66,13 @@ export default function PowerSearchContentSearch() {
   const [filters, setFilters] = useState<PowerSearchFilter[]>([]);
 
   return (
-    <PowerSearch
-      style={{width: 300}}
-      config={config}
-      filters={filters}
-      onChange={newFilters => setFilters([...newFilters])}
-      placeholder="Type to search by title, or pick a field..."
-    />
+    <div style={{display: 'grid', gridTemplateColumns: 'minmax(0, 300px)'}}>
+      <PowerSearch
+        config={config}
+        filters={filters}
+        onChange={newFilters => setFilters([...newFilters])}
+        placeholder="Type to search by title, or pick a field..."
+      />
+    </div>
   );
 }

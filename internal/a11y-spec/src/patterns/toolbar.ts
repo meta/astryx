@@ -125,7 +125,7 @@ const AST_020_FR15: AstryxRecord = {
   standard: 'astryx',
   id: 'spec:AST-020',
   clause: 'FR15',
-  url: 'https://github.com/facebook/astryx/blob/878fad9d7ac23cd3f4c5def64595abd770bb01a3/docs/specs/AST-020/spec.md#L83-L92',
+  url: 'https://github.com/meta/astryx/blob/878fad9d7ac23cd3f4c5def64595abd770bb01a3/docs/specs/AST-020/spec.md#L83-L92',
   requirement:
     "Where a component part already plays an APG pattern's role, Astryx adopts that pattern's required parts for it: the role, the accessible name, the state and relationship properties, and activation by Tab plus Enter or Space. The pattern's optional keyboard extras — arrow-key movement between parts, Home and End — are adopted only where the component already acts as one composite control.",
 };
@@ -140,7 +140,7 @@ const DESIGN_BIDI_DR6: AstryxRecord = {
   standard: 'astryx',
   id: 'design:bidirectionality',
   clause: 'DR6',
-  url: 'https://github.com/facebook/astryx/blob/22c592a7a5a911945c0c53204e4daa09a349843d/docs/design/bidirectionality.md#L79-L81',
+  url: 'https://github.com/meta/astryx/blob/22c592a7a5a911945c0c53204e4daa09a349843d/docs/design/bidirectionality.md#L79-L81',
   requirement:
     'Horizontal keyboard movement, drag/resize math, carousel or scroll progression, range navigation, and side placement MUST produce the action indicated by the RTL visual state.',
 };

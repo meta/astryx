@@ -39,6 +39,8 @@ describe('compact baseline manifest', () => {
           membershipSource: 'current-story',
           width: 1024,
           height: 768,
+          capturedAt: '2026-11-06T00:00:00.000Z',
+          runId: '42',
         },
       },
     });
@@ -49,6 +51,8 @@ describe('compact baseline manifest', () => {
       mode: 'light',
       packageName: '@astryxdesign/core',
       themePackageName: '@astryxdesign/theme-neutral',
+      capturedAt: '2026-11-06T00:00:00.000Z',
+      runId: '42',
     });
     expect(JSON.stringify(compact)).not.toContain('Core/Button');
   });
@@ -205,6 +209,74 @@ describe('accept', () => {
     promote();
     promote({keys: ['b'], reason: 'Badge padding, intentional'});
     expect(readBaseline(baselineDir).manifest.decisions).toHaveLength(2);
+  });
+
+  it('dates each promoted shot by its capture and capture run, and dates the manifest by its oldest shot', () => {
+    // The first accept dates the whole manifest by its only capture.
+    promote({
+      keys: ['a', 'b'],
+      runId: 'accepting-job',
+      currentManifest: {...currentManifest, context: {runId: '100'}},
+    });
+    let manifest = JSON.parse(
+      fs.readFileSync(path.join(baselineDir, 'manifest.json'), 'utf8'),
+    );
+    expect(manifest.shots.a).toMatchObject({
+      capturedAt: '2026-08-23T00:00:00.000Z',
+      runId: '100',
+    });
+    expect(manifest.capturedAt).toBe('2026-08-23T00:00:00.000Z');
+    // A later accept of one shot dates that shot, not the manifest.
+    promote({
+      keys: ['b'],
+      currentManifest: {
+        ...currentManifest,
+        capturedAt: '2026-11-06T00:00:00.000Z',
+        context: {runId: '200'},
+      },
+    });
+    manifest = JSON.parse(
+      fs.readFileSync(path.join(baselineDir, 'manifest.json'), 'utf8'),
+    );
+    expect(manifest.shots.a).toMatchObject({
+      capturedAt: '2026-08-23T00:00:00.000Z',
+      runId: '100',
+    });
+    expect(manifest.shots.b).toMatchObject({
+      capturedAt: '2026-11-06T00:00:00.000Z',
+      runId: '200',
+    });
+    expect(manifest.capturedAt).toBe('2026-08-23T00:00:00.000Z');
+  });
+
+  it('dates an undated older shot by the manifest date it had', () => {
+    fs.mkdirSync(path.join(baselineDir, 'shots'), {recursive: true});
+    fs.writeFileSync(
+      path.join(baselineDir, 'manifest.json'),
+      JSON.stringify({
+        version: 1,
+        shots: {b: {sha256: 'old-b'}},
+        decisions: [],
+        platform: 'linux-arm64',
+        viewport: {width: 1024, height: 768},
+        capturedAt: '2026-09-30T00:00:00.000Z',
+      }),
+    );
+    promote({
+      keys: ['a'],
+      currentManifest: {
+        ...currentManifest,
+        capturedAt: '2026-11-06T00:00:00.000Z',
+      },
+    });
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(baselineDir, 'manifest.json'), 'utf8'),
+    );
+    expect(manifest.shots.b.capturedAt).toBeUndefined();
+    expect(manifest.shots.a.capturedAt).toBe('2026-11-06T00:00:00.000Z');
+    // A capture that names no run records none; the accepting run is not it.
+    expect(manifest.shots.a.runId).toBeUndefined();
+    expect(manifest.capturedAt).toBe('2026-09-30T00:00:00.000Z');
   });
 
   it('drops pruned shots from both the manifest and disk', () => {

@@ -36,6 +36,7 @@ import {
   summarizeIssues,
   validateIntegration,
 } from '../validate-integration.mjs';
+import {withListingCache} from '../../../foundation/fs/listing-cache.mjs';
 
 /** @typedef {import('../integration-check.type.mjs').IntegrationCheckName} IntegrationCheckName */
 /** @typedef {import('../integration-check.type.mjs').IntegrationCheckReport} IntegrationCheckReport */
@@ -244,9 +245,13 @@ export async function integrationCheck(options = {}) {
   /** @type {IntegrationCheckResponse[]} */
   const responses = [];
   responses.push(await validateIntegration(undefined, {cwd}));
-  responses.push(await integrationComponentConflicts(undefined, {cwd}));
-  responses.push(await integrationTemplateConflicts(undefined, {cwd}));
-  responses.push(await integrationDocConflicts(undefined, {cwd}));
+  // The three authoring checks only read, so they share one listing of each
+  // folder.
+  await withListingCache(async () => {
+    responses.push(await integrationComponentConflicts(undefined, {cwd}));
+    responses.push(await integrationTemplateConflicts(undefined, {cwd}));
+    responses.push(await integrationDocConflicts(undefined, {cwd}));
+  });
 
   const [validation] = responses;
   return {

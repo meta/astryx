@@ -667,7 +667,7 @@ function readOwnExportNames(file, cache, stack) {
  * @param {SubpathDeclaration} declaration
  * @returns {{files: string[], allPresent: boolean}}
  */
-function declaredTargets(packageDir, declaration) {
+export function declaredTargets(packageDir, declaration) {
   if (declaration.state !== 'declared') return {files: [], allPresent: false};
   const root = path.resolve(packageDir);
   const all = allTargets(declaration.value)
@@ -693,7 +693,7 @@ function declaredTargets(packageDir, declaration) {
  *   so a list without the module's types can still judge it
  * @returns {string[] | null} null when it cannot be judged
  */
-function missingNames(
+export function missingNames(
   statement,
   files,
   cache,
