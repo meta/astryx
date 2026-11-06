@@ -405,6 +405,46 @@ export function slideNextOnRelease(
     elapsedMs >= progress.durationMs ? 0 : progress.remaining(elapsedMs);
 }
 
+/**
+ * Reads the size the pane's edge shows from its handle's drawn middle,
+ * glides included. Measured while the pane shows `size`.
+ */
+export function shownSizeReader(
+  pane: ResizablePane,
+  size: number,
+): (() => number) | null {
+  const element = pane.element;
+  const handle = resizeHandleBeside(element, null);
+  if (handle == null) {
+    return null;
+  }
+  const edge = pane.contentFacingEdge();
+  const isInline = edge.startsWith('inline');
+  const isRtl =
+    isInline &&
+    element.ownerDocument.defaultView?.getComputedStyle(element).direction ===
+      'rtl';
+  const isForward = isInline
+    ? edge.endsWith('end') !== isRtl
+    : edge.endsWith('end');
+  const rect = element.getBoundingClientRect();
+  const far = isInline
+    ? isForward
+      ? rect.left
+      : rect.right
+    : isForward
+      ? rect.top
+      : rect.bottom;
+  const sign = isForward ? 1 : -1;
+  const middle = () => {
+    const box = handle.getBoundingClientRect();
+    return isInline ? box.left + box.width / 2 : box.top + box.height / 2;
+  };
+  // The handle's middle stands this far past the pane's shown edge.
+  const offset = sign * (middle() - far) - size;
+  return () => Math.max(sign * (middle() - far) - offset, 0);
+}
+
 /** A pull past a limit, drawn on a pane a LayoutPanel renders. */
 export interface OvershootDrawing {
   /** Draws the pane's edge `amount` px past its limit: positive past the maximum. */

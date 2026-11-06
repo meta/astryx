@@ -18,7 +18,7 @@ import {observeResize} from '../utils/sharedResizeObserver';
 import {devWarn} from '../utils/devWarning';
 import {project} from '../motion/projection';
 import {
-  rubberBandClamp,
+  rubberBand,
   rubberBandInverse,
   rubberBandSlope,
 } from '../motion/rubberBand';
@@ -53,6 +53,7 @@ import {
   type PaneListener,
   type RegionPaneSlot,
   type ResizablePane,
+  shownSizeReader,
   slideNextOnRelease,
 } from './resizablePane';
 import {separatorAttributes} from './separatorAttributes';
@@ -456,6 +457,9 @@ export function createResizableAs(
   // Past a bound the pane's edge is drawn this far past it, with no layout
   // change. It springs back to 0 after the lift.
   let overshoot = 0;
+  // A finger that catches the drawn edge holds it where it shows: inside this
+  // much overshoot the edge follows the finger 1:1.
+  let caught = 0;
   let drawing: OvershootDrawing | null = null;
   // A spring-back the pane's edge is playing: what it started from, when, and
   // the share of it still to go by ms since then.
@@ -463,6 +467,14 @@ export function createResizableAs(
     from: number;
     startedAt: number;
     remaining: (elapsedMs: number) => number;
+  } | null = null;
+  // The slide a closing lift plays: its start size, its start time, and the
+  // share still to go by ms since then.
+  let closingSlide: {
+    from: number;
+    startedAt: number;
+    remaining: (elapsedMs: number) => number;
+    readShown: (() => number) | null;
   } | null = null;
 
   let initialDefault: {px: number; isFinal: boolean} | null = null;
@@ -958,15 +970,20 @@ export function createResizableAs(
       // The basis holds still for the whole gesture.
       gestureBasis = readLiveBasis();
       isGestureActive = true;
+      const closing = derived.isCollapsed ? closingShown() : 0;
+      closingSlide = null;
+      if (closing > 0) {
+        catchClosing(closing);
+        return;
+      }
       // A finger catches a spring-back where it shows.
       const shown =
         springBack == null ? overshoot : springBackShown(springBack);
       springBack = null;
       overshoot = shown;
+      caught = shown;
       drawing?.draw(shown);
-      dragStartSize =
-        (derived.isCollapsed ? 0 : derived.size) +
-        rubberBandInverse(shown, rubberDimension());
+      dragStartSize = (derived.isCollapsed ? 0 : derived.size) + shown;
       pointerSize = dragStartSize;
       sizeBeforeDrag = derived.isCollapsed ? null : derived.size;
     },
@@ -1023,6 +1040,27 @@ export function createResizableAs(
     expand,
   };
 
+  /**
+   * A finger catches a pane that is still sliding shut: the pane opens at
+   * once, and its edge stays where it shows, under the finger.
+   */
+  function catchClosing(shownSize: number): void {
+    setCollapsed(false);
+    const clamped = clampSize(shownSize, derived.min, derived.max, snaps());
+    chosenSize = clamped;
+    isPointerReopening = true;
+    commit();
+    isPointerReopening = false;
+    overshoot = pane == null ? 0 : shownSize - derived.size;
+    caught = overshoot;
+    drawing?.draw(overshoot);
+    dragStartSize = shownSize;
+    pointerSize = shownSize;
+    sizeBeforeDrag = derived.size;
+    opts.onCollapseChange?.(false);
+    opts.onSizeChange?.(clamped);
+  }
+
   /** How far a pull past a bound can move the edge: the band's extent. */
   function rubberDimension(): number {
     return RUBBER_BAND_TRAVEL_PX;
@@ -1032,11 +1070,23 @@ export function createResizableAs(
   function overshootPast(raw: number): number {
     const {min, max} = derived;
     if (raw >= min && raw <= max) {
+      caught = 0;
       return 0;
     }
-    const shown = rubberBandClamp(raw, min, max, rubberDimension());
+    const bound = raw > max ? max : min;
+    const excess = raw - bound;
+    const held = Math.sign(caught) === Math.sign(excess) ? caught : 0;
+    // The band resumes past what a catch held, over the rest of its extent.
+    const shown =
+      Math.abs(excess) <= Math.abs(held)
+        ? excess
+        : held +
+          rubberBand(
+            excess - held,
+            Math.max(rubberDimension() - Math.abs(held), 0),
+          );
     // Below the minimum the drawn edge stops at 0, never past it.
-    return Math.max(shown, 0) - (raw > max ? max : min);
+    return Math.max(bound + shown, 0) - bound;
   }
 
   /**
@@ -1076,6 +1126,37 @@ export function createResizableAs(
     }
   }
 
+  /** The size a pane still sliding shut shows now; 0 once it is shut. */
+  function closingShown(): number {
+    const view = pane?.element.ownerDocument.defaultView;
+    const row = pane?.element.parentElement;
+    if (closingSlide == null || view == null || row == null) {
+      return 0;
+    }
+    const share = closingSlide.remaining(
+      view.performance.now() - closingSlide.startedAt,
+    );
+    // A slide that landed, or landed early as a running motion lands, shows
+    // nothing. A CSS transition, such as the handle's hover, is not the slide.
+    if (
+      share <= 0 ||
+      (typeof row.getAnimations === 'function' &&
+        !row
+          .getAnimations({subtree: true})
+          .some(
+            motion =>
+              (motion.playState === 'running' ||
+                motion.playState === 'paused') &&
+              !('transitionProperty' in motion) &&
+              !('animationName' in motion),
+          ))
+    ) {
+      return 0;
+    }
+    // The handle stays under the finger: the size is read from where it shows.
+    return closingSlide.readShown?.() ?? closingSlide.from * share;
+  }
+
   /** How far past the bound a playing spring-back shows the edge now. */
   function springBackShown(played: NonNullable<typeof springBack>): number {
     const view = pane?.element.ownerDocument.defaultView;
@@ -1091,6 +1172,8 @@ export function createResizableAs(
   function closeOnRelease(velocity: number): void {
     springBack = null;
     const shown = derived.size + overshoot;
+    // Measured while the edge still shows where the lift left it.
+    const readShown = pane == null ? null : shownSizeReader(pane, shown);
     overshoot = 0;
     drawing?.clear();
     // An open restores the size the drag started from.
@@ -1098,9 +1181,21 @@ export function createResizableAs(
       chosenSize = sizeBeforeDrag;
     }
     const row = pane?.element.parentElement;
-    if (row != null) {
-      slideNextOnRelease(row, -velocity, shown);
-    }
+    const remaining =
+      row == null ? null : slideNextOnRelease(row, -velocity, shown);
+    const view = pane?.element.ownerDocument.defaultView;
+    // Under Reduce Motion the pane shuts at once: nothing is left to catch.
+    closingSlide =
+      remaining == null ||
+      view == null ||
+      view.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
+        ? null
+        : {
+            from: shown,
+            startedAt: view.performance.now(),
+            remaining,
+            readShown,
+          };
     setCollapsed(true);
     commit();
     opts.onCollapseChange?.(true);
