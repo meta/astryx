@@ -4,8 +4,9 @@
  * @file zoomStage.test.ts
  * @input vitest, the zoom stage geometry and the UIKit zoom constants
  * @output Checks the zoom stage against UIKit's measured zooming and
- *   Lightbox's double tap. It covers the overshoot, the maximum zoom, the
- *   point kept in place, resting places, a drag's rubber band and a resize
+ *   Lightbox's own zoom. It covers the overshoot, the maximum zoom, both
+ *   double taps, resting places, a drag's rubber band, a resize and the
+ *   keyboard's zoom
  * @position Testing; zoomStage.ts without a browser
  */
 
@@ -14,6 +15,7 @@ import {rubberBand} from '../motion/rubberBand';
 import {
   IDENTITY,
   ZOOM_STEP,
+  doubleClickTarget,
   doubleTapScaleFor,
   doubleTapTarget,
   draggedTransform,
@@ -24,6 +26,7 @@ import {
   pinchScaleFor,
   rawForDragged,
   releaseTarget,
+  releasedZoomTarget,
   restRange,
   restingTransform,
   transformForResize,
@@ -312,5 +315,51 @@ describe('a resize while zoomed (rotation)', () => {
     const before = landscape();
     const after = landscape({width: 500});
     expect(transformForResize(before, after, IDENTITY)).toEqual(IDENTITY);
+  });
+});
+
+describe('the double-click: 2× about the clicked point', () => {
+  const g = landscape();
+  it('zooms 2× and keeps the clicked photo point under the pointer', () => {
+    // Aspect fill would zoom this photo about 3.3×.
+    expect(g.doubleTapScale).toBeGreaterThan(3);
+    const fitted = {...IDENTITY, scale: g.minScale};
+    const target = doubleClickTarget(g, fitted, {x: 134, y: 437});
+    expect(target.scale).toBe(ZOOM_STEP);
+    expect(shown(g, target, 134, 134).x).toBeCloseTo(134, 9);
+  });
+  it('returns to the fitted size when zoomed', () => {
+    const fitted = {...IDENTITY, scale: g.minScale};
+    const zoomed = doubleClickTarget(g, fitted, {x: 134, y: 437});
+    expect(doubleClickTarget(g, zoomed, {x: 50, y: 50})).toEqual(
+      restingTransform(g, fitted),
+    );
+  });
+});
+
+describe("the keyboard's zoom", () => {
+  const g = landscape();
+  const centre = {x: g.width / 2, y: g.height / 2};
+  it('zooms 2x about the centre, whatever aspect fill would give', () => {
+    // Aspect fill would zoom this photo about 3.3x.
+    expect(g.doubleTapScale).toBeGreaterThan(3);
+    const target = releasedZoomTarget(g, {...IDENTITY, scale: g.minScale});
+    expect(target.scale).toBe(2);
+    // The stage's centre shows the photo's centre, as before.
+    const middle = shown(g, target, g.fit.width / 2, g.fit.height / 2);
+    expect(middle.x).toBeCloseTo(centre.x, 9);
+    expect(middle.y).toBeCloseTo(centre.y, 9);
+  });
+  it('returns to the fitted size when zoomed', () => {
+    const zoomed = releasedZoomTarget(g, {...IDENTITY, scale: g.minScale});
+    expect(releasedZoomTarget(g, zoomed)).toEqual(
+      restingTransform(g, {...IDENTITY, scale: g.minScale}),
+    );
+  });
+  it('stays inside the limits', () => {
+    const small = landscape({maxScale: 1.5});
+    expect(
+      releasedZoomTarget(small, {...IDENTITY, scale: small.minScale}).scale,
+    ).toBe(1.5);
   });
 });
