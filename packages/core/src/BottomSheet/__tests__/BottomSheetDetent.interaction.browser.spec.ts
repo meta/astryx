@@ -39,9 +39,10 @@ import {
   drag,
   flick,
   frames,
-  freezeTimers,
+  freezePageOn,
   holdAnimations,
   installLongTaskLog,
+  installPageFreeze,
   installTimerGate,
   markElement,
   openStory,
@@ -50,7 +51,7 @@ import {
   releaseVelocity,
   sampleCurve,
   startScreencast,
-  thawTimers,
+  thawPage,
   timeline,
   timingFunction,
   touchDriver,
@@ -190,10 +191,17 @@ test('a downward flick dismisses the sheet', async ({page}) => {
 test('the settle lands on the detent, its curve recorded frame by frame', async ({
   page,
 }, testInfo) => {
+  // The page clock that lets the scene stop at the lift, installed before
+  // the story loads; a freeze also needs the timer gate.
+  await installPageFreeze(page);
   const {driver, sheet, tallTop, halfTop, handle} = await openSheet(page);
+  await installTimerGate(page);
   const dy = Math.round((halfTop - tallTop) * 0.66);
+  // The scene stops in the lift's own task, before the sheet hears the lift.
+  // The settle then starts held, however late this process reacts. A hold
+  // that the test sends after the lift can come after the settle ends.
+  await freezePageOn(page, 'touchend');
   await driver.play(slowDragTo(handle, dy));
-  const [settle] = await waitForAnimation(sheet);
   const held = await holdAnimations(page, sheet);
   const transition = held.find(a => a.name === 'transform');
   if (transition == null) {
@@ -214,6 +222,7 @@ test('the settle lands on the detent, its curve recorded frame by frame', async 
     from + (to - from) * ease(Math.min(1, t / SETTLE_MS));
   const result = compareCurve(samples, expectedSettle, 0.5);
   await releaseAnimations(page);
+  await thawPage(page);
   testInfo.annotations.push({
     type: 'settle-curve',
     description: `settle: ${transition.easing}, ${transition.durationMs} ms; frame-by-frame max error ${result.maxError.toFixed(2)} px against ${SETTLE_EASING} over ${SETTLE_MS} ms`,
@@ -232,7 +241,7 @@ test('the settle lands on the detent, its curve recorded frame by frame', async 
     'curves/bottomsheet-settle',
     {
       [`${testInfo.project.name}.json`]: JSON.stringify(
-        {settle, transition, comparison: result},
+        {transition, comparison: result},
         null,
         2,
       ),
@@ -354,6 +363,9 @@ test(
   'storyboard: drag to the half detent and settle',
   {tag: '@storyboard'},
   async ({page}, testInfo) => {
+    // The page clock that lets the scene stop at the lift, installed before
+    // the story loads.
+    await installPageFreeze(page);
     const {driver, sheet, tallTop, halfTop, handle} = await openSheet(page);
     // Gate the page's timers from here on, so the settle's completion timer can
     // be held with its animation while the filmstrip is photographed.
@@ -362,6 +374,10 @@ test(
     const clip = {x: 0, y: 0, width: viewport.width, height: viewport.height};
     const dy = Math.round((halfTop - tallTop) * 0.66);
     const measure = async () => ({top: await sheetTop(sheet)});
+    // The scene stops in the lift's own task, before the sheet hears the
+    // lift. The settle then starts held, however late this process reacts. A
+    // hold that the test sends after the lift can come after the settle ends.
+    await freezePageOn(page, 'touchend');
     const dragBoard = await touchStoryboard(
       page,
       driver,
@@ -378,8 +394,6 @@ test(
         cellScale: 0.4,
       },
     );
-    await waitForAnimation(sheet);
-    await freezeTimers(page);
     const {storyboard: settleBoard} = await animationStoryboard(page, {
       name: 'bottomsheet-settle',
       clip,
@@ -389,7 +403,7 @@ test(
       cellScale: 0.4,
     });
     await releaseAnimations(page, {finish: true});
-    await thawTimers(page);
+    await thawPage(page);
     await dragBoard.write(testInfo);
     await settleBoard.write(testInfo);
     // The trace is the assertion; the sheets are the evidence.

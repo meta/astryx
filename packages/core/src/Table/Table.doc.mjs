@@ -161,6 +161,21 @@ export const docs = {
         whenNull:
           'Hides the glyph. The Sort control keeps its label and its click and keyboard sorting; the column header keeps `aria-sort`.',
       },
+      {
+        slot: 'table-row-expand',
+        description:
+          "The glyph in a row's expansion toggle (`useTableRowExpansion`). The toggle turns the glyph a quarter turn while the row is expanded and mirrors it in right-to-left layouts, so map a glyph that points toward the inline end.",
+        fallback: '`chevronRight`, turned while expanded',
+        state: [
+          {
+            name: 'expanded',
+            type: 'boolean',
+            description: "True while the row's detail panel is open.",
+          },
+        ],
+        whenNull:
+          'Hides the glyph. The toggle keeps its size, its "Expand row" or "Collapse row" name, `aria-expanded`, and its click and keyboard toggling.',
+      },
     ],
   },
   description:
