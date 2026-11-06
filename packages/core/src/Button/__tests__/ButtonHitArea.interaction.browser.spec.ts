@@ -212,8 +212,10 @@ test.describe('Button touch target (spec:AST-094 FR42), under a finger', () => {
       };
     });
     expect(chevron).not.toBeNull();
-    // The band stops at half the gap to the chevron.
+    // The band stops at half the gap to the chevron, and within 2 px of the
+    // clear button: WebKit moves a tap toward a clickable element near it.
     expect(clear.insets.right).toBeLessThanOrEqual(chevron!.gap / 2 + 0.5);
+    expect(clear.insets.right).toBeLessThanOrEqual(2.5);
     await tapAt(driver, {x: Math.round(chevron!.x), y: Math.round(chevron!.y)});
     await expect(
       page.locator('#storybook-root').getByRole('combobox'),

@@ -20,7 +20,7 @@ import type {ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Button} from '../Button/Button';
 import {BUTTON_HIT_AREA, ButtonHitAreaContext} from '../Button/buttonHitArea';
-import {MIN_TOUCH_TARGET, type HitInsets, type HitRect} from '../utils/hitArea';
+import {clampedHitInsets, type HitInsets, type HitRect} from '../utils/hitArea';
 import type {TouchHitAreaOptions} from '../utils/touchHitArea';
 import {Icon} from '../Icon/Icon';
 import {themeProps} from '../utils/themeProps';
@@ -32,47 +32,46 @@ import english from '../i18n/generated-english/Field/InputClearButton.generated'
 
 registerEnglishFallback(english);
 
+// WebKit moves a tap toward a clickable element near it. The field's other
+// parts, such as the chevron, are not clickable themselves. So a band that
+// comes near one takes a tap on it. Toward a part, the band reaches at most
+// this far, in px.
+const PART_REACH = 2;
+
 /**
- * How far the clear button's band grows on each side: toward the minimum
- * target, and at most half the gap to the field's next part on that side. A
- * tap on a part, such as the chevron, the status icon or the spinner, is the
- * field's, and no hit-area neighbour stops the band there, because those
- * parts are not interactive themselves.
+ * How far the clear button's band grows on each side. It grows toward the
+ * minimum target and stops at half the gap to each of the field's other parts
+ * (the chevron, the status icon, the spinner). A tap on a part is the
+ * field's. No hit-area neighbour stops the band there, because the parts are
+ * not interactive. Toward a part beside it, the band also stops at
+ * `PART_REACH`.
  */
 function clearButtonGrowth(
   target: HitRect,
   toLayout: (rect: HitRect) => HitRect,
   element: HTMLElement,
 ): HitInsets {
-  const x = Math.max(0, (MIN_TOUCH_TARGET - (target.right - target.left)) / 2);
-  const y = Math.max(0, (MIN_TOUCH_TARGET - (target.bottom - target.top)) / 2);
-  const insets = {top: y, right: x, bottom: y, left: x};
+  const parts: HitRect[] = [];
   for (const part of element.parentElement?.children ?? []) {
-    if (part === element) {
-      continue;
-    }
     const box = part.getBoundingClientRect();
-    if (box.width === 0 || box.height === 0) {
-      continue;
+    if (part !== element && box.width > 0 && box.height > 0) {
+      parts.push(
+        toLayout({
+          left: box.left,
+          top: box.top,
+          right: box.right,
+          bottom: box.bottom,
+        }),
+      );
     }
-    const rect = toLayout({
-      left: box.left,
-      top: box.top,
-      right: box.right,
-      bottom: box.bottom,
-    });
+  }
+  const insets = {...clampedHitInsets(target, parts)};
+  for (const rect of parts) {
     if (rect.top < target.bottom && target.top < rect.bottom) {
       if (rect.left >= target.right) {
-        insets.right = Math.min(insets.right, (rect.left - target.right) / 2);
+        insets.right = Math.min(insets.right, PART_REACH);
       } else if (rect.right <= target.left) {
-        insets.left = Math.min(insets.left, (target.left - rect.right) / 2);
-      }
-    }
-    if (rect.left < target.right && target.left < rect.right) {
-      if (rect.top >= target.bottom) {
-        insets.bottom = Math.min(insets.bottom, (rect.top - target.bottom) / 2);
-      } else if (rect.bottom <= target.top) {
-        insets.top = Math.min(insets.top, (target.top - rect.bottom) / 2);
+        insets.left = Math.min(insets.left, PART_REACH);
       }
     }
   }
