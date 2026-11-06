@@ -328,6 +328,15 @@ describe('generateThemeRules', () => {
     expect(
       rules.some(r => r.includes('.astryx-text[data-color="accent"]')),
     ).toBe(true);
+    // A Link's label is a Text with color="inherit": a theme that styles the
+    // text target's color must not split it from the link's own color.
+    expect(
+      rules.some(
+        r =>
+          r.includes('.astryx-text[data-color="inherit"]') &&
+          r.includes('color: inherit'),
+      ),
+    ).toBe(true);
   });
 
   // --- Size-prop overrides (so `size` beats a themed `type`) ---

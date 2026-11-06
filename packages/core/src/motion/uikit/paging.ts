@@ -183,7 +183,8 @@ export const paging = {
  * then reads `setContentOffset(_:animated:)`'s duration and curve through
  * `resolveMotion`, as it reads every touch motion. The table lists no role,
  * because no motion role names any of its values, so each plays as measured.
- * Nothing registers on import, and a second call does nothing.
+ * A page that plays no paging motion ships no paging registry. The module
+ * registers its own table at import (one idempotent in-memory write, no DOM).
  */
 export function registerPagingTable(): void {
   registerMotionTable('paging', paging, {
@@ -191,3 +192,5 @@ export function registerPagingTable(): void {
     exclude: ['catchStopMs'],
   });
 }
+
+registerPagingTable();
