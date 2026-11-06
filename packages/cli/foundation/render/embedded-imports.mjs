@@ -266,10 +266,10 @@ export function reachableFiles(files, {aliases = []} = {}) {
       if (match) {
         // Each target in order: the file the alias names, matched in the
         // tree by the path's tail, and placed where this project's target
-        // puts it (`@/c/Header` -> `<target>/c/Header.tsx`). A target whose
-        // folder the file was sent from wins over an earlier one, so a file
-        // under a later target goes back under that target.
-        /** @type {{abs: string, hit: {path: string, tail: string}, sent: boolean}[]} */
+        // puts it (`@/c/Header` -> `<target>/c/Header.tsx`). The target whose
+        // folders match the most whole segments of the sent path above the
+        // file wins; with no match, the first target does.
+        /** @type {{abs: string, hit: {path: string, tail: string}, score: number}[]} */
         const options = [];
         for (const target of match.pattern.targets) {
           const named = target.replace('*', match.capture);
@@ -292,14 +292,26 @@ export function reachableFiles(files, {aliases = []} = {}) {
               : ext
                 ? named
                 : named + hit.tail.slice(rest.length);
-          // The folder that holds the target's `*` (or, for a target with
-          // none, the target's own folder) must sit right above the part of
-          // the sent path the alias named.
-          const folder = path.basename(star === -1 ? path.dirname(named) : target.slice(0, cut));
+          // The folders that hold the target's `*` (or, for a target with
+          // none, the target's own folders), against the folders of the sent
+          // path above the part the alias named, from the nearest up.
+          const targetFolders = (star === -1 ? path.dirname(named) : target.slice(0, cut)).split(path.sep).filter(Boolean);
           const sentTail = star === -1 ? path.basename(abs) : hit.tail;
-          options.push({abs, hit, sent: hit.path.endsWith(`${folder}/${sentTail}`)});
+          const sentFolders = hit.path.slice(0, hit.path.length - sentTail.length).split('/').filter(Boolean);
+          let score = 0;
+          while (
+            score < sentFolders.length &&
+            score < targetFolders.length &&
+            sentFolders[sentFolders.length - 1 - score] === targetFolders[targetFolders.length - 1 - score]
+          ) {
+            score += 1;
+          }
+          options.push({abs, hit, score});
         }
-        const chosen = options.find(o => o.sent) ?? options[0];
+        const chosen = options.reduce(
+          (/** @type {(typeof options)[number] | undefined} */ best, o) => (!best || o.score > best.score ? o : best),
+          undefined,
+        );
         if (chosen) {
           const {r, fresh} = reach(chosen.hit.path);
           r.aliased.add(chosen.abs);

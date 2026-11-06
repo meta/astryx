@@ -764,6 +764,29 @@ describe('render(): every write stays inside the current folder', () => {
     expect(back.data.files).toEqual(expect.arrayContaining(['lib/data/cfg.json', 'lib/more/extra.json']));
   }, 60_000);
 
+  it.each([
+    ['folder names that end alike', ['./lib/app/*', './lib/webapp/*'], 'lib/webapp/Top.tsx', 'lib/webapp/Top.tsx'],
+    ['targets that share their last folder', ['./lib/ui/src/*', './lib/icons/src/*'], 'lib/icons/src/Top.tsx', 'lib/icons/src/Top.tsx'],
+    // Every embedded path is relative to the folder that holds them all, so
+    // a page inside the later target names no target folder: the first wins.
+    ['a page inside the later target', ['./lib/missing/*', './lib/src/*'], 'lib/src/Top.tsx', 'lib/missing/Top.tsx', 'lib/src/pages/page.tsx'],
+  ])('gives back an aliased module by whole folder names: %s', async (name, targets, sentFrom, comesBack, pageAt = 'page.tsx') => {
+    const base = `segments-${String(name).replace(/\W+/g, '-')}`;
+    const paths = {compilerOptions: {baseUrl: '.', paths: {'@/*': targets}}};
+    put(`${base}/tsconfig.json`, JSON.stringify(paths));
+    put(`${base}/package.json`, '{"name":"segments","private":true}');
+    put(`${base}/${sentFrom}`, "export const Top = () => <i>segment-top</i>;\n");
+    put(`${base}/${pageAt}`, "import {Top} from '@/Top';\nexport default function Page() { return <p><Top /></p>; }\n");
+    await render(`${base}/${pageAt}`, {cwd: dir});
+    const html = `${base}/${pageAt.replace(/\.tsx$/, '.html')}`;
+    fs.mkdirSync(path.join(dir, `${base}-to`), {recursive: true});
+    put(`${base}-to/tsconfig.json`, JSON.stringify(paths));
+    put(`${base}-to/package.json`, '{"name":"segments-to","private":true}');
+    fs.copyFileSync(path.join(dir, html), path.join(dir, `${base}-to/page.html`));
+    const back = /** @type {any} */ (await render('page.html', {cwd: path.join(dir, `${base}-to`), reverse: true, out: 'lib/zz/page.tsx'}));
+    expect(back.data.files).toContain(comesBack);
+  }, 60_000);
+
   it('gives back a nested aliased module under the target it was sent from', async () => {
     const paths = {compilerOptions: {baseUrl: '.', paths: {'@/*': ['./lib/missing/*', './lib/src/*']}}};
     put('nested/tsconfig.json', JSON.stringify(paths));
