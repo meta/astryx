@@ -2619,7 +2619,7 @@ jobs:
 
       # This leg's share of the spec files, by their recorded times. Every
       # spec file is in exactly one leg; one with no recorded time counts the
-      # median. The planner, the shared splitter it imports and the times come
+      # test count the leg count read, times the mean time a test. The planner, the shared splitter it imports and the times come
       # from the scope checkout, the workflow's own commit (kept above): a
       # head cut before them has none.
       - name: Plan this leg's interaction proofs

@@ -109,17 +109,29 @@ describe('estimateSeconds and legCount', () => {
     // then the median of this suite's times.
     expect(
       estimateSeconds(times, ['internal/'], {
-        listed,
+        listed: [...listed, 'new.spec.ts'],
         changed: ['new.spec.ts'],
         fallback: {'new.spec.ts': 12},
       }),
     ).toBe(182);
     expect(
       estimateSeconds(times, ['internal/'], {
-        listed,
+        listed: [...listed, 'other.spec.ts'],
         changed: ['other.spec.ts'],
       }),
     ).toBe(170 + 50);
+    // A changed spec the merge commit no longer holds (deleted, or renamed
+    // from) costs nothing, and its tests are never read.
+    expect(
+      estimateSeconds(times, ['internal/'], {
+        listed,
+        changed: ['gone.spec.ts'],
+        testsOf: () => {
+          throw new Error('read a deleted spec');
+        },
+        perTest: 1.5,
+      }),
+    ).toBe(170);
   });
 
   it('costs a spec with no recorded time by its tests at the mean time a test', () => {
@@ -392,7 +404,13 @@ describe('the interaction proof legs in ci.yml', () => {
     });
 
     // Runs the count step with the real planner on these recorded times.
-    function countFor(leg, webkitTimes, changed = [], unrecorded = []) {
+    function countFor(
+      leg,
+      webkitTimes,
+      changed = [],
+      unrecorded = [],
+      {deleted = [], sources = {}, perTest} = {},
+    ) {
       // The real path: the planner runs only when invoked as its own file.
       const dir = fs.realpathSync(
         fs.mkdtempSync(path.join(os.tmpdir(), 'webkit-legs-')),
@@ -412,13 +430,24 @@ describe('the interaction proof legs in ci.yml', () => {
           JSON.stringify({
             'interaction-webkit': webkitTimes,
             'interaction-chromium': {},
+            ...(perTest
+              ? {'seconds-per-test': {'interaction-webkit': perTest}}
+              : {}),
           }),
         );
         // The scope checkout: a repository whose tree holds the spec files.
         const scope = path.join(dir, '.test-scope');
-        for (const file of [...Object.keys(webkitTimes), ...unrecorded]) {
+        // A changed spec is in the merge commit too, unless it was deleted.
+        const present = (changed ?? []).filter(
+          file => isInteractionSpec(file) && !deleted.includes(file),
+        );
+        for (const file of [
+          ...Object.keys(webkitTimes),
+          ...unrecorded,
+          ...present,
+        ]) {
           fs.mkdirSync(path.join(scope, path.dirname(file)), {recursive: true});
-          fs.writeFileSync(path.join(scope, file), '');
+          fs.writeFileSync(path.join(scope, file), sources[file] ?? '');
         }
         const git = args =>
           execFileSync('git', ['-C', scope, ...args], {stdio: 'ignore'});
@@ -460,17 +489,41 @@ describe('the interaction proof legs in ci.yml', () => {
             },
           },
         );
-        return Object.fromEntries(
+        const result = Object.fromEntries(
           fs
             .readFileSync(output, 'utf8')
             .trim()
             .split('\n')
             .map(line => line.split('=')),
         );
+        // The counts the plan step reads after the head checkout.
+        const testsFile = path.join(dir, 'interaction-legs/tests.json');
+        if (fs.existsSync(testsFile))
+          Object.defineProperty(result, 'tests', {
+            value: JSON.parse(fs.readFileSync(testsFile, 'utf8')),
+          });
+        return result;
       } finally {
         fs.rmSync(dir, {recursive: true, force: true});
       }
     }
+
+    it('writes the test counts it read for the plan, and skips a deleted spec', () => {
+      const times = {
+        'internal/interaction-harness/src/harness.interaction.browser.spec.ts': 100,
+      };
+      const fresh =
+        'internal/interaction-harness/src/fresh.interaction.browser.spec.ts';
+      const gone =
+        'packages/core/src/List/__tests__/Gone.interaction.browser.spec.ts';
+      const result = countFor(2, times, [fresh, gone], [], {
+        deleted: [gone],
+        sources: {[fresh]: "test('a', () => {});\ntest('b', () => {});\n"},
+        perTest: 2,
+      });
+      expect(result).toEqual({count: '1', runs: 'false', leg: '2'});
+      expect(result.tests).toEqual({[fresh]: 2});
+    });
 
     it('gives the whole suite to the first leg at today’s recorded times', () => {
       const times = durations['interaction-webkit'];

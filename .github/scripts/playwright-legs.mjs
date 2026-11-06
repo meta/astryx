@@ -75,7 +75,10 @@ export function estimateSeconds(
       ? listed
       : listed.filter(file => filters.some(filter => file.includes(filter))),
   );
-  for (const file of changed) files.add(file);
+  // A changed spec the merge commit no longer holds (deleted, or renamed
+  // from) runs nowhere and costs nothing.
+  const present = new Set(listed);
+  for (const file of changed) if (present.has(file)) files.add(file);
   const median = medianOf(Object.values(times));
   let seconds = 0;
   for (const file of files) {
