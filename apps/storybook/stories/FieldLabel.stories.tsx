@@ -3,6 +3,9 @@
 import type {Meta, StoryObj} from '@storybook/react';
 import {FieldLabel} from '@astryxdesign/core/Field';
 import {Icon} from '@astryxdesign/core/Icon';
+import {FormLayout} from '@astryxdesign/core/FormLayout';
+import {TextInput} from '@astryxdesign/core/TextInput';
+import {VStack} from '@astryxdesign/core/Stack';
 
 const meta: Meta<typeof FieldLabel> = {
   title: 'Core/FieldLabel',
@@ -23,6 +26,32 @@ const groupStyle = {
  * controls make label, group, hidden-label, and description semantics observable
  * without turning each prop into a permanent story.
  */
+/**
+ * A hidden label's info button inside real fields, in a stacked layout and in
+ * a horizontal-labels FormLayout. Tab to the button: it shows just above its
+ * field.
+ */
+export const HiddenLabelInfo: Story = {
+  render: () => (
+    <VStack gap={6}>
+      <TextInput
+        label="Search people"
+        isLabelHidden
+        labelTooltip="Searches names and teams."
+        placeholder="Search people"
+      />
+      <FormLayout direction="horizontal-labels">
+        <TextInput
+          label="Search teams"
+          isLabelHidden
+          labelTooltip="Searches team names."
+          placeholder="Search teams"
+        />
+      </FormLayout>
+    </VStack>
+  ),
+};
+
 export const States: Story = {
   render: () => (
     <div style={{display: 'grid', gap: 24, maxWidth: 480}}>
@@ -100,7 +129,6 @@ export const States: Story = {
           description="Search every workspace."
           descriptionID="field-label-hidden-help"
           isLabelHidden
-          labelTooltip="Searches titles and owners."
         />
         <input
           id="field-label-hidden"

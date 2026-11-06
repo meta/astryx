@@ -90,9 +90,6 @@ const styles = stylex.create({
   },
   containerLabelHidden: {
     gap: 0,
-    // A hidden label's info button rises while it has keyboard focus. The
-    // row is its stacking boundary, so it never rises above page content.
-    isolation: 'isolate',
   },
   // Under a coarse pointer the row contains its hit band.
   hitAreaHost: {
