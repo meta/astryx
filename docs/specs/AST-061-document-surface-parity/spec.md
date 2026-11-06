@@ -160,6 +160,8 @@ constructs they render; their default editor theme follows FR2 and FR3.
 Implementation gap: `Markdown` and RichText lay every block out in the
 provider's direction (FR6); RichText's `direction: inherit` override in
 `editorTheme.ts` is part of that gap.
+Fenced code lines on `Markdown` still take the frame's direction; per-line
+direction belongs to `component:CodeBlock`.
 `@astryxdesign/core/Markdown/parser` and `@astryxdesign/core/Markdown` export
 `decodeMarkdownCharacterReferences`, the DEC-5 decoder the RichText surfaces
 import with.
