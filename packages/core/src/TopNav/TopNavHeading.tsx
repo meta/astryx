@@ -58,9 +58,8 @@ registerEnglishFallback(english);
 // =============================================================================
 
 const styles = stylex.create({
-  // A grid, not a flex row, so the root's narrowest size is the logo and the
-  // controls beside the text: the text column (minWidth 0) adds nothing to it.
-  // A crowded bar truncates the text first and never shrinks the logo.
+  // The root is a grid, so one-line text adds nothing to its narrowest width.
+  // A crowded bar narrows the text first and never shrinks the logo.
   root: {
     display: 'grid',
     gridAutoFlow: 'column',
@@ -79,6 +78,13 @@ const styles = stylex.create({
     textDecoration: 'none',
     color: colorVars['--color-text-primary'],
     cursor: 'default',
+  },
+  // The text track takes the free space, so end content sits at the inline end.
+  columnsWithLogo: {
+    gridTemplateColumns: 'auto minmax(0, 1fr)',
+  },
+  columnsText: {
+    gridTemplateColumns: 'minmax(0, 1fr)',
   },
   interactive: {
     cursor: {
@@ -411,6 +417,9 @@ export function TopNavHeading({
 
   const showChevron = !!menu;
   const hasAnyHref = !!(headingHref || superheadingHref || subheadingHref);
+  const rootColumns = isRenderable(logo)
+    ? styles.columnsWithLogo
+    : styles.columnsText;
 
   // Determine interaction mode
   const isWholeHeadingTrigger = !!menu && !hasAnyHref;
@@ -506,6 +515,7 @@ export function TopNavHeading({
           themeProps('top-nav-heading'),
           stylex.props(
             styles.root,
+            rootColumns,
             !!headingHref && styles.menuTrigger,
             xstyle,
           ),
@@ -529,7 +539,7 @@ export function TopNavHeading({
         data-testid={testId}
         {...mergeProps(
           themeProps('top-nav-heading'),
-          stylex.props(styles.root, styles.menuTrigger, xstyle),
+          stylex.props(styles.root, rootColumns, styles.menuTrigger, xstyle),
           className,
           style,
         )}
@@ -554,7 +564,7 @@ export function TopNavHeading({
           {...triggerProps}
           {...mergeProps(
             themeProps('top-nav-heading'),
-            stylex.props(styles.root, styles.menuTrigger, xstyle),
+            stylex.props(styles.root, rootColumns, styles.menuTrigger, xstyle),
             className,
             style,
           )}>
@@ -628,7 +638,7 @@ export function TopNavHeading({
           {...triggerProps}
           {...mergeProps(
             themeProps('top-nav-heading'),
-            stylex.props(styles.root, xstyle),
+            stylex.props(styles.root, rootColumns, xstyle),
             className,
             style,
           )}>
@@ -712,7 +722,7 @@ export function TopNavHeading({
         data-testid={testId}
         {...mergeProps(
           themeProps('top-nav-heading'),
-          stylex.props(styles.root, xstyle),
+          stylex.props(styles.root, rootColumns, xstyle),
           className,
           style,
         )}
@@ -766,7 +776,7 @@ export function TopNavHeading({
       data-testid={testId}
       {...mergeProps(
         themeProps('top-nav-heading'),
-        stylex.props(styles.root, xstyle),
+        stylex.props(styles.root, rootColumns, xstyle),
         className,
         style,
       )}

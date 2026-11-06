@@ -248,6 +248,35 @@ describe('TopNavHeading', () => {
     expect(screen.getByTestId('logo')).toBeInTheDocument();
   });
 
+  // jsdom does not place grid items, so this locks the track that puts
+  // headerEndContent at the inline end when the root is wider than its parts.
+  it('gives the text track the free space so header end content sits at the inline end', () => {
+    const {rerender} = render(
+      <TopNavHeading
+        logo={<span>Logo</span>}
+        heading="Product"
+        headerEndContent={<span>End</span>}
+      />,
+    );
+    const withLogo = screen
+      .getByText('Product')
+      .closest('.astryx-top-nav-heading');
+    expect(withLogo).not.toBeNull();
+    expect(getComputedStyle(withLogo!).gridTemplateColumns).toBe(
+      'auto minmax(0,1fr)',
+    );
+
+    rerender(
+      <TopNavHeading heading="Product" headerEndContent={<span>End</span>} />,
+    );
+    const textOnly = screen
+      .getByText('Product')
+      .closest('.astryx-top-nav-heading');
+    expect(getComputedStyle(textOnly!).gridTemplateColumns).toBe(
+      'minmax(0,1fr)',
+    );
+  });
+
   describe('logo link accessible name', () => {
     const logo = <img src="/logo.png" alt="" />;
 
