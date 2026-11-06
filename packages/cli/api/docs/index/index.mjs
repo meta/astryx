@@ -35,6 +35,15 @@ export async function index(topic, options = {}) {
     ...view,
     // A guide the docs tree places is read by its route, not its doc name.
     name: entry.tree ? entry.name : view.name,
+    // What it took the place of, and whose that was (INV28).
+    ...(entry.replaces != null
+      ? {
+          replaces: entry.replaces,
+          ...(entry.replacedPackage != null
+            ? {replacedPackage: entry.replacedPackage}
+            : {}),
+        }
+      : {}),
     // Each section names the package that wrote it: the topic's own, or an
     // extension's.
     sections: view.sections.map(s => ({

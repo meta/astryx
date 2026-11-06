@@ -19,7 +19,7 @@ export const docs = {
           type: 'code',
           lang: 'bash',
           label: 'Install and add a theme',
-          code: 'npm install @astryxdesign/theme-neutral\nastryx theme add neutral',
+          code: '{@pm install @astryxdesign/theme-neutral}\n{@command theme add neutral}',
         },
         {
           type: 'code',
@@ -54,7 +54,7 @@ export const docs = {
           type: 'code',
           lang: 'bash',
           label: 'Add descriptors to earlier copies',
-          code: 'astryx upgrade --from 0.6.4 --path . --apply',
+          code: '{@command upgrade --from 0.6.4 --path . --apply}',
         },
         {
           type: 'prose',
@@ -71,13 +71,13 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Install the theme package you want with `npm install @astryxdesign/theme-{name}`, then import its slug with `theme add <slug>`. The CLI imports the package\'s built outputs for you.',
+          text: 'Install the theme package you want with `{@pm install @astryxdesign/theme-<name>}`, then import its slug with `theme add <slug>`. The CLI imports the package\'s built outputs for you.',
         },
         {
           type: 'table',
           headers: ['Theme', 'Add command', 'Description'],
           rows: [
-            ['Neutral', 'astryx theme add neutral', 'Muted, minimal aesthetic with Figtree typography. A good starting point.'],
+            ['Neutral', '{@command theme add neutral}', 'Muted, minimal aesthetic with Figtree typography. A good starting point.'],
             ['Butter', 'astryx theme add butter', 'Golden, buttery surfaces with blue accents; Sarina + Outfit type.'],
             ['Chocolate', 'astryx theme add chocolate', 'Warm brown tones and cozy beige; Fraunces + Albert Sans type.'],
             ['Gothic', 'astryx theme add gothic', 'Dark-only atmospheric theme; deep blue-gray surfaces, distressed display type.'],
@@ -97,7 +97,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: "`<Theme>` takes `theme` (required), `mode` (`'system'` by default, or `'light'`/`'dark'`), and `children`. For every prop, run `astryx component Theme`.",
+          text: "`<Theme>` takes `theme` (required), `mode` (`'system'` by default, or `'light'`/`'dark'`), and `children`. For every prop, run `{@command component Theme}`.",
         },
       ],
     },
@@ -113,7 +113,7 @@ export const docs = {
           type: 'code',
           lang: 'bash',
           label: 'Install, inspect, and add',
-          code: 'npm install @astryxdesign/core @acme/brand-integration\nastryx theme list --package @acme/brand-integration\nastryx docs brand-theme\nastryx theme add ocean --package @acme/brand-integration',
+          code: '{@pm install @astryxdesign/core @acme/brand-integration}\n{@command theme list --package @acme/brand-integration}\n{@command docs brand-theme}\n{@command theme add ocean --package @acme/brand-integration}',
         },
         {
           type: 'prose',
@@ -175,11 +175,11 @@ export const docs = {
           headers: ['', 'Runtime (source)', 'Built'],
           rows: [
             ['Import (published theme)', '@astryxdesign/theme-{name}', '@astryxdesign/theme-{name}/built + theme.css'],
-            ['Import (custom theme)', 'defineTheme() directly', 'Built .js + .css from `astryx theme build`'],
+            ['Import (custom theme)', 'defineTheme() directly', 'Built .js + .css from `{@command theme build}`'],
             ['How it works', 'useInsertionEffect injects <style> at hydration', 'Pre-compiled .css file loaded with the page'],
             ['Component overrides', 'Injected client-only', 'In static CSS: present during SSR'],
             ['SSR safe', 'Tokens yes, component overrides flash on hydration', 'Fully SSR safe: no flash'],
-            ['Best for', 'Authoring input for `astryx theme build`', 'App wiring, in development and production'],
+            ['Best for', 'Authoring input for `{@command theme build}`', 'App wiring, in development and production'],
           ],
         },
         {
@@ -188,8 +188,8 @@ export const docs = {
           items: [
             'Use `theme add` for production apps; it wires the built module and CSS.',
             'Import `themes` and `defaultThemeSlug` from the generated module once, and keep that wiring in development too.',
-            'While you edit a local theme, run `astryx theme build --watch` so its built files stay current.',
-            'Run `astryx theme build` for custom themes to get the built artifacts.',
+            'While you edit a local theme, run `{@command theme build --watch}` so its built files stay current.',
+            'Run `{@command theme build}` for custom themes to get the built artifacts.',
           ],
         },
         {

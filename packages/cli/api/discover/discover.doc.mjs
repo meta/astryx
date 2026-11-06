@@ -91,22 +91,22 @@ export const doc = {
     {
       type: 'discover.list',
       description:
-        'What the project has: the integrations it loads and the official packages it declares (name, category, components, version, and a list per other kind they add), official packages first. meta.available lists what the project could add, official packages first, each with the command that adds it; inside a project, an integration installed for the computer that the project does not install is listed there too, with source `installed for this computer` and the install command for the project in `install`. meta.sources reports each source, the official list last. When it lists no integration it carries meta.configured.',
+        'What the project has: the integrations it loads and the official packages it declares (package, the npm package and always equal to name; name, category, components, version, and a list per other kind they add), official packages first. meta.available lists what the project could add, official packages first, each with its package and the command that adds it; inside a project, an integration installed for the computer that the project does not install is listed there too, with source `installed for this computer` and the install command for the project in `install`. meta.sources reports each source, the official list last. When it lists no integration it carries meta.configured.',
     },
     {
       type: 'discover.detail',
       description:
-        "One package: what the shown version adds, whether the project has it, its versions and latest release when a source knows them, and the command that adds it when the project does not have it. An entry from the official list lists the newest release this CLI knows as latest and the project's Core version; its add command pins the project's Core version, else the Core range it declares (quoted), else the latest release. A version or item the official list does not show answers ERR_UNKNOWN_PACKAGE.",
+        "One package: its package (the npm package the result is about), what the shown version adds, whether the project has it, its versions and latest release when a source knows them, and the command that adds it when the project does not have it. An entry from the official list lists the newest release this CLI knows as latest and the project's Core version; its add command pins the project's Core version, else the Core range it declares (quoted), else the latest release. A version or item the official list does not show answers ERR_UNKNOWN_PACKAGE.",
     },
     {
       type: 'discover.detail.doc',
       description:
-        'The validated ComponentDoc for one installed component, for an @scope/name/Component query.',
+        'The validated ComponentDoc for one installed component, for an @scope/name/Component query, plus package, the npm package that owns the component.',
     },
     {
       type: 'discover.item',
       description:
-        'One item that is not an installed component: its kind, name, the package and version that add it, and whether the project has the package.',
+        'One item that is not an installed component: its kind, name, the package and version that add it, and whether the project has the package. The envelope\'s package names the same package.',
     },
     {
       type: 'discover.search',

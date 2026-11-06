@@ -14,7 +14,11 @@ import {checkContract, type ContractIssue} from './rules.js';
 import type {ComponentContract} from './types.js';
 
 export {fromComponentDoc} from './fromComponentDoc.js';
-export type {ComponentDocLike, NativeAdditions} from './fromComponentDoc.js';
+export type {
+  ComponentDocLike,
+  NativeAdditions,
+  SlotKind,
+} from './fromComponentDoc.js';
 export {generateSwift} from './generateSwift.js';
 export {generateTypeScript} from './generateTypeScript.js';
 export {parseDocType} from './parseDocType.js';
@@ -22,8 +26,12 @@ export {checkContract, coreNameProblem} from './rules.js';
 export type {ContractIssue} from './rules.js';
 export type * from './types.js';
 
-/** Loads one core component's documentation by component name. */
-export type ComponentDocLoader = (name: string) => Promise<ComponentDocLike>;
+/**
+ * Loads one core documentation file: a component name for
+ * `<Name>/<Name>.doc.mjs`, or a path such as `Text/Heading` relative to core's
+ * `src` without `.doc.mjs`.
+ */
+export type ComponentDocLoader = (file: string) => Promise<ComponentDocLike>;
 
 export interface BuiltContracts {
   readonly contracts: readonly ComponentContract[];
@@ -38,7 +46,8 @@ export async function buildContracts(
   const warnings: ContractIssue[] = [];
   const errors: ContractIssue[] = [];
   for (const additions of NATIVE_COMPONENTS) {
-    const contract = fromComponentDoc(await loadDoc(additions.name), additions);
+    const doc = await loadDoc(additions.doc?.file ?? additions.name);
+    const contract = fromComponentDoc(doc, additions);
     for (const issue of checkContract(contract)) {
       (issue.level === 'error' ? errors : warnings).push(issue);
     }

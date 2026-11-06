@@ -276,6 +276,55 @@ describe('combineChecks', () => {
     respond('integration.doc-conflicts', {}),
   ];
 
+  it('counts the findings the next minor release fails as upcoming, and fails on them only with strict and next', () => {
+    const withNotes = [
+      respond('integration.validate', {
+        notes: [
+          {
+            code: 'duplicate_component_doc',
+            message: 'Two docs. Fix: one.',
+            next: true,
+          },
+          {code: 'invalid_cli_command', message: 'Not a command.'},
+        ],
+      }),
+      respond('integration.component-conflicts', {}),
+      respond('integration.template-conflicts', {}),
+      respond('integration.doc-conflicts', {}),
+    ];
+    // The default run, strict included, fails on none: the next minor does.
+    for (const strict of [false, true]) {
+      expect(combineChecks(withNotes, strict)).toMatchObject({
+        upcoming: 1,
+        warnings: 0,
+        failures: [],
+        failed: false,
+      });
+    }
+    expect(combineChecks(withNotes, false, true)).toMatchObject({
+      upcoming: 1,
+      warnings: 1,
+      failures: [],
+      failed: false,
+    });
+    // validate's own summary row shows the note it now counts.
+    expect(combineChecks(withNotes, false, true).checks[0].warnings).toBe(1);
+    expect(combineChecks(withNotes, false).checks[0].warnings).toBe(0);
+    expect(combineChecks(withNotes, true, true)).toMatchObject({
+      upcoming: 1,
+      warnings: 1,
+      failures: [
+        {
+          check: 'validate',
+          severity: 'error',
+          code: 'duplicate_component_doc',
+          message: 'Two docs. Fix: one.',
+        },
+      ],
+      failed: true,
+    });
+  });
+
   it('counts a package-level issue once, and two findings with one message twice, naming each component', () => {
     const loose = combineChecks(responses, false);
     const strict = combineChecks(responses, true);

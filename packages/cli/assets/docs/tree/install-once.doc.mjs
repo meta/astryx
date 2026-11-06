@@ -44,11 +44,11 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'npm i -g @astryxdesign/cli\n# or: pnpm add -g @astryxdesign/cli · yarn global add @astryxdesign/cli · bun add -g @astryxdesign/cli · volta install @astryxdesign/cli',
+          code: '{@pm install @astryxdesign/cli --global}\n# with Volta: volta install @astryxdesign/cli',
         },
         {
           type: 'prose',
-          text: "Keep the CLI installed in each project too: that pins its version for teammates and CI ({@link generic:project-global-or-both}). Inside a project, whichever astryx command you type, the project's version answers. Outside a project, your global install answers with its own version, and a version you name, such as `npx @astryxdesign/cli@0.7.0`, answers as exactly that version.",
+          text: "Keep the CLI installed in each project too: that pins its version for teammates and CI ({@link generic:project-global-or-both}). Inside a project, whichever astryx command you type, the project's version answers. Outside a project, your global install answers with its own version, and a version you name, such as `{@pm dlx @astryxdesign/cli@0.7.0}`, answers as exactly that version.",
         },
       ],
     },
@@ -63,7 +63,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'npm config set prefix ~/.npm-global\nexport PATH="$HOME/.npm-global/bin:$PATH"\nnpm i -g @astryxdesign/cli',
+          code: '{@pm-only npm "moves the npm global folder" config set prefix ~/.npm-global}\nexport PATH="$HOME/.npm-global/bin:$PATH"\n{@pm-only npm "installs into the npm global folder above" i -g @astryxdesign/cli}',
         },
         {
           type: 'prose',
@@ -87,7 +87,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: "Your global install answers offline in a project with only Core, and so does any project that installs its own CLI. Outside a project, commands that read components, such as `astryx component Button`, need your global version's Core: after any command you run online, your global install downloads it once into the cache in the background, so they work offline from then on (not in CI, where nothing downloads by itself: {@link generic:ci-and-containers}; and not on Windows, where the first component command downloads it). Only a project whose own CLI cannot start needs a version installed or cached; when it is neither and cannot be fetched, your global install answers with a one-line warning, and Astryx waits 2 minutes before trying to download it again (10 minutes after a second failure in a row). {@link generic:problems} has the exact message.",
+          text: "Your global install answers offline in a project with only Core, and so does any project that installs its own CLI. Outside a project, commands that read components, such as `{@command component Button}`, need your global version's Core: after any command you run online, your global install downloads it once into the cache in the background, so they work offline from then on (not in CI, where nothing downloads by itself: {@link generic:ci-and-containers}; and not on Windows, where the first component command downloads it). Only a project whose own CLI cannot start needs a version installed or cached; when it is neither and cannot be fetched, your global install answers with a one-line warning, and Astryx waits 2 minutes before trying to download it again (10 minutes after a second failure in a row). {@link generic:problems} has the exact message.",
         },
       ],
     },

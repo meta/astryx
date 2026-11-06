@@ -6,7 +6,7 @@
  * `Project` is the one entry point a command uses to read everything it needs
  * about a consumer's project: the validated config surface, the configured
  * integrations, and the resolved discovery sets (components, templates,
- * codemods, docs, themes) — plus issue routing (issuesUrl) and the accumulated
+ * codemods, docs, themes, icon sets) — plus issue routing (issuesUrl) and the accumulated
  * integration issues. It replaces the old `loadConfig(cwd)` plain-object loader
  * and the per-command fan-out into the various discovery helpers.
  *
@@ -18,7 +18,7 @@
  *     package being authored when it carries a manifest. Provider identity is
  *     resolved once over all three (see integrations/provider-resolution), and
  *     the ledger is kept for {@link providerLedgerOf}. Discovery is LAZY.
- *   - Discovery methods (components/templates/codemods/docs/themes) are MEMOIZED per
+ *   - Discovery methods (components/templates/codemods/docs/themes/iconSets) are MEMOIZED per
  *     instance (via the pluggable cache) and orchestrate the EXISTING discovery
  *     functions — Project never reimplements discovery.
  *   - SKIP + WARN policy: discovery records each integration issue. Other valid
@@ -35,7 +35,8 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {findPresentFiles, loadModuleWithParser} from '../fs/module-loader.mjs';
+import {loadModuleWithParser} from '../fs/module-loader.mjs';
+import {findConfigPath} from './config-path.mjs';
 import {parseConfig} from '../../authoring/config/parse.mjs';
 import {
   loadIntegrations,
@@ -82,6 +83,12 @@ import {
   discoverIntegrationThemes,
   discoverLocalThemes,
 } from '../discovery/theme-discovery.mjs';
+import {
+  chooseProjectIconSet,
+  discoverIntegrationIconSets,
+  orderIconSets,
+} from '../discovery/icon-set-discovery.mjs';
+import {iconDefinitionTreeInput} from '../doc-compiler/tree.mjs';
 import {getTransformsBetween} from '../../assets/codemods/registry.mjs';
 import {
   discoverIntegrationCodemods,
@@ -98,6 +105,8 @@ import {
   cacheKey,
   configContentHash,
 } from './config-cache.mjs';
+
+export {CONFIG_BASENAMES, findConfigPath} from './config-path.mjs';
 
 /**
  * Extract a human-readable message from an unknown thrown value.
@@ -315,16 +324,10 @@ function readPackageJson(dir) {
  * @typedef {import('../integrations/issue').AstryxIntegrationIssue & {package: string}} ProjectIntegrationIssue
  */
 
-/** Conventional config basenames, in load-precedence order. */
-export const CONFIG_BASENAMES = [
-  'astryx.config.ts',
-  'astryx.config.mjs',
-  'astryx.config.js',
-];
 
 /** Default issue tracker used when neither config nor integration routes one. */
 export const DEFAULT_ISSUES_URL =
-  'https://github.com/facebook/astryx/issues/new';
+  'https://github.com/meta/astryx/issues/new';
 
 /**
  * Whether this project accepts `debug` handlers contributed by the
@@ -361,25 +364,6 @@ function inheritsIntegrationDebug(projectDir) {
   }
 }
 
-/**
- * Find astryx.config.{ts,mjs,js} as a sibling of the nearest package.json.
- * Returns the absolute path, or null if none is present. Throws if multiple
- * config files exist at that root.
- * @param {string} [startDir]
- * @returns {string|null}
- */
-export function findConfigPath(startDir = process.cwd()) {
-  const root = findPackageRoot(startDir) ?? startDir;
-  const present = findPresentFiles(root, CONFIG_BASENAMES);
-  if (present.length > 1) {
-    throw new Error(
-      `Multiple Astryx config files found in ${root} (${present
-        .map(p => path.basename(p))
-        .join(', ')}). Keep exactly one.`,
-    );
-  }
-  return present.length === 1 ? present[0] : null;
-}
 
 /**
  * The provider ledger each loaded Project resolved, kept off the class so it
@@ -398,6 +382,15 @@ const PROVIDER_LEDGERS = new WeakMap();
 export function providerLedgerOf(project) {
   return PROVIDER_LEDGERS.get(project) ?? new Map();
 }
+
+/**
+ * True when an integration's templates root exists, the only place its
+ * templates come from (discoverIntegrationTemplatesForOne).
+ * @param {any} integration
+ * @returns {boolean}
+ */
+const hasTemplatesRoot = integration =>
+  integration?.templates != null && fs.existsSync(integration.templates);
 
 /**
  * The single API for reading resolved project configuration. Construct via the
@@ -743,7 +736,13 @@ export class Project {
       return;
     }
     try {
-      const found = await validateLoadedIntegration(integration);
+      // An experimental root is checked only in a project that opts in
+      // (spec:AST-017 FR27); the package's own checks read it either way.
+      const found = await validateLoadedIntegration(
+        this.#config.experimental?.iconSet
+          ? integration
+          : {...integration, iconSets: undefined},
+      );
       for (const issue of found ?? []) this.#pushIssue(pkg, issue);
     } catch (err) {
       this.#pushIssue(pkg, {
@@ -955,6 +954,75 @@ export class Project {
   }
 
   /**
+   * Installed icon sets, the sets withdrawn and why, and the project's icon
+   * set (AST-084 FR7, FR8). Sets come from each loaded integration's
+   * `iconSets` root in load order; `sets` puts the project's set first, the
+   * tie order every icon surface uses. A set whose descriptor or data file is
+   * invalid is withdrawn and reported as an `invalid_icon_set` issue; a set
+   * whose module does not resolve from the project is withdrawn without one.
+   *
+   * Icon sets are experimental (spec:AST-017 FR27): every surface but
+   * `astryx experimental icon` reads them only in a project that sets
+   * `experimental.iconSet`. Without it this answers no sets and records no
+   * issue, unless `experimental` asks for the installed sets anyway.
+   *
+   * @param {{experimental?: boolean}} [options] `experimental`: read the
+   *   installed sets without the opt-in, for `astryx experimental icon`
+   * @returns {Promise<{sets: import('../discovery/icon-set-discovery.mjs').DiscoveredIconSet[], withdrawn: import('../discovery/icon-set-discovery.mjs').WithdrawnIconSet[], choice: import('../discovery/icon-set-discovery.mjs').IconSetChoice}>}
+   */
+  async iconSets({experimental = false} = {}) {
+    if (!experimental && !this.#config.experimental?.iconSet) {
+      return {
+        sets: [],
+        withdrawn: [],
+        choice: {
+          status: /** @type {const} */ ('none'),
+          reason: 'astryx.config sets no experimental.iconSet.',
+        },
+      };
+    }
+    return this.#memo('iconSets', async () => {
+      const projectDir = findPackageRoot(this.#cwd) ?? this.#cwd;
+      /** @type {import('../discovery/icon-set-discovery.mjs').DiscoveredIconSet[]} */
+      const sets = [];
+      /** @type {import('../discovery/icon-set-discovery.mjs').WithdrawnIconSet[]} */
+      const withdrawn = [];
+      for (const integration of this.#loadedIntegrations) {
+        if (!integration?.iconSets || integration.__loadError) continue;
+        if (integration.__providerConflict) continue;
+        await this.#collectIssues(integration);
+        const pkg = this.#pkgLabel(integration);
+        try {
+          const found = discoverIntegrationIconSets(integration, {projectDir});
+          sets.push(...found.sets);
+          for (const each of found.withdrawn) {
+            withdrawn.push(each);
+            if (each.kind === 'invalid') {
+              this.#pushIssue(pkg, {
+                code: 'invalid_icon_set',
+                severity: 'error',
+                message: each.reason,
+              });
+            }
+          }
+        } catch (err) {
+          this.#pushIssue(pkg, {
+            code: 'invalid_icon_set',
+            severity: 'error',
+            message: errorMessage(err),
+          });
+        }
+      }
+      const choice = chooseProjectIconSet(
+        sets,
+        this.#config.experimental?.iconSet,
+        withdrawn,
+      );
+      return {sets: orderIconSets(sets, choice), withdrawn, choice};
+    });
+  }
+
+  /**
    * The components and templates this project reads, as links name them: by
    * owner provider id, kind, and name (a template by its id).
    * @returns {Promise<import('../discovery/docs-discovery.mjs').LinkableContributions>}
@@ -1099,6 +1167,27 @@ export class Project {
         }
       }
 
+      // With the opt-in (`iconSets()` reads no set without it), each installed
+      // icon set's own icon definitions join Astryx's under the
+      // `icon-definitions` namespace, marked with their package.
+      const {sets} = await this.iconSets();
+      for (const set of sets) {
+        if (set.definitions.length === 0) continue;
+        const at = this.#loadedIntegrations.findIndex(
+          each => each?.name === set.package,
+        );
+        const integration = this.#loadedIntegrations[at];
+        const providerId = integration?.providerId ?? set.package;
+        catalog.addTreeInputs({
+          namespaces: [],
+          guides: set.definitions.map(({doc, file}) => ({
+            ...iconDefinitionTreeInput(doc, file, set.package, providerId),
+            summary: `${doc.description} (from ${set.package}, icon set "${set.name}")`,
+            rank: at + 1,
+          })),
+        });
+      }
+
       return catalog;
     });
   }
@@ -1179,15 +1268,24 @@ export class Project {
    * @returns {Promise<ProjectIntegrationIssue[]>}
    */
   async issues() {
-    // Template replacement validity depends on the combined Core + integration
-    // catalog. Resolve it first so issue results never depend on which discovery
-    // method the caller happened to invoke earlier.
-    await this.templates();
-    // Component replacement validity likewise depends on Core plus every
-    // integration's components.
-    await this.componentReplacements();
-    for (const integration of this.#loadedIntegrations) {
-      await this.#collectIssues(integration);
+    // Each issue these passes find belongs to an integration, because Core's
+    // templates and components declare no replacement. A project with no
+    // integration skips them.
+    if (this.#loadedIntegrations.length > 0) {
+      // Template replacement validity depends on the combined Core +
+      // integration catalog. Resolve it first so issue results never depend
+      // on which discovery method the caller happened to invoke earlier. Only
+      // an integration's own templates can replace one, so with none, Core's
+      // templates stay unread.
+      if (this.#loadedIntegrations.some(hasTemplatesRoot)) {
+        await this.templates();
+      }
+      // Component replacement validity likewise depends on Core plus every
+      // integration's components.
+      await this.componentReplacements();
+      for (const integration of this.#loadedIntegrations) {
+        await this.#collectIssues(integration);
+      }
     }
     // Return a stable copy so callers can't mutate internal state.
     return this.#issues.map(i => ({...i}));

@@ -23,7 +23,7 @@ export const doc = {
     'opens a node of the docs tree: `cli` lists its guides and reference, ' +
     '`cli/api/functions` lists every API function, and `cli/api/functions/search` prints ' +
     'one. A namespace plus a section prints that section from the one guide below it ' +
-    'that has it (`astryx docs layout side-panels`). `--depth` reads as far down the tree as you ask, from the doc alone (0) to ' +
+    'that has it (`{@command docs layout side-panels}`). `--depth` reads as far down the tree as you ask, from the doc alone (0) to ' +
     'everything below it (all), and with it `--detail` sets how much of each doc below ' +
     'shows: one line (brief, the default), its sections (compact), or all of it (full).',
   fn: 'docs',

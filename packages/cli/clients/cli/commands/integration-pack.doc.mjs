@@ -8,7 +8,7 @@ export const doc = {
   namespace: 'cli/commands',
   summary: 'Deprecated: the old name of `integration verify`',
   description:
-    '`astryx integration pack --check` is the name this check had before {@link command:integration verify}. It still runs the same check, with the same output, JSON, and exit codes, and prints a note that names `integration verify`. It will be removed in a later release. Outside a package it writes nothing and reports one failed check, no_package, naming the integration package it needs (exit 1).',
+    '`{@command integration pack --check}` is the name this check had before {@link command:integration verify}. It still runs the same check, with the same output, JSON, and exit codes, and prints a note that names `integration verify`. It will be removed in a later release. Outside a package it writes nothing and reports one failed check, no_package, naming the integration package it needs (exit 1).',
   fn: 'integrationPackCheck',
   options: [
     {

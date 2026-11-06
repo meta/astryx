@@ -2,16 +2,25 @@
 
 /**
  * @file HStack.test.tsx
- * @input Uses vitest, @testing-library/react, HStack component
+ * @input Uses vitest, @testing-library/react, React, HStack and Stack components
  * @output Unit tests for HStack component behavior
  * @position Testing; validates HStack.tsx implementation
  *
  * SYNC: When HStack.tsx changes, update tests to match new behavior
  */
 
-import {describe, it, expect, vi} from 'vitest';
+import {createRef, type ReactElement} from 'react';
+import {describe, it, expect} from 'vitest';
 import {render, screen} from '@testing-library/react';
+import {Stack} from '../Stack/Stack';
 import {HStack} from './HStack';
+
+function classNameOf(element: ReactElement): string {
+  const {container, unmount} = render(element);
+  const className = (container.firstElementChild as HTMLElement).className;
+  unmount();
+  return className;
+}
 
 describe('HStack', () => {
   it('renders children correctly', () => {
@@ -41,89 +50,102 @@ describe('HStack', () => {
     expect(element.tagName).toBe('NAV');
   });
 
-  it('renders with gap prop', () => {
+  it('renders a horizontal stack that carries the stack target', () => {
     render(
-      <HStack gap={4}>
-        <div>Item 1</div>
-        <div>Item 2</div>
+      <HStack gap={4} wrap="wrap" data-testid="hstack">
+        <div>Item</div>
       </HStack>,
     );
-    expect(screen.getByText('Item 1')).toBeInTheDocument();
+    const element = screen.getByTestId('hstack');
+    expect(element).toHaveClass('astryx-stack');
+    expect(element).toHaveAttribute('data-direction', 'horizontal');
+    expect(element).toHaveAttribute('data-gap', '4');
+    expect(element).toHaveAttribute('data-wrap', 'wrap');
   });
 
-  it('renders with vAlign prop', () => {
-    render(
-      <HStack vAlign="center">
-        <div>Item 1</div>
-      </HStack>,
+  it('sets the main axis with hAlign and the cross axis with vAlign, as Stack does for a horizontal stack', () => {
+    expect(classNameOf(<HStack hAlign="center" />)).toBe(
+      classNameOf(<Stack direction="horizontal" justify="center" />),
     );
-    expect(screen.getByText('Item 1')).toBeInTheDocument();
-  });
-
-  it('renders with wrap prop', () => {
-    render(
-      <HStack wrap="wrap">
-        <div>Item 1</div>
-        <div>Item 2</div>
-      </HStack>,
+    expect(classNameOf(<HStack vAlign="center" />)).toBe(
+      classNameOf(<Stack direction="horizontal" align="center" />),
     );
-    expect(screen.getByText('Item 1')).toBeInTheDocument();
+    expect(classNameOf(<HStack hAlign="center" />)).not.toBe(
+      classNameOf(<HStack vAlign="center" />),
+    );
   });
 
-  it('forwards ref correctly', () => {
-    const ref = vi.fn();
+  it('applies justify and align as aliases for hAlign and vAlign', () => {
+    expect(classNameOf(<HStack justify="between" />)).toBe(
+      classNameOf(<HStack hAlign="between" />),
+    );
+    expect(classNameOf(<HStack align="end" />)).toBe(
+      classNameOf(<HStack vAlign="end" />),
+    );
+    expect(classNameOf(<HStack justify="between" />)).not.toBe(
+      classNameOf(<HStack />),
+    );
+    expect(classNameOf(<HStack align="end" />)).not.toBe(
+      classNameOf(<HStack />),
+    );
+  });
+
+  it('lets an explicit hAlign or vAlign win over its alias', () => {
+    expect(classNameOf(<HStack hAlign="center" justify="end" />)).toBe(
+      classNameOf(<HStack hAlign="center" />),
+    );
+    expect(classNameOf(<HStack vAlign="start" align="end" />)).toBe(
+      classNameOf(<HStack vAlign="start" />),
+    );
+  });
+
+  it('forwards ref to the rendered element', () => {
+    const ref = createRef<HTMLElement>();
     render(
-      <HStack ref={ref}>
+      <HStack ref={ref} as="section" data-testid="hstack">
         <div>Test</div>
       </HStack>,
     );
-    expect(ref).toHaveBeenCalledWith(expect.any(HTMLElement));
+    expect(ref.current).toBe(screen.getByTestId('hstack'));
   });
 
-  it('forwards ref with polymorphic as', () => {
-    const ref = vi.fn();
+  it('passes ARIA and data attributes to the rendered element', () => {
     render(
-      <HStack as="section" ref={ref}>
-        <div>Test</div>
+      <HStack aria-label="Toolbar row" data-testid="hstack">
+        <div>Item</div>
       </HStack>,
     );
-    expect(ref).toHaveBeenCalledWith(expect.any(HTMLElement));
+    expect(screen.getByTestId('hstack')).toHaveAttribute(
+      'aria-label',
+      'Toolbar row',
+    );
   });
 
-  it('passes through additional props', () => {
+  it('merges className and style, with sizing props after style', () => {
+    render(
+      <HStack
+        data-testid="hstack"
+        className="caller-row"
+        style={{color: 'red', width: 10}}
+        width={300}>
+        <div>Item</div>
+      </HStack>,
+    );
+    const element = screen.getByTestId('hstack');
+    expect(element).toHaveClass('astryx-stack');
+    expect(element).toHaveClass('caller-row');
+    expect(element.style.color).toBe('red');
+    expect(element.style.width).toBe('300px');
+  });
+
+  it('adds no role and no tab stop of its own', () => {
     render(
       <HStack data-testid="hstack">
         <div>Item</div>
       </HStack>,
     );
-    expect(screen.getByTestId('hstack')).toBeInTheDocument();
-  });
-
-  it('accepts justify as alias for hAlign', () => {
-    const {container} = render(
-      <HStack justify="between">
-        <div>A</div>
-        <div>B</div>
-      </HStack>,
-    );
-    expect(container.firstChild).toBeInTheDocument();
-  });
-
-  it('accepts align as alias for vAlign', () => {
-    const {container} = render(
-      <HStack align="center">
-        <div>A</div>
-      </HStack>,
-    );
-    expect(container.firstChild).toBeInTheDocument();
-  });
-
-  it('prefers explicit hAlign over justify', () => {
-    const {container} = render(
-      <HStack hAlign="center" justify="end">
-        <div>A</div>
-      </HStack>,
-    );
-    expect(container.firstChild).toBeInTheDocument();
+    const element = screen.getByTestId('hstack');
+    expect(element).not.toHaveAttribute('role');
+    expect(element).not.toHaveAttribute('tabindex');
   });
 });

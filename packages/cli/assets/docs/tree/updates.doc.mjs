@@ -74,7 +74,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: '`astryx doctor` shows the same thing at any time, in its `newest-release` check, along with why the last notice did not print, if one did not. When the last check ran, and when each notice printed, are kept in `state.json` in the settings folder ({@link generic:reference}).',
+          text: '`{@command doctor}` shows the same thing at any time, in its `newest-release` check, along with why the last notice did not print, if one did not. When the last check ran, and when each notice printed, are kept in `state.json` in the settings folder ({@link generic:reference}).',
         },
       ],
     },

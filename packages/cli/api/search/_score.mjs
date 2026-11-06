@@ -39,7 +39,7 @@ const MIN_TOKEN_SCORE = 50;
  * (synonym hits are discounted so a direct hit always wins).
  * @param {string} tok
  * @param {Candidate} candidate
- * @param {{fuzzy?: boolean}} [opts]
+ * @param {{fuzzy?: boolean, part?: boolean}} [opts] - see scoreCandidate
  * @returns {{score: number, reason: string} | null}
  */
 export function bestForToken(tok, candidate, opts = {}) {
@@ -47,7 +47,8 @@ export function bestForToken(tok, candidate, opts = {}) {
   const syns = SYNONYM_INDEX.get(tok);
   if (syns) {
     for (const s of syns) {
-      const h = scoreCandidate(s, candidate, opts);
+      // A synonym of a family's name names no family: its members stay put.
+      const h = scoreCandidate(s, candidate, {...opts, synonym: true});
       if (h) {
         const score = Math.round(h.score * 0.85);
         if (!best || score > best.score)
@@ -187,7 +188,7 @@ export function scoreQuery(
   let alias = false;
   let aliasWords = 0;
   for (const tok of tokens) {
-    let h = bestForToken(tok, candidate, {fuzzy});
+    let h = bestForToken(tok, candidate, {fuzzy, part: true});
     if (
       compound?.covered.has(joined(tok)) &&
       compound.score > (h?.score ?? 0)

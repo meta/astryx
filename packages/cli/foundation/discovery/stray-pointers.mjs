@@ -2,7 +2,8 @@
 
 /**
  * @file Stray doc pointers (architecture:cli-surface DEC-8): a code span in
- * prose that is exactly `astryx docs <name>` for a doc that exists. The doc's
+ * prose that is exactly `astryx docs <name>`, or its `{@command docs <name>}`
+ * token, for a doc that exists. The doc's
  * `{@link}` prints the command that opens the doc and is checked by doctor's
  * link check, so a written command is a pointer nothing checks.
  *
@@ -28,7 +29,8 @@ import {
  * more words, a flag, or a route is a walkthrough, not a pointer. A name holds
  * what a topic name may (letters, digits, `_` and `-`), never opening with `-`.
  */
-const POINTER = /`astryx docs ([A-Za-z0-9_][A-Za-z0-9_-]*)`/g;
+const POINTER =
+  /`astryx docs ([A-Za-z0-9_][A-Za-z0-9_-]*)`|`?\{@command docs ([A-Za-z0-9_][A-Za-z0-9_-]*)\}`?/g;
 
 /** @type {Promise<Map<string, string>> | undefined} */
 let coreKinds;
@@ -126,7 +128,7 @@ export function linkableStrings(doc) {
  * @returns {string[]} the doc name each one points at
  */
 export function pointersIn(text) {
-  return [...text.matchAll(POINTER)].map(match => match[1]);
+  return [...text.matchAll(POINTER)].map(match => match[1] ?? match[2]);
 }
 
 /**
@@ -253,10 +255,14 @@ export async function findStrayPointers(discovered) {
       const index = locateString(lines, source, text, words, cursor);
       if (index >= 0) cursor = index + words.length;
       for (const match of text.matchAll(POINTER)) {
-        const target = match[1];
+        const target = match[1] ?? match[2];
         const link = linkFor(target);
         if (!link) continue;
-        const command = `astryx docs ${target}`;
+        // As written: the bare command, or its `{@command}` token.
+        const command =
+          match[1] != null
+            ? `astryx docs ${target}`
+            : match[0].replace(/`/g, '');
         const line =
           index < 0
             ? null

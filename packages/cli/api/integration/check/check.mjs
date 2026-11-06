@@ -11,7 +11,10 @@
  * any warning and on any check, or comparison a check carries, that did not
  * run, so a package can gate its build on its docs staying in sync. `--strict`
  * adds no check: it reports the same warnings and skipped work again, as
- * errors in the checks' own issue format, and fails on them.
+ * errors in the checks' own issue format, and fails on them. `--next` counts
+ * the findings the next minor release turns into warnings (validate's notes
+ * marked `next`) as warnings now, so a package can fix them ahead of the
+ * release; every run reports how many there are.
  *
  * What fails it is a contract for the builds that run it: a new check, or a
  * new failure code, joins only in a minor release that names it.
@@ -33,6 +36,7 @@ import {
   summarizeIssues,
   validateIntegration,
 } from '../validate-integration.mjs';
+import {withListingCache} from '../../../foundation/fs/listing-cache.mjs';
 
 /** @typedef {import('../integration-check.type.mjs').IntegrationCheckName} IntegrationCheckName */
 /** @typedef {import('../integration-check.type.mjs').IntegrationCheckReport} IntegrationCheckReport */
@@ -236,14 +240,18 @@ export function summarizeCheck(response, context = {}) {
  * @returns {Promise<IntegrationCheckCommandResponse>}
  */
 export async function integrationCheck(options = {}) {
-  const {cwd = process.cwd(), strict = false} = options;
+  const {cwd = process.cwd(), strict = false, next = false} = options;
   // One after another: each loads the package through the same discovery.
   /** @type {IntegrationCheckResponse[]} */
   const responses = [];
   responses.push(await validateIntegration(undefined, {cwd}));
-  responses.push(await integrationComponentConflicts(undefined, {cwd}));
-  responses.push(await integrationTemplateConflicts(undefined, {cwd}));
-  responses.push(await integrationDocConflicts(undefined, {cwd}));
+  // The three authoring checks only read, so they share one listing of each
+  // folder.
+  await withListingCache(async () => {
+    responses.push(await integrationComponentConflicts(undefined, {cwd}));
+    responses.push(await integrationTemplateConflicts(undefined, {cwd}));
+    responses.push(await integrationDocConflicts(undefined, {cwd}));
+  });
 
   const [validation] = responses;
   return {
@@ -253,7 +261,8 @@ export async function integrationCheck(options = {}) {
       name: validation.data.name,
       version: validation.data.version,
       strict,
-      ...combineChecks(responses, strict),
+      next,
+      ...combineChecks(responses, strict, next),
     },
   };
 }
@@ -265,8 +274,10 @@ export async function integrationCheck(options = {}) {
  * on its own, so two findings with one message stay two.
  * @param {IntegrationCheckResponse[]} responses validate first
  * @param {boolean} strict
+ * @param {boolean} [next] count validate's notes marked `next`, the findings
+ *   the next minor release turns into warnings, as warnings now
  */
-export function combineChecks(responses, strict) {
+export function combineChecks(responses, strict, next = false) {
   const [validation] = responses;
   // Only validate reports a missing package.json; the other checks read it
   // from there instead of each naming a missing manifest.
@@ -345,12 +356,36 @@ export function combineChecks(responses, strict) {
       if (strict) failures.push({check, severity: 'error', ...issue});
     }
   });
+  // The findings the next minor release turns into warnings: always counted,
+  // so the default run can say how many there are, and with `next` counted
+  // as warnings now.
+  const notes =
+    /** @type {{notes?: Array<{code: string, message: string, next?: boolean}>}} */ (
+      validation.data
+    ).notes ?? [];
+  const upcoming = notes.filter(note => note.next === true);
+  if (next) {
+    warnings += upcoming.length;
+    // validate's own row counts them too, so the summary shows what fails.
+    checks[0].warnings += upcoming.length;
+    if (strict) {
+      for (const note of upcoming) {
+        failures.push({
+          check: 'validate',
+          severity: 'error',
+          code: note.code,
+          message: note.message,
+        });
+      }
+    }
+  }
   return {
     checks,
     errors,
     warnings,
     skipped,
     unchecked,
+    upcoming: upcoming.length,
     failures,
     failed: checks.some(check => check.failed) || failures.length > 0,
   };

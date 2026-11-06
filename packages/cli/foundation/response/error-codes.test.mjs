@@ -258,6 +258,15 @@ describe('error codes: human mode stays clean', () => {
     expect(stdout).not.toContain('ERR_UNKNOWN_COMPONENT');
   });
 
+  it('refuses --built with a doctor integration check', async () => {
+    const json = await runCli(['--json', 'doctor', '--built', 'dist', 'integration', 'validate']);
+    expect(json.status).toBe(1);
+    expect(JSON.parse(json.stdout)).toMatchObject({code: 'ERR_INVALID_OPTION'});
+    const text = await runCli(['doctor', '--built', 'dist', 'integration', 'docs']);
+    expect(text.status).toBe(1);
+    expect(text.stderr).toContain('goes with `doctor` alone');
+  });
+
   it('unknown subcommand exits 1, with the code in JSON and not in text', async () => {
     // A group that is not JSON-capable itself still answers an unknown
     // subcommand in JSON, so a JSON caller learns the subcommands it has.

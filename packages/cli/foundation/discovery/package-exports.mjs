@@ -8,7 +8,8 @@
  * their legacy public deep paths and are resolved from files on disk.
  *
  * @input Parsed package.json, package directory, and a public subpath
- * @output The public specifier and confined target file, when exported
+ * @output The public specifier and confined target file, when exported, and
+ *   the file a subpath's `source` condition names, when the package has it
  * @position packages/cli/foundation/discovery — shared package import metadata
  */
 
@@ -163,6 +164,44 @@ function resolveLegacy(packageDir, subpath) {
     ...MODULE_EXTENSIONS.map(extension => path.join(base, `index${extension}`)),
   ];
   return candidates.find(regularFile) ?? null;
+}
+
+/**
+ * The raw export value one subpath maps to, with the wildcard it matched.
+ * @param {unknown} exportsField
+ * @param {string} subpath
+ * @returns {{value: unknown, wildcard: string} | null}
+ */
+function rawExportValue(exportsField, subpath) {
+  if (exportsField == null) return null;
+  if (!isRecord(exportsField)) {
+    return subpath === '.' ? {value: exportsField, wildcard: ''} : null;
+  }
+  if (!Object.keys(exportsField).some(key => key.startsWith('.'))) {
+    return subpath === '.' ? {value: exportsField, wildcard: ''} : null;
+  }
+  const selected = subpathValue(exportsField, subpath);
+  return selected.found
+    ? {value: selected.value, wildcard: selected.wildcard}
+    : null;
+}
+
+/**
+ * The file a subpath's `source` condition names, when that file is in the
+ * package. A package that ships its source (or a workspace package before it
+ * is built) declares it beside the built target, so reading it answers the
+ * same with or without a build. Null when there is no such condition or file.
+ * @param {{exports?: unknown}} pkg
+ * @param {string} packageDir
+ * @param {string} subpath `.` or a `./`-prefixed subpath
+ * @returns {string|null}
+ */
+export function sourceExportTarget(pkg, packageDir, subpath) {
+  const selected = rawExportValue(pkg.exports, subpath);
+  if (!selected || !isRecord(selected.value)) return null;
+  const source = selected.value.source;
+  if (typeof source !== 'string') return null;
+  return resolveTarget(packageDir, source.replaceAll('*', selected.wildcard));
 }
 
 /**

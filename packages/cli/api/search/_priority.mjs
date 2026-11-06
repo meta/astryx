@@ -130,9 +130,12 @@ export function domainPriority(
     return 1;
   }
   const fuzzy = tokens.length <= 1;
+  // The whole query is read as the whole query; its words are parts of it
+  // only when there are several.
   return words.some(
-    w =>
-      (bestForToken(w, candidate, {fuzzy})?.score ?? 0) >= STRONG_TOKEN_SCORE,
+    (w, i) =>
+      (bestForToken(w, candidate, {fuzzy, part: i > 0 && tokens.length > 1})
+        ?.score ?? 0) >= STRONG_TOKEN_SCORE,
   )
     ? 1
     : 0;

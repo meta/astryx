@@ -26,7 +26,10 @@ import {
 } from '../../foundation/release/choose.mjs';
 import {readReleaseFacts} from '../../foundation/release/project.mjs';
 import {astryxCommandsOnSearchPath} from '../../foundation/env/search-path.mjs';
-import {readDeclaredDependencies} from '../../foundation/integrations/autolink.mjs';
+import {
+  readDeclaredDependencies,
+  scanAutolinkCandidates,
+} from '../../foundation/integrations/autolink.mjs';
 import {
   computerSkillFile,
   displayHomePath,
@@ -436,4 +439,173 @@ export function installCommandFor(cwd) {
  */
 export function insideProjectElsewhere(cwd) {
   return installFolder(cwd)?.moved === true;
+}
+
+/** Folders `doctor --built` never reads: installs and version control. */
+const BUILT_SKIPPED_DIRS = new Set(['node_modules', '.git', '.hg', '.sl']);
+
+/** Folders that hold build output: read for stylesheets, never as source. */
+const BUILD_OUTPUT_DIRS = new Set(['.next', 'dist', 'build', 'out', '.output']);
+
+/** `doctor --built` reads at most this many files, of at most this size. */
+export const BUILT_FILE_LIMIT = 20000;
+export const BUILT_FILE_MAX_MB = 5;
+const BUILT_FILE_MAX_BYTES = BUILT_FILE_MAX_MB * 1024 * 1024;
+
+/**
+ * The absolute path `doctor --built` checks, or null when it does not exist.
+ * @param {string} cwd
+ * @param {string} target
+ * @returns {string | null}
+ */
+export function resolveBuiltPath(cwd, target) {
+  const resolved = path.resolve(cwd, target);
+  return fs.existsSync(resolved) ? resolved : null;
+}
+
+/**
+ * The files under a `doctor --built` path, in a stable order: each with its
+ * path relative to the folder (a file's own name when the path is one file),
+ * whether it sits in build output, and a reader that returns its text, or
+ * null when it cannot be read or is over 5 MB. Installs and version control
+ * are skipped; at most `fileLimit` files are listed.
+ * @param {string} target an existing absolute path
+ * @param {{fileLimit?: number}} [options] `fileLimit`: BUILT_FILE_LIMIT
+ *   unless the caller reads fewer
+ * @returns {{files: {rel: string, built: boolean, read: () => string | null}[], truncated: boolean, missing?: number}}
+ */
+export function readBuiltPath(target, {fileLimit = BUILT_FILE_LIMIT} = {}) {
+  /** @param {string} file */
+  const reader = file => () => {
+    try {
+      if (fs.statSync(file).size > BUILT_FILE_MAX_BYTES) return null;
+      return fs.readFileSync(file, 'utf8');
+    } catch {
+      return null;
+    }
+  };
+  if (!fs.statSync(target).isDirectory()) {
+    const inBuild = path
+      .dirname(target)
+      .split(path.sep)
+      .some(part => BUILD_OUTPUT_DIRS.has(part));
+    /** @type {{rel: string, built: boolean, read: () => string | null}[]} */
+    const files = [
+      {rel: path.basename(target), built: inBuild, read: reader(target)},
+    ];
+    let missing = 0;
+    // A built page carries its styles and scripts in files it links: read
+    // the local ones beside it, as built output.
+    if (/\.html?$/iu.test(target)) {
+      // A link inside an HTML comment is not one the page loads.
+      const page = (reader(target)() ?? '').replace(/<!--[\s\S]*?-->/g, ' ');
+      const seen = new Set([path.resolve(target)]);
+      for (const match of page.matchAll(
+        /<(?:link|script)\b[^>]*?\b(?:href|src)\s*=\s*(?:"([^"#?]+)|'([^'#?]+)|([^\s"'#?>]+))/giu,
+      )) {
+        const href = match[1] ?? match[2] ?? match[3];
+        if (/^(?:[a-z][\w+.-]*:|\/\/)/iu.test(href)) continue;
+        // A root-relative link names a file from the build root: the page's
+        // folder or the nearest folder above it that holds the file.
+        let file = path.resolve(path.dirname(target), href.replace(/^\//u, ''));
+        if (href.startsWith('/')) {
+          for (let dir = path.dirname(target); ; dir = path.dirname(dir)) {
+            const candidate = path.join(dir, href);
+            if (fs.existsSync(candidate)) {
+              file = candidate;
+              break;
+            }
+            if (path.dirname(dir) === dir) break;
+          }
+        }
+        if (seen.has(file)) continue;
+        if (!fs.existsSync(file)) {
+          // Only a missing stylesheet could have held Astryx styles; a
+          // missing favicon or manifest changes nothing.
+          if (
+            /\.css$/iu.test(href) ||
+            /\brel\s*=\s*["']?stylesheet/iu.test(match[0])
+          ) {
+            missing++;
+          }
+          continue;
+        }
+        seen.add(file);
+        files.push({
+          rel: path
+            .relative(path.dirname(target), file)
+            .split(path.sep)
+            .join('/'),
+          built: true,
+          read: reader(file),
+        });
+      }
+    }
+    return {files, truncated: false, missing};
+  }
+  /** @type {{rel: string, built: boolean, read: () => string | null}[]} */
+  const files = [];
+  // A path that is itself build output (`--built dist`) is read as built.
+  /** @type {{dir: string, built: boolean}[]} */
+  const stack = [
+    {dir: target, built: BUILD_OUTPUT_DIRS.has(path.basename(target))},
+  ];
+  while (stack.length > 0) {
+    const {dir, built} = /** @type {{dir: string, built: boolean}} */ (
+      stack.pop()
+    );
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, {withFileTypes: true});
+    } catch {
+      continue;
+    }
+    entries.sort((a, b) => a.name.localeCompare(b.name));
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (BUILT_SKIPPED_DIRS.has(entry.name)) continue;
+        stack.push({
+          dir: full,
+          built: built || BUILD_OUTPUT_DIRS.has(entry.name),
+        });
+      } else if (entry.isFile()) {
+        if (files.length >= fileLimit) return {files, truncated: true};
+        files.push({
+          rel: path.relative(target, full).split(path.sep).join('/'),
+          built,
+          read: reader(full),
+        });
+      }
+    }
+  }
+  return {files, truncated: false};
+}
+
+/**
+ * The integration packages whose components count as Astryx for a `--built`
+ * path, read without running anything: each dependency the nearest
+ * package.json above the path declares whose installed copy, resolved the way
+ * the CLI autolinks integrations (a workspace root's hoisted copy included),
+ * holds an integration manifest. Every `@astryxdesign/*` package counts
+ * beside them.
+ * @param {string} target the path as given
+ * @param {string} cwd
+ * @returns {string[]}
+ */
+export function builtIntegrationPackages(target, cwd) {
+  let dir = path.resolve(cwd, target);
+  try {
+    if (!fs.statSync(dir).isDirectory()) dir = path.dirname(dir);
+  } catch {
+    dir = path.resolve(cwd);
+  }
+  for (let at = dir; ; at = path.dirname(at)) {
+    if (fs.existsSync(path.join(at, 'package.json'))) {
+      return [
+        ...new Set(scanAutolinkCandidates(at).map(candidate => candidate.spec)),
+      ];
+    }
+    if (path.dirname(at) === at) return [];
+  }
 }

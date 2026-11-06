@@ -25,6 +25,8 @@ import * as os from 'node:os';
 import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import {assertWithin} from '../../foundation/fs/path-safety.mjs';
+import {npmCommand} from '../../foundation/release/cache.mjs';
+import {commandTokensIn} from '../../foundation/doc-compiler/doc-syntax.mjs';
 import {resolvePackageDir} from '../../foundation/integrations/integrations.mjs';
 import {
   literalThemeName,
@@ -37,6 +39,8 @@ import {
   keywordsCliProblem,
   replacesCliProblem,
   sectionIdsCliProblem,
+  docTokensCliProblem,
+  sectionPositionCliProblem,
   themesCliProblem,
 } from '../../foundation/integrations/cli-requirement.mjs';
 import {
@@ -230,7 +234,12 @@ export function parseNpmPackOutput(output) {
     throw new Error('npm pack returned a result without a files array.');
   }
   return {
-    filename: info.filename,
+    // npm 8 names a scoped package's tarball `@scope/name-1.0.0.tgz` in its
+    // JSON but writes `scope-name-1.0.0.tgz`, as every later npm reports.
+    filename:
+      typeof info.filename === 'string' && /^@[^/]+\//.test(info.filename)
+        ? info.filename.slice(1).replace('/', '-')
+        : info.filename,
     fileCount: info.entryCount,
     size: info.size,
     unpackedSize: info.unpackedSize,
@@ -257,17 +266,22 @@ function npmPackErrorDetail(output) {
 /**
  * Run `npm pack --json` with output directed to `destDir` so no preexisting
  * tgz is overwritten. This intentionally runs the package lifecycle, matching
- * the artifact `npm publish` would produce. Uses spawnSync with an args array —
- * no shell — so paths with metacharacters cannot inject.
+ * the artifact `npm publish` would produce. npm starts the way the CLI starts
+ * it everywhere else (`npmCommand`): npm's own entry file run with this Node
+ * when one is found, so an `npm` earlier on the PATH that is not npm itself
+ * cannot answer for it. Uses spawnSync with an args array — no shell — so
+ * paths with metacharacters cannot inject.
  *
  * @param {string} packageDir
  * @param {string} destDir
  * @returns {{filename: string, fileCount: number, size: number, unpackedSize: number, packedPaths: Set<string>}}
  */
 function runNpmPack(packageDir, destDir) {
+  const npm = npmCommand();
   const result = spawnSync(
-    'npm',
+    npm.command,
     [
+      ...npm.prefix,
       'pack',
       '--json',
       '--silent',
@@ -276,7 +290,7 @@ function runNpmPack(packageDir, destDir) {
       '--foreground-scripts=false',
       `--pack-destination=${destDir}`,
     ],
-    {cwd: packageDir, encoding: 'utf-8', timeout: 60_000},
+    {cwd: packageDir, encoding: 'utf-8', shell: false, timeout: 60_000},
   );
   if (result.error) {
     throw new Error(`Could not start npm pack: ${result.error.message}`);
@@ -318,18 +332,49 @@ function extractTarball(tgzPath, extractDir) {
 }
 
 /**
+ * Whether any of these doc files writes a doc token (`{@command …}`, `{@pm …}`
+ * or `{@pm-only …}`; an escaped `{@@…}` is not one).
+ * @param {unknown[]} files
+ * @returns {boolean}
+ */
+function writesDocTokens(files) {
+  return files.some(file => {
+    if (typeof file !== 'string') return false;
+    try {
+      return commandTokensIn(fs.readFileSync(file, 'utf8')).length > 0;
+    } catch {
+      return false;
+    }
+  });
+}
+
+/**
  * Whether any of these doc files has a section that sets `id`.
  * @param {string[]} files
  * @returns {Promise<boolean>}
  */
 async function setsSectionIds(files) {
+  return setsSectionField(files, ['id']);
+}
+
+/**
+ * Whether any of these doc files has a section that sets one of `fields`.
+ * @param {string[]} files
+ * @param {string[]} fields
+ * @returns {Promise<boolean>}
+ */
+async function setsSectionField(files, fields) {
   for (const file of files) {
     if (typeof file !== 'string') continue;
     const doc = /** @type {any} */ (
       await loadTopicModule(file).catch(() => null)
     );
     const sections = Array.isArray(doc?.sections) ? doc.sections : [];
-    if (sections.some((/** @type {any} */ section) => section?.id != null)) {
+    if (
+      sections.some((/** @type {any} */ section) =>
+        fields.some(field => section?.[field] != null),
+      )
+    ) {
       return true;
     }
   }
@@ -1378,6 +1423,36 @@ export async function integrationPackCheck(options = {}) {
         issues.push(error('section_ids_need_cli', idProblem));
       }
     }
+    // `before` and `after` need a newer CLI than any field above. Added in a
+    // patch release, it warns and never fails the check (INV35).
+    if (
+      await setsSectionField(
+        [
+          ...records.map(record => record.path),
+          ...guides.map(guide => /** @type {any} */ (guide.ref).topicFile),
+        ],
+        ['before', 'after'],
+      )
+    ) {
+      const positionProblem = sectionPositionCliProblem(pkg);
+      if (positionProblem != null) {
+        issues.push(warning('section_position_needs_cli', positionProblem));
+      }
+    }
+    // A doc token shows as written on a CLI before the one that renders
+    // them. Added in a patch release, it warns and never fails (INV35).
+    if (
+      problem == null &&
+      writesDocTokens([
+        ...records.map(record => record.path),
+        ...guides.map(guide => /** @type {any} */ (guide.ref).topicFile),
+      ])
+    ) {
+      const tokenProblem = docTokensCliProblem(pkg);
+      if (tokenProblem != null) {
+        issues.push(warning('doc_tokens_need_cli', tokenProblem));
+      }
+    }
   }
   // A template that sets `replaces` (spec:AST-035) or `keywords` needs a CLI
   // that reads the field: an older CLI drops that template and can hide the
@@ -1566,9 +1641,12 @@ export async function integrationPackCheck(options = {}) {
     }
 
     // Validate the extracted tree as an installed integration
+    // The packed tree is the package being authored: its icon sets are
+    // checked whatever the scratch folder's config says.
     const packedResult = await validateInstalledIntegration(
       pkgName,
       scratchBase,
+      {iconSets: true},
     );
 
     for (const issue of packedResult.issues) {

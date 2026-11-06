@@ -22,12 +22,12 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Publish only a package that passes every check, then preview the upload with `npm publish --dry-run`. The dry run lists the files and the tag without uploading.',
+          text: 'Publish only a package that passes every check, then preview the upload with `{@pm-only npm "publishing goes through npm, which every Node install carries" publish --dry-run}`. The dry run lists the files and the tag without uploading.',
         },
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx doctor integration validate && astryx doctor integration components && astryx doctor integration templates && astryx doctor integration docs && astryx integration verify\nnpm publish --dry-run --access public',
+          code: '{@command doctor integration validate} && {@command doctor integration components} && {@command doctor integration templates} && {@command doctor integration docs} && {@command integration verify}\n{@pm-only npm "publishing goes through npm, which every Node install carries" publish --dry-run --access public}',
         },
         {
           type: 'code',
@@ -51,7 +51,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: "npm pkg set 'files[]=components' 'files[]=templates' 'files[]=themes' 'files[]=docs' 'files[]=codemods' 'files[]=astryx.integration.mjs'\nnpm pack --dry-run",
+          code: "{@pm-only npm \"edits package.json\" pkg set 'files[]=components' 'files[]=templates' 'files[]=themes' 'files[]=docs' 'files[]=codemods' 'files[]=astryx.integration.mjs'}\n{@pm-only npm \"builds the tarball npm publishes\" pack --dry-run}",
         },
         {
           type: 'list',
@@ -70,12 +70,12 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'A scoped package is private by default, so publish it with `--access public`. Without `--tag`, npm tags the release `latest`, which is what `npm install @acme/astryx-widgets` installs.',
+          text: 'A scoped package is private by default, so publish it with `--access public`. Without `--tag`, npm tags the release `latest`, which is what `{@pm install @acme/astryx-widgets}` installs.',
         },
         {
           type: 'code',
           lang: 'bash',
-          code: '# Publish a release\nnpm publish --access public\n\n# Or set the access once in package.json\nnpm pkg set publishConfig.access=public',
+          code: '# Publish a release\n{@pm-only npm "publishing goes through npm, which every Node install carries" publish --access public}\n\n# Or set the access once in package.json\n{@pm-only npm "Yarn has no pkg command" pkg set publishConfig.access=public}',
         },
         {
           type: 'prose',
@@ -84,7 +84,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: '# Only apps that ask for next get it: npm install @acme/astryx-widgets@next\nnpm publish --tag next\n\n# Make that version the default\nnpm dist-tag add @acme/astryx-widgets@1.1.0 latest\nnpm dist-tag ls @acme/astryx-widgets',
+          code: '# Only apps that ask for next get it: npm install @acme/astryx-widgets@next\n{@pm-only npm "publishing goes through npm, which every Node install carries" publish --tag next}\n\n# Make that version the default\n{@pm-only npm "dist-tags are set with npm, which every Node install carries" dist-tag add @acme/astryx-widgets@1.1.0 latest}\n{@pm-only npm "dist-tags are set with npm, which every Node install carries" dist-tag ls @acme/astryx-widgets}',
         },
       ],
     },
@@ -99,7 +99,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'mkdir check-release && cd check-release\nnpm init -y\nnpm install @astryxdesign/core @astryxdesign/cli @acme/astryx-widgets@1.0.0\nastryx component AcmeCarousel\nastryx doctor integration validate @acme/astryx-widgets',
+          code: 'mkdir check-release && cd check-release\n{@pm-only npm "npm, which every Node install carries, writes the package.json" init -y}\n{@pm install @astryxdesign/core @astryxdesign/cli @acme/astryx-widgets@1.0.0}\n{@command component AcmeCarousel}\n{@command doctor integration validate @acme/astryx-widgets}',
         },
         {
           type: 'prose',

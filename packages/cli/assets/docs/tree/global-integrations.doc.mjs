@@ -37,11 +37,11 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Your `@astryxdesign/core` (and, if you use it, `@astryxdesign/cli`) `peerDependencies` ranges must include the version of the CLI installed globally. If they do not, Astryx skips your package outside projects, and `astryx doctor` warns and names the range.',
+          text: 'Your `@astryxdesign/core` (and, if you use it, `@astryxdesign/cli`) `peerDependencies` ranges must include the version of the CLI installed globally. If they do not, Astryx skips your package outside projects, and `{@command doctor}` warns and names the range.',
         },
         {
           type: 'prose',
-          text: "Inside a project that does not install your package, `astryx discover` offers it, with the command that adds it to that project, once your peer range admits the project's release.",
+          text: "Inside a project that does not install your package, `{@command discover}` offers it, with the command that adds it to that project, once your peer range admits the project's release.",
         },
       ],
     },
@@ -54,8 +54,8 @@ export const docs = {
           style: 'unordered',
           items: [
             "Installed in an app: it works in that app, as always, whichever `astryx` the person runs, because the app's version of Astryx answers there.",
-            'Installed next to the global install (`npm i -g @astryxdesign/cli your-package`), or in the same folder as the CLI by a tool that installs them together: it works in every folder outside a project. People and agents there see its components, templates, docs, themes, codemods, and discover source.',
-            "Installed only globally, inside an app that does not install it: it adds nothing there. When it supports the app's version and loads, `astryx discover` lists it as one the app could add, with the app's install command.",
+            'Installed next to the global install (`{@pm install @astryxdesign/cli your-package --global}`), or in the same folder as the CLI by a tool that installs them together: it works in every folder outside a project. People and agents there see its components, templates, docs, themes, codemods, and discover source.',
+            "Installed only globally, inside an app that does not install it: it adds nothing there. When it supports the app's version and loads, `{@command discover}` lists it as one the app could add, with the app's install command.",
             "Installed both ways: the app's copy is the one used in that app. In your own package folder, your working copy is used.",
           ],
         },
@@ -73,7 +73,7 @@ export const docs = {
           type: 'list',
           style: 'unordered',
           items: [
-            'Declare the `@astryxdesign/core` (and, if you use it, `@astryxdesign/cli`) `peerDependencies` range your package really supports. Outside a project, Astryx skips your package when that range leaves out the global version, and `astryx doctor` says why: too narrow, and global users lose it after an upgrade; too wide, and it loads against a Core it may not build with.',
+            'Declare the `@astryxdesign/core` (and, if you use it, `@astryxdesign/cli`) `peerDependencies` range your package really supports. Outside a project, Astryx skips your package when that range leaves out the global version, and `{@command doctor}` says why: too narrow, and global users lose it after an upgrade; too wide, and it loads against a Core it may not build with.',
             'Keep imports in your docs and templates to packages an app installs with yours, since outside a project there is no app to check them against.',
             "If you set `cliCommand`, know that outside a project it starts every command Astryx prints, and that two global integrations naming different commands cancel out, falling back to `astryx` ({@link generic:cli-command}). Inside an app, only the app's integrations count.",
             'Try it globally before you publish, with the steps below.',
@@ -92,21 +92,21 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'npm pack\nnpm i -g @astryxdesign/cli ./your-package-1.0.0.tgz\nmkdir -p /tmp/try-global && cd /tmp/try-global\nastryx discover\nastryx docs\nastryx doctor',
+          code: '{@pm-only npm "the tarball the registry receives" pack}\n{@pm install @astryxdesign/cli ./your-package-1.0.0.tgz --global}\nmkdir -p /tmp/try-global && cd /tmp/try-global\n{@command discover}\n{@command docs}\n{@command doctor}',
         },
         {
           type: 'list',
           style: 'unordered',
           items: [
-            '`astryx discover` lists your package as installed, with what it adds.',
-            '`astryx docs` lists your topics, and `astryx search <one of your component names>` finds them.',
-            "`astryx doctor`'s `computer-integrations` check lists your package as used, with no warning.",
-            "In an app that does not install it, `astryx discover` lists it as one the app could add, with the app's install command, and none of its components or docs show up.",
+            '`{@command discover}` lists your package as installed, with what it adds.',
+            '`{@command docs}` lists your topics, and `{@command search <one of your component names>}` finds them.',
+            "`{@command doctor}`'s `computer-integrations` check lists your package as used, with no warning.",
+            "In an app that does not install it, `{@command discover}` lists it as one the app could add, with the app's install command, and none of its components or docs show up.",
           ],
         },
         {
           type: 'prose',
-          text: 'Remove it again with `npm uninstall -g your-package`.',
+          text: 'Remove it again with `{@pm remove your-package --global}`.',
         },
       ],
     },

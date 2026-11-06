@@ -28,6 +28,10 @@ export interface SchemaFieldDoc {
   example?: string;
   /** Deprecation reason, if the field is deprecated. */
   deprecated?: string;
+  /** Set on a field of an experimental surface (spec:AST-017 FR27). The
+   *  schema's own section leaves it out; the experimental feature's docs,
+   *  under `astryx docs cli/experimental`, document it. */
+  stability?: 'experimental';
   /** Nested object fields, for object-typed fields. */
   fields?: SchemaFieldDoc[];
 }

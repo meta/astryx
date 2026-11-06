@@ -16,7 +16,7 @@ export const doc = {
   displayName: 'DiscoverSource',
   namespace: 'authoring',
   description:
-    'A source for `astryx discover`: an async function that returns a catalog of packages a project could add, their versions, and what each version adds. Set it as `discover` in astryx.config, or export it as `discover` from an integration manifest. Discover calls every source, the project one first, and then reads the official list the CLI carries; another source\'s entry for an official package is kept. A source that throws, runs past 30 seconds, or returns an invalid catalog never hides the others; discover then uses the last good answer that source gave for the same request, or reports the source as failed when it saved none. Discover only reads: it prints the command that adds a package and never runs it.',
+    "A source for `{@command discover}`: an async function that returns a catalog of packages a project could add, their versions, and what each version adds. Set it as `discover` in astryx.config, or export it as `discover` from an integration manifest. Discover calls every source, the project one first, and then reads the official list the CLI carries; another source's entry for an official package is kept. A source that throws, runs past 30 seconds, or returns an invalid catalog never hides the others; discover then uses the last good answer that source gave for the same request, or reports the source as failed when it saved none. Discover only reads: it prints the command that adds a package and never runs it.",
   appliesTo:
     '`discover` in astryx.config.*, or the `discover` named export of astryx.integration.*',
   fields: [

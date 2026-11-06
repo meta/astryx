@@ -259,7 +259,7 @@ describe('a reference block in a topic section', () => {
         /^docs\(\): Read the reference docs: .* Read it with `astryx docs cli\/api\/functions\/docs`\.$/,
       );
       expect(more[1].text).toMatch(
-        /^Theme System: .* Read it with `astryx docs theme`\.$/,
+        /^Theming: .* Read it with `astryx docs theme`\.$/,
       );
     },
     SLOW,

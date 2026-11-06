@@ -27,7 +27,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: "astryx integration add agent-doc 'Use AcmeCarousel for rotating content.'",
+          code: "{@command integration add agent-doc 'Use AcmeCarousel for rotating content.'}",
         },
         {
           type: 'prose',
@@ -92,12 +92,12 @@ export default {
       content: [
         {
           type: 'prose',
-          text: "An app's `astryx init` writes your lines at the end of its managed agent block, each labeled with your package name. The CLI owns the heading, the labels, and the markers.",
+          text: "An app's `{@command init}` writes your lines at the end of its managed agent block, each labeled with your package name. The CLI owns the heading, the labels, and the markers.",
         },
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx init --features agents',
+          code: '{@command init --features agents}',
         },
         {
           type: 'code',
@@ -123,9 +123,9 @@ export default {
         {
           type: 'code',
           lang: 'bash',
-          code: `astryx init --features agents
+          code: `{@command init --features agents}
 # Or: --from takes the Core version the app had before
-astryx upgrade --from <version> --apply`,
+{@command upgrade --from <version> --apply}`,
         },
         {
           type: 'code',

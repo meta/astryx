@@ -26,7 +26,8 @@
  * - docs root: the type the doc's `type` names (`ReferenceDoc` when it names
  *   none), and a `<topic>.doc.<lang>.mjs` overlay against
  *   `ReferenceTranslationDoc`;
- * - themes root: `ThemeDoc`.
+ * - themes root: `ThemeDoc`;
+ * - iconSets root: `IconSetDoc`.
  * Every finding is a warning, names the field, and says how to fix it.
  *
  * @input Doc files with the root each was found in, the package root, and the
@@ -44,9 +45,10 @@ import {
   TYPESCRIPT_FIX,
   unusableTypeScriptReason,
 } from './project-typescript.mjs';
+import {keepSourceFiles} from './source-file-cache.mjs';
 
 /**
- * @typedef {'components' | 'hooks' | 'templates' | 'docs' | 'docs-overlay' | 'themes'} DocRoot
+ * @typedef {'components' | 'hooks' | 'templates' | 'docs' | 'docs-overlay' | 'themes' | 'icon-sets'} DocRoot
  */
 
 /**
@@ -113,6 +115,7 @@ const MAIN_EXPORTS = {
   docs: ['docs', 'default'],
   'docs-overlay': [],
   themes: ['default', 'doc', 'docs'],
+  'icon-sets': ['default'],
 };
 
 /** The type a docs-root doc's `type` stamp names. */
@@ -308,6 +311,9 @@ function expectedType(ts, root, exportName, node, core = false) {
   if (root === 'themes') {
     return {typeExpr: authoring('ThemeDoc'), typeName: 'ThemeDoc'};
   }
+  if (root === 'icon-sets') {
+    return {typeExpr: authoring('IconSetDoc'), typeName: 'IconSetDoc'};
+  }
   if (translation) {
     return {
       typeExpr: authoring('ReferenceTranslationDoc'),
@@ -421,7 +427,7 @@ function targetsOf(ts, sf, root, core = false) {
   const names = [];
   const main = MAIN_EXPORTS[root].find(name => exported.has(name));
   if (main) names.push(main);
-  if (root !== 'templates' && root !== 'themes') {
+  if (root !== 'templates' && root !== 'themes' && root !== 'icon-sets') {
     for (const name of TRANSLATIONS) if (exported.has(name)) names.push(name);
   }
   /** @type {Target[]} */
@@ -1030,8 +1036,9 @@ export async function checkDocTypes(files, options) {
     paths: {[AUTHORING]: [AUTHORING_TYPES]},
   };
   const host = ts.createCompilerHost(options_);
-  const getSourceFile = host.getSourceFile.bind(host);
-  // Every other file is parsed once, so a later pass reuses it.
+  // Every other file is parsed once, so a later pass reuses it; and once per
+  // process for these options, so a later check does too.
+  const getSourceFile = keepSourceFiles(ts, host, options_);
   /** @type {Map<string, any>} */
   const parsed = new Map();
   host.getSourceFile = (

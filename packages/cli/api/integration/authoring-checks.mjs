@@ -22,10 +22,12 @@ import path from 'node:path';
 import {getCliInvocation} from '../../foundation/env/package-manager.mjs';
 import {
   packageComponentLinkProblems,
+  packageDocTargets,
   packageDocsProblems,
   packageReferenceProblems,
 } from '../docs/_adapter.mjs';
 import {findProjectCoreDir} from '../../foundation/fs/paths.mjs';
+import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
 import {
   discoverIntegrationComponents,
   discoverOwnedComponents,
@@ -38,8 +40,10 @@ import {
   integrationStrayPointers,
 } from './_adapter.mjs';
 import {
+  BUILTIN_DOCS_PACKAGE,
   discoverBuiltinTopics,
   discoverIntegrationDocs,
+  isGuideRoute,
 } from '../../foundation/discovery/docs-discovery.mjs';
 import {
   applyTemplateReplacements,
@@ -151,6 +155,16 @@ function addErrors(issues, errors, code) {
  * @returns {Promise<import('./authoring-checks.type.mjs').IntegrationTemplateConflictResponse>}
  */
 export async function integrationTemplateConflicts(pkg, options = {}) {
+  // Read-only: one listing of each folder serves the whole check.
+  return withListingCache(() => templateConflicts(pkg, options));
+}
+
+/**
+ * @param {string | undefined} pkg
+ * @param {import('./authoring-checks.type.mjs').IntegrationAuthoringOptions} options
+ * @returns {Promise<import('./authoring-checks.type.mjs').IntegrationTemplateConflictResponse>}
+ */
+async function templateConflicts(pkg, options) {
   const {cwd = process.cwd()} = options;
   const resolved = await resolveIntegration(pkg, cwd);
   const validated = resolved.found;
@@ -288,6 +302,16 @@ export async function integrationTemplateConflicts(pkg, options = {}) {
  * @returns {Promise<import('./authoring-checks.type.mjs').IntegrationComponentConflictResponse>}
  */
 export async function integrationComponentConflicts(pkg, options = {}) {
+  // Read-only: one listing of each folder serves the whole check.
+  return withListingCache(() => componentConflicts(pkg, options));
+}
+
+/**
+ * @param {string | undefined} pkg
+ * @param {import('./authoring-checks.type.mjs').IntegrationAuthoringOptions} options
+ * @returns {Promise<import('./authoring-checks.type.mjs').IntegrationComponentConflictResponse>}
+ */
+async function componentConflicts(pkg, options) {
   const {cwd = process.cwd()} = options;
   const resolved = await resolveIntegration(pkg, cwd);
   const validated = resolved.found;
@@ -384,6 +408,16 @@ export async function integrationComponentConflicts(pkg, options = {}) {
  * @returns {Promise<import('./authoring-checks.type.mjs').IntegrationDocConflictResponse>}
  */
 export async function integrationDocConflicts(pkg, options = {}) {
+  // Read-only: one listing of each folder serves the whole check.
+  return withListingCache(() => docConflicts(pkg, options));
+}
+
+/**
+ * @param {string | undefined} pkg
+ * @param {import('./authoring-checks.type.mjs').IntegrationAuthoringOptions} options
+ * @returns {Promise<import('./authoring-checks.type.mjs').IntegrationDocConflictResponse>}
+ */
+async function docConflicts(pkg, options) {
   const {cwd = process.cwd()} = options;
   const resolved = await resolveIntegration(pkg, cwd);
   const validated = resolved.found;
@@ -489,11 +523,14 @@ export async function integrationDocConflicts(pkg, options = {}) {
       });
     }
 
-    // An extension never owns its own name. A replacement does, so it may only
-    // reuse a Core name when that is the Core topic it explicitly replaces.
+    // An extension never owns its own name, and neither does a doc that
+    // replaces a guide by its route: readers open the route. A topic
+    // replacement does, so it may only reuse a Core name when that is the
+    // Core topic it explicitly replaces.
     if (
       sameNameCore != null &&
       record.extendsTopic == null &&
+      !isGuideRoute(record.replaces) &&
       replacedCore !== sameNameCore
     ) {
       findings.push({
@@ -504,6 +541,27 @@ export async function integrationDocConflicts(pkg, options = {}) {
         message:
           `Accidental conflict: "${record.name}" is already a Core topic. ` +
           `Rename it, declare replaces: '${sameNameCore}' to take it over, or declare extends: '${sameNameCore}' to merge sections.`,
+      });
+    }
+  }
+  // A doc that replaces or extends one of the CLI's guides by its route is
+  // as intentional as one that names a Core topic.
+  if (errors.length === 0) {
+    for (const target of await packageDocTargets(
+      /** @type {{name: string}} */ (docsIntegration),
+      discovered,
+    )) {
+      if (target.kind !== 'guide' || target.owner !== BUILTIN_DOCS_PACKAGE) {
+        continue;
+      }
+      // A route the guide moved from names the guide at its route now.
+      const route = target.guide ?? target.target;
+      findings.push({
+        topic: target.topic,
+        severity: 'info',
+        relationship: target.relationship,
+        coreTopic: route,
+        message: `Intentional ${target.relationship === 'replaces' ? 'override' : 'extension'}: "${target.topic}" ${target.relationship} the CLI guide "${route}".`,
       });
     }
   }

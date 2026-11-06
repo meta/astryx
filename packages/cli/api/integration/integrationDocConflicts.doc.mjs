@@ -19,7 +19,7 @@ export const doc = {
     "package's topics, or one of them and a Core topic other than the one it replaces. " +
     'Code and examples are not compared. `fluff` lists each padding phrase, with its file ' +
     'line, and each topic of 80 or more prose words in which fewer than half carry content. ' +
-    '`strayPointers` lists each code span that is exactly `astryx docs <name>` for a doc that ' +
+    '`strayPointers` lists each code span that is exactly `{@command docs <name>}` for a doc that ' +
     "exists, in a topic's prose, description or summary or a component doc's text fields, " +
     'with the `{@link}` that replaces it. ' +
     'Each entry of these lists is also a warning (`copied_passage`, `doc_fluff`, `stray_doc_pointer`), so ' +

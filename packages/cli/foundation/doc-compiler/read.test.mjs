@@ -16,6 +16,7 @@ import {Project} from '../config/project.mjs';
 import {CLI_ROOT} from '../fs/paths.mjs';
 import {loadComponentDoc, loadDocs} from '../discovery/component-loader.mjs';
 import {compileDocFile, readDocView} from './read.mjs';
+import {importDocModule, importNativeModule} from './import.mjs';
 import {collectDocInputs} from './inputs.mjs';
 
 const REPO_ROOT = path.resolve(CLI_ROOT, '..', '..');
@@ -151,7 +152,7 @@ describe('readDocView', () => {
     ).toBe('Legacy');
   });
 
-  it('reads each file once per process, and retries a file that failed to load', async () => {
+  it('reads each file once while it is unchanged, and retries a file that failed to load', async () => {
     const file = write('Card.doc.mjs', card);
     const before = await compileDocFile(file, {root: 'components'});
     expect(await compileDocFile(file, {root: 'components'})).toBe(before);
@@ -318,5 +319,62 @@ catch (e) { console.log('threw', e.message.split('\\n')[0]); }`,
       ).stdout.trim();
     expect(run('loadDocs')).toMatch(/^threw .*node_modules/);
     expect(run('loadComponentDoc')).toMatch(/^(ok Typed|threw .*is invalid)/);
+  });
+});
+
+describe('an edited doc file, read again in the same process', () => {
+  /** @param {string} displayName */
+  const doc = displayName =>
+    `export default {type: 'component', name: 'Edited', displayName: ${JSON.stringify(displayName)}, usage: {description: 'd'}, props: []};\n`;
+
+  it('reads the new content, and shares each version while it is unchanged', async () => {
+    const file = write('Edited.doc.mjs', doc('First'));
+    const first = await loadDocs(file);
+    expect(first.displayName).toBe('First');
+    expect(await loadDocs(file)).toBe(first);
+    fs.writeFileSync(file, doc('Second, longer'));
+    const second = await loadDocs(file);
+    expect(second.displayName).toBe('Second, longer');
+    expect(await loadDocs(file)).toBe(second);
+    expect((await loadComponentDoc(file)).displayName).toBe('Second, longer');
+  });
+
+  it('reads an edited TypeScript doc again', async () => {
+    const file = write('Edited.doc.ts', doc('First'));
+    expect((await loadComponentDoc(file)).displayName).toBe('First');
+    fs.writeFileSync(file, doc('Second, longer'));
+    expect((await loadComponentDoc(file)).displayName).toBe('Second, longer');
+  });
+
+  it('gives each importer its own read of an edited TypeScript doc, as a new process would', async () => {
+    const file = write('Pair.doc.ts', doc('First'));
+    const nativeBefore = await importNativeModule(file);
+    expect(await importDocModule(file)).not.toBe(nativeBefore);
+    fs.writeFileSync(file, doc('Second, longer'));
+    // The unchecked reader (a plain import) first, then the checked one (jiti).
+    expect((await loadDocs(file)).displayName).toBe('Second, longer');
+    expect((await loadComponentDoc(file)).displayName).toBe('Second, longer');
+    const nativeAfter = await importNativeModule(file);
+    const docAfter = await importDocModule(file);
+    expect(docAfter).not.toBe(nativeAfter);
+    expect(await importNativeModule(file)).toBe(nativeAfter);
+    expect(await importDocModule(file)).toBe(docAfter);
+  });
+
+  it('lowers an edited file again for a whole-project compile', async () => {
+    const file = write('Edited.doc.mjs', doc('First'));
+    const read = () => compileDocFile(file, {root: 'components'});
+    expect((await read()).view.displayName).toBe('First');
+    fs.writeFileSync(file, doc('Second, longer'));
+    expect((await read()).view.displayName).toBe('Second, longer');
+  });
+
+  it('reads a fix after an edit that broke the file', async () => {
+    const file = write('Edited.doc.mjs', doc('First'));
+    expect((await loadDocs(file)).displayName).toBe('First');
+    fs.writeFileSync(file, 'export default {;\n');
+    await expect(loadDocs(file)).rejects.toThrow();
+    fs.writeFileSync(file, doc('Fixed again'));
+    expect((await loadDocs(file)).displayName).toBe('Fixed again');
   });
 });

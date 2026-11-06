@@ -52,7 +52,13 @@ export async function list({cwd} = {}) {
       ),
       package: entry.package,
     };
-    if (entry.replaces != null) listed.replaces = entry.replaces;
+    if (entry.replaces != null) {
+      listed.replaces = entry.replaces;
+      // INV28: the package whose topic it replaced, beside its own.
+      if (entry.replacedPackage != null) {
+        listed.replacedPackage = entry.replacedPackage;
+      }
+    }
     entries.push(listed);
   }
   // The docs tree's top-level namespaces, the CLI's and each integration's,

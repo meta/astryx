@@ -168,6 +168,13 @@ beforeAll(async () => {
     fs.mkdirSync(path.dirname(path.join(pkg, rel)), {recursive: true});
     fs.writeFileSync(path.join(pkg, rel), text);
   };
+  // Its own TypeScript config, scoped to its own files: with none, it gets
+  // the repository's root config, as `tsc` reads it, and the components check
+  // compiles every file in the repository.
+  write(
+    'tsconfig.json',
+    `${JSON.stringify({extends: '../tsconfig.json', include: ['**/*']})}\n`,
+  );
   write(
     'package.json',
     JSON.stringify({name: '@acme/widgets', version: '1.2.3'}),
@@ -191,6 +198,15 @@ beforeAll(async () => {
   write(
     'templates/acme-page.tsx',
     'export default function Fixture() { return null; }\n',
+  );
+  // The button's example, so the fixture draws no note.
+  write(
+    'templates/acme-button-showcase.doc.mjs',
+    "export default {type: 'block', name: 'acme-button-showcase', displayName: 'Acme Button showcase', description: 'A button in use.', category: 'Acme - Actions', exampleFor: 'AcmeButton', isShowcase: true};\n",
+  );
+  write(
+    'templates/acme-button-showcase.tsx',
+    "import {AcmeButton} from '@acme/widgets';\nexport default function Showcase() { return <AcmeButton />; }\n",
   );
   write(
     'docs/acme-guide.doc.mjs',

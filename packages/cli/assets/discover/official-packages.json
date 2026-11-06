@@ -102,6 +102,10 @@
         },
         {
           "kind": "component",
+          "name": "CircleCheckIndicator"
+        },
+        {
+          "kind": "component",
           "name": "CircularProgress"
         },
         {
@@ -134,10 +138,6 @@
         },
         {
           "kind": "component",
-          "name": "InfoTip"
-        },
-        {
-          "kind": "component",
           "name": "ListInput"
         },
         {
@@ -146,7 +146,15 @@
         },
         {
           "kind": "component",
-          "name": "MobileTokenizer"
+          "name": "NavigationScreen"
+        },
+        {
+          "kind": "component",
+          "name": "NavigationStack"
+        },
+        {
+          "kind": "component",
+          "name": "PageControl"
         },
         {
           "kind": "component",
@@ -159,6 +167,10 @@
         {
           "kind": "component",
           "name": "Schedule"
+        },
+        {
+          "kind": "component",
+          "name": "SelectableCardGroup"
         },
         {
           "kind": "component",
@@ -191,6 +203,10 @@
         {
           "kind": "component",
           "name": "Tour"
+        },
+        {
+          "kind": "component",
+          "name": "TourStep"
         },
         {
           "kind": "component",
@@ -239,6 +255,22 @@
         {
           "kind": "template",
           "name": "EmojiPickerShowcase"
+        },
+        {
+          "kind": "template",
+          "name": "ListInputBudgetAllocation"
+        },
+        {
+          "kind": "template",
+          "name": "ListInputFamilyMembers"
+        },
+        {
+          "kind": "template",
+          "name": "ListInputMailingList"
+        },
+        {
+          "kind": "template",
+          "name": "ListInputShowcase"
         }
       ]
     },

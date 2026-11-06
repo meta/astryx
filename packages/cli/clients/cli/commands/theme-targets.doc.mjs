@@ -19,7 +19,7 @@ export const doc = {
     'Prints every `defineTheme` components key across the system: the stable class it paints, ' +
     'the component that declares it, and the props and states that are legal override keys ' +
     'under it. This is the whole themeable surface in one command: what auditing a theme, or ' +
-    'answering "which key paints this pixel?", used to need one `astryx component <Name>` per ' +
+    'answering "which key paints this pixel?", used to need one `{@command component <Name>}` per ' +
     'component to assemble. Pass a component name to scope it; pass any other text to search ' +
     'target keys, classes, and components. `--json` for a list a repo can lint its own theme against.',
   fn: 'themeTargets',

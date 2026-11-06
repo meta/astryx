@@ -10,11 +10,12 @@
 export const docs = {
   type: 'namespace',
   name: 'migration',
-  title: 'Migration Guide',
+  title: 'Migration',
   summary:
     'Migrate an existing Tailwind, shadcn, or Radix app to the design system incrementally — setup, component replacement, and verification.',
   keywords: [
     'migration',
+    'migration guide',
     'migrate',
     'Tailwind',
     'shadcn',

@@ -82,7 +82,7 @@ export default {
         },
         {
           type: 'prose',
-          text: 'Then check the package-scoped template list ({@link generic:template-doc-overview}) and confirm the entry carries the relationship you set. `astryx component` does not show integration blocks, so the list is where to check.',
+          text: 'Then check the package-scoped template list ({@link generic:template-doc-overview}) and confirm the entry carries the relationship you set. `{@command component}` does not show integration blocks, so the list is where to check.',
         },
       ],
     },

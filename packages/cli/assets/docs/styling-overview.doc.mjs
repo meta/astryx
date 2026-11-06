@@ -67,7 +67,7 @@ export const docs = {
           type: 'code',
           lang: 'bash',
           label: 'Install',
-          code: 'npm install @astryxdesign/core @stylexjs/stylex @astryxdesign/theme-neutral',
+          code: '{@pm install @astryxdesign/core @stylexjs/stylex @astryxdesign/theme-neutral}',
         },
         {
           type: 'code',
@@ -79,7 +79,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: "Done. Components work out of the box \u2014 style them with `className`, `xstyle`, or `style`. Swap `theme-neutral` for any theme package (`astryx theme list` shows what's available).",
+          text: "Done. Components work out of the box \u2014 style them with `className`, `xstyle`, or `style`. Swap `theme-neutral` for any theme package (`{@command theme list}` shows what's available).",
         },
       ],
     },
@@ -91,7 +91,7 @@ export const docs = {
           type: 'code',
           lang: 'bash',
           label: 'Install (add to an existing Tailwind v4 app)',
-          code: 'npm install @astryxdesign/core @stylexjs/stylex @astryxdesign/theme-neutral',
+          code: '{@pm install @astryxdesign/core @stylexjs/stylex @astryxdesign/theme-neutral}',
         },
         {
           type: 'code',
@@ -123,13 +123,13 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Only needed when you write your own StyleX (`stylex.create()`) or swizzle a component (`astryx swizzle <Component>`), which copies its StyleX source into your app. The plain path already supports `xstyle` overrides \u2014 this path is for your own StyleX code. Some built-in page templates also use StyleX for layout; if you scaffold one and see "Unexpected stylex.create call at runtime", add the compiler plugin for your bundler below.',
+          text: 'Only needed when you write your own StyleX (`stylex.create()`) or swizzle a component (`{@command swizzle <Component>}`), which copies its StyleX source into your app. The plain path already supports `xstyle` overrides \u2014 this path is for your own StyleX code. Some built-in page templates also use StyleX for layout; if you scaffold one and see "Unexpected stylex.create call at runtime", add the compiler plugin for your bundler below.',
         },
         {
           type: 'code',
           lang: 'bash',
           label: 'Install',
-          code: 'npm install @astryxdesign/core @stylexjs/stylex @astryxdesign/theme-neutral',
+          code: '{@pm install @astryxdesign/core @stylexjs/stylex @astryxdesign/theme-neutral}',
         },
         {
           type: 'code',

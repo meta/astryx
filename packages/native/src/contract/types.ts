@@ -16,9 +16,20 @@ export type PropType =
   | {kind: 'number'}
   | {kind: 'boolean'}
   | {kind: 'enum'; values: readonly string[]}
+  /** A closed set of numbers, such as a heading level or a spacing step. */
+  | {kind: 'numberEnum'; values: readonly number[]}
   | {kind: 'array'; of: PropType}
   | {kind: 'record'; fields: Readonly<Record<string, PropSpec>>}
   | {kind: 'fn'; args: readonly PropType[]}
+  /** Child Astryx components: the typed content slot (AST-082 FR4). */
+  | {kind: 'content'}
+  /** A shared icon name: the typed icon slot (AST-082 FR4, FR17). */
+  | {kind: 'icon'}
+  /**
+   * Words or a switch, such as a tooltip that is on (`true`, the component's
+   * own words), off (`false`), or given words.
+   */
+  | {kind: 'textOrBoolean'}
   | {kind: 'named'; name: string};
 
 export interface PropSpec {
@@ -49,4 +60,13 @@ export interface ComponentContract {
   readonly platforms: Readonly<Partial<Record<NativePlatform, PropMap>>>;
   /** Core-doc props that stay in the web contract. */
   readonly webOnly: readonly WebOnlyProp[];
+  /**
+   * Core props projected from a wider web type: each portable value and the
+   * one web value it means (AST-082 FR4).
+   */
+  readonly projections?: Readonly<
+    Record<string, Readonly<Record<string, string>>>
+  >;
+  /** Core props that share a toolkit name with the same meaning (FR8). */
+  readonly sameMeaning?: readonly string[];
 }

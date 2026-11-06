@@ -26,6 +26,7 @@ import {warmMenuBottomSheet} from './__tests__/warmMenuBottomSheet';
 import {IconButton} from '../IconButton';
 import {RadioList, RadioListItem} from '../RadioList';
 import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation';
+import {Theme, defineTheme} from '../theme';
 import {rtlStyles} from '../utils';
 
 beforeEach(() => {
@@ -125,7 +126,7 @@ describe('DropdownMenuSubMenu', () => {
     expect(popover).toHaveStyle({minWidth: 'var(--x-minWidth)'});
     expect(popover?.getAttribute('style')).toContain('min(640px, calc(100vw');
     expect(flyout).toHaveStyle(
-      'max-height: min(300px,calc(100dvb - calc(max(var(--spacing-4), env(safe-area-inset-top, 0px)) + var(--astryx-layer-inset-block-start, 0px)) - calc(max(var(--spacing-4), env(safe-area-inset-bottom, 0px)) + var(--astryx-layer-inset-block-end, 0px))))',
+      'max-height: min(300px,min(calc(100dvb - calc(max(var(--spacing-4), env(safe-area-inset-top, 0px)) + var(--astryx-layer-inset-block-start, 0px)) - calc(max(var(--spacing-4), env(safe-area-inset-bottom, 0px)) + var(--astryx-layer-inset-block-end, 0px))), var(--_layer-keyboard-max-block-size, 100dvb)))',
     );
     expect(flyout).not.toHaveStyle({overflowY: 'auto'});
     expect(flyout).toHaveAttribute('tabindex', '-1');
@@ -450,6 +451,54 @@ describe('DropdownMenuSubMenu host attributes', () => {
     ).toHaveAttribute('aria-labelledby', 'move-row');
   });
 
+  it('reports each flyout open and close to onOpenChange once', async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    render(
+      <DropdownMenu button={{label: 'Actions'}}>
+        <DropdownMenuSubMenu label="Move to" onOpenChange={onOpenChange}>
+          <DropdownMenuItem label="Folder A" onClick={() => {}} />
+        </DropdownMenuSubMenu>
+      </DropdownMenu>,
+    );
+    const trigger = await openRoot(user);
+    expect(onOpenChange).not.toHaveBeenCalled();
+    trigger.focus();
+    await user.keyboard('{ArrowRight}');
+    await waitFor(() =>
+      expect(trigger).toHaveAttribute('aria-expanded', 'true'),
+    );
+    expect(onOpenChange.mock.calls).toEqual([[true]]);
+    await user.keyboard('{Escape}');
+    await waitFor(() =>
+      expect(trigger).toHaveAttribute('aria-expanded', 'false'),
+    );
+    expect(onOpenChange.mock.calls).toEqual([[true], [false]]);
+  });
+
+  it('menuDataTestId names the flyout menu, and data-testid the row', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu button={{label: 'Actions'}}>
+        <DropdownMenuSubMenu
+          label="Move to"
+          data-testid="move-row"
+          menuDataTestId="move-menu">
+          <DropdownMenuItem label="Folder A" onClick={() => {}} />
+        </DropdownMenuSubMenu>
+      </DropdownMenu>,
+    );
+    const trigger = await openRoot(user);
+    expect(trigger).toHaveAttribute('data-testid', 'move-row');
+    await user.click(trigger);
+    await waitFor(() =>
+      expect(trigger).toHaveAttribute('aria-expanded', 'true'),
+    );
+    expect(screen.getByTestId('move-menu')).toBe(
+      screen.getByRole('menu', {name: 'Move to', hidden: true}),
+    );
+  });
+
   it('a ref reaches the trigger row', async () => {
     const user = userEvent.setup();
     const ref = createRef<HTMLElement>();
@@ -596,6 +645,40 @@ describe('DropdownMenu data-driven submenus', () => {
       await screen.findByRole('menuitem', {name: 'Folder B', hidden: true}),
     );
     expect(onMove).toHaveBeenCalledWith('b');
+  });
+
+  it('renders a submenu for an item with nested items inside a section', async () => {
+    const user = userEvent.setup();
+    const onWork = vi.fn();
+    render(
+      <DropdownMenu
+        button={{label: 'Share'}}
+        items={[
+          {
+            type: 'section',
+            title: 'Send',
+            items: [
+              {label: 'Copy link', onClick: () => {}},
+              {
+                label: 'Email',
+                items: [
+                  {label: 'Work', onClick: onWork},
+                  {label: 'Personal', onClick: () => {}},
+                ],
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: /Share/}));
+    const trigger = screen.getByRole('menuitem', {name: /Email/, hidden: true});
+    expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
+    await user.click(trigger);
+    await user.click(
+      await screen.findByRole('menuitem', {name: 'Work', hidden: true}),
+    );
+    expect(onWork).toHaveBeenCalled();
   });
 
   it('keyboard-reaches an item positioned after a submenu row', async () => {
@@ -1404,6 +1487,62 @@ describe('DropdownMenuSubMenu drill-in on a phone', () => {
     fireEvent.click(await waitFor(() => shownRow('Move to')), {
       detail: 1,
     });
+    await waitFor(() => shownRow('Back to Actions'));
+  });
+
+  it("follows the theme's md point: a 900 px touch screen drills in under md 1000, and keeps the flyout under the default (spec:AST-012 FR9)", async () => {
+    // A query-aware stand-in for a 900 × 1024 coarse-pointer screen: `,` is
+    // or, `and` is and.
+    const screenSize = {width: 900, height: 1024};
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockImplementation((query: string) => ({
+        matches: query.split(', ').some(alternative =>
+          alternative.split(' and ').every(part => {
+            if (part === '(pointer: coarse)') {
+              return true;
+            }
+            const range = /^\((width|height) < (\d+)px\)$/.exec(part);
+            return (
+              range != null &&
+              screenSize[range[1] as 'width' | 'height'] < Number(range[2])
+            );
+          }),
+        ),
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    );
+    const wideMd = defineTheme({
+      name: 'wide-md-drill-in',
+      adaptations: {widthBreakpoints: {md: 1000, lg: 1100}},
+    });
+    const user = userEvent.setup();
+    const menu = (
+      <DropdownMenu button={{label: 'Actions'}}>
+        <DropdownMenuSubMenu label="Move to">
+          <DropdownMenuItem label="Folder A" onClick={() => {}} />
+        </DropdownMenuSubMenu>
+      </DropdownMenu>
+    );
+    // The default md point (768): not compact, so the sub-menu flies out.
+    const {unmount} = render(menu);
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+    fireEvent.click(await waitFor(() => shownRow('Move to')), {detail: 1});
+    const flyout = await waitFor(() => shownMenu('Move to'));
+    expect(flyout.closest('[popover]')).not.toBe(
+      shownMenu('Actions').closest('[popover]'),
+    );
+    unmount();
+    // A theme whose md is 1000: the same screen is compact, and it drills in.
+    render(<Theme theme={wideMd}>{menu}</Theme>);
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+    fireEvent.click(await waitFor(() => shownRow('Move to')), {detail: 1});
     await waitFor(() => shownRow('Back to Actions'));
   });
 
@@ -2299,5 +2438,80 @@ describe('DropdownMenuSubMenu header and footer', () => {
       fireEvent.keyDown(create(), {key: 'Tab'});
       expect(field()).toHaveFocus();
     });
+  });
+});
+
+describe('DropdownMenuSubMenu: Tab from a flyout leaves the whole menu (APG menu button)', () => {
+  function TabMenu({onOpenChange}: {onOpenChange: (open: boolean) => void}) {
+    return (
+      <>
+        <DropdownMenu button={{label: 'File'}} onOpenChange={onOpenChange}>
+          <DropdownMenuItem label="Open" onClick={() => {}} />
+          <DropdownMenuSubMenu label="Export">
+            <DropdownMenuItem label="PDF" onClick={() => {}} />
+            <DropdownMenuSubMenu label="Image">
+              <DropdownMenuItem label="PNG" onClick={() => {}} />
+              <DropdownMenuItem label="JPEG" onClick={() => {}} />
+            </DropdownMenuSubMenu>
+          </DropdownMenuSubMenu>
+        </DropdownMenu>
+        <button type="button">After</button>
+      </>
+    );
+  }
+
+  const row = (name: string | RegExp) =>
+    screen.getByRole('menuitem', {name, hidden: true});
+
+  async function openExport(onOpenChange: (open: boolean) => void) {
+    const user = userEvent.setup();
+    render(<TabMenu onOpenChange={onOpenChange} />);
+    const trigger = screen.getByRole('button', {name: /File/});
+    await user.click(trigger);
+    const menu = screen.getByRole('menu', {name: 'File', hidden: true});
+    await waitFor(() => expect(menu).toHaveFocus());
+    act(() => row(/Export/).focus());
+    await user.keyboard('{ArrowRight}');
+    await waitFor(() => expect(row('PDF')).toHaveFocus());
+    return {user, trigger, menu};
+  }
+
+  it('Tab on a flyout row closes every level and returns focus to the trigger, once', async () => {
+    const onOpenChange = vi.fn();
+    const {trigger, menu} = await openExport(onOpenChange);
+    onOpenChange.mockClear();
+    const tab = fireEvent.keyDown(row('PDF'), {key: 'Tab'});
+    // Not prevented: the browser's Tab moves on from the trigger.
+    expect(tab).toBe(true);
+    expect(row(/Export/)).toHaveAttribute('aria-expanded', 'false');
+    expect(menu.closest('[popover]')).not.toHaveAttribute('popover-open');
+    expect(onOpenChange).toHaveBeenCalledTimes(1);
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(trigger).toHaveFocus();
+  });
+
+  it('Shift+Tab on a flyout row closes every level too', async () => {
+    const onOpenChange = vi.fn();
+    const {menu} = await openExport(onOpenChange);
+    onOpenChange.mockClear();
+    fireEvent.keyDown(row('PDF'), {key: 'Tab', shiftKey: true});
+    expect(menu.closest('[popover]')).not.toHaveAttribute('popover-open');
+    expect(onOpenChange).toHaveBeenCalledTimes(1);
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('Tab two levels down closes every level', async () => {
+    const onOpenChange = vi.fn();
+    const {user, trigger, menu} = await openExport(onOpenChange);
+    act(() => row(/Image/).focus());
+    await user.keyboard('{ArrowRight}');
+    await waitFor(() => expect(row('PNG')).toHaveFocus());
+    onOpenChange.mockClear();
+    fireEvent.keyDown(row('PNG'), {key: 'Tab'});
+    expect(row(/Image/)).toHaveAttribute('aria-expanded', 'false');
+    expect(row(/Export/)).toHaveAttribute('aria-expanded', 'false');
+    expect(menu.closest('[popover]')).not.toHaveAttribute('popover-open');
+    expect(onOpenChange).toHaveBeenCalledTimes(1);
+    expect(trigger).toHaveFocus();
   });
 });

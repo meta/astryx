@@ -250,6 +250,32 @@ describe('external showcase blocks: canonical .doc.* plus released .template.* c
     expect(result.name).toBe('Bar — Showcase');
   });
 
+  it('findShowcase prefers the showcase that names the component in exampleFor', async () => {
+    makeShowcaseFixture();
+    // Bar's showcase also uses Chip; Chip's own showcase sits in a folder
+    // that does not carry its name and says so only through exampleFor.
+    const dir = path.join(
+      tmpDir,
+      'node_modules',
+      '@test',
+      'ext',
+      'blocks',
+      'components',
+      'Gallery',
+    );
+    fs.mkdirSync(dir, {recursive: true});
+    fs.writeFileSync(
+      path.join(dir, 'ChipCard.doc.mjs'),
+      "export default {type: 'block', name: 'Chip — Card', description: 'Chip showcase.', category: 'Test - Showcases', exampleFor: 'Chip', isShowcase: true, componentsUsed: ['Chip']};\n",
+    );
+    fs.writeFileSync(
+      path.join(dir, 'ChipCard.tsx'),
+      "'use client';\nexport default function ChipCard() { return <div>Chip</div>; }",
+    );
+    const result = await findShowcase('Chip', tmpDir);
+    expect(result?.name).toBe('Chip — Card');
+  });
+
   it('findRelatedBlocks finds both suffix families', async () => {
     makeShowcaseFixture();
     const foo = await findRelatedBlocks('Foo', tmpDir);

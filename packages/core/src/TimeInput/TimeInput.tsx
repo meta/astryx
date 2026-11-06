@@ -18,6 +18,7 @@
  */
 
 import {
+  use,
   useId,
   useState,
   useCallback,
@@ -30,6 +31,7 @@ import {
   type FocusEvent,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {
   colorVars,
   sizeVars,
@@ -44,16 +46,12 @@ import {
   inputStatusBorderStyles,
   inputStatusHoverShadowStyles,
   inputStatusFocusWithinStyles,
-  type FieldStatusVariant,
 } from '../Field';
 import {Icon} from '../Icon';
 import {Spinner} from '../Spinner';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {
   type ISOTimeString,
-  parseTimeInput,
-  formatDisplayTime12h,
-  formatDisplayTime24h,
   formatISOTime,
   adjustTime,
   isImeKeyEvent,
@@ -70,15 +68,22 @@ import {
 import type {SizeValue} from '../utils/types';
 import {useSize} from '../SizeContext/SizeContext';
 import {useAnnounce} from '../hooks/useAnnounce';
+import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useInputContainer} from '../hooks/useInputContainer';
 import {useMediaQuery} from '../hooks/useMediaQuery';
 import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
-import {groupStyles} from '../InputGroup/groupStyles';
+import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
+import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useTooltip} from '../Tooltip';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
+import {useLocale} from '../i18n';
+import {
+  formatLocaleTime,
+  parseLocaleTime,
+  resolveHourFormat,
+} from '../utils/timeFormat';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {NativeTimeSegment} from '../DateTimeInput/NativeTimeSegment';
@@ -89,22 +94,18 @@ import {
   type InputPresentation,
 } from '../utils/inputPresentation';
 import {useDevWarning} from '../hooks/useDevWarning';
+import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/TimeInput/TimeInput.generated';
+
+registerEnglishFallback(english);
 
 const TOUCH_POINTER_QUERY = '(pointer: coarse)';
 
 const styles = stylex.create({
-  // The shared disabled style drops the focus ring; restore it while a
-  // control inside the field holds focus (spec:AST-085 FR6). Defaults repeat it.
-  disabledFocusRing: {
-    borderColor: {
-      default: colorVars['--color-border-emphasized'],
-      ':focus-within': colorVars['--color-accent'],
-    },
-    boxShadow: {
-      default: 'none',
-      ':focus-within': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
-    },
-  },
   icon: {
     display: 'flex',
     alignItems: 'center',
@@ -242,7 +243,7 @@ export interface TimeInputProps extends Omit<
   /**
    * The selected time in ISO format (HH:MM or HH:MM:SS).
    */
-  value?: ISOTimeString;
+  value?: ISOTimeString | undefined;
 
   /**
    * Callback fired when the time changes.
@@ -291,9 +292,13 @@ export interface TimeInputProps extends Omit<
 
   /**
    * Hour format for display.
-   * - '12h': Display as 12-hour with AM/PM (e.g., "2:30 PM")
+   * - '12h': Display as 12-hour with the locale's day period (e.g., "2:30 PM")
    * - '24h': Display as 24-hour (e.g., "14:30")
-   * @default '12h'
+   *
+   * When unset, follows the `InternationalizationProvider` locale's hour
+   * cycle: `en-US` reads 12-hour, `en-GB` and `de-DE` read 24-hour. A
+   * per-user preference rides on the locale tag (`en-US-u-hc-h23`).
+   * @default the locale's hour cycle
    */
   hourFormat?: TimeInputHourFormat;
 
@@ -368,7 +373,7 @@ export interface TimeInputProps extends Omit<
    * - 'tooltip': no message box; the status icon becomes a focusable info-tip button that reveals the message on hover, keyboard focus, or tap
    * @default 'attached'
    */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusPlacement;
 
   /**
    * Width of the field. Numbers are treated as pixels, strings are used as-is
@@ -445,7 +450,8 @@ function TimeField({
     onKeyDown: onKeyDownProp,
     ...controlProps
   } = rest;
-  const t = useTranslator();
+  const t = useComponentTranslator();
+  const locale = useLocale();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const placeholder =
     placeholderFromProps ?? t('@astryx.timeInput.placeholder');
@@ -475,6 +481,9 @@ function TimeField({
   const [, startTransition] = useTransition();
   const [optimisticValue, setOptimisticValue] = useOptimistic(value);
   const isBusy = isLoading || optimisticValue !== value;
+  // The busy Spinner is decorative; this control announces its busy start
+  // (spec:AST-086 FR8).
+  useBusyAnnouncement(isBusy, t('@astryx.spinner.loading'), containerRef);
 
   // In grouped mode the status message renders as a visually-hidden node that
   // exists only for aria-describedby. Announce it through the persistent
@@ -482,6 +491,8 @@ function TimeField({
   // region mounted together with its content is not reliably announced.
   // Ungrouped mode delegates to Field -> FieldStatus, which announces itself.
   const announce = useAnnounce();
+  // Syncs the live region with `status.message` when the field is in an
+  // InputGroup.
   useEffect(() => {
     if (inputGroup && status?.message) {
       announce(
@@ -536,9 +547,11 @@ function TimeField({
   const [pendingInput, setPendingInput] = useState<string | null>(null);
   const [isFocused, setIsFocused] = useState(false);
 
-  // Format function based on hourFormat
-  const formatDisplayTime =
-    hourFormat === '12h' ? formatDisplayTime12h : formatDisplayTime24h;
+  const formatDisplayTime = useCallback(
+    (time: ISOTimeString, includeSeconds: boolean) =>
+      formatLocaleTime(time, locale, hourFormat, includeSeconds),
+    [locale, hourFormat],
+  );
 
   // Unified change handler that fires both onChange and changeAction
   const fireChange = useCallback(
@@ -570,21 +583,23 @@ function TimeField({
     if (pendingInput === null || !pendingInput.trim()) {
       return true;
     }
-    const parsed = parseTimeInput(pendingInput, hasSeconds);
+    const parsed = parseLocaleTime(pendingInput, locale, hasSeconds);
     if (!parsed) {
       return false;
     }
     // Also check min/max range
     return isTimeInRange(parsed, min, max);
-  }, [pendingInput, hasSeconds, min, max]);
+  }, [pendingInput, locale, hasSeconds, min, max]);
 
   // Placeholder that shows format hint when focused and empty
   const displayPlaceholder = useMemo(() => {
     if (isFocused && !displayValue) {
-      return hourFormat === '12h' ? 'e.g., 2:30 PM' : 'e.g., 14:30';
+      return hourFormat === '12h'
+        ? t('@astryx.dateTimeInput.timeHint12h')
+        : t('@astryx.dateTimeInput.timeHint24h');
     }
     return placeholder;
-  }, [isFocused, displayValue, hourFormat, placeholder]);
+  }, [isFocused, displayValue, hourFormat, placeholder, t]);
 
   // Handle input text change - update immediately if valid
   const handleInputChange = useCallback(
@@ -598,12 +613,12 @@ function TimeField({
       setPendingInput(newValue);
 
       // If the input is valid, update immediately (don't wait for blur)
-      const parsed = parseTimeInput(newValue, hasSeconds);
+      const parsed = parseLocaleTime(newValue, locale, hasSeconds);
       if (parsed && isTimeInRange(parsed, min, max) && parsed !== value) {
         fireChange(parsed);
       }
     },
-    [hasSeconds, min, max, value, fireChange, isDisabled],
+    [locale, hasSeconds, min, max, value, fireChange, isDisabled],
   );
 
   // Handle focus
@@ -640,7 +655,7 @@ function TimeField({
         return;
       }
 
-      const parsed = parseTimeInput(pendingInput, hasSeconds);
+      const parsed = parseLocaleTime(pendingInput, locale, hasSeconds);
       if (parsed && isTimeInRange(parsed, min, max)) {
         // Valid time - update if different
         if (parsed !== value) {
@@ -650,7 +665,7 @@ function TimeField({
       // Clear pending input - display will revert to formatted value
       setPendingInput(null);
     },
-    [pendingInput, isDisabled, value, fireChange, hasSeconds, min, max],
+    [pendingInput, isDisabled, value, fireChange, locale, hasSeconds, min, max],
   );
 
   // Handle keyboard navigation on input
@@ -757,6 +772,7 @@ function TimeField({
       }}
       onClick={usesNativeTimePicker ? undefined : handleWrapperClick}
       onMouseUp={usesNativeTimePicker ? undefined : handleWrapperMouseUp}
+      {...(inputGroup ? inputGroupItemProps : undefined)}
       {...mergeProps(
         themeProps('time-input', {
           size,
@@ -767,7 +783,7 @@ function TimeField({
           inputWrapperStyles.base,
           sizeStyles[size],
           isDisabled && inputWrapperStyles.disabled,
-          isDisabled && styles.disabledFocusRing,
+          isDisabled && inputDisabledFocusStyles.withinRing,
           status && inputStatusBorderStyles[status.type],
           status && !isDisabled && inputStatusHoverShadowStyles[status.type],
           status && inputStatusFocusWithinStyles[status.type],
@@ -865,7 +881,7 @@ function TimeField({
           </VisuallyHidden>
         </>
       )}
-      {isBusy && <Spinner size="sm" />}
+      {isBusy && <Spinner size="sm" aria-hidden="true" />}
       {hasClear && optimisticValue && !isDisabled && (
         <InputClearButton
           label={t('@astryx.timeInput.clearLabel', {label})}
@@ -930,6 +946,8 @@ TimeField.displayName = 'TimeField';
  * `preventDefault` on, so it cannot cancel built-in behavior.
  */
 export function TimeInput(props: TimeInputProps) {
+  const inputGroupState = use(InputGroupInternalContext);
+  const isDisabled = props.isDisabled || inputGroupState.isDisabled;
   const isTouch = useMediaQuery(TOUCH_POINTER_QUERY);
   useDevWarning(
     'TimeInput',
@@ -941,17 +959,25 @@ export function TimeInput(props: TimeInputProps) {
     props.nativePicker,
     'time',
   );
+  const locale = useLocale();
   const {
     presentation: _presentation,
     nativePicker: _nativePicker,
-    ...rest
+    ...surfaceProps
   } = props;
+  // Every surface gets the resolved hour format, so the typed text, the
+  // native field's resting text, and the sheet wheels agree.
+  const rest = {
+    ...surfaceProps,
+    hourFormat: resolveHourFormat(locale, props.hourFormat),
+  };
   if (effective === 'native') {
     // Deprecated `always` keeps released fallbacks (FR2 legacy); only an
     // explicit `presentation="native"` is forced.
     return (
       <TimeField
         {...rest}
+        isDisabled={isDisabled}
         nativeMode={
           props.presentation === undefined && props.nativePicker === 'always'
             ? 'legacy'
@@ -963,12 +989,14 @@ export function TimeInput(props: TimeInputProps) {
   switch (resolveInputPresentation(effective, isTouch)) {
     case 'native':
       // Only `adaptive-native` on a coarse pointer resolves here (FR2).
-      return <TimeField {...rest} nativeMode="adaptive" />;
+      return (
+        <TimeField {...rest} isDisabled={isDisabled} nativeMode="adaptive" />
+      );
     case 'sheet':
-      return <TouchTimeField {...rest} />;
+      return <TouchTimeField {...rest} isDisabled={isDisabled} />;
     case 'text-input':
     case 'desktop':
-      return <TimeField {...rest} />;
+      return <TimeField {...rest} isDisabled={isDisabled} />;
   }
 }
 

@@ -98,7 +98,7 @@ export const docs = {
       name: 'hasZoom',
       type: 'boolean',
       description:
-        'Enable zoom on double-click, or Enter/Space/+/- via keyboard (images only). When zoomed, drag or use arrow keys to pan.',
+        'Enable zoom (images only): pinch (or ctrl-wheel), or double-tap or double-click to zoom in at that point and back; Enter/Space/+/- zoom 2× about the centre and back. When zoomed, drag or scroll a trackpad to pan, or use arrow keys; on a phone or a tablet, the pan has momentum.',
       default: 'false',
     },
     {
@@ -211,7 +211,8 @@ export const docsZh = {
     {
       name: 'hasZoom',
       type: 'boolean',
-      description: '启用双击缩放（仅图片）。缩放后可拖动平移。',
+      description:
+        '启用缩放（仅图片）：双指捏合（或按住 Ctrl 滚动滚轮），或双点按、双击在该处放大并还原；Enter/Space/+/- 键以中心放大 2 倍并还原。缩放后可拖动或在触控板上滚动平移，或用方向键平移；在手机或平板上，平移带惯性。',
       default: 'false',
     },
     {
@@ -296,7 +297,7 @@ export const docsDense = {
     index: 'Current index in gallery mode.',
     onIndexChange: 'Callback when gallery index changes.',
     hasZoom:
-      'Enable zoom (double-click, Enter/Space, or +/-) and pan (drag or arrow keys) for images.',
+      'Enable zoom (pinch or ctrl-wheel, double-tap or double-click, Enter/Space, or +/-) and pan (drag, trackpad scroll, or arrow keys) for images.',
     xstyle: 'StyleX styles for layout customization.',
   },
 };

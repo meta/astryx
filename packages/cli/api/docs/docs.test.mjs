@@ -93,7 +93,7 @@ describe('docs() dispatcher routing', () => {
 
   it("lists the docs tree's namespaces in meta, so every data entry reads as a topic", async () => {
     const res = await docs();
-    expect(res.meta.namespaces.map(entry => entry.topic)).toEqual(['authoring', 'cli', 'foundations', 'global', 'guides', 'internationalization', 'layout', 'migration', 'styling', 'styling-libraries', 'tokens', 'typography']);
+    expect(res.meta.namespaces.map(entry => entry.topic)).toEqual(['authoring', 'calendars', 'cli', 'foundations', 'global', 'guides', 'internationalization', 'layout', 'migration', 'styling', 'styling-libraries', 'tokens', 'typography']);
     for (const entry of res.data) {
       expect((await docs(entry.topic)).type).toBe('docs.detail');
     }
@@ -252,6 +252,24 @@ describe('docs() dispatcher routing', () => {
     expect((await docs()).data.map(entry => entry.topic)).not.toContain(
       'cli-integrations',
     );
+  }, SLOW);
+
+  it('an unknown route keeps every child of its namespace, closest first', async () => {
+    const error = await docs('tokens/usage').catch(e => e);
+    expect(error.code).toBe('ERR_UNKNOWN_TOPIC');
+    const names = error.suggestions.map(s => s.name);
+    expect(names[0]).toBe('tokens/tokens-usage');
+    const none = await docs('tokens/zzzz-nope').catch(e => e);
+    expect([...names].sort()).toEqual(none.suggestions.map(s => s.name).sort());
+  }, SLOW);
+
+  it('an unknown flat topic is cut where the matches get weaker', async () => {
+    const error = await docs('authoring-at-meta').catch(e => e);
+    expect(error.suggestions.map(s => s.name)).toEqual(['authoring']);
+    // One-letter words do not narrow it: `a11y` keeps the whole browse list.
+    const browse = await docs('zzzz-nope').catch(e => e);
+    const a11y = await docs('a11y').catch(e => e);
+    expect(a11y.suggestions.length).toBe(browse.suggestions.length);
   }, SLOW);
 
   it('a section no guide of a namespace has -> ERR_UNKNOWN_SECTION, naming its guides', async () => {

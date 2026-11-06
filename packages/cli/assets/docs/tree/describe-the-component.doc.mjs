@@ -51,7 +51,7 @@ export const docs = {
     {
       type: 'code',
       lang: 'bash',
-      code: 'astryx component AcmeCarousel',
+      code: '{@command component AcmeCarousel}',
     },
   ],
 };

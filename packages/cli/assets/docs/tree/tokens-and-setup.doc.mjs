@@ -71,7 +71,7 @@ const styles = stylex.create({
       content: [
         {
           type: 'prose',
-          text: "Astryx components ship pre-compiled: `astryx.css` and each package's own stylesheet hold all of their styles, so consuming the published packages needs no StyleX setup. But `astryx swizzle <Component>` copies the raw StyleX *source* into your app, and StyleX source requires a build-time StyleX compiler to produce atomic CSS. Without one, importing the component throws an error that starts `Unexpected 'stylex.create' call at runtime`, and the page does not render. If a swizzled component throws that error, the app is missing a StyleX compiler. The same applies if you author your own StyleX with `stylex.create()`.",
+          text: "Astryx components ship pre-compiled: `astryx.css` and each package's own stylesheet hold all of their styles, so consuming the published packages needs no StyleX setup. But `{@command swizzle <Component>}` copies the raw StyleX *source* into your app, and StyleX source requires a build-time StyleX compiler to produce atomic CSS. Without one, importing the component throws an error that starts `Unexpected 'stylex.create' call at runtime`, and the page does not render. If a swizzled component throws that error, the app is missing a StyleX compiler. The same applies if you author your own StyleX with `stylex.create()`.",
         },
         {
           type: 'table',

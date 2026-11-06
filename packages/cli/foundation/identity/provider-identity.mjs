@@ -37,6 +37,7 @@ const CONTRIBUTION_KINDS = new Set([
   'command',
   'enum',
   'namespace',
+  'icon-definition',
   'theme',
   'codemod',
   'agent-doc',
@@ -53,6 +54,7 @@ const DOC_KINDS = new Set([
   'command',
   'enum',
   'namespace',
+  'icon-definition',
 ]);
 
 /** RFC 3986 path-segment encoding with uppercase escapes. */

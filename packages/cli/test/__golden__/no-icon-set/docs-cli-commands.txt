@@ -1,0 +1,44 @@
+<text>
+
+package: @astryxdesign/cli
+
+<text>
+
+blog                           <text>
+build                          <text>
+component                      <text>
+discover                       <text>
+docs                           <text>
+doctor                         <text>
+doctor-integration             <text>
+doctor-integration-components  <text>
+doctor-integration-docs        <text>
+doctor-integration-templates   <text>
+doctor-integration-validate    <text>
+gap-report                     <text>
+hook                           <text>
+init                           <text>
+integration                    <text>
+integration-add                <text>
+integration-check              <text>
+integration-pack               <text>
+integration-verify             <text>
+manifest                       <text>
+postinstall                    <text>
+search                         <text>
+swizzle                        <text>
+template                       <text>
+theme                          <text>
+theme-add                      <text>
+theme-build                    <text>
+theme-eject                    <text>
+theme-list                     <text>
+theme-palette                  <text>
+theme-palette-generate         <text>
+theme-remove                   <text>
+theme-targets                  <text>
+theme-template                 <text>
+theme-use                      <text>
+upgrade                        <text>
+
+<text>

@@ -18,7 +18,7 @@ export const doc = {
   description:
     'Enumerates the whole themeable surface: each `defineTheme` components key, the stable ' +
     'class it paints, the component that declares it, and the props and states that are legal ' +
-    'override keys under it. Same source as the Theming table `astryx component <Name>` prints ' +
+    'override keys under it. Same source as the Theming table `{@command component <Name>}` prints ' +
     '(the component docs), so the list cannot drift from the components, and `theme build` ' +
     'validates overrides against this exact set. A filter naming a component gives that ' +
     "component's set; anything else is a case-insensitive substring search over each target's key, class and component.",

@@ -26,7 +26,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx integration add theme ocean',
+          code: '{@command integration add theme ocean}',
         },
         {
           type: 'code',
@@ -63,7 +63,7 @@ Declare theme root ./themes in astryx.integration.mjs.
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx integration add theme ocean --from neutral',
+          code: '{@command integration add theme ocean --from neutral}',
         },
         {
           type: 'prose',

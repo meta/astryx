@@ -14,7 +14,7 @@ export const doc = {
   displayName: 'Astryx Codemod',
   namespace: 'authoring',
   description:
-    'A codemod module the CLI runs during `astryx upgrade`. Default-export a ' +
+    'A codemod module the CLI runs during `{@command upgrade}`. Default-export a ' +
     "plain object with a `type` discriminant: 'code' rewrites source files, " +
     "'config' rewrites the astryx.config.* file. There is no factory to call.",
   appliesTo:

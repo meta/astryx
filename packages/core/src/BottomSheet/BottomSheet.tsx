@@ -4,29 +4,51 @@
 
 /**
  * @file BottomSheet.tsx
- * @input Uses React, StyleX, core hooks, shared layer dismissal, the shared interaction modality, named BottomSheetPanel, BottomSheetSwitcherContext
+ * @input React, StyleX, core hooks, shared layer dismissal, the modal outlet
+ *   registry, interaction modality, BottomSheetPanel, the switcher and host
+ *   contexts, and the private bottom-sheet stack registry
  * @output Exports BottomSheet component and BottomSheetProps
  * @position Public BottomSheet router plus private standalone/switcher hosts
- *
- * BottomSheet selects one of two focused hosts. A standalone host owns its
- * native dialog lifecycle and joins the shared layer dismissal stack; a
- * switcher item participates in the parent's shared dialog, transition state
- * machine, and dismissal registration. Both render the same BottomSheetPanel,
- * which owns sheet presentation, content padding, gestures, mobile-keyboard
- * accommodation, and motion completion.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/BottomSheet/BottomSheetPanel.tsx
  * - /packages/core/src/BottomSheet/BottomSheetEdgeTint.tsx
+ * - /packages/core/src/BottomSheet/BottomSheetHostContext.ts
+ * - /packages/core/src/BottomSheet/bottomSheetStack.ts
  * - /packages/core/src/BottomSheet/BottomSheet.doc.mjs
  * - /packages/core/src/BottomSheet/BottomSheet.test.tsx
+ * - /packages/core/src/BottomSheet/BottomSheetStacking.test.tsx
  * - /packages/core/src/BottomSheet/BottomSheetSwitcher.tsx
  * - /packages/core/src/BottomSheet/BottomSheetSwitcher.test.tsx
  * - /packages/core/src/Layer/layerDismissalFamilies.test.tsx
  * - /packages/core/src/Layer/layerDismissalInvariants.test.tsx
+ * - /packages/core/src/Toast/ToastViewport.modalHost.test.tsx
  * - /apps/storybook/stories/BottomSheet.stories.tsx
+ * - /apps/storybook/stories/BottomSheetStacking.stories.tsx
+ * - /apps/storybook/stories/BottomSheetReplace.stories.tsx
  * - /packages/cli/assets/templates/blocks/components/BottomSheet/BottomSheetShowcase.tsx
  */
+
+// BottomSheet picks one of two hosts. A standalone host owns its native
+// dialog and joins the shared layer dismissal stack. A switcher item also
+// owns a native dialog, but its parent switcher owns the lifecycle, the scrim
+// and dismissal. Both render BottomSheetPanel, which owns presentation,
+// padding, gestures, the mobile keyboard and motion.
+//
+// A scrim sheet uses showModal(), so the browser makes the page inert, keeps
+// focus in the dialog, sends Escape as `cancel`, paints `::backdrop`, and
+// returns focus on close(). Script does only what one dialog cannot: it gates
+// `cancel` by `purpose`, orders the stack of sheets, and hands one scrim
+// between dialogs.
+//
+// A standalone sheet joins the private sheet stack (bottomSheetStack.ts)
+// while it is presented. A modal sheet opened over another stacks on top, and
+// the covered sheet recedes. The stack keeps the top layer in open order,
+// also when several sheets open in one commit. A sheet that closes as another
+// opens, from a control inside it, is replaced with the switcher's handoff.
+// Non-modal sheets (`hasScrim={false}`) are manual popovers. They never
+// stack, but they replace each other. Each open modal sheet is an outlet for
+// toasts (Layer/modalOutlet.ts), in stack order.
 
 import {
   use,
@@ -38,15 +60,32 @@ import {
   type RefObject,
   type ReactNode,
 } from 'react';
+import {useIsHydrating} from '../hooks/useIsHydrating';
+import {useSettledOpen} from '../hooks/useSettledOpen';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
 import type {DialogPurpose} from '../Dialog';
 import type {SpacingStep} from '../utils/types';
-import {colorVars, durationVars, easeVars} from '../theme/tokens.stylex';
-import {useDevWarning, useScrollLock} from '../hooks';
+import {
+  colorVars,
+  durationVars,
+  easeVars,
+  spacingVars,
+} from '../theme/tokens.stylex';
+import {useDevWarning} from '../hooks/useDevWarning';
+import {useScrollLock} from '../hooks/useScrollLock';
+import {useMergedRefs} from '../hooks/useMergedRefs';
+import {observeMutations} from '../utils/sharedMutationObserver';
+import {mergeProps} from '../utils/mergeProps';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
+import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
+import {useModalOutlet} from '../Layer/modalOutlet';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
-import {focusForLastInput} from '../utils/focusReturn';
+import {useFocusRegionContainment} from '../hooks/useFocusTrap';
+import {
+  prepareFocusRepairOnRemoval,
+  returnFocusForLastInput,
+} from '../utils/focusReturn';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {
   BottomSheetPanel,
@@ -55,6 +94,32 @@ import {
 } from './BottomSheetPanel';
 import {BottomSheetEdgeTint} from './BottomSheetEdgeTint';
 import {
+  BottomSheetHostContext,
+  CLOSED_BOTTOM_SHEET_HOST,
+  OPEN_BOTTOM_SHEET_HOST,
+} from './BottomSheetHostContext';
+import {
+  BOTTOM_SHEET_STACK_DEFAULT_VIEW,
+  cancelScrimWrite,
+  closeDialogKeepingFocus,
+  focusSheetPanel,
+  getBottomSheetBeneath,
+  hideSheetHost,
+  isClosingTogether,
+  isSheetHostPresented,
+  presentStepModally,
+  presentWithClearScrim,
+  registerBottomSheet,
+  reportBottomSheetMotion,
+  reportClosedTogether,
+  sealBottomSheetBatch,
+  setBottomSheetOpen,
+  showSheetHostNonModal,
+  writeScrimOpacity,
+  type BottomSheetScrimWrite,
+  type BottomSheetStackView,
+} from './bottomSheetStack';
+import {
   BottomSheetSwitcherContext,
   type BottomSheetSwitcherContextValue,
   type BottomSheetSwitcherPhase,
@@ -62,6 +127,8 @@ import {
 
 export type {BottomSheetHeight, BottomSheetSnapPoint} from './BottomSheetPanel';
 import type {BottomSheetHeight, BottomSheetSnapPoint} from './BottomSheetPanel';
+import {BottomSheetEscapeContext} from './bottomSheetEscape';
+import {layerClickBoundary} from '../Layer/layerClickBoundary';
 
 const styles = stylex.create({
   dialog: {
@@ -83,11 +150,35 @@ const styles = stylex.create({
   dialogOpen: {
     display: 'block',
   },
+  // An open standalone dialog positions its panel: the panel sits at its
+  // block end, centred, with no wrapper. A tap beside a narrower panel lands
+  // on the dialog, which light dismiss reads. A flex row, not a grid: WebKit
+  // lays a grid host out again on each render inside the sheet, which makes
+  // each update slower. Not a column: WebKit then drops the content's
+  // block-end padding from the scroll range. In a row the panel's height is
+  // its own cross size, so a sheet taller than the viewport runs past the top
+  // edge, as in a grid. The stack's recede applies to this dialog too, so a
+  // covered sheet shrinks and lifts as one.
+  dialogPanelHost: {
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+  },
+  // A non-modal sheet is in the top layer as a manual popover, so it has no
+  // page z-index (AST-027). Below the Popover API floor, `show()` leaves it
+  // in page stacking order as a reduced fallback.
   dialogNonModal: {
     pointerEvents: 'none',
-    zIndex: 1000,
     width: '100%',
     height: '100%',
+  },
+  dialogNonModalItem: {
+    pointerEvents: 'none',
+    width: '100%',
+    height: '100%',
+  },
+  dialogNonModalItemTop: {
+    zIndex: 1,
   },
   scrim: {
     '::backdrop': {
@@ -97,27 +188,38 @@ const styles = stylex.create({
         '@starting-style': 0,
       },
       transitionProperty: 'opacity, display',
-      transitionDuration: durationVars['--duration-medium'],
+      // The scrim changes hands between stacked sheets with no fade at all:
+      // the host pins this to 0s inline for the frame the change lands in
+      // (see `writeScrimOpacity`). Reduced motion keeps the pin too.
+      transitionDuration: `var(--_sheet-scrim-duration, ${durationVars['--duration-medium']})`,
       transitionTimingFunction: easeVars['--ease-standard'],
       transitionBehavior: 'allow-discrete',
       '@media (prefers-reduced-motion: reduce)': {
-        transitionDuration: '0.01s',
+        transitionDuration: 'var(--_sheet-scrim-duration, 0.01s)',
       },
     },
   },
+  // A sheet present on page load dims at once (AST-013 FR13), with the
+  // reduced-motion collapse, so the transition still ends.
+  scrimSettled: {
+    '::backdrop': {
+      transitionDuration: '0.01s',
+    },
+  },
   /**
-   * The dim leaves with the sheet, on a curve that matches.
-   *
-   * A fade covers no distance, so the decelerate token front-loads its
-   * progress and simply ends it early: `--ease-standard` puts the scrim at 90%
-   * faded in 163ms of a 410ms close, leaving an undimmed page under a sheet
-   * that is still sliding across it. `linear` spends the duration it is given.
-   * Same reasoning the touch date picker's surface swap already carries.
+   * The dim leaves with the sheet, on a matching curve. A fade covers no
+   * distance, so `--ease-standard` would end it early: 90% faded after 163ms
+   * of a 410ms close, under a sheet that is still sliding. `linear` uses the
+   * whole duration.
    */
   scrimClosing: {
     '::backdrop': {
       transitionTimingFunction: 'linear',
     },
+  },
+  // A closing sheet that keeps focus takes no pointer input during its exit.
+  exitHoldingFocus: {
+    pointerEvents: 'none',
   },
   positioner: {
     position: 'absolute',
@@ -133,7 +235,106 @@ const styles = stylex.create({
   positionerTop: {
     zIndex: 1,
   },
+  // A sheet in a stack recedes and returns with CSS motion only; the style
+  // stays on while another sheet is presented so the return animates too.
+  // On a standalone sheet these apply to the dialog itself (its panel's
+  // positioner); on a switcher step, to the step's positioner.
+  positionerStackMotion: {
+    transformOrigin: '50% 0',
+    transitionProperty: 'transform',
+    transitionDuration: durationVars['--duration-medium'],
+    transitionTimingFunction: easeVars['--ease-standard'],
+    '@media (prefers-reduced-motion: reduce)': {
+      transitionDuration: '0.01s',
+    },
+  },
+  // Covered sheets recede behind the top sheet: the nearest shrinks a step
+  // about its top edge and lifts, the next shrinks a second step; deeper
+  // sheets share that second step. Only sheets count toward the depth.
+  positionerReceded1: {
+    transform: `translateY(calc(-1 * ${spacingVars['--spacing-2']})) scale(0.96)`,
+  },
+  positionerReceded2: {
+    transform: `translateY(calc(-2 * ${spacingVars['--spacing-2']})) scale(0.92)`,
+  },
 });
+
+/** Positioner styles for a sheet's place in the stack; the switcher items share them. */
+function stackPositionerStyles(view: BottomSheetStackView) {
+  return [
+    view.isStacked && styles.positionerStackMotion,
+    view.depth === 1 && styles.positionerReceded1,
+    view.depth >= 2 && styles.positionerReceded2,
+  ] as const;
+}
+
+/** The `data-sheet-stack` value for a host: only set while sheets stack. */
+/** Stops a click, from any input, before it reaches its target. */
+function ignoreActivation(event: React.MouseEvent): void {
+  event.preventDefault();
+  event.stopPropagation();
+}
+
+/**
+ * Stops every key except Tab before it reaches the focused control, so no
+ * key handler runs and no text changes (a search field's Enter, a typed
+ * letter, Backspace, an arrow that reopens a list). Tab still moves focus.
+ */
+function ignoreKeyDuringExit(event: React.KeyboardEvent): void {
+  if (event.key !== 'Tab') {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+}
+
+function stackStateAttribute(
+  view: BottomSheetStackView,
+  isOpen: boolean,
+): 'top' | 'covered' | 'exiting' | 'replaced' | undefined {
+  if (!view.isStacked) {
+    return undefined;
+  }
+  if (!isOpen) {
+    return view.replacedMotion != null ? 'replaced' : 'exiting';
+  }
+  return view.isTop ? 'top' : 'covered';
+}
+
+/** Scrim opacity for an open modal sheet: one visible backdrop per stack. */
+function scrimOpacityForView(view: BottomSheetStackView): '0' | '1' {
+  return view.isStacked && !view.ownsScrim ? '0' : '1';
+}
+
+/**
+ * Writes the fade a touch drag's close paces on `dialog`'s scrim, or clears
+ * it when `ms` is null. `written` keeps the value the host wrote, so a clear
+ * removes only that value.
+ */
+function writeScrimFadeDuration(
+  dialog: HTMLDialogElement | null,
+  ms: number | null,
+  written: {current: string | null},
+): void {
+  if (dialog == null) {
+    return;
+  }
+  const current = dialog.style.getPropertyValue('--_sheet-scrim-duration');
+  if (ms == null) {
+    // Remove only the value this host wrote. A stack's 0s pin written since
+    // then stays.
+    if (written.current != null && current === written.current) {
+      dialog.style.removeProperty('--_sheet-scrim-duration');
+    }
+    written.current = null;
+    return;
+  }
+  // A stack's 0s pin hands the scrim over with no fade; it stays.
+  if (current === '0s') {
+    return;
+  }
+  written.current = `${ms}ms`;
+  dialog.style.setProperty('--_sheet-scrim-duration', written.current);
+}
 
 interface BottomSheetSharedProps extends BaseProps<HTMLDivElement> {
   /** Ref forwarded to the visual sheet panel <div>. */
@@ -183,12 +384,23 @@ interface StandaloneBottomSheetProps extends BottomSheetSharedProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
   hasScrim?: boolean;
-  /** Element that receives focus after the sheet closes. */
+  /**
+   * Element that receives focus after the sheet closes. For a sheet on its
+   * own, or the last sheet of a stack, it is always focused, wherever focus
+   * was. When the sheet closes with a modal sheet still open beneath it,
+   * focus returns into that sheet instead (to this element if it is inside
+   * it, else the revealed sheet's panel), because the page is still inert.
+   */
   finalFocusRef?: RefObject<HTMLElement | null>;
   sheetId?: never;
 }
 
 interface SwitcherBottomSheetProps extends BottomSheetSharedProps {
+  /**
+   * @deprecated `BottomSheetSwitcher` is deprecated; give each step its own
+   * standalone sheet with `isOpen` instead. Keeps working until a future
+   * minor release removes the switcher.
+   */
   sheetId: string;
   isOpen?: never;
   onOpenChange?: never;
@@ -218,26 +430,13 @@ function panelStateForSwitcherPhase(
   }
 }
 
-// preventScroll on both: presenting a sheet must not scroll the page to reveal
-// what it just focused. For an autofocused field that reveal is the mobile
-// keyboard's, and it moves the document under a fixed sheet; useMobileKeyboard
-// brings the field into view within the sheet instead.
 function focusPanel(panel: HTMLElement | null, isModal: boolean): void {
-  const activeElement = document.activeElement;
-  if (activeElement != null && panel?.contains(activeElement)) {
-    return;
-  }
-  const autofocus = panel?.querySelector<HTMLElement>('[data-autofocus]');
-  if (autofocus != null) {
-    autofocus.focus({preventScroll: true});
-  } else if (isModal) {
-    panel?.focus({preventScroll: true});
-  }
+  focusSheetPanel(panel, 'open', isModal);
 }
 
 function StandaloneBottomSheet({
   ref,
-  isOpen,
+  isOpen: isOpenProp,
   onOpenChange,
   label,
   children,
@@ -252,19 +451,97 @@ function StandaloneBottomSheet({
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
+  // Whether focus was inside this sheet when its close began. A non-modal
+  // sheet leaves the page interactive, so it returns focus to its opener
+  // only if the person was still in the sheet; a modal sheet always does.
+  const hadFocusAtCloseRef = useRef(false);
+  const finalFocusRefRef = useRef(finalFocusRef);
+  finalFocusRefRef.current = finalFocusRef;
+  // A sheet rendered in another sheet's content is presented only while that
+  // sheet is open: it leaves with its host and, if its own state is still
+  // open, comes back when the host does (see BottomSheetHostContext). Its
+  // state stays the consumer's; nothing here writes it.
+  const host = use(BottomSheetHostContext);
+  const isHostOpen = host?.isOpen ?? true;
+  // A sheet open on the server renders closed until hydration. It opens in
+  // the next render, the first one that can enter its native host. A
+  // <dialog> painted open with aria-modal before it is modal claims a state
+  // it does not have.
+  const isHydrating = useIsHydrating();
+  const isOpen = isOpenProp && isHostOpen && !isHydrating;
+  // A sheet open on the server opens settled, with no rise or fade-in. Later
+  // opens and closes animate. It latches on its own request, not its host's
+  // state, because a hydrating host reads as closed. The latch ends when the
+  // settled entry's transition ends, so a later drag settle glides.
+  const [settledOpen, releaseSettledOpen] = useSettledOpen(
+    isOpenProp,
+    isOpen,
+    false,
+  );
+  const isEntrySettled = settledOpen && isOpen;
+  // Only a modal sheet contains Tab; a non-modal one leaves the page's focus
+  // order alone. A closing sheet stops containing as soon as it starts to
+  // leave.
+  useFocusRegionContainment(dialogRef, isOpen && hasScrim);
+  // Presentation outlives the controlled prop: a closing sheet stays mounted
+  // and in its native host through its exit, and only its motion completion
+  // (or a replace finishing) clears it. The open flip is derived during
+  // render; the close flip is the host's own event.
   const [isPresented, setIsPresented] = useState(isOpen);
+  if (isOpen && !isPresented) {
+    setIsPresented(true);
+  }
   const shouldPresent = isOpen || isPresented;
-  const panelState: BottomSheetPanelState = isOpen
-    ? {kind: 'open', entering: false}
-    : isPresented
-      ? {kind: 'exiting'}
-      : {kind: 'hidden'};
 
+  // The sheet's place in the stack of presented modal sheets. Default until
+  // the stack reports otherwise, which it does in the commit that presents
+  // the sheet, so the first painted frame already shows it.
+  const stackKeyRef = useRef<object>({});
+  const [stackView, setStackView] = useState<BottomSheetStackView>(
+    BOTTOM_SHEET_STACK_DEFAULT_VIEW,
+  );
+  const isOpenRef = useRef(isOpen);
+  isOpenRef.current = isOpen;
+  // Closed and being replaced by the sheet that opened in the same update:
+  // the panel is retained (stays, aligns, fades) instead of sliding out.
+  const isReplaced = !isOpen && isPresented && stackView.replacedMotion != null;
+  // Only the layout phase knows if a replace pairs this close. Until the
+  // registry answers (a synchronous re-render before paint), the panel holds
+  // its open pose. An exit pose rendered first would start the exit
+  // transition, and the reversal would snap the panel to rest. Each change of
+  // `isOpen` restarts the flag during render, and the layout effect below
+  // settles a close.
+  const [isCloseSettled, setIsCloseSettled] = useState(false);
+  // Whether focus was inside the sheet when it closed. Such a sheet stays out
+  // of `inert` and `aria-hidden` until its exit ends and focus has left.
+  const [isExitFocusHeld, setIsExitFocusHeld] = useState(false);
+  const [settledIsOpen, setSettledIsOpen] = useState(isOpen);
+  if (settledIsOpen !== isOpen) {
+    setSettledIsOpen(isOpen);
+    setIsCloseSettled(false);
+    setIsExitFocusHeld(false);
+  }
+  const panelState: BottomSheetPanelState = isOpen
+    ? {kind: 'open', entering: stackView.isReplacing}
+    : isReplaced
+      ? {
+          kind: 'retained',
+          motion: stackView.replacedMotion ?? 'covered',
+          alignmentOffset: stackView.alignmentOffset,
+        }
+      : isPresented
+        ? isCloseSettled
+          ? {kind: 'exiting'}
+          : {kind: 'open', entering: false}
+        : {kind: 'hidden'};
+
+  // Popover's sheet may turn Escape off on its own (bottomSheetEscape.ts).
+  const isEscapeAllowed = use(BottomSheetEscapeContext);
   const dismissOnEscape = useCallback(() => {
-    if (isOpen && purpose !== 'required') {
+    if (isOpen && purpose !== 'required' && isEscapeAllowed) {
       onOpenChange(false);
     }
-  }, [isOpen, onOpenChange, purpose]);
+  }, [isEscapeAllowed, isOpen, onOpenChange, purpose]);
   const dismissOnLightInteraction = useCallback(() => {
     if (purpose === 'info') {
       onOpenChange(false);
@@ -276,66 +553,304 @@ function StandaloneBottomSheet({
     },
     [],
   );
+  const stackViewRef = useRef(stackView);
+  stackViewRef.current = stackView;
+  const scrimWriteRef = useRef<BottomSheetScrimWrite>({frame: null});
+  // Releases the pending scrim write frame on unmount.
+  useEffect(() => () => cancelScrimWrite(scrimWriteRef.current), []);
+  const writeScrim = useCallback(
+    (opacity: '0' | '1') =>
+      writeScrimOpacity(dialogRef.current, opacity, scrimWriteRef.current),
+    [],
+  );
   const handleScrimOpacity = useCallback((opacity: number) => {
+    // Only the sheet whose backdrop is the visible scrim thins it; a sheet
+    // stacked above it has a transparent backdrop that a drag must not reveal.
+    const view = stackViewRef.current;
+    if (view.isStacked && !view.ownsScrim) {
+      return;
+    }
     dialogRef.current?.style.setProperty(
       '--_sheet-scrim-opacity',
       String(opacity),
     );
   }, []);
+  // The fade duration a touch drag's close wrote, until that close ends.
+  const scrimFadeRef = useRef<string | null>(null);
+  const handleScrimFadeDuration = useCallback(
+    (panel: HTMLElement, ms: number | null) => {
+      const view = stackViewRef.current;
+      if (view.isStacked && !view.ownsScrim) {
+        return;
+      }
+      writeScrimFadeDuration(panel.closest('dialog'), ms, scrimFadeRef);
+    },
+    [],
+  );
 
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (dialog == null || !isOpen) {
+  // A sheet joins the registry for as long as it is presented. For a modal
+  // sheet the registry shows the dialog (in open order, repairing same-commit
+  // ties before paint), moves focus into it when it lands on top, and reports
+  // the sheet's view. A non-modal sheet is a group of its own: it is shown as
+  // a manual popover (or by `show()` below the Popover API floor), never
+  // stacks or recedes, and only replaces other non-modal sheets.
+  useLayoutEffect(() => {
+    if (!shouldPresent) {
       return;
     }
-
-    // The controlled prop opens an already-mounted dialog; presentation state
-    // must latch here so a later close can keep it mounted through its exit.
-    // eslint-disable-next-line @eslint-react/set-state-in-effect -- latches controlled open state for exit animation
-    setIsPresented(true);
-    dialog.style.setProperty('--_sheet-scrim-opacity', '1');
-    const wasOpen = dialog.open;
-    if (!wasOpen) {
-      if (hasScrim) {
-        triggerRef.current = document.activeElement as HTMLElement | null;
-        dialog.showModal();
-      } else {
-        dialog.show();
+    const key = stackKeyRef.current;
+    const dialog = dialogRef.current;
+    // Removing an open dialog runs no close, so focus would drop to the page.
+    // After the commit, the repair sends focus where a close would, if the
+    // removal lost focus.
+    const repairOnRemoval =
+      dialog == null
+        ? null
+        : prepareFocusRepairOnRemoval(dialog, {keepRestingFocus: true});
+    const leave = registerBottomSheet(
+      {
+        key,
+        getElement: () => dialogRef.current,
+        show: () => {
+          const dialog = dialogRef.current;
+          if (dialog == null || isSheetHostPresented(dialog)) {
+            return;
+          }
+          if (triggerRef.current == null) {
+            triggerRef.current = document.activeElement as HTMLElement | null;
+          }
+          if (!hasScrim) {
+            showSheetHostNonModal(dialog, panelRef.current);
+            return;
+          }
+          dialog.style.setProperty(
+            '--_sheet-scrim-opacity',
+            scrimOpacityForView(stackViewRef.current),
+          );
+          dialog.showModal();
+        },
+        hide: () => closeDialogKeepingFocus(dialogRef.current),
+        focus: reason => focusSheetPanel(panelRef.current, reason, hasScrim),
+        getReturnTarget: () =>
+          finalFocusRefRef.current?.current ?? triggerRef.current,
+        onView: view => {
+          stackViewRef.current = view;
+          setStackView(view);
+          // Who owns the scrim is the stack's decision; a change of owner
+          // lands with no fade (see writeScrimOpacity). A replaced sheet
+          // keeps the scrim it owns until the sheet replacing it takes it
+          // over; a closing sheet whose scrim an open sheet took over drops
+          // its backdrop the same way; a closing sheet that owned the scrim
+          // alone fades it out.
+          if (isOpenRef.current || view.replacedMotion != null) {
+            writeScrim(scrimOpacityForView(view));
+          } else if (view.isScrimTakenOver) {
+            writeScrim('0');
+          }
+        },
+        replaceable: {
+          getPanel: () => panelRef.current,
+          getOpener: () => triggerRef.current,
+          setOpener: opener => {
+            triggerRef.current = opener;
+          },
+          finish: () => {
+            // The registry has closed the dialog; focus stayed in the sheet
+            // that replaced this one, and so did the flow's opener.
+            triggerRef.current = null;
+            setIsPresented(false);
+          },
+        },
+      },
+      isOpenRef.current,
+      hasScrim,
+    );
+    return () => {
+      // Read before the registry lets go of the sheet beneath. Focus the
+      // person had already moved out of the sheet to the page body stays
+      // there: the removal did not lose it.
+      if (repairOnRemoval != null && isSheetHostPresented(dialog)) {
+        const returnTarget =
+          finalFocusRefRef.current?.current ?? triggerRef.current;
+        const revealed = hasScrim ? getBottomSheetBeneath(key) : null;
+        repairOnRemoval(() => {
+          // The sheet beneath left too. Its own repair returns focus for the
+          // stack.
+          if (revealed != null && !revealed.element.isConnected) {
+            return;
+          }
+          if (
+            revealed != null &&
+            (returnTarget == null || !revealed.element.contains(returnTarget))
+          ) {
+            revealed.focus();
+          } else if (returnTarget != null && returnTarget.isConnected) {
+            returnFocusForLastInput(returnTarget);
+          }
+        });
       }
-      focusPanel(panelRef.current, hasScrim);
+      leave();
+    };
+  }, [hasScrim, shouldPresent, writeScrim]);
+  useLayoutEffect(() => {
+    if (!isOpen) {
+      // Where focus was when the person closed the sheet. The closing sheet
+      // is not inert yet, so focus has not moved.
+      const dialog = dialogRef.current;
+      hadFocusAtCloseRef.current =
+        dialog != null && dialog.contains(dialog.ownerDocument.activeElement);
     }
-  }, [hasScrim, isOpen]);
+    if (shouldPresent) {
+      setBottomSheetOpen(stackKeyRef.current, isOpen);
+    }
+    if (!isOpen) {
+      // The registry has had every sheet's report for this commit; a close
+      // that was not paired as a replace is an exit from here on.
+      // eslint-disable-next-line @eslint-react/set-state-in-effect -- settles the close once the registry has answered
+      setIsCloseSettled(true);
+      // Read with the close, before the sheet can go inert.
+      setIsExitFocusHeld(hadFocusAtCloseRef.current);
+    }
+  }, [hasScrim, isOpen, shouldPresent]);
 
+  // An open modal sheet hosts app-global surfaces (toasts), so they stay
+  // visible above it. The latest outlet follows the sheet stack's order, so a
+  // toast lands in the top sheet and goes back to the revealed sheet when the
+  // top one closes. A Dialog opened from a sheet stays above every sheet. A
+  // closing sheet stops supplying when it starts to close. Passive: it runs
+  // after the layout effects that present.
+  useModalOutlet(
+    dialogRef,
+    isOpen && hasScrim,
+    stackView.isTop,
+    'bottom-sheet',
+  );
+  // Closes a batch of same-commit opens; see sealBottomSheetBatch.
   useEffect(() => {
-    if (!isOpen && isPresented && hasScrim) {
-      handleScrimOpacity(0);
-    }
-  }, [handleScrimOpacity, hasScrim, isOpen, isPresented]);
+    sealBottomSheetBatch();
+  });
 
+  // The scrim at rest: one visible backdrop per stack while open (a sheet
+  // stacked above the owner keeps its own backdrop transparent, and a reopen
+  // during the exit brings the owner's back), fading out through the exit.
+  useLayoutEffect(() => {
+    const dialog = dialogRef.current;
+    if (dialog == null || !hasScrim) {
+      return;
+    }
+    // A replaced sheet keeps the scrim it owns until the sheet replacing it
+    // takes it over; see bottomSheetStack.
+    if (isOpen || isReplaced) {
+      dialog.style.setProperty(
+        '--_sheet-scrim-opacity',
+        scrimOpacityForView(stackViewRef.current),
+      );
+    } else if (isPresented) {
+      dialog.style.setProperty('--_sheet-scrim-opacity', '0');
+    }
+  }, [hasScrim, isOpen, isPresented, isReplaced]);
+
+  const handleMotionStart = useCallback((motion: BottomSheetPanelMotion) => {
+    reportBottomSheetMotion(stackKeyRef.current, 'start', motion);
+  }, []);
   const handleMotionComplete = useCallback(
     (motion: BottomSheetPanelMotion) => {
+      // The replace handoff's motions (entering as a replacer, aligning and
+      // fading as the replaced sheet) are the registry's to sequence.
+      reportBottomSheetMotion(stackKeyRef.current, 'complete', motion);
       if (motion !== 'exiting' || isOpen) {
         return;
       }
+      // A sheet closing from code beneath open sheets leaves focus where it
+      // is: in the sheet on top. Its own close must not pull focus back to
+      // the element its dialog recorded, nor does it move it anywhere else.
+      if (hasScrim && stackViewRef.current.depth > 0) {
+        closeDialogKeepingFocus(dialogRef.current);
+        setIsPresented(false);
+        triggerRef.current = null;
+        return;
+      }
+      // Closing together with the other sheets of its stack ("Close all"):
+      // the registry returns focus once, after the last dialog has left.
+      if (hasScrim && isClosingTogether(stackKeyRef.current)) {
+        closeDialogKeepingFocus(dialogRef.current);
+        setIsPresented(false);
+        triggerRef.current = null;
+        reportClosedTogether(stackKeyRef.current);
+        return;
+      }
       const dialog = dialogRef.current;
-      if (dialog?.open) {
-        dialog.close();
+      if (dialog != null) {
+        hideSheetHost(dialog);
       }
       setIsPresented(false);
-      // The returned focus shows the focus-visible ring only after keyboard
-      // input (`architecture:interaction-modality` INV1). The native close
-      // may already have restored focus to the target with a ring; the helper
-      // clears it first.
-      const returnTarget = finalFocusRef?.current ?? triggerRef.current;
-      if (returnTarget != null) {
-        focusForLastInput(returnTarget);
+      // The native close can show a focus ring on the target. Clear it. The
+      // ring shows only after keyboard input.
+      //
+      // If a sheet is open below, focus goes to this sheet's opener when it is
+      // in that sheet, else to that sheet's panel.
+      //
+      // A non-modal sheet returns focus to its opener only if focus was still
+      // in the sheet. The page behind it stays live, so the person can move
+      // focus away first.
+      const revealed = hasScrim
+        ? getBottomSheetBeneath(stackKeyRef.current)
+        : null;
+      const returnTarget =
+        finalFocusRef?.current ??
+        (hasScrim || hadFocusAtCloseRef.current ? triggerRef.current : null);
+      if (
+        revealed != null &&
+        (returnTarget == null || !revealed.element.contains(returnTarget))
+      ) {
+        revealed.focus();
+      } else if (returnTarget != null) {
+        returnFocusForLastInput(returnTarget);
       }
       triggerRef.current = null;
     },
-    [finalFocusRef, isOpen],
+    [finalFocusRef, hasScrim, isOpen],
   );
 
-  useInteractionModalityTracking();
+  const {ref: modalityRef} = useInteractionModalityTracking();
+  // Ends the exit hold once focus has left the sheet: moved elsewhere, or
+  // dropped to the page because the focused control was removed or disabled.
+  // Native listeners, because React drops the `focusout` a browser sends while
+  // React removes the focused element, and Firefox and WebKit send no
+  // `focusout` for a removed element at all, so a subtree change is read too.
+  // Each reads the focus after the event. They attach only while a closing
+  // sheet holds focus, so a closed or open sheet observes nothing.
+  const isWatchingExitFocus =
+    !isOpen && isPresented && !isReplaced && isExitFocusHeld;
+  const exitFocusRef = useCallback(
+    (dialog: HTMLDialogElement | null) => {
+      if (dialog == null || !isWatchingExitFocus) {
+        return;
+      }
+      const releaseIfFocusLeft = () => {
+        if (!dialog.contains(dialog.ownerDocument.activeElement)) {
+          setIsExitFocusHeld(false);
+        }
+      };
+      const onFocusOut = () => queueMicrotask(releaseIfFocusLeft);
+      dialog.addEventListener('focusout', onFocusOut);
+      const unobserve = observeMutations(
+        dialog,
+        {
+          childList: true,
+          subtree: true,
+          attributeFilter: ['disabled', 'hidden', 'inert'],
+        },
+        releaseIfFocusLeft,
+      );
+      return () => {
+        dialog.removeEventListener('focusout', onFocusOut);
+        unobserve();
+      };
+    },
+    [isWatchingExitFocus],
+  );
+  const dialogComposedRef = useMergedRefs(dialogRef, modalityRef, exitFocusRef);
   useScrollLock(shouldPresent && hasScrim);
   useDevWarning(
     'BottomSheet',
@@ -354,20 +869,32 @@ function StandaloneBottomSheet({
   // rather than letting it close a layer behind it. `required` blocks too.
   const {shouldDismissOnCloseRequest} = useLayerDismissal({
     isActive: shouldPresent,
-    escapeBehavior: isOpen && purpose !== 'required' ? 'close' : 'block',
+    escapeBehavior:
+      isOpen && purpose !== 'required' && isEscapeAllowed ? 'close' : 'block',
     onDismiss: dismissOnEscape,
     getContainer: () => dialogRef.current,
-    isPresent: () => dialogRef.current?.open ?? false,
+    // A covered sheet is on screen but never the one a press is for: the
+    // dismissal stack ranks by tree nesting first, which would hand Escape to
+    // a covered sheet nested in another sheet's content ahead of a top sheet
+    // written outside it. Standing down while covered keeps Escape and the
+    // platform close request with the top sheet, as the sheet stack orders.
+    // A replaced sheet stands down the same way: the sheet that replaced it,
+    // registered before or after it, takes the press.
+    isPresent: () =>
+      isSheetHostPresented(dialogRef.current) &&
+      !stackViewRef.current.isCovered &&
+      stackViewRef.current.replacedMotion == null,
   });
 
   // The native `cancel` event is a close request the stack never saw a press
-  // for (Android back, the platform close watcher). One that bubbles up from
-  // inside is not: a file input fires it when its picker is dismissed, so it is
-  // left alone. Otherwise always preventDefault so the browser cannot close the
-  // controlled <dialog>, then answer with the stack's rules: only the top-most
-  // layer dismisses, and nothing dismisses during an IME composition.
+  // for (Android back, the platform close watcher). Always preventDefault so
+  // the browser cannot close the controlled <dialog>, then answer with the
+  // stack's rules: only the top-most layer dismisses, and nothing dismisses
+  // during an IME composition.
   const handleCancel = useCallback(
     (event: React.SyntheticEvent<HTMLDialogElement>) => {
+      // A `cancel` that bubbles up from inside is not a close request: a
+      // file input fires it when its picker is dismissed, so it is left alone.
       if (event.target !== event.currentTarget) {
         return;
       }
@@ -387,42 +914,105 @@ function StandaloneBottomSheet({
     [dismissOnLightInteraction, hasScrim],
   );
 
+  const isExiting = !isOpen && isPresented;
+  // A covered sheet is blocked by the browser: the top sheet's modal dialog
+  // makes everything outside it inert, this dialog included. A covered sheet
+  // that contains no presented sheet is marked inert and hidden as well, so
+  // the state is explicit; one that does contain the top sheet is left alone,
+  // because inert on it would reach the top sheet too.
+  // A sheet that closes with focus inside it is neither inert nor hidden
+  // while that focus stays: `inert` would drop the focus to the page, and
+  // `aria-hidden` would hide the focused control. When the exit ends, the
+  // dialog closes and focus returns in the same task. When focus leaves the
+  // sheet first (into a sheet opened above it, for example), the sheet goes
+  // inert at once. Until the close settles, no closing sheet is inert, so the
+  // first commit of a close never hides focus.
+  const isExitHoldingFocus =
+    isExiting && !isReplaced && (!isCloseSettled || isExitFocusHeld);
+  const isInert = (isExiting && !isExitHoldingFocus) || stackView.isBlocked;
+
   return (
     <dialog
       {...stylex.props(
         styles.dialog,
         shouldPresent && styles.dialogOpen,
+        shouldPresent && styles.dialogPanelHost,
+        // The dialog is the panel's positioner, so the stack's recede
+        // transforms the dialog: panel, grabber and all shrink and lift as
+        // one. The backdrop is not a descendant and stays put.
+        ...stackPositionerStyles(stackView),
         hasScrim && styles.scrim,
-        hasScrim && !isOpen && isPresented && styles.scrimClosing,
+        hasScrim && isEntrySettled && styles.scrimSettled,
+        hasScrim && isExiting && styles.scrimClosing,
+        isExitHoldingFocus && styles.exitHoldingFocus,
         !hasScrim && styles.dialogNonModal,
       )}
-      ref={dialogRef}
+      ref={dialogComposedRef}
+      // A non-modal sheet is hosted in the top layer as a manual popover
+      // (no light dismiss, no backdrop), so sheets order by presentation
+      // without a page-level z-index. Below the Popover API floor the
+      // attribute is inert and the sheet falls back to show(), in page
+      // stacking order (the documented reduced fallback).
+      popover={hasScrim ? undefined : 'manual'}
       aria-label={label}
-      aria-hidden={!isOpen && isPresented ? 'true' : undefined}
+      aria-hidden={isInert ? 'true' : undefined}
       aria-modal={hasScrim && isOpen ? 'true' : undefined}
       role={purpose === 'required' ? 'alertdialog' : undefined}
-      inert={!isOpen && isPresented ? true : undefined}
+      inert={isInert ? true : undefined}
+      data-sheet-stack={
+        hasScrim ? stackStateAttribute(stackView, isOpen) : undefined
+      }
+      data-sheet-stack-depth={
+        hasScrim && stackView.depth > 0 ? stackView.depth : undefined
+      }
       onCancel={handleCancel}
-      onClick={handleClick}>
-      <div {...stylex.props(styles.positioner)}>
-        <BottomSheetPanel
-          {...props}
-          ref={ref}
-          state={panelState}
-          height={height}
-          label={label}
-          snapPoints={snapPoints}
-          isSwipeDismissAllowed={purpose === 'info'}
-          isPageScrollLocked={shouldPresent && hasScrim}
-          xstyle={xstyle}
-          onDismiss={dismissOnLightInteraction}
-          onScrimOpacity={handleScrimOpacity}
-          onElementChange={handlePanelElementChange}
-          onMotionComplete={handleMotionComplete}>
-          <LayerDepthProvider>{children}</LayerDepthProvider>
-        </BottomSheetPanel>
-      </div>
-      <BottomSheetEdgeTint />
+      // A closing sheet that keeps focus takes no activation during its
+      // exit: no click and no key but Tab reaches the control that has focus.
+      onClickCapture={isExitHoldingFocus ? ignoreActivation : undefined}
+      onKeyDownCapture={isExitHoldingFocus ? ignoreKeyDuringExit : undefined}
+      onKeyUpCapture={isExitHoldingFocus ? ignoreKeyDuringExit : undefined}
+      // Presses inside the sheet do not reach handlers around where it is
+      // written. The dialog, not the panel, is the root, as in a switcher.
+      {...layerClickBoundary({onClick: handleClick})}>
+      <BottomSheetPanel
+        {...props}
+        ref={ref}
+        state={panelState}
+        isEntrySettled={isEntrySettled}
+        onEntrySettled={releaseSettledOpen}
+        isOpenRequested={isOpen}
+        height={height}
+        label={label}
+        snapPoints={snapPoints}
+        isSwipeDismissAllowed={purpose === 'info'}
+        isPageScrollLocked={shouldPresent && hasScrim}
+        xstyle={xstyle}
+        onDismiss={dismissOnLightInteraction}
+        onScrimOpacity={handleScrimOpacity}
+        onScrimFadeDuration={handleScrimFadeDuration}
+        onElementChange={handlePanelElementChange}
+        onMotionStart={handleMotionStart}
+        onMotionComplete={handleMotionComplete}>
+        <ModalAnnounceProvider
+          dialogRef={dialogRef}
+          isOpen={isOpen && hasScrim}>
+          <LayerDepthProvider>
+            {/* A sheet opened inside this one starts from Escape on. */}
+            <BottomSheetEscapeContext value>
+              <BottomSheetHostContext
+                value={
+                  isOpen ? OPEN_BOTTOM_SHEET_HOST : CLOSED_BOTTOM_SHEET_HOST
+                }>
+                {children}
+              </BottomSheetHostContext>
+            </BottomSheetEscapeContext>
+          </LayerDepthProvider>
+        </ModalAnnounceProvider>
+      </BottomSheetPanel>
+      {/* Its own element, outside the panel's transform, so it stays flush
+          with the viewport's bottom edge at every detent; only while the
+          sheet is presented, so a closed sheet renders no extra element. */}
+      {shouldPresent && <BottomSheetEdgeTint />}
     </dialog>
   );
 }
@@ -449,12 +1039,24 @@ function SwitcherBottomSheetItem({
     onActiveSheetChange,
     getSheetPhase,
     getSheetAlignmentOffset,
+    hostSheet,
+    isScrimOwner,
+    isFlowClosing,
     registerSheetElement,
-    registerSheetLabel,
+    registerSheetDialog,
     registerSheetPurpose,
+    onBeforeSheetPresent,
+    isCoveredInTopLayer,
     onSheetEnterStart,
     onSheetTransitionComplete,
     onSheetScrimOpacityChange,
+    stackView,
+    dialogProps,
+    onDialogCancel,
+    onDialogClick,
+    onDialogKeyDown,
+    settledSheet,
+    releaseSettledSheet,
   } = switcher;
   const hasValidSheetId = typeof sheetId === 'string' && sheetId.length > 0;
   const phase = hasValidSheetId ? getSheetPhase(sheetId) : 'hidden';
@@ -469,7 +1071,18 @@ function SwitcherBottomSheetItem({
     phase === 'fading' ||
     phase === 'exiting';
   const isPresented = phase !== 'hidden';
+  // The step open on the server opens settled.
+  const isEntrySettled =
+    hasValidSheetId && isPresented && settledSheet === sheetId;
   const isTopSheet = phase === 'active' || phase === 'entering';
+  const ownsScrim = hasValidSheetId && isScrimOwner(sheetId);
+  // The flow is one level of the bottom-sheet stack; a sheet outside the flow
+  // covering it blocks every step dialog, the way a covered standalone sheet
+  // is blocked. A step is also inactive on its own terms during a handoff.
+  const isBlocked = isInactive || (hasScrim && stackView.isBlocked);
+  const isHostSheet = hasValidSheetId && hostSheet === sheetId;
+  const dialogRef = useRef<HTMLDialogElement | null>(null);
+  const dialogModeRef = useRef<'modal' | 'non-modal' | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const previousPhaseRef = useRef(phase);
   const previousPhase = previousPhaseRef.current;
@@ -492,6 +1105,15 @@ function SwitcherBottomSheetItem({
       }
     },
     [hasValidSheetId, registerSheetElement, sheetId],
+  );
+  const handleDialogElementChange = useCallback(
+    (element: HTMLDialogElement | null) => {
+      dialogRef.current = element;
+      if (hasValidSheetId) {
+        registerSheetDialog(sheetId, element);
+      }
+    },
+    [hasValidSheetId, registerSheetDialog, sheetId],
   );
   const handleMotionStart = useCallback(
     (motion: BottomSheetPanelMotion) => {
@@ -517,14 +1139,16 @@ function SwitcherBottomSheetItem({
     },
     [hasValidSheetId, onSheetScrimOpacityChange, sheetId],
   );
-
-  useLayoutEffect(() => {
-    if (!hasValidSheetId) {
-      return;
-    }
-    registerSheetLabel(sheetId, label);
-    return () => registerSheetLabel(sheetId, null);
-  }, [hasValidSheetId, label, registerSheetLabel, sheetId]);
+  // The fade a touch drag's close wrote on this step's dialog, until that
+  // close ends. The step a drag closes becomes the flow's retained step, so
+  // its backdrop is the flow's scrim.
+  const scrimFadeRef = useRef<string | null>(null);
+  const handleScrimFadeDuration = useCallback(
+    (panel: HTMLElement, ms: number | null) => {
+      writeScrimFadeDuration(panel.closest('dialog'), ms, scrimFadeRef);
+    },
+    [],
+  );
 
   useLayoutEffect(() => {
     if (!hasValidSheetId) {
@@ -533,6 +1157,87 @@ function SwitcherBottomSheetItem({
     registerSheetPurpose(sheetId, purpose);
     return () => registerSheetPurpose(sheetId, null);
   }, [hasValidSheetId, purpose, registerSheetPurpose, sheetId]);
+
+  // Present this sheet's own dialog while the switcher keeps the sheet on
+  // screen, and close it once the sheet is hidden. A scrim flow presents
+  // modally: an entering dialog is shown above the retained one in the top
+  // layer, and the retained dialog closes only after its panel has faded. A
+  // modal dialog that is still open beneath a newer one -- the user went back
+  // to a sheet that was still fading -- re-presents to become topmost again:
+  // the document is blocked by the topmost modal dialog, so a lower one is
+  // inert whatever the switcher calls it.
+  //
+  // Every present blurs first, so no step dialog records an element to
+  // return focus to: a close while another sheet is active moves nothing,
+  // and when the flow ends the switcher focuses the flow's opener itself.
+  useLayoutEffect(() => {
+    const dialog = dialogRef.current;
+    if (dialog == null || !hasValidSheetId) {
+      return;
+    }
+    if (!isPresented) {
+      if (dialog.open) {
+        dialog.close();
+      }
+      dialogModeRef.current = null;
+      return;
+    }
+    const nextMode = hasScrim ? 'modal' : 'non-modal';
+    if (dialog.open && dialogModeRef.current !== nextMode) {
+      dialog.close();
+    }
+    if (
+      dialog.open &&
+      hasScrim &&
+      isInteractive &&
+      isCoveredInTopLayer(sheetId)
+    ) {
+      dialog.close();
+    }
+    if (!dialog.open) {
+      if (hasScrim) {
+        onBeforeSheetPresent(sheetId);
+        if (ownsScrim) {
+          presentStepModally(dialog);
+        } else {
+          // Entering above a retained dialog whose backdrop already dims the
+          // page: present with a clear backdrop so the page is not dimmed
+          // twice and the previous panel stays undimmed beneath this one.
+          // Pinned to 0s across the present: a dialog re-presented from the
+          // retained position (the user went back while it was fading)
+          // closed with its backdrop at 1, and would otherwise ease it down
+          // over the scrim duration on top of the new owner's backdrop.
+          presentWithClearScrim(dialog);
+        }
+      } else {
+        dialog.show();
+      }
+    }
+    dialogModeRef.current = nextMode;
+  }, [
+    hasScrim,
+    hasValidSheetId,
+    isCoveredInTopLayer,
+    isInteractive,
+    isPresented,
+    onBeforeSheetPresent,
+    ownsScrim,
+    sheetId,
+  ]);
+
+  // A sheet removed while presented -- a consumer unmounts the closing sheet
+  // in the same update that closes the flow -- takes its dialog out of the
+  // top layer with it, but the element would keep its `open` state. Close it
+  // while it is still attached so the native lifecycle ends cleanly.
+  useLayoutEffect(
+    () => () => {
+      const dialog = dialogRef.current;
+      if (dialog?.open) {
+        dialog.close();
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     if (isInteractive) {
@@ -554,45 +1259,137 @@ function SwitcherBottomSheetItem({
     isInteractive && !label,
   );
 
+  // The switcher's dialog surface applies to every sheet dialog, except the
+  // attributes that identify one element: those render on the host dialog
+  // only, the one the switcher's ref resolves to. Of the attributes set
+  // explicitly below, only `role` has a consumer value to keep: a required
+  // step forces `alertdialog`, otherwise the switcher's `role` stands, as on
+  // a shared dialog. `aria-label`/`aria-labelledby` keep consumer precedence
+  // above; `aria-modal`, `aria-hidden`, and `inert` are the host's own state.
+  const {
+    className: switcherClassName,
+    style: switcherStyle,
+    xstyle: switcherXstyle,
+    'aria-label': switcherAriaLabel,
+    'aria-labelledby': switcherAriaLabelledBy,
+    id: switcherId,
+    'data-testid': switcherTestId,
+    ...switcherDialogProps
+  } = dialogProps;
+  const dialogPresentationProps = mergeProps(
+    stylex.props(
+      styles.dialog,
+      isPresented && styles.dialogOpen,
+      hasScrim && styles.scrim,
+      hasScrim && isEntrySettled && styles.scrimSettled,
+      hasScrim && ownsScrim && isFlowClosing && styles.scrimClosing,
+      !hasScrim && styles.dialogNonModalItem,
+      !hasScrim && isTopSheet && styles.dialogNonModalItemTop,
+      switcherXstyle,
+    ),
+    switcherClassName,
+    switcherStyle,
+  );
+
   return (
-    <div
-      {...stylex.props(
-        styles.positioner,
-        !isPresented && styles.positionerHidden,
-        isTopSheet && styles.positionerTop,
-      )}
-      hidden={!isPresented}
-      aria-hidden={isInactive ? 'true' : undefined}
-      inert={isInactive ? true : undefined}>
-      <BottomSheetPanel
-        {...props}
-        ref={ref}
-        state={panelState}
-        height={height}
-        label={label}
-        snapPoints={snapPoints}
-        isSwipeDismissAllowed={purpose === 'info'}
-        isPageScrollLocked={hasScrim}
-        xstyle={xstyle}
-        onDismiss={dismissOnSwipe}
-        onScrimOpacity={handleScrimOpacity}
-        onElementChange={handlePanelElementChange}
-        onMotionStart={handleMotionStart}
-        onMotionComplete={handleMotionComplete}>
-        {/* A switcher item consumes its parent controller. Its content starts a
-            fresh ownership scope so a nested BottomSheet is standalone unless
-            it establishes a nested BottomSheetSwitcher of its own. */}
-        <BottomSheetSwitcherContext value={null}>
-          {children}
-        </BottomSheetSwitcherContext>
-      </BottomSheetPanel>
-    </div>
+    <dialog
+      {...switcherDialogProps}
+      {...dialogPresentationProps}
+      id={isHostSheet ? switcherId : undefined}
+      data-testid={isHostSheet ? switcherTestId : undefined}
+      ref={handleDialogElementChange}
+      aria-label={
+        switcherAriaLabel ??
+        (switcherAriaLabelledBy == null ? label : undefined)
+      }
+      aria-labelledby={switcherAriaLabelledBy}
+      aria-modal={hasScrim && isInteractive ? 'true' : undefined}
+      aria-hidden={isBlocked ? 'true' : undefined}
+      inert={isBlocked ? true : undefined}
+      data-sheet-stack={
+        hasScrim && isPresented
+          ? stackStateAttribute(stackView, activeSheet != null)
+          : undefined
+      }
+      data-sheet-stack-depth={
+        hasScrim && isPresented && stackView.depth > 0
+          ? stackView.depth
+          : undefined
+      }
+      role={purpose === 'required' ? 'alertdialog' : switcherDialogProps.role}
+      onCancel={onDialogCancel}
+      onKeyDown={onDialogKeyDown}
+      // Presses inside the sheet do not reach handlers around where it is
+      // written. The step's dialog, not the panel, is the root, because the
+      // switcher's handlers sit here and must still run.
+      {...layerClickBoundary({
+        ...switcherDialogProps,
+        onClick: onDialogClick,
+      })}>
+      <div
+        {...stylex.props(
+          styles.positioner,
+          !isPresented && styles.positionerHidden,
+          isTopSheet && styles.positionerTop,
+          ...(hasScrim ? stackPositionerStyles(stackView) : []),
+        )}
+        hidden={!isPresented}
+        aria-hidden={isBlocked ? 'true' : undefined}
+        inert={isBlocked ? true : undefined}>
+        <BottomSheetPanel
+          {...props}
+          ref={ref}
+          state={panelState}
+          isEntrySettled={isEntrySettled}
+          onEntrySettled={releaseSettledSheet}
+          isOpenRequested={hasValidSheetId && activeSheet === sheetId}
+          height={height}
+          label={label}
+          snapPoints={snapPoints}
+          isSwipeDismissAllowed={purpose === 'info'}
+          isPageScrollLocked={hasScrim}
+          xstyle={xstyle}
+          onDismiss={dismissOnSwipe}
+          onScrimOpacity={handleScrimOpacity}
+          onScrimFadeDuration={handleScrimFadeDuration}
+          onElementChange={handlePanelElementChange}
+          onMotionStart={handleMotionStart}
+          onMotionComplete={handleMotionComplete}>
+          {/* A switcher item consumes its parent controller. Its content starts a
+              fresh ownership scope so a nested BottomSheet is standalone unless
+              it establishes a nested BottomSheetSwitcher of its own. A
+              standalone sheet in this step's content is presented only while
+              the step is the interactive one: it leaves when the step is left,
+              keeps its own isOpen, and returns with the step while still open. */}
+          <BottomSheetSwitcherContext value={null}>
+            <ModalAnnounceProvider
+              dialogRef={dialogRef}
+              isOpen={isPresented && hasScrim}>
+              <LayerDepthProvider>
+                {/* A sheet opened inside this one starts from Escape on. */}
+                <BottomSheetEscapeContext value>
+                  <BottomSheetHostContext
+                    value={
+                      isInteractive
+                        ? OPEN_BOTTOM_SHEET_HOST
+                        : CLOSED_BOTTOM_SHEET_HOST
+                    }>
+                    {children}
+                  </BottomSheetHostContext>
+                </BottomSheetEscapeContext>
+              </LayerDepthProvider>
+            </ModalAnnounceProvider>
+          </BottomSheetSwitcherContext>
+        </BottomSheetPanel>
+      </div>
+      {isPresented && <BottomSheetEdgeTint />}
+    </dialog>
   );
 }
 
 /**
- * A mobile touch sheet that either owns a native dialog or participates in a
- * BottomSheetSwitcher shared dialog when given a sheetId inside that context.
+ * A mobile touch sheet that owns a native dialog. Given a sheetId inside a
+ * BottomSheetSwitcher, that switcher coordinates the dialog's lifecycle.
  */
 export function BottomSheet(props: BottomSheetProps) {
   const switcher = use(BottomSheetSwitcherContext);

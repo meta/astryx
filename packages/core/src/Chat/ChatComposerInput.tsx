@@ -20,7 +20,7 @@
  * SYNC: When modified, update:
  * - /packages/core/src/Chat/ChatComposerInput.test.tsx
  * - /packages/core/src/Chat/ChatComposerInput.doc.mjs
- * - /packages/core/src/Chat/ChatComposerInput.spec.md
+ * - /docs/specs/components/Chat/ChatComposerInput.spec.md
  * - /apps/storybook/stories/ChatComposerInput.stories.tsx
  * - /packages/core/src/Chat/index.ts
  * - /apps/storybook/stories/ChatComposer.stories.tsx
@@ -68,7 +68,15 @@ import {
 import {Badge, type BadgeProps} from '../Badge';
 import {useChatComposerContext} from './ChatContext';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
+import type {EnterKeyHint} from '../Field/textEntryTraits';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Chat/ChatComposerInput.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Types
@@ -241,6 +249,14 @@ export interface ChatComposerInputProps extends Omit<
    * never submits while a composition is in progress.
    */
   onKeyDown?: (event: KeyboardEvent<HTMLDivElement>) => void;
+  /**
+   * What the Return key of a touch keyboard says (the native
+   * `enterkeyhint`). Enter sends the message, so the key says so: iOS shows
+   * its Send key. When `onKeyDown` makes Enter insert a line break on touch
+   * keyboards, pass `'enter'` so the key shows Return again.
+   * @default 'send'
+   */
+  enterKeyHint?: EnterKeyHint;
 }
 
 // =============================================================================
@@ -346,7 +362,7 @@ function serialize(node: Node): string {
 // =============================================================================
 
 export function ChatComposerInput(props: ChatComposerInputProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const composerCtx = useChatComposerContext();
   const hasControlledValueProp = props.value !== undefined;
 
@@ -367,11 +383,15 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
     onFiles,
     onSubmit = composerCtx?.onSubmit,
     onKeyDown: onKeyDownProp,
+    enterKeyHint = 'send',
     xstyle,
     className,
     style,
     ...rest
   } = props;
+  // Keep focus/blur observation available, but do not forward activation or
+  // editing callbacks from the disabled root (including capture handlers).
+  const rootProps = withholdCallerHandlers(rest, isDisabled);
   const label = labelFromProps ?? t('@astryx.chat.composerInput.label');
   const placeholder =
     placeholderFromProps ??
@@ -415,6 +435,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
     (token: ChatComposerToken) => string | undefined
   >(() => undefined);
   const insertTextRef = useRef<(text: string) => void>(() => {});
+  const expandTokenRef = useRef<(id: string) => void>(() => {});
 
   // A single handle object shared between the forwarded ref (via
   // `useImperativeHandle`) and `selfRef` (used by internal consumers
@@ -480,7 +501,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
 
   const handle: ChatComposerInputHandle = {
     insertToken: (token: ChatComposerToken) => insertTokenRef.current(token),
-    expandToken: (id: string) => tokens.expandToken(id),
+    expandToken: (id: string) => expandTokenRef.current(id),
     insertText: (text: string) => insertTextRef.current(text),
     focus: focusEditable,
     getValue: () =>
@@ -503,6 +524,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
     };
   }, [inputControlRef, focusEditableAtEnd]);
 
+  // Syncs the contentEditable DOM with the controlled `value`.
   useEffect(() => {
     if (controlledValue === undefined || !editableRef.current) {
       return;
@@ -549,7 +571,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
   const emitChangeVersionRef = useRef(0);
 
   const emitChange = useCallback(() => {
-    if (!editableRef.current) {
+    if (isDisabled || !editableRef.current) {
       return;
     }
     const text = serialize(editableRef.current);
@@ -566,7 +588,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
     emitChangeVersionRef.current += 1;
     onChange?.(nextValue);
     cleanupPortalsRef.current?.();
-  }, [onChange]);
+  }, [isDisabled, onChange]);
 
   // --- Token management (via hook) ---
   const tokens = useChatComposerTokens({
@@ -598,9 +620,23 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
     [emitChange, insertTextWithoutEmit],
   );
 
-  // Keep stable refs in sync for imperative handle
-  insertTokenRef.current = tokens.insertToken;
-  insertTextRef.current = insertText;
+  const insertTokenWithoutEmit = tokens.insertToken;
+  const insertToken = useCallback(
+    (token: ChatComposerToken) => {
+      const id = insertTokenWithoutEmit(token);
+      if (id != null) {
+        emitChange();
+      }
+      return id;
+    },
+    [emitChange, insertTokenWithoutEmit],
+  );
+
+  // A caller may retain a handle across renders. Resolve mutation permission
+  // through the latest callbacks rather than the render that created it.
+  insertTokenRef.current = isDisabled ? () => undefined : insertToken;
+  insertTextRef.current = isDisabled ? () => {} : insertText;
+  expandTokenRef.current = isDisabled ? () => {} : tokens.expandToken;
 
   // --- Trigger menu ---
   const triggerMenu = useTriggerMenu({
@@ -612,13 +648,50 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
     debounceMs,
   });
 
+  const editorAriaProps =
+    isDisabled && triggerMenu.ariaProps.role === 'combobox'
+      ? {
+          ...triggerMenu.ariaProps,
+          'aria-expanded': false,
+          'aria-controls': undefined,
+          'aria-activedescendant': undefined,
+        }
+      : triggerMenu.ariaProps;
+
+  // Syncs the trigger menu's pending searches with `isDisabled`.
+  useEffect(() => {
+    if (isDisabled && triggerMenu.state.isActive) {
+      // Reset also cancels pending searches, so late results cannot reopen
+      // suggestions after disablement or a subsequent re-enable.
+      triggerMenu.reset();
+    }
+  }, [isDisabled, triggerMenu]);
+
   const handleInput = useCallback(() => {
+    if (isDisabled) {
+      return;
+    }
     emitChange();
     triggerMenu.handleInput();
-  }, [emitChange, triggerMenu]);
+  }, [isDisabled, emitChange, triggerMenu]);
+
+  // A click inside the editor keeps the menu open, but it can move the caret
+  // out of the query; the trigger is checked again at the new caret.
+  const handleEditorClick = useCallback(() => {
+    if (!isDisabled && triggerMenu.state.isActive) {
+      triggerMenu.handleInput();
+    }
+  }, [isDisabled, triggerMenu]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLDivElement>) => {
+      if (isDisabled) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+        }
+        // Native selection, copying, and Tab navigation remain available.
+        return;
+      }
       // Let trigger menu consume the event first
       if (triggerMenu.handleKeyDown(e)) {
         return;
@@ -772,11 +845,23 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
         }
       }
     },
-    [hasHistory, onSubmit, onChange, emitChange, triggerMenu, onKeyDownProp],
+    [
+      isDisabled,
+      hasHistory,
+      onSubmit,
+      onChange,
+      emitChange,
+      triggerMenu,
+      onKeyDownProp,
+    ],
   );
 
   const handlePaste = useCallback(
     (e: ClipboardEvent<HTMLDivElement>) => {
+      if (isDisabled) {
+        e.preventDefault();
+        return;
+      }
       const editable = editableRef.current;
       if (!editable) {
         return;
@@ -815,16 +900,20 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
         return;
       }
 
-      // Paste-as-token: convert long pastes to token chips.
+      // Paste-as-token: convert long pastes to token chips. The default
+      // converter inserts through the handle, which publishes the change.
+      const versionBeforeToken = emitChangeVersionRef.current;
       if (pasteAsToken?.onPaste(e, text)) {
-        emitChange();
+        if (emitChangeVersionRef.current === versionBeforeToken) {
+          emitChange();
+        }
         return;
       }
 
       insertTextAtCursor(editable, text);
       emitChange();
     },
-    [onFiles, onPasteProp, emitChange, tokens, pasteAsToken],
+    [isDisabled, onFiles, onPasteProp, emitChange, tokens, pasteAsToken],
   );
 
   const handleDragOver = useCallback((e: DragEvent<HTMLDivElement>) => {
@@ -835,6 +924,10 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
 
   const handleDrop = useCallback(
     (e: DragEvent<HTMLDivElement>) => {
+      if (isDisabled) {
+        e.preventDefault();
+        return;
+      }
       const files = Array.from(e.dataTransfer.files);
       if (files.length === 0) {
         return;
@@ -842,9 +935,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
       // File drops navigate the page by default. The input owns that drop
       // target even when no callback is supplied, so keep the user in place.
       e.preventDefault();
-      if (!isDisabled) {
-        onFiles?.(files);
-      }
+      onFiles?.(files);
     },
     [isDisabled, onFiles],
   );
@@ -860,7 +951,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
         className,
         style,
       )}
-      {...rest}>
+      {...rootProps}>
       {isEmpty && (
         <div {...stylex.props(styles.placeholder)} aria-hidden="true">
           {placeholder}
@@ -869,20 +960,25 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
       <div
         ref={editableRef}
         aria-label={label}
+        aria-describedby={rest['aria-describedby']}
+        // Explicit in both states: losing editability must not lose focus.
+        tabIndex={0}
         contentEditable={!isDisabled}
+        enterKeyHint={enterKeyHint}
         suppressContentEditableWarning
         onInput={handleInput}
+        onClick={handleEditorClick}
         onKeyDown={handleKeyDown}
         onPaste={handlePaste}
         onDragOver={handleDragOver}
         onDrop={handleDrop}
-        {...triggerMenu.ariaProps}
+        {...editorAriaProps}
         aria-disabled={isDisabled || undefined}
         {...mergeProps(stylex.props(styles.editable), {
           style: {maxHeight: `${maxHeight}px`},
         })}
       />
-      {triggerMenu.renderMenu()}
+      {!isDisabled && triggerMenu.renderMenu()}
       {tokens.tokenPortals
         .filter(({span}) => span.isConnected)
         .map(({id, span, token}) =>
@@ -894,7 +990,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
               <ChatPastedTextToken
                 key={id}
                 text={token.value}
-                onExpand={() => tokens.expandToken(id)}
+                onExpand={() => expandTokenRef.current(id)}
               />
             ) : (
               <Badge

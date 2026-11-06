@@ -25,10 +25,25 @@
  * Cross-browser specs use `.a11y.browser.spec.ts`; Chromium-only contracts keep
  * `.a11y.chromium.spec.ts`. The WebKit project runs only the former.
  *
- * SYNC: When a package gains an accessibility binding, add its spec glob here.
+ * Specs import `test` from `@astryxdesign/a11y-spec/playwright`, the base test
+ * this config and playwright.interaction.config.ts share. Its browser contexts
+ * answer remote images locally and block other remote requests, so a slow
+ * remote host cannot stall a spec. A lint rule enforces the import.
+ *
+ * Pull requests run a scoped selection of the same files with
+ * `pnpm test:a11y-contract:pr`; each spec's `@pr-a11y` header lines decide when
+ * (`.github/scripts/a11y-pr-contracts.mjs`). A new spec needs no workflow edit.
+ *
+ * SYNC: The spec globs live in `.github/scripts/lib/a11y-spec-files.mjs`, which
+ *   the default touched-components check also reads to find changed specs. A
+ *   package with an accessibility binding outside them adds its glob there.
  */
 
 import {defineConfig, devices} from '@playwright/test';
+import {
+  A11Y_SPEC_GLOBS,
+  WEBKIT_A11Y_SPEC_GLOBS,
+} from './.github/scripts/lib/a11y-spec-files.mjs';
 
 // GitHub Actions sets CI=true; some runners set it to an empty string. One
 // definition, so `forbidOnly` and the reporter choice cannot disagree.
@@ -52,13 +67,7 @@ function contractWorkers(): number {
 
 export default defineConfig({
   testDir: '.',
-  testMatch: [
-    // The contract's own conforming/violating fixture proof.
-    'internal/a11y-spec/src/**/*.chromium.spec.ts',
-    // Component bindings.
-    'packages/*/src/**/*.a11y.chromium.spec.ts',
-    'packages/*/src/**/*.a11y.browser.spec.ts',
-  ],
+  testMatch: [...A11Y_SPEC_GLOBS],
   // The contract mounts, focuses, and types into one page at a time, so a spec
   // file's tests run in order on one worker (`fullyParallel: false`). Workers
   // are separate processes, each with its own browser, so they share no
@@ -80,7 +89,7 @@ export default defineConfig({
     {name: 'chromium', use: {...devices['Desktop Chrome']}},
     {
       name: 'webkit',
-      testMatch: ['packages/*/src/**/*.a11y.browser.spec.ts'],
+      testMatch: [...WEBKIT_A11Y_SPEC_GLOBS],
       use: {...devices['Desktop Safari']},
     },
   ],

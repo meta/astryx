@@ -45,7 +45,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx integration add component AcmeCarousel',
+          code: '{@command integration add component AcmeCarousel}',
         },
         {
           type: 'code',

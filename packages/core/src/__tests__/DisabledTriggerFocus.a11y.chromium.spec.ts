@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y always
 
 /**
  * @file DisabledTriggerFocus.a11y.chromium.spec.ts
@@ -10,7 +11,7 @@
  *   element that becomes disabled, so it cannot show the loss.
  */
 
-import {expect, test} from '@playwright/test';
+import {expect, test} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -37,7 +38,7 @@ const CASES = [
   },
   {
     storyId: 'a11y-disabled-trigger-focus--complex-selector-trigger',
-    role: 'button',
+    role: 'combobox',
     name: 'View options',
   },
 ] as const;

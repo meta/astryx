@@ -41,7 +41,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: "The file name still opens the doc. A name that Core or another doc's file already has stays theirs, and so does a Core name your package replaces: with `Badge.doc.mjs` naming `AcmeBadge`, `astryx component Badge` opens Core's `Badge`, and `--package` with your package name reaches yours.",
+          text: "The file name still opens the doc. A name that Core or another doc's file already has stays theirs, and so does a Core name your package replaces: with `Badge.doc.mjs` naming `AcmeBadge`, `{@command component Badge}` opens Core's `Badge`, and `--package` with your package name reaches yours.",
         },
       ],
     },
@@ -56,7 +56,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx integration verify',
+          code: '{@command integration verify}',
         },
         {
           type: 'list',

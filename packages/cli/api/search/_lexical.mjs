@@ -73,6 +73,8 @@ import {toResult, searchedComponentsOf} from './_result.mjs';
  *   author lists in `keywords`, without the code terms and table cells its
  *   other keywords add.
  * @property {string[]} [weakKeywords]
+ * @property {string[]} [weakKeywordBound] - Every name `weakKeywords` can
+ *   hold, for a page whose weak keywords cost a parse to read.
  * @property {string} [description]
  * @property {string[]} [prose]
  * @property {string[]} [guidance]
@@ -90,12 +92,17 @@ import {toResult, searchedComponentsOf} from './_result.mjs';
  *   Core's package for its components, hooks, and templates, the integration's
  *   for what it contributed, and for a doc part the package that wrote it.
  * @property {string} [_displayName]
+ * @property {string} [_family] - The family whose doc lists a component as a
+ *   member; a query naming the family lists its first members.
+ * @property {number} [_familyIndex] - The member's place in that doc's list.
  * @property {'page'|'block'} [_kind]
  * @property {string} [_resultName]
  * @property {string} [_commandName]
  * @property {'file'|'doc'} [_hold] - How an integration component holds its
  *   name, for the owner rule.
  * @property {string} [_docPath] - An integration component's doc.
+ * @property {import('@astryxdesign/cli/authoring').ComponentDeprecation} [_deprecated] -
+ *   A deprecated component's replacement, from its doc's `deprecated`.
  */
 
 /**

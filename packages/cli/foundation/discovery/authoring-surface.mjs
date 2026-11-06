@@ -25,7 +25,8 @@ import jscodeshift from 'jscodeshift';
 import {
   AUTHORING_ROOT,
   AUTHORING_SELF_DOCS,
-  buildAuthoringReferenceDoc,
+  isExperimentalSelfDoc,
+  selfDocSection,
   discoverAuthoringSelfDocSources,
   loadAuthoringSelfDocs,
 } from './authoring-self-docs.mjs';
@@ -451,12 +452,16 @@ export async function auditAuthoringSurface({
   const registered = new Set(sources);
   const {loaded, failed} = await loadAuthoringSelfDocs(sources, root);
   const failedSources = new Set(failed.map(entry => entry.source));
-  const sections = buildAuthoringReferenceDoc(
-    loaded.map(entry => entry.doc),
-  ).sections;
   /** @type {Map<string, string>} */
   const keyOf = new Map(
-    loaded.map((entry, i) => [entry.source, sectionKey(sections[i])]),
+    loaded.map(entry => [entry.source, sectionKey(selfDocSection(entry.doc))]),
+  );
+  // An experimental self-doc is a section of the experimental route, never
+  // of `astryx docs authoring`, so the topic index is not asked for it.
+  const experimental = new Set(
+    loaded
+      .filter(entry => isExperimentalSelfDoc(entry.doc))
+      .map(entry => entry.source),
   );
 
   /**
@@ -467,7 +472,9 @@ export async function auditAuthoringSurface({
     if (!registered.has(source)) return 'unregistered';
     if (failedSources.has(source) || !keyOf.has(source)) return 'failed';
     const key = /** @type {string} */ (keyOf.get(source));
-    return topicKeys != null && !topicKeys.has(key) ? 'missing-section' : null;
+    return topicKeys != null && !experimental.has(source) && !topicKeys.has(key)
+      ? 'missing-section'
+      : null;
   };
 
   /** @type {Map<string, string[]>} declaring module -> its public types */

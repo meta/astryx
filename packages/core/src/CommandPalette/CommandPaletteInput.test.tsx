@@ -78,6 +78,32 @@ describe('CommandPaletteInput', () => {
     expect(input).not.toHaveAttribute('aria-autocomplete');
   });
 
+  it('asks a touch keyboard for its Search key and no autocorrection, standalone and in a palette', () => {
+    const {unmount} = render(<CommandPaletteInput />);
+    expect(screen.getByRole('searchbox')).toHaveAttribute(
+      'enterkeyhint',
+      'search',
+    );
+    expect(screen.getByRole('searchbox')).toHaveAttribute('autocorrect', 'off');
+    unmount();
+
+    const onKeyDown = vi.fn();
+    render(
+      <CommandPaletteContext value={makeContext({onKeyDown})}>
+        <CommandPaletteInput />
+      </CommandPaletteContext>,
+    );
+    const input = screen.getByRole('combobox');
+    expect(input).toHaveAttribute('enterkeyhint', 'search');
+    expect(input).toHaveAttribute('autocorrect', 'off');
+
+    // Enter keeps its routing to the palette whatever the key shows.
+    fireEvent.keyDown(input, {key: 'Enter'});
+    expect(onKeyDown).toHaveBeenCalledWith(
+      expect.objectContaining({key: 'Enter'}),
+    );
+  });
+
   it('preserves standalone caller-owned popup semantics', () => {
     render(
       <CommandPaletteInput
@@ -377,7 +403,9 @@ describe('CommandPaletteInput popup context', () => {
       </CommandPaletteContext>,
     );
 
-    const spinner = screen.getByRole('status');
+    // The Spinner is decorative (spec:AST-086 FR8), so find it by its class.
+    const spinner = document.querySelector('.astryx-spinner') as HTMLElement;
+    expect(spinner).toHaveAttribute('aria-hidden', 'true');
     const trailingContent = screen.getByTestId('trailing-content');
     expect(trailingContent.parentElement?.firstElementChild).toContainElement(
       spinner,

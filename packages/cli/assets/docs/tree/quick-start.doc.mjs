@@ -39,13 +39,13 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: "mkdir acme-widgets && cd acme-widgets\nnpm init -y\nnpm pkg set name=@acme/astryx-widgets type=module\nnpm pkg set 'exports={}' --json\nnpm install -D @astryxdesign/cli @astryxdesign/core typescript@6",
+          code: 'mkdir acme-widgets && cd acme-widgets\n{@pm-only npm "writes package.json" init -y}\n{@pm-only npm "edits package.json" pkg set name=@acme/astryx-widgets type=module}\n{@pm-only npm "edits package.json" pkg set \'exports={}\' --json}\n{@pm install @astryxdesign/cli @astryxdesign/core typescript@6 --dev}',
         },
         {
           type: 'list',
           style: 'unordered',
           items: [
-            'Set `"type": "module"`: the `.js` files the CLI generates, such as a built theme, are ES modules, and Node fails to load them in a package marked `"type": "commonjs"`, which `npm init -y` writes on npm 11.',
+            'Set `"type": "module"`: the `.js` files the CLI generates, such as a built theme, are ES modules, and Node fails to load them in a package marked `"type": "commonjs"`, which `{@pm-only npm "writes package.json" init -y}` writes on npm 11.',
             'Start with `"exports": {}`: each component and template you add then writes the public import that `integration verify` resolves.',
             'Run the CLI as `astryx`, which runs the `@astryxdesign/cli` you installed as a devDependency.',
             'Component commands read Core, so they need `@astryxdesign/core` installed.',
@@ -64,7 +64,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx integration add component AcmeCarousel',
+          code: '{@command integration add component AcmeCarousel}',
         },
         {
           type: 'code',
@@ -82,7 +82,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx component AcmeCarousel',
+          code: '{@command component AcmeCarousel}',
         },
         {
           type: 'prose',
@@ -100,7 +100,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'npm pkg set scripts.typecheck="astryx integration check --strict"\nnpm run typecheck',
+          code: '{@pm-only npm "edits package.json" pkg set scripts.typecheck="astryx integration check --strict"}\n{@pm run typecheck}',
         },
         {
           type: 'code',
@@ -127,7 +127,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx integration verify\nnpm pack --pack-destination ..',
+          code: '{@command integration verify}\n{@pm-only npm "builds the publish tarball" pack --pack-destination ..}',
         },
         {
           type: 'code',
@@ -136,7 +136,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: '`integration verify` installs the packed package in a temporary app and confirms the component resolves through its public import there ({@link generic:checks}). It publishes nothing and leaves no `.tgz` file, so `npm pack` writes `../acme-astryx-widgets-1.0.0.tgz` for the next step.',
+          text: '`integration verify` installs the packed package in a temporary app and confirms the component resolves through its public import there ({@link generic:checks}). It publishes nothing and leaves no `.tgz` file, so `{@pm-only npm "builds the publish tarball" pack}` writes `../acme-astryx-widgets-1.0.0.tgz` for the next step.',
         },
         {
           type: 'heading',
@@ -150,7 +150,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'cd ..\nmkdir my-app && cd my-app\nnpm init -y\nnpm install @astryxdesign/core @astryxdesign/cli ../acme-astryx-widgets-1.0.0.tgz\nastryx component AcmeCarousel',
+          code: 'cd ..\nmkdir my-app && cd my-app\n{@pm-only npm "writes package.json" init -y}\n{@pm install @astryxdesign/core @astryxdesign/cli ../acme-astryx-widgets-1.0.0.tgz}\n{@command component AcmeCarousel}',
         },
         {
           type: 'code',
@@ -290,7 +290,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'In global mode: users can also install your package for their computer, beside the global CLI (`npm i -g @astryxdesign/cli your-package`). It then applies in folders outside any project, and inside a project only if the project installs it. See {@link namespace:global} and {@link generic:global-integrations}.',
+          text: 'In global mode: users can also install your package for their computer, beside the global CLI (`{@pm install @astryxdesign/cli your-package --global}`). It then applies in folders outside any project, and inside a project only if the project installs it. See {@link namespace:global} and {@link generic:global-integrations}.',
         },
       ],
     },

@@ -83,7 +83,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Some agent machines keep the home folder across restarts but not system folders. A global install there disappears on restart while the agent guide in the home folder stays, so agents are told to run a global astryx command that is gone; the guide says to run the command that installed the CLI, such as `npm i -g @astryxdesign/cli`, when that command is not found, and `astryx doctor` names the same step. To keep the CLI across restarts, install it into a folder in your home and put its `bin` folder on your PATH, as for a permission error ({@link generic:install-once}), or run that command when the machine starts.',
+          text: 'Some agent machines keep the home folder across restarts but not system folders. A global install there disappears on restart while the agent guide in the home folder stays, so agents are told to run a global astryx command that is gone; the guide says to run the command that installed the CLI, such as `{@pm install @astryxdesign/cli --global}`, when that command is not found, and `astryx doctor` names the same step. To keep the CLI across restarts, install it into a folder in your home and put its `bin` folder on your PATH, as for a permission error ({@link generic:install-once}), or run that command when the machine starts.',
         },
       ],
     },

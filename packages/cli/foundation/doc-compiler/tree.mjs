@@ -21,10 +21,12 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {CLI_ROOT} from '../fs/paths.mjs';
 import {loadCliSelfDocs} from '../discovery/cli-self-docs.mjs';
+import {astryxIconDefinitions} from '../discovery/icon-definition-discovery.mjs';
 import {routeSegment} from '../discovery/docs-section-key.mjs';
 import {diagnostic, sortDiagnostics} from './diagnostics.mjs';
 import {readDocView} from './read.mjs';
 import {packageSource} from './source.mjs';
+import {renderTokens} from './links.mjs';
 import {createDocId} from '../identity/provider-identity.mjs';
 import {CLI_PROVIDER_ID} from '../identity/providers.mjs';
 
@@ -178,6 +180,9 @@ export const topicLevel = category =>
  * @property {TreeSlot[]} slots a namespace's slots; empty for a leaf
  * @property {string} source
  * @property {any} [ref]
+ * @property {import('../discovery/docs-discovery.mjs').GuideOverlay} [guideOverlay]
+ *   what integrations do to a guide the tree places, by its route: set by the
+ *   project's tree, absent when nothing replaces or extends it
  */
 
 /**
@@ -767,8 +772,9 @@ function checkPlacement(placement, kind, at, declared) {
 }
 
 /**
- * Every adoption rule in the doc's own package that matches its group and
- * kind, from namespaces that have a route.
+ * Every adoption rule that matches the doc's group and kind, from namespaces
+ * that have a route: its own package's, and an experimental CLI namespace's
+ * rule that adopts its group from every package (`source.packages: 'all'`).
  * @param {TreeDocInput} doc
  * @param {Map<string, TreeNamespaceInput>} declared
  * @param {Map<string, string | null>} routeOf
@@ -777,10 +783,16 @@ function adoptionsFor(doc, declared, routeOf) {
   /** @type {Array<{key: string, namespace: TreeNamespaceInput, rule: NonNullable<NamespaceDoc['adopts']>[number]}>} */
   const matches = [];
   for (const [key, namespace] of declared) {
-    if (namespace.provider !== doc.provider || routeOf.get(key) == null)
-      continue;
+    if (routeOf.get(key) == null) continue;
     for (const rule of namespace.doc.adopts ?? []) {
       if (rule.source.group !== doc.group) continue;
+      // Adopting from every package is experimental (spec:AST-017 FR27): only
+      // a CLI namespace marked experimental may (the icon definitions).
+      const shared =
+        rule.source.packages === 'all' &&
+        namespace.provider === CLI_PROVIDER &&
+        /** @type {any} */ (namespace.doc).stability === 'experimental';
+      if (namespace.provider !== doc.provider && !shared) continue;
       if (
         rule.source.kinds &&
         !rule.source.kinds.includes(/** @type {any} */ (doc.kind))
@@ -918,6 +930,23 @@ export async function loadTreeInputs({
     }
   }
   if (selfDocs) {
+    // Astryx's icon definitions, adopted by the `icon-definitions` namespace with
+    // every installed set's own.
+    const definitions = astryxIconDefinitions();
+    for (const {file, message} of definitions.errors) {
+      diagnostics.push(
+        diagnostic('invalid_doc', {
+          provider: CLI_PROVIDER,
+          source: packageSource(file),
+          message,
+        }),
+      );
+    }
+    for (const {doc, file} of definitions.definitions) {
+      docs.push(
+        iconDefinitionTreeInput(doc, file, CLI_PROVIDER, CLI_PROVIDER_ID),
+      );
+    }
     const {loaded} = await loadCliSelfDocs();
     for (const {source, doc} of loaded) {
       docs.push({
@@ -937,6 +966,35 @@ export async function loadTreeInputs({
   return {namespaces, docs, diagnostics};
 }
 
+/** The discovery group every icon definition doc belongs to. */
+export const ICON_DEFINITIONS_GROUP = 'icon-definitions';
+
+/**
+ * One icon definition as a docs-tree input: grouped for the CLI's
+ * `icon-definitions` namespace, which adopts them from every package.
+ * @param {import('../../authoring/doctypes/icon-definition/type').IconDefinitionDoc} doc
+ * @param {string} file
+ * @param {string} provider
+ * @param {string} providerId
+ * @returns {TreeDocInput}
+ */
+export function iconDefinitionTreeInput(doc, file, provider, providerId) {
+  return {
+    provider,
+    providerId,
+    source: packageSource(file),
+    kind: 'icon-definition',
+    name: doc.name,
+    title: doc.name,
+    // Built-in definitions are the ones every set must map; the words are
+    // what an author searches the library for.
+    summary: `${doc.builtIn ? '[built-in] ' : ''}${doc.description}${doc.words.length > 0 ? ` Words: ${doc.words.join(', ')}.` : ''}`,
+    group: ICON_DEFINITIONS_GROUP,
+    placement: undefined,
+    ref: {selfDoc: doc},
+  };
+}
+
 /** @type {Map<string, Promise<DocsTree>>} */
 const built = new Map();
 
@@ -952,6 +1010,11 @@ export function loadDocsTree({selfDocs = true, fresh = false} = {}) {
   if (!tree) {
     tree = loadTreeInputs({selfDocs}).then(inputs => {
       const result = buildDocsTree(inputs);
+      // Tree inputs carry authored summaries; each renders its doc tokens
+      // once, here or where the project tree is built.
+      for (const node of result.nodes.values()) {
+        node.summary = renderTokens(node.summary);
+      }
       return {
         ...result,
         diagnostics: sortDiagnostics([
@@ -963,4 +1026,19 @@ export function loadDocsTree({selfDocs = true, fresh = false} = {}) {
     built.set(key, tree);
   }
   return tree;
+}
+
+/**
+ * Is this node an experimental surface's doc (spec:AST-017 FR27): marked
+ * `stability: 'experimental'` itself, or under a namespace that is? Every
+ * reader that marks or counts experimental docs asks this one question.
+ * @param {DocsTree} tree
+ * @param {TreeNode} node
+ * @returns {boolean}
+ */
+export function isExperimentalTreeNode(tree, node) {
+  return [...tree.ancestors(node), node].some(
+    (/** @type {any} */ each) =>
+      each.ref?.selfDoc?.stability === 'experimental',
+  );
 }

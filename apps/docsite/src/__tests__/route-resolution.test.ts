@@ -92,7 +92,9 @@ describe('route resolution', () => {
     // other topics were split into short guides. `styling-overview` and
     // `cli-host-entry` are topics added since; `global` is the Global mode
     // page; `authoring` holds what CLI Integrations and Writing docs did;
-    // `use-integrations` is the guide for apps that install one.
+    // `use-integrations` is the guide for apps that install one;
+    // `cli-experimental-render-pages` is the experimental render guide;
+    // `calendars` is the calendar systems page.
     const sidebarGuides = docTopics
       .filter(d => d.category === 'guide' && d.topic !== 'getting-started')
       .map(d => d.topic)
@@ -101,7 +103,11 @@ describe('route resolution', () => {
       [
         'authoring',
         'browser-support',
+        'calendars',
         'cli-component-lookups',
+        'cli-experimental-icon-set-files',
+        'cli-experimental-icon-sets',
+        'cli-experimental-render-pages',
         'cli-host-entry',
         'global',
         'internationalization',
@@ -116,6 +122,29 @@ describe('route resolution', () => {
         'use-integrations',
         'working-with-ai',
       ].sort(),
+    );
+  });
+
+  it('shows Calendars as its own guide page, listed right after Internationalization', () => {
+    const calendars = pageBySlug.get('calendars');
+    expect(calendars?.category).toBe('guide');
+    expect(calendars?.sections.map(section => section.id)).toContain(
+      'lunisolar-calendars',
+    );
+    expect(docRedirects['calendars-calendar-systems']).toBe(
+      '/docs/calendars#choose-a-calendar',
+    );
+    // The short guide stays on the Internationalization page.
+    expect(docRedirects['internationalization-i18n-calendars']).toMatch(
+      /^\/docs\/internationalization#/,
+    );
+    // The sidebar lists guides by title (DocsShell).
+    const byTitle = docTopics
+      .filter(d => d.category === 'guide' && d.topic !== 'getting-started')
+      .sort((a, b) => a.title.localeCompare(b.title))
+      .map(d => d.topic);
+    expect(byTitle.indexOf('calendars')).toBe(
+      byTitle.indexOf('internationalization') + 1,
     );
   });
 
@@ -169,7 +198,8 @@ describe('route resolution', () => {
     );
     expect(section).toBeDefined();
     const text = JSON.stringify(section);
-    expect(text).toContain('npm i -g @astryxdesign/cli');
+    // A `{@pm}` step, which the docsite renders for npm.
+    expect(text).toContain('npm install -g @astryxdesign/cli');
     // Its link to the global mode page renders as a command that opens it.
     expect(text).toContain('`npx @astryxdesign/cli docs global`');
     expect(linkifyCode('npx @astryxdesign/cli docs global')).toBe(

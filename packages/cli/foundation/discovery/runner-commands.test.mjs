@@ -120,7 +120,10 @@ describe('CLI_COMMANDS', () => {
       .readdirSync(COMMAND_DOCS)
       .filter(file => file.endsWith('.doc.mjs'))
       .map(file => file.slice(0, -'.doc.mjs'.length))
-      .filter(name => !name.includes('-') || name === 'gap-report');
+      .filter(name => !name.includes('-') || name === 'gap-report')
+      // The experimental group is no stable command, so a runner note never
+      // names it (spec:AST-084 FR0).
+      .filter(name => name !== 'experimental');
     expect([...CLI_COMMANDS].sort()).toEqual(
       [...new Set([...documented, 'help'])].sort(),
     );

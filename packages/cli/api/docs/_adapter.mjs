@@ -19,7 +19,11 @@
 
 import * as path from 'node:path';
 import {Project} from '../../foundation/config/project.mjs';
-import {DocsCatalog} from '../../foundation/discovery/docs-discovery.mjs';
+import {
+  DocsCatalog,
+  isGuideRoute,
+  mergeTopicReport,
+} from '../../foundation/discovery/docs-discovery.mjs';
 import {checkDocTypes} from '../../foundation/discovery/doc-types.mjs';
 import {integrationDocFiles} from '../../foundation/discovery/integration-doc-files.mjs';
 import {
@@ -35,6 +39,7 @@ import {
 } from '../../foundation/doc-compiler/read.mjs';
 import {
   buildDocsTree,
+  isExperimentalTreeNode,
   loadTreeInputs,
 } from '../../foundation/doc-compiler/tree.mjs';
 import {sortDiagnostics} from '../../foundation/doc-compiler/diagnostics.mjs';
@@ -42,6 +47,7 @@ import {
   linkBlocks,
   linkFields,
   parseLinkTarget,
+  renderTokens,
 } from '../../foundation/doc-compiler/links.mjs';
 import {
   createDocId,
@@ -53,6 +59,8 @@ import {
 } from '../../foundation/discovery/cli-self-docs.mjs';
 import {
   AUTHORING_REFERENCE_ROUTE,
+  EXPERIMENTAL_AUTHORING_ROUTE,
+  isExperimentalSelfDoc,
   loadAuthoringSelfDocs,
   schemaFieldTable,
   selfDocSection,
@@ -69,6 +77,7 @@ import {
   discoverIntegrationTemplatesForOne,
 } from '../../foundation/discovery/template-adapter.mjs';
 import {findCoreDir} from '../../foundation/fs/paths.mjs';
+import {reusedWhileUnchanged} from '../../foundation/fs/read-record.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {orderRouteSuggestions} from '../../foundation/text/suggest-order.mjs';
@@ -311,7 +320,8 @@ function topicTextFields(doc) {
  * @returns {Promise<string>}
  */
 export async function linkDocText(catalog, providerId, text) {
-  if (typeof text !== 'string' || !text.includes('{@link')) return text;
+  if (typeof text !== 'string') return text;
+  if (!text.includes('{@link')) return renderTokens(text);
   let provider;
   try {
     provider = normalizeProviderId(providerId);
@@ -339,7 +349,8 @@ export async function linkDocText(catalog, providerId, text) {
  * @returns {Promise<{doc: T, problems: LinkProblem[]}>}
  */
 export async function linkComponentDoc(catalog, providerId, doc) {
-  if (!JSON.stringify(doc ?? null).includes('{@link')) {
+  // Doc tokens render in the same pass as links (resolveInline).
+  if (!JSON.stringify(doc ?? null).includes('{@')) {
     return {doc, problems: []};
   }
   return linkFields(
@@ -383,8 +394,8 @@ export function projectTree(catalog, {fresh = false} = {}) {
   return tree;
 }
 
-/** @type {ReturnType<typeof loadTreeInputs> | undefined} */
-let cliTreeInputs;
+/** The CLI's own tree files, loaded again after one of them changes. */
+const cliTreeInputs = reusedWhileUnchanged(() => loadTreeInputs());
 
 /**
  * Every flat topic in the catalog, as the tree's topic levels read it.
@@ -412,6 +423,7 @@ async function flatTopicInputs(catalog) {
       providerId: entry.providerId ?? entry.package,
       name: entry.name,
       title: title ?? entry.name,
+      // Rendered once, with the tree's other summaries (buildProjectTree).
       summary: description ?? '',
       category: category ?? null,
       source: `${entry.package}:${entry.name}`,
@@ -430,21 +442,67 @@ async function flatTopicInputs(catalog) {
  */
 async function buildProjectTree(catalog, fresh) {
   const added = catalog.treeInputs;
-  if (fresh || !cliTreeInputs) cliTreeInputs = loadTreeInputs();
-  const cli = await cliTreeInputs;
+  const cli = await cliTreeInputs({fresh});
   const result = buildDocsTree({
     namespaces: [...cli.namespaces, ...added.flatMap(each => each.namespaces)],
     docs: [...cli.docs, ...added.flatMap(each => each.guides)],
     topics: await flatTopicInputs(catalog),
   });
+  // A guide the tree places that an integration replaces or extends by its
+  // route, or by the route it had before it moved: reads apply what it does,
+  // and a replacement lists under its own title and summary.
+  // Each doc applies in configured order to the guide its route names, so a
+  // doc naming a guide's old route and one naming its new route stack as if
+  // both named the same one.
+  for (const record of catalog.guideTargeters) {
+    const node = placedGuideAt(
+      result,
+      /** @type {string} */ (record.replaces ?? record.extendsTopic),
+    );
+    if (!node) continue;
+    /** @type {import('../../foundation/discovery/docs-discovery.mjs').GuideOverlay} */
+    const overlay = node.guideOverlay ?? {replacement: null, extensions: []};
+    if (record.replaces != null) {
+      node.guideOverlay = {
+        replacement: record,
+        // Extensions were authored against the content that just went away.
+        extensions: [],
+        ...(overlay.replacement
+          ? {replacedPackage: overlay.replacement.package}
+          : {}),
+      };
+    } else {
+      node.guideOverlay = {
+        ...overlay,
+        extensions: [
+          ...overlay.extensions,
+          {
+            package: record.package,
+            path: record.path,
+            ...(record.providerId ? {providerId: record.providerId} : {}),
+          },
+        ],
+      };
+    }
+  }
+  for (const node of result.nodes.values()) {
+    const replacement = node.guideOverlay?.replacement;
+    if (replacement) {
+      node.title = replacement.title ?? node.title;
+      node.summary = replacement.description ?? node.summary;
+    }
+  }
   // A summary is a doc's text too: each link in it reads as the command that
   // opens its doc, wherever the tree's summaries print (spec:AST-047 FR9).
   for (const node of result.nodes.values()) {
-    if (typeof node.summary === 'string' && node.summary.includes('{@link')) {
+    if (typeof node.summary === 'string' && node.summary.includes('{@')) {
+      const replacement = node.guideOverlay?.replacement;
       node.summary = await linkSummary(
         catalog,
         result,
-        node.providerId,
+        replacement
+          ? (replacement.providerId ?? replacement.package)
+          : node.providerId,
         node.summary,
       );
     }
@@ -466,7 +524,7 @@ async function buildProjectTree(catalog, fresh) {
  * @returns {Promise<string>}
  */
 async function linkSummary(catalog, tree, providerId, summary) {
-  if (!summary.includes('{@link')) return summary;
+  if (!summary.includes('{@link')) return renderTokens(summary);
   let provider;
   try {
     provider = normalizeProviderId(providerId);
@@ -515,11 +573,15 @@ function identitiesOf(tree) {
 /**
  * The CLI's authoring docs, by kind and name. The field reference under
  * `astryx docs authoring` reads each as one section keyed by its name, so a
- * link to one opens that section. Loaded once per process, like the CLI's
- * tree files.
- * @type {Promise<Map<string, any>> | undefined}
+ * link to one opens that section. Loaded again after one of them changes,
+ * like the CLI's tree files.
  */
-let authoringDocs;
+const authoringDocs = reusedWhileUnchanged(() =>
+  loadAuthoringSelfDocs().then(
+    ({loaded}) =>
+      new Map(loaded.map(({doc}) => [`${doc.type}\u0000${doc.name}`, doc])),
+  ),
+);
 
 /**
  * The CLI authoring doc a link names. The `authoring` namespace is the CLI's
@@ -529,11 +591,7 @@ let authoringDocs;
  * @returns {Promise<any | null>}
  */
 async function authoringDoc(kind, name) {
-  authoringDocs ??= loadAuthoringSelfDocs().then(
-    ({loaded}) =>
-      new Map(loaded.map(({doc}) => [`${doc.type}\u0000${doc.name}`, doc])),
-  );
-  return (await authoringDocs).get(`${kind}\u0000${name}`) ?? null;
+  return (await authoringDocs()).get(`${kind}\u0000${name}`) ?? null;
 }
 
 /**
@@ -617,14 +675,20 @@ function docFinderOver(catalog, tree, fromProvider, summaries = true) {
         ? await authoringDoc(parsed.kind, parsed.name)
         : null;
     if (authored) {
+      // An experimental schema is a section of its experimental route, not
+      // of the field reference (spec:AST-084 FR0).
+      const experimental = isExperimentalSelfDoc(authored);
+      const route = experimental
+        ? EXPERIMENTAL_AUTHORING_ROUTE
+        : AUTHORING_REFERENCE_ROUTE;
       return {
         link: {
           target,
           id: createDocId(provider, authored.type, authored.name),
-          route: AUTHORING_REFERENCE_ROUTE,
+          route,
           title: authored.displayName ?? authored.name,
-          summary: authored.description ?? '',
-          command: `astryx docs authoring ${authored.name}`,
+          summary: renderTokens(authored.description ?? ''),
+          command: `astryx docs ${experimental ? route : 'authoring'} ${authored.name}`,
         },
         kind: parsed.kind,
         typed: {doc: authored, providerId: CLI_PROVIDER_ID, tree: false},
@@ -681,13 +745,16 @@ function docFinderOver(catalog, tree, fromProvider, summaries = true) {
         // The summary is the target doc's own text, so its links resolve
         // against the target's provider, never the linking doc's: a Core
         // component's against the CLI's docs, like its other fields.
-        if (summaries && link.summary.includes('{@link')) {
+        // contributedDocLink returns the authored text; it renders once here.
+        if (summaries && link.summary.includes('{@')) {
           link.summary = await linkSummary(
             catalog,
             tree,
             provider === CORE_COMPONENT_PROVIDER ? CLI_PROVIDER_ID : provider,
             link.summary,
           );
+        } else {
+          link.summary = renderTokens(link.summary);
         }
         return {link: {target, ...link}, kind: parsed.kind, typed: null};
       }
@@ -1103,7 +1170,16 @@ export async function docsLinkProblems(
     }
   }
   for (const node of tree.nodes.values()) {
-    if (owner != null && node.provider !== owner) continue;
+    // A package owns a guide it placed, and a guide it replaces or extends by
+    // its route.
+    if (
+      owner != null &&
+      node.provider !== owner &&
+      node.guideOverlay?.replacement?.package !== owner &&
+      !node.guideOverlay?.extensions.some(each => each.package === owner)
+    ) {
+      continue;
+    }
     if (node.kind === 'generic' && node.ref?.topicFile) {
       try {
         note(node.route, await topicLinkProblems(catalog, guideEntry(node)));
@@ -1235,6 +1311,168 @@ export async function packageDocsProblems(integration, discovered) {
 }
 
 /**
+ * The guide the docs tree places at a route, compared without case, or at the
+ * route it moved to; null when the route holds no placed guide.
+ * @param {DocsTree} tree
+ * @param {string} route
+ * @returns {TreeNode | null}
+ */
+function placedGuideAt(tree, route) {
+  const node =
+    tree.get(route) ?? tree.getFolded(route) ?? movedRoute(route, tree);
+  return node?.kind === 'generic' && node.ref?.topicFile ? node : null;
+}
+
+/**
+ * The routes of every guide the tree places below a namespace, nearest first,
+ * in reading order.
+ * @param {DocsTree} tree
+ * @param {TreeNode} namespace
+ * @returns {string[]}
+ */
+function placedGuidesBelow(tree, namespace) {
+  /** @type {string[]} */
+  const routes = [];
+  /** @type {TreeNode[]} */
+  let level = [namespace];
+  while (level.length > 0) {
+    /** @type {TreeNode[]} */
+    const next = [];
+    for (const parent of level) {
+      for (const slot of parent.slots) {
+        for (const route of slot.children) {
+          const child = tree.get(route);
+          if (!child || child.parent !== parent.route) continue;
+          if (child.kind === 'generic' && child.ref?.topicFile) {
+            routes.push(child.route);
+          }
+          if (child.slots.length > 0) next.push(child);
+        }
+      }
+    }
+    level = next;
+  }
+  return routes;
+}
+
+/**
+ * What one doc that replaces or extends another does, as a package's own
+ * check sees it.
+ * @typedef {object} DocTarget
+ * @property {string} topic the doc's own name
+ * @property {'replaces' | 'extends'} relationship
+ * @property {string} target the topic name or route it names
+ * @property {'topic' | 'guide' | 'namespace' | null} kind what the target
+ *   is: a flat topic, a guide the docs tree places, a namespace (which neither
+ *   takes), or null when it names nothing
+ * @property {string | null} guide for a guide, the route it is placed at now,
+ *   which an old route resolves to
+ * @property {string[]} guidesBelow for a namespace, the routes of the guides
+ *   placed below it, any of which the doc could name instead
+ * @property {string | null} owner the package whose topic or guide it is
+ * @property {Array<{section: string, field: 'before' | 'after', key: string}>} unplaced
+ *   each section whose `before` or `after` names no section of the target, so
+ *   it is added at the end instead
+ */
+
+/**
+ * Each doc in one integration's docs that replaces or extends a topic, or a
+ * guide the docs tree places by its route, read against the CLI's docs and the
+ * package's own: what it names and whether that exists, and each section an
+ * extension places with `before` or `after` that finds no section there.
+ * @param {any} integration
+ * @param {{records: import('../../foundation/discovery/docs-discovery.mjs').DocsTopicRecord[], namespaces: import('../../foundation/doc-compiler/tree.mjs').TreeNamespaceInput[], guides: import('../../foundation/doc-compiler/tree.mjs').TreeDocInput[]}} discovered
+ * @returns {Promise<DocTarget[]>}
+ */
+export async function packageDocTargets(integration, discovered) {
+  const catalog = packageCatalog(integration, discovered);
+  const tree = await projectTree(catalog);
+  /** @type {DocTarget[]} */
+  const targets = [];
+  for (const record of discovered.records) {
+    const relationship = record.replaces != null ? 'replaces' : 'extends';
+    const target =
+      relationship === 'replaces' ? record.replaces : record.extendsTopic;
+    if (target == null) continue;
+    /** @type {DocTarget['kind']} */
+    let kind = null;
+    /** @type {string | null} */
+    let owner = null;
+    /** @type {string | null} */
+    let basePath = null;
+    /** @type {ReadonlyArray<{path: string}>} every extension of the target, in configured order */
+    let extensions = [];
+    /** @type {string[]} */
+    let guidesBelow = [];
+    /** @type {string | null} */
+    let guide = null;
+    if (isGuideRoute(target)) {
+      const node = placedGuideAt(tree, target);
+      if (node) {
+        kind = 'guide';
+        guide = node.route;
+        owner = node.provider;
+        basePath = node.guideOverlay?.replacement?.path ?? node.ref.topicFile;
+        extensions = node.guideOverlay?.extensions ?? [];
+      }
+    } else {
+      // A replacement already holds the topic's place in the catalog, and
+      // names the package it took it from.
+      const entry = catalog.resolve(target);
+      if (entry?.path === record.path) {
+        kind = 'topic';
+        owner = entry.replacedPackage ?? null;
+      } else if (entry) {
+        kind = 'topic';
+        owner = entry.package;
+        basePath = entry.path;
+        extensions = entry.extensions;
+      }
+    }
+    if (kind == null) {
+      // A namespace holds no sections to take over or merge onto; the guides
+      // below it do.
+      const node =
+        tree.get(target) ?? tree.getFolded(target) ?? movedRoute(target, tree);
+      if (node?.kind === 'namespace') {
+        kind = 'namespace';
+        owner = node.provider;
+        guidesBelow = placedGuidesBelow(tree, node);
+      }
+    }
+    /** @type {DocTarget['unplaced']} */
+    let unplaced = [];
+    if (relationship === 'extends' && basePath != null) {
+      // Merge every extension in configured order, as a read does, so a key
+      // an earlier extension adds counts as a section of the target.
+      let doc = (await loadTopicFile(basePath, null)).doc;
+      for (const extension of extensions) {
+        if (doc == null) break;
+        const file = (await loadTopicFile(extension.path, null)).doc;
+        if (file == null) continue;
+        const merged = mergeTopicReport(doc, file);
+        if (extension.path === record.path) {
+          unplaced = merged.unplaced;
+          break;
+        }
+        doc = merged.doc;
+      }
+    }
+    targets.push({
+      topic: record.name,
+      relationship,
+      target,
+      kind,
+      owner,
+      guide,
+      guidesBelow,
+      unplaced,
+    });
+  }
+  return targets;
+}
+
+/**
  * How a token reference finds its target: the topic it names in `catalog`,
  * lowered for the same language.
  * @param {DocsCatalog} catalog
@@ -1335,19 +1573,40 @@ export async function compileTopic(catalog, entry, lang = null) {
 /**
  * A guide the docs tree places, as a topic entry the topic readers open by its
  * route. It is never a flat topic: `astryx docs <route>` is its only name.
+ * What integrations do to it by its route applies: a replacement is read in
+ * its place and names its own package, and each extension's sections merge
+ * onto it, each naming the package that wrote it (INV28).
  * @param {import('../../foundation/doc-compiler/tree.mjs').TreeNode} node
  * @returns {import('../../foundation/discovery/docs-discovery.mjs').DocsTopicEntry}
  */
 export function guideEntry(node) {
-  return {
+  const base = {
     name: node.route,
     route: node.route,
     package: node.provider,
     providerId: node.providerId,
     path: node.ref.topicFile,
     extensions: [],
-    tree: true,
+    tree: /** @type {const} */ (true),
     parent: node.parent ?? undefined,
+  };
+  const overlay = node.guideOverlay;
+  if (!overlay) return base;
+  const replacement = overlay.replacement;
+  return {
+    ...base,
+    ...(replacement
+      ? {
+          package: replacement.package,
+          providerId: replacement.providerId ?? replacement.package,
+          path: replacement.path,
+          replaces: node.route,
+          // The package whose guide it took over: an earlier replacement's,
+          // when the guide was already replaced.
+          replacedPackage: overlay.replacedPackage ?? node.provider,
+        }
+      : {}),
+    extensions: [...overlay.extensions],
   };
 }
 
@@ -1418,9 +1677,20 @@ export function placeLinks(tree, node) {
     up: node.parent == null ? 'astryx docs' : `astryx docs ${node.parent}`,
   };
   const parent = node.parent == null ? undefined : tree.get(node.parent);
-  const siblings =
+  // A stable node moves only to stable neighbors, so its links read as they
+  // do without experimental features (spec:AST-017 FR27, spec:AST-084 FR0),
+  // and an experimental node only to experimental ones, so each next read
+  // still names this one as its previous.
+  const experimental = isExperimentalTreeNode(tree, node);
+  const siblings = (
     parent?.slots.find(slot => slot.children.includes(node.route))?.children ??
-    [];
+    []
+  ).filter(route => {
+    const sibling = tree.get(route);
+    return (
+      sibling == null || isExperimentalTreeNode(tree, sibling) === experimental
+    );
+  });
   const at = siblings.indexOf(node.route);
   if (at > 0) links.previous = `astryx docs ${siblings[at - 1]}`;
   if (at !== -1 && at < siblings.length - 1) {
@@ -1451,14 +1721,19 @@ export async function topicLinks(catalog, entry) {
  * decides.
  * @param {unknown} topic
  * @param {{cwd?: string}} [options]
+ * @param {DocsCatalog} [loaded] internal: a catalog the read already loaded,
+ *   so the read and every part of it share one snapshot of the project's docs
+ *   (and its memoized lowering) instead of loading the project again for each
+ *   part. It is a separate argument, never an option, so no caller of the
+ *   public `docs()` can set it
  * @returns {Promise<
  *   | {kind: 'topic', catalog: DocsCatalog, entry: import('../../foundation/discovery/docs-discovery.mjs').DocsTopicEntry}
  *   | {kind: 'node', catalog: DocsCatalog, tree: import('../../foundation/doc-compiler/tree.mjs').DocsTree, node: import('../../foundation/doc-compiler/tree.mjs').TreeNode}
  *   | {kind: 'unknown', catalog: DocsCatalog}
  * >}
  */
-export async function resolveDocsArgument(topic, {cwd} = {}) {
-  const catalog = await loadDocsCatalog(cwd);
+export async function resolveDocsArgument(topic, {cwd} = {}, loaded) {
+  const catalog = loaded ?? (await loadDocsCatalog(cwd));
   if (typeof topic !== 'string' || topic === '')
     return {kind: 'unknown', catalog};
   const tree = await projectTree(catalog);
@@ -1574,8 +1849,11 @@ function movedRoute(topic, tree) {
 
 /**
  * The error for a docs argument that names nothing. For a route, it suggests
- * the children of the deepest namespace the route reaches; otherwise, every
- * topic and every top-level namespace.
+ * every child of the deepest namespace the route reaches, closest first.
+ * Otherwise it suggests the docs the argument names in another spelling, or
+ * failing that the topics and top-level namespaces, closest first and cut
+ * where the matches get weaker (every one of them when none shares a word
+ * with the argument).
  * @param {unknown} topic
  * @param {DocsCatalog} catalog
  * @returns {Promise<AstryxError>}
@@ -1584,6 +1862,8 @@ export async function unknownTopicError(topic, catalog) {
   const tree = await projectTree(catalog);
   /** @type {Array<{name: string, reason: string}>} */
   let suggestions = [];
+  // Route children stay whole (spec:AST-046); only the other lists are cut.
+  let routeChildren = false;
   if (typeof topic === 'string' && topic.includes('/')) {
     const parts = topic.split('/');
     for (
@@ -1593,6 +1873,7 @@ export async function unknownTopicError(topic, catalog) {
     ) {
       const near = tree.get(parts.slice(0, depth).join('/'));
       if (near) {
+        routeChildren = true;
         suggestions = near.slots.flatMap(slot =>
           slot.children.map(route => ({
             name: route,
@@ -1624,7 +1905,9 @@ export async function unknownTopicError(topic, catalog) {
     ];
   }
   if (typeof topic === 'string') {
-    suggestions = orderRouteSuggestions(topic, suggestions);
+    suggestions = orderRouteSuggestions(topic, suggestions, {
+      closest: !routeChildren,
+    });
   }
   // A route that moved names where it went, ahead of the usual suggestions
   // (spec:AST-046 FR9, FR6).
@@ -1664,13 +1947,14 @@ export function notLoaded(catalog) {
  * and lower it for the topic readers.
  * @param {unknown} topic
  * @param {{lang?: string | null, zh?: boolean, dense?: boolean, cwd?: string}} [options]
+ * @param {DocsCatalog} [loaded] internal, as {@link resolveDocsArgument}
  */
-export async function resolveTopicDocs(topic, options = {}) {
+export async function resolveTopicDocs(topic, options = {}, loaded) {
   const {lang = null, zh = false, dense = false, cwd} = options;
   const effectiveLang = lang || (dense ? 'dense' : zh ? 'zh' : null);
   // A public API caller could pass a non-string topic; it lands on the same
   // stable code as an unknown name rather than a raw TypeError.
-  const found = await resolveDocsArgument(topic, {cwd});
+  const found = await resolveDocsArgument(topic, {cwd}, loaded);
   if (found.kind !== 'topic') {
     throw found.kind === 'node'
       ? new AstryxError(

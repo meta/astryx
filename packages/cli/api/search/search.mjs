@@ -14,12 +14,12 @@
  * reads it, so build's output does not move when search's tree does.
  */
 
-import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
 import {
-  gatherCandidates,
-  gatherCandidatesReused,
-  loadSearchData,
-} from './_adapter.mjs';
+  docPackageManager,
+  runWithDocPackageManager,
+} from '../../foundation/env/package-manager.mjs';
+import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
+import {gatherCandidatesReused, loadSearchData} from './_adapter.mjs';
 import {rankLexical} from './_lexical.mjs';
 import {checkSearchArgs} from './_result.mjs';
 import {runTree} from '../../foundation/route/route.mjs';
@@ -52,6 +52,18 @@ export {componentKeywords} from './_adapter.mjs';
  */
 export async function search(query, options = {}) {
   checkSearchArgs(query, options);
+  return runWithDocPackageManager(
+    docPackageManager(options.cwd ?? process.cwd()),
+    () => searchRead(query, options),
+  );
+}
+
+/**
+ * The search itself, inside its project's package-manager scope.
+ * @param {string} query
+ * @param {any} options
+ */
+async function searchRead(query, options) {
   return withListingCache(
     async () =>
       /** @type {import('./search.type.mjs').SearchResponse} */ (
@@ -60,7 +72,10 @@ export async function search(query, options = {}) {
             await runTree(
               SEARCH_TREE,
               {query, options},
-              {...(await gatherCandidatesReused(options)), data: loadSearchData()},
+              {
+                ...(await gatherCandidatesReused(options)),
+                data: loadSearchData(),
+              },
             )
           ),
           options.cwd ?? process.cwd(),
@@ -71,7 +86,9 @@ export async function search(query, options = {}) {
 
 /**
  * The lexical ranker alone: keyword and fuzzy scoring of every candidate.
- * `build` ranks from it.
+ * `build` ranks from it. It ranks the candidates search gathers, reused the
+ * same way. A later query in the same folder, for the same `type`, gathers
+ * again only when an input changed.
  *
  * @param {string} query
  * @param {{cwd?: string, type?: 'component'|'hook'|'doc'|'template'|'theme', limit?: number}} [options]
@@ -79,9 +96,21 @@ export async function search(query, options = {}) {
  */
 export async function searchCore(query, options = {}) {
   checkSearchArgs(query, options);
+  return runWithDocPackageManager(
+    docPackageManager(options.cwd ?? process.cwd()),
+    () => searchCoreRead(query, options),
+  );
+}
+
+/**
+ * The lexical search itself, inside its project's package-manager scope.
+ * @param {string} query
+ * @param {any} options
+ */
+async function searchCoreRead(query, options) {
   return withListingCache(async () =>
     linkSearchResponse(
-      rankLexical(query, options, await gatherCandidates(options)),
+      rankLexical(query, options, await gatherCandidatesReused(options)),
       options.cwd ?? process.cwd(),
     ),
   );

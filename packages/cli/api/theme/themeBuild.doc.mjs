@@ -20,7 +20,7 @@ export const doc = {
   summary:
     'Compile a defineTheme() file to scoped CSS, a JS module, and type declarations, or check committed outputs for drift in CI.',
   description:
-    'The compiler behind `astryx theme build`. Reads a file that calls defineTheme() and ' +
+    'The compiler behind `{@command theme build}`. Reads a file that calls defineTheme() and ' +
     'writes a scoped CSS file, a JS module that re-exports the built theme, and a .d.ts ' +
     '(plus an optional .variants.d.ts when the theme adds custom prop values). It uses ' +
     "@astryxdesign/core's own generator, so the CSS matches what the <Theme> runtime emits. " +

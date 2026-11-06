@@ -12,6 +12,11 @@
  * Every leaf is also re-exported for direct scripting use.
  */
 
+import {
+  docPackageManager,
+  runWithDocPackageManager,
+} from '../../foundation/env/package-manager.mjs';
+import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {AstryxError} from '../error.mjs';
 import {
@@ -258,13 +263,19 @@ async function componentBatch(selectors, options, coreDir) {
  * )>}
  */
 export async function component(name, options = {}) {
+  const cwd = options.cwd ?? process.cwd();
   // Every read resolves the links in the doc text it returns (spec:AST-047
-  // FR9); a batch's results are each a read of their own.
-  return /** @type {any} */ (
-    await linkComponentResponse(
-      await componentRead(name, options),
-      options.cwd ?? process.cwd(),
-    )
+  // FR9); a batch's results are each a read of their own. Doc tokens render
+  // for the project in `cwd`. A call's lookups walk the same source tree, so
+  // the call reads each directory once.
+  return withListingCache(() =>
+    runWithDocPackageManager(
+      docPackageManager(cwd),
+      async () =>
+        /** @type {any} */ (
+          await linkComponentResponse(await componentRead(name, options), cwd)
+        ),
+    ),
   );
 }
 

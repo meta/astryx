@@ -55,7 +55,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'npm install @acme/brand-integration',
+          code: '{@pm install @acme/brand-integration}',
         },
         {
           type: 'prose',

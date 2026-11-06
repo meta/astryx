@@ -102,6 +102,7 @@ export function catalogEntry(pkg, version) {
   const {components, ...others} = kindLists(pkg.contributions);
   return {
     name: pkg.package,
+    package: pkg.package,
     category: pkg.package,
     components,
     ...(version ? {version} : {}),

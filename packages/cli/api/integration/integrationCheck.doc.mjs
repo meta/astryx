@@ -44,12 +44,19 @@ export const doc = {
       description:
         'Also fail on any warning and on any check that did not run, not only on errors. A malformed `cliCommand` is reported as a note (`invalid_cli_command`) in `data.notes` of the validate check, which fails nothing until a minor release names it.',
     },
+    {
+      name: 'options.next',
+      type: 'boolean',
+      default: 'false',
+      description:
+        "Also count the findings the next minor release turns into warnings, validate's notes marked `next`, as warnings now, so `strict` fails on them.",
+    },
   ],
   returns: [
     {
       type: 'integration.check',
       description:
-        "`data.validated` (false when no integration manifest was found, so nothing was checked), `data.name` and `data.version` of the package, `data.strict`, and `data.checks`, one entry per check in the order they run (`validate`, `components`, `templates`, `docs`), each with `check`, `errors` (what makes that check's own subcommand exit 1), `warnings`, `skipped` (why work did not run), `failed` (whether that subcommand exits 1), and `response`, the envelope the check returns on its own. The totals are `data.errors`, `data.warnings`, and `data.skipped` (each reason prefixed with its check); an issue every check starts from, such as one about the manifest, counts once, and every other finding counts on its own. `data.unchecked` counts the items the checks list as not compared, which never fail it. With `strict`, `data.failures` lists each warning and each piece of skipped work once again as an error in the checks' own issue format ({check, severity: `error`, code, message, component, prop, fix, file, line}, each where it applies); it is empty without `strict`. `data.failed` decides the exit code.",
+        "`data.validated` (false when no integration manifest was found, so nothing was checked), `data.name` and `data.version` of the package, `data.strict`, `data.next`, and `data.checks`, one entry per check in the order they run (`validate`, `components`, `templates`, `docs`), each with `check`, `errors` (what makes that check's own subcommand exit 1), `warnings`, `skipped` (why work did not run), `failed` (whether that subcommand exits 1), and `response`, the envelope the check returns on its own. The totals are `data.errors`, `data.warnings`, and `data.skipped` (each reason prefixed with its check); an issue every check starts from, such as one about the manifest, counts once, and every other finding counts on its own. `data.unchecked` counts the items the checks list as not compared, which never fail it. `data.upcoming` counts the findings the next minor release turns into warnings (validate's notes marked `next`), and `data.next` says whether this run counted them as warnings now. With `strict`, `data.failures` lists each warning and each piece of skipped work once again as an error in the checks' own issue format ({check, severity: `error`, code, message, component, prop, fix, file, line}, each where it applies); it is empty without `strict`. `data.failed` decides the exit code.",
     },
   ],
   examples: [

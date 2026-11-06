@@ -189,6 +189,28 @@ describe('integration docs in the docs tree', () => {
     ).toEqual(['acme/setup', 'acme/deploy']);
   }, SLOW);
 
+  it('renders a placed guide summary once, so an escaped token stays written', async () => {
+    scaffold({
+      ...kit(),
+      'deploy.doc.mjs': guide('deploy', {
+        description: 'Show the syntax {@@pm run build} beside {@pm run build}.',
+        placement: {parent: 'namespace:acme', slot: 'guides', order: 2},
+      }),
+    });
+    const top = await docs('acme', undefined, {cwd: tmpDir});
+    const deploy = top.data.slots[0].children.find((/** @type {any} */ c) => c.route === 'acme/deploy');
+    expect(deploy.summary).toMatch(/^Show the syntax \{@pm run build\} beside `\S+ run build`\.$/);
+  }, SLOW);
+
+  it('renders a flat topic summary once, so an escaped token stays written', async () => {
+    scaffold({
+      ...kit(),
+      'notes.doc.mjs': {...kit()['notes.doc.mjs'], description: 'Show the syntax {@@pm run build} beside {@pm run build}.'},
+    });
+    const listed = await docs('guides', undefined, {cwd: tmpDir});
+    expect(JSON.stringify(listed.data)).toContain('Show the syntax {@pm run build} beside `');
+  }, SLOW);
+
   it('reads a placed guide one level at a time, with its links resolved', async () => {
     scaffold(kit());
     const index = await docs('acme/setup', undefined, {cwd: tmpDir, index: true});

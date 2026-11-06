@@ -21,7 +21,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Readers open one section at a time, so give each section one idea and keep it to about 30 lines. `astryx doctor` warns on any read over 32 KB.',
+          text: 'Readers open one section at a time, so give each section one idea and keep it to about 30 lines. `{@command doctor}` warns on any read over 32 KB.',
         },
         {
           type: 'list',
@@ -35,7 +35,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: '# The section list\nastryx docs acme/deploying\n# One section\nastryx docs acme/deploying check-before-you-ship\n# Everything\nastryx docs acme/deploying --full',
+          code: '# The section list\n{@command docs acme/deploying}\n# One section\n{@command docs acme/deploying check-before-you-ship}\n# Everything\n{@command docs acme/deploying --full}',
         },
       ],
     },
@@ -93,7 +93,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx search "place a doc" --type doc',
+          code: '{@command search "place a doc" --type doc}',
         },
         {
           type: 'list',

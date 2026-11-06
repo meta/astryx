@@ -15,11 +15,13 @@ import {
   forEachIntegrationDoc,
   integrationSourceForDoc,
 } from '../../foundation/discovery/component-discovery.mjs';
+import {Project} from '../../foundation/config/project.mjs';
 import {discoverIntegrationDocs} from '../../foundation/discovery/docs-discovery.mjs';
+import {packageDocTargets} from '../docs/_adapter.mjs';
 import {comparePropDocs} from '../../foundation/discovery/prop-drift.mjs';
 import {findCopiedPassages} from '../../foundation/discovery/copied-passages.mjs';
 import {findFluff} from '../../foundation/discovery/doc-fluff.mjs';
-import {findRunnerCommands} from '../../foundation/discovery/runner-commands.mjs';
+import {findDocCommands} from '../../foundation/discovery/runner-commands.mjs';
 import {findStrayPointers} from '../../foundation/discovery/stray-pointers.mjs';
 
 /**
@@ -115,18 +117,60 @@ export async function integrationStrayPointers(discovered, integration) {
 }
 
 /**
- * Each Astryx command a package's topics write with a package runner. A
- * package whose topics cannot be discovered has none here: the other checks
- * report topics that do not load.
+ * What each doc in one integration's docs replaces or extends, read against
+ * the CLI's docs and the package's own (see `packageDocTargets`); empty when
+ * the docs do not load, which other checks report.
  * @param {any} integration a loaded integration
- * @returns {Promise<import('../../foundation/discovery/runner-commands.mjs').RunnerCommand[]>}
+ * @returns {Promise<import('../docs/_adapter.mjs').DocTarget[]>}
  */
-export async function integrationRunnerCommands(integration) {
+export async function integrationDocTargets(integration) {
   let discovered;
   try {
     discovered = await discoverIntegrationDocs(integration);
   } catch {
     return [];
   }
-  return findRunnerCommands(discovered);
+  // A doc that does not load is an issue already; its targets are not read.
+  if (discovered.errors.length > 0) return [];
+  try {
+    return await packageDocTargets(integration, discovered);
+  } catch {
+    // A package whose docs cannot form a tree is reported by the docs check.
+    return [];
+  }
+}
+
+/**
+ * The doc-syntax findings in a package's topics: commands written with a
+ * runner, for one package manager, or bare, and tokens that do not parse. A
+ * package whose topics cannot be discovered has none here: the other checks
+ * report topics that do not load.
+ * @param {any} integration a loaded integration
+ * @returns {Promise<import('../../foundation/discovery/runner-commands.mjs').RunnerCommand[]>}
+ */
+export async function integrationDocCommands(integration) {
+  let discovered;
+  try {
+    discovered = await discoverIntegrationDocs(integration);
+  } catch {
+    return [];
+  }
+  return findDocCommands(discovered);
+}
+
+/**
+ * Whether the project at `cwd` opts in to icon sets (`experimental.iconSet`).
+ * An installed package's experimental root is read only then
+ * (spec:AST-017 FR27, spec:AST-084 FR0): a project without it gets what a CLI
+ * without icon sets reports. A config that does not load opts in to nothing.
+ * @param {string} cwd
+ * @returns {Promise<boolean>}
+ */
+export async function projectUsesIconSets(cwd) {
+  try {
+    const project = await Project.load(cwd);
+    return Boolean(project.config?.experimental?.iconSet);
+  } catch {
+    return false;
+  }
 }

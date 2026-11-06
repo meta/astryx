@@ -97,7 +97,7 @@ describe('migration docs', () => {
     await program.parseAsync(['node', 'astryx', 'docs', 'migration']);
 
     const output = console.log.mock.calls.map(c => c[0]).join('\n');
-    expect(output).toContain('Migration Guide');
+    expect(output).toContain('Migration');
     expect(output).toContain('migration');
   });
 });

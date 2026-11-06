@@ -26,9 +26,9 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: `astryx component AcmeCarousel
-astryx component --list
-astryx search carousel`,
+          code: `{@command component AcmeCarousel}
+{@command component --list}
+{@command search carousel}`,
         },
         {
           type: 'code',

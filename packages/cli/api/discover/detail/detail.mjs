@@ -80,6 +80,7 @@ export function detail(packages, name, options = {}) {
   if (catalog) data.versions = catalog.versions;
   return {
     type: 'discover.detail',
+    package: String(data.name),
     data: /** @type {import('../discover.type.mjs').DiscoverDetailResponse['data']} */ (
       data
     ),
