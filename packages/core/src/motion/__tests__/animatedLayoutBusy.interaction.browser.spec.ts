@@ -21,6 +21,7 @@ import {
   type BlockedWindow,
   BUSY_PROOF_LOOKAROUND_MS,
   busyWindowProof,
+  BusyWindowTooLateError,
   castStep,
   CONTROL_RGB,
   MARKER_RGB,
@@ -64,9 +65,8 @@ test.afterAll(async () => {
 const BLOCK_MS = 700;
 
 /**
- * The glide's length here, ms. `--duration-medium-min` and `--duration-medium`
- * are both set to it, whichever the module plays. It is longer than the
- * theme's, so the judged part spans about 20 frames. The length changes
+ * The glide's length here, ms, set as `--duration-medium`. It is longer than
+ * the theme's, so the judged part spans about 20 frames. The length changes
  * nothing the proof judges.
  */
 const GLIDE_MS = 1000;
@@ -85,7 +85,7 @@ interface GlideRead {
   delayMs: number;
   /** The animation's own time, ms, at `at`. */
   local: number;
-  /** Epoch ms on the page clock when `local` was read. */
+  /** The document timeline's time `local` was read at, in epoch ms. */
   at: number;
 }
 
@@ -99,7 +99,7 @@ async function openStory(page: Page, story: string): Promise<void> {
     .first()
     .waitFor({state: 'attached'});
   await page.addStyleTag({
-    content: `* { --duration-medium-min: ${GLIDE_MS}ms !important; --duration-medium: ${GLIDE_MS}ms !important; }`,
+    content: `* { --duration-medium: ${GLIDE_MS}ms !important; }`,
   });
   await page.evaluate(async () => {
     await document.fonts.ready;
@@ -161,7 +161,11 @@ async function clickThenBlock(
                   durationMs: Number(effect.getComputedTiming().duration),
                   delayMs: effect.getTiming().delay ?? 0,
                   local: Number(animation.currentTime ?? 0),
-                  at: performance.timeOrigin + performance.now(),
+                  // The animation's time is on the document timeline, which
+                  // holds the frame's time through the task.
+                  at:
+                    performance.timeOrigin +
+                    Number(document.timeline.currentTime ?? performance.now()),
                 });
               }
             }
@@ -244,6 +248,7 @@ async function busyGlide(
   await startBusyControl(page);
   const cast = await startScreencast(page);
   const {busy, glides} = await clickThenBlock(page, trigger, follower, axis);
+  expect(glides.length, 'a glide carries the follower').toBeGreaterThan(0);
   // Until every animation but the control's has ended.
   await expect
     .poll(async () =>
@@ -291,6 +296,21 @@ async function busyGlide(
     ) >= step
   ) {
     readable += 1;
+  }
+  // Too little of the glide moves a cast step a frame inside the block,
+  // because the block began too late. That is when the block ran, not how the
+  // glide moved. So it fails under that name, with the numbers.
+  if (readable - busy.from < MIN_JUDGED_FRAMES * FRAME_MS) {
+    const [glide] = glides;
+    const startedMs = glide.local + (busy.from - glide.at) - glide.delayMs;
+    throw new BusyWindowTooLateError(
+      `${name}: the block began ${startedMs.toFixed(0)} ms into the ${glide.durationMs.toFixed(0)} ms glide, which moves the follower a cast step a frame for only ${(readable - busy.from).toFixed(0)} ms of the block, under the ${MIN_JUDGED_FRAMES} frames the proof judges: the block started too late for the glide. Start the block earlier.`,
+      {
+        readableMs: readable - busy.from,
+        glideStartedMs: startedMs,
+        glideDurationMs: glide.durationMs,
+      },
+    );
   }
   // The part of the block the judgment reads ends there.
   const judgedWindow = {...busy, to: Math.min(busy.to, readable)};
@@ -353,7 +373,6 @@ async function markAppDiv(page: Page, text: string): Promise<Locator> {
 
 function expectKeptAdvancing(run: Awaited<ReturnType<typeof busyGlide>>) {
   expect(run.busy.spanMs).toBeGreaterThanOrEqual(BLOCK_MS);
-  expect(run.glides.length, 'a glide carries the follower').toBeGreaterThan(0);
   expect(run.proof.verdict.failures, run.summary).toEqual([]);
   expect(run.proof.monotonic, run.summary).toBe(true);
 }
