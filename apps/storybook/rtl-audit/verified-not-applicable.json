@@ -86,10 +86,6 @@
     "reason": "ChartTooltip uses explicitly physical left/right/top viewport placement and clamping. It has no logical start/end placement, direction-dependent control order, horizontal scrolling action, or coarse form hit target; tooltip rows inherit bidi layout without component-specific directional logic."
   },
   {
-    "component": "charts/MetricTile",
-    "reason": "MetricTile stacks label, value, delta, description, and trend in a block-flow column with logical spacing. Its delta glyphs encode data direction (up, down, flat), not reading direction; the trend slot renders caller-supplied content that keeps its own RTL ownership. It owns no inline-axis placement or order, scroll, drag, overlay, or keyboard behavior."
-  },
-  {
     "component": "richtext/RichTextEditorAutoLinkPlugin",
     "reason": "RichTextEditorAutoLinkPlugin renders no visual or interactive DOM of its own. It transforms typed URL and email text into native-direction links inside the editor and owns no directional glyph, layout, placement, order, scrolling, dragging, overlay, or keyboard behavior."
   },

@@ -174,6 +174,7 @@ const trendRows = [4, 7, 5, 9, 6, 11].map((value, index) => ({
       xKey="index"
       series={[line('value')]}
       height={48}
+      margin={{top: 4, right: 0, bottom: 4, left: 0}}
       title="Request trend"
     />
   }

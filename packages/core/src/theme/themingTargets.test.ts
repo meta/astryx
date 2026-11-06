@@ -1026,11 +1026,6 @@ const UNREFLECTED_STYLE_AXIS_EXCEPTIONS: ReadonlyMap<string, string> = new Map([
       'the body to themes is an open owner decision.',
   ],
   [
-    'Code.size',
-    'The code target paints the size. Adding the prop to its themeProps() ' +
-      'call is a product change that ships separately.',
-  ],
-  [
     'ChartSwatchImpl.variant',
     'ChartSwatch has no theming target. It paints the variant shape only. ' +
       'Whether the swatch becomes a target is an open owner decision.',
