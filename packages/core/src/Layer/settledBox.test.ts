@@ -24,6 +24,11 @@ interface Engine {
   transition?: {property: string; duration: string};
   /** The computed `translate`, beside the matrix the engine paints. */
   translate?: string;
+  /**
+   * The box read is still laid out without the transform that the computed
+   * style already reports, as right after a show in Chromium.
+   */
+  stale?: boolean;
 }
 
 /** A number as an engine serializes a computed transform: six digits. */
@@ -42,6 +47,8 @@ function layerIn(engine: Engine): HTMLElement {
     layer.style.getPropertyValue('transform') === 'none';
   const applied = (): Matrix =>
     isOverridden() ? [1, 0, 0, 1, 0, 0] : engine.matrix;
+  const laidOut = (): Matrix =>
+    engine.stale ? [1, 0, 0, 1, 0, 0] : applied();
   vi.spyOn(window, 'getComputedStyle').mockImplementation(element => {
     if (element !== layer) {
       throw new Error('read of another element');
@@ -58,6 +65,9 @@ function layerIn(engine: Engine): HTMLElement {
       'transform-origin': `${engine.origin[0]}px ${engine.origin[1]}px`,
       'transition-property': engine.transition?.property ?? 'all',
       'transition-duration': engine.transition?.duration ?? '0s',
+      width: `${engine.layout.width}px`,
+      height: `${engine.layout.height}px`,
+      'box-sizing': 'border-box',
     };
     return {
       getPropertyValue: (name: string) => values[name] ?? '',
@@ -72,7 +82,7 @@ function layerIn(engine: Engine): HTMLElement {
   });
   layer.getBoundingClientRect = () => {
     const {left, top, width, height} = engine.layout;
-    const [a, b, c, d, e, f] = applied();
+    const [a, b, c, d, e, f] = laidOut();
     const [ox, oy] = engine.origin;
     const corners = [
       [0, 0],
@@ -137,7 +147,8 @@ describe('settledBox', () => {
       new DOMRect(LAYOUT.left, LAYOUT.top, LAYOUT.width, LAYOUT.height),
     );
     // Frames of the entrance: from 8 px below at 95% to rest.
-    for (const progress of [0, 0.0159, 0.1, 0.37, 0.5, 0.8132, 0.999]) {
+    // Frames whose scale the box size tells apart from 1.
+    for (const progress of [0, 0.0159, 0.1, 0.37, 0.5, 0.75]) {
       const scale = 0.95 + 0.05 * progress;
       const layer = layerIn({
         layout: LAYOUT,
@@ -252,6 +263,36 @@ describe('settledBox', () => {
       const write = vi.spyOn(layer.style, 'setProperty');
       expect(edges(settledBox(layer))).toEqual(layoutEdges());
       expect(write).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('reads under the override where the box read may not carry the transform', () => {
+    const layoutEdges = () =>
+      edges(new DOMRect(LAYOUT.left, LAYOUT.top, LAYOUT.width, LAYOUT.height));
+
+    it('a box still laid out without the transform its computed style reports', () => {
+      const layer = layerIn({
+        layout: LAYOUT,
+        matrix: [0.970033, 0, 0, 0.970033, 0, 4.79467],
+        origin: ORIGIN,
+        stale: true,
+      });
+      layer.getAnimations = () => [{pending: false} as Animation];
+      const write = vi.spyOn(layer.style, 'setProperty');
+      expect(edges(settledBox(layer))).toEqual(layoutEdges());
+      expect(write).toHaveBeenCalled();
+    });
+
+    it('a scale too near 1 for the box size to show', () => {
+      const scale = 0.95 + 0.05 * 0.999;
+      const layer = layerIn({
+        layout: LAYOUT,
+        matrix: [scale, 0, 0, scale, 0, 8 * 0.001],
+        origin: ORIGIN,
+      });
+      const write = vi.spyOn(layer.style, 'setProperty');
+      expect(edges(settledBox(layer))).toEqual(layoutEdges());
+      expect(write).toHaveBeenCalled();
     });
   });
 });

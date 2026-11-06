@@ -32,6 +32,9 @@ const IDENTITY: Matrix2D = [1, 0, 0, 1, 0, 0];
 const LAYOUT_UNITS_PER_PX = 64;
 const GRID_TOLERANCE_PX = 1 / 2048;
 
+/** How much nearer the scaled size must be, px, for the box to carry it. */
+const SCALE_TOLERANCE_PX = 1 / 32;
+
 function hasTransform(style: CSSStyleDeclaration): boolean {
   return TRANSFORM_PROPERTIES.some(name => {
     const value = style.getPropertyValue(name);
@@ -135,6 +138,48 @@ function canUndoByCalculation(
   return !(layer.getAnimations?.() ?? []).some(animation => animation.pending);
 }
 
+/** The layer's border-box size in layout px, unrounded, from its used size. */
+function layoutSize(style: CSSStyleDeclaration): {width: number; height: number} {
+  const px = (name: string) => parseFloat(style.getPropertyValue(name)) || 0;
+  const isContentBox = style.getPropertyValue('box-sizing') !== 'border-box';
+  const extra = (sides: [string, string]) =>
+    isContentBox
+      ? sides.reduce(
+          (sum, side) => sum + px(`padding-${side}`) + px(`border-${side}-width`),
+          0,
+        )
+      : 0;
+  return {
+    width: px('width') + extra(['left', 'right']),
+    height: px('height') + extra(['top', 'bottom']),
+  };
+}
+
+/**
+ * Whether the box read carries the scale of `matrix`. Right after a layer
+ * shows, Chromium can report its entrance's first frame in the computed style
+ * while the box read is still laid out without it. The box carries the scale
+ * only when its size is clearly nearer the layout size times the scale than
+ * the layout size itself. A scale too near 1 to tell them apart does not
+ * count.
+ */
+function carriesScale(
+  rect: DOMRect,
+  style: CSSStyleDeclaration,
+  [a, , , d]: Matrix2D,
+): boolean {
+  const {width, height} = layoutSize(style);
+  if (!(width > 0) || !(height > 0)) {
+    return false;
+  }
+  const scaledError =
+    Math.abs(rect.width - width * Math.abs(a)) +
+    Math.abs(rect.height - height * Math.abs(d));
+  const unscaledError =
+    Math.abs(rect.width - width) + Math.abs(rect.height - height);
+  return scaledError + SCALE_TOLERANCE_PX < unscaledError;
+}
+
 function onLayoutGrid(value: number): number {
   const snapped = Math.round(value * LAYOUT_UNITS_PER_PX) / LAYOUT_UNITS_PER_PX;
   return Math.abs(snapped - value) < GRID_TOLERANCE_PX ? snapped : value;
@@ -192,8 +237,9 @@ function untransform(
  * tooltip that fits beside its trigger can read as covering it while it
  * enters. A transform that only translates and scales, as a running
  * entrance does, is undone from the one box read (`untransform`) where
- * `canUndoByCalculation` allows it: nothing is written, so the read forces no
- * extra style or layout work. A layer that transitions a transform property is
+ * `canUndoByCalculation` allows it and the box carries the scale
+ * (`carriesScale`): nothing is written, so the read forces no extra style or
+ * layout work. A layer that transitions a transform property is
  * also only read, since restoring an overridden value would start that
  * transition. Otherwise the layer's transforms are overridden with
  * `none !important` for one read, which outranks an animation. They are restored in the same task, so no frame
@@ -213,7 +259,10 @@ export function settledBox(layer: HTMLElement): DOMRect {
     isAxisAligned(matrix) &&
     canUndoByCalculation(layer, style)
   ) {
-    return untransform(layer.getBoundingClientRect(), layer, style, matrix);
+    const rect = layer.getBoundingClientRect();
+    if (carriesScale(rect, style, matrix)) {
+      return untransform(rect, layer, style, matrix);
+    }
   }
   const transitions = style
     .getPropertyValue('transition-property')
