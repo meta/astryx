@@ -53,7 +53,10 @@ import {iconBoxSizeStyles, type IconSize} from '../Icon/IconSize.stylex';
 import {EDGE_COMP_ATTR} from '../Layout/edgeCompensation.stylex';
 import {useSize} from '../SizeContext/SizeContext';
 import {useButtonGroup} from '../ButtonGroup/ButtonGroupContext';
-import {PressGroupContext} from '../hooks/pressGroupContext';
+import {
+  PressGroupContext,
+  pressGroupItemProps,
+} from '../hooks/pressGroupContext';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
 import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
 import {
@@ -83,6 +86,9 @@ registerEnglishFallback(english);
  * believed. Typed `string`, so StyleX reads it as a computed key.
  */
 const PRESSED_ON: string = '[data-astryx-press="on"]';
+
+/** `aria-haspopup` values of a trigger that keeps its own press and opening. */
+const MENU_POPUPS: ReadonlySet<string> = new Set(['true', 'menu', 'listbox']);
 
 /**
  * Base button styles
@@ -144,8 +150,20 @@ const styles = stylex.create({
       ':active:where(:not(:disabled,[aria-disabled="true"]))': {
         default: 'scale(0.98)',
         '@media (pointer: coarse)': 'scale(1)',
+        // Under reduced motion a press never scales the button. The overlay
+        // alone shows the press.
+        '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+          'scale(1)',
+        '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+          'scale(1)',
       },
-      [PRESSED_ON]: 'scale(0.98)',
+      [PRESSED_ON]: {
+        default: 'scale(0.98)',
+        '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+          'scale(1)',
+        '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+          'scale(1)',
+      },
     },
   },
   // A tracked action's own `:active` image paints nothing: the tracker paints
@@ -157,7 +175,13 @@ const styles = stylex.create({
   pressableTracked: {
     transform: {
       default: 'scale(1)',
-      [PRESSED_ON]: 'scale(0.98)',
+      [PRESSED_ON]: {
+        default: 'scale(0.98)',
+        '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+          'scale(1)',
+        '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+          'scale(1)',
+      },
     },
   },
   inactive: {
@@ -651,7 +675,14 @@ export function Button({
   const t = useComponentTranslator();
   const size = useSize(sizeProp, 'md');
   const buttonGroup = useButtonGroup();
-  const isGroupTracked = use(PressGroupContext);
+  // A tracking group's tracker paints this button's pointer press. A menu
+  // trigger is not tracked: it keeps its own press and opening.
+  const groupPointers = use(PressGroupContext);
+  const groupItemProps =
+    groupPointers != null && !MENU_POPUPS.has(String(props['aria-haspopup']))
+      ? pressGroupItemProps(groupPointers)
+      : undefined;
+  const isGroupTracked = groupItemProps != null;
   const inputGroup = useInputGroup();
 
   const [isPending, startTransition] = useTransition();
@@ -928,6 +959,7 @@ export function Button({
           : undefined)}
         {...sharedMergedProps}
         {...pressFeedback}
+        {...groupItemProps}
         {...props}
         {...ariaLabelProp}
         {...describedByProp}
@@ -952,6 +984,7 @@ export function Button({
           : undefined)}
         {...sharedMergedProps}
         {...pressFeedback}
+        {...groupItemProps}
         {...props}
         {...ariaLabelProp}
         {...describedByProp}

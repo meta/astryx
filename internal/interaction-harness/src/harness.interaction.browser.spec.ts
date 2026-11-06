@@ -67,6 +67,8 @@ import {
   countBetween,
   cubicBezier,
   CONTROL_RGB,
+  CONTROL_SIDE,
+  controlClock,
   curveOf,
   drag,
   flick,
@@ -108,6 +110,7 @@ import {
   TouchPageStallError,
   touchStoryboard,
   traceRendering,
+  trackControl,
   trackMarker,
   waitForAnimation,
   releaseAnimationLog,
@@ -1061,6 +1064,39 @@ test.describe('frame evidence', () => {
     await control.remove();
   });
 
+  test('a control started ahead runs half a leg ahead of the first, in the strip below, and the two read every frame', async ({
+    page,
+  }, testInfo) => {
+    await busyFixture(page);
+    const first = await startBusyControl(page);
+    const ahead = await startBusyControl(page, {ahead: true});
+    // Half a leg ahead of the first, on the page clock.
+    expect(first.start - ahead.start).toBeCloseTo(200, 0);
+    const cast = await startScreencast(page);
+    // Five turns of the first control.
+    await page.waitForTimeout(2000);
+    const castFrames = await cast.stop();
+    const one = await trackControl(page, castFrames);
+    const two = await trackControl(page, castFrames, {ahead: true});
+    // Each box shows on every frame, the one ahead in the strip below.
+    expect(one.every(f => f.box != null)).toBe(true);
+    expect(two.every(f => f.box != null && f.box.y >= CONTROL_SIDE)).toBe(true);
+    // Where the first control reads nothing, within 36 px of a turn, the one
+    // ahead reads the frame.
+    const clocks = [controlClock(one), controlClock(two)];
+    const unread = castFrames.filter(f => clocks.every(c => !c.has(f.t)));
+    testInfo.annotations.push({
+      type: 'the controls read (frames)',
+      description: JSON.stringify({
+        frames: castFrames.length,
+        firstBlind: castFrames.filter(f => !clocks[0].has(f.t)).length,
+        unread: unread.length,
+      }),
+    });
+    expect(unread.map(f => f.t)).toEqual([]);
+    await first.remove();
+  });
+
   test('a hold that starts before the block is judged from its first presented change inside it; a single change and then a freeze still fails', async ({
     page,
   }) => {
@@ -1373,32 +1409,63 @@ test.describe('frame evidence', () => {
 
   test('rect sampling reads one rect per animation frame while the main thread is free', async ({
     page,
-    browserName,
   }) => {
     await fixture(page);
     const box = page.locator('#box');
+    // The box slides at 1/3 px per ms for a minute, longer than the test may
+    // run, so the sampling always reads it mid-slide. The slide starts in this
+    // call and the sampling in the next. A loaded machine can take longer
+    // between the two than a short slide lasts. The page also reads the box
+    // first in each animation frame it draws. The samples are judged against
+    // those reads, not against a frame rate the machine may not reach.
     await box.evaluate(el => {
-      el.animate(
-        [{transform: 'translateX(0px)'}, {transform: 'translateX(200px)'}],
-        {duration: 600, easing: 'linear'},
+      const animation = el.animate(
+        [{transform: 'translateX(0px)'}, {transform: 'translateX(20000px)'}],
+        {duration: 60_000, easing: 'linear'},
       );
+      const drawn: {t: number; x: number}[] = [];
+      (window as unknown as {drawn: typeof drawn}).drawn = drawn;
+      const read = (now: number) => {
+        drawn.push({
+          t: performance.timeOrigin + now,
+          x: el.getBoundingClientRect().x,
+        });
+        if (animation.playState === 'running') {
+          requestAnimationFrame(read);
+        }
+      };
+      requestAnimationFrame(read);
     });
     const samples = await sampleRects(box, 400);
-    const xs = samples.map(s => s.box?.x ?? NaN);
-    const gaps = samples
-      .slice(1)
-      .map((s, i) => s.t - samples[i].t)
-      .sort((a, b) => a - b);
-    const cadence = gaps[Math.floor(gaps.length / 2)];
-    expect(cadence).toBeLessThan(34);
-    expect(samples.length).toBeGreaterThanOrEqual(10);
-    if (browserName === 'chromium') {
-      // One sample per presented frame at 60 Hz. (Headless WebKit's animation
-      // frames are irregular, so only the cadence is checked there.)
-      expect(samples.length).toBeGreaterThanOrEqual(20);
-    }
-    expect(xs.every((x, i) => i === 0 || x >= xs[i - 1])).toBe(true);
-    expect(xs.at(-1) ?? 0).toBeGreaterThan(xs[0] + 80);
+    // One frame more, so the page has also read the frame after the last
+    // sample.
+    const drawn = await page.evaluate(
+      () =>
+        new Promise<{t: number; x: number}[]>(resolve => {
+          requestAnimationFrame(() => {
+            const w = window as unknown as {drawn: {t: number; x: number}[]};
+            resolve(w.drawn.slice());
+          });
+        }),
+    );
+    const times = samples.map(s => s.t);
+    expect(times.length).toBeGreaterThanOrEqual(2);
+    // One sample on each frame the page drew while sampling, and no other.
+    const first = drawn.findIndex(frame => frame.t === times[0]);
+    expect(times).toEqual(
+      drawn.slice(first, first + times.length).map(frame => frame.t),
+    );
+    // Each sample is its own frame's rect. It is read after the page's read
+    // in that frame and before its read in the next. WebKit reads a rect when
+    // it is read, which a loaded machine can put well past the frame's start.
+    samples.forEach((sample, i) => {
+      const x = sample.box?.x ?? NaN;
+      expect(x).toBeGreaterThanOrEqual(drawn[first + i].x);
+      expect(x).toBeLessThanOrEqual(drawn[first + i + 1].x);
+    });
+    expect(samples.at(-1)?.box?.x ?? NaN).toBeGreaterThan(
+      samples[0].box?.x ?? NaN,
+    );
   });
 
   test('the trace counts no Layout for a transform animation and one per frame for `top`', async ({
