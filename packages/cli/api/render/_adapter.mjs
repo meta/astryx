@@ -28,7 +28,7 @@ import {cliVersion} from '../../foundation/integrations/cli-peer-version.mjs';
 import {assertWithin, PathSafetyError} from '../../foundation/fs/path-safety.mjs';
 import {requireCoreDir} from '../../foundation/fs/paths.mjs';
 import {runChoice} from '../../foundation/release/run-context.mjs';
-import {PROJECT_PACKAGES, installedFrom, isServedPackage} from '../../foundation/render/served-packages.mjs';
+import {isServedPackage} from '../../foundation/render/served-packages.mjs';
 import {hostedRun, recordResolved} from '../../foundation/runtime/package-root.mjs';
 
 export {PAGE_EXTENSIONS, embeddedPathProblem};
@@ -246,8 +246,9 @@ function asAstryxError(e) {
  * The package set the CLI runs from, for a page outside a project
  * (architecture:cli-surface INV30): the Core it carries, found by the rule of
  * every command that answers from Core outside a project. Inside a project
- * (one the CLI counts as Astryx's, or a folder that installs Core, React or
- * StyleX) the project's packages serve the page alone, so this is null.
+ * (spec AST-081: a Core or CLI the folder reads, or a package.json that
+ * declares one) the project's packages serve the page alone, so this is
+ * null.
  * When the carried Core cannot be had, the reason is kept for the error a
  * page that needs it gets (spec AST-081 FR3).
  * @param {string} input absolute path of the page
@@ -255,7 +256,7 @@ function asAstryxError(e) {
  */
 function servedSet(input) {
   const dir = path.dirname(input);
-  if (runChoice(dir).inProject || PROJECT_PACKAGES.some(name => installedFrom(dir, name))) return null;
+  if (runChoice(dir).inProject) return null;
   try {
     return {dir: requireCoreDir(dir), integrations: hostedRun()?.integrations ?? []};
   } catch (e) {

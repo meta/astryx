@@ -398,13 +398,16 @@ export default function Page() {
     });
     expect(run.status).toBe(0);
     expect(JSON.parse(run.stdout).type).toBe('render.page');
-    expect(
-      fs.readFileSync(path.join(cwd, 'page.html'), 'utf-8'),
-    ).toContain('Hosted');
+    expect(fs.readFileSync(path.join(cwd, 'page.html'), 'utf-8')).toContain(
+      'Hosted',
+    );
     const sources = Object.fromEntries(
-      run.result().packages.map(
-        (/** @type {{name: string, source: string}} */ p) => [p.name, p.source],
-      ),
+      run
+        .result()
+        .packages.map((/** @type {{name: string, source: string}} */ p) => [
+          p.name,
+          p.source,
+        ]),
     );
     for (const name of [
       '@astryxdesign/core',
@@ -417,12 +420,16 @@ export default function Page() {
     expect(installedARelease(run.cache)).toBe(false);
   });
 
-  it("leaves a project's own React alone: a project that installs React but not Core gets no package from the set", () => {
-    const root = tempDir('react-project');
+  /**
+   * A folder with React installed and a page of each kind.
+   * @param {Record<string, unknown>} dependencies what its package.json declares
+   */
+  function reactFolder(dependencies) {
+    const root = tempDir('react-folder');
     writeJson(path.join(root, 'package.json'), {
-      name: 'react-project',
+      name: 'react-folder',
       private: true,
-      dependencies: {react: '*', 'react-dom': '*'},
+      dependencies,
     });
     const fromCore = createRequire(
       fileURLToPath(new URL('../../../core/package.json', import.meta.url)),
@@ -437,31 +444,51 @@ export default function Page() {
       );
     }
     fs.writeFileSync(
-      path.join(root, 'plain.jsx'),
-      "export default function Page() { return <p>project react</p>; }\n",
-    );
-    fs.writeFileSync(
       path.join(root, 'page.jsx'),
-      "import {Button} from '@astryxdesign/core';\nexport default () => <Button label=\"Go\" />;\n",
+      "import {useState} from 'react';\nimport {Button} from '@astryxdesign/core';\nexport default function Page() {\n  const [label] = useState('From the set');\n  return <Button label={label} />;\n}\n",
     );
-    const plain = host({
-      argv: ['--json', 'experimental', 'render', 'plain.jsx'],
-      cwd: root,
-    });
-    expect(plain.status).toBe(0);
-    const fromSet = plain
-      .result()
-      .packages.filter(
-        (/** @type {{source: string}} */ p) => p.source === 'package-set',
-      )
+    return root;
+  }
+
+  /**
+   * The packages a run took from the set; none when the run ended the way
+   * the bin ends one, before it could settle.
+   * @param {any} run
+   * @returns {string[]}
+   */
+  const fromSet = run =>
+    (run.result()?.packages ?? [])
+      .filter((/** @type {{source: string}} */ p) => p.source === 'package-set')
       .map((/** @type {{name: string}} */ p) => p.name);
-    expect(fromSet).not.toContain('react');
-    expect(fromSet).not.toContain('react-dom');
-    const page = host({
+
+  it('renders in a React app outside a project with the Core, React and React DOM of the set', () => {
+    const root = reactFolder({react: '*', 'react-dom': '*'});
+    const run = host({
       argv: ['--json', 'experimental', 'render', 'page.jsx'],
       cwd: root,
     });
-    expect(JSON.parse(page.stdout).code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+    expect(run.status).toBe(0);
+    expect(fs.readFileSync(path.join(root, 'page.html'), 'utf-8')).toContain(
+      'From the set',
+    );
+    expect(fromSet(run)).toEqual(
+      expect.arrayContaining(['@astryxdesign/core', 'react', 'react-dom']),
+    );
+  });
+
+  it("leaves a project's own React alone: a project that declares Core gets no package from the set", () => {
+    const root = reactFolder({
+      '@astryxdesign/core': SELF_VERSION,
+      react: '*',
+      'react-dom': '*',
+    });
+    const run = host({
+      argv: ['--json', 'experimental', 'render', 'page.jsx'],
+      cwd: root,
+    });
+    expect(JSON.parse(run.stdout).code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+    expect(fromSet(run)).not.toContain('react');
+    expect(fromSet(run)).not.toContain('react-dom');
   });
 
   it("names a project's own integration as the project's", () => {

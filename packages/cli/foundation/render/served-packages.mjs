@@ -11,7 +11,6 @@
  * @position foundation/render — read by render-page.mjs and page-worker.mjs.
  */
 
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {createRequire} from 'node:module';
 
@@ -19,25 +18,10 @@ import {createRequire} from 'node:module';
 const RUNTIME = ['react', 'react-dom', '@stylexjs/stylex'];
 
 /**
- * The packages beside the page that make its folder a project of its own for
- * a render: when it installs any of them, the project's packages serve the
- * page alone, so React and StyleX never come from two places.
+ * React and StyleX hold state per copy, so a page outside a project loads
+ * the set's copy of each, as the packages from the set do.
  */
-export const PROJECT_PACKAGES = ['@astryxdesign/core', ...RUNTIME];
-
-/**
- * Whether `name` is installed for `dir`: in a `node_modules` folder at or
- * above it. Only what is installed there counts, never NODE_PATH.
- * @param {string} dir
- * @param {string} name
- * @returns {boolean}
- */
-export function installedFrom(dir, name) {
-  for (let d = path.resolve(dir); ; d = path.dirname(d)) {
-    if (fs.existsSync(path.join(d, 'node_modules', ...name.split('/'), 'package.json'))) return true;
-    if (path.dirname(d) === d) return false;
-  }
-}
+export const SINGLE_COPY = RUNTIME;
 
 /**
  * The package a bare specifier names.

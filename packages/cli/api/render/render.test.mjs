@@ -1194,21 +1194,20 @@ describe('render(): a page outside a project', () => {
     expect(fs.readFileSync(path.join(away, 'page-restored', 'page.tsx'), 'utf8')).toBe(PAGE);
   }, 60_000);
 
-  it("uses a folder's own React alone: a folder that installs React but not Core is a project", () => {
+  it('loads one React outside a project, even when the folder holds its own copy', () => {
     const sub = path.join(away, 'own-react');
     for (const name of ['react', 'react-dom']) {
       const target = path.dirname(createRequire(path.join(CLI_DIR, '../core/package.json')).resolve(`${name}/package.json`));
       fs.mkdirSync(path.join(sub, 'node_modules'), {recursive: true});
       fs.cpSync(target, path.join(sub, 'node_modules', name), {recursive: true, dereference: true});
     }
-    fs.writeFileSync(path.join(sub, 'plain.jsx'), "import {useState} from 'react';\nexport default function Page() {\n  const [v] = useState('own react');\n  return <p>{v}</p>;\n}\n");
-    const plain = runBin(sub, ['experimental', 'render', 'plain.jsx']);
-    expect(plain.status).toBe(0);
-    expect(fs.readFileSync(path.join(sub, 'plain.html'), 'utf8')).toContain('own react');
-    fs.writeFileSync(path.join(sub, 'page.jsx'), "import {Button} from '@astryxdesign/core';\nexport default () => <Button label=\"Go\" />;\n");
-    const page = runBin(sub, ['experimental', 'render', 'page.jsx']);
-    expect(page.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
-    expect(page.json.error).toContain('@astryxdesign/core');
+    fs.writeFileSync(
+      path.join(sub, 'page.jsx'),
+      "import {useState} from 'react';\nimport {TextInput} from '@astryxdesign/core';\nexport default function Page() {\n  const [v] = useState('typed');\n  return <TextInput label=\"Name\" value={v} onChange={() => {}} />;\n}\n",
+    );
+    const run = runBin(sub, ['experimental', 'render', 'page.jsx']);
+    expect(run.status).toBe(0);
+    expect(fs.readFileSync(path.join(sub, 'page.html'), 'utf8')).toContain('typed');
   }, 60_000);
 
   it('still names a package the CLI does not carry as not installed', () => {
