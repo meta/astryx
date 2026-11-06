@@ -14,7 +14,14 @@
  * - /packages/lab/src/TransferList/index.ts
  */
 
-import {useCallback, useEffect, useRef, useState, type ReactNode} from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Button} from '@astryxdesign/core/Button';
 import {
@@ -236,6 +243,21 @@ export function TransferListSelector<T extends string = string>({
     setDraftValue([...value]);
   }
 
+  // A disabled selector keeps its controls focusable (no native `disabled`,
+  // which would blur a focused control): every row's transfer and reorder
+  // controls take their own focusable disabled state instead.
+  const listOptions = useMemo(
+    () =>
+      isDisabled
+        ? options.map(option => ({
+            ...option,
+            isTransferDisabled: true,
+            isReorderDisabled: true,
+          }))
+        : options,
+    [isDisabled, options],
+  );
+
   const resolvedWidth =
     typeof width === 'number'
       ? `${width}px`
@@ -272,7 +294,7 @@ export function TransferListSelector<T extends string = string>({
               />
             )}
             <fieldset
-              disabled={isDisabled}
+              aria-disabled={isDisabled || undefined}
               {...stylex.props(
                 styles.fieldset,
                 state.isBusy && styles.fieldsetBusy,
@@ -280,9 +302,12 @@ export function TransferListSelector<T extends string = string>({
               <TransferList
                 label={label}
                 isLabelHidden
-                options={options}
+                options={listOptions}
                 value={transferListValue}
                 onChange={nextValue => {
+                  if (isDisabled) {
+                    return;
+                  }
                   // Now that busy no longer disables the fieldset, the controls
                   // stay live while a change is in flight; ignore transfers
                   // until it settles so one pending action cannot be stacked.
