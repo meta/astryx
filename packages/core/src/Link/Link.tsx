@@ -24,6 +24,7 @@ import {
   colorVars,
   durationVars,
   easeVars,
+  focusVars,
   spacingVars,
   typeScaleVars,
 } from '../theme/tokens.stylex';
@@ -107,9 +108,11 @@ const styles = stylex.create({
   },
   // Inside a clamped Text the root joins the text's line boxes, so the
   // clamp can cut through the link. An inline-flex box is atomic: a clamp
-  // cannot truncate it.
+  // cannot truncate it. The clamp also clips at the line edges, so the ring
+  // sits inside each line box.
   inClampedText: {
     display: 'inline',
+    outlineOffset: `calc(-1 * ${focusVars['--focus-outline-width']})`,
   },
   externalIconInClampedText: {
     marginInlineStart: spacingVars['--spacing-0-5'],

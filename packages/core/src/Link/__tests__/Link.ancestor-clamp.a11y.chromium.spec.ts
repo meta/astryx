@@ -3,11 +3,13 @@
 
 /**
  * Real-browser evidence for the ancestor clamp split: a text-only Link inside
- * `<Text maxLines={2}>` participates in the clamped lines, while a composed
- * Link keeps its inline-flex root and paints a keyboard focus outline.
+ * `<Text maxLines={2}>` participates in the clamped lines, a Link inside a
+ * one- or two-line clamp paints its whole keyboard focus ring inside the
+ * clamp, and a composed Link keeps its inline-flex root and paints a keyboard
+ * focus outline.
  */
 
-import {expect, test} from '@astryxdesign/a11y-spec/playwright';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -65,6 +67,75 @@ test('a text-only Link clamps inside an ancestor Text maxLines={2}', async ({
   expect(measured?.anchorBottomPastClamp).toBe(true);
 });
 
+/** The painted color at one viewport point, read from a real screenshot. */
+async function pixel(page: Page, x: number, y: number) {
+  const shot = await page.screenshot({clip: {x, y, width: 1, height: 1}});
+  return page.evaluate(async base64 => {
+    const blob = await (await fetch(`data:image/png;base64,${base64}`)).blob();
+    const bitmap = await createImageBitmap(blob);
+    const canvas = new OffscreenCanvas(1, 1);
+    const context = canvas.getContext('2d')!;
+    context.drawImage(bitmap, 0, 0);
+    const [r, g, b] = context.getImageData(0, 0, 1, 1).data;
+    return [r, g, b] as const;
+  }, shot.toString('base64'));
+}
+
+for (const [testId, tabs] of [
+  ['ancestor-clamp-text', 1],
+  ['ancestor-clamp-one-line', 2],
+] as const) {
+  test(`${testId}: a Link inside the clamp paints its whole keyboard focus ring`, async ({
+    page,
+  }) => {
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=core-link--clamped-by-ancestor-text&viewMode=story`,
+    );
+    const link = page.getByTestId(testId).locator('a');
+    await expect(link).toBeVisible();
+    for (let i = 0; i < tabs; i++) {
+      await page.keyboard.press('Tab');
+    }
+    await expect(link).toBeFocused();
+    const ring = await link.evaluate(el => {
+      const style = getComputedStyle(el);
+      const probe = document.createElement('span');
+      probe.style.color = style.outlineColor;
+      document.body.append(probe);
+      const color = getComputedStyle(probe)
+        .color.match(/[\d.]+/g)!
+        .slice(0, 3)
+        .map(Number);
+      probe.remove();
+      const line = el.getClientRects()[0];
+      return {
+        style: style.outlineStyle,
+        color,
+        line: {
+          x: line.left + line.width / 2,
+          top: line.top,
+          bottom: line.bottom,
+        },
+      };
+    });
+    expect(ring.style).not.toBe('none');
+    // The top and the bottom edge of the link's first line box show the ring:
+    // the clamp clips at its line edges, so an outside ring loses them.
+    for (const [edge, y] of [
+      ['top', ring.line.top + 1],
+      ['bottom', ring.line.bottom - 1.5],
+    ] as const) {
+      const painted = await pixel(page, Math.floor(ring.line.x), Math.floor(y));
+      const distance = Math.hypot(
+        painted[0] - ring.color[0],
+        painted[1] - ring.color[1],
+        painted[2] - ring.color[2],
+      );
+      expect(distance, `${edge} edge`).toBeLessThan(40);
+    }
+  });
+}
+
 test('a composed Link keeps its box and paints a keyboard focus outline', async ({
   page,
 }) => {
@@ -73,8 +144,9 @@ test('a composed Link keeps its box and paints a keyboard focus outline', async 
   );
   const link = page.getByTestId('composed-link');
   await expect(link).toBeVisible();
-  // The text-only link inside the paragraph is first in tab order; the
-  // composed link is the next stop, so keyboard focus reaches it visibly.
+  // The two clamped links come first in tab order; the composed link is the
+  // next stop, so keyboard focus reaches it visibly.
+  await page.keyboard.press('Tab');
   await page.keyboard.press('Tab');
   await page.keyboard.press('Tab');
   await expect(link).toBeFocused();

@@ -200,8 +200,9 @@ export const WrappedLines: Story = {
 };
 
 /**
- * A long Link inside `<Text maxLines={2}>` clamps with the ancestor text,
- * while a composed Link outside a clamp keeps its own box and focus ring.
+ * A long Link inside `<Text maxLines={2}>` or `<Text maxLines={1}>` clamps
+ * with the ancestor text and keeps an inset focus ring, while a composed Link
+ * outside a clamp keeps its own box and focus ring.
  */
 export const ClampedByAncestorText: Story = {
   tags: ['!autodocs'],
@@ -214,6 +215,12 @@ export const ClampedByAncestorText: Story = {
           summary
         </Link>{' '}
         and the closing remarks that follow the link in the same paragraph
+      </Text>
+      <Text maxLines={1} data-testid="ancestor-clamp-one-line">
+        <Link href="/roadmap">
+          Roadmap for the next two quarters with every milestone
+        </Link>{' '}
+        and the owners
       </Text>
       <p style={{margin: 0}} data-testid="composed-host">
         <Link href="/team" data-testid="composed-link">

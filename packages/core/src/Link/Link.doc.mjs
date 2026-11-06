@@ -188,6 +188,7 @@ export const docs = {
       { guidance: false, description: 'Use generic text like "click here" or "read more"; describe the destination.' },
       { guidance: false, description: 'Set `label` on text links; `aria-label` prevents assistive technology from reading the actual link content.' },
       { guidance: false, description: 'Give a Link inside a clamped Text its own `display` or `maxLines`, or render it as a button (`onClick` with no `href`), and expect the outer clamp to cut it; that Link keeps its own box.' },
+      { guidance: false, description: 'Put a Link with block-level content, such as an HStack with an icon, inside a clamped Text; block content breaks the clamp. Clamp a text-only Link, or place the composed Link outside the clamp.' },
     ],
     anatomy: [
       {name: 'Label', required: true, description: 'The visible text of the link.'},
@@ -322,6 +323,7 @@ export const docsZh = {
       { guidance: false, description: 'Use generic text like "click here" or "read more"; describe the destination.' },
       { guidance: false, description: 'Set `label` on text links; `aria-label` prevents assistive technology from reading the actual link content.' },
       { guidance: false, description: 'Give a Link inside a clamped Text its own `display` or `maxLines`, or render it as a button (`onClick` with no `href`), and expect the outer clamp to cut it; that Link keeps its own box.' },
+      { guidance: false, description: 'Put a Link with block-level content, such as an HStack with an icon, inside a clamped Text; block content breaks the clamp. Clamp a text-only Link, or place the composed Link outside the clamp.' },
     ],
     anatomy: [
       {name: 'Label', required: true, description: 'The visible text of the link.'},
@@ -347,6 +349,7 @@ export const docsDense = {
       { guidance: false, description: 'Use generic text like "click here" or "read more"; describe the destination.' },
       { guidance: false, description: 'Set `label` on text links; `aria-label` prevents assistive technology from reading the actual link content.' },
       { guidance: false, description: 'Give a Link inside a clamped Text its own `display` or `maxLines`, or render it as a button (`onClick` with no `href`), and expect the outer clamp to cut it; that Link keeps its own box.' },
+      { guidance: false, description: 'Put a Link with block-level content, such as an HStack with an icon, inside a clamped Text; block content breaks the clamp. Clamp a text-only Link, or place the composed Link outside the clamp.' },
     ],
     anatomy: [
       {name: 'Label', required: true, description: 'The visible text of the link.'},
