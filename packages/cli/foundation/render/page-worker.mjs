@@ -8,7 +8,11 @@
  * It runs in a worker thread so a page that never finishes rendering can be
  * stopped, and so nothing the page prints reaches the CLI's own output.
  *
- * @input workerData {entry, root}
+ * Outside a project, the Astryx packages the page's folder lacks resolve
+ * from the package set the CLI runs from (served-packages.mjs), and React and
+ * StyleX always come from that set, so the page loads one copy of each.
+ *
+ * @input workerData {entry, root, served}
  * @output one message: {ok: true, markup, css, files, texts, logs} or
  *   {ok: false, error: {code, message, detail?}}
  * @position foundation/render — started by render-page.mjs
@@ -16,17 +20,23 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {createRequire} from 'node:module';
+import Module, {createRequire, register} from 'node:module';
+import {pathToFileURL} from 'node:url';
 import {format} from 'node:util';
 import {parentPort, workerData} from 'node:worker_threads';
 import {transformSync} from '@babel/core';
 import {createJiti} from 'jiti';
 import {assetDataUri, isAssetPath} from './assets.mjs';
+import {SINGLE_COPY, isServedPackage, packageOf} from './served-packages.mjs';
+import {findNodeModulesPackage} from '../fs/paths.mjs';
 
 /** @typedef {{level: string, text: string}} PageLog */
 
-/** @type {{entry: string, root: string}} */
+/** @type {{entry: string, root: string, served: {dir: string, integrations: string[]} | null}} */
 const {entry, root} = workerData;
+
+/** The package set, for a page outside a project whose folder has no Core of its own. */
+const served = workerData.served && findNodeModulesPackage(path.dirname(entry), '@astryxdesign/core') === null ? workerData.served : null;
 const ROOT_PREFIX = root.endsWith(path.sep) ? root : root + path.sep;
 
 /** @type {PageLog[]} */
@@ -348,6 +358,96 @@ const resolveAlias = spec => {
   return spec;
 };
 
+/** Packages the page took from the package set, by name: their folders. */
+/** @type {Map<string, string>} */
+const fromSet = new Map();
+
+/**
+ * The folder of the package that holds `file`.
+ * @param {string} file
+ * @param {string} name
+ * @returns {string}
+ */
+function packageDirOf(file, name) {
+  for (let d = path.dirname(file); path.dirname(d) !== d; d = path.dirname(d)) {
+    try {
+      if (JSON.parse(fs.readFileSync(path.join(d, 'package.json'), 'utf8')).name === name) return d;
+    } catch {
+      // No package.json here, or one that does not parse: look further up.
+    }
+  }
+  return path.dirname(file);
+}
+
+const moduleApi = /** @type {any} */ (Module);
+
+/** A module at the served Core's folder: what resolves as the Core would. */
+const servedParent = served ? new moduleApi(path.join(served.dir, 'package.json')) : null;
+if (servedParent && served) {
+  servedParent.filename = servedParent.id;
+  servedParent.paths = moduleApi._nodeModulePaths(served.dir);
+}
+
+/**
+ * When the page's folder has no copy of a served package, take the one the
+ * package set holds. Node's resolver keeps each package's `exports`.
+ */
+function serveFromSet() {
+  if (!served || !servedParent) return;
+  const resolveFilename = moduleApi._resolveFilename;
+  moduleApi._resolveFilename = function (/** @type {string} */ request, /** @type {any[]} */ ...rest) {
+    // React, React DOM and StyleX come from the set for every module, a
+    // library in the page's folder included, so the page runs on one copy.
+    if (!request.startsWith('.') && !path.isAbsolute(request) && packageOf(request) in SINGLE_COPY_ALIASES) {
+      try {
+        return resolveFilename.call(this, request, servedParent, false);
+      } catch {
+        // The set has no such file: the importer's own copy serves.
+      }
+    }
+    try {
+      return resolveFilename.call(this, request, ...rest);
+    } catch (e) {
+      const name = /** @type {any} */ (e)?.code === 'MODULE_NOT_FOUND' && !request.startsWith('.') && !path.isAbsolute(request)
+        ? packageOf(request)
+        : null;
+      if (!name || !isServedPackage(name, served.integrations)) throw e;
+      const file = resolveFilename.call(this, request, servedParent, false);
+      if (!fromSet.has(name)) fromSet.set(name, packageDirOf(file, name));
+      return file;
+    }
+  };
+}
+
+/**
+ * React and StyleX keep state per copy, and the packages from the set load
+ * the set's copy. So outside a project the page's own modules load that copy
+ * too, even when its folder holds another one.
+ * @returns {Record<string, string>}
+ */
+function singleCopyAliases() {
+  /** @type {Record<string, string>} */
+  const alias = {};
+  if (!servedParent) return alias;
+  for (const name of SINGLE_COPY) {
+    try {
+      alias[name] = path.dirname(moduleApi._resolveFilename(`${name}/package.json`, servedParent, false));
+    } catch {
+      // The set has no copy: the page's own copy, if any, serves.
+    }
+  }
+  return alias;
+}
+const SINGLE_COPY_ALIASES = singleCopyAliases();
+serveFromSet();
+// ES modules follow the same rule through resolve hooks (CommonJS goes
+// through serveFromSet).
+if (servedParent && Object.keys(SINGLE_COPY_ALIASES).length > 0) {
+  register(new URL('./single-copy-hooks.mjs', import.meta.url), {
+    data: {parent: pathToFileURL(servedParent.filename).href, names: Object.keys(SINGLE_COPY_ALIASES)},
+  });
+}
+
 const plain = createJiti(entry, {fsCache: false, jsx: {runtime: 'automatic'}});
 
 const jiti = createJiti(entry, {
@@ -356,7 +456,7 @@ const jiti = createJiti(entry, {
   extensions: ['.js', '.mjs', '.cjs', '.jsx', '.ts', '.tsx', '.mts', '.cts', '.json'],
   moduleCache: true,
   interopDefault: true,
-  alias: ALIASES,
+  alias: {...SINGLE_COPY_ALIASES, ...ALIASES},
   jsx: {runtime: 'automatic'},
   transform(opts) {
     const filename = opts.filename ?? '';
@@ -495,6 +595,10 @@ try {
     classify(e);
     throw null;
   }
+  // The render always runs on React; StyleX only when the page uses it.
+  for (const [name, dir] of Object.entries(SINGLE_COPY_ALIASES)) {
+    if (name !== '@stylexjs/stylex' || packages.has(name)) fromSet.set(name, dir);
+  }
   /** @type {string} */
   let css = '';
   if (stylexRules.length > 0) {
@@ -508,6 +612,7 @@ try {
     packages: [...packages],
     packageCss,
     skippedCss,
+    fromSet: [...fromSet].map(([name, dir]) => ({name, dir})),
     assets: [...assetsInlined],
     files: localFiles,
     texts,
