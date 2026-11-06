@@ -87,11 +87,10 @@ reflows no line; only editing affordances appear or disappear.
   clips sideways (DEC-9).
 - **FR6 — Direction follows the text that carries it.** A prose block — a
   paragraph, heading, quote, or list item — lays out in the direction of its
-  own text on the RichText surfaces, `RichTextEditor` and `RichTextView`, at
-  any nesting depth. A block whose text has no strongly directional character
-  takes the direction of the surrounding Internationalization provider, which
-  covers an empty block, digits, punctuation, and an image. Core `Markdown`
-  lays every block out in the provider's direction.
+  own text on every surface, `Markdown`, `RichTextEditor` and `RichTextView`,
+  at any nesting depth. A block whose text has no strongly directional
+  character takes the direction of the surrounding Internationalization
+  provider, which covers an empty block, digits, punctuation, and an image.
 
   A container is not prose and takes its parent's direction whatever it
   holds: the provider's at the top level, its wrapper item's when nested. A
@@ -154,11 +153,13 @@ reflows no line; only editing affordances appear or disappear.
 
 ## Current-state impact
 
-`Markdown` already renders FR2–FR5 for its own output, and FR6 for every
-block, except where FR7 names
+`Markdown` already renders FR2–FR5 for its own output, except where FR7 names
 a link title and FR7 names character references. `RichTextEditor` and
 `RichTextView` are governed by FR2–FR11 for the
 constructs they render; their default editor theme follows FR2 and FR3.
+Implementation gap: `Markdown` and RichText lay every block out in the
+provider's direction (FR6); RichText's `direction: inherit` override in
+`editorTheme.ts` is part of that gap.
 `@astryxdesign/core/Markdown/parser` and `@astryxdesign/core/Markdown` export
 `decodeMarkdownCharacterReferences`, the DEC-5 decoder the RichText surfaces
 import with.
