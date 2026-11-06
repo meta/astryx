@@ -28,7 +28,7 @@ import type {ButtonSize} from '../Button';
 import {radiusVars, shadowVars} from '../theme/tokens.stylex';
 import type {Elevation} from '../utils/types';
 import {SizeProvider, useSize} from '../SizeContext/SizeContext';
-import {useInternalListFocus} from '../hooks/useListFocus';
+import {oneTabStopAmong, useInternalListFocus} from '../hooks/useListFocus';
 import {PressGroupContext} from '../hooks/pressGroupContext';
 import {
   GROUP_PRESS_POINTERS,
@@ -142,21 +142,10 @@ const elevationStyles = stylex.create({
 // -1. `a[href]` catches a Button rendered with `href`.
 const MEMBER_SELECTOR = 'button, a[href], [tabindex]';
 
-/**
- * The members of a disabled group, the Tab stop first: the member that held
- * the stop, else the first. A member inside an open layer is not a member.
- */
-function keepDisabledGroupStop(list: HTMLElement): HTMLElement[] {
-  const members = Array.from(
-    list.querySelectorAll<HTMLElement>(MEMBER_SELECTOR),
-  ).filter(member => member.closest('[role="group"], [popover]') === list);
-  const stop =
-    members.find(member => member.getAttribute('tabindex') === '0') ??
-    members[0];
-  return stop == null
-    ? members
-    : [stop, ...members.filter(member => member !== stop)];
-}
+const keepDisabledGroupStop = oneTabStopAmong(
+  MEMBER_SELECTOR,
+  '[role="group"], [popover]',
+);
 
 /**
  * Groups buttons with connected styling — shared borders, proper border-radius

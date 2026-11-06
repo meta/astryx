@@ -26,7 +26,7 @@ import * as stylex from '@stylexjs/stylex';
 import {spacingVars, sizeVars} from '../theme/tokens.stylex';
 import {mergeProps} from '../utils';
 import {Section} from '../Section/Section';
-import {useListFocus} from '../hooks/useListFocus';
+import {oneTabStopAmong, useInternalListFocus} from '../hooks/useListFocus';
 import {useKeyboardHint} from '../hooks/useKeyboardHint';
 import {SizeProvider} from '../SizeContext/SizeContext';
 import {edgeCompSlot} from '../Layout/edgeCompensation.stylex';
@@ -202,6 +202,11 @@ export interface ToolbarProps extends BaseProps<HTMLDivElement> {
   dividers?: ('top' | 'bottom' | 'start' | 'end')[];
 }
 
+// `a[href]` catches a Button rendered with `href`.
+const TOOLBAR_ITEMS = 'button, input, a[href], [tabindex]';
+const TOOLBAR_BOUNDARY = '[role="toolbar"], [popover]';
+const toolbarTabStop = oneTabStopAmong(TOOLBAR_ITEMS, TOOLBAR_BOUNDARY);
+
 /**
  * General-purpose toolbar with start, center, and end content slots.
  *
@@ -247,14 +252,16 @@ export function Toolbar({
 
   const gapVar = spacingVars[spacingStepToVar[gap]] as string;
 
-  const {listRef, handleKeyDown, handleFocus} = useListFocus<HTMLDivElement>({
-    // `a[href]` catches a Button rendered with `href`.
-    itemSelector: 'button, input, a[href], [tabindex]',
-    boundarySelector: '[role="toolbar"], [popover]',
-    orientation,
-    hasRovingTabIndex: true,
-    hasCaretGuard: true,
-  });
+  const {listRef, handleKeyDown, handleFocus} =
+    useInternalListFocus<HTMLDivElement>({
+      itemSelector: TOOLBAR_ITEMS,
+      boundarySelector: TOOLBAR_BOUNDARY,
+      orientation,
+      hasRovingTabIndex: true,
+      hasCaretGuard: true,
+      // A read-only toolbar of disabled controls stays one Tab stop.
+      tabStopOrder: toolbarTabStop,
+    });
 
   const {
     hintElement,

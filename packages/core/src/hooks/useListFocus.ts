@@ -355,6 +355,39 @@ export function useListFocus<T extends HTMLElement = HTMLElement>(
   return useInternalListFocus<T>(options);
 }
 
+function isDisabledItem(el: HTMLElement): boolean {
+  return (
+    el.getAttribute('aria-disabled') === 'true' ||
+    (el as HTMLButtonElement).disabled === true ||
+    el.hasAttribute('disabled')
+  );
+}
+
+/**
+ * A `tabStopOrder` for a group whose disabled items stay focusable, such as a
+ * row of disabled Buttons. The group keeps one Tab stop while every item is
+ * disabled: the item that holds the stop, else the first enabled item, else
+ * the first item. With an enabled item it places the stop as the default does.
+ */
+export function oneTabStopAmong(
+  itemSelector: string,
+  boundarySelector: string,
+): (list: HTMLElement) => HTMLElement[] {
+  return list => {
+    const items = Array.from(
+      list.querySelectorAll<HTMLElement>(itemSelector),
+    ).filter(
+      el => !isHiddenWithin(el, list) && el.closest(boundarySelector) === list,
+    );
+    const enabled = items.filter(el => !isDisabledItem(el));
+    const candidates = enabled.length > 0 ? enabled : items;
+    const stop =
+      candidates.find(el => el.getAttribute('tabindex') === '0') ??
+      candidates[0];
+    return stop == null ? items : [stop, ...items.filter(el => el !== stop)];
+  };
+}
+
 /**
  * {@link useListFocus} with the Core-only {@link InternalListFocusOptions}.
  * Not re-exported from `hooks/index.ts`.
@@ -383,13 +416,7 @@ export function useInternalListFocus<T extends HTMLElement = HTMLElement>(
    * A `.focus()` call on such an element silently no-ops, so navigation must
    * skip these to avoid freezing on a disabled item (menus-4, navigation-5).
    */
-  const isItemDisabled = useCallback((el: HTMLElement): boolean => {
-    return (
-      el.getAttribute('aria-disabled') === 'true' ||
-      (el as HTMLButtonElement).disabled === true ||
-      el.hasAttribute('disabled')
-    );
-  }, []);
+  const isItemDisabled = useCallback(isDisabledItem, []);
 
   /**
    * Get all focusable items in the list.
