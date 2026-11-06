@@ -2997,9 +2997,9 @@ export function createMotionEngine(
 
   /**
    * How long `landing` still waits for its fade, in ms. A sampler that pauses
-   * the fade holds it, so it checks again later. A running fade holds it for
-   * the rest of the fade on the live clock. A fade at its end, or one the
-   * engine does not time, holds nothing.
+   * the fade holds it, so it checks again later. A fade that runs past the
+   * landing's due time, as after a pause, holds it for the rest of the fade.
+   * Any other fade holds nothing.
    */
   const fadeHeldFor = (landing: Landing): number => {
     const animation = running.get('opacity');
@@ -3021,8 +3021,28 @@ export function createMotionEngine(
     if (start == null || !Number.isFinite(duration)) {
       return 0;
     }
-    const left = Number(start) + duration - END_HOLD_MS - now();
-    return left > 0 ? Math.max(left, END_RECHECK_MS) : 0;
+    // A fade that ends by the landing's due time holds nothing. A timer runs
+    // in whole milliseconds, so it often fires a fraction early.
+    const end = Number(start) + duration - END_HOLD_MS;
+    if (landing.due != null && end <= landing.due) {
+      return 0;
+    }
+    const left = end - now();
+    return left > 0 ? left : 0;
+  };
+
+  /**
+   * The landing's timer: it lands once its fade lets it. A call that takes the
+   * landing over lands it directly, at once.
+   */
+  const landWhenFaded = (landing: Landing) => {
+    const held = fadeHeldFor(landing);
+    if (held > 0) {
+      landing.due = now() + held;
+      landing.timer = setTimeout(() => landWhenFaded(landing), held);
+      return;
+    }
+    land(landing);
   };
 
   /** Arms a landing from the call's start (the browser's, for a call from rest). */
@@ -3056,7 +3076,7 @@ export function createMotionEngine(
       }
       landing.due = start + landing.at;
       landing.timer = setTimeout(
-        () => land(landing),
+        () => landWhenFaded(landing),
         Math.max(0, landing.due - now()),
       );
     });
@@ -3072,14 +3092,6 @@ export function createMotionEngine(
    * and the call settles then.
    */
   const land = (landing: Landing) => {
-    // A sampler that pauses the fade, or seeks it back, holds the landing too.
-    // The travel is written once the fade reaches its end on its own clock.
-    const held = fadeHeldFor(landing);
-    if (held > 0) {
-      landing.due = now() + held;
-      landing.timer = setTimeout(() => land(landing), held);
-      return;
-    }
     landings.delete(landing);
     landing.timer = null;
     const time = now();

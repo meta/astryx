@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] Under Reduce Motion, a cross-fade's move waits for its fade on the fade's own clock. A fade the browser starts late, or one a test harness holds, no longer shows the element jumping, or lets an exit's element go, before it is transparent.
+[fix] Under Reduce Motion, a cross-fade's move and its call's settle wait while a sampler pauses its fade, so the element never moves, and an exit's element never goes, while the paused fade still shows.
 
 @vjeux

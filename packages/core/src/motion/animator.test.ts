@@ -52,6 +52,8 @@ interface Recorded {
   /** Finished from outside (a sampler's `finish()`), keeping its start. */
   finished: boolean;
   readonly playState: 'idle' | 'paused' | 'running' | 'finished';
+  /** Its timing, as the browser reports it: the duration it was given. */
+  readonly effect: {getTiming(): {duration: number}};
   ready: Promise<Recorded>;
   commit(at: number): void;
   finish(): void;
@@ -136,6 +138,11 @@ beforeEach(() => {
       cancelled: false,
       paused: false,
       finished: false,
+      effect: {
+        getTiming: () => ({
+          duration: Number((options as KeyframeAnimationOptions)?.duration),
+        }),
+      },
       get playState() {
         return this.cancelled
           ? 'idle'
