@@ -285,6 +285,8 @@ export function accept({
 
   // A shot from before per-shot dates carries the manifest's earlier date.
   const earlierCapturedAt = manifest.capturedAt;
+  // The run that captured the pixels, not the run that accepts them.
+  const captureRunId = currentManifest.context?.runId ?? null;
   const promoted = [];
   for (const key of keys) {
     const source = path.join(captureDir, 'shots', `${key}.png`);
@@ -293,7 +295,7 @@ export function accept({
     manifest.shots[key] = {
       ...currentManifest.shots[key],
       capturedAt: currentManifest.capturedAt,
-      ...(runId ? {runId} : {}),
+      ...(captureRunId ? {runId: String(captureRunId)} : {}),
     };
     promoted.push(key);
   }

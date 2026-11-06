@@ -211,9 +211,13 @@ describe('accept', () => {
     expect(readBaseline(baselineDir).manifest.decisions).toHaveLength(2);
   });
 
-  it('dates each promoted shot, and dates the manifest by its oldest shot', () => {
+  it('dates each promoted shot by its capture and capture run, and dates the manifest by its oldest shot', () => {
     // The first accept dates the whole manifest by its only capture.
-    promote({keys: ['a', 'b'], runId: '100'});
+    promote({
+      keys: ['a', 'b'],
+      runId: 'accepting-job',
+      currentManifest: {...currentManifest, context: {runId: '100'}},
+    });
     let manifest = JSON.parse(
       fs.readFileSync(path.join(baselineDir, 'manifest.json'), 'utf8'),
     );
@@ -225,10 +229,10 @@ describe('accept', () => {
     // A later accept of one shot dates that shot, not the manifest.
     promote({
       keys: ['b'],
-      runId: '200',
       currentManifest: {
         ...currentManifest,
         capturedAt: '2026-11-06T00:00:00.000Z',
+        context: {runId: '200'},
       },
     });
     manifest = JSON.parse(
@@ -270,6 +274,8 @@ describe('accept', () => {
     );
     expect(manifest.shots.b.capturedAt).toBeUndefined();
     expect(manifest.shots.a.capturedAt).toBe('2026-11-06T00:00:00.000Z');
+    // A capture that names no run records none; the accepting run is not it.
+    expect(manifest.shots.a.runId).toBeUndefined();
     expect(manifest.capturedAt).toBe('2026-09-30T00:00:00.000Z');
   });
 
