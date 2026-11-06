@@ -19,8 +19,8 @@ export const docs = {
   props: [
     {
       name: 'collapsible',
-      type: '{isCollapsed: boolean, onCollapsedChange: (isCollapsed: boolean) => void}',
-      description: 'The same controlled collapsible config passed to SideNav. Only needed when the button is rendered outside the sidenav, where collapse context cannot reach it.',
+      type: '{isCollapsed: boolean, onCollapsedChange: (isCollapsed: boolean) => void, defaultIsCollapsed?: boolean, hasButton?: boolean, buttonLabel?: string}',
+      description: 'The same controlled collapsible config passed to SideNav, with all its keys. Only needed when the button is rendered outside the sidenav, where collapse context cannot reach it.',
     },
     {
       name: 'handleRef',
@@ -53,8 +53,8 @@ export const docsZh = {
   props: [
     {
       name: 'collapsible',
-      type: '{isCollapsed: boolean, onCollapsedChange: (isCollapsed: boolean) => void}',
-      description: '与 SideNav 相同的受控 collapsible 配置。仅在按钮渲染在侧边栏外部、无法读取折叠上下文时需要。',
+      type: '{isCollapsed: boolean, onCollapsedChange: (isCollapsed: boolean) => void, defaultIsCollapsed?: boolean, hasButton?: boolean, buttonLabel?: string}',
+      description: '与 SideNav 相同的受控 collapsible 配置，包含其全部键。仅在按钮渲染在侧边栏外部、无法读取折叠上下文时需要。',
     },
     {
       name: 'handleRef',
@@ -85,7 +85,7 @@ export const docsDense = {
   displayName: 'Side Nav Collapse Button',
   description: 'Toggle button for sidenav collapse. Place inside SideNav (reads context) or outside (pass the same controlled collapsible config both get). Icon-only ghost button by default.',
   propDescriptions: {
-    collapsible: 'Controlled collapsible config, same object SideNav gets. Only needed when button rendered outside sidenav.',
+    collapsible: 'Controlled collapsible config, same object SideNav gets, all keys allowed. Only needed when button rendered outside sidenav.',
     handleRef: 'Deprecated. Pass collapsible instead.',
     label: 'Custom label. Text button w/ chevron when provided, icon-only when omitted.',
     size: "Button size. Inherits from the container ('sm' in a SideNav footer), else 'md'.",
