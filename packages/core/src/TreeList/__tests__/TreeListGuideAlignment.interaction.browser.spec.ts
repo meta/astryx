@@ -200,3 +200,49 @@ test("a parent's guide line runs unbroken past an expanded child's rows to its l
     await context.close();
   }
 });
+
+test('at a wide row gap a last connector ends at its row, and a first one starts at its parent', async ({
+  page,
+}) => {
+  await openStory(page, 'ltr', 'lineGuides');
+  const issues = await page.evaluate(async () => {
+    const tree = document.querySelector<HTMLElement>('.astryx-tree-list');
+    tree?.style.setProperty('--tree-list-row-gap', '16px');
+    await new Promise(requestAnimationFrame);
+    const found: string[] = [];
+    for (const item of document.querySelectorAll('[role="treeitem"]')) {
+      if (Number(item.getAttribute('aria-level')) < 2) {
+        continue;
+      }
+      const wrapper = item.firstElementChild;
+      const row = wrapper?.querySelector('.astryx-tree-list-item');
+      // The row's own connector is the guide in its innermost column.
+      const own = [
+        ...(wrapper?.firstElementChild?.querySelectorAll(
+          '.astryx-tree-list-guide',
+        ) ?? []),
+      ]
+        .map(line => line.getBoundingClientRect())
+        .sort((a, b) => b.left - a.left)[0];
+      if (wrapper == null || row == null || own == null) {
+        found.push(`${item.getAttribute('data-tree-id')}: no connector`);
+        continue;
+      }
+      const name = item.getAttribute('data-tree-id');
+      const last =
+        item.getAttribute('aria-posinset') ===
+        item.getAttribute('aria-setsize');
+      if (last && own.bottom > row.getBoundingClientRect().bottom + 0.5) {
+        found.push(
+          `${name}: ends ${own.bottom} past ${row.getBoundingClientRect().bottom}`,
+        );
+      }
+      const top = wrapper.getBoundingClientRect().top;
+      if (item.getAttribute('aria-posinset') === '1' && own.top > top + 0.5) {
+        found.push(`${name}: starts ${own.top} below ${top}`);
+      }
+    }
+    return found;
+  });
+  expect(issues).toEqual([]);
+});

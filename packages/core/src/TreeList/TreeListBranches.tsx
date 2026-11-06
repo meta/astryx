@@ -40,6 +40,9 @@ const styles = stylex.create({
   // and let pointer input fall through to the row underneath.
   container: {
     height: '100%',
+    // From the row wrapper's top edge, so a line spans the gap padding above
+    // the row too.
+    insetBlockStart: 0,
     position: 'absolute',
     width: GUIDE_COLUMN_WIDTH,
     zIndex: 1,

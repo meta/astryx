@@ -315,8 +315,8 @@ export function TreeList({
   const {isTouch} = useTouchPresentation();
   // Under a finger, a tree with no handle animates inside itself. The rows
   // after a toggled row glide while its group fades on the same timing.
-  // Content after the tree takes its place at once, as only the app opts in
-  // its own area.
+  // Content after the tree takes its place at once, because only an app's own
+  // handle moves it.
   const ownLayout = useMemo(
     () => createAnimatedLayout(() => treeElementRef.current),
     [],
