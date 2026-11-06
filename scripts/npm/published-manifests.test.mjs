@@ -13,6 +13,7 @@ import {afterEach, describe, expect, it} from 'vitest';
 
 import {
   alignmentProblems,
+  canaryOnlyNames,
   isPublished,
   PENDING_ALIGNMENT,
   publishedPackages,
@@ -134,6 +135,47 @@ describe('the pending exception', () => {
     for (const manifest of cases) {
       expect(alignmentProblems(manifest, versions)).toHaveLength(1);
     }
+  });
+});
+
+describe('canary-only packages', () => {
+  const release = new Map([...versions, ['@astryxdesign/lab', '0.1.9']]);
+  const canaryOnly = new Set(['@astryxdesign/lab']);
+
+  it('refuses a stable package that names one', () => {
+    expect(
+      alignmentProblems(
+        {
+          name: '@astryxdesign/cli',
+          peerDependencies: {'@astryxdesign/lab': '0.1.9'},
+        },
+        release,
+        canaryOnly,
+      ),
+    ).toEqual([
+      '@astryxdesign/cli: peerDependencies names @astryxdesign/lab, which only the canary channel publishes',
+    ]);
+  });
+
+  it('lets a canary-only package name another at its version', () => {
+    expect(
+      alignmentProblems(
+        {
+          name: '@astryxdesign/charts',
+          private: true,
+          astryx: {canaryOnly: true},
+          peerDependencies: {'@astryxdesign/lab': '0.1.9'},
+        },
+        release,
+        canaryOnly,
+      ),
+    ).toEqual([]);
+  });
+
+  it("lists this repository's canary-only packages", () => {
+    const names = canaryOnlyNames(ROOT);
+    expect(names.has('@astryxdesign/lab')).toBe(true);
+    expect(names.has('@astryxdesign/core')).toBe(false);
   });
 });
 

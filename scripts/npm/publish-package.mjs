@@ -44,7 +44,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 
-import {alignmentProblems, releaseVersions} from './published-manifests.mjs';
+import {
+  alignmentProblems,
+  canaryOnlyNames,
+  releaseVersions,
+} from './published-manifests.mjs';
 import {DEFAULT_REGISTRY, fetchVersionDocument} from './registry.mjs';
 
 const DEFAULT_ATTEMPTS = 3;
@@ -214,9 +218,11 @@ async function main() {
   );
   const {name, version} = manifest;
   // Run from the repository root, as both publish jobs do.
+  const root = process.cwd();
   const misaligned = alignmentProblems(
     manifest,
-    releaseVersions(process.cwd()),
+    releaseVersions(root),
+    canaryOnlyNames(root),
   );
   if (misaligned.length > 0) {
     for (const problem of misaligned) console.error(problem);
