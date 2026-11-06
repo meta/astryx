@@ -263,6 +263,9 @@ const styles = stylex.create({
   // wider than the control it contains. Matches CheckboxInput.
   containerLabelHidden: {
     gap: 0,
+    // A hidden label's info button rises while it has keyboard focus. The
+    // row is its stacking boundary, so it never rises above page content.
+    isolation: 'isolate',
   },
   containerSpread: {
     justifyContent: 'space-between',
