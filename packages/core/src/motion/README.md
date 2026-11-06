@@ -59,11 +59,13 @@ names for their use (`springs.settle`, `timing.stateChangeMs`,
 a plain constant. The per-role tables stay internal (`spec:AST-094` DEC-15): a
 role plays its table value at the theme's tempo, and nothing reads the
 role's own CSS variable (`--motion-springs-settle`), so no page or theme
-style sets a role. A table's
-roles exist once its `register<Name>Table()` has run: the animator registers
-the Reduce Motion fade's curve, and code that plays the shared springs calls
-`registerSpringsTable()` before its first motion. The animator resolves each
-role it is handed when the motion starts; code that times something itself
+style sets a role. A table's roles exist once its `register<Name>Table()`
+has run. A page that plays no spring ships no springs registry; each spring
+role registers itself when the module that plays it loads (one idempotent
+in-memory write, no DOM). The navigation, paging and picker tables register
+themselves at import, and the animator registers the Reduce Motion fade's
+curve. The animator resolves each role it is handed when the
+motion starts; code that times something itself
 calls `resolveMotion(element, timing, 'stateChangeMs')`. Gesture thresholds and
 the timings that decide who gets a touch are not roles.
 
@@ -74,10 +76,7 @@ import {createMotionEngine} from '../motion/animator';
 import {coast} from '../motion/coast';
 import {solveSpringTowardRamp, toSpring} from '../motion/spring';
 import {resolveMotion} from '../motion/resolveMotion';
-import {registerSpringsTable, springs} from '../motion/uikit';
-
-// Once, so the springs are registered as their roles:
-registerSpringsTable();
+import {springs} from '../motion/uikit';
 
 const animator = createMotionEngine(sheet);
 // The animator plays a motion role (spec:AST-094 FR4), its table value, as the
