@@ -1144,10 +1144,14 @@ test('a settle keeps advancing every frame through an 800 ms main-thread block',
   await control.remove();
   // The settle ends with page 1's marker at its inset. The proof is told so:
   // the last decoded frame is the block's last, which a frozen settle holds.
+  // One presented frame cannot show the settle moving, so a run whose control
+  // moved on fewer than two frames is too little to judge. Both runs count.
   const proof = pooledBusyProof(runs, {
     axis: 'x',
     settledWithin: 1,
     settledAt: 8,
+    minRunFrames: 2,
+    minJudgedRuns: 2,
   });
   test.info().annotations.push({
     type: 'busy window',
@@ -1156,17 +1160,10 @@ test('a settle keeps advancing every frame through an 800 ms main-thread block',
   // The settle moves on every frame the control moves on, and in each run it
   // stalls no longer than the control.
   expect(proof.verdict.failures, proof.summary).toEqual([]);
-  // The pool judges the ratio. Each run still has to show motion in its own
-  // block. One presented frame cannot show the settle moving. So a run whose
-  // control moved on fewer than two frames is too little to judge.
+  // Each run's own block has to show the settle at a new position.
   proof.runs.forEach((run, i) => {
     const read = run.control;
-    const controlFrames = read?.moved ?? 0;
     const settleFrames = (read?.movedWith ?? 0) - (read?.belowStep ?? 0);
-    expect(
-      controlFrames,
-      `run ${i + 1}: the control moved on ${controlFrames} frames in its block, under 2: too little to judge. ${run.summary}`,
-    ).toBeGreaterThanOrEqual(2);
     expect(
       settleFrames,
       `run ${i + 1}: the settle showed a new position on ${settleFrames} frames in its block. ${run.summary}`,
