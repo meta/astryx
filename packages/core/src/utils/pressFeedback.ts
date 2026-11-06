@@ -201,10 +201,10 @@ const TIMER_MS: Record<NonNullable<PressStep['timer']>, number> = {
 
 /**
  * The release fade's clock on `element`, read once, at the release, from the
- * token its stylesheet reads: the theme's `--duration-exit`, resolved as the
- * release animation's duration resolves it. A value that is not a time gives
- * the token's default. Under Reduce Motion it is no longer than the Reduce
- * Motion fade, as in the stylesheet.
+ * token its stylesheet reads. That token is the theme's `--duration-exit`,
+ * resolved as the release animation's duration resolves it. A value that is
+ * not a time gives the token's default. Under Reduce Motion it is no longer
+ * than the Reduce Motion fade, as in the stylesheet.
  */
 export function pressFadeMs(element: Element): number {
   const exit =
