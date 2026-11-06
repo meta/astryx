@@ -26,6 +26,7 @@ import {
   drag,
   installTimerGate,
   openStory,
+  startBusyControl,
   startScreencast,
   Storyboard,
   tap as press,
@@ -34,6 +35,7 @@ import {
   touchDriver,
   waitForRest,
   withStorybook,
+  trackControl,
   writeEvidence,
   type CastFrame,
   type TouchDriver,
@@ -360,21 +362,37 @@ test('the AM/PM turn keeps advancing every frame through a blocked main thread',
   if (rect == null) {
     throw new Error('no AM/PM column');
   }
+  // The harness's busy-window control: a box the compositor moves along the
+  // top edge, in the same screencast. The turn is judged against what the
+  // compositor presented, not against a frame rate.
+  const control = await startBusyControl(page);
   const cast = await startScreencast(page);
   await page.waitForTimeout(300);
-  await turnOneRowDown(driver, hour);
-  // The page blocks itself once the AM/PM column has turned for 32 ms.
-  const busy = await blockMainThread(page, 600, {
+  // Armed before the drag, the page blocks itself once the AM/PM column has
+  // turned for 32 ms. Armed after it, the round trip would start the block
+  // later the busier the machine is.
+  const blocking = blockMainThread(page, 600, {
     during: stripOf(meridiem),
     minProgressMs: 32,
   });
+  await turnOneRowDown(driver, hour);
+  const busy = await blocking;
   await page.waitForTimeout(500);
-  const tracked = await textCentres(page, await cast.stop(), rect);
-  // Judged until the turn's end (the text centre in tenths of a px).
+  const castFrames = await cast.stop();
+  await control.remove();
+  const tracked = await textCentres(page, castFrames, rect);
+  const controlFrames = await trackControl(
+    page,
+    castFrames.filter(f => f.t >= busy.from - 300 && f.t <= busy.to + 100),
+  );
+  // Judged until the turn's end (the text centre in tenths of a px). The turn
+  // moves on every frame the control moves on, and it stalls no longer than
+  // the control.
   const spanned = {...busy, to: Math.min(busy.to, busy.from + TURN_MS - 32)};
   const proof = busyWindowProof(tracked, spanned, {
     axis: 'y',
     settledWithin: 5,
+    control: controlFrames,
   });
   await writeEvidence(
     'busy-main-thread/timewheels-meridiem-turn',

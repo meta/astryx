@@ -4,8 +4,8 @@
  * @file viewerTempo.ts
  * @input themeTempo.ts, for the custom property Lightbox's motion reads its
  *   tempo from
- * @output `slowViewer`: plays the open viewer's motion at tempo 3, until
- *   the function it returns runs
+ * @output `slowViewer`: plays the open viewer's motion at a slow tempo, 3
+ *   unless a proof asks for another, until the function it returns runs
  * @position Test helper for the Lightbox interaction specs' busy-main-thread
  *   proofs
  */
@@ -35,14 +35,17 @@ function tempoProperty(): string {
 }
 
 /**
- * Plays the open viewer's motion at tempo 3, through the property its motion
- * reads. A theme's tempo stops at 1.5, so tempo 3 is for these proofs only.
- * Every element in the viewer carries it, so no nested theme's own tempo
- * wins. Resolves with a function that puts the viewer's own tempo back.
+ * Plays the open viewer's motion at `tempo`, through the property its motion
+ * reads. A theme's tempo stops at 1.5, so a slower tempo is for these proofs
+ * only. Every element in the viewer carries it, so no nested theme's own
+ * tempo wins. Resolves with a function that puts the viewer's own tempo back.
  */
-export async function slowViewer(page: Page): Promise<() => Promise<void>> {
+export async function slowViewer(
+  page: Page,
+  tempo = 3,
+): Promise<() => Promise<void>> {
   const style = await page.addStyleTag({
-    content: `dialog, dialog * { ${tempoProperty()}: 3 !important; }`,
+    content: `dialog, dialog * { ${tempoProperty()}: ${tempo} !important; }`,
   });
   return async () => {
     await style.evaluate(element => {

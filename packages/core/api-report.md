@@ -641,6 +641,7 @@ component CodeBlock(props: CodeBlockProps)
   prop language?: string | CodeLanguage = 'plaintext'
   prop maxHeight?: number | string
   prop onCopy?: () => void
+  prop onCopyError?: (error: unknown) => void
   prop ref?: React.Ref<HTMLPreElement>
   prop size?: 'sm' | 'md'
   prop startLineNumber?: number = 1
@@ -2558,6 +2559,7 @@ component Timestamp(props: TimestampProps)
   prop isTimezoneShown?: boolean = false
   prop ref?: React.Ref<HTMLTimeElement>
   prop size?: TextSize
+  prop timezoneID?: string
   prop tooltipEntries?: ReadonlyArray<TimestampTooltipEntry> = undefined — a single default row with the full absolute time in the viewer's own time zone
   prop type?: TextType = 'supporting'
   prop value: string | number
