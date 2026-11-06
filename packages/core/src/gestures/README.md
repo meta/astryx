@@ -75,7 +75,10 @@ function Sheet() {
   while a finger that landed inside it is down, until its `scrollend` (the
   momentum is still the finger's), or, where the browser fires none (mobile
   Safari before 26), until its scroll events go quiet. Pass a ref, or the
-  document for the page. Outside React, `watchFingerScrolls(host, scroller)` and
+  document for the page. `options.onEnd` runs each time such a scroll ends,
+  once the reader says `false`; unmounting does not call it. It is
+  re-exported from `@astryxdesign/core/internal/touch` for Lab components
+  that watch a finger's scroll. Outside React, `watchFingerScrolls(host, scroller)` and
   `isFingerScroll(host, scroller)` from `fingerScroll.ts` do the same; that
   module adds passive scroll listeners only while something is watched.
 
