@@ -24,11 +24,15 @@ import {
   drag,
   flick,
   frames,
+  freezePageOn,
   holdAnimations,
+  installPageFreeze,
+  installTimerGate,
   openStory,
   pinch,
   releaseAnimations,
   sampleCurve,
+  thawPage,
   timeline,
   touchDriver,
   waitForAnimation,
@@ -456,15 +460,23 @@ test('under Reduce Motion a pinch released past the maximum settles in place, wi
   // design:reduced-motion DR1–DR2: what a release starts fades; it never
   // moves or scales on its way back.
   await page.emulateMedia({reducedMotion: 'reduce'});
+  // The freeze has to be in the page before the story loads, and it needs
+  // the timer gate too.
+  await installPageFreeze(page);
   // A small photo: its maximum zoom (under 4.5x at any pixel ratio) is
   // well within the pinch's 10x.
   const {driver, img, read} = await openPhone(page, {width: 300, height: 200});
+  await installTimerGate(page);
   const s = await read();
   const centre = {
     x: s.stage.x + s.stage.width / 2,
     y: s.stage.y + s.stage.height / 2,
   };
   let released = 1;
+  // The scene stops in the lift's own task, before the viewer hears the lift.
+  // The fade then starts held, however late this process reacts. A hold sent
+  // after the lift can come after a 200 ms fade ends on a loaded runner.
+  await freezePageOn(page, 'touchend');
   await driver.play(
     pinch({
       center: centre,
@@ -481,14 +493,15 @@ test('under Reduce Motion a pinch released past the maximum settles in place, wi
       },
     },
   );
-  await waitForAnimation(img);
   const held = await holdAnimations(page, img);
+  expect(held.length).toBeGreaterThan(0);
   const duration = Math.max(...held.map(a => a.curveEndMs));
   const opacity = curveOf(
     await sampleCurve(img, timeline(duration)),
     'opacity',
   ).map(x => x.value);
   await releaseAnimations(page);
+  await thawPage(page);
   // It fades out and back in while the scale lands at the maximum,
   // transparent: no travel back.
   expect(duration).toBeLessThanOrEqual(205);
