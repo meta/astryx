@@ -220,6 +220,16 @@ interface Settled {
   >;
 }
 
+/** What `readTranslation` reads off a row, before anything is written. */
+interface Translation {
+  readonly view: Window & typeof globalThis;
+  readonly row: HTMLElement;
+  readonly x: number;
+  readonly y: number;
+  readonly children: ReadonlyArray<HTMLElement | SVGElement>;
+  readonly transforms: ReadonlyArray<string>;
+}
+
 /**
  * Moves a row's own translation, such as a swipe's, onto its children. So the
  * row's box lies where the row lies in the list, while it shows the same
@@ -230,10 +240,12 @@ interface Settled {
  * same before and after the commit, so nothing glides it. With the
  * translation on the row, a row that a swipe carried out of the list's box
  * would lie out of view. Its exit would then clip the action. Only a
- * translation moves. Returns what to undo, or null when the row has no
- * translation of its own.
+ * translation moves. `readTranslation` reads it, and `settleTranslation`
+ * moves it, so a list reads every row before it writes any. Returns the
+ * row's translation and its children's transforms, or null when the row has
+ * no translation of its own.
  */
-function settleTranslation(row: HTMLElement): Settled | null {
+function readTranslation(row: HTMLElement): Translation | null {
   const view = row.ownerDocument.defaultView;
   if (view == null || typeof view.DOMMatrix !== 'function') {
     return null;
@@ -257,11 +269,27 @@ function settleTranslation(row: HTMLElement): Settled | null {
     (child): child is HTMLElement | SVGElement =>
       child instanceof view.HTMLElement || child instanceof view.SVGElement,
   );
-  // Every transform is read before any is written. A translation composes
-  // the same way whatever a child's transform origin.
-  const transforms = children.map(
-    child => view.getComputedStyle(child).transform,
-  );
+  return {
+    view,
+    row,
+    x: own.e,
+    y: own.f,
+    children,
+    // A translation composes the same way whatever a child's transform
+    // origin.
+    transforms: children.map(child => view.getComputedStyle(child).transform),
+  };
+}
+
+/** Moves a row's own translation onto its children. Returns what to undo. */
+function settleTranslation({
+  view,
+  row,
+  x,
+  y,
+  children,
+  transforms,
+}: Translation): Settled {
   const prior = [row, ...children].map(
     element =>
       [
@@ -273,7 +301,7 @@ function settleTranslation(row: HTMLElement): Settled | null {
   row.style.setProperty('transform', 'none');
   children.forEach((child, index) => {
     const current = transforms[index];
-    const shift = new view.DOMMatrix().translate(own.e, own.f);
+    const shift = new view.DOMMatrix().translate(x, y);
     const moved =
       current === '' || current === 'none'
         ? shift
@@ -418,14 +446,20 @@ export function useListLayoutUpdates(
     const settled: Settled[] = [];
     const tops = new Map<string, number>();
     if (near != null) {
+      // One pass reads every near row's translation and place before any
+      // settle is written. A settled row's place is its box without its own
+      // translation.
+      const translations: Translation[] = [];
       for (let index = near[0]; index <= near[1]; index++) {
-        const done = settleTranslation(elements[index]);
-        if (done != null) {
-          settled.push(done);
+        const translation = readTranslation(elements[index]);
+        const {top} = elements[index].getBoundingClientRect();
+        tops.set(order[index], top - (translation?.y ?? 0));
+        if (translation != null) {
+          translations.push(translation);
         }
       }
-      for (let index = near[0]; index <= near[1]; index++) {
-        tops.set(order[index], elements[index].getBoundingClientRect().top);
+      for (const translation of translations) {
+        settled.push(settleTranslation(translation));
       }
     }
     // The module exits only rows it measured, so every row in view is

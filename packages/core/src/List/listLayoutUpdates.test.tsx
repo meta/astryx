@@ -570,6 +570,92 @@ describe('List row updates through animatedLayout', () => {
     });
   });
 
+  it('reads every near row before it settles any swiped row: no read between two settles', async () => {
+    // jsdom has no DOMMatrix: a 2D one, enough for a translation.
+    class Matrix {
+      a = 1;
+      b = 0;
+      c = 0;
+      d = 1;
+      e = 0;
+      f = 0;
+      is2D = true;
+      constructor(init?: string) {
+        const translate = /translate\(([-\d.]+)px,\s*([-\d.]+)px\)/.exec(
+          init ?? '',
+        );
+        if (translate != null) {
+          this.e = Number(translate[1]);
+          this.f = Number(translate[2]);
+        }
+      }
+      translate(x: number, y: number) {
+        const next = new Matrix();
+        next.e = this.e + x;
+        next.f = this.f + y;
+        return next;
+      }
+      multiply(other: Matrix) {
+        return this.translate(other.e, other.f);
+      }
+      toString() {
+        return `matrix(1, 0, 0, 1, ${this.e}, ${this.f})`;
+      }
+    }
+    vi.stubGlobal('DOMMatrix', Matrix);
+    render(<Demo initial={['Inbox', 'Sent', 'Drafts', 'Archive']} />);
+    // Two rows a swipe left translated, with a row between them.
+    for (const label of ['Inbox', 'Drafts']) {
+      const row = [...document.querySelectorAll('li')].find(
+        li => li.textContent === label,
+      );
+      row?.style.setProperty('transform', 'translate(-40px, 0px)');
+    }
+    const log: string[] = [];
+    const inRow = (element: Element) => element.closest('li') != null;
+    const getComputedStyle = window.getComputedStyle.bind(window);
+    vi.spyOn(window, 'getComputedStyle').mockImplementation(
+      (element, pseudo) => {
+        if (inRow(element)) {
+          log.push('read');
+        }
+        return getComputedStyle(element, pseudo);
+      },
+    );
+    const rect = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      if (inRow(this)) {
+        log.push('read');
+      }
+      return rect.call(this);
+    };
+    const settles = new WeakSet<CSSStyleDeclaration>();
+    for (const row of document.querySelectorAll('li')) {
+      settles.add(row.style);
+    }
+    const setProperty = CSSStyleDeclaration.prototype.setProperty;
+    vi.spyOn(CSSStyleDeclaration.prototype, 'setProperty').mockImplementation(
+      function (this: CSSStyleDeclaration, name, value, priority) {
+        // A settle turns a row's own translation off.
+        if (name === 'transform' && value === 'none' && settles.has(this)) {
+          log.push('settle');
+        }
+        setProperty.call(this, name, value, priority);
+      },
+    );
+    try {
+      await change(['Inbox', 'Sent', 'New', 'Drafts', 'Archive']);
+    } finally {
+      Element.prototype.getBoundingClientRect = rect;
+      vi.unstubAllGlobals();
+    }
+    // The first two settles are the two swiped rows of the one change.
+    const first = log.indexOf('settle');
+    const second = log.indexOf('settle', first + 1);
+    expect(second, log.join(' ')).toBeGreaterThan(first);
+    expect(log.slice(first, second), log.join(' ')).not.toContain('read');
+  });
+
   it('a re-render with the same rows in the same order plays nothing', async () => {
     render(<Demo initial={['Inbox', 'Sent']} />);
     await change(['Inbox', 'Sent']);
