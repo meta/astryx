@@ -10,13 +10,7 @@
  * the domains of the first render.
  */
 
-import {
-  type CSSProperties,
-  useCallback,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from 'react';
+import {type CSSProperties, useCallback, useRef, useState} from 'react';
 import {createPortal} from 'react-dom';
 import {IconButton} from '@astryxdesign/core/IconButton';
 import {useChart} from './ChartContext';
@@ -178,9 +172,12 @@ export function ChartZoom({
     [xScale, yScale, onXDomainChange, onYDomainChange, xOnly, yOnly, zoomAxis],
   );
 
-  const surfaceRef = useRef<SVGRectElement>(null);
   const handleWheel = useCallback(
     (e: WheelEvent) => {
+      // A sideways wheel zooms nothing, so the page keeps its scroll.
+      if (e.deltaY === 0) {
+        return;
+      }
       e.preventDefault();
 
       const surface = e.currentTarget as SVGRectElement;
@@ -226,16 +223,15 @@ export function ChartZoom({
     ],
   );
 
-  // Syncs a native wheel listener on the zoom surface. React registers
-  // `wheel` as passive, so a React `onWheel` cannot stop the page scrolling.
-  useLayoutEffect(() => {
-    const surface = surfaceRef.current;
-    if (surface == null) {
-      return;
-    }
-    surface.addEventListener('wheel', handleWheel, {passive: false});
-    return () => surface.removeEventListener('wheel', handleWheel);
-  }, [handleWheel]);
+  // React registers `wheel` as passive, so a React `onWheel` cannot stop the
+  // page scrolling. The zoom surface's ref adds a native listener instead.
+  const surfaceRef = useCallback(
+    (surface: SVGRectElement) => {
+      surface.addEventListener('wheel', handleWheel, {passive: false});
+      return () => surface.removeEventListener('wheel', handleWheel);
+    },
+    [handleWheel],
+  );
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent<SVGRectElement>) => {
