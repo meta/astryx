@@ -27,7 +27,11 @@ import {
   type LexicalNode,
 } from 'lexical';
 import {RichTextEditor} from './RichTextEditor';
-import {RichTextEditorToolbar} from './RichTextEditorToolbar';
+import {
+  RICHTEXT_ICON_KEYS,
+  RichTextEditorToolbar,
+} from './RichTextEditorToolbar';
+import {registerIcons, resetIcons} from '@astryxdesign/core/Icon';
 
 // The popover's surface is a native popover, which jsdom does not draw open.
 const h = {hidden: true} as const;
@@ -37,6 +41,10 @@ beforeAll(() => {
   // selection into view in a focused editor.
   if (typeof Range.prototype.getBoundingClientRect !== 'function') {
     Range.prototype.getBoundingClientRect = () => new DOMRect();
+  }
+  // jsdom has no scrolling; opening the form brings the Link button into view.
+  if (typeof Element.prototype.scrollIntoView !== 'function') {
+    Element.prototype.scrollIntoView = () => {};
   }
 });
 
@@ -206,6 +214,33 @@ describe('RichTextEditorToolbar link popover', () => {
     }
   });
 
+  it('draws Apply and Cancel from the shared check and close icons, with no new richtext keys', async () => {
+    registerIcons({
+      check: <svg data-testid="shared-check" />,
+      close: <svg data-testid="shared-close" />,
+    });
+    try {
+      const editor = await renderEditor();
+      await seed(editor);
+      await openFromLinkButton();
+      expect(
+        screen
+          .getByRole('button', {name: 'Add link', ...h})
+          .querySelector('[data-testid="shared-check"]'),
+      ).not.toBeNull();
+      expect(
+        screen
+          .getByRole('button', {name: 'Cancel', ...h})
+          .querySelector('[data-testid="shared-close"]'),
+      ).not.toBeNull();
+      expect(Object.keys(RICHTEXT_ICON_KEYS)).not.toEqual(
+        expect.arrayContaining(['applyLink', 'removeLink', 'cancel']),
+      );
+    } finally {
+      resetIcons();
+    }
+  });
+
   it('edits a link the selection is in, and Remove unlinks it keeping the text', async () => {
     const editor = await renderEditor();
     await seed(editor, {link: true});
@@ -360,8 +395,15 @@ describe('RichTextEditorToolbar link popover', () => {
     });
     expect(button).toHaveAttribute('aria-expanded', 'false');
 
+    // The Link button can be scrolled out of view; opening brings it back.
+    const scrollIntoView = vi.fn();
+    button.scrollIntoView = scrollIntoView;
     // jsdom is not an Apple platform, so the primary modifier is Ctrl.
     fireEvent.keyDown(root, {key: 'k', code: 'KeyK', ctrlKey: true});
+    expect(scrollIntoView).toHaveBeenCalledWith({
+      block: 'nearest',
+      inline: 'nearest',
+    });
     const field = await screen.findByRole('textbox', {name: 'URL', ...h});
     await waitFor(() => expect(field).toHaveFocus());
     expect(button).toHaveAttribute('aria-expanded', 'true');

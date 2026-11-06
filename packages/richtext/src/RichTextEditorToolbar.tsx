@@ -74,7 +74,7 @@ import {Divider} from '@astryxdesign/core/Divider';
 import {Popover} from '@astryxdesign/core/Popover';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {HStack, StackItem} from '@astryxdesign/core/Layout';
-import {getExtendedIcon} from '@astryxdesign/core/Icon';
+import {Icon, getExtendedIcon} from '@astryxdesign/core/Icon';
 import {useThemeName} from '@astryxdesign/core/theme';
 import {isImeKeyEvent, isRenderable, rtlStyles} from '@astryxdesign/core/utils';
 import {
@@ -206,9 +206,6 @@ export const RICHTEXT_ICON_KEYS = {
   number: 'richtext:number',
   undo: 'richtext:undo',
   redo: 'richtext:redo',
-  applyLink: 'richtext:applyLink',
-  removeLink: 'richtext:removeLink',
-  cancel: 'richtext:cancel',
 } as const;
 
 const INLINE_FORMAT_ACTIONS = [
@@ -412,53 +409,6 @@ const defaultToolbarIcons: Record<string, ReactNode> = {
       />
     </svg>
   ),
-  applyLink: (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden="true">
-      <path
-        d="M5 12.5l4.5 4.5L19 7"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  ),
-  removeLink: (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden="true">
-      <path
-        d="M18 13l2-2a5 5 0 0 0-7-7l-2 2M6 11l-2 2a5 5 0 0 0 7 7l2-2M8 2v3M2 8h3M16 22v-3M22 16h-3"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  ),
-  cancel: (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden="true">
-      <path
-        d="M6 6l12 12M18 6L6 18"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-    </svg>
-  ),
 };
 
 /** Renders a short text label as a toolbar glyph (for heading buttons). */
@@ -499,6 +449,27 @@ function DirectionalGlyph({children}: {children: ReactNode}) {
   );
 }
 
+/**
+ * Remove's glyph. No shared icon name means "unlink", so it is fixed
+ * component artwork until component icon slots exist.
+ */
+const REMOVE_LINK_GLYPH = (
+  <svg
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+    fill="none"
+    aria-hidden="true">
+    <path
+      d="M18 13l2-2a5 5 0 0 0-7-7l-2 2M6 11l-2 2a5 5 0 0 0 7 7l2-2M8 2v3M2 8h3M16 22v-3M22 16h-3"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
 /** Room for a typical address beside the link form's icon buttons. */
 const LINK_POPOVER_WIDTH = 320;
 
@@ -511,8 +482,6 @@ interface ToolbarLinkFormProps {
   isEditing: boolean;
   /** The toolbar's size, so the form's controls match its buttons. */
   size: 'sm' | 'md' | 'lg';
-  /** The resolved glyphs for the form's icon buttons. */
-  icons: {applyLink: ReactNode; removeLink: ReactNode; cancel: ReactNode};
   onUrlChange: (url: string) => void;
   /** Applies the field's address; false when it was refused. */
   onApply: () => boolean;
@@ -531,7 +500,6 @@ function ToolbarLinkForm({
   error,
   isEditing,
   size,
-  icons,
   onUrlChange,
   onApply,
   onRemove,
@@ -539,21 +507,6 @@ function ToolbarLinkForm({
 }: ToolbarLinkFormProps) {
   const t = useTranslator();
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const setInput = useCallback((input: HTMLInputElement | null) => {
-    inputRef.current = input;
-    // TextInput has no props for these native hints: a URL keyboard on touch
-    // screens, and no spelling marks under an address. The field stays plain
-    // text, so a bare domain is not refused before the toolbar's own check
-    // turns it into an https link.
-    input?.setAttribute('inputmode', 'url');
-    input?.setAttribute('spellcheck', 'false');
-  }, []);
-  // The field takes focus as the form opens, a frame later so the popover is
-  // shown by then, whichever control comes first in its markup.
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => inputRef.current?.focus());
-    return () => cancelAnimationFrame(frame);
-  }, []);
   const apply = () => {
     if (!onApply()) {
       inputRef.current?.focus();
@@ -579,13 +532,18 @@ function ToolbarLinkForm({
       }}>
       <StackItem size="fill">
         <TextInput
-          ref={setInput}
+          ref={inputRef}
           label={t('@astryx.richTextEditor.link.url')}
           isLabelHidden
           value={url}
           size={size}
           width="100%"
           autoComplete="url"
+          // A URL keyboard on touch screens and no spelling marks under an
+          // address. The field stays plain text, so a bare domain reaches
+          // the toolbar's own check, which makes it an https link.
+          inputMode="url"
+          hasSpellCheck={false}
           placeholder={t('@astryx.richTextEditor.link.urlPlaceholder')}
           status={error ? {type: 'error', message: error} : undefined}
           statusVariant="detached"
@@ -602,7 +560,7 @@ function ToolbarLinkForm({
       </StackItem>
       <IconButton
         label={applyLabel}
-        icon={icons.applyLink}
+        icon={<Icon icon="check" />}
         variant="ghost"
         size={size}
         tooltip={applyLabel}
@@ -611,7 +569,7 @@ function ToolbarLinkForm({
       {isEditing && (
         <IconButton
           label={removeLabel}
-          icon={icons.removeLink}
+          icon={REMOVE_LINK_GLYPH}
           variant="ghost"
           size={size}
           tooltip={removeLabel}
@@ -620,7 +578,7 @@ function ToolbarLinkForm({
       )}
       <IconButton
         label={cancelLabel}
-        icon={icons.cancel}
+        icon={<Icon icon="close" />}
         variant="ghost"
         size={size}
         tooltip={cancelLabel}
@@ -925,6 +883,13 @@ export function RichTextEditorToolbar({
     );
     setIsEditingLink(context.isLink);
     setLinkError('');
+    // Cmd/Ctrl+K can open the form while the Link button is scrolled out of
+    // view, in the page or in the toolbar's own row. Bring it back so the
+    // popover opens beside it.
+    linkButtonRef.current?.scrollIntoView({
+      block: 'nearest',
+      inline: 'nearest',
+    });
     setIsLinkPopoverOpen(true);
   }, [
     applyLinkValue,
@@ -1208,10 +1173,12 @@ export function RichTextEditorToolbar({
           isOpen={isLinkPopoverOpen}
           onOpenChange={handleLinkPopoverOpenChange}
           isModal={false}
-          // The form focuses its field, and Cancel is its close control.
-          hasAutoFocus={false}
+          // Cancel is the form's close control.
           hasCloseButton={false}
-          placement="below"
+          // Above the toolbar, so the popover does not cover the editor's
+          // first lines, where the linked words often are. It flips below
+          // only when there is no room above.
+          placement="above"
           alignment="start"
           width={LINK_POPOVER_WIDTH}
           padding={2}
@@ -1222,11 +1189,6 @@ export function RichTextEditorToolbar({
                 error={linkError}
                 isEditing={isEditingLink}
                 size={size}
-                icons={{
-                  applyLink: icon('applyLink'),
-                  removeLink: icon('removeLink'),
-                  cancel: icon('cancel'),
-                }}
                 onUrlChange={value => {
                   setLinkUrl(value);
                   setLinkError('');
