@@ -223,10 +223,11 @@ These requirements describe shipped behavior on current `main`.
   option, search row, or other list content exists. Every open, in the popover
   and the bottom sheet alike, mounts the list. Every close removes it once the
   close settles: after the exit animation when one plays (`spec:AST-090`), so
-  the exit plays on the list. No list stays mounted while closed. Every open
-  starts the same way, the first included: the highlight starts on the
-  selected option, or on the first enabled option when none is selected; the
-  trigger's `aria-activedescendant` names it; and FR2 alignment applies.
+  the exit plays on the list. No list stays mounted while closed. The first open
+  starts its highlight where a later open by the same path starts it; the
+  element AR2 gives the combobox relationship (the trigger, or the search
+  input when search is on) names it in `aria-activedescendant`; and FR2
+  alignment applies.
   Closed-trigger typeahead (FR7) and the form value (FR6) read option data and
   the committed value, never the rendered list. The trigger names the list in
   `aria-controls` only while the list exists. Selector opts out of the
