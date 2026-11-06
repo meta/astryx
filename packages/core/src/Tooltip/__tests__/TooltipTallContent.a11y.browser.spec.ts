@@ -201,13 +201,20 @@ async function openReplacedTrigger(page: Page): Promise<number> {
   await expect(first).toBeVisible();
   await expect(page.getByRole('tooltip')).toBeVisible();
   await page.waitForTimeout(200);
-  // It opened above the first trigger, on its standard list.
+  // It opened above the first trigger, where its own position puts it.
   expect(
     await page.evaluate(sel => {
-      const el = document.querySelector(sel);
-      return el?.hasAttribute('data-astryx-clears-anchor');
+      const tip = (
+        document.querySelector(sel) as HTMLElement
+      ).getBoundingClientRect();
+      const trigger = (
+        Array.from(document.querySelectorAll('button')).find(
+          button => button.textContent === 'Trigger 1',
+        ) as HTMLElement
+      ).getBoundingClientRect();
+      return tip.bottom <= trigger.top;
     }, TOOLTIP),
-  ).toBe(false);
+  ).toBe(true);
   await page.getByRole('button', {name: 'Replace the trigger'}).click();
   const second = page.getByRole('button', {name: 'Trigger 2'});
   await expect(second).toBeVisible();
