@@ -10,14 +10,10 @@
  * - /packages/core/src/Layer/layerHost.test.ts
  */
 
-const LAYER_PORTAL_BOUNDARY_ATTRIBUTE = 'data-astryx-layer-portal-boundary';
-const EXTERNAL_DOM = 'external';
-const LAYER_DOM = 'layer';
+import {isRendererManagedRoot} from '../privateAttributes/layerPortalBoundary.stylex';
 
-/** @internal Excludes an integration-managed DOM tree from corrective portal targets. */
-export const __layerPortalBoundaryProps = {
-  [LAYER_PORTAL_BOUNDARY_ATTRIBUTE]: EXTERNAL_DOM,
-} as const;
+const LAYER_PORTAL_BOUNDARY_ATTRIBUTE = 'data-astryx-layer-portal-boundary';
+const LAYER_DOM = 'layer';
 
 export const layerPortalRootProps = {
   [LAYER_PORTAL_BOUNDARY_ATTRIBUTE]: LAYER_DOM,
@@ -161,7 +157,7 @@ export function resolveLayerPortalTarget(
       isTargetLayerOwned = false;
     } else if (
       outermostUnsafe !== null &&
-      boundary === EXTERNAL_DOM &&
+      isRendererManagedRoot(node) &&
       !isTargetLayerOwned
     ) {
       outermostUnsafe = node;

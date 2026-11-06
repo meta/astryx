@@ -104,6 +104,7 @@ import {
   type LexicalNode,
   type EditorThemeClasses,
 } from 'lexical';
+import {rendererManagedRootProps} from './privateAttributes/layerPortalBoundary.stylex';
 
 /**
  * Serialized state for an empty editor: a root containing a single empty
@@ -1059,8 +1060,8 @@ function EditorContentEditable({
       dynamicStyles.contentEditableMinHeight(minHeight),
     ),
     ...rest,
-    // Private layer/integration protocol; this DOM is reconciled by Lexical.
-    'data-astryx-layer-portal-boundary': 'external',
+    // Lexical reconciles this DOM, so Layer keeps corrective portals out.
+    ...rendererManagedRootProps,
   };
   if (placeholderText) {
     return (

@@ -8,11 +8,8 @@
  */
 
 import {afterEach, describe, expect, it} from 'vitest';
-import {
-  __layerPortalBoundaryProps,
-  layerPortalRootProps,
-  resolveLayerPortalTarget,
-} from './layerHost';
+import {layerPortalRootProps, resolveLayerPortalTarget} from './layerHost';
+import {rendererManagedRootProps} from '../privateAttributes/layerPortalBoundary.stylex';
 const roots: HTMLElement[] = [];
 function mount(html: string) {
   const root = document.createElement('div');
@@ -21,7 +18,7 @@ function mount(html: string) {
   roots.push(root);
   const managed = root.querySelector('#managed');
   if (managed) {
-    for (const [name, value] of Object.entries(__layerPortalBoundaryProps)) {
+    for (const [name, value] of Object.entries(rendererManagedRootProps)) {
       managed.setAttribute(name, value);
     }
   }
