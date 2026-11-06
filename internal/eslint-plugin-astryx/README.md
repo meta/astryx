@@ -232,7 +232,8 @@ them. When a plain-TS owner exists, its `.stylex.ts` sibling is not an owner:
 it writes the attribute's selectors only as literals that reach its own
 `stylex.create` calls (directly, or through module constants read only there),
 because StyleX resolves a selector only where it is written. It never sets the
-attribute or exports a selector.
+attribute or exports a selector, through a literal or through the name it
+imports from its owner, and it never re-exports the owner.
 
 ```ts
 // fine in privateAttributes/press.ts, a plain-TS owner
@@ -243,11 +244,13 @@ const styles = stylex.create({
   base: {opacity: {default: 1, [PRESSED_ON]: 0.8}},
 });
 import {PRESS_ATTRIBUTE} from './press';
-const pressOn = {[PRESS_ATTRIBUTE]: 'on'};
+const isPressed = element => element.hasAttribute(PRESS_ATTRIBUTE);
 // flagged in privateAttributes/press.stylex.ts once press.ts exists
 const pressOn = {'data-astryx-press': 'on'};
 el.setAttribute('data-astryx-press', 'on');
-// flagged in any other Core file but the theme engine
+export const pressOn = {[PRESS_ATTRIBUTE]: 'on'};
+export {PRESS_ATTRIBUTE} from './press';
+// flagged in any other Core file but the theme engine, neighbours included
 import {PRESS_ATTRIBUTE} from '../privateAttributes/press';
 ```
 

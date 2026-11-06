@@ -23,7 +23,10 @@
  * selectors only as literals that reach its own `stylex.create` calls,
  * directly or through module constants read only there, because StyleX
  * resolves a selector only where it is written. Any other use in the sibling
- * is reported.
+ * is reported. A binding the sibling imports from its owner may be read, but
+ * not exported, re-exported, used as a setter-prop key outside
+ * `stylex.create`, or passed to `setAttribute`, `toggleAttribute` or
+ * `removeAttribute`.
  *
  * Reported, outside the owner modules:
  *   - a string literal that contains `data-astryx-<name>`, in any position
@@ -53,8 +56,9 @@
  * Known limitations: a name assembled from the namespace with `+`
  * (`'data-' + NAMESPACE + '-press'`), a template that reaches the namespace
  * through anything but `dataAttrNamespace` or `NAMESPACE` (a member access,
- * an aliased import, `classPrefix`), and a name read through `element.dataset`
- * are not seen; no shipped source does any of these today, and public-API
+ * an aliased import, `classPrefix`), a name read through `element.dataset`,
+ * and a sibling's imported name copied to another variable before it sets the
+ * attribute are not seen; no shipped source does any of these today, and public-API
  * review covers them.
  *
  * Options: `{baseline: {[repoRelativeFile]: string[]}, root: string}`. The
@@ -125,6 +129,11 @@ const NAMING_MODULE = /(?:^|\/)packages\/core\/src\/naming\.ts$/;
 const PLAIN_OWNER_TARGET =
   /^(.*\/packages\/core\/src\/privateAttributes)\/([^/.]+)(?:\.(?:ts|js))?$/;
 const THEME_ENGINE = /(?:^|\/)packages\/core\/src\/theme\//;
+const ATTRIBUTE_WRITERS = new Set([
+  'setAttribute',
+  'toggleAttribute',
+  'removeAttribute',
+]);
 
 /** Is `node` an argument of a `stylex.create` call, at any depth? */
 function insideStylexCreate(node) {
@@ -395,6 +404,20 @@ const rule = {
         ? kebabCase(stylexOwnerStem)
         : null;
     const siblingValues = [];
+    // In the sibling: import and re-export declarations from its own owner.
+    const siblingOwnerImports = [];
+    const isOwnSiblingOwner = specifier =>
+      siblingName != null &&
+      typeof specifier === 'string' &&
+      specifier.startsWith('.') &&
+      path
+        .resolve(
+          path.dirname(context.filename ?? context.getFilename()),
+          specifier,
+        )
+        .split(path.sep)
+        .join('/')
+        .replace(/\.(?:ts|js)$/, '') === filename.replace(/\.stylex\.ts$/, '');
     const ownerOf = name => {
       if (name == null) {
         return ownerDirectory;
@@ -494,10 +517,12 @@ const rule = {
      */
     function checkImport(source) {
       const specifier = source?.value;
-      if (
-        typeof specifier !== 'string' ||
-        !/(?:^|\/)privateAttributes(?:\/|$)/.test(specifier)
-      ) {
+      if (typeof specifier !== 'string') {
+        return;
+      }
+      // A neighbour in the same folder reaches a plain-TS owner as `./press`.
+      if (!/(?:^|\/)privateAttributes(?:\/|$)/.test(specifier)) {
+        checkPlainOwnerImport(source, specifier);
         return;
       }
       let foreign = !specifier.startsWith('.');
@@ -596,6 +621,41 @@ const rule = {
         );
     }
 
+    function reportSiblingUse(node) {
+      context.report({
+        node,
+        messageId: 'siblingSelector',
+        data: {
+          attribute: attributeLabel(siblingName),
+          owner: ownerOf(siblingName),
+        },
+      });
+    }
+
+    /**
+     * Does a read of a binding imported from the sibling's owner set the
+     * attribute: a setter-prop key outside `stylex.create`, or a
+     * `setAttribute`, `toggleAttribute` or `removeAttribute` argument?
+     */
+    function setsAttribute(identifier) {
+      const parent = identifier.parent;
+      if (
+        parent?.type === 'Property' &&
+        parent.computed &&
+        parent.key === identifier
+      ) {
+        return !insideStylexCreate(parent);
+      }
+      return (
+        parent?.type === 'CallExpression' &&
+        parent.arguments[0] === identifier &&
+        parent.callee.type === 'MemberExpression' &&
+        !parent.callee.computed &&
+        parent.callee.property.type === 'Identifier' &&
+        ATTRIBUTE_WRITERS.has(parent.callee.property.name)
+      );
+    }
+
     function checkText(node, text) {
       const names = attributeNames(text);
       for (const name of names) {
@@ -607,12 +667,21 @@ const rule = {
     return {
       ImportDeclaration(node) {
         checkImport(node.source);
+        if (isOwnSiblingOwner(node.source.value)) {
+          siblingOwnerImports.push(node);
+        }
       },
       ExportNamedDeclaration(node) {
         checkImport(node.source);
+        if (isOwnSiblingOwner(node.source?.value)) {
+          reportSiblingUse(node);
+        }
       },
       ExportAllDeclaration(node) {
         checkImport(node.source);
+        if (isOwnSiblingOwner(node.source.value)) {
+          reportSiblingUse(node);
+        }
       },
       ImportExpression(node) {
         if (node.source.type === 'Literal') {
@@ -658,6 +727,19 @@ const rule = {
         }
       },
       'Program:exit'() {
+        for (const declaration of siblingOwnerImports) {
+          for (const variable of sourceCode.getDeclaredVariables(declaration)) {
+            for (const reference of variable.references) {
+              if (
+                reference.isRead() &&
+                (setsAttribute(reference.identifier) ||
+                  reachesExport(reference.identifier, new Set()))
+              ) {
+                reportSiblingUse(reference.identifier);
+              }
+            }
+          }
+        }
         for (const node of siblingValues) {
           if (
             !reachesOnlyStylexCreate(node, new Set()) &&

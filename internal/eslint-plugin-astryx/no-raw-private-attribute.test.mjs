@@ -154,11 +154,12 @@ tester.run('no-raw-private-attribute', rule, {
       `,
       filename: plainOwner,
     },
-    // ✅ Its `.stylex.ts` sibling imports the name instead of writing it.
+    // ✅ Its `.stylex.ts` sibling may read the imported name.
     {
       code: `
         import {PRESS_ATTRIBUTE} from './press';
-        export const pressOn = {[PRESS_ATTRIBUTE]: 'on'};
+        export const isPressed = element => element.hasAttribute(PRESS_ATTRIBUTE);
+        export const closestPressed = element => element.closest(\`[\${PRESS_ATTRIBUTE}]\`);
       `,
       filename: plainOwnerSibling,
     },
@@ -171,7 +172,6 @@ tester.run('no-raw-private-attribute', rule, {
     //    stylex.create calls, directly and through module constants.
     {
       code: `
-        import {PRESS_ATTRIBUTE} from './press';
         const PRESSED_ON = '[data-astryx-press="on"]';
         const PRESSED_ANY =
           ':is([data-astryx-press="on"],[data-astryx-press="fading"])';
@@ -185,7 +185,6 @@ tester.run('no-raw-private-attribute', rule, {
             [stylex.when.ancestor('[data-astryx-press="on"]', scope)]: {opacity: 1},
           },
         });
-        export const pressOn = {[PRESS_ATTRIBUTE]: 'on'};
       `,
       filename: plainOwnerSibling,
     },
@@ -419,6 +418,39 @@ tester.run('no-raw-private-attribute', rule, {
       `,
       filename: plainOwnerSibling,
       errors: [{messageId: 'siblingSelector'}],
+    },
+    // ❌ The sibling sets the attribute or exports a selector through the
+    //    name it imports, or re-exports the owner.
+    {
+      code: `import {PRESS_ATTRIBUTE} from './press'; export const pressOn = {[PRESS_ATTRIBUTE]: 'on'};`,
+      filename: plainOwnerSibling,
+      errors: [{messageId: 'siblingSelector'}],
+    },
+    {
+      code: `import {PRESS_ATTRIBUTE} from './press'; export function setPress(el) { el.setAttribute(PRESS_ATTRIBUTE, 'on'); }`,
+      filename: plainOwnerSibling,
+      errors: [{messageId: 'siblingSelector'}],
+    },
+    {
+      code: 'import {PRESS_ATTRIBUTE} from \'./press\'; export const PRESSED_ON = `[${PRESS_ATTRIBUTE}="on"]`;',
+      filename: plainOwnerSibling,
+      errors: [{messageId: 'siblingSelector'}],
+    },
+    {
+      code: `import {PRESS_ATTRIBUTE} from './press'; export {PRESS_ATTRIBUTE};`,
+      filename: plainOwnerSibling,
+      errors: [{messageId: 'siblingSelector'}],
+    },
+    {
+      code: `export {PRESS_ATTRIBUTE} from './press';`,
+      filename: plainOwnerSibling,
+      errors: [{messageId: 'siblingSelector'}],
+    },
+    // ❌ A neighbour in privateAttributes imports the plain-TS owner.
+    {
+      code: `import {PRESS_ATTRIBUTE} from './press';`,
+      filename: `${corePrivateAttributes}/pressGroupItem.stylex.ts`,
+      errors: [{messageId: 'plainOwnerImport'}],
     },
     // ❌ Only the sibling and the theme engine import a plain-TS owner.
     {
