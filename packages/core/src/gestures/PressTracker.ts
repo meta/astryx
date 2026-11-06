@@ -347,10 +347,12 @@ export function createPressTracker(options: PressTrackerOptions): PressTracker {
           (delay === 'inScrollers' && touch.scroll?.isInsideScroller === true));
       if (delays) {
         // The delay counts from the touch, so the time a busy main thread
-        // took to deliver it comes off the wait.
+        // took to deliver it comes off the wait. The touch's time is on the
+        // clock of its own window, which can be an iframe's.
         const wait = Math.max(
           0,
-          PRESS.contentTouchDelay.value - msSinceInput(touch.time),
+          PRESS.contentTouchDelay.value -
+            msSinceInput(touch.time, touch.target),
         );
         highlightTimer = setTimeout(() => {
           highlightTimer = null;

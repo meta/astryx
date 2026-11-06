@@ -3,8 +3,8 @@
 /**
  * @file inputAge.test.ts
  * @input inputAge.ts
- * @output Unit tests for msSinceInput: an input's age on the page's clock, and
- *   now for a time off that clock
+ * @output Unit tests for msSinceInput: an input's age on the clock of the
+ *   window it landed in, and now for a time off that clock
  * @position Testing; validates inputAge.ts
  */
 
@@ -30,5 +30,22 @@ describe('msSinceInput', () => {
     expect(msSinceInput(0)).toBe(0);
     expect(msSinceInput(performance.now() + 500)).toBe(0);
     expect(msSinceInput(Date.now())).toBe(0);
+  });
+
+  it("reads the clock of the window the input landed in, as an iframe's", () => {
+    // The iframe's clock reads 5000 while this window's reads about 1000.
+    const frame = {performance: {now: () => 5000}};
+    const element = {nodeType: 1, ownerDocument: {defaultView: frame}};
+    const frameDocument = {nodeType: 9, defaultView: frame};
+    expect(msSinceInput(4940, element)).toBe(60);
+    expect(msSinceInput(4940, frameDocument)).toBe(60);
+    // On this window's clock, that time is ahead of now.
+    expect(msSinceInput(4940)).toBe(0);
+  });
+
+  it("reads this window's clock for a target with no window", () => {
+    const detached = {nodeType: 1, ownerDocument: {defaultView: null}};
+    expect(msSinceInput(performance.now() - 60, detached)).toBe(60);
+    expect(msSinceInput(performance.now() - 60, {})).toBe(60);
   });
 });
