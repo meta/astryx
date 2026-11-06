@@ -59,6 +59,17 @@ import {
 
 const storybook = withStorybook(test);
 
+/**
+ * A segment's inline style without the touch hit insets utils/hitArea writes
+ * under a coarse pointer: only what the selection motion writes.
+ */
+function motionStyle(element: HTMLElement): string {
+  return [...element.style]
+    .filter(property => !property.startsWith('--astryx-hit-inset-'))
+    .map(property => `${property}: ${element.style.getPropertyValue(property)}`)
+    .join('; ');
+}
+
 /** UIKit's slide, from the constants table (motion/uikit/segmented.ts). */
 const SLIDE = {response: 0.4, dampingFraction: 0.85} as const;
 /** How far past the end segments the lens follows a finger. */
@@ -508,9 +519,7 @@ test('the surface lands exactly where the segment paints it', async ({
   ).toBe('transparent');
   await thawTimers(page);
   await expectLensHidden(control);
-  expect(
-    await control.segment('list').evaluate(el => el.getAttribute('style')),
-  ).toBeFalsy();
+  expect(await control.segment('list').evaluate(motionStyle)).toBe('');
   const rest = await control.group.screenshot({animations: 'allow'});
   const a = PNG.sync.read(landed);
   const b = PNG.sync.read(rest);
@@ -738,9 +747,7 @@ test('a change mid-flight paints no press over the lens on the segment it leaves
   // Once the lens lands, Table gets its own styles back.
   await expectLensHidden(control);
   await expect
-    .poll(async () =>
-      control.segment('table').evaluate(element => element.style.cssText),
-    )
+    .poll(async () => control.segment('table').evaluate(motionStyle))
     .toBe('');
 });
 
@@ -2082,7 +2089,12 @@ test('a vetoed tap selects nothing, and the lens goes back to the selection', as
   expect(
     await control.group.evaluate(group =>
       [...group.querySelectorAll<HTMLElement>('[role="radio"]')]
-        .map(segment => segment.style.cssText)
+        .flatMap(segment =>
+          // Only what the motion writes: not utils/hitArea's touch insets.
+          [...segment.style].filter(
+            property => !property.startsWith('--astryx-hit-inset-'),
+          ),
+        )
         .join(''),
     ),
   ).toBe('');

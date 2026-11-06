@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] A toast already on screen no longer restarts its card's slide when a Dialog, a modal Drawer or a scrim sheet opens or closes over it. Its card now enters only once, as its row does.
+[internal] A toast's card no longer runs a hidden `transform` transition, with its `transitionrun` and `transitionend` events, when a Dialog, a modal Drawer or a scrim sheet opens or closes over it. The toast already stayed in place.
 
 @vjeux
