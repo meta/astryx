@@ -59,9 +59,7 @@ export function deepActiveElement(
  * any other node.
  */
 export function shadowHostOf(node: Node): Element | null {
-  return node.nodeType === node.DOCUMENT_FRAGMENT_NODE && 'host' in node
-    ? (node as ShadowRoot).host
-    : null;
+  return isShadowRoot(node) ? node.host : null;
 }
 
 /**
