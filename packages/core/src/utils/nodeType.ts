@@ -8,9 +8,10 @@
  * @position Shared DOM checks for code that handles nodes and events from
  *   another window's document, such as a same-origin iframe's or a popup's
  *
- * Each check reads the node type, not `instanceof`. A node from another
- * window belongs to that window's realm, where `instanceof` against this
- * window's classes is false.
+ * Each check reads the node type or namespace, not `instanceof`. A node from
+ * another window belongs to that window's realm, where `instanceof` against
+ * this window's classes is false. An element moved into another window's
+ * document keeps the realm it was made in.
  */
 
 /** Whether `value` is a DOM node, from this window or another one. */
@@ -38,15 +39,11 @@ export function isShadowRoot(value: unknown): value is ShadowRoot {
 }
 
 /**
- * Whether `value` is an HTML element. It is checked against the class of the
- * element's own window, or this window's for a document with no window.
+ * Whether `value` is an HTML element, from this window or another one. The
+ * namespace decides, so an element moved between windows' documents passes.
  */
 export function isHTMLElement(value: unknown): value is HTMLElement {
-  if (!isElement(value)) {
-    return false;
-  }
-  const ownClass =
-    value.ownerDocument.defaultView?.HTMLElement ??
-    (typeof HTMLElement === 'undefined' ? undefined : HTMLElement);
-  return ownClass != null && value instanceof ownClass;
+  return (
+    isElement(value) && value.namespaceURI === 'http://www.w3.org/1999/xhtml'
+  );
 }

@@ -3,7 +3,8 @@
 /**
  * @file nodeType.test.ts
  * @input jsdom nodes from this window, from a same-origin iframe's window,
- *   and from a document with no window
+ *   moved from this window into the iframe's document, and from a document
+ *   with no window
  * @output Checks that each guard holds for a node from any window, where
  *   `instanceof` against this window's classes fails for the iframe's nodes
  * @position Unit tests for utils/nodeType.ts
@@ -71,7 +72,18 @@ describe('nodeType', () => {
     }
   });
 
-  it("checks an element of a document with no window against this window's class", () => {
+  it('holds for an element this window makes and then moves into a same-origin iframe', () => {
+    const doc = frameDocument();
+    const moved = document.createElement('div');
+    const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    doc.body.append(moved, icon);
+    // The element keeps this window's class while the iframe owns it.
+    expect(moved.ownerDocument === doc).toBe(true);
+    expect(isHTMLElement(moved)).toBe(true);
+    expect(isHTMLElement(icon)).toBe(false);
+  });
+
+  it('holds for an element of a document with no window', () => {
     const doc = document.implementation.createHTMLDocument('');
     const element = doc.createElement('div');
     expect(doc.defaultView).toBeNull();
