@@ -137,6 +137,10 @@ first.
   @import '@astryxdesign/theme-neutral/theme.css';
   ```
 
+  A swizzled copy builds through `@astryxdesign/build`'s library pass so its
+  rules land in `astryx-base` below `astryx-theme` (`spec:AST-110` FR5); the
+  stock StyleX plugins have no library pass.
+
   The documentation MAY also present a source build as an alternative to a default
   setup: the source of one or more packages compiled through `@astryxdesign/build`
   under FR7 (and FR9 for `withAstryx()`), each in place of that package's
@@ -161,8 +165,10 @@ first.
   reproduces its prebuilt stylesheet's rules; compiling a subset produces the
   rules those modules use. A source build of Core always includes the Core
   definitions other packages' prebuilt stylesheets rely on under FR2, such as
-  variable groups and keyframes. Product rules stay outside `astryx-base`. A
-  source build needs no data beyond the package's own source, and holds in
+  variable groups and keyframes. Product rules stay outside `astryx-base`,
+  except a swizzled copy's: modules under a folder holding an
+  `astryx-swizzle.json` marker compile in the library pass into `astryx-base`
+  (`spec:AST-110` FR5). A source build needs no data beyond the package's own source, and holds in
   development builds as in production builds.
 
 - **FR8 — Stylesheet growth is reported and budgeted per component.** Every

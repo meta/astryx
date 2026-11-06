@@ -171,8 +171,8 @@ and the repository proves it before a change that could break it merges.
   never replaced, with or without `--overwrite` (FR2), except an owner module
   and its unexported style modules, which a changed copy refuses without
   `--overwrite` and replaces with it (FR4).
-- `@astryxdesign/build`'s Vite, PostCSS, Babel, and Next integrations compile
-  modules under an `astryx-swizzle.json` directory in the library pass (FR5).
+- `@astryxdesign/build`'s Next integration under Turbopack compiles modules
+  under an `astryx-swizzle.json` directory in the library pass (FR5).
 - The styling overview states that a copy's rules land in `astryx-base` with
   `@astryxdesign/build`, and above `astryx-theme` with the stock StyleX plugins
   (FR5).
@@ -183,8 +183,9 @@ and the repository proves it before a change that could break it merges.
 - The copy sends `../X/file` imports to the public `X` entry, which lacks the
   internal helpers, and deep StyleX modules are missing from Core's exports
   (FR1, FR2).
-- Copied styles land in the app's cascade layer above the theme's, so theme
-  component overrides stop applying (FR5).
+- `astryx swizzle` does not write the `astryx-swizzle.json` marker, so a copy's
+  styles land in the app's cascade layer above the theme's, and theme component
+  overrides stop applying, until the product adds the marker (FR5).
 - Copies include spec records and test files and leave out nested folders
   (FR2), and `swizzle --list` offers folders that are not components
   (`spec:AST-035` FR12).
@@ -210,11 +211,8 @@ and the repository proves it before a change that could break it merges.
 - Products on the stock StyleX plugins have no library-pass setting, so a
   copy's rules land above `astryx-theme` there and theme component overrides do
   not reach it (FR5).
-- `spec:AST-080` FR5 presents the stock StyleX path as the default for ejected
-  components, and its FR7 keeps every product rule, a copy's included, outside
-  `astryx-base`. The pull request that makes this record current amends both
-  with their swizzle case (FR5) and adds the `architecture:cli-surface` pointer
-  to this record.
+- The pull request that makes this record current adds the
+  `architecture:cli-surface` pointer to this record.
 
 ## Verification
 
