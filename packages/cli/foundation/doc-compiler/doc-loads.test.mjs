@@ -355,11 +355,12 @@ const RUNNERS = {
     sites: ['importDocModule', 'importNativeModule ×3', 'importTemplateModule'],
   },
   'foundation/render/page-worker.mjs': {
-    runs: 'the page `astryx experimental render` renders, its local modules, React, and the StyleX compiler, in a worker; outside a project, Node resolves the packages its folder lacks from the package set the CLI runs from',
+    runs: 'the page `astryx experimental render` renders, its local modules, React, and the StyleX compiler, in a worker; outside a project, Node resolves the packages its folder lacks, and React and StyleX for every module (resolve hooks for ES modules), from the package set the CLI runs from',
     sites: [
       '.import() ×3',
       'createJiti ×2',
       'module',
+      'module.register',
       'require(@stylexjs/babel-plugin)',
     ],
   },

@@ -1210,6 +1210,62 @@ describe('render(): a page outside a project', () => {
     expect(fs.readFileSync(path.join(sub, 'page.html'), 'utf8')).toContain('typed');
   }, 60_000);
 
+  it('gives a library in the folder the same React, as CommonJS and as an ES module', () => {
+    const sub = path.join(away, 'react-app');
+    const nm = path.join(sub, 'node_modules');
+    for (const name of ['react', 'react-dom']) {
+      const target = path.dirname(createRequire(path.join(CLI_DIR, '../core/package.json')).resolve(`${name}/package.json`));
+      fs.mkdirSync(nm, {recursive: true});
+      fs.cpSync(target, path.join(nm, name), {recursive: true, dereference: true});
+    }
+    fs.mkdirSync(path.join(nm, 'hook-cjs'), {recursive: true});
+    fs.writeFileSync(path.join(nm, 'hook-cjs', 'package.json'), '{"name":"hook-cjs","main":"index.js"}');
+    fs.writeFileSync(path.join(nm, 'hook-cjs', 'index.js'), "const {useState} = require('react');\nexports.useCjs = () => useState('cjs-hook')[0];\n");
+    fs.mkdirSync(path.join(nm, 'hook-esm'), {recursive: true});
+    fs.writeFileSync(path.join(nm, 'hook-esm', 'package.json'), '{"name":"hook-esm","type":"module","exports":"./index.js"}');
+    fs.writeFileSync(path.join(nm, 'hook-esm', 'index.js'), "import {useState} from 'react';\nexport const useEsm = () => useState('esm-hook')[0];\n");
+    const body = "  const a = useCjs();\n  const b = useEsm();\n";
+    fs.writeFileSync(
+      path.join(sub, 'plain.jsx'),
+      `import {useCjs} from 'hook-cjs';\nimport {useEsm} from 'hook-esm';\nexport default function Page() {\n${body}  return <p>{a} {b}</p>;\n}\n`,
+    );
+    fs.writeFileSync(
+      path.join(sub, 'core.jsx'),
+      `import {useCjs} from 'hook-cjs';\nimport {useEsm} from 'hook-esm';\nimport {Button} from '@astryxdesign/core';\nexport default function Page() {\n${body}  return <Button label={a + ' ' + b} />;\n}\n`,
+    );
+    for (const page of ['plain', 'core']) {
+      const run = runBin(sub, ['experimental', 'render', `${page}.jsx`]);
+      expect(run.status).toBe(0);
+      const html = fs.readFileSync(path.join(sub, `${page}.html`), 'utf8');
+      expect(html).toContain('cjs-hook');
+      expect(html).toContain('esm-hook');
+    }
+  }, 90_000);
+
+  it('says the CLI runs without Core only for a render outside a project', async () => {
+    const sub = path.join(away, 'no-core');
+    for (const name of ['react', 'react-dom']) {
+      const target = path.dirname(createRequire(path.join(CLI_DIR, '../core/package.json')).resolve(`${name}/package.json`));
+      fs.mkdirSync(path.join(sub, 'node_modules'), {recursive: true});
+      fs.cpSync(target, path.join(sub, 'node_modules', name), {recursive: true, dereference: true});
+    }
+    fs.writeFileSync(path.join(sub, 'page.jsx'), 'export default () => <p>no core</p>;\n');
+    // In a fresh process without the test runner's NODE_PATH, which would reach this repository's Core.
+    const script = `
+const {renderPage} = await import(${JSON.stringify(path.join(CLI_DIR, 'foundation/render/render-page.mjs'))});
+const entry = ${JSON.stringify(path.join(sub, 'page.jsx'))};
+const textOf = page => page.warnings.find(w => w.code === 'no-astryx-styles')?.message;
+const inside = textOf(await renderPage(entry, {served: null}));
+const outside = textOf(await renderPage(entry, {served: {dir: ${JSON.stringify(path.join(sub, 'no-such-core'))}, integrations: []}}));
+console.log(JSON.stringify({inside, outside}));
+`;
+    const {NODE_PATH: _, ...env} = process.env;
+    const run = spawnSync(process.execPath, ['--input-type=module', '-e', script], {cwd: sub, env, encoding: 'utf8', timeout: 60_000});
+    const {inside, outside} = JSON.parse(run.stdout.trim().split('\n').pop() ?? '{}');
+    expect(inside).toBe('@astryxdesign/core is not installed where the page is, so the page has no Astryx styles; install it, or render from inside the project.');
+    expect(outside).toContain('and the CLI runs without one');
+  }, 60_000);
+
   it('still names a package the CLI does not carry as not installed', () => {
     fs.writeFileSync(path.join(away, 'dep.jsx'), "import x from 'not-a-real-package-xyz';\nexport default () => <p>{String(x)}</p>;\n");
     const run = runBin(away, ['experimental', 'render', 'dep.jsx']);

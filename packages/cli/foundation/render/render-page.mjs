@@ -426,8 +426,10 @@ export async function renderPage(entry, options = {}) {
   if (!hasCore) {
     warnings.push({
       code: 'no-astryx-styles',
-      message:
-        '@astryxdesign/core is not installed where the page is, and the CLI runs without one, so the page has no Astryx styles; install it, or render from inside the project.',
+      // Outside a project the page would have taken the CLI's own Core.
+      message: served
+        ? '@astryxdesign/core is not installed where the page is, and the CLI runs without one, so the page has no Astryx styles; install it, or render from inside the project.'
+        : '@astryxdesign/core is not installed where the page is, so the page has no Astryx styles; install it, or render from inside the project.',
     });
   }
 

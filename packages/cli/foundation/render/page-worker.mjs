@@ -20,7 +20,8 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import Module, {createRequire} from 'node:module';
+import Module, {createRequire, register} from 'node:module';
+import {pathToFileURL} from 'node:url';
 import {format} from 'node:util';
 import {parentPort, workerData} from 'node:worker_threads';
 import {transformSync} from '@babel/core';
@@ -395,6 +396,15 @@ function serveFromSet() {
   if (!served || !servedParent) return;
   const resolveFilename = moduleApi._resolveFilename;
   moduleApi._resolveFilename = function (/** @type {string} */ request, /** @type {any[]} */ ...rest) {
+    // React, React DOM and StyleX come from the set for every module, a
+    // library in the page's folder included, so the page runs on one copy.
+    if (!request.startsWith('.') && !path.isAbsolute(request) && packageOf(request) in SINGLE_COPY_ALIASES) {
+      try {
+        return resolveFilename.call(this, request, servedParent, false);
+      } catch {
+        // The set has no such file: the importer's own copy serves.
+      }
+    }
     try {
       return resolveFilename.call(this, request, ...rest);
     } catch (e) {
@@ -408,7 +418,6 @@ function serveFromSet() {
     }
   };
 }
-serveFromSet();
 
 /**
  * React and StyleX keep state per copy, and the packages from the set load
@@ -430,6 +439,14 @@ function singleCopyAliases() {
   return alias;
 }
 const SINGLE_COPY_ALIASES = singleCopyAliases();
+serveFromSet();
+// ES modules follow the same rule through resolve hooks (CommonJS goes
+// through serveFromSet).
+if (servedParent && Object.keys(SINGLE_COPY_ALIASES).length > 0) {
+  register(new URL('./single-copy-hooks.mjs', import.meta.url), {
+    data: {parent: pathToFileURL(servedParent.filename).href, names: Object.keys(SINGLE_COPY_ALIASES)},
+  });
+}
 
 const plain = createJiti(entry, {fsCache: false, jsx: {runtime: 'automatic'}});
 
