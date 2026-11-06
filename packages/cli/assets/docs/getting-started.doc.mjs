@@ -76,11 +76,11 @@ export const docs = {
           type: 'code',
           lang: 'bash',
           label: 'Terminal',
-          code: `{@pm install @astryxdesign/core@latest @astryxdesign/theme-neutral@latest @astryxdesign/cli@latest}\n{@command upgrade --from 0.7.0 --apply}`,
+          code: `{@pm install @astryxdesign/core@latest @astryxdesign/theme-neutral@latest @astryxdesign/cli@latest}\n{@command upgrade --from <old Core version> --apply}`,
         },
         {
           type: 'prose',
-          text: 'Add every other Astryx package your app lists to the same command, and pass your old Core version to `--from`. If your package manager holds new releases back, as pnpm does with `minimumReleaseAge`, exempt the whole `@astryxdesign/*` scope. Exempting only some of its packages installs packages from different releases side by side.',
+          text: "Add every other Astryx package your app lists to the same command, and pass the Core version you had before to `--from`. If your package manager holds new releases back, exempt the whole `@astryxdesign/*` scope; in pnpm, `minimumReleaseAgeExclude: ['@astryxdesign/*']`. Exempting only some of its packages installs packages from different releases side by side.",
         },
       ],
     },
