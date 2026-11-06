@@ -19,7 +19,6 @@ import {
   type Locator,
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
-import {themeTempo} from '../../motion/themeTempo';
 // @ts-expect-error -- pngjs ships no declarations; runtime support is pinned.
 import {PNG} from 'pngjs';
 import {
@@ -62,6 +61,7 @@ import {
   type TouchFrame,
   type TouchScript,
 } from '@astryxdesign/interaction-harness';
+import {slowViewer} from './viewerTempo';
 
 const storybook = withStorybook(test);
 
@@ -996,7 +996,7 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
   // With the main thread blocked, a loaded runner's compositor presents a
   // frame every 100 to 135 ms. The spring moves for half a second, which
   // leaves too few frames to judge. So the zoom plays at tempo 3.
-  await slowZoom(page);
+  await slowViewer(page);
   const since = await page.evaluate(() => performance.now());
   const cast = await startScreencast(page);
   // The page itself waits for the zoom and blocks one frame into it. The
@@ -1072,39 +1072,6 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
   expect(proof.monotonic).toBe(true);
 });
 
-/**
- * The custom property Lightbox's motion reads its tempo from, asked of
- * `themeTempo` itself. A rename there renames it here too.
- */
-function tempoProperty(): string {
-  let read = '';
-  const view = {
-    getComputedStyle: () => ({
-      getPropertyValue: (name: string) => {
-        read = name;
-        return '';
-      },
-    }),
-  };
-  themeTempo({ownerDocument: {defaultView: view}} as unknown as Element);
-  if (!read.startsWith('--')) {
-    throw new Error(`themeTempo read no custom property: "${read}"`);
-  }
-  return read;
-}
-
-/**
- * Plays the viewer's motion at tempo 3, through the property its motion
- * reads. A theme's tempo stops at 1.5, so tempo 3 is for this proof only.
- * Every element in the viewer carries it, so no nested theme's own tempo
- * wins.
- */
-async function slowZoom(page: Page): Promise<void> {
-  await page.addStyleTag({
-    content: `dialog, dialog * { ${tempoProperty()}: 3 !important; }`,
-  });
-}
-
 /** Each animated property's curve length, and whether it still runs. */
 function curvesByProperty(runs: ReadonlyArray<ActiveAnimation>) {
   const meta = new Set(['offset', 'easing', 'composite', 'computedOffset']);
@@ -1163,7 +1130,7 @@ for (const pace of ['main-thread', 'frozen'] as const) {
     const before = await state();
     await markElement(photo, {mode: 'outline'});
     await startBusyControl(page);
-    await slowZoom(page);
+    await slowViewer(page);
     await breakZoom(page, pace);
     const cast = await startScreencast(page);
     await driver.play(

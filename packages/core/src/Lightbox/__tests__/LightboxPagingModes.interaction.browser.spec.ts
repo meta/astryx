@@ -390,18 +390,24 @@ test('a drag the owner refuses springs back over frames', async ({page}) => {
     trigger: 'Open gallery that keeps its photo',
   });
   const mid = {x: g.box.x + g.box.width * 0.8, y: g.box.y + g.box.height / 2};
-  // Reads the track's offset on every frame from before the drag.
+  // Records the positions of every animation the track starts from here on.
   await g.track.evaluate(track => {
-    const offsets: number[] = [];
-    (window as unknown as {__offsets: number[]}).__offsets = offsets;
-    const tick = () => {
-      const value = getComputedStyle(track).translate;
-      offsets.push(value === 'none' ? 0 : parseFloat(value));
-      if (offsets.length < 150) {
-        requestAnimationFrame(tick);
+    const runs: string[][] = [];
+    (window as unknown as {__trackRuns: string[][]}).__trackRuns = runs;
+    const animate = Element.prototype.animate;
+    Element.prototype.animate = function (keyframes, options) {
+      const animation = animate.call(this, keyframes, options);
+      if (this === track && animation.effect instanceof KeyframeEffect) {
+        runs.push(
+          animation.effect
+            .getKeyframes()
+            .map(frame =>
+              typeof frame.translate === 'string' ? frame.translate : '',
+            ),
+        );
       }
+      return animation;
     };
-    requestAnimationFrame(tick);
   });
   // Past half a page: the release pages, and the owner keeps its photo.
   await g.driver.play(
@@ -411,33 +417,24 @@ test('a drag the owner refuses springs back over frames', async ({page}) => {
       {durationMs: 400, restMs: 100},
     ),
   );
-  await expect
-    .poll(async () =>
-      page.evaluate(
-        () => (window as unknown as {__offsets: number[]}).__offsets.length,
-      ),
-    )
-    .toBe(150);
-  const offsets = await page.evaluate(
-    () => (window as unknown as {__offsets: number[]}).__offsets,
-  );
-  // The drag carried the photo past half a page.
-  expect(Math.max(...offsets.map(x => Math.abs(x)))).toBeGreaterThan(
-    g.box.width / 2,
-  );
-  // It springs back over frames: from the last frame half a page away to
-  // the first at rest, the photo shows in between.
-  let far = -1;
-  offsets.forEach((x, i) => {
-    if (Math.abs(x) >= g.box.width / 2) {
-      far = i;
-    }
-  });
-  const rest = offsets.findIndex((x, i) => i > far && Math.abs(x) < 0.5);
-  expect(rest).toBeGreaterThan(far);
-  expect(rest - far).toBeGreaterThanOrEqual(4);
-  expect(Math.abs(offsets.at(-1) ?? Number.NaN)).toBeLessThan(0.5);
+  await waitForRest(g.track);
+  expect(Math.abs(await g.trackX())).toBeLessThan(0.5);
   expect(await g.counter()).toBe('1 / 4');
+  // It springs back over frames. The track's last animation brought the
+  // photo back, from more than half a page away to rest, through positions
+  // in between. They are read from its keyframes, which a loaded runner's
+  // slow main thread does not thin out.
+  const runs = await page.evaluate(
+    () => (window as unknown as {__trackRuns: string[][]}).__trackRuns,
+  );
+  const xs = (runs.at(-1) ?? []).map(x => parseFloat(x) || 0);
+  const detail = JSON.stringify(runs);
+  expect(Math.abs(xs[0] ?? 0), detail).toBeGreaterThan(g.box.width / 2);
+  expect(Math.abs(xs.at(-1) ?? Number.NaN), detail).toBeLessThan(0.5);
+  const between = xs.filter(
+    x => Math.abs(x) >= 0.5 && Math.abs(x) <= Math.abs(xs[0] ?? 0) - 0.5,
+  );
+  expect(between.length, detail).toBeGreaterThanOrEqual(4);
 });
 
 test('with a mouse (a fine pointer) a click beside the photo closes the gallery, one on it does not', async ({

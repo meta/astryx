@@ -17,7 +17,11 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {GestureHost} from '../gestures/GestureHost';
 import {PanGestureRecognizer} from '../gestures/PanGestureRecognizer';
 import {ManualClock} from '../gestures/__tests__/harness';
-import {createMotionEngine, type Animator} from '../motion/animator';
+import {
+  createMotionEngine,
+  END_HOLD_MS,
+  type Animator,
+} from '../motion/animator';
 import {solveAnimatedPageScroll, solvePaging} from '../motion/paging';
 import type * as motionResolution from '../motion/resolveMotion';
 import {resolveMotion} from '../motion/resolveMotion';
@@ -494,6 +498,44 @@ describe('createPager', () => {
     expect(f.x()).toBe(-2 * WIDTH);
     expect(f.calls).toEqual(['index:2:drag', 'settle:2:1']);
   });
+
+  // The settle plays at the tempo of the theme the track is in: from rest it
+  // keeps its shape and takes tempo times as long. At tempo 1 it is UIKit's
+  // measured settle.
+  it.each([1, 3])(
+    "a release's settle plays at the theme's tempo %s",
+    async tempo => {
+      const style = document.createElement('style');
+      style.textContent = `[data-tempo] { --_astryx-motion-tempo: ${tempo}; }`;
+      document.head.append(style);
+      try {
+        const f = setup({defaultIndex: 1});
+        f.track.setAttribute('data-tempo', '');
+        // A silent hold of 100 ms before the lift: the settle starts at rest.
+        await drag(f, {from: 300, dx: -250, step: 4, dt: 8, hold: 100});
+        expect(f.pager.index).toBe(2);
+        const position = -f.x();
+        const measured = solvePaging({
+          from: position,
+          velocity: 0,
+          to: 2 * WIDTH,
+        });
+        await advance(16, f.clock);
+        await advance(100, f.clock);
+        // 116 ms in, it shows where the measured settle is at 116 ÷ tempo ms.
+        expect(-f.x()).toBeCloseTo(measured.at(0.116 / tempo), 0);
+        // The animation holds its end for END_HOLD_MS after the curve.
+        const played = recorded.filter(animation => !animation.cancelled);
+        expect(
+          Number(played.at(-1)?.options.duration) - END_HOLD_MS,
+        ).toBeCloseTo(measured.duration * 1000 * tempo, 6);
+        await settle(f);
+        expect(f.x()).toBe(-2 * WIDTH);
+      } finally {
+        style.remove();
+      }
+    },
+  );
 
   // A sample at the finger's last place is not motion (spec:AST-100's one
   // filter). A finger that keeps reporting while it stands still keeps its

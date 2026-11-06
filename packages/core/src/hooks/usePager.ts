@@ -44,6 +44,7 @@ import {
   solvePaging,
 } from '../motion/paging';
 import {resolveMotion} from '../motion/resolveMotion';
+import {themeTempo} from '../motion/themeTempo';
 import {resolveSnapPoint} from '../motion/resolveSnapPoint';
 import {rubberBandClamp, rubberBandUnclamp} from '../motion/rubberBand';
 import {paging, registerPagingTable} from '../motion/uikit/paging';
@@ -431,8 +432,8 @@ function isScrollContact(recognizer: PanGestureRecognizer): boolean {
  *   move, no layout read and no React render. Past the first or last page,
  *   the track follows UIKit's rubber band, with d = the page width.
  * - At the lift, `pageForRelease` picks the page with UIKit's measured rule.
- *   The track then settles on UIKit's paging integrator (`solvePaging`),
- *   baked into keyframes.
+ *   The track then settles on UIKit's paging integrator (`solvePaging`), at
+ *   the tempo of the theme the track is in, baked into keyframes.
  * - A finger that lands on a settling pager catches it `paging.catchStopMs`
  *   after the touch, as in UIKit. A drag catches it at once, from the value
  *   on screen. While the pan is off, a touch does not stop the motion.
@@ -907,8 +908,15 @@ export function createPager(
     touchRelease: boolean,
   ): void {
     const to = offsetOf(target);
-    // UIKit's integrator, as a playable curve (touch motion stays internal).
-    const curve = solvePaging({from: position, velocity, to});
+    // UIKit's integrator, as a playable curve (touch motion stays internal),
+    // at the theme's tempo. No motion role names it, so it reads the tempo
+    // itself.
+    const curve = solvePaging({
+      from: position,
+      velocity,
+      to,
+      tempo: themeTempo(trackElement),
+    });
     if (curve.steps === 0) {
       animator?.set({x: positionToX(to)});
       rest();

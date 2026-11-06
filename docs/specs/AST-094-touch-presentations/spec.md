@@ -225,12 +225,14 @@ a measured, sourced difference exists.
   component's own record states which of its roles a gesture drives.
 
   The pager's measured settle after a release (DEC-25) is not an exit, so FR4's
-  exception does not cover it. Implementation gap: it plays UIKit's measured
-  settle without a named role, and it doesn't yet follow `tempo` or `character`
-  (usePager calls solvePaging with no theme input). Implementation gap: the
-  pager is a gesture component, so its animated scroll to a page that the
-  program asks for settles on the pager's spring from rest (FR45); today it
-  plays a 300 ms scroll on a sinusoidal curve.
+  exception does not cover it. It follows the theme's `tempo`: a settle from
+  rest keeps its shape and takes tempo times as long, and a release still
+  starts at 96 % of the finger's speed, as at tempo 1. Implementation gap: it
+  plays UIKit's measured settle without a named role, and it doesn't yet
+  follow `character`.
+  Implementation gap: the pager is a gesture component, so its animated scroll
+  to a page that the program asks for settles on the pager's spring from rest
+  (FR45); today it plays a 300 ms scroll on a sinusoidal curve.
 
   Implementation gap: the sheet picker wheel's snap rate (UIKit's measured
   picker deceleration) plays from an internal constant and is not yet a named

@@ -50,24 +50,34 @@ export interface PagingCurve extends MotionCurve {
  * The release velocity enters in px per millisecond per step, as UIKit hands it
  * to the integrator. At 960 steps a second, the content starts at 96 % of the
  * finger's speed, as in UIKit.
+ *
+ * At a theme's `tempo`, each step lasts tempo times as long and carries tempo
+ * times the release's distance. So a settle from rest keeps its shape and
+ * takes tempo times as long, and a release still starts at 96 % of the
+ * finger's speed. At tempo 1 the settle is the measured one.
  */
 export function solvePaging({
   from,
   velocity,
   to,
+  tempo = 1,
 }: {
   from: number;
   velocity: number;
   to: number;
+  /** The tempo of the theme the motion plays in (themeTempo.ts). */
+  tempo?: number;
 }): PagingCurve {
-  const {springPull, friction, stepsPerSecond, restDistance, restSpeed} =
-    paging.integrator;
+  const {springPull, friction, restDistance, restSpeed} = paging.integrator;
+  const pace = Number.isFinite(tempo) && tempo > 0 ? tempo : 1;
+  const stepsPerSecond = paging.integrator.stepsPerSecond / pace;
+  const startVelocity = (velocity / 1000) * pace;
   const xs: number[] = [from];
-  const vs: number[] = [velocity / 1000];
+  const vs: number[] = [startVelocity];
   let x = from;
-  let v = velocity / 1000;
-  // ~10 s of steps: far beyond any settle (≈ 0.35 s from rest).
-  const maxSteps = stepsPerSecond * 10;
+  let v = startVelocity;
+  // ~10 s of steps at tempo 1: far beyond any settle (≈ 0.35 s from rest).
+  const maxSteps = paging.integrator.stepsPerSecond * 10;
   let steps = 0;
   while (steps < maxSteps) {
     if (Math.abs(to - x) < restDistance && Math.abs(v) < restSpeed) {
