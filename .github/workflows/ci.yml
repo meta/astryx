@@ -2703,10 +2703,13 @@ jobs:
       run:
         shell: bash
     env:
-      # A release check's throwaway pull request, from an interaction-check/
-      # branch, runs every interaction spec in WebKit: the release receipt
-      # needs the whole suite, which the leg count spreads over the matrix.
-      WEBKIT_ALL_SPECS: ${{ startsWith(github.head_ref, 'interaction-check/') }}
+      # The release interaction check's throwaway pull request runs every
+      # interaction spec in WebKit: the release receipt needs the whole suite,
+      # which the leg count spreads over the matrix. Only the release tooling
+      # opens it: an interaction-check/ branch in this repository, opened by
+      # the account the tooling uses. Any other pull request keeps the paths
+      # below.
+      WEBKIT_ALL_SPECS: ${{ startsWith(github.head_ref, 'interaction-check/') && github.event.pull_request.user.login == 'cixzhang' && github.event.pull_request.head.repo.full_name == github.repository }}
       # The specs the WebKit legs run otherwise, besides each interaction spec
       # the pull request changes.
       WEBKIT_SPEC_PATHS: >-

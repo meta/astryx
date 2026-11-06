@@ -512,10 +512,49 @@ describe('the interaction proof legs in ci.yml', () => {
       }
     }
 
-    it("plans every WebKit spec for a release check's interaction-check/ branch", () => {
+    it("plans every WebKit spec only for the release tooling's interaction-check/ pull request", () => {
       expect(job.env.WEBKIT_ALL_SPECS).toBe(
-        "${{ startsWith(github.head_ref, 'interaction-check/') }}",
+        "${{ startsWith(github.head_ref, 'interaction-check/') && github.event.pull_request.user.login == 'cixzhang' && github.event.pull_request.head.repo.full_name == github.repository }}",
       );
+      // The expression's three conditions, read against a pull request.
+      const fullScope = pr =>
+        job.env.WEBKIT_ALL_SPECS.slice(3, -2)
+          .trim()
+          .split(' && ')
+          .every(condition => {
+            const value = name =>
+              name.startsWith("'") ? name.slice(1, -1) : pr[name];
+            const prefix = /^startsWith\(([\w.]+), '([^']+)'\)$/.exec(
+              condition,
+            );
+            if (prefix) return String(value(prefix[1])).startsWith(prefix[2]);
+            const [left, right] = condition.split(' == ');
+            return value(left) === value(right);
+          });
+      const tooling = {
+        'github.head_ref': 'interaction-check/3bd5a4c1b4',
+        'github.event.pull_request.user.login': 'cixzhang',
+        'github.event.pull_request.head.repo.full_name': 'meta/astryx',
+        'github.repository': 'meta/astryx',
+      };
+      expect(fullScope(tooling)).toBe(true);
+      // The same branch prefix from another author, or from a fork, keeps
+      // the normal scope; so does the tooling account on another branch.
+      expect(
+        fullScope({
+          ...tooling,
+          'github.event.pull_request.user.login': 'someone',
+        }),
+      ).toBe(false);
+      expect(
+        fullScope({
+          ...tooling,
+          'github.event.pull_request.head.repo.full_name': 'someone/astryx',
+        }),
+      ).toBe(false);
+      expect(
+        fullScope({...tooling, 'github.head_ref': 'fix/interaction-check'}),
+      ).toBe(false);
       // A spec outside the WebKit paths, long enough for two legs.
       const times = {
         'packages/core/src/Button/__tests__/Button.interaction.browser.spec.ts': 700,
