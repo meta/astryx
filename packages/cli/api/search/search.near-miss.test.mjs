@@ -28,4 +28,9 @@ describe('a near miss of one identifier', () => {
     const {data} = await search('ButtonGrop');
     expect(data.results[0]).toMatchObject({name: 'ButtonGroup'});
   });
+
+  it('answers alone when two letters of a name word are swapped', async () => {
+    const {data} = await search('ButtonGorup');
+    expect(data.results[0]).toMatchObject({name: 'ButtonGroup'});
+  });
 });

@@ -52,13 +52,12 @@
  * queries they have nothing to do with.
  */
 
-import {spellIdentifiers, joined} from './_words.mjs';
+import {isWordSlip, spellIdentifiers, joined} from './_words.mjs';
 import {tokenizeQuery, phraseWords} from './_query.mjs';
 import {MAX_RUN_WORDS} from './_compound.mjs';
 import {scoreQuery} from './_score.mjs';
 import {scoreCandidate} from './_candidate-score.mjs';
 import {fold, nameWords, words} from './_query-words.mjs';
-import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {domainPriority} from './_priority.mjs';
 import {toResult, searchedComponentsOf} from './_result.mjs';
 
@@ -131,11 +130,12 @@ export function namesWhole(candidate, term) {
  * Whether one identifier, read whole, answers the query by itself, so it is
  * not read as the words it spells. A match on the whole identifier does,
  * unless it is only a typo-distance match: a near miss of a different name
- * (`SearchInput` and searchIndex) must not hide every entry the words match.
- * A typo match still answers alone when the entry's name spells every word of
- * the identifier in order (`useTableExpansion` and useTableRowExpansion), one
- * of them possibly misspelled by a single edit (`ButtonGrop` and ButtonGroup), and
- * when the words are not read, the near miss keeps its own score beside them.
+ * (`BaseTable` and a doc keyword `base-table`) must not hide every entry the
+ * words match. A typo match still answers alone when the entry's name spells
+ * every word of the identifier in order (`useTableExpansion` and
+ * useTableRowExpansion), one of them possibly slipped (isWordSlip: `ButtonGrop`
+ * and `ButtonGorup` for ButtonGroup); when the words are not read, the near
+ * miss keeps its own score beside them.
  * @param {string} term the identifier, lowercased
  * @param {string} spelled the identifier read as its words
  * @param {Candidate} candidate
@@ -146,34 +146,28 @@ function answersWhole(term, spelled, candidate, vocabulary) {
   const hit = scoreCandidate(term, candidate);
   if (!hit) return false;
   if (!TYPO_REASON.test(hit.reason)) return true;
-  const want = words(spelled).map(fold);
-  const have = nameWords(String(candidate.name)).map(fold);
+  // Typed words are compared as typed: folding a misspelled plural away first
+  // (`focs` to `foc`) would hide the slip.
+  const typed = words(spelled);
+  const want = typed.map(fold);
+  const named = nameWords(String(candidate.name));
+  const have = named.map(fold);
   let at = 0;
   let slips = 0;
-  for (const w of have) {
+  for (const [i, w] of have.entries()) {
     if (at >= want.length) break;
     if (w === want[at]) at++;
-    else if (slips === 0 && !vocabulary.has(want[at]) && oneSlip(w, want[at])) {
+    else if (
+      slips === 0 &&
+      !vocabulary.has(want[at]) &&
+      isWordSlip(named[i], typed[at])
+    ) {
       slips++;
       at++;
     }
   }
   return at === want.length;
 }
-
-/**
- * Whether a query word is a name word misspelled by a single edit, for words
- * of at least SLIP_MIN_LENGTH letters (`grop` for `group`). Below that, one
- * edit usually makes a different word. The caller counts it only for a word
- * the catalog never uses: a word it does use (`states` beside Status, `time`
- * beside Timer) is a different word, not a typo.
- * @param {string} name
- * @param {string} typed
- * @returns {boolean}
- */
-const oneSlip = (name, typed) =>
-  Math.min(name.length, typed.length) >= SLIP_MIN_LENGTH &&
-  levenshteinDistance(name, typed, 1) === 1;
 
 /** @type {WeakMap<Candidate[], Set<string>>} */
 const vocabularies = new WeakMap();
@@ -196,9 +190,6 @@ function vocabularyOf(all) {
   }
   return vocabulary;
 }
-
-/** The fewest letters a name word and a query word need for oneSlip. */
-const SLIP_MIN_LENGTH = 4;
 
 /** The reasons scoreCandidate gives a typo-distance match. */
 const TYPO_REASON = /\(distance [1-3]\)$|^similar name \(distance/;

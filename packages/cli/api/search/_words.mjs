@@ -214,6 +214,39 @@ export function joined(text) {
 const TYPO_MIN_LENGTH = {1: 5, 2: 8, 3: 11};
 
 /**
+ * The fewest letters a name word and a typed word need before a slip counts
+ * (isWordSlip). Lower than TYPO_MIN_LENGTH[1]: a word inside an identifier
+ * that otherwise spells an entry's name in order is already pinned by its
+ * neighbours, so a short word's single slip (`grop` for `group`) is far less
+ * likely to be a different word than the same edit to a whole query.
+ */
+const WORD_SLIP_MIN_LENGTH = 4;
+
+/**
+ * Whether a typed word is a name word slipped by one edit or by two adjacent
+ * letters swapped (`grop` and `gorup` for `group`), both at least
+ * WORD_SLIP_MIN_LENGTH letters. Compare the words as typed, before plural
+ * folding.
+ * @param {string} name
+ * @param {string} typed
+ * @returns {boolean}
+ */
+export function isWordSlip(name, typed) {
+  if (name === typed) return false;
+  if (Math.min(name.length, typed.length) < WORD_SLIP_MIN_LENGTH) return false;
+  if (levenshteinDistance(name, typed, 1) === 1) return true;
+  if (name.length !== typed.length) return false;
+  let i = 0;
+  while (i < name.length && name[i] === typed[i]) i++;
+  return (
+    i + 1 < name.length &&
+    name[i] === typed[i + 1] &&
+    name[i + 1] === typed[i] &&
+    name.slice(i + 2) === typed.slice(i + 2)
+  );
+}
+
+/**
  * @param {string} a
  * @param {string} b
  * @param {number} dist
