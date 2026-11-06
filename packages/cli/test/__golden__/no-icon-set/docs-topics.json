@@ -146,6 +146,7 @@
       "sections": [
         "quick-start-with-ai",
         "install",
+        "upgrade",
         "install-once",
         "add-base-css-and-a-theme",
         "add-your-first-component",
@@ -153,7 +154,7 @@
         "example-apps",
         "explore-the-cli"
       ],
-      "skeleton": "3cd256cfa2bad3dc6e87eb50075aef0d8afb437a7be74d4e5d4aebecf6948d0b",
+      "skeleton": "3241e02aec55b756c2dd55f6311b8e60f3b1f70b6cf76b3bc4661e7fb9410a4b",
       "mentions": []
     },
     "icons": {

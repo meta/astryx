@@ -769,6 +769,60 @@ export const AppToastOverDialog: StoryObj = {
   },
 };
 
+export const AppToastOverDialogClosedAfterSave: StoryObj = {
+  render: function AppToastOverDialogClosedAfterSaveStory() {
+    const [isOpen, setIsOpen] = useState(false);
+    return (
+      <ToastViewport>
+        <Stack gap={2}>
+          <Button label="Open dialog" onClick={() => setIsOpen(true)} />
+          <Dialog
+            isOpen={isOpen}
+            onOpenChange={() => setIsOpen(false)}
+            aria-label="Edit item">
+            <SaveToastContent onSaved={() => setIsOpen(false)} />
+          </Dialog>
+        </Stack>
+      </ToastViewport>
+    );
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Save raises a toast and closes the dialog when the save finishes, as an app that waits for a request does. The toast stays on screen while the dialog closes.',
+      },
+    },
+  },
+};
+
+/** Stands in for a request that the app waits for before it closes. */
+async function saveItem(): Promise<void> {
+  await new Promise<void>(resolve => {
+    setTimeout(resolve, 300);
+  });
+}
+
+function SaveToastContent({onSaved}: {onSaved: () => void}) {
+  const toast = useToast();
+  const save = async () => {
+    toast({body: 'Saving the item.'});
+    await saveItem();
+    onSaved();
+  };
+  return (
+    <Stack gap={3}>
+      <p>Save shows a toast, then closes this dialog when the save is done.</p>
+      <Button
+        label="Save"
+        onClick={() => {
+          void save();
+        }}
+      />
+    </Stack>
+  );
+}
+
 function DialogToastContent({onClose}: {onClose: () => void}) {
   const toast = useToast();
   return (
