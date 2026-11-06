@@ -116,11 +116,11 @@ export function isInHeldLayer(target: Node | null): boolean {
  */
 function isInGlobalHost(target: EventTarget | null): boolean {
   for (
-    let node: Node | null = target instanceof Node ? target : null;
+    let node: Node | null = isNode(target) ? target : null;
     node != null;
     node = parentAcrossShadow(node)
   ) {
-    if (node instanceof Element && isModalOutletHost(node)) {
+    if (isElement(node) && isModalOutletHost(node)) {
       return true;
     }
   }

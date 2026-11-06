@@ -495,6 +495,54 @@ describe("holdInput decides by each event's pointer (spec:AST-094 FR35)", () => 
     unmark();
   });
 
+  it("leaves a finger's press on a global host in a dismissing layer alone in a same-origin iframe too", () => {
+    // A same-origin iframe's document, as a component rendered into another
+    // window's document has: its nodes and events belong to that window.
+    const frame = document.createElement('iframe');
+    document.body.append(frame);
+    const doc = frame.contentDocument as Document;
+    const view = doc.defaultView as Window & typeof globalThis;
+    const layer = doc.createElement('div');
+    const host = doc.createElement('div');
+    const onHost = doc.createElement('button');
+    const onLayer = doc.createElement('button');
+    host.append(onHost);
+    layer.append(host, onLayer);
+    doc.body.append(layer);
+    // Another realm: this window's classes do not match the iframe's nodes.
+    expect(onHost instanceof Element).toBe(false);
+    const reached: string[] = [];
+    for (const type of ['pointerdown', 'pointerup', 'click']) {
+      onHost.addEventListener(type, () => reached.push(type));
+    }
+    const send = (target: Element, type: string, pointerType: string) =>
+      target.dispatchEvent(
+        new view.PointerEvent(type, {
+          ...INIT,
+          pointerId: 7,
+          pointerType,
+        }),
+      );
+    const unmark = markModalOutletHost(host);
+    const release = holdInput(layer, {
+      until: new Promise(() => {}),
+      scope: 'layer',
+    });
+    // A toast in the leaving layer takes the tap.
+    send(onHost, 'pointerdown', 'touch');
+    send(onHost, 'pointerup', 'touch');
+    send(onHost, 'click', 'touch');
+    expect(reached).toEqual(['pointerdown', 'pointerup', 'click']);
+    expect(holdsTouch(onHost)).toBe(false);
+    // The layer's own content stays held.
+    expect(holdsTouch(onLayer)).toBe(true);
+    release();
+    unmark();
+    // A new press ends the released hold's click window in that document.
+    send(doc.body, 'pointerdown', 'mouse');
+    send(doc.body, 'pointerup', 'mouse');
+  });
+
   it("holds a pen's press as a finger's", () => {
     const {layer} = mountLayer();
     const {button, reached} = recorder(layer);

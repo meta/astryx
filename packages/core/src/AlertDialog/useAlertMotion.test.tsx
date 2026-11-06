@@ -8,7 +8,8 @@
  *   start scale. An exit keeps the alert presented until its end, or closes at
  *   once at 0 ms, and holds its input meanwhile: inert content, focus out. It
  *   also covers the backstop, a reopen mid-exit that gives the content and
- *   focus back, and a disabled hook that follows the caller
+ *   focus back, and a disabled hook that follows the caller. The reopen gives
+ *   focus back in a same-origin iframe too
  * @position jsdom tests of packages/core/src/AlertDialog/useAlertMotion.ts
  */
 
@@ -159,6 +160,32 @@ describe('useAlertMotion', () => {
     expect(motion().isLeaving).toBe(false);
     expect(cancel).not.toHaveAttribute('inert');
     expect(cancel).toHaveFocus();
+  });
+
+  it('gives the blurred action focus back on a reopen mid-exit in a same-origin iframe too', async () => {
+    // A same-origin iframe's document: its nodes belong to that window.
+    const frame = document.createElement('iframe');
+    document.body.append(frame);
+    const doc = frame.contentDocument as Document;
+    const container = doc.body.appendChild(doc.createElement('div'));
+    const view = render(<Alert isOpen isEnabled />, {container});
+    await settle();
+    const cancel = view.getByRole('button', {name: 'Cancel'});
+    // Another realm: this window's classes do not match the iframe's nodes.
+    expect(cancel instanceof HTMLElement).toBe(false);
+    // Compared as booleans: printing another window's node fails here.
+    const hasFocus = () => doc.activeElement === cancel;
+    cancel.focus();
+    expect(hasFocus()).toBe(true);
+    running = [standIn(300)];
+    view.rerender(<Alert isOpen={false} isEnabled />);
+    expect(cancel.hasAttribute('inert')).toBe(true);
+    expect(hasFocus()).toBe(false);
+    view.rerender(<Alert isOpen isEnabled />);
+    expect(cancel.hasAttribute('inert')).toBe(false);
+    expect(hasFocus()).toBe(true);
+    view.unmount();
+    frame.remove();
   });
 
   it('does nothing when disabled: no touch style and no hold, and it closes with the caller', () => {

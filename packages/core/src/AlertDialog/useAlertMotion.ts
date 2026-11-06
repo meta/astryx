@@ -5,7 +5,8 @@
 /**
  * @file useAlertMotion.ts
  * @input Whether the alert is open, whether it takes the touch look, the
- *   dialog element's CSS animations, and the Layer module's input hold
+ *   dialog element's CSS animations, and the Layer module's input hold. It
+ *   checks nodes with utils/nodeType, which reads another window's nodes too
  * @output Exports useAlertMotion and AlertMotion: whether the Dialog is
  *   presented, which touch style applies, and the dialog's callback ref. The
  *   Dialog stays open while the alert fades out. Meanwhile its input is held
@@ -23,6 +24,7 @@ import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useSettledOpen} from '../hooks/useSettledOpen';
 import {holdInput} from '../Layer/inputHold';
 import {alertController} from '../motion/uikit/alert';
+import {isHTMLElement} from '../utils/nodeType';
 
 /** A dialog that misses its exit's end still closes this long after it. */
 const EXIT_BACKSTOP_MS = 100;
@@ -174,7 +176,7 @@ export function useAlertMotion({
     const focused = element?.ownerDocument.activeElement;
     blurredRef.current =
       element != null &&
-      focused instanceof HTMLElement &&
+      isHTMLElement(focused) &&
       focused !== element &&
       element.contains(focused)
         ? focused
