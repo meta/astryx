@@ -20,6 +20,7 @@ import {armClickGuard} from '../utils/clickGuard';
 import {subscribeInput} from '../utils/inputStream';
 import {isNode} from '../utils/nodeType';
 import {layoutViewportHeight} from '../utils/layoutViewport';
+import {PRESS_SLOP_PX} from '../utils/pressGesture';
 import {caretAt} from '../utils/selectionLock';
 
 // A shortfall smaller than this is rounding, not a keyboard.
@@ -540,10 +541,6 @@ export function watchRevealPan(
   };
 }
 
-// A touch that moves this far is the browser's to scroll, not a tap on a
-// field. Safari claims a touch for scrolling past 10 px.
-const TAP_SLOP_PX = 10;
-
 /** The caller's rules for claimTapFocus. */
 export interface ClaimTapFocusOptions {
   /** The control a touch on `target` would focus, when this caller claims it. */
@@ -601,7 +598,10 @@ export function claimTapFocus(
       start == null ||
       event.touches.length !== 1 ||
       touch == null ||
-      Math.hypot(touch.clientX - start.x, touch.clientY - start.y) > TAP_SLOP_PX
+      // Past the press slop, the touch is the browser's to scroll, not a tap
+      // on a field.
+      Math.hypot(touch.clientX - start.x, touch.clientY - start.y) >
+        PRESS_SLOP_PX
     ) {
       stopFollowing();
     }
