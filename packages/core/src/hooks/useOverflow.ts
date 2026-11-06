@@ -280,7 +280,12 @@ export function useOverflow(
   itemCount: number,
   options: UseOverflowOptions = {},
 ): UseOverflowReturn {
-  return useOverflowInternal(itemCount, options, {tracksRows: true});
+  const {remeasure: _remeasure, ...result} = useOverflowInternal(
+    itemCount,
+    options,
+    {tracksRows: true},
+  );
+  return result;
 }
 
 /**
@@ -288,13 +293,16 @@ export function useOverflow(
  * `rows` and `rowHeight`. With `tracksRows` false, the hook does not track
  * them and reports `rows: 1` and `rowHeight: 0`. A state write that nobody
  * reads still re-renders the host. Internal: the public hook always tracks
- * them.
+ * them. `onMeasure` runs after each measurement, in the same render as its
+ * result, so a host can mark what that measurement covered. `remeasure`
+ * measures again with the lists of the current commit, for a change that
+ * resizes nothing.
  */
 export function useOverflowInternal(
   itemCount: number,
   options: UseOverflowOptions,
-  {tracksRows}: {tracksRows: boolean},
-): UseOverflowReturn {
+  {tracksRows, onMeasure}: {tracksRows: boolean; onMeasure?: () => void},
+): UseOverflowReturn & {remeasure: () => void} {
   const {
     gap = 0,
     minVisibleItems = 0,
@@ -478,10 +486,12 @@ export function useOverflowInternal(
   // The latest measurement, under one identity. A list stays pending once,
   // and a pending measurement never runs with an earlier render's options.
   const calculateRef = useRef(calculate);
-  const measureLatest: Measure = useCallback(
-    reason => calculateRef.current(reason),
-    [],
-  );
+  const onMeasureRef = useRef(onMeasure);
+  const measureLatest: Measure = useCallback(reason => {
+    const deferred = calculateRef.current(reason);
+    onMeasureRef.current?.();
+    return deferred;
+  }, []);
 
   const containerRef = useCallback(
     (el: HTMLElement | null) => {
@@ -529,6 +539,16 @@ export function useOverflowInternal(
     scheduleMeasure(measureLatest, 'commit');
   }, [calculate, measureLatest]);
 
+  // The host passes a new `onMeasure` each render. The latest one runs.
+  useIsomorphicLayoutEffect(() => {
+    onMeasureRef.current = onMeasure;
+  });
+
+  const remeasure = useCallback(
+    () => scheduleMeasure(measureLatest, 'commit'),
+    [measureLatest],
+  );
+
   const hasOverflow = visibleCount < itemCount;
 
   return {
@@ -540,5 +560,6 @@ export function useOverflowInternal(
     // the return uses the fixed values.
     rows: tracksRows ? rows : 1,
     rowHeight: tracksRows ? rowHeight : 0,
+    remeasure,
   };
 }
