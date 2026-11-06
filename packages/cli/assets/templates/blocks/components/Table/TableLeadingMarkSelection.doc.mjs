@@ -8,7 +8,7 @@ export const doc = {
   name: 'Table — Selection in the Leading Mark',
   displayName: 'Table — Selection in the Leading Mark',
   description:
-    'Row selection without a checkbox column: each row shows its avatar, and the checkbox takes the avatar slot while a mouse is over it, on keyboard focus, and on every row once anything is selected. The state comes from useTableSelectionState; the checkboxes are rendered in the name column instead of by useTableSelection.',
+    'Selection without a checkbox column: each item shows its avatar, and the checkbox takes the avatar slot while a mouse is over it, on keyboard focus, and everywhere once anything is selected. The state comes from useTableSelectionState, and the checkboxes render in the name column instead of the useTableSelection column, so checked items get no aria-selected or highlight; add them if needed.',
   isReady: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['Table', 'CheckboxInput', 'Avatar'],

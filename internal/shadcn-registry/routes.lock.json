@@ -3892,6 +3892,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-table-selection-state-table-selection-in-the-leading-mark",
+      "path": "examples/use-table-selection-state/table-selection-in-the-leading-mark",
+      "aliases": []
+    },
+    {
       "name": "example-use-table-selection-table-bulk-actions",
       "path": "examples/use-table-selection/table-bulk-actions",
       "aliases": []

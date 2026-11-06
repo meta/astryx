@@ -7,6 +7,7 @@ import * as stylex from '@stylexjs/stylex';
 import {Avatar} from '@astryxdesign/core/Avatar';
 import {CheckboxInput} from '@astryxdesign/core/CheckboxInput';
 import {HStack} from '@astryxdesign/core/HStack';
+import {useContainerReveal} from '@astryxdesign/core/hooks';
 import {
   Table,
   proportional,
@@ -14,6 +15,7 @@ import {
 } from '@astryxdesign/core/Table';
 import type {TableColumn} from '@astryxdesign/core/Table';
 import {colorVars, spacingVars} from '@astryxdesign/core/theme/tokens.stylex';
+import {mergeProps} from '@astryxdesign/core/utils';
 
 interface Automation extends Record<string, unknown> {
   id: string;
@@ -43,14 +45,6 @@ const styles = stylex.create({
   checkbox: {
     borderRadius: '50%',
     backgroundColor: colorVars['--color-background-surface'],
-    opacity: {
-      default: 0,
-      ':hover': {default: null, '@media (hover: hover)': 1},
-      ':focus-within': 1,
-    },
-  },
-  checkboxShown: {
-    opacity: 1,
   },
   name: {
     paddingInlineStart: spacingVars['--spacing-1'],
@@ -59,6 +53,9 @@ const styles = stylex.create({
 
 export default function TableLeadingMarkSelection() {
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  // The mark reveals its checkbox on hover and keyboard focus, and always
+  // shows it on touch.
+  const {getContainerProps, getContentRevealProps} = useContainerReveal();
   const {selectionConfig, selectionState} = useTableSelectionState<Automation>({
     data: automations,
     idKey: 'id',
@@ -93,17 +90,22 @@ export default function TableLeadingMarkSelection() {
         const isSelected = selectionConfig.getIsItemSelected(item);
         return (
           <HStack gap={2} vAlign="center">
-            <span {...stylex.props(styles.mark)}>
+            <span
+              {...mergeProps(stylex.props(styles.mark), getContainerProps())}>
               {selectionState.hasSelection ? null : (
                 <span {...stylex.props(styles.layer)}>
                   <Avatar name={item.owner} size="sm" tooltip={false} />
                 </span>
               )}
               <span
-                {...stylex.props(
-                  styles.layer,
-                  styles.checkbox,
-                  selectionState.hasSelection && styles.checkboxShown,
+                {...mergeProps(
+                  stylex.props(styles.layer, styles.checkbox),
+                  getContentRevealProps({
+                    isLayoutPreserved: true,
+                    forceVisibility: selectionState.hasSelection
+                      ? 'shown'
+                      : undefined,
+                  }),
                 )}>
                 <CheckboxInput
                   label={`Select ${item.name}`}
