@@ -73,7 +73,7 @@ import {
 import type {SelectorOptionType, SelectorOptionData} from './types';
 import {isOptionData, isDivider, isSection, normalizeOption} from './utils';
 import {getSelectableOptionEntries} from './selectableOptionEntries';
-import {useCombobox, useSelectedItemOffset} from './hooks';
+import {useCombobox, useSelectedItemOverlayMargin} from './hooks';
 import {useMenuPress} from '../hooks/useMenuPress';
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {useTypeahead} from '../hooks/useTypeahead';
@@ -126,6 +126,9 @@ registerEnglishFallback(english);
  * taller bottom sheet) costs only the measure's correction.
  */
 const MOST_ROWS_THAT_FIT = 12;
+
+// Private runtime state. No app or theme sets it.
+const OVERLAY_MARGIN_PROPERTY = '--_selector-overlay-margin';
 
 const styles = stylex.create({
   // Trigger container — the enhanced click target wrapping the combobox button and clear button as siblings
@@ -1453,8 +1456,8 @@ export function Selector<T extends SelectorOptionType>(
   // placement opts out of the selector-specific overlay behavior and uses the
   // standard layer positioning API instead.
   const shouldOverlaySelectedItem = placement == null && !hasSearch;
-  const {offset: rawOffset, isPositioned: rawIsPositioned} =
-    useSelectedItemOffset({
+  const {marginBlockStart: rawMarginBlockStart, isPositioned: rawIsPositioned} =
+    useSelectedItemOverlayMargin({
       isOpen: popover.isOpen && shouldOverlaySelectedItem,
       selectedItemIndex,
       listboxId,
@@ -1462,13 +1465,21 @@ export function Selector<T extends SelectorOptionType>(
       anchorRef,
     });
 
-  const selectedItemOffset = shouldOverlaySelectedItem ? rawOffset : 0;
   const isPositioned = shouldOverlaySelectedItem ? rawIsPositioned : true;
   const popoverPlacement = placement ?? 'below';
+  const overlayMargin =
+    shouldOverlaySelectedItem && rawMarginBlockStart != null
+      ? rawMarginBlockStart
+      : null;
+  const overlayMarginProperty: Record<string, string> =
+    overlayMargin == null ? {} : {[OVERLAY_MARGIN_PROPERTY]: overlayMargin};
   const popoverOffsetStyle: React.CSSProperties | undefined =
-    selectedItemOffset > 0
-      ? {marginBlockStart: `-${selectedItemOffset}px`}
-      : undefined;
+    overlayMargin == null
+      ? undefined
+      : {
+          ...overlayMarginProperty,
+          marginBlockStart: `var(${OVERLAY_MARGIN_PROPERTY})`,
+        };
 
   // Clear the current value. Shared by the clear button and the keyboard
   // Delete/Backspace path so clearing is reachable without a mouse.

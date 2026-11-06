@@ -68,6 +68,7 @@ import {
   type LayoutChange,
 } from '../../../motion/animatedLayout';
 import {
+  dividerOffset,
   GLIDING_ATTRIBUTE,
   glidingDividerStyles,
   markGlidingRows,
@@ -765,6 +766,7 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
       row: HTMLElement;
       panel: HTMLElement | null;
       entrance: Animation | null;
+      panelOffset: number | null;
       edges: Map<Element, BottomEdge>;
     }[] = [];
     for (const pending of pendings) {
@@ -784,6 +786,7 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
             ? next
             : null,
         entrance: null as Animation | null,
+        panelOffset: null as number | null,
         edges: new Map<Element, BottomEdge>(),
       };
       // Read where the glide reads the layout, before anything moves: the
@@ -804,6 +807,8 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
           const edge = rowEdge(record.panel);
           if (edge != null) {
             record.edges.set(record.panel, edge);
+            // Its entrance moves its cell: read where its line hangs first.
+            record.panelOffset = dividerOffset(record.panel, edge);
           }
           record.entrance = playLayoutChange(animatedLayout, record.panel);
         }
@@ -831,12 +836,12 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
     // one runs after it, before the frame paints, and only writes.
     queueMicrotask(() => {
       const stopped = Promise.all(
-        moved.map(async ({row, panel, entrance, edges}) =>
+        moved.map(async ({row, panel, entrance, panelOffset, edges}) =>
           markGlidingRows(
             row,
             edges,
             panel != null && entrance != null
-              ? {row: panel, animation: entrance}
+              ? {row: panel, animation: entrance, offset: panelOffset}
               : null,
             glideOf,
           ),
