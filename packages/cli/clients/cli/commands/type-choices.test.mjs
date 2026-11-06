@@ -22,6 +22,34 @@ const typeOption = d =>
 const typeParam = d =>
   d.params.find((/** @type {any} */ p) => p.name === 'options.type');
 
+/**
+ * What build returns for each domain: template names a start; component and
+ * hook list only that domain; the kit has no doc or theme group, so doc and
+ * theme return an empty kit.
+ * @param {string} type
+ * @param {any} data
+ */
+const checkBuild = (type, data) => {
+  if (type === 'template') {
+    expect(data.start).not.toBeNull();
+    return;
+  }
+  expect(data.start).toBeNull();
+  expect(data.pages).toEqual([]);
+  expect(data.blocks).toEqual([]);
+  if (type === 'doc' || type === 'theme') expect(data.domain).toEqual([]);
+  else for (const entry of data.domain) expect(entry.domain).toBe(type);
+};
+
+/**
+ * Search returns only entries of the requested domain.
+ * @param {string} type
+ * @param {any} data
+ */
+const checkSearch = (type, data) => {
+  for (const entry of data.results) expect(entry.domain).toBe(type);
+};
+
 describe.each([
   [
     'build',
@@ -29,6 +57,7 @@ describe.each([
     buildFn,
     (/** @type {string} */ t) =>
       build('settings page', {type: /** @type {any} */ (t)}),
+    checkBuild,
   ],
   [
     'search',
@@ -36,8 +65,9 @@ describe.each([
     searchFn,
     (/** @type {string} */ t) =>
       search('button', {type: /** @type {any} */ (t)}),
+    checkSearch,
   ],
-])('%s --type', (_name, command, fn, run) => {
+])('%s --type', (_name, command, fn, run, check) => {
   it('lists exactly the accepted domains in the CLI choices and help text', () => {
     const option = typeOption(command);
     expect(option.choices).toEqual(SEARCH_DOMAINS);
@@ -58,6 +88,8 @@ describe.each([
   });
 
   it.each(SEARCH_DOMAINS)('accepts %s', async type => {
-    await expect(run(type)).resolves.toBeTruthy();
+    const response = /** @type {any} */ (await run(type));
+    expect(response).toBeTruthy();
+    check(type, response.data);
   });
 });
