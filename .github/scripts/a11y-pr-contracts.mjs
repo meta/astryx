@@ -53,7 +53,8 @@
  * changed `audit` spec still waits for its audit pull request. To stay inside the job's 15-minute budget
  * it takes at most CHANGED_SPEC_LIMIT changed files, starts each file only
  * when the run still fits PLAN_BUDGET_MS at that file's recorded time
- * (.github/a11y-contract-durations.json), and stops at that budget. Each file
+ * (.github/a11y-contract-durations.json), and stops at
+ * DEFAULT_CHECK_BUDGET_MS. Each file
  * it leaves out is reported as not run, never as passed or failed. Locally,
  * `pnpm test:a11y-contract:pr origin/main --dry-run` prints what a PR from
  * this branch would run.

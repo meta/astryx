@@ -316,45 +316,34 @@ describe('the default check of the touched components', () => {
 
   it('plans three quarters of the stop, so a slower runner still finishes every file it starts', () => {
     expect(PLAN_BUDGET_MS).toBe(DEFAULT_CHECK_BUDGET_MS * 0.75);
-    // One pull request's own and changed specs, at today's recorded times:
-    // the plan filled the whole 8 minutes, and Listbox, 7 minutes on that
-    // runner, was cut by the stop.
-    const durations = JSON.parse(
-      fs.readFileSync(
-        path.join(root, '.github/a11y-contract-durations.json'),
-        'utf8',
-      ),
-    );
-    const recorded = fileSeconds(durations);
-    const changedAndOwned = [
-      'packages/core/src/Selector/__tests__/SelectorKeyboardInset.a11y.chromium.spec.ts',
-      'packages/core/src/__tests__/FocusRingOwner.a11y.chromium.spec.ts',
-      'packages/core/src/DropdownMenu/__tests__/DropdownMenuTooltip.a11y.chromium.spec.ts',
-      'packages/core/src/Field/__tests__/FieldDisabledForcedColorsFocus.a11y.chromium.spec.ts',
-      'packages/core/src/Layer/__tests__/BackdropPress.a11y.chromium.spec.ts',
-      'packages/core/src/Layer/__tests__/LayerBrowserHide.a11y.chromium.spec.ts',
-      'packages/core/src/Selector/__tests__/ComboboxField.a11y.chromium.spec.ts',
-      'packages/core/src/Selector/__tests__/Listbox.a11y.chromium.spec.ts',
-      'packages/core/src/Selector/__tests__/Selector.a11y.chromium.spec.ts',
-      'packages/core/src/Selector/__tests__/Selector.combobox.a11y.chromium.spec.ts',
-      'packages/core/src/Selector/__tests__/SelectorListboxName.a11y.chromium.spec.ts',
-      'packages/core/src/Selector/__tests__/SelectorReducedMotion.a11y.chromium.spec.ts',
-    ];
+    // One pull request's changed and owned specs, at the times recorded when
+    // the plan filled the whole 8 minutes and the stop cut Listbox (7 minutes
+    // on that runner). A file with no recorded time has the median then, 17.3 s.
+    const recorded = {
+      'packages/core/src/Selector/__tests__/SelectorKeyboardInset.a11y.chromium.spec.ts': 17.3,
+      'packages/core/src/__tests__/FocusRingOwner.a11y.chromium.spec.ts': 17.3,
+      'packages/core/src/DropdownMenu/__tests__/DropdownMenuTooltip.a11y.chromium.spec.ts': 17.3,
+      'packages/core/src/Field/__tests__/FieldDisabledForcedColorsFocus.a11y.chromium.spec.ts': 17.3,
+      'packages/core/src/Layer/__tests__/BackdropPress.a11y.chromium.spec.ts': 17.3,
+      'packages/core/src/Layer/__tests__/LayerBrowserHide.a11y.chromium.spec.ts': 5.3,
+      'packages/core/src/Selector/__tests__/ComboboxField.a11y.chromium.spec.ts': 38.2,
+      'packages/core/src/Selector/__tests__/Listbox.a11y.chromium.spec.ts': 325.2,
+      'packages/core/src/Selector/__tests__/Selector.a11y.chromium.spec.ts': 1.7,
+      'packages/core/src/Selector/__tests__/Selector.combobox.a11y.chromium.spec.ts': 12.3,
+      'packages/core/src/Selector/__tests__/SelectorListboxName.a11y.chromium.spec.ts': 17.3,
+      'packages/core/src/Selector/__tests__/SelectorReducedMotion.a11y.chromium.spec.ts': 17.3,
+    };
+    const changedAndOwned = Object.keys(recorded);
     const {run, notRun} = planDefaultCheck({
       changed: [{file: changedAndOwned[0], reason: 'spec changed'}],
-      owned: changedAndOwned
-        .slice(1)
-        .map(file => ({
-          file,
-          reason: 'changed packages/core/src/Selector/Selector.test.tsx',
-        })),
+      owned: changedAndOwned.slice(1).map(file => ({
+        file,
+        reason: 'changed packages/core/src/Selector/Selector.test.tsx',
+      })),
       seconds: recorded,
       workers: 4,
     });
-    const vals = Object.values(recorded).sort((a, b) => a - b);
-    const fallback = vals[Math.floor(vals.length / 2)];
-    const msOf = file =>
-      (recorded[file] ?? fallback) * 1000 * RECORDED_TIME_MARGIN;
+    const msOf = file => recorded[file] * 1000 * RECORDED_TIME_MARGIN;
     expect(STARTUP_MS + projectedMs(files(run), msOf, 4)).toBeLessThanOrEqual(
       PLAN_BUDGET_MS,
     );
