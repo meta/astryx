@@ -986,6 +986,45 @@ for (const [label, waitMs] of [
   });
 }
 
+test('a re-grab while the panel slides shut catches it where it shows, and its edge follows the finger', async ({
+  page,
+}) => {
+  await openFixture(page, STORY.start);
+  await expectPresent(page);
+  const pane = page.getByTestId('sliding-panel');
+  const handle = page.getByRole('separator', {name: 'Resize panel'});
+  const at = await pressHandle(page);
+  // 200 px less 190 px is 10 px: under the 40 px collapse threshold.
+  await page.mouse.move(at.x - 190, at.y, {steps: 4});
+  // The close holds 120 ms in, so the grab lands mid-slide on any host.
+  await holdMotionAt(page, 120, async () => {
+    await page.mouse.up();
+  });
+  await expect(pane).toHaveAttribute('inert', '');
+  const held = await handle.boundingBox();
+  if (held == null) {
+    throw new Error('the handle is not laid out');
+  }
+  const grab = {x: held.x + held.width / 2, y: at.y};
+  await page.mouse.move(grab.x, grab.y);
+  await page.mouse.down();
+  // The drag starts on the first move, while the slide still holds.
+  await page.mouse.move(grab.x + 1, grab.y);
+  await expect(pane).not.toHaveAttribute('inert', '');
+  // The held motion goes, so the handle shows only what the catch draws.
+  await releaseMotion(page);
+  const caught = await handle.boundingBox();
+  expect(
+    Math.abs((caught?.x ?? 0) + (caught?.width ?? 0) / 2 - (grab.x + 1)),
+  ).toBeLessThan(1);
+  await page.mouse.move(grab.x + 30, grab.y, {steps: 3});
+  const moved = await handle.boundingBox();
+  expect(
+    Math.abs((moved?.x ?? 0) + (moved?.width ?? 0) / 2 - (grab.x + 30)),
+  ).toBeLessThan(1);
+  await page.mouse.up();
+});
+
 test('below the minimum the edge moves at most 8 px, the pane keeps its minimum, and a slow lift above the threshold springs the edge back', async ({
   page,
 }) => {

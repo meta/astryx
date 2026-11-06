@@ -334,6 +334,46 @@ describe("a LayoutPanel's pane slides on collapse and open (component:Resizable 
     fireEvent.pointerUp(zone, {pointerId: 2, clientX: 140});
   });
 
+  it('catches a pane sliding shut between snap points where it shows, and follows the finger to a snap', () => {
+    render(<PropsSplit config={{snaps: [50, 150, 300]}} />);
+    const zone = grabZone();
+    fireEvent.pointerDown(zone, {pointerId: 1, clientX: 300});
+    fireEvent.pointerMove(zone, {pointerId: 1, clientX: 110});
+    fireEvent.pointerUp(zone, {pointerId: 1, clientX: 110});
+    expect(propsRegion?.isCollapsed).toBe(true);
+    // The lift left the edge near 42 px. Mid-slide, the handle shows 133 px
+    // further out, so the pane shows about 175 px.
+    vi.spyOn(separator(), 'getBoundingClientRect').mockReturnValue(
+      DOMRect.fromRect({x: 133, y: 0, width: 0, height: 0}),
+    );
+    fireEvent.pointerDown(zone, {pointerId: 2, clientX: 110});
+    fireEvent.pointerMove(zone, {pointerId: 2, clientX: 120});
+    // The edge followed the finger 10 px from where it showed, between snaps.
+    expect(propsRegion?.size).toBeGreaterThan(180);
+    expect(propsRegion?.size).toBeLessThan(190);
+    // Past a snap point, the snaps hold again.
+    fireEvent.pointerMove(zone, {pointerId: 2, clientX: 245});
+    expect(propsRegion?.size).toBe(300);
+    fireEvent.pointerUp(zone, {pointerId: 2, clientX: 245});
+    expect(propsRegion?.size).toBe(300);
+  });
+
+  it('lands a caught pane on the snap nearest its edge when the finger lifts between snaps', () => {
+    render(<PropsSplit config={{snaps: [50, 150, 300]}} />);
+    const zone = grabZone();
+    fireEvent.pointerDown(zone, {pointerId: 1, clientX: 300});
+    fireEvent.pointerMove(zone, {pointerId: 1, clientX: 110});
+    fireEvent.pointerUp(zone, {pointerId: 1, clientX: 110});
+    vi.spyOn(separator(), 'getBoundingClientRect').mockReturnValue(
+      DOMRect.fromRect({x: 133, y: 0, width: 0, height: 0}),
+    );
+    fireEvent.pointerDown(zone, {pointerId: 2, clientX: 110});
+    fireEvent.pointerMove(zone, {pointerId: 2, clientX: 120});
+    fireEvent.pointerUp(zone, {pointerId: 2, clientX: 120});
+    expect(propsRegion?.isCollapsed).toBe(false);
+    expect(propsRegion?.size).toBe(150);
+  });
+
   it('plays nothing for the first render or a resize that neither collapses nor opens', () => {
     render(<PropsSplit config={{defaultIsCollapsed: true}} />);
     act(() => {
