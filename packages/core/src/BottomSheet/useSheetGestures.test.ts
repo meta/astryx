@@ -103,7 +103,7 @@ function down(hook: Hook, y: number, t: number, target: HTMLElement) {
     hook.result.current.handleProps.onPointerDown(pointerEvent(y, t, target)),
   );
 }
-/** A touch press on the handle: the release follows UIKit's sheet. */
+/** A touch press on the handle: a drag's close then plays the close spring. */
 function touchDown(hook: Hook, y: number, t: number, target: HTMLElement) {
   act(() => hook.result.current.sheetRef(target));
   act(() =>
@@ -174,73 +174,13 @@ describe('isInsideNestedLayer', () => {
 });
 
 describe('useSheetGestures', () => {
-  it('closes from the tallest detent on a flick that lands nearer closed than any detent', () => {
+  it('dismisses on a fast downward flick (swipe-to-close)', () => {
     const {hook, onDismiss} = setup({snapHeights: () => [200]});
     const t = makeTarget();
-    touchDown(hook, 0, 0, t);
-    // 60px in 20ms = 3,000 px/s. Projected 0.1 s ahead it lands at 360px,
-    // nearer closed (400px) than the 200px detent.
+    down(hook, 0, 0, t);
+    // 60px in 20ms = 3px/ms, and 60px > the flick distance floor.
     move(hook, 60, 20, t);
     up(hook, 60, 22, t);
-    expect(onDismiss).toHaveBeenCalledTimes(1);
-  });
-
-  it('closes from the tallest detent on a flick whose projection passes the next detent', () => {
-    const {hook, onDismiss} = setup({snapHeights: () => [200]});
-    const t = makeTarget();
-    touchDown(hook, 0, 0, t);
-    // 60px in 40ms = 1,500 px/s: a flick. Projected 0.1 s ahead it lands at
-    // 210px, past the 200px detent, so it goes on to closed.
-    move(hook, 30, 20, t);
-    move(hook, 60, 40, t);
-    up(hook, 60, 42, t);
-    expect(onDismiss).toHaveBeenCalledTimes(1);
-  });
-
-  it('takes a softer flick from the tallest detent to the next detent down when its projection stops short of it', () => {
-    const onSnap = vi.fn();
-    const {hook, onDismiss} = setup({snapHeights: () => [200], onSnap});
-    const t = makeTarget();
-    touchDown(hook, 0, 0, t);
-    // 60px in 50ms = 1,200 px/s: a flick. Projected 0.1 s ahead it lands at
-    // 180px, short of the 200px detent, so it goes one position down.
-    move(hook, 30, 25, t);
-    move(hook, 60, 50, t);
-    up(hook, 60, 52, t);
-    expect(onDismiss).not.toHaveBeenCalled();
-    expect(onSnap).toHaveBeenLastCalledWith(200);
-  });
-
-  it('keeps a long release under the flick speed from closing a sheet above its lowest detent', () => {
-    const onSnap = vi.fn();
-    const {hook, onDismiss} = setup({snapHeights: () => [200], onSnap});
-    const t = makeTarget();
-    touchDown(hook, 0, 0, t);
-    // 100px at about 800 px/s: no flick. The sheet stops at the lowest
-    // detent.
-    move(hook, 40, 50, t);
-    move(hook, 80, 100, t);
-    move(hook, 100, 125, t);
-    up(hook, 100, 127, t);
-    expect(onDismiss).not.toHaveBeenCalled();
-    expect(onSnap).toHaveBeenLastCalledWith(200);
-  });
-
-  it('closes on a flick at the lowest of two detents', () => {
-    const onSnap = vi.fn();
-    const {hook, onDismiss} = setup({snapHeights: () => [200], onSnap});
-    const t = makeTarget();
-    // Settle on the 200px detent first.
-    touchDown(hook, 0, 0, t);
-    move(hook, 90, 300, t);
-    move(hook, 180, 700, t);
-    up(hook, 180, 1100, t);
-    expect(onSnap).toHaveBeenLastCalledWith(200);
-    // 60px in 40ms = 1,500 px/s from the lowest detent closes the sheet.
-    touchDown(hook, 200, 2000, t);
-    move(hook, 230, 2020, t);
-    move(hook, 260, 2040, t);
-    up(hook, 260, 2042, t);
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 
@@ -370,175 +310,15 @@ describe('useSheetGestures', () => {
     });
   });
 
-  it('takes a fast short flick from the tallest of two detents to the next one down', () => {
-    const onSnap = vi.fn();
-    const {hook, onDismiss} = setup({snapHeights: () => [200], onSnap});
-    const t = makeTarget();
-    // 20px in 16ms = 1,250 px/s, a flick. Its 0.1 s projection lands at
-    // 145px, short of the 200px detent. A flick goes at least one position
-    // down: the 200px detent.
-    touchDown(hook, 0, 0, t);
-    move(hook, 20, 16, t);
-    up(hook, 20, 18, t);
-    expect(onDismiss).not.toHaveBeenCalled();
-    expect(onSnap).toHaveBeenLastCalledWith(200);
-  });
-
-  it('closes on a fast short flick at the lowest detent', () => {
-    const {hook, onDismiss} = setup(); // one detent: fully open
-    const t = makeTarget();
-    touchDown(hook, 0, 0, t);
-    move(hook, 20, 10, t);
-    up(hook, 20, 12, t);
-    expect(onDismiss).toHaveBeenCalledTimes(1);
-  });
-
-  it('keeps a short release under the flick speed', () => {
-    const {hook, onDismiss} = setup();
-    const t = makeTarget();
-    // 20px in 25ms = 800 px/s: below the flick speed, so it settles back.
-    touchDown(hook, 0, 0, t);
-    move(hook, 20, 25, t);
-    up(hook, 20, 27, t);
-    expect(onDismiss).not.toHaveBeenCalled();
-    expect(hook.result.current.settledOffset).toBe(0);
-  });
-
-  it('expands to the next detent up on a fast short flick', () => {
-    const onSnap = vi.fn();
-    const {hook} = setup({snapHeights: () => [200], onSnap});
-    const t = makeTarget();
-    // Settle on the 200px detent first.
-    touchDown(hook, 0, 0, t);
-    move(hook, 90, 300, t);
-    move(hook, 180, 700, t);
-    up(hook, 180, 1100, t);
-    expect(onSnap).toHaveBeenLastCalledWith(200);
-    touchDown(hook, 400, 2000, t);
-    move(hook, 380, 2010, t);
-    up(hook, 380, 2012, t);
-    expect(onSnap).toHaveBeenLastCalledWith(400);
-  });
-
-  it('hands the panel the distance left and the release speed after a drag closes it', () => {
-    const {hook, onDismiss} = setup();
-    const t = makeTarget();
-    touchDown(hook, 0, 0, t);
-    move(hook, 20, 10, t);
-    // The host takes the close in the same update, as a controlled host does.
-    act(() => {
-      hook.result.current.handleProps.onPointerUp(pointerEvent(20, 12, t));
-      hook.rerender({isOpen: false, isOpenRequested: false, onDismiss});
-    });
-    expect(onDismiss).toHaveBeenCalledTimes(1);
-    // 380px left to travel, at the release's 2,000 px/s.
-    expect(hook.result.current.dragExit).toEqual({
-      distance: 380,
-      velocity: 2000,
-    });
-  });
-
-  it('keeps the stylesheet exit for a close that no drag started', () => {
-    const {hook, onDismiss} = setup();
-    hook.rerender({isOpen: false, isOpenRequested: false, onDismiss});
-    expect(hook.result.current.dragExit).toBeNull();
-  });
-
-  it('springs a quick short mouse drag back at the lowest detent', () => {
-    const {hook, onDismiss} = setup(); // one detent: fully open
-    const t = makeTarget();
-    // 40 px in 20 ms = 2,000 px/s with a mouse. The flick is a touch gesture,
-    // and 40 px is too short to project.
-    down(hook, 0, 0, t);
-    move(hook, 20, 10, t);
-    move(hook, 40, 20, t);
-    up(hook, 40, 22, t);
-    expect(onDismiss).not.toHaveBeenCalled();
-    expect(hook.result.current.settledOffset).toBe(0);
-  });
-
-  it('gives a mouse drag that closes the sheet the stylesheet exit', () => {
-    const {hook, onDismiss} = setup();
-    const t = makeTarget();
-    down(hook, 0, 0, t);
-    move(hook, 100, 50, t);
-    move(hook, 200, 100, t);
-    act(() => {
-      hook.result.current.handleProps.onPointerUp(pointerEvent(200, 102, t));
-      hook.rerender({isOpen: false, isOpenRequested: false, onDismiss});
-    });
-    expect(onDismiss).toHaveBeenCalledTimes(1);
-    expect(hook.result.current.dragExit).toBeNull();
-  });
-
-  it('never stops a faster touch release short of a slower one', () => {
-    // Detents at 0, 200 and 340 px; closed at 400 px.
-    const land = (ms: number) => {
-      const {hook} = setup({snapHeights: () => [200, 60]});
-      const t = makeTarget();
-      touchDown(hook, 0, 0, t);
-      move(hook, 30, ms / 2, t);
-      move(hook, 60, ms, t);
-      up(hook, 60, ms + 2, t);
-      return hook.result.current.settledOffset;
-    };
-    // 60 px at 1,000 px/s and at 1,091 px/s. Both land 0.1 s ahead, nearest
-    // the 200 px detent.
-    expect(land(60)).toBe(200);
-    expect(land(55)).toBe(200);
-  });
-
-  it('closes the sheet on a slow touch drag only past halfway from the lowest detent to closed', () => {
-    const drag = (to: number) => {
-      const {hook, onDismiss} = setup({snapHeights: () => [200]});
-      const t = makeTarget();
-      // Settle on the 200 px detent first.
-      touchDown(hook, 0, 0, t);
-      move(hook, 90, 300, t);
-      move(hook, 180, 700, t);
-      up(hook, 180, 1100, t);
-      // Then a slow drag down at 225 px/s, too slow to project, in ten even
-      // steps.
-      touchDown(hook, 200, 2000, t);
-      const step = (to - 200) / 10;
-      for (let i = 1; i <= 10; i += 1) {
-        move(hook, 200 + step * i, 2000 + (step / 0.225) * i, t);
-      }
-      up(hook, to, 2000 + (step / 0.225) * 10 + 2, t);
-      return onDismiss.mock.calls.length;
-    };
-    // Closed is at 400 px, so halfway from the 200 px detent is 300 px.
-    expect(drag(290)).toBe(0);
-    expect(drag(310)).toBe(1);
-  });
-
-  it('cancels a touch release thrown back toward where the drag began', () => {
-    const {hook, onDismiss} = setup(); // one detent; closed at 400 px
-    const t = makeTarget();
-    // Slowly most of the way down, then 30 px back up at 1,000 px/s. Its
-    // landing (230 px) is past halfway to closed, but it moves back.
-    touchDown(hook, 0, 0, t);
-    for (let i = 1; i <= 9; i += 1) {
-      move(hook, i * 40, i * 200, t);
-    }
-    move(hook, 345, 1815, t);
-    move(hook, 330, 1830, t);
-    up(hook, 330, 1832, t);
-    expect(onDismiss).not.toHaveBeenCalled();
-    expect(hook.result.current.settledOffset).toBe(0);
-  });
-
-  it("springs a gentle touch throw back where UIKit's sheet does", () => {
+  it('does not flick-dismiss on a fast but short nudge', () => {
     const {hook, onDismiss} = setup({snapHeights: () => [200]});
     const t = makeTarget();
-    // 60 px at 300 px/s lands 0.1 s ahead at 90 px, nearer the 0 px detent
-    // than the 200 px one.
-    touchDown(hook, 0, 0, t);
-    move(hook, 30, 100, t);
-    move(hook, 60, 200, t);
-    up(hook, 60, 202, t);
+    // Fast (20px/10ms = 2px/ms) but only 20px of travel — under the distance
+    // floor, so nothing is projected and it settles rather than dismissing.
+    down(hook, 0, 0, t);
+    move(hook, 20, 10, t);
+    up(hook, 20, 12, t);
     expect(onDismiss).not.toHaveBeenCalled();
-    expect(hook.result.current.settledOffset).toBe(0);
   });
 
   it('settles to the nearest detent on a slow drag', () => {
@@ -871,6 +651,47 @@ describe('useSheetGestures', () => {
     expect(hook.result.current.isDragging).toBe(false);
     expect(hook.result.current.contentProps.style.transform).toBeUndefined();
     expect(onDismiss).not.toHaveBeenCalled();
+  });
+
+  describe("a drag's close", () => {
+    it('hands the panel the distance left and the release speed after a touch drag closes it', () => {
+      const {hook, onDismiss} = setup();
+      const t = makeTarget();
+      touchDown(hook, 0, 0, t);
+      move(hook, 100, 50, t);
+      move(hook, 200, 100, t);
+      // The host takes the close in the same update, as a controlled host does.
+      act(() => {
+        hook.result.current.handleProps.onPointerUp(pointerEvent(200, 102, t));
+        hook.rerender({isOpen: false, isOpenRequested: false, onDismiss});
+      });
+      expect(onDismiss).toHaveBeenCalledTimes(1);
+      // 200px left to travel, at the release's 2,000 px/s.
+      expect(hook.result.current.dragExit).toEqual({
+        distance: 200,
+        velocity: 2000,
+      });
+    });
+
+    it('keeps the stylesheet exit for a close that no drag started', () => {
+      const {hook, onDismiss} = setup();
+      hook.rerender({isOpen: false, isOpenRequested: false, onDismiss});
+      expect(hook.result.current.dragExit).toBeNull();
+    });
+
+    it('gives a mouse drag that closes the sheet the stylesheet exit', () => {
+      const {hook, onDismiss} = setup();
+      const t = makeTarget();
+      down(hook, 0, 0, t);
+      move(hook, 100, 50, t);
+      move(hook, 200, 100, t);
+      act(() => {
+        hook.result.current.handleProps.onPointerUp(pointerEvent(200, 102, t));
+        hook.rerender({isOpen: false, isOpenRequested: false, onDismiss});
+      });
+      expect(onDismiss).toHaveBeenCalledTimes(1);
+      expect(hook.result.current.dragExit).toBeNull();
+    });
   });
 
   describe('pinch', () => {

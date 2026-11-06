@@ -6,7 +6,8 @@
  * @output Unit tests for the exit a drag's close plays. It starts the close
  *   spring from where the finger left the sheet, and a reopen takes it back.
  *   The scrim fades for as long as that close plays, decided before the
- *   scrim starts to clear, on a standalone sheet and on a switcher flow
+ *   scrim starts to clear. That holds on a standalone sheet and on a
+ *   switcher flow
  * @position The jsdom side of the drag exit; the Chromium release spec reads
  *   the curve the browser plays.
  */
