@@ -2508,7 +2508,7 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
         with:
-          paths: '^(internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/[^/]+/src/|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts|lane-environment)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/(playwright-leg-durations|lane-environments)\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$)'
+          paths: '^(internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/[^/]+/src/|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts|lane-environment)\.mjs$|\.github/scripts/(stale-head-hint|merge-base)\.sh$|scripts/lib/duration-split\.mjs$|\.github/(playwright-leg-durations|lane-environments)\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$)'
           outside-pull-request: skip
           requires-head-file: playwright.interaction.config.ts
 
@@ -2535,6 +2535,8 @@ jobs:
           cp .test-scope/.github/scripts/a11y-pr-contracts.mjs "$RUNNER_TEMP/interaction-legs/.github/scripts/"
           cp .test-scope/.github/playwright-leg-durations.json "$RUNNER_TEMP/interaction-legs/.github/"
           cp .test-scope/.github/scripts/lane-environment.mjs "$RUNNER_TEMP/interaction-legs/.github/scripts/"
+          cp .test-scope/.github/scripts/stale-head-hint.sh "$RUNNER_TEMP/interaction-legs/.github/scripts/"
+          cp .test-scope/.github/scripts/merge-base.sh "$RUNNER_TEMP/interaction-legs/.github/scripts/"
           cp .test-scope/.github/lane-environments.json "$RUNNER_TEMP/interaction-legs/.github/"
 
       # The legs this run needs: every spec file in the merge commit, which the
@@ -2642,6 +2644,17 @@ jobs:
             --project chromium \
             --output interaction-proof-output
 
+      # A proof that fails on a head older than main may fail for a reason
+      # main already fixed. Name each newer main commit that changed a spec
+      # this leg ran, or the harness, so the fix is to update the branch and
+      # not to retry or debug it.
+      - name: Explain a failure on an older head
+        if: failure() && steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true' && steps.plan.outputs.files != '0'
+        continue-on-error: true
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: bash "$RUNNER_TEMP/interaction-legs/.github/scripts/stale-head-hint.sh" "$BASE_REF" "$RUNNER_TEMP/interaction-leg.txt"
+
       # Storyboards (PNG contact sheets) and curve traces, for review.
       - name: Upload interaction evidence
         if: always() && steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
@@ -2668,13 +2681,13 @@ jobs:
     needs: [room, admission, heavy-ci, build-storybook]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true')) }}
     # Frame evidence measures timing: four cores, one Playwright worker.
-    # One leg runs every spec while the planner's estimate fits; past that two
-    # legs share the spec files by their recorded times, as the Chromium
-    # proofs' legs do.
+    # The leg count plans as many legs as keep each one's setup and proofs
+    # within ten minutes, as the Chromium proofs' count does. The matrix is
+    # the ceiling; a leg with no share passes at once.
     strategy:
       fail-fast: false
       matrix:
-        leg: [1, 2]
+        leg: [1, 2, 3, 4, 5]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # Playwright's own image for the version the lockfile resolves, with
@@ -2690,8 +2703,15 @@ jobs:
       run:
         shell: bash
     env:
-      # The specs the WebKit legs run, besides each interaction spec the pull
-      # request changes.
+      # The release interaction check's throwaway pull request runs every
+      # interaction spec in WebKit: the release receipt needs the whole suite,
+      # which the leg count spreads over the matrix. Only the release tooling
+      # opens it: an interaction-check/ branch in this repository, opened by
+      # the account the tooling uses. Any other pull request keeps the paths
+      # below.
+      WEBKIT_ALL_SPECS: ${{ startsWith(github.head_ref, 'interaction-check/') && github.event.pull_request.user.login == 'cixzhang' && github.event.pull_request.head.repo.full_name == github.repository }}
+      # The specs the WebKit legs run otherwise, besides each interaction spec
+      # the pull request changes.
       WEBKIT_SPEC_PATHS: >-
         packages/core/src/gestures/
         packages/core/src/motion/__tests__/animatedLayout.interaction
@@ -2724,7 +2744,7 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
         with:
-          paths: '^(packages/core/src/gestures/|packages/core/src/motion/|packages/core/src/internal/touch|packages/core/src/utils/(press|touch|primaryClick|isApplePlatform|flatTree|inputStream|clickGuard|selectionLock|coarsePointer|sharedResizeObserver|scrollView|nodeType)|packages/core/src/privateAttributes/(hapticSwitch|reducedMotion)\.stylex\.ts$|packages/core/src/theme/tokenReferences\.ts$|packages/core/src/Layer/(inputHold|modalOutlet)\.ts$|packages/core/src/hooks/(useMenuPress|menuPress|useLongPress|usePressFeedback|isRtlElement|useIsomorphicLayoutEffect|useAttachment|usePager|__tests__/(usePager|pagerBundle))|internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts|lane-environment)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/(playwright-leg-durations|lane-environments)\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$)'
+          paths: '^(packages/core/src/gestures/|packages/core/src/motion/|packages/core/src/internal/touch|packages/core/src/utils/(press|touch|primaryClick|isApplePlatform|flatTree|inputStream|clickGuard|selectionLock|coarsePointer|sharedResizeObserver|scrollView|nodeType|inputAge)|packages/core/src/privateAttributes/(hapticSwitch|reducedMotion)\.stylex\.ts$|packages/core/src/theme/tokenReferences\.ts$|packages/core/src/Layer/(inputHold|modalOutlet)\.ts$|packages/core/src/hooks/(useMenuPress|menuPress|useLongPress|usePressFeedback|isRtlElement|useIsomorphicLayoutEffect|useAttachment|usePager|__tests__/(usePager|pagerBundle))|internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts|lane-environment)\.mjs$|\.github/scripts/(stale-head-hint|merge-base)\.sh$|scripts/lib/duration-split\.mjs$|\.github/(playwright-leg-durations|lane-environments)\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$)'
           outside-pull-request: skip
           requires-head-file: playwright.interaction.config.ts
           # Lists the changed files, so the planner adds a changed spec.
@@ -2753,12 +2773,14 @@ jobs:
           cp .test-scope/.github/scripts/a11y-pr-contracts.mjs "$RUNNER_TEMP/interaction-legs/.github/scripts/"
           cp .test-scope/.github/playwright-leg-durations.json "$RUNNER_TEMP/interaction-legs/.github/"
           cp .test-scope/.github/scripts/lane-environment.mjs "$RUNNER_TEMP/interaction-legs/.github/scripts/"
+          cp .test-scope/.github/scripts/stale-head-hint.sh "$RUNNER_TEMP/interaction-legs/.github/scripts/"
+          cp .test-scope/.github/scripts/merge-base.sh "$RUNNER_TEMP/interaction-legs/.github/scripts/"
           cp .test-scope/.github/lane-environments.json "$RUNNER_TEMP/interaction-legs/.github/"
 
       # One leg runs every proof while its setup and the recorded times fit
       # ten minutes, which leaves a third of the job's limit for a slow
-      # runner. Past that the planner adds the second leg, so a growing suite
-      # does not reach the limit. Each leg decides the same way, before its
+      # runner. Past that the planner adds legs, up to the matrix, so a
+      # growing suite or a wide change does not reach the limit. Each leg decides the same way, before its
       # own setup, from the workflow's times and the changed files. The spec
       # files come from the merge commit's tree, which the scope checkout
       # fetched whole, so a spec with no recorded time still counts.
@@ -2768,21 +2790,25 @@ jobs:
         env:
           CHANGED_FILES: ${{ steps.scope.outputs.changed_files_path }}
         run: |
-          read -ra SPEC_PATHS <<< "$WEBKIT_SPEC_PATHS"
+          if [ "${WEBKIT_ALL_SPECS:-}" = true ]; then SPEC_PATHS=(packages/ internal/); else read -ra SPEC_PATHS <<< "$WEBKIT_SPEC_PATHS"; fi
+          # With every spec planned, the changed files add nothing. Leave them
+          # out, so a missing list cannot make each leg run the whole suite.
+          CHANGED=(--changed "${CHANGED_FILES:-}")
+          if [ "${WEBKIT_ALL_SPECS:-}" = true ]; then CHANGED=(); fi
           git -C .test-scope ls-tree -r --name-only HEAD > "$RUNNER_TEMP/interaction-legs/listed.txt"
           node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" legs \
             --listed "$RUNNER_TEMP/interaction-legs/listed.txt" --source .test-scope \
             --tests-out "$RUNNER_TEMP/interaction-legs/tests.json" \
             --key interaction-webkit --fallback-key interaction-chromium \
             --durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json" \
-            --changed "${CHANGED_FILES:-}" \
+            "${CHANGED[@]}" \
             --setup-seconds 90 --max-seconds 600 \
             --leg ${{ matrix.leg }} --max-legs ${{ strategy.job-total }} \
             -- "${SPEC_PATHS[@]}"
 
-      - name: Leave the proofs to the first leg
+      - name: Leave the proofs to the other legs
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs != 'true'
-        run: echo "One leg holds this run's WebKit proofs (${{ steps.legs.outputs.count }} leg planned), so this leg runs none."
+        run: echo "This run's WebKit proofs fit ${{ steps.legs.outputs.count }} legs, so this leg runs none."
 
       # The caps step comes from the merge commit, not the pull request's
       # head: a head that predates the step does not have it. The head
@@ -2861,7 +2887,7 @@ jobs:
         env:
           CHANGED_FILES: ${{ steps.scope.outputs.changed_files_path }}
         run: |
-          read -ra SPEC_PATHS <<< "$WEBKIT_SPEC_PATHS"
+          if [ "${WEBKIT_ALL_SPECS:-}" = true ]; then SPEC_PATHS=(packages/ internal/); else read -ra SPEC_PATHS <<< "$WEBKIT_SPEC_PATHS"; fi
           CHANGED_SPECS=()
           if [ -n "${CHANGED_FILES:-}" ] && [ -s "$CHANGED_FILES" ]; then
             while IFS= read -r file; do
@@ -2909,6 +2935,17 @@ jobs:
             --config playwright.interaction.config.ts \
             --project webkit \
             --output interaction-proof-output-webkit
+
+      # A proof that fails on a head older than main may fail for a reason
+      # main already fixed. Name each newer main commit that changed a spec
+      # this leg ran, or the harness, so the fix is to update the branch and
+      # not to retry or debug it.
+      - name: Explain a failure on an older head
+        if: failure() && steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true' && steps.plan.outputs.files != '0'
+        continue-on-error: true
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: bash "$RUNNER_TEMP/interaction-legs/.github/scripts/stale-head-hint.sh" "$BASE_REF" "$RUNNER_TEMP/interaction-leg.txt"
 
       - name: Upload WebKit interaction evidence
         if: always() && steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
@@ -3039,9 +3076,10 @@ jobs:
         uses: actions/checkout@v7
 
       # Stable visual scope: Core and the non-private shipped themes take
-      # part; canaryOnly packages do not. A pull request the import graph can
-      # scope audits the changed components and their reverse dependents
-      # (spec:AST-030 FR13).
+      # part; canaryOnly packages do not. A change to the gate's probe fixture
+      # runs the whole plan, whose probe tier shoots it. A pull request the
+      # import graph can scope audits the changed components and their
+      # reverse dependents (spec:AST-030 FR13).
       - name: Decide stable visual scope
         id: visual-scope
         env:
@@ -3157,9 +3195,10 @@ jobs:
         uses: actions/checkout@v7
 
       # Stable visual scope: Core and the non-private shipped themes take
-      # part; canaryOnly packages do not. A pull request the import graph can
-      # scope audits the changed components and their reverse dependents
-      # (spec:AST-030 FR13).
+      # part; canaryOnly packages do not. A change to the gate's probe fixture
+      # runs the whole plan, whose probe tier shoots it. A pull request the
+      # import graph can scope audits the changed components and their
+      # reverse dependents (spec:AST-030 FR13).
       - name: Decide stable visual scope
         id: visual-scope
         env:
@@ -3276,9 +3315,9 @@ jobs:
             COMMAND=release
             SCOPE_ARGS=()
           elif [ -n "$COMPONENTS$DEPENDENTS" ] && [ -n "$THEMES" ]; then
-            SCOPE_ARGS=(--tiers 'component,theme-matrix' --components "$COMPONENTS" "${DEPENDENT_ARGS[@]}" --themes "$THEMES")
+            SCOPE_ARGS=(--tiers 'component,theme-matrix' --components "$COMPONENTS" ${DEPENDENT_ARGS[@]+"${DEPENDENT_ARGS[@]}"} --themes "$THEMES")
           elif [ -n "$COMPONENTS$DEPENDENTS" ]; then
-            SCOPE_ARGS=(--tiers component --components "$COMPONENTS" "${DEPENDENT_ARGS[@]}" --no-scout)
+            SCOPE_ARGS=(--tiers component --components "$COMPONENTS" ${DEPENDENT_ARGS[@]+"${DEPENDENT_ARGS[@]}"} --no-scout)
           elif [ -n "$THEMES" ]; then
             SCOPE_ARGS=(--tiers theme-matrix --themes "$THEMES")
           else
@@ -3298,8 +3337,8 @@ jobs:
               --storybook-dir apps/storybook/dist \
               --baseline .github/visual-baseline \
               --out .visual-run \
-              "${SCOPE_ARGS[@]}" \
-              "${OBS_ARGS[@]}" \
+              ${SCOPE_ARGS[@]+"${SCOPE_ARGS[@]}"} \
+              ${OBS_ARGS[@]+"${OBS_ARGS[@]}"} \
               --summary-output visual-summary.md
           }
           set +e
@@ -3327,7 +3366,7 @@ jobs:
               --storybook-dir apps/storybook/dist \
               --baseline .github/visual-baseline \
               --out .visual-run \
-              "${OBS_ARGS[@]}" \
+              ${OBS_ARGS[@]+"${OBS_ARGS[@]}"} \
               --summary-output visual-summary.md
             code=$?
             set -e
@@ -3402,7 +3441,7 @@ jobs:
             --storybook-dir apps/storybook/dist \
             --baseline .github/visual-baseline \
             --out .visual-run \
-            "${OBS_ARGS[@]}" \
+            ${OBS_ARGS[@]+"${OBS_ARGS[@]}"} \
             --summary-output visual-summary.md
           code=$?
           set -e
@@ -3790,7 +3829,7 @@ jobs:
             --output rtl-audit-report.json \
             --packages core \
             --merge-shards rtl-parts \
-            "${FILTER_ARGS[@]}"
+            ${FILTER_ARGS[@]+"${FILTER_ARGS[@]}"}
           code=$?
           set -e
           # 1 is the soft findings signal; anything else is a failed join.

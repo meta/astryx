@@ -290,7 +290,12 @@ and judge the runs pooled (`pooledBusyProof(runs)`, each run with its own
 tracked frames, control and window): the control must move on at least four
 frames over all the runs, the component on every one of them, and in each run
 its longest stall may be no longer than that run's control's, since a stall
-belongs to its run.
+belongs to its run. A run whose control moved on fewer frames than
+`minRunFrames` (1 by default) is too little to judge: the summary names it,
+and the pool leaves it out, so it never counts as a pass. The pool fails with
+fewer than `minJudgedRuns` judged runs (half, rounded up). In each judged run,
+the component must move on every frame its control moved on, so a freeze fails
+its run.
 
 On a loaded machine Chromium's screencast can skip frames the compositor
 still presents. `startCompositorTrace(page)`, started with the screencast and

@@ -4,8 +4,8 @@
  * @file wheelPhysics.ts
  * @input A wheel's offset and release velocity, its rows, and the UIKit
  *   picker constants (motion/uikit/picker.ts)
- * @output The curves a picker wheel moves on: the release plan, the tap spin,
- *   the rubber band, and the row crossings that tick
+ * @output The curves a picker wheel moves on: the release plan, the turn's
+ *   spring, the rubber band, and the row crossings that tick
  * @position Pure math of the touch picker wheel (PickerWheel.tsx)
  *
  * Positions are px, times seconds and velocities px/s. Row k is under the
@@ -14,7 +14,6 @@
  * SYNC: When modified, update wheelPhysics.test.ts and PickerWheel.tsx.
  */
 
-import {cubicBezier} from '../motion/bezier';
 import {projectDistance} from '../motion/projection';
 import {solveDecay} from '../motion/decay';
 import {rubberBand} from '../motion/rubberBand';
@@ -175,8 +174,9 @@ export function coastCurve(
 }
 
 /**
- * The bounce spring, from `from` with `velocity`, onto `to`. `bounce` is
- * `scroll.bounce`'s spring as its caller resolves it.
+ * A spring, from `from` with `velocity`, onto `to`, as its caller resolves
+ * it. A return past an end plays `scroll.bounce`, and a turn from rest plays
+ * `springs.settle`.
  */
 export function bounceCurve(
   from: number,
@@ -316,38 +316,6 @@ export function planRelease(
   }
   const curve = coastCurve(offset, speed, target, scale);
   return {kind: curve.duration > 0 ? 'coast' : 'snap', index, curve};
-}
-
-/**
- * The tap spin onto a row: UIKit's animated setContentOffset, over
- * `duration` seconds on `curve`.
- */
-export function spinCurve(
-  from: number,
-  to: number,
-  duration: number,
-  curve: readonly [number, number, number, number],
-): WheelCurve {
-  if (from === to || !(duration > 0)) {
-    return restCurve(to);
-  }
-  const ease = cubicBezier(curve);
-  const distance = to - from;
-  // Velocity from the eased progress's slope, by a central difference.
-  const step = 1e-4;
-  return {
-    duration,
-    to,
-    value: t => (t >= duration ? to : from + distance * ease(t / duration)),
-    velocity: t => {
-      if (t >= duration || t < 0) {
-        return 0;
-      }
-      const a = ease(Math.max(0, t / duration - step));
-      const b = ease(Math.min(1, t / duration + step));
-      return (distance * (b - a)) / (2 * step * duration);
-    },
-  };
 }
 
 /**

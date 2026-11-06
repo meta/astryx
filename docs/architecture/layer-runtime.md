@@ -736,7 +736,8 @@ is staged as `[breaking]` (`spec:AST-017` FR32) and `component:SelectableCard`
   open anchor-mode layer; the runtime imports it through `Layer/LayerTouch.ts`,
   its one touch module. `Layer/layerKeyboardClearance.ts` holds the clearance
   and the cap's arithmetic. `Layer/settledBox.ts` reads a layer's box without
-  its entrance transform, for the fallback order and the keyboard's cap.
+  its entrance transform, for the fallback order, the keyboard's cap and the
+  exit copy.
 - `Layer/preserveAnimations.ts` owns carrying the CSS animations and
   transitions of a layer and its content across the re-placement's display
   reset.

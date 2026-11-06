@@ -58,7 +58,9 @@ export function findClosestComponents(name, components, maxDistance = 3) {
  */
 export async function searchComponents(needle, coreDir, components) {
   const {readDocView} = await import('../doc-compiler/read.mjs');
-  const fs = await import('node:fs');
+  const {listDirEntries, oncePerListing, pathExists} = await import(
+    '../fs/listing-cache.mjs'
+  );
   const path = await import('node:path');
 
   const term = needle.toLowerCase();
@@ -111,32 +113,30 @@ export async function searchComponents(needle, coreDir, components) {
   }
 
   // --- Pass 2: Keyword + description matching (async, reads doc files) ---
-  for (const comp of allNames) {
-    const srcDir = path.join(coreDir, 'src');
-
-    let docPath = null;
+  const srcDir = path.join(coreDir, 'src');
+  /**
+   * The doc that Pass 2 reads for `comp`, or null.
+   * @param {string} comp
+   * @returns {string | null}
+   */
+  function docPathOf(comp) {
     const direct = path.join(srcDir, comp, comp + '.doc.mjs');
-    if (fs.existsSync(direct)) {
-      docPath = direct;
+    if (pathExists(direct)) return direct;
+    const xdsDirect = path.join(srcDir, comp, 'XDS' + comp + '.doc.mjs');
+    if (pathExists(xdsDirect)) return xdsDirect;
+    if (!pathExists(srcDir)) return null;
+    for (const entry of listDirEntries(srcDir)) {
+      if (!entry.isDirectory()) continue;
+      const nested = path.join(srcDir, entry.name, comp, comp + '.doc.mjs');
+      if (pathExists(nested)) return nested;
     }
-    if (!docPath) {
-      const xdsDirect = path.join(srcDir, comp, 'XDS' + comp + '.doc.mjs');
-      if (fs.existsSync(xdsDirect)) {
-        docPath = xdsDirect;
-      }
-    }
-    if (!docPath && fs.existsSync(srcDir)) {
-      const entries = fs.readdirSync(srcDir, {withFileTypes: true});
-      for (const entry of entries) {
-        if (!entry.isDirectory()) continue;
-        const nested = path.join(srcDir, entry.name, comp, comp + '.doc.mjs');
-        if (fs.existsSync(nested)) {
-          docPath = nested;
-          break;
-        }
-      }
-    }
-
+    return null;
+  }
+  // Each search probes the same paths, so one operation finds each doc once.
+  for (const comp of allNames) {
+    const docPath = oncePerListing(`search-doc\0${srcDir}\0${comp}`, () =>
+      docPathOf(comp),
+    );
     if (!docPath) continue;
 
     try {
