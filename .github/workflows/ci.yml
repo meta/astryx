@@ -2789,6 +2789,9 @@ jobs:
         run: |
           read -ra SPEC_PATHS <<< "$WEBKIT_SPEC_PATHS"
           git -C .test-scope ls-tree -r --name-only HEAD > "$RUNNER_TEMP/interaction-legs/listed.txt"
+          # Baseline only: one source file of every component folder counts as changed.
+          grep -E '^packages/[^/]+/src/[A-Z][^/]*/[^/]+\.tsx?$' "$RUNNER_TEMP/interaction-legs/listed.txt" > "$RUNNER_TEMP/interaction-legs/all-folders.txt"
+          CHANGED_FILES="$RUNNER_TEMP/interaction-legs/all-folders.txt"
           selected="$RUNNER_TEMP/interaction-legs/selected.txt"
           node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" select \
             --listed "$RUNNER_TEMP/interaction-legs/listed.txt" \
