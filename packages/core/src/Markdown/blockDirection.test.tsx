@@ -47,7 +47,7 @@ describe('firstStrongDirection', () => {
   });
 });
 
-describe('Markdown block direction (spec:AST-061 FR6)', () => {
+describe('Markdown block direction', () => {
   it('lays a Hebrew paragraph out right to left in a left-to-right page', () => {
     const {container} = renderIn(
       'ltr',

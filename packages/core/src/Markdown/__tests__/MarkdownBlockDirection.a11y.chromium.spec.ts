@@ -8,7 +8,8 @@
  * @output Real-Chromium evidence that each prose block lays out in its own
  *   text's direction, that a block with no strongly directional character
  *   keeps its parent's, and that lists, code and tables keep their parent's
- * @position Browser evidence for spec:AST-061 FR6 on Markdown
+ * @position Browser evidence that Markdown blocks follow their own text's
+ *   direction
  */
 
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';

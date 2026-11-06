@@ -4,11 +4,10 @@
  * @file blockDirection.ts
  * @input A Markdown AST prose block (a paragraph, heading, blockquote or list
  *   item) or a table cell
- * @output The block's own direction, 'ltr' or 'rtl', or undefined when its
+ * @output 'ltr' or 'rtl' from the block's own text, or undefined when the
  *   text has no strongly directional character
- * @position Read by Markdown.tsx to give each prose block the `dir` of its
- *   own text (spec:AST-061 FR6). A block with no direction of its own takes
- *   its parent's.
+ * @position Read by Markdown.tsx to set each block's `dir`. A block with no
+ *   direction of its own takes its parent's.
  */
 
 import {firstStrongDirection} from '../i18n/firstStrongDirection';
