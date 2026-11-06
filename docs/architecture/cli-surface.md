@@ -594,6 +594,18 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
 Some modules predate INV20–INV23 and do not meet them yet; `spec:AST-042` lists
 the known gaps.
 
+## Deprecation and cleanup records
+
+### CLN-0029 — The CLI's Core peer names its own release
+
+| Field     | Value                                                                                                                                                                                                                                                                                                                                                                                                      |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| id        | `CLN-0029`                                                                                                                                                                                                                                                                                                                                                                                                 |
+| lifecycle | No deprecation: the staged `[breaking]` change for a narrower published range (`spec:AST-017` FR12)                                                                                                                                                                                                                                                                                                        |
+| delta     | The CLI's optional `@astryxdesign/core` peer changes from `*` to the CLI's own release version, the exact Core version every theme names. npm then refuses to install the CLI beside a Core from another release, and pnpm warns, so the migration note tells consumers to upgrade the CLI and Core together. The release's published-manifest check drops its one exception, which allows this peer's `*` |
+| rollback  | Restore the `*` peer and the check's exception from the final-patch baseline                                                                                                                                                                                                                                                                                                                               |
+| state     | `pending` — lands in 0.8.0, the next minor, with its `[breaking]` Changeset                                                                                                                                                                                                                                                                                                                                |
+
 ## Change coupling
 
 A change to any of the following requires this record to be re-read, and
