@@ -81,8 +81,9 @@ export interface PanGestureRecognizerOptions extends GestureRecognizerOptions<Pa
   /**
    * A trackpad's two-finger scroll (`continuous`) drives the pan where its
    * owner allows it. It moves as a contact with the content, along its own
-   * axis, after the scrollers under the pointer. A mouse wheel's notches
-   * never drive a pan; they scroll what is under the pointer.
+   * axis, after the scrollers under the pointer. Its own element is the pan's
+   * on the axis its `touch-action` keeps, as for a finger. A mouse wheel's
+   * notches never drive a pan; they scroll what is under the pointer.
    * @default [] (none)
    */
   allowedScrollTypes?: ReadonlyArray<'continuous'>;

@@ -504,7 +504,10 @@ tick over a 40 px delta. A trackpad's precise deltas, a third of their legacy
 A wheel gesture drives a pan as a contact moving with the content, along the
 pan's own axis, and only once every scroller between the pointer and the
 pan's element is at its edge that way, decided at the gesture's first wheel:
-a wheel the pan does not take is never prevented. A watcher
+a wheel the pan does not take is never prevented. The pan's own element is
+the exception on the axis that its derived `touch-action` keeps from the
+browser: a pan on its own scroller takes that scroller's trackpad scroll, as
+it takes a finger's pan there, and a scroller inside it still goes first. A watcher
 (`claimsTouches: false`) never takes one, and a gesture whose first wheel
 another handler already prevented, or that cannot be cancelled, stays the
 page's. A scroll-edge pan (a pull to
