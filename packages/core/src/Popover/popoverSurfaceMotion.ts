@@ -4,9 +4,9 @@
 
 /**
  * @file popoverSurfaceMotion.ts
- * @input A Popover's layer element, the source it hangs off, the compositor
- *   animator, the theme's duration and easing tokens, and the layer
- *   runtime's exit copy and input hold
+ * @input A Popover's layer element, the source it hangs off and the
+ *   compositor animator. Also the theme's duration and easing tokens, and
+ *   the layer runtime's exit copy and input hold
  * @output Exports `popoverCollapsedState`, `popoverFrame` and
  *   `createPopoverSurfaceMotion`, the touch presentation's present and
  *   dismiss.
@@ -97,9 +97,10 @@ export interface PopoverSurfaceMotion {
   /**
    * The popover has just been shown in its touch presentation: grow it out
    * of its source, from the next animation frame, before it paints.
-   * `measure` reads the geometry there, with the element invisible at its
-   * full size. During a dismissal, the popover grows back from where the
-   * dismissal has it, about the same point, at once: it reads nothing.
+   * `measure` reads the geometry there, before that frame writes anything,
+   * with the element at its full size. During a dismissal, the popover grows
+   * back from where the dismissal has it, about the same point, at once: it
+   * does not call `measure`.
    */
   enter(measure: () => PopoverSurfaceGeometry): void;
   /**
@@ -150,8 +151,7 @@ const MOTION_STYLE_PROPERTIES = [
  * The hold starts with the growth, in its frame. Holding from the open
  * would lay the page out twice in the opening task, since the shield's
  * `showPopover()` lays it out. A touch that starts in the frame before the
- * hold reaches the page. Its tap does not dismiss the popover: its lift
- * lands on the hold.
+ * hold reaches the page.
  *
  * Under Reduce Motion the animator's policy applies. On a coarse pointer the
  * popover lands at its full size and cross-fades in, and it cross-fades out
