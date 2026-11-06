@@ -1157,8 +1157,9 @@ export class ListReorderController implements ListReorderSession {
       lastY: y,
       edge: edgeAutoscroll({
         intervalMs: reorder.autoscroll.tickMs,
-        // UIKit's run-loop timer: a late fire (engines fire a 20 ms interval
-        // every 20 to 25 ms) catches up one tick, a longer stall is skipped.
+        // UIKit's run-loop timer: a late fire catches up one tick, and a
+        // longer stall is skipped. Engines fire a 20 ms interval every 20 to
+        // 25 ms.
         catchUp: true,
         now: motionNow,
         step: () => this.edgeStep(session),
@@ -1235,7 +1236,8 @@ export class ListReorderController implements ListReorderSession {
 
   /**
    * Points per tick for the dragged row at `top`: positive down, negative
-   * up, 0 when neither edge is near or the content cannot move that way.
+   * up. It is 0 when neither edge is near or the content cannot move that
+   * way.
    */
   private stepFor(session: DragSession, top: number, height: number): number {
     const {scroller} = session;

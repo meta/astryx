@@ -11,7 +11,7 @@
  *   Enter turns it on. Each arrow commits a move at once with the focus on
  *   the handle. Escape ends it, keeps the moves and announces where the row
  *   is. An Escape with the focus in the hint ends the mode too, and the focus
- *   goes back to the handle. start(key) from a button or a context menu
+ *   goes back to the handle. A start(key) call from a button or context menu
  *   enters the same mode with the focus on the handle. Under a finger, taps
  *   alone reorder: the handle, the moves, then Done. A drag leaves the mode
  *   off. Each of the hint's buttons is a 44 px target centered on what it

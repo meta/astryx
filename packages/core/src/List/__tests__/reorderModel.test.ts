@@ -77,7 +77,7 @@ describe('dropPosition', () => {
   });
 
   it("moves a tall row past a short neighbour once its centre passes that row's near edge", () => {
-    // Row 1 (88 pt) rests with its centre at 88; the 44 pt row below starts at
+    // Row 1 (88 pt) rests with its centre at 88. The 44 pt row below starts at
     // 132, so the centre travels half the tall row before they change places.
     const geometry = table([44, 88, 44, 44]);
     expect(dropPosition(geometry, 1, 88)).toBe(1);
