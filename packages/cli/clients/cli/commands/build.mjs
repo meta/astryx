@@ -74,7 +74,7 @@ export function registerBuild(program) {
     fn: buildFn,
     action: async (
       /** @type {string | undefined} */ query,
-      /** @type {{type?: 'component' | 'hook' | 'template', limit?: string, verbose?: boolean}} */ options,
+      /** @type {{type?: import('../../../api/build/build.type.mjs').BuildOptions['type'], limit?: string, verbose?: boolean}} */ options,
     ) => {
       const run = getCliInvocation();
       const json = program.opts().json || false;
@@ -101,8 +101,7 @@ export function registerBuild(program) {
       // Parse --limit to a number; the API validates it (positive integer) and
       // throws ERR_INVALID_ARGUMENT, so we pass NaN through rather than
       // pre-rejecting with a generic code here (parity with `search`).
-      const limit =
-        options.limit != null ? Number(options.limit) : 60;
+      const limit = options.limit != null ? Number(options.limit) : 60;
 
       /** @type {import('../../../api/build/build.type.mjs').BuildKitResponse} */
       let result;
@@ -152,10 +151,21 @@ export function registerBuild(program) {
         return answered;
       }
 
+      // doc and theme are deprecated for build: a kit has no doc or theme
+      // group. The next minor release refuses them (DEPRECATED_BUILD_DOMAINS).
+      const deprecatedType =
+        options.type === 'doc' || options.type === 'theme'
+          ? text(
+              `--type ${options.type} is deprecated for build and is refused from the next minor release: a kit has no ${options.type}s. Find them with ${formatCliCommand(`search <query> --type ${options.type}`)}`,
+            )
+          : null;
+
       if (!hasResults && !start) {
         emit(
           text(`No matches for "${q}".`),
-          text(`Try a broader term, or browse: ${run} component --list`),
+          ...(deprecatedType
+            ? [deprecatedType]
+            : [text(`Try a broader term, or browse: ${run} component --list`)]),
         );
         return answered;
       }
@@ -212,6 +222,7 @@ export function registerBuild(program) {
             : 'This kit is narrowed by --type, so it names no template.',
         ),
       ];
+      if (deprecatedType) out.push(deprecatedType);
 
       if (start) {
         out.push(
@@ -227,7 +238,13 @@ export function registerBuild(program) {
             start,
             verbose
               ? {
-                  fields: ['name', 'package', 'displayName', 'description', 'command'],
+                  fields: [
+                    'name',
+                    'package',
+                    'displayName',
+                    'description',
+                    'command',
+                  ],
                   format: {command: formatCliCommand},
                 }
               : brief(['name', 'package', 'description', 'command']),
@@ -242,7 +259,9 @@ export function registerBuild(program) {
             ),
             records(
               start.alternatives,
-              verbose ? full : brief(['name', 'package', 'description', 'command']),
+              verbose
+                ? full
+                : brief(['name', 'package', 'description', 'command']),
             ),
           );
         }
@@ -283,7 +302,9 @@ export function registerBuild(program) {
           ? [
               records(
                 shown(domain),
-                verbose ? full : brief(['name', 'package', 'deprecated', 'description']),
+                verbose
+                  ? full
+                  : brief(['name', 'package', 'deprecated', 'description']),
               ),
             ]
           : []),

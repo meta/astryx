@@ -30,17 +30,24 @@ import {BUILD_TREE} from './tree.mjs';
 export {buildHelp, buildKit};
 
 /**
- * The domains a build kit can be narrowed to with `type`. A kit has no doc or
- * theme group; those are found with search's own `type`.
+ * The domains a build kit can be narrowed to with `type`.
  */
 export const BUILD_DOMAINS = Object.freeze(['component', 'hook', 'template']);
+
+/**
+ * Domains `type` still accepts but deprecates: a kit has no doc or theme
+ * group, so they return an empty kit. Search's own `type` finds them. The
+ * next minor release refuses them (type-choices.test.mjs fails from 0.8.0 on
+ * while they remain).
+ */
+export const DEPRECATED_BUILD_DOMAINS = Object.freeze(['doc', 'theme']);
 
 /**
  * The page-building assistant. No query → the playbook signal; a query → the
  * grouped composition kit.
  *
  * @param {string} [query] what you're building (e.g. "analytics dashboard")
- * @param {{cwd?: string, type?: 'component' | 'hook' | 'template', limit?: number}} [options]
+ * @param {import('./build.type.mjs').BuildOptions} [options]
  * @returns {Promise<import('./build.type.mjs').BuildHelpResponse | import('./build.type.mjs').BuildKitResponse>}
  */
 export async function build(query, options = {}) {
@@ -48,23 +55,19 @@ export async function build(query, options = {}) {
     return buildHelp();
   }
   const {type} = options;
-  if (type != null && !BUILD_DOMAINS.includes(type)) {
-    const asked = String(type);
-    const searchable = asked === 'doc' || asked === 'theme';
+  if (
+    type != null &&
+    !BUILD_DOMAINS.includes(type) &&
+    !DEPRECATED_BUILD_DOMAINS.includes(type)
+  ) {
     throw new AstryxError(
-      searchable
-        ? `--type "${asked}" is not a build kind; find ${asked}s with search`
-        : `Unknown --type "${asked}"`,
+      `Unknown --type "${String(type)}"`,
       [
         ...BUILD_DOMAINS.map(d => ({name: d, reason: 'valid type'})),
-        ...(searchable
-          ? [
-              {
-                name: `astryx search <query> --type ${type}`,
-                reason: `find ${type}s`,
-              },
-            ]
-          : []),
+        ...DEPRECATED_BUILD_DOMAINS.map(d => ({
+          name: d,
+          reason: `deprecated: use astryx search <query> --type ${d}`,
+        })),
       ],
       ERROR_CODES.ERR_INVALID_ARGUMENT,
     );

@@ -26,8 +26,9 @@ export const doc = {
     {
       flag: '--type <domain>',
       param: 'options.type',
-      choices: ['component', 'hook', 'template'],
-      description: 'Filter the kit to one domain (component|hook|template)',
+      choices: ['component', 'hook', 'template', 'doc', 'theme'],
+      description:
+        'Filter the kit to one domain (component|hook|template); doc and theme are deprecated',
     },
     {
       flag: '--limit <n>',

@@ -44,8 +44,9 @@ export const doc = {
     },
     {
       name: 'options.type',
-      type: "'component' | 'hook' | 'template'",
-      description: 'Restrict the underlying search to a single domain.',
+      type: "'component' | 'hook' | 'template' | 'doc' | 'theme'",
+      description:
+        'Restrict the underlying search to a single domain. doc and theme are deprecated.',
     },
     {
       name: 'options.limit',
