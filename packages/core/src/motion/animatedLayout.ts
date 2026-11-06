@@ -90,6 +90,12 @@ import {
   wrapText,
 } from './transientCopy';
 import {readThemeTiming, readThemeTokenText} from './themeTiming';
+import {
+  settlingDuration,
+  solveSpring,
+  toSpring,
+  type SpringDescription,
+} from './spring';
 import {themeReducesMotion} from '../privateAttributes/reducedMotion.stylex';
 import {reducedMotionCrossFade} from './uikit/timing';
 
@@ -115,7 +121,7 @@ type LayoutMotion =
   | {readonly kind: 'instant'};
 
 /** The move curve as remaining distance (1 → 0) over its duration. */
-interface GlideProgress {
+export interface GlideProgress {
   readonly durationMs: number;
   /** The move curve's CSS text, as read where the area is. */
   readonly easing: string;
@@ -153,6 +159,63 @@ function glideProgress(area: Element): GlideProgress | null {
   };
 }
 
+// A glide a gesture's release asks for, for the changes in one area.
+const releaseGlides = new WeakMap<Element, GlideProgress>();
+
+/**
+ * Times the changes `area` and what it holds play in the next frame by
+ * `progress`, not the theme's move curve. A release settles on its spring.
+ * Reduce Motion still wins.
+ */
+export function glideNextChange(area: Element, progress: GlideProgress): void {
+  releaseGlides.set(area, progress);
+  const view = area.ownerDocument.defaultView;
+  view?.requestAnimationFrame(() => {
+    view.requestAnimationFrame(() => releaseGlides.delete(area));
+  });
+}
+
+/**
+ * `spring` from rest toward the end, released at `velocity` (fractions of
+ * the move per second, toward the end), as a glide's progress.
+ */
+export function springGlide(
+  spring: SpringDescription,
+  velocity: number,
+): GlideProgress {
+  const physics = toSpring(spring);
+  const curve = solveSpring(physics, {from: 0, to: 1, velocity});
+  const durationMs =
+    settlingDuration(physics, {initialVelocity: velocity}) * 1000;
+  const remaining = (t: number) =>
+    t >= durationMs ? 0 : 1 - curve.value(t / 1000);
+  return {durationMs, easing: linearEasing(durationMs, remaining), remaining};
+}
+
+/** A move's remaining fraction over time as CSS `linear()` easing text. */
+function linearEasing(
+  durationMs: number,
+  remaining: (t: number) => number,
+): string {
+  const count = sampleCount(durationMs);
+  const stops: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const done = 1 - remaining((i / (count - 1)) * durationMs);
+    stops.push(String(Math.round(done * 10000) / 10000));
+  }
+  return `linear(${stops.join(', ')})`;
+}
+
+function releaseGlideFor(area: Element): GlideProgress | undefined {
+  for (let at: Element | null = area; at != null; at = at.parentElement) {
+    const progress = releaseGlides.get(at);
+    if (progress != null) {
+      return progress;
+    }
+  }
+  return undefined;
+}
+
 /** The motion a change in `area` plays now. */
 function layoutMotion(area: Element): LayoutMotion {
   if (
@@ -172,7 +235,7 @@ function layoutMotion(area: Element): LayoutMotion {
       easing: `cubic-bezier(${x1}, ${y1}, ${x2}, ${y2})`,
     };
   }
-  const progress = glideProgress(area);
+  const progress = releaseGlideFor(area) ?? glideProgress(area);
   return progress == null ? {kind: 'instant'} : {kind: 'glide', progress};
 }
 
