@@ -92,6 +92,10 @@ const styles = stylex.create({
       '@media (prefers-reduced-motion: reduce)': '0.01ms',
     },
     transitionTimingFunction: easeVars['--ease-standard'],
+  },
+  // A card enters from its edge only when it first renders. A move between
+  // modal outlets renders it again, and it must not enter again.
+  entering: {
     '@starting-style': {
       opacity: 0,
       transform: `translateY(var(--_toast-slide-y, ${TOAST_EDGE_DRIFT}))`,
@@ -164,6 +168,11 @@ interface ToastSurfaceProps extends ToastProps {
    * live region of its own, so an update in place is announced once.
    */
   isLiveRegion?: boolean;
+  /**
+   * True once the toast's row has started to open. The card then has no
+   * starting style, so a move between modal outlets starts no transition.
+   */
+  hasEntryStarted?: boolean;
 }
 
 /**
@@ -205,6 +214,7 @@ export function ToastSurface({
   gestureDirection,
   timerKey,
   isLiveRegion = true,
+  hasEntryStarted = false,
 }: ToastSurfaceProps) {
   const t = useComponentTranslator();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -400,6 +410,7 @@ export function ToastSurface({
         themeProps('toast', {type}),
         stylex.props(
           styles.root,
+          !hasEntryStarted && styles.entering,
           isError ? styles.variantError : styles.variantDefault,
           isExiting && styles.exiting,
         ),

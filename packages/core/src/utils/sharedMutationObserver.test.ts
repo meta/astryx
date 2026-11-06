@@ -1,7 +1,11 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, it, expect, vi} from 'vitest';
-import {observeContent, observeMutations} from './sharedMutationObserver';
+import {
+  flushMutations,
+  observeContent,
+  observeMutations,
+} from './sharedMutationObserver';
 
 const flush = async () => new Promise(resolve => setTimeout(resolve, 0));
 
@@ -102,5 +106,27 @@ describe('observeMutations', () => {
     expect(self).not.toHaveBeenCalled();
     expect(subtree).toHaveBeenCalledTimes(1);
     stops.forEach(stop => stop());
+  });
+});
+
+describe('flushMutations', () => {
+  it('delivers a mutation of this task at once, and only once', async () => {
+    const element = document.createElement('div');
+    const options = {childList: true, subtree: true};
+    const callback = vi.fn();
+    const unsubscribe = observeMutations(element, options, callback);
+
+    element.append(document.createElement('span'));
+    expect(callback).not.toHaveBeenCalled();
+    flushMutations(options);
+    expect(callback).toHaveBeenCalledTimes(1);
+    await flush();
+    expect(callback).toHaveBeenCalledTimes(1);
+
+    // Nothing pending, or no observer for the options: nothing is called.
+    flushMutations(options);
+    flushMutations({attributes: true});
+    expect(callback).toHaveBeenCalledTimes(1);
+    unsubscribe();
   });
 });

@@ -623,6 +623,21 @@
       "aliases": []
     },
     {
+      "name": "component-lab-navigation-screen",
+      "path": "components/lab/navigation-screen",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-navigation-stack",
+      "path": "components/lab/navigation-stack",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-page-control",
+      "path": "components/lab/page-control",
+      "aliases": []
+    },
+    {
       "name": "component-lab-radial-chart",
       "path": "components/lab/radial-chart",
       "aliases": []
@@ -1967,8 +1982,8 @@
       "aliases": []
     },
     {
-      "name": "example-create-pan-gesture-a-playing-card-without-react",
-      "path": "examples/create-pan-gesture/a-playing-card-without-react",
+      "name": "example-create-drag-to-snap-points-playing-card-in-plain-java-script",
+      "path": "examples/create-drag-to-snap-points/playing-card-in-plain-java-script",
       "aliases": []
     },
     {
@@ -3672,6 +3687,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-calendar-days-month-grid",
+      "path": "examples/use-calendar-days/month-grid",
+      "aliases": []
+    },
+    {
       "name": "example-use-clickable-container-clickable-project-card",
       "path": "examples/use-clickable-container/clickable-project-card",
       "aliases": []
@@ -3702,6 +3722,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-drag-to-snap-points-playing-card-on-three-places",
+      "path": "examples/use-drag-to-snap-points/playing-card-on-three-places",
+      "aliases": []
+    },
+    {
       "name": "example-use-focus-trap-quick-edit-panel",
       "path": "examples/use-focus-trap/quick-edit-panel",
       "aliases": []
@@ -3729,6 +3754,11 @@
     {
       "name": "example-use-image-mode-photo-caption",
       "path": "examples/use-image-mode/photo-caption",
+      "aliases": []
+    },
+    {
+      "name": "example-use-input-container-search-field-wrapper",
+      "path": "examples/use-input-container/search-field-wrapper",
       "aliases": []
     },
     {
@@ -3767,6 +3797,16 @@
       "aliases": []
     },
     {
+      "name": "example-use-merged-refs-auto-grow-text-area",
+      "path": "examples/use-merged-refs/auto-grow-text-area",
+      "aliases": []
+    },
+    {
+      "name": "example-use-multi-combobox-issue-labels",
+      "path": "examples/use-multi-combobox/issue-labels",
+      "aliases": []
+    },
+    {
       "name": "example-use-outline-from-markdown-docs-article",
       "path": "examples/use-outline-from-markdown/docs-article",
       "aliases": []
@@ -3777,8 +3817,18 @@
       "aliases": []
     },
     {
-      "name": "example-use-pan-gesture-a-playing-card",
-      "path": "examples/use-pan-gesture/a-playing-card",
+      "name": "example-use-overlay-product-quick-view",
+      "path": "examples/use-overlay/product-quick-view",
+      "aliases": []
+    },
+    {
+      "name": "example-use-pan-gesture-a-draggable-box",
+      "path": "examples/use-pan-gesture/a-draggable-box",
+      "aliases": []
+    },
+    {
+      "name": "example-use-pan-gesture-a-playing-card-advanced",
+      "path": "examples/use-pan-gesture/a-playing-card-advanced",
       "aliases": []
     },
     {
@@ -3792,6 +3842,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-scroll-lock-full-screen-mobile-menu",
+      "path": "examples/use-scroll-lock/full-screen-mobile-menu",
+      "aliases": []
+    },
+    {
       "name": "example-use-scroll-overflow-filter-strip-edge-fades",
       "path": "examples/use-scroll-overflow/filter-strip-edge-fades",
       "aliases": []
@@ -3799,6 +3854,11 @@
     {
       "name": "example-use-scrollable-area-activity-log-panel",
       "path": "examples/use-scrollable-area/activity-log-panel",
+      "aliases": []
+    },
+    {
+      "name": "example-use-snap-paging-onboarding-pages",
+      "path": "examples/use-snap-paging/onboarding-pages",
       "aliases": []
     },
     {
@@ -3839,6 +3899,11 @@
     {
       "name": "example-use-table-selection-table-floating-bulk-actions",
       "path": "examples/use-table-selection/table-floating-bulk-actions",
+      "aliases": []
+    },
+    {
+      "name": "example-use-table-sortable-state-multi-sort-orders",
+      "path": "examples/use-table-sortable-state/multi-sort-orders",
       "aliases": []
     },
     {
@@ -3902,6 +3967,11 @@
       "aliases": []
     },
     {
+      "name": "hook-create-drag-to-snap-points",
+      "path": "hooks/create-drag-to-snap-points",
+      "aliases": []
+    },
+    {
       "name": "hook-create-pan-gesture",
       "path": "hooks/create-pan-gesture",
       "aliases": []
@@ -3924,6 +3994,11 @@
     {
       "name": "hook-use-app-shell-mobile",
       "path": "hooks/use-app-shell-mobile",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-calendar-days",
+      "path": "hooks/use-calendar-days",
       "aliases": []
     },
     {
@@ -3959,6 +4034,11 @@
     {
       "name": "hook-use-dev-warning",
       "path": "hooks/use-dev-warning",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-drag-to-snap-points",
+      "path": "hooks/use-drag-to-snap-points",
       "aliases": []
     },
     {
@@ -4092,6 +4172,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-overlay",
+      "path": "hooks/use-overlay",
+      "aliases": []
+    },
+    {
       "name": "hook-use-pan-gesture",
       "path": "hooks/use-pan-gesture",
       "aliases": []
@@ -4124,6 +4209,11 @@
     {
       "name": "hook-use-scrollable-area",
       "path": "hooks/use-scrollable-area",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-snap-paging",
+      "path": "hooks/use-snap-paging",
       "aliases": []
     },
     {
@@ -4189,6 +4279,11 @@
     {
       "name": "hook-use-table-sortable",
       "path": "hooks/use-table-sortable",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-table-sortable-state",
+      "path": "hooks/use-table-sortable-state",
       "aliases": []
     },
     {
