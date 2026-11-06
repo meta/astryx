@@ -443,8 +443,7 @@ export function createResizableAs(
   let gestureBasis: number | null = null;
   let isGestureActive = false;
   let dragStartSize = 0;
-  // Where the pointer has taken the size, bounds and snaps aside.
-  let lastRaw = 0;
+  let pointerSize = 0;
   // The open size a drag started from, which a close on its lift keeps.
   let sizeBeforeDrag: number | null = null;
   // Past a bound the shown size runs past the region's by this much, which
@@ -958,12 +957,12 @@ export function createResizableAs(
       dragStartSize =
         (derived.isCollapsed ? 0 : derived.size) +
         rubberBandInverse(shown, rubberDimension());
-      lastRaw = dragStartSize;
+      pointerSize = dragStartSize;
       sizeBeforeDrag = derived.isCollapsed ? null : derived.size;
     },
     move(delta) {
       const raw = dragStartSize + delta;
-      lastRaw = raw;
+      pointerSize = raw;
       const collapsedSize = opts.collapsedSize ?? DEFAULT_COLLAPSED_SIZE;
       // A collapsed pane opens once the pointer passes the collapsed size.
       // An open one never collapses mid-drag: the lift decides.
@@ -976,7 +975,9 @@ export function createResizableAs(
       }
       const clamped = clampSize(raw, derived.min, derived.max, snaps());
       chosenSize = clamped;
-      overshoot = overshootPast(raw);
+      // Only a pane a LayoutPanel lends shows the rubber band. A panel at the
+      // hook's size alone stops at the limit.
+      overshoot = pane == null ? 0 : overshootPast(raw);
       // Only a pointer reopens without a reveal; a key's step plays one.
       isPointerReopening = reopens && regionSlot?.isPointerDragging() === true;
       commit();
@@ -993,7 +994,7 @@ export function createResizableAs(
       const closes =
         collapsible() &&
         !derived.isCollapsed &&
-        Math.min(lastRaw, project(lastRaw, velocity)) < collapsedSize;
+        Math.min(pointerSize, project(pointerSize, velocity)) < collapsedSize;
       if (closes) {
         closeOnRelease(velocity);
       } else {
