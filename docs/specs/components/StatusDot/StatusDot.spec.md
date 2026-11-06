@@ -56,7 +56,10 @@ optional pulse, optional inner mark, and its accessible name.
 ## Compatibility and migration
 
 - Released default preserved: `yes`
-- Compatibility class: no public prop, default, or styling output change; with a
+- Compatibility class: no public prop or default change. FR2's status dots
+  (`success`, `warning`, `error`) repaint from the strong status fill to the
+  status icon role, with the surface as ink, a visible color change in every
+  theme whose icon and fill roles differ; with a
   `tooltip`, a standalone dot becomes a button named by `label` inside Tooltip
   whose press pins the tooltip, adopted once `useTooltip`'s `show()` and
   `hide()` (`component:Tooltip` DEC-1) ship, and a dot inside a button, link, menu item, or option
