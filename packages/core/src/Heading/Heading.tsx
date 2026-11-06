@@ -330,6 +330,11 @@ export function Heading({
           props.onPointerLeave,
           tooltipInterest.onPointerLeave,
         )}
+        onPointerDown={composeEventHandlers(
+          props.onPointerDown,
+          tooltipInterest.onPointerDown,
+        )}
+        onClick={composeEventHandlers(props.onClick, tooltipInterest.onClick)}
         onFocus={composeEventHandlers(props.onFocus, tooltipInterest.onFocus)}
         onBlur={composeEventHandlers(props.onBlur, tooltipInterest.onBlur)}>
         {children}
@@ -343,7 +348,7 @@ export function Heading({
             </span>
           }
           placement={tooltipPlacement}
-          interest={tooltipInterest.interest}
+          interestBox={tooltipInterest.interestBox}
         />
       )}
     </>

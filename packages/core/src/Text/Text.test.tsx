@@ -485,6 +485,7 @@ describe('the truncation tooltip mounts on the first interaction', () => {
       scrollWidth: Object.getOwnPropertyDescriptor(proto, 'scrollWidth'),
       offsetWidth: Object.getOwnPropertyDescriptor(proto, 'offsetWidth'),
       showPopover: proto.showPopover,
+      hidePopover: proto.hidePopover,
     };
     Object.defineProperty(proto, 'scrollWidth', {
       configurable: true,
@@ -495,9 +496,12 @@ describe('the truncation tooltip mounts on the first interaction', () => {
       get: () => 100,
     });
     const showPopover = vi.fn();
+    const hidePopover = vi.fn();
     proto.showPopover = showPopover;
+    proto.hidePopover = hidePopover;
     return {
       showPopover,
+      hidePopover,
       restore: () => {
         if (original.scrollWidth) {
           Object.defineProperty(proto, 'scrollWidth', original.scrollWidth);
@@ -506,6 +510,7 @@ describe('the truncation tooltip mounts on the first interaction', () => {
           Object.defineProperty(proto, 'offsetWidth', original.offsetWidth);
         }
         proto.showPopover = original.showPopover;
+        proto.hidePopover = original.hidePopover;
       },
     };
   }
@@ -587,8 +592,48 @@ describe('the truncation tooltip mounts on the first interaction', () => {
     }
   });
 
-  it('opens on the tap that mounts it', async () => {
-    const {showPopover, restore} = withOverflowAndPopover();
+  // A finger's arrival is not yet a tap: only the tap's click mounts the
+  // tooltip, and the touch trigger answers it, arming the outside dismissal.
+  function tap(element: Element) {
+    fireEvent.pointerDown(element, {pointerType: 'touch'});
+    fireEvent.pointerUp(element, {pointerType: 'touch'});
+    fireEvent.click(element);
+  }
+
+  it('opens on the tap that mounts it, and a tap outside closes it', async () => {
+    const {showPopover, hidePopover, restore} = withOverflowAndPopover();
+    try {
+      render(
+        <>
+          <Text type="body" maxLines={1}>
+            {LABEL}
+          </Text>
+          <button type="button">Elsewhere</button>
+        </>,
+      );
+      const text = screen.getByText(LABEL);
+      fireEvent.pointerEnter(text, {pointerType: 'touch'});
+      tap(text);
+      await waitFor(
+        () => {
+          expect(showPopover).toHaveBeenCalled();
+        },
+        {timeout: 3000},
+      );
+      tap(screen.getByRole('button', {name: 'Elsewhere'}));
+      await waitFor(
+        () => {
+          expect(hidePopover).toHaveBeenCalled();
+        },
+        {timeout: 3000},
+      );
+    } finally {
+      restore();
+    }
+  });
+
+  it('mounts nothing for a touch that becomes a scroll', async () => {
+    const {restore} = withOverflowAndPopover();
     try {
       render(
         <Text type="body" maxLines={1}>
@@ -597,13 +642,12 @@ describe('the truncation tooltip mounts on the first interaction', () => {
       );
       const text = screen.getByText(LABEL);
       fireEvent.pointerEnter(text, {pointerType: 'touch'});
-      fireEvent.pointerLeave(text, {pointerType: 'touch'});
-      await waitFor(
-        () => {
-          expect(showPopover).toHaveBeenCalled();
-        },
-        {timeout: 3000},
-      );
+      fireEvent.pointerDown(text, {pointerType: 'touch'});
+      fireEvent.pointerCancel(text, {pointerType: 'touch'});
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 300));
+      });
+      expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
     } finally {
       restore();
     }

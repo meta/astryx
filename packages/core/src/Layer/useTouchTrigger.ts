@@ -296,6 +296,11 @@ export interface UseTouchTriggerInternalReturn extends UseTouchTriggerReturn {
    * hold arms it too.
    */
   armOutsideDismiss: () => void;
+  /**
+   * Answers a tap the trigger completed before the layer mounted, by the same
+   * rules as a tap it sees, and arms the outside dismissal when it opens.
+   */
+  answerTap: () => void;
 }
 
 /**
@@ -471,12 +476,12 @@ export function useTouchTriggerInternal(
 
   // What a tap on the trigger does. It runs from the tap's `click`, after the
   // render that armed it, so it reads the latest props through this ref.
-  const answerTapRef = useRef<(tapEvent: Event) => void>(() => {});
-  answerTapRef.current = (tapEvent: Event) => {
+  const answerTapRef = useRef<(tapEvent: Event | null) => void>(() => {});
+  answerTapRef.current = (tapEvent: Event | null) => {
     const trigger = triggerRef.current;
     // A tap that landed in a disabled control is that control's: its reason
     // opens. Every other tap is the trigger's to decide.
-    const tapped = tapEvent.target instanceof Element ? tapEvent.target : null;
+    const tapped = tapEvent?.target instanceof Element ? tapEvent.target : null;
     const mode =
       touchTrigger === 'auto'
         ? tapped != null && tapLandsOnDisabledControl(tapped)
@@ -563,6 +568,9 @@ export function useTouchTriggerInternal(
     wasOpenRef.current = isOpen;
   }, [isOpen, disarmOutsideDismiss]);
 
+  // Answers a tap the trigger completed before this layer mounted.
+  const answerTap = useCallback(() => answerTapRef.current(null), []);
+
   return {
     isTouchPointerRef,
     isTouchInteraction,
@@ -570,5 +578,6 @@ export function useTouchTriggerInternal(
     handlePointerDown,
     clearTapOpen: disarmOutsideDismiss,
     armOutsideDismiss,
+    answerTap,
   };
 }

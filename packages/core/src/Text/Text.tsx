@@ -333,6 +333,11 @@ export function Text({
           props.onPointerLeave,
           tooltipInterest.onPointerLeave,
         )}
+        onPointerDown={composeEventHandlers(
+          props.onPointerDown,
+          tooltipInterest.onPointerDown,
+        )}
+        onClick={composeEventHandlers(props.onClick, tooltipInterest.onClick)}
         onFocus={composeEventHandlers(props.onFocus, tooltipInterest.onFocus)}
         onBlur={composeEventHandlers(props.onBlur, tooltipInterest.onBlur)}>
         {/* Always mounted, so a change of maxLines keeps every child mounted. */}
@@ -349,7 +354,7 @@ export function Text({
             </span>
           }
           placement={tooltipPlacement}
-          interest={tooltipInterest.interest}
+          interestBox={tooltipInterest.interestBox}
         />
       )}
     </>
