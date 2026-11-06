@@ -6,7 +6,7 @@
  * @file useTouchTrigger.ts
  * @input Touch trigger mode, layer open state, trigger ref, show/hide callbacks
  * @output Exports useTouchTrigger hook, isActionTrigger, LayerTouchTrigger type,
- *   tapLandsOnDisabledControl, TOUCH_POINTER_TYPES, createTapRecognizer and
+ *   tapLandsOnDisabledControl, TOUCH_POINTER_TYPES, useTapRecognizer and
  *   useTapStop (internal:
  *   not re-exported from index). Also useTouchTriggerInternal, with the
  *   outside dismissal's arm for useTooltip's hold (Core-internal).
@@ -99,8 +99,15 @@ export interface TapRecognizer {
   forget(): void;
 }
 
-/** One tap recognizer per trigger. */
-export function createTapRecognizer(): TapRecognizer {
+/** One tap recognizer for a trigger, released on unmount. Internal. */
+export function useTapRecognizer(): TapRecognizer {
+  const [recognizer] = useState(createTapRecognizer);
+  // Releases a pending tap on unmount.
+  useEffect(() => () => recognizer.forget(), [recognizer]);
+  return recognizer;
+}
+
+function createTapRecognizer(): TapRecognizer {
   let stopWaiting: (() => void) | null = null;
   const forget = () => {
     stopWaiting?.();
@@ -445,7 +452,7 @@ export function useTouchTriggerInternal(
   // The documents the outside dismissal listens on: the page's, and the
   // trigger's own when it renders in another document, such as an iframe.
   const outsideDocumentsRef = useRef<Document[]>([]);
-  const [tapRecognizer] = useState(createTapRecognizer);
+  const tapRecognizer = useTapRecognizer();
 
   const readModality = useInteractionModalityTrackingFor(triggerRef);
 
@@ -517,9 +524,6 @@ export function useTouchTriggerInternal(
 
   // Releases the outside-dismiss listener on unmount.
   useEffect(() => disarmOutsideDismiss, [disarmOutsideDismiss]);
-  // Releases a pending tap on unmount.
-  useEffect(() => () => tapRecognizer.forget(), [tapRecognizer]);
-
   const isTouchInteraction = useCallback(
     () => isTouchPointerRef.current && readModality() === 'pointer',
     [readModality],

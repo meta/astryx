@@ -17,7 +17,6 @@ import {
   lazy,
   Suspense,
   useCallback,
-  useEffect,
   useRef,
   useState,
   type FocusEvent,
@@ -26,7 +25,7 @@ import {
   type RefObject,
 } from 'react';
 import type {LayerPlacement} from '../Layer';
-import {createTapRecognizer} from '../Layer/useTouchTrigger';
+import {useTapRecognizer} from '../Layer/useTouchTrigger';
 import {
   TooltipPresentInterestContext,
   type TooltipPresentInterestState,
@@ -64,9 +63,7 @@ export function useTruncationTooltipInterest(
     tapEvent: null,
     isRead: false,
   });
-  const [tapRecognizer] = useState(createTapRecognizer);
-  // Releases a pending tap on unmount.
-  useEffect(() => () => tapRecognizer.forget(), [tapRecognizer]);
+  const tapRecognizer = useTapRecognizer();
   const want = useCallback(
     (interest: 'hover' | 'tap' | 'focus', tapEvent: Event | null = null) => {
       const state = interestRef.current;
@@ -105,7 +102,8 @@ export function useTruncationTooltipInterest(
         event.currentTarget,
         tapEvent => want('tap', tapEvent),
       );
-      // A mouse or pen press cancels a hover show, as a mounted tooltip does.
+      // A mouse press cancels a hover show, as a mounted tooltip does. A pen
+      // press waits for its tap.
       if (!isTouch) {
         forget('hover');
       }
