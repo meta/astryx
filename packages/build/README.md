@@ -253,7 +253,7 @@ Library patterns (configurable):
 - `packages/themes/`
 - `node_modules/@astryxdesign/`
 
-A swizzled copy is library code too. `astryx swizzle` writes `astryx-swizzle.json` into its output folder, and the Babel, PostCSS, and Vite integrations compile every module under a folder that holds that file with the library prefix into `@layer astryx-base`, so a theme's component overrides reach the copy as they reach the package component. Turbopack builds do not read the marker yet.
+A swizzled copy is library code too. The Babel, PostCSS, and Vite integrations compile every module under a folder that holds an `astryx-swizzle.json` marker with the library prefix into `@layer astryx-base`, so a theme's component overrides reach the copy as they reach the package component. `astryx swizzle` does not write the marker yet: add the file, `{}` is enough, to the swizzle output folder. Turbopack builds do not read the marker yet.
 
 ### PostCSS plugin (`@astryxdesign/build/postcss`)
 

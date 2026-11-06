@@ -170,6 +170,12 @@ describe('Astryx babel wrapper -- Astryx source under the strict default', () =>
   }, 120_000);
 });
 
+/** A product module with many StyleX calls, so many visitor calls. */
+const MANY_STYLES = `
+import * as stylex from '@stylexjs/stylex';
+${Array.from({length: 20}, (_, i) => `export const s${i} = stylex.create({box: {width: '${i + 1}px'}});`).join('\n')}
+`;
+
 describe('Astryx babel wrapper -- a swizzled copy', () => {
   it('gives a module under a swizzle marker the library prefix', () => {
     const app = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-babel-swizzle-'));
@@ -180,8 +186,8 @@ describe('Astryx babel wrapper -- a swizzled copy', () => {
         path.join(output, 'astryx-swizzle.json'),
         JSON.stringify({packages: {'@astryxdesign/core': '0.0.0'}}),
       );
-      const compile = filename =>
-        babel.transformSync(SOURCE, {
+      const compile = (filename, source = SOURCE) =>
+        babel.transformSync(source, {
           filename,
           babelrc: false,
           configFile: false,
@@ -195,6 +201,21 @@ describe('Astryx babel wrapper -- a swizzled copy', () => {
       const copied = atomicClasses(compile(path.join(output, 'Box/Box.tsx')));
       expect(copied.length).toBeGreaterThan(0);
       expect(copied.every(c => c.startsWith('astryx'))).toBe(true);
+      // The wrapper classifies a file once, not on every StyleX visitor call.
+      const lookups = [];
+      const nodeFs = require('node:fs');
+      const existsSync = nodeFs.existsSync;
+      nodeFs.existsSync = file => {
+        if (String(file).endsWith('astryx-swizzle.json')) lookups.push(file);
+        return existsSync(file);
+      };
+      try {
+        compile(path.join(app, 'src/Many.tsx'), MANY_STYLES);
+      } finally {
+        nodeFs.existsSync = existsSync;
+      }
+      const folders = path.join(app, 'src').split(path.sep).length;
+      expect(lookups.length).toBeLessThanOrEqual(folders);
       // Product code beside the copy keeps the product prefix.
       expect(atomicClasses(compile(path.join(app, 'src/Page.tsx')))).toEqual(
         [],

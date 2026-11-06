@@ -91,15 +91,20 @@ afterAll(() => {
   fs.rmSync(appDir, {recursive: true, force: true});
 });
 
+/** One instance of the documented config's StyleX plugin, as a dev server keeps. */
+function createCompile() {
+  const config = postcss(appDir);
+  const options = config.plugins[require.resolve('./index.js')];
+  const [compile] = require('./index.js')(options).plugins;
+  return compile;
+}
+
 /**
  * Run the documented config's StyleX plugin over the app the way `next build`
  * does: from the app directory, on a stylesheet holding `@stylex;`. Returns the
  * CSS that replaces the at-rule.
  */
-async function compileApp() {
-  const config = postcss(appDir);
-  const options = config.plugins[require.resolve('./index.js')];
-  const [compile] = require('./index.js')(options).plugins;
+async function compileApp(compile = createCompile()) {
   let css = null;
   const atRule = {
     name: 'stylex',
@@ -162,4 +167,32 @@ describe('the PostCSS plugin and a swizzled copy', () => {
       delete globalThis.appBabelConfigFiles;
     }
   });
+
+  it('moves an unchanged copy to the library layer when its marker appears during a dev session', async () => {
+    const marker = path.join(
+      appDir,
+      'src/components/astryx/astryx-swizzle.json',
+    );
+    const saved = fs.readFileSync(marker, 'utf-8');
+    globalThis.appBabelConfigFiles = [];
+    try {
+      const compile = createCompile();
+      fs.rmSync(marker);
+      const before = await compileApp(compile);
+      expect(layer(before, 'product')).toMatch(/color:\s*green/);
+
+      fs.writeFileSync(marker, saved);
+      const after = await compileApp(compile);
+      expect(layer(after, 'astryx-base')).toMatch(/color:\s*green/);
+      expect(layer(after, 'product')).not.toMatch(/color:\s*green/);
+    } finally {
+      fs.writeFileSync(marker, saved);
+      delete globalThis.appBabelConfigFiles;
+    }
+  });
 });
+
+/** The text of one `@layer` block in the emitted CSS. */
+function layer(css, name) {
+  return css.match(new RegExp(`@layer ${name} \\{[^]*?\\n\\}`))?.[0] ?? '';
+}

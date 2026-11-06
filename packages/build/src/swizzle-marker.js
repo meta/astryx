@@ -3,9 +3,9 @@
 'use strict';
 
 /**
- * @astryxdesign/build: swizzled copies. `astryx swizzle` writes
- * `astryx-swizzle.json` into its output folder. Every module under a folder
- * that holds the marker is Astryx source: the library pass compiles it with
+ * @astryxdesign/build: swizzled copies. A swizzle output folder holds an
+ * `astryx-swizzle.json` marker. Every module under a folder that holds the
+ * marker is Astryx source: the library pass compiles it with
  * the library class prefix into the library layer, below `astryx-theme`, so a
  * theme's component overrides reach the copy as they reach the package.
  */
@@ -13,7 +13,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-/** The file `astryx swizzle` writes into its output folder. */
+/** The marker file in a swizzle output folder. */
 const SWIZZLE_MARKER = 'astryx-swizzle.json';
 
 /**

@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-/** The file `astryx swizzle` writes into its output folder. */
+/** The marker file in a swizzle output folder. */
 export declare const SWIZZLE_MARKER: string;
 
 /**
