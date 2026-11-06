@@ -218,6 +218,29 @@ describe('astryx docs --depth', () => {
   );
 
   it(
+    'marks an experimental doc on the list as every other listing marks it',
+    async () => {
+      const list = await runCli(['docs', '--depth', 'all']);
+      expect(list.status).toBe(0);
+      const row = list.stdout
+        .split('\n')
+        .find(line => line.includes('cli/api/functions/render'));
+      expect(row).toBeDefined();
+      expect(row).toContain('[experimental]');
+      // The namespace read marks the same doc the same way.
+      const read = await runCli(['docs', 'cli/api/functions']);
+      expect(read.stdout).toContain('[experimental]');
+      // A stable neighbour is not marked.
+      const stable = list.stdout
+        .split('\n')
+        .find(line => line.includes('cli/api/functions/search'));
+      expect(stable).toBeDefined();
+      expect(stable).not.toContain('[experimental]');
+    },
+    SLOW,
+  );
+
+  it(
     'the topic list names the docs below each namespace with a depth',
     async () => {
       const plain = await runCli(['docs']);
