@@ -15,6 +15,7 @@ import userEvent from '@testing-library/user-event';
 import {TestIcon} from '../__tests__/TestIcon';
 import {InternationalizationProvider} from '../i18n';
 import {FieldLabel} from './FieldLabel';
+import {Switch} from '../Switch/Switch';
 import {themeProps} from '../utils/themeProps';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 
@@ -250,6 +251,37 @@ describe('FieldLabel', () => {
         );
       });
       expect(screen.getByRole('checkbox')).not.toBeChecked();
+    });
+
+    it('opens the help on Space on its button and leaves a checkbox alone', async () => {
+      const user = userEvent.setup();
+      render(
+        <>
+          <FieldLabel
+            label="Digest"
+            inputID="digest"
+            labelTooltip="One email a week"
+          />
+          <input type="checkbox" id="digest" />
+        </>,
+      );
+
+      infoIcon('Digest').focus();
+      await user.keyboard(' ');
+
+      await waitFor(() => {
+        expect(infoIcon('Digest')).toHaveAttribute('aria-expanded', 'true');
+      });
+      expect(screen.getByRole('checkbox')).not.toBeChecked();
+    });
+
+    it('leaves a Switch alone when its label’s info button is clicked', async () => {
+      const user = userEvent.setup();
+      render(<Switch label="Auto-save" labelTooltip="Saves each change" />);
+
+      await user.click(infoIcon('Auto-save'));
+
+      expect(screen.getByRole('switch')).not.toBeChecked();
     });
 
     it('opens the help on a mouse click of its button and leaves a checkbox alone', async () => {

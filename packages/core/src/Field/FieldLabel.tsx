@@ -77,9 +77,8 @@ const styles = stylex.create({
     color: colorVars['--color-text-disabled'],
     cursor: 'default',
   },
-  // The label and the info button after it share one row. The button sits
-  // outside the label, because a button inside a label would also activate
-  // the label's control.
+  // A button inside a label also activates the label's control, so the info
+  // button sits outside it, in one row with the label.
   labelRow: {
     display: 'inline-flex',
     alignItems: 'center',
@@ -89,10 +88,11 @@ const styles = stylex.create({
   labelRowHidden: {
     display: 'contents',
   },
-  // A hidden label's info button takes no layout slot, and it shows while it
-  // has keyboard focus, so a keyboard user can see where focus is.
+  // A hidden label's info button takes no layout slot. It shows above the
+  // control while it has keyboard focus, so the person sees where focus is.
   infoTipHidden: {
     position: 'absolute',
+    zIndex: {default: null, ':focus-visible': 2},
     clip: {default: 'rect(0, 0, 0, 0)', ':focus-visible': 'auto'},
     overflow: {default: 'hidden', ':focus-visible': 'visible'},
     whiteSpace: 'nowrap',

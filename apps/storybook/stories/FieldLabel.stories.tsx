@@ -100,6 +100,7 @@ export const States: Story = {
           description="Search every workspace."
           descriptionID="field-label-hidden-help"
           isLabelHidden
+          labelTooltip="Searches titles and owners."
         />
         <input
           id="field-label-hidden"

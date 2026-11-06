@@ -87,6 +87,32 @@ test.describe('a mouse click or a key on the info button', () => {
     expect(await focusedId(page)).not.toBe(FIELD_ID);
   });
 
+  test('a hidden label’s info button shows above the field while it has keyboard focus', async ({
+    page,
+  }) => {
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=${STORY}&viewMode=story`,
+    );
+    const field = page.locator('#field-label-hidden');
+    await field.focus();
+    await page.keyboard.press('Shift+Tab');
+    const button = page.getByRole('button', {name: 'About Search'});
+    await expect(button).toBeFocused();
+    const box = await button.boundingBox();
+    if (box == null) {
+      throw new Error('the focused info button has no layout box');
+    }
+    expect(box.width).toBeGreaterThan(8);
+    const isOnTop = await page.evaluate(
+      ({x, y}) => {
+        const hit = document.elementFromPoint(x, y);
+        return hit?.closest('button')?.getAttribute('aria-label') ?? null;
+      },
+      {x: box.x + box.width / 2, y: box.y + box.height / 2},
+    );
+    expect(isOnTop).toBe('About Search');
+  });
+
   test('Enter shows the help and leaves the field unfocused', async ({
     page,
   }) => {

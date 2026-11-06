@@ -209,8 +209,6 @@ The ordinary description remains stable consumer anatomy without a Field-owned t
 - **Attached default (FR9).** Field defaults `statusVariant` to `attached` for
   every child, against `family:input-fields/FR8`; how to migrate the default is
   OQ1.
-- **Label tooltip (FieldLabel FR8).** A `labelTooltip` is reachable only by
-  pointer, as `component:FieldLabel` FR8 records, against WCAG 2.2 SC 2.1.1.
 
 ## Decision log
 
