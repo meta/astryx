@@ -69,7 +69,7 @@ import {
 import {TopNavRenderContext} from '../TopNav/TopNavRenderContext';
 import {TopNavMobileContentContext} from '../TopNav/TopNavMobileContentContext';
 import {AppShellMobileContext} from './AppShellMobileContext';
-import {useAppShellMainId} from './useAppShellMainId';
+import {AppShellNestingContext, useAppShellMainId} from './useAppShellMainId';
 import type {AppShellMobileContextValue} from './AppShellMobileContext';
 import type {SpacingStep} from '../utils/types';
 import type {BaseProps} from '../BaseProps';
@@ -679,10 +679,10 @@ export function AppShell({
     [mobileNavIsControlled, mobileNavOnOpenChange],
   );
 
+  const mainContentId = useAppShellMainId();
   // Move focus to the main content container when the skip link is activated.
   // Hash navigation alone doesn't reliably move focus in every browser, so
   // focus the target explicitly (it's focusable via tabIndex={-1}).
-  const mainContentId = useAppShellMainId();
   const handleSkipLinkClick = useCallback(() => {
     document.getElementById(mainContentId)?.focus();
   }, [mainContentId]);
@@ -1232,7 +1232,7 @@ export function AppShell({
           : styles.mainFocusTarget,
         styles.mainSafeAreaEnd,
       ]}>
-      {children}
+      <AppShellNestingContext value={true}>{children}</AppShellNestingContext>
     </LayoutContent>
   );
 

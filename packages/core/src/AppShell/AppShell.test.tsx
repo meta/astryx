@@ -277,6 +277,25 @@ describe('AppShell', () => {
     );
   });
 
+  it('keeps the fixed id on the page shell when another shell is nested in its content', () => {
+    render(
+      <AppShell data-testid="outer">
+        <AppShell data-testid="inner">
+          <div>Nested</div>
+        </AppShell>
+      </AppShell>,
+    );
+    const outerMain = screen
+      .getByTestId('outer')
+      .querySelector<HTMLElement>(':scope [role="main"]');
+    const innerMain = screen
+      .getByTestId('inner')
+      .querySelector<HTMLElement>('[role="main"]');
+    expect(outerMain).toHaveAttribute('id', 'astryx-app-shell-main');
+    expect(innerMain?.id).not.toBe('astryx-app-shell-main');
+    expect(innerMain?.id).not.toBe('');
+  });
+
   it('skip link text comes from the i18n catalog', () => {
     render(
       <InternationalizationProvider
