@@ -1771,6 +1771,47 @@ export function nameOwner(tree, catalog, name) {
 }
 
 /**
+ * `stability: 'experimental'` for a node whose doc is marked experimental, or
+ * that sits under an experimental namespace (spec:AST-017 FR27), the way help
+ * marks an experimental command; nothing for a stable one, so stable entries
+ * read as they always have.
+ * @param {DocsTree} tree
+ * @param {TreeNode} node
+ * @returns {{stability?: 'experimental'}}
+ */
+export function stabilityOf(tree, node) {
+  return isExperimentalTreeNode(tree, node) ? {stability: 'experimental'} : {};
+}
+
+/**
+ * The fields every child carries: what it is, and the route that opens it.
+ * Shared, so a child reads the same whether a namespace read or the topic
+ * list names it — including the package, which is the integration's for a
+ * guide an integration replaced, not the package whose route it took.
+ * @param {DocsTree} tree
+ * @param {TreeNode} child
+ * @returns {import('./docs.type.mjs').DocsNodeChild}
+ */
+export function childIdentity(tree, child) {
+  return {
+    route: child.route,
+    name: child.route.slice(child.route.lastIndexOf('/') + 1),
+    package: child.guideOverlay?.replacement?.package ?? child.provider,
+    // A guide an integration's doc took the place of names whose it was.
+    ...(child.guideOverlay?.replacement
+      ? {
+          replaces: child.route,
+          replacedPackage: child.guideOverlay.replacedPackage ?? child.provider,
+        }
+      : {}),
+    kind: child.kind,
+    title: child.title,
+    summary: child.summary,
+    ...stabilityOf(tree, child),
+  };
+}
+
+/**
  * Whether a topic answers to its own name: what the topic list and search
  * offer must open that topic.
  * @param {DocsTree} tree

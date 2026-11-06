@@ -46,7 +46,7 @@ export const doc = {
       flag: '--depth <levels>',
       param: 'options.depth',
       description:
-        'How many levels of the docs tree to read below a namespace: 0 for the namespace alone, 1 for its children (what a read without --depth shows), all for everything below it. On the topic list, where a namespace otherwise lists alone, it names the docs below each one by the route that opens them. With it, --detail sets how much of each doc below shows: brief (one line each, the default), compact (with its sections), or full',
+        'How many levels of the docs tree to read below a namespace: 0 for the namespace alone, 1 for its children (what a read without --depth shows), all for everything below it. On the topic list, where a namespace otherwise lists alone, it names the docs below each one by the route that opens them, one line each. With it on a namespace read, --detail sets how much of each doc below shows: brief (one line each, the default), compact (with its sections), or full; the topic list is one line per doc whatever the detail',
     },
   ],
   examples: [

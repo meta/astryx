@@ -16,6 +16,7 @@
 
 import {loadTopicFile} from '../../../foundation/doc-compiler/read.mjs';
 import {
+  childIdentity,
   holdsOwnName,
   linkDocText,
   loadDocsCatalog,
@@ -96,9 +97,12 @@ function depthLevels(depth) {
 }
 
 /**
- * One namespace of the list, with the branch below it to `levels`. A child is
- * listed by the route that opens it, so every line of the list is an argument
- * a reader can pass straight back to `astryx docs`.
+ * One namespace of the list, with the branch below it to `levels`. A child
+ * reads exactly as a namespace read gives it (`childIdentity`): the route
+ * that opens it, and the package that owns it — the integration's, for a
+ * guide an integration replaced, with the package whose route it took beside
+ * it. Every line of the list is then an argument a reader can pass straight
+ * back to `astryx docs`, attributed the way the read attributes it.
  * @param {import('../../../foundation/doc-compiler/tree.mjs').DocsTree} tree
  * @param {import('../../../foundation/doc-compiler/tree.mjs').TreeNode} node
  * @param {number} levels
@@ -116,15 +120,24 @@ function branch(tree, node, levels) {
     .flatMap(slot => slot.children)
     .map(route => tree.get(route))
     .filter(child => child != null)
-    .map(child =>
-      branch(
+    .map(child => {
+      const identity = childIdentity(
+        tree,
+        /** @type {import('../../../foundation/doc-compiler/tree.mjs').TreeNode} */ (
+          child
+        ),
+      );
+      const below = branch(
         tree,
         /** @type {import('../../../foundation/doc-compiler/tree.mjs').TreeNode} */ (
           child
         ),
         levels - 1,
-      ),
-    );
+      );
+      /** @type {import('../docs.type.mjs').DocsListChild} */
+      const row = {...identity, topic: identity.route, description: identity.summary};
+      return below.children == null ? row : {...row, children: below.children};
+    });
   if (children.length > 0) listed.children = children;
   return listed;
 }
