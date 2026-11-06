@@ -209,9 +209,10 @@ describe('NavigationStack', () => {
       render(<LargeHarness />);
       const large = screen.getByRole('heading', {level: 1, name: 'Settings'});
       // First in the screen's scrolling content.
-      expect(screenCard('Settings')?.firstElementChild?.firstElementChild).toBe(
-        large,
-      );
+      expect(
+        screenCard('Settings')?.firstElementChild?.firstElementChild
+          ?.firstElementChild,
+      ).toBe(large);
       // The bar's copy of the title is hidden while the large one shows.
       expect(screen.getAllByRole('heading', {name: 'Settings'})).toHaveLength(
         1,

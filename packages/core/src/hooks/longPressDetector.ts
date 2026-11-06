@@ -4,7 +4,8 @@
  * @file longPressDetector.ts
  * @input The long-press numbers (motion/uikit/longPress.ts) and touch events
  * @output createLongPressDetector(): one long press at a time, timed on the
- *   touch events' clock, with no React
+ *   touch events' clock, with no React. A press that fires claims the press
+ *   that is down (utils/pressClaim.ts).
  * @position Internal; the core of useLongPress and useLongPressDetector
  *   (useLongPress.ts). Not in the hooks entry.
  *
@@ -15,6 +16,7 @@ import {
   LONG_PRESS_ALLOWABLE_MOVEMENT_PX,
   LONG_PRESS_DURATION_MS,
 } from '../motion/uikit/longPress';
+import {claimPress} from '../utils/pressClaim';
 
 // The hold is a deadline on the touch events' timestamps, on the clock of the
 // touch's own window. A busy main thread can delay the timer past the
@@ -151,6 +153,9 @@ export function createLongPressDetector(
       return;
     }
     cancel();
+    // The press acted, so its lift is not a tap: a box under the finger adds
+    // no click of its own.
+    claimPress();
     options.onLongPress({x: at.x, y: at.y});
   };
 
