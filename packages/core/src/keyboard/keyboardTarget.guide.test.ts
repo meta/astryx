@@ -4,9 +4,9 @@
  * @file keyboardTarget.guide.test.ts
  * @input keyboardTarget.ts with a stand-in layout guide and a stand-in
  *   animator, a stand-in visual viewport and stubbed boxes
- * @output Proves a docked ride on the guide's slides: a field that loses
- *   focus while the keyboard shows rides its bar down on the hide's slide,
- *   with no set that cuts the slide at its start
+ * @output Proves a docked ride on the guide's slides. A field that loses
+ *   focus while the keyboard shows rides its bar down on the hide's slide. No
+ *   set cuts the slide at its start
  * @position Keyboard module tests
  */
 

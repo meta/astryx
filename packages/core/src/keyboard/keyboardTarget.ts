@@ -105,11 +105,10 @@ export type FixedContainer =
   {docked: HTMLElement} | 'fills-viewport' | 'floating' | null;
 
 /**
- * How the nearest fixed-position ancestor of `element` meets the keyboard:
- * docked to the layout viewport's bottom edge where its layout puts it (its
- * bottom sits at the viewport's bottom), filling the viewport, such as a
- * dialog's, or floating above the bottom edge. Null with no fixed ancestor,
- * as in page content.
+ * How the nearest fixed-position ancestor of `element` meets the keyboard. It
+ * is docked when its layout puts its bottom at the layout viewport's bottom
+ * edge. It can also fill the viewport, as a dialog does, or float above the
+ * bottom edge. Null with no fixed ancestor, as in page content.
  */
 export function fixedContainerOf(element: Element): FixedContainer {
   const view = element.ownerDocument.defaultView;
@@ -225,11 +224,11 @@ function animatedProperties(animation: Animation): string[] {
 }
 
 // Whether the app is moving `node` itself right now with a CSS transition or
-// animation on its position. A script animation is not seen: an app that
-// moves its bar from script keeps it clear with its own `translate`. On a
-// target the ride moves, a transition of `translate` alone is the ride's: the
-// target's `transition` starts it when the ride writes the property, and the
-// app sets no `translate` on a target the ride moves.
+// animation on its position. A script animation is not seen: an app that moves
+// its bar from script keeps it clear with its own `translate`. On a target the
+// ride moves, a transition of `translate` alone is the ride's. The target's
+// `transition` starts it when the ride writes the property. The app sets no
+// `translate` on a target the ride moves.
 function isMovedByApp(node: HTMLElement): boolean {
   if (typeof node.getAnimations !== 'function') {
     return false;
@@ -292,16 +291,16 @@ export function coveredBy(
   return height > 0 && covered > KEYBOARD_EPSILON ? covered : 0;
 }
 
-// The lift of a ridden target. A Core host (`isHostOwned`) clears the
-// keyboard with a focused field inside, the field `offset` above it. An app's
-// docked container moves only by the part of it the keyboard still covers,
-// measured after any lift the app gives it, so a bar the app already moves
-// with the keyboard is not moved again; once its layout leaves the bottom
-// edge, or while the app runs its own CSS transition or animation on its
-// position, it is not moved at all. When a field outside has focus, the target
-// rests under the keyboard, so it never covers that field. When focus left
-// for nothing, a lifted target rides down with the keyboard, and one at rest
-// stays there.
+// The lift of a ridden target. A Core host (`isHostOwned`) clears the keyboard
+// with a focused field inside, the field `offset` above it. An app's docked
+// container moves only by the part of it the keyboard still covers. That part
+// is measured after any lift the app gives it. So a bar the app already moves
+// with the keyboard is not moved again. It is not moved at all once its layout
+// leaves the bottom edge. Nor is it moved while the app runs its own CSS
+// transition or animation on its position. When a field outside has focus, the
+// target rests under the keyboard, so it never covers that field. When focus
+// left for nothing, a lifted target rides down with the keyboard, and one at
+// rest stays there.
 function liftFor(
   target: HTMLElement,
   animator: Animator,
@@ -350,8 +349,9 @@ function scrollBy(scroller: Element, distance: number, win: Window): void {
   }
 }
 
-// How far `field` sits outside the band it must be in: inside its scroller's
-// box and the viewport, and `offset` above the keyboard while one shows.
+// How far `field` sits outside the band it must be in. The band is inside its
+// scroller's box and the viewport, and `offset` above the keyboard while one
+// shows.
 function revealDistance(
   field: Element,
   scroller: Element,
@@ -426,9 +426,10 @@ function deliverTap(
   control.dispatchEvent(click);
 }
 
-// Puts back a pan the browser makes on its own after a keyboard report, as
-// after a focus no claim saw: a script's `focus()` while nothing has focus.
-// The field sits in place already, so the pan only displaces the page.
+// Puts back a pan the browser makes on its own after a keyboard report. This
+// happens, for example, after a focus no claim saw: a script's `focus()` while
+// nothing has focus. The field sits in place already, so the pan only displaces
+// the page.
 function watchPans(win: Window, owns: (focused: Element) => boolean) {
   const watch = watchRevealPan(win, {owns});
   let lastHeight = getKeyboardHeight(win);
@@ -560,7 +561,8 @@ function revealWithKeyboard(
 }
 
 // Whether `container`'s drawn box is taller than the room above a keyboard
-// `height` px tall, so a move to the keyboard's top would push it off the top.
+// `height` px tall. A move to the keyboard's top would then push it off the
+// top.
 function exceedsRoom(
   container: HTMLElement,
   height: number,
@@ -584,10 +586,10 @@ function focusedScrollerIn(
 }
 
 // The lift of a container taller than the room above the keyboard with no
-// scroller around its focused field: only as far as that field needs to sit
-// `offset` above the keyboard, and never past the container's own overlap,
-// so a field near its top stays on screen. It keeps liftFor's guards: a
-// container that left the bottom edge or that the app is moving gets none.
+// scroller around its focused field. It lifts only as far as that field needs
+// to sit `offset` above the keyboard. It never lifts past the container's own
+// overlap, so a field near its top stays on screen. It keeps liftFor's guards:
+// a container that left the bottom edge or that the app is moving gets none.
 // When focus left for nothing it never rises and rides down as the keyboard
 // goes.
 function fieldLift(
@@ -613,8 +615,8 @@ function fieldLift(
 }
 
 // The ride that moves each target. A new ride on the same target takes over,
-// whether the old one still rides or waits for the keyboard to go, so two
-// never move one target, and the one taken over never moves it again.
+// whether the old one still rides or waits for the keyboard to go. So two never
+// move one target, and the one taken over never moves it again.
 const currentRides = new WeakMap<HTMLElement, () => void>();
 
 // Rides `target` with the keyboard until the returned call (see liftFor).
@@ -664,8 +666,8 @@ function rideWithKeyboard(
       return;
     }
     // An app's container taller than the room above the keyboard never rides
-    // the whole overlap: a scroller in it reveals the focused field instead,
-    // and with none it rides only as far as that field needs.
+    // the whole overlap. A scroller in it reveals the focused field instead.
+    // With none, it rides only as far as that field needs.
     const isTooTall = !isHostOwned && exceedsRoom(target, height, win);
     const inside = isTooTall ? focusedScrollerIn(target) : null;
     const lift = !isTooTall
@@ -691,10 +693,10 @@ function rideWithKeyboard(
       end();
     }
   };
-  // A report, a slide or a focus move places the target on the next frame,
-  // once every listener of that event has run. An app that moves its own
-  // bar in its listener has moved it by then, so the lift measures only what
-  // the keyboard still covers and never stacks on the app's.
+  // A report, a slide or a focus move places the target on the next frame, once
+  // every listener of that event has run. An app that moves its own bar in its
+  // listener has moved it by then. So the lift measures only what the keyboard
+  // still covers, and never stacks on the app's.
   const placeOnNextFrame = (slide: KeyboardTransition | null) => {
     if (slide != null) {
       pendingSlide = slide;
@@ -748,12 +750,12 @@ export interface KeepFieldAboveKeyboardOptions {
 }
 
 // How the field path places `field` when it gains focus: a ride of its docked
-// container, or a reveal by its nearest scroller. In a fixed container the app
-// positions (one that fills the viewport, floats above the bottom edge, or
-// sets its own `translate`), that is a scroller between the field and the
-// container. Null where the browser's own reveal stays: inside a keyboard
-// target, which places the field itself, or in such a container with no
-// scroller around the field.
+// container, or a reveal by its nearest scroller. A fixed container the app
+// positions fills the viewport, floats above the bottom edge, or sets its own
+// `translate`. In one, that is a scroller between the field and the container.
+// Null where the browser's own reveal stays. That is inside a keyboard target,
+// which places the field itself, or in such a container with no scroller around
+// the field.
 function placementOf(
   field: HTMLElement,
 ): {ride: HTMLElement} | {reveal: Element} | null {
@@ -793,18 +795,18 @@ function revealWithin(
 
 /**
  * A field's own path until the returned call. When the field gains focus, it
- * decides where it is: docked at the viewport's bottom, its fixed container
- * moves up by the part of it the keyboard still covers; in scrolling content,
+ * decides where it is. Docked at the viewport's bottom, its fixed container
+ * moves up by the part of it the keyboard still covers. In scrolling content,
  * its nearest scroller, the document included, brings it into view, above the
- * keyboard while one shows; a docked container taller than the room above the
- * keyboard never rides its whole overlap: its scroller there brings the field
- * up instead, and with none it rides only as far as the field needs. In a
- * fixed container the app positions (one that fills the viewport, floats above
- * the bottom edge, or sets its own `translate`), a scroller between the field
- * and the container brings it up. A focus move or a tap into the field arrives
- * without the browser's reveal there, so the page never pans for it. Inside a
- * keyboard target, or in such a container with no scroller around the field,
- * the path does nothing and the browser's own reveal stays.
+ * keyboard while one shows. A docked container taller than the room above the
+ * keyboard never rides its whole overlap. Its scroller there brings the field
+ * up instead, and with none it rides only as far as the field needs. A fixed
+ * container the app positions fills the viewport, floats above the bottom edge,
+ * or sets its own `translate`. In one, a scroller between the field and the
+ * container brings it up. A focus move or a tap into the field arrives without
+ * the browser's reveal there, so the page never pans for it. Inside a keyboard
+ * target, or in such a container with no scroller around the field, the path
+ * does nothing and the browser's own reveal stays.
  *
  * @example
  * ```

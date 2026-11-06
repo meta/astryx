@@ -26,9 +26,10 @@ export interface KeyboardTestDouble {
 
 /**
  * Installs a visual viewport that shrinks for the keyboard, as Mobile Safari
- * and Chrome on Android do, and a coarse primary pointer unless `coarse` is
- * false. Each change reports in the visual viewport's own `resize`, and the
- * animation frames asked for during it run right after, as before a paint.
+ * and Chrome on Android do. It also installs a coarse primary pointer unless
+ * `coarse` is false. Each change reports in the visual viewport's own `resize`,
+ * and the animation frames asked for during it run right after, as before a
+ * paint.
  */
 export function installKeyboardTestDouble({
   coarse = true,

@@ -584,10 +584,10 @@ export function claimTapFocus(
   // The touch the route follows, and the listeners that follow it: on the
   // region only, and only while that touch is down.
   let start: {x: number; y: number; control: HTMLElement} | null = null;
-  // On the iOS simulator, a tap held about 250 ms still gets its mousedown
-  // and click a few ms after its touchend, though the route cancelled that
-  // touchend. They go to whatever is under the finger by then, which can take
-  // the focus the tap delivered. The click guard takes them
+  // On the iOS simulator, a tap held about 250 ms still gets its mousedown and
+  // click. They come a few ms after its touchend, though the route cancelled
+  // that touchend. They go to whatever is under the finger by then, which can
+  // take the focus the tap delivered. The click guard takes them
   // (utils/clickGuard.ts).
   const stopFollowing = () => {
     start = null;

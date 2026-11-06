@@ -10,9 +10,9 @@
 
 /**
  * How far content must scroll so a box from `top` to `bottom` sits inside the
- * band from `safeTop` to `safeBottom`, CSS px: positive scrolls it up,
- * negative down, 0 when it fits or the band is empty. A box taller than the
- * band keeps its bottom edge in it.
+ * band from `safeTop` to `safeBottom`, CSS px. A positive distance scrolls it
+ * up and a negative one down. It is 0 when the box fits or the band is empty. A
+ * box taller than the band keeps its bottom edge in it.
  *
  * @example
  * ```
