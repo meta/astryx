@@ -89,11 +89,11 @@ const styles = stylex.create({
     display: 'contents',
   },
   // A hidden label's info button takes no layout slot. While it has keyboard
-  // focus it shows just above the control, so the control never covers it and
-  // it needs no stacking order of its own.
+  // focus it takes its place in flow above the control, so nothing covers or
+  // clips it, at the top of a scroll container too.
   infoTipHidden: {
-    position: 'absolute',
-    transform: {default: null, ':focus-visible': 'translateY(-100%)'},
+    position: {default: 'absolute', ':focus-visible': 'static'},
+    alignSelf: 'flex-start',
     clip: {default: 'rect(0, 0, 0, 0)', ':focus-visible': 'auto'},
     overflow: {default: 'hidden', ':focus-visible': 'visible'},
     whiteSpace: 'nowrap',

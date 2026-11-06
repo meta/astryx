@@ -7,6 +7,8 @@ import {FormLayout} from '@astryxdesign/core/FormLayout';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {VStack} from '@astryxdesign/core/Stack';
 import {Text} from '@astryxdesign/core/Text';
+import {Dialog, DialogHeader} from '@astryxdesign/core/Dialog';
+import {Layout, LayoutContent} from '@astryxdesign/core/Layout';
 
 const meta: Meta<typeof FieldLabel> = {
   title: 'Core/FieldLabel',
@@ -51,6 +53,35 @@ export const HiddenLabelInfo: Story = {
         />
       </FormLayout>
     </VStack>
+  ),
+};
+
+/**
+ * A hidden label's info button on the first field of a dialog's scrolling
+ * body. Tab to the button: it shows in flow above the field, inside the body.
+ */
+export const HiddenLabelInfoInDialog: Story = {
+  render: () => (
+    <Dialog isOpen onOpenChange={() => {}} maxHeight="50vh">
+      <Layout
+        header={<DialogHeader title="Files" onOpenChange={() => {}} />}
+        content={
+          <LayoutContent>
+            <TextInput
+              label="Search files"
+              isLabelHidden
+              labelTooltip="Searches file names only."
+              placeholder="Search files"
+            />
+            {Array.from({length: 12}, (_, index) => (
+              <Text type="body" as="p" display="block" key={index}>
+                File {index + 1}
+              </Text>
+            ))}
+          </LayoutContent>
+        }
+      />
+    </Dialog>
   ),
 };
 

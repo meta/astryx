@@ -118,6 +118,43 @@ test.describe('a mouse click or a key on the info button', () => {
     });
   }
 
+  test('on the first field of a dialog’s scrolling body, a hidden label’s focused info button stays inside the body', async ({
+    page,
+  }) => {
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=core-fieldlabel--hidden-label-info-in-dialog&viewMode=story`,
+    );
+    const field = page.getByRole('textbox', {name: 'Search files'});
+    await field.focus();
+    await page.keyboard.press('Shift+Tab');
+    const button = page.getByRole('button', {name: 'About Search files'});
+    await expect(button).toBeFocused();
+    const placement = await button.evaluate(el => {
+      let scroller = el.parentElement;
+      while (scroller && getComputedStyle(scroller).overflowY === 'visible') {
+        scroller = scroller.parentElement;
+      }
+      const box = el.getBoundingClientRect();
+      const view = scroller?.getBoundingClientRect();
+      const hit = document.elementFromPoint(
+        box.x + box.width / 2,
+        box.y + box.height / 2,
+      );
+      return {
+        isInside:
+          view != null && box.top >= view.top && box.bottom <= view.bottom,
+        isOnTop: hit?.closest('button') === el,
+        width: box.width,
+      };
+    });
+    expect(placement).toEqual({
+      isInside: true,
+      isOnTop: true,
+      width: expect.any(Number),
+    });
+    expect(placement.width).toBeGreaterThan(8);
+  });
+
   test('Enter shows the help and leaves the field unfocused', async ({
     page,
   }) => {
