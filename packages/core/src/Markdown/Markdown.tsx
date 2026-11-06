@@ -65,6 +65,7 @@ import {
 } from './parser';
 import type {IncrementalState, MathParseOptions, ParseOptions} from './parser';
 import {getMarkdownAstLegacyCodeLanguage, markdownAstText} from './ast';
+import {markdownBlockDirection} from './blockDirection';
 import type {
   MarkdownAstBlockContent,
   MarkdownAstPhrasingContent,
@@ -1415,6 +1416,7 @@ function renderBlock(
           <Tag
             key={index}
             id={headingId}
+            dir={markdownBlockDirection(node)}
             {...mergeProps(
               themeProps('markdown-heading', {density, level}),
               stylex.props(
@@ -1439,6 +1441,7 @@ function renderBlock(
       return (
         <HeadingLinksRenderer
           key={index}
+          dir={markdownBlockDirection(node)}
           headingId={headingId}
           headingLabel={headingLabel}
           permalinkUrl={permalinkUrl}
@@ -1501,6 +1504,7 @@ function renderBlock(
         <div
           key={index}
           role="paragraph"
+          dir={markdownBlockDirection(node)}
           {...mergeProps(
             themeProps('markdown-paragraph', {density}),
             stylex.props(
@@ -1671,6 +1675,7 @@ function renderBlock(
       return (
         <Blockquote
           key={index}
+          dir={markdownBlockDirection(node)}
           {...themeProps('markdown-blockquote', {density})}
           {...lineStamps}
           xstyle={[
@@ -1801,6 +1806,7 @@ function renderBlock(
                     key={i}
                     value={`task-${i}`}
                     label={label}
+                    dir={markdownBlockDirection(item)}
                     {...(recordsSourceLines
                       ? sourceLineAttributes(blockSourceLines(item))
                       : undefined)}
@@ -1922,6 +1928,7 @@ function renderBlock(
                   hasMarkerGutter={node.ordered}>
                   <ListItem
                     label={label}
+                    dir={markdownBlockDirection(item)}
                     {...(recordsSourceLines
                       ? sourceLineAttributes(blockSourceLines(item))
                       : undefined)}

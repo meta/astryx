@@ -28,6 +28,10 @@ const MIXED = [
   '',
   'פסקה בעברית שמתחילה מימין ונמשכת מספיק כדי לעבור לשורה שנייה ברוחב של טלפון.',
   '',
+  'Short English line.',
+  '',
+  'שורה קצרה.',
+  '',
   '12345 — 67%',
   '',
   '- First item',
@@ -105,22 +109,27 @@ for (const pageDirection of ['ltr', 'rtl'] as const) {
   test.describe(`in a ${pageDirection} page`, () => {
     test('a prose block lays out in its own text direction', async ({page}) => {
       await renderMixed(page, pageDirection);
+      const direction = async (selector: string, text: string) =>
+        (await measure(page, selector, text)).direction;
       expect(
-        await measure(page, '[role="paragraph"]', 'An English paragraph'),
-      ).toEqual({direction: 'ltr', startsAt: 'left'});
-      expect(await measure(page, '[role="paragraph"]', 'פסקה בעברית')).toEqual(
-        {direction: 'rtl', startsAt: 'right'},
-      );
-      expect(await measure(page, 'h1', 'English heading')).toEqual({
-        direction: 'ltr',
-        startsAt: 'left',
-      });
-      expect(await measure(page, 'blockquote', 'ציטוט')).toEqual({
-        direction: 'rtl',
-        startsAt: 'right',
-      });
-      expect((await measure(page, 'li', 'פריט שני')).direction).toBe('rtl');
-      expect((await measure(page, 'li', 'First item')).direction).toBe('ltr');
+        await direction('[role="paragraph"]', 'An English paragraph'),
+      ).toBe('ltr');
+      expect(await direction('[role="paragraph"]', 'פסקה בעברית')).toBe('rtl');
+      expect(await direction('h1', 'English heading')).toBe('ltr');
+      expect(await direction('blockquote', 'ציטוט')).toBe('rtl');
+      expect(await direction('li', 'פריט שני')).toBe('rtl');
+      expect(await direction('li', 'First item')).toBe('ltr');
+    });
+
+    test('a short line starts on its own text edge', async ({page}) => {
+      await renderMixed(page, pageDirection);
+      expect(
+        (await measure(page, '[role="paragraph"]', 'Short English line'))
+          .startsAt,
+      ).toBe('left');
+      expect(
+        (await measure(page, '[role="paragraph"]', 'שורה קצרה')).startsAt,
+      ).toBe('right');
     });
 
     test('a block with no strongly directional character keeps the page direction', async ({
