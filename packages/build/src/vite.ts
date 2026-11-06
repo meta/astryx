@@ -11,6 +11,15 @@ import {createHash} from 'node:crypto';
 import {undefinedGeneratedVariables} from './undefinedVariables';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// The CommonJS marker reader the Babel and PostCSS integrations share,
+// loaded on first use from beside babel.js, so every integration runs one copy.
+let markerReader: typeof import('./swizzle-marker.js') | undefined;
+function isSwizzledSource(filePath: string, memo: Map<string, boolean>) {
+  markerReader ??= createRequire(import.meta.url)(
+    path.resolve(__dirname, 'swizzle-marker.js'),
+  ) as typeof import('./swizzle-marker.js');
+  return markerReader.isSwizzledSource(filePath, memo);
+}
 
 const LIBRARY_PATTERN = 'node_modules/@astryxdesign/';
 const STYLEX_CSS_PATH = '/virtual:stylex.css';
@@ -356,10 +365,14 @@ function renderSplitLayers(
   // their own, so repeating them adds nothing to the output.
   const collectedConstants: unknown[] = [];
 
+  // A swizzled copy is Astryx source too: its rules go in the library layer.
+  const markerMemo = new Map<string, boolean>();
   for (const [filePath, rules] of rulesById.entries()) {
-    const own = filePath.includes(options.libraryPattern)
-      ? libraryRules
-      : productRules;
+    const own =
+      filePath.includes(options.libraryPattern) ||
+      isSwizzledSource(filePath, markerMemo)
+        ? libraryRules
+        : productRules;
     for (const rule of rules) {
       if (isConstantRule(rule)) {
         collectedConstants.push(rule);

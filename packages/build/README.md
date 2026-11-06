@@ -253,6 +253,8 @@ Library patterns (configurable):
 - `packages/themes/`
 - `node_modules/@astryxdesign/`
 
+A swizzled copy is library code too. `astryx swizzle` writes `astryx-swizzle.json` into its output folder, and the Babel, PostCSS, and Vite integrations compile every module under a folder that holds that file with the library prefix into `@layer astryx-base`, so a theme's component overrides reach the copy as they reach the package component. Turbopack builds do not read the marker yet.
+
 ### PostCSS plugin (`@astryxdesign/build/postcss`)
 
 Compiles StyleX from both library and product source files in two separate passes with different prefixes. Wraps the results in named `@layer` blocks:

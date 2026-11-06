@@ -11,6 +11,9 @@
  * Library files get 'astryx' prefix (.astryx78zum5), product files get 'x' (.x78zum5).
  */
 
+const path = require('node:path');
+const {isSwizzledSource} = require('./swizzle-marker');
+
 const LIBRARY_PATTERNS = [
   'packages/core/',
   'packages/themes/',
@@ -48,7 +51,9 @@ module.exports = function astryxBabelPlugin(api, options) {
   const productPlugin = stylexPlugin(api, productOpts);
 
   function getPluginAndOpts(filename) {
-    const isLibrary = libraryPatterns.some(p => filename.includes(p));
+    const isLibrary =
+      libraryPatterns.some(p => filename.includes(p)) ||
+      (filename !== '' && isSwizzledSource(path.resolve(filename)));
     return isLibrary
       ? {plugin: libraryPlugin, opts: libraryOpts}
       : {plugin: productPlugin, opts: productOpts};

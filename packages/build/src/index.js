@@ -23,6 +23,7 @@
  */
 
 const path = require('node:path');
+const {isSwizzledSource} = require('./swizzle-marker');
 const fs = require('node:fs');
 const babel = require('@babel/core');
 const stylexBabelPlugin = require('@stylexjs/babel-plugin');
@@ -242,6 +243,8 @@ function createPlugin() {
           // Partition files into library vs product, then compile
           // each group with its own babel config (different prefix)
           const transforms = [];
+          // A swizzled copy is Astryx source too: it compiles in the library pass.
+          const markerMemo = new Map();
           for (const filePath of files) {
             const mtimeMs = fs.existsSync(filePath)
               ? fs.statSync(filePath).mtimeMs
@@ -257,7 +260,9 @@ function createPlugin() {
             const contents = fs.readFileSync(filePath, 'utf-8');
             if (!contents.includes(STYLEX_IMPORT_SOURCE)) continue;
 
-            const isLibrary = libraryPatterns.some(p => filePath.includes(p));
+            const isLibrary =
+              libraryPatterns.some(p => filePath.includes(p)) ||
+              isSwizzledSource(filePath, markerMemo);
             const config = isLibrary ? libraryBabelConfig : productBabelConfig;
             const rulesMap = isLibrary ? libraryRulesMap : productRulesMap;
 
