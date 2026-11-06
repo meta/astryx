@@ -3973,6 +3973,16 @@ interface ComplexSelectorStatus
   message?: string
   type: 'warning' | 'error' | 'success'
 type ComplexSelectorVariant = 'input' | 'secondary' | 'ghost'
+type ComponentIconMap<Variant extends string = IconVariant> = { [Slot in ComponentIconSlotName]?: ComponentIconSlotMap[Slot] extends true ? IconName | null | ComponentIconRequest<Variant> : ComponentIconValue<ComponentIconSlotMap[Slot], Variant> }
+type ComponentIconRequest<Variant extends string = IconVariant> = Readonly<{ icon?: IconName | null; variant?: Variant; size?: IconSize }>
+interface ComponentIconSlotMap
+  code-block-copy: { readonly copied: boolean }
+  table-row-expand: { readonly expanded: boolean }
+  table-sort-indicator: { readonly direction: 'ascending' | 'descending' | 'none' }
+  timestamp-copy: { readonly copied: boolean }
+type ComponentIconSlotName = keyof ComponentIconSlotMap & string
+type ComponentIconStaticMap = Partial<Record<ComponentIconSlotName, IconName | null | ComponentIconRequest<string>>>
+type ComponentIconValue<State, Variant extends string = IconVariant> = IconName | null | ComponentIconRequest<Variant> | ((state: Readonly<State>) => ComponentIconRequest<Variant> | null | undefined)
 type ComponentStyleMap = Record<string, Record<string, StyleOverrides>>
 type ContainerComponent = keyof typeof themeDefaultStyles
 interface ContainerOptions
@@ -4161,6 +4171,7 @@ type DayOfWeekName = 'sun' | 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat'
 interface DefineThemeInput<IconVariants extends ReadonlyArray<string> | undefined = ReadonlyArray<string> | undefined, Base extends DefinedTheme | undefined = DefinedTheme | undefined>
   adaptations?: ThemeAdaptations
   color?: ColorScaleConfig
+  componentIcons?: ComponentIconMap<ThemeIconEntryVariant<IconVariants, Base>>
   components?: ComponentStyleMap
   extends?: Base
   iconVariants?: IconVariants
@@ -4180,6 +4191,7 @@ interface DefinedTheme
   __adaptations?: NormalizedThemeAdaptations @internal
   __axes?: ThemeGenerativeAxes @internal
   __built?: true
+  __componentIcons?: Partial<Record<string, StoredComponentIconValue>> @internal
   __iconEntryVariants?: Record<string, ReadonlyArray<string> | undefined> @internal
   __icons?: ThemeIconEntries<never> @internal
   __inputTokens?: Partial<Record<string, TokenValue>> @internal
@@ -4187,6 +4199,7 @@ interface DefinedTheme
   __localTokenOwners?: Record<string, string> @internal
   __onDark?: ResolvedOnMedia @internal
   __onLight?: ResolvedOnMedia @internal
+  componentIcons?: ComponentIconStaticMap
   components?: ComponentStyleMap
   iconVariants?: ReadonlyArray<string>
   icons?: ThemeIconOverrides
@@ -7140,6 +7153,12 @@ useHoverCard (.)
 ### Also exported from an earlier entry point
 
 ```text
+ComponentIconMap (.)
+ComponentIconRequest (.)
+ComponentIconSlotMap (.)
+ComponentIconSlotName (.)
+ComponentIconStaticMap (.)
+ComponentIconValue (.)
 ExtendedIconName (.)
 Icon (.)
 IconColor (.)
@@ -10342,7 +10361,7 @@ target input-clear-icon (Field)
 target input-group (InputGroup) props [size, status]
 target input-group-text (InputGroup)
 target input-status-icon (Field) props [size, status]
-target item (Item) props [align, density]
+target item (Item) props [align, density] states [disabled, highlighted, selected]
 target item-swipe-action (Item) props [variant]
 target item-swipe-panel (Item) props [side]
 target kbd (Kbd)
@@ -10517,14 +10536,14 @@ attr data-columns (theme reflection on 2 targets)
 attr data-container (theme reflection on 5 targets)
 attr data-density (theme reflection on 25 targets)
 attr data-direction (theme reflection on 3 targets)
-attr data-disabled (theme reflection on 30 targets)
+attr data-disabled (theme reflection on 31 targets)
 attr data-divided (theme reflection on 1 target)
 attr data-edge-fade (theme reflection on 1 target)
 attr data-elevation (theme reflection on 5 targets)
 attr data-format (theme reflection on 1 target)
 attr data-gap (theme reflection on 3 targets)
 attr data-height (theme reflection on 1 target)
-attr data-highlighted (theme reflection on 1 target)
+attr data-highlighted (theme reflection on 2 targets)
 attr data-in-range (theme reflection on 1 target)
 attr data-indicator-position (theme reflection on 1 target)
 attr data-is-pressed (theme reflection on 1 target)
@@ -10547,7 +10566,7 @@ attr data-presentation (theme reflection on 1 target)
 attr data-progress (theme reflection on 4 targets)
 attr data-readonly (theme reflection on 5 targets)
 attr data-select-all (theme reflection on 1 target)
-attr data-selected (theme reflection on 14 targets)
+attr data-selected (theme reflection on 15 targets)
 attr data-sender (theme reflection on 2 targets)
 attr data-shade (theme reflection on 1 target)
 attr data-shape (theme reflection on 5 targets)
