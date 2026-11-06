@@ -329,7 +329,7 @@ export const STARTUP_MS = 30 * 1000;
  * component: their share of the projected time, after the changed and owned
  * specs.
  */
-export const DEPENDENT_SHARE_MS = 3 * 60 * 1000;
+export const DEPENDENT_SHARE_MS = 60 * 1000;
 
 /** The expected time of a file that has no recorded time. */
 const UNRECORDED_FILE_SECONDS = 60;

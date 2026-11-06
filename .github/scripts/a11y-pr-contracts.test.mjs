@@ -616,7 +616,7 @@ describe('the folders that render a touched component (spec:AST-030 FR12)', () =
         {file: near, reason: 'renders a touched component'},
         {file: far, reason: 'renders a touched component (3 folders away)'},
       ],
-      seconds: {[own]: 60, [near]: 60, [far]: 400},
+      seconds: {[own]: 60, [near]: 40, [far]: 400},
       workers: 1,
     });
     expect(run.map(({file}) => file)).toEqual([own, near]);
@@ -627,30 +627,30 @@ describe('the folders that render a touched component (spec:AST-030 FR12)', () =
     expect(notRun[0].reason).toContain('add ci:run-a11y to run it');
   });
 
-  it('gives the dependents at most their three-minute share, and reports the rest as not run', () => {
+  it('gives the dependents at most their one-minute share, and reports the rest as not run', () => {
     const own =
       'packages/core/src/Spinner/__tests__/SpinnerMotion.a11y.chromium.spec.ts';
     const deps = ['A', 'B', 'C'].map(name => ({
       file: `packages/core/src/${name}/__tests__/${name}.a11y.chromium.spec.ts`,
       reason: 'renders a touched component',
     }));
-    // 80 s each with the 1.25 margin is 100 s: two fit 180 s, three do not.
+    // 40 s each with the 1.25 margin is 50 s: one fits 60 s, two do not.
     const {run, notRun} = planDefaultCheck({
       changed: [],
       owned: [{file: own, reason: 'component core/Spinner'}],
       dependents: deps,
       seconds: {
         [own]: 60,
-        ...Object.fromEntries(deps.map(({file}) => [file, 80])),
+        ...Object.fromEntries(deps.map(({file}) => [file, 40])),
       },
       workers: 1,
     });
     expect(run.map(({file}) => file)).toEqual([own, deps[0].file]);
     expect(notRun.map(({file}) => file)).toEqual([deps[1].file, deps[2].file]);
     expect(notRun[0].reason).toContain(
-      '3-minute share for folders that render a touched component',
+      '1-minute share for folders that render a touched component',
     );
-    expect(DEPENDENT_SHARE_MS).toBe(3 * 60 * 1000);
+    expect(DEPENDENT_SHARE_MS).toBe(60 * 1000);
   });
 
   it('says in the summary how many folders render a touched component', () => {
