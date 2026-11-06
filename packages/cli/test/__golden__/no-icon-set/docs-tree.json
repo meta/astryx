@@ -1415,7 +1415,8 @@
       "type-scale",
       "display-text",
       "usage",
-      "custom-type-scale"
+      "custom-type-scale",
+      "dynamic-type"
     ],
     "mentions": []
   },
