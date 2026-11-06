@@ -2997,9 +2997,10 @@ export function createMotionEngine(
 
   /**
    * How long `landing` still waits for its fade, in ms. A sampler that pauses
-   * the fade holds it, so it checks again later. A fade that runs past the
-   * landing's due time, as after a pause, holds it for the rest of the fade.
-   * Any other fade holds nothing.
+   * the fade holds it, so it checks again later. A resumed fade holds it until
+   * the fade starts again. A fade that runs past the landing's due time, as
+   * after a pause, holds it for the rest of the fade. Any other fade holds
+   * nothing.
    */
   const fadeHeldFor = (landing: Landing): number => {
     const animation = running.get('opacity');
@@ -3018,8 +3019,12 @@ export function createMotionEngine(
     // time would date a fade that has ended as still running.
     const start = animation.startTime;
     const duration = Number(animation.effect?.getTiming?.().duration);
-    if (start == null || !Number.isFinite(duration)) {
+    if (!Number.isFinite(duration)) {
       return 0;
+    }
+    if (start == null) {
+      // A fade resumed with play() has no start until its next frame.
+      return animation.playState === 'running' ? END_RECHECK_MS : 0;
     }
     // A fade that ends by the landing's due time holds nothing. A timer runs
     // in whole milliseconds, so it often fires a fraction early.

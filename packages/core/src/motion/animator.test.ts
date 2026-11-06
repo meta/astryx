@@ -3081,6 +3081,44 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     expect(settled).toBe(true);
   });
 
+  it('a landing waits while a resumed fade has no start yet, and lands once the fade plays to its end', async () => {
+    const {animator} = reduced();
+    const handle = animator.animate({x: 100}, {spring: springs.navigationPush});
+    let settled: boolean | undefined;
+    void handle.finished.then(value => {
+      settled = value;
+    });
+    await commitFrame(clock);
+    await advance(fade / 4);
+    const [fadeOut] = live('opacity');
+    fadeOut.paused = true;
+    // The fade shows the frame it was paused at, a quarter of the way in.
+    Object.defineProperty(fadeOut, 'currentTime', {
+      configurable: true,
+      get: () => fade / 4,
+    });
+    for (let step = 0; step < 300; step++) {
+      await advance(1);
+    }
+    // play(): the fade waits for the browser's next frame, with no start.
+    fadeOut.paused = false;
+    fadeOut.startTime = null;
+    fadeOut.startDelayFrames = 1_000;
+    for (let step = 0; step < 300; step++) {
+      await advance(1);
+    }
+    expect(animator.get('x')).toBe(0);
+    expect(settled).toBeUndefined();
+    // The browser starts it, and it plays to its end.
+    fadeOut.startDelayFrames = 0;
+    Reflect.deleteProperty(fadeOut, 'currentTime');
+    for (let step = 0; step < 16; step++) {
+      await advance(fade / 4);
+    }
+    expect(animator.get('x')).toBe(100);
+    expect(settled).toBe(true);
+  });
+
   it('an exit whose fade a sampler pauses after its start settles only once the fade resumes', async () => {
     const {animator} = reduced();
     const handle = animator.animate(
