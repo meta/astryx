@@ -382,7 +382,9 @@ function CardLayer({
       const entry = registry.get(model.key) ?? {};
       entry.largeTitleElement = title;
       registry.set(model.key, entry);
-      const scroller = title?.parentElement ?? null;
+      // The title is first in the scroll content, so a change of its height
+      // reaches the scroll area's measure. The scroller holds that content.
+      const scroller = title?.parentElement?.parentElement ?? null;
       if (title == null || scroller == null) {
         return undefined;
       }
@@ -442,18 +444,20 @@ function CardLayer({
         {...getViewportProps<HTMLDivElement>({
           xstyle: [focusOutlineStyles.focusVisible, styles.scroller],
         })}>
-        {isLarge ? (
-          <h1
-            ref={largeTitleCallback}
-            tabIndex={-1}
-            {...stylex.props(
-              focusOutlineStyles.focusVisible,
-              styles.largeTitle,
-            )}>
-            {props.title}
-          </h1>
-        ) : null}
-        <div {...getContentProps<HTMLDivElement>({})}>{props.children}</div>
+        <div {...getContentProps<HTMLDivElement>({})}>
+          {isLarge ? (
+            <h1
+              ref={largeTitleCallback}
+              tabIndex={-1}
+              {...stylex.props(
+                focusOutlineStyles.focusVisible,
+                styles.largeTitle,
+              )}>
+              {props.title}
+            </h1>
+          ) : null}
+          {props.children}
+        </div>
       </div>
       <div
         ref={dim.ref}

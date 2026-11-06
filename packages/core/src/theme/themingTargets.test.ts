@@ -128,6 +128,50 @@ function conditionalSpreadKeys(expression: ts.Expression): string[] | null {
 }
 
 /**
+ * The keys of a `themeProps()` props argument, and whether any key cannot be
+ * read statically. A bag such as `...rest`, a computed key, or a variable or
+ * call passed as the whole argument makes the result opaque.
+ */
+function themePropsKeys(propsArg: ts.Expression | undefined): {
+  keys: string[];
+  isOpaque: boolean;
+} {
+  const result = {keys: [] as string[], isOpaque: false};
+  if (propsArg == null) {
+    return result;
+  }
+  if (!ts.isObjectLiteralExpression(propsArg)) {
+    result.isOpaque = true;
+    return result;
+  }
+  for (const prop of propsArg.properties) {
+    if (ts.isSpreadAssignment(prop)) {
+      // A conditional spread of an object literal, such as `...(type &&
+      // {type})`, has statically known keys. If it were opaque, the
+      // `astryx-heading` `type` key would stay undocumented, which is the
+      // drift this file exists to catch.
+      const spreadKeys = conditionalSpreadKeys(prop.expression);
+      if (spreadKeys == null) {
+        result.isOpaque = true;
+      } else {
+        result.keys.push(...spreadKeys);
+      }
+      continue;
+    }
+    const name = prop.name;
+    if (
+      name != null &&
+      (ts.isIdentifier(name) || ts.isStringLiteralLike(name))
+    ) {
+      result.keys.push(name.text);
+    } else {
+      result.isOpaque = true;
+    }
+  }
+  return result;
+}
+
+/**
  * Extract every `themeProps('name', {...})` call from a source file.
  *
  * Uses the AST rather than a regex because the call sites use every object
@@ -160,45 +204,12 @@ function extractThemeTargets(
       // Only string-literal component names are resolvable. A dynamic name
       // can't be checked statically; skip rather than guess.
       if (nameArg != null && ts.isStringLiteralLike(nameArg)) {
+        const {keys, isOpaque} = themePropsKeys(propsArg);
         const site: ThemeTargetSite = {
           className: stableClassName(nameArg.text),
-          propKeys: [],
-          isOpaque: false,
+          propKeys: keys,
+          isOpaque,
         };
-
-        if (propsArg != null) {
-          if (ts.isObjectLiteralExpression(propsArg)) {
-            for (const prop of propsArg.properties) {
-              if (ts.isSpreadAssignment(prop)) {
-                // A conditional spread of an object literal — `...(type &&
-                // {type})` — has statically known keys. Treating it as opaque
-                // is how `astryx-heading`'s `type` stayed undocumented: the
-                // same drift this file exists to catch (#3652, #3680).
-                const spreadKeys = conditionalSpreadKeys(prop.expression);
-                if (spreadKeys == null) {
-                  site.isOpaque = true;
-                } else {
-                  site.propKeys.push(...spreadKeys);
-                }
-                continue;
-              }
-              const name = prop.name;
-              if (name == null) {
-                site.isOpaque = true;
-                continue;
-              }
-              if (ts.isIdentifier(name) || ts.isStringLiteralLike(name)) {
-                site.propKeys.push(name.text);
-              } else {
-                // Computed key: themeProps('x', {[k]: v})
-                site.isOpaque = true;
-              }
-            }
-          } else {
-            // A variable or call passed as the props bag.
-            site.isOpaque = true;
-          }
-        }
 
         sites.push(site);
       }
@@ -332,10 +343,23 @@ describe('extractThemeTargets', () => {
 // ---------------------------------------------------------------------------
 
 /**
- * The shared catalog of style keys that a target can guarantee to a theme. A
- * style map that sets one of these keys paints, so a prop that selects from it
- * is a visual axis. A map that sets none of them, for example a gap scale,
- * changes only layout and does not need a selector.
+ * The shared catalog of style keys that a target can guarantee to a theme. The
+ * guard counts a style map as painting only when one of its namespaces sets
+ * one of these exact keys at the top level, so a prop that selects from that
+ * map is a visual axis. A gap scale sets none of them and is out of scope.
+ *
+ * The guard does not check these shapes:
+ * - a key that is not in the list, such as the longhand
+ *   `borderInlineStartColor`;
+ * - a key inside a nested block, such as a `'::before'` pseudo-element block;
+ * - a namespace written as a function, such as `sm: v => ({fontSize: v})`;
+ * - a map imported from another file;
+ * - a lookup outside a `stylex.props()` call, such as inside
+ *   `focusOutlineProps.focusVisible()`;
+ * - a lookup keyed by an expression, such as `sizeStyles[size ?? 'sm']`, and
+ *   not by a destructured prop name;
+ * - a lookup in a nested function that destructures its own props, when the
+ *   lookup key is a prop of the function around it.
  */
 const GUARANTEED_STYLE_KEYS: ReadonlySet<string> = new Set([
   // Paint
@@ -544,23 +568,9 @@ function findUnreflectedStyleAxes(
         ts.isIdentifier(node.expression) &&
         node.expression.text === 'themeProps'
       ) {
-        const propsArg = node.arguments[1];
-        if (propsArg != null && ts.isObjectLiteralExpression(propsArg)) {
-          for (const property of propsArg.properties) {
-            const keys = ts.isSpreadAssignment(property)
-              ? conditionalSpreadKeys(property.expression)
-              : property.name != null &&
-                  (ts.isIdentifier(property.name) ||
-                    ts.isStringLiteralLike(property.name))
-                ? [property.name.text]
-                : null;
-            if (keys == null) {
-              reflectsUnknownKeys = true;
-            } else {
-              keys.forEach(key => reflected.add(key));
-            }
-          }
-        } else if (propsArg != null) {
+        const {keys, isOpaque} = themePropsKeys(node.arguments[1]);
+        keys.forEach(key => reflected.add(key));
+        if (isOpaque) {
           reflectsUnknownKeys = true;
         }
       }
@@ -1006,11 +1016,6 @@ const UNREFLECTED_STYLE_AXIS_EXCEPTIONS: ReadonlyMap<string, string> = new Map([
     'ChatComposer.elevation',
     'The composer body paints the elevation but has no target. How to expose ' +
       'the body to themes is an open owner decision.',
-  ],
-  [
-    'Code.size',
-    'The code target paints the size. Adding the prop to its themeProps() ' +
-      'call is a product change that ships separately.',
   ],
   [
     'Skeleton.radius',
