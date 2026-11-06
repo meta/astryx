@@ -705,8 +705,11 @@ function isTextEntry(node: EventTarget | null): boolean {
   return (element as HTMLElement).isContentEditable;
 }
 
-/** An element's inline style, when it has one (HTML and SVG elements). */
+/**
+ * An element's inline style, when it has one (HTML and SVG elements). It is
+ * checked as an object, so another window's style passes too.
+ */
 function styleOf(element: Element): CSSStyleDeclaration | null {
   const style = (element as Partial<ElementCSSInlineStyle>).style;
-  return style instanceof Object ? style : null;
+  return typeof style === 'object' && style !== null ? style : null;
 }
