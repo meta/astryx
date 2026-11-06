@@ -718,7 +718,6 @@ export const RichTextEditor = function RichTextEditor({
               <TableColumnFloorPlugin />
               <CodeBlockHeaderPlugin codeLanguages={codeLanguages} />
               <CodeSyntaxPlugin codeLanguages={codeLanguages} />
-              {/* A rich paste into a code block goes in as plain lines. */}
               <CodePastePlugin />
               {markdownExtensions != null && markdownExtensions.length > 0 ? (
                 <MarkdownExtensionsPlugin
