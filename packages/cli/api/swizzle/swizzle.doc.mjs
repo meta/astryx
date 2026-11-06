@@ -22,7 +22,10 @@ export const doc = {
     '(or list) it returns the swizzlable component names instead. An integration ' +
     'component that replaces a Core component is what that Core name copies; ' +
     "options.package '@astryxdesign/core' copies the original. The list names Core " +
-    'components, including one an integration component replaces.',
+    'components, including one an integration component replaces. A Core component ' +
+    'is copied with its nested folders, except the test-only __tests__ and __snapshots__ ' +
+    'folders and browser test harnesses (*.spec.ts, *.spec.tsx); an integration ' +
+    "component's folder is copied flat.",
   importPath: '@astryxdesign/cli/api',
   signature:
     'swizzle(component?: string, options?: SwizzleOptions): Promise<SwizzleListResponse | SwizzleCopyResponse>',
@@ -76,7 +79,7 @@ export const doc = {
     {
       type: 'swizzle.copy',
       description:
-        'A receipt after copying the component into the project: the component name, owning package, output directory, files-copied count, the copied file names (relative to the component folder, including the private attribute owner modules and their unexported style modules copied beside it, e.g. `../privateAttributes/press.stylex.ts`), whether any file uses StyleX, and, when the owner has an issues URL, feedback ({issuesUrl, ghCommand?}): where to report the gap that led to swizzling.',
+        'A receipt after copying the component into the project: the component name, owning package, output directory, files-copied count, the copied file paths (relative to the component folder with `/` separators, nested folders included, e.g. `plugins/selection/index.ts`, and including the private attribute owner modules and their unexported style modules copied beside it, e.g. `../privateAttributes/press.stylex.ts`), whether any file uses StyleX, and, when the owner has an issues URL, feedback ({issuesUrl, ghCommand?}): where to report the gap that led to swizzling.',
     },
   ],
   throws: [
@@ -106,7 +109,7 @@ export const doc = {
     },
     {
       code: 'ERR_WRITE_FAILED',
-      when: 'the output directory or a copied file could not be written (no permission, read-only mount, full disk)',
+      when: 'the output directory or a copied file could not be written (no permission, read-only mount, full disk), or, checked before any write even with overwrite, a destination holds an entry of the wrong kind (a file where a folder must go, or a folder where a file must go)',
     },
   ],
   examples: [

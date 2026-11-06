@@ -5,6 +5,12 @@
  * for customization, rewriting escaping relative imports to the OWNER package's
  * subpaths.
  *
+ * A Core component is copied with its nested folders (Table's `plugins/`),
+ * test-only folders and harness files left out; an integration component's
+ * folder is copied flat. Every destination is checked before anything is
+ * written: it stays inside the project, through any symlink, and nothing of
+ * the wrong kind is in its place.
+ *
  * Side-effecting: writes files and returns a `swizzle.copy` receipt describing
  * what it did. Shared core discovery + component listing come from
  * api/swizzle/_adapter.mjs; everything here (owner resolution, the copy, import
@@ -180,7 +186,8 @@ function exportedSubpathsOf(srcRoot) {
  *
  * @param {string} srcRoot the owner package's source root
  * @param {string} componentDir
- * @param {string[]} componentFiles files of the component that are copied
+ * @param {string[]} componentFiles files of the component that are copied,
+ *   relative to `componentDir` with `/` separators
  * @returns {Map<string, string>} module path (relative to srcRoot, no
  *   extension) -> its file path relative to srcRoot
  */
@@ -196,7 +203,7 @@ export function sharedModulesOf(srcRoot, componentDir, componentFiles) {
   const queue = componentFiles
     .filter(f => /\.[cm]?[jt]sx?$/.test(f))
     .map(f => ({
-      fromDir: componentRel,
+      fromDir: path.posix.join(componentRel, path.posix.dirname(f)),
       content: fs.readFileSync(path.join(componentDir, f), 'utf-8'),
       owner: false,
     }));
@@ -229,17 +236,21 @@ export function sharedModulesOf(srcRoot, componentDir, componentFiles) {
 
 /**
  * A `keep` predicate for `rewriteImports`: true for an import that names one
- * of the carried modules from a file in `fromDir`.
+ * of the carried modules from a file in `fromDir`, or, with `componentRel`, a
+ * file of the copied component itself (`../types` from `Table/plugins/`).
  * @param {Map<string, string>} carried
  * @param {string} fromDir relative to the source root
+ * @param {string} [componentRel] the component's folder, relative to the
+ *   source root
  * @returns {(importPath: string) => boolean}
  */
-function keepCarried(carried, fromDir) {
+function keepCarried(carried, fromDir, componentRel) {
   return importPath => {
-    const module = path.posix
-      .normalize(path.posix.join(fromDir, importPath))
-      .replace(/\.[cm]?[jt]sx?$/, '');
-    return carried.has(module);
+    const target = path.posix.normalize(path.posix.join(fromDir, importPath));
+    if (componentRel != null && target.startsWith(componentRel + '/')) {
+      return true;
+    }
+    return carried.has(target.replace(/\.[cm]?[jt]sx?$/, ''));
   };
 }
 
@@ -342,8 +353,106 @@ function confineWrite(target, cwd, options) {
 /** @param {string} file */
 function isExcludedFromCopy(file) {
   return (
-    file.includes('.test.') || file.includes('.doc.') || file === 'README.md'
+    file.includes('.test.') ||
+    file.includes('.doc.') ||
+    file === 'README.md' ||
+    // Browser test harnesses import dev-only packages a consumer cannot resolve.
+    /\.spec\.[cm]?[jt]sx?$/.test(file)
   );
+}
+
+/** Test-only folders a copy never enters, at any depth. */
+const TEST_ONLY_DIRS = new Set(['__tests__', '__snapshots__']);
+
+/**
+ * A component's copyable files, relative to `dir` with `/` separators and
+ * sorted. With `nested`, folders are walked too (Table's
+ * `plugins/selection/index.ts`), except test-only ones: their files are not
+ * all named `.test.` and import dev-only packages.
+ * @param {string} dir
+ * @param {boolean} nested
+ * @param {string} [prefix] the path of `dir` below the component folder
+ * @returns {string[]}
+ */
+function componentFilesOf(dir, nested, prefix = '') {
+  /** @type {string[]} */
+  const files = [];
+  for (const entry of fs.readdirSync(dir, {withFileTypes: true})) {
+    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+    const abs = path.join(dir, entry.name);
+    const stat = fs.statSync(abs);
+    if (stat.isDirectory()) {
+      if (nested && !TEST_ONLY_DIRS.has(entry.name)) {
+        files.push(...componentFilesOf(abs, nested, rel));
+      }
+    } else if (stat.isFile() && !isExcludedFromCopy(entry.name)) {
+      files.push(rel);
+    }
+  }
+  return files.sort();
+}
+
+/**
+ * Refuse, before anything is written and whatever `overwrite` says, a
+ * destination that something of the wrong kind already holds: a file where a
+ * folder must go, or a folder where a file must go. Symlinks are followed;
+ * `confineWrite` has already kept every destination inside the project, so a
+ * folder linked elsewhere in the project is written through (`spec:AST-017`
+ * FR1, FR5). Parents are checked before children, so no check below a file
+ * raises a raw ENOTDIR.
+ * @param {string} cwd
+ * @param {string[]} dirs folders the copy writes into
+ * @param {string[]} files files the copy writes
+ */
+function checkDestinationKinds(cwd, dirs, files) {
+  const root = path.resolve(cwd);
+  /** @type {Set<string>} */
+  const checked = new Set();
+  /** @param {string} message */
+  const refuse = message =>
+    new AstryxError(
+      `${message} Nothing was written.`,
+      [],
+      ERROR_CODES.ERR_WRITE_FAILED,
+    );
+  /** @type {Array<[string, boolean]>} */
+  const targets = [
+    ...dirs.map(dir => /** @type {[string, boolean]} */ ([dir, false])),
+    ...files.map(file => /** @type {[string, boolean]} */ ([file, true])),
+  ];
+  for (const [target, isFile] of targets) {
+    const parts = path.relative(root, target).split(path.sep);
+    let segment = root;
+    for (const [i, part] of parts.entries()) {
+      segment = path.join(segment, part);
+      const last = i === parts.length - 1;
+      const key = `${segment}\0${isFile && last}`;
+      if (checked.has(key)) continue;
+      checked.add(key);
+      const rel = path.relative(root, segment);
+      let stat;
+      try {
+        stat = fs.statSync(segment, {throwIfNoEntry: false});
+      } catch (err) {
+        const errno = /** @type {NodeJS.ErrnoException} */ (err).code;
+        if (typeof errno !== 'string') throw err;
+        throw refuse(`Could not write ${rel}: ${errno}.`);
+      }
+      // Nothing is here yet, so nothing deeper can be either.
+      if (!stat) break;
+      if (isFile && last) {
+        if (!stat.isFile()) {
+          throw refuse(
+            `Could not write ${rel}: it exists and is ${stat.isDirectory() ? 'a folder' : 'not a regular file'}.`,
+          );
+        }
+      } else if (!stat.isDirectory()) {
+        throw refuse(
+          `Could not write into ${rel}: it exists and is not a folder.`,
+        );
+      }
+    }
+  }
 }
 
 /**
@@ -459,11 +568,13 @@ export async function swizzleCopy(component, options = {}) {
   // writes anything.
   const feedback = buildFeedback(dirName, owner.issuesUrl);
 
-  // Pre-flight path and overwrite checks before any mkdir/writeFile.
-  const sourceFiles = fs.readdirSync(componentDir).filter(file => {
-    if (isExcludedFromCopy(file)) return false;
-    return fs.statSync(path.join(componentDir, file)).isFile();
-  });
+  // Pre-flight path and overwrite checks before any mkdir/writeFile. A Core
+  // component brings its nested folders; an integration's folder may hold
+  // other components' source, so only its top level is copied.
+  const sourceFiles = componentFilesOf(
+    componentDir,
+    owner.package === CORE_PACKAGE,
+  );
   for (const file of sourceFiles) {
     confineWrite(path.join(outputDir, file), cwd, {
       allowAbsolute: true,
@@ -507,6 +618,14 @@ export async function swizzleCopy(component, options = {}) {
       exists: existing != null,
     };
   });
+  checkDestinationKinds(
+    cwd,
+    [outputDir],
+    [
+      ...sourceFiles.map(f => path.join(outputDir, f)),
+      ...shared.map(s => s.dest),
+    ],
+  );
   const existingFiles = sourceFiles.filter(f =>
     fs.existsSync(path.join(outputDir, f)),
   );
@@ -535,7 +654,6 @@ export async function swizzleCopy(component, options = {}) {
     throw writeFailed(outputDir, cwd, err);
   }
 
-  const files = fs.readdirSync(componentDir);
   let copied = 0;
   let usesStyleX = false;
   // A copy that fails part-way undoes what it already wrote, so the report is
@@ -543,13 +661,21 @@ export async function swizzleCopy(component, options = {}) {
   // the bytes the file had before this run (null when the copy created it).
   /** @type {Array<{dest: string, original: Buffer|null}>} */
   const written = [];
-  for (const file of files) {
-    if (isExcludedFromCopy(file)) continue;
+  /** @type {string[]} folders this run created, outermost first */
+  const createdDirs = [];
+  for (const file of sourceFiles) {
     const srcPath = path.join(componentDir, file);
-    if (!fs.statSync(srcPath).isFile()) continue;
     let content = fs.readFileSync(srcPath, 'utf-8');
     if (file.endsWith('.ts') || file.endsWith('.tsx')) {
-      content = rewriteImports(content, owner.ownerPackage, keepCarried(carried, componentRel));
+      content = rewriteImports(
+        content,
+        owner.ownerPackage,
+        keepCarried(
+          carried,
+          path.posix.join(componentRel, path.posix.dirname(file)),
+          componentRel,
+        ),
+      );
     }
     if (
       (file.endsWith('.ts') || file.endsWith('.tsx')) &&
@@ -563,10 +689,15 @@ export async function swizzleCopy(component, options = {}) {
       // back (no permission, or a directory with this name) must still undo
       // the earlier writes and report ERR_WRITE_FAILED.
       const original = fs.existsSync(dest) ? fs.readFileSync(dest) : null;
+      const firstCreated = fs.mkdirSync(path.dirname(dest), {recursive: true});
+      if (firstCreated != null) createdDirs.push(firstCreated);
       written.push({dest, original});
       fs.writeFileSync(dest, content);
     } catch (err) {
       const unrestored = undoCopy(written);
+      for (const dir of [...createdDirs].reverse()) {
+        fs.rmSync(dir, {recursive: true, force: true});
+      }
       if (!outputDirExisted) {
         try {
           fs.rmdirSync(outputDir);
@@ -579,8 +710,6 @@ export async function swizzleCopy(component, options = {}) {
     copied++;
   }
 
-  /** @type {string[]} folders this run created for carried modules, outermost first */
-  const createdDirs = [];
   for (const module of shared) {
     // An identical copy is already in place: it is part of this copy, unwritten.
     if (module.unchanged) {
@@ -612,11 +741,6 @@ export async function swizzleCopy(component, options = {}) {
   if (shared.length > 0) usesStyleX = true;
 
   const relOutput = path.relative(cwd, outputDir);
-  const copiedFiles = files.filter(
-    f =>
-      !isExcludedFromCopy(f) &&
-      fs.statSync(path.join(componentDir, f)).isFile(),
-  );
   /** @type {import('../swizzle.type.mjs').SwizzleCopyResponse['data']} */
   const data = {
     component: dirName,
@@ -626,7 +750,7 @@ export async function swizzleCopy(component, options = {}) {
     // The owner modules and their unexported style dependencies the copy
     // carries beside the component (spec:AST-110 FR4) are its files too.
     files: [
-      ...copiedFiles.map(f => f),
+      ...sourceFiles,
       ...shared.map(m => path.relative(outputDir, m.dest).split(path.sep).join('/')),
     ],
     usesStyleX,

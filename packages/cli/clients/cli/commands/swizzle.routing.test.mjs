@@ -372,4 +372,24 @@ describe('swizzle — shared modules outside the component folder (spec:AST-110 
       'Shared modules: ../privateAttributes/row.stylex.ts, ../motion/fade.stylex.ts (copied whole; their imports between each other stay relative)',
     );
   });
+
+  it('preserves the flat copy boundary when integration components share a directory', async () => {
+    buildFakeCore(project);
+    writeProjectPackageJson(project);
+    const {compDir} = buildIntegration(project, {componentName: 'Alpha'});
+    fs.writeFileSync(path.join(compDir, 'Beta.tsx'), 'export const Beta = () => null;');
+    fs.writeFileSync(path.join(compDir, 'Beta.doc.mjs'), "export const docs = {name: 'Beta'};");
+    fs.mkdirSync(path.join(compDir, 'unrelated'));
+    fs.writeFileSync(path.join(compDir, 'unrelated/Other.tsx'), 'export const Other = () => null;');
+    const outDir = path.join(project, 'components/astryx/Alpha');
+    fs.mkdirSync(path.join(outDir, 'unrelated'), {recursive: true});
+    fs.writeFileSync(path.join(outDir, 'unrelated/Other.tsx'), '// consumer edit');
+
+    const result = await runCli(['--json', 'swizzle', 'Alpha'], project);
+    expect(result.code).toBe(0);
+    const env = JSON.parse(result.stdout);
+    // Sibling top-level files were already copied before recursive core support.
+    expect(env.data.files).toEqual(['Alpha.tsx', 'Beta.tsx', 'sibling.ts']);
+    expect(fs.readFileSync(path.join(outDir, 'unrelated/Other.tsx'), 'utf8')).toBe('// consumer edit');
+  });
 });
