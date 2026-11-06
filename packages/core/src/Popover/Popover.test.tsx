@@ -1561,8 +1561,30 @@ describe('Popover touch presentation', () => {
   const originalMatchMedia = window.matchMedia;
   const originalShow = HTMLElement.prototype.showPopover;
   const originalHide = HTMLElement.prototype.hidePopover;
+  const originalRequestFrame = window.requestAnimationFrame;
+  const originalCancelFrame = window.cancelAnimationFrame;
+  // The animation frames asked for, run by `frame()`: the touch
+  // presentation reads its geometry in the next one.
+  const frames = new Map<number, FrameRequestCallback>();
+  let lastFrame = 0;
+  const frame = () =>
+    act(() => {
+      const due = [...frames.values()];
+      frames.clear();
+      for (const callback of due) {
+        callback(performance.now());
+      }
+    });
 
   beforeAll(() => {
+    window.requestAnimationFrame = callback => {
+      lastFrame += 1;
+      frames.set(lastFrame, callback);
+      return lastFrame;
+    };
+    window.cancelAnimationFrame = handle => {
+      frames.delete(handle);
+    };
     // The shared resolver reads the primary pointer (one touch model on every
     // touch device); Reduce Motion is off.
     window.matchMedia = (query: string) => ({
@@ -1605,6 +1627,8 @@ describe('Popover touch presentation', () => {
   });
 
   afterAll(() => {
+    window.requestAnimationFrame = originalRequestFrame;
+    window.cancelAnimationFrame = originalCancelFrame;
     window.matchMedia = originalMatchMedia;
     HTMLElement.prototype.showPopover = originalShow;
     HTMLElement.prototype.hidePopover = originalHide;
@@ -1619,6 +1643,8 @@ describe('Popover touch presentation', () => {
       </Popover>,
     );
     fireEvent.click(screen.getByRole('button', {name: 'Filter'}));
+    // The touch presentation reads its geometry in the next frame.
+    frame();
     const layer = screen
       .getByRole('dialog', {name: 'Filters', hidden: true})
       .closest<HTMLElement>('[popover]');

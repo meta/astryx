@@ -189,10 +189,21 @@ interface Recorded {
 describe('createPopoverSurfaceMotion', () => {
   let clock = 1000;
   let recorded: Recorded[] = [];
+  // The animation frames the motion asked for, run by `frame()`.
+  const frames = new Map<number, () => void>();
+  let lastFrame = 0;
+  const frame = () => {
+    const due = [...frames.values()];
+    frames.clear();
+    for (const callback of due) {
+      callback();
+    }
+  };
 
   beforeEach(() => {
     clock = 1000;
     recorded = [];
+    frames.clear();
     vi.useFakeTimers();
     HTMLElement.prototype.animate = function (keyframes, options) {
       const animation = {
@@ -246,7 +257,7 @@ describe('createPopoverSurfaceMotion', () => {
     vi.unstubAllGlobals();
   });
 
-  const create = (reducedMotion = false) => {
+  const create = (reducedMotion = false, {scheduled = true} = {}) => {
     const host = document.createElement('section');
     document.body.appendChild(host);
     const element = document.createElement('div');
@@ -267,7 +278,20 @@ describe('createPopoverSurfaceMotion', () => {
     // The touch presentation runs under a coarse pointer, where Reduce
     // Motion cross-fades.
     stubMedia(reducedMotion, true);
-    const motion = createPopoverSurfaceMotion(element, {now: () => clock});
+    const motion = createPopoverSurfaceMotion(
+      element,
+      scheduled
+        ? {
+            now: () => clock,
+            requestFrame: callback => {
+              lastFrame += 1;
+              frames.set(lastFrame, callback);
+              return lastFrame;
+            },
+            cancelFrame: handle => frames.delete(handle),
+          }
+        : {now: () => clock},
+    );
     return {element, motion};
   };
 
@@ -317,6 +341,7 @@ describe('createPopoverSurfaceMotion', () => {
       return GEOMETRY;
     });
     motion.enter(measure);
+    frame();
     expect(measure).toHaveBeenCalledTimes(1);
     const state = popoverCollapsedState(GEOMETRY);
     expect(element.style.getPropertyValue('animation-name')).toBe('none');
@@ -342,6 +367,7 @@ describe('createPopoverSurfaceMotion', () => {
   it('plays the dismissal on a static copy of the popover, back into its source on the theme\u2019s exit tokens, removed when it ends', async () => {
     const {element, motion} = create();
     motion.enter(() => GEOMETRY);
+    frame();
     clock += 1000;
     vi.advanceTimersByTime(1000);
     motion.exit();
@@ -392,6 +418,7 @@ describe('createPopoverSurfaceMotion', () => {
     element.style.setProperty('--ease-exit', 'ease-in');
     const state = popoverCollapsedState(GEOMETRY);
     motion.enter(() => GEOMETRY);
+    frame();
     const growth = expectPath(
       live('scale', element)[0],
       state,
@@ -417,6 +444,7 @@ describe('createPopoverSurfaceMotion', () => {
     element.style.setProperty('--duration-fast', '250ms');
     const state = popoverCollapsedState(GEOMETRY);
     motion.enter(() => GEOMETRY);
+    frame();
     clock += 1000;
     vi.advanceTimersByTime(1000);
     motion.exit();
@@ -433,6 +461,7 @@ describe('createPopoverSurfaceMotion', () => {
   it('dismissed during the growth, shrinks from the frame on screen on the exit tokens', () => {
     const {element, motion} = create();
     motion.enter(() => GEOMETRY);
+    frame();
     clock += ENTRANCE.ms / 2;
     vi.advanceTimersByTime(ENTRANCE.ms / 2);
     motion.exit();
@@ -450,6 +479,7 @@ describe('createPopoverSurfaceMotion', () => {
   it('lets the hidden layer go of its compositing layer as the dismissal starts, so no style write reaches it during the dismissal', async () => {
     const {element, motion} = create();
     motion.enter(() => GEOMETRY);
+    frame();
     // Dismissed about 100 ms after the presentation's curve ended, while the
     // animator still keeps the element promoted (its PROMOTION_LINGER_MS).
     clock += 600;
@@ -480,9 +510,83 @@ describe('createPopoverSurfaceMotion', () => {
     expect(element.style.getPropertyValue('will-change')).toBe('');
   });
 
+  it('reads and writes nothing while the task that opens the popover runs, turns the CSS entrance off as that task ends, and reads the boxes in the next frame', async () => {
+    const {element, motion} = create();
+    const measure = vi.fn(() => GEOMETRY);
+    motion.enter(measure);
+    expect(measure).not.toHaveBeenCalled();
+    expect(live('scale')).toEqual([]);
+    // A write while the task runs would lay the page out again at the
+    // task's next read.
+    expect(element.style.getPropertyValue('animation-name')).toBe('');
+    expect(element.style.getPropertyValue('opacity')).toBe('');
+    // As the task ends, the CSS entrance goes off. A style read after the
+    // task then starts no entrance for the frame to cancel.
+    await Promise.resolve();
+    expect(element.style.getPropertyValue('animation-name')).toBe('none');
+    expect(element.style.getPropertyValue('opacity')).toBe('');
+    expect(measure).not.toHaveBeenCalled();
+    frame();
+    expect(element.style.getPropertyValue('animation-name')).toBe('none');
+    expect(measure).toHaveBeenCalledTimes(1);
+    expect(live('scale')).toHaveLength(1);
+  });
+
+  it('a close before that frame presents nothing and leaves the element as the component styles it, with no compositing layer or timer left on it', async () => {
+    const {element, motion} = create();
+    const measure = vi.fn(() => GEOMETRY);
+    motion.enter(measure);
+    const timers = vi.getTimerCount();
+    motion.exit();
+    await Promise.resolve();
+    frame();
+    expect(measure).not.toHaveBeenCalled();
+    expect(copyOf(element)).toBeNull();
+    expect(live('scale')).toEqual([]);
+    expect(element.style.getPropertyValue('animation-name')).toBe('');
+    expect(element.style.getPropertyValue('opacity')).toMatch(/^(1)?$/);
+    // The element is hidden. A promotion would leave `will-change` on it and
+    // a timer to end it, a style write on an element that no longer paints.
+    expect(element.style.getPropertyValue('will-change')).toBe('');
+    expect(vi.getTimerCount()).toBe(timers);
+    const style = element.getAttribute('style');
+    vi.advanceTimersByTime(1000);
+    expect(element.getAttribute('style')).toBe(style);
+  });
+
+  it('a close after the opening task ends, before that frame, gives the CSS entrance back and presents nothing', async () => {
+    const {element, motion} = create();
+    const measure = vi.fn(() => GEOMETRY);
+    motion.enter(measure);
+    await Promise.resolve();
+    expect(element.style.getPropertyValue('animation-name')).toBe('none');
+    motion.exit();
+    frame();
+    expect(measure).not.toHaveBeenCalled();
+    expect(live('scale')).toEqual([]);
+    expect(element.style.getPropertyValue('animation-name')).toBe('');
+  });
+
+  it('without animation frames, presents at once, and a close plays the shrink on its copy', () => {
+    vi.stubGlobal('requestAnimationFrame', undefined);
+    vi.stubGlobal('cancelAnimationFrame', undefined);
+    const {element, motion} = create(false, {scheduled: false});
+    const measure = vi.fn(() => GEOMETRY);
+    motion.enter(measure);
+    expect(measure).toHaveBeenCalledTimes(1);
+    expect(live('scale', element)).toHaveLength(1);
+    clock += 1000;
+    vi.advanceTimersByTime(1000);
+    motion.exit();
+    const copy = copyOf(element);
+    expect(copy).not.toBeNull();
+    expect(live('scale', copy!)).toHaveLength(1);
+  });
+
   it('presented again during the dismissal, grows back from the frame on screen about the same point', () => {
     const {element, motion} = create();
     motion.enter(() => GEOMETRY);
+    frame();
     clock += 1000;
     vi.advanceTimersByTime(1000);
     motion.exit();
@@ -515,6 +619,7 @@ describe('createPopoverSurfaceMotion', () => {
   it('reset leaves the element as the component styles it', () => {
     const {element, motion} = create();
     motion.enter(() => GEOMETRY);
+    frame();
     motion.reset();
     for (const property of [
       'scale',
@@ -531,6 +636,7 @@ describe('createPopoverSurfaceMotion', () => {
   it('Reduce Motion: the popover cross-fades in at its size and out where it stands, in 200 ms or less, with no spring', () => {
     const {element, motion} = create(true);
     motion.enter(() => GEOMETRY);
+    frame();
     // No growth: every scale keyframe is the full size.
     for (const animation of live('scale', element)) {
       for (const frame of animation.keyframes) {
@@ -608,6 +714,9 @@ describe('createPopoverSurfaceMotion', () => {
     it('holds every touch while the popover grows, and lets go when the growth ends', async () => {
       const {element, motion} = create();
       motion.enter(() => GEOMETRY);
+      // The growth, and its hold, start in the next frame.
+      expect(isInHeldLayer(element)).toBe(false);
+      frame();
       expect(isInHeldLayer(element)).toBe(true);
       expect(shieldOf(element)).not.toBeNull();
       // Still held halfway through the growth.
@@ -629,6 +738,7 @@ describe('createPopoverSurfaceMotion', () => {
     it('lets go at once when the popover is dismissed or reset during the growth', () => {
       const dismissed = create();
       dismissed.motion.enter(() => GEOMETRY);
+      frame();
       expect(isInHeldLayer(dismissed.element)).toBe(true);
       dismissed.motion.exit();
       expect(isInHeldLayer(dismissed.element)).toBe(false);
@@ -636,6 +746,7 @@ describe('createPopoverSurfaceMotion', () => {
 
       const reset = create();
       reset.motion.enter(() => GEOMETRY);
+      frame();
       reset.motion.reset();
       expect(isInHeldLayer(reset.element)).toBe(false);
       expect(shieldOf(reset.element)).toBeNull();
@@ -644,6 +755,7 @@ describe('createPopoverSurfaceMotion', () => {
     it('holds under Reduce Motion too, for the length of the cross-fade', async () => {
       const {element, motion} = create(true);
       motion.enter(() => GEOMETRY);
+      frame();
       expect(isInHeldLayer(element)).toBe(true);
       clock += timing.reducedMotionCrossFadeMs / 2;
       vi.advanceTimersByTime(timing.reducedMotionCrossFadeMs / 2);
