@@ -15,6 +15,7 @@
  */
 
 import fs from 'node:fs/promises';
+import {createRequire} from 'node:module';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {transformAsync} from '@babel/core';
@@ -23,6 +24,9 @@ import {describe, expect, it} from 'vitest';
 import stylexResolution from '../../../../scripts/stylex-module-resolution.cjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// Core declares the presets, so they resolve from here, not from the folder
+// the tests run in.
+const require = createRequire(import.meta.url);
 
 async function compiledCss(fileName) {
   const file = path.join(__dirname, fileName);
@@ -31,8 +35,11 @@ async function compiledCss(fileName) {
     configFile: false,
     filename: file,
     presets: [
-      ['@babel/preset-typescript', {isTSX: true, allExtensions: true}],
-      ['@babel/preset-react', {runtime: 'automatic'}],
+      [
+        require.resolve('@babel/preset-typescript'),
+        {isTSX: true, allExtensions: true},
+      ],
+      [require.resolve('@babel/preset-react'), {runtime: 'automatic'}],
     ],
     plugins: [
       [

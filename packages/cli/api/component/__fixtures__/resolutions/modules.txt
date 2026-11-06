@@ -168,7 +168,6 @@ menuPressGesture menuPressGesture hooks/useAnimatedLayout.doc.mjs hooks/menuPres
 menuPressMarker menuPressMarker hooks/useAnimatedLayout.doc.mjs hooks/menuPressMarker.ts
 menuPressOnItems menuPressOnItems hooks/useAnimatedLayout.doc.mjs hooks/menuPressOnItems.ts
 menuRegionStops menuRegionStops DropdownMenu/DropdownMenu.doc.mjs DropdownMenu/menuRegionStops.ts
-menuRegionsContext menuRegionsContext DropdownMenu/DropdownMenu.doc.mjs DropdownMenu/menuRegionsContext.ts
 menuWidth menuWidth DropdownMenu/DropdownMenu.doc.mjs DropdownMenu/menuWidth.ts
 mergeComponents mergeComponents theme/MediaTheme.doc.mjs theme/mergeComponents.ts
 modalAnnounce modalAnnounce hooks/useAnimatedLayout.doc.mjs hooks/modalAnnounce.ts
@@ -300,7 +299,7 @@ useSwipeAction useSwipeAction Item/Item.doc.mjs Item/useSwipeAction.ts
 useSwitchTouch useSwitchTouch Switch/Switch.doc.mjs Switch/useSwitchTouch.ts
 useTableCellStyles useTableCellStyles Table/Table.doc.mjs Table/useTableCellStyles.ts
 useTableColumnSettingsState useTableColumnSettingsState Table/Table.doc.mjs Table/plugins/columnSettings/useTableColumnSettingsState.tsx
-useTableSortableState useTableSortableState Table/Table.doc.mjs Table/plugins/sortable/useTableSortableState.tsx
+useTableSortableState useTableSortableState Table/plugins/sortable/useTableSortableState.doc.mjs Table/plugins/sortable/useTableSortableState.tsx
 useToastGesture useToastGesture Toast/Toast.doc.mjs Toast/useToastGesture.ts
 useTouchTrigger useTouchTrigger Layer/Layer.doc.mjs Layer/useTouchTrigger.ts
 useTriggerMenu useTriggerMenu Chat/Chat.doc.mjs Chat/useTriggerMenu.tsx
