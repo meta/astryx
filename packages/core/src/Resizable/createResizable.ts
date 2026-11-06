@@ -22,8 +22,6 @@ import {
   rubberBandInverse,
   rubberBandSlope,
 } from '../motion/rubberBand';
-import {SETTLING_EPSILON, solveSpring, toSpring} from '../motion/spring';
-import {springs} from '../motion/uikit/springs';
 import type {SizeValue} from '../utils/types';
 import {
   DEFAULT_COLLAPSED_SIZE,
@@ -452,7 +450,15 @@ export function createResizableAs(
   // Past a bound the shown size runs past the region's by this much, which
   // springs back to 0 after the lift.
   let overshoot = 0;
-  let stopSettle: (() => void) | null = null;
+  // A spring-back the pane's edge is playing: what it started from, when, and
+  // the share of it still to go by ms since then.
+  let springBack: {
+    from: number;
+    startedAt: number;
+    remaining: (elapsedMs: number) => number;
+  } | null = null;
+  // The commit that lands a spring-back plays it rather than landing it.
+  let isSpringingBack = false;
 
   let initialDefault: {px: number; isFinal: boolean} | null = null;
   let chosenSize: number | null | undefined;
@@ -710,7 +716,7 @@ export function createResizableAs(
             paneReveal.land();
           }
         }
-      } else if (notified.size !== reported.size) {
+      } else if (notified.size !== reported.size && !isSpringingBack) {
         // A resize that neither collapses nor opens lands a running motion.
         paneReveal.land();
       }
@@ -946,10 +952,12 @@ export function createResizableAs(
       gestureBasis = readLiveBasis();
       isGestureActive = true;
       // A finger catches a spring-back where it shows.
-      stopSettle?.();
+      const shown =
+        springBack == null ? overshoot : springBackShown(springBack);
+      springBack = null;
       dragStartSize =
         (derived.isCollapsed ? 0 : derived.size) +
-        rubberBandInverse(overshoot, rubberDimension());
+        rubberBandInverse(shown, rubberDimension());
       lastRaw = dragStartSize;
       sizeBeforeDrag = derived.isCollapsed ? null : derived.size;
     },
@@ -1019,19 +1027,22 @@ export function createResizableAs(
     return Math.max(shown, 0) - (raw > max ? max : min);
   }
 
-  /** The shown size springs back to the bound on the settle spring. */
+  /**
+   * The shown size springs back to the bound in one commit. The pane's edge
+   * glides there on the settle spring from the release velocity, on the
+   * shared layout glide, so no frame lays the row out.
+   */
   function settleOvershoot(velocity: number): void {
-    stopSettle?.();
     const from = overshoot;
-    const view = pane?.element.ownerDocument.defaultView ?? null;
+    springBack = null;
     if (from === 0) {
       return;
     }
-    if (
-      view == null ||
-      view.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
-    ) {
-      overshoot = 0;
+    overshoot = 0;
+    const current = pane;
+    const row = current?.element.parentElement;
+    const view = current?.element.ownerDocument.defaultView;
+    if (current == null || row == null || view == null) {
       commit();
       return;
     }
@@ -1041,28 +1052,28 @@ export function createResizableAs(
       rubberBandInverse(from, dimension),
       dimension,
     );
-    const curve = solveSpring(toSpring(springs.settle), {
-      from,
-      to: 0,
-      velocity: velocity * slope,
-    });
-    const settleMs = curve.settleTime(Math.abs(from) * SETTLING_EPSILON) * 1000;
-    const startedAt = view.performance.now();
-    let frame = 0;
-    const step = (now: number) => {
-      const elapsed = now - startedAt;
-      overshoot = elapsed >= settleMs ? 0 : curve.value(elapsed / 1000);
-      commit();
-      frame = overshoot === 0 ? 0 : view.requestAnimationFrame(step);
-      if (frame === 0) {
-        stopSettle = null;
-      }
-    };
-    frame = view.requestAnimationFrame(step);
-    stopSettle = () => {
-      view.cancelAnimationFrame(frame);
-      stopSettle = null;
-    };
+    paneReveal.measure(current, current.contentFacingEdge());
+    const remaining = slideNextOnRelease(
+      row,
+      -Math.sign(from) * velocity * slope,
+      Math.abs(from),
+    );
+    const isReduced =
+      view.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
+    if (remaining != null && !isReduced) {
+      springBack = {from, startedAt: view.performance.now(), remaining};
+    }
+    isSpringingBack = true;
+    commit();
+    isSpringingBack = false;
+  }
+
+  /** How far past the bound a playing spring-back shows the edge now. */
+  function springBackShown(played: NonNullable<typeof springBack>): number {
+    const view = pane?.element.ownerDocument.defaultView;
+    const elapsed =
+      view == null ? Infinity : view.performance.now() - played.startedAt;
+    return played.from * played.remaining(elapsed);
   }
 
   /**
@@ -1070,7 +1081,7 @@ export function createResizableAs(
    * settle spring from the release velocity.
    */
   function closeOnRelease(velocity: number): void {
-    stopSettle?.();
+    springBack = null;
     const shown = derived.size + overshoot;
     overshoot = 0;
     // An open restores the size the drag started from.
@@ -1214,7 +1225,7 @@ export function createResizableAs(
       // A gesture a ResizeHandle drove through the region's model, rather
       // than the factory's own, ends the same way.
       endGesture();
-      stopSettle?.();
+      springBack = null;
       overshoot = 0;
       isDestroyed = true;
       stopFollowingRegion?.();
