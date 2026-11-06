@@ -5,7 +5,8 @@
 /**
  * @file useTruncation.ts
  * @input Uses React hooks, sharedResizeObserver, sharedMutationObserver
- * @output Exports useTruncation hook for detecting text overflow
+ * @output Exports useTruncation hook for detecting text overflow, and
+ *   useHeldTruncation, internal to core: the same check with a hold
  * @position Hook; consumed by Text.tsx, Heading.tsx
  *
  * SYNC: When modified, update:
@@ -13,6 +14,7 @@
  */
 
 import {useCallback, useRef, useState, type RefCallback} from 'react';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {observeContent} from '../utils/sharedMutationObserver';
 
@@ -22,6 +24,15 @@ export interface UseTruncationOptions {
    * 0 = no truncation, hook returns isTruncated: false
    */
   maxLines: number;
+}
+
+interface HeldTruncationOptions extends UseTruncationOptions {
+  /**
+   * While true, the hook keeps its last result and measures nothing. A caller
+   * that shows the text unclamped for a while, such as an expanded caption,
+   * keeps the clamped answer. Releasing it measures again.
+   */
+  isHeld: boolean;
 }
 
 export interface UseTruncationReturn {
@@ -69,7 +80,48 @@ export interface UseTruncationReturn {
 export function useTruncation(
   options: UseTruncationOptions,
 ): UseTruncationReturn {
-  const {maxLines} = options;
+  const {ref, isTruncated, fullText} = useTruncationMeasure(
+    options.maxLines,
+    NEVER_HELD,
+  );
+  return {ref, isTruncated, fullText};
+}
+
+/**
+ * useTruncation with a hold, internal to core. Lightbox holds its caption's
+ * clamped answer while the caption is open. `measure` checks the text again
+ * at once, for a caller that knows when its text first lays out.
+ */
+export function useHeldTruncation(
+  options: HeldTruncationOptions,
+): UseTruncationReturn & {measure: () => void} {
+  const {maxLines, isHeld} = options;
+  const isHeldRef = useRef(isHeld);
+  const truncation = useTruncationMeasure(maxLines, isHeldRef);
+  const {measure} = truncation;
+  // Syncs the hold with the caller's flag. A release measures the text again
+  // after the commit. Until then the held answer stands, so it never flickers.
+  useIsomorphicLayoutEffect(() => {
+    const wasHeld = isHeldRef.current;
+    isHeldRef.current = isHeld;
+    if (wasHeld && !isHeld) {
+      queueMicrotask(measure);
+    }
+  }, [isHeld, measure]);
+  return truncation;
+}
+
+/** A hold that never holds: plain useTruncation's. */
+const NEVER_HELD: {readonly current: boolean} = {current: false};
+
+/**
+ * The measurement both hooks share. While `isHeldRef` holds, it measures
+ * nothing. `measure` checks the current element again.
+ */
+function useTruncationMeasure(
+  maxLines: number,
+  isHeldRef: {readonly current: boolean},
+): UseTruncationReturn & {measure: () => void} {
   const [isTruncated, setIsTruncated] = useState(false);
   const [fullText, setFullText] = useState('');
   const elementRef = useRef<HTMLElement | null>(null);
@@ -78,6 +130,9 @@ export function useTruncation(
 
   const checkTruncation = useCallback(
     (element: HTMLElement) => {
+      if (isHeldRef.current) {
+        return;
+      }
       if (maxLines === 0) {
         setIsTruncated(false);
         return;
@@ -108,7 +163,7 @@ export function useTruncation(
         setIsTruncated(contentHeight > element.offsetHeight);
       }
     },
-    [maxLines],
+    [maxLines, isHeldRef],
   );
 
   const ref: RefCallback<HTMLElement> = useCallback(
@@ -164,9 +219,17 @@ export function useTruncation(
     [maxLines, checkTruncation],
   );
 
+  const measure = useCallback(() => {
+    const element = elementRef.current;
+    if (element != null && maxLines > 0) {
+      checkTruncation(element);
+    }
+  }, [maxLines, checkTruncation]);
+
   return {
     ref,
     isTruncated,
     fullText,
+    measure,
   };
 }

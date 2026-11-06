@@ -51,6 +51,7 @@ import {useScrollLock} from '../hooks/useScrollLock';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useAttachment} from '../hooks/useAttachment';
 import {observeResize} from '../utils/sharedResizeObserver';
+import {observeContent} from '../utils/sharedMutationObserver';
 import {watchHitArea, writeHitInsets} from '../utils/hitArea';
 import {usePressTracker} from '../gestures/usePressTracker';
 import {mergeProps, rtlStyles} from '../utils';
@@ -94,6 +95,7 @@ import {
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {MediaTheme} from '../theme/MediaTheme';
 import {Text} from '../Text/Text';
+import {useHeldTruncation} from '../Text/useTruncation';
 import {Button} from '../Button/Button';
 
 registerEnglishFallback(english);
@@ -363,7 +365,7 @@ const styles = stylex.create({
     minWidth: 0,
     maxWidth: '100%',
   },
-  // Text's two-line clamp.
+  // Lets the clamped Text shrink inside the band.
   captionClamped: {
     flexShrink: 1,
     minWidth: 0,
@@ -853,13 +855,25 @@ export function Lightbox({
   // The toggle's width, which its place in the caption's last line takes.
   const [captionToggleWidth, setCaptionToggleWidth] = useState(0);
   // The current page's caption in its band, and whether two lines clamp it.
+  // Text's truncation check also follows new text in a box that keeps its
+  // size. While the caption is open it holds its closed answer, so the toggle
+  // stays mounted, with its focus, as the caption closes.
   const bandCaptionRef = useRef<HTMLElement | null>(null);
-  const [isCaptionClamped, setIsCaptionClamped] = useState(false);
+  const captionTruncation = useHeldTruncation({
+    maxLines: 2,
+    isHeld: isCaptionOpen,
+  });
+  const isCaptionClamped = captionTruncation.isTruncated;
+  const measureCaptionClamp = captionTruncation.measure;
+  const bandCaptionMeasureRef = useMergedRefs(
+    bandCaptionRef,
+    captionTruncation.ref,
+  );
   // How far below the caption's first line its last shown line starts.
   const [captionLastLineTop, setCaptionLastLineTop] = useState(0);
   // Whether the open caption scrolls inside its panel.
   const [isCaptionScrolling, setIsCaptionScrolling] = useState(false);
-  const measureCaptionClamp = useCallback(() => {
+  const measureCaptionLines = useCallback(() => {
     const caption = bandCaptionRef.current;
     if (caption != null) {
       const view = caption.ownerDocument.defaultView ?? window;
@@ -873,29 +887,36 @@ export function Lightbox({
         Number.isFinite(line) ? Math.max(0, lines - line) : 0,
       );
     }
-    // An open caption shows every line. The toggle keeps the closed caption's
-    // measurement, so it stays mounted, with its focus, as the caption closes.
-    if (isCaptionOpen) {
-      setIsCaptionScrolling(
-        caption != null && caption.scrollHeight > caption.clientHeight + 1,
-      );
-      return;
-    }
-    setIsCaptionScrolling(false);
-    setIsCaptionClamped(
-      caption != null && caption.scrollHeight > caption.clientHeight + 1,
+    setIsCaptionScrolling(
+      isCaptionOpen &&
+        caption != null &&
+        caption.scrollHeight > caption.clientHeight + 1,
     );
   }, [isCaptionOpen]);
-  // Syncs the clamp, the toggle's place and the open caption's scroll with
-  // the caption's laid-out size. A resize, a font load and a new caption all
-  // resize it, and paging attaches the next page's caption.
+  // Syncs the toggle's place and the open caption's scroll with the caption's
+  // laid-out size and its text. A resize and a font load resize it, new text
+  // can keep its size, and paging attaches the next page's caption.
+  // A closed dialog lays its caption out at no size, so the attachment runs
+  // again as the dialog opens. showModal() above has run by then, and the
+  // caption paints with its "more" from its first frame.
+  const captionAttachKey = useMemo(
+    () => ({measureCaptionLines, isOpen}),
+    [measureCaptionLines, isOpen],
+  );
   useAttachment(
     bandCaptionRef,
     element => {
+      // The clamp too, at once, so the caption paints with its toggle.
       measureCaptionClamp();
-      return observeResize(element, measureCaptionClamp);
+      measureCaptionLines();
+      const stopResize = observeResize(element, measureCaptionLines);
+      const stopContent = observeContent(element, measureCaptionLines);
+      return () => {
+        stopResize();
+        stopContent();
+      };
     },
-    measureCaptionClamp,
+    captionAttachKey,
   );
   // The caption's toggle. Under a coarse pointer it takes taps out toward
   // 44 px. A finger's tap on it is its own, as UIKit gives a control's tap
@@ -1630,7 +1651,7 @@ export function Lightbox({
                                       <Text
                                         ref={
                                           i === index
-                                            ? bandCaptionRef
+                                            ? bandCaptionMeasureRef
                                             : undefined
                                         }
                                         id={i === index ? captionId : undefined}

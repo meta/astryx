@@ -245,6 +245,85 @@ for (const viewport of [
   });
 }
 
+test(`the first frame that shows the clamped caption at open already ends it in "more"`, async ({
+  page,
+}) => {
+  await page.setViewportSize({width: 402, height: 874});
+  await page.route(/picsum\.photos/, async route =>
+    route.fulfill({contentType: 'image/svg+xml', body: PHOTO_SVG}),
+  );
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-lightbox--gallery-with-captions&viewMode=story`,
+  );
+  // Each frame from here on: whether the open viewer shows the current
+  // caption, and whether its "more" is there. A frame's animation-frame
+  // callbacks see what that frame paints.
+  await page.evaluate(() => {
+    const frames: {isShown: boolean; hasMore: boolean}[] = [];
+    (window as unknown as {__captionFrames: typeof frames}).__captionFrames =
+      frames;
+    const read = () => {
+      const caption = document.querySelector(
+        'dialog[open] [data-current] [data-lightbox-caption]',
+      );
+      const text = caption?.querySelector('.astryx-text');
+      const isShown = text != null && text.getBoundingClientRect().height > 0;
+      frames.push({isShown, hasMore: caption?.querySelector('button') != null});
+      if (frames.length < 600 && !frames.some(frame => frame.hasMore)) {
+        requestAnimationFrame(read);
+      }
+    };
+    requestAnimationFrame(read);
+  });
+  await page.getByRole('button', {name: 'Open gallery with captions'}).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('button', {name: 'more'})).toBeVisible();
+  const frames = await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          __captionFrames: {isShown: boolean; hasMore: boolean}[];
+        }
+      ).__captionFrames,
+  );
+  const firstShown = frames.find(frame => frame.isShown);
+  expect(firstShown, JSON.stringify(frames.slice(-6))).toEqual({
+    isShown: true,
+    hasMore: true,
+  });
+});
+
+test(`a caption whose text grows while its box keeps two lines gets "more" at the end of its second line`, async ({
+  page,
+}) => {
+  const dialog = await openCaptionGallery(page, {width: 402, height: 874});
+  await dialog.getByRole('button', {name: 'Next'}).click();
+  await expect(dialog.getByText('2 / 4')).toBeVisible();
+  // The second page's caption fits its two lines, with no toggle.
+  await expect(dialog.getByRole('button', {name: 'more'})).toHaveCount(0);
+  const lines = await dialog.evaluate(element => {
+    const text = element.querySelector(
+      '[data-current] [data-lightbox-caption] .astryx-text',
+    ) as HTMLElement;
+    const walker = document.createTreeWalker(text, NodeFilter.SHOW_TEXT);
+    let last: Text | null = null;
+    for (let node = walker.nextNode(); node != null; node = walker.nextNode()) {
+      last = node as Text;
+    }
+    const before = text.getBoundingClientRect().height;
+    // New text, past two lines, in a box that keeps its height.
+    last?.appendData(
+      ' The trail climbs past the old mill, crosses the river on stepping stones, and winds back through the beeches to the car park at the top of the hill.',
+    );
+    return {before, after: text.getBoundingClientRect().height};
+  });
+  expect(lines.after, JSON.stringify(lines)).toBeCloseTo(lines.before, 0);
+  await expect(dialog.getByRole('button', {name: 'more'})).toBeVisible();
+  await expect(async () => {
+    expectToggleEndsLastLine(await readToggle(dialog));
+  }).toPass({timeout: 3_000});
+});
+
 test(`a clamped caption's "more" still ends its second line after the viewport narrows (402 → 360)`, async ({
   page,
 }) => {
