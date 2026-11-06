@@ -1003,8 +1003,8 @@ describe('derived var expansion', () => {
     const rules = generateThemeRules(theme);
     const rule = rules.find(r => r.includes('.astryx-chat-composer'));
     expect(rule).toBeDefined();
-    expect(rule).toContain('border-radius: 24px');
-    expect(rule).toContain('padding: 12px');
+    expect(rule).toMatch(/^\s*border-radius: 24px;/m);
+    expect(rule).toMatch(/^\s*padding: 12px;/m);
     expect(rule).toContain('--_chat-composer-radius: 24px');
     expect(rule).toContain('--_chat-composer-padding: 12px');
   });
