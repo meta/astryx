@@ -326,6 +326,55 @@ export const TopNavWithSideNav: Story = {
   ),
 };
 
+function FocusModeDemo() {
+  const [isFocusMode, setIsFocusMode] = useState(false);
+  return (
+    <AppShell
+      contentPadding={6}
+      topNav={<AppTopNav />}
+      sideNav={<SideNavWithoutHeader />}
+      hiddenRegions={isFocusMode ? ['topNav', 'sideNav'] : undefined}>
+      <Button
+        label={isFocusMode ? 'Exit focus mode' : 'Focus mode'}
+        onClick={() => setIsFocusMode(!isFocusMode)}
+      />
+      <MockContent />
+    </AppShell>
+  );
+}
+
+/**
+ * Focus mode: `hiddenRegions` hides the top nav and the side nav. They slide
+ * out by their edges as the content takes their space, in one motion, and
+ * keep their state. The exit control lives in the content.
+ */
+export const FocusMode: Story = {
+  render: () => <FocusModeDemo />,
+};
+
+function SectionFocusModeDemo() {
+  const [isHidden, setIsHidden] = useState(false);
+  return (
+    <AppShell
+      variant="section"
+      contentPadding={6}
+      topNav={<AppTopNav />}
+      sideNav={<SideNavWithoutHeader />}
+      hiddenRegions={isHidden ? ['sideNav'] : undefined}>
+      <Button
+        label={isHidden ? 'Show side nav' : 'Hide side nav'}
+        onClick={() => setIsHidden(!isHidden)}
+      />
+      <MockContent />
+    </AppShell>
+  );
+}
+
+/** The section variant's side nav divider goes with the hidden side nav. */
+export const HiddenSideNavSection: Story = {
+  render: () => <SectionFocusModeDemo />,
+};
+
 /**
  * A long app name on a phone. The heading truncates with an ellipsis so the
  * end content and the menu toggle stay inside the bar.

@@ -18,7 +18,7 @@ import {
   beforeEach,
   afterEach,
 } from 'vitest';
-import {use} from 'react';
+import {use, useState} from 'react';
 import {renderToString} from 'react-dom/server';
 import {act, render, screen, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -1568,5 +1568,144 @@ describe('AppShell layout root (FR18)', () => {
     expect(computed.getPropertyValue('--container-padding-inline-start')).toBe(
       '8px',
     );
+  });
+});
+
+describe('AppShell hiddenRegions', () => {
+  // A side nav with state of its own, to show that hiding keeps it.
+  function CountingSideNav() {
+    const [count, setCount] = useState(0);
+    return (
+      <SideNav>
+        <SideNavSection title="Test" isHeaderHidden>
+          <SideNavItem
+            label={`Count ${count}`}
+            onClick={() => setCount(count + 1)}
+          />
+        </SideNavSection>
+      </SideNav>
+    );
+  }
+
+  function Shell({
+    hiddenRegions,
+  }: {
+    hiddenRegions?: ReadonlyArray<'topNav' | 'sideNav'>;
+  }) {
+    return (
+      <AppShell
+        hiddenRegions={hiddenRegions}
+        topNav={
+          <TopNav heading={<TopNavHeading heading="App" />}>
+            <TopNavItem label="Home" href="/home" />
+          </TopNav>
+        }
+        sideNav={<CountingSideNav />}>
+        <button type="button">In content</button>
+      </AppShell>
+    );
+  }
+
+  it('keeps a hidden side nav mounted with its state', async () => {
+    const user = userEvent.setup();
+    const {rerender} = render(<Shell />);
+    await user.click(screen.getByRole('button', {name: 'Count 0'}));
+    const row = screen.getByRole('button', {name: 'Count 1'});
+    rerender(<Shell hiddenRegions={['sideNav']} />);
+    rerender(<Shell />);
+    expect(screen.getByRole('button', {name: 'Count 1'})).toBe(row);
+  });
+
+  it('makes a hidden region inert, and only while it is hidden', () => {
+    const {rerender} = render(<Shell />);
+    const nav = screen.getByText('Count 0').closest('nav') as HTMLElement;
+    const home = screen.getByText('Home');
+    expect(nav.closest('[inert]')).toBeNull();
+    expect(home.closest('[inert]')).toBeNull();
+
+    rerender(<Shell hiddenRegions={['topNav', 'sideNav']} />);
+    expect(nav.closest('[inert]')).not.toBeNull();
+    expect(home.closest('[inert]')).not.toBeNull();
+    // Content is never hidden.
+    expect(
+      screen.getByRole('button', {name: 'In content'}).closest('[inert]'),
+    ).toBeNull();
+
+    rerender(<Shell />);
+    expect(nav.closest('[inert]')).toBeNull();
+    expect(home.closest('[inert]')).toBeNull();
+  });
+
+  it('hides only the named region', () => {
+    render(<Shell hiddenRegions={['topNav']} />);
+    expect(screen.getByText('Home').closest('[inert]')).not.toBeNull();
+    expect(screen.getByText('Count 0').closest('[inert]')).toBeNull();
+  });
+
+  it('moves focus inside a region that hides to main', () => {
+    const {rerender} = render(<Shell />);
+    const row = screen.getByRole('button', {name: 'Count 0'});
+    act(() => row.focus());
+    rerender(<Shell hiddenRegions={['sideNav']} />);
+    expect(screen.getByRole('main')).toHaveFocus();
+  });
+
+  it('leaves focus in content alone when a region hides', () => {
+    const {rerender} = render(<Shell />);
+    const inContent = screen.getByRole('button', {name: 'In content'});
+    act(() => inContent.focus());
+    rerender(<Shell hiddenRegions={['topNav', 'sideNav']} />);
+    expect(inContent).toHaveFocus();
+  });
+
+  it('shows no banner landmark when every header slot is hidden', () => {
+    render(<Shell hiddenRegions={['topNav']} />);
+    expect(screen.queryByRole('banner')).toBeNull();
+  });
+
+  it('ignores an unknown region with a development warning', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    render(
+      <Shell
+        hiddenRegions={['banner' as unknown as 'topNav', 'sideNav', 'sideNav']}
+      />,
+    );
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('banner'));
+    expect(screen.getByText('Home').closest('[inert]')).toBeNull();
+    expect(screen.getByText('Count 0').closest('[inert]')).not.toBeNull();
+  });
+
+  it('on a phone, closes the drawer and disables it when the side nav it holds hides', () => {
+    mockMql = createMockMatchMedia(true);
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue(mockMql));
+    let mobile: ReturnType<typeof useAppShellMobile> | null = null;
+    function Probe() {
+      mobile = useAppShellMobile();
+      return null;
+    }
+    const onOpenChange = vi.fn();
+    function PhoneShell({hidden}: {hidden?: boolean}) {
+      return (
+        <AppShell
+          hiddenRegions={hidden ? ['sideNav'] : undefined}
+          sideNav={<TestSideNav />}
+          mobileNav={{defaultIsMobile: true, isOpen: true, onOpenChange}}>
+          <Probe />
+        </AppShell>
+      );
+    }
+    const {rerender} = render(<PhoneShell />);
+    expect(mobile).toMatchObject({
+      isMobileNavOpen: true,
+      isMobileNavEnabled: true,
+    });
+    rerender(<PhoneShell hidden />);
+    expect(mobile).toMatchObject({
+      isMobile: true,
+      isMobileNavOpen: false,
+      isMobileNavEnabled: false,
+    });
+    // Hiding never writes the app's open state.
+    expect(onOpenChange).not.toHaveBeenCalled();
   });
 });

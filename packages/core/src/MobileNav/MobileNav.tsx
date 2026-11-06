@@ -382,6 +382,17 @@ function closeAndRestoreFocus(
   if (!opener || opener === document.body || !opener.isConnected) {
     return;
   }
+  // An opener that is still connected but hidden, such as the menu button of
+  // a navigation region the app hid, cannot take focus. Focus goes to main.
+  const isHidden =
+    opener.closest('[inert]') != null ||
+    (typeof opener.checkVisibility === 'function' && !opener.checkVisibility());
+  if (isHidden) {
+    opener.ownerDocument
+      .querySelector<HTMLElement>('[role="main"], main')
+      ?.focus();
+    return;
+  }
   opener.focus();
 }
 

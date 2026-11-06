@@ -185,6 +185,38 @@ function DetachHarness() {
   );
 }
 
+/** Hides the opener (an inert navigation region) as the drawer closes. */
+function HiddenOpenerHarness() {
+  const [isOpen, setIsOpen] = useState(false);
+  const [isHidden, setIsHidden] = useState(false);
+  return (
+    <>
+      <div inert={isHidden || undefined}>
+        <button
+          type="button"
+          data-testid="trigger"
+          onClick={() => setIsOpen(true)}>
+          Open nav
+        </button>
+      </div>
+      <div role="main" tabIndex={-1} data-testid="main">
+        <button
+          type="button"
+          data-testid="hide"
+          onClick={() => {
+            setIsHidden(true);
+            setIsOpen(false);
+          }}>
+          Hide
+        </button>
+      </div>
+      <MobileNav isOpen={isOpen} onOpenChange={setIsOpen} side="start">
+        <span>Content</span>
+      </MobileNav>
+    </>
+  );
+}
+
 /** Opens the drawer without ever focusing the button that opens it. */
 function BodyHarness() {
   const [isOpen, setIsOpen] = useState(false);
@@ -517,6 +549,21 @@ describe('MobileNav focus restoration', () => {
       }).not.toThrow();
       expect(screen.queryByTestId('trigger')).toBeNull();
       expect(triggerFocus).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('moves focus to main when the opener is connected but hidden', () => {
+    vi.useFakeTimers();
+    try {
+      render(<HiddenOpenerHarness />);
+      openFromTrigger();
+      fireEvent.click(screen.getByTestId('hide'));
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+      expect(screen.getByTestId('main')).toHaveFocus();
     } finally {
       vi.useRealTimers();
     }

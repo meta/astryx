@@ -27,6 +27,7 @@ component AppShell(props: AppShellProps)
   prop children: ReactNode
   prop contentPadding?: SpacingStep
   prop height?: 'fill' | 'auto' = 'fill'
+  prop hiddenRegions?: ReadonlyArray<'topNav' | 'sideNav'>
   prop mobileNav?: false | MobileNavConfig | ReactNode
   prop ref?: React.Ref<HTMLDivElement>
   prop sideNav?: ReactNode
