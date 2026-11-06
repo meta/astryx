@@ -296,7 +296,7 @@ export function reachableFiles(files, {aliases = []} = {}) {
           // none, the target's own folders), against the folders of the sent
           // path above the part the alias named, from the nearest up.
           const targetFolders = (star === -1 ? path.dirname(named) : target.slice(0, cut)).split(path.sep).filter(Boolean);
-          const sentTail = star === -1 ? path.basename(abs) : hit.tail;
+          const sentTail = hit.tail;
           const sentFolders = hit.path.slice(0, hit.path.length - sentTail.length).split('/').filter(Boolean);
           let score = 0;
           while (
