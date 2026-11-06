@@ -950,6 +950,42 @@ test('a spring-back past a limit lays out no frame: the edge glides back over th
   expect(between.length).toBeGreaterThanOrEqual(3);
 });
 
+for (const [label, waitMs] of [
+  ['at once', 0],
+  ['50 ms after', 50],
+  ['mid-settle', 120],
+] as const) {
+  test(`a re-grab ${label} the lift past the maximum moves the edge 1:1 from where it shows`, async ({
+    page,
+  }) => {
+    await openFixture(page, STORY.start);
+    await expectPresent(page);
+    const handle = page.getByRole('separator', {name: 'Resize panel'});
+    const at = await pressHandle(page);
+    // 200 px plus 260 px of pull would be 460 px against a 320 px maximum.
+    await page.mouse.move(at.x + 260, at.y, {steps: 6});
+    await page.mouse.up();
+    if (waitMs > 0) {
+      await page.waitForTimeout(waitMs);
+    }
+    const shown = await handle.boundingBox();
+    if (shown == null) {
+      throw new Error('the handle is not laid out');
+    }
+    const grab = {x: shown.x + shown.width / 2, y: at.y};
+    await page.mouse.move(grab.x, grab.y);
+    await page.mouse.down();
+    await page.mouse.move(grab.x - 40, grab.y, {steps: 4});
+    // The edge left from where it showed, past the maximum. It followed the
+    // finger 40 px back, so the pane is about 40 px under it. A spring-back
+    // from an outward release can carry the edge a few px past the band.
+    const now = Number(await handle.getAttribute('aria-valuenow'));
+    expect(now).toBeLessThan(295);
+    expect(now).toBeGreaterThan(270);
+    await page.mouse.up();
+  });
+}
+
 test('below the minimum the edge moves at most 8 px, the pane keeps its minimum, and a slow lift above the threshold springs the edge back', async ({
   page,
 }) => {
