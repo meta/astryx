@@ -245,6 +245,14 @@ jobs:
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
         run: node packages/cli/scripts/generate-cli-readme.mjs --check
 
+      # The comment-provenance rule allows only the sites its baseline lists.
+      # A change that removes a cited site must also drop its entry, so the
+      # baseline never allows a site that no longer exists. The check reads
+      # the merged tree, so a site that main removed fails here too.
+      - name: Check the comment-provenance baseline
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        run: node internal/eslint-plugin-astryx/no-comment-provenance.baseline.mjs --check
+
       # The pre-commit hook formats staged files with Prettier, but a commit
       # made without it can land unformatted source. A later local merge of
       # main then reformats that file inside the merging pull request, which

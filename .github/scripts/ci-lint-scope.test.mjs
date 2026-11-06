@@ -196,4 +196,24 @@ describe('required lint routing', () => {
       full_suite: 'false',
     });
   });
+
+  it('checks the comment-provenance baseline in full lint, and a baseline-only change runs it', () => {
+    const check = steps.find(
+      step => step.name === 'Check the comment-provenance baseline',
+    );
+    expect(check.run).toBe(
+      'node internal/eslint-plugin-astryx/no-comment-provenance.baseline.mjs --check',
+    );
+    // The same lanes as ESLint: everything but the docs and spec fast paths.
+    expect(check.if).toBe(steps.find(step => step.name === 'Run ESLint').if);
+    expect(steps.indexOf(check)).toBeGreaterThan(
+      steps.findIndex(step => step.uses === './.github/actions/setup'),
+    );
+    expect(
+      classifyPullRequest({
+        'internal/eslint-plugin-astryx/no-comment-provenance.baseline.json':
+          '{}\n',
+      }),
+    ).toMatchObject({spec_only: 'false', docsite_only: 'false'});
+  });
 });
