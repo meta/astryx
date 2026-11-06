@@ -260,7 +260,7 @@ export const butterTheme = defineTheme({
     '--color-tint-hover': [neutral.light[0], neutral.dark[100]],
 
     // Typography override
-    '--text-supporting-size': '12px',
+    '--text-supporting-size': '0.75rem', // 12px at the default root size
 
     // Element sizes — slightly taller defaults so the new input padding
     // (--spacing-2 block) has room to breathe.

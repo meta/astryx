@@ -240,7 +240,7 @@ export const stoneTheme = defineTheme({
     '--color-tint-hover': [neutral.light[0], neutral.dark[100]],
 
     // Typography override
-    '--text-supporting-size': '12px',
+    '--text-supporting-size': '0.75rem', // 12px at the default root size
 
     // Categorical
     // Light mode pairs pastel stop 90 surfaces with stop 30 foregrounds.
