@@ -77,6 +77,7 @@ import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
+import {matchesMediaQuery} from '../utils/coarsePointer';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useScrollLock} from '../hooks/useScrollLock';
@@ -341,7 +342,10 @@ function resolveCloseDelay(dialog: HTMLDialogElement): number {
   // Reduced motion makes the close sooner; it must not make the hold shorter.
   // Shrinking both leaves no slack — one slow frame between the commit and this
   // macrotask and the drawer has already stopped being rendered.
-  const cap = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  const cap = matchesMediaQuery(
+    dialog.ownerDocument.defaultView,
+    '(prefers-reduced-motion: reduce)',
+  )
     ? 0
     : MAX_CLOSE_DELAY_MS;
 

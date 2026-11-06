@@ -49,6 +49,10 @@ export const calendarStyles = stylex.create({
     fontSize: typeScaleVars['--text-label-size'],
     color: colorVars['--color-text-primary'],
   },
+  // The month is not known yet (server render, hydration): keep the space.
+  monthsPending: {
+    visibility: 'hidden',
+  },
   monthsContainer: {
     display: 'flex',
     // Wraps rather than overflowing: two months side by side need ~488px, so

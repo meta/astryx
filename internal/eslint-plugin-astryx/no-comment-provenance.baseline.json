@@ -938,7 +938,6 @@
     "DR2",
     "DR3",
     "FR17",
-    "FR4",
     "FR6",
     "FR9",
     "INV12",
@@ -946,8 +945,7 @@
     "component:AppShell",
     "component:SideNav",
     "design:reduced-motion",
-    "spec quote",
-    "spec:AST-105"
+    "spec quote"
   ],
   "packages/core/src/Skeleton/Skeleton.tsx": ["FR4", "spec:AST-108"],
   "packages/core/src/Slider/Slider.tsx": [
@@ -1884,7 +1882,6 @@
     "spec:AST-105"
   ],
   "packages/core/src/motion/animatedLayout.ts": [
-    "DEC-11",
     "DR1",
     "DR2",
     "DR2",
@@ -1895,7 +1892,6 @@
     "DR3",
     "FR1",
     "FR2",
-    "FR4",
     "FR4",
     "FR4",
     "FR4",
@@ -1939,8 +1935,6 @@
     "spec quote",
     "spec quote",
     "spec quote",
-    "spec:AST-094",
-    "spec:AST-105",
     "spec:AST-105",
     "spec:AST-105",
     "spec:AST-105",

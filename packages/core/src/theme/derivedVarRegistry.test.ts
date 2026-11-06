@@ -134,6 +134,9 @@ const STRUCTURAL_VARS = new Set([
   // Written beside it: `auto` while the keyboard caps the layer, so the
   // surface scrolls from that commit. Runtime state, never authored by a theme.
   '--_layer-keyboard-overflow',
+  // Also beside it: how far above the viewport's bottom a layer ends while the
+  // keyboard is up. Runtime geometry, never authored by a theme.
+  '--_layer-keyboard-inset-block-end',
 ]);
 
 /**

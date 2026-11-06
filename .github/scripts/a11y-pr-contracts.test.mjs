@@ -27,6 +27,7 @@ import {
   changedOnly,
   changedSinceMergeBase,
   DEFAULT_CHECK_BUDGET_MS,
+  PLAN_BUDGET_MS,
   DEPENDENT_SHARE_MS,
   dependentSpecs,
   importerGraph,
@@ -302,14 +303,57 @@ describe('the default check of the touched components', () => {
     expect(owns(['core/Switch'], [], [tokened])).toEqual([]);
   });
 
-  it('runs every owned file that fits the budget at its recorded time', () => {
+  it('runs every owned file that fits the plan at its recorded time', () => {
     expect(plan(['core/Switch'])).toEqual({
       run: [{file: SWITCH, reason: 'component core/Switch'}],
       notRun: [],
     });
-    expect(files(plan(['core/Selector']).run).sort()).toEqual(
-      [COMBOBOX_FIELD, LISTBOX].sort(),
+    // Listbox's 325 s, with the margin and startup, passes the 6-minute plan.
+    const selector = plan(['core/Selector']);
+    expect(files(selector.run)).toEqual([COMBOBOX_FIELD]);
+    expect(files(selector.notRun)).toEqual([LISTBOX]);
+  });
+
+  it('plans three quarters of the stop, so a slower runner still finishes every file it starts', () => {
+    expect(PLAN_BUDGET_MS).toBe(DEFAULT_CHECK_BUDGET_MS * 0.75);
+    // One pull request's changed and owned specs, at the times recorded when
+    // the plan filled the whole 8 minutes and the stop cut Listbox (7 minutes
+    // on that runner). A file with no recorded time has the median then, 17.3 s.
+    const recorded = {
+      'packages/core/src/Selector/__tests__/SelectorKeyboardInset.a11y.chromium.spec.ts': 17.3,
+      'packages/core/src/__tests__/FocusRingOwner.a11y.chromium.spec.ts': 17.3,
+      'packages/core/src/DropdownMenu/__tests__/DropdownMenuTooltip.a11y.chromium.spec.ts': 17.3,
+      'packages/core/src/Field/__tests__/FieldDisabledForcedColorsFocus.a11y.chromium.spec.ts': 17.3,
+      'packages/core/src/Layer/__tests__/BackdropPress.a11y.chromium.spec.ts': 17.3,
+      'packages/core/src/Layer/__tests__/LayerBrowserHide.a11y.chromium.spec.ts': 5.3,
+      'packages/core/src/Selector/__tests__/ComboboxField.a11y.chromium.spec.ts': 38.2,
+      'packages/core/src/Selector/__tests__/Listbox.a11y.chromium.spec.ts': 325.2,
+      'packages/core/src/Selector/__tests__/Selector.a11y.chromium.spec.ts': 1.7,
+      'packages/core/src/Selector/__tests__/Selector.combobox.a11y.chromium.spec.ts': 12.3,
+      'packages/core/src/Selector/__tests__/SelectorListboxName.a11y.chromium.spec.ts': 17.3,
+      'packages/core/src/Selector/__tests__/SelectorReducedMotion.a11y.chromium.spec.ts': 17.3,
+    };
+    const changedAndOwned = Object.keys(recorded);
+    const {run, notRun} = planDefaultCheck({
+      changed: [{file: changedAndOwned[0], reason: 'spec changed'}],
+      owned: changedAndOwned.slice(1).map(file => ({
+        file,
+        reason: 'changed packages/core/src/Selector/Selector.test.tsx',
+      })),
+      seconds: recorded,
+      workers: 4,
+    });
+    const msOf = file => recorded[file] * 1000 * RECORDED_TIME_MARGIN;
+    expect(STARTUP_MS + projectedMs(files(run), msOf, 4)).toBeLessThanOrEqual(
+      PLAN_BUDGET_MS,
     );
+    expect(files(notRun)).toContain(
+      'packages/core/src/Selector/__tests__/Listbox.a11y.chromium.spec.ts',
+    );
+    expect(
+      notRun.find(({file}) => file.endsWith('Listbox.a11y.chromium.spec.ts'))
+        .reason,
+    ).toContain('6-minute plan');
   });
 
   it('reports a file that does not fit as not run, with the label that runs it', () => {
@@ -320,9 +364,11 @@ describe('the default check of the touched components', () => {
     expect(files(notRun)).toEqual([LISTBOX]);
     expect(notRun[0].reason).toContain('component core/Selector');
     expect(notRun[0].reason).toContain('ci:run-a11y');
-    expect(notRun[0].reason).toContain('8-minute budget');
-    // On four workers they run side by side.
-    expect(plan(['core/Selector', 'core/Switch']).notRun).toEqual([]);
+    expect(notRun[0].reason).toContain('6-minute plan');
+    // On four workers the others run side by side; Listbox alone passes the plan.
+    expect(files(plan(['core/Selector', 'core/Switch']).notRun)).toEqual([
+      LISTBOX,
+    ]);
   });
 
   it('never starts a file that the recorded time says the stop would cut', () => {
@@ -343,19 +389,31 @@ describe('the default check of the touched components', () => {
     );
   });
 
-  it('runs changed specs first and counts them against the budget, without running a file twice', () => {
-    expect(plan(['core/Selector'], [LISTBOX])).toEqual({
+  it('runs changed specs first and counts them against the plan, without running a file twice', () => {
+    const later =
+      'packages/core/src/Switch/__tests__/SwitchLater.a11y.chromium.spec.ts';
+    const check = workers =>
+      planDefaultCheck({
+        changed: [{file: SWITCH, reason: 'spec changed'}],
+        owned: [
+          {file: SWITCH, reason: 'component core/Switch'},
+          {file: later, reason: 'component core/Switch'},
+        ],
+        seconds: {...seconds, [later]: 120},
+        workers,
+      });
+    expect(check(4)).toEqual({
       run: [
-        {file: LISTBOX, reason: 'spec changed'},
-        {file: COMBOBOX_FIELD, reason: 'component core/Selector'},
+        {file: SWITCH, reason: 'spec changed'},
+        {file: later, reason: 'component core/Switch'},
       ],
       notRun: [],
     });
-    // On one worker, ComboboxField after the changed Listbox passes the
-    // budget: 30 + (325.2 + 38.2) * 1.25 s.
-    const {run, notRun} = plan(['core/Selector'], [LISTBOX], 1);
-    expect(run).toEqual([{file: LISTBOX, reason: 'spec changed'}]);
-    expect(files(notRun)).toEqual([COMBOBOX_FIELD]);
+    // On one worker, the later file after the changed Switch passes the
+    // plan: 30 + (168.4 + 120) * 1.25 s is more than 6 minutes.
+    const {run, notRun} = check(1);
+    expect(run).toEqual([{file: SWITCH, reason: 'spec changed'}]);
+    expect(files(notRun)).toEqual([later]);
   });
 
   it('reports a changed spec that does not fit as not run, never starts it', () => {

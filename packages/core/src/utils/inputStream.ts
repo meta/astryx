@@ -4,8 +4,9 @@
  * @file inputStream.ts
  * @input A window, and subscribers to its input events (the press feedback
  *   controller, the gesture host)
- * @output subscribeInput, and getLastPointerType: the type of the latest
- *   pointer event the stream delivered
+ * @output subscribeInput, getLastPointerType and getLastMousePoint: the
+ *   type of the latest pointer event the stream delivered, and where the
+ *   latest mouse one was
  * @position The one entry for document-wide input listeners in core: one
  *   native listener per event type on the window's capture phase, shared by
  *   every subscriber
@@ -68,6 +69,14 @@ export type InputEventMap = WindowEventMap & DocumentEventMap;
 const streams = new WeakMap<Window, Map<string, Channel>>();
 /** The type of the latest pointer event each window's stream delivered. */
 const lastPointerTypes = new WeakMap<Window, string>();
+/** Where the latest mouse pointer event each window's stream delivered was. */
+const lastMousePoints = new WeakMap<Window, MousePoint>();
+
+/** A point in the viewport, in CSS pixels. */
+export interface MousePoint {
+  readonly x: number;
+  readonly y: number;
+}
 
 /**
  * The type of the latest pointer event `view`'s stream delivered: `mouse`,
@@ -77,6 +86,15 @@ const lastPointerTypes = new WeakMap<Window, string>();
  */
 export function getLastPointerType(view: Window): string | null {
   return lastPointerTypes.get(view) ?? null;
+}
+
+/**
+ * Where the latest mouse pointer event `view`'s stream delivered was, in
+ * viewport coordinates, or `null` before any. A mouse that has not moved
+ * since rests there. Reading it adds no listener.
+ */
+export function getLastMousePoint(view: Window): MousePoint | null {
+  return lastMousePoints.get(view) ?? null;
 }
 
 /**
@@ -161,9 +179,16 @@ function register(view: Window, type: string, channel: Channel): void {
 
 function dispatch(view: Window, channel: Channel, event: Event): void {
   // Recorded before any subscriber runs, so each reads the pointer at hand.
-  const {pointerType} = event as Partial<PointerEvent>;
+  const {pointerType, clientX, clientY} = event as Partial<PointerEvent>;
   if (typeof pointerType === 'string' && pointerType !== '') {
     lastPointerTypes.set(view, pointerType);
+  }
+  if (
+    pointerType === 'mouse' &&
+    typeof clientX === 'number' &&
+    typeof clientY === 'number'
+  ) {
+    lastMousePoints.set(view, {x: clientX, y: clientY});
   }
   // A subscriber may subscribe or unsubscribe while the event runs; the
   // event goes to those subscribed when it arrived.

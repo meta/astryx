@@ -68,16 +68,26 @@ describe('interaction proof routing', () => {
     const guards = new Set([
       "Require this pull request's Storybook build",
       'Skip the proofs outside their scope',
+      'Leave the proofs to the other legs',
     ]);
-    for (const candidate of proofs.steps.slice(2)) {
-      if (guards.has(candidate.name)) continue;
+    // Every step after the leg count also waits for this leg to have a share.
+    const counted = proofs.steps.indexOf(step(proofs, "Count this run's legs"));
+    for (const [index, candidate] of proofs.steps.entries()) {
+      if (index < 2 || guards.has(candidate.name)) continue;
+      const gate =
+        index <= counted
+          ? applies
+          : `${applies} && steps.legs.outputs.runs == 'true'`;
       // A leg whose plan holds no spec file runs no proofs.
       expect(candidate.if, candidate.name ?? candidate.uses).toMatch(
         new RegExp(
-          `^(always\\(\\) && )?${applies.replace(/[.()|]/g, '\\$&')}( && steps\\.plan\\.outputs\\.files != '0')?$`,
+          `^((always|failure)\\(\\) && )?${gate.replace(/[.()|]/g, '\\$&')}( && steps\\.plan\\.outputs\\.files != '0')?$`,
         ),
       );
     }
+    expect(step(proofs, 'Leave the proofs to the other legs').if).toBe(
+      `${applies} && steps.legs.outputs.runs != 'true'`,
+    );
   });
 
   it('fails closed when Storybook did not build for proofs that apply', () => {
