@@ -85,30 +85,28 @@ hover.
 - **Group hand-off.** Within a group of triggers, a pointer that moves from one
   open trigger to the next shows the next at once; the entry delay applies to
   the first open only (`architecture:interaction-modality` INV11).
-- **Default on; adjustable.** The delay and guard are on by default. A surface
-  exposes them as `delay` and `hideDelay`, in milliseconds, and a caller
-  shortens or removes them only for a stated use case.
-- **Consistent timing.** Surfaces of one kind share their default timing:
-  tooltips and hover cards share one default, hover-opened menus and flyouts
-  another, and container reveals a third. `architecture:interaction-modality`
-  INV11 owns the mechanism.
+- **Default on; adjustable.** The delay and guard are on by default, and each
+  owner sets its own default values. A timer-driven surface (a tooltip, a hover
+  card, a hover-opened menu or flyout) exposes them as `delay` and `hideDelay`,
+  in milliseconds, and a caller shortens or removes them only for a stated use
+  case. A container reveal keeps its timing in CSS with no public option.
 
 Inventory of hover-to-display surfaces and their defaults:
 
-| Surface                                         | Entry delay                               | Exit guard                              | Conforms                                     |
-| ----------------------------------------------- | ----------------------------------------- | --------------------------------------- | -------------------------------------------- |
-| `Tooltip`                                       | on, `delay`                               | `hideDelay`, else the hover bridge      | yes                                          |
-| `HoverCard`                                     | on, `delay`                               | on, `hideDelay`                         | yes                                          |
-| `TopNavMenu`                                    | on, `delay`                               | on, `hideDelay`                         | yes                                          |
-| `TopNavMegaMenu`                                | on, `delay`                               | on, `hideDelay`                         | yes                                          |
-| `DropdownMenu` submenu                          | on, no option                             | on, no option                           | partial: no `delay` or `hideDelay` option    |
-| `SideNavItem` collapsed flyout                  | on, no option                             | on, no option                           | partial: no `delay` or `hideDelay` option    |
-| `TopNavHeading` menu                            | none on a first open                      | on, no option                           | no: first open has no entry delay (gap, FR5) |
-| `SideNavHeading` collapsed flyout               | none on a first open                      | on, no option                           | no: first open has no entry delay (gap, FR5) |
-| `Slider` value tooltip                          | none (`delay` set to zero)                | on                                      | no: zero delay with no recorded reason       |
-| `Overlay` with `showOn="hover"`                 | none, no option                           | none                                    | no: no entry delay, exit guard or option     |
-| Container reveal (`Thumbnail`, `TreeList` rows) | opt-in                                    | exit fade, instant under reduced motion | partial: entry delay opt-in                  |
-| Markdown heading links                          | none (`module:Markdown/headingLinks` AR3) | exit fade, instant under reduced motion | yes: the owner's recorded zero delay         |
+| Surface                                         | Entry delay                               | Exit guard                              | Conforms                                             |
+| ----------------------------------------------- | ----------------------------------------- | --------------------------------------- | ---------------------------------------------------- |
+| `Tooltip`                                       | on, `delay`                               | `hideDelay`, else the hover bridge      | yes                                                  |
+| `HoverCard`                                     | on, `delay`                               | on, `hideDelay`                         | yes                                                  |
+| `TopNavMenu`                                    | on, `delay`                               | on, `hideDelay`                         | yes                                                  |
+| `TopNavMegaMenu`                                | on, `delay`                               | on, `hideDelay`                         | yes                                                  |
+| `DropdownMenu` submenu                          | on, no option                             | on, no option                           | partial: no `delay` or `hideDelay` option            |
+| `SideNavItem` collapsed flyout                  | on, no option                             | on, no option                           | partial: no `delay` or `hideDelay` option            |
+| `TopNavHeading` menu                            | none on a first open                      | on, no option                           | no: first open has no entry delay (gap, FR5)         |
+| `SideNavHeading` collapsed flyout               | none on a first open                      | on, no option                           | no: first open has no entry delay (gap, FR5)         |
+| `Slider` value tooltip                          | none (`delay` set to zero)                | on                                      | no: zero delay with no recorded reason               |
+| `Overlay` with `showOn="hover"`                 | none, no option                           | exit fade, instant under reduced motion | no: no entry delay                                   |
+| Container reveal (`Thumbnail`, `TreeList` rows) | opt-in                                    | exit fade, instant under reduced motion | partial: entry delay opt-in                          |
+| Markdown heading links                          | none (`module:Markdown/headingLinks` AR3) | exit fade, instant under reduced motion | partial: zero delay recorded in AR3 without a reason |
 
 A surface listed as not conforming is a gap for its owner to close or to justify
 with a recorded use case; this record does not change its shipped behavior.
@@ -182,5 +180,6 @@ once.
 
 ## Content boundary
 
-This file defines motion intent. It does not define duration or easing tokens,
-CSS properties, animation APIs, component behavior, or audit checks.
+This file defines motion intent and the hover-to-display rule. It does not
+define duration or easing tokens, CSS properties, animation APIs, other
+component behavior, or audit checks.
