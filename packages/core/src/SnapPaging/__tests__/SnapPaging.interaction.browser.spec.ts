@@ -310,18 +310,23 @@ test('the scroll offset holds through a swipe, so the edge fades and buttons sta
   const y = box.y + box.height / 2;
   const from = {x: box.x + box.width / 2 + 40, y};
   const to = {x: from.x - 80, y};
-  const seen: number[] = [];
-  const driver = await touchDriver(page);
-  await driver.play(drag(from, to, {durationMs: 80, restMs: 0}), {
-    onEvent: async step => {
-      if (step.type === 'touchMove') {
-        seen.push(await offset(scroller));
-      }
-    },
+  // The page reads the offset at each move. A read from here holds the lift
+  // back, and a lift past the stillness interval releases at rest.
+  await scroller.evaluate(el => {
+    const seen: number[] = [];
+    (window as unknown as {__seen: number[]}).__seen = seen;
+    window.addEventListener('touchmove', () => seen.push(el.scrollLeft), {
+      passive: true,
+    });
   });
+  const driver = await touchDriver(page);
+  await driver.play(drag(from, to, {durationMs: 80, restMs: 0}));
+  const seen = await page.evaluate(
+    () => (window as unknown as {__seen: number[]}).__seen,
+  );
   expect(seen.length).toBeGreaterThan(0);
   for (const at of seen) {
-    expect(at).toBeCloseTo(stops[3], 0);
+    expect(Math.abs(at)).toBeCloseTo(stops[3], 0);
   }
   await settled(scroller);
   await expect.poll(async () => offset(scroller)).toBeCloseTo(stops[6], 0);
