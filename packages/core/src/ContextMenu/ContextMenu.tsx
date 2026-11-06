@@ -296,6 +296,8 @@ export type ContextMenuProps = ContextMenuDataProps | ContextMenuCompoundProps;
  */
 export interface ContextMenuTriggerHandlers {
   onContextMenu: (event: React.MouseEvent<HTMLElement>) => void;
+  /** Opens the menu as a long press at this viewport point does. */
+  openFromLongPress: (point: {x: number; y: number}) => void;
   onTouchStart: (event: React.TouchEvent<HTMLElement>) => void;
   onTouchMove: (event: React.TouchEvent<HTMLElement>) => void;
   onTouchEnd: (event: React.TouchEvent<HTMLElement>) => void;
@@ -714,6 +716,20 @@ function useContextMenuElement(
   // held long enough (see useLongPress for timer/move-cancel/cleanup logic).
   // The hook also returns the imperative start/moveTo/cancel API the menu press
   // model drives; only its four touch handlers belong on the trigger element.
+  const openFromLongPress = useCallback(
+    (point: {x: number; y: number}) => {
+      const rect = getAnchorBaseRect();
+      // The finger is still down: the compatibility mousedown iOS sends
+      // mid-hold, or Chromium as it lifts, belongs to this press.
+      openingGestureRef.current = currentGesture();
+      openAtLocalPoint(
+        rect ? point.x - rect.left : point.x,
+        rect ? point.y - rect.top : point.y,
+        triggerRef.current,
+      );
+    },
+    [openAtLocalPoint, getAnchorBaseRect],
+  );
   const {
     onTouchStart: handleLongPressTouchStart,
     onTouchMove: handleLongPressTouchMove,
@@ -721,20 +737,7 @@ function useContextMenuElement(
     onTouchCancel: handleLongPressTouchCancel,
   } = useLongPress({
     disabled: isDisabled,
-    onLongPress: useCallback(
-      (point: {x: number; y: number}) => {
-        const rect = getAnchorBaseRect();
-        // The finger is still down: the compatibility mousedown iOS sends
-        // mid-hold, or Chromium as it lifts, belongs to this press.
-        openingGestureRef.current = currentGesture();
-        openAtLocalPoint(
-          rect ? point.x - rect.left : point.x,
-          rect ? point.y - rect.top : point.y,
-          triggerRef.current,
-        );
-      },
-      [openAtLocalPoint, getAnchorBaseRect],
-    ),
+    onLongPress: openFromLongPress,
   });
 
   // ContextMenu owns invocation and long-press cleanup. Consumer handlers are
@@ -912,6 +915,7 @@ function useContextMenuElement(
   const triggerHandlers = useMemo<ContextMenuTriggerHandlers>(
     () => ({
       onContextMenu: handleTriggerContextMenu,
+      openFromLongPress,
       onTouchStart: handleTriggerTouchStart,
       onTouchMove: handleTriggerTouchMove,
       onTouchEnd: handleTriggerTouchEnd,
@@ -919,6 +923,7 @@ function useContextMenuElement(
     }),
     [
       handleTriggerContextMenu,
+      openFromLongPress,
       handleTriggerTouchStart,
       handleTriggerTouchMove,
       handleTriggerTouchEnd,

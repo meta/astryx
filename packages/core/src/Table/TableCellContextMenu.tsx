@@ -4,7 +4,7 @@
 
 /**
  * @file TableCellContextMenu.tsx
- * @input React (lazy, Suspense), ContextMenuTrigger, tableContextActions
+ * @input React (lazy, Suspense), ContextMenuTrigger, useLongPress
  * @output TableCellContextMenu, loadTableContextMenu
  * @position Renders a cell's `contextMenuActions` for TableCell and
  * TableHeaderCell. The menu code loads only for cells that have actions. The
@@ -19,6 +19,7 @@ import type {
   ContextMenuTriggerHandlers,
 } from '../ContextMenu/ContextMenu';
 import {ContextMenuTrigger} from '../ContextMenu/ContextMenuTrigger';
+import {useLongPress} from '../hooks/useLongPress';
 import type {StyleXStyles} from '../theme/types';
 import type {TableContextActions} from './types';
 import type {TableContextMenuForTrigger} from './tableContextMenu';
@@ -49,7 +50,7 @@ const LazyTableContextMenu = lazy(async () =>
 /** An invocation that arrived before the menu, replayed when it attaches. */
 type HeldInvocation =
   | {kind: 'contextmenu'; event: React.MouseEvent<HTMLElement>}
-  | {kind: 'touch'; event: React.TouchEvent<HTMLElement>};
+  | {kind: 'long-press'; point: {x: number; y: number}};
 
 /**
  * A cell's content, wrapped in a right-click context menu when `actions` can
@@ -65,10 +66,34 @@ export function TableCellContextMenu({
   actions: TableContextActions | undefined;
   triggerXstyle?: StyleXStyles | StyleXStyles[];
 }): ReactNode {
+  if (actions === undefined || !hasContextActions(actions)) {
+    return children;
+  }
+  return (
+    <CellTrigger actions={actions} triggerXstyle={triggerXstyle}>
+      {children}
+    </CellTrigger>
+  );
+}
+
+function CellTrigger({
+  children,
+  actions,
+  triggerXstyle,
+}: {
+  children: ReactNode;
+  actions: TableContextActions;
+  triggerXstyle?: StyleXStyles | StyleXStyles[];
+}): ReactNode {
   const triggerRef = useRef<HTMLElement>(null);
   const anchorRef = useRef<HTMLSpanElement>(null);
   const handlersRef = useRef<ContextMenuTriggerHandlers | null>(null);
   const heldRef = useRef<HeldInvocation | null>(null);
+  // True from a touch that starts before the menu attaches until it ends. The
+  // cell's own detector follows that press to its end, even if the menu
+  // attaches during it, because the menu's detector never saw it start.
+  const earlyPressRef = useRef(false);
+
   const triggerHandle = useRef<ContextMenuExternalTrigger>({
     triggerRef,
     anchorRef,
@@ -88,15 +113,25 @@ export function TableCellContextMenu({
         if (held.kind === 'contextmenu') {
           handlers.onContextMenu(held.event);
         } else {
-          handlers.onTouchStart(held.event);
+          handlers.openFromLongPress(held.point);
         }
       });
     },
   }).current;
 
-  if (actions === undefined || !hasContextActions(actions)) {
-    return children;
-  }
+  // The same hold time, movement tolerance and lift rule as the menu's own
+  // long press, for a press that starts before the menu attaches.
+  const earlyLongPress = useLongPress({
+    onLongPress: point => {
+      const handlers = handlersRef.current;
+      if (handlers != null) {
+        handlers.openFromLongPress(point);
+      } else {
+        heldRef.current = {kind: 'long-press', point};
+      }
+    },
+  });
+
   return (
     <>
       <ContextMenuTrigger
@@ -117,34 +152,36 @@ export function TableCellContextMenu({
         }}
         onTouchStart={event => {
           const handlers = handlersRef.current;
-          if (handlers != null) {
+          if (handlers != null && !earlyPressRef.current) {
             handlers.onTouchStart(event);
             return;
           }
-          heldRef.current =
-            event.touches.length === 1 ? {kind: 'touch', event} : null;
+          earlyPressRef.current = true;
+          earlyLongPress.onTouchStart(event);
           void loadTableContextMenu();
         }}
         onTouchMove={event => {
-          if (handlersRef.current == null) {
-            heldRef.current = null;
-            return;
+          if (earlyPressRef.current) {
+            earlyLongPress.onTouchMove(event);
+          } else {
+            handlersRef.current?.onTouchMove(event);
           }
-          handlersRef.current.onTouchMove(event);
         }}
         onTouchEnd={event => {
-          if (handlersRef.current == null) {
-            heldRef.current = null;
-            return;
+          if (earlyPressRef.current) {
+            earlyLongPress.onTouchEnd(event);
+            earlyPressRef.current = event.touches.length > 0;
+          } else {
+            handlersRef.current?.onTouchEnd(event);
           }
-          handlersRef.current.onTouchEnd(event);
         }}
         onTouchCancel={event => {
-          if (handlersRef.current == null) {
-            heldRef.current = null;
-            return;
+          if (earlyPressRef.current) {
+            earlyLongPress.onTouchCancel(event);
+            earlyPressRef.current = false;
+          } else {
+            handlersRef.current?.onTouchCancel(event);
           }
-          handlersRef.current.onTouchCancel(event);
         }}>
         {children}
       </ContextMenuTrigger>
