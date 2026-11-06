@@ -221,8 +221,8 @@ import Testing
 }
 
 // What VoiceOver reads for the drawn read-only and disabled field (record FR2).
-// The rendered accessibility tree is not measured until an app-hosted test
-// target exists; these assert what the view gives `accessibilityRepresentation`.
+// These assert what the view gives `accessibilityRepresentation`. The host
+// app's UI test reads the rendered accessibility tree.
 
 @MainActor
 @Test func aReadOnlyFieldReadsAsAnUndimmedTextFieldWithItsValue() {

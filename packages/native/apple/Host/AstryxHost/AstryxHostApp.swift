@@ -2,9 +2,9 @@
 
 import Astryx
 
-/// The host app UI tests drive: one screen per Swift component, chosen by the
-/// launch argument `-component <Name>`, such as `-component Button`. Without
-/// it, the app lists every screen.
+/// The host app UI tests drive: one screen per Swift component with a host
+/// screen, chosen by the launch argument `-component <Name>`, such as
+/// `-component Button`. Without it, the app lists every screen.
 @main
 struct AstryxHostApp: App {
   var body: some Scene {

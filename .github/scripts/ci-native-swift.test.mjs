@@ -143,4 +143,15 @@ describe('native Swift routing', () => {
     expect(script).toContain('shasum -a 256 -c -');
     expect(script).toContain("-path '*/Host/project.yml'");
   });
+
+  it('reports package and host result bundles through one function', () => {
+    const script = fs.readFileSync(
+      path.join(root, '.github/scripts/native-swift.sh'),
+      'utf8',
+    );
+    expect(script.match(/xcresulttool get test-results summary/g)).toHaveLength(
+      1,
+    );
+    expect(script.match(/^\s+report_results "\$results"/gm)).toHaveLength(2);
+  });
 });
