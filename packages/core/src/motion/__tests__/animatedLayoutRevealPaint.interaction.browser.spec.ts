@@ -165,6 +165,22 @@ function expectPaintedRide(result: PaintedRide): void {
   }
 }
 
+/**
+ * Waits until no animation on the page still runs. It reads again after each
+ * wait, so a motion that starts late is waited for too.
+ */
+async function settleMotions(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    const running = () =>
+      document
+        .getAnimations()
+        .filter(animation => animation.playState !== 'finished');
+    for (let left = running(); left.length > 0; left = running()) {
+      await Promise.allSettled(left.map(async animation => animation.finished));
+    }
+  });
+}
+
 /** Opens the gliding rows story and marks the first row's toggle and the row after it. */
 async function openTable(page: Page): Promise<void> {
   await page.goto(
@@ -235,7 +251,7 @@ test.describe('spec:AST-105 FR9: an edge reveal paints its edge on the content b
     const contentId = (await trigger.getAttribute('aria-controls')) ?? '';
     for (let i = 0; i < 3; i++) {
       await trigger.click();
-      await page.waitForTimeout(700);
+      await settleMotions(page);
     }
     const parts = await page.evaluate(id => {
       const region = document.getElementById(id);
@@ -289,9 +305,9 @@ test.describe('spec:AST-105 FR9: an edge reveal paints its edge on the content b
       clips: false,
       partMotions: 1,
     });
-    await page.waitForTimeout(700);
+    await settleMotions(page);
     await page.locator('[data-test-id="expand"]').click();
-    await page.waitForTimeout(700);
+    await settleMotions(page);
     const ride = await paintedRide(page, {
       trigger: '[data-test-id="expand"]',
       content: '[data-expansion-panel]',
