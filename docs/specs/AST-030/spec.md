@@ -581,6 +581,17 @@ they are separately named.
   help when the reference is unclear. A range it cannot read fails the check. A
   maintainer handles a false positive through the normal fix-forward route,
   with no bypass.
+- **FR28 — A release interaction check's throwaway pull request runs the full
+  WebKit scope.** A release interaction check's throwaway pull request, on an
+  `interaction-check/` branch that the release tooling creates for a named
+  release attempt, runs the full WebKit browser spec scope. The workflow
+  verifies the branch prefix, the creator identity and that the head repository
+  is this one, so a pull request that only picks the prefix, or comes from a
+  fork, does not qualify. The creator check matches the shared automation
+  account, so another automated pull request from that account on an
+  `interaction-check/` branch also qualifies; the prefix is reserved for the
+  release tooling. Such pull requests stay non-mergeable, and this widens the
+  scope of no other pull request (DEC-24).
 
 ### Platform support
 
@@ -645,6 +656,7 @@ The nightly perf lane is the one scheduled measurement outside them (FR18).
 | FR24     | `ci-heavy-lanes.test.mjs` cadence cases                                                                                                                                          | release-check 170 and 176 minutes old; the unit lane hourly beside it; weekday 06:37 Pacific inside the window in standard and daylight time; the pre-cut check already started; the tip already checked; a weekend morning; before 06:30 and after 07:30                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | a release-check starts inside the 175-minute window, the pre-cut check is skipped or starts twice, or it runs on a weekend                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | FR26     | `ci-lab-only-routing.test.mjs`, `change-scope.test.mjs` and `test-scope-action.test.mjs` Lab-only cases                                                                          | a Lab-only change, with and without a Changeset; a new Lab component with its routes, discovery entry and story; Lab beside core, charts, a core Storybook story, a route or discovery entry for another component, an entry-file diff GitHub leaves out, the docsite, the Sandbox, a workflow, the lockfile, root configuration, internal tooling or a spec record; a rename into or out of Lab; an incomplete list; a base classifier without the lane; each required context, its owners, the UI legs' Lab tests, the UI and Node guard tests, the repository guards, the Storybook build and Lab typecheck, the heavy suites with and without a label, lint and an agent push                                                                                                                | a mixed change takes the Lab-only lane; a new Lab component's own entry files make it mixed, or another component's do not; a changed existing story, a story for a component the change does not carry, or a renamed entry file keeps the lane; the CLI official-packages check, the route-lock check when the lock changed, or the Storybook build does not run for one; a required context skips or fails, or passes without its notice; a Lab test, a guard test, a repository guard, the Lab typecheck or the Storybook build does not run; an unlabelled heavy suite, the docsite or the full typecheck runs, or a label's suite cannot audit Lab; lint is skipped |
 | FR27     | `check-public-text.test.mjs` over the check and the Lint workflow step                                                                                                           | each identifier shape; a hashed name and host made up in the test; ordinary text; a finding in a commit message, an added line and the description; a match before the merge base; an empty range, a bad sha, a missing commit and a missing digest file                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | a reference passes; the output holds the matched text; a match on the base branch fails a later pull request; an unreadable range passes; the step runs the pull request's own copy                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| FR28     | `playwright-legs.test.mjs` creator, prefix and head-repository cases ("plans every WebKit spec only for the release tooling's interaction-check/ pull request")                  | release interaction-check PRs: the release tooling's pull request; the same prefix from another author or from a fork; the tooling account on another branch                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | A prefix-only, other-author or fork pull request gets the full WebKit scope, or the tooling's interaction-check pull request does not                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
 ## Decision log
 
@@ -1146,6 +1158,19 @@ unchanged `audit` and `always` specs still do not run on a pull request.
 Rejected: dropping the five-component limit for every audit (the visual,
 accessibility and RTL audits of a wide change do not fit the default check's
 time).
+
+### DEC-24 — Release interaction-check pull requests run the full WebKit scope
+
+**Reference:** `spec:AST-030/DEC-24`
+**Decider:** the Chief with the release owner, `2026-11-06`
+
+A release interaction check's throwaway pull request runs the full WebKit
+browser spec scope (FR28). It qualifies only when its head branch starts with
+`interaction-check/`, the release tooling's account opened it, and its head
+repository is this repository. Such pull requests stay non-mergeable, and the
+rule widens the scope of no other pull request.
+
+Rejected: any pull request on the prefix (a prefix alone is spoofable).
 
 ## Open questions
 
