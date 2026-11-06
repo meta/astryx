@@ -146,6 +146,7 @@ import {
   canElementScroll,
   createNativeScrollProbe,
   parentAcrossShadow,
+  parseTouchAction,
 } from './nativeScroll';
 import {containsAlongFlatTree} from '../utils/flatTree';
 import {isIosWebKit} from '../utils/touchQueries';
@@ -214,6 +215,11 @@ interface Registration {
    */
   authorTouchAction: {derived: string; author: string | null} | null;
   manageStyle: boolean;
+  /**
+   * The recognizers attached with `manageStyle: false`. The host styles the
+   * element for its other recognizers only.
+   */
+  readonly unstyled: Set<GestureRecognizer>;
   /** An action group (`family:action-groups` FR5). */
   actionGroup: boolean;
   /** The attachments that asked for the action group; it lasts while one does. */
@@ -252,7 +258,8 @@ export interface AttachOptions {
   /**
    * Let the host set the element's styles: its `touch-action`, and the
    * selection and callout lock a hold that does something keeps while it is
-   * held (`spec:AST-094` FR41). With false the caller keeps both.
+   * held (`spec:AST-094` FR41). With false the caller keeps both for this
+   * recognizer, and the host still styles the element for its others.
    * @default true
    */
   manageStyle?: boolean;
@@ -925,7 +932,16 @@ export class GestureHost {
     options: AttachOptions = {},
   ): () => void {
     const registration = this.registrationFor(element);
-    registration.manageStyle = options.manageStyle ?? registration.manageStyle;
+    // Each attachment says whether the host styles the element for its
+    // recognizer. The element is styled while an attached recognizer asks.
+    if (options.manageStyle === false) {
+      registration.unstyled.add(recognizer);
+      if (registration.recognizers.length === 0) {
+        registration.manageStyle = false;
+      }
+    } else {
+      registration.manageStyle = true;
+    }
     // An action group while any attachment asks, whatever their order.
     const asksForGroup = options.actionGroup === true;
     if (asksForGroup) {
@@ -963,6 +979,7 @@ export class GestureHost {
       if (index >= 0) {
         registration.recognizers.splice(index, 1);
       }
+      registration.unstyled.delete(recognizer);
       // A recognizer whose view goes away mid-gesture is cancelled, as in
       // UIKit when a view leaves the window.
       if (recognizer.state !== 'possible' || recognizer.isInvolved()) {
@@ -1394,6 +1411,7 @@ export class GestureHost {
         savedStyle: new Map(),
         authorTouchAction: null,
         manageStyle: true,
+        unstyled: new Set(),
         actionGroup: false,
         actionGroupAsks: 0,
       };
@@ -1497,7 +1515,8 @@ export class GestureHost {
     // A disabled recognizer leaves the browser everything (FR24).
     // Every pointer gets it: a touchscreen laptop's finger as a phone's (FR43).
     const active = registration.recognizers.filter(
-      recognizer => recognizer.isEnabled,
+      recognizer =>
+        recognizer.isEnabled && !registration.unstyled.has(recognizer),
     );
     let style: GestureHostStyle =
       active.length > 0 ? gestureHostStyle(active) : {};
@@ -2191,17 +2210,22 @@ export class GestureHost {
     // it). Only one that took this contact locks for it: a recognizer that
     // declined it (its pointer, or its own shouldReceiveTouch) has no hold
     // here.
-    // An element attached with manageStyle: false keeps its own styles, the
-    // lock included (AttachOptions.manageStyle).
-    const managed = (element: Element) =>
-      this.registry.get(element)?.manageStyle !== false;
+    // A recognizer attached with manageStyle: false leaves the element's
+    // styles to the caller, the lock included (AttachOptions.manageStyle).
+    const managed = (element: Element, recognizer?: GestureRecognizer) => {
+      const registration = this.registry.get(element);
+      return (
+        registration?.manageStyle !== false &&
+        (recognizer == null || registration?.unstyled.has(recognizer) !== true)
+      );
+    };
     const byLock = new Map<SelectionLock, Set<Element>>();
     for (const recognizer of recognizers) {
       const lock = recognizer.selectionLock;
       if (
         lock != null &&
         recognizer.view instanceof Element &&
-        managed(recognizer.view)
+        managed(recognizer.view, recognizer)
       ) {
         const elements = byLock.get(lock) ?? new Set<Element>();
         elements.add(recognizer.view);
@@ -2520,7 +2544,14 @@ export class GestureHost {
         if (
           kind === 'pan' &&
           (!panTakesMove(recognizer, -dx, -dy) ||
-            this.scrollerTakes(target, node, dx, dy, isHorizontal) ||
+            this.scrollerTakes(
+              target,
+              node,
+              dx,
+              dy,
+              isHorizontal,
+              this.keepsAxis(node, isHorizontal),
+            ) ||
             // A scroll-edge pan only past every scroller's edge.
             (isScrollEdgePan(recognizer) && scroll.canScroll(-dx, -dy)))
         ) {
@@ -2583,7 +2614,8 @@ export class GestureHost {
   /**
    * Whether a scroller between `target` and `boundary` (both included)
    * scrolls this wheel now, along the wheel's major axis. It uses the edge
-   * test a finger's probe uses (canElementScroll).
+   * test a finger's probe uses (canElementScroll). With `keepsBoundary`, the
+   * boundary's own scroll is its recognizers', as it is for a finger.
    */
   private scrollerTakes(
     target: unknown,
@@ -2591,12 +2623,16 @@ export class GestureHost {
     dx: number,
     dy: number,
     isHorizontal: boolean,
+    keepsBoundary: boolean,
   ): boolean {
     for (
       let node: Node | null = target instanceof Node ? target : null;
       node != null;
       node = parentAcrossShadow(node)
     ) {
+      if (node === boundary && keepsBoundary) {
+        break;
+      }
       if (
         node instanceof Element &&
         canElementScroll(node, isHorizontal ? -dx : 0, isHorizontal ? 0 : -dy)
@@ -2608,6 +2644,30 @@ export class GestureHost {
       }
     }
     return false;
+  }
+
+  /**
+   * Whether the touch-action the host derives for `element` keeps the
+   * wheel's axis from the browser. A finger's pan along that axis is then
+   * the element's recognizers', and so is a trackpad's scroll of the element
+   * itself.
+   */
+  private keepsAxis(element: Element, isHorizontal: boolean): boolean {
+    const registration = this.registry.get(element);
+    if (registration == null || !registration.manageStyle) {
+      return false;
+    }
+    const active = registration.recognizers.filter(
+      recognizer =>
+        recognizer.isEnabled && !registration.unstyled.has(recognizer),
+    );
+    const touchAction =
+      active.length > 0 ? gestureHostStyle(active).touchAction : undefined;
+    if (touchAction == null) {
+      return false;
+    }
+    const allowed = parseTouchAction(touchAction);
+    return isHorizontal ? !allowed.x : !allowed.y;
   }
 
   /** A ctrl-wheel pinch's two contacts, `span` apart around its center. */

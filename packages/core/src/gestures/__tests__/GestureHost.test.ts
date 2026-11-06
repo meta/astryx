@@ -3223,6 +3223,37 @@ describe('GestureHost', () => {
     expect(lock).not.toHaveBeenCalled();
   });
 
+  for (const holdFirst of [false, true]) {
+    it(`styles an element for its other recognizers when one attaches with manageStyle: false ${holdFirst ? 'before' : 'after'} them, and restores it when both leave`, () => {
+      detachers.push(coarsePrimaryPointer());
+      const {row} = mount('<div id="row">A row a pan and a catch share</div>');
+      const lock = vi.fn(() => () => {});
+      const attachHold = () =>
+        host.attach(
+          row,
+          new LongPressGestureRecognizer({name: 'hold', selectionLock: lock}),
+          {manageStyle: false},
+        );
+      const detachEarly = holdFirst ? attachHold() : null;
+      const detachPan = host.attach(
+        row,
+        new PanGestureRecognizer({name: 'pan', direction: 'horizontal'}),
+      );
+      const detachHold = detachEarly ?? attachHold();
+      // The pan's touch-action, and none of the hold's styles or its lock.
+      expect(row.getAttribute('data-astryx-touch-action')).toBe(
+        'pan-y pinch-zoom',
+      );
+      const finger = {id: 1, x: 5, y: 5};
+      touch('touchstart', row, [finger], [finger], 0);
+      touch('touchend', row, [finger], [], 600);
+      expect(lock).not.toHaveBeenCalled();
+      detachHold();
+      detachPan();
+      expect(row.hasAttribute('data-astryx-touch-action')).toBe(false);
+    });
+  }
+
   it('a long press brings lockSelection by default', () => {
     expect(new LongPressGestureRecognizer().selectionLock).toBe(lockSelection);
     expect(new TapGestureRecognizer().selectionLock).toBeNull();
