@@ -378,7 +378,7 @@ describe('PageControl', () => {
     expect(old.style.transition).toBe(SWITCH);
   });
 
-  it('under a finger and Reduce Motion, every opacity change fades in 200 ms on easeInOut, whatever the theme (design:reduced-motion DR2)', () => {
+  it('under a finger and Reduce Motion, the current indicator changes at once, with no fade, whatever the theme (design:reduced-motion DR2)', () => {
     asTouch({reduced: true});
     const onChange = vi.fn();
     const themed = (value: number) => (
@@ -398,13 +398,11 @@ describe('PageControl', () => {
     );
     expect(dots.length).toBe(5);
     for (const dot of dots) {
-      expect(dot.style.transition).toBe(
-        'opacity 0.2s cubic-bezier(0.42, 0, 0.58, 1)',
-      );
+      expect(dot.style.transition).toBe('none');
     }
   });
 
-  it('under a finger and Reduce Motion, a held finger’s platter and the dots’ dimming show and hide on the policy’s fade', () => {
+  it('under a finger and Reduce Motion, a held finger’s platter and the dots’ dimming show at once and hide on the policy’s fade (design:reduced-motion DR2)', () => {
     vi.useFakeTimers();
     try {
       asTouch({reduced: true});
@@ -440,14 +438,17 @@ describe('PageControl', () => {
       });
       expect(slider.hasAttribute('data-interacting')).toBe(true);
       expect(fadeOfLook()).toEqual({
-        platter: reduced,
-        dots: Array.from({length: 5}, () => reduced),
+        platter: 'none',
+        dots: Array.from({length: 5}, () => 'none'),
       });
       act(() => {
         touch('touchend');
       });
       expect(slider.hasAttribute('data-interacting')).toBe(false);
-      expect(fadeOfLook().platter).toBe(reduced);
+      expect(fadeOfLook()).toEqual({
+        platter: reduced,
+        dots: Array.from({length: 5}, () => reduced),
+      });
     } finally {
       vi.useRealTimers();
     }

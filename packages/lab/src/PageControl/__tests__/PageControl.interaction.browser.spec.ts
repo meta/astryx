@@ -804,7 +804,7 @@ const holdsOrJumps = (
   return values.size <= 2;
 };
 
-test('under Reduce Motion nothing slides or scales, and no fade runs over 200 ms on a coarse pointer (design:reduced-motion DR1, DR2)', async ({
+test('under Reduce Motion nothing slides or scales, the current indicator and a held finger’s platter change at once, and no fade runs over 200 ms on a coarse pointer (design:reduced-motion DR1, DR2)', async ({
   page,
 }) => {
   await page.emulateMedia({reducedMotion: 'reduce'});
@@ -857,16 +857,45 @@ test('under Reduce Motion nothing slides or scales, and no fade runs over 200 ms
   // The window still keeps the page in view.
   await expect.poll(stripX, {timeout: 2000}).toBeCloseTo(-19 * PITCH, 0);
   expect(await longestFade()).toBeLessThanOrEqual(200);
-  // A change that is not a tap (a key) fades the old dot: at most 200 ms.
+  // A change that is not a tap (a key) changes the current indicator at once.
   await slider.focus();
   await page.keyboard.press('ArrowRight');
   await expect.poll(async () => valueNow(slider)).toBe(28);
-  expect(await longestFade()).toBeLessThanOrEqual(200);
-  // A held finger's platter fades in and out in at most 200 ms too.
+  expect(await longestFade()).toBe(0);
+  // A held finger's platter shows at once, and fades out on the lift.
   const finger = await indicatorCenter(slider, 27);
+  const frames = slider.evaluate(
+    el =>
+      new Promise<{held: boolean; opacity: number}[]>(resolve => {
+        const seen: {held: boolean; opacity: number}[] = [];
+        const tick = () => {
+          seen.push({
+            held: el.hasAttribute('data-interacting'),
+            opacity: Number(getComputedStyle(el, '::before').opacity),
+          });
+          const held = seen.map(frame => frame.held);
+          const lifted = held.lastIndexOf(true);
+          if (lifted !== -1 && seen.length - lifted > 15) {
+            resolve(seen);
+          } else if (seen.length < 180) {
+            requestAnimationFrame(tick);
+          } else {
+            resolve(seen);
+          }
+        };
+        requestAnimationFrame(tick);
+      }),
+  );
   await driver.play(
     drag(finger, {x: finger.x + 1, y: finger.y}, {durationMs: 400, restMs: 0}),
   );
+  const seen = await frames;
+  const shown = seen.findIndex(frame => frame.held);
+  const lifted = seen.map(frame => frame.held).lastIndexOf(true) + 1;
+  expect(shown).toBeGreaterThan(-1);
+  expect(seen[shown].opacity).toBe(1);
+  expect(lifted).toBeLessThan(seen.length);
+  expect(seen[lifted].opacity).toBeGreaterThan(0.5);
   const platterFade = await slider.evaluate(el =>
     Math.max(
       ...getComputedStyle(el, '::before')

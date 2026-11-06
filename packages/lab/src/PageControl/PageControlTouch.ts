@@ -45,7 +45,7 @@ import {
 const PC = pageControl;
 
 /**
- * Under Reduce Motion, every opacity change takes the one policy's fade:
+ * Under Reduce Motion, the held look's release takes the one policy's fade:
  * 200 ms on a coarse pointer, and none on any other. It is null when motion
  * is not reduced.
  */
@@ -263,8 +263,9 @@ export function usePageControlTouch({
   };
 
   // Under Reduce Motion the held look, the platter and the dots' dimming,
-  // takes the policy's fade. It is written before the look changes.
-  const writeHeldFade = () => {
+  // shows at once and takes the policy's fade on the release. It is written
+  // before the look changes.
+  const writeHeldFade = (isRelease: boolean) => {
     const root = rootRef.current;
     if (!isTouch || root == null) {
       return;
@@ -273,12 +274,13 @@ export function usePageControlTouch({
     if (reduced == null) {
       return;
     }
+    const transition = isRelease ? reduced : 'none';
     // The platter is the root's ::before: its fade is a custom property.
-    root.style.setProperty('--_page-control-platter-transition', reduced);
+    root.style.setProperty('--_page-control-platter-transition', transition);
     for (const dot of Array.from(
       stripRef.current?.children ?? [],
     ) as HTMLElement[]) {
-      dot.style.transition = reduced;
+      dot.style.transition = transition;
     }
   };
 
@@ -292,14 +294,14 @@ export function usePageControlTouch({
     g.isScrubbing = false;
     g.geo = null;
     g.centres = [];
-    writeHeldFade();
+    writeHeldFade(true);
     setInteracting(false);
     setScrubbing(false);
   };
   // The platter and the dimmed indicators are the touch presentation.
   const showHeld = () => {
     if (isTouch) {
-      writeHeldFade();
+      writeHeldFade(false);
       setInteracting(true);
     }
   };
@@ -476,8 +478,9 @@ export function usePageControlTouch({
   const shownPageRef = useRef(current);
   // Syncs the indicators' opacity transitions with the page. The old current
   // indicator fades, faster after a tap; every other opacity change is a
-  // switch. This runs before the window effect: its style reads would start
-  // the transitions on the previous values.
+  // switch. Under Reduce Motion the highlight is a selection colour, so it
+  // changes at once. This runs before the window effect: its style reads
+  // would start the transitions on the previous values.
   useLayoutEffect(() => {
     const old = shownPageRef.current;
     shownPageRef.current = current;
@@ -492,19 +495,19 @@ export function usePageControlTouch({
     if (!isTouch || root == null) {
       return;
     }
-    // Under Reduce Motion every dot takes the policy's fade.
-    const reduced = reducedFadeOf(root);
+    const isReduced = reducedMotionFade(root) != null;
     const fade = fadeOf(
       kind === 'tap' ? PC.tapFadeOutMs : PC.fadeOutMs,
       PC.fadeOutCurve,
     );
+    const other = isReduced ? 'none' : SWITCH;
     let fading: HTMLElement | null = null;
     for (const dot of Array.from(
       stripRef.current?.children ?? [],
     ) as HTMLElement[]) {
-      const isOld = Number(dot.dataset.page) === old;
-      dot.style.transition = reduced ?? (isOld ? fade : SWITCH);
-      if (isOld && reduced == null) {
+      const isFading = !isReduced && Number(dot.dataset.page) === old;
+      dot.style.transition = isFading ? fade : other;
+      if (isFading) {
         fading = dot;
       }
     }
