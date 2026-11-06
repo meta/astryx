@@ -10,6 +10,7 @@
  */
 
 import {act} from 'react';
+import {fireEvent, within} from '@testing-library/react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {hydrateRoot} from 'react-dom/client';
 import {renderToString} from 'react-dom/server';
@@ -65,6 +66,23 @@ describe('Calendar today across a server and a browser in different zones', () =
     // its space but is hidden from everyone.
     expect(serverMarkup).not.toContain('aria-current');
     expect(serverMarkup).toContain('aria-hidden="true"');
+    // The month label is empty and both month buttons are unavailable.
+    const server = document.createElement('div');
+    server.innerHTML = serverMarkup;
+    const previous = within(server).getByRole('button', {
+      name: 'Previous month',
+    });
+    const next = within(server).getByRole('button', {name: 'Next month'});
+    for (const button of [previous, next]) {
+      expect(button.matches(':disabled, [aria-disabled="true"]')).toBe(true);
+    }
+    const header = previous.parentElement!;
+    expect(header.contains(next)).toBe(true);
+    const headerText = [...header.childNodes]
+      .filter(node => !node.contains(previous) && !node.contains(next))
+      .map(node => node.textContent)
+      .join('');
+    expect(headerText).toBe('');
     expect(errors).toEqual([]);
     expect(
       container.querySelector('[role="grid"]')?.getAttribute('aria-label'),
@@ -74,6 +92,27 @@ describe('Calendar today across a server and a browser in different zones', () =
         .querySelector('[aria-current="date"]')
         ?.getAttribute('data-date'),
     ).toBe('2026-12-01');
+    // The first month to appear is not a change, so nothing is announced.
+    expect(
+      document.querySelector('[data-astryx-live-region="polite"]'),
+    ).toBeNull();
+    unmount();
+  });
+
+  it('keeps both shown months when a day in the second month is picked after hydration', async () => {
+    const {container, errors, unmount} = await serverThenHydrate(
+      <Calendar numberOfMonths={2} />,
+    );
+    expect(errors).toEqual([]);
+    const labels = () =>
+      [...container.querySelectorAll('[role="grid"]')].map(grid =>
+        grid.getAttribute('aria-label'),
+      );
+    expect(labels()).toEqual(['December 2026', 'January 2027']);
+    await act(async () => {
+      fireEvent.click(container.querySelector('[data-date="2027-01-15"]')!);
+    });
+    expect(labels()).toEqual(['December 2026', 'January 2027']);
     unmount();
   });
 

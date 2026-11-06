@@ -362,8 +362,8 @@ export function Calendar({ref, ...props}: CalendarProps) {
       calendar,
     });
 
-  // Focus date state (which month is visible), set once the person moves the
-  // month. Until then the opening month is derived on each render.
+  // Focus date state (which month is visible). Null only while the opening
+  // month waits for today.
   const [internalFocusDate, setInternalFocusDate] = useState<PlainDate | null>(
     getOpeningFocusDate,
   );
@@ -371,9 +371,18 @@ export function Calendar({ref, ...props}: CalendarProps) {
   // Use controlled focusDate if callback is provided, otherwise use internal state
   const isControlledFocus =
     focusDateProp !== undefined && onFocusDateChange !== undefined;
+  // Store the opening month in the first render that knows today, so a later
+  // pick or value change does not move the shown months.
+  const openingFocusDate =
+    !isControlledFocus && internalFocusDate == null && today != null
+      ? getOpeningFocusDate()
+      : null;
+  if (openingFocusDate != null) {
+    setInternalFocusDate(openingFocusDate);
+  }
   const knownFocusDate = isControlledFocus
     ? plainDateFromISO(focusDateProp)
-    : (internalFocusDate ?? getOpeningFocusDate());
+    : (internalFocusDate ?? openingFocusDate);
   // Before the month is known the grid is hidden, and the month math below
   // uses a stand-in date that nothing can act on before hydration ends.
   const isMonthKnown = knownFocusDate != null;
@@ -780,7 +789,8 @@ export function Calendar({ref, ...props}: CalendarProps) {
       </div>
       {/* Month grids */}
       {/* Before the month is known the grids keep their space but stay hidden
-          and out of reach, so the month appears with no layout jump. */}
+          and out of reach. With the default six-row grid, the month appears
+          with no layout jump. */}
       <div
         aria-hidden={isMonthKnown ? undefined : true}
         inert={!isMonthKnown}
