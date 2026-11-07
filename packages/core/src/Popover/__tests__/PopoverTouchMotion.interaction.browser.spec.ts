@@ -400,23 +400,26 @@ test.describe('with a mouse (a fine primary pointer)', () => {
     await trigger.click();
     await expect(trigger).toHaveAttribute('aria-expanded', 'true');
     const layer = page.locator('[popover]:has(.astryx-popover)').first();
-    // The layer's own CSS entrance runs; no UIKit scale is set or played.
-    const entrance = await layer.evaluate(element => ({
-      inlineScale: (element as HTMLElement).style.getPropertyValue('scale'),
-      inlineAnimation: (element as HTMLElement).style.getPropertyValue(
-        'animation-name',
-      ),
-      animationName: getComputedStyle(element).animationName,
-      played: element
-        .getAnimations()
-        .some(
-          animation =>
-            !(animation instanceof CSSAnimation) &&
-            (animation.effect as KeyframeEffect | null)
-              ?.getKeyframes()
-              .some(frame => 'scale' in frame) === true,
-        ),
-    }));
+    // The surface's CSS entrance runs; no UIKit scale is set or played.
+    const entrance = await layer.evaluate(element => {
+      const surface = element.querySelector<HTMLElement>('.astryx-popover');
+      return {
+        inlineScale: (element as HTMLElement).style.getPropertyValue('scale'),
+        inlineAnimation:
+          surface?.style.getPropertyValue('animation-name') ?? 'no surface',
+        animationName:
+          surface == null ? 'none' : getComputedStyle(surface).animationName,
+        played: element
+          .getAnimations({subtree: true})
+          .some(
+            animation =>
+              !(animation instanceof CSSAnimation) &&
+              (animation.effect as KeyframeEffect | null)
+                ?.getKeyframes()
+                .some(frame => 'scale' in frame) === true,
+          ),
+      };
+    });
     expect(entrance.inlineScale).toBe('');
     expect(entrance.inlineAnimation).toBe('');
     expect(entrance.animationName).not.toBe('none');
@@ -892,7 +895,7 @@ test('a style read after the opening tap finds no CSS entrance running on the la
         }
         resolve(
           layer
-            .getAnimations()
+            .getAnimations({subtree: true})
             .filter(
               animation =>
                 animation instanceof CSSAnimation &&

@@ -679,6 +679,15 @@ inside a layer within the card, so before the layer's own handlers; the change
 is staged as `[breaking]` (`spec:AST-017` FR32) and `component:SelectableCard`
 `CLN-0026` removes that handler.
 
+Tooltip, HoverCard and ContextMenu's entrance layout is a performance gap. They
+play their entrance on the anchored layer itself. Tooltip and HoverCard's layer
+is their themed surface: it carries the theme class and the caller's `xstyle`,
+`className` and `style`. Chromium lays an anchored element out again each time
+its own style changes. On a page with work on every frame, each frame of their
+150 ms entrance therefore runs two to four layouts. A Tooltip entrance runs
+about 14 to 18 layouts. The other components that play `layerAnimations` play
+it on the surface inside the layer and run no layout while it plays.
+
 ## Change coupling
 
 - A change to `useLayer` hosting or lifecycle verifies safe inline placement,

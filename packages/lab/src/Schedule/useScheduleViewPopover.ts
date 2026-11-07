@@ -21,6 +21,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
+import {layerAnimations} from '@astryxdesign/core/Layer';
 import {usePopover, type UsePopoverReturn} from '@astryxdesign/core/Popover';
 
 const TRIGGER_ATTRIBUTE = 'data-schedule-popover-trigger';
@@ -82,6 +83,9 @@ export function useScheduleViewPopover(
     // Popover's own defaults, spelled out where the hook's differ.
     padding: 3,
     surfaceTarget: 'popover',
+    // The entrance runs on the surface: an anchored layer lays out again on
+    // each frame its own style animates.
+    xstyle: layerAnimations.below,
     onHide: useCallback(() => {
       setOpenKey(null);
     }, []),
