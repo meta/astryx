@@ -6,12 +6,14 @@
  * @description Splits the spec files of one Playwright suite into legs of
  *   about equal running time, from the per-file times a CI run recorded
  *   (spec:AST-030 FR13).
- * @input `legs`: the suite's times key, its path filters, the changed files,
- *   a leg's setup time and time limit. `plan`: the suite's times key, its
+ * @input `select`: the listed spec files, the changed files, the shared-code
+ *   pattern and the suite's own path filters. `legs`: the suite's times key,
+ *   its path filters, the changed files, a leg's setup time and time limit. `plan`: the suite's times key, its
  *   config and project, this leg and the leg count, and any Playwright path
  *   filters; `.github/playwright-leg-durations.json`. `record`: CI job logs
  *   of the list reporter.
- * @output `legs`: `count=<legs>`, `runs=<true|false>` and the `leg=<i>` this
+ * @output `select`: the path filters and spec files a WebKit run covers, one
+ *   per line. `legs`: `count=<legs>`, `runs=<true|false>` and the `leg=<i>` this
  *   leg plans, for `$GITHUB_OUTPUT`.
  *   `plan`: this leg's spec files, one per line, for Playwright's
  *   `--test-list`, and `files=<count>` for `$GITHUB_OUTPUT`. `record`: the
@@ -30,7 +32,11 @@ import {
   medianOf,
   splitByDuration,
 } from '../../scripts/lib/duration-split.mjs';
-import {listedFiles} from './a11y-pr-contracts.mjs';
+import {
+  isComponentPath,
+  listedFiles,
+  specOwners,
+} from './a11y-pr-contracts.mjs';
 
 // CI may run this file from the workflow's own commit, outside the checkout,
 // in the checkout's root.
@@ -200,6 +206,58 @@ export function isInteractionSpec(file) {
       file,
     )
   );
+}
+
+// The component folder a path is in: `packages/<package>/src/<Component>`.
+// Shared folders (`motion`, `hooks`, `utils`) are not component folders: the
+// lane's shared-code pattern decides what their changes run.
+// Files that put no code on a proof's page: tests, stories, docs, notes.
+const NOT_RENDERED = /(?:^|\/)__tests__\/|\.(?:test|stories|doc)\.[^/]+$|\.md$/;
+
+/**
+ * The interaction specs in each component folder whose code a change
+ * reaches: a changed file in `packages/<package>/src/<Component>/` that puts
+ * code on a page selects every listed interaction spec under that folder.
+ * @param {string[]} listed every file of the tree
+ * @param {string[]} changed the changed files
+ */
+export function folderSpecs(listed, changed) {
+  // A component folder as the accessibility contracts read it.
+  const folderOf = file => specOwners(file).prefixes;
+  const folders = new Set(
+    changed
+      .filter(
+        file =>
+          isComponentPath(file) &&
+          !NOT_RENDERED.test(file) &&
+          !isInteractionSpec(file),
+      )
+      .flatMap(folderOf),
+  );
+  return listed
+    .filter(
+      file =>
+        isInteractionSpec(file) &&
+        folderOf(file).some(folder => folders.has(folder)),
+    )
+    .sort();
+}
+
+/**
+ * What a WebKit run covers for a change. The suite's own path filters run
+ * when the change touches shared code (`shared`); every interaction spec the
+ * change edits runs; and so does every spec in a folder whose code it changes.
+ * An unknown change (no file list) runs the suite's own filters only.
+ * @param {{listed: string[], changed: string[] | null, shared: RegExp, filters: string[]}} options
+ */
+export function selectProofs({listed, changed, shared, filters}) {
+  if (changed == null) return [...filters];
+  const out = new Set();
+  if (changed.some(file => shared.test(file)))
+    for (const filter of filters) out.add(filter);
+  for (const file of changed) if (isInteractionSpec(file)) out.add(file);
+  for (const file of folderSpecs(listed, changed)) out.add(file);
+  return [...out];
 }
 
 // A suite with one unnamed project prints no `[project]`.
@@ -425,6 +483,37 @@ function legs(args) {
     );
 }
 
+function select(args) {
+  const split = args.indexOf('--');
+  const own = split === -1 ? args : args.slice(0, split);
+  const filters = split === -1 ? [] : args.slice(split + 1);
+  const listedFile = option(own, '--listed');
+  const pattern = option(own, '--shared');
+  if (!listedFile || !pattern || filters.length === 0)
+    throw new Error(
+      'usage: select --listed <file> --shared <pattern> [--changed <file>] -- <filters...>',
+    );
+  const lines = file =>
+    fs.readFileSync(file, 'utf8').split('\n').filter(Boolean);
+  const changedFile = option(own, '--changed');
+  const changed =
+    changedFile && fs.existsSync(changedFile) ? lines(changedFile) : null;
+  // Without `--changed` every listed path is planned on purpose (the release
+  // interaction check); only a list that was meant to be there and is not
+  // gets a warning.
+  if (own.includes('--changed') && changed == null)
+    console.error(
+      "::warning title=Changed specs not planned::The scope step could not list the changed files, so only this lane's own paths run here.",
+    );
+  const selected = selectProofs({
+    listed: lines(listedFile),
+    changed,
+    shared: new RegExp(pattern),
+    filters,
+  });
+  for (const line of selected) console.log(line);
+}
+
 function record(args) {
   const key = option(args, '--key');
   const project = option(args, '--project');
@@ -471,10 +560,12 @@ if (
 ) {
   const [command, ...args] = process.argv.slice(2);
   try {
-    if (command === 'legs') legs(args);
+    if (command === 'select') select(args);
+    else if (command === 'legs') legs(args);
     else if (command === 'plan') plan(args);
     else if (command === 'record') record(args);
-    else throw new Error('usage: playwright-legs.mjs legs|plan|record ...');
+    else
+      throw new Error('usage: playwright-legs.mjs select|legs|plan|record ...');
   } catch (error) {
     console.error(error.message);
     process.exitCode = 1;

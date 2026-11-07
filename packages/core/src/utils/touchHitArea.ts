@@ -13,7 +13,7 @@
  *   press-tracking groups use it, and so can any control whose target outgrows
  *   its box under a finger.
  *
- * SYNC: When modified, update utils/touchHitArea.stylex.ts and
+ * SYNC: When modified, update internal/touchHitArea.stylex.ts and
  * touchHitArea.test.tsx.
  */
 
@@ -47,6 +47,15 @@ export interface TouchHitAreaOptions {
    * @default true
    */
   readonly checkAtPress?: boolean;
+  /**
+   * Whether a finger's press that lands on a descendant is the element's,
+   * however near a neighbour is, read as `watchHitArea`'s
+   * `ownsDescendantTouches`. An owner that draws the band on a descendant,
+   * and whose content never paints past its box, turns it off, so a band
+   * press nearer a neighbour is not the element's.
+   * @default true
+   */
+  readonly ownsDescendantTouches?: boolean;
 }
 
 const NO_OPTIONS: TouchHitAreaOptions = {};
@@ -88,7 +97,7 @@ function settlingAnimations(element: HTMLElement): Animation[] {
 function watchAtRest(
   element: HTMLElement,
   minSize: number,
-  {growth, checkAtPress}: TouchHitAreaOptions,
+  {growth, checkAtPress, ownsDescendantTouches = true}: TouchHitAreaOptions,
 ): () => void {
   let stopWatch = (): void => {};
   let isStopped = false;
@@ -128,11 +137,12 @@ function watchAtRest(
           }
         });
       },
-      // The layer is the host's own `::after`, so a touch on the host's
-      // content is the host's, even where that content paints past its box.
+      // By default the layer is the host's own `::after`, so a touch on the
+      // host's content is the host's, even where that content paints past
+      // its box.
       {
         minSize,
-        ownsDescendantTouches: true,
+        ownsDescendantTouches,
         growth:
           growth == null
             ? undefined
@@ -196,8 +206,9 @@ function holdWatch(
  * A callback ref that keeps its element's hit insets live while `enabled`:
  * the element takes taps, so it is interactive and not disabled or read-only.
  * Merge it into the element's ref, and pair it with `touchHitAreaStyles.layer`
- * on the same element. The watch lasts while the element is attached, so a
- * replaced element starts its own. A re-render that hands the same element a
+ * on the same element, or on a descendant with `ownsDescendantTouches` off.
+ * The watch lasts while the element is attached, so a replaced element starts
+ * its own. A re-render that hands the same element a
  * new merged ref keeps its watch. `options` set how the element grows. Keep
  * them stable, as a module constant. An element's first holder sets them.
  *
