@@ -1684,3 +1684,75 @@ for (const viewport of [
     });
   });
 }
+
+test("the caption toggle's width comes from its own delivery, never from a read of the toggle", async ({
+  page,
+}) => {
+  // A read of the toggle in a resize delivery can come after another
+  // observer's update in the same delivery, which forces a layout. The
+  // delivery's own size was measured in the layout before it.
+  await page.addInitScript(() => {
+    const reads: string[] = [];
+    (window as unknown as {__toggleReads: string[]}).__toggleReads = reads;
+    let isDelivering = false;
+    const Native = window.ResizeObserver;
+    window.ResizeObserver = class extends Native {
+      constructor(callback: ResizeObserverCallback) {
+        super((entries, observer) => {
+          isDelivering = true;
+          try {
+            callback(entries, observer);
+          } finally {
+            isDelivering = false;
+          }
+        });
+      }
+    };
+    const own = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'offsetWidth',
+    );
+    const get = own?.get as ((this: HTMLElement) => number) | undefined;
+    if (get == null) {
+      return;
+    }
+    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+      configurable: true,
+      get(this: HTMLElement): number {
+        if (
+          isDelivering &&
+          this.tagName === 'BUTTON' &&
+          this.closest('[data-lightbox-caption]') != null
+        ) {
+          reads.push('offsetWidth');
+        }
+        return get.call(this);
+      },
+    });
+  });
+  await page.route('https://picsum.photos/**', async route => {
+    const id = /\/id\/(\d+)\//.exec(route.request().url())?.[1] ?? '10';
+    await route.fulfill({
+      contentType: 'image/svg+xml',
+      body: photoSvg(COLORS[id] ?? '#888'),
+    });
+  });
+  await openStory(page, storybook(), 'core-lightbox--gallery-with-captions');
+  await page.getByRole('button', {name: 'Open gallery with captions'}).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('button', {name: 'more'})).toBeVisible();
+  await dialog.getByRole('button', {name: 'Next'}).click();
+  await expect(dialog.getByText('2 / 4')).toBeVisible();
+  await waitForRest(dialog.locator('[data-lightbox-viewport] > div').first());
+  await frames(page, 2);
+  // Back onto the clamped first caption, whose toggle mounts hidden and is
+  // shown by the band's delivery.
+  await page.keyboard.press('ArrowLeft');
+  await expect(dialog.getByText('1 / 4')).toBeVisible();
+  await expect(dialog.getByRole('button', {name: 'more'})).toBeVisible();
+  await frames(page, 2);
+  const reads = await page.evaluate(
+    () => (window as unknown as {__toggleReads: string[]}).__toggleReads,
+  );
+  expect(reads).toEqual([]);
+});

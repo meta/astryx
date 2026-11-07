@@ -574,7 +574,7 @@ const KEYBOARD_PAN_OFFSETS: Record<string, [number, number]> = {
 const VIDEO_CONTROLS_BAND = 48;
 
 /**
- * Calls `onDelivery` in each delivery of the shared ResizeObserver for
+ * Calls `onDelivery` with each entry of the shared ResizeObserver for
  * `element`. It skips the call that registers it, which runs in React's
  * commit, where a read forces a layout before the browser's own. The first
  * delivery comes after the browser lays `element` out. Where no
@@ -583,15 +583,15 @@ const VIDEO_CONTROLS_BAND = 48;
  */
 function observeAfterLayout(
   element: Element,
-  onDelivery: () => void,
+  onDelivery: (entry: ResizeObserverEntry) => void,
 ): (() => void) | null {
   if (typeof ResizeObserver === 'undefined') {
     return null;
   }
   let isRegistered = false;
-  const stop = observeResize(element, () => {
+  const stop = observeResize(element, entry => {
     if (isRegistered) {
-      onDelivery();
+      onDelivery(entry);
     }
   });
   isRegistered = true;
@@ -987,19 +987,22 @@ export function Lightbox({
   );
   usePressTracker(captionToggleRef);
   // Syncs the toggle's place in the caption's last line with its width. The
-  // width is read in the observer's deliveries, after layout. A hidden toggle
-  // has no size and gets no delivery, so the last width stays until a shown
-  // toggle reads another.
+  // width is the delivery's own size, measured in the layout the delivery
+  // follows. A read of the toggle there could come after the band's update in
+  // the same delivery, and force a layout. A hidden toggle's size is zero, so
+  // the last width stays until a shown toggle's delivery brings another.
   useAttachment(
     captionToggleRef,
     toggle => {
-      const measureToggle = () => setCaptionToggleWidth(toggle.offsetWidth);
-      const stop = observeAfterLayout(toggle, () => {
-        // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- a delivery comes after layout and before paint; the toggle's place commits in that frame
-        flushSync(measureToggle);
+      const stop = observeAfterLayout(toggle, entry => {
+        const width = entry.borderBoxSize?.[0]?.inlineSize ?? 0;
+        if (width > 0) {
+          // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- a delivery comes after layout and before paint; the toggle's place commits in that frame
+          flushSync(() => setCaptionToggleWidth(Math.round(width)));
+        }
       });
       if (stop == null) {
-        measureToggle();
+        setCaptionToggleWidth(toggle.offsetWidth);
         return () => {};
       }
       return stop;
