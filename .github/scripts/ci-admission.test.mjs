@@ -27,13 +27,22 @@ const action = read('.github/actions/ci-admission/action.yml');
 const ci = read('.github/workflows/ci.yml');
 const main = read('.github/workflows/deploy.yml');
 const script = action.runs.steps[0].with.script;
+// The count each look runs, shared with the tools that grant CI capacity.
+const COUNT_MODULE = path.join(root, '.github/actions/ci-admission/count.mjs');
+const counter = fs.readFileSync(COUNT_MODULE, 'utf8');
+// Loaded once: under fake timers a fresh import inside the script would
+// resolve after the timers have run.
+const preloaded = {
+  'node:url': await import('node:url'),
+  count: await import(COUNT_MODULE),
+};
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
 const STEP = 'Wait for room under the CI ceiling';
-const CEILING = Number(/const CI_CEILING = (\d+);/.exec(script)[1]);
+const CEILING = Number(/const CI_CEILING = (\d+);/.exec(counter)[1]);
 const needsOf = job => [job.needs ?? []].flat();
 const stepOf = job => job.steps.find(step => step.name === STEP);
 const estimateOf = workflow =>
-  new RegExp(`'\\.github/workflows/${workflow}': [^\\n]*`).exec(script)[0];
+  new RegExp(`'\\.github/workflows/${workflow}': [^\\n]*`).exec(counter)[0];
 
 /** Legs a job runs for an event: its matrix size, or one. */
 function legs(job, event = 'workflow_dispatch') {
@@ -644,6 +653,7 @@ describe('ci admission', () => {
             },
     };
     Object.assign(process.env, {
+      COUNT_MODULE,
       PEAK: String(peak),
       MAIN: String(isMain),
       LABEL_LEGS: '{"ci:run-visual": 6}',
@@ -655,10 +665,16 @@ describe('ci admission', () => {
       LOOKS: looked,
       NEXT: next,
     });
-    const done = new AsyncFunction('github', 'context', 'core', script)(
-      github,
-      context,
-      core,
+    // The script loads the shared count with `import()`, which a function
+    // built here cannot call; the test passes it in.
+    const done = new AsyncFunction(
+      'github',
+      'context',
+      'core',
+      'importModule',
+      script.replaceAll('await import(', 'await importModule('),
+    )(github, context, core, async specifier =>
+      specifier === 'node:url' ? preloaded['node:url'] : preloaded.count,
     );
     // Observed here; `await done` below still rethrows a failure.
     done.catch(() => {});
