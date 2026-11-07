@@ -31,6 +31,7 @@
 
 import {typography} from './uikitTypography';
 import {markTextSizeProbe} from '../privateAttributes/textSizeProbe.stylex';
+import {observeResize} from '../utils/sharedResizeObserver';
 import {textSizeDefaults, typeScaleDefaults} from './tokens.stylex';
 
 // =============================================================================
@@ -405,16 +406,11 @@ function startReaderTextSizeSync(doc: Document): (() => void) | undefined {
         ),
       ),
     );
-  read();
-
-  const observer =
-    typeof view.ResizeObserver === 'function'
-      ? new view.ResizeObserver(read)
-      : null;
-  observer?.observe(probe);
+  // observeResize reads once now and again whenever the probe resizes.
+  const stopObserving = observeResize(probe, read);
 
   return () => {
-    observer?.disconnect();
+    stopObserving();
     probe.remove();
     doc.adoptedStyleSheets = doc.adoptedStyleSheets.filter(
       adopted => adopted !== sheet,

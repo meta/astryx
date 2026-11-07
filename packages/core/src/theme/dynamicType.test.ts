@@ -923,7 +923,7 @@ describe('every theme follows the reader text size', () => {
 
 describe('the root sync', () => {
   const html = document.documentElement;
-  let observerCallback: (() => void) | null = null;
+  let observerCallback: ((entries: {target: Element}[]) => void) | null = null;
   let probeSize = '17px';
 
   /** A stylesheet as the sync can see one: its whole text. */
@@ -961,10 +961,11 @@ describe('the root sync', () => {
     vi.stubGlobal(
       'ResizeObserver',
       class {
-        constructor(callback: () => void) {
+        constructor(callback: (entries: {target: Element}[]) => void) {
           observerCallback = callback;
         }
         observe() {}
+        unobserve() {}
         disconnect() {
           observerCallback = null;
         }
@@ -1036,21 +1037,24 @@ describe('the root sync', () => {
     const probe = document.querySelector<HTMLElement>(
       '[data-astryx-text-size-probe]',
     );
+    if (probe == null) {
+      throw new Error('The sync added no probe.');
+    }
     // A hidden box, 1em square, that renders no text.
-    expect(probe?.getAttribute('aria-hidden')).toBe('true');
-    expect(probe?.style.getPropertyValue('visibility')).toBe('hidden');
-    expect(probe?.style.getPropertyValue('inline-size')).toBe('1em');
-    expect(probe?.textContent).toBe('');
+    expect(probe.getAttribute('aria-hidden')).toBe('true');
+    expect(probe.style.getPropertyValue('visibility')).toBe('hidden');
+    expect(probe.style.getPropertyValue('inline-size')).toBe('1em');
+    expect(probe.textContent).toBe('');
     expect(adoptedText()).toBe(dynamicTypeScaleRule('xxxl'));
 
     // The reader moves the slider while the page is open: the probe resizes.
     probeSize = '53px';
-    observerCallback?.();
+    observerCallback?.([{target: probe}]);
     expect(adoptedText()).toBe(dynamicTypeScaleRule('ax5'));
 
     // A size that names no category clears the scales rather than guessing.
     probeSize = '18px';
-    observerCallback?.();
+    observerCallback?.([{target: probe}]);
     expect(adoptedText()).toBe('');
     expect(htmlAttributes()).toBe(before);
 
