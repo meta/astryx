@@ -275,6 +275,9 @@ describe('elementPropOrigins', () => {
       "import {Theme} from '@acme/core';\nimport {gone} from '@acme/missing';\nexport const A = () => <Theme theme={gone} />;\n",
     );
     expect(elementPropOrigins(app, THEME)).toEqual([null]);
+  });
+});
+
 describe('moduleExportOrigins', () => {
   /** @type {string} */
   let dir;
