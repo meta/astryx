@@ -116,7 +116,11 @@ and the repository proves it before a change that could break it merges.
   and custom properties as the package component of that version, so a theme,
   `xstyle`, and product CSS reach it the same way. Swizzle marks its output
   directory as Astryx source with an `astryx-swizzle.json` file that names the
-  owner package and its version. `@astryxdesign/build` compiles every module
+  owner package and its version. It writes the marker only into an output
+  directory it owns: one the copy creates, an empty one, or one it marked
+  before. For any other directory it writes no marker, and the `swizzle.copy`
+  result and the command's output name what the directory holds and how to add
+  the marker by hand. `@astryxdesign/build` compiles every module
   under a marked directory in its library pass, with the library class prefix,
   into `astryx-base` below `astryx-theme`, so a theme's component overrides
   apply to the copy as they do to the package component. This placement holds
@@ -175,9 +179,6 @@ and the repository proves it before a change that could break it merges.
   `--overwrite` and replaces with it (FR4).
 - `@astryxdesign/build`'s Next integration under Turbopack compiles modules
   under an `astryx-swizzle.json` directory in the library pass (FR5).
-- The styling overview states that a copy's rules land in `astryx-base` with
-  `@astryxdesign/build`, and above `astryx-theme` with the stock StyleX plugins
-  (FR5).
 - The `swizzle` command doc states FR1 and FR6 for product teams.
 
 ### Known gaps
@@ -185,9 +186,6 @@ and the repository proves it before a change that could break it merges.
 - The copy sends `../X/file` imports to the public `X` entry, which lacks the
   internal helpers, and deep StyleX modules are missing from Core's exports
   (FR1, FR2).
-- `astryx swizzle` does not write the `astryx-swizzle.json` marker, so a copy's
-  styles land in the app's cascade layer above the theme's, and theme component
-  overrides stop applying, until the product adds the marker (FR5).
 - Copies include spec records and test files and leave out nested folders
   (FR2), and `swizzle --list` offers folders that are not components
   (`spec:AST-035` FR12).
@@ -224,6 +222,7 @@ and the repository proves it before a change that could break it merges.
 | FR3      | `sharedContexts.test.tsx` "gives each React its own context under a key, and one per React": a second React instance loads a copy of the shared-context module | Two copies on one React; a copy on a second React in the same process                                                                                                                                                                                                                                                                                               | Two copies on one React getting different contexts, or a copy on a second React getting the same context object, fails                                                                                                                                                                                                                                                                                                                                      |
 | FR4      | Scan each output for private data-attribute names and selectors; compare copied owner modules with the package's                                               | Components that reach an owner module                                                                                                                                                                                                                                                                                                                               | A hand-written private attribute name or selector, or an edited owner module, in the output                                                                                                                                                                                                                                                                                                                                                                 |
 | FR5      | Render package and copy side by side under a theme with component overrides; compare                                                                           | Default; each variant; a theme component override; a copy built by `@astryxdesign/build`                                                                                                                                                                                                                                                                            | A theme override, documented class name, data attribute, or theme target reaches one and not the other                                                                                                                                                                                                                                                                                                                                                      |
+| FR5      | Swizzle into a new folder, an empty one, a marked one, and one holding a product module; read the folder and the `swizzle.copy` result                         | Default output; `--output` to a product folder; a folder of earlier copies with no marker                                                                                                                                                                                                                                                                           | A marker lands in a folder that holds a product module, a new, empty or marked folder is left unmarked, or the result omits what a skipped folder holds                                                                                                                                                                                                                                                                                                     |
 | FR6      | The component's own interaction and accessibility checks run against the copy                                                                                  | Keyboard, pointer, screen-reader tree                                                                                                                                                                                                                                                                                                                               | A check that passes on the package fails on the copy                                                                                                                                                                                                                                                                                                                                                                                                        |
 | FR7      | The required test lane's swizzle proof and the release-time proof; both cover Core's list and every integration package's components through `--package`       | A change to component source; a change to the swizzle copy; an unrelated change; Core, Lab, Charts, RichText, Vega                                                                                                                                                                                                                                                  | An offered component missing from the proof, a failure that does not block, a new required context, the proof adding wall-clock time to the slowest required check, or the proof pushing its job past the pull-request time budget                                                                                                                                                                                                                          |
 
