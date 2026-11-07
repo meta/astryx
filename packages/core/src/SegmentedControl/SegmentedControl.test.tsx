@@ -13,7 +13,7 @@
  */
 
 import {StrictMode, useState} from 'react';
-import {describe, it, expect, vi, beforeEach} from 'vitest';
+import {describe, it, expect, vi, beforeEach, onTestFinished} from 'vitest';
 import {
   cleanup,
   render,
@@ -651,23 +651,32 @@ describe('SegmentedControl keyboard navigation', () => {
     }: ControlProps) {
       const [value, setValue] = useState(initial);
       return (
-        <div dir={dir}>
-          <SegmentedControl
-            value={value}
-            onChange={next => {
-              onChange(next);
-              setValue(next);
-            }}
-            label="View mode">
-            <SegmentedControlItem value="grid" label="Grid" />
-            <SegmentedControlItem
-              value="list"
-              label="List"
-              isDisabled={disabledValue === 'list'}
-            />
-            <SegmentedControlItem value="table" label="Table" />
-          </SegmentedControl>
-        </div>
+        // jsdom computes `direction` only on the element that carries `dir`,
+        // so the control itself takes it.
+        <SegmentedControl
+          dir={dir}
+          value={value}
+          onChange={next => {
+            onChange(next);
+            setValue(next);
+          }}
+          label="View mode">
+          <SegmentedControlItem
+            value="grid"
+            label="Grid"
+            isDisabled={disabledValue === 'grid'}
+          />
+          <SegmentedControlItem
+            value="list"
+            label="List"
+            isDisabled={disabledValue === 'list'}
+          />
+          <SegmentedControlItem
+            value="table"
+            label="Table"
+            isDisabled={disabledValue === 'table'}
+          />
+        </SegmentedControl>
       );
     }
 
@@ -730,19 +739,92 @@ describe('SegmentedControl keyboard navigation', () => {
       expect(screen.getByRole('radio', {name: 'Table'})).toHaveFocus();
     });
 
+    it.each([
+      {from: 'Grid', key: '{ArrowUp}', to: 'Table'},
+      {from: 'Table', key: '{ArrowDown}', to: 'Grid'},
+    ])(
+      '$key wraps from a disabled selected $from to $to',
+      async ({from, key, to}) => {
+        const user = userEvent.setup();
+        const handleChange = vi.fn();
+        renderControl({
+          value: from.toLowerCase(),
+          onChange: handleChange,
+          disabledValue: from.toLowerCase(),
+        });
+
+        screen.getByRole('radio', {name: from}).focus();
+        await user.keyboard(key);
+
+        expect(handleChange).toHaveBeenCalledWith(to.toLowerCase());
+        const target = screen.getByRole('radio', {name: to});
+        expect(target).toHaveFocus();
+        // The disabled segment hands its Tab stop to the new selection.
+        expect(
+          screen.getAllByRole('radio').filter(radio => radio.tabIndex === 0),
+        ).toEqual([target]);
+      },
+    );
+
     it('keeps logical order under dir="rtl"', async () => {
       const user = userEvent.setup();
       const handleChange = vi.fn();
       renderControl({value: 'grid', onChange: handleChange, dir: 'rtl'});
 
       screen.getByRole('radio', {name: 'Grid'}).focus();
-      await user.keyboard('{ArrowDown}');
+      // ArrowLeft moving forward proves the right-to-left layout is in effect.
+      await user.keyboard('{ArrowLeft}');
       expect(handleChange).toHaveBeenLastCalledWith('list');
       expect(screen.getByRole('radio', {name: 'List'})).toHaveFocus();
 
+      await user.keyboard('{ArrowDown}');
+      expect(handleChange).toHaveBeenLastCalledWith('table');
+      expect(screen.getByRole('radio', {name: 'Table'})).toHaveFocus();
+
       await user.keyboard('{ArrowUp}');
-      expect(handleChange).toHaveBeenLastCalledWith('grid');
-      expect(screen.getByRole('radio', {name: 'Grid'})).toHaveFocus();
+      expect(handleChange).toHaveBeenLastCalledWith('list');
+      expect(screen.getByRole('radio', {name: 'List'})).toHaveFocus();
+    });
+
+    it.each([
+      {key: '{ArrowDown}', to: 'List'},
+      {key: '{ArrowUp}', to: 'Table'},
+    ])('$key moves focus and closes the keyboard hint', async ({key, to}) => {
+      // jsdom keeps its last :focus-visible element across the tests in a
+      // file, so a later Tab entry does not match.
+      const matches = HTMLElement.prototype.matches;
+      const focusVisible = vi
+        .spyOn(HTMLElement.prototype, 'matches')
+        .mockImplementation(function (this: HTMLElement, selector: string) {
+          return selector === ':focus-visible'
+            ? true
+            : matches.call(this, selector);
+        });
+      onTestFinished(() => focusVisible.mockRestore());
+      const user = userEvent.setup();
+      render(
+        <>
+          <button type="button">Before</button>
+          <Control value="grid" onChange={vi.fn()} />
+        </>,
+      );
+
+      screen.getByRole('button', {name: 'Before'}).focus();
+      await user.tab();
+      const radiogroup = screen.getByRole('radiogroup');
+      const hint = radiogroup.querySelector('[popover="manual"]');
+      expect(hint).toHaveAttribute('popover-open');
+      // The hint names only the horizontal pair, though all four arrows move.
+      expect(
+        Array.from(
+          radiogroup.querySelectorAll('[popover="manual"] kbd'),
+          kbd => kbd.textContent,
+        ),
+      ).toEqual(['←', '→']);
+
+      await user.keyboard(key);
+      expect(hint).not.toHaveAttribute('popover-open');
+      expect(screen.getByRole('radio', {name: to})).toHaveFocus();
     });
   });
 });

@@ -266,6 +266,19 @@ export const RADIO_GROUP_BINDING_STATES = [
     storyId: story('segmented-group-selected-rtl'),
   },
   {
+    id: 'segmented-group-selected-rtl-vertical',
+    binding: 'SegmentedControl',
+    summary: 'an RTL segmented choice whose down/up arrows keep logical order',
+    facts: groupFacts({visibleLabel: false, movement: 'vertical'}),
+    subjectName: 'View mode',
+    relations: {
+      first: {role: 'radio', name: 'List'},
+      second: {role: 'radio', name: 'Grid'},
+      third: {role: 'radio', name: 'Table'},
+    },
+    storyId: story('segmented-group-selected-rtl-vertical'),
+  },
+  {
     id: 'segmented-group-none-selected',
     binding: 'SegmentedControl',
     summary: 'a segmented choice whose controlled value matches no option',
