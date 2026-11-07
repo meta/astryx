@@ -133,6 +133,16 @@ export function nearestStop(stops: ReadonlyArray<number>, at: number): number {
 }
 
 /**
+ * The scale a scaled ancestor gives the row's rects: the rect's width over the
+ * row's layout width. Scroll offsets do not have it.
+ */
+export function rowScale(element: HTMLElement, box: DOMRect): number {
+  return element.offsetWidth > 0 && box.width > 0
+    ? box.width / element.offsetWidth
+    : 1;
+}
+
+/**
  * Each item's snap stop: the scroll offset that aligns its start edge with
  * the scroll padding, clamped to `end`. Read from the items' rects, with the
  * position `shown` added back. Stops closer than half a pixel are one stop.
@@ -144,11 +154,7 @@ export function snapStops(
 ): number[] {
   const rtl = isRtlElement(element);
   const box = element.getBoundingClientRect();
-  // A scaled ancestor scales the rects, not the scroll offsets.
-  const scale =
-    element.offsetWidth > 0 && box.width > 0
-      ? box.width / element.offsetWidth
-      : 1;
+  const scale = rowScale(element, box);
   const border = rtl
     ? element.offsetWidth - element.clientWidth - element.clientLeft
     : element.clientLeft;
