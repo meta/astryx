@@ -769,8 +769,9 @@ interface ClosedRegionsArgs {
 
 /**
  * A region hidden with `isOpen && <LayoutHeader />` leaves `false` in its
- * slot. The closed column must match the column that omits the slots, and
- * with `contentWidth` a closed end panel must give the no-panel composition.
+ * slot. The closed column must match the column that omits the slots: both
+ * set `padding={6}`, so the outer inset differs from the inner one. With
+ * `contentWidth`, a closed end panel must give the no-panel composition.
  */
 export const ClosedRegions = {
   name: 'Closed Regions',
@@ -785,9 +786,10 @@ export const ClosedRegions = {
     <VStack gap={6} xstyle={styles.storySection}>
       <HStack gap={4}>
         <VStack gap={2}>
-          <p {...stylex.props(styles.subheading)}>Slots omitted</p>
+          <p {...stylex.props(styles.subheading)}>Slots omitted, padding=6</p>
           <Card width={300} height={220} data-closed-region="omitted">
             <Layout
+              padding={6}
               content={
                 <LayoutContent>
                   <p {...stylex.props(styles.bodyText)}>
@@ -799,9 +801,10 @@ export const ClosedRegions = {
           </Card>
         </VStack>
         <VStack gap={2}>
-          <p {...stylex.props(styles.subheading)}>Regions closed</p>
+          <p {...stylex.props(styles.subheading)}>Regions closed, padding=6</p>
           <Card width={300} height={220} data-closed-region="closed">
             <Layout
+              padding={6}
               header={
                 isOpen && (
                   <LayoutHeader hasDivider>
