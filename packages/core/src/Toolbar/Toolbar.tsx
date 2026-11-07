@@ -82,19 +82,21 @@ const styles = stylex.create({
     display: 'flex',
     alignItems: 'center',
   },
-  // The center lane grows first, up to its content width, and never narrows
-  // below its content's minimum width, so its text never spills over the
-  // lanes beside it. The slot deliberately does not clip (`overflow`):
-  // clipping would cut off the box-shadow and focus ring of its outermost
-  // children, which paint outside their own box.
+  // The center lane claims its content's minimum width when the row decides
+  // where to wrap, so its text never spills over the lanes beside it, and
+  // then grows first, up to its content width. Only a center wider than the
+  // whole toolbar, alone on its line, narrows below that minimum, so content
+  // that scrolls (a TabList) still scrolls. The slot deliberately does not
+  // clip (`overflow`): clipping would cut off the box-shadow and focus ring
+  // of its outermost children, which paint outside their own box.
   centerSlot: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     flexGrow: 1000,
     flexShrink: 1,
-    flexBasis: 0,
-    minWidth: 'min-content',
+    flexBasis: 'min-content',
+    minWidth: 0,
     maxWidth: 'max-content',
   },
   // A start or end lane beside a center lane: the two share the width the

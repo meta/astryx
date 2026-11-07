@@ -77,10 +77,10 @@ Consumer migration instructions belong in consumer docs and release notes.
   `orientation="vertical"` and `centerContent`, the three lanes stay in one row
   while `aria-orientation` is vertical and ArrowDown and ArrowUp move between
   them, so the visual order and the announced axis disagree.
-- **A scrolling TabList in the center lane does not scroll in place.** In a
-  narrow container, a center lane that holds a TabList keeps all of its tabs,
-  so the row wraps and the end lane moves to a second line; the tabs do not
-  scroll within the lane.
+- **A scrolling TabList in the center lane wraps the row first.** In a narrow
+  container, a center lane that holds a TabList keeps all of its tabs while
+  they fit the toolbar, so the row wraps and the end lane moves to a second
+  line; the tabs scroll only when they are wider than the toolbar.
 - **The tab stop does not follow a pointer click.** After a click on a control
   that does not hold the stop, the stop stays on the earlier control, so
   Shift+Tab from the clicked control lands on that earlier control inside the

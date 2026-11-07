@@ -249,7 +249,7 @@ describe('Toolbar', () => {
       expect(clipsOverflow(slotOf('end'))).toBe(false);
     });
 
-    it('keeps the center slot at its minimum width and wraps the row instead', () => {
+    it('sizes the center slot from its minimum width and wraps the row instead', () => {
       render(
         <Toolbar
           label="Actions"
@@ -258,9 +258,10 @@ describe('Toolbar', () => {
           endContent={<span data-testid="end">End</span>}
         />,
       );
-      // The center lane never narrows below its content, so its text never
-      // spills over the lanes beside it; a row that does not fit wraps.
-      expect(getComputedStyle(slotOf('center')).minWidth).toBe('min-content');
+      // The center lane claims its content's minimum width when the row
+      // decides where to wrap, so its text never spills over the lanes beside
+      // it; a row that does not fit wraps.
+      expect(getComputedStyle(slotOf('center')).flexBasis).toBe('min-content');
       expect(getComputedStyle(screen.getByRole('toolbar')).flexWrap).toBe(
         'wrap',
       );
