@@ -926,6 +926,7 @@ describe('the audit of changed stories no other audit covers', () => {
     const os = await import('node:os');
     const path = await import('node:path');
     const {execFileSync} = await import('node:child_process');
+    const {fileURLToPath} = await import('node:url');
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'touched-stories-'));
     try {
       const run = files => {
@@ -936,7 +937,7 @@ describe('the audit of changed stories no other audit covers', () => {
         execFileSync(
           'node',
           [
-            new URL('./touched-components.mjs', import.meta.url).pathname,
+            fileURLToPath(new URL('./touched-components.mjs', import.meta.url)),
             'scope',
             '--analysis',
             path.join(dir, 'analysis.json'),
@@ -971,6 +972,7 @@ describe('the audit of changed stories no other audit covers', () => {
     const os = await import('node:os');
     const path = await import('node:path');
     const {execFileSync} = await import('node:child_process');
+    const {fileURLToPath} = await import('node:url');
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'touched-contracts-'));
     try {
       const owners = [
@@ -995,7 +997,7 @@ describe('the audit of changed stories no other audit covers', () => {
       execFileSync(
         'node',
         [
-          new URL('./touched-components.mjs', import.meta.url).pathname,
+          fileURLToPath(new URL('./touched-components.mjs', import.meta.url)),
           'scope',
           '--analysis',
           path.join(dir, 'analysis.json'),
