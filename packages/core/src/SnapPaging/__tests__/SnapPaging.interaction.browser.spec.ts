@@ -447,7 +447,7 @@ test('an edge press late in a settle steps on to a stop', async ({page}) => {
 });
 
 for (const holdMs of [150, 40]) {
-  test(`during an edge button's move, a ${holdMs} ms touch on the row ${holdMs > 85 ? 'stops it where it shows' : 'lets it run on'}, and the row rests on a stop`, async ({
+  test(`during an edge button's move, a ${holdMs} ms touch on the row stops it where it shows, and the row rests on a stop`, async ({
     page,
   }) => {
     const {scroller} = await open(page, 'snap-paging-three-up', 'paging', {
@@ -465,8 +465,8 @@ for (const holdMs of [150, 40]) {
     );
     const at = await restingOffset(scroller);
     expect(Math.min(...stops.map(stop => Math.abs(stop - at)))).toBeLessThan(1);
-    // Past the pager's 85 ms catch time, the move stops short of its target.
-    expect(Math.abs(at - stops[5]) < 1).toBe(holdMs < 85);
+    // A finger stops the pager's own move at the touch, short of its target.
+    expect(Math.abs(at - stops[5])).toBeGreaterThan(1);
   });
 }
 
