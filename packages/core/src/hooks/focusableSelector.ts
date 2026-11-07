@@ -3,7 +3,7 @@
 /**
  * @file focusableSelector.ts
  * @input None (a plain CSS selector string constant)
- * @output Exports FOCUSABLE_SELECTOR and isDisabledWithin
+ * @output Exports FOCUSABLE_SELECTOR, isDisabledWithin and preferTabStops
  * @position Internal utility; the canonical CSS selector for focusable
  *   elements, shared by focus-management hooks (e.g. useFocusTrap) so the
  *   selector isn't duplicated across components/hooks. Not exported from the
@@ -26,8 +26,8 @@ export const FOCUSABLE_SELECTOR =
 
 /**
  * Whether `element` is disabled inside `container`: it, or an ancestor up to
- * `container`, has `aria-disabled="true"`. A disabled control stays reachable
- * by Tab, but focus never starts on it when a surface opens.
+ * `container`, has `aria-disabled="true"`. Popover skips such an element when
+ * it picks initial focus. Tab still reaches it.
  */
 export function isDisabledWithin(
   element: Element,
@@ -35,4 +35,19 @@ export function isDisabledWithin(
 ): boolean {
   const disabled = element.closest('[aria-disabled="true"]');
   return disabled != null && container.contains(disabled);
+}
+
+/**
+ * `elements` with tab stops first, each group in document order. Inside a
+ * composite widget with a roving tab stop (a grid, a toolbar), the member
+ * that holds `tabindex="0"` comes before the members that hold `-1`.
+ */
+export function preferTabStops<T extends Element>(
+  elements: ReadonlyArray<T>,
+): T[] {
+  const isTabStop = (element: T) => element.getAttribute('tabindex') !== '-1';
+  return [
+    ...elements.filter(isTabStop),
+    ...elements.filter(element => !isTabStop(element)),
+  ];
 }

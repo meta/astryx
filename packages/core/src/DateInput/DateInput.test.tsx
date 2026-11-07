@@ -1746,6 +1746,50 @@ describe('DateInput', () => {
       );
       expect(getButton('Next month')).toHaveAttribute('aria-disabled', 'true');
     });
+
+    it("opens on the selected day, the grid's Tab stop", async () => {
+      render(
+        <DateInput
+          label="Date"
+          value="2026-04-06"
+          min="2026-04-01"
+          max="2026-04-30"
+          onChange={() => {}}
+        />,
+      );
+      fireEvent.click(getButton('Open calendar'));
+      await waitFor(() => {
+        expect(document.activeElement).toHaveAttribute(
+          'data-date',
+          '2026-04-06',
+        );
+      });
+      expect(document.activeElement).toHaveAttribute('tabindex', '0');
+    });
+
+    it("opens on today when it is in range and nothing is selected, the grid's Tab stop", async () => {
+      vi.useFakeTimers({toFake: ['Date']});
+      vi.setSystemTime(new Date(2026, 3, 20, 12));
+      try {
+        render(
+          <DateInput
+            label="Date"
+            min="2026-04-01"
+            max="2026-04-30"
+            onChange={() => {}}
+          />,
+        );
+        fireEvent.click(getButton('Open calendar'));
+        await waitFor(() => {
+          expect(document.activeElement).toHaveAttribute(
+            'data-date',
+            '2026-04-20',
+          );
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   describe('weekStartsOn', () => {

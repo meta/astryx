@@ -1052,6 +1052,33 @@ describe('Popover', () => {
       );
     });
 
+    it('starts focus on a roving tab stop, not an earlier member that holds tabindex -1', async () => {
+      render(
+        <Popover
+          content={
+            <div role="toolbar" aria-label="Formatting">
+              <button type="button" tabIndex={-1}>
+                Bold
+              </button>
+              <button type="button" tabIndex={0}>
+                Italic
+              </button>
+            </div>
+          }
+          label="Format">
+          <button type="button">Open format</button>
+        </Popover>,
+      );
+      fireEvent.click(screen.getByRole('button', {name: 'Open format'}), {
+        detail: 1,
+      });
+      await waitFor(() =>
+        expect(
+          screen.getByRole('button', {name: 'Italic', hidden: true}),
+        ).toHaveFocus(),
+      );
+    });
+
     it('starts focus on the labelled surface when every control is disabled, and Tab still reaches them', async () => {
       const user = userEvent.setup();
       render(
