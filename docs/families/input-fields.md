@@ -411,9 +411,9 @@ DEC-6 does not require unrelated components to add a new floor.
   styling passed through a product wrapper's own props or spread; FR10's type
   error surfaces those callsites.
 
-- **On-screen keyboard (FR13):** no member meets FR13 on current main. No
-  member has keyboard handling, and the keyboard module does not exist
-  yet; `spec:AST-099` lists each gap.
+- **On-screen keyboard (FR13):** TextInput, TextArea, and NumberInput meet
+  FR13 through `spec:AST-099` FR9, apart from the missing scroll range (its Gap
+  11). For the other members, `spec:AST-099` lists each gap.
 - **Verification coverage:** current unit tests prove composition, semantics, and
   individual state behavior, but do not yet provide the complete real-browser
   inline-size/end-overlap matrix below. This current record names those
