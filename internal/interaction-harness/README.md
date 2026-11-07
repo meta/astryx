@@ -329,8 +329,10 @@ frames over all the runs, the component on every one of them, and in each run
 its longest stall may be no longer than that run's control's, since a stall
 belongs to its run. A run whose control moved on fewer frames than
 `minRunFrames` (1 by default) is too little to judge: the summary names it,
-and the pool leaves it out, so it never counts as a pass. The pool fails with
-fewer than `minJudgedRuns` judged runs (half, rounded up). In each judged run,
+and the pool leaves it out, so it never counts as a pass. A run whose block
+began after its motion had settled is left out the same way: its `runs` entry
+is null, and `late` holds its `BusyWindowTooLateError`. The pool fails with
+fewer than `minJudgedRuns` judged runs (half of all the runs, rounded up). In each judged run,
 the component must move on every frame its control moved on, so a freeze fails
 its run.
 
@@ -368,7 +370,9 @@ longer than `FRAME_STARVATION_MS`: it throws `FrameStarvationError`, not
 **No Layout / Paint.** `traceRendering` records a Chromium trace around the
 interaction; `countBetween` counts the steady middle of an animation (its
 first and last frames may commit). A transform/opacity animation does no
-Layout or Paint there; a layout-property animation does one per frame. The
+Layout or Paint there; a layout-property animation does one per frame. Each
+counted `Paint` names the node it painted (`node`), and each `UpdateLayoutTree`
+counts the elements it restyled (`elements`). The
 harness's own animation recorder stands down while the trace runs, since its
 frame loop would make every frame a main-thread one, restyling each running
 animation's target and laying out an anchored one: it reads only the element a
