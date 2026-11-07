@@ -9,7 +9,7 @@
  * SYNC: When useLayer.tsx changes, update tests accordingly
  */
 
-import {describe, it, expect, vi, afterEach} from 'vitest';
+import {describe, it, expect, vi, afterEach, beforeEach} from 'vitest';
 import {
   render,
   renderHook,
@@ -29,6 +29,7 @@ import {
   getPositionTryFallbacks,
   getSelfAlignment,
 } from './useLayer';
+import {preserveAnimations} from './preserveAnimations';
 import {getAnchorClearFallbacks} from './layerSlideRules';
 import {typeScaleVars} from '../theme/tokens.stylex';
 import type {
@@ -40,6 +41,12 @@ import type {
 } from './useLayer';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {observeBrowserHide} from './popoverOperations';
+
+vi.mock('./preserveAnimations', async importOriginal => {
+  const actual: {preserveAnimations: typeof preserveAnimations} =
+    await importOriginal();
+  return {...actual, preserveAnimations: vi.fn(actual.preserveAnimations)};
+});
 
 function mockCSSStyleDeclaration(
   styles: Partial<CSSStyleDeclaration>,
@@ -3116,16 +3123,26 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
       .mockReturnValue(720);
   }
 
+  /**
+   * How many times a layer was placed afresh since the last clear: the
+   * runtime keeps every animation through `preserveAnimations` only then.
+   */
+  const placedAfresh = () => vi.mocked(preserveAnimations).mock.calls.length;
+
+  beforeEach(() => {
+    vi.mocked(preserveAnimations).mockClear();
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it('lists beside the trigger, then the other block side at its own size, and only then each block side sized to its room', () => {
+  it('lists the other block side at its own size, then beside the trigger, and only then each block side sized to its room', () => {
     expect(getAnchorClearFallbacks('above')).toBe(
-      '--astryx-layer-beside-end, --astryx-layer-beside-start, flip-block, --astryx-layer-fit-above, --astryx-layer-fit-below',
+      'flip-block, --astryx-layer-beside-end, --astryx-layer-beside-start, --astryx-layer-fit-above, --astryx-layer-fit-below',
     );
     expect(getAnchorClearFallbacks('below')).toBe(
-      '--astryx-layer-beside-end, --astryx-layer-beside-start, flip-block, --astryx-layer-fit-below, --astryx-layer-fit-above',
+      'flip-block, --astryx-layer-beside-end, --astryx-layer-beside-start, --astryx-layer-fit-below, --astryx-layer-fit-above',
     );
     // Side placements already slide along the block axis at full height.
     expect(getAnchorClearFallbacks('start')).toBe('');
@@ -3138,7 +3155,7 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
     }
   });
 
-  it('installs the beside and fit rules and the switch to the clear list', async () => {
+  it('installs the beside and fit rules, each aligned unsafe toward the anchor', async () => {
     const user = userEvent.setup();
     const {container} = render(<ClearHarness />);
     await user.click(container.querySelector('button')!);
@@ -3150,7 +3167,7 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
       '@position-try --astryx-layer-beside-end{position-area:self-inline-end span-all;margin-inline-start:var(--_astryx-layer-clearance, 0px);',
     );
     expect(css).toMatch(
-      /@position-try --astryx-layer-beside-start\{[^}]*inline-size:max-content;\}/,
+      /@position-try --astryx-layer-beside-start\{[^}]*inline-size:max-content;/,
     );
     // Fit: sized to the room on its side and never less than half of the
     // room the trigger leaves on the block axis, so it fits only on the
@@ -3168,34 +3185,55 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
     }
     expect(css).not.toMatch(/--astryx-layer-fit-[a-z]+-roomier/);
     expect(css.match(/@position-try --astryx-layer-fit-/g)).toHaveLength(2);
-    expect(css).toContain(
-      '[data-astryx-clears-anchor]{--_astryx-layer-try-fallbacks:var(--_astryx-layer-clear-fallbacks);}',
+    // Every option aligns unsafe toward the anchor on the placement axis, so
+    // a box that runs out of room overflows away from the anchor.
+    expect(css).toMatch(
+      /@position-try --astryx-layer-beside-end\{[^}]*align-self:normal;justify-self:unsafe self-start;\}/,
     );
+    expect(css).toMatch(
+      /@position-try --astryx-layer-beside-start\{[^}]*justify-self:unsafe self-end;\}/,
+    );
+    expect(css).toMatch(
+      /@position-try --astryx-layer-fit-above\{[^}]*align-self:unsafe self-end;\}/,
+    );
+    expect(css).toMatch(
+      /@position-try --astryx-layer-fit-below\{[^}]*align-self:unsafe self-start;\}/,
+    );
+    // One list: no switch to a second one.
+    expect(css).not.toContain('clears-anchor');
   });
 
-  it('carries the clear list beside the standard one, which it uses until the switch', async () => {
+  it('uses its one combined list from the start, aligned unsafe toward its trigger', async () => {
     const user = userEvent.setup();
-    const {container} = render(<ClearHarness placement="below" />);
+    const {container, rerender} = render(<ClearHarness placement="below" />);
     await user.click(container.querySelector('button')!);
     const layerEl = container.querySelector('[popover]') as HTMLElement;
     expect(layerEl.style.positionTryFallbacks).toBe(
-      `var(--_astryx-layer-try-fallbacks, ${getPositionTryFallbacks('below', 'center')})`,
+      getAnchorClearFallbacks('below'),
     );
-    expect(
-      layerEl.style.getPropertyValue('--_astryx-layer-clear-fallbacks'),
-    ).toBe(getAnchorClearFallbacks('below'));
+    expect(layerEl.style.alignSelf).toBe('unsafe self-start');
+    rerender(<ClearHarness placement="above" />);
+    expect(layerEl.style.positionTryFallbacks).toBe(
+      getAnchorClearFallbacks('above'),
+    );
+    expect(layerEl.style.alignSelf).toBe('unsafe self-end');
+    // A side placement keeps the standard list.
+    rerender(<ClearHarness placement="end" />);
+    expect(layerEl.style.positionTryFallbacks).toBe(
+      getPositionTryFallbacks('end', 'center'),
+    );
+    expect(layerEl.style.alignSelf).toBe('');
   });
 
-  it('switches to the clear list when the shown layer covers its trigger', async () => {
+  it('places the shown layer afresh from its list when it covers its trigger', async () => {
     const user = userEvent.setup();
     placeBoxes(TRIGGER, rect(16, 350, 688, 300));
     const {container} = render(<ClearHarness />);
     await user.click(container.querySelector('button')!);
-    const layerEl = container.querySelector('[popover]') as HTMLElement;
-    expect(layerEl).toHaveAttribute('data-astryx-clears-anchor');
+    expect(placedAfresh()).toBeGreaterThan(0);
   });
 
-  it('places a layer afresh from the clear list when it switches, without closing it or leaving a frame', async () => {
+  it('places a layer afresh without closing it or leaving a frame', async () => {
     const user = userEvent.setup();
     const onToggle = vi.fn();
     const displays: string[] = [];
@@ -3213,9 +3251,9 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
     layerEl.addEventListener('toggle', onToggle);
     layerEl.addEventListener('beforetoggle', onToggle);
     await user.click(container.querySelector('button')!);
-    expect(layerEl).toHaveAttribute('data-astryx-clears-anchor');
+    expect(placedAfresh()).toBeGreaterThan(0);
     // A browser keeps a laid-out layer on its last option until the layer
-    // stops being rendered: the switch takes it out of rendering for one
+    // stops being rendered: the runtime takes it out of rendering for one
     // forced layout, then restores its own display, in the same task.
     expect(displays).toContain('none');
     expect(layerEl.style.display).not.toBe('none');
@@ -3240,7 +3278,7 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it('switches to the clear list when the shown layer leaves the viewport on the block axis while its trigger is in view', async () => {
+  it('places the shown layer afresh when it leaves the viewport on the block axis while its trigger is in view', async () => {
     const user = userEvent.setup();
     // Above the trigger, clear of it, but its top past the viewport: where
     // WebKit leaves a box that fits no option.
@@ -3248,19 +3286,17 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
     placeBoxes(TRIGGER, rect(-348, 350, 640, 300));
     const {container} = render(<ClearHarness />);
     await user.click(container.querySelector('button')!);
-    const layerEl = container.querySelector('[popover]') as HTMLElement;
-    expect(layerEl).toHaveAttribute('data-astryx-clears-anchor');
+    expect(placedAfresh()).toBeGreaterThan(0);
   });
 
-  it('keeps the standard list for a layer past the viewport while its trigger is out of view too', async () => {
+  it('leaves a layer past the viewport alone while its trigger is out of view too', async () => {
     const user = userEvent.setup();
-    // The trigger is above the viewport: the layer holds (FR5), not switches.
+    // The trigger is above the viewport: the layer holds (FR5).
     viewport720();
     placeBoxes(rect(-80, 400, 30, 100), rect(-200, 350, 100, 200));
     const {container} = render(<ClearHarness />);
     await user.click(container.querySelector('button')!);
-    const layerEl = container.querySelector('[popover]') as HTMLElement;
-    expect(layerEl).not.toHaveAttribute('data-astryx-clears-anchor');
+    expect(placedAfresh()).toBe(0);
   });
 
   it('does not read on scroll events, when the layer has not followed its anchor yet', async () => {
@@ -3269,7 +3305,6 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
     const spy = placeBoxes(TRIGGER, rect(200, 350, 100, 200));
     const {container} = render(<ClearHarness />);
     await user.click(container.querySelector('button')!);
-    const layerEl = container.querySelector('[popover]') as HTMLElement;
     // Mid-scroll: the trigger has moved under the layer's stale box, which
     // reads as covering it and past the viewport. A scroll is read only once
     // it has painted, by the anchor-move observer.
@@ -3279,32 +3314,171 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
       window.dispatchEvent(new Event('scroll'));
       document.dispatchEvent(new Event('scroll'));
     });
-    expect(layerEl).not.toHaveAttribute('data-astryx-clears-anchor');
+    expect(placedAfresh()).toBe(0);
   });
 
-  it('keeps the standard list when the shown layer sits clear of its trigger, even flush against it', async () => {
+  /** Let the task queued after a frame's paint run, then the next frame. */
+  async function afterNextPaint() {
+    await nextFrame();
+    await act(
+      async () =>
+        new Promise<void>(resolve => {
+          setTimeout(resolve);
+        }),
+    );
+    await nextFrame();
+  }
+
+  async function wait(ms: number) {
+    await act(
+      async () =>
+        new Promise<void>(resolve => {
+          setTimeout(resolve, ms);
+        }),
+    );
+  }
+
+  it('checks the box once, in the first frame painted after a scroll of its trigger ends, with no read in the scroll handler', async () => {
+    const view = window as {onscrollend?: unknown};
+    view.onscrollend = null;
+    try {
+      const user = userEvent.setup();
+      viewport720();
+      const shown = placeBoxes(TRIGGER, rect(200, 350, 100, 200));
+      const {container} = render(<ClearHarness />);
+      await user.click(container.querySelector('button')!);
+      shown.mockRestore();
+      // The scroll carried the trigger to the top: the layer above it now
+      // runs past the viewport.
+      const reads = placeBoxes(rect(12, 380, 30, 100), rect(-40, 350, 48, 200));
+      vi.mocked(preserveAnimations).mockClear();
+      // A scroll that does not carry the trigger is not its scroll.
+      const other = document.createElement('div');
+      document.body.append(other);
+      act(() => {
+        other.dispatchEvent(new Event('scrollend'));
+      });
+      await afterNextPaint();
+      expect(placedAfresh()).toBe(0);
+      reads.mockClear();
+      act(() => {
+        document.dispatchEvent(new Event('scrollend'));
+      });
+      expect(reads).not.toHaveBeenCalled();
+      await nextFrame();
+      expect(placedAfresh()).toBe(0);
+      await afterNextPaint();
+      expect(placedAfresh()).toBe(1);
+      other.remove();
+    } finally {
+      delete view.onscrollend;
+    }
+  });
+
+  it('cancels the check when a scroll of its trigger starts again before it, where the browser fires scrollend', async () => {
+    const view = window as {onscrollend?: unknown};
+    view.onscrollend = null;
+    try {
+      const user = userEvent.setup();
+      viewport720();
+      const shown = placeBoxes(TRIGGER, rect(200, 350, 100, 200));
+      const {container} = render(<ClearHarness />);
+      await user.click(container.querySelector('button')!);
+      shown.mockRestore();
+      placeBoxes(rect(12, 380, 30, 100), rect(-40, 350, 48, 200));
+      vi.mocked(preserveAnimations).mockClear();
+      act(() => {
+        document.dispatchEvent(new Event('scrollend'));
+      });
+      await nextFrame();
+      act(() => {
+        document.dispatchEvent(new Event('scroll'));
+      });
+      await afterNextPaint();
+      expect(placedAfresh()).toBe(0);
+    } finally {
+      delete view.onscrollend;
+    }
+  });
+
+  it('hears a scroll that stops inside a shadow root above its trigger', async () => {
+    const view = window as {onscrollend?: unknown};
+    view.onscrollend = null;
+    const host = document.createElement('div');
+    document.body.append(host);
+    const shadowRoot = host.attachShadow({mode: 'open'});
+    const scroller = document.createElement('div');
+    shadowRoot.append(scroller);
+    try {
+      const user = userEvent.setup();
+      viewport720();
+      const shown = placeBoxes(TRIGGER, rect(200, 350, 100, 200));
+      render(<ClearHarness />, {container: scroller});
+      await user.click(scroller.querySelector('button')!);
+      shown.mockRestore();
+      placeBoxes(rect(12, 380, 30, 100), rect(-40, 350, 48, 200));
+      vi.mocked(preserveAnimations).mockClear();
+      // Not composed: the event stops at the shadow root.
+      act(() => {
+        scroller.dispatchEvent(new Event('scrollend'));
+      });
+      await afterNextPaint();
+      expect(placedAfresh()).toBe(1);
+    } finally {
+      delete view.onscrollend;
+      host.remove();
+    }
+  });
+
+  it('checks the box once, 150 ms after the last scroll of its trigger, where the browser fires no scrollend', async () => {
+    expect('onscrollend' in window).toBe(false);
+    const user = userEvent.setup();
+    viewport720();
+    const shown = placeBoxes(TRIGGER, rect(200, 350, 100, 200));
+    const {container} = render(<ClearHarness />);
+    await user.click(container.querySelector('button')!);
+    shown.mockRestore();
+    const reads = placeBoxes(rect(12, 380, 30, 100), rect(-40, 350, 48, 200));
+    vi.mocked(preserveAnimations).mockClear();
+    reads.mockClear();
+    act(() => {
+      document.dispatchEvent(new Event('scroll'));
+    });
+    await wait(100);
+    // Still scrolling: each scroll event starts the wait again.
+    act(() => {
+      document.dispatchEvent(new Event('scroll'));
+    });
+    await wait(100);
+    expect(reads).not.toHaveBeenCalled();
+    expect(placedAfresh()).toBe(0);
+    await wait(80);
+    await afterNextPaint();
+    expect(placedAfresh()).toBe(1);
+  });
+
+  it('leaves the shown layer alone when it sits clear of its trigger, even flush against it', async () => {
     const user = userEvent.setup();
     // Directly above the trigger, its bottom edge on the trigger's top edge.
     placeBoxes(TRIGGER, rect(200, 350, 100, 200));
     const {container} = render(<ClearHarness />);
     await user.click(container.querySelector('button')!);
-    const layerEl = container.querySelector('[popover]') as HTMLElement;
-    expect(layerEl).not.toHaveAttribute('data-astryx-clears-anchor');
+    expect(placedAfresh()).toBe(0);
   });
 
-  it('starts every show from the standard list', async () => {
+  it('judges every show afresh', async () => {
     const user = userEvent.setup();
     const spy = placeBoxes(TRIGGER, rect(16, 350, 688, 300));
-    const {container, getByText} = render(<ClearHarness />);
+    const {getByText} = render(<ClearHarness />);
     await user.click(getByText('Trigger'));
-    const layerEl = container.querySelector('[popover]') as HTMLElement;
-    expect(layerEl).toHaveAttribute('data-astryx-clears-anchor');
+    expect(placedAfresh()).toBeGreaterThan(0);
 
     await user.click(getByText('Hide'));
     spy.mockRestore();
     placeBoxes(TRIGGER, rect(200, 350, 100, 200));
+    vi.mocked(preserveAnimations).mockClear();
     await user.click(getByText('Trigger'));
-    expect(layerEl).not.toHaveAttribute('data-astryx-clears-anchor');
+    expect(placedAfresh()).toBe(0);
   });
 
   it('scrolls only while its content overflows the box it was given', async () => {
@@ -3353,7 +3527,7 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
     const {container, getByText} = render(<ClearHarness />);
     await user.click(getByText('Trigger'));
     const layerEl = container.querySelector('[popover]') as HTMLElement;
-    expect(layerEl).not.toHaveAttribute('data-astryx-clears-anchor');
+    expect(placedAfresh()).toBe(0);
     expect(observed).toContain(layerEl);
     expect(observed).toContain(layerEl.firstElementChild);
     expect(observed).toContain(getByText('Trigger'));
@@ -3366,11 +3540,11 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
         callback();
       }
     });
-    expect(layerEl).toHaveAttribute('data-astryx-clears-anchor');
+    expect(placedAfresh()).toBeGreaterThan(0);
     vi.unstubAllGlobals();
   });
 
-  it('re-reads its geometry when its trigger moves in layout without resizing', async () => {
+  it('follows a trigger that moves in layout without resizing, and leaves its placement to the engine', async () => {
     const observers: {
       callback: (entries: IntersectionObserverEntry[]) => void;
       options: IntersectionObserverInit;
@@ -3396,10 +3570,9 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
     );
     const user = userEvent.setup();
     const spy = placeBoxes(TRIGGER, rect(200, 350, 100, 200));
-    const {container, getByText} = render(<ClearHarness />);
+    const {getByText} = render(<ClearHarness />);
     await user.click(getByText('Trigger'));
-    const layerEl = container.querySelector('[popover]') as HTMLElement;
-    expect(layerEl).not.toHaveAttribute('data-astryx-clears-anchor');
+    expect(placedAfresh()).toBe(0);
     // The move observer's root is the viewport shrunk to the trigger's rect.
     const move = observers.find(o => o.options?.root === document);
     expect(move?.options.threshold).toBe(1);
@@ -3409,18 +3582,19 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
 
     // Its initial report: fully inside its own rect.
     act(() => move?.callback([report(move.options, TRIGGER, 1)]));
-    expect(layerEl).not.toHaveAttribute('data-astryx-clears-anchor');
+    expect(placedAfresh()).toBe(0);
 
-    // The trigger moves; the standard list now settles over it.
+    // The trigger moves, and the layer now reads as covering it.
     spy.mockRestore();
     placeBoxes(TRIGGER, rect(16, 350, 688, 300));
     const before = observers.length;
     act(() => move?.callback([report(move.options, TRIGGER, 0.4)]));
-    // Re-armed on the new rect at once; read in the next frame.
+    // Re-armed on the new rect at once.
     expect(move?.disconnected).toBe(true);
     expect(observers.length).toBe(before + 1);
+    // A move never places the layer afresh: CSS anchor positioning places it.
     await nextFrame();
-    expect(layerEl).toHaveAttribute('data-astryx-clears-anchor');
+    expect(placedAfresh()).toBe(0);
     vi.unstubAllGlobals();
   });
 
@@ -3492,12 +3666,9 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
     vi.unstubAllGlobals();
   });
 
-  it('reads a move its observer reports after paint in the next frame, before that frame paints, never in the reporting task', async () => {
-    // Placing a layer afresh in the task right after the frame that scrolled
-    // its anchor lets Chromium lay it out for one more frame against the
-    // anchor's position before the scroll, over the anchor (spec:AST-059 FR8:
-    // clear from the second painted frame). The read waits for the next
-    // frame, before it paints, and several reports in one frame share it.
+  it('handles a move its observer reports in the next frame, never in the reporting task, and never checks the box or places the layer afresh', async () => {
+    // During a scroll, CSS anchor positioning alone places the layer
+    // (spec:AST-059 FR4). Several reports in one frame share one call.
     const observers: {
       callback: (entries: IntersectionObserverEntry[]) => void;
       options: IntersectionObserverInit;
@@ -3528,7 +3699,7 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
       move?.callback([report(move.options, TRIGGER, 1)]);
     });
     await nextFrame();
-    expect(layerEl).not.toHaveAttribute('data-astryx-clears-anchor');
+    expect(placedAfresh()).toBe(0);
 
     // A scroll carries the trigger under the layer; the observer reports it
     // after the frame that painted the move, twice before the next frame.
@@ -3550,13 +3721,24 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
       const second = latestMove();
       second?.callback([report(second.options, TRIGGER, 0.6)]);
     });
-    expect(layerEl).not.toHaveAttribute('data-astryx-clears-anchor');
+    expect(placedAfresh()).toBe(0);
     expect(reads).not.toHaveBeenCalled();
 
-    // The next frame reads it once, switches it, and places it afresh.
+    // The next frame neither reads the layer's box nor places it afresh, so
+    // the layer does not jump to another side mid-scroll.
     await nextFrame();
-    expect(layerEl).toHaveAttribute('data-astryx-clears-anchor');
-    expect(reads).toHaveBeenCalled();
+    expect(reads).not.toHaveBeenCalled();
+    expect(placedAfresh()).toBe(0);
+    expect(layerEl.style.display).not.toBe('none');
+
+    // A later move does neither either.
+    act(() => {
+      const move = latestMove();
+      move?.callback([report(move.options, TRIGGER, 0.5)]);
+    });
+    await nextFrame();
+    expect(reads).not.toHaveBeenCalled();
+    expect(placedAfresh()).toBe(0);
     vi.unstubAllGlobals();
   });
 
@@ -3596,14 +3778,13 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
     const latest = () => moves()[moves().length - 1];
     const user = userEvent.setup();
     let spy = placeBoxes(TRIGGER, rect(200, 350, 100, 200));
-    const {container, getByText} = render(<ClearHarness />);
+    const {getByText} = render(<ClearHarness />);
     await user.click(getByText('Trigger'));
-    const layerEl = container.querySelector('[popover]') as HTMLElement;
-    expect(layerEl).not.toHaveAttribute('data-astryx-clears-anchor');
+    expect(placedAfresh()).toBe(0);
 
     // A fresh observer's first report already differs: the trigger kept
     // moving after its rectangle was read, as in a smooth scroll. That is a
-    // move: it re-reads, and re-arms at the reported ratio.
+    // move: it re-arms at the reported ratio, and leaves placement to CSS.
     spy.mockRestore();
     spy = placeBoxes(TRIGGER, rect(16, 350, 688, 300));
     let armed = moves().length;
@@ -3611,7 +3792,7 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
     expect(moves().length).toBe(armed + 1);
     expect(latest().options.threshold).toBe(0.7);
     await nextFrame();
-    expect(layerEl).toHaveAttribute('data-astryx-clears-anchor');
+    expect(placedAfresh()).toBe(0);
 
     // A first report of 0 for a trigger that moved since the observer read
     // its rectangle re-arms at once on the new rectangle.
@@ -3749,12 +3930,11 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
     );
     fireEvent.click(getByRole('button', {name: 'Trigger'}));
     await waitFor(() => {
-      expect(container.querySelector('[popover]')).toHaveAttribute(
-        'data-astryx-clears-anchor',
-      );
+      expect(placedAfresh()).toBeGreaterThan(0);
     });
     const first = container.querySelector('[popover]');
 
+    vi.mocked(preserveAnimations).mockClear();
     rerender(<MovingClearHarness unsafe={false} />);
 
     await waitFor(() => {
@@ -3764,7 +3944,7 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
         container.querySelector('[data-testid="safe-host"]'),
       );
       expect(layer).toHaveAttribute('data-open', 'true');
-      expect(layer).toHaveAttribute('data-astryx-clears-anchor');
+      expect(placedAfresh()).toBeGreaterThan(0);
     });
   });
 
@@ -3774,12 +3954,10 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
     const {container} = render(<ContextLayerHarness />);
     await user.click(container.querySelector('button')!);
     const layerEl = container.querySelector('[popover]') as HTMLElement;
-    expect(layerEl).not.toHaveAttribute('data-astryx-clears-anchor');
+    expect(placedAfresh()).toBe(0);
     expect(layerEl.style.positionTryFallbacks).toBe(
       getPositionTryFallbacks('above', 'center'),
     );
-    expect(
-      layerEl.style.getPropertyValue('--_astryx-layer-clear-fallbacks'),
-    ).toBe('');
+    expect(layerEl.style.alignSelf).toBe('');
   });
 });
