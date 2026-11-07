@@ -314,8 +314,8 @@ export function accept({
   manifest.platform = currentManifest.platform;
   manifest.browser = currentManifest.browser;
   manifest.viewport = currentManifest.viewport;
-  // The manifest's date is its oldest shot's, so it never claims that older
-  // pixels are newer than they are.
+  // The manifest's date is its oldest shot's date. An undated shot counts at
+  // the manifest's earlier date.
   manifest.capturedAt = oldestCapture(manifest.shots, earlierCapturedAt);
   manifest.context = currentManifest.context ?? null;
   manifest.decisions = [

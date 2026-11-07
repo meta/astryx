@@ -94,7 +94,7 @@ const STATIC_EXPORTS = {
   },
   // Cross-directory .stylex modules that swizzled components import. Each is
   // an explicit public subpath so the StyleX compiler can resolve the deep
-  // import rewriteImports emits (see api/swizzle/copy/copy.mjs). No wildcard —
+  // import a swizzled copy uses (see api/swizzle/_moduleGraph.mjs). No wildcard —
   // a future cross-directory .stylex import needs a deliberate entry here.
   // Precedent: ./theme/tokens.stylex and ./theme/dataTokens.stylex above.
   './DateInput/tokens.stylex': {
@@ -244,6 +244,7 @@ const FILE_MODULE_SUBPATH_EXPORTS = [
   'internal/spinner-rotor',
   'internal/calendar-system',
   'internal/dialog-context',
+  'internal/scroll-anchoring',
 ];
 
 /**

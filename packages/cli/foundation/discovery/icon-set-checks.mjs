@@ -44,8 +44,9 @@ import * as path from 'node:path';
 import {findInstalledPackage} from '../fs/paths.mjs';
 import {satisfiesRange} from '../env/semver.mjs';
 import {
-  NOTICE_FILE_RE,
   discoverIconSetDirectory,
+  hasLicenseNotice,
+  licenseNoticeFix,
   resolveIconModule,
   splitSpecifier,
 } from './icon-set-discovery.mjs';
@@ -1003,14 +1004,11 @@ function checkUpstream(set, packageDir, pkg) {
       ),
     );
   }
-  const rootNotices = safeList(packageDir).filter(name =>
-    NOTICE_FILE_RE.test(name),
-  );
-  if (set.notices.length === 0 && rootNotices.length === 0) {
+  if (!hasLicenseNotice(set.dir) && !hasLicenseNotice(packageDir)) {
     issues.push(
       issueWarning(
         ICON_LICENSE_NOTICE_MISSING,
-        `${label} is generated from ${source.package} but ships no license notice. Copy the library's LICENSE (and NOTICE, if any) into the set directory or the package root.`,
+        `${label} is generated from ${source.package}@${source.version} but ships no license notice. ${licenseNoticeFix(path.relative(packageDir, set.dir).split(path.sep).join('/'), `${source.package}@${source.version}`)} If the library ships a LICENSE or NOTICE file, copy that file there instead.`,
       ),
     );
   }
@@ -1024,14 +1022,5 @@ function safeSatisfies(version, range) {
   } catch {
     // A range this reader cannot judge is not reported.
     return true;
-  }
-}
-
-/** @param {string} dir */
-function safeList(dir) {
-  try {
-    return fs.readdirSync(dir);
-  } catch {
-    return [];
   }
 }

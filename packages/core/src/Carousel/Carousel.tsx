@@ -65,6 +65,7 @@ import {
   attachSnapPaging,
   isSnapPaging,
   moveHeldSnapPaging,
+  moveSnapPaging,
   nearestStop,
   type SnapPaging,
   snapStops,
@@ -507,9 +508,10 @@ export function Carousel({
       if (!el) {
         return;
       }
-      // While a flick's drag or settle holds the row, the paging moves it.
+      // Under snap paging the paging moves the row, held or at rest. A touch
+      // then catches the move, and the release rests on a page.
       if (
-        moveHeldSnapPaging(el, (at, end) =>
+        moveSnapPaging(el, (at, end) =>
           pagingStep(el, at, end, direction, hasLoop && hasOverflow),
         )
       ) {
@@ -590,8 +592,15 @@ export function Carousel({
     const delta = isRtlElement(el)
       ? itemRect.right - containerRect.right
       : itemRect.left - containerRect.left;
+    // Under snap paging the row goes to the item's stop, inside the scroll
+    // padding, so the hand-back's snap does not pull it back.
     if (
-      moveHeldSnapPaging(el, at => at + (isRtlElement(el) ? -delta : delta))
+      moveSnapPaging(el, (at, end) =>
+        nearestStop(
+          snapStops(el, at, end),
+          at + (isRtlElement(el) ? -delta : delta),
+        ),
+      )
     ) {
       return;
     }
@@ -772,6 +781,9 @@ export function Carousel({
         layer.render(
           <>
             <div
+              // A hidden button is never a Tab stop or in the a11y tree. Its
+              // disabled state alone would keep it focusable.
+              inert={!canScrollStart || undefined}
               {...stylex.props(
                 styles.buttonPill,
                 styles.buttonPillStart,
@@ -791,18 +803,18 @@ export function Carousel({
                 size="sm"
                 isIconOnly
                 // Disabled when there's nothing to scroll toward. Keeps the
-                // button mounted (stable layout) but removes it from the tab
-                // order and a11y tree while it's visually hidden, so keyboard
-                // users don't land on an invisible control. The Effect above
-                // hands focus to the scroll area when the state behind this
-                // one flips it disabled.
+                // button mounted (stable layout). The Effect above hands focus
+                // to the scroll area when the state behind this one flips it
+                // disabled.
                 isDisabled={!canScrollStart}
                 onFocus={() => {
                   focusedNavRef.current = 'start';
                 }}
                 onBlur={event => {
                   // A disabled button was blurred by the commit, not the person.
-                  if (!event.currentTarget.disabled) {
+                  if (
+                    event.currentTarget.getAttribute('aria-disabled') !== 'true'
+                  ) {
                     focusedNavRef.current = null;
                   }
                 }}
@@ -811,6 +823,9 @@ export function Carousel({
               />
             </div>
             <div
+              // A hidden button is never a Tab stop or in the a11y tree. Its
+              // disabled state alone would keep it focusable.
+              inert={!canScrollEnd || undefined}
               {...stylex.props(
                 styles.buttonPill,
                 styles.buttonPillEnd,
@@ -830,14 +845,16 @@ export function Carousel({
                 size="sm"
                 isIconOnly
                 // See "Scroll left" — disabled while visually hidden so the
-                // button stays mounted but out of the tab order / a11y tree.
+                // button stays mounted.
                 isDisabled={!canScrollEnd}
                 onFocus={() => {
                   focusedNavRef.current = 'end';
                 }}
                 onBlur={event => {
                   // A disabled button was blurred by the commit, not the person.
-                  if (!event.currentTarget.disabled) {
+                  if (
+                    event.currentTarget.getAttribute('aria-disabled') !== 'true'
+                  ) {
                     focusedNavRef.current = null;
                   }
                 }}
