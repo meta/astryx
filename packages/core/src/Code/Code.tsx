@@ -112,6 +112,7 @@ export function Code({
   return (
     <code
       ref={ref}
+      dir="ltr"
       {...props}
       {...mergeProps(
         themeProps('code', {color, size}),

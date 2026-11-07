@@ -61,6 +61,15 @@ describe('CodeBlock', () => {
     expect(screen.getByText(/const/)).toBeInTheDocument();
   });
 
+  it('lays its code out left to right in a right-to-left page', () => {
+    const {container} = render(
+      <div dir="rtl">
+        <CodeBlock code="const a = 1;" language="javascript" hasLineNumbers />
+      </div>,
+    );
+    expect(container.querySelector('code')).toHaveAttribute('dir', 'ltr');
+  });
+
   it('forwards the public ref and composes supported root props', () => {
     const ref = createRef<HTMLPreElement>();
     render(
