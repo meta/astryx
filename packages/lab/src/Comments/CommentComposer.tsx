@@ -328,8 +328,15 @@ export function CommentComposerBase({
     }
   };
 
+  // The picker, a paste, and a drop all arrive here. A busy composer starts
+  // no upload, so none of them can add images to a draft in flight.
   const beginImageUpload = (files: readonly File[]) => {
-    if (onUploadImages == null || files.length === 0) {
+    if (
+      onUploadImages == null ||
+      files.length === 0 ||
+      isSubmittingRef.current ||
+      actionPendingRef.current
+    ) {
       return;
     }
     const images = files.filter(file => file.type.startsWith('image/'));

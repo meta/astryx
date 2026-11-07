@@ -305,13 +305,16 @@ describe('ChatComposerInput', () => {
         );
       }
       render(<Host />);
-      expect(screen.getByRole('button', {name: 'Send'})).toBeDisabled();
+      expect(screen.getByRole('button', {name: 'Send'})).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      );
       screen.getByRole('textbox').focus();
       act(() => {
         handleRef.current!.insertToken({value: '@sam', label: 'Sam'});
       });
       const send = screen.getByRole('button', {name: 'Send'});
-      expect(send).toBeEnabled();
+      expect(send).not.toHaveAttribute('aria-disabled');
       fireEvent.click(send);
       expect(onSubmit.mock.lastCall?.[0]).toContain('@sam');
     });

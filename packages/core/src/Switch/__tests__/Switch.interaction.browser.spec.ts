@@ -29,6 +29,7 @@ import {
   busyWindowProof,
   compareCurve,
   cubicBezier,
+  controlClock,
   countBetween,
   advanceFrozenPage,
   drag,
@@ -42,6 +43,7 @@ import {
   releaseAnimations,
   seekAnimations,
   springStep,
+  startBusyControl,
   startScreencast,
   tap,
   thawPage,
@@ -50,6 +52,7 @@ import {
   touchDriver,
   touchStoryboard,
   traceRendering,
+  trackControl,
   trackMarker,
   waitForRest,
   watchAnimations,
@@ -57,6 +60,7 @@ import {
   writeEvidence,
   type CastFrame,
   type TouchDriver,
+  CONTROL_SIDE,
 } from '@astryxdesign/interaction-harness';
 import {BROWSER_CLICK_WAIT_MS} from '../../utils/browserClickWait';
 import {CLICK_GUARD_WINDOW_MS} from '../../utils/clickGuard';
@@ -313,10 +317,16 @@ async function openSwitch(
   {
     direction = 'ltr',
     globals = [],
+    belowControls = false,
   }: {
     direction?: 'ltr' | 'rtl';
     /** More Storybook globals, e.g. `theme:probe`. */
     globals?: string[];
+    /**
+     * Moves the switch below the busy controls' strips (the top
+     * `2 * CONTROL_SIDE + 4` px), so a control never crosses its marker.
+     */
+    belowControls?: boolean;
   } = {},
 ): Promise<OpenSwitch> {
   const allGlobals = [
@@ -341,6 +351,17 @@ async function openSwitch(
         requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
       );
     });
+  }
+  if (belowControls) {
+    await page.addStyleTag({
+      content: `#storybook-root { padding-top: ${2 * CONTROL_SIDE + 16}px !important; }`,
+    });
+    await page.evaluate(
+      async () =>
+        new Promise<void>(resolve =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
   }
   const driver = await touchDriver(page);
   const root = page.locator('#storybook-root');
@@ -2025,6 +2046,122 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     expectCaughtWithoutAJump(samples.filter((_, index) => index % 3 === 0));
   });
 
+  /** The side of the marker on the thumb, px (`markElement`). */
+  const MARKER_PX = 6;
+
+  /** The inset that centres the marker on the off thumb (16 px). */
+  const MARKER_CENTRE_PX = (THUMB_OFF - MARKER_PX) / 2;
+
+  /**
+   * The narrowest box a whole marker can show, px. When the value changes,
+   * the thumb's scale carries its old size, down to `THUMB_OFF / THUMB_ON`.
+   * At a subpixel offset, the pixel at each edge is only partly covered. A
+   * narrower box is a torn frame: the cast caught the marker half drawn.
+   */
+  const WHOLE_MARKER_PX = Math.ceil((MARKER_PX * THUMB_OFF) / THUMB_ON) - 2;
+
+  /** How long each busy-window control takes to cross and come back, ms. */
+  const CONTROL_CYCLE_MS = 800;
+
+  /** One 60 Hz frame, ms. */
+  const FRAME_60_MS = 1000 / 60;
+
+  /**
+   * Starts the two busy-window controls, half a leg apart. It resolves with
+   * each one's start on the page clock, epoch ms.
+   */
+  async function startControls(page: Page): Promise<[number, number]> {
+    const first = await startBusyControl(page);
+    const ahead = await startBusyControl(page, {ahead: true});
+    return [first.start, ahead.start];
+  }
+
+  /**
+   * The thumb's center in each presented frame, on the page clock, `[ms,
+   * px]`. The two controls time each frame by the compositor's own
+   * progress, so a late or bunched cast stamp moves nothing. Only frames
+   * with a whole marker count, and the run logs how many it drops.
+   */
+  /**
+   * A frame on the page clock: its time, the marker's x, and how many torn
+   * frames were dropped just before it.
+   */
+  type ClockedFrame = [ms: number, px: number, dropsBefore: number];
+
+  async function thumbOnControlClock(
+    page: Page,
+    castFrames: Parameters<typeof trackMarker>[1],
+    starts: [number, number],
+  ): Promise<ClockedFrame[]> {
+    const readers = [
+      {
+        clock: controlClock(await trackControl(page, castFrames)),
+        origin: starts[0],
+      },
+      {
+        clock: controlClock(
+          await trackControl(page, castFrames, {ahead: true}),
+        ),
+        origin: starts[1],
+      },
+    ];
+    const pageTime = (stamp: number): number | null => {
+      for (const {clock, origin} of readers) {
+        const ms = clock.get(stamp);
+        if (ms != null) {
+          // The stamp only picks the control's cycle.
+          const cycles = Math.round((stamp - origin - ms) / CONTROL_CYCLE_MS);
+          return origin + ms + cycles * CONTROL_CYCLE_MS;
+        }
+      }
+      return null;
+    };
+    const tracked = await trackMarker(page, castFrames);
+    const shown = tracked.filter(
+      (f): f is typeof f & {box: NonNullable<typeof f.box>} =>
+        f.box != null && f.box.width > 0 && f.box.height > 0,
+    );
+    // Cast frames come in the order the compositor presented them.
+    const clocked: ClockedFrame[] = [];
+    let dropped = 0;
+    let dropsBefore = 0;
+    for (const f of [...shown].sort((a, b) => a.t - b.t)) {
+      if (f.box.width < WHOLE_MARKER_PX || f.box.height < WHOLE_MARKER_PX) {
+        dropped += 1;
+        dropsBefore += 1;
+        continue;
+      }
+      const at = pageTime(f.t);
+      if (at != null) {
+        clocked.push([at, f.box.x + f.box.width / 2, dropsBefore]);
+        dropsBefore = 0;
+      }
+    }
+    clocked.sort((a, b) => a[0] - b[0]);
+    const gaps = clocked.slice(1).map(([at], i) => at - clocked[i][0]);
+    test.info().annotations.push({
+      type: 'torn marker frames',
+      description: `${dropped} of ${shown.length} frames show a marker box under ${WHOLE_MARKER_PX} px; ${clocked.filter(([, , drops]) => drops > 0).length} steps span one; the longest gap is ${(Math.max(0, ...gaps) / FRAME_60_MS).toFixed(1)} frames`,
+    });
+    return clocked;
+  }
+
+  /**
+   * Each presented frame's step from the one before, in px per 60 Hz frame. A
+   * frame that comes late spans more time, so its step counts per frame. A
+   * step across dropped frames counts as the whole move over them, since a
+   * skip inside them would show only in part.
+   */
+  function frameSteps(samples: ReadonlyArray<ClockedFrame>): number[] {
+    return samples
+      .slice(1)
+      .map(
+        ([time, x, drops], i) =>
+          ((drops + 1) * Math.abs(x - samples[i][1]) * FRAME_60_MS) /
+          Math.max(time - samples[i][0], FRAME_60_MS),
+      );
+  }
+
   test('P14 · a second tap whose lift the page handles late (its main thread busy for 100 ms) catches the thumb where the screen shows it, without a jump (spec:AST-094 FR6)', async ({
     page,
     browserName,
@@ -2033,8 +2170,12 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
       browserName !== 'chromium',
       'screencast frame evidence is Chromium-only in Playwright (WebKit: checked on the iOS simulator instead)',
     );
-    const {driver, input, thumb, center} = await openSwitch(page);
-    await markElement(thumb, {size: 6, inset: 2});
+    const {driver, input, thumb, center} = await openSwitch(page, undefined, {
+      belowControls: true,
+    });
+    // The marker sits at the thumb's centre, so the thumb's scale does not
+    // move it.
+    await markElement(thumb, {size: MARKER_PX, inset: MARKER_CENTRE_PX});
     // The page blocks at the second touch's start, so that touch's lift waits
     // for the block. The switch handles the lift about 70 ms after it
     // happened, while the compositor keeps the first travel moving.
@@ -2060,6 +2201,7 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
         {capture: true, passive: true},
       );
     });
+    const controls = await startControls(page);
     const cast = await startScreencast(page);
     // The travel has to keep moving through the block, so this second tap is
     // not frozen.
@@ -2072,33 +2214,23 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
         (window as unknown as {__block?: {from: number; to: number}}).__block,
     );
     expect(block, 'the page was busy when the lift came').toBeDefined();
-    const tracked = await trackMarker(page, castFrames);
-    // Present and painted first: the marked thumb in the frames, with a box.
-    const shown = tracked.filter(
-      (f): f is typeof f & {box: NonNullable<typeof f.box>} =>
-        f.box != null && f.box.width > 0 && f.box.height > 0,
-    );
-    expect(shown.length).toBeGreaterThan(10);
-    const samples = shown.map(
-      f => [f.t, f.box.x + f.box.width / 2] as [number, number],
-    );
-    const xs = samples.map(([, x]) => x);
-    const farthest = Math.max(...xs) - xs[0];
-    // It turned around mid-travel, short of the on end...
+    const samples = await thumbOnControlClock(page, castFrames, controls);
+    expect(samples.length).toBeGreaterThan(10);
+    // No presented frame moves it more than a few px from the one before, on
+    // the compositor's clock.
+    expect(
+      Math.max(...frameSteps(samples)),
+      JSON.stringify(samples),
+    ).toBeLessThan(4);
+    // It turned around mid-travel, short of the on end. A loaded page can
+    // handle the late lift once the travel has ended. That fails here, by
+    // name.
+    const farthest = Math.max(...samples.map(([, x]) => x)) - samples[0][1];
     expect(farthest).toBeGreaterThan(1);
-    expect(farthest).toBeLessThan(TRAVEL_PX - 1);
-    // ...from the place the screen showed when the late lift was handled. No
-    // presented frame moves it more than a few px from the one before,
-    // measured against the time the two frames span.
-    const FRAME_MS = 1000 / 60;
-    const perFrame = samples
-      .slice(1)
-      .map(
-        ([time, x], i) =>
-          (Math.abs(x - samples[i][1]) * FRAME_MS) /
-          Math.max(time - samples[i][0], FRAME_MS),
-      );
-    expect(Math.max(...perFrame), JSON.stringify(samples)).toBeLessThan(4);
+    expect(
+      farthest,
+      `the late lift came after the travel ended on screen (it reached ${farthest} px)`,
+    ).toBeLessThan(TRAVEL_PX - 1);
   });
 
   test('a tap whose first frame the page commits late (its main thread busy for 100 ms after the lift) starts the travel from rest on that frame, not partway into its curve', async ({
@@ -2109,8 +2241,12 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
       browserName !== 'chromium',
       'screencast frame evidence is Chromium-only in Playwright (WebKit: checked on the iOS simulator instead)',
     );
-    const {driver, input, thumb, center} = await openSwitch(page);
-    await markElement(thumb, {size: 6, inset: 2});
+    const {driver, input, thumb, center} = await openSwitch(page, undefined, {
+      belowControls: true,
+    });
+    // The marker sits at the thumb's centre, so the thumb's scale does not
+    // move it.
+    await markElement(thumb, {size: MARKER_PX, inset: MARKER_CENTRE_PX});
     // The page blocks in the lift's own dispatch, after the switch's
     // listeners have started the travel. The frame that first shows the
     // travel comes about 100 ms after the switch asked for it. As Core
@@ -2139,6 +2275,7 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     const restLeft = async () =>
       thumb.evaluate(element => element.getBoundingClientRect().left);
     const offLeft = await restLeft();
+    const controls = await startControls(page);
     const cast = await startScreencast(page);
     await driver.play(tap(center, {holdMs: 40}));
     await expect(input).toBeChecked();
@@ -2150,31 +2287,18 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
         (window as unknown as {__block?: {from: number; to: number}}).__block,
     );
     expect(block, 'the page was busy after the lift').toBeDefined();
-    const tracked = await trackMarker(page, castFrames);
-    // Present and painted first: the marked thumb in the frames, with a box.
-    const shown = tracked.filter(
-      (f): f is typeof f & {box: NonNullable<typeof f.box>} =>
-        f.box != null && f.box.width > 0 && f.box.height > 0,
-    );
-    expect(shown.length).toBeGreaterThan(10);
-    const samples = shown.map(
-      f => [f.t, f.box.x + f.box.width / 2] as [number, number],
-    );
+    const samples = await thumbOnControlClock(page, castFrames, controls);
+    expect(samples.length).toBeGreaterThan(10);
     const xs = samples.map(([, x]) => x);
     // It travelled from the off rest to the on rest (the frames place the
     // marker to the whole px)...
     expect(Math.abs(xs.at(-1)! - xs[0] - (onLeft - offLeft))).toBeLessThan(1.5);
     // ...from rest: no presented frame moves it more than a few px from the
-    // one before, measured against the time the two frames span.
-    const FRAME_MS = 1000 / 60;
-    const perFrame = samples
-      .slice(1)
-      .map(
-        ([time, x], i) =>
-          (Math.abs(x - samples[i][1]) * FRAME_MS) /
-          Math.max(time - samples[i][0], FRAME_MS),
-      );
-    expect(Math.max(...perFrame), JSON.stringify(samples)).toBeLessThan(4);
+    // one before, on the compositor's clock.
+    expect(
+      Math.max(...frameSteps(samples)),
+      JSON.stringify(samples),
+    ).toBeLessThan(4);
   });
 
   test('a disabled or busy switch stays inert under a finger', async ({

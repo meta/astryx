@@ -30,7 +30,7 @@ import type {StyleXStyles} from '@stylexjs/stylex';
 import {createPortal} from 'react-dom';
 import {LayerContentBoundary} from './layerScopedContext';
 import {layerClickBoundary} from './layerClickBoundary';
-import {addAnchorName, removeAnchorName} from './anchorName';
+import {addAnchorName, readAnchorNames, removeAnchorName} from './anchorName';
 import {currentGesture, currentGestureHasClicked} from './gestureCounter';
 import {resolveLayerPortalTarget} from './layerHost';
 import {layerTextReset} from './layerTextReset.stylex';
@@ -1673,14 +1673,35 @@ function useLayerImplementation(
   // hide starts; the ledger counts the hide from there until the element's
   // own `toggle`, independent of this hook's bindings, which a render inside
   // the hide can replace.
-  const handleBeforeToggle = useCallback((e: Event) => {
-    const toggleEvent = e as ToggleEvent;
-    const el = e.currentTarget as HTMLElement | null;
-    if (toggleEvent.newState === 'closed' && isOpenRef.current && el != null) {
-      observeBrowserHide(el);
-      onCloseStartRef.current?.();
-    }
-  }, []);
+  const handleBeforeToggle = useCallback(
+    (e: Event) => {
+      const toggleEvent = e as ToggleEvent;
+      const el = e.currentTarget as HTMLElement | null;
+      if (toggleEvent.newState !== 'closed' || el == null) {
+        return;
+      }
+      if (isOpenRef.current) {
+        observeBrowserHide(el);
+        onCloseStartRef.current?.();
+        // The browser's own close releases the name from its toggle event.
+        return;
+      }
+      // Our hide drops its trigger's anchor name here, inside the hide, so the
+      // hide's own layout covers the change. A name dropped after that layout
+      // costs one more. A layer that the closed state keeps shown keeps the
+      // name until its exit ends.
+      const trigger = triggerRef.current;
+      if (
+        trigger != null &&
+        readAnchorNames(trigger).includes(anchorId) &&
+        !closeKeepsShownRef.current
+      ) {
+        exitRef.current = null;
+        removeAnchorName(trigger, anchorId);
+      }
+    },
+    [anchorId],
+  );
 
   const handleToggle = useCallback(
     (e: Event) => {

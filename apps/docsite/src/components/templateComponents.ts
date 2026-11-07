@@ -50,6 +50,10 @@ export const TEMPLATE_COMPONENTS: Record<
     () =>
       import('../../../../packages/cli/assets/templates/pages/contact-form/page'),
   ),
+  'course-detail': lazy(
+    () =>
+      import('../../../../packages/cli/assets/templates/pages/course-detail/page'),
+  ),
   dashboard: lazy(
     () =>
       import('../../../../packages/cli/assets/templates/pages/dashboard/page'),

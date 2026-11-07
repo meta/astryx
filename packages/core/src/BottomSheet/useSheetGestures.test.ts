@@ -113,6 +113,8 @@ function touchDown(hook: Hook, y: number, t: number, target: HTMLElement) {
     } as unknown as React.PointerEvent),
   );
 }
+// A release velocity needs two moves or more: Core's velocity tracker reads
+// none from fewer. So each flick here moves at least twice.
 function move(hook: Hook, y: number, t: number, target: HTMLElement) {
   act(() =>
     hook.result.current.handleProps.onPointerMove(pointerEvent(y, t, target)),
@@ -180,6 +182,7 @@ describe('useSheetGestures', () => {
     touchDown(hook, 0, 0, t);
     // 60px in 20ms = 3,000 px/s. Projected 0.1 s ahead it lands at 360px,
     // nearer closed (400px) than the 200px detent.
+    move(hook, 30, 10, t);
     move(hook, 60, 20, t);
     up(hook, 60, 22, t);
     expect(onDismiss).toHaveBeenCalledTimes(1);
@@ -255,6 +258,7 @@ describe('useSheetGestures', () => {
     });
     const t = makeTarget();
     down(hook, 0, 0, t);
+    move(hook, 30, 10, t);
     move(hook, 60, 20, t);
     up(hook, 60, 22, t);
 
@@ -277,6 +281,7 @@ describe('useSheetGestures', () => {
     onSnap.mockClear();
     // Now flick up fast: 60px in 20ms = 3px/ms, over the distance floor.
     down(hook, 200, 1000, t);
+    move(hook, 170, 1010, t);
     move(hook, 140, 1020, t);
     up(hook, 140, 1022, t);
     expect(onDismiss).not.toHaveBeenCalled();
@@ -315,7 +320,7 @@ describe('useSheetGestures', () => {
       expect(onSnap).toHaveBeenLastCalledWith(200);
     });
 
-    it('reads the release speed over the last stretch, so one slow sample does not cancel a throw', () => {
+    it('keeps a throw whose last sample is slow, because the newest interval weighs a fifth', () => {
       const {hook, onDismiss} = setup({snapHeights: () => [200]});
       const t = makeTarget();
       down(hook, 0, 0, t);
@@ -325,24 +330,43 @@ describe('useSheetGestures', () => {
       expect(onDismiss).toHaveBeenCalledTimes(1);
     });
 
-    it('reads a throw that begins after a hold at its own speed, not the average since touch-down', () => {
+    it('reads a throw that begins after a hold at its own speed once two of its moves are in', () => {
       const {hook, onDismiss} = setup({snapHeights: () => [200]});
       const t = makeTarget();
       down(hook, 0, 0, t);
       move(hook, 0, 250, t); // a still hold on the handle
-      move(hook, 30, 275, t); // then 60px in 50ms
+      // Then 60px in 50ms. The hold weighs on the first move only.
+      move(hook, 15, 262, t);
+      move(hook, 30, 275, t);
+      move(hook, 45, 287, t);
       move(hook, 60, 300, t);
       up(hook, 60, 302, t);
       expect(onDismiss).toHaveBeenCalledTimes(1);
     });
 
-    it('reads a single move after a hold as a move, not as the whole hold', () => {
+    it('weighs a hold into the first move after it, as iOS does', () => {
+      const {hook, onDismiss} = setup({snapHeights: () => [200]});
+      const t = makeTarget();
+      down(hook, 0, 0, t);
+      move(hook, 0, 250, t); // a still hold on the handle
+      // Two moves of 30px in 25ms. The first one counts the hold's time, so
+      // the release reads about 330 px/s and the sheet stops at the 200px
+      // detent.
+      move(hook, 30, 275, t);
+      move(hook, 60, 300, t);
+      up(hook, 60, 302, t);
+      expect(onDismiss).not.toHaveBeenCalled();
+      expect(hook.result.current.settledOffset).toBe(200);
+    });
+
+    it('releases a single move at no speed', () => {
       const {hook, onDismiss} = setup({snapHeights: () => [200]});
       const t = makeTarget();
       down(hook, 0, 0, t);
       move(hook, 60, 300, t); // one sample, 300ms after touch-down
       up(hook, 60, 302, t);
-      expect(onDismiss).toHaveBeenCalledTimes(1);
+      expect(onDismiss).not.toHaveBeenCalled();
+      expect(hook.result.current.settledOffset).toBe(0);
     });
 
     it('releases no throw from a finger that rested before lifting', () => {
@@ -353,6 +377,27 @@ describe('useSheetGestures', () => {
       up(hook, 60, 400, t); // ... then 380ms of rest, then the lift
       expect(onDismiss).not.toHaveBeenCalled();
       expect(hook.result.current.settledOffset).toBe(0);
+    });
+
+    it('releases no throw from a finger that rested 50ms before lifting', () => {
+      const {hook, onDismiss} = setup({snapHeights: () => [200]});
+      const t = makeTarget();
+      down(hook, 0, 0, t);
+      move(hook, 30, 10, t);
+      move(hook, 60, 20, t); // 3px/ms ...
+      up(hook, 60, 70, t); // ... then 50ms of rest, past the 40ms stillness
+      expect(onDismiss).not.toHaveBeenCalled();
+      expect(hook.result.current.settledOffset).toBe(0);
+    });
+
+    it('keeps a throw after a 30ms rest before the lift', () => {
+      const {hook, onDismiss} = setup({snapHeights: () => [200]});
+      const t = makeTarget();
+      down(hook, 0, 0, t);
+      move(hook, 30, 10, t);
+      move(hook, 60, 20, t); // 3px/ms, then 30ms of rest
+      up(hook, 60, 50, t);
+      expect(onDismiss).toHaveBeenCalledTimes(1);
     });
 
     it('settles a throw that would coast past the line at the shortest detent when canDismiss is false', () => {
@@ -370,6 +415,42 @@ describe('useSheetGestures', () => {
     });
   });
 
+  it('lands a flick on the next detent when one of its early moves arrives late', () => {
+    const onSnap = vi.fn();
+    const {hook, onDismiss} = setup({snapHeights: () => [100], onSnap});
+    const t = makeTarget();
+    // 9.6px every 8ms = 1,200 px/s, a flick. The eighth of ten moves comes
+    // 70ms late, stamped when it arrives, at its own position. The last two
+    // moves keep the 8ms spacing.
+    touchDown(hook, 0, 0, t);
+    for (let k = 1; k <= 7; k += 1) {
+      move(hook, 9.6 * k, 8 * k, t);
+    }
+    move(hook, 76.8, 134, t);
+    move(hook, 86.4, 142, t);
+    move(hook, 96, 150, t);
+    up(hook, 96, 152, t);
+    // A flick from the tallest detent goes one position down: the 100px
+    // detent, 300px below.
+    expect(onDismiss).not.toHaveBeenCalled();
+    expect(onSnap).toHaveBeenLastCalledWith(100);
+  });
+
+  it('reads a lift at a new position as the last move', () => {
+    const onSnap = vi.fn();
+    const {hook, onDismiss} = setup({snapHeights: () => [100], onSnap});
+    const t = makeTarget();
+    // Two moves at 900 px/s, then a lift 30px further on 10ms later. The
+    // lift's move makes the release about 1,320 px/s: a flick, so the sheet
+    // goes one position down, to the 100px detent.
+    touchDown(hook, 0, 0, t);
+    move(hook, 9, 10, t);
+    move(hook, 18, 20, t);
+    up(hook, 48, 30, t);
+    expect(onDismiss).not.toHaveBeenCalled();
+    expect(onSnap).toHaveBeenLastCalledWith(100);
+  });
+
   it('takes a fast short flick from the tallest of two detents to the next one down', () => {
     const onSnap = vi.fn();
     const {hook, onDismiss} = setup({snapHeights: () => [200], onSnap});
@@ -378,6 +459,7 @@ describe('useSheetGestures', () => {
     // 145px, short of the 200px detent. A flick goes at least one position
     // down: the 200px detent.
     touchDown(hook, 0, 0, t);
+    move(hook, 10, 8, t);
     move(hook, 20, 16, t);
     up(hook, 20, 18, t);
     expect(onDismiss).not.toHaveBeenCalled();
@@ -388,6 +470,7 @@ describe('useSheetGestures', () => {
     const {hook, onDismiss} = setup(); // one detent: fully open
     const t = makeTarget();
     touchDown(hook, 0, 0, t);
+    move(hook, 10, 5, t);
     move(hook, 20, 10, t);
     up(hook, 20, 12, t);
     expect(onDismiss).toHaveBeenCalledTimes(1);
@@ -398,6 +481,7 @@ describe('useSheetGestures', () => {
     const t = makeTarget();
     // 20px in 25ms = 800 px/s: below the flick speed, so it settles back.
     touchDown(hook, 0, 0, t);
+    move(hook, 8, 10, t);
     move(hook, 20, 25, t);
     up(hook, 20, 27, t);
     expect(onDismiss).not.toHaveBeenCalled();
@@ -415,6 +499,7 @@ describe('useSheetGestures', () => {
     up(hook, 180, 1100, t);
     expect(onSnap).toHaveBeenLastCalledWith(200);
     touchDown(hook, 400, 2000, t);
+    move(hook, 390, 2005, t);
     move(hook, 380, 2010, t);
     up(hook, 380, 2012, t);
     expect(onSnap).toHaveBeenLastCalledWith(400);
@@ -424,6 +509,7 @@ describe('useSheetGestures', () => {
     const {hook, onDismiss} = setup();
     const t = makeTarget();
     touchDown(hook, 0, 0, t);
+    move(hook, 10, 5, t);
     move(hook, 20, 10, t);
     // The host takes the close in the same update, as a controlled host does.
     act(() => {
@@ -1236,12 +1322,16 @@ describe('useSheetGestures', () => {
       y: number,
       id = 1,
       touchType = 'direct',
+      time?: number,
     ) {
       const ev = new Event(type, {bubbles: true, cancelable: true});
       // jsdom lacks TouchEvent; attach the fields the handler reads.
       Object.defineProperty(ev, 'changedTouches', {
         value: [{identifier: id, clientY: y, touchType}],
       });
+      if (time != null) {
+        Object.defineProperty(ev, 'timeStamp', {value: time});
+      }
       Object.defineProperty(ev, 'touches', {
         value:
           type === 'touchend' || type === 'touchcancel'
@@ -1293,6 +1383,30 @@ describe('useSheetGestures', () => {
       // The handoff is only worth taking if the sheet follows the finger:
       // 50px of pull expands 50px toward the tallest detent.
       expect(liveOffset(hook)).toBe(150);
+    });
+
+    it("lands a content pull-down flick by the touch events' own timestamps", () => {
+      const onSnap = vi.fn();
+      const {hook, onDismiss} = setup({snapHeights: () => [200], onSnap});
+      const el = makeScroller({
+        scrollTop: 0,
+        clientHeight: 200,
+        scrollHeight: 800,
+      });
+      act(() => hook.result.current.sheetRef(el));
+      act(() => hook.result.current.bodyProps.ref(el));
+      // 17.6px every 16ms = 1,100 px/s, a flick, dispatched all at once, so
+      // only the events' own timestamps carry the speed. Its 0.1 s projection
+      // stops at 180px, so the flick goes one position down, to 200px.
+      act(() => {
+        touch(el, 'touchstart', 0, 1, 'direct', 0);
+        for (let k = 1; k <= 4; k += 1) {
+          touch(el, 'touchmove', 17.6 * k, 1, 'direct', 16 * k);
+        }
+        touch(el, 'touchend', 70.4, 1, 'direct', 66);
+      });
+      expect(onDismiss).not.toHaveBeenCalled();
+      expect(onSnap).toHaveBeenLastCalledWith(200);
     });
 
     it('stretches the sheet with a pull up past a list already at its end, at the tallest detent, without claiming the touch', () => {

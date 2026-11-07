@@ -14,7 +14,7 @@
  */
 
 import {use, useMemo, type ReactNode} from 'react';
-import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
+import {createLayerScopedContext} from '../Layer/layerScopedContext';
 import type {AnimatedLayout} from '../hooks/useAnimatedLayout';
 
 export type ListDensity = 'compact' | 'balanced' | 'spacious';
@@ -70,7 +70,11 @@ export interface ListContextValue {
   animatedLayout?: AnimatedLayout;
 }
 
-export const ListContext = createContext<ListContextValue | null>(null);
+export const ListContext = createLayerScopedContext<ListContextValue | null>(
+  'ListContext',
+  1,
+  null,
+);
 ListContext.displayName = 'ListContext';
 
 /**
