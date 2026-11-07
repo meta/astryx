@@ -56,8 +56,10 @@ Both are defects to correct there, not variations this record allows.
   pointers, and every width outcome.
 - Compatibility class: presentation-only change to one transient state, plus one
   accessibility correction that adds a control where keyboard resize was already
-  promised. No public API, prop, export, target, or accessibility mapping is added
-  or changed.
+  promised. No public API, prop, export, or target is added or changed. One
+  accessibility correction changes the announced range: a column with no
+  maximum width announces a stand-in maximum and its value in words (AR7),
+  where it announced no maximum, so ARIA's default of 100 applied.
 - Migration decision: none. No consumer edit and no codemod.
 
 This specification-only change carries no package Changeset. The implementation
@@ -161,7 +163,7 @@ remain in `useTableColumnResize.doc.mjs`.
 ## Accessibility contract
 
 - **AR1 — Unchanged semantics.** Each boundary keeps its separator role, vertical
-  orientation, accessible name naming its column, and current value bounds. Its
+  orientation, accessible name naming its column, and value bounds (AR7). Its
   resize handle sits in the `overlay` slot, so it doesn't join the header's
   name (`component:Table` FR11).
 - **AR2 — Decorative disclosure.** `hinted` is presentation only. It changes no ARIA
@@ -182,10 +184,10 @@ remain in `useTableColumnResize.doc.mjs`.
   never below its value or its minimum (`spec:AST-020` FR1). A column with a
   maximum width announces that maximum. A column with none announces the
   window's inline extent, floored at its value and minimum, as an unbounded
-  Resizable region does; the column is never clamped to it. Because that
-  maximum stands in for a missing limit, such a boundary also announces its
-  width in words ("133 pixels"). The server render, which has no window,
-  carries no maximum until hydration reads it.
+  Resizable region does, from the same shared measurement; the column is never
+  clamped to it. Because that maximum stands in for a missing limit, such a
+  boundary also announces its value in words ("133 pixels"). The server
+  render, which has no window, carries no maximum until hydration reads it.
 - **AR8 — The value is the rendered width.** A boundary's value is its
   column's rendered width in whole pixels, from the first measurement after
   layout, and follows the column as it is resized. The width is read from the

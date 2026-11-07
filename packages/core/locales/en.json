@@ -964,8 +964,8 @@
     "description": "Accessible name for a Table column-resize handle (a vertical separator between header cells). `label` is the column header's visible text, or the column key when the header has no text."
   },
   "@astryx.table.columnResize.widthValue": {
-    "defaultMessage": "{width} pixels",
-    "description": "Value a screen reader announces for a Table column-resize handle when the column has no maximum width. `width` is the column's current width as a whole number of CSS pixels, for example \"133 pixels\"."
+    "defaultMessage": "{width, number} {width, plural, one {pixel} other {pixels}}",
+    "description": "Value a screen reader announces for a Table column-resize handle when the column has no maximum width. `width` is the column's current value as a whole number of CSS pixels, for example \"133 pixels\"."
   },
   "@astryx.table.filter.allPlaceholder": {
     "defaultMessage": "All",
