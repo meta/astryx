@@ -329,6 +329,20 @@ const paddingStyles = stylex.create({
 });
 
 /**
+ * Runs one of Carousel's own calls into the paging: a scroll call or the
+ * detach. Such a call can run inside React's commit, so a report it raises
+ * takes React's scheduling.
+ */
+function ownCall<T>(depth: {current: number}, run: () => T): T {
+  depth.current += 1;
+  try {
+    return run();
+  } finally {
+    depth.current -= 1;
+  }
+}
+
+/**
  * Where an edge press under snap paging goes from offset `at`: about one view
  * on, to the nearest stop and at least one stop on. With `wraps`, a press past
  * an edge goes to the opposite edge.
@@ -402,6 +416,8 @@ export function Carousel({
   const t = useComponentTranslator();
   const ariaLabel = ariaLabelFromProps ?? t('@astryx.carousel.label');
   const scrollElRef = useRef<HTMLElement | null>(null);
+  // How many of Carousel's own calls into the paging are running.
+  const ownCallsRef = useRef(0);
   const startButtonRef = useRef<HTMLButtonElement>(null);
   const endButtonRef = useRef<HTMLButtonElement>(null);
   // Which nav button last held focus, and what the overflow state was on the
@@ -455,16 +471,10 @@ export function Carousel({
       if (attachedPaging == null) {
         return () => {};
       }
-      // The detach runs in an effect cleanup, inside React's commit, so the
-      // paging's last report there takes React's scheduling.
-      let isDetaching = false;
       const detach = attachSnapPaging(attachedPaging, scroller, held =>
-        followShown(held, !isDetaching),
+        followShown(held, ownCallsRef.current === 0),
       );
-      return () => {
-        isDetaching = true;
-        detach();
-      };
+      return () => ownCall(ownCallsRef, detach);
     },
     attachedPaging,
   );
@@ -522,8 +532,10 @@ export function Carousel({
       // Under snap paging the paging moves the row, held or at rest. A touch
       // then catches the move, and the release rests on a page.
       if (
-        moveSnapPaging(el, (at, end) =>
-          pagingStep(el, at, end, direction, hasLoop && hasOverflow),
+        ownCall(ownCallsRef, () =>
+          moveSnapPaging(el, (at, end) =>
+            pagingStep(el, at, end, direction, hasLoop && hasOverflow),
+          ),
         )
       ) {
         return;
@@ -606,10 +618,12 @@ export function Carousel({
     // Under snap paging the row goes to the item's stop, inside the scroll
     // padding, so the hand-back's snap does not pull it back.
     if (
-      moveSnapPaging(el, (at, end) =>
-        nearestStop(
-          snapStops(el, at, end),
-          at + (isRtlElement(el) ? -delta : delta),
+      ownCall(ownCallsRef, () =>
+        moveSnapPaging(el, (at, end) =>
+          nearestStop(
+            snapStops(el, at, end),
+            at + (isRtlElement(el) ? -delta : delta),
+          ),
         ),
       )
     ) {

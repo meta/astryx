@@ -119,10 +119,10 @@ export function useScrollOverflow() {
  * scroll offset stays where the hold began and its items move. The caller
  * reports where the row is shown, and the edges follow it. An edge change
  * commits before the report returns. A report with `isLive` false takes
- * React's scheduling: one from inside React's commit, as a detach in an
- * effect cleanup. Null measures the scroll offset again from the next frame,
- * when the handed-back offset is current. Internal: not exported from the
- * hooks entry.
+ * React's scheduling: one that can come from inside React's commit, as a
+ * caller's own call into the paging. Null measures the scroll offset again
+ * from the next frame, when the handed-back offset is current. Internal: not
+ * exported from the hooks entry.
  */
 export function useShownScrollOverflow() {
   const elRef = useRef<HTMLElement | null>(null);
@@ -138,7 +138,7 @@ export function useShownScrollOverflow() {
   // The edges last set, so a measure that changes no edge renders nothing.
   const edgesRef = useRef(state);
 
-  const measureNow = useCallback((el: HTMLElement, isHeld = false) => {
+  const measureNow = useCallback((el: HTMLElement, isLive = false) => {
     const tolerance = 1;
     const shown = shownRef.current;
     const offset = shown?.offset ?? Math.abs(el.scrollLeft);
@@ -158,9 +158,9 @@ export function useShownScrollOverflow() {
     }
     const next = {overflowStart, overflowEnd, hasOverflow};
     edgesRef.current = next;
-    if (isHeld) {
-      // A held row reports from the paging's frame. An edge change commits in
-      // that frame, before the paging can hand the row back.
+    if (isLive) {
+      // A live report comes from the paging's frame or event. An edge change
+      // commits there, before the paging can hand the row back.
       // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the buttons must change in the frame the row leaves its edge
       flushSync(() => setState(next));
     } else {

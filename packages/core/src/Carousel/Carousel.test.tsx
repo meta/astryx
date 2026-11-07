@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, it, expect, vi} from 'vitest';
-import {createRef} from 'react';
+import {createRef, useEffect, useRef} from 'react';
 import {act, render, screen, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Carousel, type CarouselHandle} from './Carousel';
@@ -285,6 +285,42 @@ describe('Carousel', () => {
     );
     // The detach runs in an effect cleanup, inside React's commit.
     view.unmount();
+    expect(error).not.toHaveBeenCalled();
+    error.mockRestore();
+  });
+
+  it('scrolls from an Effect after a slide is added, with no flushSync in the commit', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // A stand-in paging: a move takes the row over and reports it at once,
+    // as the pager does.
+    const paging = makeSnapPaging((_element, onHeld) => ({
+      detach: () => {},
+      move: () => {
+        onHeld?.({offset: 150, travel: 400});
+      },
+      moveHeld: () => false,
+    }));
+    function Grows({count}: {count: number}) {
+      const ref = useRef<CarouselHandle>(null);
+      useEffect(() => {
+        if (count > 2) {
+          ref.current?.scrollNext();
+        }
+      }, [count]);
+      return (
+        <Carousel handleRef={ref} aria-label="Grows" hasSnap={paging}>
+          {Array.from({length: count}, (_, i) => (
+            <div key={i}>Item {i + 1}</div>
+          ))}
+        </Carousel>
+      );
+    }
+    const view = render(<Grows count={2} />);
+    view.rerender(<Grows count={3} />);
+    expect(screen.getByLabelText('Scroll left')).not.toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
     expect(error).not.toHaveBeenCalled();
     error.mockRestore();
   });
