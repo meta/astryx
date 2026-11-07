@@ -5,7 +5,7 @@
  * @input A unified diff, a reader for the head tree, the Changeset coverage
  *   result, and the pull request description when one is given.
  * @output Findings for checklist items h to l: the item, the file and line,
- *   the rule, and the fix.
+ *   the rule, and the fix. An advisory finding is reported apart.
  * @position Called by `scripts/pre-review.mjs`. SYNC: keep each rule in step
  *   with its item in `docs/contributing/pull-requests.md#pre-review-checklist`.
  */
@@ -162,7 +162,10 @@ export function sharedOwnerFindings(addedLines) {
   return findings;
 }
 
-const EFFECT = /\b(?:React\.)?use(?:Isomorphic)?(?:Layout)?Effect\s*\(/;
+const EFFECT =
+  /\b(?:React\.)?use(?:Isomorphic)?(?:Layout|Insertion)?Effect\s*\(/;
+const COMMIT_EFFECT =
+  /\b(?:React\.)?use(?:Isomorphic)?(?:Layout|Insertion)Effect\s*\(/;
 const DOM_STATE =
   /\buseState\s*<[^>]*(?<![\w$.])(?:(?:HTML|SVG)\w*Element|Element|Node|NodeList|HTMLCollection)\b/;
 
@@ -208,26 +211,237 @@ export function hasEffectNote(lines, index, body) {
   return first != null && isNote(first);
 }
 
-/** True when every statement of the body assigns a ref's `current`. */
-export function copiesIntoRef(body) {
-  const statements = body
+function statementsOf(body) {
+  return body
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/\/\/.*$/gm, '')
     .split(/[;\n]/)
     .map(text => text.trim())
     .filter(Boolean);
+}
+
+/** True when every statement of the body assigns a ref's `current`. */
+export function copiesIntoRef(body) {
+  const statements = statementsOf(body);
   return (
     statements.length > 0 &&
     statements.every(text => /^[\w$.]+\.current\s*=(?!=)/.test(text))
   );
 }
 
+/**
+ * True when the body is one statement that sets a ref's `current` to the name
+ * of a prop or a callback, such as `onPanRef.current = onPan`.
+ */
+export function keepsLatestRef(body) {
+  const statements = statementsOf(body);
+  return (
+    statements.length === 1 &&
+    /^[\w$.]+\.current\s*=\s*[\w$]+(?:\.[\w$]+)*$/.test(statements[0])
+  );
+}
+
+/** True when every statement of the body sets state to a named value. */
+export function copiesIntoState(body) {
+  const statements = statementsOf(body);
+  return (
+    statements.length > 0 &&
+    statements.every(text =>
+      /^set[A-Z][\w$]*\s*\(\s*[\w$]+(?:\.[\w$]+)*\s*\)$/.test(text),
+    )
+  );
+}
+
+const REF = String.raw`(?<![\w$.])((?:[\w$]+\.)*[\w$]+)\.current\b`;
+// `??=` and `||=` set an empty ref only, so they are lazy initialization.
+const REF_WRITES = [
+  new RegExp(
+    String.raw`${REF}\s*(?:(?:[-+*/%&|^]|\*\*|<<|>>>?|&&)?=(?![=>])|\+\+|--)`,
+    'g',
+  ),
+  new RegExp(String.raw`(?:\+\+|--)\s*${REF}`, 'g'),
+];
+const CONTROL = /^(?:if|else|for|while|do|switch|try|catch|finally|with)\b/;
+const RUNS_IN_RENDER =
+  /\buse(?:Memo|State|Reducer)\s*(?:<[^>]*>)?\s*\((?:[^()]*,)?\s*(?:\([^()]*\)|[\w$]+)?\s*(?::[^=]+)?=>\s*$/;
+
+function functionName(header) {
+  return (
+    /\bfunction\s*\*?\s*([\w$]+)/.exec(header)?.[1] ??
+    /\b(?:const|let|var)\s+([\w$]+)\s*(?::[^=]+)?=/.exec(header)?.[1] ??
+    null
+  );
+}
+
+/** What a `{` opens, from the text between the last statement end and it. */
+function blockKind(statement) {
+  const header = statement.replace(/^[,\s]+/, '');
+  if (RUNS_IN_RENDER.test(header)) return {kind: 'render'};
+  const isFunction =
+    /=>\s*$/.test(header) ||
+    /\bfunction\b[\s\S]*\)\s*(?::[^{}]*)?$/.test(header) ||
+    (/^(?:(?:async|get|set|static)\s+)*\*?[\w$]+\s*\([\s\S]*\)\s*(?::[^{]*)?$/.test(
+      header,
+    ) &&
+      !CONTROL.test(header));
+  if (!isFunction) return {kind: 'block', header};
+  const name = functionName(header);
+  return {
+    kind:
+      name != null && /^(?:[A-Z]|use[A-Z0-9])/.test(name)
+        ? 'render'
+        : 'callback',
+  };
+}
+
+function hasOpenParenthesis(text) {
+  return text.split('(').length > text.split(')').length;
+}
+
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** True when `text` tests that `ref.current` is not set yet. */
+function guardsLazyInit(text, ref) {
+  const current = `${escapeRegExp(ref)}\\.current`;
+  const empty = '(?:null|undefined)';
+  return new RegExp(
+    `\\bif\\s*\\(\\s*(?:!\\s*${current}|${current}\\s*===?\\s*${empty}|${empty}\\s*===?\\s*${current})\\s*\\)`,
+  ).test(text);
+}
+
+/**
+ * The lines of `source` that write a ref's `current` during render: directly
+ * in the body of a component or a hook (a function named `Name` or `useName`),
+ * or in an inline `useMemo`, `useState` or `useReducer` callback. A write in an
+ * Effect, a handler or another nested function, and lazy initialization
+ * (`if (ref.current == null) ref.current = …`), are not render writes. The scan
+ * reads text. It recognizes strings, comments and template literals, and no
+ * other syntax.
+ */
+export function renderRefWrites(source) {
+  const writes = new Map();
+  for (const pattern of REF_WRITES) {
+    for (const match of source.matchAll(pattern)) {
+      writes.set(match.index, match[1]);
+    }
+  }
+  const found = [];
+  const blocks = [];
+  const modes = ['code'];
+  let statementStart = 0;
+  for (let i = 0; i < source.length; i += 1) {
+    const char = source[i];
+    const next = source[i + 1];
+    const mode = modes.at(-1);
+    if (mode === 'line-comment') {
+      if (char === '\n') modes.pop();
+      continue;
+    }
+    if (mode === 'block-comment') {
+      if (char === '*' && next === '/') {
+        modes.pop();
+        i += 1;
+      }
+      continue;
+    }
+    if (mode === "'" || mode === '"') {
+      if (char === '\\') i += 1;
+      else if (char === mode || char === '\n') modes.pop();
+      continue;
+    }
+    if (mode === '`') {
+      if (char === '\\') i += 1;
+      else if (char === '`') modes.pop();
+      else if (char === '$' && next === '{') {
+        modes.push('code');
+        blocks.push({kind: 'template', statementStart, inParentheses: true});
+        i += 1;
+        statementStart = i + 1;
+      }
+      continue;
+    }
+    if (char === '/' && next === '/') {
+      modes.push('line-comment');
+      i += 1;
+    } else if (char === '/' && next === '*') {
+      modes.push('block-comment');
+      i += 1;
+    } else if (char === "'" || char === '"' || char === '`') {
+      modes.push(char);
+    } else if (char === '{') {
+      const header = source.slice(statementStart, i);
+      blocks.push({
+        ...blockKind(header.trim()),
+        statementStart,
+        inParentheses: hasOpenParenthesis(header),
+      });
+      statementStart = i + 1;
+    } else if (char === '}') {
+      const block = blocks.pop();
+      if (block?.kind === 'template') modes.pop();
+      statementStart = block?.inParentheses ? block.statementStart : i + 1;
+    } else if (char === ';') {
+      statementStart = i + 1;
+    } else if (writes.has(i)) {
+      const ref = writes.get(i);
+      const prefix = source.slice(statementStart, i);
+      const owner = blocks.findLast(
+        block => block.kind === 'render' || block.kind === 'callback',
+      );
+      const guarded = blocks
+        .slice(blocks.lastIndexOf(owner) + 1)
+        .some(block => guardsLazyInit(block.header ?? '', ref));
+      const inExpressionCallback = /=>|\bfunction\b/.test(prefix);
+      const lazy =
+        guarded ||
+        guardsLazyInit(prefix, ref) ||
+        new RegExp(
+          `${escapeRegExp(ref)}\\.current\\s*(?:\\|\\||\\?\\?)\\s*\\(?\\s*$`,
+        ).test(prefix);
+      if (owner?.kind === 'render' && !inExpressionCallback && !lazy) {
+        found.push({line: source.slice(0, i).split('\n').length, ref});
+      }
+    }
+  }
+  return found;
+}
+
 /** Item j. `readHead(file)` returns the file at the head, or null. */
 export function effectFindings(addedLines, readHead) {
   const findings = [];
   const sources = new Map();
-  const add = (file, line, rule, fix) =>
-    findings.push({item: 'j', file, line, rule, fix});
+  const renderWrites = new Map();
+  const add = (file, line, rule, fix, advisory = false) =>
+    findings.push({
+      item: 'j',
+      file,
+      line,
+      rule,
+      fix,
+      ...(advisory && {advisory}),
+    });
+  const linesOf = file => {
+    if (!sources.has(file)) sources.set(file, readHead(file));
+    return sources.get(file)?.split('\n') ?? null;
+  };
+  const renderWritesOf = file => {
+    if (!renderWrites.has(file)) {
+      const source = sources.get(file) ?? readHead(file);
+      sources.set(file, source);
+      renderWrites.set(
+        file,
+        new Map(
+          (source == null ? [] : renderRefWrites(source)).map(write => [
+            write.line,
+            write.ref,
+          ]),
+        ),
+      );
+    }
+    return renderWrites.get(file);
+  };
   for (const {file, line, text} of addedLines) {
     if (!file.startsWith('packages/') || COMMENT.test(text)) continue;
     if (DOM_STATE.test(text)) {
@@ -238,19 +452,52 @@ export function effectFindings(addedLines, readHead) {
         `Own the node through a ref, or keep only the minimal key that render needs (${RUNTIME} INV1).`,
       );
     }
-    if (!EFFECT.test(text)) continue;
-    if (!sources.has(file)) sources.set(file, readHead(file)?.split('\n'));
-    const lines = sources.get(file);
-    if (lines == null) continue;
-    const body = effectBody(lines, line - 1);
-    if (body != null && copiesIntoRef(body)) {
+    if (/\.current\b/.test(text) && renderWritesOf(file).has(line)) {
       add(
         file,
         line,
-        'The Effect only copies a value into a ref',
-        `Read the value where it is used, or set the ref in the handler that changes it. An Effect syncs an external system (${RUNTIME} INV3).`,
+        `\`${renderWritesOf(file).get(line)}.current\` is written during render`,
+        'React can discard a render, and the ref then keeps a value that never committed. Write the ref in the handler that changes it, or keep the latest prop or callback in a one-line layout or insertion Effect with a note. Only lazy initialization (`if (ref.current == null) ref.current = …`) stays in render.',
+        // Advisory until a current record states this rule.
+        true,
       );
-    } else if (!hasEffectNote(lines, line - 1, body)) {
+    }
+    if (!EFFECT.test(text)) continue;
+    const lines = linesOf(file);
+    if (lines == null) continue;
+    const body = effectBody(lines, line - 1);
+    const hasNote = hasEffectNote(lines, line - 1, body);
+    if (body != null && copiesIntoRef(body)) {
+      if (!COMMIT_EFFECT.test(text)) {
+        add(
+          file,
+          line,
+          'The Effect only copies a value into a ref, after paint',
+          `When handlers read the ref, keep it in a one-line layout or insertion Effect with a note that names what it syncs. Otherwise read the value where it is used (${RUNTIME} INV3).`,
+        );
+      } else if (!keepsLatestRef(body)) {
+        add(
+          file,
+          line,
+          'The Effect copies into a ref and is not a one-line latest-ref Effect',
+          'Give each ref its own layout or insertion Effect whose body is one assignment of a prop or callback, with a note that names what it syncs. Move any logic into the callback that reads the ref.',
+        );
+      } else if (!hasNote) {
+        add(
+          file,
+          line,
+          'The latest-ref Effect has no note that names what it syncs',
+          'Add a short comment above it that names the prop or callback and the handlers that read the ref.',
+        );
+      }
+    } else if (body != null && copiesIntoState(body)) {
+      add(
+        file,
+        line,
+        'The Effect only copies a value into state',
+        `Derive the value during render, or set the state in the handler that changes it (${RUNTIME} INV1 and INV2).`,
+      );
+    } else if (!hasNote) {
       add(
         file,
         line,

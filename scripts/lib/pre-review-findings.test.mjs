@@ -184,7 +184,7 @@ describe('effectFindings', () => {
     const sourceLines = source.split('\n');
     return effectFindings(addedLinesOf(file, sourceLines), name =>
       name === file ? source : null,
-    ).map(f => [f.line, f.rule]);
+    ).map(f => [f.line, f.rule, ...(f.advisory ? ['advisory'] : [])]);
   }
 
   it('flags a new Effect with no note', () => {
@@ -220,7 +220,37 @@ describe('effectFindings', () => {
     ).toEqual([]);
   });
 
-  it('flags an Effect that only copies a value into a ref', () => {
+  it('accepts a one-line layout or insertion Effect that keeps a latest ref, with a note', () => {
+    expect(
+      findingsFor(
+        [
+          '// Keeps the committed handler for the gesture callbacks.',
+          'useIsomorphicLayoutEffect(() => {',
+          '  onPanRef.current = onPan;',
+          '});',
+          '',
+          'useInsertionEffect(() => {',
+          '  // Keeps the committed getter for the key handlers.',
+          '  getPartsRef.current = props.getParts;',
+          '});',
+        ].join('\n'),
+      ),
+    ).toEqual([]);
+  });
+
+  it('flags a latest-ref Effect with no note', () => {
+    expect(
+      findingsFor(
+        ['useLayoutEffect(() => {', '  onPanRef.current = onPan;', '});'].join(
+          '\n',
+        ),
+      ),
+    ).toEqual([
+      [1, 'The latest-ref Effect has no note that names what it syncs'],
+    ]);
+  });
+
+  it('flags a ref copy in a passive Effect', () => {
     expect(
       findingsFor(
         [
@@ -230,17 +260,33 @@ describe('effectFindings', () => {
           '});',
         ].join('\n'),
       ),
-    ).toEqual([[2, 'The Effect only copies a value into a ref']]);
+    ).toEqual([[2, 'The Effect only copies a value into a ref, after paint']]);
+  });
+
+  it('flags a layout Effect that copies more than one value or holds logic', () => {
+    const notOneLine =
+      'The Effect copies into a ref and is not a one-line latest-ref Effect';
     expect(
       findingsFor(
         [
-          '// Keeps the getter current for gesture callbacks.',
-          'useIsomorphicLayoutEffect(() => {',
-          '  getPartsRef.current = getParts;',
+          '// Keeps the latest callbacks.',
+          'useLayoutEffect(() => {',
+          '  onPanRef.current = onPan;',
+          '  onEndRef.current = onEnd;',
+          '});',
+          '// Keeps the latest callback.',
+          'useLayoutEffect(() => {',
+          '  onPanRef.current = isDisabled ? noop : onPan;',
           '});',
         ].join('\n'),
       ),
-    ).toEqual([[2, 'The Effect only copies a value into a ref']]);
+    ).toEqual([
+      [2, notOneLine],
+      [7, notOneLine],
+    ]);
+  });
+
+  it('accepts an Effect that sets a ref and also syncs an external system', () => {
     expect(
       findingsFor(
         [
@@ -249,6 +295,116 @@ describe('effectFindings', () => {
           '  onChangeRef.current = onChange;',
           "  node.addEventListener('input', onInput);",
           '}, [onChange]);',
+        ].join('\n'),
+      ),
+    ).toEqual([]);
+  });
+
+  it('flags an Effect that only copies a prop into state', () => {
+    expect(
+      findingsFor(
+        [
+          '// Mirrors the value.',
+          'useEffect(() => {',
+          '  setDraft(value);',
+          '}, [value]);',
+        ].join('\n'),
+      ),
+    ).toEqual([[2, 'The Effect only copies a value into state']]);
+  });
+
+  it('reports a ref write in a component or hook body as an advisory', () => {
+    expect(
+      findingsFor(
+        [
+          'export function Button({label}: Props) {',
+          '  labelRef.current = label;',
+          '  return null;',
+          '}',
+          'export const useLatest = <T,>(value: T) => {',
+          '  if (value !== previousRef.current) {',
+          '    previousRef.current = value;',
+          '  }',
+          '};',
+          'function useCache(input) {',
+          '  return useMemo(() => {',
+          '    cacheRef.current = input;',
+          '    return input;',
+          '  }, [input]);',
+          '}',
+          'function useCount(reducer, arg) {',
+          '  rendersRef.current += 1;',
+          '  ++passesRef.current;',
+          '  return useReducer(reducer, arg, init => {',
+          '    seedRef.current = init;',
+          '    return init;',
+          '  });',
+          '}',
+        ].join('\n'),
+      ),
+    ).toEqual([
+      [2, '`labelRef.current` is written during render', 'advisory'],
+      [7, '`previousRef.current` is written during render', 'advisory'],
+      [12, '`cacheRef.current` is written during render', 'advisory'],
+      [17, '`rendersRef.current` is written during render', 'advisory'],
+      [18, '`passesRef.current` is written during render', 'advisory'],
+      [20, '`seedRef.current` is written during render', 'advisory'],
+    ]);
+  });
+
+  it('accepts lazy initialization of a ref during render', () => {
+    expect(
+      findingsFor(
+        [
+          'export function useStore() {',
+          '  if (storeRef.current == null) {',
+          '    storeRef.current = createStore();',
+          '  }',
+          '  if (!cacheRef.current) cacheRef.current = new Map();',
+          '  idsRef.current ??= new Set();',
+          '  namesRef.current ||= [];',
+          '  if (countRef.current >= 1 && countRef.current <= 9) count();',
+          '  if (storeRef.current === null) {',
+          '    otherRef.current = createStore();',
+          '  }',
+          '}',
+        ].join('\n'),
+      ),
+    ).toEqual([
+      [10, '`otherRef.current` is written during render', 'advisory'],
+    ]);
+  });
+
+  it('accepts a ref write in a handler, a callback ref, or outside a component', () => {
+    expect(
+      findingsFor(
+        [
+          'export function Button({label}: Props) {',
+          '  const onClick = () => {',
+          '    countRef.current += 1;',
+          '    pressedRef.current = true;',
+          '  };',
+          '  const setNode = useCallback(node => {',
+          '    nodeRef.current = node;',
+          '  }, []);',
+          '  const handlers = {',
+          '    onKeyDown() {',
+          '      keyRef.current = label;',
+          '    },',
+          '  };',
+          '  return (',
+          '    <button',
+          '      onBlur={() => (blurredRef.current = true)}',
+          '      ref={node => {',
+          '        elementRef.current = node;',
+          '      }}>',
+          "      Don't {`${label} {`}",
+          '    </button>',
+          '  );',
+          '}',
+          'function createStore() {',
+          '  storeRef.current = new Map();',
+          '}',
         ].join('\n'),
       ),
     ).toEqual([]);

@@ -63,7 +63,7 @@ export const CHECKS = {
   g: 'Records: a changed record needs a spec owner to approve its spec content',
   h: `Size: at most ${SIZE_LIMIT.toLocaleString('en-US')} authored lines, unless the description declares a behavior-module pull request or a batch row`,
   i: 'Shared owners: a concern Core owns in a shared module is called through that module',
-  j: 'Effects: a new Effect names the system it syncs and does more than copy into a ref; no DOM node in state',
+  j: "Effects: interaction logic lives in callbacks, and no Effect reacts to interaction state. A new Effect names the system it syncs. The one exception is a one-line layout or insertion Effect that keeps a ref at the latest committed prop or callback for those callbacks, with a note that names what it syncs; it holds no logic (`useEffectEvent` replaces it once Core's React floor reaches 19.2). No Effect only copies props or state into other state, and no DOM node is in state. A ref written during render, except by lazy initialization, is reported as an advisory",
   k: 'Release notes and records: a Changeset names each package that ships a change, its category fits, and no gap row stays for a claim the change builds',
   l: 'Mergeable: the change merges into the base without conflicts',
 };
@@ -325,6 +325,14 @@ export function findingChecks(findings) {
     }));
 }
 
+/** Findings apart from advisories, which the report lists on their own. */
+export function splitAdvisories(allFindings) {
+  return {
+    findings: allFindings.filter(finding => !finding.advisory),
+    advisories: allFindings.filter(finding => finding.advisory),
+  };
+}
+
 export function buildReport({
   base = 'origin/main',
   head = null,
@@ -384,7 +392,7 @@ export function buildReport({
       ...files.filter(file => classes[file].specRecord && present.has(file)),
     ]),
   ];
-  const findings = [
+  const allFindings = [
     ...sizeFindings(authoredLines, body),
     ...sharedOwnerFindings(addedLines),
     ...effectFindings(addedLines, readHead),
@@ -398,6 +406,7 @@ export function buildReport({
     }),
     ...mergeFindings(merge.conflicts ?? [], base),
   ];
+  const {findings, advisories} = splitAdvisories(allFindings);
   return {
     base,
     head: head ?? 'working tree',
@@ -406,6 +415,7 @@ export function buildReport({
     authoredLines,
     merge,
     findings,
+    advisories,
     files: files.map(file => ({file, class: fileClass(file, classes[file])})),
     records: [...records].map(([id, recordPath]) => ({id, path: recordPath})),
     claims: [...claims].sort(),
@@ -457,6 +467,13 @@ export function formatReport(report) {
     ...(report.findings.length
       ? report.findings.map(formatFinding)
       : ['  none']),
+    ...(report.advisories?.length
+      ? [
+          '',
+          `Advisory, not yet a finding (${report.advisories.length}):`,
+          ...report.advisories.map(formatFinding),
+        ]
+      : []),
     '',
     'Checklist items that apply:',
     ...report.checks.map(

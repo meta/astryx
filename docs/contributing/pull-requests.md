@@ -219,11 +219,20 @@ each finding at its file and line.
   `subscribeInput`, `useDevWarning`, or `parentAcrossShadow`
   ([`architecture:react-component-runtime`](../architecture/react-component-runtime.md#boundaries-and-invariants)
   INV16).
-- **j. Effects (automatic).** An added Effect with no comment that names the
-  system it syncs, an Effect that only copies a value into a ref, and a DOM node
-  in React state are findings
+- **j. Effects (automatic).** Interaction logic lives in callbacks, and no
+  Effect reacts to interaction state. These are findings: an added Effect with
+  no comment that names the system it syncs; an Effect that only copies props
+  or state into other state; an Effect that only copies a value into a ref,
+  unless it is a one-line layout or insertion Effect that keeps the ref at the
+  latest committed prop or callback for event or gesture callbacks, with a note
+  that names what it syncs and no other logic (`useEffectEvent` replaces this
+  exception once Core's React floor reaches 19.2); and a DOM node in React
+  state
   ([`architecture:react-component-runtime`](../architecture/react-component-runtime.md#boundaries-and-invariants)
-  INV1 and INV3).
+  INV1, INV2 and INV3). A `ref.current` write during render is an advisory, in
+  its own section: write the ref in a handler or in the one-line Effect above.
+  Lazy initialization, such as `if (ref.current == null) ref.current = value`,
+  stays in render.
 - **k. Release notes and records (automatic).** A package that ships a change
   with no Changeset, a `[fix]`, `[feat]`, or `[perf]` Changeset for a package
   where nothing that ships changes, such as a change to tests or tooling only,

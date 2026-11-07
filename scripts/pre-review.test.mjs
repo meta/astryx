@@ -13,6 +13,7 @@ import {
   findingChecks,
   formatReport,
   mergeConflicts,
+  splitAdvisories,
 } from './pre-review.mjs';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
@@ -179,6 +180,20 @@ describe('findingChecks', () => {
   });
 });
 
+describe('splitAdvisories', () => {
+  it('keeps advisories out of the findings and the checklist count', () => {
+    const advisory = {item: 'j', rule: 'written during render', advisory: true};
+    const {findings, advisories} = splitAdvisories([
+      {item: 'j', rule: 'no note'},
+      advisory,
+    ]);
+    expect(advisories).toEqual([advisory]);
+    expect(findingChecks(findings).map(item => item.reason)).toEqual([
+      '1 finding above',
+    ]);
+  });
+});
+
 describe('formatReport', () => {
   const finding = {
     item: 'i',
@@ -217,6 +232,41 @@ describe('formatReport', () => {
     expect(text).toContain('[d] ');
     expect(text).toContain(
       'Checklist: docs/contributing/pull-requests.md#pre-review-checklist',
+    );
+    expect(text).not.toContain('Advisory');
+  });
+
+  it('lists advisories in their own section, apart from the findings count', () => {
+    const text = formatReport({
+      base: 'origin/main',
+      head: 'working tree',
+      mergeBase: 'a'.repeat(40),
+      scope: 'changes include another surface',
+      files: [
+        {file: 'packages/core/src/A/A.tsx', class: 'published package code'},
+      ],
+      records: [],
+      claims: [],
+      baselines: {command: null, claims: []},
+      authoredLines: 12,
+      merge: {conflicts: []},
+      findings: [],
+      advisories: [
+        {
+          item: 'j',
+          file: 'packages/core/src/A/A.tsx',
+          line: 4,
+          rule: '`labelRef.current` is written during render',
+          fix: 'Write the ref in the handler that changes it.',
+          advisory: true,
+        },
+      ],
+      checks: [],
+      checklist: 'docs/contributing/pull-requests.md#pre-review-checklist',
+    });
+    expect(text).toContain('Findings in this change (0):\n  none');
+    expect(text).toContain(
+      'Advisory, not yet a finding (1):\n  [j] packages/core/src/A/A.tsx:4  `labelRef.current` is written during render',
     );
   });
 });
