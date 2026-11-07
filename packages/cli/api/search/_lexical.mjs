@@ -134,8 +134,9 @@ export function namesWhole(candidate, term) {
  * words match. A typo match still answers alone when the entry's name spells
  * every word of the identifier in order (`useTableExpansion` and
  * useTableRowExpansion), one of them possibly slipped (isWordSlip: `ButtonGrop`
- * and `ButtonGorup` for ButtonGroup); when the words are not read, the near
- * miss keeps its own score beside them.
+ * and `ButtonGorup` for ButtonGroup) unless the catalog already uses the slipped
+ * word; when the words are read, the near miss keeps its own score among
+ * their results.
  * @param {string} term the identifier, lowercased
  * @param {string} spelled the identifier read as its words
  * @param {Candidate} candidate
@@ -157,6 +158,8 @@ function answersWhole(term, spelled, candidate, vocabulary) {
   for (const [i, w] of have.entries()) {
     if (at >= want.length) break;
     if (w === want[at]) at++;
+    // A word the catalog already uses is that word, not a slip: `stats`
+    // beside Status, `time` beside Timer.
     else if (
       slips === 0 &&
       !vocabulary.has(want[at]) &&
