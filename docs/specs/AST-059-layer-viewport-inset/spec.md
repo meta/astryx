@@ -330,7 +330,10 @@ the app reaches every layer instead of the components that happen to read it.
   its block size so that edge sits 10 px above the keyboard, the clearance
   UIKit keeps under a popover. Its content overflows inside the layer box,
   where the composing component scrolls it, and the field being typed into
-  stays in view. A layer the keyboard does not reach, and a layer whose
+  stays in view. When a person presses, touches or turns a wheel inside the
+  layer after the cap lands, the content stays where they put it. A later
+  keyboard change brings the field into view again.
+  A layer the keyboard does not reach, and a layer whose
   block-end edge the fallback order holds (placed above its trigger), stay as
   they are. The keyboard's height is the keyboard module's one height
   (`architecture:react-component-runtime` INV11); no layer measures the

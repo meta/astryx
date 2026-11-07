@@ -106,7 +106,7 @@ describe('CommentComposer', () => {
       <CommentComposer value="" onChange={() => {}} onSubmit={onSubmit} />,
     );
     const post = screen.getByRole('button', {name: /send/i});
-    expect(post).toBeDisabled();
+    expect(post).toHaveAttribute('aria-disabled', 'true');
     rerender(
       <CommentComposer
         value="Looks good"

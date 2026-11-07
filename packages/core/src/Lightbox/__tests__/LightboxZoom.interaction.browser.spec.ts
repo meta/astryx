@@ -586,7 +586,9 @@ test('past the minimum the zoom gives way, then springs back on springs.settle',
   const recognizerScale = pinchScale / (300 - 8);
   expect(shown).toBeCloseTo(1 / (2 - recognizerScale), 2);
   const [settle] = await waitForAnimation(photo);
-  const held = await holdAnimations(page, photo);
+  const held = await holdAnimations(page, photo, {
+    judges: {target: photo, property: 'scale'},
+  });
   const duration = Math.max(...held.map(a => a.curveEndMs));
   const samples = curveOf(
     await sampleCurve(photo, timeline(duration)),
@@ -684,7 +686,9 @@ test('a double tap zooms until the photo fills the screen, about the tapped poin
   const tapped = photoPointAt(before, at);
   await driver.play(doubleTap(at));
   const [zoom] = await waitForAnimation(photo);
-  const held = await holdAnimations(page, photo);
+  const held = await holdAnimations(page, photo, {
+    judges: {target: photo, property: 'scale'},
+  });
   const duration = Math.max(...held.map(a => a.curveEndMs));
   const samples = curveOf(
     await sampleCurve(photo, timeline(duration)),
@@ -1417,6 +1421,7 @@ test(
       name: 'lightbox-return-from-past-minimum',
       clip,
       scope: photo,
+      judges: {target: photo, property: 'scale'},
       measure,
       columns: 6,
       cellScale: 0.35,
@@ -1447,6 +1452,7 @@ test(
       name: 'lightbox-double-tap-zoom-in',
       clip,
       scope: photo,
+      judges: {target: photo, property: 'scale'},
       measure,
       columns: 6,
       cellScale: 0.35,
