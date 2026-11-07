@@ -51,11 +51,45 @@ beforeEach(() => {
 });
 
 describe('useOverflow', () => {
-  it('shows all items when they fit', () => {
+  it('measures every list of a commit after it, then renders every result once', async () => {
+    const log: string[] = [];
+    let renders = 0;
+    const container = (name: string, width: number) =>
+      ({
+        get offsetWidth() {
+          log.push(`${name} read at render ${renders}`);
+          return width;
+        },
+      }) as unknown as HTMLElement;
+    const {result} = renderHook(() => {
+      renders++;
+      return [useOverflow(4, {gap: 10}), useOverflow(4, {gap: 10})] as const;
+    });
+    const rendersAtMount = renders;
+
+    await act(async () => {
+      result.current[0].measureRef(mockMeasure([50, 50, 50, 50], 30));
+      result.current[0].containerRef(container('a', 150));
+      result.current[1].measureRef(mockMeasure([50, 50, 50, 50], 30));
+      result.current[1].containerRef(container('b', 150));
+      // Nothing is measured while the commit runs.
+      expect(log).toEqual([]);
+    });
+
+    expect(log).toEqual([
+      `a read at render ${rendersAtMount}`,
+      `b read at render ${rendersAtMount}`,
+    ]);
+    expect(renders).toBe(rendersAtMount + 1);
+    expect(result.current[0].visibleCount).toBe(2);
+    expect(result.current[1].visibleCount).toBe(2);
+  });
+
+  it('shows all items when they fit', async () => {
     // 3 items of 50px each, gap 10 → total = 50+10+50+10+50 = 170, container = 200
     const {result} = renderHook(() => useOverflow(3, {gap: 10}));
 
-    act(() => {
+    await act(async () => {
       result.current.measureRef(mockMeasure([50, 50, 50]));
       result.current.containerRef(mockContainer(200));
     });
@@ -64,7 +98,7 @@ describe('useOverflow', () => {
     expect(result.current.hasOverflow).toBe(false);
   });
 
-  it('hides items that do not fit', () => {
+  it('hides items that do not fit', async () => {
     // 4 items of 50px, gap 10, indicator 30px, container 150
     // Item 1: 50, not last → reserve 30+10=40 → 50+40=90 ≤ 150 ✓ (total=50)
     // Item 2: 50+10+50=110, not last → reserve 40 → 110+40=150 ≤ 150 ✓ (total=110)
@@ -72,7 +106,7 @@ describe('useOverflow', () => {
     // → visibleCount = 2
     const {result} = renderHook(() => useOverflow(4, {gap: 10}));
 
-    act(() => {
+    await act(async () => {
       result.current.measureRef(mockMeasure([50, 50, 50, 50], 30));
       result.current.containerRef(mockContainer(150));
     });
@@ -81,12 +115,12 @@ describe('useOverflow', () => {
     expect(result.current.hasOverflow).toBe(true);
   });
 
-  it('shows zero items when nothing fits and minVisibleItems is 0', () => {
+  it('shows zero items when nothing fits and minVisibleItems is 0', async () => {
     // 3 items of 100px, container 50, indicator 30
     // Item 1: 100, not last → reserve 30+0=30 → 100+30=130 > 50, count=0 ≥ min(0) → break
     const {result} = renderHook(() => useOverflow(3, {gap: 0}));
 
-    act(() => {
+    await act(async () => {
       result.current.measureRef(mockMeasure([100, 100, 100], 30));
       result.current.containerRef(mockContainer(50));
     });
@@ -95,7 +129,7 @@ describe('useOverflow', () => {
     expect(result.current.hasOverflow).toBe(true);
   });
 
-  it('respects minVisibleItems even when items do not fit', () => {
+  it('respects minVisibleItems even when items do not fit', async () => {
     // 3 items of 100px, container 50, indicator 30, minVisibleItems 2
     // Item 1: 100 > 50+reserved, but count(0) < min(2) → continue
     // Item 2: 200 > 50, but count(1) < min(2) → continue
@@ -105,7 +139,7 @@ describe('useOverflow', () => {
       useOverflow(3, {gap: 0, minVisibleItems: 2}),
     );
 
-    act(() => {
+    await act(async () => {
       result.current.measureRef(mockMeasure([100, 100, 100], 30));
       result.current.containerRef(mockContainer(50));
     });
@@ -114,7 +148,7 @@ describe('useOverflow', () => {
     expect(result.current.hasOverflow).toBe(true);
   });
 
-  it('handles no gap', () => {
+  it('handles no gap', async () => {
     // 3 items of 40px, no gap → total = 120, container = 100, indicator = 20
     // Item 1: 40, not last → reserve 20+0=20 → 40+20=60 ≤ 100 ✓ (total=40)
     // Item 2: 40+40=80, not last → reserve 20+20=40... wait
@@ -125,7 +159,7 @@ describe('useOverflow', () => {
     // → visibleCount = 2
     const {result} = renderHook(() => useOverflow(3, {gap: 0}));
 
-    act(() => {
+    await act(async () => {
       result.current.measureRef(mockMeasure([40, 40, 40], 20));
       result.current.containerRef(mockContainer(100));
     });
@@ -134,7 +168,7 @@ describe('useOverflow', () => {
     expect(result.current.hasOverflow).toBe(true);
   });
 
-  it('works without an overflow indicator', () => {
+  it('works without an overflow indicator', async () => {
     // 3 items of 50px, gap 10, no indicator, container 130
     // total needed = 50+10+50+10+50 = 170 > 130
     // Item 1: 50, not last → reserve 0 → 50 ≤ 130 ✓
@@ -143,7 +177,7 @@ describe('useOverflow', () => {
     // → visibleCount = 2
     const {result} = renderHook(() => useOverflow(3, {gap: 10}));
 
-    act(() => {
+    await act(async () => {
       result.current.measureRef(mockMeasure([50, 50, 50]));
       result.current.containerRef(mockContainer(130));
     });
@@ -152,7 +186,7 @@ describe('useOverflow', () => {
     expect(result.current.hasOverflow).toBe(true);
   });
 
-  it('handles items with different widths', () => {
+  it('handles items with different widths', async () => {
     // Items: 30, 80, 40, 60. Gap 10. Indicator 25. Container 200.
     // Item 1 (30): not last → reserve 25+0=25 → 30+25=55 ≤ 200 ✓ (total=30)
     // Item 2 (80): 30+10+80=120, not last → reserve 25+10=35 → 120+35=155 ≤ 200 ✓ (total=120)
@@ -160,7 +194,7 @@ describe('useOverflow', () => {
     // → visibleCount = 2
     const {result} = renderHook(() => useOverflow(4, {gap: 10}));
 
-    act(() => {
+    await act(async () => {
       result.current.measureRef(mockMeasure([30, 80, 40, 60], 25));
       result.current.containerRef(mockContainer(200));
     });
@@ -169,7 +203,7 @@ describe('useOverflow', () => {
     expect(result.current.hasOverflow).toBe(true);
   });
 
-  it('collapses from start', () => {
+  it('collapses from start', async () => {
     // Items: 30, 80, 40. Gap 10. Indicator 25. Container 100.
     // collapseFrom='start' reverses widths → ordered: [40, 80, 30]
     // Item 1 (40): not last → reserve 25+0=25 → 40+25=65 ≤ 100 ✓ (total=40)
@@ -179,7 +213,7 @@ describe('useOverflow', () => {
       useOverflow(3, {gap: 10, collapseFrom: 'start'}),
     );
 
-    act(() => {
+    await act(async () => {
       result.current.measureRef(mockMeasure([30, 80, 40], 25));
       result.current.containerRef(mockContainer(100));
     });
@@ -188,10 +222,10 @@ describe('useOverflow', () => {
     expect(result.current.hasOverflow).toBe(true);
   });
 
-  it('handles zero children', () => {
+  it('handles zero children', async () => {
     const {result} = renderHook(() => useOverflow(0));
 
-    act(() => {
+    await act(async () => {
       result.current.measureRef(mockMeasure([]));
       result.current.containerRef(mockContainer(200));
     });
@@ -200,7 +234,7 @@ describe('useOverflow', () => {
     expect(result.current.hasOverflow).toBe(false);
   });
 
-  it('shows all items when exact fit with indicator not needed', () => {
+  it('shows all items when exact fit with indicator not needed', async () => {
     // 3 items of 50px, gap 10 → total = 170, container = 170, indicator present
     // Item 1 (50): not last → reserve 30+0=30 → 50+30=80 ≤ 170 ✓ (total=50)
     // Item 2 (50): 50+10+50=110, not last → reserve 30+10=40 → 110+40=150 ≤ 170 ✓ (total=110)
@@ -208,7 +242,7 @@ describe('useOverflow', () => {
     // → visibleCount = 3, all fit so no overflow
     const {result} = renderHook(() => useOverflow(3, {gap: 10}));
 
-    act(() => {
+    await act(async () => {
       result.current.measureRef(mockMeasure([50, 50, 50], 30));
       result.current.containerRef(mockContainer(170));
     });
@@ -217,10 +251,10 @@ describe('useOverflow', () => {
     expect(result.current.hasOverflow).toBe(false);
   });
 
-  it('recalculates when container resizes', () => {
+  it('recalculates when container resizes', async () => {
     const {result} = renderHook(() => useOverflow(3, {gap: 10}));
 
-    act(() => {
+    await act(async () => {
       result.current.measureRef(mockMeasure([50, 50, 50], 30));
       result.current.containerRef(mockContainer(170));
     });
@@ -228,7 +262,7 @@ describe('useOverflow', () => {
     expect(result.current.visibleCount).toBe(3);
 
     // Simulate resize by calling containerRef with a smaller container
-    act(() => {
+    await act(async () => {
       result.current.containerRef(mockContainer(100));
     });
 
@@ -236,17 +270,17 @@ describe('useOverflow', () => {
     expect(result.current.hasOverflow).toBe(true);
   });
 
-  it('cleans up ResizeObserver on unmount', () => {
+  it('cleans up ResizeObserver on unmount', async () => {
     const {result, unmount} = renderHook(() => useOverflow(3));
 
     const container = mockContainer(200);
-    act(() => {
+    await act(async () => {
       result.current.containerRef(container);
     });
 
     // Get the observer that was created
     // Instead, check disconnect is called when ref is set to null
-    act(() => {
+    await act(async () => {
       result.current.containerRef(null);
     });
 
@@ -254,10 +288,10 @@ describe('useOverflow', () => {
     unmount();
   });
 
-  it('single item that fits', () => {
+  it('single item that fits', async () => {
     const {result} = renderHook(() => useOverflow(1, {gap: 10}));
 
-    act(() => {
+    await act(async () => {
       result.current.measureRef(mockMeasure([50]));
       result.current.containerRef(mockContainer(100));
     });
@@ -266,7 +300,7 @@ describe('useOverflow', () => {
     expect(result.current.hasOverflow).toBe(false);
   });
 
-  it('does not re-render when visibleCount stays the same', () => {
+  it('does not re-render when visibleCount stays the same', async () => {
     let renderCount = 0;
     const {result} = renderHook(() => {
       renderCount++;
@@ -275,7 +309,7 @@ describe('useOverflow', () => {
 
     const initialRenderCount = renderCount;
 
-    act(() => {
+    await act(async () => {
       result.current.measureRef(mockMeasure([50, 50, 50]));
       result.current.containerRef(mockContainer(200));
     });
@@ -285,7 +319,7 @@ describe('useOverflow', () => {
     expect(result.current.visibleCount).toBe(3);
   });
 
-  it('renders exactly once more when visibleCount changes', () => {
+  it('renders exactly once more when visibleCount changes', async () => {
     let renderCount = 0;
     const {result} = renderHook(() => {
       renderCount++;
@@ -294,7 +328,7 @@ describe('useOverflow', () => {
 
     const afterInitialRender = renderCount;
 
-    act(() => {
+    await act(async () => {
       result.current.measureRef(mockMeasure([50, 50, 50, 50], 30));
       result.current.containerRef(mockContainer(150));
     });
@@ -304,14 +338,14 @@ describe('useOverflow', () => {
     expect(result.current.visibleCount).toBe(2);
   });
 
-  it('does not re-render on resize when visibleCount is unchanged', () => {
+  it('does not re-render on resize when visibleCount is unchanged', async () => {
     let renderCount = 0;
     const {result} = renderHook(() => {
       renderCount++;
       return useOverflow(3, {gap: 10});
     });
 
-    act(() => {
+    await act(async () => {
       result.current.measureRef(mockMeasure([50, 50, 50]));
       result.current.containerRef(mockContainer(200));
     });
@@ -319,7 +353,7 @@ describe('useOverflow', () => {
     const afterSetup = renderCount;
 
     // Resize to a still-large-enough container — visibleCount stays 3
-    act(() => {
+    await act(async () => {
       result.current.containerRef(mockContainer(300));
     });
 
@@ -327,10 +361,10 @@ describe('useOverflow', () => {
     expect(result.current.visibleCount).toBe(3);
   });
 
-  it('single item that does not fit without minVisibleItems', () => {
+  it('single item that does not fit without minVisibleItems', async () => {
     const {result} = renderHook(() => useOverflow(1, {gap: 0}));
 
-    act(() => {
+    await act(async () => {
       result.current.measureRef(mockMeasure([200], 30));
       result.current.containerRef(mockContainer(100));
     });
@@ -342,12 +376,12 @@ describe('useOverflow', () => {
 });
 
 describe('useOverflow with maxVisibleItems (cap)', () => {
-  it('caps visible items even when they all fit', () => {
+  it('caps visible items even when they all fit', async () => {
     const {result} = renderHook(() =>
       useOverflow(5, {gap: 10, maxVisibleItems: 3}),
     );
 
-    act(() => {
+    await act(async () => {
       result.current.measureRef(mockMeasure([50, 50, 50, 50, 50], 30));
       result.current.containerRef(mockContainer(10000));
     });
@@ -356,12 +390,12 @@ describe('useOverflow with maxVisibleItems (cap)', () => {
     expect(result.current.hasOverflow).toBe(true);
   });
 
-  it('cap does not raise a fit-limited count', () => {
+  it('cap does not raise a fit-limited count', async () => {
     const {result} = renderHook(() =>
       useOverflow(4, {gap: 10, maxVisibleItems: 4}),
     );
 
-    act(() => {
+    await act(async () => {
       result.current.measureRef(mockMeasure([50, 50, 50, 50], 30));
       result.current.containerRef(mockContainer(150));
     });
@@ -369,13 +403,13 @@ describe('useOverflow with maxVisibleItems (cap)', () => {
     expect(result.current.visibleCount).toBe(2);
   });
 
-  it('min wins when maxVisibleItems < minVisibleItems and warns in dev', () => {
+  it('min wins when maxVisibleItems < minVisibleItems and warns in dev', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const {result} = renderHook(() =>
       useOverflow(5, {gap: 10, minVisibleItems: 3, maxVisibleItems: 1}),
     );
 
-    act(() => {
+    await act(async () => {
       result.current.measureRef(mockMeasure([50, 50, 50, 50, 50], 30));
       result.current.containerRef(mockContainer(10000));
     });
@@ -387,14 +421,14 @@ describe('useOverflow with maxVisibleItems (cap)', () => {
 });
 
 describe('useOverflowInternal without row tracking', () => {
-  it('renders the host once per measurement that changes nothing it shows: rows and rowHeight are not tracked', () => {
+  it('renders the host once per measurement that changes nothing it shows: rows and rowHeight are not tracked', async () => {
     let renders = 0;
     const {result} = renderHook(() => {
       renders += 1;
       return useOverflowInternal(3, {gap: 10}, {tracksRows: false});
     });
 
-    act(() => {
+    await act(async () => {
       // 3 items of 50px, 24px tall, gap 10 → 170 fits in 200: the count stays.
       result.current.measureRef(mockMeasure([50, 50, 50], 40, 24));
       result.current.containerRef(mockContainer(200));
@@ -408,7 +442,7 @@ describe('useOverflowInternal without row tracking', () => {
     expect(result.current.rowHeight).toBe(0);
   });
 
-  it('reports rows 1 and rowHeight 0 once a multi-row host stops tracking', () => {
+  it('reports rows 1 and rowHeight 0 once a multi-row host stops tracking', async () => {
     const initialProps: {maxRows: number | undefined} = {maxRows: 2};
     const {result, rerender} = renderHook(
       ({maxRows}: {maxRows: number | undefined}) =>
@@ -420,7 +454,7 @@ describe('useOverflowInternal without row tracking', () => {
       {initialProps},
     );
 
-    act(() => {
+    await act(async () => {
       result.current.measureRef(mockMeasure([50, 50, 50, 50, 50, 50], 40, 24));
       result.current.containerRef(mockContainer(170));
     });
@@ -428,7 +462,9 @@ describe('useOverflowInternal without row tracking', () => {
     expect(result.current.rows).toBe(2);
     expect(result.current.rowHeight).toBe(24);
 
-    rerender({maxRows: undefined});
+    await act(async () => {
+      rerender({maxRows: undefined});
+    });
     // The untracked values, not the state the multi-row measurements left
     // behind; the count is re-measured for one row.
     expect(result.current.rows).toBe(1);
@@ -438,10 +474,10 @@ describe('useOverflowInternal without row tracking', () => {
 });
 
 describe('useOverflow on the single-line path', () => {
-  it('still measures rowHeight, as its return type documents', () => {
+  it('still measures rowHeight, as its return type documents', async () => {
     const {result} = renderHook(() => useOverflow(3, {gap: 10}));
 
-    act(() => {
+    await act(async () => {
       result.current.measureRef(mockMeasure([50, 50, 50], 40, 24));
       result.current.containerRef(mockContainer(200));
     });
@@ -453,10 +489,10 @@ describe('useOverflow on the single-line path', () => {
 });
 
 describe('useOverflow with maxRows (multi-row)', () => {
-  it('exposes rows and rowHeight', () => {
+  it('exposes rows and rowHeight', async () => {
     const {result} = renderHook(() => useOverflow(6, {gap: 10, maxRows: 2}));
 
-    act(() => {
+    await act(async () => {
       result.current.measureRef(mockMeasure([50, 50, 50, 50, 50, 50], 40, 24));
       result.current.containerRef(mockContainer(170));
     });
@@ -468,10 +504,10 @@ describe('useOverflow with maxRows (multi-row)', () => {
     expect(result.current.hasOverflow).toBe(false);
   });
 
-  it('collapses items beyond maxRows into the indicator', () => {
+  it('collapses items beyond maxRows into the indicator', async () => {
     const {result} = renderHook(() => useOverflow(8, {gap: 10, maxRows: 2}));
 
-    act(() => {
+    await act(async () => {
       result.current.measureRef(
         mockMeasure([50, 50, 50, 50, 50, 50, 50, 50], 40, 24),
       );
@@ -483,10 +519,10 @@ describe('useOverflow with maxRows (multi-row)', () => {
     expect(result.current.hasOverflow).toBe(true);
   });
 
-  it('maxRows=1 matches single-line behavior', () => {
+  it('maxRows=1 matches single-line behavior', async () => {
     const {result} = renderHook(() => useOverflow(4, {gap: 10, maxRows: 1}));
 
-    act(() => {
+    await act(async () => {
       result.current.measureRef(mockMeasure([50, 50, 50, 50], 30, 24));
       result.current.containerRef(mockContainer(150));
     });
@@ -518,14 +554,14 @@ describe('useOverflow with behavior=observeParent', () => {
     return container;
   }
 
-  it('uses parent content width as available space', () => {
+  it('uses parent content width as available space', async () => {
     // Parent: 400px wide, 8px padding each side → available = 384
     // 4 items of 50px, gap 10 → total = 230 ≤ 384 → all fit
     const {result} = renderHook(() =>
       useOverflow(4, {gap: 10, behavior: 'observeParent'}),
     );
 
-    act(() => {
+    await act(async () => {
       result.current.measureRef(mockMeasure([50, 50, 50, 50], 30));
       result.current.containerRef(mockContainerWithParent(400, 8));
     });
@@ -534,7 +570,7 @@ describe('useOverflow with behavior=observeParent', () => {
     expect(result.current.hasOverflow).toBe(false);
   });
 
-  it('overflows when parent content width is too small', () => {
+  it('overflows when parent content width is too small', async () => {
     // Parent: 200px, padding 8 each side → available = 184
     // 4 items of 50px, gap 10, indicator 30
     // Item 1 (50): reserve 30 → 80 ≤ 184 ✓
@@ -545,7 +581,7 @@ describe('useOverflow with behavior=observeParent', () => {
       useOverflow(4, {gap: 10, behavior: 'observeParent'}),
     );
 
-    act(() => {
+    await act(async () => {
       result.current.measureRef(mockMeasure([50, 50, 50, 50], 30));
       result.current.containerRef(mockContainerWithParent(200, 8));
     });
@@ -554,7 +590,7 @@ describe('useOverflow with behavior=observeParent', () => {
     expect(result.current.hasOverflow).toBe(true);
   });
 
-  it('accounts for parent padding', () => {
+  it('accounts for parent padding', async () => {
     // Parent: 200px, padding 40 each side → available = 120
     // 3 items of 50px, gap 10, no indicator → total = 170 > 120
     // Item 1 (50): not last, reserve 0 → 50 ≤ 120 ✓
@@ -565,7 +601,7 @@ describe('useOverflow with behavior=observeParent', () => {
       useOverflow(3, {gap: 10, behavior: 'observeParent'}),
     );
 
-    act(() => {
+    await act(async () => {
       result.current.measureRef(mockMeasure([50, 50, 50]));
       result.current.containerRef(mockContainerWithParent(200, 40));
     });
@@ -611,7 +647,7 @@ describe('useOverflow when the observer reports a resize (component:OverflowList
       const {result} = renderHook(() => useOverflow(3, {gap: 10}));
       const box = resizableBox(fromWidth);
 
-      act(() => {
+      await act(async () => {
         result.current.measureRef(mockMeasure([50, 50, 50], 30));
         result.current.containerRef(box as unknown as HTMLElement);
       });
@@ -634,7 +670,7 @@ describe('useOverflow when the observer reports a resize (component:OverflowList
       });
       const box = resizableBox(200);
 
-      act(() => {
+      await act(async () => {
         result.current.measureRef(mockMeasure([50, 50, 50], 30, itemHeight));
         result.current.containerRef(box as unknown as HTMLElement);
       });
@@ -650,7 +686,7 @@ describe('useOverflow when the observer reports a resize (component:OverflowList
   it('renders after paint when a multi-row fold changes the rows the list fills', async () => {
     const {result} = renderHook(() => useOverflow(6, {gap: 10, maxRows: 2}));
     const box = resizableBox(120);
-    act(() => {
+    await act(async () => {
       result.current.measureRef(mockMeasure([50, 50, 50, 50, 50, 50], 30, 20));
       result.current.containerRef(box as unknown as HTMLElement);
     });
@@ -674,7 +710,7 @@ describe('useOverflow when the observer reports a resize (component:OverflowList
     const {result} = renderHook(() => useOverflow(5, {gap: 0, maxRows: 2}));
     // At 100px one item shows, and the indicator wraps onto the second row.
     const box = resizableBox(100);
-    act(() => {
+    await act(async () => {
       result.current.measureRef(mockMeasure([60, 60, 60, 150, 60], 60, 20));
       result.current.containerRef(box as unknown as HTMLElement);
     });
@@ -695,7 +731,7 @@ describe('useOverflow when the observer reports a resize (component:OverflowList
   it('renders after paint when a single-row fold shows an indicator taller than the items', async () => {
     const {result} = renderHook(() => useOverflow(3, {gap: 10}));
     const box = resizableBox(200);
-    act(() => {
+    await act(async () => {
       result.current.measureRef(mockMeasure([50, 50, 50], 30, 20, 40));
       result.current.containerRef(box as unknown as HTMLElement);
     });
@@ -717,7 +753,7 @@ describe('useOverflow when the observer reports a resize (component:OverflowList
     // The indicator renders as a text node, which the list's element
     // children do not include; the measure copy wraps it in an element.
     const box = resizableBox(100);
-    act(() => {
+    await act(async () => {
       result.current.measureRef(mockMeasure([50, 50, 50], 30, 16, 24));
       result.current.containerRef(box as unknown as HTMLElement);
     });
@@ -737,7 +773,7 @@ describe('useOverflow when the observer reports a resize (component:OverflowList
   it('renders after paint when the shown indicator can be narrower than the measured one', async () => {
     const {result} = renderHook(() => useOverflow(5, {gap: 0, maxRows: 2}));
     const box = resizableBox(400);
-    act(() => {
+    await act(async () => {
       // The measured indicator holds all five items; one for two is narrower.
       result.current.measureRef(mockMeasure([50, 50, 50, 180, 50], 44, 20));
       result.current.containerRef(box as unknown as HTMLElement);
@@ -760,7 +796,7 @@ describe('useOverflow when the observer reports a resize (component:OverflowList
   it('renders before paint when a multi-row fold keeps the rows the list fills', async () => {
     const {result} = renderHook(() => useOverflow(6, {gap: 10, maxRows: 2}));
     const box = resizableBox(260);
-    act(() => {
+    await act(async () => {
       result.current.measureRef(mockMeasure([50, 50, 50, 50, 50, 50], 30, 20));
       result.current.containerRef(box as unknown as HTMLElement);
     });
@@ -806,7 +842,7 @@ describe('useOverflow when the observer reports a resize (component:OverflowList
         useOverflow(3, {gap: 10, behavior: 'observeParent'}),
       );
       const {container, parent} = boxWithParent(fromWidth);
-      act(() => {
+      await act(async () => {
         result.current.measureRef(mockMeasure([50, 50, 50], 30));
         result.current.containerRef(container);
       });
@@ -828,7 +864,7 @@ describe('useOverflow when the observer reports a resize (component:OverflowList
       useOverflow(4, {gap: 10, behavior: 'observeParent'}),
     );
     const {container, parent} = boxWithParent(160);
-    act(() => {
+    await act(async () => {
       result.current.measureRef(mockMeasure([50, 50, 50, 50], 30));
       result.current.containerRef(container);
     });
@@ -844,7 +880,7 @@ describe('useOverflow when the observer reports a resize (component:OverflowList
     const {result} = renderHook(() => useOverflow(6, {gap: 10, maxRows: 2}));
     const box = resizableBox(120);
     const measure = mockMeasure([50, 50, 50, 50, 50, 50], 30, 20);
-    act(() => {
+    await act(async () => {
       result.current.measureRef(measure);
       result.current.containerRef(box as unknown as HTMLElement);
     });
@@ -906,7 +942,7 @@ describe('useOverflow when the observer reports a resize (component:OverflowList
     async (_label, followsItems, beforePaint) => {
       const {result} = renderHook(() => useOverflow(3, {gap: 10}));
       const box = styledBox(200, followsItems);
-      act(() => {
+      await act(async () => {
         result.current.measureRef(mockMeasure([50, 50, 50], 30));
         result.current.containerRef(box as unknown as HTMLElement);
       });
@@ -930,7 +966,7 @@ describe('useOverflow when the observer reports a resize (component:OverflowList
     let width = 200;
     const list = document.createElement('div');
     Object.defineProperty(list, 'offsetWidth', {get: () => width});
-    act(() => {
+    await act(async () => {
       result.current.measureRef(mockMeasure([50, 50, 50], 30));
       result.current.containerRef(list);
     });
@@ -951,7 +987,7 @@ describe('useOverflow when the observer reports a resize (component:OverflowList
     const first = resizableBox(200);
     const second = resizableBox(200);
 
-    act(() => {
+    await act(async () => {
       result.current[0].measureRef(mockMeasure([50, 50, 50], 30));
       result.current[0].containerRef(first as unknown as HTMLElement);
       result.current[1].measureRef(mockMeasure([50, 50, 50], 30));
