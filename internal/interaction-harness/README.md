@@ -46,6 +46,11 @@ newly animated layer). The script keeps Mesa's shader cache on the host
 (`~/.cache/astryx-webkit-shaders/<image>`, or `ASTRYX_WEBKIT_SHADER_CACHE`), so
 only the first run on a machine pays for them.
 
+With `CI` set, the script gives the container the four CPUs of CI's WebKit
+runners as a quota, and llvmpipe as many threads. `ASTRYX_WEBKIT_CPUS` sets
+another count. On Linux the container runs only on the CPUs the script may use,
+so `taskset` limits it too.
+
 Evidence (storyboards, curve traces) is written to
 `test-results/interaction-evidence/` (override with
 `ASTRYX_INTERACTION_EVIDENCE`) and attached to the test report. It is never
@@ -194,7 +199,10 @@ only before its curve's held tail (keyframes that end in a run of identical
 values, read as `waitForRest` reads them): when the only animation running
 there started while the page waited, or the wait times out with only such
 animations, the page looked too late, and the wait rejects with
-`BusyWindowTooLateError`. The `verdict` judges the
+`BusyWindowTooLateError`. With `pseudoElement` (`'::before'` or
+`'::after'`), only that pseudo-element's animations on `during` itself count,
+as `sampleCurve` reads them: a child's animation, such as a switch thumb's
+press, does not start the block. The `verdict` judges the
 frames the screencast delivered, whatever its rate (a loaded machine's can
 deliver one frame in five or six), and tolerates nothing a frozen animation
 does: at least one frame in the judged part, no stall longer than three of the

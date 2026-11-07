@@ -88,8 +88,11 @@ permissions: {}
 # A release-check runs its browser owners in wide shards that all start at
 # once, so a full check takes minutes; pull requests keep their narrower legs
 # (spec:AST-030 FR23, DEC-17).
+# A pull request's newer push cancels its older run. A re-run takes a group of
+# its own, so re-running an older head never cancels the run for the pull
+# request's current head.
 concurrency:
-  group: "ci-${{ github.event.pull_request.number || github.event.merge_group.head_sha || (github.event_name == 'workflow_dispatch' && github.triggering_actor == 'github-actions[bot]' && 'main-heavy-lanes') || github.run_id }}"
+  group: "ci-${{ github.event.pull_request.number && (github.run_attempt == '1' && github.event.pull_request.number || format('{0}-rerun-{1}', github.event.pull_request.number, github.run_id)) || github.event.merge_group.head_sha || (github.event_name == 'workflow_dispatch' && github.triggering_actor == 'github-actions[bot]' && 'main-heavy-lanes') || github.run_id }}"
   cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' || (inputs.recheck && github.triggering_actor == 'github-actions[bot]') }}
 
 jobs:
@@ -965,11 +968,13 @@ jobs:
 
       # A scoped pull request runs the tests Vitest's module graph relates to
       # its diff against the base (`--changed`): the changed tests, and every
-      # test that imports a changed module, however indirectly. Anything else
-      # runs every test.
+      # test that imports a changed module, however indirectly. That includes
+      # shared infrastructure only the module graph reaches (the interaction
+      # harness and the lint plugin: `vitest_full_suite`).
+      # Anything else runs every test.
       - name: Run this shard of the UI tests
         env:
-          SCOPED: ${{ github.event_name == 'pull_request' && steps.scope.outputs.full_suite == 'false' }}
+          SCOPED: ${{ github.event_name == 'pull_request' && steps.scope.outputs.vitest_full_suite == 'false' }}
           LAB_ONLY: ${{ steps.scope.outputs.lab_only }}
         run: |
           if [ "$LAB_ONLY" = true ]; then
@@ -1109,7 +1114,7 @@ jobs:
       # Scoped like test-ui's run.
       - name: Run this shard of the Node tests
         env:
-          SCOPED: ${{ github.event_name == 'pull_request' && steps.scope.outputs.full_suite == 'false' }}
+          SCOPED: ${{ github.event_name == 'pull_request' && steps.scope.outputs.vitest_full_suite == 'false' }}
         run: |
           if [ "$SCOPED" = true ]; then
             .github/scripts/run-named.sh "Tests the change reaches" -- pnpm test:node --changed=HEAD^1 --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }}
