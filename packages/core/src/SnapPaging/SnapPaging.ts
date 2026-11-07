@@ -480,7 +480,7 @@ function attachPaging(
       if (!pager.isDragging) {
         const end = track.travel();
         const to = Math.min(Math.max(target(track.position(), end), 0), end);
-        // The pager's own move: a finger catches it as it catches a settle.
+        // The pager's own move: a finger on the row stops it at the touch.
         pager.goTo(pager.nearestPage(to), {offset: to});
       }
       return true;

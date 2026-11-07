@@ -24,6 +24,7 @@ import {
   advanceFrozenPage,
   animationStoryboard,
   armHold,
+  armInputRun,
   blockMainThread,
   BusyWindowTooLateError,
   busyWindowProof,
@@ -48,7 +49,12 @@ import {
   startBusyControl,
   startScreencast,
   thawPage,
+  toTouchEvents,
+  touchArrivalsFrom,
   touchDriver,
+  TouchPacingError,
+  touchPacingFault,
+  TouchPageStallError,
   touchStoryboard,
   traceRendering,
   trackMarker,
@@ -455,6 +461,18 @@ const rowCenter = async (page: Page, name: string) => {
   }
   return {x: box.x + box.width / 2, y: box.y + box.height / 2};
 };
+
+/** The events a touch play's page receives, pointer events included. */
+const TOUCH_INPUT_TYPES = [
+  'pointerdown',
+  'pointermove',
+  'pointerup',
+  'pointercancel',
+  'touchstart',
+  'touchmove',
+  'touchend',
+  'touchcancel',
+];
 
 test('a push follows UIKit’s push spring, the card underneath at 0.3 of its speed', async ({
   page,
@@ -930,9 +948,39 @@ test('a flick from near the edge finishes the pop', async ({page}) => {
     standalone: true,
   });
   // ~60 px of travel at ~1200 px/s: p + 0.35·v is well past half.
-  await driver.play(flick({x: left + 6, y: 400}, {velocity: {x: 1200, y: 0}}));
+  const script = flick({x: left + 6, y: 400}, {velocity: {x: 1200, y: 0}});
+  const run = await armInputRun(page, TOUCH_INPUT_TYPES);
+  // The page reads the release from when the moves arrive: pace on spacing.
+  await driver.play(script, {pacing: 'spacing'});
   await waitForRest(card(page, 'screen-General'));
-  await expect.poll(topTitle).toBe('General');
+  try {
+    await expect.poll(topTitle).toBe('General');
+  } catch (error) {
+    // A starved runner delivers the moves late, so the page reads a release
+    // far from the script's. Past half of it, the run did not deliver the
+    // flick this test describes. It fails by name, as the page's when its own
+    // listeners held a move.
+    const record = await run.evaluate(recorded => {
+      recorded.stop();
+      return {
+        eventTypes: recorded.eventTypes.slice(),
+        pointerTypes: recorded.pointerTypes.slice(),
+        stamps: recorded.stamps.slice(),
+        handledAt: recorded.handledAt.slice(),
+      };
+    });
+    const fault = touchPacingFault(
+      toTouchEvents(script),
+      touchArrivalsFrom(record),
+      0.5,
+    );
+    if (fault != null) {
+      throw fault.heldByPage == null
+        ? new TouchPacingError(fault)
+        : new TouchPageStallError({...fault, heldByPage: fault.heldByPage});
+    }
+    throw error;
+  }
 });
 
 test('in a browser tab the leading screen edge stays the browser’s', async ({

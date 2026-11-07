@@ -1507,6 +1507,10 @@
     "defaultMessage": "Alt",
     "description": "Spoken name of the Alt modifier key in a keyboard shortcut's accessible name."
   },
+  "@astryx.kbd.key.altShort": {
+    "defaultMessage": "Alt",
+    "description": "Abbreviated visible label of the Alt keycap on non-Apple platforms (Apple platforms show the Option symbol). Localize to the keyboard's conventional short label."
+  },
   "@astryx.kbd.key.backspace": {
     "defaultMessage": "Backspace",
     "description": "Spoken name of the Backspace key in a keyboard shortcut's accessible name."
@@ -1555,6 +1559,10 @@
     "defaultMessage": "Shift",
     "description": "Spoken name of the Shift modifier key in a keyboard shortcut's accessible name."
   },
+  "@astryx.kbd.key.shiftShort": {
+    "defaultMessage": "Shift",
+    "description": "Abbreviated visible label of the Shift keycap on non-Apple platforms (Apple platforms show the Shift symbol). Localize to the keyboard's conventional short label."
+  },
   "@astryx.kbd.key.tab": {
     "defaultMessage": "Tab",
     "description": "Spoken name of the Tab key in a keyboard shortcut's accessible name."
@@ -1562,6 +1570,10 @@
   "@astryx.kbd.key.up": {
     "defaultMessage": "Up arrow",
     "description": "Spoken name of the up arrow key in a keyboard shortcut's accessible name."
+  },
+  "@astryx.kbd.key.windowsShort": {
+    "defaultMessage": "Win",
+    "description": "Abbreviated visible label of the Windows logo keycap, shown for the meta key on non-Apple platforms. Localize to the keyboard's conventional short label."
   },
   "@astryx.kbd.shortcut": {
     "defaultMessage": "{shortcut} + {key}",

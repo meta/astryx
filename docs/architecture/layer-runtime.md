@@ -217,7 +217,9 @@ and no option lets it overlap the anchor. Content that fits on some side keeps
 its own size there, and no option is sized to whatever room is left: a browser
 keeps an open layer on the option it last used while that option still fits,
 so an anchor that moves takes the layer to the side now roomier instead of
-shrinking it. The layer scrolls only while its content overflows. Chromium
+shrinking it. Its `overflow-y` is `auto`, with no overscroll containment, so it scrolls
+only while its content overflows and a fitting layer has no scroll range;
+no read decides it. Chromium
 tries no more than five options, so this list replaces the standard list
 rather than extending it.
 During a scroll, Chromium does not choose a CSS-anchored layer's option again,
@@ -252,7 +254,7 @@ observed while the layer is open, so a layer opened with its anchor already out
 of view holds from its first frame. Whether a layer that keeps its anchor clear
 covers its anchor or leaves the viewport, judged from its box without its own
 transform (so an entry animation that starts it closer to the anchor does not
-count), and whether its content overflows, is read inside `show()` and the
+count), is read inside `show()` and the
 open-remount path right after the popover is shown, and again while it is open
 from ResizeObserver callbacks and resize events, all of which run before the
 frame paints; the observers move to the replacement when the caller replaces
@@ -265,17 +267,9 @@ frame after reads and applies. The scroll listeners subscribe to the window's in
 each shadow root along the anchor's flat-tree path, because `scroll` and
 `scrollend` are not composed. A `scroll` only cancels a pending check or
 starts the timer, and no handler reads layout. Chromium fires `scrollend` per wheel step, so a long
-wheel scroll is checked more than once, never during the scroll itself. An
-anchor that moves on screen without resizing, in layout or by a scroll, is
-reported only by an intersection observer on the anchor, whose root is the
-viewport shrunk to the anchor's rectangle and which re-arms from each report
-that differs from its threshold; a report that finds an anchor which has not
-moved wholly outside that rectangle means a scrolled container clips it, and a
-second intersection observer, rooted at the viewport with a threshold of 0,
-waits for the anchor to come back into view and then re-arms. A reported move
-updates only whether the layer scrolls, in the next frame: it never checks the
-box and never places the layer afresh, so the layer never changes side in the
-middle of a scroll. Apart from the read after a scroll stops, a layer never
+wheel scroll is checked more than once, never during the scroll itself. Nothing watches an anchor that moves on screen without
+resizing: every option keeps the layer clear of its anchor, so the layer never
+changes side in the middle of a scroll. Apart from the read after a scroll stops, a layer never
 paints at a geometry it is about to correct.
 
 ### Current browser support behavior
@@ -557,10 +551,10 @@ layers use Layer rendering without joining Escape/platform dismissal.
   reported keeps its top until it closes: when the cap lifts it grows downward
   in place; when the keyboard rises it moves up above it and then holds.
 - **INV12 — The first frame is the settled frame.** No input to a layer's
-  viewport geometry is measured after paint and then applied, with three
+  viewport geometry is measured after paint and then applied, with two
   exceptions. The runtime observes anchor visibility for every layer, and,
   for a layer that keeps its anchor clear, whether it covers its anchor or
-  leaves the viewport and whether its content overflows; each is read before
+  leaves the viewport; each is read before
   first paint and, while the layer is open, from callbacks that run before the
   frame paints. The first exception is the check after a scroll stops
   (`spec:AST-059` DEC-8): once a scroll of the page or of a scrolling ancestor
@@ -570,11 +564,8 @@ layers use Layer rendering without joining Escape/platform dismissal.
   scroll handler checks the box, re-picks or forces layout for a layer, and no
   option of the layer's list overlaps its anchor, so a frame painted during
   the scroll can show the layer past the viewport edge but never over its
-  anchor. The second exception is whether a layer that keeps its anchor
-  clear scrolls: a same-size anchor's move, which an intersection observer
-  reports after paint, re-reads the layer's scroll and client heights in the
-  next frame and updates it; it never checks the box or re-picks. The
-  third exception is the software keyboard's cap (`spec:AST-059` FR10).
+  anchor. The
+  second exception is the software keyboard's cap (`spec:AST-059` FR10).
   A box's height cannot change on the compositor, so the cap changes once per
   keyboard movement: when a rising keyboard has arrived, at once as a falling
   keyboard starts down, and at once for a keyboard that changes without
@@ -584,9 +575,7 @@ layers use Layer rendering without joining Escape/platform dismissal.
   that opens with a keyboard up, when the keyboard moves, and before the first
   paint of a layer element the runtime swaps in while the layer is open.
   Otherwise a layer never paints at a geometry it is about to
-  correct, and the runtime polls nothing: an anchor that a scrolled
-  container hides is followed again when an intersection observer reports it
-  back in view.
+  correct, and the runtime polls nothing.
 - **INV13 — One exit copy per closing layer.** A layer's close plays on at most
   one exit copy, made by `placeLayerExitCopy`: drawn where the layer was drawn,
   inert, hidden from assistive technology, without ids, form names, or form

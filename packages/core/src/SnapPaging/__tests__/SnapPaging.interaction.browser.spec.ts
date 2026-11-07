@@ -446,6 +446,12 @@ const TRACKPAD_IN_CHROMIUM =
   "Chromium's CDP wheels read as a mouse's wheel; the trackpad cases run in WebKit";
 
 /**
+ * How long after its last wheel the gesture host ends a horizontal trackpad
+ * scroll, ms. A gap this long or longer starts a new gesture.
+ */
+const TRACKPAD_SCROLL_END_MS = 220;
+
+/**
  * Reports a coarse primary pointer to script, before the story loads: a
  * tablet with a trackpad, whose wheels a desktop context can inject.
  */
@@ -492,15 +498,21 @@ for (const pointer of ['coarse', 'fine'] as const) {
           throw new Error('no scroller');
         }
         const input = await webInputDriver(page);
-        // 40 steps of 6.5 px, a trackpad's continuous scroll: 260 px, past half
-        // of a view.
-        for (let i = 0; i < 40; i++) {
-          await input.wheel({
-            x: box.x + box.width / 2,
-            y: box.y + box.height / 2,
-            dx: 6.5,
-          });
-        }
+        // 40 steps, 7 and 6 px in turn, one a frame: a trackpad's continuous
+        // scroll of 260 px, past half of a view. WebKit delivers whole px. A
+        // step that reaches the page after the scroll ended would start a
+        // second, shorter swipe, which settles back. So that gap fails here,
+        // by name.
+        await input.wheelBurst({
+          x: box.x + box.width / 2,
+          y: box.y + box.height / 2,
+          steps: Array.from({length: 40}, (_, i) => ({
+            dx: i % 2 === 0 ? 7 : 6,
+          })),
+          // WebKit stamps wheels in whole ms, so the longest gap that keeps
+          // one scroll is 1 ms shorter than the end.
+          maxGapMs: TRACKPAD_SCROLL_END_MS - 1,
+        });
         await settled(scroller);
         await expect
           .poll(async () => offset(scroller))
@@ -656,7 +668,7 @@ test('an edge press late in a settle steps on to a stop', async ({page}) => {
 });
 
 for (const holdMs of [150, 40]) {
-  test(`during an edge button's move, a ${holdMs} ms touch on the row ${holdMs > 85 ? 'stops it where it shows' : 'lets it run on'}, and the row rests on a stop`, async ({
+  test(`during an edge button's move, a ${holdMs} ms touch on the row stops it where it shows, and the row rests on a stop`, async ({
     page,
   }) => {
     const {scroller} = await open(page, 'snap-paging-three-up', 'paging', {
@@ -674,8 +686,8 @@ for (const holdMs of [150, 40]) {
     );
     const at = await restingOffset(scroller);
     expect(Math.min(...stops.map(stop => Math.abs(stop - at)))).toBeLessThan(1);
-    // Past the pager's 85 ms catch time, the move stops short of its target.
-    expect(Math.abs(at - stops[5]) < 1).toBe(holdMs < 85);
+    // A finger stops the pager's own move at the touch, short of its target.
+    expect(Math.abs(at - stops[5])).toBeGreaterThan(1);
   });
 }
 
