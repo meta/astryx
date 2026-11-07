@@ -12,7 +12,7 @@
  * SYNC: When SegmentedControl components change, update tests to match new behavior
  */
 
-import {StrictMode} from 'react';
+import {StrictMode, useState} from 'react';
 import {describe, it, expect, vi, beforeEach} from 'vitest';
 import {
   cleanup,
@@ -630,6 +630,120 @@ describe('SegmentedControl keyboard navigation', () => {
 
     expect(handleChange).toHaveBeenCalledWith('table');
     expect(screen.getByRole('radio', {name: 'Table'})).toHaveFocus();
+  });
+
+  // ArrowDown moves forward and ArrowUp moves back. They keep logical order,
+  // so right-to-left layouts do not flip them.
+  describe('ArrowUp and ArrowDown', () => {
+    type ControlProps = {
+      value: string;
+      onChange: (value: string) => void;
+      dir?: 'ltr' | 'rtl';
+      disabledValue?: string;
+    };
+
+    // Holds the value so a sequence of presses moves from the new selection.
+    function Control({
+      value: initial,
+      onChange,
+      dir,
+      disabledValue,
+    }: ControlProps) {
+      const [value, setValue] = useState(initial);
+      return (
+        <div dir={dir}>
+          <SegmentedControl
+            value={value}
+            onChange={next => {
+              onChange(next);
+              setValue(next);
+            }}
+            label="View mode">
+            <SegmentedControlItem value="grid" label="Grid" />
+            <SegmentedControlItem
+              value="list"
+              label="List"
+              isDisabled={disabledValue === 'list'}
+            />
+            <SegmentedControlItem value="table" label="Table" />
+          </SegmentedControl>
+        </div>
+      );
+    }
+
+    function renderControl(props: ControlProps) {
+      return render(<Control {...props} />);
+    }
+
+    it('ArrowDown moves focus to the next segment and selects it', async () => {
+      const user = userEvent.setup();
+      const handleChange = vi.fn();
+      renderControl({value: 'grid', onChange: handleChange});
+
+      screen.getByRole('radio', {name: 'Grid'}).focus();
+      await user.keyboard('{ArrowDown}');
+
+      expect(handleChange).toHaveBeenCalledWith('list');
+      expect(screen.getByRole('radio', {name: 'List'})).toHaveFocus();
+    });
+
+    it('ArrowUp moves focus to the previous segment and selects it', async () => {
+      const user = userEvent.setup();
+      const handleChange = vi.fn();
+      renderControl({value: 'list', onChange: handleChange});
+
+      screen.getByRole('radio', {name: 'List'}).focus();
+      await user.keyboard('{ArrowUp}');
+
+      expect(handleChange).toHaveBeenCalledWith('grid');
+      expect(screen.getByRole('radio', {name: 'Grid'})).toHaveFocus();
+    });
+
+    it('wraps from last to first with ArrowDown and first to last with ArrowUp', async () => {
+      const user = userEvent.setup();
+      const handleChange = vi.fn();
+      renderControl({value: 'table', onChange: handleChange});
+
+      screen.getByRole('radio', {name: 'Table'}).focus();
+      await user.keyboard('{ArrowDown}');
+      expect(handleChange).toHaveBeenLastCalledWith('grid');
+      expect(screen.getByRole('radio', {name: 'Grid'})).toHaveFocus();
+
+      await user.keyboard('{ArrowUp}');
+      expect(handleChange).toHaveBeenLastCalledWith('table');
+      expect(screen.getByRole('radio', {name: 'Table'})).toHaveFocus();
+    });
+
+    it('skips disabled segments', async () => {
+      const user = userEvent.setup();
+      const handleChange = vi.fn();
+      renderControl({
+        value: 'grid',
+        onChange: handleChange,
+        disabledValue: 'list',
+      });
+
+      screen.getByRole('radio', {name: 'Grid'}).focus();
+      await user.keyboard('{ArrowDown}');
+
+      expect(handleChange).toHaveBeenCalledWith('table');
+      expect(screen.getByRole('radio', {name: 'Table'})).toHaveFocus();
+    });
+
+    it('keeps logical order under dir="rtl"', async () => {
+      const user = userEvent.setup();
+      const handleChange = vi.fn();
+      renderControl({value: 'grid', onChange: handleChange, dir: 'rtl'});
+
+      screen.getByRole('radio', {name: 'Grid'}).focus();
+      await user.keyboard('{ArrowDown}');
+      expect(handleChange).toHaveBeenLastCalledWith('list');
+      expect(screen.getByRole('radio', {name: 'List'})).toHaveFocus();
+
+      await user.keyboard('{ArrowUp}');
+      expect(handleChange).toHaveBeenLastCalledWith('grid');
+      expect(screen.getByRole('radio', {name: 'Grid'})).toHaveFocus();
+    });
   });
 });
 
