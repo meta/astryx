@@ -20,6 +20,7 @@ import {animatorFor, type MotionHandle} from '../motion/animator';
 import {
   type HeldRowListener,
   makeSnapPaging,
+  rowScale,
   type SnapPaging,
   type SnapPagingAttachment,
   type SnapPagingOptions,
@@ -128,6 +129,12 @@ function childTrack(element: HTMLElement, onHeld?: HeldRowListener) {
   let heldSign = 1;
   let lead: HTMLElement | null = null;
   let followFrame = 0;
+  // The row's travel, the children's span and the row's width at the
+  // takeover. A resize while the row is held moves the travel by the change in
+  // span and width.
+  let takeoverTravel = 0;
+  let heldSpan = 0;
+  let heldWidth = 0;
   // The row's own inline snap type, back at the hand-back.
   let ownSnapType = '';
   const children = () =>
@@ -170,8 +177,52 @@ function childTrack(element: HTMLElement, onHeld?: HeldRowListener) {
     followFrame = requestAnimationFrame(follow);
   }
 
+  // Every child carries the same translate, so a held row's span is its
+  // layout's.
+  function span(): number {
+    const items = children();
+    if (items.length === 0) {
+      return 0;
+    }
+    let start = Infinity;
+    let end = -Infinity;
+    for (const child of items) {
+      const rect = child.getBoundingClientRect();
+      start = Math.min(start, rect.left);
+      end = Math.max(end, rect.right);
+    }
+    return (end - start) / rowScale(element, element.getBoundingClientRect());
+  }
+
+  // A resize while the row is held moves its travel with the row's width and
+  // the children's span. A frame of the hold reads the result, not the row.
+  function remeasure(): void {
+    if (!isMoving) {
+      return;
+    }
+    const nextSpan = span();
+    const nextWidth = element.clientWidth;
+    const native = nativePosition();
+    // WebKit truncates a fractional scroll offset, so the travel stays a whole
+    // number of pixels, as the scroll width is. It rounds once, from the
+    // takeover, so a resize over many frames adds up no rounding.
+    heldTravel = Math.max(
+      0,
+      Math.round(
+        takeoverTravel + (nextSpan - heldSpan) - (nextWidth - heldWidth),
+      ),
+    );
+    // A shorter travel clamps the row's own scroll offset. The children take
+    // up the clamp, so the row still shows where the pager holds it.
+    if (native !== heldOffset) {
+      const at = position();
+      heldOffset = native;
+      place(at);
+    }
+  }
+
   // A held row's translate widens its overflow, so its travel is the one it
-  // was taken over with.
+  // was taken over with, moved by any resize since.
   function travel(): number {
     return isMoving
       ? heldTravel
@@ -209,8 +260,13 @@ function childTrack(element: HTMLElement, onHeld?: HeldRowListener) {
     const rowTravel = Math.max(0, element.scrollWidth - element.clientWidth);
     const rowSign = isRtl() ? -1 : 1;
     const items = children();
+    const rowSpan = span();
+    const rowWidth = element.clientWidth;
     heldOffset = offset;
     heldTravel = rowTravel;
+    takeoverTravel = rowTravel;
+    heldSpan = rowSpan;
+    heldWidth = rowWidth;
     heldSign = rowSign;
     lead = items[0] ?? null;
     isMoving = true;
@@ -307,6 +363,7 @@ function childTrack(element: HTMLElement, onHeld?: HeldRowListener) {
     },
     position,
     travel,
+    remeasure,
     stops,
     viewWidth,
     place,
@@ -337,7 +394,6 @@ function attachPaging(
   let anchor = 0;
   // The row's stops and view width, read before a takeover's first write.
   let measured: {stops: number[]; viewWidth: number} | null = null;
-  // Takes the row over where it is shown, at `at`, on the page nearest it.
   const takeOverShown = (at: number) => {
     // Every read comes before the takeover's first write.
     const stops = track.stops();
@@ -366,6 +422,8 @@ function attachPaging(
       // the pointer kinds.
       panOptions: {allowedPointerTypes: ['touch', 'pen']},
       measurePages: () => {
+        // A resize while the row is held moves its travel first.
+        track.remeasure();
         const stops = measured?.stops ?? track.stops();
         return (options.pages ?? 'view') === 'item'
           ? stops
@@ -422,7 +480,7 @@ function attachPaging(
       if (!pager.isDragging) {
         const end = track.travel();
         const to = Math.min(Math.max(target(track.position(), end), 0), end);
-        // The pager's own move: a finger catches it as it catches a settle.
+        // The pager's own move: a finger on the row stops it at the touch.
         pager.goTo(pager.nearestPage(to), {offset: to});
       }
       return true;

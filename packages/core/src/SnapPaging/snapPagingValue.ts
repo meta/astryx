@@ -11,6 +11,7 @@
  */
 
 import {isRtlElement} from '../hooks/isRtlElement';
+import {realmValue, sharedKey} from '../utils/sharedRealm';
 
 /** Options of `useSnapPaging`. */
 export interface SnapPagingOptions {
@@ -22,14 +23,16 @@ export interface SnapPagingOptions {
   readonly pages?: 'view' | 'item';
 }
 
-declare const snapPagingBrand: unique symbol;
-
 /**
  * Configured snap paging. Make it with `useSnapPaging`, and pass it to
  * Carousel's `hasSnap`.
  */
 export interface SnapPaging {
-  readonly [snapPagingBrand]: true;
+  /**
+   * A brand that is never present, so the paging types of the package and a
+   * swizzled copy match.
+   */
+  readonly '@astryxdesign/core/snap-paging/v1'?: never;
 }
 
 /** The paging attached to one row. */
@@ -60,7 +63,11 @@ interface SnapPagingValue {
   readonly attach: Attach;
 }
 
-const values = new WeakSet<object>();
+// Registered, so a swizzled Carousel accepts the package's paging value.
+const values = realmValue(
+  sharedKey('snap-paging/values', 1),
+  () => new WeakSet<object>(),
+);
 // Each attached row's paging, for Carousel's own scroll calls.
 const attachments = new WeakMap<HTMLElement, SnapPagingAttachment>();
 
@@ -133,6 +140,16 @@ export function nearestStop(stops: ReadonlyArray<number>, at: number): number {
 }
 
 /**
+ * The scale a scaled ancestor gives the row's rects: the rect's width over the
+ * row's layout width. Scroll offsets do not have it.
+ */
+export function rowScale(element: HTMLElement, box: DOMRect): number {
+  return element.offsetWidth > 0 && box.width > 0
+    ? box.width / element.offsetWidth
+    : 1;
+}
+
+/**
  * Each item's snap stop: the scroll offset that aligns its start edge with
  * the scroll padding, clamped to `end`. Read from the items' rects, with the
  * position `shown` added back. Stops closer than half a pixel are one stop.
@@ -144,11 +161,7 @@ export function snapStops(
 ): number[] {
   const rtl = isRtlElement(element);
   const box = element.getBoundingClientRect();
-  // A scaled ancestor scales the rects, not the scroll offsets.
-  const scale =
-    element.offsetWidth > 0 && box.width > 0
-      ? box.width / element.offsetWidth
-      : 1;
+  const scale = rowScale(element, box);
   const border = rtl
     ? element.offsetWidth - element.clientWidth - element.clientLeft
     : element.clientLeft;

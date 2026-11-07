@@ -149,6 +149,10 @@ const styles = stylex.create({
   cwContainer400: {
     width: 400,
   },
+  insetFrame: {
+    width: 360,
+    height: 200,
+  },
 });
 
 // Helper components for demo content
@@ -1705,4 +1709,159 @@ export const NestedInAppShellWide: Story = {
       </div>
     </VStack>
   ),
+};
+
+/**
+ * LayoutContent beside each kind of neighbour, in plain frames with no
+ * padding container: the inner inset is spacing step 4, and `padding={6}`
+ * sets the Layout-edge inset. Each case names its content region with
+ * `data-content-inset`. With `contentWidth` and one start panel, the content
+ * children end one Layout-edge inset inside the content-width frame.
+ */
+export const ContentInsets: Story = {
+  name: 'Content Insets',
+  render: () => {
+    const body = <p {...stylex.props(styles.bodyText)}>Content area.</p>;
+    const panel = (
+      <LayoutPanel width={100} hasDivider>
+        <NavItem active>Nav</NavItem>
+      </LayoutPanel>
+    );
+    const cases = [
+      {
+        id: 'start-panel',
+        label: 'Start panel, padding=6',
+        layout: (
+          <Layout
+            padding={6}
+            start={panel}
+            content={
+              <LayoutContent data-content-inset="start-panel">
+                {body}
+              </LayoutContent>
+            }
+          />
+        ),
+      },
+      {
+        id: 'end-panel',
+        label: 'End panel, padding=6',
+        layout: (
+          <Layout
+            padding={6}
+            end={panel}
+            content={
+              <LayoutContent data-content-inset="end-panel">
+                {body}
+              </LayoutContent>
+            }
+          />
+        ),
+      },
+      {
+        id: 'header-without-divider',
+        label: 'Header without divider, footer with divider, padding=6',
+        layout: (
+          <Layout
+            padding={6}
+            header={
+              <LayoutHeader>
+                <h3 {...stylex.props(styles.heading)}>Header</h3>
+              </LayoutHeader>
+            }
+            content={
+              <LayoutContent data-content-inset="header-without-divider">
+                {body}
+              </LayoutContent>
+            }
+            footer={
+              <LayoutFooter hasDivider>
+                <p {...stylex.props(styles.bodyText)}>Footer</p>
+              </LayoutFooter>
+            }
+          />
+        ),
+      },
+      {
+        id: 'full-bleed-start-panel',
+        label: 'Start panel, padding=0',
+        layout: (
+          <Layout
+            padding={0}
+            start={panel}
+            content={
+              <LayoutContent data-content-inset="full-bleed-start-panel">
+                {body}
+              </LayoutContent>
+            }
+          />
+        ),
+      },
+      {
+        id: 'content-width-start-panel',
+        label: 'contentWidth=240, start panel, padding=6',
+        layout: (
+          <Layout
+            padding={6}
+            contentWidth={240}
+            header={
+              <LayoutHeader hasDivider>
+                <h3 {...stylex.props(styles.heading)}>Header</h3>
+              </LayoutHeader>
+            }
+            start={panel}
+            content={
+              <LayoutContent data-content-inset="content-width-start-panel">
+                {body}
+              </LayoutContent>
+            }
+          />
+        ),
+      },
+      {
+        id: 'nested',
+        label: 'Nested Layout under a header without divider',
+        layout: (
+          <Layout
+            padding={6}
+            header={
+              <LayoutHeader>
+                <h3 {...stylex.props(styles.heading)}>Outer header</h3>
+              </LayoutHeader>
+            }
+            content={
+              <LayoutContent padding={0}>
+                <Layout
+                  header={
+                    <LayoutHeader hasDivider>
+                      <p {...stylex.props(styles.bodyText)}>Inner header</p>
+                    </LayoutHeader>
+                  }
+                  content={
+                    <LayoutContent data-content-inset="nested">
+                      {body}
+                    </LayoutContent>
+                  }
+                />
+              </LayoutContent>
+            }
+          />
+        ),
+      },
+    ];
+    return (
+      <VStack gap={4} xstyle={styles.storySection}>
+        <HStack gap={4} wrap="wrap">
+          {cases.map(({id, label, layout}) => (
+            <VStack key={id} gap={2}>
+              <p {...stylex.props(styles.subheading)}>{label}</p>
+              <div {...stylex.props(styles.cwContainer, styles.insetFrame)}>
+                {layout}
+              </div>
+            </VStack>
+          ))}
+        </HStack>
+      </VStack>
+    );
+  },
 };

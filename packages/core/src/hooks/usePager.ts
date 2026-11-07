@@ -412,6 +412,14 @@ class SettleCatcher extends LongPressGestureRecognizer {
     this.clearTimer();
   }
 
+  /**
+   * Takes the touch from the content under it: no press and no click. In
+   * UIKit, the touch that stops a scroll view never reaches its content.
+   */
+  takeFromContent(): void {
+    this.cancelTouchesInView();
+  }
+
   protected override touchesBegan(
     touches: ReadonlyArray<GestureTouch>,
     event: GestureEventContext,
@@ -449,8 +457,9 @@ function isScrollContact(recognizer: PanGestureRecognizer): boolean {
  *   The track then settles on UIKit's paging integrator (`solvePaging`),
  *   baked into keyframes.
  * - A finger that lands on a settling pager catches it `paging.catchStopMs`
- *   after the touch, as in UIKit. A drag catches it at once, from the value
- *   on screen. While the pan is off, a touch does not stop the motion.
+ *   after the touch, as in UIKit. A finger stops a `goTo` move at once. A
+ *   drag catches it at once, from the value on screen. While the pan is off,
+ *   a touch does not stop the motion.
  * - `goTo` runs the curve of `setContentOffset(_:animated:)` and cancels a
  *   drag in progress. It reads that duration and curve through
  *   `resolveMotion`.
@@ -650,6 +659,8 @@ export function createPager(
   let settled = target;
   let settleHandle: MotionHandle | null = null;
   let isSwipeSettle = false;
+  // Whether the running settle follows a release, not the program's `goTo`.
+  let isReleaseSettle = false;
   let settleToken = 0;
   let isDragging = false;
 
@@ -721,6 +732,7 @@ export function createPager(
     clearCatchTimer();
     flushReport();
     isSwipeSettle = false;
+    isReleaseSettle = false;
     if (settleHandle != null) {
       settleToken += 1;
       settleHandle = null;
@@ -874,10 +886,16 @@ export function createPager(
    * travel. A settle that a touch's release starts (`touchRelease`)
    * cross-fades on any pointer. Any other motion, such as `goTo` or a mouse's
    * or a pen's release, cross-fades on a coarse pointer. It lands at once on
-   * any other pointer.
+   * any other pointer. `isRelease` marks a release's settle, which a finger
+   * that catches it takes from the content.
    */
-  function play(curve: MotionCurve, touchRelease = false): void {
+  function play(
+    curve: MotionCurve,
+    touchRelease = false,
+    isRelease = false,
+  ): void {
     isSwipeSettle = false;
+    isReleaseSettle = isRelease;
     if (animator == null) {
       return;
     }
@@ -925,7 +943,7 @@ export function createPager(
       rest();
       return;
     }
-    play(curve, touchRelease);
+    play(curve, touchRelease, true);
   }
 
   function measure(): void {
@@ -941,7 +959,13 @@ export function createPager(
     if (isChildPages()) {
       const offsets = measureChildOffsets();
       if (!sameOffsets(offsets, childOffsets)) {
+        // A drag's release moves at most one page from where the drag began.
+        // New pages renumber, so the drag keeps the page nearest that offset.
+        const dragFrom = isDragging ? offsetOf(dragStartIndex) : null;
         childOffsets = offsets;
+        if (dragFrom != null) {
+          dragStartIndex = nearestPage(dragFrom);
+        }
         changed = true;
         const pageCount = offsets.length;
         deliver(() => options.onPagesChange?.(pageCount));
@@ -1088,18 +1112,26 @@ export function createPager(
   function onCatch(recognizer: LongPressGestureRecognizer): void {
     if (recognizer.state === 'began') {
       holdSelection(true);
+      const isMouse = catcher.pointerType === 'mouse';
+      // A mouse keeps its click. A finger or a pen loses it.
+      if (isReleaseSettle && !isMouse) {
+        catcher.takeFromContent();
+      }
       clearCatchTimer();
       caughtSettle = false;
+      if (!isReleaseSettle && !isMouse) {
+        // UIKit stops an animated `setContentOffset` at the touch itself. A
+        // mouse keeps the catch delay.
+        catchSettle();
+        return;
+      }
       isCatchTimerArmed = true;
       catcher.armCatch(paging.catchStopMs, () => {
         if (!isCatchTimerArmed) {
           return;
         }
         isCatchTimerArmed = false;
-        if (settleHandle != null && !isDragging) {
-          stopSettle();
-          caughtSettle = true;
-        }
+        catchSettle();
       });
       return;
     }
@@ -1124,6 +1156,13 @@ export function createPager(
         setTarget(next, 'drag', true);
         settleFrom(position, 0, catcher.pointerType === 'touch');
       }
+    }
+  }
+
+  function catchSettle(): void {
+    if (settleHandle != null && !isDragging) {
+      stopSettle();
+      caughtSettle = true;
     }
   }
 
