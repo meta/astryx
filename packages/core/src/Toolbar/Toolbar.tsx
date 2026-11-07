@@ -98,10 +98,12 @@ const styles = stylex.create({
     maxWidth: 'max-content',
   },
   // A start or end lane beside a center lane: the two share the width the
-  // center leaves, and each keeps at least its content's minimum width.
+  // center leaves, and each keeps at least its content's minimum width. A
+  // lane whose controls do not fit even on a line of their own wraps them.
   sideLane: {
     flexGrow: 1,
     flexShrink: 1,
+    flexWrap: 'wrap',
   },
   endSlot: {
     display: 'flex',
