@@ -948,8 +948,9 @@ test('busy main thread: a window slide finishes on time through a 600 ms block',
   // Before the slide, so the control is on the compositor first.
   await startBusyControl(page);
   const cast = await startScreencast(page);
-  // The page blocks once the slide has run a frame. A round trip from here
-  // would start the block later in the slide, or after it.
+  // The page blocks once the old dot's fade has run a frame, just before the
+  // slide starts on its own start time. A round trip from here would start
+  // the block later in the slide, or after it.
   const blocking = blockMainThread(page, 600, {during: strip});
   const current = await indicatorCenter(slider, 25);
   await driver.tap({x: current.x + 12, y: current.y});
@@ -974,9 +975,18 @@ test('busy main thread: a window slide finishes on time through a 600 ms block',
     minJudgedFrames: MIN_JUDGED_FRAMES,
     control,
   });
-  // The compositor carried the slide to the next slot during the block.
+  // The compositor carried the slide to the next slot during the block. It
+  // moved on every frame, and a frame inside the block shows it at rest.
   expect(proof.verdict.failures, proof.summary).toEqual([]);
   expect(proof.monotonic, proof.summary).toBe(true);
+  const atRest = tracked.find(
+    f =>
+      f.box != null &&
+      f.t >= busy.from &&
+      f.t <= busy.to &&
+      Math.abs(f.box.x - settledAt) <= 1,
+  );
+  expect(atRest, proof.summary).toBeDefined();
   expect(
     await strip.evaluate(el =>
       Number.parseFloat(getComputedStyle(el).translate),
