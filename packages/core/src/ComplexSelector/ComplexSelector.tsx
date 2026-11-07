@@ -656,6 +656,9 @@ export function ComplexSelector<Value>({
     surfaceTarget: 'complex-selector-popup',
     onShow: handlePopoverShow,
     onHide: handlePopoverHide,
+    // The entrance runs on the surface: an anchored layer lays out again on
+    // each frame its own style animates.
+    xstyle: layerAnimations[placement],
   });
   popupContentRef.current = popover.contentRef.current;
 
@@ -803,7 +806,7 @@ export function ComplexSelector<Value>({
     placement,
     alignment,
     offset: spacingVars['--spacing-1'],
-    xstyle: [styles.popover, layerAnimations[placement]],
+    xstyle: styles.popover,
   });
 
   if (renderTrigger != null) {

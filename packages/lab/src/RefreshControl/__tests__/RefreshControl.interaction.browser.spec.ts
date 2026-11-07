@@ -1143,6 +1143,12 @@ async function listScrollRest(page: Page, timeout = 3000): Promise<number> {
   );
 }
 
+/**
+ * The pause that ends a vertical trackpad scroll's gesture, ms. The page's
+ * clock counts whole ms, so a gap of 1 ms less is the longest within one.
+ */
+const TRACKPAD_SCROLL_END_MS = 180;
+
 /** Why the trackpad proofs run in WebKit only. */
 const TRACKPAD_SKIP =
   "Chromium's driver sends each wheel step as a mouse wheel's notch; WebKit's sends a trackpad's precise deltas";
@@ -1168,8 +1174,16 @@ test('with a trackpad, a two-finger scroll at the top pulls and refreshes as a f
   test.skip(browserName === 'chromium', TRACKPAD_SKIP);
   const {context, page, content} = await desktopPage(browser);
   try {
-    // 300 px of scroll toward the top: past the trigger.
-    await scrollWheel(page, 30, -10);
+    // 300 px of scroll toward the top, past the trigger, as one gesture. The
+    // steps go out on their schedule. A run the page receives with a
+    // gesture-ending pause fails by name.
+    const driver = await webInputDriver(page);
+    await driver.wheelBurst({
+      x: 200,
+      y: 300,
+      steps: Array.from({length: 30}, () => ({dy: -10})),
+      maxGapMs: TRACKPAD_SCROLL_END_MS - 1,
+    });
     // The scroll's gesture ends after its last step. The pull's release
     // starts the settle, and the content comes to rest on the inset.
     await waitForSettleStart(content);
@@ -1248,8 +1262,25 @@ test('with a pen, a drag at the top stays the browser’s and never pulls', asyn
   }
 });
 
-/** The top of the indicator band, in px below the scroll view's top. */
-const indicatorTop = (content: Locator) =>
+interface Positions {
+  /** The content's presented translation, px. */
+  readonly shown: number;
+  /** The top of the indicator band, in px below the scroll view's top. */
+  readonly indicator: number;
+}
+
+/** What `recordPositions` keeps in the page. */
+interface PositionRecord {
+  __positions: Positions[];
+  __readPositions: () => Positions;
+}
+
+/**
+ * The page records the positions in the frame after each touch move. A read
+ * from the runner holds the play's next event back, and then the lift loses
+ * the pull's rest.
+ */
+const recordPositions = (content: Locator) =>
   content.evaluate(element => {
     const band = element.querySelector(':scope > :last-child > div');
     let scroller = element.parentElement;
@@ -1259,8 +1290,25 @@ const indicatorTop = (content: Locator) =>
     ) {
       scroller = scroller.parentElement;
     }
-    const top = scroller?.getBoundingClientRect().top ?? 0;
-    return (band?.getBoundingClientRect().top ?? NaN) - top;
+    const read = () => {
+      const translate = getComputedStyle(element).translate;
+      const top = scroller?.getBoundingClientRect().top ?? 0;
+      return {
+        shown:
+          translate === 'none' || translate === ''
+            ? 0
+            : parseFloat(translate.split(/\s+/)[1] ?? '0'),
+        indicator: (band?.getBoundingClientRect().top ?? NaN) - top,
+      };
+    };
+    const record = window as unknown as PositionRecord;
+    record.__positions = [];
+    record.__readPositions = read;
+    addEventListener(
+      'touchmove',
+      () => requestAnimationFrame(() => record.__positions.push(read())),
+      {capture: true, passive: true},
+    );
   });
 
 test('the indicator stays at the top of the scroll view while the content is pulled and settles, as UIRefreshControl’s does', async ({
@@ -1269,20 +1317,16 @@ test('the indicator stays at the top of the scroll view while the content is pul
   const {driver, content, start} = await openRefresh(page, undefined, {
     refreshMs: '6000',
   });
-  const readings: {shown: number; indicator: number}[] = [];
-  await driver.play(slowPull(start, 300, 150), {
-    onEvent: async step => {
-      if (step.type !== 'touchMove') {
-        return;
-      }
-      await frames(page, 1);
-      readings.push({
-        shown: await shownPull(content),
-        indicator: await indicatorTop(content),
-      });
-    },
-  });
+  await recordPositions(content);
+  await driver.play(slowPull(start, 300, 150));
   await waitForContentRest(content);
+  const {readings, indicatorAtRest} = await page.evaluate(() => {
+    const record = window as unknown as PositionRecord;
+    return {
+      readings: record.__positions,
+      indicatorAtRest: record.__readPositions().indicator,
+    };
+  });
   const revealed = readings.filter(r => r.shown >= HEIGHT + 10);
   const shown = revealed.map(r => r.shown);
   const indicator = revealed.map(r => r.indicator);
@@ -1293,9 +1337,7 @@ test('the indicator stays at the top of the scroll view while the content is pul
   );
   // Settled onto the inset, it is where it was during the pull.
   expect(await shownPull(content)).toBeCloseTo(HEIGHT, 0);
-  expect(
-    Math.abs((await indicatorTop(content)) - indicator[0]),
-  ).toBeLessThanOrEqual(1);
+  expect(Math.abs(indicatorAtRest - indicator[0])).toBeLessThanOrEqual(1);
 });
 
 /**

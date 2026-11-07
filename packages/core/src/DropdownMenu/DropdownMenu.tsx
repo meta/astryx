@@ -1113,6 +1113,9 @@ function DropdownMenuPopover({
     dialogLabel: hasRegions
       ? (menuLabel ?? t(DEFAULT_BUTTON_I18N_KEY))
       : undefined,
+    // The entrance runs on the surface: an anchored layer lays out again on
+    // each frame its own style animates.
+    xstyle: layerAnimations[placement],
   });
 
   const closeMenu = useCallback(() => {
@@ -1220,9 +1223,14 @@ function DropdownMenuPopover({
       pressTouchModel === 'uikit'
         ? listRef.current?.closest('[popover]')
         : null;
+    // The entrance plays on the popover's surface, inside the layer.
     releaseEntranceRef.current =
-      layer == null ? null : holdEntranceInput(layer);
-  }, [listRef, pressTouchModel]);
+      layer == null
+        ? null
+        : holdEntranceInput(layer, {
+            entrance: popover.contentRef.current ?? layer,
+          });
+  }, [listRef, pressTouchModel, popover.contentRef]);
   holdEntranceRef.current = holdEntrance;
   // The layer runtime's input hold: an unmount during the entrance releases it.
   useEffect(
@@ -1787,7 +1795,6 @@ function DropdownMenuPopover({
             resolvedMaxHeight != null &&
               dynamicStyles.popoverViewportMaxBlockSize(resolvedMaxHeight),
             popoverXstyle,
-            layerAnimations[placement],
           ],
         },
       )}

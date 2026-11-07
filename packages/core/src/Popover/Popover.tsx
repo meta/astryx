@@ -61,7 +61,11 @@ import {matchesMediaQuery, watchMediaQuery} from '../utils/coarsePointer';
 import type {BaseProps} from '../BaseProps';
 import {FALLBACK_CLOSE_SELECTOR, usePopoverInternal} from './usePopover';
 import {usePopoverSurfaceMotion} from './PopoverTouch';
-import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
+import {
+  FOCUSABLE_SELECTOR,
+  isDisabledWithin,
+  preferTabStops,
+} from '../hooks/focusableSelector';
 import type {LayerAlignment, LayerPlacement} from '../Layer/useLayer';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
@@ -583,6 +587,9 @@ export function Popover({
     xstyle: [
       styles.surfaceViewportFit,
       hasOverflow && styles.surfaceScrollable,
+      // The entrance runs on the surface: an anchored layer lays out again on
+      // each frame its own style animates.
+      layerAnimations[placement],
       xstyle,
     ],
     className,
@@ -599,6 +606,7 @@ export function Popover({
     surfaceMotion.present(
       surfaceRef.current?.closest<HTMLElement>('[popover]') ?? null,
       anchorElementRef.current,
+      surfaceRef.current,
     );
   };
   // A controlled popover opens on the surface its presentation resolves to
@@ -645,12 +653,12 @@ export function Popover({
     sheetPanelRef.current = panel;
     setSheetPanelAttached(panel != null);
   }, []);
-  // Focus enters the sheet at each opening as it enters the anchored popover
-  // (FR2): a caller's `[data-autofocus]`, else the first genuine content
-  // control (never the injected fallback close, never BottomSheet's own
-  // scroll area), else that scroll area: the sheet's labelled surface, which
-  // paints the shared focus ring under the keyboard. It runs a frame after
-  // BottomSheet presents the dialog; BottomSheet is unchanged.
+  // Focus enters the sheet at each opening, as in the anchored popover (FR2).
+  // A caller's `[data-autofocus]` wins. Else the first enabled tab stop in the
+  // content takes focus: never the injected fallback close or BottomSheet's
+  // own scroll area. Else the scroll area does: it is the sheet's labelled
+  // surface and shows the keyboard focus ring. This runs a frame after
+  // BottomSheet presents the dialog.
   useEffect(() => {
     if (!isSheetOpen || !isSheetPanelAttached) {
       return;
@@ -675,15 +683,18 @@ export function Popover({
       }
       const target =
         sheetPanel.querySelector<HTMLElement>('[data-autofocus]') ??
-        Array.from(
-          sheetPanel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
-        ).find(
-          element =>
-            // BottomSheet's scroll area is the panel's own child; content
-            // sits inside it.
-            element.parentElement !== sheetPanel &&
-            element.closest(FALLBACK_CLOSE_SELECTOR) == null,
-        );
+        preferTabStops(
+          Array.from(
+            sheetPanel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+          ).filter(
+            element =>
+              // BottomSheet's scroll area is the panel's own child; content
+              // sits inside it.
+              element.parentElement !== sheetPanel &&
+              element.closest(FALLBACK_CLOSE_SELECTOR) == null &&
+              !isDisabledWithin(element, sheetPanel),
+          ),
+        )[0];
       if (target != null) {
         target.focus({preventScroll: true});
         return;
@@ -1043,7 +1054,6 @@ export function Popover({
           ? width.trim()
           : clampInlineSize(width, layerViewportInset.maxInlineSizeFallback),
       );
-  const layerXstyle = [popoverSizeXstyle, layerAnimations[placement]];
 
   // One instance of the content at a time: the sheet holds it while it is
   // mounted, the anchored layer otherwise.
@@ -1093,7 +1103,7 @@ export function Popover({
         placement,
         alignment,
         offset: spacingVars['--spacing-1'],
-        xstyle: layerXstyle,
+        xstyle: popoverSizeXstyle,
       });
 
   // Sibling mode: render only the popover (no wrapper needed)
