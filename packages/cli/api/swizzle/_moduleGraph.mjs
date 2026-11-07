@@ -21,7 +21,10 @@ import {
   moduleExportOrigins,
   resolveLocalModule,
 } from '../../foundation/discovery/module-exports.mjs';
-import {subpathDeclaration} from '../../foundation/integrations/exports-subpaths.mjs';
+import {
+  allTargets,
+  subpathDeclaration,
+} from '../../foundation/integrations/exports-subpaths.mjs';
 
 /** The extensions an extensionless import may name, in resolution order. */
 const CODE_FILE = /\.[cm]?[jt]sx?$/;
@@ -290,17 +293,8 @@ function exportedSourceFiles(pkg, packageDir, root) {
  */
 function wildcardSubpaths(packageDir, root, key, value) {
   /** @type {string[]} */
-  const patterns = [];
-  const collect = (/** @type {unknown} */ node) => {
-    if (typeof node === 'string') patterns.push(node);
-    else if (Array.isArray(node)) node.forEach(collect);
-    else if (node && typeof node === 'object')
-      Object.values(node).forEach(collect);
-  };
-  collect(value);
-  /** @type {string[]} */
   const subpaths = [];
-  for (const pattern of patterns) {
+  for (const pattern of allTargets(value)) {
     if (!pattern.startsWith('./') || !pattern.includes('*')) continue;
     const fixed = pattern.slice(2, pattern.indexOf('*'));
     const base = path.resolve(

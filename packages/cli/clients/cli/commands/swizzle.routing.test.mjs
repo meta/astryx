@@ -343,7 +343,7 @@ describe('swizzle — integration-owned components', () => {
     writeProjectPackageJson(project);
     const {intDir} = buildIntegration(project, {componentName: 'Foo'});
     fs.writeFileSync(path.join(intDir, 'package.json'), JSON.stringify({name: '@test/meta', version: '1.2.3', exports: exportsField}));
-    fs.writeFileSync(path.join(intDir, 'components', 'index.ts'), `export const all = 1;\n`);
+    fs.writeFileSync(path.join(intDir, 'components', 'index.ts'), `export {Bar} from './Bar/Bar';\n`);
     const bar = path.join(intDir, 'components', 'Bar');
     fs.mkdirSync(bar, {recursive: true});
     fs.writeFileSync(path.join(bar, 'Bar.tsx'), `export function Bar() { return null; }\n`);
@@ -364,11 +364,13 @@ describe('swizzle — integration-owned components', () => {
     expect(await swizzleFooBesideBar(exportsField)).toContain(`from '@test/meta/Bar'`);
   });
 
-  it.each([
-    ['a single condition object', {source: './components/index.ts', default: './dist/index.js'}],
-    ['a blocked subpath beside a `./*` pattern', {'./*': {source: './components/*/index.ts'}, './Bar': null}],
-  ])('copies a component the package does not export when exports use %s', async (_shape, exportsField) => {
-    const out = await swizzleFooBesideBar(exportsField);
+  it('imports from the package root when exports are a single condition object', async () => {
+    const out = await swizzleFooBesideBar({source: './components/index.ts', default: './dist/index.js'});
+    expect(out).toContain(`from '@test/meta';`);
+  });
+
+  it('copies a component whose subpath exports block beside a `./*` pattern', async () => {
+    const out = await swizzleFooBesideBar({'./*': {source: './components/*/index.ts'}, './Bar': null});
     expect(out).not.toContain('@test/meta');
     expect(out).toContain(`from '../Bar`);
   });
