@@ -21,6 +21,8 @@ import {
 } from '@astryxdesign/a11y-spec/playwright';
 import {
   drag,
+  FRAME_STARVATION_MS,
+  FrameStarvationError,
   installInputLog,
   openStory,
   readInputLog,
@@ -149,11 +151,79 @@ const touchStartedAt = async (page: Page) => lastInput(page, 'touchstart');
 /** A finger held still for `ms`, then lifted. */
 const hold = (at: {x: number; y: number}, ms: number) => tap(at, {holdMs: ms});
 
+/** One frame at 60 Hz, ms. */
+const FRAME_MS = 1000 / 60;
+
+/** Logs when each frame's callbacks run, on the page clock, until read. */
+async function startFrameLog(page: Page) {
+  await page.evaluate(() => {
+    const w = window as unknown as {__frameLog?: number[]};
+    const log: number[] = [];
+    w.__frameLog = log;
+    const tick = () => {
+      log.push(performance.now());
+      if (w.__frameLog === log) {
+        requestAnimationFrame(tick);
+      }
+    };
+    requestAnimationFrame(tick);
+  });
+}
+
+/** Stops the frame log and reads it. */
+async function readFrameLog(page: Page): Promise<number[]> {
+  return page.evaluate(() => {
+    const w = window as unknown as {__frameLog?: number[]};
+    const log = w.__frameLog ?? [];
+    w.__frameLog = undefined;
+    return log;
+  });
+}
+
+/**
+ * The timer task that decides the menu starts within a frame of its due
+ * time. A later start that a frame gap over `FRAME_STARVATION_MS` covers
+ * fails by name: the page was starved of frames. Any other late start fails
+ * bare, because something on the page held the timer.
+ */
+function expectDecidedOnTime(
+  frames: ReadonlyArray<number>,
+  dueAt: number,
+  startedAt: number,
+) {
+  const lateMs = startedAt - dueAt;
+  if (lateMs <= FRAME_MS) {
+    return;
+  }
+  let longestGapMs = 0;
+  for (let i = 1; i < frames.length; i++) {
+    const coversLateStart =
+      frames[i - 1] <= dueAt + FRAME_MS && frames[i] >= startedAt - FRAME_MS;
+    if (coversLateStart) {
+      longestGapMs = Math.max(longestGapMs, frames[i] - frames[i - 1]);
+    }
+  }
+  if (longestGapMs > FRAME_STARVATION_MS) {
+    throw new FrameStarvationError({
+      during: `the menu's timer task was due, and it started ${lateMs.toFixed(1)} ms late`,
+      frames: frames.filter(t => t > dueAt && t < startedAt).length,
+      min: Math.max(1, Math.floor(lateMs / FRAME_MS)),
+      longestGapMs,
+    });
+  }
+  expect(
+    lateMs,
+    'the timer task that decides the menu started late while frames ran',
+  ).toBeLessThanOrEqual(FRAME_MS);
+}
+
 test('a finger still down gets the menu at 735 ms (iOS 26.2), not before', async ({
   page,
 }) => {
   const {driver, center} = await openTouchStory(page);
+  await startFrameLog(page);
   await driver.play(hold(center, menuDisplayMs + 200));
+  const frames = await readFrameLog(page);
   const start = await touchStartedAt(page);
   const shown = await menuShownAt(page);
   const decided = await menuShownTimerAt(page);
@@ -165,6 +235,7 @@ test('a finger still down gets the menu at 735 ms (iOS 26.2), not before', async
     'the menu showed after the task that decided it',
   ).not.toBeNull();
   expect((decided as number) - start).toBeGreaterThanOrEqual(menuDisplayMs - 1);
+  expectDecidedOnTime(frames, start + menuDisplayMs, decided as number);
   const after = (shown as number) - start;
   // The timer runs at its deadline, give or take a task.
   expect(after).toBeGreaterThanOrEqual(menuDisplayMs);
