@@ -111,9 +111,9 @@ async function openPopover(
   }
   await driver.tap({x: box.x + box.width / 2, y: box.y + box.height / 2});
   await expect(trigger).toHaveAttribute('aria-expanded', 'true');
-  const layer = page.locator('[popover]:has([role="dialog"])').first();
+  const layer = page.locator('[popover]:has(.astryx-popover)').first();
   await waitForRest(layer);
-  return {surface: layer.locator('[role="dialog"]'), trigger};
+  return {surface: layer.locator('.astryx-popover'), trigger};
 }
 
 /**
@@ -377,7 +377,7 @@ test('a person who scrolls the capped popover before its field reveal keeps the 
   const capped = freezePageWhen(
     page,
     () => {
-      const layer = document.querySelector('[popover]:has([role="dialog"])');
+      const layer = document.querySelector('[popover]:has(.astryx-popover)');
       return (
         layer != null &&
         getComputedStyle(layer)
@@ -439,9 +439,9 @@ test('opened while the keyboard is already up, it opens clear of the keyboard', 
   await expect(trigger).toHaveAttribute('aria-expanded', 'true');
   await page.waitForTimeout(200);
   await cdp?.send('Animation.setPlaybackRate', {playbackRate: 1});
-  const layer = page.locator('[popover]:has([role="dialog"])').first();
+  const layer = page.locator('[popover]:has(.astryx-popover)').first();
   await waitForRest(layer);
-  const surface = layer.locator('[role="dialog"]');
+  const surface = layer.locator('.astryx-popover');
   const opened = await boxOf(surface);
   const keyboardTop = opened.innerHeight - COVER;
   expect(opened.keyboardCap).not.toBe('');
@@ -482,9 +482,9 @@ async function firstFrameOpenedWithKeyboardUp(page: Page): Promise<FirstFrame> {
     const win = window as unknown as {__firstFrame?: FirstFrame};
     const read = () => {
       const layer = document.querySelector<HTMLElement>(
-        '[popover]:has([role="dialog"])',
+        '[popover]:has(.astryx-popover)',
       );
-      const surface = layer?.querySelector<HTMLElement>('[role="dialog"]');
+      const surface = layer?.querySelector<HTMLElement>('.astryx-popover');
       if (layer?.matches(':popover-open') !== true || surface == null) {
         requestAnimationFrame(read);
         return;
