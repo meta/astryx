@@ -4,8 +4,9 @@
  * @file outsidePress.test.ts
  * @input isFocusInsideOwnedLayer, isPressInsideOwnedLayer and
  *   watchOutsidePress
- * @output The shared focus-leave test, and the outside-press watch that
- *   closes as a finger outside begins to pan, at a cancel or at a lift
+ * @output The shared focus-leave test, and the outside-press watch. The
+ *   watch closes as a finger outside begins to pan, at a cancel or at a lift.
+ *   For a mouse or a pen it closes at the press
  */
 
 import {fireEvent} from '@testing-library/react';
@@ -333,6 +334,113 @@ describe('watchOutsidePress, closing on a pan', () => {
     fireEvent.pointerDown(host, touch(2));
     fireEvent.pointerUp(host, touch(2));
     expect(onOutside).toHaveBeenCalledOnce();
+    stop();
+  });
+});
+
+describe('watchOutsidePress, closing at the press', () => {
+  afterEach(() => {
+    document.body.replaceChildren();
+  });
+
+  const press = (pointerType: string, pointerId = 1) => ({
+    pointerType,
+    pointerId,
+    composed: true,
+  });
+
+  function setup(root?: Node, pressTypes = ['mouse', 'pen']) {
+    const owner = document.createElement('div');
+    const layer = document.createElement('div');
+    const item = document.createElement('button');
+    layer.append(item);
+    const outside = document.createElement('button');
+    document.body.append(owner, outside);
+    (root ?? document.body).appendChild(layer);
+    const onOutside = vi.fn();
+    const stop = watchOutsidePress(
+      owner,
+      path => path.includes(layer),
+      onOutside,
+      {closesOnPan: true, pointerTypes: ['touch'], pressTypes, root},
+    );
+    return {item, outside, onOutside, stop};
+  }
+
+  it('closes at the mousedown of a mouse or a pen press outside, and not again at its lift', () => {
+    const {outside, onOutside, stop} = setup();
+    fireEvent.pointerDown(outside, press('mouse'));
+    fireEvent.mouseDown(outside);
+    expect(onOutside).toHaveBeenCalledOnce();
+    fireEvent.pointerUp(outside, press('mouse'));
+    fireEvent.mouseUp(outside);
+    expect(onOutside).toHaveBeenCalledOnce();
+    fireEvent.pointerDown(outside, press('pen', 2));
+    fireEvent.mouseDown(outside);
+    expect(onOutside).toHaveBeenCalledTimes(2);
+    stop();
+  });
+
+  it('keeps the layer open for a mouse press inside it, in a closed shadow root too', () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const shadow = host.attachShadow({mode: 'closed'});
+    const {item, onOutside, stop} = setup(shadow);
+    fireEvent.pointerDown(item, press('mouse'));
+    fireEvent.mouseDown(item, {composed: true});
+    expect(onOutside).not.toHaveBeenCalled();
+    fireEvent.pointerDown(host, press('mouse'));
+    fireEvent.mouseDown(host, {composed: true});
+    expect(onOutside).toHaveBeenCalledOnce();
+    stop();
+  });
+
+  it('judges a mousedown that no pointerdown came before as a mouse press', () => {
+    const {outside, onOutside, stop} = setup();
+    fireEvent.mouseDown(outside);
+    expect(onOutside).toHaveBeenCalledOnce();
+    stop();
+  });
+
+  it('leaves a press whose handler stops its mousedown before the document unjudged', () => {
+    const {outside, onOutside, stop} = setup();
+    outside.addEventListener('mousedown', event => event.stopPropagation());
+    fireEvent.pointerDown(outside, press('mouse'));
+    fireEvent.mouseDown(outside);
+    expect(onOutside).not.toHaveBeenCalled();
+    stop();
+  });
+
+  it('leaves a touch to its own judgment, and its compatibility mousedown alone', () => {
+    const {outside, onOutside, stop} = setup();
+    fireEvent.pointerDown(outside, press('touch'));
+    fireEvent.pointerUp(outside, press('touch'));
+    expect(onOutside).toHaveBeenCalledOnce();
+    fireEvent.mouseDown(outside);
+    expect(onOutside).toHaveBeenCalledOnce();
+    stop();
+  });
+
+  it('judges a touch at its compatibility mousedown when touch is a press type', () => {
+    const {outside, onOutside, stop} = setup(undefined, [
+      'mouse',
+      'pen',
+      'touch',
+    ]);
+    fireEvent.pointerDown(outside, press('touch'));
+    fireEvent.pointerUp(outside, press('touch'));
+    expect(onOutside).not.toHaveBeenCalled();
+    fireEvent.mouseDown(outside);
+    expect(onOutside).toHaveBeenCalledOnce();
+    stop();
+  });
+
+  it('counts a layer it closes at the press as an outside dismissal', () => {
+    const {outside, stop} = setup();
+    const before = outsideDismissalCount(document);
+    fireEvent.pointerDown(outside, press('mouse'));
+    fireEvent.mouseDown(outside);
+    expect(outsideDismissalCount(document)).toBe(before + 1);
     stop();
   });
 });
