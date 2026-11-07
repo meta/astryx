@@ -8,8 +8,9 @@
  *   sits 10 px above the keyboard. It is written once a rising keyboard has
  *   arrived, and taken off as a falling one starts down. A keyboard already
  *   up at the open caps the layer before paint. The field stays in view,
- *   unless a person touched the layer after the cap; a component's own
- *   scroll keeps the reveal. A layer clear of the keyboard, a bottom-held layer and a layer in another
+ *   unless a person touched the layer after the cap. A component's own
+ *   scroll keeps the reveal, and so does the next keyboard change. A layer
+ *   clear of the keyboard, a bottom-held layer and a layer in another
  *   positioning are left as they are. The positioning is read from the last
  *   commit. An entering layer is read without its entrance transform. The
  *   cap is held through a press until its click. The window listeners are
@@ -597,6 +598,31 @@ describe('useLayerKeyboardClearance', () => {
       expect(scroller.scrollTop).toBe(30);
     },
   );
+
+  it('reveals the field again at the next keyboard change after a person scrolled', () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => {
+      frames.push(callback);
+      return frames.length;
+    });
+    const {container} = render(<Harness focusRow />);
+    guide.emit({kind: 'show', from: 0, to: COVER});
+    advance(timing.keyboardNotificationMs + 1);
+    const scroller = container.querySelector<HTMLElement>(
+      '[data-testid="scroller"]',
+    )!;
+    fireEvent.pointerDown(scroller);
+    fireEvent.pointerCancel(scroller);
+    scroller.scrollTop = 30;
+    runFrames(frames);
+    expect(scroller.scrollTop).toBe(30);
+    // The keyboard grows by 20 px: a new cap, and the field is revealed.
+    guide.emit({kind: 'change', from: COVER, to: COVER + 20, animated: false});
+    runFrames(frames);
+    // The box now ends at 714 - 357 - 10 = 347. The stand-in field stays at
+    // 420 to 444 whatever the scroll, so the reveal adds 444 - 347.
+    expect(scroller.scrollTop).toBe(30 + 444 - 347);
+  });
 
   it('still reveals the field after a component scrolls its own list in the layer', () => {
     const frames: FrameRequestCallback[] = [];

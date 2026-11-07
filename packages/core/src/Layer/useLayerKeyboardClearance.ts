@@ -156,11 +156,11 @@ export function useLayerKeyboardClearance(
     // replace the layer element while it stays open; `sync` moves both to the
     // element the ref holds now.
     let layer: HTMLElement = initial;
-    // Counts a person's presses, touches and wheel turns in the layer. The
-    // field reveal after a cap stands down if one came after the cap.
-    let touches = 0;
-    const noteTouch = () => {
-      touches += 1;
+    // The field reveal after a cap stands down if a person's input reached
+    // the layer since the cap.
+    let personInputs = 0;
+    const notePersonInput = () => {
+      personInputs += 1;
     };
     const sync = (): boolean => {
       const next = layerRef.current;
@@ -168,15 +168,15 @@ export function useLayerKeyboardClearance(
         return false;
       }
       layer.removeEventListener('pointerdown', handlePress, true);
-      layer.removeEventListener('touchstart', noteTouch, {capture: true});
-      layer.removeEventListener('wheel', noteTouch, {capture: true});
+      layer.removeEventListener('touchstart', notePersonInput, {capture: true});
+      layer.removeEventListener('wheel', notePersonInput, {capture: true});
       layer = next;
       layer.addEventListener('pointerdown', handlePress, true);
-      layer.addEventListener('touchstart', noteTouch, {
+      layer.addEventListener('touchstart', notePersonInput, {
         capture: true,
         passive: true,
       });
-      layer.addEventListener('wheel', noteTouch, {
+      layer.addEventListener('wheel', notePersonInput, {
         capture: true,
         passive: true,
       });
@@ -262,13 +262,13 @@ export function useLayerKeyboardClearance(
       // person who presses, touches or turns a wheel in the layer by then has
       // placed its content, so the reveal stands down. A component's own
       // scroll, such as a list keeping its active option in view, does not
-      // stop it.
+      // stop it. The next cap reveals the field again.
       const focused = layer.ownerDocument.activeElement;
       if (focused != null && focused !== layer && layer.contains(focused)) {
-        const touchesAtCap = touches;
+        const inputsAtCap = personInputs;
         win.requestAnimationFrame(() =>
           win.requestAnimationFrame(() => {
-            if (!isDisposed && touches === touchesAtCap) {
+            if (!isDisposed && personInputs === inputsAtCap) {
               keepInView(layer, focused);
             }
           }),
@@ -319,7 +319,7 @@ export function useLayerKeyboardClearance(
       run?.();
     };
     function handlePress(event: PointerEvent) {
-      noteTouch();
+      notePersonInput();
       if (pressed.size === 0) {
         follow();
       }
@@ -339,11 +339,11 @@ export function useLayerKeyboardClearance(
       });
     }
     layer.addEventListener('pointerdown', handlePress, true);
-    layer.addEventListener('touchstart', noteTouch, {
+    layer.addEventListener('touchstart', notePersonInput, {
       capture: true,
       passive: true,
     });
-    layer.addEventListener('wheel', noteTouch, {
+    layer.addEventListener('wheel', notePersonInput, {
       capture: true,
       passive: true,
     });
@@ -421,8 +421,8 @@ export function useLayerKeyboardClearance(
       cancelPending();
       stopWaiting?.();
       layer.removeEventListener('pointerdown', handlePress, true);
-      layer.removeEventListener('touchstart', noteTouch, {capture: true});
-      layer.removeEventListener('wheel', noteTouch, {capture: true});
+      layer.removeEventListener('touchstart', notePersonInput, {capture: true});
+      layer.removeEventListener('wheel', notePersonInput, {capture: true});
       unfollow();
       // A closed layer reopens at its own size.
       if (capRef.current != null) {
