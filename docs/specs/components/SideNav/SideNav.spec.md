@@ -110,7 +110,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 | Concept       | Closed values or states                        | Meaning                                                                                                     | Availability by variant/orientation/state | Default | Owner               | Stability | Invalid-value behavior |
 | ------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------- | ------- | ------------------- | --------- | ---------------------- |
 | Nesting depth | `0`, `1`, `2`, … (derived, not a prop)         | The number of SideNavItem ancestors of a row within the same list. A collapsed rail's flyout restarts at 0. | Expanded rail; mobile drawer; flyout      | `0`     | `component:SideNav` | stable    | Not caller-settable    |
-| Row size      | `sm`, `md`, `lg` (existing SideNavItem `size`) | Sets the row's height and base inline padding; the indent adds to that padding.                             | Every row                                 | `md`    | `component:SideNav` | stable    | Rejected by the type   |
+| Row size      | `sm`, `md`, `lg` (existing SideNavItem `size`) | Sets the row's minimum height and base inline padding; the indent adds to that padding.                     | Every row                                 | `md`    | `component:SideNav` | stable    | Rejected by the type   |
 
 ## Behavioral and layout contract
 

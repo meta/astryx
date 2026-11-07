@@ -273,6 +273,15 @@ const styles = stylex.create({
   },
 });
 
+// An expanded row's size is a minimum, not a fixed height: the row grows with
+// a larger text size, so its label and end content stay inside it and never
+// overlap the next row. The collapsed rail keeps its square, icon-only rows.
+const rowSizeStyles = stylex.create({
+  sm: {height: 'auto', minHeight: sizeVars['--size-element-sm']},
+  md: {height: 'auto', minHeight: sizeVars['--size-element-md']},
+  lg: {height: 'auto', minHeight: sizeVars['--size-element-lg']},
+});
+
 // Nesting indent, drawn inside the row: one `--spacing-6` step per nesting
 // level. The row itself stays full width, so its hover and selected fill
 // matches a top-level row's.
@@ -818,6 +827,7 @@ export function SideNavItem({
     navItemStyles.item,
     interactionOverlayStyles.backgroundColor,
     navItemStyles[size],
+    rowSizeStyles[size],
     isSelected && navItemStyles.selected,
     isDisabled && navItemStyles.disabled,
   ] as const;
