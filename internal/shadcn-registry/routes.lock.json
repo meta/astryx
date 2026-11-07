@@ -2332,6 +2332,11 @@
       "aliases": []
     },
     {
+      "name": "example-internationalization-provider-calendar",
+      "path": "examples/internationalization-provider/calendar",
+      "aliases": []
+    },
+    {
       "name": "example-internationalization-provider-overrides",
       "path": "examples/internationalization-provider/overrides",
       "aliases": []
