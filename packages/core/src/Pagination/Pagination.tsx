@@ -182,6 +182,11 @@ export interface PaginationProps extends Omit<
 /** Width (px) of the page-size Selector field. */
 const PAGE_SIZE_SELECTOR_WIDTH = 80;
 
+const growStyles = stylex.create({
+  sm: {height: 'auto', minHeight: sizeVars['--size-element-sm']},
+  md: {height: 'auto', minHeight: sizeVars['--size-element-md']},
+});
+
 const styles = stylex.create({
   // Both rows wrap when their controls do not fit, as at a larger text size,
   // so no control leaves the screen. When they fit, nothing changes.
@@ -210,14 +215,14 @@ const styles = stylex.create({
     alignItems: 'center',
     justifyContent: 'center',
     minWidth: sizeVars['--size-element-md'],
-    height: sizeVars['--size-element-md'],
+    minHeight: sizeVars['--size-element-md'],
     color: colorVars['--color-text-secondary'],
     fontSize: typeScaleVars['--text-label-size'],
     userSelect: 'none',
   },
   ellipsisSm: {
     minWidth: sizeVars['--size-element-sm'],
-    height: sizeVars['--size-element-sm'],
+    minHeight: sizeVars['--size-element-sm'],
     fontSize: typeScaleVars['--text-supporting-size'],
   },
   infoText: {
@@ -650,7 +655,10 @@ export function Pagination({
                   onClick={() => handlePageChange(item)}
                   isDisabled={isDisabled}
                   aria-current={isActive ? 'page' : undefined}
-                  xstyle={isActive && styles.activePage}>
+                  xstyle={[
+                    growStyles[buttonSize],
+                    isActive && styles.activePage,
+                  ]}>
                   {item}
                 </Button>
               );

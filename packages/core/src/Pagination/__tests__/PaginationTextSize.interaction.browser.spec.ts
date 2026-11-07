@@ -92,3 +92,39 @@ for (const [size, px] of [
     expect(buttons[buttons.length - 1].name).toMatch(/next/i);
   });
 }
+
+test('at 312% text size no wrapped button covers another', async ({page}) => {
+  await setDefaultFontSize(page, 50);
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-pagination--default&viewMode=story`,
+  );
+  await page.locator('nav button').first().waitFor();
+  const boxes = await page.evaluate(() =>
+    [
+      ...document.querySelectorAll<HTMLElement>('#storybook-root nav button'),
+    ].map(button => {
+      const range = document.createRange();
+      range.selectNodeContents(button);
+      const text = range.getBoundingClientRect();
+      const box = button.getBoundingClientRect();
+      return {
+        name: button.getAttribute('aria-label') ?? '',
+        top: Math.min(box.top, text.top),
+        bottom: Math.max(box.bottom, text.bottom),
+        left: box.left,
+        right: box.right,
+      };
+    }),
+  );
+  for (let i = 0; i < boxes.length; i++) {
+    for (let j = i + 1; j < boxes.length; j++) {
+      const a = boxes[i];
+      const b = boxes[j];
+      const overlapsX = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+      const overlapsY = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+      expect(overlapsX > 1 && overlapsY > 1, `${a.name} / ${b.name}`).toBe(
+        false,
+      );
+    }
+  }
+});
