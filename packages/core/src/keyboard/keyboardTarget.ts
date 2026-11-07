@@ -430,11 +430,17 @@ export function deliverTap(
   control.dispatchEvent(click);
 }
 
-// Puts back a pan the browser makes on its own after a keyboard report. This
-// happens, for example, after a focus no claim saw: a script's `focus()` while
-// nothing has focus. The field sits in place already, so the pan only displaces
-// the page.
-function watchPans(win: Window, owns: (focused: Element) => boolean) {
+/**
+ * Puts back a pan the browser makes on its own after a keyboard report. This
+ * happens, for example, after a focus no claim saw: a script's `focus()` while
+ * nothing has focus. The field sits in place already, so the pan only displaces
+ * the page. Feed `report` each keyboard height the module reports; `owns`
+ * says whether a focused element is one this watch keeps in place.
+ */
+export function watchPans(
+  win: Window,
+  owns: (focused: Element) => boolean,
+): {report(height: number): void; stop(): void} {
   const watch = watchRevealPan(win, {owns});
   let lastHeight = getKeyboardHeight(win);
   return {

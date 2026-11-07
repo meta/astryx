@@ -442,6 +442,10 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
   const insertTextRef = useRef<(text: string) => void>(() => {});
   const expandTokenRef = useRef<(id: string) => void>(() => {});
 
+  // Inside ChatLayout's keyboard surface, every touch route into the text
+  // skips the browser's reveal. Elsewhere the browser's own focus applies.
+  const isKeyboardSurface = use(KeyboardSurfaceContext);
+
   // A single handle object shared between the forwarded ref (via
   // `useImperativeHandle`) and `selfRef` (used by internal consumers
   // like paste-as-token). We can't rely on `useImperativeHandle`'s
@@ -458,10 +462,6 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
    * would arm the next ArrowUp to replace it. Landing after the text is
    * also what a click on the composer's trailing space means.
    */
-  // Inside ChatLayout's keyboard surface, every touch route into the text
-  // skips the browser's reveal. Elsewhere the browser's own focus applies.
-  const isKeyboardSurface = use(KeyboardSurfaceContext);
-
   /**
    * Focus the editable, keeping a caret or selection the user already has
    * inside it.

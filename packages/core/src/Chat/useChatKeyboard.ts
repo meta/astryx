@@ -17,13 +17,7 @@
  * SYNC: update Chat/ChatLayout.tsx, ChatLayout.doc.mjs and keyboard/README.md
  */
 
-import {
-  useCallback,
-  useRef,
-  useState,
-  useSyncExternalStore,
-  type RefObject,
-} from 'react';
+import {useRef, useState, useSyncExternalStore, type RefObject} from 'react';
 import {createMotionEngine, type Animator} from '../motion/animator';
 import {
   claimTapFocus,
@@ -32,13 +26,16 @@ import {
   isTextEntryControl,
   refuseFocusReveal,
   subscribeKeyboardHeight,
-  watchRevealPan,
 } from '../keyboard/keyboardHeight';
 import {
   getKeyboardLayoutGuide,
   keyboardProfileOf,
 } from '../keyboard/keyboardLayoutGuide';
-import {deliverTap, followsKeyboard} from '../keyboard/keyboardTarget';
+import {
+  deliverTap,
+  followsKeyboard,
+  watchPans,
+} from '../keyboard/keyboardTarget';
 import type {KeyboardTransition} from '../keyboard/keyboardModel';
 import {rideKeyboard} from '../keyboard/rideKeyboard';
 import {layoutViewportHeight} from '../utils/layoutViewport';
@@ -189,9 +186,6 @@ export function useChatKeyboard({
   const dock = useElementAnimator();
   const messages = useElementAnimator();
   const composerRef = useRef<HTMLDivElement>(null);
-  const keyboardHeight = useKeyboardHeight(
-    rootRef.current?.ownerDocument.defaultView,
-  );
   // The lift the layout shows (read in render, so styles carry it) and its
   // mirror for the handlers below.
   const [liftStore] = useState(createLiftStore);
@@ -213,7 +207,6 @@ export function useChatKeyboard({
   // scrolled, just before the layout's last change.
   const atEndRef = useRef(false);
   const scrollBeforeRef = useRef(0);
-  const commitRef = useRef<() => void>(() => {});
   const touchPresentation = useTouchPresentation();
   const readModality = useInteractionModalityTrackingFor(composerRef);
 
@@ -262,7 +255,6 @@ export function useChatKeyboard({
       scrollBeforeRef.current = scrollRef.current?.scrollTop ?? 0;
       liftStore.set(next);
     };
-    commitRef.current = commit;
 
     // The ride plays the curve the guide publishes with each transition: the
     // keyboard's own motion. These are values, not motion roles, since the
@@ -330,9 +322,20 @@ export function useChatKeyboard({
       isTouch && keyboardProfileOf(win) === 'chromium'
         ? getKeyboardLayoutGuide(win).subscribe(follow)
         : undefined;
+    // A height change the guide has no ride for, as for a resize or a
+    // rotation, takes its lift at once. This listener comes after the guide's,
+    // so a ride claims the change first.
+    let reportedHeight = getKeyboardHeight(win);
+    const unsubscribeHeight = subscribeKeyboardHeight(win, event => {
+      if (event.type === 'viewport' && event.height !== reportedHeight) {
+        reportedHeight = event.height;
+        commit();
+      }
+    });
     // Mounted under a keyboard that is already up: take its place at once.
     commit();
     return () => {
+      unsubscribeHeight();
       unsubscribe?.();
       ridingRef.current = false;
     };
@@ -345,15 +348,6 @@ export function useChatKeyboard({
     messages.animator,
     liftStore,
   ]);
-
-  // Synchronizes the layout with the keyboard module's height when the guide
-  // had no ride for it, as for a resize or a rotation. `commit` measures the
-  // root against the layout viewport and sets the lift store. It acquires
-  // nothing and is idempotent: it sets the lift only on a change of half a
-  // pixel or more, and not during a ride.
-  useIsomorphicLayoutEffect(() => {
-    commitRef.current();
-  }, [keyboardHeight]);
 
   // Synchronizes the dock's and the transcript's translates, and the
   // transcript's scroll, with the lift the layout just took. The translates
@@ -432,24 +426,15 @@ export function useChatKeyboard({
     ) {
       return undefined;
     }
-    const watch = watchRevealPan(win, {
-      owns: focused => composer.contains(focused),
-    });
-    let reportedHeight = getKeyboardHeight(win);
+    const pans = watchPans(win, focused => composer.contains(focused));
     const unsubscribe = subscribeKeyboardHeight(win, event => {
-      if (event.type !== 'viewport') {
-        return;
-      }
-      if (event.height !== reportedHeight) {
-        reportedHeight = event.height;
-        watch.report();
-      } else if (watch.isRevealPan(event.height)) {
-        watch.putBack();
+      if (event.type === 'viewport') {
+        pans.report(event.height);
       }
     });
     return () => {
       unsubscribe();
-      watch.stop();
+      pans.stop();
     };
   }, [touchPresentation.isTouch]);
 
@@ -494,42 +479,6 @@ export function useChatKeyboard({
     messagesRef: messages.ref,
     composerRef,
   };
-}
-
-/**
- * The keyboard height, CSS px, re-rendering when it changes. 0 during server
- * render and before hydration reads a viewport.
- */
-function useKeyboardHeight(win?: Window | null): number {
-  const target = win ?? (typeof window === 'undefined' ? null : window);
-  // One subscription for the component's life, per window. A subscribe
-  // function made anew each render would make React resubscribe every render.
-  // A lone reader would then detach the module's listeners and measure again.
-  const subscribe = useCallback(
-    (onChange: () => void) => {
-      if (target == null) {
-        return () => {};
-      }
-      let last = getKeyboardHeight(target);
-      return subscribeKeyboardHeight(target, event => {
-        if (event.type === 'viewport' && event.height !== last) {
-          last = event.height;
-          onChange();
-        }
-      });
-    },
-    [target],
-  );
-  const getSnapshot = useCallback(
-    () => (target == null ? 0 : getKeyboardHeight(target)),
-    [target],
-  );
-  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
-}
-
-/** The keyboard height during server render and hydration. */
-function getServerSnapshot(): number {
-  return 0;
 }
 
 /** A compositor animator for one element, bound through a stable callback ref. */

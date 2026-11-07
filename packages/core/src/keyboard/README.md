@@ -69,7 +69,9 @@ that times motion with it. Everything here is internal to
   `touchstart` subscription on the window's input stream, which lives only
   while a surface watches. BottomSheet's hook watches while its sheet is presented
   under a coarse primary pointer; under a fine one it registers no touch
-  listener.
+  listener. `watchPans(win, owns)` (`keyboardTarget.ts`) runs that loop on
+  each height the module reports: the keyboard targets and ChatLayout's
+  composer watch with it.
 - **Keyboard targets (`keyboardTarget.ts`):** a target keeps the focused field
   inside it above the keyboard, and registers so a field inside moves nothing
   itself (`registerKeyboardTarget`, `isInsideKeyboardTarget`).
