@@ -8,6 +8,7 @@ import {Toolbar} from '@astryxdesign/core/Toolbar';
 import {List, ListItem} from '@astryxdesign/core/List';
 import {HStack, VStack} from '@astryxdesign/core/Layout';
 import {StackItem} from '@astryxdesign/core/Stack';
+import {rtlStyles} from '@astryxdesign/core/utils';
 import {Text} from '@astryxdesign/core/Text';
 import {Icon} from '@astryxdesign/core/Icon';
 import {IconButton} from '@astryxdesign/core/IconButton';
@@ -357,7 +358,13 @@ export default function FileExplorerPage() {
               <IconButton
                 variant="ghost"
                 size="sm"
-                icon={<Icon icon={ChevronLeftIcon} size="sm" />}
+                icon={
+                  <Icon
+                    icon={ChevronLeftIcon}
+                    size="sm"
+                    xstyle={rtlStyles.mirror}
+                  />
+                }
                 onClick={() => {
                   if (selectedPath.length > 0) {
                     setSelectedPath(selectedPath.slice(0, -1));
@@ -369,7 +376,13 @@ export default function FileExplorerPage() {
               <IconButton
                 variant="ghost"
                 size="sm"
-                icon={<Icon icon={ChevronRightIcon} size="sm" />}
+                icon={
+                  <Icon
+                    icon={ChevronRightIcon}
+                    size="sm"
+                    xstyle={rtlStyles.mirror}
+                  />
+                }
                 isDisabled
                 label="Go forward"
               />
@@ -497,6 +510,7 @@ export default function FileExplorerPage() {
                                   icon={ChevronRightIcon}
                                   size="xsm"
                                   color="secondary"
+                                  xstyle={rtlStyles.mirror}
                                 />
                               ) : undefined
                             }
