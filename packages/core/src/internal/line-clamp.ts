@@ -3,8 +3,8 @@
  * @file line-clamp.ts
  * @input Core's canonical focusable selector and the shared mutation observer
  * @output `@astryxdesign/core/internal/line-clamp`: FOCUSABLE_SELECTOR,
- *   observeMutations and flushMutations, re-exported by name for Lab's
- *   LineClamp
+ *   observeMutations, flushMutations, TruncationTooltip and
+ *   useTruncationTooltipInterest, re-exported by name for Lab's LineClamp
  * @position An internal entry reserved for Astryx's own packages:
  *   undocumented, outside the public API and its compatibility promise,
  *   versioned in lockstep with Core, and allowed only in Core and Lab by the
@@ -18,3 +18,7 @@ export {
   flushMutations,
   observeMutations,
 } from '../utils/sharedMutationObserver';
+export {
+  TruncationTooltip,
+  useTruncationTooltipInterest,
+} from '../Text/TruncationTooltip';

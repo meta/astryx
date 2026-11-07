@@ -18,8 +18,6 @@
  */
 
 import {
-  lazy,
-  Suspense,
   useCallback,
   useLayoutEffect,
   useRef,
@@ -42,11 +40,9 @@ import {
   FOCUSABLE_SELECTOR,
   flushMutations,
   observeMutations,
+  TruncationTooltip,
+  useTruncationTooltipInterest,
 } from '@astryxdesign/core/internal/line-clamp';
-
-const LazyTooltip = lazy(async () =>
-  import('@astryxdesign/core/Tooltip').then(mod => ({default: mod.Tooltip})),
-);
 
 const styles = stylex.create({
   clamp: {
@@ -283,6 +279,10 @@ export function LineClamp({
   style,
   ref,
   onBlur,
+  onFocus,
+  onPointerEnter,
+  onPointerLeave,
+  onPointerDown,
   ...props
 }: LineClampProps): ReactNode {
   // The clamp is height-based at every line count, so a single line must be
@@ -334,6 +334,9 @@ export function LineClamp({
 
   const tooltipEnabled =
     hasTruncateTooltip && maxLines > 0 && truncation.isTruncated;
+  // The tooltip mounts on the first hover, completed tap or focus, as Text's
+  // does, so a page of clamped content mounts no tooltip layers at load.
+  const tooltipInterest = useTruncationTooltipInterest(tooltipEnabled);
 
   // Line clamping clips paint only. A link on a clipped line stays in the Tab
   // order, so mark it inert. This runs on every render; the observers above
@@ -372,22 +375,37 @@ export function LineClamp({
         // `tabIndex` wins.
         tabIndex={tooltipEnabled ? 0 : undefined}
         {...{[ROOT_ATTRIBUTE]: ''}}
-        onBlur={composeEventHandlers(handleBlur, onBlur)}
+        onPointerEnter={composeEventHandlers(
+          tooltipInterest.onPointerEnter,
+          onPointerEnter,
+        )}
+        onPointerLeave={composeEventHandlers(
+          tooltipInterest.onPointerLeave,
+          onPointerLeave,
+        )}
+        onPointerDown={composeEventHandlers(
+          tooltipInterest.onPointerDown,
+          onPointerDown,
+        )}
+        onFocus={composeEventHandlers(tooltipInterest.onFocus, onFocus)}
+        onBlur={composeEventHandlers(
+          tooltipInterest.onBlur,
+          composeEventHandlers(handleBlur, onBlur),
+        )}
         {...props}>
         {children}
       </Component>
-      {tooltipEnabled && (
-        <Suspense fallback={null}>
-          <LazyTooltip
-            anchorRef={elementRef}
-            content={
-              <span {...stylex.props(styles.tooltipContent)}>
-                {truncation.fullText}
-              </span>
-            }
-            placement={truncateTooltipPlacement}
-          />
-        </Suspense>
+      {tooltipEnabled && tooltipInterest.isWanted && (
+        <TruncationTooltip
+          anchorRef={elementRef}
+          content={
+            <span {...stylex.props(styles.tooltipContent)}>
+              {truncation.fullText}
+            </span>
+          }
+          placement={truncateTooltipPlacement}
+          interest={tooltipInterest}
+        />
       )}
     </>
   );
