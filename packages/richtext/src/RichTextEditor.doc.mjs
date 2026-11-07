@@ -145,6 +145,13 @@ export const docs = {
         'CodeBlock language values a fence may name, each imported on its own (e.g. graphql from @astryxdesign/core/CodeBlock/languages/graphql) or made with createCodeLanguage. Pass the same list as Markdown codeLanguages so a matched fence paints and labels the same while reading and editing. RichTextView takes the same prop.',
     },
     {
+      name: 'hasCellMerge',
+      type: 'boolean',
+      description:
+        'Keep merged table cells (colSpan, rowSpan), which content made elsewhere can hold. By default each merged cell is split into single cells as the content loads, with the content in the first. Markdown has no merged cells, so getMarkdown() and editorStateJSONToMarkdown write a merged cell as the cells it covers: its content in the top-left one and the rest empty. RichTextView takes the same prop.',
+      default: 'false',
+    },
+    {
       name: 'transformers',
       type: 'ReadonlyArray<Transformer>',
       description:

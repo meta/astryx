@@ -2,9 +2,23 @@
 
 import {describe, it, expect} from 'vitest';
 import {render, waitFor} from '@testing-library/react';
-import {TableCellHeaderStates} from '@lexical/table';
-import {RichTextEditor} from './RichTextEditor';
+import {createRef} from 'react';
+import {createHeadlessEditor} from '@lexical/headless';
+import {
+  $createTableCellNode,
+  $createTableNode,
+  $createTableRowNode,
+  TableCellHeaderStates,
+} from '@lexical/table';
+import {
+  $createParagraphNode,
+  $createTextNode,
+  $getRoot,
+  type ElementFormatType,
+} from 'lexical';
+import {RichTextEditor, type RichTextEditorRef} from './RichTextEditor';
 import {RichTextView} from './RichTextView';
+import {DEFAULT_NODES} from './editorNodes';
 import {
   editorStateJSONToMarkdown,
   markdownToEditorStateJSON,
@@ -209,6 +223,188 @@ describe('GFM tables', () => {
       const wrapper = container.querySelector('table')?.parentElement;
       expect(wrapper?.tagName).toBe('DIV');
       expect(wrapper?.getAttribute('contenteditable')).toBeNull();
+    });
+  });
+});
+
+/** A cell of a table built for a test: its text, spans, and alignment. */
+interface CellSpec {
+  text: string;
+  colSpan?: number;
+  rowSpan?: number;
+  format?: ElementFormatType;
+}
+
+/**
+ * Serialized editor state holding one table, the way content made outside
+ * RichText holds merged cells: a merged cell keeps its spans, and each row
+ * lists only the cells that start in it. The first row is the header row.
+ */
+function tableStateJSON(rows: Array<Array<CellSpec>>): string {
+  const editor = createHeadlessEditor({
+    nodes: [...DEFAULT_NODES],
+    onError(error: Error) {
+      throw error;
+    },
+  });
+  editor.update(
+    () => {
+      const table = $createTableNode();
+      rows.forEach((cells, rowIndex) => {
+        const row = $createTableRowNode();
+        for (const {text, colSpan = 1, rowSpan = 1, format} of cells) {
+          const cell = $createTableCellNode(
+            rowIndex === 0
+              ? TableCellHeaderStates.ROW
+              : TableCellHeaderStates.NO_STATUS,
+            colSpan,
+          );
+          cell.setRowSpan(rowSpan);
+          if (format != null) {
+            cell.setFormat(format);
+          }
+          cell.append($createParagraphNode().append($createTextNode(text)));
+          row.append(cell);
+        }
+        table.append(row);
+      });
+      $getRoot().clear().append(table);
+    },
+    {discrete: true},
+  );
+  return JSON.stringify(editor.getEditorState().toJSON());
+}
+
+/** A table whose header spans two columns and whose "Ada" spans two rows. */
+const MERGED = tableStateJSON([
+  [{text: 'Name', colSpan: 2}, {text: 'Notes'}],
+  [{text: 'Ada', rowSpan: 2}, {text: 'first'}, {text: 'wrote'}],
+  [{text: 'second'}, {text: 'proved'}],
+  [{text: 'Grace'}, {text: 'third'}, {text: 'built'}],
+]);
+
+/**
+ * GFM has no merged cells: each merged cell's content sits in its top-left
+ * cell, the cells it covered are empty, and every row has every column.
+ */
+const MERGED_MARKDOWN = [
+  '| Name |  | Notes |',
+  '| --- | --- | --- |',
+  '| Ada | first | wrote |',
+  '|  | second | proved |',
+  '| Grace | third | built |',
+].join('\n');
+
+/** Each rendered cell's text and spans, in document order. */
+function renderedCells(
+  container: HTMLElement,
+): Array<[string, number, number]> {
+  return [...container.querySelectorAll<HTMLTableCellElement>('th, td')].map(
+    cell => [cell.textContent ?? '', cell.colSpan, cell.rowSpan],
+  );
+}
+
+const KEPT_CELLS: Array<[string, number, number]> = [
+  ['Name', 2, 1],
+  ['Notes', 1, 1],
+  ['Ada', 1, 2],
+  ['first', 1, 1],
+  ['wrote', 1, 1],
+  ['second', 1, 1],
+  ['proved', 1, 1],
+  ['Grace', 1, 1],
+  ['third', 1, 1],
+  ['built', 1, 1],
+];
+
+const SPLIT_CELLS: Array<[string, number, number]> = [
+  ['Name', 1, 1],
+  ['', 1, 1],
+  ['Notes', 1, 1],
+  ['Ada', 1, 1],
+  ['first', 1, 1],
+  ['wrote', 1, 1],
+  ['', 1, 1],
+  ['second', 1, 1],
+  ['proved', 1, 1],
+  ['Grace', 1, 1],
+  ['third', 1, 1],
+  ['built', 1, 1],
+];
+
+describe('merged table cells', () => {
+  it('export as GFM with every row at the full column count', () => {
+    expect(editorStateJSONToMarkdown(MERGED)).toBe(MERGED_MARKDOWN);
+  });
+
+  it('export Markdown that reads back with every cell in its column', () => {
+    const table = onlyTable(editorStateJSONToMarkdown(MERGED));
+    expect(rows(table).map(row => row.map(textOf))).toEqual([
+      ['Name', '', 'Notes'],
+      ['Ada', 'first', 'wrote'],
+      ['', 'second', 'proved'],
+      ['Grace', 'third', 'built'],
+    ]);
+  });
+
+  it('export each column with the alignment of the header-row cell over it', () => {
+    const value = tableStateJSON([
+      [
+        {text: 'Wide', colSpan: 2, format: 'center'},
+        {text: 'Last', format: 'end'},
+      ],
+      [{text: 'a'}, {text: 'b'}, {text: 'c'}],
+    ]);
+    expect(editorStateJSONToMarkdown(value)).toBe(
+      '| Wide |  | Last |\n| :---: | :---: | ---: |\n| a | b | c |',
+    );
+  });
+
+  it('stay merged in the editor with hasCellMerge, and export the same Markdown', async () => {
+    const ref = createRef<RichTextEditorRef>();
+    const {container} = render(
+      <RichTextEditor
+        ref={ref}
+        label="Notes"
+        defaultValue={MERGED}
+        hasCellMerge
+      />,
+    );
+    // Let the table plugin's mount effects run before reading the cells.
+    await waitFor(() => {
+      expect(container.querySelector('table')?.parentElement?.tagName).toBe(
+        'DIV',
+      );
+    });
+    expect(renderedCells(container)).toEqual(KEPT_CELLS);
+    expect(ref.current?.getMarkdown()).toBe(MERGED_MARKDOWN);
+  });
+
+  it('split in the editor by default, with the content in the first cell of each', async () => {
+    const ref = createRef<RichTextEditorRef>();
+    const {container} = render(
+      <RichTextEditor ref={ref} label="Notes" defaultValue={MERGED} />,
+    );
+    await waitFor(() => {
+      expect(renderedCells(container)).toEqual(SPLIT_CELLS);
+    });
+    expect(ref.current?.getMarkdown()).toBe(MERGED_MARKDOWN);
+  });
+
+  it('stay merged in RichTextView with hasCellMerge', async () => {
+    const {container} = render(<RichTextView value={MERGED} hasCellMerge />);
+    await waitFor(() => {
+      expect(container.querySelector('table')?.parentElement?.tagName).toBe(
+        'DIV',
+      );
+    });
+    expect(renderedCells(container)).toEqual(KEPT_CELLS);
+  });
+
+  it('split in RichTextView by default', async () => {
+    const {container} = render(<RichTextView value={MERGED} />);
+    await waitFor(() => {
+      expect(renderedCells(container)).toEqual(SPLIT_CELLS);
     });
   });
 });
