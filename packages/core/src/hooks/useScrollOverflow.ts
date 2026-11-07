@@ -160,7 +160,9 @@ export function useShownScrollOverflow() {
   // again.
   const measure = useCallback(() => {
     const el = elRef.current;
-    if (el && isRendered(el)) {
+    // A held row's edges come from where it is shown, which reads no layout.
+    // So the paging's own style writes force no layout here.
+    if (el && (shownRef.current != null || isRendered(el))) {
       measureNow(el);
     }
   }, [measureNow]);
@@ -190,7 +192,8 @@ export function useShownScrollOverflow() {
         shownRef.current = null;
         return;
       }
-      // The reported edges stand until then, so no edge flickers.
+      // Keep the reported edges until the next frame, when the scroll offset
+      // is current. Otherwise an edge flickers.
       releaseFrameRef.current = requestAnimationFrame(() => {
         shownRef.current = null;
         measure();
