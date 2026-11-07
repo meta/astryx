@@ -23,6 +23,7 @@ import {
 } from '../../foundation/discovery/module-exports.mjs';
 import {
   allTargets,
+  isRecord,
   subpathDeclaration,
 } from '../../foundation/integrations/exports-subpaths.mjs';
 
@@ -246,9 +247,7 @@ function visitDynamicReferences(node, onLiteral) {
 function exportedSourceFiles(pkg, packageDir, root) {
   const exportsField = pkg.exports;
   const subpathMap =
-    exportsField != null &&
-    typeof exportsField === 'object' &&
-    !Array.isArray(exportsField) &&
+    isRecord(exportsField) &&
     Object.keys(exportsField).some(key => key.startsWith('.'));
   /** @type {Set<string>} */
   const candidates = new Set(['.']);

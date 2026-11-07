@@ -372,6 +372,8 @@ describe('swizzle.copy — the module graph (spec:AST-110 FR1, FR2)', () => {
         '../InputGroup/InputGroupInternalContext.ts',
       );
       expect(r.data.filesCopied).toBe(r.data.files.length);
+      // Core's public i18n entry exports this context through an alias, so it is imported.
+      expect(r.data.files).not.toContain('../i18n/InternationalizationContext.ts');
       const files = filesUnder(out())
         .filter(rel => /\.tsx?$/.test(rel) && !rel.startsWith('node_modules'))
         .map(rel => path.join(out(), rel));
