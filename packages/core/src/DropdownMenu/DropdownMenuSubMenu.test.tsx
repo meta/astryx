@@ -1622,6 +1622,28 @@ describe('DropdownMenuSubMenu drill-in on a phone', () => {
     expect(drilled).toBeInTheDocument();
   });
 
+  it('a keyboard drill-in lands on the first enabled row after Back, and ArrowUp reaches the disabled one', async () => {
+    stubCompactTouch(true);
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu button={{label: 'Actions'}}>
+        <DropdownMenuSubMenu label="Move to">
+          <DropdownMenuItem label="Projects" isDisabled onClick={() => {}} />
+          <DropdownMenuItem label="Archive" onClick={() => {}} />
+        </DropdownMenuSubMenu>
+      </DropdownMenu>,
+    );
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+    fireEvent.keyDown(await waitFor(() => shownRow('Move to')), {
+      key: 'Enter',
+    });
+    await waitFor(() => shownMenu('Move to'));
+    await waitFor(() => expect(shownRow('Archive')).toHaveFocus());
+    fireEvent.keyDown(document.activeElement!, {key: 'ArrowUp'});
+    expect(shownRow('Projects')).toHaveFocus();
+    expect(shownRow('Projects')).toHaveAttribute('aria-disabled', 'true');
+  });
+
   it('presentation="flyout" keeps the flyout on a phone and "drill-in" drills on a laptop', async () => {
     stubCompactTouch(true);
     const user = userEvent.setup();

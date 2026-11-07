@@ -793,8 +793,15 @@ export function DropdownMenuSubMenu(
     }
     pendingViewFocusRef.current = null;
     const items = getItems();
-    // Back is the first row; a keyboard open lands on the first row after it.
-    const target = mode === 'first' ? (items[1] ?? items[0]) : null;
+    // Back is the first row; a keyboard open lands on the first enabled row
+    // after it. The keys reach a disabled row, but an open never starts there.
+    const target =
+      mode === 'first'
+        ? (items.find(
+            (item, index) =>
+              index > 0 && item.getAttribute('aria-disabled') !== 'true',
+          ) ?? items[0])
+        : null;
     if (target != null) {
       target.focus({preventScroll: true});
     } else {

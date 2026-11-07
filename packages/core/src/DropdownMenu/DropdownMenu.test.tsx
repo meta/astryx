@@ -2569,7 +2569,7 @@ describe('DropdownMenu keyboard access for menuitemradio/menuitemcheckbox (#3829
     expect(fireEvent.mouseDown(del)).toBe(false);
     expect(fireEvent.mouseDown(edit)).toBe(true);
 
-    // End and Home visit a disabled row as any other row.
+    // End and Home move to the first and last rows, as from any row.
     const menu = screen.getByRole('menu', {hidden: true});
     fireEvent.keyDown(menu, {key: 'Home'});
     expect(edit).toHaveFocus();
