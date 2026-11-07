@@ -219,6 +219,23 @@ export function analyzeTargeting({observedTargets, targets, themeOverrides}) {
 }
 
 /**
+ * The newest per-shot capture date, or null when no shot has one.
+ * @param {Record<string, {capturedAt?: string}> | undefined} shots
+ * @returns {string | null}
+ */
+function latestCapture(shots) {
+  const dates = Object.values(shots ?? {})
+    .map(shot => shot.capturedAt)
+    .filter(
+      date => typeof date === 'string' && !Number.isNaN(Date.parse(date)),
+    );
+  if (dates.length === 0) return null;
+  return dates.reduce((latest, date) =>
+    Date.parse(date) > Date.parse(latest) ? date : latest,
+  );
+}
+
+/**
  * The verdict document. The release cron reads `status` and, when it is
  * `changed`, walks `changes` with the report open.
  *
@@ -264,7 +281,10 @@ export function buildVerdict({
     context,
     platform: currentManifest.platform,
     baseline: {
+      // The oldest shot's date. `sha` names the commit of the newest accepted
+      // capture, which `latestCapturedAt` dates.
       capturedAt: baselineManifest.capturedAt ?? null,
+      latestCapturedAt: latestCapture(baselineManifest.shots),
       sha: baselineManifest.context?.sha ?? null,
       platform: baselineManifest.platform ?? null,
     },

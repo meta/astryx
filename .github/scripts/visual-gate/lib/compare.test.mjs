@@ -383,6 +383,38 @@ describe('buildVerdict', () => {
     expect(verdict.status).toBe('failed');
   });
 
+  it('dates the baseline by its oldest shot and its commit by its newest', () => {
+    const verdict = buildVerdict({
+      ...base,
+      baselineManifest: {
+        capturedAt: '2026-09-26T00:53:28.283Z',
+        context: {sha: 'newest'},
+        platform: 'linux-arm64',
+        shots: {
+          a: {capturedAt: '2026-09-26T00:53:28.283Z'},
+          b: {capturedAt: '2026-11-06T16:00:00.000Z'},
+          c: {},
+        },
+      },
+      comparison: {changes: [], added: [], removed: [], unchanged: ['a']},
+      failures: [],
+    });
+    expect(verdict.baseline).toEqual({
+      capturedAt: '2026-09-26T00:53:28.283Z',
+      latestCapturedAt: '2026-11-06T16:00:00.000Z',
+      sha: 'newest',
+      platform: 'linux-arm64',
+    });
+    // A baseline with no dated shot has no latest date.
+    expect(
+      buildVerdict({
+        ...base,
+        comparison: {changes: [], added: [], removed: [], unchanged: ['a']},
+        failures: [],
+      }).baseline.latestCapturedAt,
+    ).toBeNull();
+  });
+
   it('requires acceptance when stable shots are added or removed', () => {
     const verdict = buildVerdict({
       ...base,
