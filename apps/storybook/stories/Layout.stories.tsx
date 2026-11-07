@@ -1716,7 +1716,7 @@ export const NestedInAppShellWide: Story = {
  * padding container: the inner inset is spacing step 4, and `padding={6}`
  * sets the Layout-edge inset. Each case names its content region with
  * `data-content-inset`. With `contentWidth` and one start panel, the content
- * children end where the header content ends.
+ * children end one Layout-edge inset inside the content-width frame.
  */
 export const ContentInsets: Story = {
   name: 'Content Insets',

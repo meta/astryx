@@ -96,8 +96,9 @@ const INSETS: Record<string, Partial<Record<Edge, 0 | 4 | 6>>> = {
   'content-width-start-panel': {blockStart: 4, blockEnd: 6},
 };
 
-// Cases whose Layout sets `contentWidth` with one start panel: the content
-// children must end where the header content ends.
+// Cases whose Layout sets `contentWidth` with one start panel. The header
+// content spans the content-width frame, and the content children end one
+// Layout-edge inset (step 6) inside its end, as they do without panels.
 const ALIGNED_TO_HEADER = new Set(['content-width-start-panel']);
 
 const cases: AuditCase[] = [];
@@ -451,12 +452,15 @@ for (const item of cases) {
           `${where} has no child or header child to compare`,
         );
         if (child != null && headerChild != null) {
-          const childEnd = item.direction === 'rtl' ? child.left : child.right;
-          const headerEnd =
-            item.direction === 'rtl' ? headerChild.left : headerChild.right;
+          const isRtl = item.direction === 'rtl';
+          const childEnd = isRtl ? child.left : child.right;
+          const frameEnd = isRtl ? headerChild.left : headerChild.right;
+          const expectedEnd = isRtl
+            ? frameEnd + observed.steps[6]
+            : frameEnd - observed.steps[6];
           check(
-            near(childEnd, headerEnd),
-            `${where} children end at ${childEnd}, header content ends at ${headerEnd}`,
+            near(childEnd, expectedEnd),
+            `${where} children end at ${childEnd}, expected ${expectedEnd} (frame end ${frameEnd}, inset ${observed.steps[6]})`,
           );
         }
       });
@@ -490,7 +494,7 @@ for (const item of cases) {
           : 'every edge applies exactly the padding it publishes, except the inline edges of a content-width case, which are at least what they publish',
         alignedToHeader:
           item.story === 'content-insets'
-            ? 'in the content-width start-panel case, the first content child ends where the first header child ends'
+            ? 'in the content-width start-panel case, the first content child ends one step-6 inset inside the end of the first header child, which spans the content-width frame'
             : 'not applicable',
         insets: item.story === 'content-insets' ? INSETS : 'not applicable',
         overflow:
