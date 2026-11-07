@@ -24,6 +24,7 @@
  */
 
 import {useCallback, useEffect, useMemo, useRef} from 'react';
+import {isElement, isNode, isShadowRoot} from '../utils/nodeType';
 
 // A modal host's backdrop press reads this. A press that closed a layer above
 // the host is that layer's, so the host stays open.
@@ -116,25 +117,6 @@ export function useOutsidePress(): OutsidePressWatch {
   // Stops the outside-press listeners on unmount.
   useEffect(() => stop, [stop]);
   return useMemo(() => ({start, stop}), [start, stop]);
-}
-
-// Node, Element and ShadowRoot are checked by nodeType, not instanceof: a
-// node from a same-origin iframe or a Picture-in-Picture window belongs to
-// another realm, where instanceof against this window's classes is false.
-function isNode(target: unknown): target is Node {
-  return (
-    typeof target === 'object' &&
-    target !== null &&
-    typeof (target as {nodeType?: unknown}).nodeType === 'number'
-  );
-}
-
-function isElement(node: Node): node is Element {
-  return node.nodeType === 1;
-}
-
-function isShadowRoot(node: Node): node is ShadowRoot {
-  return node.nodeType === 11 && 'host' in node;
 }
 
 /** Whether `node` is the layer with this id, or inside it across shadow roots. */

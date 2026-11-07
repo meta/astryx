@@ -13,6 +13,7 @@ review_triggers: [public-api, behavior, layout, theming, accessibility]
 verified_by:
   [
     packages/core/src/Field/Field.test.tsx,
+    packages/core/src/Button/__tests__/ButtonHitArea.interaction.browser.spec.ts,
     packages/core/src/FormLayout/FormLayout.test.tsx,
     packages/core/src/theme/themingTargets.test.ts,
     packages/core/src/docPropLiterals.test.ts,
@@ -170,7 +171,9 @@ spacing tokens.
   "Input clear icon": {"target": "input-clear-icon"},
   "Optional/Required indicator": {"inherits": "field-label"},
   "Label tooltip trigger": {
-    "delegatesTo": {"owner": "component:Icon", "target": "icon"}
+    "none": {
+      "reason": "unsettled: the trigger is component:InfoTip's button, which has no public theming target yet; its info icon stays on Icon/icon through InfoTip"
+    }
   },
   "Label tooltip surface": {
     "delegatesTo": {"owner": "component:Tooltip", "target": "tooltip"}
@@ -178,7 +181,7 @@ spacing tokens.
 }
 ```
 
-The ordinary description remains stable consumer anatomy without a Field-owned target. A visible horizontal-label description delegates to `Text/text`; when `isLabelHidden` is true, the same content delegates to `VisuallyHidden` and exposes no painted target. The label tooltip splits its visible `Icon/icon` trigger from its layer-hosted `Tooltip/tooltip` surface.
+The ordinary description remains stable consumer anatomy without a Field-owned target. A visible horizontal-label description delegates to `Text/text`; when `isLabelHidden` is true, the same content delegates to `VisuallyHidden` and exposes no painted target. The label tooltip splits its `component:InfoTip` trigger button, which has no public target yet, from its layer-hosted `Tooltip/tooltip` surface.
 
 ## Family and system relationships
 
@@ -200,6 +203,7 @@ The ordinary description remains stable consumer anatomy without a Field-owned t
 | FR8                          | `Field.test.tsx` attached-layer and local-stacking cases                                                               | Attached, no status, custom control                                                                  | Removing isolation or ranking the root outside its parent fails.                                                                                                | `audit:Field/code-health`   |
 | FR9                          | `Field.test.tsx` attached-layer case for a custom control                                                              | Custom control with an attached status                                                               | The test pins the current attached default, so it changes when the FR9 gap closes.                                                                              | `audit:Field/behavior`      |
 | PR1                          | Evidence gap: no test asserts the absence of per-field global resources                                                | —                                                                                                    | —                                                                                                                                                               | `audit:Field/code-health`   |
+| `spec:AST-094` FR42          | `ButtonHitArea.interaction.browser.spec.ts` clear-band and clearable-Selector chevron cases                            | A text input's clear button beside its text; a clearable Selector's beside its chevron               | A clear band past half the gap to the text or to the field's next part, or a chevron tap that clears, fails.                                                    | `audit:Field/behavior`      |
 | Theming anatomy              | `scripts/check-knowledge.mjs`; `themingTargets.test.ts`                                                                | Field root, label, description, caller control, status, shared input affordances, indicator, tooltip | Invalid dispositions, or a rendered class absent from the documented targets, fails.                                                                            | `audit:Field/theming`       |
 | Documentation projection     | `docPropLiterals.test.ts`; `docPropReferences.test.ts`                                                                 | Status placements, `labelIcon`, and other documented props                                           | A documented literal or prop reference that drifts from the source type fails.                                                                                  | `audit:Field/docs`          |
 | RTL applicability            | `apps/storybook/rtl-audit/verified-not-applicable.json` entry for `core/Field`                                         | Checked-in Field stories                                                                             | A story that gains directional placement or behavior makes the not-applicable entry stale.                                                                      | `audit:Field/i18n-rtl`      |
@@ -209,8 +213,6 @@ The ordinary description remains stable consumer anatomy without a Field-owned t
 - **Attached default (FR9).** Field defaults `statusVariant` to `attached` for
   every child, against `family:input-fields/FR8`; how to migrate the default is
   OQ1.
-- **Label tooltip (FieldLabel FR8).** A `labelTooltip` is reachable only by
-  pointer, as `component:FieldLabel` FR8 records, against WCAG 2.2 SC 2.1.1.
 
 ## Decision log
 

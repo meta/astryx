@@ -846,6 +846,8 @@ describe('createPager', () => {
     // Still moving 40 ms after the touch.
     expect(f.pager.isSettling).toBe(true);
     await advance(paging.catchStopMs, f.clock);
+    // The catch's deadline is on the gesture clock.
+    f.clock.runDue(now);
     expect(f.pager.isSettling).toBe(false);
     const held = -f.x();
     await advance(100, f.clock);
@@ -853,6 +855,54 @@ describe('createPager', () => {
     touch('touchend', f.page, 300, 100, now);
     await settle(f);
     expect(f.x()).toBe(-2 * WIDTH);
+  });
+
+  it('a finger held past the catch delay catches the settle when a busy page delivers its touch and lift together', async () => {
+    const f = setup({defaultIndex: 0});
+    f.pager.goTo(3);
+    await advance(0, f.clock);
+    await advance(60, f.clock);
+    // One task delivers both events, with no timer turn between them. Their
+    // own times say the finger stayed down 150 ms.
+    touch('touchstart', f.page, 300, 100, now);
+    touch('touchend', f.page, 300, 100, now + 150);
+    await settle(f);
+    const page = -f.x() / WIDTH;
+    expect(page).toBe(Math.round(page));
+    expect(page).toBeLessThan(3);
+  });
+
+  it('a 40 ms tap that a busy page delivers with its lift lets the settle run on', async () => {
+    const f = setup({defaultIndex: 0});
+    f.pager.goTo(3);
+    await advance(0, f.clock);
+    await advance(60, f.clock);
+    touch('touchstart', f.page, 300, 100, now);
+    touch('touchend', f.page, 300, 100, now + 40);
+    await settle(f);
+    expect(f.x()).toBe(-3 * WIDTH);
+  });
+
+  it('goTo with an offset ends there as a settle, and a still finger that catches it settles on the nearest page', async () => {
+    const f = setup({defaultIndex: 0});
+    f.pager.goTo(2, {offset: 2.4 * WIDTH});
+    await advance(0, f.clock);
+    const curve = solveAnimatedPageScroll({from: 0, to: 2.4 * WIDTH});
+    await advance(150, f.clock);
+    expect(-f.x()).toBeCloseTo(curve.at(0.15), 0);
+    await settle(f);
+    expect(-f.x()).toBeCloseTo(2.4 * WIDTH, 0);
+    expect(f.calls).toEqual(['index:2:goTo', 'settle:2:0']);
+    f.pager.goTo(4, {offset: 3.6 * WIDTH});
+    await advance(60, f.clock);
+    touch('touchstart', f.page, 300, 100, now);
+    await advance(paging.catchStopMs + 40, f.clock);
+    // The catch's deadline is on the gesture clock.
+    f.clock.runDue(now);
+    expect(f.pager.isSettling).toBe(false);
+    touch('touchend', f.page, 300, 100, now);
+    await settle(f);
+    expect(-f.x() / WIDTH).toBe(Math.round(-f.x() / WIDTH));
   });
 
   it('loops: past the last page goes forward to a virtual page, wrapped for callbacks', async () => {
@@ -966,6 +1016,8 @@ describe('createPager', () => {
       await advance(60, f.clock);
       touch('touchstart', f.page, 300, 100, now);
       await advance(paging.catchStopMs + 40, f.clock);
+      // The catch's deadline is on the gesture clock.
+      f.clock.runDue(now);
       expect(pager.isSettling).toBe(false);
       const held = f.x();
       calls.length = 0;
@@ -2213,6 +2265,7 @@ describe('review fixes', () => {
     expect(refuses()).toBe(false);
     // The catch stops the settle after UIKit's catch delay, as a finger's.
     await advance(120, f.clock);
+    f.clock.runDue(now);
     expect(f.pager.isSettling).toBe(false);
     expect(refuses()).toBe(false);
     mouse('pointerup', f.page, 200, 100, now);
@@ -2423,6 +2476,8 @@ describe('pre-review fixes', () => {
     f.pager.setPanEnabled(false);
     touch('touchstart', f.page, 200, 100, now);
     await advance(paging.catchStopMs + 30, f.clock);
+    // The catch's deadline is on the gesture clock.
+    f.clock.runDue(now);
     expect(f.pager.isSettling).toBe(true);
     touch('touchend', f.page, 200, 100, now);
     await settle(f);

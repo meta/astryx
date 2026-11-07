@@ -257,7 +257,15 @@ guidance owns the process used to propose and test APIs.
   written. The owner exports only ready-made styles that read the attribute, the
   props or writer that set it, and the runtime readers its package needs, such
   as a `closest` or `matches` helper or a getter; it never exports the raw name
-  or a selector. Every other file in that package spreads those exports and
+  or a selector. A plain-TS owner,
+  `packages/core/src/privateAttributes/<name>.ts`, may export its name and
+  selector text to its `.stylex.ts` sibling and to the theme engine in
+  `packages/core/src/theme/`; no other file imports it, and `.stylex.ts` owners
+  still never export them. When a plain-TS owner exists, its `.stylex.ts`
+  sibling is not an owner: it writes the attribute's selectors only as literals
+  for its own `stylex.create` calls, because StyleX resolves a selector only
+  where it is written, and it never exports them or sets the attribute. Every
+  other file in that package spreads those exports and
   never writes the attribute or its selector, and no package imports another
   package's owner module through an internal path. StyleX merges styles one
   whole property at a time, so an owner style carries every condition of each

@@ -39,6 +39,8 @@ export const END_INSET_MS = 0.5;
  * entry keeps the animation's start time too: a page that cancels a finished
  * animation (an entrance whose class is removed on `animationend`) nulls its
  * `startTime`.
+ *
+ * A run that the page cancels while it plays is dated at the cancel.
  */
 function animationRecorder(): void {
   const w = window as unknown as {__harnessAnimations?: unknown};
@@ -65,6 +67,10 @@ function animationRecorder(): void {
     startedAt: number | null;
     // Where the run began, as the engine had it when it finished.
     finishStart: number | null;
+    // When the page cancelled the run while it played, and how much of its
+    // curve it had presented by then (see the cancel wrapper below).
+    cancelledAt: number | null;
+    playedMs: number | null;
   }[] = [];
   // Start events that found no animation to record (see `onStart`), with
   // the target's ancestors as they were: an exit the page removes at its end
@@ -177,6 +183,8 @@ function animationRecorder(): void {
       finishedAt: null as number | null,
       startedAt: real(playStart(animation)),
       finishStart: null as number | null,
+      cancelledAt: null as number | null,
+      playedMs: null as number | null,
       ancestors,
     };
     entries.set(animation, entry);
@@ -367,6 +375,52 @@ function animationRecorder(): void {
     const animation = animate.apply(this, args);
     remember(animation);
     return animation;
+  };
+  // A run that the page cancels while it plays ended there, and no finish
+  // event comes. Core's motion animator retires each run so: once the curve
+  // ends, it writes the end inline and cancels the run. The run's finish
+  // would come only after a long end-state tail. So the run's start and how
+  // much of its curve it presented are read here, before the cancel clears
+  // them. A run cancelled before its first frame has no start, and it
+  // presented nothing. The state of a CSS run is read only outside a
+  // rendering trace, because those reads flush style.
+  const cancel = Animation.prototype.cancel;
+  Animation.prototype.cancel = function (this: Animation) {
+    const entry = entries.get(this);
+    const isCss = 'animationName' in this || 'transitionProperty' in this;
+    if (
+      entry != null &&
+      entry.finishedAt == null &&
+      !(isCss && tracing()) &&
+      this.playState === 'running' &&
+      this.startTime != null
+    ) {
+      // The specified timing: a script animation's computed timing can
+      // restyle its target, which a rendering trace counts.
+      const timing = this.effect?.getTiming();
+      const delay = Number(timing?.delay ?? 0);
+      const endDelay = Number(timing?.endDelay ?? 0);
+      const duration =
+        typeof timing?.duration === 'number' ? timing.duration : 0;
+      const end = delay + duration * Number(timing?.iterations ?? 1) + endDelay;
+      const rate = this.playbackRate;
+      const speed = Math.abs(rate || 1);
+      const time = Number(this.currentTime ?? 0);
+      // A run going backward began at its end.
+      if (rate >= 0 || Number.isFinite(end)) {
+        entry.finishStart = real(
+          rate < 0
+            ? Number(this.startTime) - end / speed
+            : Number(this.startTime),
+        );
+        entry.cancelledAt = performance.now() + span();
+        // Negative while the run is still in its start delay: it presented
+        // nothing, as the live check reads it.
+        entry.playedMs =
+          (rate < 0 ? end - endDelay - time : time - delay) / speed;
+      }
+    }
+    return cancel.call(this);
   };
   w.__harnessAnimations = {
     log,
@@ -1185,7 +1239,9 @@ export interface ActiveAnimation {
   /**
    * Epoch ms (page clock) when it finished, if it had already finished when
    * it was reported (where its start put its end, by the engine's clock, not
-   * when the finish event arrived); null while it runs.
+   * when the finish event arrived); null while it runs. A run that the page
+   * cancelled while it played reports when the page cancelled it, which can
+   * be before `to`.
    */
   readonly finishedAt: number | null;
 }
@@ -1269,9 +1325,11 @@ async function withinTimeout<T>(
  * its first frame (from the first call into this module on the page: this,
  * `waitForRest`, `watchAnimations`, sampling or holding), so one that started
  * after the last `waitForRest`, `waitForAnimation` or `watchAnimations` and has already
- * finished is reported too, with `finishedAt` set. For an action that may be
- * the page's first contact with this module, take `watchAnimations(locator)`
- * before the action instead.
+ * finished is reported too, with `finishedAt` set. So is one that the page
+ * cancelled while it played, once it presented `minProgressMs`. Core's motion
+ * animator retires each run so, at the end of its curve. For an action that
+ * may be the page's first contact with this module, take
+ * `watchAnimations(locator)` before the action instead.
  *
  * In WebKit a CSS animation shorter than a gap between two of the page's
  * frames can start and finish inside it: its start event comes at the next
@@ -1341,6 +1399,8 @@ export async function waitForAnimation(
                   finishedAt: number | null;
                   startedAt: number | null;
                   finishStart: number | null;
+                  cancelledAt: number | null;
+                  playedMs: number | null;
                   ancestors: Element[];
                 }[];
                 record: () => void;
@@ -1510,6 +1570,11 @@ export async function waitForAnimation(
             const finishedAt = (e: (typeof recorded)[number]) => {
               if (e.finishedAt != null) {
                 return e.finishedAt;
+              }
+              // The page cancelled it while it played: it ended there, once
+              // it presented `minProgress` of its curve.
+              if (e.cancelledAt != null) {
+                return (e.playedMs ?? 0) >= minProgress ? e.cancelledAt : null;
               }
               const a = e.animation;
               if (a.startTime == null) {

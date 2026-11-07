@@ -80,6 +80,10 @@ import {
 } from '../AppShell/useCloseMobileDrawerOnActivate';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {isRenderable} from '../utils/isRenderable';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 // =============================================================================
 // Props
 // =============================================================================
@@ -598,7 +602,12 @@ function BreadcrumbMenuTrigger({
     (e: React.KeyboardEvent) => {
       // A submenu flyout renders inline inside this menu; its key events bubble
       // up here. Let that level own them — only handle events from this level.
+      // Except Tab: each open flyout has closed itself as the key bubbled up,
+      // and the menu closes as Tab from one of its own rows would (APG).
       if (!ownsEvent(e)) {
+        if (e.key === 'Tab') {
+          closeMenu();
+        }
         return;
       }
       if (e.key === 'Enter' || e.key === ' ') {

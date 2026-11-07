@@ -13,6 +13,7 @@
  */
 
 import {parentAcrossShadow} from './flatTree';
+import {isElement} from './nodeType';
 
 /** Overflow values that let a box scroll. */
 export const SCROLLABLE_OVERFLOW: ReadonlySet<string> = new Set([
@@ -98,7 +99,7 @@ export function isInsideScrollView(
   let panX = true;
   let panY = true;
   for (let node: Node | null = element; node != null;) {
-    if (node instanceof Element) {
+    if (isElement(node)) {
       const style = view.getComputedStyle(node);
       if (readsTouchAction) {
         const pans = parseTouchAction(style.touchAction || 'auto');

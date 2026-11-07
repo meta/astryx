@@ -300,12 +300,33 @@ describe('Carousel', () => {
       );
       const scroller = getScroller();
       makeOverflowing(scroller);
+      // The row measures its overflow again on a scroll.
+      fireEvent.scroll(scroller);
       const scrollBy = vi.fn();
       scroller.scrollBy = scrollBy;
 
       fireEvent.wheel(scroller, {shiftKey: true, deltaY: 120, deltaX: 0});
 
       expect(scrollBy).toHaveBeenCalledWith({left: 120, behavior: 'auto'});
+    });
+
+    it("stops the browser's own scroll, so a notch scrolls the row once", () => {
+      render(
+        <Carousel aria-label="Wheel">
+          <div>Item 1</div>
+          <div>Item 2</div>
+        </Carousel>,
+      );
+      const scroller = getScroller();
+      makeOverflowing(scroller);
+      // The row measures its overflow again on a scroll.
+      fireEvent.scroll(scroller);
+      scroller.scrollBy = vi.fn();
+
+      // A listener that called preventDefault() makes dispatch return false.
+      expect(
+        fireEvent.wheel(scroller, {shiftKey: true, deltaY: 120, deltaX: 0}),
+      ).toBe(false);
     });
 
     it('does not translate wheel without Shift held', () => {
@@ -317,6 +338,8 @@ describe('Carousel', () => {
       );
       const scroller = getScroller();
       makeOverflowing(scroller);
+      // The row measures its overflow again on a scroll.
+      fireEvent.scroll(scroller);
       const scrollBy = vi.fn();
       scroller.scrollBy = scrollBy;
 
@@ -335,12 +358,70 @@ describe('Carousel', () => {
       );
       const scroller = getScroller();
       makeOverflowing(scroller);
+      // The row measures its overflow again on a scroll.
+      fireEvent.scroll(scroller);
       const scrollBy = vi.fn();
       scroller.scrollBy = scrollBy;
 
       fireEvent.wheel(scroller, {shiftKey: true, deltaY: 120, deltaX: 40});
 
       expect(scrollBy).not.toHaveBeenCalled();
+    });
+
+    it('reads no style or layout on a wheel over the row, with Shift or without', () => {
+      render(
+        <Carousel aria-label="Wheel">
+          <div>Item 1</div>
+          <div>Item 2</div>
+        </Carousel>,
+      );
+      const scroller = getScroller();
+      let reads = 0;
+      for (const [name, value] of [
+        ['scrollWidth', 500],
+        ['clientWidth', 200],
+      ] as const) {
+        Object.defineProperty(scroller, name, {
+          configurable: true,
+          get: () => {
+            reads += 1;
+            return value;
+          },
+        });
+      }
+      fireEvent.scroll(scroller);
+      scroller.scrollBy = vi.fn();
+      reads = 0;
+      const style = vi.spyOn(window, 'getComputedStyle');
+
+      fireEvent.wheel(scroller, {deltaY: 120});
+      fireEvent.wheel(scroller, {shiftKey: true, deltaY: 120});
+      const styles = style.mock.calls.length;
+      style.mockRestore();
+
+      expect({reads, styles}).toEqual({reads: 0, styles: 0});
+      expect(scroller.scrollBy).toHaveBeenCalledTimes(1);
+    });
+
+    it('adds no wheel listener to a row with nothing to scroll', () => {
+      const addEventListener = vi.spyOn(
+        HTMLElement.prototype,
+        'addEventListener',
+      );
+      render(
+        <Carousel aria-label="Wheel">
+          <div>Item 1</div>
+        </Carousel>,
+      );
+      const scroller = getScroller();
+      const wheels = addEventListener.mock.contexts.filter(
+        (element, call) =>
+          element === scroller &&
+          addEventListener.mock.calls[call][0] === 'wheel',
+      );
+      addEventListener.mockRestore();
+
+      expect(wheels).toHaveLength(0);
     });
 
     it('does not intercept when there is no horizontal overflow', () => {

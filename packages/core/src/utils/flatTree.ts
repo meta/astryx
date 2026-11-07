@@ -11,6 +11,8 @@
  *   gesture system) and the Layer module's input hold
  */
 
+import {isShadowRoot} from './nodeType';
+
 /** The node's parent, crossing out of shadow roots. */
 export function parentAcrossShadow(node: Node): Node | null {
   // The flat tree the browser scrolls and dispatches through: a slotted node
@@ -20,7 +22,7 @@ export function parentAcrossShadow(node: Node): Node | null {
     return slot;
   }
   if (node.parentNode != null) {
-    return node.parentNode instanceof ShadowRoot
+    return isShadowRoot(node.parentNode)
       ? node.parentNode.host
       : node.parentNode;
   }

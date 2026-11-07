@@ -9,7 +9,12 @@
  * SYNC: When Dialog.tsx changes, update tests to match new behavior
  */
 
-import {StrictMode, useState, type SyntheticEvent} from 'react';
+import {
+  StrictMode,
+  useLayoutEffect,
+  useState,
+  type SyntheticEvent,
+} from 'react';
 import {readFileSync} from 'node:fs';
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import type {MockInstance} from 'vitest';
@@ -29,6 +34,7 @@ import {
 } from './Dialog';
 import {DialogHeader} from './DialogHeader';
 import {getFocusableElements, useFocusTrap} from '../hooks/useFocusTrap';
+import {useDialogContext} from './DialogContext';
 import {defineTheme, generateThemeCSS} from '../theme';
 import {
   __resetInteractionModalityForTest,
@@ -496,6 +502,91 @@ describe('Dialog', () => {
     expect(screen.getByRole('button', {name: 'Continue'})).toHaveFocus();
   });
 
+  it('skips a hidden or inert initial-focus request for the next eligible one', () => {
+    render(
+      <Dialog isOpen={true} onOpenChange={() => {}}>
+        <div hidden>
+          <button type="button" data-autofocus>
+            Hidden
+          </button>
+        </div>
+        <div inert>
+          <button type="button" data-autofocus>
+            Inert
+          </button>
+        </div>
+        <button type="button" data-autofocus>
+          Continue
+        </button>
+      </Dialog>,
+    );
+
+    expect(screen.getByRole('button', {name: 'Continue'})).toHaveFocus();
+  });
+
+  it('honors its own initial-focus request inside an inert region of the page', () => {
+    render(
+      <div inert>
+        <Dialog isOpen={true} onOpenChange={() => {}}>
+          <button type="button" data-autofocus>
+            Continue
+          </button>
+        </Dialog>
+      </div>,
+    );
+
+    expect(
+      screen.getByRole('button', {name: 'Continue', hidden: true}),
+    ).toHaveFocus();
+  });
+
+  it('falls through an initial-focus request that cannot take focus', () => {
+    render(
+      <Dialog isOpen={true} onOpenChange={() => {}}>
+        <button type="button" disabled data-autofocus>
+          Unavailable
+        </button>
+        <button type="button" data-autofocus>
+          Continue
+        </button>
+      </Dialog>,
+    );
+
+    expect(screen.getByRole('button', {name: 'Continue'})).toHaveFocus();
+  });
+
+  it("honors an explicit request before a header's title request", () => {
+    render(
+      <Dialog isOpen={true} onOpenChange={() => {}}>
+        <h2 tabIndex={-1} data-autofocus="dialog-title">
+          Hero title
+        </h2>
+        <button type="button" data-autofocus>
+          Continue
+        </button>
+      </Dialog>,
+    );
+
+    expect(screen.getByRole('button', {name: 'Continue'})).toHaveFocus();
+  });
+
+  it("focuses a header's title request when no explicit request is eligible", () => {
+    render(
+      <Dialog isOpen={true} onOpenChange={() => {}}>
+        <h2 tabIndex={-1} data-autofocus="dialog-title">
+          Hero title
+        </h2>
+        <div hidden>
+          <button type="button" data-autofocus>
+            Hidden
+          </button>
+        </div>
+      </Dialog>,
+    );
+
+    expect(screen.getByRole('heading', {name: 'Hero title'})).toHaveFocus();
+  });
+
   describe('purpose: info (default)', () => {
     it('calls onOpenChange(false) when Escape is pressed', () => {
       const handleHide = vi.fn();
@@ -899,6 +990,25 @@ describe('Dialog', () => {
           </>
         );
       }
+
+      it("honors an explicit request before a header's title request", () => {
+        render(
+          createPortal(
+            <Dialog isOpen={true} onOpenChange={() => {}} aria-label="Review">
+              <h2 tabIndex={-1} data-autofocus="dialog-title">
+                Hero title
+              </h2>
+              <button type="button" data-autofocus>
+                Continue
+              </button>
+            </Dialog>,
+            secondDocument.body,
+          ),
+        );
+
+        const continueButton = secondDocument.querySelector('button')!;
+        expect(secondDocument.activeElement).toBe(continueButton);
+      });
 
       function SecondDocumentFieldDialog({isOpen}: {isOpen: boolean}) {
         return createPortal(
@@ -1721,6 +1831,38 @@ describe('Dialog', () => {
       const heading = screen.getByRole('heading', {level: 2});
       expect(dialog).toHaveAttribute('aria-labelledby', heading.id);
       expect(dialog).toHaveAccessibleName('Rich dialog title');
+    });
+
+    it('names itself by a header title that renders after the dialog mounts', () => {
+      // A composed header whose title arrives in a later commit asks the
+      // dialog to check its default name again.
+      function LateTitleHeader({isReady}: {isReady: boolean}) {
+        const context = useDialogContext();
+        const syncDefaultName = context?.syncDefaultName;
+        useLayoutEffect(() => {
+          syncDefaultName?.();
+        }, [isReady, syncDefaultName]);
+        return isReady ? <h2 id={context?.titleId}>Late title</h2> : null;
+      }
+      const {rerender} = render(
+        <Dialog isOpen={true} onOpenChange={() => {}}>
+          <LateTitleHeader isReady={false} />
+        </Dialog>,
+      );
+      const dialog = screen.getByRole('dialog');
+      expect(dialog).not.toHaveAttribute('aria-labelledby');
+      rerender(
+        <Dialog isOpen={true} onOpenChange={() => {}}>
+          <LateTitleHeader isReady={true} />
+        </Dialog>,
+      );
+      expect(dialog).toHaveAccessibleName('Late title');
+      rerender(
+        <Dialog isOpen={true} onOpenChange={() => {}}>
+          <LateTitleHeader isReady={false} />
+        </Dialog>,
+      );
+      expect(dialog).not.toHaveAttribute('aria-labelledby');
     });
 
     it('prefers a consumer-provided aria-label over the header title', () => {

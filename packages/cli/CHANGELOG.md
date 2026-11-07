@@ -1,5 +1,112 @@
 # @xds/cli
 
+# 0.7.10
+
+#### New Features
+
+- `astryx discover` lists the experimental PageControl component from `@astryxdesign/lab`. (#9684)
+- `createDragToSnapPoints` and its hook `useDragToSnapPoints` let a drag move an element along one axis and settle it on snap points (px offsets from its resting position) at the release: the nearest one, the next one in its direction after a flick faster than `flickThreshold` (default 1008 px/s), or the one it started from when the release moves back. The settle continues the release velocity, `settleTo(index)` settles without a drag, and `onSettle(index)` reports where it landed. `createDragToSnapPoints` is exported from the package root and `useDragToSnapPoints` from `@astryxdesign/core/hooks`; the CLI's templates gain a playing-card example of each. (#8658)
+
+#### Fixes
+
+- Inserting a token through `ChatComposerInput`'s handle (`insertToken`) now reports the new value through `onChange` once, as typing does, and hides the placeholder. Before, a controlled host's Send button stayed disabled or sent a stale prompt. The `ai-chat-landing` page template drops the input-event workaround it used to sync the composer after an insert. (#10167)
+- The CLI no longer lists `@astryxdesign/theme-neutral`, `@astryxdesign/lab` or `@astryxdesign/charts` as optional peers. Before, a package manager could keep a theme from an older release as the CLI's peer after an app removed the theme and upgraded Core, and then warn that the theme's Core peer was not met. `@astryxdesign/core` stays the CLI's one optional peer. In a Yarn Plug'n'Play workspace member, or a pnpm workspace member with `hoist: false`, a legacy `package.json#astryx.theme` of `neutral` now makes `astryx component` warn that it cannot resolve the theme. Add the theme to the app with `astryx theme add neutral` instead. (#10232)
+
+#### Documentation
+
+- A new `useMultiCombobox — Issue Labels` example block builds a Labels field on `useMultiCombobox`: typing filters the labels, the arrow keys move the active option while focus stays in the field, Enter or a click toggles a label and the list stays open, and selected labels show as removable tokens above the field. Copy it with `astryx template useMultiComboboxHookUsage <path>`. (#9578)
+- A `useSnapPaging — Onboarding Pages` example block: onboarding cards in a Carousel with `hasSnap={useSnapPaging()}` move one view per flick, and a switch moves one card per flick through the hook's `pages` option. Copy it with `astryx template CarouselSnapPaging <path>`. (#8153)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+- @kyu-rong
+- @vjeux
+
+---
+
+# 0.7.9
+
+#### Experimental APIs
+
+- `astryx discover` lists the experimental NavigationStack and NavigationScreen components from `@astryxdesign/lab`.
+
+#### New Features
+
+- `astryx discover` lists the experimental CircleCheckIndicator component from `@astryxdesign/lab`.
+- `astryx theme build` keeps a theme's `componentIcons` slot functions. The built module imports each slot function from the module the theme source imports it from, writes static slot values beside it as JSON, and reads back the same static `componentIcons` view, so component icon slots resolve the same for the built theme as for the runtime theme. This includes slots inherited from a built, package, or family base. A slot function defined in the theme file still fails the build: move it to its own module and import it. In `--family` output, a member supplies its own slot functions through a named import of its whole `componentIcons` map. The module keeps each slot import as the theme source spells it (`--icons-specifier` rewrites only the icon registry import), so with `--out` in another directory, a module must answer to that specifier from the output directory.
+- A theme chooses which shared icon a component's own icon role uses, by slot, with `defineTheme({componentIcons})`. The first slot is `code-block-copy`: CodeBlock's copy button passes `{copied}` and, with no theme entry, draws `copy`, then `check` while copied. A slot value is a shared icon name, `null` to hide the icon, a partial `{icon, variant, size}` request, or a pure function of the slot's state that returns one; a field the request leaves out keeps the component's own value. For the copy button, `null` hides only the glyph. `theme.componentIcons` reads back the static values. `ComponentIconSlotMap` and the slot value types are exported from `@astryxdesign/core/Icon`. `astryx theme build` carries static slot values into built themes and fails on a slot function, and `astryx component` lists a component's slots.
+- `createPanGesture(element, {axis?, onPan})` and `usePanGesture(ref, {axis?, onPan})` report a drag on an element as values: `onPan` gets `{state, translation, velocity}` as the drag begins, changes, ends at the release, or is cancelled, and a finger, a mouse and a pen all drive it. A mouse or pen drag that starts on selectable text selects it instead; give text the drag should move `user-select: none`. `axis` limits the drag to `'x'` or `'y'`; a drag along the other axis is not reported. `translation` counts from where the drag began, so an element that follows it does not jump, and `velocity` at `ended` is the release velocity in pixels per second. The drag claims its touch at UIKit's 10 pt and leaves presses and long presses alone. `destroy()` removes every listener; the hook creates one pan for the element behind `ref` and destroys it at unmount.
+- Motion: a theme's `tempo` now times the springs of touch motion as well as its CSS durations. Each spring keeps its shape and takes `tempo` times as long, and so does the animated-layout glide. Finger tracking and busy loops stay as measured. A theme with only a duration scale keeps its springs at tempo 1, even inside a theme with a tempo. The springs don't follow `character` yet. The motion doc says so.
+
+#### Fixes
+
+- `astryx docs <namespace> <section>` loads the project once instead of once for every guide below the namespace, so on a namespace with many guides, such as `astryx docs authoring <section>`, the read itself takes tens of milliseconds instead of hundreds. The answer is unchanged.
+- A run that takes over a crashed run's release-cache lock now also recognizes the npm install that run left behind by its original command line, as npm shows it before renaming its process, when Node's own file is not named `node`, such as `nodejs` or `node-linux-x64`.
+- The lexical ranker behind `astryx build`'s search ranks the candidates search gathers, reused the same way. A later query in the same folder, for the same `type`, gathers again only when an input changed. In a long-running caller, a build that follows a build or a search no longer reads every component, hook, doc, template and theme again. A search that follows a build no longer reads them again either. Results are unchanged.
+- Under the Neutral theme, a selected row, a calendar range and the other selected fills on Neutral's surfaces are visible again, and highlighted code lines are stronger. `--color-accent-muted` matched the surface in dark mode and barely differed from the hover tint in light mode; it is now `#d4d4d4` in light and `#474747` in dark. In dark mode a selected Item, TreeListItem or checked CheckboxListItem row, a numbered Citation and a FileInput dropzone lift their secondary text so it stays readable on the fill; a dropzone's hint is slightly lighter at rest too. Neutral's code comments, operators and punctuation are slightly less muted so they stay readable on a highlighted line. The CLI's Neutral theme template carries the same values.
+- The stock theme's dark-mode accent (`--color-accent`) is now `#0171E3` instead of `#2694FE`, so white text on an accent fill, such as a primary Button's label at rest, meets 4.5:1 (4.70:1, was 3.11:1). Hovered and pressed primary Buttons improve too (about 4.36:1 and 4.03:1, from under 3:1) but stay under 4.5:1. Light mode keeps `#0064E0`. Everything else painted with `--color-accent` in dark mode also darkens: accent fills, focus rings and accent icons. MetadataList's "Show more", Table's sort rank and DateRangeInput's applied preset now use `--color-text-accent`, so their text stays readable on dark surfaces. The theme template that `astryx theme template` writes uses the same dark accent, and the generated color token docs list it. To keep the previous look, a theme can set `'--color-accent': ['#0064E0', '#2694FE']`.
+- `astryx swizzle` no longer runs `gh auth status` before it reports: the ready `gh issue create` line appears when `gh` is on your PATH, found without running it, so a copy never waits on a process start or on GitHub. The line now also appears when `gh` is installed but not logged in; running it, gh asks you to log in.
+- `astryx swizzle` now copies the private attribute owner modules a component imports, and the unexported style modules they need, beside the copy in the package's layout. A swizzled `Item`, `CheckboxList`, `RadioList` or `TreeList` no longer imports a `privateAttributes/*.stylex` subpath that `@astryxdesign/core` does not export. A second swizzle reuses an identical copy and refuses a changed one without `--overwrite`. The receipt's `files` and `filesCopied` include the modules it copied.
+- `astryx theme build` reads the theme's icon import from the source it loaded: a theme saved in place while it builds now builds with its import, or fails and builds on the next save, instead of producing a module without the import.
+- theme: support `CustomTextTypes` module augmentation for custom Text variants (#5013)
+
+#### Performance
+
+- `astryx search` and `astryx build` read Core's exports map once per run, not once per component. With the other readers, a search now reads Core's package.json 10 times instead of 183. Results are unchanged.
+- When no loaded integration ships templates, the integration-issue check no longer imports every Core template doc. `astryx doctor` in a project whose integrations only ship icon sets now imports none of them.
+- With no integration loaded, the integration-issue check no longer imports every Core template doc. `astryx discover`, and `astryx component` without `--showcase` or `--blocks`, now import none of them.
+- The integration manifest writer loads the code-rewrite toolkit only when it patches a manifest. `astryx component`, `astryx theme list` and `astryx doctor` outside a project no longer load it, and a component lookup loads about 70 fewer modules.
+- `astryx search` and `astryx build` look for a component's doc only in the Core folders whose listing holds its name, not in every folder. A search makes about a quarter of the file checks it made before. Results are unchanged.
+- Outside a project whose config names `debug` or `integrations`, `astryx --version` no longer loads the project, integration and code-rewrite modules. In a folder with no project config, it uses about three quarters less CPU. When no integration is installed, `astryx docs` and `astryx hook --list` load the project but not the code-rewrite modules. Output and exit codes are unchanged.
+- `astryx search` and `astryx build` work out a query word's forms once per entry they score, not once per word compared. Answers are unchanged.
+- `astryx search` and `astryx build` compute a typo's edit distance only up to the most edits that can count. A fuzzy match now computes far fewer table cells, with unchanged answers.
+- A standalone `astryx theme build` against the current Core loads Core's root entry only when the theme imports it. A theme that imports only `@astryxdesign/core/theme` no longer loads all of Core and its components. Family builds and builds against an older Core still load the root. Some builds hand the theme its Core: family builds, builds against an older Core, and themes whose folder has no Core. There, a theme that imports a Core root `require()` cannot load, such as one that awaits at its top level, fails with `ERR_THEME_LOAD`. The error names that root.
+- `astryx doctor`'s theme checks, family builds and builds against an older Core defer an installed Core's root entry. It loads only when the theme or one of its `.cjs` dependencies imports it. A theme that does not import Core's root no longer loads all of Core and its components for them.
+
+#### Documentation
+
+- The calendars guide says `Calendar`, `DateInput`, `DateRangeInput`, and `DateTimeInput` show the Gregorian calendar unless the application chooses another one. (#9842)
+- Hook docs for `useCalendarDays`, so `astryx hook useCalendarDays` and `astryx search` return it, and a `useCalendarDays — Month Grid` example block: a compact month table built from the hook's `weeks` and `dayNames`, with the previous and next months' days dimmed and a Week starts on control (Sunday or Monday) that reorders both the header and the grid. Copy it with `astryx template useCalendarDaysHookUsage <path>`.
+- Hook docs for `useIcon`, so `astryx hook useIcon` and `astryx search` return it, and a `useIcon — Status Row` example block: a custom status row draws the success, warning and error icons with `useIcon`, and under a Theme that overrides those icons the same row draws the theme's icons. Copy it with `astryx template useIconHookUsage <path>`.
+- Hook docs for `useLinkComponent`, so `astryx hook useLinkComponent` and `astryx search` return it, and a `useLinkComponent — Article Cards` example block: custom Article cards render their title link with the component the hook resolves. Inside a LinkProvider wired to a client-side router the title navigates without a page load, `as="a"` gives a native anchor even inside the provider, and outside the provider the title falls back to the next provider up or a native anchor. Copy it with `astryx template useLinkComponentHookUsage <path>`.
+- Hook docs for `useOverlay`, so `astryx hook useOverlay` and `astryx search` return it, and a `useOverlay — Product Quick View` example block: a product Card spreads the hook's `containerRef` and `containerProps` and renders the returned scrim once over its image. Hovering the card, or moving keyboard focus into it, reveals a Quick view button, and the image link before it lets Tab reach the button. Copy it with `astryx template useOverlayHookUsage <path>`.
+- Hook docs for `useTableSortableState`, so `astryx hook useTableSortableState` and `astryx search` return it, and a `useTableSortableState — Multi-Sort Orders` example block: an orders Table with no sort code of its own, where clicking Customer and then Shift-clicking Total sorts by customer and then by total. Copy it with `astryx template useTableSortableStateHookUsage <path>`.
+- Internationalization gains a short Other calendars guide: choose a calendar on `InternationalizationProvider` or `Calendar`, values stay Gregorian ISO dates, and most calendars need `Temporal` (load `temporal-polyfill/full/global` where it is missing). A new `astryx docs calendars` namespace has the detail: the supported calendars, loading `Temporal` on the server and in the browser, why the lunisolar calendars (`chinese`, `dangi`) can differ by a day between runtimes, and ISO 8601 week numbers. The guide and `Calendar`'s `calendar` prop docs say how to get identical server and browser markup for those calendars: `installImplementation()` from `temporal-polyfill/full/shim` on both sides, since the `full/global` import keeps a native `Temporal`.
+- InfoTip: the component page, `astryx component InfoTip --showcase`, and `astryx component InfoTip --blocks` now have worked examples — a showcase metric label, a row of metric definitions, and read-only settings with permission notes. InfoTip's docs list its anatomy (trigger button, info icon, help surface) and say it follows the toggletip pattern: the button reports `aria-expanded="true"` while the help is pinned, and a screen reader hears the help once when it pins.
+- The `usePanGesture` page opens with a draggable box in two forms side by side: the hook and `createPanGesture`, which takes any element, with the same StyleX styles and Astryx tokens. The playing card follows as the advanced example. The `createPanGesture` page points to that example, and the `usePanGesture` guidance warns against holding the drag offset in a large component's state.
+- A new `useClickableContainer — Clickable Project Card` example block makes a project card clickable anywhere with `useClickableContainer`: a click on the card follows its title link, while the Star button, the owner link and a text selection keep their own behavior, and Ctrl/Cmd+click or middle-click opens the project in a new tab. Copy it with `astryx template useClickableContainerHookUsage <path>`.
+- A new `useImageMode — Photo Caption` example block shows a caption over a photo's sky. `useImageMode` samples only the strip under the caption, and `MediaTheme` gives the caption light or dark text from the result. A Beach photo switch swaps a night photo for a bright beach photo, and the caption keeps the dark fallback while the new photo loads. Copy it with `astryx template useImageModeHookUsage <path>`.
+- A new `useInputContainer — Search Field Wrapper` example block builds a custom search field with a leading search icon, padding and a trailing Clear button. `useInputContainer` puts focus in the input when the icon or the padding is clicked, and a click on Clear stays with Clear. Copy it with `astryx template useInputContainerHookUsage <path>`.
+- A `useMergedRefs — AutoGrowTextArea` example block: an AutoGrowTextArea forwards the caller's ref and keeps its own ref to measure its height, and the merged ref attaches both to the same textarea, so it resizes itself while a parent button focuses it through the forwarded ref. Copy it with `astryx template useMergedRefsHookUsage <path>`.
+- A new `useScrollLock — Full-screen Mobile Menu` example block opens a custom full-screen menu from a Menu button and locks the page behind it with `useScrollLock`, so the page neither scrolls nor shifts sideways, and closing the menu returns the reader to the same scroll position. Copy it with `astryx template useScrollLockHookUsage <path>`.
+- A new `useScrollOverflow — Filter Strip Edge Fades` example block shows a row of active filters that scrolls sideways and fades only the edge where `useScrollOverflow` reports hidden filters. Adding or removing a filter updates the fades, and a right-to-left switch moves the start edge to the right. Copy it with `astryx template useScrollOverflowHookUsage <path>`.
+
+#### Other Changes
+
+- Internal: the search gather runs in its own listing-cache operation, so a caller that gathers candidates directly lists each folder about once, as `astryx search` already does. The command's results and output are unchanged. Not exported from the package entry point.
+- Internal: the CLI's in-process test helper builds only the commands its arguments need, as a run of the bin does.
+- The CLI's test setup rebuilds Core when its build is older than Core's sources or translations. It does so before any test starts, so a reused checkout no longer tests the CLI against an old Core build. A test waiting on another's build reads it only once that build is finished. One checkout's build no longer holds up another's tests. A run that cannot rebuild a stale Core, while an earlier run in the checkout uses it, stops with an error naming that run.
+- The PowerSearch blocks fit a phone-sized screen. Each sizes its field through a grid column, `minmax(0, <width>)`: the old width where there is room, and the container's width where there is not. The Search with Table block's table scrolls inside its own frame on a narrow screen instead of widening the example.
+- Internal: the main searcher's test checks the count contract for each query, not a byte total over eight queries.
+- The Tokenizer blocks and the table-inbox and work-item-detail page templates follow Tokenizer's `'adaptive'` default, so on a compact touch screen they show the bottom sheet. Their `endContent` and `renderToken` work there as in the inline field; `hasClear` and the overflow modes apply to the inline field, and the Clear and Overflow blocks say so. The rule: docs examples follow `adaptive`; the stories that are fixtures for inline-field geometry (Caret placement, Logical order, RTL end lane, Long token beside the end lane) keep `presentation="popover"`. The table-inbox and work-item-detail back arrows mirror in right-to-left.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+- @imdreamrunner
+- @jibin7jose
+- @MannXo
+- @nynexman4464
+- @Sainath-Reddy7
+- @vjeux
+
+---
+
 # 0.7.8
 
 #### Experimental APIs

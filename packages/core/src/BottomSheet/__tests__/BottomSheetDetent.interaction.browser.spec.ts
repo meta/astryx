@@ -39,9 +39,10 @@ import {
   drag,
   flick,
   frames,
-  freezeTimers,
+  freezePageOn,
   holdAnimations,
   installLongTaskLog,
+  installPageFreeze,
   installTimerGate,
   markElement,
   openStory,
@@ -49,14 +50,16 @@ import {
   releaseAnimations,
   releaseVelocity,
   sampleCurve,
+  startBusyControl,
   startScreencast,
-  thawTimers,
+  thawPage,
   timeline,
   timingFunction,
   touchDriver,
   toTouchEvents,
   touchStoryboard,
   traceRendering,
+  trackControl,
   trackMarker,
   withStorybook,
   waitForAnimation,
@@ -187,13 +190,38 @@ test('a downward flick dismisses the sheet', async ({page}) => {
   await expect(page.getByRole('dialog', {name: 'Nearby places'})).toBeHidden();
 });
 
+test('a softer downward flick from the tall detent lands on the half detent', async ({
+  page,
+}) => {
+  const {driver, sheet, handle, halfTop} = await openSheet(page);
+  // 1,200 px/s: a flick, whose projection stops short of the half detent, so
+  // it goes one stop.
+  const script = flick(handle, {
+    velocity: {x: 0, y: 1200},
+    durationMs: 80,
+    hz: 120,
+  });
+  expect(releaseVelocity(script).y).toBeCloseTo(1200, -1);
+  await driver.play(script);
+  await waitForRest(sheet);
+  await expect(page.getByRole('dialog', {name: 'Nearby places'})).toBeVisible();
+  expect(await sheetTop(sheet)).toBeCloseTo(halfTop, 0);
+});
+
 test('the settle lands on the detent, its curve recorded frame by frame', async ({
   page,
 }, testInfo) => {
+  // The page clock that lets the scene stop at the lift, installed before
+  // the story loads; a freeze also needs the timer gate.
+  await installPageFreeze(page);
   const {driver, sheet, tallTop, halfTop, handle} = await openSheet(page);
+  await installTimerGate(page);
   const dy = Math.round((halfTop - tallTop) * 0.66);
+  // The scene stops in the lift's own task, before the sheet hears the lift.
+  // The settle then starts held, however late this process reacts. A hold
+  // that the test sends after the lift can come after the settle ends.
+  await freezePageOn(page, 'touchend');
   await driver.play(slowDragTo(handle, dy));
-  const [settle] = await waitForAnimation(sheet);
   const held = await holdAnimations(page, sheet);
   const transition = held.find(a => a.name === 'transform');
   if (transition == null) {
@@ -214,6 +242,7 @@ test('the settle lands on the detent, its curve recorded frame by frame', async 
     from + (to - from) * ease(Math.min(1, t / SETTLE_MS));
   const result = compareCurve(samples, expectedSettle, 0.5);
   await releaseAnimations(page);
+  await thawPage(page);
   testInfo.annotations.push({
     type: 'settle-curve',
     description: `settle: ${transition.easing}, ${transition.durationMs} ms; frame-by-frame max error ${result.maxError.toFixed(2)} px against ${SETTLE_EASING} over ${SETTLE_MS} ms`,
@@ -232,7 +261,7 @@ test('the settle lands on the detent, its curve recorded frame by frame', async 
     'curves/bottomsheet-settle',
     {
       [`${testInfo.project.name}.json`]: JSON.stringify(
-        {settle, transition, comparison: result},
+        {transition, comparison: result},
         null,
         2,
       ),
@@ -253,6 +282,10 @@ test('the settle keeps advancing every frame while the main thread is blocked', 
   );
   const {driver, sheet, tallTop, halfTop, handle} = await openSheet(page);
   await markElement(sheet);
+  // The harness's busy-window control: a box the compositor moves along the
+  // top edge, in the same screencast. The settle is judged against what the
+  // compositor presented, not against a frame rate.
+  const control = await startBusyControl(page);
   const cast = await startScreencast(page);
   // The settle must be running (and composited) before the block: an
   // animation cannot start while the main thread is held. Armed before the
@@ -279,11 +312,21 @@ test('the settle keeps advancing every frame while the main thread is blocked', 
     return chip.getBoundingClientRect().y;
   });
   const castFrames = await cast.stop();
+  await control.remove();
   const tracked = await trackMarker(page, castFrames);
+  const controlFrames = await trackControl(
+    page,
+    castFrames.filter(f => f.t >= block.from - 300 && f.t <= block.to + 100),
+  );
   // Judge the part of the block during which the settle was still moving:
   // until it is within 2 px of rest (the screencast rounds to whole pixels,
-  // so the easing tail shows plateaus there).
-  const proof = busyWindowProof(tracked, block, {settledWithin: 2, settledAt});
+  // so the easing tail shows plateaus there). The settle moves on every frame
+  // the control moves on, and it stalls no longer than the control.
+  const proof = busyWindowProof(tracked, block, {
+    settledWithin: 2,
+    settledAt,
+    control: controlFrames,
+  });
   await writeEvidence(
     'busy-main-thread/bottomsheet-settle',
     {
@@ -354,6 +397,9 @@ test(
   'storyboard: drag to the half detent and settle',
   {tag: '@storyboard'},
   async ({page}, testInfo) => {
+    // The page clock that lets the scene stop at the lift, installed before
+    // the story loads.
+    await installPageFreeze(page);
     const {driver, sheet, tallTop, halfTop, handle} = await openSheet(page);
     // Gate the page's timers from here on, so the settle's completion timer can
     // be held with its animation while the filmstrip is photographed.
@@ -362,6 +408,10 @@ test(
     const clip = {x: 0, y: 0, width: viewport.width, height: viewport.height};
     const dy = Math.round((halfTop - tallTop) * 0.66);
     const measure = async () => ({top: await sheetTop(sheet)});
+    // The scene stops in the lift's own task, before the sheet hears the
+    // lift. The settle then starts held, however late this process reacts. A
+    // hold that the test sends after the lift can come after the settle ends.
+    await freezePageOn(page, 'touchend');
     const dragBoard = await touchStoryboard(
       page,
       driver,
@@ -378,8 +428,6 @@ test(
         cellScale: 0.4,
       },
     );
-    await waitForAnimation(sheet);
-    await freezeTimers(page);
     const {storyboard: settleBoard} = await animationStoryboard(page, {
       name: 'bottomsheet-settle',
       clip,
@@ -389,7 +437,7 @@ test(
       cellScale: 0.4,
     });
     await releaseAnimations(page, {finish: true});
-    await thawTimers(page);
+    await thawPage(page);
     await dragBoard.write(testInfo);
     await settleBoard.write(testInfo);
     // The trace is the assertion; the sheets are the evidence.
