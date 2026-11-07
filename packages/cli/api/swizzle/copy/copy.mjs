@@ -489,7 +489,9 @@ export async function swizzleCopy(component, options = {}) {
   // only a folder it owns: one the copy creates, an empty one, or one it
   // marked before. Any other folder is reported with what it holds.
   const foundInOutputBase =
-    markerExisting == null && fs.existsSync(outputBase)
+    markerExisting == null &&
+    fs.existsSync(outputBase) &&
+    fs.statSync(outputBase).isDirectory()
       ? fs.readdirSync(outputBase).sort()
       : [];
   const marksOutputBase = foundInOutputBase.length === 0;

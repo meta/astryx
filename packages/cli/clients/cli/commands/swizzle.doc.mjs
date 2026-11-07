@@ -22,7 +22,7 @@ export const doc = {
     "is copied beside it in the package's folder layout. " +
     'Tests, stories and docs are not copied. It lists the npm packages the copy imports, ' +
     'with the ranges the owner package declares, to install if your project lacks them. ' +
-    'Tests, stories and docs are not copied. An output folder swizzle owns (one the copy ' +
+    'An output folder swizzle owns (one the copy ' +
     'creates, an empty one, or one it marked before) gets an astryx-swizzle.json marker naming ' +
     "each package its copies came from, so @astryxdesign/build's Babel, PostCSS and Vite " +
     'integrations, and withAstryx() under webpack, compile the copy below your theme. ' +

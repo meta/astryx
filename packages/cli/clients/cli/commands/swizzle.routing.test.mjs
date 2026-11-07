@@ -259,6 +259,15 @@ describe('swizzle — the astryx-swizzle.json marker', () => {
     expect(result.stdout).toContain('add components/astryx/astryx-swizzle.json to mark it');
   });
 
+  it('reports a write failure when the output path is a file', async () => {
+    buildFakeCore(project);
+    writeProjectPackageJson(project);
+    fs.writeFileSync(path.join(project, 'notes.txt'), 'notes\n');
+    const result = await runCli(['--json', 'swizzle', 'Button', '--output', 'notes.txt'], project);
+    expect(result.code).not.toBe(0);
+    expect(JSON.parse(result.stdout).code).toBe('ERR_WRITE_FAILED');
+  });
+
   it('marks a folder the copy creates, and says what the marker does', async () => {
     buildFakeCore(project);
     writeProjectPackageJson(project);
