@@ -72,7 +72,7 @@ import {
 } from './theme-checks.mjs';
 import {availableLine, RUN_FROM_PROJECT, upgradeLine} from '../../foundation/release/notices.mjs';
 import {COMPUTER_COMMAND, COMPUTER_INSTALL_STEP} from '../../foundation/agent-docs/computer-agent-text.mjs';
-import {alignCommand, addCliCommandFor, computerAgentTextState, installCommandFor, insideProjectElsewhere, projectCoreVersion, projectHasOwnCli, computerIntegrationsOutside, computerIntegrationsToAdd, displayHomePath, outsideProject, releaseFacts, builtIntegrationPackages} from './_adapter.mjs';
+import {alignCommand, addCliCommandFor, computerAgentTextState, installCommandFor, insideProjectElsewhere, projectCoreVersion, projectHasOwnCli, computerIntegrationsOutside, computerIntegrationsToAdd, displayHomePath, outsideProject, releaseFacts, builtIntegrationPackages, corePeerRange, isLocalThemeOwner, readThemeState} from './_adapter.mjs';
 import {checkBuilt} from './built-checks.mjs';
 
 /**
@@ -95,6 +95,8 @@ import {checkBuilt} from './built-checks.mjs';
  * @property {string|null} coreDir - Resolved core package directory, or null.
  * @property {boolean} [ownCli] - Whether the project installs its own CLI;
  *   false means the copy that started the run answered it (spec AST-081 FR2).
+ * @property {string[]} [addedThemePackages] - Packages of the project's added
+ *   themes, which `theme-core-peers` checks against Core
  * @property {string|null} [projectCore] - The Core release the project names
  *   (installed, else locked, else declared), as the daily hint reads it.
  * @property {string|null} configPath - Resolved astryx.config.mjs path, or null.
@@ -137,6 +139,22 @@ function readPkg(pkgPath) {
     return JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
   } catch {
     return null;
+  }
+}
+
+/**
+ * Packages that own the project's added themes (local themes excluded); empty
+ * when the project manages no themes or its theme state cannot be read.
+ * @param {string} cwd
+ * @returns {string[]}
+ */
+function addedThemePackages(cwd) {
+  try {
+    return Object.values(readThemeState(cwd).themes ?? {}).filter(
+      owner => typeof owner === 'string' && !isLocalThemeOwner(owner),
+    );
+  } catch {
+    return [];
   }
 }
 
@@ -918,6 +936,67 @@ export function checkIntegrationIssues(ctx) {
     status: 'warn',
     message: `${issues.length} integration issue(s)${errors > 0 ? `, ${errors} of them errors` : ''}: ${details}`,
     fix: `Run \`${formatCliCommand('doctor integration', ctx.cwd)}\` for package-specific diagnostics and resolve cross-package precedence in astryx.config.`,
+  };
+}
+
+/**
+ * Every loaded integration's `@astryxdesign/core` peer range admits the
+ * installed Core: a package's declared peer ranges define the Core versions it
+ * supports (spec:AST-017 FR12). A package made for another Core installs with
+ * only a package manager warning, and its components, themes and docs may not
+ * work. New, so it warns: a project that passed before keeps passing.
+ * Packages of added themes are left to `theme-core-peers` (spec:AST-050 FR11),
+ * which applies the same rule. Null when Core is not installed or no other
+ * loaded integration declares a Core range.
+ * @param {DoctorContext} ctx
+ * @returns {DoctorCheck | null}
+ */
+export function checkIntegrationCoreRange(ctx) {
+  const core = pkgVersion(ctx.coreDir);
+  if (!core || ctx.integrations == null) return null;
+  // `theme-core-peers` already judges each added theme package by the same
+  // rule (`corePeerRange`), with a fix that keeps the theme setup working.
+  const reportedByThemeChecks = new Set(ctx.addedThemePackages ?? []);
+  /** @type {Array<{name: string, version: string | null, range: string, accepts: boolean}>} */
+  const declared = [];
+  for (const integration of ctx.integrations) {
+    if (integration.__loadError != null || !integration.__packageDir) continue;
+    const pkg = readPkg(path.join(integration.__packageDir, 'package.json'));
+    const name = typeof pkg?.name === 'string' ? pkg.name : integration.name;
+    if (reportedByThemeChecks.has(name)) continue;
+    const {range, accepts} = corePeerRange(pkg, core);
+    // An integration need not depend on Core; only a declared, non-empty range
+    // is a claim about which Core it supports.
+    if (range == null || range === '') continue;
+    declared.push({
+      name,
+      version: typeof pkg?.version === 'string' ? pkg.version : null,
+      range,
+      accepts,
+    });
+  }
+  if (declared.length === 0) return null;
+  const excluded = declared.filter(d => !d.accepts);
+  const label = 'Integrations support the installed Core';
+  if (excluded.length === 0) {
+    return {
+      id: 'integration-core-range',
+      label,
+      status: 'pass',
+      message: `${declared.length} loaded integration${declared.length === 1 ? ' supports' : 's support'} @astryxdesign/core ${core} (${nameIntegrations(declared)}).`,
+    };
+  }
+  return {
+    id: 'integration-core-range',
+    label,
+    status: 'warn',
+    message: `${excluded
+      .map(
+        d =>
+          `${d.name}${d.version ? `@${d.version}` : ''} supports @astryxdesign/core ${d.range}`,
+      )
+      .join('; ')}, but the project has ${core}. ${excluded.length === 1 ? 'Its' : 'Their'} components, themes and docs were made for another Core and may not work.`,
+    fix: `Install a release of ${excluded.length === 1 ? 'that package' : 'each package'} whose @astryxdesign/core range includes ${core}, or move the project to a Core in that range. When no such release exists, ask the package's owner for one.`,
   };
 }
 
@@ -1992,6 +2071,7 @@ export const SYNC_CHECKS = [
   checkConfiguredIntegrations,
   checkProviderIdentity,
   checkIntegrationIssues,
+  checkIntegrationCoreRange,
   checkIconSets,
   checkAgentDocs,
   checkPeerDeps,
@@ -2172,6 +2252,7 @@ export async function runChecks(options = {}) {
     coreDir,
     ownCli: projectHasOwnCli(cwd),
     projectCore: projectCoreVersion(cwd),
+    addedThemePackages: addedThemePackages(cwd),
     configPath,
     integrations,
     docsCatalog,

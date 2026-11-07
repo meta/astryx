@@ -41,6 +41,7 @@ import {computerAgentTextSettings} from '../../foundation/env/user-settings.mjs'
 import * as fs from 'node:fs';
 import {elementPropOrigins} from '../../foundation/discovery/module-exports.mjs';
 import {cssImports} from '../../foundation/render/embedded-imports.mjs';
+import {satisfiesRange} from '../../foundation/env/semver.mjs';
 import * as path from 'node:path';
 import {
   Project,
@@ -201,6 +202,31 @@ export function doctorElementPropOrigins(file, element) {
  */
 export function doctorStylesheetImports(css) {
   return new Set(cssImports(css));
+}
+
+/**
+ * The `@astryxdesign/core` range a package's peerDependencies declare, and
+ * whether it accepts `coreVersion` (spec:AST-017/FR12). The one rule every
+ * doctor check uses to compare a package with the installed Core:
+ * `theme-core-peers` for added theme packages, `integration-core-range` for
+ * every other loaded integration.
+ * @param {{peerDependencies?: Record<string, unknown>} | null | undefined} pkg
+ * @param {string | null | undefined} coreVersion
+ * Any declared string is judged by `satisfiesRange`, so an empty range
+ * accepts every Core; only a missing range is `null`.
+ * @returns {{range: string | null, accepts: boolean}}
+ */
+export function corePeerRange(pkg, coreVersion) {
+  const raw = pkg?.peerDependencies?.['@astryxdesign/core'];
+  const range = typeof raw === 'string' ? raw.trim() : null;
+  return {
+    range,
+    accepts:
+      range !== null &&
+      typeof coreVersion === 'string' &&
+      coreVersion !== '' &&
+      satisfiesRange(coreVersion, range),
+  };
 }
 
 /** @param {string} projectDir */
