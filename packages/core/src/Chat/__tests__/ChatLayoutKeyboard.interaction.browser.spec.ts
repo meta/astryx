@@ -549,8 +549,24 @@ test.describe('Chrome on Android (spec:AST-099 FR8)', () => {
   test('the rise does no Layout or Paint per frame', async ({page}) => {
     const {editable} = await openChat(page, {android: true});
     await editable.focus();
+    // Focus starts the composer's own feedback, a short box-shadow transition
+    // that paints every frame. It is no part of the ride, so it ends before
+    // the trace, and the window counts the ride alone.
+    await page.evaluate(async () => {
+      const transitions = document
+        .getAnimations()
+        .filter(animation => animation instanceof CSSTransition);
+      await Promise.all(
+        transitions.map(async transition =>
+          transition.finished.catch(() => undefined),
+        ),
+      );
+    });
     // Records each ride the motion engine starts on the dock, when it starts
     // and when it is cancelled. Reading an animation's times reads no layout.
+    // The engine sets the start in the task that makes the ride, so a
+    // microtask reads it. A promise on `ready` would add a main-thread frame
+    // when the compositor starts the ride.
     await page.evaluate(() => {
       const dock = document.querySelector('[data-testid="keyboard-dock"]');
       const rides: {start: number | null; cancelled: number | null}[] = [];
@@ -572,12 +588,11 @@ test.describe('Chrome on Android (spec:AST-099 FR8)', () => {
             cancelled: null as number | null,
           };
           rides.push(ride);
-          void animation.ready.then(
-            () => {
+          queueMicrotask(() => {
+            if (animation.startTime != null) {
               ride.start = performance.timeOrigin + Number(animation.startTime);
-            },
-            () => undefined,
-          );
+            }
+          });
           animation.addEventListener('cancel', () => {
             ride.cancelled = performance.timeOrigin + performance.now();
           });
@@ -599,8 +614,8 @@ test.describe('Chrome on Android (spec:AST-099 FR8)', () => {
       }, COVER);
     });
     // The steady part of Gboard's slide, 125–220 ms after the report. Its start
-    // lays out once and paints for a few frames. Its end, about 260 ms after the
-    // report, hands the layers back and lays out once.
+    // lays out once and paints in its first two frames. From about 230 ms, its
+    // end paints twice and hands the layers back with one layout.
     const steady = {from: reported + 125, to: reported + 220};
     // A ride runs through that window: it starts before the window, its slide
     // ends after it, and nothing cancels it sooner. So no rendering in the
