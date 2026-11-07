@@ -7,9 +7,8 @@
  *   isRendererManagedRoot, which reads the mark
  * @position Owner module of the private layer-portal-boundary attribute in
  *   Core: the only Core file that writes its name. Layer's corrective portal
- *   resolver reads it, so a layer never lands inside DOM a renderer manages
- *   (architecture:layer-runtime INV19). RichText writes the same mark from its
- *   own owner module. No package entry exports it.
+ *   resolver reads it. RichText writes the same mark from its own owner
+ *   module. No package entry exports it.
  */
 
 const LAYER_PORTAL_BOUNDARY = 'data-astryx-layer-portal-boundary';
