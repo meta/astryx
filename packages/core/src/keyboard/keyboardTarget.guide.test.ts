@@ -4,9 +4,10 @@
  * @file keyboardTarget.guide.test.ts
  * @input keyboardTarget.ts with a stand-in layout guide and a stand-in
  *   animator, a stand-in visual viewport and stubbed boxes
- * @output Proves a docked ride on the guide's slides. A field that loses
- *   focus while the keyboard shows rides its bar down on the hide's slide. No
- *   set cuts the slide at its start
+ * @output Proves a docked ride on the guide's slides. A show sets the field
+ *   just above the keyboard at once and rides the rest, and a pan the browser
+ *   makes is put back. A field that loses focus while the keyboard shows rides
+ *   its bar down on the hide's slide. No set cuts the slide at its start
  * @position Keyboard module tests
  */
 
@@ -72,7 +73,8 @@ vi.mock('../motion/animator', async importOriginal => {
   return {...actual, animatorFor: () => animator};
 });
 
-const {keepFieldAboveKeyboard} = await import('./keyboardTarget');
+const {keepFieldAboveKeyboard, FIELD_CLEARANCE_AT_REPORT} =
+  await import('./keyboardTarget');
 
 let keyboard: KeyboardTestDouble;
 
@@ -152,5 +154,72 @@ it("rides a blurred field's bar down on the hide's slide, never cutting it with 
   // The stopped ride no longer listens: a later slide moves nothing.
   publish(slide('show', 300));
   expect(animator.play).toHaveBeenCalledTimes(1);
+  stop();
+});
+
+// A bar docked at the viewport's bottom with a field 10 px above its bottom,
+// both drawn where the ride moves them.
+function dockedBar() {
+  const bottom = window.innerHeight;
+  const bar = document.createElement('div');
+  bar.style.position = 'fixed';
+  const input = document.createElement('input');
+  bar.append(input);
+  document.body.append(bar);
+  animator.state.element = bar;
+  vi.spyOn(bar, 'getBoundingClientRect').mockImplementation(
+    () => new DOMRect(0, bottom - 60 + animator.state.y, 300, 60),
+  );
+  vi.spyOn(input, 'getBoundingClientRect').mockImplementation(
+    () => new DOMRect(0, bottom - 50 + animator.state.y, 300, 40),
+  );
+  return {bar, input};
+}
+
+it("sets a docked bar's field just above the keyboard at the show's first report, then rides the rest", () => {
+  const {input} = dockedBar();
+  const stop = keepFieldAboveKeyboard(input);
+  act(() => input.focus());
+  keyboard.frame();
+  animator.set.mockClear();
+  animator.play.mockClear();
+  publish(slide('show', 300));
+  // The field's bottom, 10 px above the viewport's bottom, is set
+  // FIELD_CLEARANCE_AT_REPORT px above the keyboard's top at once.
+  expect(animator.set).toHaveBeenCalledWith({
+    y: -(300 - 10 + FIELD_CLEARANCE_AT_REPORT),
+  });
+  // The rest rides on the slide, to the bar's bottom on the keyboard's top.
+  expect(animator.play).toHaveBeenCalledTimes(1);
+  expect(animator.set.mock.invocationCallOrder[0]).toBeLessThan(
+    animator.play.mock.invocationCallOrder[0],
+  );
+  expect(animator.state.y).toBe(-300);
+  stop();
+});
+
+it('puts back a pan the browser makes on its own while a docked bar rides its field', () => {
+  const scrollIntoView = vi.fn();
+  Object.defineProperty(Element.prototype, 'scrollIntoView', {
+    configurable: true,
+    value: scrollIntoView,
+  });
+  const {input} = dockedBar();
+  const stop = keepFieldAboveKeyboard(input);
+  act(() => input.focus());
+  keyboard.frame();
+  publish(slide('show', 300));
+  keyboard.show(300);
+  expect(scrollIntoView).not.toHaveBeenCalled();
+  // The browser pans the visual viewport by itself: no touch, no scroll.
+  const viewport = window.visualViewport as unknown as EventTarget & {
+    offsetTop: number;
+  };
+  viewport.offsetTop = 48;
+  act(() => {
+    viewport.dispatchEvent(new Event('scroll'));
+  });
+  expect(scrollIntoView).toHaveBeenCalledTimes(1);
+  Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
   stop();
 });

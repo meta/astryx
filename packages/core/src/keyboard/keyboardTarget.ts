@@ -26,6 +26,7 @@ import {
   isTextEntryControl,
   refuseFocusReveal,
   subscribeKeyboardHeight,
+  getResizedRoom,
   watchRevealPan,
 } from './keyboardHeight';
 import {getKeyboardLayoutGuide, keyboardProfileOf} from './keyboardLayoutGuide';
@@ -44,6 +45,14 @@ export type KeyboardMove = 'reveal' | 'ride';
  * clearance a layer keeps above the keyboard.
  */
 export const FIELD_OFFSET = 10;
+
+/**
+ * Chrome on Android pans the page itself if the keyboard still covers the
+ * focused field about 100 to 170 ms after the report. A field a fraction of a
+ * pixel under the keyboard's top still counts as covered. So a show sets the
+ * field this far above that top at once, CSS px, and only the rest rides.
+ */
+export const FIELD_CLEARANCE_AT_REPORT = 4;
 
 // Targets that keep their own fields above the keyboard. A field inside one
 // moves nothing itself, so nothing moves twice.
@@ -346,9 +355,34 @@ function scrollBy(scroller: Element, distance: number, win: Window): void {
   }
 }
 
-// How far `field` sits outside the band it must be in. The band is inside its
-// scroller's box and the viewport, and `offset` above the keyboard while one
-// shows. A move not yet written shifts the field and its scroller by `shift`.
+// The band a field must be in. It is inside its scroller's box and the
+// viewport, and `offset` above the keyboard while one shows. A move not yet
+// written shifts the scroller by `shift`. Where the browser shrank the layout
+// viewport for the keyboard (`resized`), the keyboard's top is that viewport's
+// bottom.
+function bandOf(
+  scroller: Element,
+  height: number,
+  offset: number,
+  win: Window,
+  shift = 0,
+  resized = false,
+): {top: number; bottom: number} {
+  const doc = scroller.ownerDocument;
+  const keyboardTop = layoutViewportHeight(win) - height;
+  let top = 0;
+  let bottom =
+    height > KEYBOARD_EPSILON || resized ? keyboardTop - offset : keyboardTop;
+  if (scroller !== (doc.scrollingElement ?? doc.documentElement)) {
+    const box = scroller.getBoundingClientRect();
+    top = Math.max(top, box.top + shift);
+    bottom = Math.min(bottom, box.bottom + shift);
+  }
+  return {top, bottom};
+}
+
+// How far `field` sits outside its band (see bandOf). A move not yet written
+// shifts the field and its scroller by `shift`.
 function revealDistance(
   field: Element,
   scroller: Element,
@@ -356,23 +390,33 @@ function revealDistance(
   offset: number,
   win: Window,
   shift = 0,
+  resized = false,
 ): number {
-  const doc = field.ownerDocument;
-  const keyboardTop = layoutViewportHeight(win) - height;
-  let safeTop = 0;
-  let safeBottom =
-    height > KEYBOARD_EPSILON ? keyboardTop - offset : keyboardTop;
-  if (scroller !== (doc.scrollingElement ?? doc.documentElement)) {
-    const box = scroller.getBoundingClientRect();
-    safeTop = Math.max(safeTop, box.top + shift);
-    safeBottom = Math.min(safeBottom, box.bottom + shift);
-  }
+  const band = bandOf(scroller, height, offset, win, shift, resized);
   const box = field.getBoundingClientRect();
   return distanceIntoBand(
     box.top + shift,
     box.bottom + shift,
-    safeTop,
-    safeBottom,
+    band.top,
+    band.bottom,
+  );
+}
+
+// Whether `field` lies wholly in its band. A band too short for the field
+// holds none of it, as when a scroll area sits under the keyboard.
+function sitsInBand(
+  field: Element,
+  scroller: Element,
+  height: number,
+  offset: number,
+  win: Window,
+  resized = false,
+): boolean {
+  const band = bandOf(scroller, height, offset, win, 0, resized);
+  const box = field.getBoundingClientRect();
+  return (
+    box.top >= band.top - KEYBOARD_EPSILON &&
+    box.bottom <= band.bottom + KEYBOARD_EPSILON
   );
 }
 
@@ -385,8 +429,17 @@ function reveal(
   height: number,
   offset: number,
   win: Window,
+  resized = false,
 ): void {
-  const distance = revealDistance(field, scroller, height, offset, win);
+  const distance = revealDistance(
+    field,
+    scroller,
+    height,
+    offset,
+    win,
+    0,
+    resized,
+  );
   if (Math.abs(distance) > KEYBOARD_EPSILON) {
     scrollBy(scroller, distance, win);
   }
@@ -530,6 +583,12 @@ export function followKeyboard(
   };
 }
 
+// Who reveals a field its scroller cannot place. 'document': the document
+// does. 'fixed': the document does where its scroll moves a fixed container,
+// and otherwise the browser's own pan. 'keep': nobody, since the scroller
+// holds every field it reveals.
+type UnplacedField = 'document' | 'fixed' | 'keep';
+
 // Reveals the focused field `field()` returns through `scroller` when the
 // keyboard's height changes, now, and when focus moves into `region` with the
 // keyboard already up. Returns the call that stops it.
@@ -539,21 +598,70 @@ function revealWithKeyboard(
   scroller: Element,
   offset: number,
   win: Window,
+  unplaced: UnplacedField = 'keep',
+  resizedRoom: () => number = () => 0,
 ): () => void {
+  // Unless `unplaced` is 'keep', a field still out of its band is the
+  // browser's, so its pan stands.
+  const doc = scroller.ownerDocument;
+  const root = doc.scrollingElement ?? doc.documentElement;
+  let isPlaced = true;
   const revealNow = (height: number) => {
     const focused = field();
-    if (focused != null) {
-      reveal(focused, scroller, height, offset, win);
+    if (focused == null) {
+      return;
+    }
+    const resized = resizedRoom() > 0;
+    reveal(focused, scroller, height, offset, win, resized);
+    if (unplaced === 'keep') {
+      return;
+    }
+    isPlaced = sitsInBand(focused, scroller, height, offset, win, resized);
+    if (isPlaced || (height <= KEYBOARD_EPSILON && !resized)) {
+      return;
+    }
+    if (unplaced === 'document' && scroller !== root) {
+      reveal(focused, root, height, offset, win, resized);
+      isPlaced = sitsInBand(focused, root, height, offset, win, resized);
+    } else if (unplaced === 'fixed') {
+      // Safari runs no reveal of its own after Core took the focus. While its
+      // keyboard shows, it carries a document scroll out as a visual-viewport
+      // offset, which moves a fixed container too. Where the scroll moves
+      // nothing, Core scrolls the document back, and the browser's own pan
+      // stands.
+      const top = focused.getBoundingClientRect().top;
+      const scrollY = win.scrollY;
+      reveal(focused, root, height, offset, win, resized);
+      if (
+        Math.abs(focused.getBoundingClientRect().top - top) <= KEYBOARD_EPSILON
+      ) {
+        const scrolled = win.scrollY - scrollY;
+        if (scrolled !== 0) {
+          win.scrollBy({top: -scrolled, behavior: 'instant'});
+        }
+      } else {
+        isPlaced = sitsInBand(focused, root, height, offset, win, resized);
+      }
     }
   };
-  const pans = watchPans(win, focused => focused === field());
+  const pans = watchPans(win, focused => focused === field() && isPlaced);
   // A report within a pixel of the last height comes from a pan, a scroll or
-  // a zoom's rounding. The field stays where the person put it.
+  // a zoom's rounding. The field stays where the person put it. Under
+  // `interactive-widget=resizes-content` the height stays 0 and the layout
+  // viewport shrinks instead. The field then takes its place above the new
+  // bottom in the report's own frame, so the browser's own focus scroll finds
+  // it in view.
   let lastHeight = getKeyboardHeight(win);
+  let lastRoom = resizedRoom();
   const stopReports = subscribeKeyboardHeight(win, event => {
     if (event.type === 'viewport') {
-      if (Math.abs(event.height - lastHeight) > KEYBOARD_EPSILON) {
+      const room = resizedRoom();
+      if (
+        Math.abs(event.height - lastHeight) > KEYBOARD_EPSILON ||
+        Math.abs(room - lastRoom) > KEYBOARD_EPSILON
+      ) {
         lastHeight = event.height;
+        lastRoom = room;
         revealNow(event.height);
       }
       pans.report(event.height);
@@ -621,6 +729,27 @@ function fieldLift(
   }
   const need = coveredBy(restingBottom(field, animator), height, offset, win);
   return Math.min(need, overlap);
+}
+
+// The move that sets the focused field in `target` FIELD_CLEARANCE_AT_REPORT
+// px above a keyboard `height` px tall, or null with no field to clear.
+function clearanceAtReport(
+  target: HTMLElement,
+  animator: Animator,
+  height: number,
+  win: Window,
+): number | null {
+  const field = focusedFieldIn(target);
+  if (field == null) {
+    return null;
+  }
+  const need = coveredBy(
+    restingBottom(field, animator),
+    height,
+    FIELD_CLEARANCE_AT_REPORT,
+    win,
+  );
+  return need > 0 ? -need : null;
 }
 
 // The ride that moves each target. A new ride on the same target takes over,
@@ -707,6 +836,15 @@ function rideWithKeyboard(
       if (transition == null) {
         animator.set({y});
       } else {
+        // On a show, the field is set just above the keyboard's top at once,
+        // so Chrome's own pan finds it clear. Only the rest rides.
+        const atReport =
+          transition.kind === 'show'
+            ? clearanceAtReport(target, animator, height, win)
+            : null;
+        if (atReport != null && y < atReport && atReport < animator.get('y')) {
+          animator.set({y: atReport});
+        }
         rideKeyboard(animator, {y}, transition);
       }
     }
@@ -734,15 +872,18 @@ function rideWithKeyboard(
       place(next?.to ?? guide?.inset ?? getKeyboardHeight(win), next);
     });
   };
+  // Every viewport report feeds the pan watch, so a pan the browser still
+  // makes is put back. Without the guide, the report also places the target.
+  stopReports = subscribeKeyboardHeight(win, event => {
+    if (event.type === 'viewport') {
+      if (guide == null) {
+        placeOnNextFrame(null);
+      }
+      pans.report(event.height);
+    }
+  });
   if (guide != null) {
     stopGuide = guide.subscribe(placeOnNextFrame);
-  } else {
-    stopReports = subscribeKeyboardHeight(win, event => {
-      if (event.type === 'viewport') {
-        placeOnNextFrame(null);
-        pans.report(event.height);
-      }
-    });
   }
   // A field gaining focus with the keyboard up places the target. A blur to
   // nothing waits for the keyboard's own report or slide, so the target rides
@@ -772,45 +913,86 @@ export interface KeepFieldAboveKeyboardOptions {
   offset?: number;
 }
 
+// Whether `scroller` can bring `field` into its band. It must scroll the field
+// up to the scroller's own top, since a scroller does not gain the range it
+// lacks at its end yet. With the keyboard up, its box must also leave the
+// field room above the keyboard. A claim on a field it cannot bring up would
+// leave that field under the keyboard. The document is not checked: in
+// Safari, a document scroll reaches into the room the keyboard takes.
+function canBringUp(
+  field: Element,
+  scroller: Element,
+  offset: number,
+  win: Window,
+): boolean {
+  const doc = field.ownerDocument;
+  if (scroller === (doc.scrollingElement ?? doc.documentElement)) {
+    return true;
+  }
+  const range =
+    scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop;
+  const box = field.getBoundingClientRect();
+  if (
+    range <
+    box.top - scroller.getBoundingClientRect().top - KEYBOARD_EPSILON
+  ) {
+    return false;
+  }
+  const height = getKeyboardHeight(win);
+  if (height <= KEYBOARD_EPSILON) {
+    return true;
+  }
+  const band = bandOf(scroller, height, offset, win);
+  return band.bottom - band.top >= box.height - KEYBOARD_EPSILON;
+}
+
 // The placement of `field` when it gains focus. A docked container rides.
 // Page content, or a fixed container the app positions, reveals the field
-// through a scroller. Null keeps the browser's reveal: inside a keyboard
-// target, or with no such scroller.
+// through a scroller that can bring it up. Null keeps the browser's reveal:
+// inside a keyboard target, or with no such scroller.
 function placementOf(
   field: HTMLElement,
-): {ride: HTMLElement} | {reveal: Element} | null {
+  offset: number,
+  win: Window,
+): {ride: HTMLElement} | {reveal: Element; unplaced: UnplacedField} | null {
   if (isInsideKeyboardTarget(field)) {
     return null;
   }
   const container = fixedContainerOf(field);
   if (container === 'floating' || container === 'fills-viewport') {
-    return revealWithin(field, nearestFixedAncestor(field));
+    return revealWithin(field, nearestFixedAncestor(field), offset, win);
   }
   if (container == null) {
     // A page with nothing to scroll keeps the browser's own reveal: a claim
     // there would leave the field under the keyboard.
     const scroller = nearestScroller(field);
-    return scroller.scrollHeight > scroller.clientHeight
-      ? {reveal: scroller}
+    // In the page, the document reveals a field its scroll area cannot place.
+    return scroller.scrollHeight > scroller.clientHeight &&
+      canBringUp(field, scroller, offset, win)
+      ? {reveal: scroller, unplaced: 'document'}
       : null;
   }
   // A bar the app positions with its own `translate` does not ride: the ride
   // would replace that translate.
   const view = field.ownerDocument.defaultView;
   return view != null && hasOwnTranslate(container.docked, view)
-    ? revealWithin(field, container.docked)
+    ? revealWithin(field, container.docked, offset, win)
     : {ride: container.docked};
 }
 
 // A reveal by the scroller between `field` and the fixed `container` the app
-// positions, or null when no scroller sits between them.
+// positions, or null when no scroller there can bring the field up.
 function revealWithin(
   field: HTMLElement,
   container: HTMLElement | null,
-): {reveal: Element} | null {
+  offset: number,
+  win: Window,
+): {reveal: Element; unplaced: UnplacedField} | null {
   const scroller =
     container == null ? null : scrollingAncestor(field, container);
-  return scroller == null ? null : {reveal: scroller};
+  return scroller == null || !canBringUp(field, scroller, offset, win)
+    ? null
+    : {reveal: scroller, unplaced: 'fixed'};
 }
 
 /**
@@ -826,7 +1008,11 @@ function revealWithin(
  * container brings it up. A focus move or a tap into the field arrives without
  * the browser's reveal there, so the page never pans for it. Inside a keyboard
  * target, or in such a container with no scroller around the field, the path
- * does nothing and the browser's own reveal stays.
+ * does nothing and the browser's own reveal stays. So does a field that a
+ * scroll area cannot bring above the keyboard. Once the keyboard shows, the
+ * document reveals a field that its scroll area cannot place. It does so in the
+ * page, and in a fixed container where a document scroll moves the container.
+ * Elsewhere a field still covered keeps the browser's own pan.
  *
  * @example
  * ```
@@ -842,14 +1028,21 @@ export function keepFieldAboveKeyboard(
   if (!followsKeyboard(win)) {
     return () => {};
   }
+  // The module keeps the tallest root box per window, so a later shrink reads
+  // as room.
+  const resizedRoom = () => getResizedRoom(win);
   const stopClaim = refuseFocusReveal(doc, {
     claim: destination =>
-      destination === field && placementOf(field) != null ? field : null,
+      destination === field && placementOf(field, offset, win) != null
+        ? field
+        : null,
   });
   // A first tap moves focus from nothing, so no blur claims it.
   const stopTaps = claimTapFocus(field, {
     claim: () =>
-      doc.activeElement !== field && placementOf(field) != null ? field : null,
+      doc.activeElement !== field && placementOf(field, offset, win) != null
+        ? field
+        : null,
     deliver: deliverTap,
   });
   let stopSession: ((isFinal?: boolean) => void) | null = null;
@@ -861,7 +1054,7 @@ export function keepFieldAboveKeyboard(
     if (stopSession != null) {
       return;
     }
-    const placement = placementOf(field);
+    const placement = placementOf(field, offset, win);
     if (placement == null) {
       return;
     }
@@ -874,6 +1067,8 @@ export function keepFieldAboveKeyboard(
             placement.reveal,
             offset,
             win,
+            placement.unplaced,
+            resizedRoom,
           );
   };
   const onBlur = () => {

@@ -5,11 +5,12 @@
 /**
  * @file keyboardHeight.ts
  * @input The visual viewport, the window's input stream (focus, blur,
- *   resize, scroll and touch), and the layout viewport's height
+ *   resize, scroll and touch), the layout viewport's height and the root's
+ *   box
  * @output The on-screen keyboard module: measureKeyboardHeight,
  *   isKeyboardMeasurable, subscribeKeyboardHeight, getKeyboardHeight,
- *   isTextEntryControl, findTextEntryControl, refuseFocusReveal and
- *   watchRevealPan
+ *   getResizedRoom, isTextEntryControl, findTextEntryControl,
+ *   refuseFocusReveal and watchRevealPan
  * @position Core's one source for the on-screen keyboard. It is internal to
  *   core and never exported from the package.
  *
@@ -48,7 +49,8 @@ const NON_TEXT_INPUT_TYPES = new Set([
  * shrinks for a keyboard, so it reads 0. Where the app sets
  * `interactive-widget=resizes-content`, Chrome shrinks the layout viewport
  * with the keyboard. The height is then 0 too, and nothing rides, because the
- * browser has made the room itself.
+ * browser has made the room itself. A focused field still keeps its clearance
+ * above the layout viewport's new bottom (getResizedRoom).
  */
 export function isKeyboardMeasurable(win: Window): boolean {
   return win.visualViewport != null && win.self === win.top;
@@ -90,6 +92,15 @@ export type KeyboardHeightEvent =
 
 interface KeyboardStore {
   height: number;
+  /** The room the browser made by shrinking the root's box (getResizedRoom). */
+  room: number;
+  /** The root's box width that `rootTallest` belongs to. */
+  rootWidth: number;
+  /**
+   * The tallest the root's box has been at `rootWidth`. The store keeps it
+   * across subscriptions.
+   */
+  rootTallest: number;
   listeners: Set<(event: KeyboardHeightEvent) => void>;
   /** The subscribers that asked for focus moves too (the layout guide). */
   focusListeners: Set<(event: KeyboardHeightEvent) => void>;
@@ -104,6 +115,9 @@ function storeOf(win: Window): KeyboardStore {
   if (store == null) {
     store = {
       height: 0,
+      room: 0,
+      rootWidth: Number.NaN,
+      rootTallest: 0,
       listeners: new Set(),
       focusListeners: new Set(),
       detach: null,
@@ -114,11 +128,46 @@ function storeOf(win: Window): KeyboardStore {
   return store;
 }
 
+// The root's box. Chrome on Android keeps it at the viewport with its toolbar
+// shown, and `interactive-widget=resizes-content` shrinks it with the
+// keyboard. So the toolbar's moves change `innerHeight`, but not this room.
+function measureResizedRoom(
+  win: Window,
+  store: KeyboardStore,
+  keyboardHeight: number,
+): number {
+  if (!isKeyboardMeasurable(win)) {
+    return 0;
+  }
+  const root = win.document.documentElement;
+  const height = root.clientHeight;
+  // A root with no box yet, as before layout, makes no room.
+  if (!(height > 0)) {
+    return 0;
+  }
+  const width = root.clientWidth;
+  if (width !== store.rootWidth || height > store.rootTallest) {
+    store.rootWidth = width;
+    store.rootTallest = height;
+    return 0;
+  }
+  if (keyboardHeight > KEYBOARD_EPSILON) {
+    return 0;
+  }
+  const room = store.rootTallest - height;
+  return room > KEYBOARD_EPSILON ? room : 0;
+}
+
+function measure(win: Window, store: KeyboardStore) {
+  store.height = measureKeyboardHeight(win);
+  store.room = measureResizedRoom(win, store, store.height);
+}
+
 function attach(win: Window, store: KeyboardStore): () => void {
   const viewport = win.visualViewport;
-  store.height = measureKeyboardHeight(win);
+  measure(win, store);
   const onViewport = (event: Event) => {
-    store.height = measureKeyboardHeight(win);
+    measure(win, store);
     const report: KeyboardHeightEvent = {
       type: 'viewport',
       height: store.height,
@@ -212,6 +261,31 @@ export function subscribeKeyboardHeight(
       store.detach = null;
     }
   };
+}
+
+/**
+ * The room the browser makes for the keyboard by shrinking the layout
+ * viewport, CSS px. Chrome on Android does so under
+ * `interactive-widget=resizes-content`, where the keyboard height reads 0.
+ * It is how far the root's box is short of the tallest it has been at its
+ * width. The toolbar's moves leave the root's box as it is. The room is 0
+ * while the visual viewport measures a keyboard, and a width change, such as
+ * a rotation, starts over. While the module listens, it is the room measured
+ * at the last report, so every reader shares that one layout read. The module
+ * keeps the tallest box across subscriptions. A window that gets its first
+ * reader while such a keyboard is up reads 0 until that keyboard goes.
+ *
+ * @example
+ * ```
+ * const isKeyboardUp =
+ *   getKeyboardHeight(window) > 0 || getResizedRoom(window) > 0;
+ * ```
+ */
+export function getResizedRoom(win: Window): number {
+  const store = storeOf(win);
+  return store.detach != null
+    ? store.room
+    : measureResizedRoom(win, store, measureKeyboardHeight(win));
 }
 
 /**

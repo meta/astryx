@@ -27,7 +27,9 @@ that times motion with it. Everything here is internal to
   so it reads 0; inside an iframe the height is 0. Where the app sets
   `interactive-widget=resizes-content`, Chrome shrinks the layout viewport
   with the keyboard, so the height is 0 there too and nothing rides: the
-  browser has made the inset (FR8).
+  browser has made the inset (FR8). `getResizedRoom(window)` reads that room,
+  measured once per report, so a focused field still sits 10 px clear of the
+  layout viewport's new bottom, revealed by its nearest scroller.
 - **One set of listeners (FR1, INV11):** `subscribeKeyboardHeight(window, fn)`
   delivers every report (the visual viewport's resize and scroll, the window's
   resize, and with `{focus: true}` focus moves, whose input-stream
@@ -86,21 +88,30 @@ that times motion with it. Everything here is internal to
   document included, brings it into view on both edges (`distanceIntoBand`,
   shared with the Tall sheet's reveal), `FIELD_OFFSET` (10 px) above the
   keyboard while one shows. Nothing else moves. A scroller does not gain the
-  missing scroll range at its end yet (`spec:AST-099` Gap 11), so a field it
-  cannot scroll far enough stays partly covered, and an element with nothing to
-  scroll yet, the document included, does not count as a scroller: the browser's
-  own reveal stays there. In a fixed container the app positions (one that
+  missing scroll range at its end yet (`spec:AST-099` Gap 11). Until it does,
+  a page with nothing to scroll keeps the browser's own reveal. So does a field
+  that a scroll area cannot scroll up to the area's own top, or, with the
+  keyboard up, one whose area leaves it no room above the keyboard. Once the
+  keyboard shows, the document reveals a field that its area cannot place, in
+  the page or, where a document scroll moves a fixed container (as in Safari
+  while its keyboard shows), in that container. Elsewhere a field still covered
+  keeps the browser's own pan. The document is not checked
+  that way: in Safari, a document scroll reaches into the room the keyboard
+  takes. In a fixed container the app positions (one that
   fills the viewport, floats above the bottom edge, or sets its own `translate`,
   which the ride would replace), a scroller between the field and the container
   reveals the field. Inside a keyboard target, or in such a container with no
   scroller around the field, the path does nothing and the browser's own reveal
-  stays. A
-  ride places its target on the frame after each report, slide or focus move,
-  once every listener of that event has run, and measures what the keyboard
-  still covers after any move the app makes itself: a bar the app already moves
-  with the keyboard is not moved, one the app lifts part of the way moves the
-  rest, and one the app is moving itself at that moment (a running CSS
-  transition or animation on its position) is left to the app; a script
+  stays. A ride places its target on the frame after each report, slide or focus
+  move, once every listener of that event has run. On the guide's show, a ride
+  first sets the focused field `FIELD_CLEARANCE_AT_REPORT` (4 px) above the
+  keyboard's top at once, so Chrome's own pan finds it clear, and only the rest
+  rides (`spec:AST-099` DEC-6). Every viewport report feeds the reveal-pan
+  watch, so a pan the browser still makes is put back. The ride measures what
+  the keyboard still covers after any move the app makes itself: a bar the app
+  already moves with the keyboard is not moved, one the app lifts part of the
+  way moves the rest, and one the app is moving itself at that moment (a running
+  CSS transition or animation on its position) is left to the app; a script
   animation is not seen, so an app that moves its bar from script keeps it clear
   with its own `translate`. The ride writes the CSS `translate`, which adds to
   an app's `transform`, writes nothing on an element it never moved, and on an

@@ -37,6 +37,7 @@ import {
   isTextEntryControl,
   refuseFocusReveal,
   subscribeKeyboardHeight,
+  getResizedRoom,
   watchRevealPan,
 } from './keyboardHeight';
 import {
@@ -49,6 +50,7 @@ import type {KeyboardTransition} from './keyboardModel';
 import {
   FIELD_OFFSET,
   drawnOffsetOf,
+  FIELD_CLEARANCE_AT_REPORT,
   followKeyboard,
   keepFieldAboveKeyboard,
   registerKeyboardTarget,
@@ -56,13 +58,6 @@ import {
 } from './keyboardTarget';
 import {distanceIntoBand} from './revealBand';
 import {rideKeyboard} from './rideKeyboard';
-
-// Chrome on Android pans the page itself if the keyboard still covers the
-// focused field about 100 to 170 ms after the report. A field a fraction of a
-// pixel under the keyboard's top still counts as covered. So the reveal sets
-// the field 4 px above that top in the report's own commit, and only the rest
-// rides.
-const FIELD_CLEARANCE_AT_REPORT = 4;
 
 /** How a target keeps a focused field above the on-screen keyboard. */
 export interface MobileKeyboardOptions {
@@ -247,6 +242,10 @@ export function useMobileKeyboard(
       }
       // A field inside the sheet moves nothing itself.
       const unregister = registerKeyboardTarget(sheet);
+      // The module keeps the tallest root box per window, so a later shrink
+      // reads as room. Only a coarse primary pointer reads it: a desktop
+      // window made shorter is no keyboard.
+      const resizedRoom = () => (isTouch ? getResizedRoom(window) : 0);
 
       let keyboardGeometry: KeyboardGeometry | null = null;
       // Where a smooth reveal under way is taking the body's scrollTop.
@@ -421,9 +420,13 @@ export function useMobileKeyboard(
         const measuredControlRect = control.getBoundingClientRect();
         const obstructionTop = getObstructionTop();
         // Under a pixel of overhang is `innerHeight`'s precision, not a
-        // keyboard: no suggestion clearance then (overlapOf).
+        // keyboard: no suggestion clearance then (overlapOf). Where the
+        // browser shrank the layout viewport for the keyboard, nothing
+        // overlaps, and the field keeps a field's clearance above the new
+        // bottom.
         const overlap = overlapOf(measuredBodyRect.bottom, obstructionTop);
-        const clearance = overlap > 0 ? offset : 0;
+        const clearance =
+          overlap > 0 ? offset : resizedRoom() > 0 ? FIELD_OFFSET : 0;
         const safeTop = measuredBodyRect.top;
         const safeBottom = Math.min(
           measuredBodyRect.bottom,
@@ -941,6 +944,7 @@ export function useMobileKeyboard(
       // the full-viewport dialog's top into view. On every later report, the field
       // lands at once.
       let lastHeight = getKeyboardHeight(window);
+      let lastRoom = resizedRoom();
       // Under a coarse primary pointer only: the watch reads touches, and an
       // on-screen keyboard's pan comes with a touch screen.
       const revealPan = isTouch
@@ -965,6 +969,17 @@ export function useMobileKeyboard(
           revealPan?.report();
           cancelAnimationFrame(animationFrame);
           revealFocusedControl(true);
+          return;
+        }
+        // Under `interactive-widget=resizes-content` the height stays 0 and
+        // the layout viewport shrinks. The field takes its place above the new
+        // bottom in the report's own frame, so the browser's own focus scroll
+        // finds it in view.
+        const room = resizedRoom();
+        if (Math.abs(room - lastRoom) > KEYBOARD_EPSILON) {
+          lastRoom = room;
+          cancelAnimationFrame(animationFrame);
+          revealFocusedControl();
           return;
         }
         if (revealPan?.isRevealPan(event.height) === true) {
