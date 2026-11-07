@@ -113,6 +113,55 @@ describe('TopNavMegaMenu — default mode', () => {
     expect(screen.getByRole('button', {name: 'Products'})).toBeInTheDocument();
   });
 
+  it('anchors the panel to the trigger itself when no ancestor <nav> exists (#4905)', () => {
+    // Every test in this file (matching real-world usage like an isolated
+    // docs/storybook preview) renders TopNavMegaMenu without a <nav>
+    // ancestor. Without the fallback, popover.triggerRef is never called at
+    // all in that case, so no anchor-name is ever set anywhere and the panel
+    // falls back to the viewport's top-left corner instead of the trigger.
+    render(
+      <TopNavMegaMenu
+        label="Products"
+        items={<TopNavMegaMenuItem title="Analytics" href="/analytics" />}
+      />,
+    );
+    const trigger = screen.getByRole('button', {name: 'Products'});
+    const panel = document.querySelector('[popover]') as HTMLElement;
+    expect(panel).not.toBeNull();
+    const anchorId = panel.style.positionAnchor;
+    expect(anchorId).not.toBe('');
+    expect(trigger.style.anchorName.split(',').map(s => s.trim())).toContain(
+      anchorId,
+    );
+  });
+
+  it('anchors the panel to the ancestor <nav>, not the trigger, when one exists', () => {
+    // The primary, real-usage case (TopNavMegaMenu rendered inside a TopNav's
+    // <nav>): the panel must stay anchored to the full nav bar so it renders
+    // full-width, not narrowed to just the trigger item's own width.
+    render(
+      <nav>
+        <TopNavMegaMenu
+          label="Products"
+          items={<TopNavMegaMenuItem title="Analytics" href="/analytics" />}
+        />
+      </nav>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Products'});
+    const nav = screen.getByRole('navigation');
+    const panel = document.querySelector('[popover]') as HTMLElement;
+    const anchorId = panel.style.positionAnchor;
+    expect(anchorId).not.toBe('');
+    expect(nav.style.anchorName.split(',').map(s => s.trim())).toContain(
+      anchorId,
+    );
+    // The trigger itself must NOT also carry this anchor-name — it's the
+    // nav's, not the trigger's.
+    expect(
+      trigger.style.anchorName.split(',').map(s => s.trim()),
+    ).not.toContain(anchorId);
+  });
+
   it('renders with featured content', () => {
     render(
       <TopNavMegaMenu
