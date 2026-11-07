@@ -2369,8 +2369,10 @@ component TableHeader(props: TableHeaderProps)
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component TableHeaderCell(props: TableHeaderCellProps)
   prop children?: ReactNode
+  prop colSpan?: number
   prop contextMenuActions?: TableContextActions
   prop ref?: React.Ref<HTMLTableCellElement>
+  prop rowSpan?: number
   prop scope?: 'col' | 'row' | 'colgroup' | 'rowgroup'
   prop xstyle?: StyleXStyles | StyleXStyles[]
   inherits AriaAttributes, DOMAttributes, HTMLAttributes

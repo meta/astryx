@@ -16,6 +16,7 @@ import {BaseTable} from './BaseTable';
 import {Table} from './Table';
 import {TableRow} from './TableRow';
 import {TableCell} from './TableCell';
+import {TableHeaderCell} from './TableHeaderCell';
 import {TableHeader} from './TableHeader';
 import {TableBody} from './TableBody';
 import {TableFooter} from './TableFooter';
@@ -1567,6 +1568,39 @@ describe('TableCell', () => {
       </table>,
     );
     expect(screen.getByTestId('rowspan-cell')).toHaveAttribute('rowspan', '2');
+  });
+
+  it('forwards colSpan on a header cell', () => {
+    render(
+      <table>
+        <thead>
+          <tr>
+            <TableHeaderCell colSpan={3} scope="colgroup" data-testid="span-th">
+              Group
+            </TableHeaderCell>
+          </tr>
+        </thead>
+      </table>,
+    );
+    expect(screen.getByTestId('span-th')).toHaveAttribute('colspan', '3');
+  });
+
+  it('forwards rowSpan on a header cell', () => {
+    render(
+      <table>
+        <tbody>
+          <tr>
+            <TableHeaderCell
+              rowSpan={2}
+              scope="rowgroup"
+              data-testid="rowspan-th">
+              Group
+            </TableHeaderCell>
+          </tr>
+        </tbody>
+      </table>,
+    );
+    expect(screen.getByTestId('rowspan-th')).toHaveAttribute('rowspan', '2');
   });
 });
 
