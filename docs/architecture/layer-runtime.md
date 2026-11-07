@@ -205,39 +205,42 @@ would change a parent's last child.
 Content taller than the placement axis can hold on either side is capped to the
 viewport minus both gutters and shifted into the viewport by the browser; its
 margin box stays inside the viewport, so it keeps its anchor clearance from the
-edge it meets. A layer that keeps its anchor clear (Tooltip) carries a second
-list beside the first: when it finds the first list settled the box over the
-anchor or, while the anchor is in view, past the viewport on the block axis
-(Chromium shifts a box that fits no option over the anchor; WebKit leaves it on
-its preferred side, partly off-screen), it switches to beside the anchor on the
-inline end, then the inline start, at the content's inline size, then the
-opposite block side at its own size, and only then the preferred block side and
-the other, each only while it is the roomier side and sized to the room there;
-it keeps that list until it next opens, and scrolls only while its content
-overflows. Content that fits on some side keeps its own size there, and no
-option is sized to whatever room is left: a browser keeps an open layer on the
-option it last used while that
-option still fits, so an anchor that moves takes the layer to the side now
-roomier instead of shrinking it. A browser also keeps a laid-out layer on its
-last option when its list changes, so when a switch does not take effect at
-once the runtime takes the layer out of rendering for one forced layout in the
-same task (no frame paints, the popover stays open, no toggle event fires), and
-the engine places it afresh from the new list; a later read that finds it
-failing again does the same, since no engine re-runs the list when a scroll
-carries the anchor. Leaving rendering cancels the CSS animations and
-transitions of the layer and its content: the browser recreates the animations
-at their start and the transitions not at all. `Layer/preserveAnimations.ts`
-reads every accessor with a setter on each animation's and effect's prototype
-chains, the effect's timing and keyframes, and the play and replace state,
-before the reset, and writes back whatever differs on the recreated animation;
-it resumes each transition with a script animation in the same state and
-finishes a recreated animation that had no predecessor. Script animations are
-untouched. The Animation and effect objects of CSS animations and transitions
-are new (their listeners and promises stay with the old ones, and the browser
-fires their cancel and start events), and a finished animation's start time is
-counted again from now while its held end time is kept.
-Chromium tries no more than five
-options, so the second list replaces the first rather than extending it.
+edge it meets. A layer that keeps its anchor clear (Tooltip) carries
+one combined list from its first frame, in place of the standard list
+(`spec:AST-059` DEC-7): the preferred block side at its own size, then the
+opposite block side at its own size, then beside the anchor on the inline end,
+then on the inline start, at the content's inline size, and only then the
+preferred block side and the other, each only while it is the roomier side and
+sized to the room there. Every option aligns `unsafe` toward the anchor on the
+placement axis, so a box that runs out of room overflows away from the anchor
+and no option lets it overlap the anchor. Content that fits on some side keeps
+its own size there, and no option is sized to whatever room is left: a browser
+keeps an open layer on the option it last used while that option still fits,
+so an anchor that moves takes the layer to the side now roomier instead of
+shrinking it. Its `overflow-y` is `auto`, with no overscroll containment, so it scrolls
+only while its content overflows and a fitting layer has no scroll range;
+no read decides it. Chromium
+tries no more than five options, so this list replaces the standard list
+rather than extending it.
+During a scroll, Chromium does not choose a CSS-anchored layer's option again,
+on a page or inside a scrolling panel, so the runtime checks the layer once a
+scroll stops (`spec:AST-059` DEC-8). Where the box still covers the anchor or,
+while the anchor is in view, leaves the viewport on the block axis, the runtime
+takes the layer out of rendering for one forced layout in the same task (no
+frame paints, the popover stays open, no toggle event fires), and the engine
+places it afresh from its list. Leaving rendering cancels the CSS animations
+and transitions of the layer and its content: the browser recreates the
+animations at their start and the transitions not at all.
+`Layer/preserveAnimations.ts` reads every accessor with a setter on each
+animation's and effect's prototype chains, the effect's timing and keyframes,
+and the play and replace state, before the reset, and writes back whatever
+differs on the recreated animation; it resumes each transition with a script
+animation in the same state and finishes a recreated animation that had no
+predecessor. Script animations are untouched. The Animation and effect objects
+of CSS animations and transitions are new (their listeners and promises stay
+with the old ones, and the browser fires their cancel and start events), and a
+finished animation's start time is counted again from now while its held end
+time is kept.
 Once the anchor has left the viewport the runtime pins the layer's
 self-alignment `unsafe` toward the anchor, so the layer holds the position its
 flips give it and holds its size rather than sliding to the edge. Components
@@ -251,25 +254,23 @@ observed while the layer is open, so a layer opened with its anchor already out
 of view holds from its first frame. Whether a layer that keeps its anchor clear
 covers its anchor or leaves the viewport, judged from its box without its own
 transform (so an entry animation that starts it closer to the anchor does not
-count), and whether its content overflows, is read inside `show()` and the
-open-remount path right after the popover is shown,
-and again while it is open from ResizeObserver callbacks and resize events, all
-of which run before the frame paints; the observers move to the replacement when
-the caller replaces the anchor element while the layer stays open. An anchor
-that moves on screen without resizing, in layout or by a scroll, is reported
-only by an intersection observer on the anchor, whose root is the viewport
-shrunk to the anchor's rectangle and which re-reads and re-arms on each report
-that differs from its threshold, a fresh observer's first report included, so
-an anchor that keeps moving, as through a smooth scroll, is followed frame by
-frame. A report that finds an anchor which has not moved wholly outside that
-rectangle means a scrolled container clips it; re-arming then would report the
-same every frame, so a second intersection observer, rooted at the viewport
-with a threshold of 0, waits for the anchor to come back into view and then
-re-reads and re-arms. No timer runs.
-It reports after paint, so on that one path at most one painted frame shows
-the layer over its anchor before it is corrected. Scroll events are not read: one fires before
-the layer has followed its anchor. Apart from that, a layer never paints at a
-geometry it is about to correct.
+count), is read inside `show()` and the
+open-remount path right after the popover is shown, and again while it is open
+from ResizeObserver callbacks and resize events, all of which run before the
+frame paints; the observers move to the replacement when the caller replaces
+the anchor element while the layer stays open. The one read after a scroll
+runs once each time a scroll of the page or of a scrolling ancestor of the
+anchor stops: at `scrollend`, or, where the browser does not fire it, after
+150 ms with no `scroll` event on those. It runs in the first frame painted
+after the stop: the next frame paints, a task runs after that paint, and the
+frame after reads and applies. The scroll listeners subscribe to the window's input stream, and listen on
+each shadow root along the anchor's flat-tree path, because `scroll` and
+`scrollend` are not composed. A `scroll` only cancels a pending check or
+starts the timer, and no handler reads layout. Chromium fires `scrollend` per wheel step, so a long
+wheel scroll is checked more than once, never during the scroll itself. Nothing watches an anchor that moves on screen without
+resizing: every option keeps the layer clear of its anchor, so the layer never
+changes side in the middle of a scroll. Apart from the read after a scroll stops, a layer never
+paints at a geometry it is about to correct.
 
 ### Current browser support behavior
 
@@ -553,12 +554,18 @@ layers use Layer rendering without joining Escape/platform dismissal.
   viewport geometry is measured after paint and then applied, with two
   exceptions. The runtime observes anchor visibility for every layer, and,
   for a layer that keeps its anchor clear, whether it covers its anchor or
-  leaves the viewport and whether its content overflows; each is read before
+  leaves the viewport; each is read before
   first paint and, while the layer is open, from callbacks that run before the
-  frame paints. The first is a same-size anchor that moves on screen, in
-  layout or by a scroll, which only an intersection observer reports, after
-  paint: at most one painted frame shows the layer over its anchor before the
-  correction. The second is the software keyboard's cap (`spec:AST-059` FR10).
+  frame paints. The first exception is the check after a scroll stops
+  (`spec:AST-059` DEC-8): once a scroll of the page or of a scrolling ancestor
+  of the anchor stops (`scrollend`, or 150 ms with no `scroll` event where
+  `scrollend` is missing), the layer is checked once, in the first frame
+  painted after the stop, and placed afresh if it fails. No scroll frame and no
+  scroll handler checks the box, re-picks or forces layout for a layer, and no
+  option of the layer's list overlaps its anchor, so a frame painted during
+  the scroll can show the layer past the viewport edge but never over its
+  anchor. The
+  second exception is the software keyboard's cap (`spec:AST-059` FR10).
   A box's height cannot change on the compositor, so the cap changes once per
   keyboard movement: when a rising keyboard has arrived, at once as a falling
   keyboard starts down, and at once for a keyboard that changes without
@@ -568,9 +575,7 @@ layers use Layer rendering without joining Escape/platform dismissal.
   that opens with a keyboard up, when the keyboard moves, and before the first
   paint of a layer element the runtime swaps in while the layer is open.
   Otherwise a layer never paints at a geometry it is about to
-  correct, and the runtime polls nothing: an anchor that a scrolled
-  container hides is followed again when an intersection observer reports it
-  back in view.
+  correct, and the runtime polls nothing.
 - **INV13 — One exit copy per closing layer.** A layer's close plays on at most
   one exit copy, made by `placeLayerExitCopy`: drawn where the layer was drawn,
   inert, hidden from assistive technology, without ids, form names, or form
@@ -793,7 +798,8 @@ change the hosting runtime described here.
 
 `spec:AST-059` governs the viewport inset projected above: the gutter, the
 caps, the fallback order and its anchor-visibility condition, and the
-app-declared inset.
+app-declared inset. Its DEC-7 and DEC-8 govern the anchor-clear list and the
+one check after a scroll stops.
 
 `spec:AST-003` is accepted but unimplemented. It defines the approved next
 runtime and must move to `shipped` before its requirements are incorporated into
@@ -801,22 +807,22 @@ this current architecture record.
 
 ## Verification
 
-| Invariant    | Evidence                                                                                                                                                                                                                                                                                      | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                               |
-| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| INV1, INV2   | `useLayer.test.tsx` and `layerHost.test.ts`                                                                                                                                                                                                                                                   | Invalid DOM, stale host, lost theme/writing context, or portal mistaken for top-layer promotion                                                                                                                                                                                                                                                                                                                              |
-| INV3–INV5    | `useLayer.test.tsx` and `anchorName.test.ts`                                                                                                                                                                                                                                                  | A mode leaks geometry, RTL resolves from the wrong context, fallback clips, or a sibling anchor is lost                                                                                                                                                                                                                                                                                                                      |
-| INV11        | `layerViewportInset.test.ts`, `useLayer.test.tsx`, and the `Core/Layer` viewport-inset stories under the story play guard at a desktop and a phone viewport; `BaseTypeahead.incremental.test.tsx` and the Typeahead incremental-results stories for the `spec:AST-092` FR6 exception          | A second gutter definition, a `100%`-of-span cap, a layer narrower than its explicit size, a layer box wider than the viewport, a layer inside the gutter, or a layer that slides toward an off-screen anchor; for an open Typeahead popup, a later list for the same query that flips it to the other side or grows it past the room on its side, or a first list for a query that is capped to the span beside the trigger |
-| INV12        | The `Core/Layer` viewport-inset stories' first-frame comparison, and `useLayer.test.tsx`'s synchronous anchor read                                                                                                                                                                            | A layer whose first painted rectangle differs from its settled one                                                                                                                                                                                                                                                                                                                                                           |
-| INV11, INV12 | The software keyboard's cap: `useLayerKeyboardClearance.test.tsx` for its rule, its timing, its read before first paint, and the inset's hold; the `PopoverKeyboard`, `keyboardCappedLists` and `SelectorKeyboardInset` browser specs for its rendered geometry                               | A layer that runs under the keyboard, or is capped though the keyboard does not reach it; a cap that changes more than once per keyboard movement or under a press; a layer opened with the keyboard up whose first frame is uncapped or paints its content past its box; a layer that reads the inset and moves down when the keyboard report ends                                                                          |
-| INV13        | `layerExitCopy.test.ts` and `layerExitCopy.interaction.browser.spec.ts`                                                                                                                                                                                                                       | A copy with an id, a form name, a form owner, or pointer reach; a copy off the layer's drawn box; a copy outside the top layer; a second copy for one layer                                                                                                                                                                                                                                                                  |
-| INV6, INV7   | `useLayer.test.tsx`, `Popover.test.tsx`, `DropdownMenu.test.tsx`, and `useMenuHover.test.tsx`                                                                                                                                                                                                 | Duplicate close callback or the same press/re-hover reopens a surface                                                                                                                                                                                                                                                                                                                                                        |
-| INV8         | `useLayerDismissal.test.tsx`, `layerDismissalInvariants.test.tsx`, and `useFocusTrap.test.tsx`                                                                                                                                                                                                | Current top registered layer is skipped, two layers close, or a blocker leaks through                                                                                                                                                                                                                                                                                                                                        |
-| INV9         | Representative Dialog, ContextMenu, Tooltip/HoverCard, and BottomSheet source/tests; `useBackdropPress.test.tsx`; `outsidePress.test.ts`                                                                                                                                                      | A current local channel silently changes ownership or policy                                                                                                                                                                                                                                                                                                                                                                 |
-| INV10        | `LayerProvider.tsx`, `toastHost.tsx`, `LayerProvider.test.tsx`, `toastHost.test.tsx`, `toastHost.lateRegistration.test.tsx`, `useToast.tsx`, `ToastViewport.test.tsx`, `ToastViewport.modalHost.test.tsx`, and `scripts/layer-toast-bundle.test.mjs`                                          | Provider begins relocating ordinary layers, Toast fallback loses its current lifecycle, a default provider renders differently from no provider, a Layer import loads a Toast module, or a toast added before Toast loads is lost                                                                                                                                                                                            |
-| INV14, INV15 | Source boundary check over Core for top-layer hosts, exit copies, backdrop elements, lift, and rectangle-morph code outside the runtime and the lift module                                                                                                                                   | A component building its own copy of a mechanism INV14 lists (top-layer mounting, close-request delivery, hold, exit copy, or backdrop element), or re-implementing the lift or the grow                                                                                                                                                                                                                                     |
-| INV17        | One runtime suite over every kind of layer root: a `useLayer` layer, inline and portaled, and the Dialog, Drawer, Lightbox, MobileNav, BottomSheetPanel, and ToastViewport content roots, each inside a plain `onClick` wrapper and a Core clickable container; nested layers                 | A click inside a layer root that reaches an ancestor bubble-phase handler, a caller's wrapper included; an outer layer's handler that receives an inner layer's press; or a document listener or light dismiss that no longer receives it                                                                                                                                                                                    |
-| INV18        | `useLayer.test.tsx` (a closed trigger has no anchor-name, and the trigger of a shown or fading layer does) and `TooltipClosedTriggerAnchor.interaction.browser.spec.ts` in Chromium and WebKit                                                                                                | A closed trigger with an anchor-name, a shown or fading layer placed away from its anchor, or a surface around a closed trigger that stops while the main thread is busy                                                                                                                                                                                                                                                     |
-| INV18        | `useLayer.test.tsx`: a closed state that declares a discrete `display` transition or a keyframe animation keeps the trigger's anchor name until those animations end, read from the closed state's style; a layer whose closed state declares neither is not read for animations at the close | A layer with such a closed-state exit placed away from its anchor while it fades, or an animation read on the close of a layer whose closed state declares no exit                                                                                                                                                                                                                                                           |
+| Invariant    | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| INV1, INV2   | `useLayer.test.tsx` and `layerHost.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Invalid DOM, stale host, lost theme/writing context, or portal mistaken for top-layer promotion                                                                                                                                                                                                                                                                                                                              |
+| INV3–INV5    | `useLayer.test.tsx` and `anchorName.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | A mode leaks geometry, RTL resolves from the wrong context, fallback clips, or a sibling anchor is lost                                                                                                                                                                                                                                                                                                                      |
+| INV11        | `layerViewportInset.test.ts`, `useLayer.test.tsx`, and the `Core/Layer` viewport-inset stories under the story play guard at a desktop and a phone viewport; `BaseTypeahead.incremental.test.tsx` and the Typeahead incremental-results stories for the `spec:AST-092` FR6 exception                                                                                                                                                                                                                                                                                                                      | A second gutter definition, a `100%`-of-span cap, a layer narrower than its explicit size, a layer box wider than the viewport, a layer inside the gutter, or a layer that slides toward an off-screen anchor; for an open Typeahead popup, a later list for the same query that flips it to the other side or grows it past the room on its side, or a first list for a query that is capped to the span beside the trigger |
+| INV12        | The `Core/Layer` viewport-inset stories' first-frame comparison, and `useLayer.test.tsx`'s synchronous anchor read; for the check after a scroll stops, `useLayer.test.tsx`'s `scrollend` and 150 ms fallback cases (one check, in the first painted frame after the stop, with no read in the scroll handler) and the Tooltip suites' scroll-edge cases; a Chromium trace at 4× CPU of a wheel scroll that carries a Tooltip's trigger to the scroll edge counts the forced layouts per scroll before and after DEC-8: page scroll 27–42 → 5, a scrolling panel 7 → 5, the Slider value bubble 12–22 → 5 | A layer whose first painted rectangle differs from its settled one; a box check, a re-pick or a forced layout for a layer in a scroll frame or a scroll handler; a re-pick before the first painted frame after a scroll stops, or more than one per stop; a painted frame that shows a layer that keeps its anchor clear over its anchor                                                                                    |
+| INV11, INV12 | The software keyboard's cap: `useLayerKeyboardClearance.test.tsx` for its rule, its timing, its read before first paint, and the inset's hold; the `PopoverKeyboard`, `keyboardCappedLists` and `SelectorKeyboardInset` browser specs for its rendered geometry                                                                                                                                                                                                                                                                                                                                           | A layer that runs under the keyboard, or is capped though the keyboard does not reach it; a cap that changes more than once per keyboard movement or under a press; a layer opened with the keyboard up whose first frame is uncapped or paints its content past its box; a layer that reads the inset and moves down when the keyboard report ends                                                                          |
+| INV13        | `layerExitCopy.test.ts` and `layerExitCopy.interaction.browser.spec.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | A copy with an id, a form name, a form owner, or pointer reach; a copy off the layer's drawn box; a copy outside the top layer; a second copy for one layer                                                                                                                                                                                                                                                                  |
+| INV6, INV7   | `useLayer.test.tsx`, `Popover.test.tsx`, `DropdownMenu.test.tsx`, and `useMenuHover.test.tsx`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Duplicate close callback or the same press/re-hover reopens a surface                                                                                                                                                                                                                                                                                                                                                        |
+| INV8         | `useLayerDismissal.test.tsx`, `layerDismissalInvariants.test.tsx`, and `useFocusTrap.test.tsx`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Current top registered layer is skipped, two layers close, or a blocker leaks through                                                                                                                                                                                                                                                                                                                                        |
+| INV9         | Representative Dialog, ContextMenu, Tooltip/HoverCard, and BottomSheet source/tests; `useBackdropPress.test.tsx`; `outsidePress.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | A current local channel silently changes ownership or policy                                                                                                                                                                                                                                                                                                                                                                 |
+| INV10        | `LayerProvider.tsx`, `toastHost.tsx`, `LayerProvider.test.tsx`, `toastHost.test.tsx`, `toastHost.lateRegistration.test.tsx`, `useToast.tsx`, `ToastViewport.test.tsx`, `ToastViewport.modalHost.test.tsx`, and `scripts/layer-toast-bundle.test.mjs`                                                                                                                                                                                                                                                                                                                                                      | Provider begins relocating ordinary layers, Toast fallback loses its current lifecycle, a default provider renders differently from no provider, a Layer import loads a Toast module, or a toast added before Toast loads is lost                                                                                                                                                                                            |
+| INV14, INV15 | Source boundary check over Core for top-layer hosts, exit copies, backdrop elements, lift, and rectangle-morph code outside the runtime and the lift module                                                                                                                                                                                                                                                                                                                                                                                                                                               | A component building its own copy of a mechanism INV14 lists (top-layer mounting, close-request delivery, hold, exit copy, or backdrop element), or re-implementing the lift or the grow                                                                                                                                                                                                                                     |
+| INV17        | One runtime suite over every kind of layer root: a `useLayer` layer, inline and portaled, and the Dialog, Drawer, Lightbox, MobileNav, BottomSheetPanel, and ToastViewport content roots, each inside a plain `onClick` wrapper and a Core clickable container; nested layers                                                                                                                                                                                                                                                                                                                             | A click inside a layer root that reaches an ancestor bubble-phase handler, a caller's wrapper included; an outer layer's handler that receives an inner layer's press; or a document listener or light dismiss that no longer receives it                                                                                                                                                                                    |
+| INV18        | `useLayer.test.tsx` (a closed trigger has no anchor-name, and the trigger of a shown or fading layer does) and `TooltipClosedTriggerAnchor.interaction.browser.spec.ts` in Chromium and WebKit                                                                                                                                                                                                                                                                                                                                                                                                            | A closed trigger with an anchor-name, a shown or fading layer placed away from its anchor, or a surface around a closed trigger that stops while the main thread is busy                                                                                                                                                                                                                                                     |
+| INV18        | `useLayer.test.tsx`: a closed state that declares a discrete `display` transition or a keyframe animation keeps the trigger's anchor name until those animations end, read from the closed state's style; a layer whose closed state declares neither is not read for animations at the close                                                                                                                                                                                                                                                                                                             | A layer with such a closed-state exit placed away from its anchor while it fades, or an animation read on the close of a layer whose closed state declares no exit                                                                                                                                                                                                                                                           |
 
 Current unit coverage proves emitted styles, reducers, state transitions, and DOM
 placement. Native Popover, `<dialog>`, focus, top-layer ordering, and rendered
