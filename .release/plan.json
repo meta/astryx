@@ -1,0 +1,744 @@
+{
+  "schemaVersion": 2,
+  "version": "0.7.11",
+  "branch": "release/v0.7.11",
+  "cutSha": "d8f2a63db60aed0ebe31b367e86276ca75d2de19",
+  "changesets": [
+    {
+      "path": ".changeset/animated-layout-curve-tokens.md",
+      "sha256": "219e2742110422e97414b98eaeebee6eccf5a3851320c9ec9fb567ab92c53b0d",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "Animated layout: the glide, the in-place swap and the edge reveal play the theme's move curve (`--ease-move`) over `--duration-medium` instead of a spring, so they follow the theme's `character` and `tempo` and land with the motion around them. Reduce Motion is unchanged: a cross-fade under a coarse pointer, an immediate change otherwise. The glides of AppShell's content area, Collapsible, Table's row expansion and TreeList change feel: 300 ms in the Neutral theme, 410 ms with no theme, instead of about 735 ms. A theme whose move easing is a `linear()` or `steps()` function glides on it, as the browser plays it. The segmented control's selection, which reads its timing the same way, now plays such an easing too instead of moving at once.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/authoring-guides-keyword.md",
+      "sha256": "70f59126216c82e7bf51b201ee6acde1b89bfe87613e0dbb2eff3ddae0d99abe",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "docs",
+      "headline": "The Authoring guides (Quick Start, Field reference, Building Blocks, Ship, Help, and Make your integration work globally) now carry the keyword \"authoring\", so `astryx search authoring` lists them right after the Authoring overview instead of after API function pages.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/avatar-initials-contrast.md",
+      "sha256": "1d759cd1ee5fc926182e5cf477ca04e9bf081f7cb4bce2085069d1a536e4bbce",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "`Avatar` initials and the default person icon paint in primary text on the neutral tint, a pair at 4.5:1 or more in light and dark mode; secondary text fell below 4.5:1 in dark mode. Initials read darker in light mode and lighter in dark mode.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/banner-alert-message-only.md",
+      "sha256": "db0d6e8d05cd3408378e63fe104a1357bd918e35efe03dca66a2f33913bd8b9a",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "Banner: `role=\"alert\"` now sits on the title and description only, not on the whole banner, so an urgent alert holds only its message (`component:Banner` FR8; WCAG 2.2 4.1.3 Status Messages). The dismiss and expand controls, their tooltips, a caller's action, and the supporting content are outside the alert. ARIA attributes passed with `role=\"alert\"`, such as `aria-label`, move with it. Other roles still land on the banner frame. Use `role=\"alert\"` only for an urgent message, and announce every other message with `useAnnounce`. No visual change: the banner renders the same pixels as before.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/block-picker-doc-matrix.md",
+      "sha256": "445954eae0a934ecbca6809a0b6cec61e06ece297f46b0ae5af9cdca8f77eb62",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "feat",
+      "headline": "`astryx build` ranks Core blocks of component families its picker was not fitted with somewhat better: the block picker's doc-side word weights are refitted from paraphrases of each block's own source.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/bottom-sheet-flick-closes.md",
+      "sha256": "e69823b11bf59be26c80ab7cd6bb55704d9c213ebacae3e237b3cb75665def6b",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "BottomSheet: a touch release takes the iOS sheet's measured values, and a release moving back toward where the drag began cancels. A release faster than about 1,000 px/s is a flick: it goes at least to the next detent in its direction, so a short fast flick at the lowest detent closes the sheet instead of springing back. From a higher detent, a flick that would carry past the next detent goes on, so a hard flick closes the sheet and a softer one stops at the next detent. A slow or medium touch throw now travels less than before, and a slow touch drag closes the sheet only past halfway to closed. A mouse or pen drag is unchanged.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/build-alternatives-blend-order.md",
+      "sha256": "acc759d0488fe03ee2b44804d88774839cb994778e506f1b7250ae48d5d8cb48",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "`astryx build` names its two alternative page templates in the same order it chooses the start from, so the three templates it shows for a whole page are its best three. The start, the number of alternatives, the blocks and the JSON shape are unchanged.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/build-type-choices.md",
+      "sha256": "59dab3c5a5af2111a6e31ccfc3b1196e883ba0ad587d14382a299dd3d07acdff",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "docs",
+      "headline": "`astryx build --help` lists every value `--type` accepts (component, hook, doc, template, theme), matching the invalid-type error and what build actually runs, and says that `doc` and `theme` give an empty kit, since the kit has no doc or theme group. A test keeps the help text, the choices, the API doc and the error message on build and search naming the same set, and checks what each value returns.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/button-label-name-webkit.md",
+      "sha256": "f4e46664e3a149160c806b254de5b2051aa547f31eb87bacbc4865570801a33a",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "A labelled `Button` has its accessible name again in VoiceOver on macOS 14 (Safari 17 and WKWebView). The label sat inside a `display: contents` wrapper, which that WebKit drops names through, so it read an unnamed \"button\". The wrapper is now a flex box that takes the Button's own layout, and the Button looks the same.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/calendar-today-hydration.md",
+      "sha256": "9a30d65a5af2a46f4242e48d002f5a4ded8f0b320aeddd40d2a8c8343ecc6986",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "`Calendar` and `DateRangeInput` no longer cause a hydration mismatch when the server and the browser are on different dates, for example a UTC server and a visitor already in tomorrow. Today is read only after hydration: a server-rendered Calendar shows no today marker until then, and a Calendar with no `focusDate` or value keeps its month grid's space empty until the browser's month is known. A DateRangeInput shows the year in its range text until then.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/carousel-shift-wheel-once.md",
+      "sha256": "6268d4f32d6fd05d357d8331f9526d412a2809b0e342afab6e8fbdf7bb99cc7f",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "Shift and one mouse wheel notch now scroll a `Carousel` row by the notch, once. Before, Firefox also scrolled the row on its own, so each notch moved it twice: React's wheel listener is passive, so Carousel could not stop the browser's scroll. A wheel with a horizontal delta, such as a trackpad swipe, and a row with nothing to scroll keep the browser's own scroll.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/carousel-wheel-comment.md",
+      "sha256": "6ad458d6699f4d25d66385ae23df2d8c948d08f896c4004008308ad0e94e81ac",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "chore",
+      "headline": "Internal: a source comment in `Carousel` now says that the wheel listener reads no style or layout unless a flick holds the row. Apps see no change.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/chat-composer-derived-vars.md",
+      "sha256": "6c24a2096855fb71e9dd37bd1faf50c097b3fe8f5e8d25b4e195dbde1cea2881",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "A theme's `borderRadius` and `padding` on the `chat-composer` target now also set the composer's `--_chat-composer-radius` and `--_chat-composer-padding`, so the composer body, its status strip, and the concentric send and attach button radius follow the theme. With `density=\"compact\"`, the body keeps its compact padding, and its radius still follows. Before, the derived-variable registry filed these two mappings under `chat`, a key no element renders, so `defineTheme({components: {'chat-composer': {base: {borderRadius: '16px', padding: '8px'}}}})` emitted only `border-radius` and `padding` on the composer root, and everything that reads the two variables kept the default geometry.",
+      "contributors": [
+        "utsavo-afk"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/cli-hook-lists-each-folder-once.md",
+      "sha256": "ca472e4bc92bfbe83c7e70ca49f948138763f3f321f3c385ea570468d1c0a8fd",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "perf",
+      "headline": "A compact or full hook list, and the suggestions for an unknown hook name, list each of Core's folders once. Before, they listed a folder again for each hook they looked up.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/cli-listings-kept-per-process.md",
+      "sha256": "63729669dc23b45ee6a80377e4707e53b00ee52e9b679386dd4b4f7bad3d4d59",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "perf",
+      "headline": "A search, build or component read lists each folder once. A process that runs several reads, such as a docs site's search or an agent harness, reuses a folder's listing once the folder has stayed unchanged for two seconds. A later read lists the folder again after an entry is added, removed or renamed.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/cli-matcher-docs-once.md",
+      "sha256": "bb971333cf5765384f6033c800cd1e611d921854979e1b819f4cd3c6c912c0d0",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "perf",
+      "headline": "Within one operation, component discovery reads each component doc once, and the component matcher looks for each component's doc once, not once for each name they resolve. Resolving 30 names that only the matcher finds, such as names in another case, makes 14,794 file-system calls instead of 305,108. Results are unchanged.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/code-block-copy-failure.md",
+      "sha256": "5f864de745d8329b69b8f9fa777cb5cb48b5ea5ea427ac22135de98a54c62ef8",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "`CodeBlock`'s copy button now says when copying fails. A rejected clipboard write used to look like nothing happened. Now the button shows a cross in place of the copy icon for 2 seconds, as a copy shows its check mark (a theme that maps the `code-block-copy` icon slot keeps its own rest glyph during the failure), and is named, tooltipped and announced as \"Failed to copy value to clipboard.\" (a new localized key, `@astryx.codeBlock.copyFailed`). A new `onCopyError(error)` prop receives the rejection once per failed copy; the error itself is never shown.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/core-process-env-types.md",
+      "sha256": "06edb794fa488950bc31f0ace987a7d6d4b1ccb2b9d173eb465efff01dbf2057",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "The Core modules that read `process.env.NODE_ENV` for development warnings now declare it themselves, so those files type-check in a project that does not install `@types/node`, such as a swizzled `Breadcrumbs`, `Stepper` or `TabList`. Bundlers still replace the value at build time, so production builds drop the warnings as before. No API changes.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/docs-upgrade-together.md",
+      "sha256": "bc88ae7f2abd82ef1a25a1c13216fb8192bade6e5bd2642e1d838d8ee0c24191",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "docs",
+      "headline": "Getting Started has an Upgrade section: upgrade every Astryx package your app lists in one command, to the same release, then run `astryx upgrade`. If your package manager holds new releases back, exempt the whole `@astryxdesign/*` scope, not only some of its packages.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/edge-reveal-slide.md",
+      "sha256": "e14dcd11ef13c5ad49d93daf131463ee0ababd234def740643de028a6c05f122",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "A block-edge reveal or conceal, as in Collapsible, TreeList and Table's row expansion with an `animatedLayout` handle, now slides the revealed element's children on the same frames as the content beside it, under a still clip on the element's box. An element that paints its own box, such as Table's `panelVariant=\"muted\"` panel, keeps the moving clip. On iOS Safari a moving clip ran on its own clock and parted from that content for a few frames; now the two stay together. The glide's timing and curve are unchanged. Collapsible's region now wraps its children in one inner element; selectors like `region > *` or `:first-child` on the region's children need updating.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/formlayout-native-form.md",
+      "sha256": "19b43035464a9cf84ef0f5e207944d13faa320b00f9d407afe054fa633a0f2f1",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "docs",
+      "headline": "FormLayout says to wrap it in a native `<form>`, and that `<form>` has no Astryx replacement.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/kbd-grows-with-text.md",
+      "sha256": "9a7da1e7d8ceb61eb1b271856608231ab3c1090f9ccdf137f904f812887cf886",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "`Kbd`: a key badge grows with a larger text size instead of holding its fixed height, so a bigger glyph stays inside its badge. At the default text size nothing changes. The docs now list `ref`, say how a screen reader names the shortcut, and say that Kbd only shows keys and does not listen for them.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/keyboard-targets-docked-ride.md",
+      "sha256": "44e5bfeeeaf2bf46282efc2069f8dfad816b3ec86f6125a703639ac792c42650",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "chore",
+      "headline": "Internal: Core's keyboard module keeps a field above the on-screen keyboard where its nearest scroller can bring it up: a field in scrolling content is scrolled into view by its nearest scroller, the document included, a field in a container fixed at the viewport's bottom moves that container up by the part of it the keyboard still covers, unless the container sets its own `translate`, the app is moving it itself, or it is taller than the room above the keyboard, where its scroller reveals the field instead, or with none it moves only as far as the field needs, and focus moves and first taps into those fields arrive without the browser's reveal. A field in a fixed container the app positions itself (a dialog or a sheet that fills the viewport, a bar floating above the bottom edge, or a bar with its own `translate`) is revealed by a scroller around it there, and with none keeps the browser's own reveal. Core's fields adopt it next; apps import nothing new.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/layer-exit-copy.md",
+      "sha256": "f929be70ac366ffcc88fa8ec8a4388dbdca053970b9f24a0fc97573b716b6a91",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "chore",
+      "headline": "Internal: the layer runtime gains one exit copy for touch presentations that animate a popover out: a static, inert copy of the closing popover, shown only in the top layer where the popover was drawn, for the close to play on. Core's other inert copies now join no form, carry no anchor name and keep their color scheme, as their documentation says.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/layer-provider-docs-nested.md",
+      "sha256": "cb8378992e4e402fc4c22c89885b95a3b28106d60b58cf7e7cf9ff8811ea2949",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "docs",
+      "headline": "`LayerProvider`: editors and generated docs now show its description and example; they were attached to an internal constant. The docs no longer say that a nested provider is ignored: a nested provider keeps the outer toast configuration and mounts no second toast viewport, and one that declares `inset` applies its declared edges to the anchored layers in its subtree.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/layout-fill-needs-height.md",
+      "sha256": "ed4c3694489af46f645b761d91038d8f571f7166b6f0b920abdce4a77db8c955",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "docs",
+      "headline": "Layout's `height` prop says that `fill` needs a container with a set height, such as AppShell's content area.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/local-theme-descriptor.md",
+      "sha256": "32320de2953a49871eafa37b468019274c622519b82e66255d57d9aa23b374af",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "docs",
+      "headline": "The custom theme guide names the files of a local theme, including the same-stem descriptor `theme add` reads.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/media-queries-without-matchmedia.md",
+      "sha256": "0e76cbe64ef6d95cd6ad1cb1af6436ea5a57191d93e833eac8dc8202914da834",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "Overlay, AppShell and MobileNav work in a DOM with no `matchMedia`, such as an app's jsdom test. Before, Overlay threw on its first render, AppShell as it mounted (with React 19.2 or later), and MobileNav as it closed. Where `matchMedia` exists, nothing changes.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/pager-catch-event-clock.md",
+      "sha256": "76fe3518850dc248f83c62cd1797d4567a65b9034d5b8a651556791142d11edc",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "Carousel paging: on a busy page, a finger held on a settling row now stops it, as on an idle page. Before, when the page received the touch and its lift together, a short hold read as a tap and the row ran on to its target.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/popover-motion-comments.md",
+      "sha256": "a4371dc67f5cc0808ba3a2039c9a126bf18e21bc5b311ccc4a1cf3be8dfb4009",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "chore",
+      "headline": "Internal: source comments in Popover's touch presentation and the transient copy now match what the code does: a touch that starts before the input hold can close the popover, and `measure` reads before the frame writes. Apps see no change.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/popover-uikit-presentation.md",
+      "sha256": "2189a9534b66bddccbf12b2a7292e6ccc18d014d56c00d8c84fe86cb5f758806",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "feat",
+      "headline": "Under a finger (a coarse primary pointer, on any touch device), Popover grows out of its trigger, wide before tall, with its edge held on the trigger, and shrinks back into the trigger when it closes. The growth plays the theme's `--duration-medium-min` (in the Storybook theme, the step nearest iOS's 206 ms growth) with its entrance easing, and the shrink plays its exit duration and easing, on the compositor. A close during the growth, or an open during the shrink, turns back from where the popover is. With reduced motion it cross-fades in and out, opacity only, in 200 ms or less. A fine primary pointer (a mouse) keeps its entrance. A tap that lands while it grows is ignored, and a pan started then scrolls nothing. The shrink plays on the layer runtime's exit copy, of which Popover is the first user. The growth starts in the next animation frame, before that frame paints, so the opening tap does no extra layout.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/presentation-without-matchmedia.md",
+      "sha256": "0d010ae782212dd37f38a374423dec07d09724360c0bfdcb6671764e9a7f8695",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "`presentation=\"adaptive\"` no longer crashes in environments without `matchMedia` (jsdom tests).",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/replaced-topic-links.md",
+      "sha256": "47aa897481411b993355cadca832e1942b19aec525591611e3cc818e9b63ab8a",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "A link to a topic that an integration replaces under the same name opens the replacement. In an app whose integration replaced `theme` or `getting-started`, `doctor` reported Core's links to them as naming no doc.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/selector-overlay-above-keyboard.md",
+      "sha256": "b54575070c41f2c97268cd81c5ea8fec9dcc990ddf0049ce4c8184ddbbdf61e5",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "A Selector's list, opened over its trigger near the bottom of the screen while a software keyboard is up, now slides up and ends above the keyboard with its options in view. Before, it shrank to a sliver or opened under the keyboard. Without a keyboard it opens where it did.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/selector-search-trigger-value.md",
+      "sha256": "7797e9de7daed61df7149c36a2ada289ade4d8ebfc20e763031e1afd77b2864f",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "A searchable `Selector`'s closed trigger now names the selected option after its label, so a screen reader announces the selection (for example \"Team, Banana, button, collapsed\").",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/status-dot-icon-role-docs.md",
+      "sha256": "edbfcc4941c3f925eec0d8de2e356ea139af2e1df0c30393e523da3375700b43",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "docs",
+      "headline": "The CLI's bundled colour token docs say the status icon colours (`--color-icon-<status>`) paint status marks on the page or a card, such as a StatusDot.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/status-dot-icon-role.md",
+      "sha256": "6f7ac88795ec152c8ad3903c7e0f56a9784c472fd5cb5ce2da2926dece8442f7",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "`StatusDot`'s `success`, `warning` and `error` dots paint their status icon role (`--color-icon-<status>`) instead of the strong status fill, so the dot keeps 3:1 or more against the page and card surfaces; the warning dot used to read near 1.8:1 on a muted card. Success and error dots change colour too: they take their status icon colour, which is darker in light mode in the default theme. An `icon` inside a status dot now paints in the surface colour.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/still-mouse-passes-entrance-hold.md",
+      "sha256": "680ac0f7d1f2a5b56ef0b26eac756d1ea772ed90b025369244282e5fad850c10",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "On a touch screen with a mouse, after a finger opens a menu, a dialog, a drawer, a mobile nav or a popover, a click with a mouse that has not moved since reaches what is under it while the layer enters. Before, that click landed on the entrance's input hold and did nothing. A finger's or a pen's tap during the entrance is still ignored. A mouse that has sent no pointer event since the page loaded still meets the hold.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/submenu-hover-delay.md",
+      "sha256": "872df4eb56784e1a0c740aaeb537d243d0a936ea75865167849ff6f7aa311d82",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "feat",
+      "headline": "`DropdownMenuSubMenu` accepts `delay` and `hideDelay`, in milliseconds, the same options `Tooltip`, `HoverCard` and `TopNavMenu` have. `delay` is how long a hovering pointer waits before the flyout opens (default 150), and `hideDelay` is how long the flyout stays after the pointer leaves (default 200). The defaults match today's timing, so nothing changes unless you pass them. Keyboard focus and touch never wait.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/swizzle-skips-spec-harnesses.md",
+      "sha256": "01bc25e6d018293c917f8fd3714a23fd2dc2e1aca5600f378691e82ab93292dd",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "`swizzle` no longer copies a component's browser test harnesses (`*.spec.ts`, `*.spec.tsx`, such as Item's `ItemMarkerColumns.a11y.chromium.spec.ts`) when the installed Core source holds them: `@astryxdesign/core` 0.7.5 and earlier, or Core's repository source. They import Playwright and an unpublished test package, so a project that swizzled such a component failed to type-check or build. Core 0.7.6 and later ship no harnesses, so swizzling from them is unchanged.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/tall-sheet-keyboard-hide-ride.md",
+      "sha256": "9c3bb1f662037ab093487c03a7079e03940001afd77db160aaef4e794e765064",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "BottomSheet: in iOS Safari, which publishes no keyboard slide, when the on-screen keyboard closes, a Tall sheet's content rides down with it on UIKit's keyboard spring, instead of jumping back to its earlier scroll once the keyboard is gone. A field that takes focus again before the keyboard is down rides back up, and focus moving to a select, whose picker takes the keyboard's place, starts no ride. In Chrome on Android, a busy page that reads the keyboard's hide late no longer moves the content back up before it settles.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/theme-known-values-doc-order.md",
+      "sha256": "51ce04777049ea394e1e0b2ba9c7a410841d9675f53edce221f21348fe7722ee",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "`astryx theme build` no longer depends on the order it loads the core component docs. A parent doc that lists a sub-component by name only, such as `Avatar.doc.mjs` listing `AvatarStatusDot`, erased the values the sub-component's own doc declares when it loaded after that doc; when `Avatar.doc.mjs` loaded last, `avatar-status-dot` `variant:success` counted as a custom value. The build now merges every doc's entry for a component.",
+      "contributors": [
+        "utsavo-afk"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/timestamp-time-zone.md",
+      "sha256": "301d8d61f363255725743a5138af8a3fc4bf38cde02fa01eda6190c9a42823b0",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "feat",
+      "headline": "`Timestamp` takes a `timezoneID` prop naming the IANA zone its absolute formats render in, such as `'UTC'` or `'America/Los_Angeles'`. An explicit zone renders identically on the server and the client, so a server-rendered absolute time no longer depends on the server's zone and hydrates without a mismatch. Omit it (or pass `'local'`) to keep the viewer's own zone, relative formats' visible text ignores it (configured `tooltipEntries` rows still follow it), and an unknown identifier warns once in development and falls back to the viewer's zone.",
+      "contributors": [
+        "nbozidarevic"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/toast-stays-when-dialog-closes.md",
+      "sha256": "f59e91c3f6406168855f15c0fdf38c48163e0d8d59127ef649ba6a63390c114f",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "A toast shown over a `Dialog` no longer blinks out for a frame or more when the Dialog closes outside a click, for example when it closes once an awaited save finishes. The toast stays on screen while the Dialog closes. A close from a click, the Escape key or the backdrop already kept it.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/verify-built-by-command.md",
+      "sha256": "e8bd877666f29ae385747819615ff2e52c587b349886b8489a29b9fed325fb2b",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "`astryx integration verify` no longer reports `theme_module_stale` for a theme whose built module differs only in the command its comment says built it, such as a theme built with `yarn astryx` and verified where `pnpm exec astryx` runs. Any other difference still fails.",
+      "contributors": [
+        "josephfarina"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/wheel-turn-spring.md",
+      "sha256": "3b607c42590d924cd4d7fdfcbd40eaef50ed68da35997743d8b0a90d0235b0ad",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "DateInput: under a finger, a bottom-sheet wheel's turn onto a tapped row, a key's row or a value set from outside now plays the shared settle spring from rest, instead of a fixed 300 ms ease-in-ease-out. The wheel's main interaction is a gesture, so all its motion springs; a flick's coast and a slow release's snap stay as they are.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    }
+  ]
+}
