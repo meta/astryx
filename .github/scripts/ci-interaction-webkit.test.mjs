@@ -289,6 +289,7 @@ describe('WebKit interaction proof routing', () => {
     expect(proofs(['packages/core/src/Carousel/useCarouselPaging.ts'])).toEqual(
       [
         'packages/core/src/Carousel/__tests__/Carousel.interaction.browser.spec.ts',
+        'packages/core/src/Carousel/__tests__/CarouselSnapPagingButtons.interaction.browser.spec.ts',
         'packages/core/src/Carousel/__tests__/CarouselSnapPagingEdges.interaction.browser.spec.ts',
       ],
     );

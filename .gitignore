@@ -53,7 +53,13 @@ internal/vibe-tests/results/
 internal/vibe-tests/.fixture-runs/
 
 # Astryx agent docs and test scratch directories (generated)
-.astryx-*/
+# A test that makes a scratch folder inside the repository lists it here:
+# the Playwright spec search skips what this file lists. A leading **/
+# makes Playwright match at any depth.
+**/.astryx-*/
+.tmp-theme-app-types-*/
+tmp-swizzle-*-test/
+packages/cli/.tmp-component-icons-*/
 apps/sandbox/.next/
 apps/sandbox/out/
 apps/sandbox/next-env.d.ts

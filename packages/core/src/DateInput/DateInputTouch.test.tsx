@@ -1035,7 +1035,7 @@ describe('DateInput — calendar surface', () => {
     for (const name of ['Previous month', 'Next month']) {
       // Still mounted, so the header cannot reflow...
       expect(arrow(name)).toBeInTheDocument();
-      expect(arrow(name)).toBeDisabled();
+      expect(arrow(name)).toHaveAttribute('aria-disabled', 'true');
       // ...but gone from the accessibility tree, and so unreachable.
       expect(screen.queryByRole('button', {name})).toBeNull();
     }

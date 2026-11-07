@@ -319,30 +319,32 @@ function getHandle(): HTMLElement {
 
 // Drive a pointer drag on the grab handle. jsdom PointerEvents don't carry
 // clientY, so dispatch plain events with the coords the handlers read.
+// One clock for the drags: each event comes 16 ms after the one before, so
+// a drag's release velocity follows its events' own timestamps.
+let dragTime = 0;
+
 function drag(
   handle: HTMLElement,
   points: {y: number}[],
   pointerType: 'mouse' | 'touch' | 'pen' = 'mouse',
 ) {
   const [down, ...rest] = points;
-  fireEvent.pointerDown(handle, {
-    pointerId: 1,
-    clientY: down.y,
-    button: 0,
-    isPrimary: true,
-    pointerType,
-  });
+  const at = (y: number) => {
+    dragTime += 16;
+    return {time: dragTime, y, pointerType};
+  };
+  fireTimedPointer(handle, 'pointerdown', at(down.y));
   for (const p of rest) {
-    fireEvent.pointerMove(handle, {pointerId: 1, clientY: p.y, pointerType});
+    fireTimedPointer(handle, 'pointermove', at(p.y));
   }
   const last = points[points.length - 1];
-  fireEvent.pointerUp(handle, {pointerId: 1, clientY: last.y, pointerType});
+  fireTimedPointer(handle, 'pointerup', at(last.y));
 }
 
 function fireTimedPointer(
   target: Element,
   type: 'pointerdown' | 'pointermove' | 'pointerup',
-  {time, y}: {time: number; y: number},
+  {time, y, pointerType}: {time: number; y: number; pointerType?: string},
 ) {
   const event = new Event(type, {bubbles: true, cancelable: true});
   Object.defineProperties(event, {
@@ -352,6 +354,9 @@ function fireTimedPointer(
     pointerId: {value: 1},
     timeStamp: {value: time},
   });
+  if (pointerType != null) {
+    Object.defineProperty(event, 'pointerType', {value: pointerType});
+  }
   return fireEvent(target, event);
 }
 
