@@ -849,6 +849,65 @@ test('no Layout or Paint runs while it animates', async ({
   expect(counts.Paint ?? 0).toBe(0);
 });
 
+test('the calls one frame commits start at one time, however long the frame callbacks between them run', async ({
+  page,
+}) => {
+  await open(page);
+  const result = await page.evaluate(async () => {
+    const box = document.getElementById('box') as HTMLElement;
+    const other = box.cloneNode() as HTMLElement;
+    other.id = 'other';
+    other.style.top = '120px';
+    document.body.append(other);
+    const second = Motion.createMotionEngine(other);
+    const frame = async () =>
+      new Promise<void>(resolve => {
+        requestAnimationFrame(() => resolve());
+      });
+    await frame();
+    // Out of the frame: calls made in a task, which the next frame commits.
+    await new Promise<void>(resolve => {
+      setTimeout(resolve, 0);
+    });
+    const spring = {response: 0.6, dampingRatio: 1};
+    const first = window.animator.animate({x: 300}, {spring});
+    // A page's own frame callback runs 3 ms between the two animators'.
+    requestAnimationFrame(() => {
+      const end = performance.now() + 3;
+      while (performance.now() < end) {
+        // the page's own frame work
+      }
+    });
+    const next = second.animate({x: 300}, {spring});
+    const starts = await Promise.all([first.started, next.started]);
+    const [a] = box.getAnimations();
+    const [b] = other.getAnimations();
+    // Both animations' own times, frame by frame through the motion.
+    const apart: number[] = [];
+    for (let i = 0; i < 20; i++) {
+      await frame();
+      if (a.currentTime == null || b.currentTime == null) {
+        break;
+      }
+      apart.push(Math.abs(Number(a.currentTime) - Number(b.currentTime)));
+    }
+    return {
+      starts,
+      startTimes: [Number(a.startTime), Number(b.startTime)],
+      apart,
+    };
+  });
+  test.info().annotations.push({
+    type: 'two calls, one frame',
+    description: JSON.stringify(result),
+  });
+  // Both move, frame after frame, before their clocks are compared.
+  expect(result.apart.length).toBeGreaterThan(5);
+  expect(result.startTimes[1]).toBe(result.startTimes[0]);
+  expect(result.starts[1]).toBe(result.starts[0]);
+  expect(Math.max(...result.apart)).toBe(0);
+});
+
 test('the engine plays the analytic curve, all channels on one clock', async ({
   page,
 }) => {
