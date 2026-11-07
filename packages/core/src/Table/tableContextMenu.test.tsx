@@ -6,11 +6,16 @@
  * @position Validates contextMenuActions aggregation + header context menus
  */
 
-import {describe, it, expect, vi, beforeEach} from 'vitest';
+import {describe, it, expect, vi, beforeAll, beforeEach} from 'vitest';
 import {render, screen, fireEvent} from '@testing-library/react';
 import {Table} from './Table';
 import type {TablePlugin, TableColumn} from './types';
 import {resolveContextActions} from './tableContextMenu';
+import {warmTableContextMenu} from './__tests__/warmTableContextMenu';
+
+// Cells load their context menu lazily; resolve it once so menus open
+// synchronously below.
+beforeAll(warmTableContextMenu);
 
 // jsdom doesn't implement the Popover API; mirror the ContextMenu test's mock
 // so the menu can "open" and its items become queryable (as hidden).

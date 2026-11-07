@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {describe, it, expect, vi, beforeEach} from 'vitest';
+import {describe, it, expect, vi, beforeAll, beforeEach} from 'vitest';
 import {render, screen, fireEvent} from '@testing-library/react';
 import {useState} from 'react';
 import {Table} from '../../Table';
@@ -10,6 +10,11 @@ import {InternationalizationProvider} from '../../../i18n';
 import type {ComponentIconMap} from '../../../Icon/index';
 import {defineTheme} from '../../../theme/defineTheme';
 import {Theme} from '../../../theme/Theme';
+import {warmTableContextMenu} from '../../__tests__/warmTableContextMenu';
+
+// Cells load their context menu lazily; resolve it once so menus open
+// synchronously below.
+beforeAll(warmTableContextMenu);
 
 // popover mock for context-menu tests
 beforeEach(() => {
