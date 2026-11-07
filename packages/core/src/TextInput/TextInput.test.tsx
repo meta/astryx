@@ -668,6 +668,35 @@ describe('TextInput', () => {
     });
   });
 
+  describe('native length attributes', () => {
+    it('passes maxLength and minLength to the native input', () => {
+      render(
+        <TextInput
+          label="Code"
+          value=""
+          onChange={() => {}}
+          maxLength={6}
+          minLength={4}
+        />,
+      );
+      const input = screen.getByRole('textbox');
+      expect(input).toHaveAttribute('maxlength', '6');
+      expect(input).toHaveAttribute('minlength', '4');
+    });
+
+    it('keeps a longer controlled value as the caller set it', () => {
+      render(
+        <TextInput
+          label="Code"
+          value="1234567890"
+          onChange={() => {}}
+          maxLength={6}
+        />,
+      );
+      expect(screen.getByRole('textbox')).toHaveValue('1234567890');
+    });
+  });
+
   describe('touch keyboard traits', () => {
     it('renders no trait attribute when none is set, leaving the browser default', () => {
       render(<TextInput label="Name" value="" onChange={() => {}} />);

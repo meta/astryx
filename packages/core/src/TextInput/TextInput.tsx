@@ -159,6 +159,17 @@ export interface TextInputProps
    */
   type?: TextInputType;
   /**
+   * The native `maxlength` attribute: the browser stops typing past this many
+   * characters. TextInput adds no truncation, counter or validation of its
+   * own, so a longer controlled value stays as the caller set it.
+   */
+  maxLength?: number;
+  /**
+   * The native `minlength` attribute, which the browser's own form
+   * validation reads. TextInput adds no validation of its own.
+   */
+  minLength?: number;
+  /**
    * Label text for the input (always rendered for accessibility).
    */
   label: string;
