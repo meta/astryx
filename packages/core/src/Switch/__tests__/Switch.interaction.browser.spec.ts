@@ -912,7 +912,20 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     await freezeTimers(page);
     const row = page.locator('#storybook-root [data-astryx-pressable]').first();
     const exit = await exitOf(row);
-    const held = await holdAnimations(page, row);
+    const held = await holdAnimations(page, row, {
+      judges: [
+        {
+          target: page.locator('#storybook-root .astryx-switch').first(),
+          property: 'opacity',
+          pseudoElement: '::before',
+        },
+        {
+          target: page.locator('#storybook-root .astryx-switch-thumb').first(),
+          property: 'opacity',
+          pseudoElement: '::before',
+        },
+      ],
+    });
     // One CSS animation per press layer runs the release, the track's and
     // the thumb's (design:user-states DR1), each its opacity on the shared
     // release's clock. The row's strength has no release of its own under a finger (no
@@ -1009,9 +1022,24 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
       const row = page
         .locator('#storybook-root [data-astryx-pressable]')
         .first();
-      const css = (await holdAnimations(page, row)).filter(
-        a => a.kind === 'CSSAnimation',
-      );
+      const css = (
+        await holdAnimations(page, row, {
+          judges: [
+            {
+              target: page.locator('#storybook-root .astryx-switch').first(),
+              property: 'opacity',
+              pseudoElement: '::before',
+            },
+            {
+              target: page
+                .locator('#storybook-root .astryx-switch-thumb')
+                .first(),
+              property: 'opacity',
+              pseudoElement: '::before',
+            },
+          ],
+        })
+      ).filter(a => a.kind === 'CSSAnimation');
       // Present first: the track's layer and the thumb's.
       expect(css.map(a => (a.target ?? '').split('.')[1]).sort()).toEqual([
         'astryx-switch',

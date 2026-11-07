@@ -2849,7 +2849,9 @@ test.describe('pseudo-element animations', () => {
         {duration: 300, easing: 'linear', pseudoElement: '::before'},
       );
     }, VEIL_STYLE);
-    await holdAnimations(page, box);
+    await holdAnimations(page, box, {
+      judges: {target: box, property: 'opacity', pseudoElement: '::before'},
+    });
     const samples = await sampleCurve(box, [0, 75, 150, 225, 300], {
       pseudoElement: '::before',
     });
@@ -3078,6 +3080,58 @@ test.describe('holding', () => {
     ).rejects.toThrow(/armHold: name the motion that the test judges/);
   });
 
+  test('a hold sent from the test rejects when the judged motion does not run yet', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const {box, thumb} = await pressAndTravelFixture(page);
+    await startPressThenTravel(page);
+    await expect(
+      holdAnimations(page, box, {
+        judges: {target: thumb, property: 'translate'},
+      }),
+    ).rejects.toThrow(
+      /holdAnimations: the hold took no animation of the judged motion \(translate on .*#thumb.*\)\. The judged motion did not run when the hold reached the page .*; it took: div#box opacity/,
+    );
+    // The travel was never held: a film of this hold would show the press.
+    await expect
+      .poll(() =>
+        thumb.evaluate(el => el.getAnimations().map(a => a.playState)),
+      )
+      .toEqual(['running']);
+    await releaseAnimations(page, {finish: true});
+  });
+
+  test('a judged custom property is found in its @keyframes rule, inside a layer', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    await page.evaluate(() => {
+      const style = document.createElement('style');
+      style.textContent =
+        "@property --harness-strength { syntax: '<number>'; inherits: false; initial-value: 0; }" +
+        '@layer harness { @keyframes harness-strength { from { --harness-strength: 1; } to { --harness-strength: 0; } } }' +
+        '#box { animation: harness-strength 2s linear; }';
+      document.head.append(style);
+    });
+    const held = await holdAnimations(page, box, {
+      judges: {target: box, property: '--harness-strength'},
+    });
+    expect(held.map(a => a.name)).toEqual(['harness-strength']);
+    await releaseAnimations(page, {finish: true});
+  });
+
+  test('a film that holds now refuses to start without the motion it shows', async ({
+    page,
+  }) => {
+    await fixture(page);
+    await expect(
+      // @ts-expect-error -- a caller without types can omit `judges`.
+      animationStoryboard(page, {name: 'harness-self-test-no-judges'}),
+    ).rejects.toThrow(/holdAnimations: name the motion that the test judges/);
+  });
+
   test('a sample at an end reports the time it was read at', async ({page}) => {
     await fixture(page);
     const box = page.locator('#box');
@@ -3169,7 +3223,12 @@ test.describe('holding', () => {
       await later?.ready;
       return Number(later?.startTime) - Number(box?.startTime);
     });
-    const held = await holdAnimations(page);
+    const held = await holdAnimations(page, undefined, {
+      judges: [
+        {target: page.locator('#box'), property: 'transform'},
+        {target: page.locator('#later'), property: 'transform'},
+      ],
+    });
     expect(held.map(a => a.target)).toEqual(['div#box', 'div#later']);
     const [first, later] = held;
     expect(first.offsetMs).toBe(0);
@@ -3374,7 +3433,9 @@ test.describe('holding', () => {
     });
     const [running] = await fast.started();
     expect(running.to - running.from).toBeCloseTo(5000, 0);
-    await holdAnimations(page, box);
+    await holdAnimations(page, box, {
+      judges: {target: box, property: 'translate'},
+    });
     await seekAnimations(page, 125);
     const x = await box.evaluate(
       el =>
@@ -3406,7 +3467,9 @@ test.describe('holding', () => {
         {duration, easing: 'cubic-bezier(0.42, 0, 1, 1)'},
       );
     }, RUN_MS);
-    const [held] = await holdAnimations(page, box);
+    const [held] = await holdAnimations(page, box, {
+      judges: {target: box, property: 'translate'},
+    });
     // The keyframe offset 0.5 is progress, not half the time: the run starts
     // where the eased progress reaches 0.5.
     const ease = cubicBezier(0.42, 0, 1, 1);
@@ -3436,7 +3499,9 @@ test.describe('holding', () => {
         {duration, easing: 'linear', direction: 'reverse'},
       );
     }, RUN_MS);
-    const [reversed] = await holdAnimations(page, box);
+    const [reversed] = await holdAnimations(page, box, {
+      judges: {target: box, property: 'translate'},
+    });
     expect(reversed.curveEndMs).toBeCloseTo(RUN_MS, 0);
     await releaseAnimations(page, {finish: true});
 
@@ -3469,7 +3534,9 @@ test.describe('holding', () => {
     // Both from the engine's own instants: within the timeline's rounding.
     expect(Math.abs(running.from - begunAt)).toBeLessThanOrEqual(1);
     expect(running.to - running.from).toBeCloseTo(RUN_MS, -1);
-    await expect(holdAnimations(page, box)).rejects.toThrow(/runs backward/);
+    await expect(
+      holdAnimations(page, box, {judges: 'count-only'}),
+    ).rejects.toThrow(/runs backward/);
     await box.evaluate(el => el.getAnimations().forEach(a => a.finish()));
 
     // A property keyed only before the held run, and a last keyframe short of
@@ -3492,7 +3559,9 @@ test.describe('holding', () => {
         },
         {frames: keyframes, duration: RUN_MS},
       );
-      const [moving] = await holdAnimations(page, box);
+      const [moving] = await holdAnimations(page, box, {
+        judges: {target: box, property: 'translate'},
+      });
       expect(moving.curveEndMs).toBeCloseTo(RUN_MS, 0);
       await releaseAnimations(page, {finish: true});
     }
@@ -3503,7 +3572,9 @@ test.describe('holding', () => {
         easing: 'linear',
       });
     }, RUN_MS);
-    await holdAnimations(page, box);
+    await holdAnimations(page, box, {
+      judges: {target: box, property: 'rotate'},
+    });
     const [end] = await sampleCurve(box, [RUN_MS]);
     // About x, nothing turns in the plane: no z rotation, and y shrinks by
     // cos 60°.
@@ -3525,7 +3596,9 @@ test.describe('holding', () => {
     });
     const box = page.locator('#box');
     await waitForAnimation(box, {minProgressMs: 50});
-    const [held] = await holdAnimations(page, box);
+    const [held] = await holdAnimations(page, box, {
+      judges: {target: box, property: 'transform'},
+    });
     // Two frames later, the held animation is still where the hold read it.
     const after = await box.evaluate(
       el =>
@@ -3607,7 +3680,12 @@ test.describe('holding', () => {
         },
       });
     });
-    const held = await holdAnimations(page);
+    const held = await holdAnimations(page, undefined, {
+      judges: [
+        {target: page.locator('#box'), property: 'transform'},
+        {target: page.locator('#faster'), property: 'transform'},
+      ],
+    });
     expect(held.map(a => a.target)).toEqual(['div#box', 'div#faster']);
     const [box, faster] = held;
     expect(faster.heldAtMs).toBe(400);
@@ -3710,8 +3788,12 @@ test.describe('holding', () => {
     const box = page.locator('#box');
     await waitForAnimation(box);
     // The later-started element is held first.
-    const [first] = await holdAnimations(page, box);
-    const [later] = await holdAnimations(page, page.locator('#early'));
+    const [first] = await holdAnimations(page, box, {
+      judges: {target: box, property: 'transform'},
+    });
+    const [later] = await holdAnimations(page, page.locator('#early'), {
+      judges: {target: page.locator('#early'), property: 'opacity'},
+    });
     const samples = await sampleCurve(box, [0, 15_000, 30_000]);
     // Unrounded: at 0.005 px a ms, sampling from an origin shifted by the
     // start gap (over 100 ms) moves a sample by 0.5 px or more, while a seek
@@ -4784,7 +4866,9 @@ test.describe('animation state', () => {
         );
         expect(changed, `${label}: changed partway`).toBe(true);
         if (held) {
-          const taken = await holdAnimations(page, box);
+          const taken = await holdAnimations(page, box, {
+            judges: {target: box.locator('div').first(), property: 'opacity'},
+          });
           expect(taken.length, `${label}: held partway`).toBe(1);
           await page.waitForTimeout(150);
           if (change === 'held, then finished') {
@@ -5004,7 +5088,9 @@ test.describe('animation state', () => {
     expect(after.at - startedAt).toBeLessThan(1_500);
     expect(after.translate).toBe('0px 120px');
 
-    const held = await holdAnimations(page, box);
+    const held = await holdAnimations(page, box, {
+      judges: {target: box, property: 'translate'},
+    });
     expect(held[0].curveEndMs).toBeCloseTo(300, 0);
     const [mid, end] = await sampleCurve(box, [150, 300]);
     expect(mid.raw.translate).toBe('0px 60px');
@@ -5534,6 +5620,7 @@ test.describe('storyboards', {tag: '@storyboard'}, () => {
     await expect(
       animationStoryboard(page, {
         name: 'harness-self-test-endless-only',
+        judges: {target: page.locator('#box'), property: 'rotate'},
         clip: {x: 0, y: 340, width: 402, height: 120},
       }),
     ).rejects.toThrow(/repeats forever/);
