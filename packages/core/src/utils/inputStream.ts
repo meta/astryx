@@ -70,8 +70,8 @@ export interface InputSubscriptionOptions {
 export type InputEventMap = WindowEventMap & DocumentEventMap;
 
 /**
- * Each window's input stream state. It is registered, so a swizzled copy's
- * subscribers join the package's one set of window listeners.
+ * Registered, so a swizzled copy's subscribers join the package's window
+ * listeners.
  */
 const inputState = realmValue(sharedKey('input-stream', 1), () => ({
   streams: new WeakMap<Window, Map<string, Channel>>(),
