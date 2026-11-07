@@ -347,8 +347,8 @@ export function ToggleButton({
       </span>
     ) : undefined;
 
-  // In a group, only a toggle with a value is tracked; a toggle without one
-  // keeps its own press. Outside a group, the toggle follows its parent.
+  // In a group, the group tracks only a toggle with a value. A toggle without
+  // one keeps its own press. Outside a group, the toggle follows its parent.
   const parentPointers = use(PressGroupContext);
   const groupPointers =
     group == null
