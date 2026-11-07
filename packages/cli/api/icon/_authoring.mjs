@@ -936,6 +936,55 @@ async function iconAuthoring(step) {
 }
 
 /**
+ * Keep the root moves that give each root export to one export of the set.
+ * A root export that an export of the set already reads, or that an earlier
+ * move takes, stays where it is. The icon that would move keeps its own file,
+ * and its variants stay with it. Returns the kept moves and the ids of the
+ * icons that stay (with `(<variant>)` for a variant that stays).
+ * @param {{data: {module: string, icons: Array<{id: string, export: string, module?: string, variants?: Array<{variant: string, export: string}>}>}}} set
+ * @param {Map<string, {module: string, source: string}>} origins
+ * @param {string} root
+ * @param {Map<string, {source: string, from: string}>} moves
+ */
+function claimRootMoves(set, origins, root, moves) {
+  /** @type {Map<string, {source: string, from: string}>} */
+  const kept = new Map();
+  /** @type {string[]} */
+  const skipped = [];
+  const claimed = new Set(
+    [...origins.values()]
+      .filter(origin => sameIconModule(origin.module, root))
+      .map(origin => origin.source),
+  );
+  for (const icon of set.data.icons) {
+    if ((icon.module ?? set.data.module) !== set.data.module) continue;
+    const own = moves.get(icon.export);
+    const origin = origins.get(icon.export);
+    const readsRoot = origin != null && sameIconModule(origin.module, root);
+    if (own) {
+      if (claimed.has(own.source)) {
+        skipped.push(icon.id);
+        continue;
+      }
+      claimed.add(own.source);
+      kept.set(icon.export, own);
+    } else if (!readsRoot) continue;
+    for (const each of icon.variants ?? []) {
+      const move = moves.get(each.export);
+      if (!move) continue;
+      if (claimed.has(move.source)) {
+        skipped.push(`${icon.id} (${each.variant})`);
+        continue;
+      }
+      claimed.add(move.source);
+      kept.set(each.export, move);
+    }
+  }
+  skipped.sort();
+  return {moves: kept, skipped};
+}
+
+/**
  * Wrap a library into an existing set again: its icons are replaced by what
  * the library exports now (an icon whose words the author extended keeps
  * them), the generated module gains the new exports, `map` keeps every entry
@@ -1009,11 +1058,16 @@ async function refreshIconSet(
     // A refresh from a package root also supplies the exports that read one
     // file of that package, when the root exports the same icon. They move to
     // the root import, so the set has one import style.
-    const rootMoves = packageRootMoves(
+    const {moves: rootMoves, skipped: skippedMoves} = claimRootMoves(
+      set,
       origins,
-      source,
-      everyIcon.map(icon => icon.export),
-      where,
+      source.module,
+      packageRootMoves(
+        origins,
+        source,
+        everyIcon.map(icon => icon.export),
+        where,
+      ),
     );
     /** @param {string} name the set's export */
     const libraryExportOf = name =>
@@ -1034,8 +1088,14 @@ async function refreshIconSet(
     // (`squares-2-x2` is now `squares-2x2`); an icon matched this way keeps
     // its public export byte for byte, every field it had (its variants, the
     // words the author added, its module), and its map entries.
-    const byId = new Map(supplied.map(icon => [icon.id, icon]));
-    const byExport = new Map(supplied.map(icon => [icon.export, icon]));
+    // A moved icon is found only through the root export it moves to. It
+    // keeps its id and export, so a root glyph with the same id or name is
+    // a different icon.
+    const movedHere = supplied.filter(icon => rootMoves.has(icon.export));
+    const moving = new Set(movedHere);
+    const unmoved = supplied.filter(icon => !rootMoves.has(icon.export));
+    const byId = new Map(unmoved.map(icon => [icon.id, icon]));
+    const byExport = new Map(unmoved.map(icon => [icon.export, icon]));
     const bySource = new Map(
       supplied.map(icon => [libraryExportOf(icon.export), icon]),
     );
@@ -1050,15 +1110,20 @@ async function refreshIconSet(
     const iconByExport = new Map(everyIcon.map(icon => [icon.export, icon]));
     /** @type {string[]} the set's exports whose statement now names another look */
     const repicked = [];
+    /** @type {Map<string, (typeof supplied)[number]>} the new look's export → the moved icon it now draws */
+    const movedByLook = new Map();
     const found = looksOf.flatMap(icon => {
       const wrapped = (icon.looks ?? []).filter(look => bySource.has(look));
       if (wrapped.length === 0) return [icon];
       return wrapped.map(look => {
-        const prior = /** @type {{id: string, export: string}} */ (
+        const prior = /** @type {(typeof supplied)[number]} */ (
           bySource.get(look)
         );
-        if (moved && prior.id === icon.id && !bySource.has(icon.export)) {
+        // A moved icon is the glyph its root export draws, whatever its id.
+        const sameGlyph = moving.has(prior) || prior.id === icon.id;
+        if (moved && sameGlyph && !bySource.has(icon.export)) {
           repicked.push(prior.export);
+          if (moving.has(prior)) movedByLook.set(icon.export, prior);
           return icon;
         }
         const own = /** @type {(typeof everyIcon)[number]} */ (
@@ -1072,13 +1137,16 @@ async function refreshIconSet(
     });
     /** @param {{export: string, name: string, id: string}} icon */
     const priorOf = icon =>
+      movedByLook.get(icon.export) ??
       bySource.get(icon.export) ??
       byExport.get(icon.name) ??
       byId.get(icon.id) ??
       null;
-    const otherIds = new Set(others.map(icon => icon.id));
-    const otherExports = new Set(others.map(icon => icon.export));
-    /** @type {string[]} library icons left out: an icon of yours has the id or name */
+    const takenIds = new Set([...others, ...movedHere].map(icon => icon.id));
+    const takenExports = new Set(
+      [...others, ...movedHere].map(icon => icon.export),
+    );
+    /** @type {string[]} library icons left out: an icon of the set has the id or name */
     const shadowed = [];
     /** @type {Map<string, string>} old id → new id */
     const renames = new Map();
@@ -1087,9 +1155,18 @@ async function refreshIconSet(
     const fromLibrary = found.flatMap(icon => {
       const prior = priorOf(icon);
       const name = prior?.export ?? icon.name;
-      if (!prior && (otherIds.has(icon.id) || otherExports.has(name))) {
+      if (!prior && (takenIds.has(icon.id) || takenExports.has(name))) {
         shadowed.push(icon.id);
         return [];
+      }
+      if (prior && moving.has(prior)) {
+        publicName.set(icon.export, prior.export);
+        return [
+          {
+            ...prior,
+            words: [...new Set([...(prior.words ?? []), ...icon.aliases])],
+          },
+        ];
       }
       if (prior && prior.id !== icon.id) renames.set(prior.id, icon.id);
       publicName.set(icon.export, name);
@@ -1360,7 +1437,12 @@ async function refreshIconSet(
         : []),
       ...(shadowed.length > 0
         ? [
-            `Left out ${shadowed.length} library icons whose id or name an icon of yours from another module already has: ${shadowed.join(', ')}.`,
+            `Left out ${shadowed.length} library icons whose id or name an icon of the set already has: ${shadowed.join(', ')}.`,
+          ]
+        : []),
+      ...(skippedMoves.length > 0
+        ? [
+            `${skippedMoves.length} icons stay on their own file, because another icon of the set already reads the same export of ${source.module}: ${skippedMoves.join(', ')}.`,
           ]
         : []),
       astryxIconDefinitions().definitions.every(({doc}) => map[doc.name])

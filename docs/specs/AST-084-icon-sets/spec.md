@@ -336,8 +336,12 @@ icon, and the CLI verifies it, writes the files, and checks the set.
     refreshes, when the root exports the same icon: an export that resolves
     to the same file and binding, or an export of the same name when the
     file export does not resolve. It moves to the root import, keeps its
-    fields, and the icon is reported under `moved`; every export the
-    refresh does not write again stays in the generated module. A refresh
+    id, export, and other fields, and the icon is reported under `moved`.
+    It is matched only through that root export, and a root icon with its
+    id or export is left out. An export stays on its file, and the receipt
+    says so, when another export of the set already reads that root export
+    or an earlier move takes it. Every export the refresh does not write
+    again stays in the generated module. A refresh
     copies the library's license notices the set lacks, and the run that
     first records `source` takes the library's license for the descriptor
     when its `license` is still the one `new-set` wrote (the package's own,
