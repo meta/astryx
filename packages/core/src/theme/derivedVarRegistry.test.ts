@@ -309,6 +309,12 @@ const PRIVATE_SYSTEM_VARS = new Set([
   // `break-word` fallback. scripts/text-overflow-wrap-anywhere.test.mjs
   // keeps every such container setting it.
   '--_astryx-text-overflow-wrap',
+  // List FR5 and the container-padding record's corner geometry: a bleeding
+  // List passes its first and last rows the container corner they take.
+  '--_list-corner-start-start',
+  '--_list-corner-start-end',
+  '--_list-corner-end-start',
+  '--_list-corner-end-end',
 ]);
 
 const CROSS_COMPONENT_VARS: Record<string, string[]> = {

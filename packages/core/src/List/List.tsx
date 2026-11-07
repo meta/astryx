@@ -198,9 +198,9 @@ const styles = stylex.create({
       'calc(100% + var(--container-padding-inline-start, 0px) + var(--container-padding-inline-end, 0px))',
   },
   // 'bleed' rows reach the container's padding edge inline, and keep its block
-  // padding. The list publishes, for its first and last rows, the corner of a
-  // rounded container it reaches less that block padding. It reaches a
-  // corner only as the container's first or last child.
+  // padding. The list passes its first and last rows the corner a rounded
+  // container publishes, less that block padding. It is at a corner only as
+  // the container's first or last child.
   bleedCorners: {
     '--_list-corner-start-start': {
       default: '0px',
@@ -353,6 +353,11 @@ export function List({
       // role restores "list, N items" announcements for every listStyle
       // variant.
       role="list"
+      // A bleeding list reads the corner its container publishes. With a
+      // header, the root below is the container's child and reads it.
+      {...(edge === 'bleed' && header == null
+        ? {'data-container-corner': ''}
+        : null)}
       {...mergeProps(
         themeProps('list', {density, listStyle}),
         stylex.props(
@@ -395,6 +400,7 @@ export function List({
     <ListContext value={contextValue}>
       {snapshot}
       <div
+        {...(edge === 'bleed' ? {'data-container-corner': ''} : null)}
         {...stylex.props(
           styles.root,
           edge === 'bleed' && styles.bleedCornersBelowHeader,

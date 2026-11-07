@@ -92,7 +92,18 @@ export const docs = {
   theming: {
     container: true,
     targets: [{className: 'astryx-bottom-sheet', visualProps: []}],
-    derived: [{property: 'padding', expand: 'container'}],
+    vars: [
+      {
+        name: '--_sheet-radius',
+        description: 'Border radius of the sheet top corners',
+        default: 'var(--radius-container)',
+        private: true,
+      },
+    ],
+    derived: [
+      {property: 'borderRadius', vars: ['--_sheet-radius']},
+      {property: 'padding', expand: 'container'},
+    ],
   },
   description:
     "A mobile touch sheet that rises from the bottom edge, with animated entrance and exit, a grab handle, optional drag-to-resize snap points, and purpose-controlled dismissal. Like Dialog, it is a padded container: content starts at the theme's bottom-sheet padding (--spacing-4 by default), and a lone Section child or bleed children such as Table and Divider align against it. A sheet always owns a native <dialog>; inside the deprecated BottomSheetSwitcher the switcher presents and closes that dialog as the flow moves between steps. In both modes, ref and shared DOM props target the visual panel <div>. Sheets stack: a sheet opened while another is open sits on top of it, the covered sheet stays mounted and recedes, and one scrim covers the page. A sheet that closes as another opens in the same update is replaced by it, with the step-to-step handoff a multi-step flow needs.",

@@ -33,8 +33,8 @@
  * ```
  *
  * Internal variables (`--layout-padding-inner-x`, `--container-padding-*`,
- * `--container-corner-*`, `--_section-padding-propagated`) are implementation
- * details and must not be referenced by themes. They also do not cross an overlay boundary — see
+ * `--_section-padding-propagated`) are implementation details and must not be
+ * referenced by themes. They also do not cross an overlay boundary — see
  * `overlayPaddingReset` in padding.stylex.ts.
  *
  * SYNC: When modified, update /packages/core/src/Layout/Layout.doc.mjs
@@ -70,12 +70,6 @@ const baseStyles = stylex.create({
     paddingInlineEnd: 'var(--container-padding-inline-end)',
     paddingBlockStart: 'var(--container-padding-block-start)',
     paddingBlockEnd: 'var(--container-padding-block-end)',
-    // Square corners for full-bleed descendants. A rounded container (Card,
-    // Dialog, BottomSheet) publishes its own corners after this.
-    '--container-corner-start-start': '0px',
-    '--container-corner-start-end': '0px',
-    '--container-corner-end-start': '0px',
-    '--container-corner-end-end': '0px',
     // This container's --layout-padding-outer-* below now describe the inset
     // for Layouts inside it; clear any enclosing Layout's own padding, which
     // its regions would otherwise read first.

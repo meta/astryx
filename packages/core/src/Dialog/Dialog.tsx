@@ -306,12 +306,37 @@ const styles = stylex.create({
     overflow: 'hidden',
     borderRadius: 'inherit',
   },
-  // The corner a full-bleed child takes where it reaches the dialog's edge.
+  // The corners a full-bleed child takes where it reaches the dialog's edge,
+  // published as Card publishes them.
   innerCorners: {
-    '--container-corner-start-start': 'var(--_dialog-radius)',
-    '--container-corner-start-end': 'var(--_dialog-radius)',
-    '--container-corner-end-start': 'var(--_dialog-radius)',
-    '--container-corner-end-end': 'var(--_dialog-radius)',
+    '--container-corner-start-start': {
+      default: '0px',
+      ':has(> [data-container-corner]:first-child)': {
+        default: 'var(--_dialog-radius)',
+        ':has(> * [data-container-corner])': '0px',
+      },
+    },
+    '--container-corner-start-end': {
+      default: '0px',
+      ':has(> [data-container-corner]:first-child)': {
+        default: 'var(--_dialog-radius)',
+        ':has(> * [data-container-corner])': '0px',
+      },
+    },
+    '--container-corner-end-start': {
+      default: '0px',
+      ':has(> [data-container-corner]:last-child)': {
+        default: 'var(--_dialog-radius)',
+        ':has(> * [data-container-corner])': '0px',
+      },
+    },
+    '--container-corner-end-end': {
+      default: '0px',
+      ':has(> [data-container-corner]:last-child)': {
+        default: 'var(--_dialog-radius)',
+        ':has(> * [data-container-corner])': '0px',
+      },
+    },
   },
   // Inline wrapper mirrors the dialog's visual styles without <dialog> behavior
   inlineWrapper: {
@@ -841,7 +866,6 @@ export function Dialog({
           effectivePadding !== 4 &&
           containerPaddingBlockEndVarStyles[effectivePadding],
         isFullscreen && useThemeDefault && styles.fullscreenSafeArea,
-        // After the container's square default.
         styles.innerCorners,
       )}>
       <DialogContext value={dialogContextValue}>{children}</DialogContext>

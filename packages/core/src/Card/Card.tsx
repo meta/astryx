@@ -91,13 +91,40 @@ const styles = stylex.create({
     paddingBlockStart: `calc(var(--container-padding-block-start) - ${borderVars['--border-width']})`,
     paddingBlockEnd: `calc(var(--container-padding-block-end) - ${borderVars['--border-width']})`,
   },
-  // The corner a full-bleed child takes where it reaches the card's edge.
-  // The child reaches under the border, so this is the outer radius.
+  // The corners a full-bleed child takes where it reaches the card's edge.
+  // A corner goes only to a reader that is the card's first or last child,
+  // and to no reader when one sits deeper, where it could take a corner it
+  // does not reach. The child reaches under the border, so this is the outer
+  // radius.
   publishesCorners: {
-    '--container-corner-start-start': 'var(--_card-radius)',
-    '--container-corner-start-end': 'var(--_card-radius)',
-    '--container-corner-end-start': 'var(--_card-radius)',
-    '--container-corner-end-end': 'var(--_card-radius)',
+    '--container-corner-start-start': {
+      default: '0px',
+      ':has(> [data-container-corner]:first-child)': {
+        default: 'var(--_card-radius)',
+        ':has(> * [data-container-corner])': '0px',
+      },
+    },
+    '--container-corner-start-end': {
+      default: '0px',
+      ':has(> [data-container-corner]:first-child)': {
+        default: 'var(--_card-radius)',
+        ':has(> * [data-container-corner])': '0px',
+      },
+    },
+    '--container-corner-end-start': {
+      default: '0px',
+      ':has(> [data-container-corner]:last-child)': {
+        default: 'var(--_card-radius)',
+        ':has(> * [data-container-corner])': '0px',
+      },
+    },
+    '--container-corner-end-end': {
+      default: '0px',
+      ':has(> [data-container-corner]:last-child)': {
+        default: 'var(--_card-radius)',
+        ':has(> * [data-container-corner])': '0px',
+      },
+    },
   },
   // Fixed-height cards scroll content; overflow: auto also clips to border-radius
   scrollable: {
@@ -330,7 +357,6 @@ export function Card({
                   paddingOuterY: paddingToken,
                 },
           ),
-          // After the container's square default.
           styles.publishesCorners,
           // Applied after the container padding so the border-inset calc wins;
           // it reads the --container-padding-* vars set above.

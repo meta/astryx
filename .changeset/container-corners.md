@@ -2,4 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-A Table, or a List with `edge="bleed"`, that reaches the corner of a rounded Card, Dialog, or BottomSheet now rounds with that corner, so its focus ring and row fills follow the corner instead of being cut off. Standalone, inside a square container, or where the container's padding stays between them, they stay square.
+[fix] A Table, or a List with `edge="bleed"`, that is the first or last child of a rounded Card, Dialog, or BottomSheet now rounds with the corner it reaches, so the table's focus ring stays whole at the container's corners instead of being cut off. Every other corner stays square: standalone, inside a square container or a wrapper element, or between other content.
+
+@cixzhang

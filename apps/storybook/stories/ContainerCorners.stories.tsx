@@ -167,6 +167,36 @@ export const BleedListInDialog: Story = {
 };
 
 /**
+ * A Dialog with no padding, with the table between two lines of text: the
+ * table reaches no corner, so it stays square.
+ */
+export const TableBetweenTextInDialog: Story = {
+  render: () => (
+    <Dialog isOpen isInline onOpenChange={() => {}} width={360} padding={0}>
+      <Text>Open orders</Text>
+      <OrdersTable />
+      <Text>Three open orders.</Text>
+    </Dialog>
+  ),
+};
+
+/**
+ * A Dialog with no padding, with the bleeding list inside a wrapper element
+ * below a heading: the list is not the dialog's own child, so its rows stay
+ * square.
+ */
+export const WrappedBleedListInDialog: Story = {
+  render: () => (
+    <Dialog isOpen isInline onOpenChange={() => {}} width={360} padding={0}>
+      <Text>Folders</Text>
+      <div>
+        <BleedList />
+      </div>
+    </Dialog>
+  ),
+};
+
+/**
  * The card's block padding is larger than its corner radius, so the
  * bleeding list's rows stay square.
  */

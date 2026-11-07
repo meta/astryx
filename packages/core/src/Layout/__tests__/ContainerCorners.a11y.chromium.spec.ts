@@ -245,6 +245,33 @@ test.describe('Container corners (Chromium)', () => {
     ]);
   });
 
+  test('a table between other content in a Dialog with no padding stays square', async ({
+    page,
+  }) => {
+    await mount(page, 'table-between-text-in-dialog', TABLE_REGION);
+    expect(await radii(page, TABLE_REGION)).toEqual([
+      '0px',
+      '0px',
+      '0px',
+      '0px',
+    ]);
+  });
+
+  test('a bleeding list inside a wrapper element keeps its rows square', async ({
+    page,
+  }) => {
+    await mount(page, 'wrapped-bleed-list-in-dialog', LIST_ROWS);
+    const count = await page.locator(LIST_ROWS).count();
+    for (let i = 0; i < count; i++) {
+      expect(await radii(page, LIST_ROWS, i), `row ${i}`).toEqual([
+        '0px',
+        '0px',
+        '0px',
+        '0px',
+      ]);
+    }
+  });
+
   test('in a padded Card, bleeding rows stay square', async ({page}) => {
     await mount(page, 'bleed-list-in-card', LIST_ROWS);
     const count = await page.locator(LIST_ROWS).count();

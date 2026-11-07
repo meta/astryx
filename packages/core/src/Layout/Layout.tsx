@@ -79,10 +79,6 @@ const styles = stylex.create({
     '--container-padding-inline-end': '0px',
     '--container-padding-block-start': '0px',
     '--container-padding-block-end': '0px',
-    '--container-corner-start-start': '0px',
-    '--container-corner-start-end': '0px',
-    '--container-corner-end-start': '0px',
-    '--container-corner-end-end': '0px',
     // Reset inherited width so nested Layouts without contentWidth keep their
     // released padding. An explicit contentWidth overrides this on the same node.
     '--layout-content-width': '100cqi',

@@ -85,12 +85,6 @@ const styles = stylex.create({
     boxSizing: 'border-box',
     minInlineSize: '100%',
     minBlockSize: '100%',
-    // The content publishes its padding to full-bleed children. Its corners
-    // are square.
-    '--container-corner-start-start': '0px',
-    '--container-corner-start-end': '0px',
-    '--container-corner-end-start': '0px',
-    '--container-corner-end-end': '0px',
   },
   contentWithInlineOverflow: {
     inlineSize: 'max-content',

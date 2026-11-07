@@ -453,12 +453,27 @@ const styles = stylex.create({
     // range.
     minHeight: 'fit-content',
   },
-  // The corners a full-bleed child takes at the sheet's top edge. The content
-  // starts inside the sheet's top border, so each is the sheet's radius less
-  // that border. The bottom edge is square.
+  // The corners a full-bleed child takes at the sheet's top edge, published
+  // as Card publishes them. The content starts inside the sheet's top border,
+  // so each is the sheet's radius less that border. The bottom edge is
+  // square.
   contentCorners: {
-    '--container-corner-start-start': `calc(var(--_sheet-radius) - ${borderVars['--border-width']})`,
-    '--container-corner-start-end': `calc(var(--_sheet-radius) - ${borderVars['--border-width']})`,
+    '--container-corner-start-start': {
+      default: '0px',
+      ':has(> [data-container-corner]:first-child)': {
+        default: `calc(var(--_sheet-radius) - ${borderVars['--border-width']})`,
+        ':has(> * [data-container-corner])': '0px',
+      },
+    },
+    '--container-corner-start-end': {
+      default: '0px',
+      ':has(> [data-container-corner]:first-child)': {
+        default: `calc(var(--_sheet-radius) - ${borderVars['--border-width']})`,
+        ':has(> * [data-container-corner])': '0px',
+      },
+    },
+    '--container-corner-end-start': '0px',
+    '--container-corner-end-end': '0px',
   },
   tallKeyboardBody: {
     scrollPaddingBlockEnd: MOBILE_KEYBOARD_BOTTOM_CLEARANCE,
@@ -1267,7 +1282,6 @@ export function BottomSheetPanel({
                 !usesThemePadding &&
                   effectivePadding !== 4 &&
                   containerPaddingBlockEndVarStyles[effectivePadding],
-                // After the container's square default.
                 styles.contentCorners,
               ),
             ),

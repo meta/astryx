@@ -45,7 +45,10 @@ export interface DerivedVarEntry {
 export const derivedVarRegistry: Record<string, DerivedVarEntry[]> = {
   avatar: [{property: 'borderRadius', vars: ['--_avatar-radius']}],
   banner: [{property: 'borderRadius', vars: ['--_banner-radius']}],
-  'bottom-sheet': [{property: 'padding', expand: 'container'}],
+  'bottom-sheet': [
+    {property: 'borderRadius', vars: ['--_sheet-radius']},
+    {property: 'padding', expand: 'container'},
+  ],
   button: [{property: 'borderRadius', vars: ['--_button-radius']}],
   card: [
     {property: 'borderRadius', vars: ['--_card-radius']},
