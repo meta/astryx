@@ -2806,9 +2806,6 @@ jobs:
           if [ "${WEBKIT_ALL_SPECS:-}" = true ]; then CHANGED=(); fi
           git -C .test-scope ls-tree -r --name-only HEAD > "$RUNNER_TEMP/interaction-legs/listed.txt"
           selected="$RUNNER_TEMP/interaction-legs/selected.txt"
-          if [ "${WEBKIT_ALL_SPECS:-}" != true ] && { [ -z "${CHANGED_FILES:-}" ] || [ ! -s "$CHANGED_FILES" ]; }; then
-            echo "::warning title=Changed specs not planned::The scope step could not list the changed files, so this run plans only the lane's own paths."
-          fi
           node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" select \
             --listed "$RUNNER_TEMP/interaction-legs/listed.txt" \
             "${CHANGED[@]}" \

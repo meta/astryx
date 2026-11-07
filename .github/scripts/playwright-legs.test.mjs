@@ -223,15 +223,17 @@ describe('estimateSeconds and legCount', () => {
 });
 
 describe('the list reader and recordLog', () => {
-  it('reads the list report with the reader the accessibility contracts use', () => {
+  it("reads the list report and the component folder with the accessibility contracts' own helpers", () => {
     const source = fs.readFileSync(
       path.join(root, '.github/scripts/playwright-legs.mjs'),
       'utf8',
     );
-    expect(source).toContain(
-      "import {listedFiles} from './a11y-pr-contracts.mjs';",
+    expect(source).toMatch(
+      /import \{[^}]*\bisComponentPath\b[^}]*\blistedFiles\b[^}]*\bspecOwners\b[^}]*\} from '\.\/a11y-pr-contracts\.mjs';/,
     );
     expect(source).not.toMatch(/function listedFiles/);
+    // No folder rule of its own.
+    expect(source).not.toMatch(/const FOLDER =/);
   });
 
   it("records each test's gap from the line before it, under its spec file and project", () => {

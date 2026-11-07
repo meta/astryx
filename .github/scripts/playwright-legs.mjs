@@ -32,7 +32,11 @@ import {
   medianOf,
   splitByDuration,
 } from '../../scripts/lib/duration-split.mjs';
-import {listedFiles} from './a11y-pr-contracts.mjs';
+import {
+  isComponentPath,
+  listedFiles,
+  specOwners,
+} from './a11y-pr-contracts.mjs';
 
 // CI may run this file from the workflow's own commit, outside the checkout,
 // in the checkout's root.
@@ -207,7 +211,6 @@ export function isInteractionSpec(file) {
 // The component folder a path is in: `packages/<package>/src/<Component>`.
 // Shared folders (`motion`, `hooks`, `utils`) are not component folders: the
 // lane's shared-code pattern decides what their changes run.
-const FOLDER = /^(packages\/[^/]+\/src\/[A-Z][^/]*)\//;
 // Files that put no code on a proof's page: tests, stories, docs, notes.
 const NOT_RENDERED = /(?:^|\/)__tests__\/|\.(?:test|stories|doc)\.[^/]+$|\.md$/;
 
@@ -219,15 +222,23 @@ const NOT_RENDERED = /(?:^|\/)__tests__\/|\.(?:test|stories|doc)\.[^/]+$|\.md$/;
  * @param {string[]} changed the changed files
  */
 export function folderSpecs(listed, changed) {
+  // A component folder as the accessibility contracts read it.
+  const folderOf = file => specOwners(file).prefixes;
   const folders = new Set(
     changed
-      .filter(file => !NOT_RENDERED.test(file) && !isInteractionSpec(file))
-      .map(file => FOLDER.exec(file)?.[1])
-      .filter(Boolean),
+      .filter(
+        file =>
+          isComponentPath(file) &&
+          !NOT_RENDERED.test(file) &&
+          !isInteractionSpec(file),
+      )
+      .flatMap(folderOf),
   );
   return listed
     .filter(
-      file => isInteractionSpec(file) && folders.has(FOLDER.exec(file)?.[1]),
+      file =>
+        isInteractionSpec(file) &&
+        folderOf(file).some(folder => folders.has(folder)),
     )
     .sort();
 }
@@ -487,7 +498,10 @@ function select(args) {
   const changedFile = option(own, '--changed');
   const changed =
     changedFile && fs.existsSync(changedFile) ? lines(changedFile) : null;
-  if (changed == null)
+  // Without `--changed` every listed path is planned on purpose (the release
+  // interaction check); only a list that was meant to be there and is not
+  // gets a warning.
+  if (own.includes('--changed') && changed == null)
     console.error(
       "::warning title=Changed specs not planned::The scope step could not list the changed files, so only this lane's own paths run here.",
     );

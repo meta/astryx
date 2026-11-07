@@ -523,7 +523,9 @@ describe('WebKit interaction proof routing', () => {
     const folderOf = file =>
       /^(packages\/[^/]+\/src\/[A-Z][^/]*)\//.exec(file)?.[1];
     const folders = [...new Set(listedSpecs.map(folderOf).filter(Boolean))];
-    // Lab's own proofs too, not only Core's.
+    // Lab's own proofs too, not only Core's. A pull request that changes
+    // only Lab takes the Lab-only lane, which runs no interaction proofs
+    // (spec:AST-030 FR26), so Lab's folders run beside a change outside Lab.
     expect(folders).toContain('packages/lab/src/RefreshControl');
     for (const folder of folders) {
       const change = `${folder}/Changed.tsx`;
