@@ -36,6 +36,7 @@ import {
   watchRevealPan,
   type KeyboardHeightEvent,
 } from './keyboardHeight';
+import {coveredBy} from './keyboardTarget';
 
 type FakeViewport = EventTarget & {
   height: number;
@@ -191,6 +192,65 @@ describe('the layout viewport WebKit reports under a pinch zoom (FR2)', () => {
     });
     rootHeight(714);
     expect(measureKeyboardHeight(window)).toBe(337);
+  });
+
+  it('reads the visual viewport height once while Safari pans, the pan check included (INV11)', () => {
+    safari({
+      innerHeight: 377,
+      innerWidth: 402,
+      height: 377,
+      scale: 1,
+      offsetTop: 337,
+    });
+    rootHeight(714);
+    let height = viewport.height;
+    let reads = 0;
+    Object.defineProperty(viewport, 'height', {
+      configurable: true,
+      get: () => {
+        reads += 1;
+        return height;
+      },
+      set: (value: number) => {
+        height = value;
+      },
+    });
+    expect(measureKeyboardHeight(window)).toBe(337);
+    expect(reads).toBe(1);
+  });
+
+  it('reads the visual viewport height once per report while Safari pans, a reader laying out included (INV11)', () => {
+    safari({innerHeight: 714, innerWidth: 402, height: 714, scale: 1});
+    rootHeight(714);
+    const covered: number[] = [];
+    const stop = subscribeKeyboardHeight(window, event => {
+      if (event.type === 'viewport') {
+        covered.push(coveredBy(700, event.height, 0, window));
+      }
+    });
+    let height = viewport.height;
+    let reads = 0;
+    Object.defineProperty(viewport, 'height', {
+      configurable: true,
+      get: () => {
+        reads += 1;
+        return height;
+      },
+      set: (value: number) => {
+        height = value;
+      },
+    });
+    try {
+      vi.stubGlobal('innerHeight', 377);
+      reads = 0;
+      report({height: 377, offsetTop: 337});
+      // A 337 px keyboard under a 714 px layout viewport covers 323 px of a
+      // bottom edge at 700.
+      expect(covered).toEqual([323]);
+      expect(reads).toBe(1);
+    } finally {
+      stop();
+    }
   });
 
   it('reads none where the layout viewport truly shrinks for the keyboard, as under resizes-content', () => {

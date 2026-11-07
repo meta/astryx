@@ -8,7 +8,8 @@
  *   resize, scroll and touch), and the layout viewport's height
  * @output The on-screen keyboard module: measureKeyboardHeight,
  *   isKeyboardMeasurable, hasVirtualKeyboard, subscribeKeyboardHeight,
- *   getKeyboardHeight, isTextEntryControl, findTextEntryControl,
+ *   getKeyboardHeight, getKeyboardViewportHeight, isTextEntryControl,
+ *   findTextEntryControl,
  *   refuseFocusReveal and watchRevealPan
  * @position Core's one source for the on-screen keyboard. It is internal to
  *   core and never exported from the package.
@@ -70,13 +71,29 @@ export function isKeyboardMeasurable(win: Window): boolean {
  * `isKeyboardMeasurable` is false.
  */
 export function measureKeyboardHeight(win: Window): number {
+  return measureKeyboard(win).height;
+}
+
+/**
+ * The keyboard height, and the layout viewport's height it is measured
+ * against (null where the keyboard is not measurable). It reads the visual
+ * viewport's height once.
+ */
+function measureKeyboard(win: Window): {
+  height: number;
+  viewportHeight: number | null;
+} {
   const viewport = win.visualViewport;
   if (viewport == null || !isKeyboardMeasurable(win)) {
-    return 0;
+    return {height: 0, viewportHeight: null};
   }
-  const height =
-    layoutViewportHeight(win) - viewport.height * (viewport.scale ?? 1);
-  return height > KEYBOARD_EPSILON ? Math.round(height * 100) / 100 : 0;
+  const visualHeight = viewport.height;
+  const viewportHeight = layoutViewportHeight(win, visualHeight);
+  const height = viewportHeight - visualHeight * (viewport.scale ?? 1);
+  return {
+    height: height > KEYBOARD_EPSILON ? Math.round(height * 100) / 100 : 0,
+    viewportHeight,
+  };
 }
 
 /** A report from the keyboard module, in the order the window raised them. */
@@ -100,6 +117,8 @@ export type KeyboardHeightEvent =
 
 interface KeyboardStore {
   height: number;
+  /** The layout viewport's height that `height` was measured against. */
+  viewportHeight: number | null;
   listeners: Set<(event: KeyboardHeightEvent) => void>;
   /** The subscribers that asked for focus moves too (the layout guide). */
   focusListeners: Set<(event: KeyboardHeightEvent) => void>;
@@ -114,6 +133,7 @@ function storeOf(win: Window): KeyboardStore {
   if (store == null) {
     store = {
       height: 0,
+      viewportHeight: null,
       listeners: new Set(),
       focusListeners: new Set(),
       detach: null,
@@ -146,21 +166,28 @@ function isHideStep(win: Window, shown: number, height: number): boolean {
 
 function attach(win: Window, store: KeyboardStore): () => void {
   const viewport = win.visualViewport;
-  store.height = measureKeyboardHeight(win);
+  const first = measureKeyboard(win);
+  store.height = first.height;
+  store.viewportHeight = first.viewportHeight;
   // Set while a step of a hide waits. The store keeps the height it reported,
   // so every reader lays out once, when the keyboard comes to rest.
   let stepTimer: ReturnType<typeof setTimeout> | null = null;
   let stepHeight = 0;
   let stepLimit = 0;
-  const deliver = (height: number, timeStamp: number) => {
+  const deliver = (
+    {height, viewportHeight}: ReturnType<typeof measureKeyboard>,
+    timeStamp: number,
+  ) => {
     store.height = height;
+    store.viewportHeight = viewportHeight;
     const report: KeyboardHeightEvent = {type: 'viewport', height, timeStamp};
     for (const listener of [...store.listeners]) {
       listener(report);
     }
   };
   const onViewport = (event: Event) => {
-    const height = measureKeyboardHeight(win);
+    const measured = measureKeyboard(win);
+    const {height} = measured;
     if (isHideStep(win, store.height, height)) {
       // A pan reports the same step again, and leaves the wait as it is.
       if (
@@ -180,7 +207,7 @@ function attach(win: Window, store: KeyboardStore): () => void {
       stepTimer = setTimeout(
         () => {
           stepTimer = null;
-          deliver(measureKeyboardHeight(win), win.performance.now());
+          deliver(measureKeyboard(win), win.performance.now());
         },
         Math.min(HIDE_STEP_WAIT_MS, stepLimit - now),
       );
@@ -190,7 +217,7 @@ function attach(win: Window, store: KeyboardStore): () => void {
       clearTimeout(stepTimer);
       stepTimer = null;
     }
-    deliver(height, event.timeStamp);
+    deliver(measured, event.timeStamp);
   };
   viewport?.addEventListener('resize', onViewport);
   viewport?.addEventListener('scroll', onViewport);
@@ -293,6 +320,18 @@ export function subscribeKeyboardHeight(
 export function getKeyboardHeight(win: Window): number {
   const store = stores.get(win);
   return store?.detach != null ? store.height : measureKeyboardHeight(win);
+}
+
+/**
+ * The layout viewport's height, CSS px, that `getKeyboardHeight` was
+ * measured against. A reader that lays out against the keyboard reads both
+ * from the module, so a keyboard change reads the visual viewport once.
+ */
+export function getKeyboardViewportHeight(win: Window): number {
+  const store = stores.get(win);
+  return store?.detach != null && store.viewportHeight != null
+    ? store.viewportHeight
+    : layoutViewportHeight(win);
 }
 
 /**

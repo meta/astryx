@@ -37,8 +37,10 @@ that times motion with it. Everything here is internal to
   resize, and with `{focus: true}` focus moves, whose input-stream
   subscriptions exist only while such a subscriber does) from one set of listeners per window,
   however many components subscribe, and `getKeyboardHeight(window)` gives a reader the
-  height that report measured. No other code in core listens to the visual
-  viewport for the keyboard.
+  height that report measured. `getKeyboardViewportHeight(window)` gives the
+  layout viewport's height that report measured it against, so a reader lays
+  out with no second read of the visual viewport. No other code in core
+  listens to the visual viewport for the keyboard.
 - **Focus (FR4):** `refuseFocusReveal(document, {claim, park, isActive})`
   delivers every focus move a surface claims with `preventScroll`, on the
   capture-phase `blur` before the browser's own focus step, so the browser
@@ -174,7 +176,7 @@ that times motion with it. Everything here is internal to
 
 Layout follows the height (FR3), through a functional style on your own
 element, so it is right with no animation running; for an element docked at
-the bottom, `lift = height > 0 ? max(0, restingBottom − (layoutViewportHeight(window) − height)) : 0`.
+the bottom, `lift = height > 0 ? max(0, restingBottom − (getKeyboardViewportHeight(window) − height)) : 0`.
 An animation that rides the keyboard is optional polish on top, timed by the
 guide:
 

@@ -3,7 +3,7 @@
 /**
  * @file layoutViewport.ts
  * @input A window: its innerHeight and innerWidth, its visual viewport's
- *   width and scale, and its document's root box
+ *   width, scale and height, and its document's root box
  * @output layoutViewportHeight, the layout viewport's height in layout px
  *   less a classic horizontal scrollbar, and __resetLayoutViewportForTest
  * @position Internal shared measurement, not re-exported from the utils
@@ -27,8 +27,13 @@
  * 377 of 714. The root's client height stays 714. So at a scale of 1, where
  * `innerHeight` equals the visual viewport's height, the function takes the
  * larger of the two. The root must also be as wide as the visual viewport.
+ * A caller that has read the visual viewport's height for the same layout
+ * passes it as `visualHeight`, so that one layout reads it once.
  */
-export function layoutViewportHeight(win: Window): number {
+export function layoutViewportHeight(
+  win: Window,
+  visualHeight?: number,
+): number {
   const viewport = win.visualViewport;
   const width = viewport?.width ?? 0;
   if (viewport == null || !(width > 0)) {
@@ -54,7 +59,7 @@ export function layoutViewportHeight(win: Window): number {
   if (
     root != null &&
     Math.abs(scale - 1) < 0.001 &&
-    Math.abs(win.innerHeight - viewport.height) < 1 &&
+    Math.abs(win.innerHeight - (visualHeight ?? viewport.height)) < 1 &&
     Math.abs(root.clientWidth - width) < 1
   ) {
     return Math.max(layout, root.clientHeight);

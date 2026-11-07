@@ -15,7 +15,6 @@
 import {animatorFor, type Animator} from '../motion/animator';
 import {isCoarsePointer} from '../utils/coarsePointer';
 import {subscribeInput} from '../utils/inputStream';
-import {layoutViewportHeight} from '../utils/layoutViewport';
 import {scrollingAncestor} from '../utils/scrollingAncestor';
 import {
   KEYBOARD_EPSILON,
@@ -23,6 +22,7 @@ import {
   findTextEntryControl,
   focusAtPoint,
   getKeyboardHeight,
+  getKeyboardViewportHeight,
   isKeyboardMeasurable,
   isTextEntryControl,
   refuseFocusReveal,
@@ -157,7 +157,7 @@ function dockOf(
   node: HTMLElement,
   view: Window,
 ): 'docked' | 'fills-viewport' | 'floating' {
-  const viewportBottom = layoutViewportHeight(view);
+  const viewportBottom = getKeyboardViewportHeight(view);
   const box = node.getBoundingClientRect();
   if (box.height >= viewportBottom - KEYBOARD_EPSILON) {
     return 'fills-viewport';
@@ -285,7 +285,7 @@ export function coveredBy(
   offset: number,
   win: Window,
 ): number {
-  const covered = bottom + offset - (layoutViewportHeight(win) - height);
+  const covered = bottom + offset - (getKeyboardViewportHeight(win) - height);
   return height > 0 && covered > KEYBOARD_EPSILON ? covered : 0;
 }
 
@@ -359,7 +359,7 @@ function revealDistance(
   shift = 0,
 ): number {
   const doc = field.ownerDocument;
-  const keyboardTop = layoutViewportHeight(win) - height;
+  const keyboardTop = getKeyboardViewportHeight(win) - height;
   let safeTop = 0;
   let safeBottom =
     height > KEYBOARD_EPSILON ? keyboardTop - offset : keyboardTop;
@@ -590,7 +590,7 @@ function exceedsRoom(
   return (
     height > KEYBOARD_EPSILON &&
     container.getBoundingClientRect().height >
-      layoutViewportHeight(win) - height + KEYBOARD_EPSILON
+      getKeyboardViewportHeight(win) - height + KEYBOARD_EPSILON
   );
 }
 
