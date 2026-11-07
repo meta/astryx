@@ -26,8 +26,9 @@
  *      the first row intersecting the viewport top, so above-window size
  *      corrections keep the row being read visually frozen.
  *
- * Corrections are SYNCHRONOUS pre-paint: every commit's layout effect runs
- * the pass — measure (forced reads only for never-seen rows; the rest come
+ * Corrections are SYNCHRONOUS pre-paint: the layout effect runs the pass for
+ * each commit that changes the geometry, the mounted rows, the scroller or a
+ * sizing prop — measure (forced reads only for never-seen rows; the rest come
  * from ResizeObserver callbacks), recompute offsets, resize the spacers,
  * restore scrollTop from the mode — all before the browser paints. No
  * compensation deltas anywhere: position is always re-derived from the
@@ -307,6 +308,7 @@ export function ChatVirtualizer<T>(
   const passedRenderRef = React.useRef<{
     keys: string;
     scroller: HTMLElement | null;
+    sizing: readonly unknown[];
   } | null>(null);
   const pendingRenderKeysRef = React.useRef('');
   const gapTailRef = React.useRef<HTMLDivElement | null>(null);
@@ -978,21 +980,28 @@ export function ChatVirtualizer<T>(
   // The pre-paint correction slot. (No separate initial-landing effect: this
   // pass computes the window from the declared target on the same commits,
   // attach arrival included.) A commit that changes none of what the pass
-  // reads — the geometry, the rows mounted, the scroller — skips it: a parent
-  // re-render with the same data, a label change.
+  // reads — the geometry, the rows mounted, the scroller, the sizing props —
+  // skips it: a parent re-render with the same data, a label change.
   React.useLayoutEffect(() => {
     const scroller = getScroller();
     const keys = pendingRenderKeysRef.current;
+    const sizing = [
+      overscanTop,
+      overscanBottom,
+      estimatedItemSize,
+      getItemType,
+    ];
     const passed = passedRenderRef.current;
     if (
       !geoChanged.current &&
       passed !== null &&
       passed.keys === keys &&
-      passed.scroller === scroller
+      passed.scroller === scroller &&
+      passed.sizing.every((value, i) => Object.is(value, sizing[i]))
     ) {
       return;
     }
-    passedRenderRef.current = {keys, scroller};
+    passedRenderRef.current = {keys, scroller, sizing};
     syncAndRestore();
   });
 
@@ -1422,8 +1431,14 @@ export function ChatVirtualizer<T>(
         }
         run.push(key);
       }
-      if (isTailAppend) {
-        for (const key of run) {
+      // Only while the reader is away from the tail: a window that reached
+      // the previous last row follows the append itself. At most one
+      // window's worth of the newest rows mounts this way.
+      const wasAtTail =
+        win.end >= win.start && win.end >= arrival.data.length - 1;
+      if (isTailAppend && !wasAtTail) {
+        const room = Math.max(1, win.end - win.start + 1);
+        for (const key of run.slice(0, room)) {
           if (!reached(key)) {
             next.add(key);
           }

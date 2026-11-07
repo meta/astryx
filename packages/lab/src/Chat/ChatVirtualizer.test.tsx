@@ -487,6 +487,49 @@ describe('ChatVirtualizer', () => {
     }
   });
 
+  it('mounts no more than a window of rows when a large batch is appended while following', async () => {
+    const el = tallScroller();
+    let rendered = new Set<string>();
+    const list = (data: Row[]) => (
+      <ChatVirtualizer<Row>
+        data={data}
+        getRowKey={m => String(m.id)}
+        renderItem={({item}) => {
+          rendered.add(String(item.id));
+          return <span>{item.text}</span>;
+        }}
+        estimatedItemSize={100}
+        scrollElement={el}
+      />
+    );
+    const {rerender} = render(list(rows(40)));
+    await settled();
+    const window = rendered.size;
+    // 2,000 messages arrive at once while the list follows the newest one.
+    rendered = new Set();
+    act(() => rerender(list(rows(2040))));
+    await settled();
+    expect(rendered.size).toBeLessThanOrEqual(2 * Math.max(window, 60));
+    expect(screen.getByText('message 2039')).toBeInTheDocument();
+    el.remove();
+  });
+
+  it('mounts at most a window of rows when a large batch arrives while the reader is in history', async () => {
+    const el = tallScroller();
+    const {container, rerender} = render(attachedTo(rows(60), el));
+    await settled();
+    scrollEvent(el, 0);
+    await settled();
+    const window = container.querySelectorAll('[data-pkey]').length;
+    act(() => rerender(attachedTo(rows(2060), el)));
+    expect(
+      container.querySelectorAll('[data-pkey]').length,
+    ).toBeLessThanOrEqual(2 * window);
+    // The newest message is among the ones that mount.
+    expect(screen.getByText('message 2059')).toBeInTheDocument();
+    el.remove();
+  });
+
   it('mounts no extra rows when another thread replaces the rows while the reader is in history', async () => {
     const el = tallScroller();
     const thread = (prefix: string, n: number): Row[] =>
