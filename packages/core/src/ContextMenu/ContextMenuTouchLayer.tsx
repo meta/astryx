@@ -32,6 +32,13 @@ export interface ContextMenuTouchLayerProps {
   ref?: Ref<ContextMenuTouchHandle>;
   /** Open the menu at a client point (where the finger landed). */
   onOpen: (point: {x: number; y: number}) => void;
+  /**
+   * The hold committed: the menu shows at its moment or at the lift, so its
+   * content can mount now, hidden.
+   */
+  onCommit?: () => void;
+  /** The press ended with no menu: what mounted at the commit can go. */
+  onCancel?: () => void;
 }
 
 /**
@@ -48,16 +55,32 @@ export function ContextMenuTouchLayer({
   triggerRef,
   ref,
   onOpen,
+  onCommit,
+  onCancel,
 }: ContextMenuTouchLayerProps): null {
   const onOpenRef = useRef(onOpen);
   onOpenRef.current = onOpen;
+  const onCommitRef = useRef(onCommit);
+  onCommitRef.current = onCommit;
+  const onCancelRef = useRef(onCancel);
+  onCancelRef.current = onCancel;
   const hasPressOpenedRef = useRef(false);
 
   // The gesture hook follows the element behind the ref, so a `triggerAs`
   // swap moves the recognizer to the new node.
   const recognizer = useGestureRecognizer(
     triggerRef,
-    () => new ContextMenuPressRecognizer(),
+    () => {
+      const recognizer = new ContextMenuPressRecognizer();
+      // Its target-action listeners never hear `failed`, so a press that ends
+      // with no menu releases what the commit mounted from here.
+      recognizer.addTransitionListener((_press, _from, to) => {
+        if (to === 'failed' || to === 'cancelled') {
+          onCancelRef.current?.();
+        }
+      });
+      return recognizer;
+    },
     press => {
       const open = () => {
         hasPressOpenedRef.current = true;
@@ -72,6 +95,9 @@ export function ContextMenuTouchLayer({
           // The click haptic, where a vibration motor is the only haptic.
           // iOS Safari can play none here: no tap lands at the commit.
           playHaptic(contextMenu.commitHaptic);
+          // The menu shows at its moment or at the lift. Mounted now, its
+          // content costs that show nothing.
+          onCommitRef.current?.();
           break;
         case 'changed':
           if (press.isMenuDue && !hasPressOpenedRef.current) {

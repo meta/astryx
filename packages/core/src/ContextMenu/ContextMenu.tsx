@@ -28,7 +28,9 @@
  * context menu that was never opened adds no popover element to the page (a
  * table with a menu on every cell would otherwise carry one per cell). Once
  * mounted it stays, so every later open and close, its exit animation
- * included, runs as before.
+ * included, runs as before. A finger's hold mounts it, closed, at the
+ * commit, so the show at 735 ms only reveals it. A hold that ends with no
+ * menu unmounts it again.
  * The trigger wrapper is a `div` by default; `triggerAs` makes it an inline
  * `span`, so a reference inside prose can own a context menu without
  * breaking the text flow.
@@ -666,6 +668,14 @@ export function ContextMenu({
     [layer, updateOpenState, usesBottomSheet],
   );
 
+  // The hold's commit: the menu shows at its moment or at the lift, so its
+  // layer mounts now, closed, and the show only reveals it.
+  const prepareMenu = useCallback(() => {
+    if (!usesBottomSheet) {
+      layer.prepare();
+    }
+  }, [layer, usesBottomSheet]);
+
   // The box the cursor anchor's offsets are measured from: the trigger, which
   // is its containing block.
   const getAnchorBaseRect = useCallback(
@@ -978,6 +988,8 @@ export function ContextMenu({
           ref={touchHandleRef}
           triggerRef={triggerRef}
           onOpen={openFromFinger}
+          onCommit={prepareMenu}
+          onCancel={layer.releasePrepared}
         />
       ) : null}
 
