@@ -451,6 +451,11 @@ test.describe('touch input', () => {
     const {numbers} = outcome as TouchLiftStallError;
     expect(numbers.gapMs).toBeGreaterThan(40);
     expect(numbers.scriptedGapMs).toBeLessThanOrEqual(40);
+    // Like every pacing error, it names the longest frame gap.
+    expect(numbers.frameGapMs).toEqual(expect.any(Number));
+    expect(String(outcome)).toMatch(
+      /; the page drew no frame for \d+ ms during the gesture\. /,
+    );
     // The error gives the gap the page itself read.
     const gap = await pageLiftGap();
     expect(gap).toBeGreaterThan(40);
@@ -535,6 +540,43 @@ test.describe('touch input', () => {
         `gap ${index} of ${stamps.length - 1}`,
       ).toBeGreaterThanOrEqual(scripted - ANSWER_SLACK_MS - 1);
     }
+  });
+
+  test("a tap the page holds past the component's catch time fails by name, with the time the page drew no frame, where the page stamps touches on arrival", async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'webkit',
+      'only WebKit stamps a touch when it arrives; Chromium carries the scripted times',
+    );
+    // The page's own touchstart listener holds its main thread for 120 ms, so
+    // WebKit hands it the lift late, and no frame is drawn meanwhile.
+    await page.route('http://touch-hold.test/', route =>
+      route.fulfill({
+        contentType: 'text/html',
+        body: '<!doctype html><body style="margin:0;height:3000px;touch-action:none"><script>addEventListener("touchstart",()=>{if(window.busy){const end=performance.now()+120;while(performance.now()<end){}}},{passive:true})</script>',
+      }),
+    );
+    await page.goto('http://touch-hold.test/');
+    const driver = await touchDriver(page);
+    const script = tap({x: 200, y: 300}, {holdMs: 40});
+    // On a free page, the 40 ms hold stays under the 85 ms bound.
+    await driver.play(script, {boundaries: {holdMs: 85}});
+    await page.evaluate(() => {
+      (window as unknown as {busy: boolean}).busy = true;
+    });
+    // Without a bound, a tap's hold is not judged.
+    await driver.play(script);
+    const outcome = await driver.play(script, {boundaries: {holdMs: 85}}).then(
+      () => 'resolved',
+      (error: unknown) => error,
+    );
+    expect(String(outcome)).toMatch(
+      /the page read a hold of \d+ ms where the script holds 40 ms, on the other side of the 85 ms the component decides on; the page drew no frame for (\d+) ms during the gesture/,
+    );
+    const gap = Number(/drew no frame for (\d+) ms/.exec(String(outcome))?.[1]);
+    expect(gap).toBeGreaterThan(100);
   });
 
   test('a Chromium play carries the scripted times, so a slow onEvent before its lift does not fail it', async ({
