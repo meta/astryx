@@ -2296,10 +2296,19 @@ jobs:
         with:
           name: pr-analysis
 
+      # Before the count: selecting a pull request's specs resolves its
+      # components through the built Storybook's story index.
+      - name: Download Storybook artifact
+        if: steps.scope.outputs.has_components == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: storybook-${{ needs.build-storybook.outputs.short_hash }}
+          path: apps/storybook/dist
+
       # How many legs the selection needs, from the specs' recorded times, and
       # this leg's share, which the run step reads. It runs before the
-      # Storybook download and the Chromium install; listing the specs installs
-      # the workspace's dependencies. The runner, its routing lines and the
+      # Chromium install; listing the specs installs the workspace's
+      # dependencies. The runner, its routing lines and the
       # times come from the merge commit. The merge commit's first parent is
       # the base branch tip that it merges into.
       - name: Count this run's accessibility legs
@@ -2322,13 +2331,6 @@ jobs:
       - name: Leave the specs to the legs that have a share
         if: steps.scope.outputs.has_components == 'true' && steps.legs.outputs.runs != 'true'
         run: echo "This leg runs no accessibility specs (${{ steps.legs.outputs.count }} leg(s) planned for this selection)."
-
-      - name: Download Storybook artifact
-        if: steps.scope.outputs.has_components == 'true' && steps.legs.outputs.runs == 'true'
-        uses: actions/download-artifact@v8
-        with:
-          name: storybook-${{ needs.build-storybook.outputs.short_hash }}
-          path: apps/storybook/dist
 
       - name: Install Playwright
         if: steps.scope.outputs.has_components == 'true' && steps.legs.outputs.runs == 'true'
