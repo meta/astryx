@@ -34,15 +34,22 @@ const REWARD_MEMBER_NAME = 'Ami Pena';
 const REWARD_MEMBER_AVATAR = '/images/avatars/DATA-Ami-Pena.png';
 
 const styles = stylex.create({
-  // Desktop overlap stage: fixed, viewport-centered 1200px box (shared with the
-  // aurora blobs) so cards track the blobs on resize. Capped to 100vw to avoid
-  // horizontal scroll. Hidden <1024px, where the collage takes over.
+  // Desktop overlap stage: a centered 1200px box (shared with the aurora blobs)
+  // so cards track the blobs on resize. Capped to the rail's width, never
+  // 100vw: with a classic scrollbar 100vw is wider than the rail, which zeroes
+  // the auto margins and shoves the box left. Hidden <1024px, where the
+  // collage takes over.
+  //
+  // Sticky inside HeroThemeReel's cards rail, not fixed: it pins under the
+  // header for the whole pin-and-cover but lifts with the document, so it can
+  // never paint into an overscroll gap (#5470). Centered by auto margins in
+  // the full-width rail — on a sticky box `left` is an inset, so the old
+  // `left: 50%; translateX(-50%)` trick would shift it instead.
   stage: {
-    position: 'fixed',
+    position: 'sticky',
     top: 'var(--appshell-header-height, 0px)',
-    left: '50%',
-    transform: 'translateX(-50%)',
-    width: 'min(1200px, 100vw)',
+    marginInline: 'auto',
+    width: 'min(1200px, 100%)',
     height: 1050,
     pointerEvents: 'none',
     display: {

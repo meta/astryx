@@ -17,6 +17,8 @@ import {astryxTheme} from '@/themes/astryx';
 import {layout} from '../../layout.stylex';
 import {
   HeroReelProvider,
+  HeroReelSwipeArea,
+  HeroReelBackdrop,
   HeroReelCards,
   HeroReelStack,
   HeroReelWordmark,
@@ -39,22 +41,39 @@ const styles = stylex.create({
     // Shared by the nav→wordmark gap and the text→cards gap so they match.
     '--hero-gap': 'calc(var(--spacing-12) * 2)',
   },
-  // Desktop: fixed for pin-and-cover (heroSpacer reserves its height). Narrow:
-  // in flow — the mobile hero is taller than the viewport, so pinning stranded
-  // the lower collage below the fold.
+  // Desktop: the hero text's rail — absolute over the whole of heroScope (hero
+  // band + showcase) so the sticky heroContent inside pins for the entire
+  // pin-and-cover; inside the 760px band alone it would release after ~48px.
+  // It doubles as the reel's swipe/hover surface (HeroReelSwipeArea), so it
+  // keeps pointer events: over the band it is the top-most hit target, and the
+  // showcase, later in tree order, covers it as it scrolls up. Narrow: in flow,
+  // wrapping the hero text like the old provider wrapper did.
+  heroContentRail: {
+    position: {
+      default: 'static',
+      '@media (min-width: 1024px)': 'absolute',
+    },
+    inset: {
+      default: 'auto',
+      '@media (min-width: 1024px)': 0,
+    },
+  },
+  // Desktop: sticky for pin-and-cover (heroSpacer reserves its height) —
+  // sticky rather than fixed so the band lifts with the document and can't
+  // bleed into an overscroll gap (#5470). Narrow: in flow — the mobile hero is
+  // taller than the viewport, so pinning stranded the lower collage below the
+  // fold.
   heroContent: {
     position: {
       default: 'relative',
-      '@media (min-width: 1024px)': 'fixed',
+      '@media (min-width: 1024px)': 'sticky',
     },
-    // top offset only matters when fixed; in flow it would leave a gap.
+    // top offset only matters when sticky; in flow it would leave a gap.
     top: {
       default: 0,
       '@media (min-width: 1024px)': 'var(--appshell-header-height, 0px)',
     },
-    left: 0,
-    right: 0,
-    // Desktop: fixed band, centered (cards are a separate overlap layer).
+    // Desktop: pinned band, centered (cards are a separate overlap layer).
     // Narrow: auto height (sizes to text + collage); a ResizeObserver applies it
     // to heroSpacer so the showcase starts right after the cards.
     height: {
@@ -85,7 +104,7 @@ const styles = stylex.create({
     // content (the buttons/links re-enable pointer events on themselves).
     zIndex: 0,
   },
-  // Reserves the fixed hero's height (desktop); 0 on narrow (hero is in flow).
+  // Reserves the pinned hero's height (desktop); 0 on narrow (hero is in flow).
   heroSpacer: {
     height: {
       default: 0,
@@ -146,7 +165,7 @@ const styles = stylex.create({
     },
     insetBlockEnd: {
       default: 'auto',
-      // The fixed band's bottom sits a nav-height above the real seam, so
+      // The pinned band's bottom sits a nav-height above the real seam, so
       // subtract it to land 32px above the features surface.
       '@media (min-width: 1024px)':
         'calc(var(--spacing-8) - var(--appshell-header-height, 0px))',
@@ -342,11 +361,18 @@ export default function HomePage() {
       {/* HeroReelProvider holds the shared cycling state for the cards, wordmark,
           and dots. The headline/CTAs stay in stable Astryx brand style. */}
       <HeroReelProvider>
-        {/* Desktop overlap cards layer (the gutters). */}
-        <HeroReelCards />
-        {/* Reserves the fixed hero's height so the showcase starts below it. */}
+        {/* Reserves the pinned hero's height so the showcase starts below it. */}
         <div {...stylex.props(styles.heroSpacer)} aria-hidden="true" />
-        <HeroContent contentRef={heroContentRef} />
+        {/* The pinned layers, one full-height rail each, all direct children of
+            heroScope (HeroReelProvider renders no DOM). Every hero layer ties
+            at z-index 0/auto, so this tree order IS the paint order: backdrop,
+            then the overlap cards, then the hero text — and all of them before
+            the showcase, which covers them as it scrolls up. */}
+        <HeroReelBackdrop />
+        <HeroReelCards />
+        <HeroReelSwipeArea xstyle={styles.heroContentRail}>
+          <HeroContent contentRef={heroContentRef} />
+        </HeroReelSwipeArea>
       </HeroReelProvider>
       <VStack ref={showcaseRef} xstyle={styles.showcaseOverlay}>
         <FeaturesShowcase />
