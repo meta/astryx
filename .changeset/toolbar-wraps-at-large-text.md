@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] A `Toolbar` with `centerContent` wraps its row when its lanes don't fit, as at a larger text size on a phone, instead of letting the center title spill over the buttons beside it and past the screen's edge. The end lane moves to a second line. While the lanes fit, the center sits at the toolbar's middle as before.
+[fix] A `Toolbar` with `centerContent` wraps its row when its lanes don't fit, as at a larger text size on a phone, instead of letting the center title spill over the buttons beside it and past the screen's edge. The end lane moves to a second line. While the lanes fit, the center sits at the toolbar's middle as before. In a narrow container, a center `TabList` now shows all its tabs and the row wraps, instead of scrolling the tabs in place.
 
 @cixzhang
