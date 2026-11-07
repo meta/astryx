@@ -4,8 +4,8 @@
 
 /**
  * @file page.tsx
- * @input Deterministic multi-file and single-file diff workloads, view mode,
- *   and syntax highlighting on or off
+ * @input Deterministic diff workloads (multi-file presets from typical to the
+ *   upper bound, or one file), view mode, and syntax highlighting on or off
  * @output Interactive DiffViewer benchmark: diff-model time, first file on
  *   screen, total render, long tasks, DOM size, heap, scroll frames, and the
  *   cost of collapse, expand, and view switches; files mount on screen by
@@ -54,6 +54,7 @@ import {
   MULTI_FILE_WORKLOADS,
   SINGLE_FILE_LINES,
   type DiffBenchmarkFile,
+  type MultiFileWorkloadId,
   type SingleFileChange,
 } from './benchmark';
 
@@ -69,6 +70,8 @@ type Mount = 'visible' | 'all';
 interface RunSubject {
   label: string;
   totalLines: number;
+  changedLines: number;
+  largestFileChangedLines: number;
   viewMode: DiffViewerViewMode;
   syntax: Syntax;
   mount: Mount;
@@ -333,7 +336,7 @@ function Metric({label, value}: {label: string; value: string}) {
 
 export default function DiffViewerPerfPage() {
   const [scenario, setScenario] = useState<Scenario>('multi');
-  const [fileCount, setFileCount] = useState('200');
+  const [preset, setPreset] = useState<MultiFileWorkloadId>('large');
   const [lineCount, setLineCount] = useState('5000');
   const [change, setChange] = useState<SingleFileChange>('sparse');
   const [viewMode, setViewMode] = useState<DiffViewerViewMode>('unified');
@@ -352,12 +355,16 @@ export default function DiffViewerPerfPage() {
   const workload = useMemo(() => {
     if (scenario === 'multi') {
       const entry =
-        MULTI_FILE_WORKLOADS.find(w => String(w.files) === fileCount) ??
+        MULTI_FILE_WORKLOADS.find(w => w.id === preset) ??
         MULTI_FILE_WORKLOADS[0];
-      return createMultiFileWorkload(entry.files, entry.totalLines);
+      const generated = createMultiFileWorkload(
+        entry.files,
+        entry.changedLines,
+      );
+      return {...generated, label: `${entry.label}, ${generated.label}`};
     }
     return createSingleFileWorkload(Number(lineCount), change);
-  }, [scenario, fileCount, lineCount, change]);
+  }, [scenario, preset, lineCount, change]);
 
   const language = syntax === 'on' ? undefined : 'plaintext';
   const diffLines = useMemo(() => diffLineCount(files), [files]);
@@ -366,6 +373,8 @@ export default function DiffViewerPerfPage() {
     const subject: RunSubject = {
       label: workload.label,
       totalLines: workload.totalLines,
+      changedLines: workload.changedLines,
+      largestFileChangedLines: workload.largestFileChangedLines,
       viewMode,
       syntax,
       mount,
@@ -417,9 +426,12 @@ export default function DiffViewerPerfPage() {
         // Looks for a rendered diff now and then once per frame, so a file
         // that renders late is caught at the frame it appears.
         const watchFirstFile = () => {
-          // Unified view renders a <table>; split view, a role="table" grid.
+          // Unified view renders a <table>; split view, a role="table" grid;
+          // a file folded for its size, only its fold row.
           if (
-            surfaceRef.current?.querySelector('table, [role="table"]') != null
+            surfaceRef.current?.querySelector(
+              'table, [role="table"], [data-diff-fold]',
+            ) != null
           ) {
             afterNextPaint(renderStart, ms => {
               firstFileMs = ms;
@@ -567,6 +579,8 @@ export default function DiffViewerPerfPage() {
   const shown: RunSubject = run.subject ?? {
     label: workload.label,
     totalLines: workload.totalLines,
+    changedLines: workload.changedLines,
+    largestFileChangedLines: workload.largestFileChangedLines,
     viewMode,
     syntax,
     mount,
@@ -597,16 +611,16 @@ export default function DiffViewerPerfPage() {
             </SegmentedControl>
             {scenario === 'multi' ? (
               <SegmentedControl
-                label="Files"
-                value={fileCount}
-                onChange={setFileCount}
+                label="Size"
+                value={preset}
+                onChange={value => setPreset(value as MultiFileWorkloadId)}
                 isDisabled={controlsDisabled}
                 size="sm">
                 {MULTI_FILE_WORKLOADS.map(entry => (
                   <SegmentedControlItem
-                    key={entry.files}
-                    value={String(entry.files)}
-                    label={entry.files.toLocaleString()}
+                    key={entry.id}
+                    value={entry.id}
+                    label={entry.label}
                   />
                 ))}
               </SegmentedControl>
@@ -696,6 +710,12 @@ export default function DiffViewerPerfPage() {
               <Heading level={3}>Run metrics</Heading>
               <HStack gap={2} wrap="wrap">
                 <Badge label={shown.label} />
+                <Badge
+                  label={`${shown.changedLines.toLocaleString()} changed lines`}
+                />
+                <Badge
+                  label={`largest file ${shown.largestFileChangedLines.toLocaleString()} changed`}
+                />
                 <Badge
                   label={`${shown.totalLines.toLocaleString()} file lines`}
                 />

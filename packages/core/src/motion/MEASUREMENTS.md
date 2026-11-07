@@ -37,27 +37,28 @@ installed); rows marked † also on iOS 18 for the pre-glass delta. iPhone
 
 ## Shared (foundation)
 
-| ID    | What                       | App and gesture                                                                                                                                       | Extract                                                                                                                | Method | Feeds                                                                                                                                             |
-| ----- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| M-S1  | Deceleration rates         | none                                                                                                                                                  | `UIScrollView.DecelerationRate.normal.rawValue`, `.fast.rawValue`                                                      | D      | `scroll.decelerationRate`                                                                                                                         |
-| M-S2  | Momentum coast             | A long list (Contacts, or a probe table of 500 rows): flicks released at 1000, 2500, 5000 pt/s                                                        | contentOffset(t) from release to rest; decay constant; per-millisecond vs per-frame model; the speed at which it stops | C      | `scroll.decelerationRate`                                                                                                                         |
-| M-S3  | Bounce-back spring         | Same list: drag 120 pt past the top, hold still, release; a flick into the top edge at 3000 pt/s                                                      | contentOffset(t) after release and after edge contact; spring response and damping ratio; velocity hand-off            | C      | `scroll.bounce`                                                                                                                                   |
-| M-S5  | Rubber band                | Same list on an 852 pt view: drag 100, 300, 600 pt past the top; a horizontal pager                                                                   | displayed overflow against finger overflow; confirm c = 0.55 and d = the view's size on the axis                       | C      | `scroll.rubberBand`                                                                                                                               |
-| M-PG1 | Paging                     | Photos full-screen swipes; a probe paging scroll view                                                                                                 | page chosen per release position × velocity (thresholds; at most one page?); contentOffset(t) onto the page            | B, C   | `scroll.paging`                                                                                                                                   |
-| M-ST1 | Scroll to top              | Settings scrolled down 500, 2000, 8000 pt; tap the status bar                                                                                         | contentOffset(t); duration against distance; curve or spring fit                                                       | B, C   | `scroll.scrollToTopRate`                                                                                                                          |
-| M-N1  | Navigation push            | Settings: tap General                                                                                                                                 | incoming leading edge x(t), outgoing x(t) (parallax fraction), dimming alpha(t); animation parameters                  | A, B   | `springs.navigationPush`                                                                                                                          |
-| M-N2  | Navigation pop             | General: back button                                                                                                                                  | same as M-N1                                                                                                           | A, B   | `springs.navigationPop`                                                                                                                           |
-| M-N3  | Interactive pop            | Settings ▸ General: edge swipe released at 40 % of the width at 600 pt/s (finishes) and at 30 % at rest (cancels)                                     | x(t) after release; spring parameters; the finish / cancel rule (position, velocity)                                   | A, B   | `springs.navigationInteractivePopFinish`                                                                                                          |
-| M-A1  | Alert                      | Probe app: `UIAlertController(.alert)` presented and dismissed                                                                                        | scale(t), alpha(t) of the alert and the dimming view; animation parameters                                             | A      | `springs.alertPresent`, `.alertDismiss`                                                                                                           |
-| M-AS1 | Action sheet and menu      | Probe app: `.actionSheet`; a button with a `UIMenu` as its primary action; Files: the … menu                                                          | scale, alpha, position (t) on open and close; animation parameters                                                     | A, B   | `springs.actionSheet*`, `.menu*`                                                                                                                  |
-| M-CM1 | Context menu               | Files: long-press an item; dismiss by tapping outside                                                                                                 | preview scale(t) on lift, backdrop blur and dim (t), menu scale(t); the preview's return on dismiss                    | A, B   | `springs.contextMenu*`                                                                                                                            |
-| M-K1  | UIKit legacy spring        | Probe app: `UIView.animate(withDuration:usingSpringWithDamping:initialSpringVelocity:)`, durations 0.3, 0.5, 1 × ratios 0.5, 0.8, 1 × velocities 0, 2 | the `CASpringAnimation` UIKit attaches: mass, stiffness, damping, initialVelocity, duration, settlingDuration          | A      | `springs.ts` (UIKit's legacy springs)                                                                                                             |
-| M-K2  | Default spring, keyboard   | Probe app: an animator with `UISpringTimingParameters()`; focus and blur a text field                                                                 | both springs' parameters and allowsOverdamping; the keyboard notification's duration and curve                         | A, D   | `springs.viewChange`, `.keyboard`, `timing.keyboard*`                                                                                             |
-| M-CA1 | Settling duration          | none: `CASpringAnimation` mass 1, stiffness 100, damping 5, 10, 15, 20, 40 × initialVelocity 0, 5, −5 × allowsOverdamping on, off                     | `settlingDuration` of each (checks the critically damped and overdamped branches)                                      | D      | `springs.ts` (settling)                                                                                                                           |
-| M-T1  | Banner                     | A notification pushed to the simulator while an app is in the foreground                                                                              | banner y(t) in and out; time on screen                                                                                 | B      | `springs.banner`                                                                                                                                  |
-| M-RM1 | Reduced Motion             | Reduce Motion on, Prefer Cross-Fade Transitions on and off: Settings push and pop, an alert (sheets: M-SH13; controls: M-SW11, M-SL12, M-SG15)        | which transitions become cross-fades; alpha(t), duration and curve; what still moves                                   | B      | `timing.reducedMotionCrossFadeMs` (played at 200 ms: `design:reduced-motion` DR2 caps it, DEC-1 of 2026-10-24, departing from the measured 0.5 s) |
-| M-PR1 | Press release curve        | Settings and Contacts: a row tapped and released (the deselect cross-fade)                                                                            | the timing function Core Animation attaches to the deselect fade (control points)                                      | A      | `timing.press.highlightOutCurve`                                                                                                                  |
-| M-NB1 | Navigation bar hide / show | none                                                                                                                                                  | `UINavigationController.hideShowBarDuration`                                                                           | D      | `timing.navigationBarHideShowMs`                                                                                                                  |
+| ID    | What                       | App and gesture                                                                                                                                       | Extract                                                                                                                                        | Method | Feeds                                                                                                                                             |
+| ----- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M-S1  | Deceleration rates         | none                                                                                                                                                  | `UIScrollView.DecelerationRate.normal.rawValue`, `.fast.rawValue`                                                                              | D      | `scroll.decelerationRate`                                                                                                                         |
+| M-S2  | Momentum coast             | A long list (Contacts, or a probe table of 500 rows): flicks released at 1000, 2500, 5000 pt/s                                                        | contentOffset(t) from release to rest; decay constant; per-millisecond vs per-frame model; the speed at which it stops                         | C      | `scroll.decelerationRate`                                                                                                                         |
+| M-S3  | Bounce-back spring         | Same list: drag 120 pt past the top, hold still, release; a flick into the top edge at 3000 pt/s                                                      | contentOffset(t) after release and after edge contact; spring response and damping ratio; velocity hand-off                                    | C      | `scroll.bounce`                                                                                                                                   |
+| M-S5  | Rubber band                | Same list on an 852 pt view: drag 100, 300, 600 pt past the top; a horizontal pager                                                                   | displayed overflow against finger overflow; confirm c = 0.55 and d = the view's size on the axis                                               | C      | `scroll.rubberBand`                                                                                                                               |
+| M-PG1 | Paging                     | Photos full-screen swipes; a probe paging scroll view                                                                                                 | page chosen per release position × velocity (thresholds; at most one page?); contentOffset(t) onto the page                                    | B, C   | `paging`                                                                                                                                          |
+| M-ST1 | Scroll to top              | Settings scrolled down 500, 2000, 8000 pt; tap the status bar                                                                                         | contentOffset(t); duration against distance; curve or spring fit                                                                               | B, C   | `scroll.scrollToTopRate`                                                                                                                          |
+| M-N1  | Navigation push            | Settings: tap General                                                                                                                                 | incoming leading edge x(t), outgoing x(t) (parallax fraction), dimming alpha(t); animation parameters                                          | A, B   | `springs.navigationPush`                                                                                                                          |
+| M-N2  | Navigation pop             | General: back button                                                                                                                                  | same as M-N1                                                                                                                                   | A, B   | `springs.navigationPop`                                                                                                                           |
+| M-N3  | Interactive pop            | Settings ▸ General: edge swipe released at 40 % of the width at 600 pt/s (finishes) and at 30 % at rest (cancels)                                     | x(t) after release; spring parameters; the finish / cancel rule (position, velocity)                                                           | A, B   | `springs.navigationInteractivePopFinish`                                                                                                          |
+| M-A1  | Alert                      | Probe app: `UIAlertController(.alert)` presented and dismissed                                                                                        | scale(t), alpha(t) of the alert and the dimming view; animation parameters                                                                     | A      | `springs.alertPresent`, `.alertDismiss`                                                                                                           |
+| M-AS1 | Action sheet and menu      | Probe app: `.actionSheet`; a button with a `UIMenu` as its primary action; Files: the … menu                                                          | scale, alpha, position (t) on open and close; animation parameters                                                                             | A, B   | `springs.actionSheet*`, `.menu*`                                                                                                                  |
+| M-CM1 | Context menu               | Files: long-press an item; dismiss by tapping outside                                                                                                 | preview scale(t) on lift, backdrop blur and dim (t), menu scale(t); the preview's return on dismiss                                            | A, B   | `springs.contextMenu*`                                                                                                                            |
+| M-K1  | UIKit legacy spring        | Probe app: `UIView.animate(withDuration:usingSpringWithDamping:initialSpringVelocity:)`, durations 0.3, 0.5, 1 × ratios 0.5, 0.8, 1 × velocities 0, 2 | the `CASpringAnimation` UIKit attaches: mass, stiffness, damping, initialVelocity, duration, settlingDuration                                  | A      | `springs.ts` (UIKit's legacy springs)                                                                                                             |
+| M-K2  | Default spring, keyboard   | Probe app: an animator with `UISpringTimingParameters()`; focus and blur a text field                                                                 | both springs' parameters and allowsOverdamping; the keyboard notification's duration and curve                                                 | A, D   | `springs.viewChange`, `.keyboard`, `timing.keyboard*`                                                                                             |
+| M-CA1 | Settling duration          | none: `CASpringAnimation` mass 1, stiffness 100, damping 5, 10, 15, 20, 40 × initialVelocity 0, 5, −5 × allowsOverdamping on, off                     | `settlingDuration` of each (checks the critically damped and overdamped branches)                                                              | D      | `springs.ts` (settling)                                                                                                                           |
+| M-T1  | Banner                     | A notification pushed to the simulator while an app is in the foreground                                                                              | banner y(t) in and out; time on screen                                                                                                         | B      | `springs.banner`                                                                                                                                  |
+| M-RM1 | Reduced Motion             | Reduce Motion on, Prefer Cross-Fade Transitions on and off: Settings push and pop, an alert (sheets: M-SH13; controls: M-SW11, M-SL12, M-SG15)        | which transitions become cross-fades; alpha(t), duration and curve; what still moves                                                           | B      | `timing.reducedMotionCrossFadeMs` (played at 200 ms: `design:reduced-motion` DR2 caps it, DEC-1 of 2026-10-24, departing from the measured 0.5 s) |
+| M-PR1 | Press release curve        | Settings and Contacts: a row tapped and released (the deselect cross-fade)                                                                            | the timing function Core Animation attaches to the deselect fade (control points)                                                              | A      | `timing.press.highlightOutCurve`                                                                                                                  |
+| M-NB1 | Navigation bar hide / show | none                                                                                                                                                  | `UINavigationController.hideShowBarDuration`                                                                                                   | D      | `timing.navigationBarHideShowMs`                                                                                                                  |
+| M-PB1 | Indeterminate pulse        | Reduce Motion on: Safari loading a page (its indeterminate bar) beside ProgressBar's reduced-motion pulse                                             | Not a parity value: an owner value (`component:ProgressBar` DEC-2); confirm the 2000 ms pulse reads as calm and the 0.84 floor keeps 3:1 (AR4) | B      | `progressBar.reducedMotionPulseMs`, `progressBar.reducedMotionPulseFloor`                                                                         |
 
 Done (UIKit lab, iOS 26.2 simulator, Oct 23 2026; values in `uikit/` tagged
 `measured:`): M-S1, M-NB1, M-K2, M-CA1 (underdamped grid matched to the last
@@ -71,6 +72,13 @@ has `allowsOverdamping` off (clamped to critical) except
 initial velocity's sign flipped, a curve that overshoots. Push and pop are
 not Core Animation animations on iOS 26.2: UIKit writes presentation
 modifiers every frame from the main thread.
+
+## Paging (UIScrollView `isPagingEnabled`, UIPageViewController)
+
+| ID     | What                  | App and gesture                                                                          | Extract                                                                                | Method | Feeds                          |
+| ------ | --------------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ------ | ------------------------------ |
+| M-PG12 | End of a settle       | Same pager: releases at rest from 10 %, 49 %, 60 % and 90 % of a page, logged at 120 fps | remaining distance and step velocity at the frame the offset lands exactly on the page | C      | `paging.integrator.restSpeed`  |
+| M-PG13 | Settle velocity floor | Same pager: steady releases from 200 to 250 pt/s in 5 pt/s steps, at 25 % of a page      | the slowest release whose `scrollViewWillEndDragging` velocity is not 0                | C      | `paging.release.velocityFloor` |
 
 ## Gestures (UIKit gesture recognizers)
 
@@ -94,7 +102,7 @@ of a page scroll, so many of these can be read off Safari itself.
 | M-G12 | `UIKIT_GESTURES.control.trackingExpansion`      | Calculator (UIButton): HID press, drag away at 20 px/s filmed at 60 fps; distance from the frame at which the highlight turns off, then back on.                                                 | B, C   |
 | M-G14 | `UIKIT_GESTURES.velocity.scrollReleaseWeight`   | Safari page scroll (UIScrollView): HID flings with known speed profiles; back out the release velocity from the coast distance (0.998/ms decay) and compare with this blend on the same samples. | C      |
 | M-G16 | `UIKIT_GESTURES.velocity.stillness`             | Safari page scroll: HID drag, pause P ms, lift; smallest P after which the page does not coast.                                                                                                  | C      |
-| M-G17 | `UIKIT_GESTURES.click.strayClickWindow`         | Not a parity value: confirm in Safari and Chromium that the click follows touchend within one frame.                                                                                             | C      |
+| M-G17 | `CLICK_GUARD_WINDOW_MS` (utils/clickGuard.ts)   | Not a parity value: confirm in Safari and Chromium that the click follows touchend within one frame.                                                                                             | C      |
 | M-G18 | `HAPTIC_VIBRATION_PATTERNS` (every kind)        | On an Android device, compare against the platform HapticFeedbackConstants for the same moments.                                                                                                 | C      |
 | M-G19 | `UIKIT_GESTURES.press.momentumMemory`           | Safari page, hardest HID flick: time from the lift to the last scroll event.                                                                                                                     | C      |
 | M-G20 | `LongPressGestureRecognizer` taps phase         | Probe app: a UILongPressGestureRecognizer with numberOfTapsRequired 1: HID taps held 0.2, 0.5, 1, 2 s, then the press after gaps of 100 to 600 ms; record which recognize.                       | C      |
@@ -110,7 +118,8 @@ during the motion; `velocity(in:)` is 0.2 × the newest event's
 instantaneous velocity + 0.8 × the previous one's (it reproduces every value
 UIKit reported on six recorded streams), does not decay through a rest and
 ignores the lift: the table keeps that one filter and no least-squares
-estimator (`spec:AST-100` FR2); a sheet over a scrolled list leaves the whole
+estimator (`spec:AST-100` FR2; M-G14 is the scroll-view release blend still to
+confirm, and M-G16 is Astryx’s stillness reset, not a UIKit value); a sheet over a scrolled list leaves the whole
 drag to the list (no mid-gesture handoff), so the table carries no handoff
 slop (`spec:AST-094` FR14).
 
@@ -120,12 +129,13 @@ Subject "switch S": the first switch in Settings ▸ Accessibility ▸ Display &
 Text Size (Bold Text row); a minimal host app holds a UISwitch on a plain view
 where a switch outside any scroll view is needed.
 
-Captured (iOS 26.2 simulator, Oct 23 2026), with their values landing in the
-switch's own table: M-SW02, M-SW03, M-SW04, M-SW05, M-SW06, M-SW09 (UISwitch
-makes no haptic call), M-SW11 (Reduce Motion: the lift stays, the stretch
-goes), M-SW16 (iOS 26.2). Until that table lands they stay open here, and
-`springs.switchThumbMove` and `switchThumbStretch` keep WebKit's values.
-Partly: M-SW07 (a single tap only). Still open: M-SW17, and M-SW11's On/Off
+Captured (iOS 26.2 simulator, Oct 23 2026), with their values in the
+switch's own table (`uikit/switch.ts`): M-SW02, M-SW03, M-SW04, M-SW05,
+M-SW06, M-SW09 (UISwitch makes no haptic call), M-SW11 (Reduce Motion: the
+lift stays, the stretch goes), M-SW16 (iOS 26.2). `springs.switchThumbMove`
+holds the measured travel the switch's table reads; WebKit's
+`switchThumbStretch` is retired for the table's `lift`. Partly: M-SW07 (a single
+tap only). Still open: M-SW17, and M-SW11's On/Off
 labels, Reduce Transparency and Bold Text.
 
 | ID     | Scene                                                                                                                                              | Gesture                                                                                                                                                                                           | Extract                                                                                                                                    | Method  |
@@ -209,6 +219,13 @@ Bookmarks sheet.
 | M-SG18 | iPad S1 (touch; pointer if available)                                                                                                       | tap, hold, drag; hover                                                                                                                                                                                                                                                                                                                                                                            | differences from iPhone                                                                                                                               | B      |
 | M-SG19 | Safari showing the segmented stories vs S1                                                                                                  | the segmented storyboards side by side                                                                                                                                                                                                                                                                                                                                                            | synced recordings (parity proof)                                                                                                                      | B      |
 
+Done (UIKit lab, iOS 26.2 simulator, Oct 23–24 2026; in the segmented control's
+own table, `uikit/segmented.ts`, tagged `measured:`): M-SG02 (the selection
+spring and the drag clamp; the tracking spring is the shared
+`springs.fingerTracking`; the lift was measured too and is not in the table,
+since a pressed thumb's lift is a theme's) and M-SG03 (the tap's frames,
+fitted per frame).
+
 ## Sheets (UISheetPresentationController)
 
 Probe app "SheetProbe" on an iPhone 16 Pro (iPad Pro 11" for M-SH11 / M-SH20 /
@@ -251,6 +268,16 @@ match the probe.
 | M-SH21  | SheetProbe on iPad, iOS 27 `preferredPlacement` each case, RTL                                                         | present                                                                                                                             | placement geometry and motion                                                                                                                           | B, C    |
 | M-SH22  | SheetProbe iOS 26 `preferredTransition = .zoom` from a bar button                                                      | present, dismiss                                                                                                                    | morph geometry per frame                                                                                                                                | A, C    |
 
+## Date picker (UIDatePicker)
+
+Rules the DateInput, DateTimeInput and TimeInput touch sheets follow, in their
+own table (`uikit/datePicker.ts`). The wheels' physics are UIPickerView's: the
+table only names them, and their values belong to the wheel's own table.
+
+Done (UIKit lab, iOS 26.2 simulator, Oct 23 2026; in the date picker's table):
+the month/year wheels changing the date, the AM/PM column following the hour,
+the turn back onto a bound, and the day clamped to the month.
+
 ## Context menu (UIContextMenuInteraction)
 
 Values the context menu reads from its own table, which lands with the
@@ -269,3 +296,66 @@ fades in, with Prefer Cross-Fade Transitions on or off.
 | M-CM4 | Reduce Motion press feedback    | Probe app with Reduce Motion on: long press, then dismiss                                                                   | press feedback, lift and dismiss animations under Reduce Motion                                                                                                                           | A, B   |
 | M-CM5 | Commit haptic stand-in          | An Android device: `navigator.vibrate` patterns against the platform's HapticFeedbackConstants for the context-click moment | the pattern that matches; not a UIKit parity value (as M-G18)                                                                                                                             | H      |
 | M-CM6 | Press thresholds                | Probe app: repeated long presses at random vsync phases                                                                     | from touch receipt and from the HID timestamp, the tick before and the tick at the press observer's began and at the click commit; the intersection pins the 150 ms and 400 ms thresholds | C      |
+
+## Popovers (UIPopoverPresentationController)
+
+Values the popover reads from its own table (`uikit/popover.ts`). Its growth
+and shrink play the theme's duration and easing tokens, not UIKit's springs.
+The table keeps how long UIKit's springs take, as references: the growth comes
+within 2% of its end in 206 ms and plays `--duration-medium-min`, the nearest
+step in the Storybook theme (225 ms); the shrink takes 249 ms and plays the
+exit every overlay shares.
+
+Done (iOS 26.2 simulator, Oct 23 2026; in the popover's table): the scale and
+length a popover below its source grows from, how long its growth and shrink
+take, and Reduce Motion, with the `.none` adaptation on iPhone.
+
+| ID    | Scene                                                                                                                                    | Gesture                     | Extract                                                                                                                      | Method |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------ |
+| M-PO1 | a popover above its source, one to its left and one to its right; a source near a screen edge so the arrow sits off the popover's centre | present, then a tap outside | which edge stays in place, which length grows from 100 pt, and the point the scale grows out of when the arrow is off centre | A, C   |
+
+## Picker (UIPickerView)
+
+Values the Wheel reads from its own table (`uikit/picker.ts`).
+
+The recordings are of a 402 × 216 pt UIPickerView with two columns of 24 and
+60 rows. It runs in an instrumented host app on the iOS 26.2 simulator
+(iPhone 17 Pro), driven by real HID touches. They hold per-frame offsets, the
+table views' and cells' layers, the delegate calls and the haptics.
+
+Done (UIKit lab, iOS 26.2 simulator, Oct 23 2026; in the picker's table): the
+row pitch, the picker's height, the rubber band's dimension, the coast's stop
+speed, the velocity floor, the snap at rest, the tap spin and the selection
+tick. Measured and kept by the gesture system instead: the
+scroll view coasts with 0.25 × the pan's velocity plus 0.75 × its value one
+event earlier (four HID releases; `velocity.scrollReleaseWeight`, which a
+pan's `scrollVelocity()` reads). On UIKit, Reduce Motion with Prefer Cross-Fade changes
+nothing on a picker; the Wheel follows design:reduced-motion instead.
+
+## Menus (UIMenu)
+
+Probe: the UIKit lab host app with a UIButton whose `UIMenu` is its primary
+action (`showsMenuAsPrimaryAction`), three to twelve items, on a plain view
+and inside a UIScrollView; the gesture-state, presentation-modifier,
+display-link and feedback hooks; real HID touches.
+
+| ID    | Scene                  | Gesture                                                                                                                                                 | Extract                                                                                                                                 | Method |
+| ----- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| M-MN2 | button on a plain view | hold until the menu is open, then lift still; move 8 pt down, 8 pt right, 12 pt down, (7, 7), (8, 8) and lift; move 6 pt before the open and 6 pt after | row picked or not; handoff and list-selection recognizer states; highlighted row per frame: threshold, metric, where it is counted from | C      |
+
+## Zoom media (UIScrollView zooming, Photos)
+
+Values Lightbox's zoom stage reads (`uikit/zoomMedia.ts`). Done (UIKit lab and
+Photos, iOS 26.2 simulator, Oct 23 2026; tagged `measured:`): the overshoot
+past the limits, the absence of scale momentum and of a two-finger-tap action,
+the content point under the centroid staying put, Photos' aspect-fill double
+tap and its maximum zoom on 3000 × 2000 and 2000 × 3000 photos. M-ZM2 confirms
+that maximum on two other sizes. A zoomed pan flicked into an edge coasts and
+bounces like any scroll view (`scroll.*`). UIKit settles a zoom on an eased
+curve whose length grows with the zoom ratio (100 ms plus 300 ms per unit of
+its log, at most 400 ms). Lightbox's zoom settles on `springs.settle` instead,
+since its main interaction is a gesture (`spec:AST-094` FR45).
+
+| ID    | What         | App and gesture                                                      | Extract                                                                   | Method |
+| ----- | ------------ | -------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------ |
+| M-ZM2 | Maximum zoom | Photos: pinch a 4032 × 3024 and a 1200 × 800 photo as far as it goes | the zoom it settles on against the photo's pixel size and the fitted size | B, C   |

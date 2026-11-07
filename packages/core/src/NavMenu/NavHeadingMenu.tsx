@@ -12,15 +12,21 @@
  * - /packages/core/src/NavMenu/index.ts
  */
 
-import React, {useCallback, useMemo, useRef, type ReactNode} from 'react';
+import React, {use, useCallback, useMemo, useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import {mergeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {useListFocus} from '../hooks/useListFocus';
+import {useMenuPress} from '../hooks/useMenuPress';
+import {pressOnItemsOnly} from '../hooks/menuPressOnItems';
+import {menuTouchActionStyles} from '../DropdownMenu/menuTouchAction.stylex';
+import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
+import {composeEventHandlers} from '../utils/composeEventHandlers';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {themeProps} from '../utils/themeProps';
 import {
+  NavHeadingDismissContext,
   NavHeadingMenuContext,
   useNavHeadingCloseContext,
   type NavHeadingMenuSize,
@@ -46,6 +52,9 @@ const sizeStyles = stylex.create({
     minWidth: 240,
   },
 });
+
+/** The rows a press, a key or typeahead can reach. */
+const ENABLED_ITEM_SELECTOR = '[role="menuitem"]:not([aria-disabled="true"])';
 
 export interface NavHeadingMenuProps extends BaseProps<HTMLDivElement> {
   ref?: React.Ref<HTMLDivElement>;
@@ -98,15 +107,29 @@ export function NavHeadingMenu({
   'data-testid': testId,
   onKeyDown: onKeyDownProp,
   onKeyDownCapture: onKeyDownCaptureProp,
+  onPointerDown: onPointerDownProp,
   ...rest
 }: NavHeadingMenuProps) {
   const closeCtx = useNavHeadingCloseContext();
   const closeMenu = closeCtx?.closeMenu;
+  // A heading whose menu items do not close it on selection (an expanded
+  // SideNavHeading) still lets a mouse released outside dismiss it.
+  const dismissMenu = use(NavHeadingDismissContext)?.dismiss;
 
   const {listRef, handleKeyDown, focusItem} = useListFocus({
-    itemSelector: '[role="menuitem"]:not([aria-disabled="true"])',
+    itemSelector: ENABLED_ITEM_SELECTOR,
     onEscape: closeMenu,
   });
+
+  // A press that slides across the rows acts on the row it lifts on, the
+  // highlight following the pointer, as every menu does
+  // (`family:action-groups` FR1-FR3); a mouse released outside closes it.
+  const menuPress = useMenuPress({
+    menuRef: listRef,
+    itemSelector: ENABLED_ITEM_SELECTOR,
+    onDismiss: closeMenu ?? dismissMenu,
+  });
+  const hasOverflow = useMenuOverflow(listRef, children, true);
 
   // First-character typeahead over the (enabled) menu items (menus-11).
   const getMenuItems = useCallback(
@@ -114,7 +137,7 @@ export function NavHeadingMenu({
       listRef.current
         ? Array.from(
             listRef.current.querySelectorAll<HTMLElement>(
-              '[role="menuitem"]:not([aria-disabled="true"])',
+              ENABLED_ITEM_SELECTOR,
             ),
           )
         : [],
@@ -189,11 +212,26 @@ export function NavHeadingMenu({
         data-testid={testId}
         {...mergeProps(
           themeProps('nav-heading-menu', {size}),
-          stylex.props(styles.root, sizeStyles[size], xstyle),
+          stylex.props(
+            styles.root,
+            sizeStyles[size],
+            hasOverflow
+              ? menuTouchActionStyles.scrolls
+              : menuTouchActionStyles.fits,
+            xstyle,
+          ),
           className,
           inlineStyle,
         )}
         {...rest}
+        {...menuPress.menuProps}
+        onPointerDown={composeEventHandlers(
+          onPointerDownProp,
+          pressOnItemsOnly(
+            menuPress.menuProps.onPointerDown,
+            ENABLED_ITEM_SELECTOR,
+          ),
+        )}
         role="menu"
         onKeyDownCapture={handleMenuKeyDownCapture}
         onKeyDown={handleMenuKeyDown}>

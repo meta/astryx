@@ -5,7 +5,7 @@
 import {useState} from 'react';
 import {BottomSheet} from '@astryxdesign/core/BottomSheet';
 import {Button} from '@astryxdesign/core/Button';
-import {CheckboxInput} from '@astryxdesign/core/CheckboxInput';
+import {CheckboxList, CheckboxListItem} from '@astryxdesign/core/CheckboxList';
 import {Divider} from '@astryxdesign/core/Divider';
 import {Heading} from '@astryxdesign/core/Heading';
 import {Section} from '@astryxdesign/core/Section';
@@ -25,23 +25,23 @@ export default function BottomSheetShowcase() {
           <VStack gap={4}>
             <Heading level={3}>Filters</Heading>
             <Divider />
-            <VStack gap={2}>
-              <CheckboxInput
+            <CheckboxList label="Filters" isLabelHidden>
+              <CheckboxListItem
                 label="In stock"
-                value={inStock}
-                onChange={setInStock}
+                isChecked={inStock}
+                onCheck={setInStock}
               />
-              <CheckboxInput
+              <CheckboxListItem
                 label="On sale"
-                value={onSale}
-                onChange={setOnSale}
+                isChecked={onSale}
+                onCheck={setOnSale}
               />
-              <CheckboxInput
+              <CheckboxListItem
                 label="Free shipping"
-                value={freeShipping}
-                onChange={setFreeShipping}
+                isChecked={freeShipping}
+                onCheck={setFreeShipping}
               />
-            </VStack>
+            </CheckboxList>
             <Button label="Apply" onClick={() => setIsOpen(false)} />
           </VStack>
         </Section>

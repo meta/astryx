@@ -54,7 +54,12 @@ import type {BaseProps} from '@astryxdesign/core';
 import {useInputStatusIcon} from '@astryxdesign/core/hooks';
 import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 import {useTranslator} from '@astryxdesign/core/i18n';
-import {mergeProps, themeProps, type SizeValue} from '@astryxdesign/core/utils';
+import {
+  isRenderable,
+  mergeProps,
+  themeProps,
+  type SizeValue,
+} from '@astryxdesign/core/utils';
 import {useSize} from '@astryxdesign/core/SizeContext';
 
 import {LexicalExtensionComposer} from '@lexical/react/LexicalExtensionComposer';
@@ -72,12 +77,15 @@ import {TablePlugin} from '@lexical/react/LexicalTablePlugin';
 import {HorizontalRuleExtension} from '@lexical/extension';
 import {TextSemanticsExtension} from './textSemantics';
 import {TableColumnFloorPlugin} from './TableColumnFloorPlugin';
+import {CodeBackspacePlugin} from './CodeBackspacePlugin';
 import {CodeBlockHeaderPlugin} from './CodeBlockHeaderPlugin';
 import {CodeSyntaxPlugin} from './CodeSyntaxPlugin';
 import {MarkdownExtensionsPlugin} from './MarkdownExtensionsPlugin';
 import type {RichTextMarkdownExtension} from './markdownExtensions';
 import type {CodeLanguage} from '@astryxdesign/core/CodeBlock';
 import {TaskCheckboxPlugin} from './TaskCheckboxPlugin';
+import {SelectAllScopePlugin} from './SelectAllScopePlugin';
+import {ImageSourceCaretPlugin} from './ImageSourceCaretPlugin';
 import {type Transformer} from '@lexical/markdown';
 import {$generateHtmlFromNodes} from '@lexical/html';
 import {DEFAULT_NODES} from './editorNodes';
@@ -370,7 +378,7 @@ export interface RichTextEditorProps extends Omit<
    *   info-tip button that reveals the message
    * @default 'attached'
    */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusVariant | 'tooltip';
   /**
    * Width of the field. Numbers are treated as pixels, strings are used as-is
    * (e.g. `'100%'`).
@@ -599,7 +607,7 @@ export const RichTextEditor = function RichTextEditor({
   }
 
   const hasTabEscapeHint = editable && tabEscapeHint !== '';
-  const hasToolbar = toolbar != null && typeof toolbar !== 'boolean';
+  const hasToolbar = isRenderable(toolbar);
 
   const {statusIcon, describedBy: statusTooltipDescribedBy} =
     useInputStatusIcon({
@@ -717,6 +725,9 @@ export const RichTextEditor = function RichTextEditor({
               <TableColumnFloorPlugin />
               <CodeBlockHeaderPlugin codeLanguages={codeLanguages} />
               <CodeSyntaxPlugin codeLanguages={codeLanguages} />
+              {/* Backspace at the very start of a code block makes it a
+                  paragraph, instead of merging it into the block above. */}
+              <CodeBackspacePlugin />
               {markdownExtensions != null && markdownExtensions.length > 0 ? (
                 <MarkdownExtensionsPlugin
                   extensions={markdownExtensions}
@@ -725,6 +736,8 @@ export const RichTextEditor = function RichTextEditor({
               ) : null}
               <TabIndentationPlugin />
               <TabFocusEscapePlugin />
+              <SelectAllScopePlugin />
+              <ImageSourceCaretPlugin />
               {hasMarkdownShortcuts && (
                 <MarkdownShortcutPlugin transformers={markdownTransformers} />
               )}
@@ -755,6 +768,7 @@ export const RichTextEditor = function RichTextEditor({
           <VisuallyHidden id={tabEscapeHintID}>{tabEscapeHint}</VisuallyHidden>
         )}
       </div>
+      {/* eslint-disable-next-line @astryx/no-nullish-jsx-guard -- `maxLength` is a number; 0 still shows its counter */}
       {maxLength != null && (
         <div
           id={counterID}

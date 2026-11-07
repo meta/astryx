@@ -109,7 +109,7 @@ export const docs = {
       name: 'size',
       type: "'sm' | 'md'",
       description:
-        'The size of the checkbox. sm for compact layouts, md for default.',
+        'The size of the checkbox. sm for compact layouts, md for default. Under a coarse pointer a labelled checkbox’s target grows toward 44 px through an invisible hit area. It never shrinks below the row and stops at half the gap to a closer neighbour; nothing changes size.',
       default: "'md'",
     },
     {
@@ -150,6 +150,15 @@ export const docs = {
         states: ['checked', 'disabled'],
       },
       {className: 'astryx-checkbox-label'},
+    ],
+    vars: [
+      {
+        name: '--_indicator-press-image',
+        description:
+          "The row's touch press image, handed down to a first-party indicator that paints its own press. Set from the press paint only while the row itself is pressed, or, under a CheckboxList row that owns the press, from that row's press paint. Only this row declares it.",
+        default: 'none',
+        private: true,
+      },
     ],
   },
   usage: {
@@ -352,7 +361,8 @@ export const docsZh = {
     {
       name: 'size',
       type: "'sm' | 'md'",
-      description: '复选框尺寸。sm 用于紧凑布局，md 为默认。',
+      description:
+        '复选框尺寸。sm 用于紧凑布局，md 为默认。在粗指针（触摸）下，带可见标签的复选框的目标通过不可见的点击区域向 44 px 扩展。它不小于所在行，与相邻控件较近时止于间距的一半；尺寸不变。',
       default: "'md'",
     },
     {
@@ -389,6 +399,15 @@ export const docsZh = {
         states: ['checked', 'disabled'],
       },
       {className: 'astryx-checkbox-label'},
+    ],
+    vars: [
+      {
+        name: '--_indicator-press-image',
+        description:
+          '复选框行的触摸按下图像，传递给自行绘制按下效果的第一方指示器。仅在该行自身被按下时根据按下涂层设置；在拥有按下效果的 CheckboxList 行中，取该行的按下涂层。只有该行声明它。',
+        default: 'none',
+        private: true,
+      },
     ],
   },
 };

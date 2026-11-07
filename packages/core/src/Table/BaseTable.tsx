@@ -14,7 +14,15 @@
  * - /packages/cli/assets/templates/blocks/components/Table/ (showcase blocks)
  */
 
-import {memo, useRef, type ReactElement, type ReactNode, type Ref} from 'react';
+import {
+  memo,
+  useId,
+  useRef,
+  type ReactElement,
+  type ReactNode,
+  type Ref,
+} from 'react';
+import {isRenderable} from '../utils/isRenderable';
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import type {
@@ -47,7 +55,13 @@ import {devError} from '../utils/devWarning';
 import {EmptyState} from '../EmptyState';
 import {Text} from '../Text';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Table/BaseTable.generated';
+
+registerEnglishFallback(english);
 
 const styles = stylex.create({
   table: {
@@ -265,10 +279,10 @@ function TableRowInner<T extends Record<string, unknown>>({
  * Compares TableRowProps to determine if re-render is needed.
  * Shallow compares the item object and checks if columns/plugins references changed.
  *
- * Includes rowIndex in the comparison so that plugins using the index
- * (e.g. for row numbering or conditional formatting) get correct values
- * after insertions/deletions. This also future-proofs for tree grid
- * index paths where structural position matters.
+ * The row index reaches a row's output only through a plugin's
+ * `transformBodyRow` (cells get no index), so it is compared only when some
+ * plugin has one: a re-sort that moves rows then re-renders none of them
+ * unless a plugin can show the index (row numbering, conditional formatting).
  */
 function areRowPropsEqual<T extends Record<string, unknown>>(
   prevProps: TableRowProps<T>,
@@ -277,7 +291,10 @@ function areRowPropsEqual<T extends Record<string, unknown>>(
   if (prevProps.rowKey !== nextProps.rowKey) {
     return false;
   }
-  if (prevProps.rowIndex !== nextProps.rowIndex) {
+  if (
+    prevProps.rowIndex !== nextProps.rowIndex &&
+    nextProps.plugins.some(plugin => plugin.transformBodyRow != null)
+  ) {
     return false;
   }
   if (prevProps.ariaRowIndex !== nextProps.ariaRowIndex) {
@@ -357,7 +374,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
   ref,
   ...rest
 }: BaseTableProps<T> & {ref?: Ref<HTMLTableElement>}): ReactElement {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   // Use stable empty array when no plugins provided
   const plugins = pluginsProp ?? (EMPTY_PLUGINS as TablePlugin<T>[]);
 
@@ -413,6 +430,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
   } satisfies TableRenderProps);
 
   // --- Plugin pipeline: header cells ---
+  const headerLabelIdBase = useId();
   const headerCells = resolvedColumns.map((col, columnIndex) => {
     const headerContent = col.header ?? col.key;
 
@@ -467,28 +485,54 @@ function BaseTableInner<T extends Record<string, unknown>>({
     const hasSlots =
       before != null || after != null || overlay != null || below != null;
 
-    const headerInner = hasSlots ? (
-      <>
-        {before}
-        {after != null ? (
-          <div {...stylex.props(styles.headerLabelRow)}>
-            {resolvedContent}
-            {after}
-          </div>
-        ) : (
-          resolvedContent
-        )}
-        {overlay}
-        {below}
-      </>
+    const labelRow = isRenderable(after) ? (
+      <div {...stylex.props(styles.headerLabelRow)}>
+        {resolvedContent}
+        {after}
+      </div>
     ) : (
       resolvedContent
     );
+
+    // The overlay is a control of its own. Keep its name and value out of the
+    // header's name.
+    const namesOwnHeader =
+      isRenderable(overlay) &&
+      mergedHtmlProps['aria-label'] == null &&
+      mergedHtmlProps['aria-labelledby'] == null;
+    const labelId = `${headerLabelIdBase}-label-${columnIndex}`;
+    const belowId = `${headerLabelIdBase}-below-${columnIndex}`;
+    const hasBelow = isRenderable(below);
+
+    const headerInner = !hasSlots ? (
+      resolvedContent
+    ) : namesOwnHeader ? (
+      <>
+        {/* Inline, so the cell's text-overflow still reaches the label. */}
+        <span id={labelId}>
+          {before}
+          {labelRow}
+        </span>
+        {overlay}
+        {hasBelow && <div id={belowId}>{below}</div>}
+      </>
+    ) : (
+      <>
+        {before}
+        {labelRow}
+        {overlay}
+        {below}
+      </>
+    );
+    const headerNameProps = namesOwnHeader
+      ? {'aria-labelledby': hasBelow ? `${labelId} ${belowId}` : labelId}
+      : {};
 
     return (
       <HeaderCellComponent
         key={col.key}
         {...mergedHtmlProps}
+        {...headerNameProps}
         {...headerTitleProp}
         contextMenuActions={cellRenderProps.contextMenuActions}
         xstyle={cellRenderProps.xstyle}>

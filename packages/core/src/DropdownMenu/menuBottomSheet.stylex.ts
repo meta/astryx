@@ -13,8 +13,7 @@ import {spacingVars} from '../theme/tokens.stylex';
 export const menuBottomSheetStyles = stylex.create({
   // The menu's own content element carries the inset a wrapper used to:
   // MenuBottomSheet gives the sheet no content padding, so the sheet keeps
-  // only the band under its grab bar above the first row
-  // (component:BottomSheet, Content area inset), and this element keeps 4px
+  // only the band under its grab bar above the first row, and this element keeps 4px
   // at the sides. The container variables tell bleeding children the
   // padding actually applied.
   content: {

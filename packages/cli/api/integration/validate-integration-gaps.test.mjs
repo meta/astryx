@@ -17,7 +17,6 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {parse} from '@babel/parser';
-import {spawnSync} from 'node:child_process';
 import {
   validateIntegration,
   validateLocalIntegration,
@@ -29,22 +28,26 @@ import {
 } from './check/check.mjs';
 import {componentDocNamesCheck} from '../../foundation/integrations/validate-contributions.mjs';
 import {formatCliCommand} from '../../foundation/env/package-manager.mjs';
+import {runCli} from '../../test-utils/run-cli.mjs';
+import {warmIntegrationChecks} from '../../test-utils/warm-integration-checks.mjs';
+
+// The checks' one-time start in this file (TypeScript and its lib files) runs
+// here, while the file is collected, so no test carries it.
+await warmIntegrationChecks();
 
 let tmpDir;
 let copies = 0;
 
-const CLI = path.join(
-  process.cwd(),
-  'packages',
-  'cli',
-  'clients',
-  'cli',
-  'bin',
-  'astryx.mjs',
-);
-
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-validate-gaps-'));
+  // The fixture is a package with its own TypeScript config, scoped to its
+  // own files. Without one, the prop check reads the repository's root
+  // config, as `tsc` would for a folder inside it, and compiles every
+  // declaration in the repository for each check.
+  fs.writeFileSync(
+    path.join(tmpDir, 'tsconfig.json'),
+    `${JSON.stringify({extends: '../tsconfig.json', include: ['**/*']})}\n`,
+  );
 });
 
 afterEach(() => {
@@ -314,18 +317,14 @@ describe('a name that differs from its file name', () => {
     },
   );
 
-  it('prints the doc names it could not check', () => {
+  it('prints the doc names it could not check', async () => {
     const dir = writeNamed({
       [MANIFEST]: manifest({components: './components'}),
       'components/AcmeWidget.doc.mjs': namedDoc('AcmeWidget', 'AcmeWidgets'),
       'components/AcmeWidget.tsx': "export {AcmeWidgets} from '@acme/ui';\n",
     });
 
-    const run = spawnSync(
-      process.execPath,
-      [CLI, 'doctor', 'integration', 'validate'],
-      {cwd: dir, encoding: 'utf-8', timeout: 60_000},
-    );
+    const run = await runCli(['doctor', 'integration', 'validate'], dir);
     expect(run.status, run.stderr).toBe(0);
     expect(run.stdout).toContain(
       '[info] Component names not checked: 1 doc(s) whose source exports this check cannot read:',
@@ -646,7 +645,7 @@ describe('block component names', () => {
     ]);
   });
 
-  it('prints the block names it could not judge', () => {
+  it('prints the block names it could not judge', async () => {
     const dir = writeKit({
       [MANIFEST]: manifest({templates: './templates'}),
       'templates/account-card.doc.mjs': block(" componentsUsed: ['Panel']"),
@@ -654,11 +653,7 @@ describe('block component names', () => {
         "import * as UI from '@acme/kit';\nexport default function A() {\n  return <UI.Panel />;\n}\n",
     });
 
-    const run = spawnSync(
-      process.execPath,
-      [CLI, 'doctor', 'integration', 'validate'],
-      {cwd: dir, encoding: 'utf-8', timeout: 60_000},
-    );
+    const run = await runCli(['doctor', 'integration', 'validate'], dir);
     expect(run.status, run.stderr).toBe(0);
     expect(run.stdout).toContain(
       '[info] Block component names not checked: 1 name(s) this check could not judge:',
@@ -1926,7 +1921,7 @@ describe('layout findings 0.7.2 did not fail on', () => {
     },
   );
 
-  it('prints the notes and counts none of them', () => {
+  it('prints the notes and counts none of them', async () => {
     const dir = writePackage({
       [MANIFEST]: manifest({components: './components'}),
       'components/AcmeWidget.doc.mjs': componentDoc('AcmeWidget'),
@@ -1934,11 +1929,7 @@ describe('layout findings 0.7.2 did not fail on', () => {
       'components/AcmeWidget.tsx': componentSource('AcmeWidget'),
     });
 
-    const run = spawnSync(
-      process.execPath,
-      [CLI, 'doctor', 'integration', 'validate'],
-      {cwd: dir, encoding: 'utf-8', timeout: 60_000},
-    );
+    const run = await runCli(['doctor', 'integration', 'validate'], dir);
     expect(run.status, run.stderr).toBe(0);
     expect(run.stdout).toContain(
       'note (duplicate_component_doc): [next minor] Component "AcmeWidget" has 2 docs:',
@@ -1983,13 +1974,9 @@ describe('name findings listed until the next minor release', () => {
     },
   );
 
-  it('prints the name notes and counts none', () => {
+  it('prints the name notes and counts none', async () => {
     const dir = blockLayout();
-    const run = spawnSync(
-      process.execPath,
-      [CLI, 'doctor', 'integration', 'validate'],
-      {cwd: dir, encoding: 'utf-8', timeout: 60_000},
-    );
+    const run = await runCli(['doctor', 'integration', 'validate'], dir);
     expect(run.status, run.stderr).toBe(0);
     expect(run.stdout).toContain(
       'note (unknown_block_component): [next minor] Template "account-card" names "AcmeGizmo" in componentsUsed',

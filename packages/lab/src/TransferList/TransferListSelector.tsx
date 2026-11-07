@@ -272,7 +272,7 @@ export function TransferListSelector<T extends string = string>({
               />
             )}
             <fieldset
-              disabled={isDisabled}
+              aria-disabled={isDisabled || undefined}
               {...stylex.props(
                 styles.fieldset,
                 state.isBusy && styles.fieldsetBusy,
@@ -281,8 +281,12 @@ export function TransferListSelector<T extends string = string>({
                 label={label}
                 isLabelHidden
                 options={options}
+                isDisabled={isDisabled}
                 value={transferListValue}
                 onChange={nextValue => {
+                  if (isDisabled) {
+                    return;
+                  }
                   // Now that busy no longer disables the fieldset, the controls
                   // stay live while a change is in flight; ignore transfers
                   // until it settles so one pending action cannot be stacked.

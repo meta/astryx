@@ -258,6 +258,11 @@ export const categories: SandboxCategory[] = [
           'Render and scroll many files and lines; compare unified and split',
       },
       {
+        name: 'Perf Scenes',
+        href: '/pages/perf-scenes/',
+        description: 'Fixed performance scenes to mount and profile by hand',
+      },
+      {
         name: 'Table Lab',
         href: '/pages/table-lab/',
         description:

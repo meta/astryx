@@ -30,5 +30,10 @@
   "DropdownMenuDivider": {"readySelector": "[role=\"menu\"]"},
   "DropdownMenuGroup": {"readySelector": "[role=\"menu\"]"},
   "DropdownMenuItem": {"readySelector": "[role=\"menu\"]"},
-  "DropdownMenuSubMenu": {"evidence": "dropdown-menu-submenu-audit-evidence"}
+  "DropdownMenuSubMenu": {"evidence": "dropdown-menu-submenu-audit-evidence"},
+  "HoverCard": {
+    "stories": ["core-hovercard--open-states"],
+    "readySelector": "[role=\"dialog\"]"
+  },
+  "InputGroupText": {"components": ["InputGroupText", "InputGroup"]}
 }

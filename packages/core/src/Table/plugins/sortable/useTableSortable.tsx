@@ -4,7 +4,8 @@
 
 /**
  * @file useTableSortable.tsx
- * @input React, types, Icon, theme tokens, i18n (useTranslator)
+ * @input React, types, Icon, the theme's `table-sort-indicator` icon slot,
+ *   theme tokens, i18n (useComponentTranslator)
  * @output Exports useTableSortable hook and sort-related types
  * @position Sortable plugin; consumed by Table via plugins prop
  *
@@ -13,19 +14,26 @@
  * - /packages/core/src/Table/index.ts (exports)
  */
 
-import {useRef, useMemo, type ReactNode} from 'react';
+import {useId, useRef, useMemo, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars, spacingVars, radiusVars} from '../../../theme/tokens.stylex';
 import {focusOutlineProps} from '../../../utils/focusOutline.stylex';
 import {Icon} from '../../../Icon';
+import {ComponentIcon} from '../../../Icon/ComponentIcon';
 import {resolveContextActions} from '../../tableContextMenu';
-import {useTranslator, type TranslatorFn} from '../../../i18n';
 import type {
   TablePlugin,
   HeaderCellRenderProps,
   TableColumn,
   TableContextAction,
 } from '../../types';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../../../i18n/useComponentTranslator';
+import english from '../../../i18n/generated-english/Table/plugins/sortable/useTableSortable.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Sort Types
@@ -147,22 +155,27 @@ const sortStyles = stylex.create({
   buttonAlignEnd: {
     justifyContent: 'flex-end',
   },
+  // The wrapper takes no block size, so a theme's larger glyph overflows it
+  // instead of growing the Sort control or the header row. When the slot
+  // hides the glyph, the empty wrapper collapses, so the button's gap does
+  // not offset an end-aligned label.
+  iconWrapper: {
+    display: {default: 'inline-flex', ':empty': 'none'},
+    alignItems: 'center',
+    blockSize: 0,
+  },
   iconWrapperUnsorted: {
-    display: 'inline-flex',
     opacity: {
       default: 0.35,
       ':is(th:hover *)': 1,
       ':focus-visible': 1,
     },
   },
-  iconWrapperActive: {
-    display: 'inline-flex',
-  },
   rank: {
     fontSize: 10,
     // eslint-disable-next-line @astryx/no-hardcoded-styles -- no token for lineHeight:1 (tight badge)
     lineHeight: '1',
-    color: colorVars['--color-accent'],
+    color: colorVars['--color-text-accent'],
   },
 });
 
@@ -181,42 +194,6 @@ function resolveSortKey<T extends Record<string, unknown>>(
     return column.key;
   }
   return sortable.sortKey ?? column.key;
-}
-
-function getHeaderLabel<T extends Record<string, unknown>>(
-  column: TableColumn<T>,
-): string {
-  const {header} = column;
-  if (typeof header === 'string') {
-    return header;
-  }
-  return column.key;
-}
-
-function buildAriaLabel<T extends Record<string, unknown>>(
-  t: TranslatorFn,
-  column: TableColumn<T>,
-  direction: TableSortDirection | null,
-  rank: number | null,
-  total: number,
-): string {
-  const label = getHeaderLabel(column);
-  if (direction == null) {
-    return t('@astryx.table.sort.sortBy', {label});
-  }
-  const directionLabel =
-    direction === 'ascending'
-      ? t('@astryx.table.sort.direction.ascending')
-      : t('@astryx.table.sort.direction.descending');
-  if (rank != null && total > 1) {
-    return t('@astryx.table.sort.sortedByWithPriority', {
-      label,
-      direction: directionLabel,
-      rank,
-      total,
-    });
-  }
-  return t('@astryx.table.sort.sortedBy', {label, direction: directionLabel});
 }
 
 function getNextDirection(
@@ -246,7 +223,7 @@ function SortHeaderButton<T extends Record<string, unknown>>({
   children: ReactNode;
   configRef: React.RefObject<UseTableSortableConfig>;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const config = configRef.current;
   const sortKey = resolveSortKey(column) ?? '';
   const entryIndex = config.sort.findIndex(e => e.sortKey === sortKey);
@@ -257,20 +234,18 @@ function SortHeaderButton<T extends Record<string, unknown>>({
     config.isMultiSortEnabled === true && config.sort.length > 1;
   const rank = isMultiSort && entryIndex >= 0 ? entryIndex + 1 : null;
 
-  const iconName =
+  const indicator =
     direction === 'ascending'
       ? 'arrowUp'
       : direction === 'descending'
         ? 'arrowDown'
         : 'arrowsUpDown';
 
-  const ariaLabel = buildAriaLabel(
-    t,
-    column,
-    direction,
-    rank,
-    config.sort.length,
-  );
+  // The button is named by its column's text, so the column header keeps
+  // that name; direction lives in the header's aria-sort. Only the multi-sort
+  // priority, which aria-sort cannot carry, is a description
+  // (spec:AST-020 FR15; WCAG 1.3.1).
+  const priorityId = useId();
 
   const handleClick = (e: React.MouseEvent | React.KeyboardEvent) => {
     const cfg = configRef.current;
@@ -315,37 +290,48 @@ function SortHeaderButton<T extends Record<string, unknown>>({
   };
 
   return (
-    <button
-      type="button"
-      {...focusOutlineProps.focusVisible(
-        sortStyles.button,
-        column.align === 'end'
-          ? sortStyles.buttonAlignEnd
-          : column.align === 'center'
-            ? sortStyles.buttonAlignCenter
-            : null,
-      )}
-      aria-label={ariaLabel}
-      onClick={handleClick}>
-      <span>{children}</span>
-      <span
-        {...stylex.props(
-          direction != null
-            ? sortStyles.iconWrapperActive
-            : sortStyles.iconWrapperUnsorted,
-        )}>
-        <Icon
-          icon={iconName}
-          size="xsm"
-          color={direction != null ? 'accent' : 'secondary'}
-        />
-      </span>
+    <>
+      <button
+        type="button"
+        {...focusOutlineProps.focusVisible(
+          sortStyles.button,
+          column.align === 'end'
+            ? sortStyles.buttonAlignEnd
+            : column.align === 'center'
+              ? sortStyles.buttonAlignCenter
+              : null,
+        )}
+        aria-describedby={rank != null ? priorityId : undefined}
+        onClick={handleClick}>
+        <span>{children}</span>
+        <span
+          {...stylex.props(
+            sortStyles.iconWrapper,
+            direction == null && sortStyles.iconWrapperUnsorted,
+          )}>
+          <ComponentIcon
+            slot="table-sort-indicator"
+            state={{direction: direction ?? 'none'}}
+            fallback={{icon: indicator, size: 'xsm'}}
+            color={direction != null ? 'accent' : 'secondary'}
+          />
+        </span>
+        {/* eslint-disable-next-line @astryx/no-nullish-jsx-guard -- `rank` is the column's sort position, a number */}
+        {rank != null && (
+          <span {...stylex.props(sortStyles.rank)} aria-hidden="true">
+            {rank}
+          </span>
+        )}
+      </button>
+      {/* eslint-disable-next-line @astryx/no-nullish-jsx-guard -- `rank` is the column's sort position, a number */}
       {rank != null && (
-        <span {...stylex.props(sortStyles.rank)} aria-hidden="true">
-          {rank}
+        // Hidden, so it adds nothing to the button's or the header's name;
+        // aria-describedby still reads it.
+        <span id={priorityId} hidden>
+          {t('@astryx.table.sort.priority', {rank, total: config.sort.length})}
         </span>
       )}
-    </button>
+    </>
   );
 }
 
@@ -378,7 +364,7 @@ export function useTableSortable<
   T extends Record<string, unknown>,
   TSortKey extends string = string,
 >(config: UseTableSortableConfig<TSortKey>): TablePlugin<T> {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const configRef = useRef(config);
   configRef.current = config;
 

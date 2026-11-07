@@ -6,7 +6,7 @@
  * @file Tour.tsx
  * @input Uses React state/refs, TourContext
  * @output Exports Tour controller component and TourProps
- * @position Lab experiment (facebook/astryx#4239); controller consumed by index.ts
+ * @position Lab experiment (meta/astryx#4239); controller consumed by index.ts
  *
  * Tour is the controller for a product-tour / NUX walkthrough. It renders no
  * visible chrome of its own — it owns the tour state (active step, advance /

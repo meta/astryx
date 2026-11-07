@@ -119,6 +119,12 @@ export const docs = {
           default: "'lineGuides'",
         },
         {
+          name: 'animatedLayout',
+          type: 'AnimatedLayout',
+          description:
+            'The handle from useAnimatedLayout({containerRef}). With it, expanding or collapsing a row glides the rows and content after it, up to that container, on one shared motion role instead of jumping, and the shown rows and the chevron move on the same motion. Without it, the content after the row takes its place at once.',
+        },
+        {
           name: 'header',
           type: 'ReactNode',
           description:
@@ -200,6 +206,12 @@ export const docsZh = {
           default: "'lineGuides'",
         },
         {
+          name: 'animatedLayout',
+          type: 'AnimatedLayout',
+          description:
+            'useAnimatedLayout({containerRef}) 返回的句柄。传入后，展开或收起一行时，该行之后直到该容器内的行和内容会以同一个共享动效角色平滑移动，而不是跳动；新显示的行和箭头也使用同一动效。不传时，该行之后的内容会立即就位。',
+        },
+        {
           name: 'header',
           type: 'ReactNode',
           description:
@@ -248,6 +260,7 @@ export const docsDense = {
     items: 'Recursive tree item data w/ id, label, optional children + isExpanded, plus optional xstyle/className/style on its row.',
     density: 'Spacing density for items.',
     variant: 'Guide-line treatment: lineGuides shows connectors, noGuides hides them (indent kept). Orthogonal to density.',
+    animatedLayout: 'handle from useAnimatedLayout({containerRef}); expand/collapse glides the content after the row inside that container on one shared motion role. Omit: content after the row snaps.',
     header: 'Header content, linked to tree via aria-labelledby.',
     xstyle: 'StyleX styles for layout. Must be stylex.create() value.',
   },

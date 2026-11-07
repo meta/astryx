@@ -27,6 +27,7 @@ import {
   DisclosureRig,
   ListReorderRig,
   NavTintRig,
+  ProgressFillRig,
   RailRig,
   SkeletonSwapRig,
   StatCountRig,
@@ -313,6 +314,26 @@ export default function PreviewsPage() {
           />
         </DemoCard>
       </Grid>
+
+      <DemoCard
+        title="ProgressBar fill"
+        question="Width against transform for the determinate fill. Width re-lays out the bar every frame; scaleX stays on the compositor but squashes the rounded ends."
+        badges={<Badge variant="warning" label="PARTIAL" />}>
+        <ComparePanes
+          panes={[
+            {
+              tone: 'before',
+              label: 'Today — real ProgressBar, width',
+              content: <ProgressFillRig mode="before" />,
+            },
+            {
+              tone: 'after',
+              label: 'Proposed — transform: scaleX',
+              content: <ProgressFillRig mode="after" />,
+            },
+          ]}
+        />
+      </DemoCard>
 
       <VStack gap={2}>
         <Heading level={2}>What is not here</Heading>

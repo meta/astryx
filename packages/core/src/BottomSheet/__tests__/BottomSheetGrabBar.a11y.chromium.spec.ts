@@ -7,10 +7,10 @@
  *   grab bar at rest, whatever its padding, so the first line is clear of the
  *   bar's fade; that scrolled content still passes beneath the bar; and that
  *   a sheet whose content fits still does not scroll
- * @position Chromium proof for component:BottomSheet's Content area inset
+ * @position Chromium proof that a resting sheet's first row starts below its grab bar
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -163,7 +163,7 @@ for (const story of ['showcase', 'tall-sheet', 'hug-height', 'text-only']) {
       description: JSON.stringify(reading),
     });
     expect(reading.firstLineTop).not.toBeNull();
-    expect(reading.firstLineTop!).toBeGreaterThanOrEqual(
+    expect(reading.firstLineTop ?? 0).toBeGreaterThanOrEqual(
       reading.barTop + reading.fadeEnd,
     );
     expect(reading.contentTop + 0.5).toBeGreaterThanOrEqual(reading.barTop);

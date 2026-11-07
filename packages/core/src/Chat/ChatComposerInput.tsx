@@ -20,7 +20,7 @@
  * SYNC: When modified, update:
  * - /packages/core/src/Chat/ChatComposerInput.test.tsx
  * - /packages/core/src/Chat/ChatComposerInput.doc.mjs
- * - /packages/core/src/Chat/ChatComposerInput.spec.md
+ * - /docs/specs/components/Chat/ChatComposerInput.spec.md
  * - /apps/storybook/stories/ChatComposerInput.stories.tsx
  * - /packages/core/src/Chat/index.ts
  * - /apps/storybook/stories/ChatComposer.stories.tsx
@@ -68,7 +68,15 @@ import {
 import {Badge, type BadgeProps} from '../Badge';
 import {useChatComposerContext} from './ChatContext';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
+import type {EnterKeyHint} from '../Field/textEntryTraits';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Chat/ChatComposerInput.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Types
@@ -241,6 +249,14 @@ export interface ChatComposerInputProps extends Omit<
    * never submits while a composition is in progress.
    */
   onKeyDown?: (event: KeyboardEvent<HTMLDivElement>) => void;
+  /**
+   * What the Return key of a touch keyboard says (the native
+   * `enterkeyhint`). Enter sends the message, so the key says so: iOS shows
+   * its Send key. When `onKeyDown` makes Enter insert a line break on touch
+   * keyboards, pass `'enter'` so the key shows Return again.
+   * @default 'send'
+   */
+  enterKeyHint?: EnterKeyHint;
 }
 
 // =============================================================================
@@ -346,7 +362,7 @@ function serialize(node: Node): string {
 // =============================================================================
 
 export function ChatComposerInput(props: ChatComposerInputProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const composerCtx = useChatComposerContext();
   const hasControlledValueProp = props.value !== undefined;
 
@@ -367,6 +383,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
     onFiles,
     onSubmit = composerCtx?.onSubmit,
     onKeyDown: onKeyDownProp,
+    enterKeyHint = 'send',
     xstyle,
     className,
     style,
@@ -374,13 +391,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
   } = props;
   // Keep focus/blur observation available, but do not forward activation or
   // editing callbacks from the disabled root (including capture handlers).
-  const rootProps = isDisabled
-    ? Object.fromEntries(
-        Object.entries(rest).filter(
-          ([key]) => !/^on[A-Z]/.test(key) || /^on(Focus|Blur)/.test(key),
-        ),
-      )
-    : rest;
+  const rootProps = withholdCallerHandlers(rest, isDisabled);
   const label = labelFromProps ?? t('@astryx.chat.composerInput.label');
   const placeholder =
     placeholderFromProps ??
@@ -513,6 +524,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
     };
   }, [inputControlRef, focusEditableAtEnd]);
 
+  // Syncs the contentEditable DOM with the controlled `value`.
   useEffect(() => {
     if (controlledValue === undefined || !editableRef.current) {
       return;
@@ -608,9 +620,21 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
     [emitChange, insertTextWithoutEmit],
   );
 
+  const insertTokenWithoutEmit = tokens.insertToken;
+  const insertToken = useCallback(
+    (token: ChatComposerToken) => {
+      const id = insertTokenWithoutEmit(token);
+      if (id != null) {
+        emitChange();
+      }
+      return id;
+    },
+    [emitChange, insertTokenWithoutEmit],
+  );
+
   // A caller may retain a handle across renders. Resolve mutation permission
   // through the latest callbacks rather than the render that created it.
-  insertTokenRef.current = isDisabled ? () => undefined : tokens.insertToken;
+  insertTokenRef.current = isDisabled ? () => undefined : insertToken;
   insertTextRef.current = isDisabled ? () => {} : insertText;
   expandTokenRef.current = isDisabled ? () => {} : tokens.expandToken;
 
@@ -634,6 +658,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
         }
       : triggerMenu.ariaProps;
 
+  // Syncs the trigger menu's pending searches with `isDisabled`.
   useEffect(() => {
     if (isDisabled && triggerMenu.state.isActive) {
       // Reset also cancels pending searches, so late results cannot reopen
@@ -649,6 +674,14 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
     emitChange();
     triggerMenu.handleInput();
   }, [isDisabled, emitChange, triggerMenu]);
+
+  // A click inside the editor keeps the menu open, but it can move the caret
+  // out of the query; the trigger is checked again at the new caret.
+  const handleEditorClick = useCallback(() => {
+    if (!isDisabled && triggerMenu.state.isActive) {
+      triggerMenu.handleInput();
+    }
+  }, [isDisabled, triggerMenu]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLDivElement>) => {
@@ -867,9 +900,13 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
         return;
       }
 
-      // Paste-as-token: convert long pastes to token chips.
+      // Paste-as-token: convert long pastes to token chips. The default
+      // converter inserts through the handle, which publishes the change.
+      const versionBeforeToken = emitChangeVersionRef.current;
       if (pasteAsToken?.onPaste(e, text)) {
-        emitChange();
+        if (emitChangeVersionRef.current === versionBeforeToken) {
+          emitChange();
+        }
         return;
       }
 
@@ -927,8 +964,10 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
         // Explicit in both states: losing editability must not lose focus.
         tabIndex={0}
         contentEditable={!isDisabled}
+        enterKeyHint={enterKeyHint}
         suppressContentEditableWarning
         onInput={handleInput}
+        onClick={handleEditorClick}
         onKeyDown={handleKeyDown}
         onPaste={handlePaste}
         onDragOver={handleDragOver}

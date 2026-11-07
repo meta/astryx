@@ -6,8 +6,9 @@
  * @output Unit tests for keyboard hint rendering
  */
 
-import {render} from '@testing-library/react';
-import {describe, expect, it} from 'vitest';
+import {fireEvent, render, screen} from '@testing-library/react';
+import {createPortal} from 'react-dom';
+import {afterEach, describe, expect, it, vi} from 'vitest';
 import {useKeyboardHint, type KeyboardHintOrientation} from './useKeyboardHint';
 import {InternationalizationProvider} from '../i18n';
 
@@ -88,5 +89,49 @@ describe('useKeyboardHint', () => {
 
     expect(hint.textContent).toContain('pour naviguer');
     expect(hint.textContent).not.toContain('to navigate');
+  });
+});
+
+// component:Toolbar FR6: the hint follows keyboard focus entering the row.
+describe('useKeyboardHint focus inside portaled children', () => {
+  const originalShowPopover = HTMLElement.prototype.showPopover;
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    HTMLElement.prototype.showPopover = originalShowPopover;
+  });
+
+  function Row() {
+    const {hintElement, onFocus, onBlur} = useKeyboardHint({});
+    return (
+      <div onFocus={onFocus} onBlur={onBlur}>
+        <button type="button">First</button>
+        {createPortal(<input aria-label="Sheet field" />, document.body)}
+        {hintElement}
+      </div>
+    );
+  }
+
+  it('neither shows nor spends the hint for focus in a portaled child', () => {
+    // jsdom has neither :focus-visible for synthetic focus nor the Popover API.
+    const matches = HTMLElement.prototype.matches;
+    vi.spyOn(HTMLElement.prototype, 'matches').mockImplementation(function (
+      this: HTMLElement,
+      selector: string,
+    ) {
+      return selector === ':focus-visible'
+        ? true
+        : matches.call(this, selector);
+    });
+    const showPopover = vi.fn();
+    HTMLElement.prototype.showPopover = showPopover;
+    render(<Row />);
+
+    fireEvent.focus(screen.getByRole('textbox', {name: 'Sheet field'}));
+    expect(showPopover).not.toHaveBeenCalled();
+
+    // The one-time hint is still there for the row itself.
+    fireEvent.focus(screen.getByRole('button', {name: 'First'}));
+    expect(showPopover).toHaveBeenCalledTimes(1);
   });
 });

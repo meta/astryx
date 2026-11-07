@@ -224,7 +224,7 @@ export const docs = {
     },
     {
       name: 'statusVariant',
-      type: 'FieldStatusVariant',
+      type: "'attached' | 'detached' | 'tooltip'",
       description: 'Placement treatment for the status message.',
     },
     {
@@ -323,6 +323,13 @@ export const docs = {
           type: 'boolean',
           description:
             'Shows a shared search field that filters both lists by label and description.',
+          default: 'false',
+        },
+        {
+          name: 'isDisabled',
+          type: 'boolean',
+          description:
+            'Disables every transfer, reorder, Clear, Add all and search control. The row controls and the search field stay focusable.',
           default: 'false',
         },
         {
@@ -751,6 +758,8 @@ export const docsDense = {
         selectedLabel: 'Selected-list heading and name.',
         availableLabel: 'Available-list heading and name.',
         hasSearch: 'Shared list filter; default false.',
+        isDisabled:
+          'Disable every control; rows and search stay focusable; default false.',
         searchLabel: 'Accessible search label.',
         searchPlaceholder: 'Search placeholder.',
         isReorderable: 'Enable pointer and keyboard ordering; default true.',

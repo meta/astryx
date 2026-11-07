@@ -47,7 +47,6 @@
   "packages/core/src/DropdownMenu/DropdownMenuRadioItem.doc.mjs docsZh isHiddenFromOverview unknown_field",
   "packages/core/src/DropdownMenu/DropdownMenuSubMenu.doc.mjs docsDense isHiddenFromOverview unknown_field",
   "packages/core/src/Field/FieldLabel.doc.mjs docsDense isHiddenFromOverview unknown_field",
-  "packages/core/src/Grid/GridSpan.doc.mjs docsDense isHiddenFromOverview unknown_field",
   "packages/core/src/InputGroup/InputGroupText.doc.mjs docsDense isHiddenFromOverview unknown_field",
   "packages/core/src/Layout/LayoutContent.doc.mjs docsDense isHiddenFromOverview unknown_field",
   "packages/core/src/Layout/LayoutFooter.doc.mjs docsDense isHiddenFromOverview unknown_field",

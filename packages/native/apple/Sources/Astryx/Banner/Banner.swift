@@ -13,21 +13,21 @@ public enum AstryxBannerStatus: String, CaseIterable, Sendable {
   /// theme's or the platform's symbol for it.
   var iconName: String { rawValue }
 
-  var groundToken: String {
+  func groundColor(_ color: ColorTokens) -> Color {
     switch self {
-    case .info: "color-accent-muted"
-    case .warning: "color-warning-muted"
-    case .error: "color-error-muted"
-    case .success: "color-success-muted"
+    case .info: color.accentMuted
+    case .warning: color.warningMuted
+    case .error: color.errorMuted
+    case .success: color.successMuted
     }
   }
 
-  var iconToken: String {
+  func iconColor(_ color: ColorTokens) -> Color {
     switch self {
-    case .info: "color-accent"
-    case .warning: "color-warning"
-    case .error: "color-error"
-    case .success: "color-success"
+    case .info: color.accent
+    case .warning: color.warning
+    case .error: color.error
+    case .success: color.success
     }
   }
 }
@@ -48,15 +48,15 @@ public struct Banner: View {
   }
 
   public var body: some View {
-    HStack(alignment: .firstTextBaseline, spacing: astryx.space(2)) {
+    HStack(alignment: .firstTextBaseline, spacing: astryx.tokens.space.s2) {
       if let icon = astryx.icon(status.iconName) {
         // Sized with the title so it grows with Dynamic Type.
-        icon.sized(astryx.fontSize("text-body-size", 14))
-          .font(astryx.font(size: "text-body-size", 14, weight: "text-body-weight"))
-          .foregroundStyle(astryx.color(status.iconToken))
+        icon.sized(astryx.tokens.font.body.size * astryx.textScale)
+          .font(astryx.font(TypeStyle(astryx.tokens.font.body, families: astryx.tokens.font.family.body)))
+          .foregroundStyle(status.iconColor(astryx.tokens.color))
           .accessibilityHidden(true)
       }
-      VStack(alignment: .leading, spacing: astryx.space(1)) {
+      VStack(alignment: .leading, spacing: astryx.tokens.space.s1) {
         Text(title, weight: .semibold)
         if let description {
           Text(description, color: .secondary)
@@ -64,10 +64,10 @@ public struct Banner: View {
       }
       .frame(maxWidth: .infinity, alignment: .leading)
     }
-    .padding(astryx.space(3))
+    .padding(astryx.tokens.space.s3)
     .background(
-      RoundedRectangle(cornerRadius: astryx.size("radius-container", 12), style: .continuous)
-        .fill(astryx.color(status.groundToken))
+      RoundedRectangle(cornerRadius: astryx.tokens.radius.container, style: .continuous)
+        .fill(status.groundColor(astryx.tokens.color))
     )
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(SwiftUI.Text(accessibilityText))

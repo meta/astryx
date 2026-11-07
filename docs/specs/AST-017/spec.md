@@ -6,8 +6,8 @@ id: spec:AST-017
 authority: current
 archive_reason: null
 superseded_by: null
-approved_by: cixzhang
-approved_at: 2026-10-24
+approved_by: imdreamrunner
+approved_at: 2026-10-29
 phase: accepted
 owners: [cixzhang, josephfarina]
 affects_architecture:
@@ -108,7 +108,8 @@ affects_consumer_docs: [release-process, templates]
       "FR60",
       "DEC-26",
       "DEC-27",
-      "DEC-28"
+      "DEC-28",
+      "DEC-30"
     ]
   }
 }
@@ -159,9 +160,10 @@ one removal merged ahead of the decision to allow it.
   when a valid consumer scenario supported by the latest stable release of a
   published package must change source or configuration to keep its code,
   interaction, data, semantic output, or supported workflow working, or loses a
-  stable public surface. The review names that scenario and the released surface
-  it uses. For a surface other than a component, FR54 decides which scenarios are
-  valid and supported.
+  stable public surface. FR3's numeric-stepper presentation adaptation is not
+  a stable-surface loss when every condition in that rule holds. The review
+  names the consumer scenario and the released surface it uses. For a surface
+  other than a component, FR54 decides which scenarios are valid and supported.
 - **FR2 — Classify against the latest stable release.** A surface added and then
   renamed, removed, or reworked before any stable release has no installed
   consumer and is not breaking. Private or ignored packages are outside the
@@ -187,6 +189,24 @@ one removal merged ahead of the decision to allow it.
   surface and input mode. A change to documented
   interaction or accessibility behavior made for accessibility conformance is
   classified under FR53.
+
+  Numeric-entry fields MAY hide compact, component-owned auxiliary increment
+  and decrement buttons on coarse primary pointers as a nonbreaking
+  presentation adaptation, even when those buttons are documented and leave
+  the accessibility tree. This narrow rule applies only while existing public
+  props, types, exports, accepted values, validation, submitted values, and
+  numeric callbacks remain unchanged; direct numeric entry remains accessible
+  on the coarse-pointer device; and the field's role, accessible name, value
+  semantics, focusability, and keyboard stepping remain supported. Callers
+  MUST need no source or configuration migration. Non-coarse-pointer steppers
+  remain available, and the component record MUST state the pointer-conditioned
+  availability and verify the preserved entry and stepping contracts. Such an
+  intentional adaptation uses a patch `[feat]` Changeset that describes the
+  buttons' changed availability; it requires no opt-out or deprecation path.
+  This rule does not cover removing a public prop or export, removing an action
+  other than auxiliary numeric stepping, or losing an accessible numeric-entry
+  path. Those changes remain subject to FR1.
+
 - **FR4 — Preserved old usage is nonbreaking.** A rename or replacement is
   nonbreaking when the old released call, import, option, identifier, or input
   continues to work with equivalent meaning through a compatibility alias or
@@ -640,9 +660,13 @@ one removal merged ahead of the decision to allow it.
   cut. Canary publication owns that ordering boundary instead: the fixed group MUST
   declare one plain version; a declaration strictly above the newest stable tag
   publishes `<declared version>-canary.<commit>`, equality publishes nothing, and a
-  lower or split declaration fails rather than publishing. Changeset admission still
-  refuses `[breaking]` work while main declares a patch and admits it while main
-  declares the minor successor.
+  lower or split declaration fails rather than publishing. Scheduled canary
+  publication runs at most once an hour, from main's tip at that time, and a release
+  owner can also publish a canary from main on demand. The hourly limit caps
+  frequency only and promises no freshness: a missed or late run leaves the previous
+  canary in place. A tip whose canary packages are all published publishes nothing
+  (DEC-31). Changeset admission still refuses `[breaking]` work while main declares a
+  patch and admits it while main declares the minor successor.
 - **FR47 — A release branch releases the declared version.** A release branch's
   version is the fixed-group version declared at its cut commit. Admission, the
   release plan, Changeset consumption, changelog generation, and stable
@@ -826,12 +850,12 @@ questions rather than restating them:
 - [`spec:AST-039` — Integration contribution descriptor system spec](../AST-039/spec.md)
   is a related draft, not authority. If promoted, it links its compatibility readers
   and removals to this lifecycle.
-- The public [Component Lifecycle](https://github.com/facebook/astryx/wiki/Component-Lifecycle)
+- The public [Component Lifecycle](https://github.com/meta/astryx/wiki/Component-Lifecycle)
   owns whole-component Lab-to-Core readiness. Lab remains the private canary-only
   incubation boundary; this spec owns the compatibility effect of promotion.
-- The public [API Conventions](https://github.com/facebook/astryx/wiki/API-Conventions),
-  [Distribution](https://github.com/facebook/astryx/wiki/Distribution), and
-  [Release Process](https://github.com/facebook/astryx/wiki/Release-Process) pages
+- The public [API Conventions](https://github.com/meta/astryx/wiki/API-Conventions),
+  [Distribution](https://github.com/meta/astryx/wiki/Distribution), and
+  [Release Process](https://github.com/meta/astryx/wiki/Release-Process) pages
   are operational projections. When they discuss compatibility lifecycle, they MUST
   link here and cannot create competing rules.
 - [`.changeset/config.json`](../../../.changeset/config.json),
@@ -921,7 +945,7 @@ lands, maintainers apply its requirement in review and release approval.
 | FR36–FR40 | Owner-declared target, locked final-patch receipt, three-way delta classification against the merged `[breaking]` Changesets, and separated release notes                                                                                                                                                                                                       | ordinary cadence, immediate pair, cleanup, release metadata, pre/post-lock compatible fix                                                                                                                                                                                                                                         | Cadence becomes eligibility, the final patch is recut for bookkeeping, a feature or incompatible fix enters the incidental-fix lane, or release notes merge cleanup with fixes                                                                                                                                                                                                                                                                                                                                                                                                      |
 | FR41–FR44 | Schema validation, PR declaration, semantic stable/base/head comparisons, exact-main gate, and immutable publish/rollback receipt                                                                                                                                                                                                                               | duplicate ids, missing evidence, route/schema removal, old-client metadata, partial publish, safe rollback                                                                                                                                                                                                                        | A label passes without semantics, a delta maps zero or multiple times, fixed-group membership drifts, or a release rebuilds under one identity                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | FR45      | Docs route inventory, repository-reference checks, and Changeset review                                                                                                                                                                                                                                                                                         | catalog entry rename, former-route miss, stable command and JSON schema                                                                                                                                                                                                                                                           | Catalog routing is frozen as API, or a rename silently changes the contractual command or response schema                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| FR46–FR47 | Declared-tier Changeset admission, canary publication ordering, and release-versioning fixtures                                                                                                                                                                                                                                                                 | owner increase/decrease, above/equal/below stable, split group, `[breaking]` on patch and minor plans                                                                                                                                                                                                                             | Pending Changesets derive the plan, `[breaking]` passes on a patch or fails on a minor, equality publishes a canary, or a lower/split declaration publishes instead of failing                                                                                                                                                                                                                                                                                                                                                                                                      |
+| FR46–FR47 | Declared-tier Changeset admission, canary publication ordering and cadence, and release-versioning fixtures                                                                                                                                                                                                                                                     | owner increase/decrease, above/equal/below stable, split group, `[breaking]` on patch and minor plans, hourly, on-demand and already-published canary runs                                                                                                                                                                        | Pending Changesets derive the plan, `[breaking]` passes on a patch or fails on a minor, equality publishes a canary, a lower/split declaration publishes instead of failing, a canary publishes on every push, or a tip whose canaries are all published publishes again                                                                                                                                                                                                                                                                                                            |
 | FR48      | Category and classification admission under each declared tier                                                                                                                                                                                                                                                                                                  | patch release with `[breaking]`, patch release with a deprecation, minor release with `[breaking]`                                                                                                                                                                                                                                | Incompatible work passes in a patch release, or a deprecation is refused in one                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | FR49      | Malformed and inconsistent declaration fixtures                                                                                                                                                                                                                                                                                                                 | disagreeing group versions, canary identifier, release version unlike the cut manifest, already-released version, skipped version, no stable tag                                                                                                                                                                                  | An untrustworthy or mismatched declaration is released                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | FR50      | Three-way squash merge-back fixtures bound to the immutable tag, branch head, and plan digest                                                                                                                                                                                                                                                                   | exact branch outputs, frozen deletion, branch-only marker exclusion, post-cut Changeset/manifest edit, newer main declaration, merge conflict, regenerated output                                                                                                                                                                 | Merge-back differs from release bytes, lands lifecycle files, consumes post-cut work, overwrites a newer main declaration or unrelated field, or chooses a version                                                                                                                                                                                                                                                                                                                                                                                                                  |
@@ -931,6 +955,7 @@ lands, maintainers apply its requirement in review and release approval.
 | FR54      | Changeset classification review against the surface's current record, then the same tier admission every Changeset receives                                                                                                                                                                                                                                     | a CLI correction the CLI record classifies as `[fix]`; a CLI change the CLI record leaves undecided; a CLI change the CLI record classifies as `[breaking]` on a patch plan; a component change                                                                                                                                   | A non-component change is classified by a rule this record restates instead of its surface record, a surface rule turns on risk or adoption, a surface-classified `[breaking]` change ships in a patch or a surface rule makes it patch-eligible, or a component change is classified by a surface record                                                                                                                                                                                                                                                                           |
 | FR59      | Pull request review of fine-pointer before-and-after evidence                                                                                                                                                                                                                                                                                                   | a touch change that also fixes a defect fine-pointer users hit; a deliberate cross-device consistency change; a touch-only change; a new fine-pointer look proposed with touch work                                                                                                                                               | A touch change alters fine-pointer behavior or appearance with neither reason, shows no fine-pointer before-and-after evidence, or ships a new fine-pointer look without its own owner decision                                                                                                                                                                                                                                                                                                                                                                                     |
 | FR60      | Element counts per story at rest and open, fine and coarse pointer, against architecture INV7                                                                                                                                                                                                                                                                   | a surface component at rest; an open layer; a DOM reduction; a recorded exception; an open layer under touch with extra elements                                                                                                                                                                                                  | An element beyond INV7's budgets with no recorded owner exception, a hidden twin or second presentation, or a DOM reduction that removes a theme target or documented anatomy, or that is classified as breaking; an open layer more than 5 elements over its fine-pointer count, an added element that is themeable, a new anatomy part, or without a job in its record, or a closed layer, trigger, or repeated component above its fine-pointer count                                                                                                                            |
+| FR3       | Current component contract, latest-stable inspection, and coarse/non-coarse browser evidence                                                                                                                                                                                                                                                                    | Auxiliary numeric steppers hidden with accessible direct entry and keyboard stepping retained; lost entry path; removed public prop or essential action                                                                                                                                                                           | A qualifying numeric-stepper adaptation is labeled breaking, or the narrow rule is used to excuse a lost API, essential action, value/validation/callback contract, or accessible entry path                                                                                                                                                                                                                                                                                                                                                                                        |
 
 ## Decision log
 
@@ -1449,6 +1474,35 @@ Decoration belongs on pseudo-elements and existing elements, and each
 implementation tries to use fewer than the allowance.
 
 Rejected: strict parity for layers, with an owner exception for every sheet frame.
+
+### DEC-30 — Numeric entry does not depend on compact touch steppers
+
+**Reference:** `spec:AST-017/DEC-30`
+**Decider:** `imdreamrunner`, `2026-10-29`
+
+Compact auxiliary numeric steppers may adapt to primary-pointer precision while
+accessible direct entry, numeric contracts, and keyboard stepping remain intact.
+FR3 defines the conditions for patch-compatible adaptation and its limits;
+button visibility is not independently frozen when those conditions hold.
+
+Rejected: classifying every documented auxiliary button's disappearance as breaking despite preserved numeric entry and caller contracts.
+
+### DEC-31 — Canaries publish at most hourly from main's tip
+
+**Reference:** `spec:AST-017/DEC-31`
+**Decider:** the Chief with the release owner, `2026-11-05`
+
+Canaries publish at most once an hour from main's tip, a cap on frequency that
+promises no freshness, and a release owner can publish one from main on demand.
+
+A canary from a recent main tip serves the people who install `@canary` as well
+as one per commit does. Every canary adds a version to each package's npm
+document, and a large document slows how quickly npm serves a new version,
+stable releases included. A release owner can still publish a canary from main
+on demand, for example to prove the publish path before a cut. Stable
+publication never waits for a canary.
+
+Rejected: a canary for every commit that reaches main.
 
 ## Open questions
 

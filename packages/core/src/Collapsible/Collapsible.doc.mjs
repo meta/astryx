@@ -94,6 +94,12 @@ export const docs = {
         'Identifier used for group coordination. When set inside a CollapsibleGroup, the group owns open state and its onChange is the notification callback.',
     },
     {
+      name: 'animatedLayout',
+      type: 'AnimatedLayout',
+      description:
+        'The handle from useAnimatedLayout({containerRef}). With it, opening and closing glides the content after this Collapsible, up to that container, on one shared motion role instead of jumping, and the revealed content and the chevron move on the same motion. Without it, the content after it takes its place at once.',
+    },
+    {
       name: 'ref',
       type: 'React.Ref<HTMLDivElement>',
       description: 'Ref forwarded to the root collapsible element.',

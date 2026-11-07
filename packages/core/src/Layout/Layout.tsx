@@ -24,7 +24,7 @@ import {LayoutSlotsContext, type LayoutSlots} from './LayoutSlotsContext';
 import {LayoutDividerContext} from './LayoutDividerContext';
 import {stack} from '../Stack/stack.stylex';
 import {stackItem} from '../Stack/stackItem.stylex';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 import {layoutFooterMarker, layoutHeaderMarker} from './layoutEdges.stylex';
 import type {BaseProps} from '../BaseProps';
 import type {SizeValue, SpacingStep} from '../utils/types';

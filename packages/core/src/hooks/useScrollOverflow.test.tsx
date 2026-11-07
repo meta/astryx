@@ -3,14 +3,15 @@
 /**
  * @file useScrollOverflow.test.tsx
  * @input Uses vitest, @testing-library/react, useScrollOverflow
- * @output Unit tests for the hook's measurement and its rendered-only gate
+ * @output Unit tests for the hook's measurement, what it observes (the
+ *   container's scroll and size, and its content), and its rendered-only gate
  * @position Testing; jsdom lays nothing out, so the scroll box is faked and
  *   `checkVisibility` is stubbed per element.
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {act, renderHook} from '@testing-library/react';
-import {useScrollOverflow} from './useScrollOverflow';
+import {useScrollOverflow, useShownScrollOverflow} from './useScrollOverflow';
 
 // jsdom has no ResizeObserver. This one hands the test the shared observer's
 // callback so a resize can be delivered on demand; the registration-time
@@ -18,7 +19,10 @@ import {useScrollOverflow} from './useScrollOverflow';
 let deliverResize: ((entries: ResizeObserverEntry[]) => void) | null = null;
 
 class FakeResizeObserver implements ResizeObserver {
+  /** The shared observer, so a test can read what it observes. */
+  static last: FakeResizeObserver | null = null;
   constructor(callback: ResizeObserverCallback) {
+    FakeResizeObserver.last = this;
     deliverResize = entries => callback(entries, this);
   }
   observe = vi.fn();
@@ -69,7 +73,9 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   deliverResize = null;
+  FakeResizeObserver.last = null;
 });
 
 describe('useScrollOverflow', () => {
@@ -200,6 +206,101 @@ describe('useScrollOverflow', () => {
     unmount();
   });
 
+  // The overflow is the content's width against the container's: it changes
+  // when the content does, with the container keeping its size.
+  it('measures again when a child is added or removed, though the container keeps its size', async () => {
+    const el = document.createElement('div');
+    fakeScrollBox(el, {scrollWidth: 300, clientWidth: 300});
+    stubRendered(el, true);
+    const {result, unmount} = renderHook(() => useScrollOverflow());
+    act(() => {
+      result.current.scrollRef(el);
+    });
+    expect(result.current.hasOverflow).toBe(false);
+
+    const child = document.createElement('div');
+    fakeScrollBox(el, {scrollWidth: 600, clientWidth: 300});
+    await act(async () => {
+      el.append(child);
+    });
+    expect(result.current.hasOverflow).toBe(true);
+
+    fakeScrollBox(el, {scrollWidth: 300, clientWidth: 300});
+    await act(async () => {
+      child.remove();
+    });
+    expect(result.current.hasOverflow).toBe(false);
+    unmount();
+  });
+
+  it('measures again when a child resizes, though the container keeps its size', () => {
+    const el = document.createElement('div');
+    const child = document.createElement('div');
+    el.append(child);
+    fakeScrollBox(el, {scrollWidth: 300, clientWidth: 300});
+    stubRendered(el, true);
+    const {result, unmount} = renderHook(() => useScrollOverflow());
+    act(() => {
+      result.current.scrollRef(el);
+    });
+    expect(result.current.hasOverflow).toBe(false);
+
+    // The child's content grows past the container.
+    fakeScrollBox(el, {scrollWidth: 600, clientWidth: 300});
+    act(() => {
+      deliverResize?.([resizeEntry(child)]);
+    });
+    expect(result.current.hasOverflow).toBe(true);
+    unmount();
+  });
+
+  it("measures again when the container's class or style changes, as a new gap does", async () => {
+    const el = document.createElement('div');
+    fakeScrollBox(el, {scrollWidth: 300, clientWidth: 300});
+    stubRendered(el, true);
+    const {result, unmount} = renderHook(() => useScrollOverflow());
+    act(() => {
+      result.current.scrollRef(el);
+    });
+    expect(result.current.hasOverflow).toBe(false);
+
+    fakeScrollBox(el, {scrollWidth: 340, clientWidth: 300});
+    await act(async () => {
+      el.className = 'wider-gap';
+    });
+    expect(result.current.hasOverflow).toBe(true);
+
+    fakeScrollBox(el, {scrollWidth: 300, clientWidth: 300});
+    await act(async () => {
+      el.style.columnGap = '0px';
+    });
+    expect(result.current.hasOverflow).toBe(false);
+    unmount();
+  });
+
+  it('stops observing the content when the container detaches', () => {
+    const el = document.createElement('div');
+    const child = document.createElement('div');
+    el.append(child);
+    fakeScrollBox(el, {scrollWidth: 300, clientWidth: 300});
+    stubRendered(el, true);
+    const disconnect = vi.spyOn(MutationObserver.prototype, 'disconnect');
+    const {result, unmount} = renderHook(() => useScrollOverflow());
+    act(() => {
+      result.current.scrollRef(el);
+    });
+    const observer = FakeResizeObserver.last;
+    expect(observer?.observe).toHaveBeenCalledWith(child);
+
+    act(() => {
+      result.current.scrollRef(null);
+    });
+    expect(disconnect).toHaveBeenCalled();
+    expect(observer?.unobserve).toHaveBeenCalledWith(child);
+    expect(observer?.unobserve).toHaveBeenCalledWith(el);
+    unmount();
+  });
+
   it('follows a scroll on a rendered container', () => {
     const el = document.createElement('div');
     fakeScrollBox(el, {scrollWidth: 600, clientWidth: 300});
@@ -217,6 +318,88 @@ describe('useScrollOverflow', () => {
     });
     expect(result.current.overflowStart).toBe(true);
     expect(result.current.overflowEnd).toBe(false);
+    unmount();
+  });
+
+  it('returns the same fields as before, with no way to report a position', () => {
+    const {result, unmount} = renderHook(() => useScrollOverflow());
+    expect(Object.keys(result.current).sort()).toEqual([
+      'hasOverflow',
+      'overflowEnd',
+      'overflowStart',
+      'scrollRef',
+    ]);
+    unmount();
+  });
+});
+
+describe('useShownScrollOverflow', () => {
+  function attach() {
+    const el = document.createElement('div');
+    fakeScrollBox(el, {scrollWidth: 600, clientWidth: 300});
+    stubRendered(el, true);
+    const hook = renderHook(() => useShownScrollOverflow());
+    act(() => {
+      hook.result.current.scrollRef(el);
+    });
+    return {el, ...hook};
+  }
+
+  const nextFrame = async () =>
+    act(
+      async () =>
+        new Promise<void>(resolve => {
+          requestAnimationFrame(() => resolve());
+        }),
+    );
+
+  it('measures the edges from a reported position while the scroll offset stays put', () => {
+    const {result, unmount} = attach();
+    expect([result.current.overflowStart, result.current.overflowEnd]).toEqual([
+      false,
+      true,
+    ]);
+    act(() => result.current.followShown({offset: 150, travel: 300}));
+    expect([result.current.overflowStart, result.current.overflowEnd]).toEqual([
+      true,
+      true,
+    ]);
+    act(() => result.current.followShown({offset: 299.5, travel: 300}));
+    expect([result.current.overflowStart, result.current.overflowEnd]).toEqual([
+      true,
+      false,
+    ]);
+    unmount();
+  });
+
+  it('keeps the reported edges for one frame after null, then measures the scroll offset', async () => {
+    const {el, result, unmount} = attach();
+    act(() => result.current.followShown({offset: 300, travel: 300}));
+    act(() => result.current.followShown(null));
+    expect(result.current.overflowEnd).toBe(false);
+    // A scroll before that frame still reads the reported position.
+    act(() => {
+      el.dispatchEvent(new Event('scroll'));
+    });
+    expect(result.current.overflowEnd).toBe(false);
+    await nextFrame();
+    expect(result.current.overflowEnd).toBe(true);
+    unmount();
+  });
+
+  it('leaves no frame running when the container detaches or the hook unmounts', () => {
+    const cancel = vi.spyOn(window, 'cancelAnimationFrame');
+    const {result, unmount} = attach();
+    act(() => result.current.followShown({offset: 300, travel: 300}));
+    act(() => result.current.followShown(null));
+    const calls = cancel.mock.calls.length;
+    act(() => result.current.scrollRef(null));
+    expect(cancel.mock.calls.length).toBeGreaterThan(calls);
+    // With no container, null schedules nothing.
+    const request = vi.spyOn(window, 'requestAnimationFrame');
+    act(() => result.current.followShown({offset: 300, travel: 300}));
+    act(() => result.current.followShown(null));
+    expect(request).not.toHaveBeenCalled();
     unmount();
   });
 });
