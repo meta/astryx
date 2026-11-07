@@ -1525,7 +1525,10 @@ describe('RichTextEditorToolbar', () => {
         toolbar={<RichTextEditorToolbar />}
       />,
     );
-    expect(screen.getByRole('button', {name: 'Bold'})).toBeDisabled();
+    expect(screen.getByRole('button', {name: 'Bold'})).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
   });
 
   it('renders a theme-registered icon override for a richtext:* key', () => {
@@ -2385,12 +2388,17 @@ describe('toolbar follows the editable props after mount', () => {
         toolbar={<RichTextEditorToolbar />}
       />,
     );
-    expect(screen.getByRole('button', {name: 'Bold'})).toBeDisabled();
+    expect(screen.getByRole('button', {name: 'Bold'})).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
 
     rerender(
       <RichTextEditor label="Notes" toolbar={<RichTextEditorToolbar />} />,
     );
-    expect(screen.getByRole('button', {name: 'Bold'})).toBeEnabled();
+    expect(screen.getByRole('button', {name: 'Bold'})).not.toHaveAttribute(
+      'aria-disabled',
+    );
 
     rerender(
       <RichTextEditor
@@ -2399,7 +2407,10 @@ describe('toolbar follows the editable props after mount', () => {
         toolbar={<RichTextEditorToolbar />}
       />,
     );
-    expect(screen.getByRole('button', {name: 'Bold'})).toBeDisabled();
+    expect(screen.getByRole('button', {name: 'Bold'})).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
   });
 });
 

@@ -943,6 +943,10 @@
     "defaultMessage": "Maximum value",
     "description": "Accessible name of the upper thumb of a range Slider (two thumbs), announced together with the Slider's own label, for example \"Price range, Maximum value, 80\". Never shown on screen."
   },
+  "@astryx.tabBar.badgedItem": {
+    "defaultMessage": "{label}, {badge}",
+    "description": "Screen-reader name of a bottom tab bar item that shows a badge (\"Library, 3\"). {label} is the tab's visible name; {badge} is the badge's count or its own label (\"3 unread\"). Translators may reorder the two or change the separator."
+  },
   "@astryx.tabList.label": {
     "defaultMessage": "Tabs",
     "description": "Screen-reader-only fallback name for a horizontal tab bar. Plural noun; \"Tabs\" here = UI tab panels, not browser tabs or the Tab key."
@@ -1422,6 +1426,10 @@
   "@astryx.codeBlock.copyCode": {
     "defaultMessage": "Copy code",
     "description": "\"Code\" = source code. Aria label AND tooltip on the CodeBlock copy button in its default state. Pairs with `codeBlock.copied` (post-click state)."
+  },
+  "@astryx.codeBlock.copyFailed": {
+    "defaultMessage": "Failed to copy value to clipboard.",
+    "description": "Aria label, tooltip and screen-reader announcement on the CodeBlock copy button for ~2s after the clipboard write fails. Pairs with `codeBlock.copyCode` and `codeBlock.copied`."
   },
   "@astryx.codeBlock.code": {
     "defaultMessage": "Code",

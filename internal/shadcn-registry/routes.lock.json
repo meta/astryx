@@ -668,6 +668,16 @@
       "aliases": []
     },
     {
+      "name": "component-lab-tab-bar",
+      "path": "components/lab/tab-bar",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-tab-bar-item",
+      "path": "components/lab/tab-bar-item",
+      "aliases": []
+    },
+    {
       "name": "component-lab-three-d-bar",
       "path": "components/lab/three-d-bar",
       "aliases": []
@@ -880,6 +890,21 @@
     {
       "name": "component-richtext-rich-text-editor",
       "path": "components/richtext/rich-text-editor",
+      "aliases": []
+    },
+    {
+      "name": "component-richtext-rich-text-editor-auto-link-plugin",
+      "path": "components/richtext/rich-text-editor-auto-link-plugin",
+      "aliases": []
+    },
+    {
+      "name": "component-richtext-rich-text-editor-toolbar",
+      "path": "components/richtext/rich-text-editor-toolbar",
+      "aliases": []
+    },
+    {
+      "name": "component-richtext-rich-text-view",
+      "path": "components/richtext/rich-text-view",
       "aliases": []
     },
     {
@@ -3892,6 +3917,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-table-selection-state-table-selection-in-the-leading-mark",
+      "path": "examples/use-table-selection-state/table-selection-in-the-leading-mark",
+      "aliases": []
+    },
+    {
       "name": "example-use-table-selection-table-bulk-actions",
       "path": "examples/use-table-selection/table-bulk-actions",
       "aliases": []
@@ -5234,6 +5264,11 @@
     {
       "name": "template-contact-form",
       "path": "templates/contact-form",
+      "aliases": []
+    },
+    {
+      "name": "template-course-detail",
+      "path": "templates/course-detail",
       "aliases": []
     },
     {

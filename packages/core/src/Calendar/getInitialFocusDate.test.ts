@@ -16,12 +16,25 @@ import {plainDateFromISO, plainDateToISO} from '../utils/plainDate';
 const TODAY = plainDateFromISO('2026-08-21');
 
 function focusISO(options: Partial<Parameters<typeof getInitialFocusDate>[0]>) {
-  return plainDateToISO(
-    getInitialFocusDate({numberOfMonths: 1, today: TODAY, ...options}),
-  );
+  const date = getInitialFocusDate({
+    numberOfMonths: 1,
+    today: TODAY,
+    ...options,
+  });
+  return date == null ? null : plainDateToISO(date);
 }
 
 describe('getInitialFocusDate', () => {
+  it('waits for today when there is no focus date or value', () => {
+    expect(focusISO({today: null})).toBeNull();
+    expect(focusISO({today: null, min: '2026-01-01'})).toBeNull();
+  });
+
+  it('opens on the focus date or the value while today is unknown', () => {
+    expect(focusISO({today: null, focusDate: '2026-03-04'})).toBe('2026-03-04');
+    expect(focusISO({today: null, value: '2026-05-06'})).toBe('2026-05-06');
+  });
+
   it('opens on today when there are no bounds', () => {
     expect(focusISO({})).toBe('2026-08-21');
   });

@@ -377,6 +377,17 @@ interface DropdownMenuSubMenuBaseProps extends Omit<
    */
   presentation?: DropdownMenuSubMenuPresentation;
   /**
+   * How long a hovering pointer waits before the flyout opens, in
+   * milliseconds. Keyboard focus and touch never wait.
+   * @default 150
+   */
+  delay?: number;
+  /**
+   * How long the flyout stays open after the pointer leaves, in milliseconds.
+   * @default 200
+   */
+  hideDelay?: number;
+  /**
    * Content above the sub-menu's rows: a field that filters them, say. Like
    * the root menu's `header`, it sits beside the sub-menu's `role="menu"`
    * element, never inside it, and keeps its own keys and presses. With a
@@ -495,6 +506,8 @@ export function DropdownMenuSubMenu(
     menuWidth,
     onOpenChange,
     presentation = 'adaptive',
+    delay = 150,
+    hideDelay = 200,
     header,
     footer,
     children,
@@ -708,6 +721,8 @@ export function DropdownMenuSubMenu(
       hide: hideLayer,
       isOpen: isFlyoutOpen,
       isEnabled: canOpen && !isDrillIn && isRootMenuOpen,
+      showDelay: delay,
+      hideDelay,
       // The safe triangle toward the flyout's near edge is built from the
       // flyout this component renders, not the hook's own list ref: the
       // frame, with a header or footer.

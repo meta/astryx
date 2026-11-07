@@ -14,6 +14,7 @@ verified_by:
   [
     packages/core/src/DateRangeInput/DateRangeInput.test.tsx,
     packages/core/src/DateRangeInput/DateRangeInput.calendar.test.tsx,
+    packages/core/src/DateRangeInput/DateRangeInput.ssr.test.tsx,
     packages/core/src/Calendar/Calendar.calendarSystems.test.tsx,
     packages/core/src/theme/themingTargets.test.ts,
     packages/core/src/DateRangeInput/__tests__/DateRangeInputReflow.interaction.browser.spec.ts,

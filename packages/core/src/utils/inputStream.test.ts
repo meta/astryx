@@ -21,7 +21,12 @@ import path from 'node:path';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import {getGestureHost} from '../gestures/GestureHost';
-import {getLastPointerType, subscribeInput} from './inputStream';
+import {
+  getDownPresses,
+  getLastMousePoint,
+  getLastPointerType,
+  subscribeInput,
+} from './inputStream';
 import {installPressFeedback} from './pressFeedback';
 
 type Registration = {
@@ -253,6 +258,73 @@ describe('inputStream', () => {
       new PointerEvent('pointermove', {bubbles: true, pointerType: 'pen'}),
     );
     expect(getLastPointerType(view)).toBe('touch');
+  });
+
+  it("records where each finger's or pen's press that is down was last, while one hears pointer presses, and forgets them when the last listener for their end goes", () => {
+    const view = document.defaultView as Window;
+    const press = (
+      type: string,
+      pointerType: string,
+      pointerId: number,
+      x: number,
+      y: number,
+    ) =>
+      document.body.dispatchEvent(
+        new PointerEvent(type, {
+          bubbles: true,
+          pointerType,
+          pointerId,
+          clientX: x,
+          clientY: y,
+        }),
+      );
+    const stops = (
+      ['pointerdown', 'pointermove', 'pointerup', 'pointercancel'] as const
+    ).map(type => subscribeInput(view, type, () => {}));
+    press('pointerdown', 'touch', 31, 10, 20);
+    press('pointerdown', 'pen', 32, 30, 40);
+    press('pointerdown', 'mouse', 33, 50, 60);
+    // A move of a pointer that is not down records nothing.
+    press('pointermove', 'touch', 34, 70, 80);
+    press('pointermove', 'touch', 31, 12, 22);
+    expect([...getDownPresses(view)]).toEqual([
+      [31, {x: 12, y: 22}],
+      [32, {x: 30, y: 40}],
+    ]);
+    press('pointerup', 'touch', 31, 12, 22);
+    press('pointercancel', 'pen', 32, 30, 40);
+    press('pointerup', 'mouse', 33, 50, 60);
+    expect([...getDownPresses(view)]).toEqual([]);
+    press('pointerdown', 'touch', 35, 1, 2);
+    expect([...getDownPresses(view)]).toEqual([[35, {x: 1, y: 2}]]);
+    for (const stop of stops) {
+      stop();
+    }
+    expect([...getDownPresses(view)]).toEqual([]);
+  });
+
+  it("records where the latest delivered mouse pointer event was, and keeps it through a finger's events", () => {
+    const view = document.defaultView as Window;
+    const stop = subscribeInput(view, 'pointermove', () => {});
+    document.body.dispatchEvent(
+      new PointerEvent('pointermove', {
+        bubbles: true,
+        pointerType: 'mouse',
+        clientX: 40,
+        clientY: 60,
+      }),
+    );
+    expect(getLastMousePoint(view)).toEqual({x: 40, y: 60});
+    document.body.dispatchEvent(
+      new PointerEvent('pointermove', {
+        bubbles: true,
+        pointerType: 'touch',
+        clientX: 200,
+        clientY: 10,
+      }),
+    );
+    expect(getLastMousePoint(view)).toEqual({x: 40, y: 60});
+    stop();
   });
 
   it('keeps the press feedback controller free of the gesture system', () => {

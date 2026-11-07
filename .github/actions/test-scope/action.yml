@@ -72,6 +72,12 @@ outputs:
   full_suite:
     description: The import graph cannot scope this change; run every test.
     value: ${{ steps.scope.outputs.full_suite }}
+  vitest_full_suite:
+    description: >-
+      The Vitest lanes run every test. `false` also for shared infrastructure
+      only Vitest's module graph reaches (spec:AST-030 FR13); a base whose
+      classifier predates it reports nothing, which runs every test.
+    value: ${{ steps.scope.outputs.vitest_full_suite }}
   release_bump:
     description: The PR targets a release branch (the generated version bump).
     value: ${{ steps.scope.outputs.release_bump }}
@@ -136,6 +142,7 @@ runs:
             tooling_only: 'false',
             lab_only: 'false',
             full_suite: 'true',
+            vitest_full_suite: 'true',
             release_bump: 'false',
             touches: 'true',
             applies: 'true',

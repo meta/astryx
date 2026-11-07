@@ -201,13 +201,20 @@ async function openReplacedTrigger(page: Page): Promise<number> {
   await expect(first).toBeVisible();
   await expect(page.getByRole('tooltip')).toBeVisible();
   await page.waitForTimeout(200);
-  // It opened above the first trigger, on its standard list.
+  // It opened above the first trigger, where its own position puts it.
   expect(
     await page.evaluate(sel => {
-      const el = document.querySelector(sel);
-      return el?.hasAttribute('data-astryx-clears-anchor');
+      const tip = (
+        document.querySelector(sel) as HTMLElement
+      ).getBoundingClientRect();
+      const trigger = (
+        Array.from(document.querySelectorAll('button')).find(
+          button => button.textContent === 'Trigger 1',
+        ) as HTMLElement
+      ).getBoundingClientRect();
+      return tip.bottom <= trigger.top;
     }, TOOLTIP),
-  ).toBe(false);
+  ).toBe(true);
   await page.getByRole('button', {name: 'Replace the trigger'}).click();
   const second = page.getByRole('button', {name: 'Trigger 2'});
   await expect(second).toBeVisible();
@@ -227,19 +234,22 @@ async function openReplacedTrigger(page: Page): Promise<number> {
 /**
  * Open the TallContent story at a viewport, scroll the trigger's centre to
  * `triggerY`, rest the pointer on the trigger and wait for the tooltip.
- * Returns how many times the tooltip toggled.
+ * Motion is held still unless `motion` is 'allowed'.
  */
 async function hoverTallTrigger(
   page: Page,
   viewport: {width: number; height: number},
   triggerY: number,
   args = '',
+  motion: 'still' | 'allowed' = 'still',
 ) {
   await page.setViewportSize(viewport);
   await page.goto(
     `${storybook.origin}/iframe.html?id=core-tooltip--tall-content&viewMode=story${args ? `&args=${args}` : ''}`,
   );
-  await holdMotionStill(page);
+  if (motion === 'still') {
+    await holdMotionStill(page);
+  }
   const trigger = page.getByRole('button', {name: 'Hover for details'});
   await expect(trigger).toBeVisible();
   await page.evaluate(
@@ -339,6 +349,19 @@ test('desktop: a tall tooltip opens beside its trigger and stays open', async ({
   // Beside the trigger, on the inline axis.
   expect(s.left >= trigger.right || s.right <= trigger.left).toBe(true);
   await expectScrollsInside(page);
+});
+
+test('desktop, with motion allowed: a tall tooltip opens beside its trigger, and no frame of its entrance covers the trigger', async ({
+  page,
+}) => {
+  // The reads while the tooltip enters take its entrance transform out. No
+  // frame of the entrance paints it over its trigger.
+  const viewport = {width: 1280, height: 720};
+  const {trigger} = await hoverTallTrigger(page, viewport, 360, '', 'allowed');
+  await page.waitForTimeout(500);
+  const s = await expectStillAndClear(page, trigger, viewport);
+  expect(s.left >= trigger.right || s.right <= trigger.left).toBe(true);
+  expect(await sitsBesideTrigger(page)).toBe(true);
 });
 
 test('phone: with no room beside, it opens below when below has more room', async ({
@@ -618,11 +641,24 @@ test('a held-open tooltip keeps a replaced trigger clear when the replacement re
   expect(overlaps(await rect(page, TOOLTIP), after)).toBe(false);
 });
 
-async function hasSwitched(page: Page): Promise<boolean | undefined> {
+/**
+ * Whether the tooltip sits beside its trigger on the inline axis: level with
+ * it, and clear of it to its inline start or end.
+ */
+async function sitsBesideTrigger(page: Page): Promise<boolean> {
   return page.evaluate(
-    sel =>
-      document.querySelector(sel)?.hasAttribute('data-astryx-clears-anchor'),
-    TOOLTIP,
+    ([tip, sel]) => {
+      const l = (
+        document.querySelector(tip) as HTMLElement
+      ).getBoundingClientRect();
+      const a = (
+        document.querySelector(sel) as HTMLElement
+      ).getBoundingClientRect();
+      const level = l.top < a.bottom && a.top < l.bottom;
+      const clear = l.right <= a.left || l.left >= a.right;
+      return level && clear;
+    },
+    [TOOLTIP, TRIGGER],
   );
 }
 
@@ -647,7 +683,7 @@ test('with motion allowed, a tooltip that fits does not switch at open, and fitt
   await page.mouse.move((t.left + t.right) / 2, (t.top + t.bottom) / 2);
   await expect(page.getByRole('tooltip')).toBeVisible();
   await page.waitForTimeout(400);
-  expect(await hasSwitched(page)).toBe(false);
+  expect(await sitsBesideTrigger(page)).toBe(false);
   const open = await rect(page, TOOLTIP);
   expect(open.bottom).toBeLessThanOrEqual(t.top);
   // Grown to about 290px, which fits below (464px of room) but not above:
@@ -661,7 +697,7 @@ test('with motion allowed, a tooltip that fits does not switch at open, and fitt
     }
   }, TOOLTIP);
   await page.waitForTimeout(400);
-  expect(await hasSwitched(page)).toBe(false);
+  expect(await sitsBesideTrigger(page)).toBe(false);
   const grown = await rect(page, TOOLTIP);
   const metrics = await page.evaluate(sel => {
     const el = document.querySelector(sel) as HTMLElement;
