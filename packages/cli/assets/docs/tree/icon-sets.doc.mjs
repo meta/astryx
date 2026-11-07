@@ -139,7 +139,7 @@ astryx experimental icon add --variant solid --from @heroicons/react/24/solid --
         },
         {
           type: 'prose',
-          text: "A library that redraws its artwork for small sizes (Heroicons' 20px mini and 16px micro) ships each of those as its own set in its own package (their export names match the 24px ones), not as variants: a variant's size comes from CSS. `--variants` lists the variants; `--default-variant` names the one each icon's own export draws (the first variant when omitted). `--all` adds the variant for every icon whose id an export of `--from` has (`TrashIcon` in the solid module becomes `TrashSolidIcon`, the solid variant of `trash`), and the receipt lists the icons the module has no export for. Running it again changes nothing.",
+          text: "A library that redraws its artwork for small sizes (Heroicons' 20px mini and 16px micro) ships each of those as its own set in its own package (their export names match the 24px ones), not as variants: a variant's size comes from CSS. `--variants` lists the variants; `--default-variant` names the one each icon's own export draws (when omitted, the look a library that names its looks draws; otherwise the set's current default, else, on a set without icons, the first variant; a set with icons changes it only with `--from`, and only in a library that names its looks). `--all` adds the variant for every icon whose id an export of `--from` has (`TrashIcon` in the solid module becomes `TrashSolidIcon`, the solid variant of `trash`), and the receipt lists the icons the module has no export for. Running it again changes nothing.",
         },
         {
           type: 'prose',
@@ -177,7 +177,7 @@ astryx experimental icon add --variant solid --from @heroicons/react/24/solid --
         },
         {
           type: 'prose',
-          text: "An optional render test you can copy. Save it inside your package directory and run it there, since it imports your package by name through its `exports`, and install `react-dom` first (`npm install -D react-dom`). A library may add its own classes beside yours, so it checks the class list. A library that sets `width` and `height` attributes (24, say) still fills its box: CSS sizing, such as the `Icon` component's, overrides SVG size attributes.",
+          text: 'An optional render test you can copy. Save it inside your package directory and run it there, since it imports your package by name through its `exports`, and install `react-dom` first (`npm install -D react-dom`). A library may add its own classes beside yours, so it checks the class list. A component that writes its own `width` and `height` attributes (24, from a `size` prop, say) still fills its box when it passes `style` through to its svg: the `Icon` component and `themeIcons` size the svg with CSS, which overrides size attributes. The test checks that too.',
         },
         {
           type: 'code',
@@ -191,6 +191,8 @@ for (const [name, Icon] of Object.entries(icons)) {
   const html = renderToStaticMarkup(createElement(Icon, {className: 'x'}));
   if (!/class="([^"]* )?x( [^"]*)?"/.test(html)) throw new Error(\`\${name} drops className\`);
   if (!html.includes('currentColor')) throw new Error(\`\${name} has a fixed color\`);
+  const styled = renderToStaticMarkup(createElement(Icon, {style: {width: '1em'}}));
+  if (!styled.includes('width:1em')) throw new Error(\`\${name} drops style, so CSS cannot size it\`);
 }`,
         },
       ],
@@ -214,6 +216,10 @@ for (const [name, Icon] of Object.entries(icons)) {
             [
               'A subpath per style',
               '`experimental icon add --variant solid --from @acme/glyph-library/solid --all` for every icon at once, or `experimental icon add Bin --from @acme/glyph-library/solid --id bin --variant solid` for one (the set must declare the variant: `new-set --variants`)',
+            ],
+            [
+              'Every look in its export names (`XOutline24WGHT500Icon`, `XFilled24WGHT500Icon`)',
+              "`experimental icon new-set meta --from @acme/vector-icons` wraps each glyph once as `x` (`XIcon`), in the look `--default-variant` names or the library's usual default (outline, the middle weight). For another look: `experimental icon new-set meta --variants outline,filled` declares it in place, then `experimental icon add --variant filled --from @acme/vector-icons --all`",
             ],
             [
               'One file per icon, default export',
@@ -262,7 +268,7 @@ export function adapt(data) {
       content: [
         {
           type: 'prose',
-          text: 'The generated module also exports `themeIcons`: one entry per built-in definition in `map`, each an element of your own icon, hidden from assistive technology and sized `1em`. The CLI rewrites it on every `experimental icon add` and `experimental icon map`, so you never write it by hand, and `integration check` proves it matches `map`. A theme uses it in one line:',
+          text: "The generated module also exports `themeIcons`: one entry per built-in definition in `map`, each an element of your own icon, hidden from assistive technology and sized `1em` by its attributes and by CSS (its `style`), so it fills the theme's icon box even when your component writes its own size attributes. The CLI rewrites it on every `experimental icon add` and `experimental icon map`, so you never write it by hand, and `integration check` proves it matches `map`. A theme uses it in one line:",
         },
         {
           type: 'code',
