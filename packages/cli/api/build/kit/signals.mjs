@@ -27,8 +27,8 @@ import {
   templateSetupNotes,
 } from '../_adapter.mjs';
 import {ideaKind} from './kind.mjs';
-import {pickAlternatives, rankPages} from './rank.mjs';
-import {asTemplate, chooseStart} from './start.mjs';
+import {rankPages} from './rank.mjs';
+import {asTemplate, chooseStart, pickStartAlternatives} from './start.mjs';
 
 /** A page at/above this score is a confident direct match. */
 const PAGE_DIRECT = 95;
@@ -247,7 +247,13 @@ export async function kitSignals(query, options = {}) {
   /** @type {BuildStart | null} */
   const start = chosen && {
     ...chosen,
-    alternatives: pickAlternatives(ranked, chosen.name).flatMap(r => {
+    alternatives: pickStartAlternatives(
+      ranked,
+      kind,
+      chosen.name,
+      catalog,
+      query,
+    ).flatMap(r => {
       const t = catalog.find(c => c.name === r.name);
       return t ? [asTemplate(t)] : [];
     }),

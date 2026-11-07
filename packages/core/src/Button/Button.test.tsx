@@ -815,6 +815,22 @@ describe('Button', () => {
     await waitFor(() => expect(liveRegion).toHaveTextContent('Chargement'));
   });
 
+  it('puts no display: contents element between the Button and its label', () => {
+    // WebKit before macOS 15 drops an accessible name computed through a
+    // `display: contents` element, so VoiceOver read the Button as unnamed.
+    render(
+      <Button label="Save" icon={<span>+</span>} endContent={<span>3</span>} />,
+    );
+    const button = screen.getByRole('button');
+    for (
+      let el = screen.getByText('Save').parentElement;
+      el != null && el !== button;
+      el = el.parentElement
+    ) {
+      expect(getComputedStyle(el).display).not.toBe('contents');
+    }
+  });
+
   describe('in a narrow row', () => {
     // jsdom has no layout, so these assert the computed declarations that
     // produce the behavior. The real-browser widths are in the PR evidence.
@@ -828,6 +844,16 @@ describe('Button', () => {
       );
       expect(getComputedStyle(label).textOverflow).toBe('ellipsis');
       expect(getComputedStyle(label).overflow).toBe('hidden');
+    });
+
+    it('lets the content box shrink too, so the label inside it truncates', () => {
+      render(<Button label="A very long button label that should truncate" />);
+      const box = screen.getByText(
+        'A very long button label that should truncate',
+      ).parentElement!;
+      const style = getComputedStyle(box);
+      expect(style.minWidth).toBe('0');
+      expect(style.flexShrink).toBe('1');
     });
 
     it('keeps the default flex-shrink so a row can shrink the button', () => {

@@ -9,8 +9,13 @@
 import {describe, it, expect} from 'vitest';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {search, searchCore} from './search.mjs';
-import {bandOf} from './_order.mjs';
+import {requireNatively} from '../../test-utils/native-require.mjs';
+
+const require = requireNatively(import.meta.url);
+/** @type {typeof import('./search.mjs')} */
+const {search, searchCore} = require('./search.mjs');
+/** @type {typeof import('./_order.mjs')} */
+const {bandOf} = require('./_order.mjs');
 
 const cwd = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
