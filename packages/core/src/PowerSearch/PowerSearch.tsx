@@ -718,7 +718,9 @@ export function PowerSearch({
     (filter: PowerSearchFilter) => {
       const field = config.getField(filter.field);
       const operator = config.getOperator(filter.field, filter.operator);
-      const fieldLabel = field?.label ?? '';
+      // A field the config no longer has shows its key, so the token keeps
+      // a visible text and a name.
+      const fieldLabel = field?.label ?? filter.field;
       const operatorLabel = operator ? resolveOperatorLabel(operator, t) : '';
       const label = formatTokenLabel(t, fieldLabel, operatorLabel);
       const value = operator
