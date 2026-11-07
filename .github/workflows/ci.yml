@@ -2296,8 +2296,9 @@ jobs:
         with:
           name: pr-analysis
 
-      # Before the count: selecting a pull request's specs resolves its
-      # components through the built Storybook's story index.
+      # Before the count: a pull request that changes a multi-component folder
+      # (Chat, Layer, Chart and the like) resolves its components through the
+      # built Storybook's story index.
       - name: Download Storybook artifact
         if: steps.scope.outputs.has_components == 'true'
         uses: actions/download-artifact@v8
