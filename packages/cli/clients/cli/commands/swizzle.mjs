@@ -113,6 +113,18 @@ export function registerSwizzle(program) {
         );
       }
 
+      const {marker} = result.data;
+      if (marker) {
+        const folder = marker.path.replace(/\/?astryx-swizzle\.json$/, '') || '.';
+        out.push(
+          text(
+            marker.written
+              ? `Marked ${folder}/ with astryx-swizzle.json: with @astryxdesign/build's Babel, PostCSS and Vite integrations, or withAstryx() under webpack, every module under it compiles below your theme, so theme overrides reach the copy. Keep only swizzled copies there. Turbopack does not read the marker yet.`
+              : `Did not mark ${folder}/ with astryx-swizzle.json: it already holds ${(marker.found ?? []).join(', ')} and no astryx-swizzle.json. If it holds only swizzled copies, add ${marker.path} to mark it, so theme overrides reach them; keep the product's own components out of a marked folder.`,
+          ),
+        );
+      }
+
       // StyleX build requirement — swizzled StyleX source throws on import
       // ("Unexpected 'stylex.create' call at runtime") unless the consumer's
       // build runs a StyleX compiler, so the page does not render at all.
