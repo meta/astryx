@@ -50,4 +50,19 @@ function isSwizzledSource(filePath, memo = new Map()) {
   return marked;
 }
 
-module.exports = {SWIZZLE_MARKER, isSwizzledSource};
+/**
+ * The marker paths that decide whether a module is in a swizzled copy, from
+ * its own folder up to `stopDir` (or the file system root).
+ * @param {string} filePath an absolute module path
+ * @param {string} [stopDir] the last folder to check, such as the project root
+ * @returns {string[]}
+ */
+function markerPaths(filePath, stopDir) {
+  const paths = [];
+  for (let dir = path.dirname(filePath); ; dir = path.dirname(dir)) {
+    paths.push(path.join(dir, SWIZZLE_MARKER));
+    if (dir === stopDir || path.dirname(dir) === dir) return paths;
+  }
+}
+
+module.exports = {SWIZZLE_MARKER, isSwizzledSource, markerPaths};
