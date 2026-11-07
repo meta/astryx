@@ -171,14 +171,10 @@ for (const story of ['showcase', 'tall-sheet', 'hug-height', 'text-only']) {
 }
 
 // Sheets whose height follows their content. A detent-sized sheet (Snap
-// Points With Peek) is not one of them: its height is the detent's, so
-// whether its content fits depends on the machine's font metrics.
-for (const story of [
-  'text-only-fitting',
-  'showcase',
-  'hug-height',
-  'nested-popover',
-]) {
+// Points With Peek, Nested Popover) is not one of them: its height is the
+// detent's, so whether its content fits depends on the machine's font
+// metrics.
+for (const story of ['text-only-fitting', 'showcase', 'hug-height']) {
   test(`a sheet whose content fits does not scroll: ${story}`, async ({
     page,
   }) => {
