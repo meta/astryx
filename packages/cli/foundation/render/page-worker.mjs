@@ -265,7 +265,7 @@ function setChartsAside(p, t) {
  * counted.
  * @param {string} markup
  * @param {any} Page
- * @returns {Promise<{markup: string, failed: number, alone: false | 'error' | 'changed'}>}
+ * @returns {Promise<{markup: string, failed: number, alone: false | 'error' | 'changed' | 'rerendered'}>}
  */
 async function drawCharts(markup, Page) {
   const placeholder = /<astryx-chart data-chart="(\d+)"><\/astryx-chart>/g;
@@ -309,7 +309,7 @@ async function drawCharts(markup, Page) {
   };
   mode = 'page';
   let drawn = drawIn(createElement(Page), host => [...host.querySelectorAll('astryx-chart')].map(el => el.innerHTML));
-  /** @type {false | 'error' | 'changed'} */
+  /** @type {false | 'error' | 'changed' | 'rerendered'} */
   let alone = false;
   if (!drawn) alone = 'error';
   // The page's effects changed a chart: its props, which charts there are,
@@ -318,10 +318,11 @@ async function drawCharts(markup, Page) {
   else if (
     drawn.length !== charts.length ||
     pageCharts.length !== charts.length ||
-    pageRenders.some(count => count > 1) ||
     charts.some((chart, i) => sameKey(chart.props) !== sameKey(pageCharts[i]))
   ) {
     alone = 'changed';
+  } else if (pageRenders.some(count => count > 1)) {
+    alone = 'rerendered';
   }
   if (alone) {
     mode = 'alone';
@@ -800,7 +801,7 @@ try {
   /** @type {string} */
   let markup;
   let chartsFailed = 0;
-  /** @type {false | 'error' | 'changed'} */
+  /** @type {false | 'error' | 'changed' | 'rerendered'} */
   let chartsAlone = false;
   try {
     markup = server.renderToStaticMarkup(React.createElement(Page));

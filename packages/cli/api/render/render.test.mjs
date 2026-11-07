@@ -1330,6 +1330,12 @@ export default function Page() {
       <ResponsiveContainer width="100%" height={220}>
         <LineChart data={data}><XAxis dataKey="d" /><Line dataKey="v" name="Visits" /><Legend layout="vertical" align="right" verticalAlign="middle" /></LineChart>
       </ResponsiveContainer>
+      <ResponsiveContainer width="100%" height={220}>
+        <LineChart data={data}><XAxis dataKey="d" /><Line dataKey="v" name="Wins" /><Legend layout="vertical" align="left" verticalAlign="bottom" /></LineChart>
+      </ResponsiveContainer>
+      <ResponsiveContainer width="100%" height={220}>
+        <LineChart data={data}><XAxis dataKey="d" /><Line dataKey="v" name="Ties" /><Legend layout="vertical" align="center" verticalAlign="bottom" /></LineChart>
+      </ResponsiveContainer>
     </div>
   );
 }
@@ -1353,9 +1359,16 @@ export default function Page() {
     expect(html).toContain('.recharts-legend-wrapper[style*="bottom"]{order:1}');
     // A vertical legend in a container chart sits beside the picture, centered.
     const sided = [...html.matchAll(/<div\b[^>]*class="recharts-wrapper"[^>]*>/g)].map(m => m[0]).filter(tag => tag.includes('data-legend-side'));
-    expect(sided).toHaveLength(1);
+    // Right and middle, then left and bottom; a vertical legend centered
+    // across takes its own row, unmarked.
+    expect(sided).toHaveLength(2);
     expect(sided[0]).toContain('data-legend-side="right"');
     expect(sided[0]).toContain('data-legend-middle=""');
+    expect(sided[1]).toContain('data-legend-side="left"');
+    expect(sided[1]).not.toContain('data-legend-middle');
+    expect(sided[1]).toContain('data-legend-bottom=""');
+    // A bottom legend goes under the picture only when it is not beside it.
+    expect(html).toContain('.recharts-wrapper:not([data-legend-side])>.recharts-legend-wrapper[style*="bottom"]{order:1}');
     expect(html).toContain('[data-legend-side]{flex-direction:row');
     expect(html).toContain('[data-legend-side="right"]>.recharts-legend-wrapper{order:1}');
     // Only the chart's own picture scales; a legend's icons keep their size.
@@ -1493,7 +1506,60 @@ export default function Page() {
     expect(html).toContain('Unit: items');
     expect(html).toContain('Mon items');
     expect(html).not.toContain('Mon km');
-    expect(result.data.warnings.find((/** @type {any} */ w) => w.code === 'chart-size')?.message).toContain('once its effects ran');
+    expect(result.data.warnings.find((/** @type {any} */ w) => w.code === 'chart-size')?.message).toContain('A component that makes a chart rendered again');
+  }, 60_000);
+
+  it('names a re-render as the cause when a chart\'s maker only re-renders in an effect', async () => {
+    put(
+      'charts-effect-mounted.tsx',
+      `import {useEffect, useState} from 'react';
+import {BarChart, Bar} from 'recharts';
+const data = [{v: 1}, {v: 2}];
+export default function Page() {
+  const [, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  return <BarChart width={300} height={150} data={data}><Bar dataKey="v" /></BarChart>;
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('charts-effect-mounted.tsx', {cwd: dir}));
+    const message = result.data.warnings.find((/** @type {any} */ w) => w.code === 'chart-size')?.message ?? '';
+    expect(message).toContain('A component that makes a chart rendered again');
+    expect(message).not.toContain('changed its charts');
+  }, 60_000);
+
+  it('keeps first-render data and props, and lets a context an effect changes reach the chart', async () => {
+    // The guide promises a chart's data and props from the first render; a
+    // value its parts read from a context that an effect changes may show its
+    // later value.
+    put(
+      'charts-effect-provider.tsx',
+      `import {createContext, useContext, useEffect, useState} from 'react';
+import {BarChart, Bar, XAxis} from 'recharts';
+const data = [{d: 'a', v: 1}, {d: 'b', v: 2}];
+const Units = createContext('items');
+function UnitsProvider({children}: {children: any}) {
+  const [unit, setUnit] = useState('items');
+  useEffect(() => setUnit('km'), []);
+  return <Units.Provider value={unit}><p>Unit: {unit}</p>{children}</Units.Provider>;
+}
+function Tick(props: any) {
+  return <text x={props.x} y={props.y + 12}>{props.payload.value} {useContext(Units)}</text>;
+}
+export default function Page() {
+  return (
+    <UnitsProvider>
+      <BarChart width={300} height={150} data={data}><XAxis dataKey="d" tick={<Tick />} /><Bar dataKey="v" /></BarChart>
+    </UnitsProvider>
+  );
+}
+`,
+    );
+    await render('charts-effect-provider.tsx', {cwd: dir});
+    const html = fs.readFileSync(path.join(dir, 'charts-effect-provider.html'), 'utf8');
+    expect(html).toContain('Unit: items');
+    expect(html.match(/\brecharts-bar-rectangle\b(?!s)/g)).toHaveLength(2);
+    expect(html).toMatch(/a (items|km)/);
   }, 60_000);
 
   it('draws a chart with the data of the first render when an effect replaces it', async () => {
