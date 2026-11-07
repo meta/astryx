@@ -41,8 +41,8 @@ system_specs: []
 | Public contract         | `children`, `scope`, `colSpan`, `rowSpan`, `contextMenuActions`, `xstyle` (one style or a list), root `BaseProps`, and a `ref`.                                    |
 | Behavior                | A native `th` carrying the `table-header-cell` target that takes the Table's density and column dividers, always draws its bottom divider, and truncates its text. |
 | End-user impact         | People see column headings set apart by weight, color, and a rule, aligned with the cells below.                                                                   |
-| Builder impact          | None; the record describes shipped behavior.                                                                                                                       |
-| Compatibility/readiness | Released behavior recorded as current; no API, default, or output changes.                                                                                         |
+| Builder impact          | Builders can pass `colSpan` and `rowSpan` to a group header without a type error.                                                                                  |
+| Compatibility/readiness | Adds two optional props, `colSpan` and `rowSpan`; no default or output changes.                                                                                    |
 | Review checks           | Reject a missing bottom divider, a `scope` the caller did not set, a lost target or density reflection, or caller `xstyle` that loses to context styling.          |
 | Governing rules         | `architecture:container-padding`; `architecture:public-component-api` INV5–INV8; `architecture:component-theming-surface`.                                         |
 
@@ -60,9 +60,9 @@ Consumer syntax and examples belong in `TableHeaderCell.doc.mjs`.
 ## Compatibility and migration
 
 - Released default preserved: `yes` — no `scope` unless given.
-- Compatibility class: additive optional props (`colSpan`, `rowSpan`, the
-  native `th` attributes the props already passed at runtime); no default,
-  DOM, target, or styling output changes.
+- Compatibility class: additive optional props (`colSpan` and `rowSpan`, which
+  reach the native `th` spans); no default, DOM, target, or styling output
+  changes.
 - Controlled/uncontrolled behavior: not applicable
 - Migration decision: none
 
