@@ -196,7 +196,13 @@ const styles = stylex.create({
     display: 'flex',
     flexDirection: 'column',
     minWidth: 0,
-    overflow: 'hidden',
+    // In the phone layout the body does not scroll, so the panel does not
+    // clip. On iOS, that clip around the list's own clip draws the row at its
+    // edge one point off while rows glide.
+    overflow: {
+      default: 'hidden',
+      '@container (max-width: 40rem)': 'visible',
+    },
     // Inset, not the shared offset: the panel's own edge is the container
     // boundary, so an outset ring would fall outside the component.
     outlineOffset: {default: '0', ':focus-visible': -2},
