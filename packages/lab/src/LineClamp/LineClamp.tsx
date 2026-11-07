@@ -32,6 +32,7 @@ import {truncationTooltipStyles} from '@astryxdesign/core/Text/text.stylex';
 import type {LayerPlacement} from '@astryxdesign/core/Layer';
 import {
   composeEventHandlers,
+  focusOutlineStyles,
   mergeProps,
   themeProps,
   observeResize,
@@ -363,7 +364,7 @@ export function LineClamp({
         ref={mergedRef}
         {...mergeProps(
           themeProps('line-clamp'),
-          stylex.props(styles.clamp, xstyle),
+          stylex.props(focusOutlineStyles.focusVisible, styles.clamp, xstyle),
           className,
           {...style, WebkitLineClamp: maxLines},
         )}
