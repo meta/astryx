@@ -69,6 +69,7 @@ function resolveRelative(fromFile, specifier, cache) {
  * @typedef {object} ParsedModule
  * @property {string} code
  * @property {ModuleReference[]} references
+ * @property {Set<string>} declares names the module declares and exports
 
  */
 
@@ -81,7 +82,7 @@ function resolveRelative(fromFile, specifier, cache) {
 function parseModule(file) {
   const code = fs.readFileSync(file, 'utf-8');
   /** @type {ParsedModule} */
-  const parsed = {code, references: []};
+  const parsed = {code, references: [], declares: new Set()};
   if (!CODE_FILE.test(file)) return parsed;
   const ast = parse(code, {
     sourceType: 'module',
@@ -91,6 +92,10 @@ function parseModule(file) {
   const {references} = parsed;
   // Babel's node types mark positions optional; a parsed file always has them.
   for (const node of /** @type {any[]} */ (ast.program.body)) {
+    for (const d of node.declaration?.declarations ?? [node.declaration]) {
+      if (node.type === 'ExportNamedDeclaration' && d?.id?.name)
+        parsed.declares.add(d.id.name);
+    }
     if (node.type === 'ImportDeclaration') {
       const typeOnly = node.importKind === 'type';
       const base = {
@@ -249,11 +254,9 @@ function exportedSourceFiles(pkg, packageDir, root) {
   const subpathMap =
     isRecord(exportsField) &&
     Object.keys(exportsField).some(key => key.startsWith('.'));
-  /** @type {Set<string>} */
   const candidates = new Set(['.']);
   if (subpathMap) {
-    const map = /** @type {Record<string, unknown>} */ (exportsField);
-    for (const [key, value] of Object.entries(map)) {
+    for (const [key, value] of Object.entries(exportsField)) {
       if (!key.includes('*')) {
         candidates.add(key);
         continue;
@@ -635,8 +638,12 @@ export function planCopy({
         // Take the name from the module that defines it, so the copy carries
         // that module and not a whole barrel. An origin names a binding, so
         // the import uses the name that module exports it under.
+        // A module that declares the name itself, even as an alias, is carried.
         const definingExport =
-          origin && origin.file !== target && inSource(origin.file)
+          origin &&
+          origin.file !== target &&
+          inSource(origin.file) &&
+          !parseModule(target).declares.has(spec.imported)
             ? exportNameOf(origin)
             : null;
         if (origin && definingExport != null) {
