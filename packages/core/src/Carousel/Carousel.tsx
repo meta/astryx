@@ -53,7 +53,7 @@ import {Button} from '../Button';
 import {Icon} from '../Icon';
 import {useLayer} from '../Layer';
 import {useAttachment} from '../hooks/useAttachment';
-import {useScrollOverflow} from '../hooks/useScrollOverflow';
+import {useShownScrollOverflow} from '../hooks/useScrollOverflow';
 import {isRtlElement} from '../hooks/isRtlElement';
 import type {BaseProps} from '../BaseProps';
 import {mergeProps, rtlStyles} from '../utils';
@@ -408,8 +408,8 @@ export function Carousel({
   // transition it is allowed to act on.
   const focusedNavRef = useRef<'start' | 'end' | null>(null);
   const prevCanScrollRef = useRef<{start: boolean; end: boolean} | null>(null);
-  const {scrollRef, overflowStart, overflowEnd, hasOverflow} =
-    useScrollOverflow();
+  const {scrollRef, followShown, overflowStart, overflowEnd, hasOverflow} =
+    useShownScrollOverflow();
 
   // Children.toArray drops null/undefined/boolean children and assigns
   // stable keys, so slide numbering ("Slide N of M") matches what actually
@@ -447,12 +447,13 @@ export function Carousel({
     setAttachedPaging(snapPaging);
   }
   // Attaches snap paging to the scroll area, and follows a replaced one.
+  // While the paging holds the row, the edges follow the row as shown.
   useAttachment(
     scrollElRef,
     scroller =>
       attachedPaging == null
         ? () => {}
-        : attachSnapPaging(attachedPaging, scroller),
+        : attachSnapPaging(attachedPaging, scroller, followShown),
     attachedPaging,
   );
   // React's wheel listener is passive, so it can't stop the browser's own

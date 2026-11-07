@@ -2,8 +2,15 @@
 
 /** @file Icon ids from export names (AST-084): a dimension stays one word. */
 
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import {describe, expect, it} from 'vitest';
-import {iconIdOf} from './icon-set-writer.mjs';
+import {
+  entryWiringNote,
+  generatedModuleText,
+  iconIdOf,
+} from './icon-set-writer.mjs';
 
 describe('iconIdOf', () => {
   it.each([
@@ -22,5 +29,76 @@ describe('iconIdOf', () => {
     ['Heading1', 'heading-1'],
   ])('%s → %s', (name, id) => {
     expect(iconIdOf(name)).toBe(id);
+  });
+});
+
+describe('generatedModuleText over a large library', () => {
+  it('writes twenty thousand icons in one pass, and rewrites them unchanged', () => {
+    const icons = Array.from({length: 20000}, (_, index) => ({
+      name: `Glyph${index}Icon`,
+      from: '@acme/big-library',
+      source: `Glyph${index}Outline24Icon`,
+      adapt: false,
+    }));
+    const data = /** @type {any} */ ({
+      schemaVersion: 1,
+      module: '@acme/big-icons',
+      icons: [],
+      map: {},
+    });
+    const started = Date.now();
+    const first = generatedModuleText(
+      '/pkg',
+      'big.generated.js',
+      null,
+      data,
+      icons,
+    );
+    const again = generatedModuleText(
+      '/pkg',
+      'big.generated.js',
+      first.js,
+      data,
+      icons,
+    );
+    // Quadratic matching took minutes here; a single pass takes well under
+    // a second.
+    expect(Date.now() - started).toBeLessThan(5000);
+    expect(again.js).toBe(first.js);
+    expect(first.js).toContain(
+      "export {Glyph19999Outline24Icon as Glyph19999Icon} from '@acme/big-library';",
+    );
+  });
+});
+
+describe('entryWiringNote over a types file a formatter rewrote', () => {
+  it.each([
+    [
+      'double quotes, no semicolon',
+      'export * from "./icon-sets/brand/brand.generated.js"\n',
+    ],
+    [
+      'the line as written',
+      "export * from './icon-sets/brand/brand.generated.js';\n",
+    ],
+  ])('names no line the types file already has (%s)', (_, types) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-wiring-'));
+    try {
+      const pkg = {
+        name: '@acme/icons',
+        type: 'module',
+        exports: {'.': {types: './index.d.ts', default: './index.js'}},
+      };
+      fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify(pkg));
+      fs.writeFileSync(path.join(dir, 'index.js'), 'export {};\n');
+      fs.writeFileSync(path.join(dir, 'index.d.ts'), types);
+      expect(
+        entryWiringNote(dir, pkg, './icon-sets/brand/brand.generated.js'),
+      ).toBe(
+        "Add `export * from './icon-sets/brand/brand.generated.js';` to index.js, so the icons import from @acme/icons.",
+      );
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
   });
 });
