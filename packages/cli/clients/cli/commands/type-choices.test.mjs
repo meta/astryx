@@ -6,6 +6,8 @@
  * name that same set, so the four cannot drift apart.
  */
 
+import {spawnSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import {describe, expect, it} from 'vitest';
 import {SEARCH_DOMAINS} from '../../../api/search/_query.mjs';
 import {doc as buildCommand} from './build.doc.mjs';
@@ -91,5 +93,42 @@ describe.each([
     const response = /** @type {any} */ (await run(type));
     expect(response).toBeTruthy();
     check(type, response.data);
+  });
+});
+
+describe('build --type doc|theme points to search', () => {
+  const BIN = fileURLToPath(new URL('../bin/astryx.mjs', import.meta.url));
+  /** @param {string[]} args */
+  const cli = args =>
+    spawnSync(process.execPath, [BIN, 'build', ...args], {encoding: 'utf8'});
+
+  it.each([
+    ['doc', ['neutral']],
+    ['theme', ['neutral']],
+    ['doc', []],
+    ['theme', []],
+  ])(
+    'names search once on stderr for %s (query: %j)',
+    (type, query) => {
+      const run = cli([...query, '--type', type]);
+      expect(run.status).toBe(0);
+      expect(run.stderr.match(/Note: a build kit has no/g) ?? []).toHaveLength(
+        1,
+      );
+      expect(run.stderr).toContain(`search <query> --type ${type}`);
+      expect(run.stdout).not.toContain('Note: a build kit');
+    },
+    60_000,
+  );
+
+  it('says nothing in JSON mode or for a kind a kit has', () => {
+    expect(cli(['neutral', '--type', 'doc', '--json']).stderr).toBe('');
+    expect(cli(['neutral', '--type', 'component']).stderr).toBe('');
+  }, 60_000);
+
+  it('reads an empty --type as no filter', async () => {
+    const none = await build('settings page');
+    const empty = await build('settings page', {type: /** @type {any} */ ('')});
+    expect(empty).toEqual(none);
   });
 });

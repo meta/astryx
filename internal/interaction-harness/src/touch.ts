@@ -514,10 +514,12 @@ export class TouchPacingError extends Error {
 }
 
 /**
- * A paced play's page read a release that is not the script's because its
- * own touch and pointer listeners held an event back: they were still handling the
- * event before, and WebKit dispatches the next touch only once the page is
- * free. The page changed the release, so this is the proof's own failure.
+ * A paced play's page read a release that is not the script's, and its own
+ * touch and pointer listeners held an event back. They were still handling
+ * the event before, and WebKit dispatches the next touch only once the page
+ * is free. The handling time is page wall time, which on a starved runner
+ * includes the page's wait for a CPU. Judge a page stall from a run with CI's
+ * CPU limits: there it is the proof's own failure.
  */
 export class TouchPageStallError extends Error {
   constructor(
@@ -526,7 +528,7 @@ export class TouchPageStallError extends Error {
     },
   ) {
     super(
-      `touchDriver: the page's own touch and pointer listeners took ${fault.heldByPage.handlingMs.toFixed(0)} ms to handle an event, so the next reached it ${fault.heldByPage.gapMs.toFixed(0)} ms later, and ${describeFault(fault)}: the page changed the release, not the runner`,
+      `touchDriver: the page's own touch and pointer listeners took ${fault.heldByPage.handlingMs.toFixed(0)} ms of page wall time to handle an event, so the next reached it ${fault.heldByPage.gapMs.toFixed(0)} ms later, and ${describeFault(fault)}. On a starved runner that time includes the page's wait for a CPU: judge a page stall from a run with CI's CPU limits`,
     );
     this.name = 'TouchPageStallError';
   }

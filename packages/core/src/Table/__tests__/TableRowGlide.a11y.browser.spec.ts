@@ -347,7 +347,8 @@ test('the chevron turns on the glide; column lines and Reduce Motion change at o
   page,
 }) => {
   await mount(page, 'gliding-rows');
-  await page.locator('[data-expansion-toggle]').first().click();
+  // Hold the glide before a slow runner can let it finish between calls.
+  expect(await toggleAndHold(page, 0, 90)).toBeGreaterThan(0);
   // The values the rows glide on, as read where the area is.
   const timing = await page
     .locator('[data-expansion-toggle] > *')

@@ -7,20 +7,25 @@
  * @file privateAttributes/press.stylex.ts
  * @input StyleX, the overlay color tokens, the touch press strength
  *   (`pressVars`) and the theme's exit motion tokens
- * @output `rowPressLayerStyles`, the compositor press layer for list rows
- *   (`cell`, `cellOnImage` for a `backgroundImage` row,
- *   `cellOnImagePressOnly` for a row whose fill is the hover tone), which
- *   Button also composes; `controlPressLayerStyles`, what Button adds to that
- *   layer (`control`); and `rowPressPaintStyles`, a CheckboxList row's press
- *   paint for its box
+ * @output `rowPressLayerStyles`, the compositor press layer for list rows,
+ *   which Button also composes. Its styles: `cell`, and `cellOnImage` for a
+ *   `backgroundImage` row. `cellOnImagePressOnly` is for a row whose fill is
+ *   the hover tone, and `overDividers` for a row of a List with dividers. Also
+ *   `controlPressLayerStyles`, what Button adds to that layer (`control`),
+ *   and `rowPressPaintStyles`, a CheckboxList row's press paint for its box.
  * @position Owner module of the private press attribute: the press controller
  *   (utils/pressFeedback.ts) writes it, and this file reads it. No package
- *   entry exports it. Item, TreeList, Button and CheckboxListItem compose its
- *   styles; utils/interactionOverlay.cell.test.ts tests the row layer.
+ *   entry exports it. Item, ListItem, TreeList, Button and CheckboxListItem
+ *   compose its styles; utils/interactionOverlay.cell.test.ts tests the row layer.
  */
 
 import * as stylex from '@stylexjs/stylex';
-import {colorVars, durationVars, easeVars} from '../theme/tokens.stylex';
+import {
+  borderVars,
+  colorVars,
+  durationVars,
+  easeVars,
+} from '../theme/tokens.stylex';
 import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
 import {pressVars} from '../utils/interactionOverlay.stylex';
 
@@ -71,6 +76,13 @@ const cellRelease = stylex.keyframes({
 
 /** The release's curve: the theme's exit easing, as the strength's. */
 const RELEASE_EASE = easeVars['--ease-exit'];
+
+/** A List divider's width (ListItem's bottom border). */
+const DIVIDER_WIDTH = borderVars['--border-width'];
+/** How far a highlighted row's tint reaches past its edge: one divider. */
+const PAST_DIVIDER = `calc(-1 * ${DIVIDER_WIDTH})`;
+/** A tint one divider tall, just above the row: over the row before's divider. */
+const tintAbove = (tint: string) => `0 ${PAST_DIVIDER} 0 0 ${tint}`;
 
 export const rowPressLayerStyles = stylex.create({
   /**
@@ -192,6 +204,62 @@ export const rowPressLayerStyles = stylex.create({
       animationFillMode: {
         default: null,
         [COARSE]: {default: null, [PRESSED_FADING]: 'both'},
+      },
+    },
+  },
+  /**
+   * A row of a List with dividers, composed after `cell`. Where the primary
+   * pointer is fine, its own divider is its border, which paints over its
+   * tint. The tint also covers the divider above it, as a shadow, under a
+   * mouse or a finger. Under a coarse pointer, the press layer covers both
+   * dividers, so they fade with it on the release. The tint is translucent,
+   * so a divider under it reads as it does at rest.
+   */
+  overDividers: {
+    boxShadow: {
+      default: null,
+      [ENABLED]: {
+        default: null,
+        ':not(:first-child)': {
+          default: null,
+          ':active': {
+            default: tintAbove(colorVars['--color-overlay-pressed']),
+            [COARSE]: 'none',
+          },
+          [HOVER_HOVER]: {
+            default: null,
+            ':hover': tintAbove(colorVars['--color-overlay-hover']),
+            ':active': tintAbove(colorVars['--color-overlay-pressed']),
+          },
+          // A press the controller paints. Under a coarse pointer, the press
+          // layer covers the divider above. Elsewhere the strip takes the
+          // row's own press paint, which follows the release's strength.
+          [PRESSED_ON]: {
+            default: tintAbove('var(--_press-paint)'),
+            [COARSE]: 'none',
+          },
+          [PRESSED_FADING]: {
+            default: tintAbove('var(--_press-paint)'),
+            [COARSE]: 'none',
+          },
+        },
+      },
+    },
+    '::before': {
+      insetBlockStart: {
+        default: null,
+        [COARSE]: {
+          default: null,
+          ':not(:first-child)': {default: null, [PRESSED_ANY]: PAST_DIVIDER},
+        },
+      },
+      // The last row draws no divider (ListItem).
+      insetBlockEnd: {
+        default: null,
+        [COARSE]: {
+          default: null,
+          ':not(:last-child)': {default: null, [PRESSED_ANY]: PAST_DIVIDER},
+        },
       },
     },
   },
