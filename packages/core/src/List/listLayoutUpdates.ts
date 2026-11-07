@@ -333,7 +333,8 @@ function settleTranslation({
 /**
  * Marks each row that crosses another on the longer of the two glides, for
  * the length of its glide, so it rides above. It reads the glides once the
- * module has started them, after the commit's layout effects. One pass each
+ * module has started them, after the commit's layout effects. It marks the
+ * rows then too, after the module has read the commit's layout. One pass each
  * way over the rows near the visible part, in their old order, finds the rows
  * that cross any other. Only those are compared, so a removal or an insert,
  * which crosses nothing, costs the two passes.
@@ -390,21 +391,19 @@ function markCrossings(
   if (travelling.length === 0) {
     return;
   }
-  const unmarks = travelling.map(element => markTravelling(element));
-  // After the module's own microtask has started the glides.
+  // After the module's own microtask has read the layout and started the
+  // glides. A mark set before that read would make it lay the page out again.
   queueMicrotask(() => {
-    travelling.forEach((element, index) => {
-      const end = unmarks[index];
+    for (const element of travelling) {
       const glide =
         typeof element.getAnimations === 'function'
           ? element.getAnimations().at(-1)
           : undefined;
-      if (glide == null) {
-        end();
-        return;
+      if (glide != null) {
+        const end = markTravelling(element);
+        glide.finished.then(end, end);
       }
-      glide.finished.then(end, end);
-    });
+    }
   });
 }
 

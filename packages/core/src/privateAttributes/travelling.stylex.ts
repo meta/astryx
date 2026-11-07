@@ -16,12 +16,26 @@ import {colorVars} from '../theme/tokens.stylex';
 const TRAVELLING = 'data-astryx-travelling';
 
 /**
+ * Each row's latest mark, so the end of an earlier slide leaves a later
+ * mark in place.
+ */
+const marks = new WeakMap<Element, object>();
+
+/**
  * Marks `row` as sliding across rows that move the other way. Returns the
- * call that removes the mark when the slide ends.
+ * call that removes the mark when the slide ends. A later mark on the row
+ * stays when that call runs.
  */
 export function markTravelling(row: Element): () => void {
+  const mark = {};
+  marks.set(row, mark);
   row.setAttribute(TRAVELLING, '');
-  return () => row.removeAttribute(TRAVELLING);
+  return () => {
+    if (marks.get(row) === mark) {
+      marks.delete(row);
+      row.removeAttribute(TRAVELLING);
+    }
+  };
 }
 
 export const travellingStyles = stylex.create({

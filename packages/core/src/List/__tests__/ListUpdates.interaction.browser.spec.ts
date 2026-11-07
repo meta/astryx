@@ -742,6 +742,76 @@ test('a row swiped away with a removal action exits in place as it was on screen
   await expect(leaving(page)).toHaveCount(0, {timeout: 3000});
 });
 
+/**
+ * Presses `button` with a click that has no pointer. It counts the style
+ * recalculations and layouts in that task: the click, React's commit and the
+ * microtasks after it, before the next frame. With `isMarkSkipped`, no row is
+ * marked to ride above others. It also says whether a row rides then.
+ */
+async function workInPress(
+  page: Page,
+  button: string,
+  isMarkSkipped: boolean,
+): Promise<{work: number; isRiding: boolean}> {
+  let press = {from: 0, to: 0, isRiding: false};
+  const trace = await traceRendering(page, async () => {
+    press = await page.evaluate(
+      async ({name, skip}) => {
+        const target = [...document.querySelectorAll('button')].find(
+          element => element.textContent?.trim() === name,
+        );
+        const setAttribute = Element.prototype.setAttribute;
+        if (skip) {
+          Element.prototype.setAttribute = function (key, value) {
+            if (key !== 'data-astryx-travelling') {
+              setAttribute.call(this, key, value);
+            }
+          };
+        }
+        const from = performance.timeOrigin + performance.now();
+        target?.click();
+        // Resolved promises keep the task open, so no frame runs meanwhile.
+        for (let hop = 0; hop < 8; hop++) {
+          await Promise.resolve();
+        }
+        const to = performance.timeOrigin + performance.now();
+        Element.prototype.setAttribute = setAttribute;
+        return {
+          from,
+          to,
+          isRiding:
+            document.querySelector(
+              '#storybook-root li[data-astryx-travelling]',
+            ) != null,
+        };
+      },
+      {name: button, skip: isMarkSkipped},
+    );
+  });
+  const counts = countBetween(trace, press.from, press.to);
+  return {
+    work: (counts.UpdateLayoutTree ?? 0) + (counts.Layout ?? 0),
+    isRiding: press.isRiding,
+  };
+}
+
+test('a reorder with a row riding across others restyles and lays out the page in its commit no more often than with no row marked to ride', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(browserName !== 'chromium', 'Chromium traces layouts through CDP');
+  await open(page);
+  const skipped = await workInPress(page, 'Move the last row first', true);
+  await open(page);
+  const marked = await workInPress(page, 'Move the last row first', false);
+  expect(skipped.isRiding).toBe(false);
+  expect(marked.isRiding).toBe(true);
+  expect(
+    marked.work,
+    `with the row marked: ${marked.work}; with no mark: ${skipped.work}`,
+  ).toBe(skipped.work);
+});
+
 test('a change with a row swiped open lays the page out no more often than the same change with none', async ({
   page,
   browserName,

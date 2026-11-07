@@ -314,6 +314,75 @@ describe('List row updates through animatedLayout', () => {
     expect(entrances()).toEqual([]);
   });
 
+  it('a crossing row is marked only after the module has read the layout of the commit', async () => {
+    render(<Demo initial={['Inbox', 'Sent', 'Drafts']} />);
+    const marked = () =>
+      document.querySelector('li[data-astryx-travelling]') != null;
+    const readsWhileMarked: string[] = [];
+    const rect = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      if (marked()) {
+        readsWhileMarked.push(this.textContent?.trim() ?? this.tagName);
+      }
+      return rect.call(this);
+    };
+    try {
+      await change(['Drafts', 'Inbox', 'Sent']);
+    } finally {
+      Element.prototype.getBoundingClientRect = rect;
+    }
+    expect(readsWhileMarked).toEqual([]);
+    expect(marked()).toBe(true);
+  });
+
+  it('a second reorder while a row rides keeps it marked until its new glide ends', async () => {
+    // As in a browser, a cancelled animation rejects its finished promise.
+    const animate = Element.prototype.animate;
+    const finishes = new Map<Animation, () => void>();
+    Element.prototype.animate = function (
+      this: Element,
+      ...args: Parameters<Element['animate']>
+    ) {
+      const animation = animate.apply(this, args);
+      const cancel = animation.cancel.bind(animation);
+      let settle = (_isCancelled: boolean) => {};
+      const finished = new Promise<Animation>((resolve, reject) => {
+        settle = isCancelled =>
+          isCancelled ? reject(new Error('cancelled')) : resolve(animation);
+      });
+      finished.catch(() => undefined);
+      Object.assign(animation, {
+        finished,
+        cancel: () => {
+          cancel();
+          settle(true);
+        },
+      });
+      finishes.set(animation, () => settle(false));
+      return animation;
+    };
+    try {
+      render(<Demo initial={['Inbox', 'Sent', 'Drafts']} />);
+      const drafts = () =>
+        [...document.querySelectorAll('li')].find(
+          row => row.textContent?.trim() === 'Drafts',
+        );
+      await change(['Drafts', 'Inbox', 'Sent']);
+      expect(drafts()).toHaveAttribute('data-astryx-travelling');
+      // Drafts crosses the same rows again, back down, while it still rides.
+      await change(['Inbox', 'Sent', 'Drafts']);
+      expect(drafts()).toHaveAttribute('data-astryx-travelling');
+      const glide = drafts()?.getAnimations().at(-1);
+      if (glide != null) {
+        finishes.get(glide)?.();
+      }
+      await flushMicrotasks();
+      expect(drafts()).not.toHaveAttribute('data-astryx-travelling');
+    } finally {
+      Element.prototype.animate = animate;
+    }
+  });
+
   it('moving the first row last: it glides down from its old place riding above the rows it crosses, and they glide up', async () => {
     render(<Demo initial={['Inbox', 'Sent', 'Drafts', 'Spam', 'Archive']} />);
     await change(['Sent', 'Drafts', 'Spam', 'Archive', 'Inbox']);
