@@ -6,7 +6,11 @@
  */
 
 import {describe, it, expect} from 'vitest';
-import {runDrift} from './docs-drift.mjs';
+import {requireNatively} from '../../test-utils/native-require.mjs';
+
+const require = requireNatively(import.meta.url);
+/** @type {typeof import('./docs-drift.mjs')} */
+const {runDrift} = require('./docs-drift.mjs');
 
 describe('production authored-doc drift', () => {
   it('every doc parses and stays in sync with its source of truth', async () => {

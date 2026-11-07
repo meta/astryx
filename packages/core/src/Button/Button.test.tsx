@@ -25,9 +25,12 @@ import {Icon} from '../Icon/Icon';
 import * as stylex from '@stylexjs/stylex';
 import {
   hasPressedArm,
-  hasReleaseFade,
-  readsPressStrength,
+  keepsPressOutsideCoarse,
+  layerOnlyWhilePressed,
+  releasesOnLayer,
+  showsLayerPress,
 } from '../__tests__/pressState';
+import {PRESS_FADE_MS} from '../utils/pressGesture';
 import {Badge} from '../Badge/Badge';
 import {ButtonGroup} from '../ButtonGroup';
 import {InputGroup} from '../InputGroup';
@@ -772,6 +775,22 @@ describe('Button', () => {
     await waitFor(() => expect(liveRegion).toHaveTextContent('Chargement'));
   });
 
+  it('puts no display: contents element between the Button and its label', () => {
+    // WebKit before macOS 15 drops an accessible name computed through a
+    // `display: contents` element, so VoiceOver read the Button as unnamed.
+    render(
+      <Button label="Save" icon={<span>+</span>} endContent={<span>3</span>} />,
+    );
+    const button = screen.getByRole('button');
+    for (
+      let el = screen.getByText('Save').parentElement;
+      el != null && el !== button;
+      el = el.parentElement
+    ) {
+      expect(getComputedStyle(el).display).not.toBe('contents');
+    }
+  });
+
   describe('in a narrow row', () => {
     // jsdom has no layout, so these assert the computed declarations that
     // produce the behavior. The real-browser widths are in the PR evidence.
@@ -785,6 +804,16 @@ describe('Button', () => {
       );
       expect(getComputedStyle(label).textOverflow).toBe('ellipsis');
       expect(getComputedStyle(label).overflow).toBe('hidden');
+    });
+
+    it('lets the content box shrink too, so the label inside it truncates', () => {
+      render(<Button label="A very long button label that should truncate" />);
+      const box = screen.getByText(
+        'A very long button label that should truncate',
+      ).parentElement!;
+      const style = getComputedStyle(box);
+      expect(style.minWidth).toBe('0');
+      expect(style.flexShrink).toBe('1');
     });
 
     it('keeps the default flex-shrink so a row can shrink the button', () => {
@@ -945,16 +974,32 @@ describe('Button', () => {
 });
 
 describe('Button pressed state (touch)', () => {
-  it('fades the touch press out over the release, painting the pressed token at its strength on both arms', () => {
+  it('paints the touch press on a compositor layer and releases it on the press clock', () => {
     render(<Button label="Save" />);
     const button = screen.getByRole('button', {name: 'Save'});
-    // The touch arms the controller writes: `on` paints the pressed token at
-    // strength 1 on the first frame; `fading` keeps the paint and runs the
-    // release animation on the machine's clock. A mouse keeps `:active`.
+    // The touch arms the controller writes, under a coarse primary pointer:
+    // `on` shows the pressed token on the button's `::before` layer on the
+    // first frame; `fading` runs the layer's opacity release on the press
+    // clock. A mouse keeps `:active`.
     expect(button).toHaveAttribute('data-astryx-pressable');
     expect(hasPressedArm(button)).toBe(true);
-    expect(readsPressStrength(button, '[data-astryx-press="on"]')).toBe(true);
-    expect(readsPressStrength(button)).toBe(true);
-    expect(hasReleaseFade(button)).toBe(true);
+    expect(showsLayerPress(button)).toBe(true);
+    expect(releasesOnLayer(button, '::before', PRESS_FADE_MS)).toBe(true);
+  });
+
+  it('has no press layer and no isolation at rest under a coarse pointer, only while a press is on or fading', () => {
+    render(<Button label="Save" />);
+    const button = screen.getByRole('button', {name: 'Save'});
+    // At rest the button is no stacking context, and a `::before` a caller
+    // styles through `xstyle` keeps its own opacity, z-index and position.
+    expect(layerOnlyWhilePressed(button, '::before')).toBe(true);
+  });
+
+  it('keeps the press it always had under any other pointer: no layer, no isolation, the strength’s release', () => {
+    render(<Button label="Save" />);
+    const button = screen.getByRole('button', {name: 'Save'});
+    // A finger on a touch screen beside a mouse, and the mouse itself, see
+    // what they always saw.
+    expect(keepsPressOutsideCoarse(button, '::before')).toBe(true);
   });
 });

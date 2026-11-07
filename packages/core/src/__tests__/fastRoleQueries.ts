@@ -3,7 +3,8 @@
 /**
  * @file fastRoleQueries.ts
  * @input Uses @testing-library/react screen, dom-accessibility-api
- * @output getButton/queryButton — role+name lookups that stay O(match) in jsdom
+ * @output getButton/queryButton/getOnlyButton — role+name lookups that stay
+ *   O(match) in jsdom
  * @position Shared test helper; imported by component tests that render large
  *   always-mounted button collections (Calendar month grids)
  *
@@ -23,12 +24,15 @@
  *     names only consult display/visibility, and under {hidden: true}
  *     semantics visibility must not exclude candidates anyway.
  *
- * Trade-off vs getByRole: first match wins — no tree-wide uniqueness check.
+ * Trade-off vs getByRole: getButton and queryButton take the first match —
+ * no tree-wide uniqueness check. getOnlyButton keeps getByRole's checks. Each
+ * button with a matching name must also pass RTL's own role, name and
+ * accessibility query, run on its parent alone. Exactly one may.
  *
  * SYNC: When modified, update this header.
  */
 
-import {screen} from '@testing-library/react';
+import {screen, within} from '@testing-library/react';
 import {computeAccessibleName} from 'dom-accessibility-api';
 
 // The name algorithm only reads getPropertyValue (for display/visibility/
@@ -63,4 +67,21 @@ export function getButton(name: string | RegExp): HTMLElement {
     throw new Error(`Unable to find a role=button named ${String(name)}`);
   }
   return el;
+}
+
+export function getOnlyButton(name: string | RegExp): HTMLElement {
+  const matches = screen
+    .queryAllByRole('button', {hidden: true})
+    .filter(
+      el =>
+        matchesName(el, name) &&
+        el.parentElement != null &&
+        within(el.parentElement).queryAllByRole('button', {name}).includes(el),
+    );
+  if (matches.length !== 1) {
+    throw new Error(
+      `Expected one accessible role=button named ${String(name)}, found ${matches.length}`,
+    );
+  }
+  return matches[0];
 }

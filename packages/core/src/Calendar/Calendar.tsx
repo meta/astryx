@@ -44,7 +44,6 @@ import {
   plainDateFromISO,
   plainDateToISO,
   plainDateToDate,
-  plainDateToday,
   plainDateAddDays,
   plainDateDiffDays,
   plainDateIsAfter,
@@ -71,6 +70,7 @@ import {mergeProps, composeEventHandlers, rtlStyles} from '../utils';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
+import {useToday} from '../hooks/useToday';
 import {getInitialFocusDate} from './getInitialFocusDate';
 import {getWeekdayHeaders} from './getWeekdayHeaderNames';
 import {
@@ -110,6 +110,10 @@ import {
 import english from '../i18n/generated-english/Calendar/Calendar.generated';
 
 registerEnglishFallback(english);
+
+// The month math needs a date before the opening month is known (server
+// render, hydration). The grid it lays out is hidden.
+const UNKNOWN_MONTH_STAND_IN = plainDateFromISO('1970-01-01');
 
 /** How a month navigation moves the focused day: by its row offset in days, or by whole calendar months or years. */
 type NavigationUnit = 'days' | 'months' | 'years';
@@ -320,8 +324,9 @@ export function Calendar({ref, ...props}: CalendarProps) {
   // absurd number of month grids (e.g. `numberOfMonths={1000}`).
   const numberOfMonths = numberOfMonthsProp === 2 ? 2 : 1;
 
-  // Today's date (memoized)
-  const today = useMemo(() => plainDateToday(), []);
+  // Today is unknown on the server and while hydrating, so the hydrating
+  // render matches the server markup.
+  const today = useToday();
 
   // Internal state for uncontrolled mode
   const [internalValue, setInternalValue] = useState<
@@ -342,10 +347,11 @@ export function Calendar({ref, ...props}: CalendarProps) {
   const effectiveValue =
     (value !== undefined ? value : internalValue) ?? undefined;
 
-  // Focus date state (which month is visible). Falls back to today, clamped
+  // The month to open on: the focus date, else the value, else today clamped
   // into the min/max window so a window that doesn't contain today doesn't
-  // open on an all-disabled month.
-  const [internalFocusDate, setInternalFocusDate] = useState<PlainDate>(() =>
+  // open on an all-disabled month. Without a focus date or a value it waits
+  // for today, so it is unknown on the server and while hydrating.
+  const getOpeningFocusDate = () =>
     getInitialFocusDate({
       focusDate: focusDateProp,
       value: effectiveValue,
@@ -354,15 +360,33 @@ export function Calendar({ref, ...props}: CalendarProps) {
       numberOfMonths,
       today,
       calendar,
-    }),
+    });
+
+  // Focus date state (which month is visible). Null only while the opening
+  // month waits for today.
+  const [internalFocusDate, setInternalFocusDate] = useState<PlainDate | null>(
+    getOpeningFocusDate,
   );
 
   // Use controlled focusDate if callback is provided, otherwise use internal state
   const isControlledFocus =
     focusDateProp !== undefined && onFocusDateChange !== undefined;
-  const focusDate = isControlledFocus
+  // Store the opening month in the first render that knows today, so a later
+  // pick or value change does not move the shown months.
+  const openingFocusDate =
+    !isControlledFocus && internalFocusDate == null && today != null
+      ? getOpeningFocusDate()
+      : null;
+  if (openingFocusDate != null) {
+    setInternalFocusDate(openingFocusDate);
+  }
+  const knownFocusDate = isControlledFocus
     ? plainDateFromISO(focusDateProp)
-    : internalFocusDate;
+    : (internalFocusDate ?? openingFocusDate);
+  // Before the month is known the grid is hidden, and the month math below
+  // uses a stand-in date that nothing can act on before hydration ends.
+  const isMonthKnown = knownFocusDate != null;
+  const focusDate = knownFocusDate ?? UNKNOWN_MONTH_STAND_IN;
 
   // Expose imperative handle for external navigation
   useImperativeHandle(
@@ -431,10 +455,12 @@ export function Calendar({ref, ...props}: CalendarProps) {
   // where the locale capitalizes one (FR1).
   const monthYearLabel = useMemo(
     () =>
-      visibleMonths
-        .map(m => formatCalendarMonthLabel(calendar, m, locale))
-        .join(' – '),
-    [calendar, visibleMonths, locale],
+      isMonthKnown
+        ? visibleMonths
+            .map(m => formatCalendarMonthLabel(calendar, m, locale))
+            .join(' – ')
+        : '',
+    [calendar, visibleMonths, locale, isMonthKnown],
   );
 
   // Announce the newly visible month to screen readers whenever it changes.
@@ -449,8 +475,9 @@ export function Calendar({ref, ...props}: CalendarProps) {
   const announce = useAnnounce();
   const isInitialRenderRef = useRef(true);
   useEffect(() => {
-    if (isInitialRenderRef.current) {
-      isInitialRenderRef.current = false;
+    // The first month shown, after a server render too, is not a change.
+    if (isInitialRenderRef.current || monthYearLabel === '') {
+      isInitialRenderRef.current = monthYearLabel === '';
       return;
     }
     announce(monthYearLabel);
@@ -468,11 +495,13 @@ export function Calendar({ref, ...props}: CalendarProps) {
 
   // A month button is available while a day past the shown months is in range.
   const canNavigatePrevious =
-    minDateForKeys == null ||
-    plainDateIsBefore(minDateForKeys, baseMonth.start);
+    isMonthKnown &&
+    (minDateForKeys == null ||
+      plainDateIsBefore(minDateForKeys, baseMonth.start));
   const canNavigateNext =
-    maxDateForKeys == null ||
-    plainDateIsAfter(maxDateForKeys, lastVisibleMonth.end);
+    isMonthKnown &&
+    (maxDateForKeys == null ||
+      plainDateIsAfter(maxDateForKeys, lastVisibleMonth.end));
 
   // Navigation handlers
   // The same constraint view the grids use, so a key can resolve its target
@@ -509,9 +538,8 @@ export function Calendar({ref, ...props}: CalendarProps) {
           return;
         }
         const newPd = calendarAddMonths(calendar, baseMonth, delta).start;
-        if (onFocusDateChange) {
-          onFocusDateChange(plainDateToISO(newPd));
-        } else {
+        onFocusDateChange?.(plainDateToISO(newPd));
+        if (!isControlledFocus) {
           setInternalFocusDate(newPd);
         }
         return;
@@ -586,9 +614,8 @@ export function Calendar({ref, ...props}: CalendarProps) {
       const newPd = isBeforeShown
         ? targetMonth.start
         : calendarAddMonths(calendar, targetMonth, -(numberOfMonths - 1)).start;
-      if (onFocusDateChange) {
-        onFocusDateChange(plainDateToISO(newPd));
-      } else {
+      onFocusDateChange?.(plainDateToISO(newPd));
+      if (!isControlledFocus) {
         setInternalFocusDate(newPd);
       }
     },
@@ -597,6 +624,7 @@ export function Calendar({ref, ...props}: CalendarProps) {
       calendar,
       canNavigateNext,
       canNavigatePrevious,
+      isControlledFocus,
       isRootDateDisabled,
       lastVisibleMonth,
       maxDateForKeys,
@@ -760,7 +788,16 @@ export function Calendar({ref, ...props}: CalendarProps) {
         />
       </div>
       {/* Month grids */}
-      <div {...stylex.props(calendarStyles.monthsContainer)}>
+      {/* Before the month is known the grids keep their space but stay hidden
+          and out of reach. With the default six-row grid, the month appears
+          with no layout jump. */}
+      <div
+        aria-hidden={isMonthKnown ? undefined : true}
+        inert={!isMonthKnown}
+        {...stylex.props(
+          calendarStyles.monthsContainer,
+          !isMonthKnown && calendarStyles.monthsPending,
+        )}>
         {visibleMonths.map(month => (
           <MonthGrid
             key={plainDateToISO(month.start)}
@@ -823,7 +860,8 @@ interface MonthGridProps {
   weekStartsOn: DayOfWeek;
   onDayClick: (date: PlainDate) => void;
   onDayHover: (date: PlainDate | null) => void;
-  today: PlainDate;
+  /** Today, or `null` on the server and while hydrating. */
+  today: PlainDate | null;
   onNavigatePrevious?: (
     focusedDate: ISODateString,
     offset: number,
@@ -922,8 +960,11 @@ function MonthGrid({
       }
     }
 
-    const isTodayInMonth = isInCalendarMonth(today, month);
-    if (isTodayInMonth && !isDateDisabled(today)) {
+    if (
+      today != null &&
+      isInCalendarMonth(today, month) &&
+      !isDateDisabled(today)
+    ) {
       return plainDateToISO(today);
     }
 
@@ -1240,7 +1281,7 @@ interface DayCellProps {
   rangeEnd: PlainDate | null;
   previewStart: PlainDate | null;
   previewEnd: PlainDate | null;
-  today: PlainDate;
+  today: PlainDate | null;
   hasOutsideDays: boolean;
   isDisabled: boolean;
   /**

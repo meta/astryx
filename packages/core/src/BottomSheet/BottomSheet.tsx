@@ -82,7 +82,10 @@ import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 import {useModalOutlet} from '../Layer/modalOutlet';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {useFocusRegionContainment} from '../hooks/useFocusTrap';
-import {returnFocusForLastInput} from '../utils/focusReturn';
+import {
+  prepareFocusRepairOnRemoval,
+  returnFocusForLastInput,
+} from '../utils/focusReturn';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {
   BottomSheetPanel,
@@ -300,6 +303,37 @@ function stackStateAttribute(
 /** Scrim opacity for an open modal sheet: one visible backdrop per stack. */
 function scrimOpacityForView(view: BottomSheetStackView): '0' | '1' {
   return view.isStacked && !view.ownsScrim ? '0' : '1';
+}
+
+/**
+ * Writes the fade a touch drag's close paces on `dialog`'s scrim, or clears
+ * it when `ms` is null. `written` keeps the value the host wrote, so a clear
+ * removes only that value.
+ */
+function writeScrimFadeDuration(
+  dialog: HTMLDialogElement | null,
+  ms: number | null,
+  written: {current: string | null},
+): void {
+  if (dialog == null) {
+    return;
+  }
+  const current = dialog.style.getPropertyValue('--_sheet-scrim-duration');
+  if (ms == null) {
+    // Remove only the value this host wrote. A stack's 0s pin written since
+    // then stays.
+    if (written.current != null && current === written.current) {
+      dialog.style.removeProperty('--_sheet-scrim-duration');
+    }
+    written.current = null;
+    return;
+  }
+  // A stack's 0s pin hands the scrim over with no fade; it stays.
+  if (current === '0s') {
+    return;
+  }
+  written.current = `${ms}ms`;
+  dialog.style.setProperty('--_sheet-scrim-duration', written.current);
 }
 
 interface BottomSheetSharedProps extends BaseProps<HTMLDivElement> {
@@ -541,6 +575,18 @@ function StandaloneBottomSheet({
       String(opacity),
     );
   }, []);
+  // The fade duration a touch drag's close wrote, until that close ends.
+  const scrimFadeRef = useRef<string | null>(null);
+  const handleScrimFadeDuration = useCallback(
+    (panel: HTMLElement, ms: number | null) => {
+      const view = stackViewRef.current;
+      if (view.isStacked && !view.ownsScrim) {
+        return;
+      }
+      writeScrimFadeDuration(panel.closest('dialog'), ms, scrimFadeRef);
+    },
+    [],
+  );
 
   // A sheet joins the registry for as long as it is presented. For a modal
   // sheet the registry shows the dialog (in open order, repairing same-commit
@@ -553,7 +599,15 @@ function StandaloneBottomSheet({
       return;
     }
     const key = stackKeyRef.current;
-    return registerBottomSheet(
+    const dialog = dialogRef.current;
+    // Removing an open dialog runs no close, so focus would drop to the page.
+    // After the commit, the repair sends focus where a close would, if the
+    // removal lost focus.
+    const repairOnRemoval =
+      dialog == null
+        ? null
+        : prepareFocusRepairOnRemoval(dialog, {keepRestingFocus: true});
+    const leave = registerBottomSheet(
       {
         key,
         getElement: () => dialogRef.current,
@@ -611,6 +665,32 @@ function StandaloneBottomSheet({
       isOpenRef.current,
       hasScrim,
     );
+    return () => {
+      // Read before the registry lets go of the sheet beneath. Focus the
+      // person had already moved out of the sheet to the page body stays
+      // there: the removal did not lose it.
+      if (repairOnRemoval != null && isSheetHostPresented(dialog)) {
+        const returnTarget =
+          finalFocusRefRef.current?.current ?? triggerRef.current;
+        const revealed = hasScrim ? getBottomSheetBeneath(key) : null;
+        repairOnRemoval(() => {
+          // The sheet beneath left too. Its own repair returns focus for the
+          // stack.
+          if (revealed != null && !revealed.element.isConnected) {
+            return;
+          }
+          if (
+            revealed != null &&
+            (returnTarget == null || !revealed.element.contains(returnTarget))
+          ) {
+            revealed.focus();
+          } else if (returnTarget != null && returnTarget.isConnected) {
+            returnFocusForLastInput(returnTarget);
+          }
+        });
+      }
+      leave();
+    };
   }, [hasScrim, shouldPresent, writeScrim]);
   useLayoutEffect(() => {
     if (!isOpen) {
@@ -639,7 +719,7 @@ function StandaloneBottomSheet({
   // top one closes. A Dialog opened from a sheet stays above every sheet. A
   // closing sheet stops supplying when it starts to close. Passive: it runs
   // after the layout effects that present.
-  useModalOutlet(
+  const outletRef = useModalOutlet(
     dialogRef,
     isOpen && hasScrim,
     stackView.isTop,
@@ -909,7 +989,9 @@ function StandaloneBottomSheet({
         xstyle={xstyle}
         onDismiss={dismissOnLightInteraction}
         onScrimOpacity={handleScrimOpacity}
+        onScrimFadeDuration={handleScrimFadeDuration}
         onElementChange={handlePanelElementChange}
+        handleRef={outletRef}
         onMotionStart={handleMotionStart}
         onMotionComplete={handleMotionComplete}>
         <ModalAnnounceProvider
@@ -1057,6 +1139,16 @@ function SwitcherBottomSheetItem({
       }
     },
     [hasValidSheetId, onSheetScrimOpacityChange, sheetId],
+  );
+  // The fade a touch drag's close wrote on this step's dialog, until that
+  // close ends. The step a drag closes becomes the flow's retained step, so
+  // its backdrop is the flow's scrim.
+  const scrimFadeRef = useRef<string | null>(null);
+  const handleScrimFadeDuration = useCallback(
+    (panel: HTMLElement, ms: number | null) => {
+      writeScrimFadeDuration(panel.closest('dialog'), ms, scrimFadeRef);
+    },
+    [],
   );
 
   useLayoutEffect(() => {
@@ -1260,6 +1352,7 @@ function SwitcherBottomSheetItem({
           xstyle={xstyle}
           onDismiss={dismissOnSwipe}
           onScrimOpacity={handleScrimOpacity}
+          onScrimFadeDuration={handleScrimFadeDuration}
           onElementChange={handlePanelElementChange}
           onMotionStart={handleMotionStart}
           onMotionComplete={handleMotionComplete}>

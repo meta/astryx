@@ -56,23 +56,14 @@ export function watchResizablePanes(listener: () => void): () => void {
  * The pane a resize handle resizes: the lent LayoutPanel just before it, or
  * just after it when the region is reversed.
  */
-export function resizablePaneBeside(
-  handle: Element,
-  side: 'before' | 'after',
-): ResizablePane | null {
-  const sibling =
-    side === 'before'
-      ? handle.previousElementSibling
-      : handle.nextElementSibling;
-  return sibling == null ? null : (lent.get(sibling) ?? null);
-}
-
-/** The lent panel a handle sizes: before it, or after it when reversed. */
 export function resizablePaneFor(
   handle: Element,
   isReversed: boolean,
 ): ResizablePane | null {
-  return resizablePaneBeside(handle, isReversed ? 'after' : 'before');
+  const sibling = isReversed
+    ? handle.nextElementSibling
+    : handle.previousElementSibling;
+  return sibling == null ? null : (lent.get(sibling) ?? null);
 }
 
 /**

@@ -9,7 +9,8 @@
  * so `mod` resolves to "Ctrl" rather than "\u2318" after the layout effect.
  */
 
-import {render, screen} from '@testing-library/react';
+import {render, screen, within} from '@testing-library/react';
+import {renderToString} from 'react-dom/server';
 import {describe, it, expect, afterEach, vi} from 'vitest';
 import {Kbd} from './Kbd';
 import {InternationalizationProvider} from '../i18n';
@@ -67,6 +68,51 @@ describe('Kbd', () => {
   it('maps special keys', () => {
     render(<Kbd keys="enter" />);
     expect(screen.getByText('\u21B5')).toBeInTheDocument(); // \u21B5
+  });
+
+  it.each([
+    {key: 'backspace', glyph: '\u232B', label: 'Backspace'},
+    {key: 'tab', glyph: '\u21E5', label: 'Tab'},
+    {key: 'up', glyph: '\u2191', label: 'Up arrow'},
+    {key: 'down', glyph: '\u2193', label: 'Down arrow'},
+    {key: 'left', glyph: '\u2190', label: 'Left arrow'},
+    {key: 'right', glyph: '\u2192', label: 'Right arrow'},
+  ])('shows the $key symbol and speaks its name', ({key, glyph, label}) => {
+    render(<Kbd keys={key} />);
+    expect(screen.getByText(glyph)).toBeInTheDocument();
+    expect(screen.getByRole('img')).toHaveAccessibleName(label);
+  });
+
+  it('renders Ctrl and the Control name on the server, even on a Mac', () => {
+    Object.defineProperty(navigator, 'platform', {
+      value: 'MacIntel',
+      configurable: true,
+    });
+    const container = document.createElement('div');
+    container.innerHTML = renderToString(<Kbd keys="mod+k" />);
+    document.body.appendChild(container);
+    try {
+      expect(within(container).getByText('Ctrl')).toBeInTheDocument();
+      expect(within(container).queryByText('\u2318')).not.toBeInTheDocument();
+      expect(within(container).getByRole('img')).toHaveAccessibleName(
+        'Control + K',
+      );
+    } finally {
+      container.remove();
+    }
+  });
+
+  it('puts the kbd theme target on the shortcut only, not on a key badge', () => {
+    render(<Kbd keys="mod+shift+k" />);
+    const shortcut = screen.getByRole('img');
+    expect(shortcut).toHaveClass('astryx-kbd');
+    const badges = Array.from(shortcut.querySelectorAll('kbd'));
+    expect(badges).toHaveLength(3);
+    badges.forEach(badge =>
+      expect(
+        Array.from(badge.classList).filter(name => name.startsWith('astryx-')),
+      ).toEqual([]),
+    );
   });
 
   it('renders escape as text', () => {

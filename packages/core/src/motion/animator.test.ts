@@ -19,7 +19,7 @@ import path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
   animatorFor,
-  createMotionAnimator,
+  createMotionEngine,
   END_HOLD_MS,
   PROMOTION_LINGER_MS,
   type AnimatorOptions,
@@ -52,6 +52,8 @@ interface Recorded {
   /** Finished from outside (a sampler's `finish()`), keeping its start. */
   finished: boolean;
   readonly playState: 'idle' | 'paused' | 'running' | 'finished';
+  /** Its timing, as the browser reports it: the duration it was given. */
+  readonly effect: {getTiming(): {duration: number}};
   ready: Promise<Recorded>;
   commit(at: number): void;
   finish(): void;
@@ -136,6 +138,11 @@ beforeEach(() => {
       cancelled: false,
       paused: false,
       finished: false,
+      effect: {
+        getTiming: () => ({
+          duration: Number((options as KeyframeAnimationOptions)?.duration),
+        }),
+      },
       get playState() {
         return this.cancelled
           ? 'idle'
@@ -205,7 +212,7 @@ function setup({
 }: AnimatorOptions & {reduced?: boolean; coarse?: boolean} = {}) {
   stubMedia(reduced, coarse);
   const element = document.createElement('div');
-  const animator = createMotionAnimator(element, {
+  const animator = createMotionEngine(element, {
     now: () => clock,
     requestFrame,
     ...options,
@@ -2071,11 +2078,11 @@ describe('promotion: a compositing layer while it moves', () => {
         .mock.calls.filter(([read]) => read === node).length;
     const removed = document.createElement('div');
     document.body.append(removed);
-    createMotionAnimator(removed, {now: () => clock, requestFrame});
+    createMotionEngine(removed, {now: () => clock, requestFrame});
     removed.remove();
     const kept = document.createElement('div');
     document.body.append(kept);
-    createMotionAnimator(kept, {now: () => clock, requestFrame});
+    createMotionEngine(kept, {now: () => clock, requestFrame});
     await vi.advanceTimersByTimeAsync(0);
     expect(readsOf(removed)).toBe(0);
     // A node still in the document is read, once, in that task.
@@ -2089,7 +2096,7 @@ describe('promotion: a compositing layer while it moves', () => {
     stylesheet['will-change'] = 'transform, opacity';
     stubMedia(false, false);
     const element = document.createElement('div');
-    const animator = createMotionAnimator(element, {
+    const animator = createMotionEngine(element, {
       now: () => clock,
       requestFrame,
     });
@@ -2834,7 +2841,7 @@ describe('Reduced Motion (design:reduced-motion)', () => {
 
   it('a running dip survives any re-attach, so the move never passes in view', async () => {
     const halfway = async (
-      animator: ReturnType<typeof createMotionAnimator>,
+      animator: ReturnType<typeof createMotionEngine>,
       start: number,
     ): Promise<number> => {
       // The plan lands by timer: step the clock to the landing.
@@ -3047,6 +3054,94 @@ describe('Reduced Motion (design:reduced-motion)', () => {
       expect(animator.get('opacity')).toBe(1);
       await expect(handle.finished).resolves.toBe(true);
     }
+  });
+
+  it('a landing waits while a sampler pauses its fade after the browser started it, and lands once the fade resumes', async () => {
+    const {animator} = reduced();
+    const handle = animator.animate({x: 100}, {spring: springs.navigationPush});
+    let settled: boolean | undefined;
+    void handle.finished.then(value => {
+      settled = value;
+    });
+    await commitFrame(clock);
+    await advance(fade / 4);
+    // A harness holds the fade mid-way, after the browser started it.
+    const [fadeOut] = live('opacity');
+    fadeOut.paused = true;
+    await advance(5000);
+    // The travel waits for the fade, which still shows the element.
+    expect(animator.get('x')).toBe(0);
+    expect(settled).toBeUndefined();
+    fadeOut.paused = false;
+    for (let step = 0; step < 16; step++) {
+      await advance(fade / 4);
+    }
+    expect(animator.get('x')).toBe(100);
+    expect(animator.get('opacity')).toBe(1);
+    expect(settled).toBe(true);
+  });
+
+  it('a landing waits while a resumed fade has no start yet, and lands once the fade plays to its end', async () => {
+    const {animator} = reduced();
+    const handle = animator.animate({x: 100}, {spring: springs.navigationPush});
+    let settled: boolean | undefined;
+    void handle.finished.then(value => {
+      settled = value;
+    });
+    await commitFrame(clock);
+    await advance(fade / 4);
+    const [fadeOut] = live('opacity');
+    fadeOut.paused = true;
+    // The fade shows the frame it was paused at, a quarter of the way in.
+    Object.defineProperty(fadeOut, 'currentTime', {
+      configurable: true,
+      get: () => fade / 4,
+    });
+    for (let step = 0; step < 300; step++) {
+      await advance(1);
+    }
+    // play(): the fade waits for the browser's next frame, with no start.
+    fadeOut.paused = false;
+    fadeOut.startTime = null;
+    fadeOut.startDelayFrames = 1_000;
+    for (let step = 0; step < 300; step++) {
+      await advance(1);
+    }
+    expect(animator.get('x')).toBe(0);
+    expect(settled).toBeUndefined();
+    // The browser starts it, and it plays to its end.
+    fadeOut.startDelayFrames = 0;
+    Reflect.deleteProperty(fadeOut, 'currentTime');
+    for (let step = 0; step < 16; step++) {
+      await advance(fade / 4);
+    }
+    expect(animator.get('x')).toBe(100);
+    expect(settled).toBe(true);
+  });
+
+  it('an exit whose fade a sampler pauses after its start settles only once the fade resumes', async () => {
+    const {animator} = reduced();
+    const handle = animator.animate(
+      {x: 100, opacity: 0},
+      {spring: springs.navigationPush},
+    );
+    let settled: boolean | undefined;
+    void handle.finished.then(value => {
+      settled = value;
+    });
+    await commitFrame(clock);
+    await advance(fade / 4);
+    const [fadeOut] = live('opacity');
+    fadeOut.paused = true;
+    await advance(5000);
+    // A component that removes the element when the call settles keeps it
+    // while the fade is held on screen.
+    expect(settled).toBeUndefined();
+    fadeOut.paused = false;
+    for (let step = 0; step < 16; step++) {
+      await advance(fade / 4);
+    }
+    expect(settled).toBe(true);
   });
 
   it('a landing later than the whole fade back in shows the element at once and settles then', async () => {
@@ -4171,7 +4266,7 @@ describe('pseudoElement: a dialog\u2019s ::backdrop', () => {
 
 describe('attach', () => {
   it('keeps state without an element and resumes the curve on attach', () => {
-    const animator = createMotionAnimator(null, {
+    const animator = createMotionEngine(null, {
       now: () => clock,
     });
     animator.animate({x: 300}, {spring: springs.settle});
@@ -4262,7 +4357,7 @@ describe('attach', () => {
 
   it('writes nothing for channels at identity', () => {
     const element = document.createElement('div');
-    createMotionAnimator(element);
+    createMotionEngine(element);
     expect(element.getAttribute('style')).toBeNull();
   });
 });
@@ -4367,7 +4462,7 @@ describe("a theme's reduced-motion mark", () => {
     const element = document.createElement('div');
     theme.append(element);
     document.body.append(theme);
-    const animator = createMotionAnimator(element, {
+    const animator = createMotionEngine(element, {
       now: () => clock,
       requestFrame,
     });

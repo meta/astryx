@@ -548,8 +548,8 @@ describe('Pagination', () => {
           variant="dots"
         />,
       );
-      const group = screen.getByRole('group', {name: 'Page indicators'});
-      expect(within(group).getAllByRole('button')).toHaveLength(5);
+      const group = screen.getByRole('radiogroup', {name: 'Page indicators'});
+      expect(within(group).getAllByRole('radio')).toHaveLength(5);
     });
 
     it('treats NaN pageSize as the default', () => {
@@ -606,28 +606,30 @@ describe('Pagination', () => {
           variant="dots"
         />,
       );
-      const group = screen.getByRole('group', {name: 'Page indicators'});
-      const dots = within(group).getAllByRole('button');
+      const group = screen.getByRole('radiogroup', {name: 'Page indicators'});
+      const dots = within(group).getAllByRole('radio');
       expect(dots).toHaveLength(5);
-    });
-
-    it('marks active dot with aria-current', () => {
-      render(
-        <Pagination
-          page={3}
-          onChange={() => {}}
-          totalPages={5}
-          variant="dots"
-        />,
-      );
-      const activeDot = screen.getByRole('button', {name: 'Go to page 3'});
-      expect(activeDot).toHaveAttribute('aria-current', 'page');
     });
 
     // -------------------------------------------------------------------------
     // Keyboard navigation (roving tabindex + arrow keys via useListFocus).
     // Selection follows focus: arrow/Home/End move focus and select that page.
     // -------------------------------------------------------------------------
+
+    it('does not choose a page on the press: the browser keeps focus off the dot until the click', () => {
+      const onChange = vi.fn();
+      render(
+        <Pagination
+          page={1}
+          onChange={onChange}
+          totalPages={3}
+          variant="dots"
+        />,
+      );
+      const dot = screen.getByRole('radio', {name: 'Page 2'});
+      expect(fireEvent.mouseDown(dot)).toBe(false);
+      expect(onChange).not.toHaveBeenCalled();
+    });
 
     it('uses roving tabindex — active dot has tabIndex 0, others -1', () => {
       render(
@@ -638,15 +640,18 @@ describe('Pagination', () => {
           variant="dots"
         />,
       );
-      expect(
-        screen.getByRole('button', {name: 'Go to page 2'}),
-      ).toHaveAttribute('tabindex', '0');
-      expect(
-        screen.getByRole('button', {name: 'Go to page 1'}),
-      ).toHaveAttribute('tabindex', '-1');
-      expect(
-        screen.getByRole('button', {name: 'Go to page 3'}),
-      ).toHaveAttribute('tabindex', '-1');
+      expect(screen.getByRole('radio', {name: 'Page 2'})).toHaveAttribute(
+        'tabindex',
+        '0',
+      );
+      expect(screen.getByRole('radio', {name: 'Page 1'})).toHaveAttribute(
+        'tabindex',
+        '-1',
+      );
+      expect(screen.getByRole('radio', {name: 'Page 3'})).toHaveAttribute(
+        'tabindex',
+        '-1',
+      );
     });
 
     it('ArrowRight moves focus to the next dot and selects it', async () => {
@@ -660,10 +665,10 @@ describe('Pagination', () => {
           variant="dots"
         />,
       );
-      screen.getByRole('button', {name: 'Go to page 2'}).focus();
+      screen.getByRole('radio', {name: 'Page 2'}).focus();
       await user.keyboard('{ArrowRight}');
       expect(onChange).toHaveBeenCalledWith(3);
-      expect(screen.getByRole('button', {name: 'Go to page 3'})).toHaveFocus();
+      expect(screen.getByRole('radio', {name: 'Page 3'})).toHaveFocus();
     });
 
     it('ArrowLeft moves focus to the previous dot and selects it', async () => {
@@ -677,10 +682,10 @@ describe('Pagination', () => {
           variant="dots"
         />,
       );
-      screen.getByRole('button', {name: 'Go to page 3'}).focus();
+      screen.getByRole('radio', {name: 'Page 3'}).focus();
       await user.keyboard('{ArrowLeft}');
       expect(onChange).toHaveBeenCalledWith(2);
-      expect(screen.getByRole('button', {name: 'Go to page 2'})).toHaveFocus();
+      expect(screen.getByRole('radio', {name: 'Page 2'})).toHaveFocus();
     });
 
     it('Home selects the first page, End the last', async () => {
@@ -694,10 +699,10 @@ describe('Pagination', () => {
           variant="dots"
         />,
       );
-      screen.getByRole('button', {name: 'Go to page 3'}).focus();
+      screen.getByRole('radio', {name: 'Page 3'}).focus();
       await user.keyboard('{Home}');
       expect(onChange).toHaveBeenCalledWith(1);
-      expect(screen.getByRole('button', {name: 'Go to page 1'})).toHaveFocus();
+      expect(screen.getByRole('radio', {name: 'Page 1'})).toHaveFocus();
 
       onChange.mockClear();
       rerender(
@@ -708,10 +713,10 @@ describe('Pagination', () => {
           variant="dots"
         />,
       );
-      screen.getByRole('button', {name: 'Go to page 3'}).focus();
+      screen.getByRole('radio', {name: 'Page 3'}).focus();
       await user.keyboard('{End}');
       expect(onChange).toHaveBeenCalledWith(5);
-      expect(screen.getByRole('button', {name: 'Go to page 5'})).toHaveFocus();
+      expect(screen.getByRole('radio', {name: 'Page 5'})).toHaveFocus();
     });
 
     it('wraps from the last dot to the first with ArrowRight', async () => {
@@ -725,10 +730,10 @@ describe('Pagination', () => {
           variant="dots"
         />,
       );
-      screen.getByRole('button', {name: 'Go to page 4'}).focus();
+      screen.getByRole('radio', {name: 'Page 4'}).focus();
       await user.keyboard('{ArrowRight}');
       expect(onChange).toHaveBeenCalledWith(1);
-      expect(screen.getByRole('button', {name: 'Go to page 1'})).toHaveFocus();
+      expect(screen.getByRole('radio', {name: 'Page 1'})).toHaveFocus();
     });
 
     it('wraps from the first dot to the last with ArrowLeft', async () => {
@@ -742,10 +747,10 @@ describe('Pagination', () => {
           variant="dots"
         />,
       );
-      screen.getByRole('button', {name: 'Go to page 1'}).focus();
+      screen.getByRole('radio', {name: 'Page 1'}).focus();
       await user.keyboard('{ArrowLeft}');
       expect(onChange).toHaveBeenCalledWith(4);
-      expect(screen.getByRole('button', {name: 'Go to page 4'})).toHaveFocus();
+      expect(screen.getByRole('radio', {name: 'Page 4'})).toHaveFocus();
     });
 
     it('does not navigate with arrow keys when disabled', async () => {
@@ -760,7 +765,7 @@ describe('Pagination', () => {
           isDisabled
         />,
       );
-      const dot = screen.getByRole('button', {name: 'Go to page 2'});
+      const dot = screen.getByRole('radio', {name: 'Page 2'});
       // spec:AST-085 FR1: the active dot keeps its tab stop, exposed as disabled.
       expect(dot).not.toHaveAttribute('disabled');
       expect(dot).toHaveAttribute('aria-disabled', 'true');
@@ -1313,7 +1318,7 @@ describe('Pagination', () => {
           variant="dots"
         />,
       );
-      await user.click(screen.getByRole('button', {name: 'Go to page 4'}));
+      await user.click(screen.getByRole('radio', {name: 'Page 4'}));
       expect(onChange).toHaveBeenCalledWith(4);
     });
   });

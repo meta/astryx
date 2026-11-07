@@ -55,7 +55,7 @@ import {cubicBezier} from '@astryxdesign/core/internal/touch';
 import {mapProgress} from '@astryxdesign/core/internal/touch';
 import {scroll} from '@astryxdesign/core/internal/touch';
 import {observeResize} from '@astryxdesign/core/utils';
-import {useMotionAnimator} from './useMotionAnimator';
+import {useMotionEngine} from '../internal/useMotionEngine';
 import {
   RefreshPullRecognizer,
   RefreshScrollPullRecognizer,
@@ -186,8 +186,8 @@ export function useRefreshTouchController({
     (event: RefreshEvent) => dispatchRef.current(event),
     [dispatchRef],
   );
-  const content = useMotionAnimator();
-  const indicator = useMotionAnimator();
+  const content = useMotionEngine();
+  const indicator = useMotionEngine();
   const contentElement = useRef<HTMLElement | null>(null);
   const indicatorElement = useRef<HTMLElement | null>(null);
   // Whether the content holds the refreshing inset.

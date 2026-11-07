@@ -53,7 +53,7 @@ import {
   test,
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
-import type {CastFrame, TrackedFrame} from './frames';
+import type {CastFrame} from './frames';
 import {
   advanceFrozenPage,
   ANSWER_SLACK_MS,
@@ -63,10 +63,13 @@ import {
   blockMainThread,
   busyWindowProof,
   BusyWindowTooLateError,
+  castStep,
   compareCurve,
   countBetween,
   cubicBezier,
   CONTROL_RGB,
+  CONTROL_SIDE,
+  controlClock,
   curveOf,
   drag,
   flick,
@@ -105,9 +108,11 @@ import {
   thawTimers,
   timeline,
   touchDriver,
+  trackBrightness,
   TouchPageStallError,
   touchStoryboard,
   traceRendering,
+  trackControl,
   trackMarker,
   waitForAnimation,
   releaseAnimationLog,
@@ -154,73 +159,6 @@ const BUSY_FIXTURE = `<!doctype html><meta name=viewport content="width=device-w
   #box { position: absolute; left: 20px; top: 40px; width: 80px; height: 80px; background: #36c; }
 </style>
 <div id=box></div>`;
-
-/**
- * The red channel at a CSS-px point in each cast frame (a 16 px square's mean),
- * as a tracked value on x: what a backdrop's dim shows there. Decoded in a
- * scratch page, as `trackMarker` does.
- */
-async function brightnessAt(
-  page: Page,
-  castFrames: readonly CastFrame[],
-  {x, y}: {x: number; y: number},
-): Promise<TrackedFrame[]> {
-  const scratch = await page.context().newPage();
-  try {
-    const values: number[] = [];
-    for (let i = 0; i < castFrames.length; i += 12) {
-      const batch = castFrames.slice(i, i + 12);
-      values.push(
-        ...(await scratch.evaluate(
-          async ({items, px, py}) => {
-            const out: number[] = [];
-            for (const item of items) {
-              const blob = await (
-                await fetch(`data:image/${item.format};base64,${item.data}`)
-              ).blob();
-              const bitmap = await createImageBitmap(blob);
-              const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
-              const context = canvas.getContext('2d');
-              if (context == null) {
-                throw new Error('no 2d context');
-              }
-              context.drawImage(bitmap, 0, 0);
-              const scale = bitmap.width / item.viewportWidth;
-              const {data} = context.getImageData(
-                Math.round(px * scale),
-                Math.round(py * scale),
-                16,
-                16,
-              );
-              let sum = 0;
-              for (let o = 0; o < data.length; o += 4) {
-                sum += data[o];
-              }
-              out.push(sum / (data.length / 4));
-            }
-            return out;
-          },
-          {
-            items: batch.map(f => ({
-              data: f.data,
-              format: f.format,
-              viewportWidth: f.viewportWidth,
-            })),
-            px: x,
-            py: y,
-          },
-        )),
-      );
-    }
-    return castFrames.map((f, i) => ({
-      t: f.t,
-      box: {x: values[i], y: 0, width: 1, height: 1},
-      pixels: 1,
-    }));
-  } finally {
-    await scratch.close();
-  }
-}
 
 async function busyFixture(page: Page) {
   await page.route('http://busy.test/', route =>
@@ -911,6 +849,7 @@ test.describe('frame evidence', () => {
   test('against a compositor-only control in the same window, a compositor animation passes and a rAF one fails, whatever the screencast rate', async ({
     page,
   }, testInfo) => {
+    const started = Date.now();
     await busyFixture(page);
     const box = page.locator('#box');
     await markElement(box, {mode: 'outline'});
@@ -934,10 +873,21 @@ test.describe('frame evidence', () => {
             {duration: 1600, easing: 'linear', iterations: Infinity},
           );
         } else {
+          // Each step is logged with its time on the page clock, and when it
+          // ran. A frame can then be traced to the step it shows. The first
+          // entry is the reset.
+          const reset = performance.timeOrigin + performance.now();
+          const steps = [{t: reset, ran: reset, y: 0}];
+          (window as unknown as {__rafSteps: typeof steps}).__rafSteps = steps;
           const start = performance.now();
           const step = (now: number) => {
             const p = ((now - start) / 1600) % 1;
             el.style.transform = `translateY(${560 * p}px)`;
+            steps.push({
+              t: performance.timeOrigin + now,
+              ran: performance.timeOrigin + performance.now(),
+              y: 560 * p,
+            });
             requestAnimationFrame(step);
           };
           requestAnimationFrame(step);
@@ -967,30 +917,105 @@ test.describe('frame evidence', () => {
         type: `busy-main-thread ${driver} 1/${everyNthFrame} against the control`,
         description: `${proof.summary} | without the control: ${alone.verdict.failures.join('; ') || 'pass'}`,
       });
-      return proof;
+      // `before` holds the steps the page set in the 800 ms before the block.
+      // `unset` lists the frames in the judged part that show a new position
+      // set at none of them. On a starved runner, a late frame showed a step
+      // at most 261 ms old. The page runs no step while the block holds the
+      // main thread, which its log shows (`inBlock`).
+      const steps =
+        driver === 'raf'
+          ? await page.evaluate(
+              () =>
+                (
+                  window as unknown as {
+                    __rafSteps: {t: number; ran: number; y: number}[];
+                  }
+                ).__rafSteps,
+            )
+          : [];
+      const before = steps
+        .filter(s => s.t < window.from && s.t >= window.from - 800)
+        .map(s => s.y);
+      const top = await box.evaluate(el => (el as HTMLElement).offsetTop);
+      // Within one cast step: a position reads up to a step off (2 px in
+      // WebKit's cast, 1 px in Chromium's).
+      const step = castStep(tracked, 'y');
+      let shown = tracked
+        .filter(f => f.box != null && f.t < proof.judged.from)
+        .at(-1)?.box?.y;
+      const unset: {atMs: number; y: number}[] = [];
+      for (const f of tracked) {
+        const y = f.box?.y;
+        if (y == null || f.t < proof.judged.from || f.t > proof.judged.to) {
+          continue;
+        }
+        if (
+          shown != null &&
+          Math.abs(y - shown) > 0.25 &&
+          !before.some(set => Math.abs(top + set - y) <= step)
+        ) {
+          unset.push({atMs: f.t - window.from, y: y - top});
+        }
+        shown = y;
+      }
+      // By when each step ran: Chromium stamps a step with its frame's time,
+      // which can fall inside the block though the step ran after it.
+      const inBlock = steps.filter(
+        s => s.ran > window.from && s.ran < window.to,
+      ).length;
+      return {proof, unset: driver === 'raf' ? unset : null, inBlock};
     };
 
-    const compositor = await run('compositor');
+    const armStart = Date.now();
+    const {proof: compositor} = await run('compositor');
+    const armMs = Date.now() - armStart;
     expect(compositor.verdict.failures, compositor.summary).toEqual([]);
     expect(compositor.control?.moved).toBeGreaterThanOrEqual(4);
 
-    // The mutant: a main-thread animation freezes while the control moves. A
-    // frame presented as the block starts can still show its last step, so
-    // it can read as moved on one of the control's frames; never on the rest.
-    const raf = await run('raf');
-    expect(raf.verdict.pass, raf.summary).toBe(false);
-    const rafFailures = raf.verdict.failures.join('\n');
-    expect(rafFailures).toMatch(
-      /moved on [01] of the \d+ frames the control moved/,
-    );
-    expect(rafFailures).toMatch(/longest stall .* longer than the control's/);
+    // A loaded runner presents fewer frames, so the same block holds fewer of
+    // the frames the other arms judge. Each of their blocks is sized from the
+    // cadence this arm measured, to hold ten of them, and never shorter
+    // than on an idle runner. Each arm also takes at most this arm's work
+    // around its block. A machine too slow for them to fit in the test's time
+    // fails here, not at its timeout.
+    const slowNth = 6;
+    const rafMs = Math.max(700, 10 * compositor.cadenceMs);
+    const slowMs = Math.max(1400, 10 * slowNth * compositor.cadenceMs);
+    const needMs =
+      Date.now() - started + rafMs + 2 * slowMs + 3 * (armMs - 700);
+    testInfo.annotations.push({
+      type: 'busy-main-thread blocks',
+      description: `a frame every ${compositor.cadenceMs.toFixed(0)} ms: blocks of ${rafMs.toFixed(0)} and ${slowMs.toFixed(0)} ms, about ${(needMs / 1000).toFixed(0)} s in all`,
+    });
+    if (
+      slowMs > 30_000 ||
+      (testInfo.timeout > 0 && needMs > testInfo.timeout - 5000)
+    ) {
+      throw new Error(
+        `a frame every ${compositor.cadenceMs.toFixed(0)} ms needs blocks of ${(slowMs / 1000).toFixed(1)} s, about ${(needMs / 1000).toFixed(0)} s in all, past ${slowMs > 30_000 ? 'the 30 s cap' : `the test's ${(testInfo.timeout / 1000).toFixed(0)} s`}: this machine presents too little to judge in time`,
+      );
+    }
 
-    // A slower screencast samples the control and the component alike; a
-    // 1.4 s block keeps the control's four frames on a loaded runner.
-    const slow = await run('compositor', 6, 1400);
+    // The mutant: a main-thread animation freezes while the control moves.
+    // The compositor can still present, inside the block, steps the page set
+    // before it. On a loaded runner it showed two such steps, up to 230 ms in.
+    // Every new position it shows there is a step set shortly before the
+    // block, never a step from inside it. How many frames the verdict counts
+    // as moved depends on how many such steps a loaded runner presents.
+    const raf = await run('raf', 1, rafMs);
+    expect(raf.inBlock, raf.proof.summary).toBe(0);
+    expect(raf.proof.verdict.pass, raf.proof.summary).toBe(false);
+    expect(raf.proof.verdict.failures.join('\n')).toMatch(
+      /longest stall .* longer than the control's/,
+    );
+    expect(raf.unset, raf.proof.summary).toEqual([]);
+
+    // A slower screencast samples the control and the component alike.
+    const {proof: slow} = await run('compositor', slowNth, slowMs);
     expect(slow.verdict.failures, slow.summary).toEqual([]);
-    const slowRaf = await run('raf', 6, 1400);
-    expect(slowRaf.verdict.pass, slowRaf.summary).toBe(false);
+    const slowRaf = await run('raf', slowNth, slowMs);
+    expect(slowRaf.inBlock, slowRaf.proof.summary).toBe(0);
+    expect(slowRaf.proof.verdict.pass, slowRaf.proof.summary).toBe(false);
     await control.remove();
   });
 
@@ -1028,12 +1053,50 @@ test.describe('frame evidence', () => {
     const controlFrames = await trackMarker(page, castFrames, {
       rgb: CONTROL_RGB,
     });
-    const dim = await brightnessAt(page, castFrames, {x: 40, y: 600});
+    const dim = await trackBrightness(page, castFrames, {x: 40, y: 600});
     const proof = busyWindowProof(dim, window, {
       axis: 'x',
       control: controlFrames,
     });
     expect(proof.verdict.failures, proof.summary).toEqual([]);
+  });
+
+  test('trackBrightness reads the channel it is given, over a square of the size it is given', async ({
+    page,
+  }) => {
+    const lastFrame = async (html: string) => {
+      await page.setContent(html);
+      const cast = await startScreencast(page);
+      await page.waitForTimeout(200);
+      const castFrames = (await cast.stop()).slice(-1);
+      expect(castFrames).toHaveLength(1);
+      return castFrames;
+    };
+    const read = async (
+      castFrames: readonly CastFrame[],
+      at: {x: number; y: number; size: number; channel?: 'r' | 'g' | 'b'},
+    ) => (await trackBrightness(page, castFrames, at))[0].box?.x ?? Number.NaN;
+    // A flat colour: each channel reads its own value, to within the cast's
+    // compression.
+    const flat = await lastFrame(
+      '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;height:100%;background:rgb(10,200,30)}</style>',
+    );
+    for (const [channel, value] of [
+      ['r', 10],
+      ['g', 200],
+      ['b', 30],
+    ] as const) {
+      expect(
+        Math.abs((await read(flat, {x: 40, y: 40, size: 16, channel})) - value),
+      ).toBeLessThan(6);
+    }
+    // A 16 px red block on black. A small square inside it reads the block.
+    // A large one reads mostly the black around it, at any device scale.
+    const block = await lastFrame(
+      '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;height:100%;background:#000}#block{position:absolute;left:40px;top:40px;width:16px;height:16px;background:rgb(200,0,0)}</style><div id="block"></div>',
+    );
+    expect(await read(block, {x: 44, y: 44, size: 4})).toBeGreaterThan(150);
+    expect(await read(block, {x: 44, y: 44, size: 128})).toBeLessThan(60);
   });
 
   test("waitForAnimation and blockMainThread's during never count the control's own animation inside a dialog", async ({
@@ -1059,6 +1122,39 @@ test.describe('frame evidence', () => {
     await waitForAnimation(dialog);
     await blockMainThread(page, 100, {during: dialog});
     await control.remove();
+  });
+
+  test('a control started ahead runs half a leg ahead of the first, in the strip below, and the two read every frame', async ({
+    page,
+  }, testInfo) => {
+    await busyFixture(page);
+    const first = await startBusyControl(page);
+    const ahead = await startBusyControl(page, {ahead: true});
+    // Half a leg ahead of the first, on the page clock.
+    expect(first.start - ahead.start).toBeCloseTo(200, 0);
+    const cast = await startScreencast(page);
+    // Five turns of the first control.
+    await page.waitForTimeout(2000);
+    const castFrames = await cast.stop();
+    const one = await trackControl(page, castFrames);
+    const two = await trackControl(page, castFrames, {ahead: true});
+    // Each box shows on every frame, the one ahead in the strip below.
+    expect(one.every(f => f.box != null)).toBe(true);
+    expect(two.every(f => f.box != null && f.box.y >= CONTROL_SIDE)).toBe(true);
+    // Where the first control reads nothing, within 36 px of a turn, the one
+    // ahead reads the frame.
+    const clocks = [controlClock(one), controlClock(two)];
+    const unread = castFrames.filter(f => clocks.every(c => !c.has(f.t)));
+    testInfo.annotations.push({
+      type: 'the controls read (frames)',
+      description: JSON.stringify({
+        frames: castFrames.length,
+        firstBlind: castFrames.filter(f => !clocks[0].has(f.t)).length,
+        unread: unread.length,
+      }),
+    });
+    expect(unread.map(f => f.t)).toEqual([]);
+    await first.remove();
   });
 
   test('a hold that starts before the block is judged from its first presented change inside it; a single change and then a freeze still fails', async ({
@@ -1131,6 +1227,10 @@ test.describe('frame evidence', () => {
     const box = page.locator('#box');
     await markElement(box, {mode: 'outline'});
     const control = await startBusyControl(page);
+    const rest = await box.boundingBox();
+    if (rest == null) {
+      throw new Error('no box');
+    }
 
     // Six 70 ms blocks: each judged part (20 ms margins, 30 ms) holds at most
     // three frames even at WebKit's 14 ms cast, under the four one window
@@ -1183,8 +1283,18 @@ test.describe('frame evidence', () => {
         await page.waitForTimeout(150);
       }
       const frames = await cast.stop();
-      const tracked = await trackMarker(page, frames);
-      const controlFrames = await trackMarker(page, frames, {rgb: CONTROL_RGB});
+      // Each search reads only the strip its box crosses. On a loaded machine
+      // a search of every pixel, four drivers by two tracks, held most of the
+      // test's time. The box travels 560 px down from where it rests.
+      const tracked = await trackMarker(page, frames, {
+        region: {
+          x: rest.x - 20,
+          y: rest.y - 16,
+          width: rest.width + 40,
+          height: rest.height + 560 + 32,
+        },
+      });
+      const controlFrames = await trackControl(page, frames);
       return windows.map(window => ({tracked, control: controlFrames, window}));
     };
 
@@ -1204,6 +1314,34 @@ test.describe('frame evidence', () => {
     });
     expect(pooled.verdict.failures, pooled.summary).toEqual([]);
 
+    // The same runs with the control taken out of the last blocks. A starved
+    // run is named and left out. With too few judged runs, the pool fails.
+    const starve = (count: number) =>
+      pooledBusyProof(
+        compositor.map((run, i) =>
+          i < compositor.length - count
+            ? run
+            : {
+                ...run,
+                control: run.control.map(frame =>
+                  frame.t >= run.window.from && frame.t <= run.window.to
+                    ? {...frame, box: null}
+                    : frame,
+                ),
+              },
+        ),
+        {axis: 'y'},
+      );
+    const lastStarved = starve(1);
+    expect(lastStarved.judged[5], lastStarved.summary).toBe(false);
+    expect(lastStarved.summary).toMatch(
+      /; run 6: too little to judge, the control moved on 0 frames/,
+    );
+    const oneLeft = starve(5);
+    expect(oneLeft.verdict.failures.join('\n'), oneLeft.summary).toMatch(
+      /[01] of 6 runs judged, under 3/,
+    );
+
     // The mutant: a main-thread animation freezes in every block.
     const raf = pooledBusyProof(await runs('raf'), {axis: 'y'});
     testInfo.annotations.push({
@@ -1212,7 +1350,7 @@ test.describe('frame evidence', () => {
     });
     expect(raf.verdict.pass, raf.summary).toBe(false);
     expect(raf.verdict.failures.join('\n')).toMatch(
-      /moved on \d+ of the \d+ frames the control moved over 6 runs/,
+      /moved on \d+ of the \d+ frames the control moved over (6 runs|the \d judged runs of 6)/,
     );
 
     // A frame-counted loop stalls in every block too and then steps on, one
@@ -1373,32 +1511,63 @@ test.describe('frame evidence', () => {
 
   test('rect sampling reads one rect per animation frame while the main thread is free', async ({
     page,
-    browserName,
   }) => {
     await fixture(page);
     const box = page.locator('#box');
+    // The box slides at 1/3 px per ms for a minute, longer than the test may
+    // run, so the sampling always reads it mid-slide. The slide starts in this
+    // call and the sampling in the next. A loaded machine can take longer
+    // between the two than a short slide lasts. The page also reads the box
+    // first in each animation frame it draws. The samples are judged against
+    // those reads, not against a frame rate the machine may not reach.
     await box.evaluate(el => {
-      el.animate(
-        [{transform: 'translateX(0px)'}, {transform: 'translateX(200px)'}],
-        {duration: 600, easing: 'linear'},
+      const animation = el.animate(
+        [{transform: 'translateX(0px)'}, {transform: 'translateX(20000px)'}],
+        {duration: 60_000, easing: 'linear'},
       );
+      const drawn: {t: number; x: number}[] = [];
+      (window as unknown as {drawn: typeof drawn}).drawn = drawn;
+      const read = (now: number) => {
+        drawn.push({
+          t: performance.timeOrigin + now,
+          x: el.getBoundingClientRect().x,
+        });
+        if (animation.playState === 'running') {
+          requestAnimationFrame(read);
+        }
+      };
+      requestAnimationFrame(read);
     });
     const samples = await sampleRects(box, 400);
-    const xs = samples.map(s => s.box?.x ?? NaN);
-    const gaps = samples
-      .slice(1)
-      .map((s, i) => s.t - samples[i].t)
-      .sort((a, b) => a - b);
-    const cadence = gaps[Math.floor(gaps.length / 2)];
-    expect(cadence).toBeLessThan(34);
-    expect(samples.length).toBeGreaterThanOrEqual(10);
-    if (browserName === 'chromium') {
-      // One sample per presented frame at 60 Hz. (Headless WebKit's animation
-      // frames are irregular, so only the cadence is checked there.)
-      expect(samples.length).toBeGreaterThanOrEqual(20);
-    }
-    expect(xs.every((x, i) => i === 0 || x >= xs[i - 1])).toBe(true);
-    expect(xs.at(-1) ?? 0).toBeGreaterThan(xs[0] + 80);
+    // One frame more, so the page has also read the frame after the last
+    // sample.
+    const drawn = await page.evaluate(
+      () =>
+        new Promise<{t: number; x: number}[]>(resolve => {
+          requestAnimationFrame(() => {
+            const w = window as unknown as {drawn: {t: number; x: number}[]};
+            resolve(w.drawn.slice());
+          });
+        }),
+    );
+    const times = samples.map(s => s.t);
+    expect(times.length).toBeGreaterThanOrEqual(2);
+    // One sample on each frame the page drew while sampling, and no other.
+    const first = drawn.findIndex(frame => frame.t === times[0]);
+    expect(times).toEqual(
+      drawn.slice(first, first + times.length).map(frame => frame.t),
+    );
+    // Each sample is its own frame's rect. It is read after the page's read
+    // in that frame and before its read in the next. WebKit reads a rect when
+    // it is read, which a loaded machine can put well past the frame's start.
+    samples.forEach((sample, i) => {
+      const x = sample.box?.x ?? NaN;
+      expect(x).toBeGreaterThanOrEqual(drawn[first + i].x);
+      expect(x).toBeLessThanOrEqual(drawn[first + i + 1].x);
+    });
+    expect(samples.at(-1)?.box?.x ?? NaN).toBeGreaterThan(
+      samples[0].box?.x ?? NaN,
+    );
   });
 
   test('the trace counts no Layout for a transform animation and one per frame for `top`', async ({
@@ -2533,7 +2702,9 @@ test.describe('curve sampling', () => {
     const box = page.locator('#box');
     // Armed before the 400 ms transition starts, so a busy runner cannot end
     // it before the hold.
-    const hold = await armHold(page, box);
+    const hold = await armHold(page, box, {
+      judges: {target: box, property: 'transform'},
+    });
     await box.evaluate(el => {
       el.style.transition = 'transform 400ms cubic-bezier(0.24, 1, 0.4, 1)';
       void (el as HTMLElement).offsetWidth;
@@ -2562,7 +2733,9 @@ test.describe('curve sampling', () => {
     const duration = 1200;
     // Armed before the run starts, so a busy runner cannot end it before the
     // hold.
-    const hold = await armHold(page, box);
+    const hold = await armHold(page, box, {
+      judges: {target: box, property: 'transform'},
+    });
     await box.evaluate(
       (el, {stops, ms}) => {
         el.animate(
@@ -2671,6 +2844,37 @@ test.describe('pseudo-element animations', () => {
   });
 });
 
+/**
+ * Adds a thumb inside the fixture's box: the box presses, the thumb travels,
+ * as in a switch.
+ */
+async function pressAndTravelFixture(page: Page) {
+  await page.locator('#box').evaluate(el => {
+    const thumb = document.createElement('div');
+    thumb.id = 'thumb';
+    thumb.style.cssText = 'width:20px;height:20px;background:#fff';
+    el.append(thumb);
+  });
+  return {box: page.locator('#box'), thumb: page.locator('#thumb')};
+}
+
+/**
+ * Starts the box's press fade, then the thumb's 2 s travel 150 ms later. The
+ * travel is a new animation then, as a release starts its own.
+ */
+async function startPressThenTravel(page: Page) {
+  await page.evaluate(() => {
+    document
+      .getElementById('box')
+      ?.animate([{opacity: 1}, {opacity: 0.6}], {duration: 2_000});
+    setTimeout(() => {
+      document
+        .getElementById('thumb')
+        ?.animate([{translate: '0px'}, {translate: '20px'}], {duration: 2_000});
+    }, 150);
+  });
+}
+
 test.describe('holding', () => {
   test('an armed hold takes a short animation on its first frames, from the page itself', async ({
     page,
@@ -2680,7 +2884,9 @@ test.describe('holding', () => {
     // Armed before the animation starts: the page holds it on the first frame
     // it has run, however late a busy runner would have delivered a hold sent
     // after it (a 120 ms run can end first).
-    const hold = await armHold(page, box);
+    const hold = await armHold(page, box, {
+      judges: {target: box, property: 'transform'},
+    });
     await box.evaluate(el =>
       el.animate(
         [{transform: 'translateY(0px)'}, {transform: 'translateY(200px)'}],
@@ -2718,7 +2924,10 @@ test.describe('holding', () => {
         {duration: 10_000, easing: 'linear'},
       ),
     );
-    const hold = await armHold(page, box, {newOnly: true});
+    const hold = await armHold(page, box, {
+      judges: {target: box, property: 'opacity'},
+      newOnly: true,
+    });
     await box.evaluate(el =>
       el.animate([{opacity: 1}, {opacity: 0}], {
         duration: 120,
@@ -2744,10 +2953,71 @@ test.describe('holding', () => {
     page,
   }) => {
     await fixture(page);
-    const hold = await armHold(page, page.locator('#box'), {timeout: 200});
+    const box = page.locator('#box');
+    const hold = await armHold(page, box, {
+      judges: {target: box, property: 'transform'},
+      timeout: 200,
+    });
     await expect(hold.held()).rejects.toThrow(
       /no animation under the scope ran/,
     );
+  });
+
+  test('an armed hold rejects when other animations meet its count before the judged motion starts', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const {box, thumb} = await pressAndTravelFixture(page);
+    const hold = await armHold(page, box, {
+      judges: {target: thumb, property: 'translate'},
+    });
+    await startPressThenTravel(page);
+    await expect(hold.held()).rejects.toThrow(
+      /took no animation of the judged motion \(translate on .*#thumb.*\)\. Other animations met its count of 1 first; it took: div#box opacity/,
+    );
+    // The travel was never held: a film of this hold would show the press.
+    await expect
+      .poll(() =>
+        thumb.evaluate(el => el.getAnimations().map(a => a.playState)),
+      )
+      .toEqual(['running']);
+    await releaseAnimations(page, {finish: true});
+  });
+
+  test('an armed hold whose count waits for the judged motion returns it', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const {box, thumb} = await pressAndTravelFixture(page);
+    const hold = await armHold(page, box, {
+      judges: {target: thumb, property: 'translate'},
+      count: 2,
+    });
+    await startPressThenTravel(page);
+    const held = await hold.held();
+    expect(held.map(a => a.target)).toEqual(['div#box', 'div#thumb']);
+    await releaseAnimations(page, {finish: true});
+  });
+
+  test("an armed hold with judges: 'count-only' checks what it took against nothing", async ({
+    page,
+  }) => {
+    await fixture(page);
+    const {box} = await pressAndTravelFixture(page);
+    const hold = await armHold(page, box, {judges: 'count-only'});
+    await startPressThenTravel(page);
+    expect((await hold.held()).map(a => a.target)).toEqual(['div#box']);
+    await releaseAnimations(page, {finish: true});
+  });
+
+  test('an armed hold refuses to arm without the motion it judges', async ({
+    page,
+  }) => {
+    await fixture(page);
+    await expect(
+      // @ts-expect-error -- a caller without types can omit `judges`.
+      armHold(page, page.locator('#box'), {count: 1}),
+    ).rejects.toThrow(/armHold: name the motion that the test judges/);
   });
 
   test('a sample at an end reports the time it was read at', async ({page}) => {
@@ -2755,7 +3025,9 @@ test.describe('holding', () => {
     const box = page.locator('#box');
     // Armed before the 300 ms run starts, so a busy runner cannot end it
     // before the hold.
-    const hold = await armHold(page, box);
+    const hold = await armHold(page, box, {
+      judges: {target: box, property: 'transform'},
+    });
     await box.evaluate(el =>
       el.animate(
         [{transform: 'translateY(0px)'}, {transform: 'translateY(200px)'}],
@@ -2881,7 +3153,12 @@ test.describe('holding', () => {
     // #box moves for 300 ms and fades for 400 ms; another element runs longer.
     // Armed before they start (all in one task), so a busy runner cannot end
     // the move before the hold.
-    const hold = await armHold(page);
+    const hold = await armHold(page, undefined, {
+      judges: [
+        {target: page.locator('#box'), property: 'transform'},
+        {target: page.locator('#box'), property: 'opacity'},
+      ],
+    });
     await page.evaluate(() => {
       const box = document.getElementById('box');
       box?.animate(
@@ -2924,7 +3201,16 @@ test.describe('holding', () => {
     await fixture(page);
     // #box moves for 300 ms; its ::after fades for 600 ms. Armed before they
     // start, so a busy runner cannot end the move before the hold.
-    const hold = await armHold(page);
+    const hold = await armHold(page, undefined, {
+      judges: [
+        {target: page.locator('#box'), property: 'transform'},
+        {
+          target: page.locator('#box'),
+          property: 'opacity',
+          pseudoElement: '::after',
+        },
+      ],
+    });
     await page.evaluate(() => {
       const style = document.createElement('style');
       style.textContent = "#box::after { content: ''; display: block; }";
@@ -2953,7 +3239,9 @@ test.describe('holding', () => {
     const box = page.locator('#box');
     // Each hold is armed before its 300 ms run starts, so a busy runner
     // cannot end the run before the hold.
-    const hold = await armHold(page, box);
+    const hold = await armHold(page, box, {
+      judges: {target: box, property: 'translate'},
+    });
     await box.evaluate(el => {
       el.style.width = '80.6px';
       el.style.height = '40.4px';
@@ -2970,7 +3258,9 @@ test.describe('holding', () => {
     // animation with the first one still running.
     await releaseAnimations(page, {finish: true});
 
-    const second = await armHold(page, box);
+    const second = await armHold(page, box, {
+      judges: {target: box, property: 'translate'},
+    });
     await box.evaluate(el => {
       el.animate(
         [
@@ -3288,8 +3578,13 @@ test.describe('holding', () => {
     const box = page.locator('#box');
     // Both holds are armed before the 300 ms runs start, so a busy runner
     // cannot end either before its hold; each adds to the held set.
-    const first = await armHold(page, box);
-    const second = await armHold(page, page.locator('#other'));
+    const other = page.locator('#other');
+    const first = await armHold(page, box, {
+      judges: {target: box, property: 'transform'},
+    });
+    const second = await armHold(page, other, {
+      judges: {target: other, property: 'opacity'},
+    });
     await page.evaluate(() => {
       document
         .getElementById('box')
@@ -3381,7 +3676,9 @@ test.describe('holding', () => {
     const box = page.locator('#box');
     // Armed before the 300 ms transition starts, so a busy runner cannot end
     // it before the hold.
-    const hold = await armHold(page, box);
+    const hold = await armHold(page, box, {
+      judges: {target: box, property: 'transform'},
+    });
     await box.evaluate(el => {
       el.style.transition = 'transform 300ms linear';
       el.getBoundingClientRect();
@@ -3422,7 +3719,12 @@ test.describe('holding', () => {
     await fixture(page);
     // Armed before the 300 ms fade starts, so a busy runner cannot end it
     // before the hold.
-    const hold = await armHold(page);
+    const hold = await armHold(page, undefined, {
+      judges: [
+        {target: page.locator('#box'), property: 'rotate'},
+        {target: page.locator('#fade'), property: 'opacity'},
+      ],
+    });
     await page.evaluate(() => {
       const box = document.getElementById('box');
       box?.animate([{rotate: '0deg'}, {rotate: '360deg'}], {
@@ -3893,6 +4195,105 @@ test.describe('animation state', () => {
     );
     const started = await watch.started();
     expect(started.map(a => a.durationMs)).toEqual([70]);
+  });
+
+  test('a run that the page cancels while it plays is reported, ended where the page cancelled it', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    const watch = await watchAnimations(box);
+    // The page retires the run as Core's motion animator does: it writes the
+    // end and cancels the run, so no finish event comes. It cancels on its
+    // first frame past 200 ms of play. A starved page gets there late, but it
+    // gets there.
+    const calledAt = await box.evaluate(el => {
+      const run = el.animate([{opacity: 0}, {opacity: 1}], {
+        duration: 60_000,
+        fill: 'both',
+      });
+      const retire = () => {
+        if (Number(run.currentTime ?? 0) >= 200) {
+          (el as HTMLElement).style.opacity = '1';
+          run.cancel();
+        } else {
+          requestAnimationFrame(retire);
+        }
+      };
+      requestAnimationFrame(retire);
+      return performance.timeOrigin + performance.now();
+    });
+    // The first look comes after the cancel.
+    await expect
+      .poll(() => box.evaluate(el => el.getAnimations().length))
+      .toBe(0);
+    const [run] = await watch.started();
+    expect(run.kind).toBe('Animation');
+    expect(run.durationMs).toBe(60_000);
+    expect(run.from).toBeGreaterThan(calledAt - 17);
+    // It played at least 200 ms, and it ended long before its curve's end.
+    expect(run.finishedAt).not.toBeNull();
+    expect((run.finishedAt ?? 0) - run.from).toBeGreaterThanOrEqual(199);
+    expect(run.finishedAt ?? 0).toBeLessThan(run.to);
+  });
+
+  test('a run that the page cancels before it presented minProgressMs, or in its start delay, is not reported', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    // Cancelled in the task that made it: it never presented a frame.
+    const unstarted = await watchAnimations(box);
+    await box.evaluate(el => {
+      el.animate([{opacity: 0}, {opacity: 1}], {duration: 60_000}).cancel();
+    });
+    await expect(unstarted.started({timeout: 300})).rejects.toThrow(
+      /no animation started/,
+    );
+    // Cancelled after 200 ms of play, short of the 5 s that the wait asks for.
+    const short = await watchAnimations(box);
+    await box.evaluate(el => {
+      const run = el.animate([{opacity: 0}, {opacity: 1}], {
+        duration: 60_000,
+      });
+      const retire = () => {
+        if (Number(run.currentTime ?? 0) >= 200) {
+          run.cancel();
+        } else {
+          requestAnimationFrame(retire);
+        }
+      };
+      requestAnimationFrame(retire);
+    });
+    await expect
+      .poll(() => box.evaluate(el => el.getAnimations().length))
+      .toBe(0);
+    await expect(
+      short.started({minProgressMs: 5_000, timeout: 300}),
+    ).rejects.toThrow(/no animation started/);
+    // Cancelled in its 30 s start delay: it has a start, but it presented
+    // nothing, even for a wait that asks for no progress.
+    const delayed = await watchAnimations(box);
+    await box.evaluate(el => {
+      const run = el.animate([{opacity: 0}, {opacity: 1}], {
+        duration: 60_000,
+        delay: 30_000,
+      });
+      const retire = () => {
+        if (run.startTime != null) {
+          run.cancel();
+        } else {
+          requestAnimationFrame(retire);
+        }
+      };
+      requestAnimationFrame(retire);
+    });
+    await expect
+      .poll(() => box.evaluate(el => el.getAnimations().length))
+      .toBe(0);
+    await expect(
+      delayed.started({minProgressMs: 0, timeout: 300}),
+    ).rejects.toThrow(/no animation started/);
   });
 
   test('an entrance the page cancels when it ends keeps its start', async ({
@@ -4599,7 +5000,9 @@ test.describe('storyboards', {tag: '@storyboard'}, () => {
     const box = page.locator('#box');
     // Armed before the 200 ms run starts, so a busy runner cannot end it
     // before the film holds it.
-    const hold = await armHold(page, box);
+    const hold = await armHold(page, box, {
+      judges: {target: box, property: 'transform'},
+    });
     await box.evaluate(el =>
       el.animate(
         [{transform: 'translateX(0)'}, {transform: 'translateX(240px)'}],
@@ -4875,7 +5278,9 @@ test.describe('storyboards', {tag: '@storyboard'}, () => {
     // set and its 300 ms run starts, so on a busy runner neither the timer
     // nor the run's end can come before them.
     await freezeTimers(page);
-    const hold = await armHold(page, box);
+    const hold = await armHold(page, box, {
+      judges: {target: box, property: 'transform'},
+    });
     // A component that ends its own animation from a timer (a transitionend
     // backstop): without the gate it would finish behind the held storyboard.
     await box.evaluate(el => {
@@ -4918,7 +5323,9 @@ test.describe('storyboards', {tag: '@storyboard'}, () => {
     await fixture(page);
     // Armed before the 200 ms fade starts, so a busy runner cannot end it
     // before the film holds it.
-    const hold = await armHold(page, page.locator('#box'));
+    const hold = await armHold(page, page.locator('#box'), {
+      judges: {target: page.locator('#box'), property: 'rotate'},
+    });
     await page.locator('#box').evaluate(el => {
       el.animate([{rotate: '0deg'}, {rotate: '360deg'}], {
         duration: 800,
@@ -4946,7 +5353,13 @@ test.describe('storyboards', {tag: '@storyboard'}, () => {
     // move that starts 83 ms after it. The page holds all three once the
     // second move runs, so a busy runner cannot end the first move before the
     // film holds it.
-    const hold = await armHold(page, undefined, {count: 3});
+    const hold = await armHold(page, undefined, {
+      judges: [
+        {target: page.locator('#first'), property: 'transform'},
+        {target: page.locator('#second'), property: 'transform'},
+      ],
+      count: 3,
+    });
     await page.evaluate(async () => {
       const make = (id: string, top: number) => {
         const el = document.createElement('div');
@@ -5445,7 +5858,10 @@ test.describe('page freeze', () => {
     const box = page.locator('#box');
     const samples = await sampleRects(box, 200);
     expect(samples.length).toBeGreaterThan(3);
-    const hold = await armHold(page, box, {timeout: 300});
+    const hold = await armHold(page, box, {
+      judges: {target: box, property: 'transform'},
+      timeout: 300,
+    });
     await expect(hold.held()).rejects.toThrow(
       'armHold: no animation under the scope ran within 300 ms',
     );
