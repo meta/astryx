@@ -7,7 +7,8 @@
  *   › Disabled fixture, with a mouse and keys
  * @output Browser evidence that a selected row dragged past the end of its
  *   list stays inside that list, its bottom on the list's end. It never slides
- *   under the next panel's header, and it lands last on release. A disabled
+ *   under the next panel's header, and it lands last on release. In the phone
+ *   layout the panels do not clip; at a desktop width they do. A disabled
  *   list keeps each handle focusable and disabled, with the focus where it was
  * @position Chromium proof for TransferList's selected panel, which reorders
  *   through core's createReorderable on its List (List/listReorderEngine.tsx
@@ -129,6 +130,24 @@ test('a row dragged past the end of its list stays inside it, clear of the next 
   await sleep(700);
   const after = await order();
   expect(after[after.length - 1]).toBe(before[0]);
+});
+
+test('the panels clip nothing in the phone layout, and clip at a desktop width', async ({
+  page,
+}) => {
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=lab-transferlist--default&viewMode=story`,
+  );
+  await expect(page.locator(GRIP).first()).toBeVisible();
+  const overflows = async () =>
+    page
+      .locator('[role="group"][data-side]')
+      .evaluateAll(panels =>
+        panels.map(panel => getComputedStyle(panel).overflow),
+      );
+  expect(await overflows()).toEqual(['visible', 'visible']);
+  await page.setViewportSize({width: 1024, height: 768});
+  await expect.poll(overflows).toEqual(['hidden', 'hidden']);
 });
 
 test('selected rows keep one height and one Remove column, fixed rows included', async ({
