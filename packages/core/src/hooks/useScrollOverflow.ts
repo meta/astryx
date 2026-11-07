@@ -117,12 +117,12 @@ export function useScrollOverflow() {
 /**
  * `useScrollOverflow`, plus `followShown`: while snap paging holds a row, its
  * scroll offset stays where the hold began and its items move. The caller
- * reports where the row is shown, and the edges follow it. An edge change
- * commits before the report returns. A report with `isLive` false takes
- * React's scheduling: one that can come from inside React's commit, as a
- * caller's own call into the paging. Null measures the scroll offset again
- * from the next frame, when the handed-back offset is current. Internal: not
- * exported from the hooks entry.
+ * reports where the row is shown, and the edges follow it. A live report
+ * commits an edge change before it returns. A report that the caller's own
+ * call into the paging raises passes `isLive` false. That call can run inside
+ * React's commit, so the report takes React's scheduling. Null measures the
+ * scroll offset again from the next frame, when the handed-back offset is
+ * current. Internal: not exported from the hooks entry.
  */
 export function useShownScrollOverflow() {
   const elRef = useRef<HTMLElement | null>(null);

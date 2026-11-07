@@ -416,8 +416,7 @@ export function Carousel({
   const t = useComponentTranslator();
   const ariaLabel = ariaLabelFromProps ?? t('@astryx.carousel.label');
   const scrollElRef = useRef<HTMLElement | null>(null);
-  // How many of Carousel's own calls into the paging are running.
-  const ownCallsRef = useRef(0);
+  const runningOwnCallsRef = useRef(0);
   const startButtonRef = useRef<HTMLButtonElement>(null);
   const endButtonRef = useRef<HTMLButtonElement>(null);
   // Which nav button last held focus, and what the overflow state was on the
@@ -472,9 +471,9 @@ export function Carousel({
         return () => {};
       }
       const detach = attachSnapPaging(attachedPaging, scroller, held =>
-        followShown(held, ownCallsRef.current === 0),
+        followShown(held, runningOwnCallsRef.current === 0),
       );
-      return () => ownCall(ownCallsRef, detach);
+      return () => ownCall(runningOwnCallsRef, detach);
     },
     attachedPaging,
   );
@@ -532,7 +531,7 @@ export function Carousel({
       // Under snap paging the paging moves the row, held or at rest. A touch
       // then catches the move, and the release rests on a page.
       if (
-        ownCall(ownCallsRef, () =>
+        ownCall(runningOwnCallsRef, () =>
           moveSnapPaging(el, (at, end) =>
             pagingStep(el, at, end, direction, hasLoop && hasOverflow),
           ),
@@ -618,7 +617,7 @@ export function Carousel({
     // Under snap paging the row goes to the item's stop, inside the scroll
     // padding, so the hand-back's snap does not pull it back.
     if (
-      ownCall(ownCallsRef, () =>
+      ownCall(runningOwnCallsRef, () =>
         moveSnapPaging(el, (at, end) =>
           nearestStop(
             snapStops(el, at, end),
