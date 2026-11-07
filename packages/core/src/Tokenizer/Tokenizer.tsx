@@ -1231,8 +1231,8 @@ export function Tokenizer<T extends SearchableItem>({
         const results = await searchSource.bootstrap();
         return results.filter(item => !selectedIds.has(item.id));
       },
-      // Forward cancellation, so a newer search, closing the menu, or
-      // unmounting reaches the consumer's source (e.g. to abort a request).
+      // BaseTypeahead cancels this wrapper, not the caller's source. Pass the
+      // call on, so the caller can stop its request.
       cancel: () => searchSource.cancel?.(),
     }),
     [searchSource, selectedIds],
