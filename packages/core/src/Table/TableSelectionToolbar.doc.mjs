@@ -128,14 +128,26 @@ const selectionPlugin = useTableSelection({
   startContent={
     <>
       <Button label="Archive" variant="ghost" onClick={archive} />
-      {/* Beside the action, not in its place: a second press on the
-          offer must never run Archive. */}
-      {!isAllMatching && isPageSelected ? (
+      {/* Beside the action, not in its place. Once used, the offer stays as
+          the command that undoes it, so focus stays on it and a second
+          press can never run Archive. */}
+      {isAllMatching || isPageSelected ? (
         <Button
-          key="select-all-matching"
-          label={'Select all ' + total + ' matching'}
+          label={
+            isAllMatching
+              ? 'Select only this page'
+              : 'Select all ' + total + ' matching'
+          }
           variant="ghost"
-          onClick={() => setIsAllMatching(true)}
+          onClick={() => {
+            if (isAllMatching) {
+              setPicked(
+                new Set(pageRows.filter(isSelected).map(row => row.id)),
+              );
+              setExcluded(new Set());
+            }
+            setIsAllMatching(!isAllMatching);
+          }}
         />
       ) : null}
     </>

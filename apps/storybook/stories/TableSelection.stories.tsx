@@ -1,7 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {useRef, useState} from 'react';
-import {flushSync} from 'react-dom';
+import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {expect, userEvent, waitFor, within} from 'storybook/test';
 import * as stylex from '@stylexjs/stylex';
@@ -595,7 +594,6 @@ const NO_SELECTION: MatchingSelection = {
 function SelectAllMatchingExample() {
   const [page, setPage] = useState(1);
   const [selection, setSelection] = useState<MatchingSelection>(NO_SELECTION);
-  const archiveRef = useRef<HTMLButtonElement>(null);
   const rows = fetchMatchingPage(page);
 
   const isSelected = (row: User) =>
@@ -667,30 +665,35 @@ function SelectAllMatchingExample() {
         renderSelectionLabel={renderSelectionLabel}
         startContent={
           <>
-            <Button
-              ref={archiveRef}
-              label="Archive"
-              variant="ghost"
-              onClick={() => {}}
-            />
-            {/* Beside the action, not in its place: a second press on the
-                offer must never run Archive. */}
-            {!selection.isAllMatching && isPageSelected ? (
+            <Button label="Archive" variant="ghost" onClick={() => {}} />
+            {/* Beside the action, not in its place. Once used, the offer
+                stays as the command that undoes it, so focus stays on it
+                and a second press can never run Archive. */}
+            {selection.isAllMatching || isPageSelected ? (
               <Button
-                key="select-all-matching"
-                label={`Select all ${MATCHING_TOTAL} matching`}
+                label={
+                  selection.isAllMatching
+                    ? 'Select only this page'
+                    : `Select all ${MATCHING_TOTAL} matching`
+                }
                 variant="ghost"
-                onClick={() => {
-                  // The offer leaves once used; keep focus in the toolbar.
-                  flushSync(() =>
-                    setSelection({
-                      isAllMatching: true,
-                      picked: new Set(),
-                      excluded: new Set(),
-                    }),
-                  );
-                  archiveRef.current?.focus();
-                }}
+                onClick={() =>
+                  setSelection(
+                    selection.isAllMatching
+                      ? {
+                          isAllMatching: false,
+                          picked: new Set(
+                            rows.filter(isSelected).map(row => row.id),
+                          ),
+                          excluded: new Set(),
+                        }
+                      : {
+                          isAllMatching: true,
+                          picked: new Set(),
+                          excluded: new Set(),
+                        },
+                  )
+                }
               />
             ) : null}
           </>
@@ -732,11 +735,19 @@ export const SelectAllMatching: Story = {
     await expect(
       canvas.getByText('All 248 matching selected'),
     ).toBeInTheDocument();
-    // The offer is gone, and focus moved to the action beside it.
+    // The used offer stays as the command that undoes it and keeps focus,
+    // so a second Enter returns to this page and never reaches Archive.
+    const undo = canvas.getByRole('button', {name: 'Select only this page'});
+    await expect(undo).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    await expect(canvas.getByText('5 selected')).toBeInTheDocument();
     await expect(
-      canvas.queryByRole('button', {name: 'Select all 248 matching'}),
-    ).not.toBeInTheDocument();
-    await expect(canvas.getByRole('button', {name: 'Archive'})).toHaveFocus();
+      canvas.getByRole('button', {name: 'Select all 248 matching'}),
+    ).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    await expect(
+      canvas.getByText('All 248 matching selected'),
+    ).toBeInTheDocument();
 
     await userEvent.click(canvas.getByLabelText('Select Record 2'));
     await expect(
