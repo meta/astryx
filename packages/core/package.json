@@ -1,6 +1,6 @@
 {
   "name": "@astryxdesign/core",
-  "version": "0.7.10",
+  "version": "0.7.11",
   "displayName": "Astryx Core",
   "description": "The component library. Accessible, themeable React components with built-in spacing, dark mode, and StyleX styling.",
   "author": "Meta Open Source",
@@ -833,6 +833,11 @@
       "source": "./src/internal/indicatorPress.stylex.ts",
       "types": "./dist/internal/indicatorPress.stylex.d.ts",
       "default": "./dist/internal/indicatorPress.stylex.js"
+    },
+    "./internal/touchHitArea.stylex": {
+      "source": "./src/internal/touchHitArea.stylex.ts",
+      "types": "./dist/internal/touchHitArea.stylex.d.ts",
+      "default": "./dist/internal/touchHitArea.stylex.js"
     },
     "./internal/touch": {
       "source": "./src/internal/touch.ts",

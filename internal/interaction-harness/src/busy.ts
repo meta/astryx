@@ -623,10 +623,11 @@ export interface BusyProof extends FrameStats {
    */
   readonly judged: {readonly from: number; readonly to: number};
   /**
-   * When the tracked value was seen at rest before the judged part (a frame
-   * there, no change in the 250 ms before it: a just-started animation not on
-   * screen yet), ms after the window's start of its first presented change
-   * inside the block, where judging starts; null otherwise.
+   * The ms after the window's start of the tracked value's first presented
+   * change inside the block, where judging starts. It is set when the value
+   * was seen at rest before the judged part: a frame there, and no change in
+   * the `BUSY_PROOF_LOOKAROUND_MS` before it. That is a just-started animation
+   * not on screen yet. Otherwise it is null.
    */
   readonly onScreenFromMs: number | null;
   /**
@@ -798,10 +799,10 @@ function motionStepPx(values: readonly number[]): number {
  *   judge, and that fails rather than passes.
  *
  * A just-started animation can reach the screen after the block began (its
- * hand-off to the compositor lags under load: 50–100 ms in WebKit). When the
- * tracked value was seen at rest before the judged part (a frame there, and no
- * change in the 250 ms before it), judging starts at its first presented
- * change inside the block, which the
+ * hand-off to the compositor lags under load: 50–100 ms in WebKit). The
+ * tracked value may be seen at rest before the judged part: a frame there, and
+ * no change in the `BUSY_PROOF_LOOKAROUND_MS` before it. Judging then starts at
+ * its first presented change inside the block, which the
  * proof reports as `onScreenFromMs`. So does a hold that starts before the
  * block (two frames at least at one position, the first before it) and ends
  * at the first presented change inside it: WebKit presents a just-started
@@ -1049,10 +1050,10 @@ export function busyWindowProof(
       previous = v.value;
     }
   }
-  // Seen at rest before the judged part (a frame there, and no change in the
-  // 250 ms before it): the first presented change is the animation's on-screen
-  // start, and judging starts there. With no frame before, nothing is known,
-  // and the window is judged from its start.
+  // Seen at rest before the judged part: a frame there, and no change in the
+  // `BUSY_PROOF_LOOKAROUND_MS` before it. The first presented change is then
+  // the animation's on-screen start, and judging starts there. With no frame
+  // before, nothing is known, and the window is judged from its start.
   const prior = tracked.filter(f => f.box != null && f.t < inner.from);
   let leadFrom = 0;
   prior.forEach((f, i) => {

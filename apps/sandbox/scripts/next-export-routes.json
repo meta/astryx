@@ -602,6 +602,7 @@
     "/templates/TableGroupedRowsTable/",
     "/templates/TableInCard/",
     "/templates/TableInlineFilterTable/",
+    "/templates/TableLeadingMarkSelection/",
     "/templates/TablePaginatedTable/",
     "/templates/TableResizableTable/",
     "/templates/TableRichCellTable/",

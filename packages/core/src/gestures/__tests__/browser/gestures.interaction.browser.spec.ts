@@ -3201,3 +3201,76 @@ test('a pan on an element the page moves into a same-origin iframe keeps its tou
   expect(states).toContain('changed');
   expect(states.slice(-2)).toEqual(['ended', 'possible']);
 });
+
+test("a press in a same-origin iframe's scroll view waits the content-touch delay from the touch, on that window's clock (spec:AST-094 FR11)", async ({
+  page,
+  browserName,
+}) => {
+  const driver = await openBare(page, browserName);
+  // An iframe's clock starts when its document does, after the page's. Its
+  // touches carry times on that clock.
+  const {clockGap, ...start} = await page.evaluate(async () => {
+    // The iframe opens well after the page, as a popup or a late iframe does.
+    await new Promise(resolve => {
+      setTimeout(resolve, Math.max(0, 400 - performance.now()));
+    });
+    const frame = document.createElement('iframe');
+    frame.style.cssText =
+      'position: absolute; left: 0; top: 0; width: 320px; height: 480px; border: 0';
+    document.body.append(frame);
+    const doc = frame.contentDocument as Document;
+    const view = doc.defaultView as Window;
+    doc.body.style.margin = '0';
+    doc.body.innerHTML =
+      '<div style="height: 300px; overflow-y: auto"><div id="row" style="height: 80px; background: #ddd"></div><div style="height: 900px"></div></div>';
+    const row = doc.getElementById('row') as HTMLElement;
+    const times: {touch?: number; handled?: number; highlight?: number} = {};
+    (window as unknown as {__frameTimes: typeof times}).__frameTimes = times;
+    doc.addEventListener(
+      'touchstart',
+      event => {
+        times.touch = event.timeStamp;
+        times.handled = view.performance.now();
+      },
+      {capture: true},
+    );
+    const {getGestureHost, createPressTracker} = window.__api;
+    const tracker = createPressTracker({
+      getBounds: () => row.getBoundingClientRect(),
+      onHighlightChange: isHighlighted => {
+        if (isHighlighted && times.highlight == null) {
+          times.highlight = view.performance.now();
+        }
+      },
+    });
+    getGestureHost(doc).attachConsumer(row, tracker);
+    const box = row.getBoundingClientRect();
+    return {
+      x: box.left + box.width / 2,
+      y: box.top + box.height / 2,
+      clockGap: view.performance.timeOrigin - performance.timeOrigin,
+    };
+  });
+  // The case needs the clocks apart: an age read on the page's clock then
+  // cuts the wait short.
+  expect(clockGap).toBeGreaterThan(150);
+  await driver.play([{t: 0, down: [{...start, id: 1}]}]);
+  await page.waitForFunction(
+    () =>
+      (window as unknown as {__frameTimes: {highlight?: number}}).__frameTimes
+        .highlight != null,
+  );
+  await driver.play([{t: 0, down: []}]);
+  const times = await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          __frameTimes: {touch: number; handled: number; highlight: number};
+        }
+      ).__frameTimes,
+  );
+  // The wait counts from the touch. Chromium's driver stamps a touch ahead of
+  // its delivery, and a time ahead of now counts as now.
+  const touchedAt = Math.min(times.touch, times.handled);
+  expect(times.highlight - touchedAt).toBeGreaterThanOrEqual(145);
+});

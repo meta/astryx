@@ -3738,8 +3738,9 @@ describe('BottomSheet', () => {
         expect(body.scrollTop).toBe(248);
       });
 
-      // A field the sheet cannot see: one in an open shadow host or in a frame.
-      // Focus on it leaves `document.activeElement` on its holder.
+      // A field behind a holder: one inside an open shadow root, or in a frame.
+      // Focus on it leaves `document.activeElement` on the holder. The sheet
+      // reads into the open root, and a frame can hold a field it cannot read.
       const hiddenFields = [
         ['an open shadow host', 'shadow host'],
         ['a frame', 'frame'],
@@ -3766,6 +3767,53 @@ describe('BottomSheet', () => {
         };
         return {...sheet, focusHiddenField};
       }
+
+      it('rides the content down when focus moves from a field to a plain button inside an open shadow host, as a blur does', async () => {
+        const {body, input, report, drawnTop} = renderIOSSheet({
+          picker: <div title="Editor" />,
+        });
+        const host = screen.getByTitle('Editor');
+        const button = host
+          .attachShadow({mode: 'open'})
+          .appendChild(document.createElement('button'));
+        act(() => input.focus());
+        report(500);
+        act(() => button.focus());
+        expect(document.activeElement).toBe(host);
+        await nextFrame();
+        expect(drawnTop(performance.now() + 450)).toBeCloseTo(0, 0);
+        expect(keyboardInsetOf(body)).toBe(348);
+        expect(body.scrollTop).toBe(248);
+      });
+
+      it('rides the content down from the blur once focus settles on a plain button inside an open shadow host', async () => {
+        const {body, input, report, drawnTop} = renderIOSSheet({
+          picker: <div title="Editor" />,
+        });
+        const host = screen.getByTitle('Editor');
+        const button = host
+          .attachShadow({mode: 'open'})
+          .appendChild(document.createElement('button'));
+        act(() => input.focus());
+        report(500);
+        // The browser runs the blur's frame after focus settles on the button.
+        const frames: FrameRequestCallback[] = [];
+        vi.mocked(requestAnimationFrame).mockImplementation(callback => {
+          frames.push(callback);
+          return frames.length;
+        });
+        act(() => button.focus());
+        expect(document.activeElement).toBe(host);
+        vi.mocked(requestAnimationFrame).mockImplementation(callback => {
+          callback(0);
+          return 1;
+        });
+        act(() => frames.splice(0).forEach(frame => frame(0)));
+        await nextFrame();
+        expect(drawnTop(performance.now() + 450)).toBeCloseTo(0, 0);
+        expect(keyboardInsetOf(body)).toBe(348);
+        expect(body.scrollTop).toBe(248);
+      });
 
       it.each(hiddenFields)(
         'starts no ride when focus moves from a field into %s, whose own field can keep the keyboard up',
