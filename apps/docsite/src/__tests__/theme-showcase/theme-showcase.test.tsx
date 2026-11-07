@@ -424,7 +424,7 @@ describe('theme-showcase local interactions', () => {
     ).toBeInTheDocument();
     expect(composer).toHaveTextContent('');
     await waitFor(() => expect(viewport.scrollTop).toBe(700));
-    expect(viewport).toHaveAttribute('data-astryx-chat-following');
+    expect(viewport).toHaveAttribute('data-astryx-scroll-anchoring', 'off');
     const list = viewport.querySelector('.astryx-chat-message-list')!;
     expect(resizeCallbacks.has(list)).toBe(true);
     Object.defineProperty(viewport, 'scrollHeight', {value: 1200});
@@ -432,7 +432,7 @@ describe('theme-showcase local interactions', () => {
     await waitFor(() => expect(viewport.scrollTop).toBe(1000), {timeout: 3000});
     viewport.scrollTop = 200;
     fireEvent.scroll(viewport);
-    expect(viewport).not.toHaveAttribute('data-astryx-chat-following');
+    expect(viewport).not.toHaveAttribute('data-astryx-scroll-anchoring');
     Object.defineProperty(viewport, 'scrollHeight', {value: 1500});
     resizeCallbacks.get(list)!();
     expect(viewport.scrollTop).toBe(200);

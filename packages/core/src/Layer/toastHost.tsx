@@ -16,7 +16,6 @@
  */
 
 import {
-  createContext,
   use,
   useEffect,
   useState,
@@ -26,6 +25,7 @@ import {
 } from 'react';
 import type {ToastDismissReason, ToastEntry} from '../Toast/types';
 import type {LayerInset, LayerToastConfig} from './LayerContext';
+import {createSharedContext} from '../utils/sharedContext';
 
 /** Internal context value for toast state management. */
 export interface ToastContextValue {
@@ -42,7 +42,11 @@ export interface ToastContextValue {
  * provide it without importing Toast. With no provider it is null, and
  * `useToast` mounts a viewport of its own.
  */
-export const ToastContext = createContext<ToastContextValue | null>(null);
+export const ToastContext = createSharedContext<ToastContextValue | null>(
+  'ToastContext',
+  1,
+  null,
+);
 ToastContext.displayName = 'ToastContext';
 
 /**

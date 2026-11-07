@@ -36,7 +36,7 @@ import {resolveLayerPortalTarget} from './layerHost';
 import {layerTextReset} from './layerTextReset.stylex';
 import {layerStructureReset} from './layerStructureReset.stylex';
 import {layerViewportInset} from './layerViewportInset.stylex';
-import {useLayerKeyboardClearance} from './LayerTouch';
+import {keyboardLiftStyle, useLayerKeyboardClearance} from './LayerTouch';
 import {LAYER_ANCHORED_ATTRIBUTE} from './layerKeyboardClearance';
 import {settledBox} from './settledBox';
 import {layerInsetProperties} from './layerInset';
@@ -1761,6 +1761,7 @@ function useLayerImplementation(
   // block-start edge and ends clear of the keyboard.
   const {
     cap: keyboardCap,
+    lift: keyboardLift,
     inset: keyboardInset,
     followLayerElement,
   } = useLayerKeyboardClearance(isOpen && mode === 'context', popoverRef);
@@ -2037,6 +2038,7 @@ function useLayerImplementation(
           style={{
             ...stylexResult.style,
             ...anchorStyle,
+            ...keyboardLiftStyle(keyboardLift),
             ...clearanceProperty,
             ...clearFallbacksProperty,
             ...layerInsetProperties(declaredInset),
@@ -2068,6 +2070,7 @@ function useLayerImplementation(
       keepsAnchorClear,
       keyboardCap,
       keyboardInset,
+      keyboardLift,
       lightDismiss,
       mountStore,
       popoverRefCallback,

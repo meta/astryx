@@ -21,7 +21,8 @@ export const doc = {
     'the owner package exports: names the package exports are imported from its ' +
     'public paths, and every internal module the component needs is ' +
     "copied beside it in the package's folder layout. Tests, stories and docs are not " +
-    'copied. The receipt flags whether any copied file uses StyleX. With no name ' +
+    'copied. The receipt flags whether any copied file uses StyleX and lists each npm ' +
+    'package the copy imports with the range the owner package declares. With no name ' +
     '(or list) it returns the swizzlable component names instead. An integration ' +
     'component that replaces a Core component is what that Core name copies; ' +
     "options.package '@astryxdesign/core' copies the original. The list names Core " +

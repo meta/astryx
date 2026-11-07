@@ -514,6 +514,7 @@ export async function swizzleCopy(component, options = {}) {
     filesCopied: copied,
     files: outputs.map(o => toPosix(path.relative(outputDir, o.dest))),
     usesStyleX: outputs.some(o => o.content.includes('@stylexjs/stylex')),
+    dependencies: plan.dependencies,
   };
   if (feedback) data.feedback = feedback;
   return {type: 'swizzle.copy', package: data.package, data};

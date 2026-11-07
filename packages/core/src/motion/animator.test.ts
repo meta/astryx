@@ -4484,3 +4484,106 @@ describe("a theme's reduced-motion mark", () => {
     theme.remove();
   });
 });
+
+describe('rebase towards a new rest', () => {
+  const curve = solveSpring(toSpring(springs.settle), {from: 0, to: 300});
+
+  /** A spring to 300 whose first frame came late, its start still unread. */
+  async function lateStart() {
+    const ready = setup();
+    const handle = ready.animator.animate({x: 300}, {spring: springs.settle});
+    const [animation] = live('translate');
+    clock = 1070;
+    await commitFrame(1070, {startUnread: true});
+    clock = 1170;
+    return {...ready, handle, animation};
+  }
+
+  it('before its first frame, a spring heading for the new rest keeps its own velocity', () => {
+    const {animator} = setup();
+    animator.animate({x: 300}, {spring: springs.settle});
+    clock = 1033;
+    animator.rebase({x: -300}, {towards: {x: 0}});
+    // The curve has not started, so it keeps its own course. 33 ms in, it has
+    // its own velocity, not that of a new spring dated from the call.
+    expect(animator.get('x')).toBeCloseTo(-300, 6);
+    expect(animator.getVelocity('x')).toBeCloseTo(curve.velocity(0.033), 3);
+  });
+
+  it('while its start is unread, a spring heading for the new rest moves whole in the model only', async () => {
+    const {element, animator, animation} = await lateStart();
+    const keyframes = animation.keyframes;
+    const under = inlineX(element);
+    const shown = animator.get('x');
+    animator.rebase({x: -300}, {towards: {x: 0}});
+    // Within the task, the animation on screen keeps its keyframes, its
+    // inline value and the compositor's start; the model reads the shift.
+    expect(live('translate')).toEqual([animation]);
+    expect(animation.keyframes).toBe(keyframes);
+    expect(animation.startTime).toBeNull();
+    expect(inlineX(element)).toBe(under);
+    expect(animator.get('x')).toBeCloseTo(shown - 300, 6);
+  });
+
+  it('a call in the same task rebuilds the channel from the shifted curve, and nothing rebuilds it again', async () => {
+    const {animator, animation} = await lateStart();
+    animator.rebase({x: -300}, {towards: {x: 0}});
+    const shown = animator.get('x');
+    animator.animate({x: 0}, {spring: springs.settle});
+    const rebuilt = live('translate').at(-1) as Recorded;
+    expect(rebuilt).not.toBe(animation);
+    expect(parse(rebuilt.keyframes[0].translate)[0]).toBeCloseTo(shown, 1);
+    expect(parse(rebuilt.keyframes.at(-1)?.translate)[0]).toBeCloseTo(0, 1);
+    await Promise.resolve();
+    expect(live('translate')).toEqual([rebuilt]);
+  });
+
+  it('with no call after it, the end of the task rebuilds the channel from the shifted curve', async () => {
+    const {animator, animation} = await lateStart();
+    animator.rebase({x: -300}, {towards: {x: 0}});
+    const shown = animator.get('x');
+    await Promise.resolve();
+    const [healed] = live('translate');
+    expect(healed).not.toBe(animation);
+    expect(animation.cancelled).toBe(true);
+    expect(parse(healed.keyframes[0].translate)[0]).toBeCloseTo(shown, 1);
+    expect(parse(healed.keyframes.at(-1)?.translate)[0]).toBeCloseTo(0, 1);
+  });
+
+  it('a dispose in the same task leaves nothing for the end of the task to rebuild', async () => {
+    const {animator, animation} = await lateStart();
+    animator.rebase({x: -300}, {towards: {x: 0}});
+    animator.dispose();
+    await Promise.resolve();
+    expect(animation.cancelled).toBe(true);
+    expect(live('translate')).toEqual([]);
+  });
+
+  it('a spring with a known start moves whole on its own course', async () => {
+    const {animator} = setup();
+    animator.animate({x: 300}, {spring: springs.settle});
+    clock = 1016;
+    await commitFrame(1016);
+    clock = 1116;
+    animator.rebase({x: -300}, {towards: {x: 0}});
+    const rebuilt = live('translate').at(-1) as Recorded;
+    clock = 1216;
+    expect(animator.get('x')).toBeCloseTo(curve.value(0.2) - 300, 6);
+    expect(sampleAt(rebuilt, 'translate', 1216)[0]).toBeCloseTo(
+      curve.value(0.2) - 300,
+      0,
+    );
+  });
+
+  it('a target the shift does not bring to `towards` rebases as without it', async () => {
+    const plain = await lateStart();
+    plain.animator.rebase({x: -16});
+    const plainX = plain.animator.get('x');
+    recorded = [];
+    clock = 1000;
+    const toward = await lateStart();
+    toward.animator.rebase({x: -16}, {towards: {x: 0}});
+    expect(toward.animator.get('x')).toBe(plainX);
+    expect(live('translate')).not.toContain(toward.animation);
+  });
+});
