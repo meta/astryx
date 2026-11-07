@@ -217,8 +217,9 @@ Consumer migration instructions belong in consumer docs and release notes.
     }
   },
   "Result row": {
-    "none": {
-      "reason": "reachability-gap: The stable option row owns highlight and selection but has no current target."
+    "delegatesTo": {
+      "owner": "component:Typeahead",
+      "target": "typeahead-option"
     }
   },
   "Default item content": {
@@ -233,8 +234,9 @@ Consumer migration instructions belong in consumer docs and release notes.
     }
   },
   "Selected result state": {
-    "none": {
-      "reason": "reachability-gap: No current Typeahead target or state reaches the outer selected option."
+    "delegatesTo": {
+      "owner": "component:Typeahead",
+      "target": "typeahead-option"
     }
   }
 }

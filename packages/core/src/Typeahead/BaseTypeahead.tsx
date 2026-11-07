@@ -1831,11 +1831,21 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
                     // the option the user was shown, not the one that
                     // happened to appear under the cursor.
                     onMouseMove={() => highlightOnHover(index)}
-                    {...stylex.props(
-                      styles.item,
-                      itemSizeStyles[size],
-                      index === highlightedIndex && styles.itemHighlighted,
-                      isSelected && styles.itemSelected,
+                    {...mergeProps(
+                      // The row paints the per-size padding, the highlight and
+                      // the selected fill, so its target carries all three.
+                      themeProps('typeahead-option', {
+                        size,
+                        highlighted:
+                          index === highlightedIndex ? 'highlighted' : null,
+                        selected: isSelected ? 'selected' : null,
+                      }),
+                      stylex.props(
+                        styles.item,
+                        itemSizeStyles[size],
+                        index === highlightedIndex && styles.itemHighlighted,
+                        isSelected && styles.itemSelected,
+                      ),
                     )}>
                     <span {...stylex.props(styles.itemContent)}>
                       {renderItem ? (

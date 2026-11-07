@@ -312,6 +312,11 @@ export const docs = {
       {className: 'astryx-typeahead', visualProps: ['status', 'size']},
       {className: 'astryx-typeahead-dropdown'},
       {className: 'astryx-typeahead-empty-state'},
+      {
+        className: 'astryx-typeahead-option',
+        visualProps: ['size'],
+        states: ['highlighted', 'selected'],
+      },
       {className: 'astryx-typeahead-item'},
     ],
   },
