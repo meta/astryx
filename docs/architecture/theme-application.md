@@ -104,7 +104,10 @@ standard width map.
   one internal store with one observer per document. A normal React portal keeps
   provider context. The fallback cannot recover a nested provider.
 - **INV4 — Built themes are not compiled again.** A theme marked as built uses its
-  loaded stylesheet and skips runtime style generation and injection.
+  loaded stylesheet and skips runtime style generation and injection. An app
+  that renders only built themes also does not download the runtime generator:
+  an unbuilt theme from `defineTheme` brings the generator with it, and
+  `Theme` does not import it (DEC-1).
 - **INV5 — Runtime styles are shared safely.** Multiple providers using the same
   unbuilt theme share one document-level style set. Styles are removed only when
   no mounted provider still needs them.
@@ -168,6 +171,22 @@ which component parts are public theme targets.
   them reaches `Theme` from client code.
 - `spec:AST-108/DEC-1` lets a theme's `reducedMotion: 'always'` reach nested
   providers (INV1).
+
+### DEC-1 — The runtime generator travels with the runtime theme
+
+**Decider:** pending
+
+A person loading a page styled only by a built theme still downloads the
+runtime theme generator, about 18.7 kB gzipped, because `Theme` imports it.
+The generator now comes with the theme that needs it: `defineTheme` returns an
+unbuilt theme that carries it, and `Theme` uses it only when the theme is not
+built. An app without runtime themes pays nothing for them, the same rule as
+LayerProvider and Toast. Runtime themes still apply on the first render, with
+no flash.
+
+Rejected: loading the generator with a dynamic import, which can show unstyled
+content before a runtime theme applies. Rejected: a separate built-theme entry
+point, which adds a second public way to mount a theme.
 
 ## Verification
 
