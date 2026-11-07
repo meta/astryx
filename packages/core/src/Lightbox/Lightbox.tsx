@@ -1134,12 +1134,17 @@ export function Lightbox({
         setIndex(next);
       }
     },
-    onSettle: () => {
-      for (const img of trackRef.current?.querySelectorAll<HTMLElement>(
-        '[data-lightbox-page]:not([data-current]) img',
+    // The pager names the page it rests on. Its report can come before the
+    // render that marks that page current, so the page, not the mark, decides.
+    onSettle: settled => {
+      for (const page of trackRef.current?.querySelectorAll<HTMLElement>(
+        ':scope > [data-lightbox-page]',
       ) ?? []) {
-        img.style.translate = '';
-        img.style.scale = '';
+        const img = page.querySelector<HTMLElement>('img');
+        if (img != null && page.dataset.lightboxPage !== String(settled)) {
+          img.style.translate = '';
+          img.style.scale = '';
+        }
       }
     },
   });
@@ -1478,7 +1483,7 @@ export function Lightbox({
                       {pageIndexes.map(i => (
                         <div
                           key={i}
-                          data-lightbox-page=""
+                          data-lightbox-page={i}
                           data-current={i === index ? '' : undefined}
                           // Only the current page is on screen at rest: the
                           // others stay out of the tab order and the

@@ -169,11 +169,19 @@ icon, and the CLI verifies it, writes the files, and checks the set.
   `export`, `import` line, `words`, `definitions`, `variants`, `reason`, and
   `score`: 100 for a definition the set maps to the icon, 90 or 80 for an
   exact name or meaning match (the reading most of the searched icons use
-  leads), 60 when the query starts one of its words, 40 for a partial match,
-  which answers only when nothing scores 60 or more. An icon also answers to
+  leads), 60 when the query starts one of its words, 40 for a partial match
+  (three letters or more inside a word). A word's plural or singular is an
+  exact match (`stars` for `star`); a word that only starts with the query
+  (`start`) answers only when nothing matches a whole word, and a partial
+  match only when nothing scores 60 or more. A query is scored as typed
+  first; only when nothing answers it with a whole word are the words that
+  only phrase it (`go`, `the`, `icon`) left out of a query of several words,
+  so `go home` asks for `home` and `arrow up to line` still names
+  `arrow-up-to-line`. An icon also answers to
   the name and words of every definition it draws. Equal scores are ordered by
   set order (FR8), so the project's set leads; then, within a set, an exact
-  name match on the whole id before one on an id part and an exact meaning
+  name match on the whole id, then on its plural or singular, before one on
+  an id part, and an exact meaning
   match by its tag position; then by `id`. `--set` keeps one set and `--limit`
   caps the list; `--set` with `--all-icons` and no words lists every icon of
   that set (`icon.setIcons`), and `--definitions` lists every Astryx
@@ -224,7 +232,9 @@ icon, and the CLI verifies it, writes the files, and checks the set.
   Icons join it only at promotion.
 - **FR12 — The theme map.** A set exports the map `themeMap` names: one entry
   per built-in definition in `map`, each its icon's artwork, so a theme sets
-  `icons: themeIcons`.
+  `icons: themeIcons`. Each entry is sized to the theme's icon box by CSS
+  (`style` width and height `1em`) as well as by attributes, so an icon whose
+  component writes its own size attributes still draws at the box's size.
 
 ### Authoring
 
@@ -266,6 +276,17 @@ icon, and the CLI verifies it, writes the files, and checks the set.
     `draft`). Never an icon `map` already uses, one whose `id` is another
     definition's name, a negated form (`lock-open`, `bell-off`), or the
     opposite direction (`ellipsis-vertical` for `moreHorizontal`).
+    A library whose export names end in look words (a style, a size, a
+    weight: `XOutline24WGHT500Icon`), read from its trailing words that a few
+    values fill on nearly every export and that are numbered or include a
+    style word, never a direction word (`ArrowUp` and `ArrowDown` are two
+    glyphs), gives one icon per glyph, named
+    without them (`x`, `XIcon`), in the look the default variant names, else
+    the library's usual default (`outline`, `regular`), else the middle of a
+    numbered series; the receipt names the looks it found and how many
+    exports draw the icons. Reading a module of a thousand exports or more,
+    here, on a refresh, and in `add`, prints its progress on stderr in text
+    mode, naming the module as given.
     Ids keep a dimension as one word (`Squares2X2Icon` is `squares-2x2`)
     and split a one-letter word from a digit (`CalendarX2` is
     `calendar-x-2`); a shared library prefix is left out of ids and names;
@@ -284,8 +305,19 @@ icon, and the CLI verifies it, writes the files, and checks the set.
     `@types/react` and `@astryxdesign/cli` peers it does not declare, and a
     `typecheck` script running `integration check --strict` when it has
     none. `--variants` and `--default-variant` declare `variants` and
-    `default`; `--display-name` and `--description` fill the descriptor. Run
-    again, it refreshes the icons that module supplies (those the generated
+    `default`; `--display-name` and `--description` fill the descriptor.
+    Without `--from`, over an existing set, those four options update it in
+    place and leave its icons, `map`, and generated module as they are; a
+    variant an icon has must stay declared, a set with icons keeps its
+    default variant (in a library of looks the refusal names the `--from`
+    run that moves it), and the receipt carries `updated`. A set whose
+    icons' export names name no looks keeps its default variant on a
+    refresh too, since its icons keep their exports; the refusal names the
+    `add --variant <name> --from <module> --all --set <set>` run that adds the look. Over an existing set, `--variants` without
+    `--default-variant` keeps the set's default variant while it stays
+    declared; in a library of looks, it takes the look the icons' exports
+    draw, which `--variants` must list. Run again with `--from`, it
+    refreshes the icons that module supplies (those the generated
     module re-exports or adapts from it) and keeps `map` entries whose icon
     exists; every other icon (the author's `./` artwork, another library's)
     is kept with its `map` entries and variants, a library icon whose `id`
@@ -302,14 +334,33 @@ icon, and the CLI verifies it, writes the files, and checks the set.
     when its `license` is still the one `new-set` wrote (the package's own,
     or `UNLICENSED`); a `license` the author changed is kept, and the
     receipt names both. Later runs keep the descriptor's `license`. The
-    package's own `license` is never written.
+    package's own `license` is never written. In a library of looks, a look
+    the set already wraps keeps its icon and `id`, so a set wrapped one look
+    at a time loses and renames nothing, and a new glyph comes in once; a
+    new `--default-variant` moves each glyph's own icon to the look it
+    names, and the icon keeps its `id` and export. A new
+    `--default-variant` that is none of the library's look words is
+    refused, the look words named, and nothing is written.
   - `experimental icon add <Export> --from <module>` verifies the export,
     lists the definitions that fit it, and with `--definition` or
     `--new-definition` adds it and maps it; `--variant <name>` adds it as
-    that declared variant of an existing icon. With `--variant <name> --all`
-    and no export, it adds that variant for every icon from that module's
-    package whose `id` an export of the module has, in one write; an icon
-    from another module is left alone and not listed as missing. For a `./`
+    that declared variant of an existing icon, and names a variant the set
+    does not declare with the command that declares it, which names the
+    set's default variant. Each command it
+    lists names the set with `--set` and repeats `--default` and `--id` as
+    passed, so it runs as printed. A new definition is named in camelCase or kebab-case and written
+    in camelCase. From a library of looks it names the icon by its glyph;
+    when the set already exports that glyph's name for another export of the
+    library, the export keeps its look words in its id and name, or takes
+    its name from `--id`, and when its first look word that differs from
+    the wrapped export's is a declared variant other than the default, the
+    listing adds the command that adds it as that icon's variant. With
+    `--variant <name> --all` and no export, it adds that variant for every
+    icon from that module's package whose `id` an export of the module has
+    (in a library of looks, the glyph's look of that name), in one write; an
+    icon from another module is left alone and not listed as missing, and a
+    glyph drawn in no look of that name, or whose own export is that look,
+    is listed as missing. For a `./`
     file outside package.json `files`, it names the `files` array that
     publishes it.
   - `experimental icon map <definition> <icon>` writes one `map` entry,
@@ -323,7 +374,10 @@ icon, and the CLI verifies it, writes the files, and checks the set.
     writes `experimental.iconSet`.
   - The generated module re-exports each library component, or wraps a data
     export with the adapter, and rewrites its declaration file and theme map
-    with every change.
+    with every change. It and its declaration file are read statement by
+    statement however a formatter left them, with or without semicolons,
+    so a formatted module is
+    rewritten and checked like the one the CLI wrote.
 - **FR14 — The export contract.** Every icon and variant is a named
   `<Name>Icon` export of the package's public entry: a React component, or an
   adapter call, that takes SVG props, draws with `currentColor`, and fills its
@@ -352,7 +406,7 @@ icon, and the CLI verifies it, writes the files, and checks the set.
   | `icon_license_notice_missing`     | warning  | a set with an upstream ships no license notice                                 |
 
   A definition finding names the definition's description and words and the
-  `icon map` command that fixes it, and suggests icons by the rule `new-set`
+  `icon map` command, with `--set`, that fixes it, and suggests icons by the rule `new-set`
   uses (FR13), never from part of a word. When the package's entry exports
   neither the set's theme map nor any of its icons, one `icon_export_missing`
   names the same entry change the `new-set` receipt names (FR13), in place of
