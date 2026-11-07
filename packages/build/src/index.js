@@ -246,10 +246,8 @@ function createPlugin() {
           // A swizzled copy is Astryx source too: it compiles in the library pass.
           const markerMemo = new Map();
           for (const filePath of files) {
-            // Classify every file on each pass. A marker added or removed
-            // during a dev session moves an unchanged copy to the other side,
-            // as `withAstryx()` rebuilds the copy's module with the other
-            // class prefix.
+            // Classify every file on each pass: when a marker appears or goes,
+            // `withAstryx()` rebuilds the copy with the other prefix.
             const isLibrary =
               libraryPatterns.some(p => filePath.includes(p)) ||
               isSwizzledSource(filePath, markerMemo);
