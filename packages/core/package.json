@@ -834,6 +834,11 @@
       "types": "./dist/internal/indicatorPress.stylex.d.ts",
       "default": "./dist/internal/indicatorPress.stylex.js"
     },
+    "./internal/touchHitArea.stylex": {
+      "source": "./src/internal/touchHitArea.stylex.ts",
+      "types": "./dist/internal/touchHitArea.stylex.d.ts",
+      "default": "./dist/internal/touchHitArea.stylex.js"
+    },
     "./internal/touch": {
       "source": "./src/internal/touch.ts",
       "types": "./dist/internal/touch.d.ts",

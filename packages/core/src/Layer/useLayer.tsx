@@ -30,7 +30,7 @@ import type {StyleXStyles} from '@stylexjs/stylex';
 import {createPortal} from 'react-dom';
 import {LayerContentBoundary} from './layerScopedContext';
 import {layerClickBoundary} from './layerClickBoundary';
-import {addAnchorName, removeAnchorName} from './anchorName';
+import {addAnchorName, readAnchorNames, removeAnchorName} from './anchorName';
 import {currentGesture, currentGestureHasClicked} from './gestureCounter';
 import {resolveLayerPortalTarget} from './layerHost';
 import {layerTextReset} from './layerTextReset.stylex';
@@ -526,6 +526,43 @@ function exitAnimations(layer: HTMLElement | null): Animation[] {
         animation.playState === 'running' &&
         animation.effect?.getComputedTiming().endTime !== Infinity,
     );
+}
+
+/**
+ * Whether the closed state's transition keeps `layer` shown after it hides.
+ * Only a discrete `display` transition holds a hidden layer shown, until it
+ * ends. Read it while the layer is closed: the close takes its values from
+ * the closed state's style.
+ */
+function closeTransitionKeepsShown(layer: HTMLElement): boolean {
+  const style = layer.ownerDocument.defaultView?.getComputedStyle(layer);
+  if (style == null) {
+    return false;
+  }
+  const list = (name: string) =>
+    style
+      .getPropertyValue(name)
+      .split(',')
+      .map(value => value.trim());
+  const behaviors = list('transition-behavior');
+  const durations = list('transition-duration').map(parseFloat);
+  const delays = list('transition-delay').map(parseFloat);
+  return list('transition-property').some((name, index) => {
+    const behavior = behaviors[index % behaviors.length];
+    const duration = durations[index % durations.length] || 0;
+    const delay = delays[index % delays.length] || 0;
+    return (
+      (name === 'all' || name === 'display') &&
+      behavior === 'allow-discrete' &&
+      duration + Math.max(0, delay) > 0
+    );
+  });
+}
+
+/** The keyframe animations that `layer`'s style declares, or `none`. */
+function animationNames(layer: HTMLElement): string {
+  const style = layer.ownerDocument.defaultView?.getComputedStyle(layer);
+  return style?.getPropertyValue('animation-name').trim() || 'none';
 }
 
 /**
@@ -1199,6 +1236,9 @@ function useLayerImplementation(
   // again during it. Null once it has ended.
   const exitRef = useRef<object | null>(null);
 
+  // Read at the last show, from the closed state's style.
+  const closeKeepsShownRef = useRef(false);
+
   // A closed trigger is no anchor, once the layer stops painting. A show
   // during the exit keeps the name, and so does a later exit.
   const releaseAnchor = useCallback(
@@ -1215,7 +1255,9 @@ function useLayerImplementation(
           removeAnchorName(trigger, anchorId);
         }
       };
-      const running = exitAnimations(layer);
+      // The animation read lays out the page between the writes of the close.
+      // Skip it when the layer stops painting as it hides.
+      const running = closeKeepsShownRef.current ? exitAnimations(layer) : [];
       if (running.length === 0) {
         release();
         return;
@@ -1426,6 +1468,10 @@ function useLayerImplementation(
         replayWhenSettled();
         return;
       }
+      // The close takes its values from the closed state's style. Read it
+      // before the writes of the show, so the read lays nothing out.
+      const closeTransitionHolds = closeTransitionKeepsShown(popover);
+      const closedAnimations = animationNames(popover);
       popover.removeAttribute(LAYER_CLEARS_ANCHOR_ATTRIBUTE);
       popover.removeAttribute(LAYER_SCROLLS_ATTRIBUTE);
       applyDeferredWritingContext(popover);
@@ -1450,6 +1496,13 @@ function useLayerImplementation(
         replayWhenSettled();
         return;
       }
+      // A keyframe animation that only the closed state declares starts at
+      // the close, and it can animate `display`. One that both states declare
+      // is the entrance, and the hide stops it.
+      const closeStartsAnimation =
+        closedAnimations !== 'none' &&
+        closedAnimations !== animationNames(popover);
+      closeKeepsShownRef.current = closeTransitionHolds || closeStartsAnimation;
       if (keepsAnchorClear) {
         keepAnchorClear(popover, triggerRef.current);
       }
@@ -1620,14 +1673,35 @@ function useLayerImplementation(
   // hide starts; the ledger counts the hide from there until the element's
   // own `toggle`, independent of this hook's bindings, which a render inside
   // the hide can replace.
-  const handleBeforeToggle = useCallback((e: Event) => {
-    const toggleEvent = e as ToggleEvent;
-    const el = e.currentTarget as HTMLElement | null;
-    if (toggleEvent.newState === 'closed' && isOpenRef.current && el != null) {
-      observeBrowserHide(el);
-      onCloseStartRef.current?.();
-    }
-  }, []);
+  const handleBeforeToggle = useCallback(
+    (e: Event) => {
+      const toggleEvent = e as ToggleEvent;
+      const el = e.currentTarget as HTMLElement | null;
+      if (toggleEvent.newState !== 'closed' || el == null) {
+        return;
+      }
+      if (isOpenRef.current) {
+        observeBrowserHide(el);
+        onCloseStartRef.current?.();
+        // The browser's own close releases the name from its toggle event.
+        return;
+      }
+      // Our hide drops its trigger's anchor name here, inside the hide, so the
+      // hide's own layout covers the change. A name dropped after that layout
+      // costs one more. A layer that the closed state keeps shown keeps the
+      // name until its exit ends.
+      const trigger = triggerRef.current;
+      if (
+        trigger != null &&
+        readAnchorNames(trigger).includes(anchorId) &&
+        !closeKeepsShownRef.current
+      ) {
+        exitRef.current = null;
+        removeAnchorName(trigger, anchorId);
+      }
+    },
+    [anchorId],
+  );
 
   const handleToggle = useCallback(
     (e: Event) => {
