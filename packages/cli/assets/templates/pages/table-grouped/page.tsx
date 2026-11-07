@@ -701,7 +701,14 @@ const columns: TableColumn<TaskRow>[] = [
           },
           {
             label: 'Move to project',
-            icon: <Icon icon={ArrowRightIcon} xstyle={rtlStyles.mirror} />,
+            icon: (
+              <Icon
+                icon={ArrowRightIcon}
+                size="sm"
+                color="secondary"
+                xstyle={rtlStyles.mirror}
+              />
+            ),
             onClick: () => {},
           },
           {type: 'divider' as const},
