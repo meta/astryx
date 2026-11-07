@@ -100,6 +100,18 @@ export function registerSwizzle(program) {
         );
       }
 
+      // npm packages the copy imports that the product may not have installed.
+      const dependencies = Object.entries(result.data.dependencies ?? {});
+      if (dependencies.length > 0) {
+        out.push(
+          text(
+            `It imports these npm packages; install them if your project lacks them: ${dependencies
+              .map(([name, range]) => `${name}@${range}`)
+              .join(' ')}`,
+          ),
+        );
+      }
+
       // StyleX build requirement — swizzled StyleX source throws on import
       // ("Unexpected 'stylex.create' call at runtime") unless the consumer's
       // build runs a StyleX compiler, so the page does not render at all.

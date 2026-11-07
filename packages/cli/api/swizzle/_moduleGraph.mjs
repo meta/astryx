@@ -12,6 +12,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {isBuiltin} from 'node:module';
 import {parse} from '@babel/parser';
 import {
   inspectPackageExport,
@@ -388,6 +389,8 @@ function publicSurfaceOf(packageDir, srcRoot, originsOf) {
  *   file the copy holds (absolute source path), with the edits its imports need
  * @property {Map<string, Set<string>>} dependsOn file -> carried files its
  *   computed specifiers point at
+ * @property {Set<string>} packages the npm packages the copied files import,
+ *   other than the owner package and Node's built-in modules
  */
 
 /**
@@ -454,6 +457,8 @@ export function planCopy({
   const files = new Map();
   /** @type {CopyPlan['dependsOn']} */
   const dependsOn = new Map();
+  /** @type {Set<string>} */
+  const packages = new Set();
   const queue = [...entries];
   const queued = new Set(queue);
   /** @param {string} file */
@@ -554,7 +559,11 @@ export function planCopy({
     files.set(file, {code: parsed.code, edits});
     if (!CODE_FILE.test(file)) continue;
     for (const ref of parsed.references) {
-      if (!ref.source.startsWith('.')) continue;
+      if (!ref.source.startsWith('.')) {
+        const name = packageNameOf(ref.source);
+        if (name && name !== ownerPackage) packages.add(name);
+        continue;
+      }
       const target = resolveRelative(file, ref.source, resolutions);
       // A dangling import is left for the build to report.
       if (!target) continue;
@@ -585,7 +594,7 @@ export function planCopy({
       edits.push(planReference(file, parsed.code, ref, target));
     }
   }
-  return {files, dependsOn};
+  return {files, dependsOn, packages};
 
   /**
    * Decide one reference that leaves the component folder.
@@ -667,6 +676,17 @@ export function planCopy({
       render: specifierOf => renderStatements(ref, groups, specifierOf),
     };
   }
+}
+
+/**
+ * The npm package a bare specifier names, or null for a Node built-in module.
+ * @param {string} specifier
+ * @returns {string|null}
+ */
+function packageNameOf(specifier) {
+  if (specifier.startsWith('node:') || isBuiltin(specifier)) return null;
+  const parts = specifier.split('/');
+  return specifier.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0];
 }
 
 /**
