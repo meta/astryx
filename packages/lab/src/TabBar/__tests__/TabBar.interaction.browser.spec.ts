@@ -399,7 +399,12 @@ test('a selection made with the keys slides the lens on UIKit’s spring, the se
   await expect(tab(page, 'Browse')).toHaveAttribute('aria-selected', 'true');
   const body = lensBody(page);
   await waitForAnimation(body, {minProgressMs: 0});
-  await holdAnimations(page);
+  await holdAnimations(page, undefined, {
+    judges: [
+      {target: body, property: 'translate'},
+      {target: lensCopy(page), property: 'translate'},
+    ],
+  });
 
   const times = Array.from({length: 49}, (_, i) => i * 16.667);
   const bodySamples = await sampleCurve(body, times);
@@ -809,7 +814,18 @@ test('a finger landing lifts the lens and flexes the bar on UIKit’s springs, t
         return;
       }
       await waitForAnimation(capsule, {minProgressMs: 0});
-      await holdAnimations(page);
+      await holdAnimations(page, undefined, {
+        judges: [
+          {target: capsule, property: 'scale'},
+          {target: lensBody(page), property: 'scale'},
+          {target: lensBody(page), property: 'translate'},
+          {
+            target: page.locator('[data-tab-bar-lens-clip]'),
+            property: 'opacity',
+            pseudoElement: '::before',
+          },
+        ],
+      });
       const flex = await sampleCurve(capsule, times);
       const body = await sampleCurve(lensBody(page), times);
       const glass = await samplePseudoOpacity(
@@ -934,7 +950,12 @@ test('the lift settles the lens and relaxes the lift and the flex on UIKit’s s
   // animation is one the animator has since replaced.
   await expect(tab(page, 'Browse')).toHaveAttribute('aria-selected', 'true');
   await waitForAnimation(capsule, {minProgressMs: 0});
-  await holdAnimations(page);
+  await holdAnimations(page, undefined, {
+    judges: [
+      {target: capsule, property: 'scale'},
+      {target: lensBody(page), property: 'scale'},
+    ],
+  });
   const times = Array.from({length: 37}, (_, i) => i * 16.667);
   const flex = await sampleCurve(capsule, times);
   const body = await sampleCurve(lensBody(page), times);
@@ -2077,6 +2098,7 @@ test(
       },
       times: Array.from({length: 37}, (_, i) => i * 16.667),
       measure: async () => ({x: await translateX(lensBody(page))}),
+      judges: {target: lensBody(page), property: 'translate'},
       columns: 6,
       cellScale: 0.6,
     });
