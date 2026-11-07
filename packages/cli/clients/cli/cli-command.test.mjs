@@ -76,6 +76,8 @@ describe('the setup nudge in a project with no CLI of its own', () => {
     const stateHome = fs.mkdtempSync(
       path.join(os.tmpdir(), 'astryx-cli-command-state-'),
     );
+    vi.stubEnv('HOME', stateHome);
+    vi.stubEnv('USERPROFILE', stateHome);
     vi.stubEnv('XDG_CONFIG_HOME', stateHome);
     vi.stubEnv('APPDATA', stateHome);
     vi.stubEnv('CI', '');

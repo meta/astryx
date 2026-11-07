@@ -22,6 +22,7 @@ import {
   isAstryxPromptInReach,
 } from '../../../foundation/agent-docs/agent-docs.mjs';
 import {runCli} from '../../../test-utils/run-cli.mjs';
+import {userConfigDir} from '../../../foundation/env/user-dirs.mjs';
 
 /** This source checkout: the tests run the CLI from it. */
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../..');
@@ -43,6 +44,10 @@ let stateHome;
 beforeEach(() => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-setup-nudge-'));
   stateHome = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-setup-state-'));
+  // Every platform's per-user folder lands under stateHome: macOS reads only
+  // the home folder, Linux XDG_CONFIG_HOME, Windows APPDATA.
+  vi.stubEnv('HOME', stateHome);
+  vi.stubEnv('USERPROFILE', stateHome);
   vi.stubEnv('XDG_CONFIG_HOME', stateHome);
   vi.stubEnv('APPDATA', stateHome);
   vi.stubEnv('CI', '');
@@ -54,7 +59,7 @@ afterEach(() => {
 });
 
 /** The per-user state file the reminder records its day in. */
-const stateFile = () => path.join(stateHome, 'astryx', 'state.json');
+const stateFile = () => path.join(userConfigDir(), 'state.json');
 
 function write(rel, body) {
   const p = path.join(tmp, rel);
@@ -191,6 +196,7 @@ describe('enforcement layer 3 — per-command setup nudge', () => {
 
   it('prints once again the next day', async () => {
     asProject();
+    expect(stateFile().startsWith(stateHome)).toBe(true);
     expect((await runCli(['docs', 'tokens'], tmp)).stderr).toMatch(NUDGE);
     const state = JSON.parse(fs.readFileSync(stateFile(), 'utf8'));
     const key = Object.keys(state.notifiedAt).find(k => k.startsWith('setup:'));
