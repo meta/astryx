@@ -118,7 +118,6 @@ const styles = stylex.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacingVars['--spacing-2'],
-    paddingBlock: spacingVars['--spacing-2'],
     paddingInline: spacingVars['--spacing-3'],
     borderWidth: 0,
     borderStyle: 'none',
@@ -269,16 +268,22 @@ const dynamicStyles = stylex.create({
   width: (width: SizeValue | null) => ({width}),
 });
 
+// A labelled button's size is a minimum, not a fixed height: when the text
+// size grows (iOS Dynamic Type), the button grows with its label, so the label
+// stays inside its own tap target. The button has no block padding, so its
+// label's line box decides the height above that minimum.
 const sizeStyles = stylex.create({
-  sm: {
-    height: sizeVars['--size-element-sm'],
-  },
-  md: {
-    height: sizeVars['--size-element-md'],
-  },
-  lg: {
-    height: sizeVars['--size-element-lg'],
-  },
+  sm: {minHeight: sizeVars['--size-element-sm']},
+  md: {minHeight: sizeVars['--size-element-md']},
+  lg: {minHeight: sizeVars['--size-element-lg']},
+});
+
+// An icon-only button holds its glyph, which does not grow with the text, so
+// it keeps a fixed square size.
+const iconOnlySizeStyles = stylex.create({
+  sm: {height: sizeVars['--size-element-sm']},
+  md: {height: sizeVars['--size-element-md']},
+  lg: {height: sizeVars['--size-element-lg']},
 });
 
 /**
@@ -823,7 +828,7 @@ export function Button({
   // Shared StyleX props for both button and link rendering
   const sharedStylexProps = focusOutlineProps.focusVisible(
     styles.base,
-    sizeStyles[size],
+    isIconOnly ? iconOnlySizeStyles[size] : sizeStyles[size],
     isIconOnly && styles.iconOnly,
     interactionOverlayStyles.backgroundImage,
     // The press the controller writes, on a layer under the label whose
