@@ -1039,6 +1039,31 @@ describe('Timestamp', () => {
       });
     });
 
+    it('names and announces a failed copy, then returns to rest', async () => {
+      (
+        navigator.clipboard.writeText as ReturnType<typeof vi.fn>
+      ).mockRejectedValueOnce(new Error('clipboard denied'));
+      render(<Timestamp value={Date.now() / 1000 - 3600} format="relative" />);
+      const card = await openTimestampHoverCard();
+      const button = card.querySelector('button')!;
+      const restName = button.getAttribute('aria-label');
+      fireEvent.click(button);
+      await waitFor(() =>
+        expect(button).toHaveAccessibleName(
+          'Failed to copy value to clipboard.',
+        ),
+      );
+      await waitFor(() =>
+        expect(
+          document.querySelector('[data-astryx-live-region="polite"]'),
+        ).toHaveTextContent('Failed to copy value to clipboard.'),
+      );
+      await waitFor(
+        () => expect(button).toHaveAttribute('aria-label', restName ?? ''),
+        {timeout: 3000},
+      );
+    });
+
     it("shows a 'Copy' tooltip on the copy button, flipping to 'Copied' after a copy", async () => {
       render(<Timestamp value={Date.now() / 1000 - 3600} format="relative" />);
       const card = await openTimestampHoverCard();
