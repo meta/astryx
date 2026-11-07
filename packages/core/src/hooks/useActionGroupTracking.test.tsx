@@ -5,14 +5,15 @@
  * @input A component using useActionGroupTracking over two actions and a
  *   message, laid out with stubbed rects, and touch, pointer and click events
  *   dispatched on it with explicit timestamps
- * @output The group tracking contract: the action under the finger is
- *   painted in the touch-down event; the paint follows the finger and is cut,
- *   not faded, when it leaves; the lift runs only the action under the
- *   finger, once; a touch on the message or a cancel runs nothing; a disabled
- *   action is skipped; a second finger or the window losing focus cancels;
- *   inside a scroller a flick is left to the scroller; a mouse under a fine
- *   pointer is tracked like a finger; the shared tracker does the tracking;
- *   a caller's no-paint option and press callbacks; no render per move
+ * @output The group tracking contract. The action under the finger is
+ *   painted in the touch-down event. The paint follows the finger and is cut,
+ *   not faded, when it leaves. The lift runs only the action under the
+ *   finger, once. A touch on the message or a cancel runs nothing. A disabled
+ *   action is skipped. A second finger or the window losing focus cancels.
+ *   Inside a scroller, a flick is left to the scroller. A mouse under a fine
+ *   pointer is tracked like a finger. The shared tracker does the tracking. A
+ *   group that paints its own highlight can turn the paint off and hear each
+ *   press. No move causes a render.
  * @position jsdom tests of packages/core/src/hooks/useActionGroupTracking.ts
  */
 

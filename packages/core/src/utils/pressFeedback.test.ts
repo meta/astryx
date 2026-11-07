@@ -29,6 +29,7 @@ import {
   installPressFeedback,
   PRESSABLE_ATTRIBUTE,
   PRESSED_ATTRIBUTE,
+  pressFadeMs,
 } from './pressFeedback';
 import {
   isTrackedByGroup,
@@ -694,6 +695,34 @@ describe('a finger waits only inside a scroller (spec:AST-094 FR11)', () => {
 describe('the release clock without a theme', () => {
   it("is the exit duration token's default, 175 ms (spec:AST-094 FR5)", () => {
     expect(PRESS_FADE_MS).toBe(175);
+  });
+});
+
+describe('the release clock on the pressed element', () => {
+  afterEach(() => {
+    document.body.replaceChildren();
+  });
+
+  /** An element with `tokens` set on it, in the document. */
+  function pressed(tokens: Record<string, string> = {}): HTMLElement {
+    const element = document.createElement('div');
+    for (const [name, value] of Object.entries(tokens)) {
+      element.style.setProperty(name, value);
+    }
+    document.body.appendChild(element);
+    return element;
+  }
+
+  it('reads --duration-exit where the element is, a zero included', () => {
+    expect(pressFadeMs(pressed({'--duration-exit': '250ms'}))).toBe(250);
+    expect(pressFadeMs(pressed({'--duration-exit': '0ms'}))).toBe(0);
+  });
+
+  it("gives the token's default for no value or a value that is not a time", () => {
+    expect(pressFadeMs(pressed())).toBe(PRESS_FADE_MS);
+    expect(pressFadeMs(pressed({'--duration-exit': 'fast'}))).toBe(
+      PRESS_FADE_MS,
+    );
   });
 });
 
