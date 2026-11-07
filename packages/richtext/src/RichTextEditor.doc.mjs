@@ -241,6 +241,11 @@ export const docs = {
       {
         guidance: true,
         description:
+          'Backspace at the very start of a code block turns it into a paragraph holding its lines, each on its own line, with the caret at its start. The code never merges into the block above, so a heading above keeps its own text. Backspace anywhere else in a code block deletes as usual.',
+      },
+      {
+        guidance: true,
+        description:
           'Cmd+A (Ctrl+A on other platforms) in a code block or a table cell selects the code or the cell text first; pressing it again selects the whole document. Anywhere else it selects the whole document at once.',
       },
       {

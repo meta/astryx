@@ -279,15 +279,14 @@ test('a flick from the top snap point whose projection passes the next one close
     'Nearby places',
   );
   const top = await restingTop(page);
-  const half = await page.evaluate(() => window.innerHeight * 0.5);
+  const height = await page.evaluate(() => window.innerHeight);
+  const half = height * 0.5;
   const cdp = await page.context().newCDPSession(page);
   // 60 px in 15 ms is 4,000 px/s. 0.1 s ahead it lands past the
   // half-height snap point, though nearer it than closed.
   const projected = top + 60 + 4000 * sheetTable.release.projectionSeconds;
   expect(projected).toBeGreaterThan(half);
-  expect(projected - half).toBeLessThan(
-    page.viewportSize()!.height - projected,
-  );
+  expect(projected - half).toBeLessThan(height - projected);
   await drag(cdp, sheet, 60, 15);
   await expect(dialog).toBeHidden({timeout: 2_000});
 });

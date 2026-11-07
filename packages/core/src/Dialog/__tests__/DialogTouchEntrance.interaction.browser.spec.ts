@@ -6,15 +6,15 @@
  *   the AlertDialog story "Delete", real touch input through the interaction
  *   harness in its phone context, and a mouse there and on a fine-pointer
  *   page
- * @output Browser evidence for spec:AST-094 FR35 on Dialog: under a finger, a
- *   tap or a drag that lands while the dialog is still entering closes
- *   nothing, runs no action, moves no focus and scrolls nothing, and the
- *   dialog finishes entering and stays open; keys stay live and the content
- *   stays in the accessibility tree meanwhile; an alert's entrance holds its
- *   action alike. With a mouse, a click during the entrance acts as before:
- *   on a touch screen the hold decides by each event's pointer, and a press
- *   where the mouse already rests acts once the page last heard a mouse;
- *   under a fine primary pointer nothing is held.
+ * @output Browser evidence for spec:AST-094 FR35 on Dialog. Under a finger,
+ *   a tap or a drag that lands while the dialog is still entering closes
+ *   nothing and runs no action. It moves no focus and scrolls nothing, and
+ *   the dialog finishes entering and stays open. Keys stay live and the
+ *   content stays in the accessibility tree meanwhile. An alert's entrance
+ *   holds its action alike. With a mouse, a click during the entrance acts as
+ *   before. On a touch screen the hold decides by each event's pointer. A
+ *   press where the mouse already rests acts, after a finger opened the
+ *   dialog as after a mouse. Under a fine primary pointer nothing is held.
  * @position Browser proof for Dialog's entrance hold (Dialog.tsx, through the
  *   Layer module's holdEntranceInput); the hold itself is proven in
  *   Layer/__tests__/inputHold.interaction.browser.spec.ts
@@ -76,7 +76,9 @@ async function holdEntrance(page: Page): Promise<void> {
         ?.getAnimations()
         .some(animation => animation.playState === 'running') ?? false,
   );
-  const held = await holdAnimations(page, openDialogs(page));
+  const held = await holdAnimations(page, openDialogs(page), {
+    judges: {target: openDialogs(page), property: 'opacity'},
+  });
   // Held: later transitions (an exit, the next open) keep their own timing.
   await page.evaluate(() =>
     document.getElementById('__slowEntrance')?.remove(),
@@ -401,6 +403,55 @@ test.describe('with a mouse on a touch screen', () => {
     // A press where the mouse already is, with no movement first. The page's
     // input stream heard the mouse move last, so the hold lets it through,
     // and it reaches the action (after the key's own click on the opener).
+    await page.mouse.down();
+    await page.mouse.up();
+    await expect.poll(clicks).toEqual(['Open Info Modal', 'Got it']);
+    await expect(openDialogs(page)).toHaveCount(0);
+  });
+
+  test('after a finger opens the dialog, a press where the mouse already rests reaches its action while the dialog enters (spec:AST-094 FR35)', async ({
+    page,
+  }) => {
+    // Under Reduce Motion the dialog only fades in, so its action stays where
+    // the mouse rests.
+    await page.emulateMedia({reducedMotion: 'reduce'});
+    await openStory(page, storybook(), INFO);
+    const opener = page.getByRole('button', {name: 'Open Info Modal'});
+    // A first presentation, which a mouse opens and a key closes, finds where
+    // the action appears.
+    await opener.click();
+    await expect(openDialogs(page)).toHaveCount(1);
+    await finishEntrance(page);
+    const action = await centerOf(page.getByRole('button', {name: 'Got it'}));
+    await page.keyboard.press('Escape');
+    await expect(openDialogs(page)).toHaveCount(0);
+    // The mouse comes to rest where the action appears; a finger opens the
+    // dialog again, so the page last heard a finger.
+    await page.mouse.move(action.x - 40, action.y);
+    await page.mouse.move(action.x, action.y, {steps: 4});
+    await page.evaluate(() => {
+      const clicks: string[] = [];
+      (window as unknown as {__clicks: string[]}).__clicks = clicks;
+      window.addEventListener(
+        'click',
+        event => {
+          const target = event.target as Element;
+          clicks.push(target.closest('button')?.textContent?.trim() ?? '');
+        },
+        {capture: true},
+      );
+    });
+    await slowNextEntrance(page);
+    const driver = await touchDriver(page);
+    await driver.tap(await centerOf(opener));
+    await holdEntrance(page);
+
+    const clicks = async () =>
+      page.evaluate(() => (window as unknown as {__clicks: string[]}).__clicks);
+    await expect(openDialogs(page)).toHaveCount(1);
+    await expect(page.getByRole('button', {name: 'Got it'})).toBeVisible();
+    // The mouse has not moved since the finger: its press reaches the action
+    // (after the finger's own click on the opener).
     await page.mouse.down();
     await page.mouse.up();
     await expect.poll(clicks).toEqual(['Open Info Modal', 'Got it']);

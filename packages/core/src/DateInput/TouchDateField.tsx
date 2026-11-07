@@ -58,6 +58,8 @@ import {
   useState,
   useTransition,
 } from 'react';
+import {flushSync} from 'react-dom';
+import {moveFocusLeftBehind, noteFocusWithin} from '../utils/focusReturn';
 import * as stylex from '@stylexjs/stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import type {StyleXStyles} from '@stylexjs/stylex';
@@ -852,6 +854,12 @@ export function TouchDateField({
   const isWheelsWarm = useWheelsWarmUp(isSheetOpen && isTouch);
   const {ref: chevronRef, dip: dipChevron} = useChevronDip();
   const scrollerHandleRef = useRef<MonthScrollerHandle | null>(null);
+  const previousArrowRef = useRef<HTMLButtonElement | null>(null);
+  const nextArrowRef = useRef<HTMLButtonElement | null>(null);
+  const monthYearButtonRef = useRef<HTMLButtonElement | null>(null);
+  // The title button takes two refs: the chevron's dip reads it, and the
+  // month arrows hand focus to it when both hide.
+  const titleButtonRef = useMergedRefs(monthYearButtonRef, chevronRef);
   // Pending focus handoff from the clear button; see handleClear.
   const clearFocusTimerRef = useRef<number | null>(null);
   // Releases the focus timer on unmount.
@@ -1069,6 +1077,55 @@ export function TouchDateField({
     [monthIndex, minMonthIndex, maxMonthIndex],
   );
 
+  // An arrow at the range end hides, and a hidden element loses focus. So
+  // when a move to `target` hides the focused arrow, focus moves to the other
+  // arrow, or to the month-and-year button when both hide. The move renders
+  // first, because in a two-month range the other arrow is hidden until then.
+  const moveMonth = useCallback(
+    (target: number, move: () => void) => {
+      const previousHides = target <= minMonthIndex;
+      const nextHides = target >= maxMonthIndex;
+      const previousArrow = previousArrowRef.current;
+      const nextArrow = nextArrowRef.current;
+      const focusOnPrevious = previousHides
+        ? noteFocusWithin(previousArrow)
+        : null;
+      const focusOnNext = nextHides ? noteFocusWithin(nextArrow) : null;
+      const focusOnArrow = focusOnPrevious ?? focusOnNext;
+      if (focusOnArrow == null) {
+        move();
+        return;
+      }
+      // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the other arrow must be shown before it can take focus
+      flushSync(move);
+      const isOnPrevious = focusOnPrevious != null;
+      const otherArrowHides = isOnPrevious ? nextHides : previousHides;
+      const destination = otherArrowHides
+        ? monthYearButtonRef.current
+        : isOnPrevious
+          ? nextArrowRef.current
+          : previousArrowRef.current;
+      moveFocusLeftBehind(
+        focusOnArrow,
+        destination,
+        isOnPrevious ? previousArrow : nextArrow,
+      );
+    },
+    [minMonthIndex, maxMonthIndex],
+  );
+
+  const stepMonthFromArrow = useCallback(
+    (delta: -1 | 1) => {
+      const target = clampIndex(
+        monthIndex + delta,
+        minMonthIndex,
+        maxMonthIndex,
+      );
+      moveMonth(target, () => stepMonth(delta));
+    },
+    [monthIndex, minMonthIndex, maxMonthIndex, moveMonth, stepMonth],
+  );
+
   // A wheel commit steers the scroller immediately, even though it is behind
   // the wheels: it keeps its layout box while hidden, so by the time the
   // wheels close it is already resting on the new month. Under a finger,
@@ -1118,12 +1175,16 @@ export function TouchDateField({
   // or close.
   const isWheelOpenRef = useRef(isWheelOpen);
   isWheelOpenRef.current = isWheelOpen;
-  const handleVisibleMonthChange = useCallback((next: number) => {
-    if (isWheelOpenRef.current) {
-      return;
-    }
-    setMonthIndex(next);
-  }, []);
+  const handleVisibleMonthChange = useCallback(
+    (next: number) => {
+      if (isWheelOpenRef.current) {
+        return;
+      }
+      // A swipe to the range end hides an arrow, as a press does.
+      moveMonth(next, () => setMonthIndex(next));
+    },
+    [moveMonth],
+  );
 
   /**
    * Put the calendar back where it belongs when the wheels close.
@@ -1198,8 +1259,9 @@ export function TouchDateField({
             styles.monthArrow,
             !canStepBack && styles.monthArrowUnavailable,
           ]}
+          ref={previousArrowRef}
           isDisabled={!canStepBack}
-          onClick={() => stepMonth(-1)}
+          onClick={() => stepMonthFromArrow(-1)}
           label={t('@astryx.calendar.previousMonth')}
           icon={
             <span {...stylex.props(styles.monthArrowIcon, rtlStyles.mirror)}>
@@ -1214,8 +1276,9 @@ export function TouchDateField({
             styles.monthArrow,
             !canStepForward && styles.monthArrowUnavailable,
           ]}
+          ref={nextArrowRef}
           isDisabled={!canStepForward}
-          onClick={() => stepMonth(1)}
+          onClick={() => stepMonthFromArrow(1)}
           label={t('@astryx.calendar.nextMonth')}
           icon={
             <span {...stylex.props(styles.monthArrowIcon, rtlStyles.mirror)}>
@@ -1225,7 +1288,7 @@ export function TouchDateField({
         />
       </>
     ),
-    [canStepBack, canStepForward, stepMonth, t],
+    [canStepBack, canStepForward, stepMonthFromArrow, t],
   );
   const resetButton = useMemo(
     () => (
@@ -1300,6 +1363,7 @@ export function TouchDateField({
     <div {...stylex.props(styles.surface)}>
       <div {...stylex.props(styles.header)}>
         <button
+          ref={titleButtonRef}
           type="button"
           onClick={() => {
             followFocus(!isWheelOpen);
@@ -1319,7 +1383,6 @@ export function TouchDateField({
           // restyle the header button. Adding a target later is additive;
           // withdrawing one is not.
           data-title="month-year"
-          ref={chevronRef}
           {...pressable}
           {...stylex.props(
             styles.title,

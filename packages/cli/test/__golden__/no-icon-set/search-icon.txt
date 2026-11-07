@@ -1,4 +1,4 @@
-Results for "icon" (20 of 232)
+Results for "icon" (20 of 233)
 name:        Icon
 domain:      component
 package:     @astryxdesign/core

@@ -102,10 +102,11 @@ export class WheelPacingError extends Error {
 
 /**
  * The page received a wheel burst's steps further apart than the proof's
- * `maxGapMs` because it was still handling the step before: its own wheel
+ * `maxGapMs` while it was still handling the step before. Its own wheel
  * listeners held the main thread, and WebKit dispatches the next step only
- * once it is free. The page split the gesture, so this is the proof's own
- * failure, never re-taken.
+ * once it is free. The handling time is page wall time, which on a starved
+ * runner includes the page's wait for a CPU. Judge a page stall from a run
+ * with CI's CPU limits: there it is the proof's own failure, never re-taken.
  */
 export class WheelPageStallError extends Error {
   constructor(
@@ -113,7 +114,7 @@ export class WheelPageStallError extends Error {
     readonly stall: WheelPageStall,
   ) {
     super(
-      `webInputDriver: the page's own wheel listeners took ${stall.handlingMs.toFixed(0)} ms to handle a step, so the next reached it ${stall.gapMs.toFixed(0)} ms later, over its ${maxGapMs} ms: the page split the run, not the runner`,
+      `webInputDriver: the page's own wheel listeners took ${stall.handlingMs.toFixed(0)} ms of page wall time to handle a step, so the next reached it ${stall.gapMs.toFixed(0)} ms later, over its ${maxGapMs} ms: the page split the run. On a starved runner that time includes the page's wait for a CPU: judge a page stall from a run with CI's CPU limits`,
     );
     this.name = 'WheelPageStallError';
   }
