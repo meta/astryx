@@ -390,8 +390,9 @@ function publicSurfaceOf(packageDir, srcRoot, originsOf) {
  *   file the copy holds (absolute source path), with the edits its imports need
  * @property {Map<string, Set<string>>} dependsOn file -> carried files its
  *   computed specifiers point at
- * @property {Set<string>} packages the npm packages the copied files import,
- *   other than the owner package and Node's built-in modules
+ * @property {Record<string, string>} dependencies each npm package the copied
+ *   files import, other than the owner package and Node's built-in modules,
+ *   with the range the owner package declares
  */
 
 /**
@@ -596,7 +597,7 @@ export function planCopy({
       edits.push(planReference(file, parsed.code, ref, target));
     }
   }
-  return {files, dependsOn, packages};
+  return {files, dependsOn, dependencies: declaredRanges(packageDir, packages)};
 
   /**
    * Decide one reference that leaves the component folder.
@@ -678,6 +679,35 @@ export function planCopy({
       render: specifierOf => renderStatements(ref, groups, specifierOf),
     };
   }
+}
+
+/**
+ * The version range the owner package declares for each npm package the copy
+ * imports, by name; `*` for one it does not declare.
+ * @param {string} packageDir
+ * @param {Iterable<string>} names
+ * @returns {Record<string, string>}
+ */
+function declaredRanges(packageDir, names) {
+  /** @type {Record<string, Record<string, string>>} */
+  let manifest = {};
+  try {
+    manifest = JSON.parse(
+      fs.readFileSync(path.join(packageDir, 'package.json'), 'utf-8'),
+    );
+  } catch {
+    // An unreadable manifest declares nothing.
+  }
+  /** @type {Record<string, string>} */
+  const ranges = {};
+  for (const name of [...names].sort()) {
+    ranges[name] =
+      manifest.dependencies?.[name] ??
+      manifest.optionalDependencies?.[name] ??
+      manifest.peerDependencies?.[name] ??
+      '*';
+  }
+  return ranges;
 }
 
 /**

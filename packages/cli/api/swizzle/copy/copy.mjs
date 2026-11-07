@@ -72,33 +72,6 @@ function entryFilesOf(componentDir) {
 }
 
 /**
- * The version range the owner package declares for each npm package the copy
- * imports, by name; `*` for one it does not declare.
- * @param {string} packageDir
- * @param {Iterable<string>} names
- * @returns {Record<string, string>}
- */
-function declaredRanges(packageDir, names) {
-  /** @type {Record<string, Record<string, string>>} */
-  let manifest = {};
-  try {
-    manifest = JSON.parse(fs.readFileSync(path.join(packageDir, 'package.json'), 'utf-8'));
-  } catch {
-    // An unreadable manifest declares nothing.
-  }
-  /** @type {Record<string, string>} */
-  const ranges = {};
-  for (const name of [...names].sort()) {
-    ranges[name] =
-      manifest.dependencies?.[name] ??
-      manifest.optionalDependencies?.[name] ??
-      manifest.peerDependencies?.[name] ??
-      '*';
-  }
-  return ranges;
-}
-
-/**
  * A module path relative to the source root, without its extension.
  * @param {string} srcRoot
  * @param {string} file
@@ -541,7 +514,7 @@ export async function swizzleCopy(component, options = {}) {
     filesCopied: copied,
     files: outputs.map(o => toPosix(path.relative(outputDir, o.dest))),
     usesStyleX: outputs.some(o => o.content.includes('@stylexjs/stylex')),
-    dependencies: declaredRanges(packageDir, plan.packages),
+    dependencies: plan.dependencies,
   };
   if (feedback) data.feedback = feedback;
   return {type: 'swizzle.copy', package: data.package, data};
