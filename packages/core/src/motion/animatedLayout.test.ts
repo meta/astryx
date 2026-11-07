@@ -361,7 +361,7 @@ describe('one shared motion (spec:AST-105 FR4)', () => {
     );
   }
 
-  it("plays the changed element and its followers on the theme's move curve over --duration-medium-min, with one duration", async () => {
+  it("plays the changed element and its followers on the theme's move curve over --duration-medium, with one duration", async () => {
     // With no stylesheet, the tokens read core's declared values.
     await changeOnce();
     const follower = played.find(p => (p.element as HTMLElement).id === 'a');
@@ -369,16 +369,16 @@ describe('one shared motion (spec:AST-105 FR4)', () => {
     expect(follower).toBeDefined();
     expect(own).toBeDefined();
     expect(own?.options.duration).toBe(follower?.options.duration);
-    expect(Number(follower?.options.duration)).toBeCloseTo(310, 6);
-    const remaining = remainingOn([0.24, 1, 0.4, 1], 310);
+    expect(Number(follower?.options.duration)).toBeCloseTo(410, 6);
+    const remaining = remainingOn([0.24, 1, 0.4, 1], 410);
     for (const {t, y} of verticalCurveOf(follower as Played)) {
       expect(y).toBeCloseTo(-80 * remaining(t), 3);
     }
   });
 
-  it('plays the --duration-medium-min and --ease-move of the theme the area is in', async () => {
+  it('plays the --duration-medium and --ease-move of the theme the area is in', async () => {
     await changeOnce(
-      '--duration-medium-min: 200ms; --ease-move: cubic-bezier(0, 0, 1, 1)',
+      '--duration-medium: 200ms; --ease-move: cubic-bezier(0, 0, 1, 1)',
     );
     const follower = played.find(p => (p.element as HTMLElement).id === 'a');
     expect(Number(follower?.options.duration)).toBeCloseTo(200, 6);
@@ -389,17 +389,15 @@ describe('one shared motion (spec:AST-105 FR4)', () => {
 
   it("follows the theme's tempo through its duration token, never scaled twice (spec:AST-108 FR2)", async () => {
     // A theme at tempo 1.5 writes the scaled token beside its tempo.
-    await changeOnce(
-      '--duration-medium-min: 465ms; --_astryx-motion-tempo: 1.5',
-    );
+    await changeOnce('--duration-medium: 615ms; --_astryx-motion-tempo: 1.5');
     const follower = played.find(p => (p.element as HTMLElement).id === 'a');
     const own = played.find(p => (p.element as HTMLElement).id === 'changed');
-    expect(Number(follower?.options.duration)).toBeCloseTo(465, 6);
+    expect(Number(follower?.options.duration)).toBeCloseTo(615, 6);
     expect(own?.options.duration).toBe(follower?.options.duration);
   });
 
   it('lands at once when the theme sets a zero duration', async () => {
-    await changeOnce('--duration-medium-min: 0ms');
+    await changeOnce('--duration-medium: 0ms');
     expect(played).toEqual([]);
   });
 
@@ -424,7 +422,7 @@ describe('one shared motion (spec:AST-105 FR4)', () => {
   it('retargets an element already gliding: one glide, started from where it is on screen', async () => {
     // A long, even curve, so the first glide still moves fast 100 ms in.
     const {area, changed, phase} = setUp(
-      '<div id="area" style="--duration-medium-min: 1000ms; --ease-move: cubic-bezier(0, 0, 1, 1)"><div id="changed"></div><div id="a"></div></div>',
+      '<div id="area" style="--duration-medium: 1000ms; --ease-move: cubic-bezier(0, 0, 1, 1)"><div id="changed"></div><div id="a"></div></div>',
     );
     const a = document.getElementById('a') as HTMLElement;
     let top = 0;
@@ -759,14 +757,14 @@ describe('the indicator transition', () => {
     expect(chevron.style.getPropertyValue('transition-timing-function')).toBe(
       'cubic-bezier(0.24, 1, 0.4, 1)',
     );
-    expect(chevron.style.getPropertyValue('transition-duration')).toBe('310ms');
+    expect(chevron.style.getPropertyValue('transition-duration')).toBe('410ms');
     applyLayoutChangeTransition(null, chevron);
     expect(chevron.style.getPropertyValue('transition-duration')).toBe('');
   });
 
   it('takes the timing read where the area is, whatever scope sits between them', () => {
-    document.body.innerHTML = `<div id="area" style="--duration-medium-min: 465ms; --ease-move: cubic-bezier(0, 0, 0.2, 1)">
-      <div style="--duration-medium-min: 620ms; --ease-move: cubic-bezier(0.3, 1.2, 0.5, 1)"><svg id="chevron"></svg></div></div>`;
+    document.body.innerHTML = `<div id="area" style="--duration-medium: 465ms; --ease-move: cubic-bezier(0, 0, 0.2, 1)">
+      <div style="--duration-medium: 620ms; --ease-move: cubic-bezier(0.3, 1.2, 0.5, 1)"><svg id="chevron"></svg></div></div>`;
     const area = document.getElementById('area') as HTMLElement;
     const chevron = document.getElementById(
       'chevron',

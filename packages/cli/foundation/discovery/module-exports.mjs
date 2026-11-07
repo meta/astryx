@@ -1317,11 +1317,17 @@ export function exportScalarType(file, exportName) {
  * then have the same final origin. Null when an alias cannot be followed (to
  * a default or namespace import, a member such as `Icons.X`, or an import
  * that does not resolve), so a caller leaves the comparison unchecked.
+ * `unwrap`, when given, names a value a declaration stands for besides a
+ * plain alias (a theme made by `defineTheme({extends: base})` stands for
+ * `base`): it receives the declaration's initializer and returns the
+ * expression to follow, or null for none. A followed expression that is not
+ * an identifier makes the origin unknown.
  * @param {{file: string, name: string}} origin
  * @param {Set<string>} [seen]
+ * @param {(init: any) => any} [unwrap]
  * @returns {{file: string, name: string} | null}
  */
-export function aliasedOrigin(origin, seen = new Set()) {
+export function aliasedOrigin(origin, seen = new Set(), unwrap) {
   const identity = `${origin.file}\0${origin.name}`;
   if (seen.has(identity)) return null;
   seen.add(identity);
@@ -1344,14 +1350,86 @@ export function aliasedOrigin(origin, seen = new Set()) {
       ) {
         continue;
       }
-      const init = withoutTypeWrappers(declarator.init);
+      const declared = withoutTypeWrappers(declarator.init);
+      const followed = declared && unwrap ? unwrap(declared) : null;
+      const init = followed ? withoutTypeWrappers(followed) : declared;
       if (init?.type === 'MemberExpression') return null;
-      if (init?.type !== 'Identifier') return origin;
+      if (init?.type !== 'Identifier') return followed ? null : origin;
       const next = bindingOrigin(ast, origin.file, init.name, new Set());
-      return next ? aliasedOrigin(next, seen) : null;
+      return next ? aliasedOrigin(next, seen, unwrap) : null;
     }
   }
   return origin;
+}
+
+/**
+ * Where the value each `<Name prop={value}>` element of a module passes is
+ * declared, one entry per element, read without running anything. `Name` is
+ * a runtime import of `name` from one of `sources` (renames included). The
+ * value is followed with {@link aliasedOrigin} (passing `unwrap`) from the
+ * module-scope binding it names, through local files and installed packages.
+ * An entry is null when the value is not an identifier or its origin cannot
+ * be proved (a parameter or an import that does not resolve gives the
+ * module's own name, and a member or a default import gives null). An element
+ * without `prop` gives no entry.
+ * @param {string} file
+ * @param {{sources: ReadonlySet<string>, name: string, prop: string, unwrap?: (init: any) => any}} element
+ * @returns {Array<{file: string, name: string} | null>}
+ */
+export function elementPropOrigins(file, {sources, name, prop, unwrap}) {
+  let ast;
+  try {
+    ast = parseModule(file);
+  } catch {
+    return [];
+  }
+  /** @type {Set<string>} */
+  const locals = new Set();
+  for (const node of ast.program.body) {
+    if (
+      node.type !== 'ImportDeclaration' ||
+      node.importKind === 'type' ||
+      !sources.has(node.source?.value)
+    ) {
+      continue;
+    }
+    for (const specifier of node.specifiers ?? []) {
+      if (
+        specifier.type === 'ImportSpecifier' &&
+        specifier.importKind !== 'type' &&
+        (specifier.imported?.name ?? specifier.imported?.value) === name
+      ) {
+        locals.add(specifier.local.name);
+      }
+    }
+  }
+  if (locals.size === 0) return [];
+  /** @type {Array<{file: string, name: string} | null>} */
+  const origins = [];
+  for (const element of nodesOfType(ast.program, 'JSXOpeningElement')) {
+    if (
+      element.name?.type !== 'JSXIdentifier' ||
+      !locals.has(element.name.name)
+    ) {
+      continue;
+    }
+    const attribute = (element.attributes ?? []).find(
+      (/** @type {any} */ item) =>
+        item.type === 'JSXAttribute' && item.name?.name === prop,
+    );
+    if (!attribute) continue;
+    const value =
+      attribute.value?.type === 'JSXExpressionContainer'
+        ? withoutTypeWrappers(attribute.value.expression)
+        : null;
+    if (value?.type !== 'Identifier') {
+      origins.push(null);
+      continue;
+    }
+    const binding = bindingOrigin(ast, file, value.name, new Set());
+    origins.push(binding ? aliasedOrigin(binding, new Set(), unwrap) : null);
+  }
+  return origins;
 }
 
 /**
