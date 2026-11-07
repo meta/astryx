@@ -1,5 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/**
+ * @file Component documentation rendering, including custom theme annotations.
+ * @input Component docs and resolved theme metadata.
+ * @output Assertions for full, compact, and brief CLI documentation.
+ * @position Regression coverage for the component formatter.
+ */
+
 import {describe, it, expect} from 'vitest';
 import {formatBrief, formatCompact, formatFull} from './component-format.mjs';
 
@@ -242,6 +249,84 @@ describe('formatBrief signature stays terse', () => {
     expect(signature).not.toContain('0|0.5|1|1.5|2|3|4|5|6|8|10');
     // But the prop is still named, so it is not lost.
     expect(formatBrief(docs, 'HStack', '')).toContain('gap');
+  });
+});
+
+describe('theme custom-variant annotation', () => {
+  // Regression guard: built themes never carried runtime variant
+  // metadata, so every `themeData?.variants` read below was dead code and the
+  // `*` annotation could not fire for ANY built theme. `astryx theme build`
+  // now exports `themeVariants: { [componentKey]: { [prop]: value[] } }`
+  // beside the built theme; these tests pin the annotation rendering each
+  // value under the prop that accepts it.
+  const docs = {
+    name: 'Badge',
+    description: 'A badge.',
+    theming: {
+      targets: [{className: 'astryx-badge', visualProps: ['variant']}],
+    },
+    props: [
+      {
+        name: 'variant',
+        type: "'neutral' | 'info'",
+        description: 'Visual variant.',
+      },
+    ],
+  };
+  const themeData = {name: 'vartheme', variants: {badge: {variant: ['gray']}}};
+
+  it('formatFull suffixes theme variants with * and prints the footnote', () => {
+    const out = formatFull(docs, {themeData});
+
+    // Core variants stay plain; the theme-added one is starred under its prop.
+    expect(out).toContain('neutral, info, variant:gray*');
+    expect(out).toContain('_\\* = custom variant from vartheme theme_');
+  });
+
+  it('formatBrief appends the starred theme variants to the Targets line', () => {
+    const out = formatBrief(docs, 'Badge', '', {themeData});
+
+    expect(out).toContain('theme: variant:gray*');
+  });
+
+  it('names the accepting prop for each value on a two-prop target', () => {
+    const banner = {
+      name: 'Banner',
+      description: 'A banner.',
+      theming: {
+        targets: [
+          {className: 'astryx-banner', visualProps: ['container', 'status']},
+        ],
+      },
+    };
+    const bannerTheme = {
+      name: 'vartheme',
+      variants: {banner: {container: ['glass'], status: ['critical', 'muted']}},
+    };
+
+    const full = formatFull(banner, {themeData: bannerTheme});
+    expect(full).toContain(
+      '| container, status, container:glass*, status:critical*, status:muted* |',
+    );
+    const brief = formatBrief(banner, 'Banner', '', {themeData: bannerTheme});
+    expect(brief).toContain(
+      'theme: container:glass*, status:critical*, status:muted*',
+    );
+    for (const out of [full, brief]) {
+      expect(out).not.toMatch(/container:(critical|muted)|status:glass/);
+    }
+  });
+
+  it('stays silent for a theme without runtime variants (older built module)', () => {
+    // A theme built by an older CLI resolves with `variants: null` —
+    // the docs must not crash, star anything, or print the footnote.
+    const out = formatFull(docs, {
+      themeData: {name: 'vartheme', variants: null},
+    });
+
+    // The targets row ends at the core variants — nothing starred after them.
+    expect(out).toContain('neutral, info |');
+    expect(out).not.toContain('custom variant from');
   });
 });
 

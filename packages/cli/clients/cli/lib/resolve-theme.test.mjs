@@ -1,6 +1,9 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-/** @file Tests generated-record default resolution and released package-field fallback. */
+/**
+ * @file Tests generated-record default resolution, released package-field
+ * fallback, and the custom-variant metadata a built theme module exports.
+ */
 
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import * as fs from 'node:fs';
@@ -30,18 +33,18 @@ function fixture(pkg = {name: 'app'}) {
 function writeTheme(dir, filename, name) {
   fs.writeFileSync(
     path.join(dir, filename),
-    `module.exports = {name: '${name}', variants: {Button: ['${name}']}, fonts: {body: '${name}'}};\n`,
+    `module.exports = {${name}Theme: {name: '${name}', tokens: {}, fonts: {body: '${name}'}}, themeVariants: {button: {variant: ['${name}']}}};\n`,
   );
 }
 
-function writeGeneratedRecord(dir) {
+function writeGeneratedRecord(
+  dir,
+  moduleSource = "export const oceanTheme = {name: 'ocean', variants: {Button: ['ocean']}};\n",
+) {
   const sourceDir = path.join(dir, 'src', 'themes', 'ocean');
   fs.mkdirSync(sourceDir, {recursive: true});
   const moduleFile = path.join(sourceDir, 'ocean.js');
-  fs.writeFileSync(
-    moduleFile,
-    "export const oceanTheme = {name: 'ocean', variants: {Button: ['ocean']}};\n",
-  );
+  fs.writeFileSync(moduleFile, moduleSource);
   fs.writeFileSync(
     path.join(dir, 'src', 'astryx-themes.js'),
     renderThemeModule(
@@ -241,7 +244,7 @@ describe('resolveTheme package field', () => {
 
     expect(await resolveTheme(dir)).toEqual({
       name: 'legacy',
-      variants: {Button: ['legacy']},
+      variants: {button: {variant: ['legacy']}},
       fonts: {body: 'legacy'},
     });
   });
@@ -547,5 +550,58 @@ describe('component output with a broken recorded theme', () => {
     expect(json.status, json.stderr).toBe(0);
     expect(JSON.parse(json.stdout).type).toBe('component.detail');
     expect(json.stderr).toBe('');
+  });
+});
+
+describe('resolveTheme — custom variant metadata', () => {
+  /** @param {string} source */
+  function themeModule(source) {
+    const cwd = fixture({astryx: {theme: './theme.cjs'}});
+    fs.writeFileSync(path.join(cwd, 'theme.cjs'), source);
+    return cwd;
+  }
+
+  it('reads the themeVariants export beside the theme object', async () => {
+    const cwd = themeModule(`module.exports = {
+      acmeTheme: {name: 'acme', __built: true, tokens: {}},
+      themeVariants: {banner: {container: ['glass'], status: ['critical']}},
+    };`);
+
+    expect(await resolveTheme(cwd)).toEqual({
+      name: 'acme',
+      variants: {banner: {container: ['glass'], status: ['critical']}},
+      fonts: null,
+    });
+  });
+
+  it('does not read CLI metadata from the theme object itself', async () => {
+    const cwd = themeModule(`module.exports = {
+      acmeTheme: {name: 'acme', tokens: {}, variants: {badge: ['gray']}},
+    };`);
+
+    expect((await resolveTheme(cwd))?.variants).toBeNull();
+  });
+
+  it('resolves variants to null for a module without the export', async () => {
+    const cwd = themeModule(`module.exports = {
+      acmeTheme: {name: 'acme', __built: true, tokens: {}},
+    };`);
+
+    expect((await resolveTheme(cwd))?.variants).toBeNull();
+  });
+
+  it('reads the themeVariants export from the generated record default', async () => {
+    const dir = fixture({name: 'app', type: 'module'});
+    writeGeneratedRecord(
+      dir,
+      "export const oceanTheme = {name: 'ocean', __built: true, tokens: {}};\n" +
+        "export const themeVariants = {banner: {container: ['glass'], status: ['critical']}};\n",
+    );
+
+    expect(await resolveTheme(dir)).toEqual({
+      name: 'ocean',
+      variants: {banner: {container: ['glass'], status: ['critical']}},
+      fonts: null,
+    });
   });
 });

@@ -13,8 +13,10 @@
  * - Starts with `@` → npm package (require/import)
  * - Otherwise → try `@astryxdesign/theme-{name}`, then try as bare package name
  *
- * Returns the theme object's `variants` and `fonts` if available,
- * or null if no theme is configured or found.
+ * Returns the theme object's `name` and `fonts`, plus the loaded module's
+ * `themeVariants` export (custom component prop values that `astryx theme
+ * build` emits beside the built theme object), or null if no theme is
+ * configured or found.
  */
 
 import * as fs from 'node:fs';
@@ -73,6 +75,19 @@ function extractTheme(mod) {
   return null;
 }
 
+/**
+ * Read the custom-value metadata a built theme module exports as
+ * `themeVariants`: `{ [componentKey]: { [prop]: value[] } }`. It is a sibling
+ * of the theme object rather than a theme field, because build/CLI metadata
+ * stays outside `DefinedTheme` (docs/architecture/theme-authoring-contract.md).
+ * @param {any} mod
+ * @returns {Record<string, Record<string, string[]>> | null}
+ */
+function extractVariants(mod) {
+  const variants = mod?.themeVariants;
+  return variants && typeof variants === 'object' ? variants : null;
+}
+
 /** @param {unknown} mod @param {string} specifier */
 function resolvedThemeData(mod, specifier) {
   const theme = extractTheme(mod);
@@ -84,7 +99,7 @@ function resolvedThemeData(mod, specifier) {
   }
   return {
     name: theme.name || null,
-    variants: theme.variants || null,
+    variants: extractVariants(mod),
     fonts: theme.fonts || null,
   };
 }
@@ -94,7 +109,7 @@ function resolvedThemeData(mod, specifier) {
  * `package.json#astryx.theme` when there is no generated module.
  *
  * @param {string} [cwd] Working directory (defaults to process.cwd())
- * @returns {Promise<{variants?: Record<string, string[]>|null, fonts?: Record<string, string>|null, name?: string|null}|null>}
+ * @returns {Promise<{variants?: Record<string, Record<string, string[]>>|null, fonts?: Record<string, string>|null, name?: string|null}|null>}
  */
 export async function resolveTheme(cwd = process.cwd()) {
   const loaded = await resolveRecordedTheme(cwd);
