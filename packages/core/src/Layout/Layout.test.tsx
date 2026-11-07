@@ -10,12 +10,13 @@
  * SYNC: When Layout.tsx changes, update tests to match new behavior
  */
 
-import {describe, it, expect} from 'vitest';
-import {render, screen} from '@testing-library/react';
+import {describe, it, expect, vi} from 'vitest';
+import {fireEvent, render, screen} from '@testing-library/react';
 import {use, createRef} from 'react';
 import {Layout} from './Layout';
 import {LayoutHeader} from './LayoutHeader';
 import {LayoutFooter} from './LayoutFooter';
+import {Dialog} from '../Dialog/Dialog';
 import {LayoutAreaContext} from './LayoutAreaContext';
 import {LayoutSlotsContext} from './LayoutSlotsContext';
 
@@ -256,6 +257,25 @@ describe('Layout', () => {
       ).not.toBeNull();
     });
 
+    it('stops the default at a layer boundary', () => {
+      render(
+        <Layout
+          defaultHasDividers
+          content={
+            <Dialog isOpen isInline onOpenChange={() => {}}>
+              <Layout
+                header={<LayoutHeader>In dialog</LayoutHeader>}
+                content={<div>c</div>}
+              />
+            </Dialog>
+          }
+        />,
+      );
+      expect(
+        screen.getByText('In dialog').closest('.astryx-layout-header'),
+      ).not.toHaveAttribute('data-divider');
+    });
+
     it('an explicit hasDivider={false} on a header overrides the context default', () => {
       const {container} = render(
         <Layout
@@ -400,6 +420,15 @@ describe('Layout', () => {
       expect(el).toHaveAttribute('id', 'records-layout');
       expect(el).toHaveAttribute('data-testid', 'layout-root');
       expect(el).toHaveAttribute('data-zone', 'admin');
+    });
+
+    it('forwards event handlers to the root element', () => {
+      const onClick = vi.fn();
+      const {container} = render(
+        <Layout onClick={onClick} content={<div>c</div>} />,
+      );
+      fireEvent.click(root(container));
+      expect(onClick).toHaveBeenCalledTimes(1);
     });
 
     it('keeps component-owned theme metadata over a colliding pass-through', () => {

@@ -65,7 +65,7 @@ const LAYOUTS: Record<Story, number> = {
   'content-only': 1,
   'closed-regions': 3,
   'content-width-scrollbar-placement': 4,
-  'nested-in-app-shell': 2,
+  'nested-in-app-shell': 3,
 };
 
 const cases: AuditCase[] = [];
@@ -176,14 +176,21 @@ async function observe(page: Page) {
       'block-start',
       'block-end',
     ] as const;
+    // Resolve each published padding to pixels in the element's own scope:
+    // the custom property holds an unresolved length such as a rem value.
     function published(element: Element) {
-      const style = getComputedStyle(element);
-      return Object.fromEntries(
-        EDGES.map(edge => [
-          edge,
-          px(style.getPropertyValue(`--container-padding-${edge}`)),
-        ]),
-      ) as Record<(typeof EDGES)[number], number>;
+      const values = EDGES.map(edge => {
+        const probe = document.createElement('div');
+        probe.style.cssText = `position:absolute;visibility:hidden;width:var(--container-padding-${edge}, 0px)`;
+        element.appendChild(probe);
+        const width = px(getComputedStyle(probe).width);
+        probe.remove();
+        return [edge, width];
+      });
+      return Object.fromEntries(values) as Record<
+        (typeof EDGES)[number],
+        number
+      >;
     }
     const REGION_KINDS = ['header', 'panel', 'content', 'footer'] as const;
     function regionKind(element: Element) {
