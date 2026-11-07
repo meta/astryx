@@ -482,6 +482,8 @@ const styles = stylex.create({
     // observed box grow with async content beyond a fixed-height viewport.
     // This box is also the sheet's container: it carries the padding and
     // publishes it, so a lone Section child escapes it exactly as in Dialog.
+    // At the block start it publishes only the padding past the grab bar's
+    // band, so a child escapes the padding but never the band.
     display: 'flow-root',
     boxSizing: 'border-box',
     height: '100%',

@@ -947,8 +947,8 @@ describe('BottomSheetPanel', () => {
       ['block-end', 'padding-bottom'],
     ] as const;
     // The block-start inset never drops below the grab bar's height, so
-    // resting content starts below the bar (component:BottomSheet, Content
-    // area inset); it is applied and published alike.
+    // resting content starts below the bar. The block start publishes only the
+    // padding past that band; the other edges publish what they apply.
 
     function renderWithPadding(padding?: 0 | 2) {
       render(
