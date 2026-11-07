@@ -54,6 +54,7 @@ import {EDGE_COMP_ATTR} from '../Layout/edgeCompensation.stylex';
 import {useSize} from '../SizeContext/SizeContext';
 import {useButtonGroup} from '../ButtonGroup/ButtonGroupContext';
 import {
+  PressGroupBandContext,
   PressGroupContext,
   pressGroupItemProps,
 } from '../hooks/pressGroupContext';
@@ -752,9 +753,10 @@ export function Button({
   const isBusyOnlyDisabled =
     !isTrueDisabled && isLoadingState && !isInterruptible;
   const buttonDisabled = isTrueDisabled || isBusyOnlyDisabled;
-  // The group draws one band for all its members.
-  // A disabled or busy-only button takes no tap.
-  const hasHitArea = buttonGroup == null && !buttonDisabled;
+  // The group draws one band for all its members: a ButtonGroup, or a
+  // tracking group that says so. A disabled or busy-only button takes no tap.
+  const groupDrawsBand = use(PressGroupBandContext);
+  const hasHitArea = buttonGroup == null && !groupDrawsBand && !buttonDisabled;
   const hitAreaRef = useTouchHitArea(hasHitArea, use(ButtonHitAreaContext));
   // isIconOnly prop is the source of truth for icon-only rendering.
   // When false (default), label is always rendered as visible text.

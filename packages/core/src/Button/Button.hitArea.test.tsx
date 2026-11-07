@@ -3,9 +3,10 @@
 /**
  * @file Button.hitArea.test.tsx
  * @input Button, ButtonGroup, and the shared hit area (mocked)
- * @output Unit coverage that a standalone Button takes the shared touch band,
- *   on its content wrapper, which leaves a caller's ::after alone, and that a
- *   grouped, disabled or busy-only Button takes none
+ * @output Unit coverage that a standalone Button takes the shared touch band
+ *   on its content wrapper, which leaves a caller's ::after alone. A grouped
+ *   Button takes none: a ButtonGroup's, or one whose tracking group draws its
+ *   band. A disabled or busy-only Button takes none either.
  * @position Button's FR42 touch-target evidence beside Button.test.tsx
  */
 
@@ -16,6 +17,7 @@ import type * as HitAreaModule from '../utils/hitArea';
 import type {HitInsets} from '../utils/hitArea';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {ButtonGroup} from '../ButtonGroup/ButtonGroup';
+import {PressGroupBandContext} from '../hooks/pressGroupContext';
 import {Button} from './Button';
 
 // On a coarse pointer, the shared hit area measures neighbours in a real
@@ -129,5 +131,16 @@ describe('Button touch target (AST-094 FR42)', () => {
     const cut = screen.getByRole('button', {name: 'Cut'});
     expect(isWatched(cut)).toBe(false);
     expect(bandElementOf(cut)).toBeUndefined();
+  });
+
+  it('leaves a button to a tracking group that draws its band: it draws none of its own', () => {
+    render(
+      <PressGroupBandContext value>
+        <Button label="Bold" />
+      </PressGroupBandContext>,
+    );
+    const bold = screen.getByRole('button', {name: 'Bold'});
+    expect(isWatched(bold)).toBe(false);
+    expect(bandElementOf(bold)).toBeUndefined();
   });
 });
