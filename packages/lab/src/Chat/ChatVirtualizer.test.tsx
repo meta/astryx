@@ -527,6 +527,19 @@ describe('ChatVirtualizer', () => {
     ).toBeLessThanOrEqual(2 * window);
     // The newest message is among the ones that mount.
     expect(screen.getByText('message 2059')).toBeInTheDocument();
+    // A second batch and then single arrivals, still in history: the mounted
+    // arrivals stay one window's worth of the newest rows.
+    act(() => rerender(attachedTo(rows(4060), el)));
+    expect(
+      container.querySelectorAll('[data-pkey]').length,
+    ).toBeLessThanOrEqual(2 * window);
+    for (const n of [4061, 4062, 4063]) {
+      act(() => rerender(attachedTo(rows(n), el)));
+    }
+    expect(
+      container.querySelectorAll('[data-pkey]').length,
+    ).toBeLessThanOrEqual(2 * window);
+    expect(screen.getByText('message 4062')).toBeInTheDocument();
     el.remove();
   });
 

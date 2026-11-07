@@ -1432,17 +1432,28 @@ export function ChatVirtualizer<T>(
         run.push(key);
       }
       // Only while the reader is away from the tail: a window that reached
-      // the previous last row follows the append itself. At most one
-      // window's worth of the newest rows mounts this way.
+      // the previous last row follows the append itself.
       const wasAtTail =
         win.end >= win.start && win.end >= arrival.data.length - 1;
       if (isTailAppend && !wasAtTail) {
-        const room = Math.max(1, win.end - win.start + 1);
-        for (const key of run.slice(0, room)) {
+        for (const key of run) {
           if (!reached(key)) {
             next.add(key);
           }
         }
+      }
+    }
+    // At most one window's worth of the newest arrivals stays mounted, across
+    // every batch and single arrival while the reader stays in history. They
+    // are the newest rows, so the run they start is that long too.
+    const room = Math.max(1, win.end - win.start + 1);
+    if (next.size > room) {
+      const newest = [...next]
+        .sort((a, b) => (indexOf.get(b) ?? -1) - (indexOf.get(a) ?? -1))
+        .slice(0, room);
+      next.clear();
+      for (const key of newest) {
+        next.add(key);
       }
     }
     arrivedKeys = next;
