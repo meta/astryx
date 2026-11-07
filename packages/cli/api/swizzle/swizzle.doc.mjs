@@ -21,8 +21,12 @@ export const doc = {
     'the owner package exports: names the package exports are imported from its ' +
     'public paths, and every internal module the component needs is ' +
     "copied beside it in the package's folder layout. Tests, stories and docs are not " +
-    'copied. The receipt flags whether any copied file uses StyleX and lists each npm ' +
-    'package the copy imports with the range the owner package declares. With no name ' +
+    'copied. An output folder swizzle owns (one the copy creates, an empty one, or one it ' +
+    'marked before) gets an astryx-swizzle.json marker naming each package its copies came from, ' +
+    "with its version, so @astryxdesign/build's Babel, PostCSS and Vite integrations, and " +
+    'withAstryx() under webpack, compile the copy below the theme. The receipt flags whether ' +
+    'any copied file uses StyleX and lists each npm package the copy imports with the range ' +
+    'the owner package declares. With no name ' +
     '(or list) it returns the swizzlable component names instead. An integration ' +
     'component that replaces a Core component is what that Core name copies; ' +
     "options.package '@astryxdesign/core' copies the original. The list names Core " +
@@ -81,7 +85,7 @@ export const doc = {
     {
       type: 'swizzle.copy',
       description:
-        'A receipt after copying the component into the project: the component name, owning package, output directory, files-copied count, the copied file names (relative to the component folder; the internal modules copied beside it start with `../`, e.g. `../InputGroup/groupStyles.ts`), whether any file uses StyleX, and, when the owner has an issues URL, feedback ({issuesUrl, ghCommand?}): where to report the gap that led to swizzling.',
+        'A receipt after copying the component into the project: the component name, owning package, output directory, files-copied count, the copied file names (relative to the component folder; the internal modules copied beside it start with `../`, e.g. `../InputGroup/groupStyles.ts`), whether any file uses StyleX, the npm packages the copy imports with the ranges the owner declares (dependencies), the output folder\'s astryx-swizzle.json (marker: {path, written, found?}; written is false for a folder swizzle does not own, and found names up to five entries it already holds), and, when the owner has an issues URL, feedback ({issuesUrl, ghCommand?}): where to report the gap that led to swizzling.',
     },
   ],
   throws: [
