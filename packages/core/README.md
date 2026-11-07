@@ -139,6 +139,8 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
 
 No build plugins needed; Astryx ships pre-built CSS that works alongside Tailwind.
 
+This `globals.css` is the whole file for a new app. For an app that already uses Tailwind, keep its own `@import "tailwindcss"` and put the `@layer` line above it, as `astryx docs styling-libraries/tailwind` shows under "Add Astryx to an app that already uses Tailwind". A `@layer` line below the Tailwind import silently inverts the cascade.
+
 **`src/app/globals.css`**
 
 ```css
