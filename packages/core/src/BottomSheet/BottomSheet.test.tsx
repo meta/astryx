@@ -29,6 +29,7 @@ import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 import {__focusTakeoverCallersForTest} from '../keyboard/keyboardHeight';
 import {__resetRevealsAtReportForTest} from '../keyboard/useMobileKeyboard';
 import {getKeyboardLayoutGuide} from '../keyboard/keyboardLayoutGuide';
+import {animatorFor} from '../motion/animator';
 
 // A sheet has no stops unless its host asks for them, so the tests that
 // exercise detents pass their own. These three — a 14% peek, a half-height
@@ -198,6 +199,26 @@ function mockPrimaryPointer(pointer: 'coarse' | 'fine') {
   );
 }
 
+// A touch screen whose user asked for reduced motion.
+function mockReducedMotionOnTouch() {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn((query: string) => ({
+      matches:
+        query === '(pointer: coarse)' ||
+        query === '(prefers-reduced-motion: reduce)' ||
+        query === '(prefers-reduced-motion: reduce) and (pointer: coarse)',
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  );
+}
+
 // A browser with its own keyboard geometry API (navigator.virtualKeyboard).
 // Desktop Chrome's visual viewport never shrinks for a keyboard. The module
 // measures Chrome on Android from its visual viewport, like every browser.
@@ -240,6 +261,25 @@ function mockResizeObserverInstances(): ResizeObserverRecord[] {
   }
   vi.stubGlobal('ResizeObserver', ResizeObserverMock);
   return observers;
+}
+
+/**
+ * Lays a sheet out `height` px tall, as the browser's resize observer would.
+ * A touch release lands by the sheet's geometry, so a touch dismissal needs
+ * one.
+ */
+function layOutSheet(
+  observers: ResizeObserverRecord[],
+  sheet: HTMLElement,
+  height = 400,
+) {
+  const observer = observers.find(instance => instance.observed.has(sheet));
+  act(() => {
+    observer?.callback(
+      [resizeEntry(height)],
+      observer as unknown as ResizeObserver,
+    );
+  });
 }
 
 function finishSheetExit() {
@@ -1112,6 +1152,7 @@ describe('BottomSheet', () => {
     it("a sheet opened from inside another sheet's content drags to dismiss by its own handle, and the covered host neither drags nor takes the pointer (FR6, FR7)", () => {
       const onInnerOpenChange = vi.fn();
       const onOuterOpenChange = vi.fn();
+      const observers = mockResizeObserverInstances();
       render(
         <BottomSheet isOpen onOpenChange={onOuterOpenChange} label="Outer">
           Outer content
@@ -1135,6 +1176,10 @@ describe('BottomSheet', () => {
       const innerHandle = innerDialog.querySelector<HTMLElement>(
         '.astryx-bottom-sheet > [aria-hidden="true"]',
       )!;
+      layOutSheet(
+        observers,
+        innerDialog.querySelector<HTMLElement>('.astryx-bottom-sheet')!,
+      );
       // `setPointerCapture` is a prototype stub here, so record who captures.
       const captured: Element[] = [];
       const capture = vi
@@ -2831,6 +2876,117 @@ describe('BottomSheet', () => {
         expect(subscribe).not.toHaveBeenCalled();
         subscribe.mockRestore();
       });
+
+      describe('on a slow phone, whose reports of the hide come after Gboard\u2019s slide', () => {
+        // One clock for event times and the guide's own reads, as in a
+        // browser, so the guide's check after the slide runs on time.
+        let restoreNow: (() => void) | null = null;
+        beforeEach(() => {
+          const now = vi
+            .spyOn(window.performance, 'now')
+            .mockImplementation(() => Date.now());
+          restoreNow = () => now.mockRestore();
+        });
+        afterEach(() => {
+          restoreNow?.();
+          restoreNow = null;
+        });
+        const wait = async (ms: number) =>
+          act(async () => {
+            await new Promise(resolve => setTimeout(resolve, ms));
+          });
+        // Where the content is drawn at rest: its translate, less the body's
+        // scroll.
+        const drawnTopOf = (body: HTMLElement, content: HTMLElement) => {
+          const [, y = '0px'] = content.style.translate.split(' ');
+          return Number.parseFloat(y) - body.scrollTop;
+        };
+
+        it('keeps the content where the slide leaves it until the keyboard\u2019s report of its hide, then clears the room with nothing drawn moving', async () => {
+          const {body, content, input, report} = renderChromeSheet({
+            instantScrollBy: true,
+          });
+          act(() => input.focus());
+          report(500);
+          await afterTheSlide();
+          expect(drawnTopOf(body, content)).toBe(-248);
+
+          // Done: the field loses focus to nothing, and Gboard slides down. The
+          // page is busy, as on a phone at a quarter of the speed. Chrome's
+          // reports reach it 603 ms after the blur, with the keyboard partway down, and 1119 ms after it, with the keyboard gone.
+          act(() => input.blur());
+          // The slide has ended and Chrome has reported nothing yet. The
+          // content stays where the scroll from before the keyboard draws it,
+          // and the room and the scroll stay.
+          await wait(250);
+          expect(drawnTopOf(body, content)).toBe(0);
+          expect(keyboardInsetOf(body)).toBe(348);
+          expect(body.scrollTop).toBe(248);
+          // The keyboard partway down moves nothing.
+          await wait(353);
+          report(543);
+          expect(drawnTopOf(body, content)).toBe(0);
+          // The keyboard gone: in one commit the room drops, the scroll goes
+          // back and the translate clears, so nothing drawn moves.
+          await wait(516);
+          report(800);
+          expect(keyboardInsetOf(body)).toBe(0);
+          expect(body.scrollTop).toBe(0);
+          expect(content.style.translate).toBe('');
+          expect(drawnTopOf(body, content)).toBe(0);
+          await wait(400);
+          expect(drawnTopOf(body, content)).toBe(0);
+          expect(content.style.translate).toBe('');
+        });
+
+        it('rides the content back up with the keyboard when the field takes focus again before Chrome reports the hide', async () => {
+          const {body, content, input, report} = renderChromeSheet({
+            instantScrollBy: true,
+          });
+          act(() => input.focus());
+          report(500);
+          await afterTheSlide();
+
+          act(() => input.blur());
+          // After Gboard's slide, before any report, the field takes focus
+          // again. The keyboard comes back, so the content rides back up with
+          // it and stays there.
+          await wait(250);
+          act(() => input.focus());
+          await wait(500);
+          expect(drawnTopOf(body, content)).toBe(-248);
+          expect(keyboardInsetOf(body)).toBe(348);
+          expect(body.scrollTop).toBe(248);
+          expect(content.style.translate).toBe('');
+          // Chrome's report that the keyboard is up again moves nothing.
+          report(500);
+          expect(drawnTopOf(body, content)).toBe(-248);
+        });
+
+        it('rides the content back up once the check after the slide reads the keyboard still up, when focus moves into a frame whose field keeps it', async () => {
+          const {body, content, input, report} = renderChromeSheet({
+            instantScrollBy: true,
+            picker: <iframe key="f" title="Editor" sandbox="" />,
+          });
+          const frame = screen.getByTitle('Editor');
+          act(() => input.focus());
+          report(500);
+          await afterTheSlide();
+          expect(drawnTopOf(body, content)).toBe(-248);
+
+          // The field inside the frame keeps the keyboard up, and Chrome
+          // reports nothing. The guide cannot see that field, so the check
+          // 150 ms after the slide believes the viewport.
+          act(() => frame.focus());
+          expect(document.activeElement).toBe(frame);
+          await wait(250);
+          expect(drawnTopOf(body, content)).toBe(0);
+          await wait(550);
+          expect(drawnTopOf(body, content)).toBe(-248);
+          expect(keyboardInsetOf(body)).toBe(348);
+          expect(content.style.translate).toBe('');
+        });
+      });
     });
 
     it('subscribes no keyboard layout guide where the keyboard moves on Safari\u2019s schedule, whose transitions the sheet never rides (spec:AST-099 FR8)', () => {
@@ -3389,6 +3545,348 @@ describe('BottomSheet', () => {
       });
 
       expect(body.scrollTop).toBe(448);
+    });
+
+    describe('in iOS Safari, which reports the keyboard once it is gone (spec:AST-099 FR3)', () => {
+      // A Tall sheet in iOS Safari: a visual viewport, no keyboard geometry
+      // API, and a coarse pointer. Its body, from top 100 to bottom 800, holds
+      // 800 px of content and the room after it. A reveal's scroll lands at
+      // once.
+      function renderIOSSheet({
+        pointer = 'coarse',
+        reducedMotion = false,
+        picker,
+      }: {
+        pointer?: 'coarse' | 'fine';
+        reducedMotion?: boolean;
+        picker?: ReactNode;
+      } = {}) {
+        mockIOSWebKit();
+        if (reducedMotion) {
+          mockReducedMotionOnTouch();
+        } else {
+          mockPrimaryPointer(pointer);
+        }
+        mockWindowHeight(800);
+        const viewport = mockVisualViewport(800);
+        render(
+          <BottomSheet
+            isOpen
+            onOpenChange={() => {}}
+            label="Add a comment"
+            height="tall">
+            <input aria-label="Comment" />
+            {picker}
+          </BottomSheet>,
+        );
+        const body = getBody();
+        const content = body.firstElementChild as HTMLElement;
+        const input = screen.getByRole('textbox', {name: 'Comment'});
+        let scrollTop = 0;
+        const scrollHeight = () => 800 + keyboardInsetOf(body);
+        const maxScroll = () => scrollHeight() - 700;
+        Object.defineProperties(body, {
+          clientHeight: {configurable: true, get: () => 700},
+          scrollHeight: {configurable: true, get: scrollHeight},
+          scrollTop: {
+            configurable: true,
+            get: () => Math.min(scrollTop, maxScroll()),
+            set: (value: number) => {
+              scrollTop = Math.max(0, Math.min(value, maxScroll()));
+            },
+          },
+        });
+        Object.defineProperty(body, 'scrollBy', {
+          configurable: true,
+          value: (options: ScrollToOptions) => {
+            body.scrollTop += options.top ?? 0;
+          },
+        });
+        vi.spyOn(body, 'getBoundingClientRect').mockReturnValue(
+          rect({top: 100, bottom: 800}),
+        );
+        vi.spyOn(input, 'getBoundingClientRect').mockImplementation(() =>
+          rect({top: 660 - body.scrollTop, bottom: 700 - body.scrollTop}),
+        );
+        const report = (height: number) => {
+          viewport.height = height;
+          act(() => {
+            viewport.dispatchEvent(new Event('resize'));
+          });
+        };
+        // Where the content is drawn at `time`: its layout's place, less the
+        // body's scroll, moved by its translate.
+        const drawnTop = (time?: number) =>
+          animatorFor(content).get('y', time) - body.scrollTop;
+        return {body, content, input, report, drawnTop};
+      }
+
+      const nextFrame = async () =>
+        act(async () => {
+          await new Promise(resolve => requestAnimationFrame(resolve));
+        });
+      const afterTheHide = async () =>
+        act(async () => {
+          await new Promise(resolve => setTimeout(resolve, 450));
+        });
+
+      it('rides the content down on the keyboard\u2019s spring from the blur, and the report then moves nothing', async () => {
+        const {body, content, input, report, drawnTop} = renderIOSSheet();
+        act(() => input.focus());
+        report(500);
+        expect(body.scrollTop).toBe(248);
+        expect(keyboardInsetOf(body)).toBe(348);
+        expect(drawnTop()).toBe(-248);
+
+        // Done: the field loses focus to nothing, and the keyboard goes down.
+        const blurAt = performance.now();
+        act(() => input.blur());
+        await nextFrame();
+        // Sampled every 16 ms through the keyboard's slide, the content moves
+        // down a little each frame. It lands where the scroll from before the
+        // keyboard draws it. No frame jumps.
+        const samples = Array.from({length: 32}, (_, frame) =>
+          drawnTop(blurAt + frame * 16),
+        );
+        for (let frame = 1; frame < samples.length; frame += 1) {
+          const step = (samples[frame] ?? 0) - (samples[frame - 1] ?? 0);
+          expect(step).toBeGreaterThanOrEqual(-0.01);
+          expect(step).toBeLessThan(40);
+        }
+        expect(samples.at(-1)).toBeCloseTo(0, 0);
+        // The room and the scroll stay until the keyboard is gone.
+        expect(keyboardInsetOf(body)).toBe(348);
+        expect(body.scrollTop).toBe(248);
+
+        // iOS reports the keyboard gone about half a second after the blur.
+        // In one commit the room drops, the scroll goes back and the
+        // translate clears, so nothing drawn moves.
+        await afterTheHide();
+        const before = drawnTop();
+        report(800);
+        expect(keyboardInsetOf(body)).toBe(0);
+        expect(body.scrollTop).toBe(0);
+        expect(content.style.translate).toBe('');
+        expect(drawnTop() - before).toBeCloseTo(0, 0);
+      });
+
+      it('rides nothing under a fine pointer: the content stays put until the report clears the room', async () => {
+        const {body, input, report, drawnTop} = renderIOSSheet({
+          pointer: 'fine',
+        });
+        act(() => input.focus());
+        report(500);
+        const settled = drawnTop();
+        act(() => input.blur());
+        await nextFrame();
+        expect(drawnTop(performance.now() + 450)).toBe(settled);
+        report(800);
+        expect(keyboardInsetOf(body)).toBe(0);
+      });
+
+      it('dips the content out and back in at its resting place under Reduce Motion, and the report then moves nothing (design:reduced-motion DR2)', async () => {
+        const {body, content, input, report, drawnTop} = renderIOSSheet({
+          reducedMotion: true,
+        });
+        act(() => input.focus());
+        report(500);
+        act(() => input.blur());
+        await nextFrame();
+        // The cross-fade lands the content on a timer, so the samples are
+        // read as the frames pass.
+        const animator = animatorFor(content);
+        const offsets: number[] = [];
+        const opacities: number[] = [];
+        for (let frame = 0; frame < 28; frame += 1) {
+          offsets.push(animator.get('y'));
+          opacities.push(animator.get('opacity'));
+          await act(async () => {
+            await new Promise(resolve => setTimeout(resolve, 16));
+          });
+        }
+        // Nothing travels. Each sample is where the content was or where it
+        // rests, and it fades out and back in around the landing.
+        expect(
+          offsets.every(y => Math.abs(y) < 0.5 || Math.abs(y - 248) < 0.5),
+        ).toBe(true);
+        expect(offsets.at(-1)).toBeCloseTo(248, 0);
+        expect(Math.min(...opacities)).toBeLessThan(0.5);
+        expect(opacities.at(-1)).toBeCloseTo(1, 2);
+
+        await afterTheHide();
+        const before = drawnTop();
+        report(800);
+        expect(keyboardInsetOf(body)).toBe(0);
+        expect(drawnTop() - before).toBeCloseTo(0, 0);
+      });
+
+      it('starts no ride when focus moves from a field to a select, whose picker iOS puts where the keyboard was', async () => {
+        const {body, input, report, drawnTop} = renderIOSSheet({
+          picker: (
+            <select aria-label="Picker">
+              <option>One</option>
+            </select>
+          ),
+        });
+        act(() => input.focus());
+        report(500);
+        const settled = drawnTop();
+        act(() => screen.getByLabelText('Picker').focus());
+        await nextFrame();
+        expect(drawnTop(performance.now() + 450)).toBe(settled);
+        expect(keyboardInsetOf(body)).toBe(348);
+        expect(body.scrollTop).toBe(248);
+      });
+
+      // A field behind a holder: one inside an open shadow root, or in a frame.
+      // Focus on it leaves `document.activeElement` on the holder. The sheet
+      // reads into the open root, and a frame can hold a field it cannot read.
+      const hiddenFields = [
+        ['an open shadow host', 'shadow host'],
+        ['a frame', 'frame'],
+      ] as const;
+      function renderWithHiddenField(kind: 'shadow host' | 'frame') {
+        const sheet = renderIOSSheet({
+          picker:
+            kind === 'frame' ? (
+              <iframe title="Editor" sandbox="" />
+            ) : (
+              <div title="Editor" />
+            ),
+        });
+        const holder = screen.getByTitle('Editor');
+        const field: HTMLElement =
+          kind === 'frame'
+            ? holder
+            : holder
+                .attachShadow({mode: 'open'})
+                .appendChild(document.createElement('input'));
+        const focusHiddenField = () => {
+          act(() => field.focus());
+          expect(document.activeElement).toBe(holder);
+        };
+        return {...sheet, focusHiddenField};
+      }
+
+      it('rides the content down when focus moves from a field to a plain button inside an open shadow host, as a blur does', async () => {
+        const {body, input, report, drawnTop} = renderIOSSheet({
+          picker: <div title="Editor" />,
+        });
+        const host = screen.getByTitle('Editor');
+        const button = host
+          .attachShadow({mode: 'open'})
+          .appendChild(document.createElement('button'));
+        act(() => input.focus());
+        report(500);
+        act(() => button.focus());
+        expect(document.activeElement).toBe(host);
+        await nextFrame();
+        expect(drawnTop(performance.now() + 450)).toBeCloseTo(0, 0);
+        expect(keyboardInsetOf(body)).toBe(348);
+        expect(body.scrollTop).toBe(248);
+      });
+
+      it('rides the content down from the blur once focus settles on a plain button inside an open shadow host', async () => {
+        const {body, input, report, drawnTop} = renderIOSSheet({
+          picker: <div title="Editor" />,
+        });
+        const host = screen.getByTitle('Editor');
+        const button = host
+          .attachShadow({mode: 'open'})
+          .appendChild(document.createElement('button'));
+        act(() => input.focus());
+        report(500);
+        // The browser runs the blur's frame after focus settles on the button.
+        const frames: FrameRequestCallback[] = [];
+        vi.mocked(requestAnimationFrame).mockImplementation(callback => {
+          frames.push(callback);
+          return frames.length;
+        });
+        act(() => button.focus());
+        expect(document.activeElement).toBe(host);
+        vi.mocked(requestAnimationFrame).mockImplementation(callback => {
+          callback(0);
+          return 1;
+        });
+        act(() => frames.splice(0).forEach(frame => frame(0)));
+        await nextFrame();
+        expect(drawnTop(performance.now() + 450)).toBeCloseTo(0, 0);
+        expect(keyboardInsetOf(body)).toBe(348);
+        expect(body.scrollTop).toBe(248);
+      });
+
+      it.each(hiddenFields)(
+        'starts no ride when focus moves from a field into %s, whose own field can keep the keyboard up',
+        async (_, kind) => {
+          const {body, input, report, drawnTop, focusHiddenField} =
+            renderWithHiddenField(kind);
+          act(() => input.focus());
+          report(500);
+          const settled = drawnTop();
+          focusHiddenField();
+          await nextFrame();
+          expect(drawnTop(performance.now() + 450)).toBe(settled);
+          expect(keyboardInsetOf(body)).toBe(348);
+          expect(body.scrollTop).toBe(248);
+        },
+      );
+
+      it('rides the content back up when a field takes focus before the keyboard is gone', async () => {
+        const {body, input, report, drawnTop} = renderIOSSheet();
+        act(() => input.focus());
+        report(500);
+        act(() => input.blur());
+        await nextFrame();
+        // Focus comes back to the field mid-slide, so the keyboard stays.
+        act(() => input.focus());
+        await nextFrame();
+        expect(drawnTop(performance.now() + 450)).toBeCloseTo(-248, 0);
+        expect(keyboardInsetOf(body)).toBe(348);
+        expect(body.scrollTop).toBe(248);
+      });
+
+      it.each(hiddenFields)(
+        'rides the content back up when focus moves into %s before the keyboard is gone',
+        async (_, kind) => {
+          const {body, input, report, drawnTop, focusHiddenField} =
+            renderWithHiddenField(kind);
+          act(() => input.focus());
+          report(500);
+          act(() => input.blur());
+          await nextFrame();
+          // Focus moves to a field inside the holder mid-slide, so the
+          // keyboard stays.
+          focusHiddenField();
+          await nextFrame();
+          expect(drawnTop(performance.now() + 450)).toBeCloseTo(-248, 0);
+          expect(keyboardInsetOf(body)).toBe(348);
+          expect(body.scrollTop).toBe(248);
+        },
+      );
+
+      it('glides the content to its new place when the keyboard goes while its field keeps focus, as a downward dismissal leaves it', () => {
+        const {body, input, report, drawnTop} = renderIOSSheet();
+        act(() => input.focus());
+        report(500);
+        expect(drawnTop()).toBe(-248);
+        // The clock holds still through the report, so the glide starts at
+        // `reportAt` however slowly the test runs.
+        const reportAt = performance.now();
+        const clock = vi
+          .spyOn(window.performance, 'now')
+          .mockReturnValue(reportAt);
+        try {
+          report(800);
+        } finally {
+          clock.mockRestore();
+        }
+        expect(keyboardInsetOf(body)).toBe(0);
+        expect(body.scrollTop).toBe(0);
+        // Drawn where it was at the report, then down on the keyboard's spring:
+        // two frames in, it has hardly moved.
+        expect(drawnTop(reportAt + 32)).toBeLessThan(-200);
+        expect(drawnTop(reportAt + 450)).toBeCloseTo(0, 0);
+      });
     });
 
     it('retains Tall keyboard scroll space during travel until the viewport recovers', () => {
@@ -4308,8 +4806,10 @@ describe('BottomSheet', () => {
 
     it("a touch swipe dismissal under reduced motion fades out in place on a fine pointer (design:reduced-motion DR2, a touch drag's release)", () => {
       stubReducedMotion(false);
+      const observers = mockResizeObserverInstances();
       render(<Controlled />);
       const dialog = screen.getByRole('dialog');
+      layOutSheet(observers, getSheet());
       drag(getHandle(), [{y: 0}, {y: 40}, {y: 120}], 'touch');
       // Exiting: a transform end does not close the dialog, the fade does.
       fireEvent.transitionEnd(getSheet(), {propertyName: 'transform'});
@@ -4338,8 +4838,10 @@ describe('BottomSheet', () => {
           </>
         );
       }
+      const observers = mockResizeObserverInstances();
       render(<Reopenable />);
       const dialog = screen.getByRole('dialog');
+      layOutSheet(observers, getSheet());
       drag(getHandle(), [{y: 0}, {y: 40}, {y: 120}], 'touch');
       fireEvent.transitionEnd(getSheet(), {propertyName: 'opacity'});
       expect(dialog).not.toHaveAttribute('open');

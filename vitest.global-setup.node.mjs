@@ -5,8 +5,9 @@
  * @input Shared ensureCoreBuilt helper and authored Sandbox template descriptors.
  * @output Holds this run's lease and builds Core. It rebuilds a Core build
  *   older than its sources once no earlier run is still running. It
- *   regenerates the Sandbox template registry and route wrappers and packs the
- *   CLI, once, before any test worker forks.
+ *   regenerates the Sandbox template registry and route wrappers, packs the
+ *   CLI, and points the per-user folder at a folder of this run, once, before
+ *   any test worker forks.
  * @position Referenced by vitest.config.ts's `node` project. The build-theme
  *   suites need a compiled Core; the Sandbox route contract imports generated
  *   template metadata and scans ignored wrappers that do not exist in a fresh
@@ -71,6 +72,19 @@ export default async function setup(project) {
     // An earlier run's child may have been stopped before it removed that
     // run's folder.
     sweepTrash(os.tmpdir(), Date.now());
+    // The CLI records once-a-day notices in a per-user state file. Point the
+    // per-user folder of every worker at a folder of this run, so no test
+    // writes the developer's real one. macOS reads it under the home folder
+    // only, so there the home folder moves too, and npm keeps its own cache.
+    const userHome = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'astryx-test-user-'),
+    );
+    process.env.XDG_CONFIG_HOME = path.join(userHome, '.config');
+    process.env.APPDATA = path.join(userHome, 'AppData', 'Roaming');
+    if (process.platform === 'darwin') {
+      process.env.npm_config_cache ??= path.join(os.homedir(), '.npm');
+      process.env.HOME = userHome;
+    }
     // `npm pack` costs about 5 s of CPU. Packing once here keeps that out of
     // every suite that places CLI copies, and out of their timed tests. A watch
     // session packs again before a rerun of this project's tests, so they see
@@ -95,6 +109,7 @@ export default async function setup(project) {
       // Vitest gives close() 10 s, and the folder holds thousands of files.
       // It moves aside at once, and a detached child removes it.
       trashFolder(packDir);
+      trashFolder(userHome);
       endRun();
     };
   } catch (error) {
