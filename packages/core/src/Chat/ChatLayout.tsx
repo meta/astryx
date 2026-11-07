@@ -140,6 +140,12 @@ const styles = stylex.create({
     width: '100%',
     maxWidth: '100%',
     paddingInline: 0,
+    // Publish the width Markdown prose should span: the message area already
+    // caps itself (800px in spacious), and prose reading this var spans the
+    // same box as the full-width code blocks and tables below it, so one
+    // bubble has one right edge. Markdown's own default stays 680px where
+    // nothing publishes.
+    '--markdown-content-width': '100%',
   },
 
   emptyState: {
