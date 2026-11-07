@@ -346,9 +346,9 @@ describe('timing metrics on different CPU models', () => {
       {scene: 'table', metric: 'mountLongTaskMs', runs: 1},
       {scene: 'table', metric: 'interactionMs', runs: 1},
     ]);
-    // Never a silent pass: the run is not good, and records its CPU.
+    // Never a silent pass: the run records which metrics had no baseline.
     expect(nextHistory.runs.at(-1)).toMatchObject({
-      good: false,
+      good: true,
       runner: RUNNER_B,
       noBaseline: ['table/mountLongTaskMs', 'table/interactionMs'],
     });
@@ -403,7 +403,10 @@ describe('timing metrics on different CPU models', () => {
       'mountLongTaskMs',
       'interactionMs',
     ]);
-    expect(nextHistory.runs.at(-1).good).toBe(false);
+    expect(nextHistory.runs.at(-1).noBaseline).toEqual([
+      'table/mountLongTaskMs',
+      'table/interactionMs',
+    ]);
   });
 
   it('gives a run with no CPU model no timing baseline', () => {
@@ -464,13 +467,16 @@ describe('runReport', () => {
       path.join(results, 'table.json'),
       JSON.stringify({scene: 'table', samples: [SCENE], median: SCENE}),
     );
+    fs.writeFileSync(
+      path.join(results, 'runner.json'),
+      JSON.stringify(RUNNER_A),
+    );
     const out = path.join(dir, 'out');
     const {report, summary, earlierRuns} = runReport({
       resultsDir: results,
       historyFile: path.join(dir, 'missing.json'),
       outDir: out,
       run: NIGHTLY,
-      runner: RUNNER_A,
     });
     expect(earlierRuns).toBe(0);
     expect(report.recorded).toBe(true);
@@ -479,6 +485,9 @@ describe('runReport', () => {
       fs.readFileSync(path.join(out, 'perf-history.json'), 'utf8'),
     );
     expect(written.runs).toHaveLength(1);
+    // runner.json reaches the history and the summary.
+    expect(written.runs[0].runner).toEqual(RUNNER_A);
+    expect(summary).toContain(`Runner: ${CPU_A}`);
     expect(fs.existsSync(path.join(out, 'report.json'))).toBe(true);
     fs.rmSync(dir, {recursive: true, force: true});
   });

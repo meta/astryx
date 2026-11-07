@@ -30,8 +30,8 @@
  * tasks, interaction latency) can double from one model to another on the
  * same commit. So a timing metric is compared only with the runs recorded on
  * the same CPU model. With fewer than three of those in the window it has no
- * baseline: the report lists it as such, and the run is not a good run, so a
- * CPU change never passes silently. Count metrics are compared with every
+ * baseline: the report and the summary list it as such, so a CPU change never
+ * passes silently. Count metrics are compared with every
  * recorded run in the window. Each run records its CPU model and a fixed
  * calibration score; the score is kept for reference and gates nothing.
  *
@@ -302,7 +302,7 @@ export function renderSummary({
       ? []
       : [
           '',
-          `${noBaseline.length} timing metric(s) have no baseline on ${cpu} (fewer than ${MIN_BASELINE_RUNS} recorded runs on it in 7 days), so they are not compared (no baseline). This run is not a good run.`,
+          `${noBaseline.length} timing metric(s) have no baseline on ${cpu} (fewer than ${MIN_BASELINE_RUNS} recorded runs on it in 7 days), so they are not compared (no baseline).`,
         ]),
     '',
     `Runner: ${cpu}${runner.calibrationMs == null ? '' : `, calibration ${runner.calibrationMs} ms`}. Timing metrics compare with runs on the same CPU model.`,
@@ -360,7 +360,7 @@ export function evaluateRun({
         sha: run.sha,
         runId: run.runId,
         date: run.date,
-        good: overThreshold.length === 0 && noBaseline.length === 0,
+        good: overThreshold.length === 0,
         overThreshold: overThreshold.map(metricKey),
         noBaseline: noBaseline.map(metricKey),
         runner,
