@@ -2307,13 +2307,18 @@ jobs:
         if: (!cancelled()) && steps.scope.outputs.has_components == 'true'
         env:
           ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           WORKFLOW_SHA: ${{ github.sha }}
+        # The merge commit's first parent is the base branch tip that it
+        # merges into. The event's base SHA stays at the base the pull request
+        # was opened on, so after the base is merged into the head, a merge
+        # base from it counts the base's own changes as the pull request's.
         run: |
           runner="$RUNNER_TEMP/a11y-pr-contracts.mjs"
-          git fetch --quiet --no-tags --depth=1 origin "$WORKFLOW_SHA"
+          git fetch --quiet --no-tags --depth=2 origin "$WORKFLOW_SHA"
           git show "$WORKFLOW_SHA:.github/scripts/a11y-pr-contracts.mjs" > "$runner"
+          BASE_SHA=$(git rev-parse "$WORKFLOW_SHA^1")
+          export BASE_SHA
           node "$runner"
 
       - name: Upload browser accessibility evidence
@@ -2681,13 +2686,13 @@ jobs:
     needs: [room, admission, heavy-ci, build-storybook]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true')) }}
     # Frame evidence measures timing: four cores, one Playwright worker.
-    # One leg runs every spec while the planner's estimate fits; past that two
-    # legs share the spec files by their recorded times, as the Chromium
-    # proofs' legs do.
+    # The leg count plans as many legs as keep each one's setup and proofs
+    # within ten minutes, as the Chromium proofs' count does. The matrix is
+    # the ceiling; a leg with no share passes at once.
     strategy:
       fail-fast: false
       matrix:
-        leg: [1, 2]
+        leg: [1, 2, 3, 4, 5]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # Playwright's own image for the version the lockfile resolves, with
@@ -2703,8 +2708,15 @@ jobs:
       run:
         shell: bash
     env:
-      # The specs the WebKit legs run, besides each interaction spec the pull
-      # request changes.
+      # The release interaction check's throwaway pull request runs every
+      # interaction spec in WebKit: the release receipt needs the whole suite,
+      # which the leg count spreads over the matrix. Only the release tooling
+      # opens it: an interaction-check/ branch in this repository, opened by
+      # the account the tooling uses. Any other pull request keeps the paths
+      # below.
+      WEBKIT_ALL_SPECS: ${{ startsWith(github.head_ref, 'interaction-check/') && github.event.pull_request.user.login == 'cixzhang' && github.event.pull_request.head.repo.full_name == github.repository }}
+      # The specs the WebKit legs run otherwise, besides each interaction spec
+      # the pull request changes.
       WEBKIT_SPEC_PATHS: >-
         packages/core/src/gestures/
         packages/core/src/motion/__tests__/animatedLayout.interaction
@@ -2772,8 +2784,8 @@ jobs:
 
       # One leg runs every proof while its setup and the recorded times fit
       # ten minutes, which leaves a third of the job's limit for a slow
-      # runner. Past that the planner adds the second leg, so a growing suite
-      # does not reach the limit. Each leg decides the same way, before its
+      # runner. Past that the planner adds legs, up to the matrix, so a
+      # growing suite or a wide change does not reach the limit. Each leg decides the same way, before its
       # own setup, from the workflow's times and the changed files. The spec
       # files come from the merge commit's tree, which the scope checkout
       # fetched whole, so a spec with no recorded time still counts.
@@ -2783,21 +2795,25 @@ jobs:
         env:
           CHANGED_FILES: ${{ steps.scope.outputs.changed_files_path }}
         run: |
-          read -ra SPEC_PATHS <<< "$WEBKIT_SPEC_PATHS"
+          if [ "${WEBKIT_ALL_SPECS:-}" = true ]; then SPEC_PATHS=(packages/ internal/); else read -ra SPEC_PATHS <<< "$WEBKIT_SPEC_PATHS"; fi
+          # With every spec planned, the changed files add nothing. Leave them
+          # out, so a missing list cannot make each leg run the whole suite.
+          CHANGED=(--changed "${CHANGED_FILES:-}")
+          if [ "${WEBKIT_ALL_SPECS:-}" = true ]; then CHANGED=(); fi
           git -C .test-scope ls-tree -r --name-only HEAD > "$RUNNER_TEMP/interaction-legs/listed.txt"
           node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" legs \
             --listed "$RUNNER_TEMP/interaction-legs/listed.txt" --source .test-scope \
             --tests-out "$RUNNER_TEMP/interaction-legs/tests.json" \
             --key interaction-webkit --fallback-key interaction-chromium \
             --durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json" \
-            --changed "${CHANGED_FILES:-}" \
+            "${CHANGED[@]}" \
             --setup-seconds 90 --max-seconds 600 \
             --leg ${{ matrix.leg }} --max-legs ${{ strategy.job-total }} \
             -- "${SPEC_PATHS[@]}"
 
-      - name: Leave the proofs to the first leg
+      - name: Leave the proofs to the other legs
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs != 'true'
-        run: echo "One leg holds this run's WebKit proofs (${{ steps.legs.outputs.count }} leg planned), so this leg runs none."
+        run: echo "This run's WebKit proofs fit ${{ steps.legs.outputs.count }} legs, so this leg runs none."
 
       # The caps step comes from the merge commit, not the pull request's
       # head: a head that predates the step does not have it. The head
@@ -2876,7 +2892,7 @@ jobs:
         env:
           CHANGED_FILES: ${{ steps.scope.outputs.changed_files_path }}
         run: |
-          read -ra SPEC_PATHS <<< "$WEBKIT_SPEC_PATHS"
+          if [ "${WEBKIT_ALL_SPECS:-}" = true ]; then SPEC_PATHS=(packages/ internal/); else read -ra SPEC_PATHS <<< "$WEBKIT_SPEC_PATHS"; fi
           CHANGED_SPECS=()
           if [ -n "${CHANGED_FILES:-}" ] && [ -s "$CHANGED_FILES" ]; then
             while IFS= read -r file; do
@@ -3065,9 +3081,10 @@ jobs:
         uses: actions/checkout@v7
 
       # Stable visual scope: Core and the non-private shipped themes take
-      # part; canaryOnly packages do not. A pull request the import graph can
-      # scope audits the changed components and their reverse dependents
-      # (spec:AST-030 FR13).
+      # part; canaryOnly packages do not. A change to the gate's probe fixture
+      # runs the whole plan, whose probe tier shoots it. A pull request the
+      # import graph can scope audits the changed components and their
+      # reverse dependents (spec:AST-030 FR13).
       - name: Decide stable visual scope
         id: visual-scope
         env:
@@ -3183,9 +3200,10 @@ jobs:
         uses: actions/checkout@v7
 
       # Stable visual scope: Core and the non-private shipped themes take
-      # part; canaryOnly packages do not. A pull request the import graph can
-      # scope audits the changed components and their reverse dependents
-      # (spec:AST-030 FR13).
+      # part; canaryOnly packages do not. A change to the gate's probe fixture
+      # runs the whole plan, whose probe tier shoots it. A pull request the
+      # import graph can scope audits the changed components and their
+      # reverse dependents (spec:AST-030 FR13).
       - name: Decide stable visual scope
         id: visual-scope
         env:

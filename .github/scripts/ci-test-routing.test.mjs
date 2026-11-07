@@ -428,7 +428,9 @@ describe('ci.yml pr-a11y browser specs', () => {
     // The merge commit the steps come from, not the PR's recorded base, which
     // can lag main and predate the runner.
     expect(run.env.WORKFLOW_SHA).toBe('${{ github.sha }}');
-    expect(run.env.BASE_SHA).toBe('${{ github.event.pull_request.base.sha }}');
+    // The base comes from the merge commit's first parent, not the event.
+    expect(run.env.BASE_SHA).toBeUndefined();
+    expect(run.run).toContain('BASE_SHA=$(git rev-parse "$WORKFLOW_SHA^1")');
     expect(run.env.PR_TITLE).toBe('${{ github.event.pull_request.title }}');
     expect(run.run).toContain(
       'git show "$WORKFLOW_SHA:.github/scripts/a11y-pr-contracts.mjs" > "$runner"',
