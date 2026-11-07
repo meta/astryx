@@ -992,13 +992,9 @@ async function refreshIconSet(
     const bySource = new Map(
       supplied.map(icon => [origins.get(icon.export)?.source, icon]),
     );
-    // A library that draws each icon in several looks gives one icon per
-    // glyph. A look the set already wraps keeps its icon as it is (a set an
-    // earlier release wrapped one look at a time keeps every icon and id);
-    // only a glyph the set has no look of comes in once, in the look the
-    // set's default variant or the library's usual default prefers. A new
-    // default variant moves each glyph's own icon to the look it names, so
-    // its export draws the default; the icon keeps its id, name and fields.
+    // One icon per glyph. A look the set already wraps keeps its icon and id.
+    // A new glyph comes in once, in the preferred look. A new default variant
+    // moves each glyph's icon to that look.
     const preferred = looks?.default ?? current;
     const {icons: looksOf} = libraryLooks(
       everyIcon,
