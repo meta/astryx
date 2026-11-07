@@ -475,6 +475,12 @@ export const docs = {
           'Uses a direction-neutral X to remove and plus to add. Selected rows end with a reorder handle when reordering is enabled; a row that keeps its place has none, and transfer constraints disable the remove action.',
       },
       {
+        name: 'Reorder hint',
+        required: false,
+        description:
+          'While a selected row is in reorder mode: the hint below its handle, whose Move up, Move down and Done are buttons.',
+      },
+      {
         name: 'Bulk actions',
         required: false,
         description:
