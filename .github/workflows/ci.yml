@@ -1193,7 +1193,7 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
         with:
-          paths: '^packages/native/.*(\.swift|/Package\.swift)$|^\.github/scripts/native-swift\.sh$|^\.github/actions/test-scope/'
+          paths: '^packages/native/.*(\.swift|/Package\.swift|/Host/project\.yml)$|^\.github/scripts/native-swift\.sh$|^\.github/actions/test-scope/'
 
   test-native-swift:
     needs: [admission, heavy-ci, native-swift-runner]
@@ -1230,7 +1230,19 @@ jobs:
       # so a change to them runs on its own pull request.
       - name: Build and test each native Swift package
         if: needs.native-swift-runner.outputs.applies == 'true'
+        env:
+          NATIVE_UI_DIR: ${{ runner.temp }}/native-ui-tests
         run: bash .github/scripts/native-swift.sh
+
+      # Screenshots the host app's UI tests took, named with the head commit.
+      - name: Upload native UI test screenshots
+        if: always() && needs.native-swift-runner.outputs.applies == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-ui-tests-${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
+          path: ${{ runner.temp }}/native-ui-tests
+          if-no-files-found: ignore
+          retention-days: 30
 
   # The full shadcn registry install, preview and hidden production legs
   # (spec:AST-026 FR10, draft): every item through the pinned client. It runs

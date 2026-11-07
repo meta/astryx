@@ -169,12 +169,19 @@ validating, and reviewing individual native components while
   they are the only native components exempt from FR5's generated-parameter
   requirement; every other FR5 check applies to them. A new view never takes
   this exemption.
-- Swift tests run as Swift package tests, where SwiftUI exposes no
-  accessibility tree, so FR5's accessibility assertions check the label,
-  traits, and value a view sets, not the tree VoiceOver reads. Until an
-  app-hosted iOS test target exists, a change reports the rendered tree's
-  accessibility as not measured, as FR5 reports a claim it could not capture.
-  Every other FR5 check applies.
+- Swift package tests run where SwiftUI exposes no accessibility tree, so
+  they check the label, traits, and value a view sets. The host app in
+  `packages/native/apple/Host/` runs UI tests on the iOS Simulator that run
+  the system accessibility audit on every Swift component's screen, at the
+  default and the largest text size, and read the tree VoiceOver reads for
+  every component with a screen. Every other FR5 check applies. The
+  rendered-tree checks have these implementation gaps, each reported as not
+  measured, as FR5 reports a claim it could not capture:
+  - Heading's header trait: XCUITest cannot read a header trait.
+  - Banner's icon and title: XCUITest lists the parts inside a banner's one
+    element, so the test cannot show that they are skipped.
+  - Avatar, AvatarStatusDot, Item, ListItem, and Thumbnail: they have no
+    host-app screen yet. Each gap closes when its screen is added.
 
 ## Verification
 

@@ -142,8 +142,8 @@ import AppKit
   #expect(!colored.contains { close($0, red) })
 }
 
-// FR5 accessibility: what the view sets. The rendered accessibility tree is
-// not measured until an app-hosted target exists.
+// FR5 accessibility: what the view sets. The host app's UI test reads the
+// rendered accessibility tree.
 @MainActor
 @Test func aLabeledIconIsNamedAndAnUnlabeledOneIsDecorative() {
   #expect(Icon(.success, label: "Completed").accessibilityLabel == "Completed")

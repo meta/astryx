@@ -137,8 +137,9 @@ Consumer migration instructions belong in consumer docs and release notes.
   Swift accessibility X1, X4).
   In an avatar's status slot a labeled icon also names the status, which joins
   the avatar's name (`component:swift/Avatar` AR6).
-- **AR2 — Rendered tree not measured.** Tests assert what the view sets; the
-  rendered accessibility tree is not measured until an app-hosted target exists.
+- **AR2 — Rendered tree.** Unit tests assert what the view sets. The host
+  app's UI test reads the Icon screen's rendered tree: a labeled icon is an
+  image named by its label, and an unlabeled icon is not in the tree.
 
 ## Design relationships
 

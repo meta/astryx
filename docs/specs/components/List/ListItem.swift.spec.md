@@ -121,8 +121,8 @@ Consumer migration instructions belong in consumer docs and release notes.
   read first, as part of the row ("3. Mix the batter"); a dot or ring is hidden
   (Swift accessibility X5).
 - **AR2 — Rendered tree not measured.** Tests assert what the view sets; the
-  rendered accessibility tree is not measured until an app-hosted target
-  exists.
+  rendered accessibility tree is not measured: the host app has no ListItem
+  screen yet, an implementation gap that closes when the screen is added.
 
 ## Design relationships
 

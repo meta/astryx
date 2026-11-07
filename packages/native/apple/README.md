@@ -212,3 +212,22 @@ system type, read its tokens from `astryx`, and add tests under
 - Pixel and behavior parity with the web components has not been measured.
 - Theme-local tokens and platform theme entries
   (`defineNativeTheme`, reserved as `Theme.native`) are not wired in.
+
+## UI tests in a host app
+
+`Host/` is a small iOS app, `AstryxHost`, with a screen for seven Swift
+components (Banner, Button, Card, Heading, Icon, Text, and TextInput), and an
+XCUITest target that drives it on the iOS Simulator. The
+tests run the system accessibility audit on every screen and check what
+VoiceOver reads, which unit tests cannot measure. `Host/project.yml` describes
+both targets; XcodeGen writes the Xcode project from it, so no `.xcodeproj` is
+checked in:
+
+```sh
+cd Host && xcodegen generate && open AstryxHost.xcodeproj
+```
+
+Launch the app with `-component <Name>` to open one screen. A new component
+adds its screen to `Host/AstryxHost/ComponentScreen.swift` and its name to the
+UI tests' list. CI runs these tests for every native Swift change and uploads
+their screenshots as `native-ui-tests-<head sha>`.

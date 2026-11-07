@@ -88,7 +88,12 @@ describe('native Swift routing', () => {
       ) {
         continue;
       }
-      expect(candidate.if, candidate.name ?? candidate.uses).toBe(applies);
+      // The screenshot upload adds always(), so it runs after a failure.
+      expect(candidate.if, candidate.name ?? candidate.uses).toBe(
+        candidate.name === 'Upload native UI test screenshots'
+          ? `always() && ${applies}`
+          : applies,
+      );
     }
   });
 
@@ -140,6 +145,8 @@ describe('native Swift routing', () => {
       '.github/scripts/native-swift.sh',
       'packages/native/apple/Package.swift',
       'packages/native/swift-ios-1/core/Button/AstryxButton.swift',
+      'packages/native/apple/Host/project.yml',
+      'packages/native/apple/Host/AstryxHost/ComponentScreen.swift',
       '.github/actions/test-scope/action.yml',
     ]) {
       expect(pattern.test(touched), touched).toBe(true);
@@ -148,8 +155,45 @@ describe('native Swift routing', () => {
       '.github/workflows/ci.yml',
       'packages/native/src/index.ts',
       'packages/core/src/Button/Button.tsx',
+      'packages/native/project.yml',
     ]) {
       expect(pattern.test(untouched), untouched).toBe(false);
     }
+  });
+
+  it('uploads the host app UI test screenshots, named with the head commit', () => {
+    expect(step(swift, 'Build and test each native Swift package').env).toEqual(
+      {NATIVE_UI_DIR: '${{ runner.temp }}/native-ui-tests'},
+    );
+    const upload = step(swift, 'Upload native UI test screenshots');
+    expect(upload.if).toBe(
+      "always() && needs.native-swift-runner.outputs.applies == 'true'",
+    );
+    expect(upload.with.name).toBe(
+      'native-ui-tests-${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}',
+    );
+    expect(upload.with.path).toBe('${{ runner.temp }}/native-ui-tests');
+  });
+
+  it('generates each host project with a pinned, checksummed XcodeGen', () => {
+    const script = fs.readFileSync(
+      path.join(root, '.github/scripts/native-swift.sh'),
+      'utf8',
+    );
+    expect(script).toMatch(/^XCODEGEN_VERSION=\d+\.\d+\.\d+$/m);
+    expect(script).toMatch(/^XCODEGEN_SHA256=[0-9a-f]{64}$/m);
+    expect(script).toContain('shasum -a 256 -c -');
+    expect(script).toContain("-path '*/Host/project.yml'");
+  });
+
+  it('reports package and host result bundles through one function', () => {
+    const script = fs.readFileSync(
+      path.join(root, '.github/scripts/native-swift.sh'),
+      'utf8',
+    );
+    expect(script.match(/xcresulttool get test-results summary/g)).toHaveLength(
+      1,
+    );
+    expect(script.match(/^\s+report_results "\$results"/gm)).toHaveLength(2);
   });
 });

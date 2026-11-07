@@ -81,7 +81,16 @@ Differentiate Without Color get components that honor each setting.
 
 - On `main`, the Swift package `packages/native/apple` holds generated props,
   the wire, and the logic host, and no SwiftUI views.
-- No Swift component has accessibility tests or an audit.
+- Unit tests assert the label, traits, and value each Swift view sets. UI
+  tests in the host app read the rendered tree of every component's screen,
+  except Heading's header trait, which XCUITest cannot read, and Banner's icon
+  and title, which XCUITest lists inside the banner's one element, and run
+  `performAccessibilityAudit()` on each screen at the default and largest
+  text sizes (X4, X5, X7). Two issues are recorded as known: a loading Button
+  fails contrast, and the audit reports a filled TextInput's text as clipped;
+  at the largest size the field cuts off the value until it is focused.
+  Avatar, AvatarStatusDot, Item, ListItem, and Thumbnail have no host-app
+  screen yet, so their rendered trees are not measured.
 
 ## Open questions
 

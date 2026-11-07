@@ -12,6 +12,10 @@
 # the iOS Simulator, since `#if os(iOS)` code compiles only there; a package
 # without a test target only builds for it.
 #
+# Then every host app under packages/native (a Host/project.yml) is generated
+# with a pinned XcodeGen and its UI tests run on the same simulator; with
+# NATIVE_UI_DIR set, their screenshots are exported there.
+#
 # The steps live in this file, not inline in ci.yml, so a change to them is in
 # the native Swift scope and runs on its own pull request.
 set -euo pipefail
@@ -57,6 +61,27 @@ print(phones[-1] if phones else "")
   echo "$udid"
 }
 
+# Reads a result bundle and reports it. -quiet names a failing test but not
+# why it failed, so this prints the counts and annotates each failure with its
+# own message, such as an audit issue's element and finding. It fails if
+# xcodebuild failed, a test failed, the bundle cannot be read, or no test ran.
+report_results() {
+  local results=$1 status=$2 label=$3
+  if ! xcrun xcresulttool get test-results summary --path "$results" --compact > "$work/summary.json"; then
+    echo "Could not read the $label results."
+    return "$(( status == 0 ? 1 : status ))"
+  fi
+  python3 - "$work/summary.json" "$status" "$label" <<'PY'
+import json, sys
+summary = json.load(open(sys.argv[1]))
+print("%s: %s passed, %s failed, %s skipped" % (sys.argv[3], summary["passedTests"], summary["failedTests"], summary["skippedTests"]))
+for failure in summary.get("testFailures", []):
+    text = " ".join(failure.get("failureText", "").split()).replace("%", "%25")
+    print("::error title=%s::%s" % (failure.get("testName", "test"), text))
+sys.exit(1 if sys.argv[2] != "0" or summary["failedTests"] > 0 or summary["totalTestCount"] == 0 else 0)
+PY
+}
+
 simulator=$(ios_simulator)
 echo "iOS Simulator: $simulator"
 for package in $packages; do
@@ -79,25 +104,48 @@ for package in $packages; do
       rm -rf "$results"
       status=0
       xcodebuild test -scheme "$scheme" -destination "platform=iOS Simulator,id=$simulator" -resultBundlePath "$results" -quiet || status=$?
-      # -quiet names a failing test but not why it failed, so read the counts
-      # and each failure's message from the result bundle. Fail if a test
-      # failed or the scheme ran no tests at all.
-      if ! xcrun xcresulttool get test-results summary --path "$results" --compact > "$work/summary.json"; then
-        echo 'Could not read the iOS Simulator test results.'
-        exit "$(( status == 0 ? 1 : status ))"
-      fi
-      python3 - "$work/summary.json" "$status" <<'PY'
-import json, sys
-summary = json.load(open(sys.argv[1]))
-print("iOS Simulator: %s passed, %s failed, %s skipped" % (summary["passedTests"], summary["failedTests"], summary["skippedTests"]))
-for failure in summary.get("testFailures", []):
-    text = " ".join(failure.get("failureText", "").split())
-    print("::error title=%s::%s" % (failure.get("testName", "test"), text))
-sys.exit(1 if sys.argv[2] != "0" or summary["failedTests"] > 0 or summary["totalTestCount"] == 0 else 0)
-PY
+      report_results "$results" "$status" 'iOS Simulator'
     else
       xcodebuild build -scheme "$scheme" -destination 'generic/platform=iOS Simulator' -quiet
     fi
+  )
+  echo '::endgroup::'
+done
+
+# App-hosted UI tests. XcodeGen writes each host's .xcodeproj from its checked-in
+# project.yml; the release is pinned by version and checksum.
+XCODEGEN_VERSION=2.46.0
+XCODEGEN_SHA256=4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806
+hosts=$(find packages/native -path '*/Host/project.yml' -not -path '*/.build/*' -not -path '*/node_modules/*' | sort)
+if [ -n "$hosts" ]; then
+  curl -fsSL -o "$work/xcodegen.zip" "https://github.com/yonaskolb/XcodeGen/releases/download/$XCODEGEN_VERSION/xcodegen.zip"
+  echo "$XCODEGEN_SHA256  $work/xcodegen.zip" | shasum -a 256 -c -
+  rm -rf "$work/xcodegen"
+  unzip -q "$work/xcodegen.zip" -d "$work"
+  xcodegen="$work/xcodegen/bin/xcodegen"
+  "$xcodegen" --version
+fi
+for spec in $hosts; do
+  host=$(dirname "$spec")
+  echo "::group::$host (UI tests)"
+  (
+    cd "$host"
+    "$xcodegen" generate --spec project.yml --quiet
+    project=$(find . -maxdepth 1 -name '*.xcodeproj' | head -1)
+    xcodebuild -list -json -project "$project" > "$work/host-schemes.json"
+    # The host's own scheme is named after its project; the local package
+    # adds schemes of its own beside it.
+    scheme=$(python3 -c 'import json,sys; p=json.load(open(sys.argv[1]))["project"]; print(p["name"] if p["name"] in p["schemes"] else p["schemes"][0])' "$work/host-schemes.json")
+    name=$(basename "$(dirname "$host")")
+    results="$work/$name-host-ui.xcresult"
+    rm -rf "$results"
+    status=0
+    xcodebuild test -project "$project" -scheme "$scheme" -destination "platform=iOS Simulator,id=$simulator" -resultBundlePath "$results" -quiet || status=$?
+    if [ -n "${NATIVE_UI_DIR:-}" ] && [ -d "$results" ]; then
+      mkdir -p "$NATIVE_UI_DIR/$name"
+      xcrun xcresulttool export attachments --path "$results" --output-path "$NATIVE_UI_DIR/$name" || true
+    fi
+    report_results "$results" "$status" 'UI tests'
   )
   echo '::endgroup::'
 done

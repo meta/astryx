@@ -153,8 +153,9 @@ states Avatar's choices.
   tap opens its tooltip, answers taps across at least 44 by 44 points without
   changing its drawn size or layout (X7).
 - **AR3 — Rendered tree not measured.** Tests assert what the view sets; the
-  rendered accessibility tree and the hit region are not measured until an
-  app-hosted target exists.
+  rendered accessibility tree and the hit region are not measured: the host
+  app has no Avatar screen yet, an implementation gap that closes when the
+  screen is added.
 - **AR4 — Unnamed taps are flagged.** A link or button avatar without `alt`
   or `name` logs a development warning, as core warns.
 - **AR5 — Initials contrast.** The initials draw in core's tokens,

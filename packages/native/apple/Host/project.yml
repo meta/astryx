@@ -1,0 +1,60 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# The iOS host app and its UI tests (AST-093 FR5). XcodeGen writes
+# AstryxHost.xcodeproj from this file; the project is never checked in.
+#
+#   xcodegen generate --spec project.yml
+#
+# .github/scripts/native-swift.sh generates it and runs the UI tests on the
+# iOS Simulator for every native Swift change.
+name: AstryxHost
+options:
+  bundleIdPrefix: dev.astryx
+  deploymentTarget:
+    iOS: '17.0'
+  createIntermediateGroups: true
+packages:
+  AstryxNative:
+    path: ..
+settings:
+  base:
+    SWIFT_VERSION: '5.0'
+    # Simulator builds need no signing identity.
+    CODE_SIGN_IDENTITY: '-'
+    CODE_SIGN_STYLE: Manual
+    DEVELOPMENT_TEAM: ''
+targets:
+  AstryxHost:
+    type: application
+    platform: iOS
+    sources: [AstryxHost]
+    dependencies:
+      - package: AstryxNative
+        product: Astryx
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.astryx.host
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Astryx
+        TARGETED_DEVICE_FAMILY: '1,2'
+  AstryxHostUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [AstryxHostUITests]
+    dependencies:
+      - target: AstryxHost
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.astryx.host.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: AstryxHost
+schemes:
+  AstryxHost:
+    build:
+      targets:
+        AstryxHost: all
+        AstryxHostUITests: [test]
+    test:
+      targets: [AstryxHostUITests]
