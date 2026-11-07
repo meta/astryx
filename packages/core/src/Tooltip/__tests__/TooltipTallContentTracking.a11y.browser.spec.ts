@@ -438,11 +438,24 @@ async function expectPlacedClear(page: Page) {
     .toBe(true);
 }
 
-async function hasSwitched(page: Page): Promise<boolean | undefined> {
+/**
+ * Whether the tooltip sits beside its trigger on the inline axis: level with
+ * it, and clear of it to its inline start or end.
+ */
+async function sitsBesideTrigger(page: Page): Promise<boolean> {
   return page.evaluate(
-    sel =>
-      document.querySelector(sel)?.hasAttribute('data-astryx-clears-anchor'),
-    TOOLTIP,
+    ([tip, sel]) => {
+      const l = (
+        document.querySelector(tip) as HTMLElement
+      ).getBoundingClientRect();
+      const a = (
+        document.querySelector(sel) as HTMLElement
+      ).getBoundingClientRect();
+      const level = l.top < a.bottom && a.top < l.bottom;
+      const clear = l.right <= a.left || l.left >= a.right;
+      return level && clear;
+    },
+    [TOOLTIP, TRIGGER],
   );
 }
 
@@ -465,14 +478,14 @@ test('a scroll never switches a tooltip that fits, so it still flips below when 
   await button.focus();
   await expect(page.getByRole('tooltip')).toBeVisible();
   await page.waitForTimeout(200);
-  const atOpen = await hasSwitched(page);
+  const atOpen = await sitsBesideTrigger(page);
   // Small scroll steps, each one painted, with the tooltip open throughout.
   for (let i = 0; i < 10; i++) {
     await page.evaluate(() => window.scrollBy(0, 6));
     await page.waitForTimeout(40);
   }
   await page.waitForTimeout(200);
-  expect(await hasSwitched(page)).toBe(atOpen);
+  expect(await sitsBesideTrigger(page)).toBe(atOpen);
   // Grown past the room above, it stays clear of its trigger and in view.
   await page.evaluate(sel => {
     const content = document.querySelector(sel)?.firstElementChild;
@@ -493,7 +506,7 @@ test('a scroll never switches a tooltip that fits, so it still flips below when 
   expect(atOpen).toBe(false);
   expect(tooltip.top).toBeGreaterThanOrEqual(trigger.bottom);
   expect(tooltip.left).toBeLessThan(trigger.right);
-  expect(await hasSwitched(page)).toBe(false);
+  expect(await sitsBesideTrigger(page)).toBe(false);
 });
 
 test('a scroll that moves a tall tooltip’s trigger never leaves the tooltip over it past the first painted frame, and it ends on the roomier side', async ({

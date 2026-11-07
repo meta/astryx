@@ -59,7 +59,7 @@ import {preserveAnimations} from './preserveAnimations';
 import {useLayerContext} from './LayerContext';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {overlayPaddingReset} from '../Layout/overlayPaddingReset.stylex';
-import {parentAcrossShadow} from '../utils/flatTree';
+import {containsAlongFlatTree} from '../utils/flatTree';
 import {subscribeInput} from '../utils/inputStream';
 
 const styles = stylex.create({
@@ -793,20 +793,6 @@ function observeMove(element: HTMLElement, onMove: () => void): () => void {
  */
 const SCROLL_STILL_MS = 150;
 
-/** Whether `target` is `node` or contains it in the flat tree. */
-function isAncestorOrSelf(target: EventTarget | null, node: Node): boolean {
-  for (
-    let current: Node | null = node;
-    current;
-    current = parentAcrossShadow(current)
-  ) {
-    if (current === target) {
-      return true;
-    }
-  }
-  return false;
-}
-
 /**
  * Calls `onStop` once each time a scroll of the page or of an ancestor of
  * `anchor` stops, in the first frame painted after it stops. During a scroll,
@@ -851,7 +837,7 @@ function observeScrollStop(
   const firesScrollEnd =
     (view as {onscrollend?: unknown}).onscrollend !== undefined;
   const onScrollEvent = (event: Event) => {
-    if (!isAncestorOrSelf(event.target, anchor)) {
+    if (!containsAlongFlatTree(event.target as Node, anchor)) {
       return;
     }
     if (firesScrollEnd) {

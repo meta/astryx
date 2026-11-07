@@ -625,11 +625,24 @@ test('a held-open tooltip keeps a replaced trigger clear when the replacement re
   expect(overlaps(await rect(page, TOOLTIP), after)).toBe(false);
 });
 
-async function hasSwitched(page: Page): Promise<boolean | undefined> {
+/**
+ * Whether the tooltip sits beside its trigger on the inline axis: level with
+ * it, and clear of it to its inline start or end.
+ */
+async function sitsBesideTrigger(page: Page): Promise<boolean> {
   return page.evaluate(
-    sel =>
-      document.querySelector(sel)?.hasAttribute('data-astryx-clears-anchor'),
-    TOOLTIP,
+    ([tip, sel]) => {
+      const l = (
+        document.querySelector(tip) as HTMLElement
+      ).getBoundingClientRect();
+      const a = (
+        document.querySelector(sel) as HTMLElement
+      ).getBoundingClientRect();
+      const level = l.top < a.bottom && a.top < l.bottom;
+      const clear = l.right <= a.left || l.left >= a.right;
+      return level && clear;
+    },
+    [TOOLTIP, TRIGGER],
   );
 }
 
@@ -654,7 +667,7 @@ test('with motion allowed, a tooltip that fits does not switch at open, and fitt
   await page.mouse.move((t.left + t.right) / 2, (t.top + t.bottom) / 2);
   await expect(page.getByRole('tooltip')).toBeVisible();
   await page.waitForTimeout(400);
-  expect(await hasSwitched(page)).toBe(false);
+  expect(await sitsBesideTrigger(page)).toBe(false);
   const open = await rect(page, TOOLTIP);
   expect(open.bottom).toBeLessThanOrEqual(t.top);
   // Grown to about 290px, which fits below (464px of room) but not above:
@@ -668,7 +681,7 @@ test('with motion allowed, a tooltip that fits does not switch at open, and fitt
     }
   }, TOOLTIP);
   await page.waitForTimeout(400);
-  expect(await hasSwitched(page)).toBe(false);
+  expect(await sitsBesideTrigger(page)).toBe(false);
   const grown = await rect(page, TOOLTIP);
   const metrics = await page.evaluate(sel => {
     const el = document.querySelector(sel) as HTMLElement;
