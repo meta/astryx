@@ -612,6 +612,24 @@ export const NearFullTokenRow: Story = {
       requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
     );
 
+    // Font metrics can leave enough room for the editing input. Keep this
+    // fixture below that boundary without changing the wrap assertions.
+    const placeholderAttribute = input.getAttribute('placeholder');
+    input.removeAttribute('placeholder');
+    const editingRect = input.getBoundingClientRect();
+    if (editingRect.top < finalToken.getBoundingClientRect().bottom) {
+      const editingMinimum = Number.parseFloat(
+        getComputedStyle(input).minWidth,
+      );
+      wrapper.style.inlineSize = `${wrapper.getBoundingClientRect().width - editingRect.width + editingMinimum / 2}px`;
+    }
+    if (placeholderAttribute !== null) {
+      input.setAttribute('placeholder', placeholderAttribute);
+    }
+    await new Promise<void>(resolve =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+
     const inputRect = input.getBoundingClientRect();
     const firstTokenRect = firstToken.getBoundingClientRect();
     const tokenRect = finalToken.getBoundingClientRect();
@@ -619,7 +637,11 @@ export const NearFullTokenRow: Story = {
     let clearHitLeft = 0;
     let clearHitRight = 0;
     if (isCoarsePointer) {
-      const clearHitStyle = getComputedStyle(clearButton, '::after');
+      const clearHitHost = clearButton.querySelector(':scope > span');
+      if (!clearHitHost) {
+        throw new Error('Clear all did not render its touch-band host');
+      }
+      const clearHitStyle = getComputedStyle(clearHitHost, '::after');
       clearHitLeft = Number.parseFloat(clearHitStyle.left);
       clearHitRight = Number.parseFloat(clearHitStyle.right);
       if (
@@ -643,7 +665,6 @@ export const NearFullTokenRow: Story = {
     // the ordinary in-flow editing input (the typed-query layout) cannot fit
     // beside the final token. Without a placeholder the input never matches
     // :placeholder-shown, so it lays out exactly as it does once typing starts.
-    const placeholderAttribute = input.getAttribute('placeholder');
     input.removeAttribute('placeholder');
     const inFlowInputTop = input.getBoundingClientRect().top;
     if (placeholderAttribute !== null) {
