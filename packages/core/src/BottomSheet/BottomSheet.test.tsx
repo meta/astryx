@@ -153,6 +153,19 @@ function mockVisualViewport(height: number, offsetTop = 0) {
   return viewport;
 }
 
+// The root's box, which Chrome on Android keeps at the viewport with its
+// toolbar shown, and which `interactive-widget=resizes-content` shrinks with
+// the keyboard.
+function mockRootHeight(height: number) {
+  Object.defineProperty(document.documentElement, 'clientHeight', {
+    configurable: true,
+    value: height,
+  });
+  onTestFinished(() => {
+    Reflect.deleteProperty(document.documentElement, 'clientHeight');
+  });
+}
+
 // The layout viewport — `100dvh`, `window.innerHeight` — which is what the
 // sheet's height budget and its detents are measured against. Deliberately
 // separate from the visual viewport above: the mobile keyboard shrinks that
@@ -3148,8 +3161,8 @@ describe('BottomSheet', () => {
       // A Tall sheet with its last field low, as in the Mobile keyboard story,
       // on a touch screen. The on-screen keyboard's own pan comes with a touch
       // screen.
-      function renderLowField() {
-        mockPrimaryPointer('coarse');
+      function renderLowField(pointer: 'coarse' | 'fine' = 'coarse') {
+        mockPrimaryPointer(pointer);
         mockWindowHeight(800);
         const viewport = Object.assign(mockVisualViewport(800), {scale: 1});
         render(
@@ -3209,6 +3222,66 @@ describe('BottomSheet', () => {
         input.focus();
         report(500);
         expect(keyboardInsetOf(body)).toBe(348);
+      });
+
+      // Chrome on Android under `interactive-widget=resizes-content`: the
+      // layout viewport and the root's box shrink with the keyboard, and the
+      // sheet with them. The keyboard height reads 0, and nothing overlaps the
+      // body.
+      function resizeForKeyboard(body: HTMLElement, height: number) {
+        mockWindowHeight(height);
+        mockRootHeight(height);
+        vi.spyOn(body, 'getBoundingClientRect').mockReturnValue(
+          rect({top: 100, bottom: height}),
+        );
+        const viewport = window.visualViewport as unknown as EventTarget & {
+          height: number;
+        };
+        viewport.height = height;
+        void act(() => viewport.dispatchEvent(new Event('resize')));
+      }
+
+      it('keeps the field 10 px above the keyboard where the browser shrinks the layout viewport for it, in the report\u2019s own frame (spec:AST-099 FR8)', () => {
+        mockRootHeight(800);
+        const {body, input, scrollBy} = renderLowField();
+        // No frame comes: only what the report's own event does shows.
+        vi.stubGlobal(
+          'requestAnimationFrame',
+          vi.fn(() => 1),
+        );
+        input.focus();
+        resizeForKeyboard(body, 500);
+        expect(scrollBy).toHaveBeenCalledTimes(1);
+        expect(scrollBy).toHaveBeenLastCalledWith({
+          top: 700 + 10 - 500,
+          behavior: 'instant',
+        });
+        // The browser made the room: the sheet adds none.
+        expect(keyboardInsetOf(body)).toBe(0);
+      });
+
+      it('takes no room under a fine pointer, where a window made shorter at the same width is no keyboard', () => {
+        mockRootHeight(800);
+        const {body, input, scrollBy} = renderLowField('fine');
+        // Still in view, 5 px above the body's new bottom.
+        vi.spyOn(input, 'getBoundingClientRect').mockImplementation(() =>
+          rect({top: 455 - body.scrollTop, bottom: 495 - body.scrollTop}),
+        );
+        input.focus();
+        resizeForKeyboard(body, 500);
+        expect(scrollBy).not.toHaveBeenCalled();
+        expect(keyboardInsetOf(body)).toBe(0);
+      });
+
+      it('moves no field already 10 px above the keyboard where the browser shrinks the layout viewport for it', () => {
+        mockRootHeight(800);
+        const {body, input, scrollBy} = renderLowField();
+        vi.spyOn(input, 'getBoundingClientRect').mockImplementation(() =>
+          rect({top: 400 - body.scrollTop, bottom: 440 - body.scrollTop}),
+        );
+        input.focus();
+        resizeForKeyboard(body, 500);
+        expect(scrollBy).not.toHaveBeenCalled();
       });
 
       it('keeps the smooth reveal where the browser does not pan to the field', () => {

@@ -15,7 +15,12 @@
 
 import {reducesMotion} from '../motion/reducedMotion';
 import {subscribeInput} from '../utils/inputStream';
-import {KEYBOARD_EPSILON, subscribeKeyboardHeight} from './keyboardHeight';
+import {
+  KEYBOARD_EPSILON,
+  getResizedRoom,
+  getResizedRoomWidth,
+  subscribeKeyboardHeight,
+} from './keyboardHeight';
 
 interface AddedScroll {
   /** Where the scroller was before Core's first scroll. */
@@ -124,13 +129,26 @@ export function keyboardScrollTarget(
   return now >= low && now <= high ? added.at : null;
 }
 
-// The scroll back starts at the keyboard's report that it has gone. Safari
-// holds the visual viewport while its keyboard slides down. A scroll then
-// shows only at the slide's end, in one jump.
+// The scroll back starts at the keyboard's report that it has gone, with no
+// room left from a page the browser shrank for it. Safari holds the visual
+// viewport while its keyboard slides down. A scroll then shows only at the
+// slide's end, in one jump. A change of the viewport's width, as when the
+// phone turns, ends the watch. Nothing goes back: a scroll recorded at one
+// width does not apply at another.
 function watchKeyboardGo(win: Window): Map<Element, AddedScroll> {
   const scrolls = new Map<Element, AddedScroll>();
+  const width = getResizedRoomWidth(win);
   const stop = subscribeKeyboardHeight(win, event => {
-    if (event.type === 'viewport' && event.height <= KEYBOARD_EPSILON) {
+    if (event.type !== 'viewport') {
+      return;
+    }
+    if (getResizedRoomWidth(win) !== width) {
+      scrolls.clear();
+      end();
+    } else if (
+      event.height <= KEYBOARD_EPSILON &&
+      getResizedRoom(win) <= KEYBOARD_EPSILON
+    ) {
       end();
       scrollBack(win, scrolls);
     }
@@ -196,7 +214,11 @@ function awaitFoldedReveal(
   });
   const stopTouch = subscribeInput(win, 'touchstart', () => stop());
   const stopKeyboard = subscribeKeyboardHeight(win, event => {
-    if (event.type === 'viewport' && event.height > KEYBOARD_EPSILON) {
+    if (
+      event.type === 'viewport' &&
+      (event.height > KEYBOARD_EPSILON ||
+        getResizedRoom(win) > KEYBOARD_EPSILON)
+    ) {
       stop();
     }
   });

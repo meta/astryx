@@ -739,6 +739,16 @@ export const MobileKeyboardSheet: Story = {
   render: () => <SheetFixture />,
 };
 
+/**
+ * Mobile keyboard, with a field high in a page that scrolls. The keyboard
+ * leaves the field clear, so nothing moves.
+ */
+export const MobileKeyboardHighField: Story = {
+  name: 'Mobile keyboard: a field high in a page that scrolls',
+  parameters: {layout: 'fullscreen'},
+  render: () => <HighFieldFixture />,
+};
+
 const keyboardFixtureStyles = stylex.create({
   page: {padding: 16, paddingBlockEnd: 160},
   intro: {minHeight: '60vh'},
@@ -846,6 +856,19 @@ function EndOfPageFixture() {
       <EndIntro where="The page" />
       <div {...stylex.props(endFixtureStyles.grow)} />
       <TextInput label="Last field" value={value} onChange={setValue} />
+    </div>
+  );
+}
+
+function HighFieldFixture() {
+  const [value, setValue] = useState('');
+  return (
+    <div {...stylex.props(endFixtureStyles.endColumn)}>
+      <TextInput label="High field" value={value} onChange={setValue} />
+      <Text type="supporting" color="secondary">
+        The page scrolls. Focus the field: the mobile keyboard leaves it clear,
+        so nothing moves.
+      </Text>
     </div>
   );
 }
