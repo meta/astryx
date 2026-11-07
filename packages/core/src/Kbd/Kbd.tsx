@@ -67,11 +67,7 @@ const styles = stylex.create({
   },
 });
 
-/**
- * Map of key names to display symbols on every platform. The modifiers
- * (`mod`, `ctrl`, `alt`, `shift`, `meta`) are not in this map: they show
- * Apple's symbols only on Apple platforms (`APPLE_MODIFIER_DISPLAY`).
- */
+/** Symbols that every platform shows. Modifier text depends on the platform. */
 const KEY_DISPLAY = new Map<string, string>([
   ['enter', '\u21B5'], // ↵
   ['backspace', '\u232B'], // ⌫
@@ -83,7 +79,6 @@ const KEY_DISPLAY = new Map<string, string>([
   ['plus', '+'],
 ]);
 
-/** Modifier symbols on Apple platforms. */
 const APPLE_MODIFIER_DISPLAY = new Map<string, string>([
   ['mod', '\u2318'], // ⌘
   ['meta', '\u2318'], // ⌘ — the Command key
@@ -106,11 +101,7 @@ const KBD_KEY_ALIASES = new Map<string, string>([
   ['return', 'enter'],
 ]);
 
-/**
- * Resolves a key name to its display string. The modifiers show Apple's
- * symbols on Apple platforms and the catalog's short text elsewhere; other
- * keys fall back to KEY_DISPLAY or the uppercased key name.
- */
+/** The server render has no platform, so it uses the non-Apple text. */
 function getKeyDisplay(key: string, isMac: boolean, t: TranslatorFn): string {
   const appleSymbol = isMac ? APPLE_MODIFIER_DISPLAY.get(key) : undefined;
   if (appleSymbol != null) {

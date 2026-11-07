@@ -9,7 +9,8 @@
  * so `mod` resolves to "Ctrl" rather than "\u2318" after the layout effect.
  */
 
-import {render, screen, within} from '@testing-library/react';
+import {act, render, screen, within} from '@testing-library/react';
+import {hydrateRoot} from 'react-dom/client';
 import {renderToString} from 'react-dom/server';
 import {describe, it, expect, afterEach, vi} from 'vitest';
 import {Kbd} from './Kbd';
@@ -114,6 +115,35 @@ describe('Kbd', () => {
         expect(within(container).getByText(text)).toBeInTheDocument();
       }
       expect(within(container).queryByText('\u2325')).not.toBeInTheDocument();
+    } finally {
+      container.remove();
+    }
+  });
+
+  it('hydrates a server render on a Mac without a mismatch, then shows the symbols', async () => {
+    Object.defineProperty(navigator, 'platform', {
+      value: 'MacIntel',
+      configurable: true,
+    });
+    const container = document.createElement('div');
+    container.innerHTML = renderToString(<Kbd keys="ctrl+alt+shift+meta+k" />);
+    document.body.appendChild(container);
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+    const recoverableErrors: unknown[] = [];
+    try {
+      expect(within(container).getByText('Win')).toBeInTheDocument();
+      await act(async () => {
+        hydrateRoot(container, <Kbd keys="ctrl+alt+shift+meta+k" />, {
+          onRecoverableError: error => recoverableErrors.push(error),
+        });
+      });
+      expect(recoverableErrors).toEqual([]);
+      expect(consoleError).not.toHaveBeenCalled();
+      for (const glyph of ['\u2303', '\u2325', '\u21E7']) {
+        expect(within(container).getByText(glyph)).toBeInTheDocument();
+      }
     } finally {
       container.remove();
     }
