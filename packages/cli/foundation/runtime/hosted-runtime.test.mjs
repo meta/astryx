@@ -14,6 +14,7 @@
 import {describe, it, expect, afterEach} from 'vitest';
 import {spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
+import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {
@@ -76,7 +77,8 @@ process.exitCode = result.status;
       env: {
         ...Object.fromEntries(
           Object.entries(process.env).filter(
-            ([key]) => !/^(?:npm_|CI$|NO_UPDATE_NOTIFIER$)/iu.test(key),
+            ([key]) =>
+              !/^(?:npm_|CI$|NO_UPDATE_NOTIFIER$|NODE_PATH$)/iu.test(key),
           ),
         ),
         HOME: home,
@@ -376,6 +378,117 @@ describe('what a hosted run resolved', () => {
         },
       ]),
     );
+  });
+
+  it('renders a page in an empty folder from the package set: Core, React and StyleX', () => {
+    const cwd = tempDir('empty');
+    fs.writeFileSync(
+      path.join(cwd, 'page.jsx'),
+      `import * as stylex from '@stylexjs/stylex';
+import {Button} from '@astryxdesign/core';
+const styles = stylex.create({box: {padding: 12}});
+export default function Page() {
+  return <div {...stylex.props(styles.box)}><Button label="Hosted" /></div>;
+}
+`,
+    );
+    const run = host({
+      argv: ['--json', 'experimental', 'render', 'page.jsx'],
+      cwd,
+    });
+    expect(run.status).toBe(0);
+    expect(JSON.parse(run.stdout).type).toBe('render.page');
+    expect(fs.readFileSync(path.join(cwd, 'page.html'), 'utf-8')).toContain(
+      'Hosted',
+    );
+    const sources = Object.fromEntries(
+      run
+        .result()
+        .packages.map((/** @type {{name: string, source: string}} */ p) => [
+          p.name,
+          p.source,
+        ]),
+    );
+    for (const name of [
+      '@astryxdesign/core',
+      'react',
+      'react-dom',
+      '@stylexjs/stylex',
+    ]) {
+      expect(sources[name]).toBe('package-set');
+    }
+    expect(installedARelease(run.cache)).toBe(false);
+  });
+
+  /**
+   * A folder with React installed and a page of each kind.
+   * @param {Record<string, unknown>} dependencies what its package.json declares
+   */
+  function reactFolder(dependencies) {
+    const root = tempDir('react-folder');
+    writeJson(path.join(root, 'package.json'), {
+      name: 'react-folder',
+      private: true,
+      dependencies,
+    });
+    const fromCore = createRequire(
+      fileURLToPath(new URL('../../../core/package.json', import.meta.url)),
+    );
+    for (const name of ['react', 'react-dom']) {
+      const link = path.join(root, 'node_modules', name);
+      fs.mkdirSync(path.dirname(link), {recursive: true});
+      fs.symlinkSync(
+        path.dirname(fromCore.resolve(`${name}/package.json`)),
+        link,
+        'dir',
+      );
+    }
+    fs.writeFileSync(
+      path.join(root, 'page.jsx'),
+      "import {useState} from 'react';\nimport {Button} from '@astryxdesign/core';\nexport default function Page() {\n  const [label] = useState('From the set');\n  return <Button label={label} />;\n}\n",
+    );
+    return root;
+  }
+
+  /**
+   * The packages a run took from the set; none when the run ended the way
+   * the bin ends one, before it could settle.
+   * @param {any} run
+   * @returns {string[]}
+   */
+  const fromSet = run =>
+    (run.result()?.packages ?? [])
+      .filter((/** @type {{source: string}} */ p) => p.source === 'package-set')
+      .map((/** @type {{name: string}} */ p) => p.name);
+
+  it('renders in a React app outside a project with the Core, React and React DOM of the set', () => {
+    const root = reactFolder({react: '*', 'react-dom': '*'});
+    const run = host({
+      argv: ['--json', 'experimental', 'render', 'page.jsx'],
+      cwd: root,
+    });
+    expect(run.status).toBe(0);
+    expect(fs.readFileSync(path.join(root, 'page.html'), 'utf-8')).toContain(
+      'From the set',
+    );
+    expect(fromSet(run)).toEqual(
+      expect.arrayContaining(['@astryxdesign/core', 'react', 'react-dom']),
+    );
+  });
+
+  it("leaves a project's own React alone: a project that declares Core gets no package from the set", () => {
+    const root = reactFolder({
+      '@astryxdesign/core': SELF_VERSION,
+      react: '*',
+      'react-dom': '*',
+    });
+    const run = host({
+      argv: ['--json', 'experimental', 'render', 'page.jsx'],
+      cwd: root,
+    });
+    expect(JSON.parse(run.stdout).code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+    expect(fromSet(run)).not.toContain('react');
+    expect(fromSet(run)).not.toContain('react-dom');
   });
 
   it("names a project's own integration as the project's", () => {
