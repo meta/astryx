@@ -474,9 +474,10 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     registerLayerSurface,
   );
 
-  // Schedule show with delay (suppressed when isOpen is false)
+  // Schedule show with delay. Held closed (`isOpen={false}`), the same hover
+  // reports the intent through onShow and shows nothing: the caller decides.
   const scheduleShow = useCallback(() => {
-    if (!isEnabled || isOpen === false) {
+    if (!isEnabled) {
       return;
     }
     clearTimeouts();
@@ -484,11 +485,17 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     showTimeoutRef.current = setTimeout(() => {
       // A show runs only if the tooltip stayed enabled since it was
       // scheduled: nothing would close a tooltip that opens after a disable.
-      if (disabledRendersRef.current === disabledRenders) {
-        showLayer();
+      if (disabledRendersRef.current !== disabledRenders) {
+        return;
       }
+      const latest = latestRef.current;
+      if (latest.isOpen === false) {
+        latest.onShow?.();
+        return;
+      }
+      showLayer();
     }, delay);
-  }, [isEnabled, isOpen, clearTimeouts, showLayer, delay]);
+  }, [isEnabled, clearTimeouts, showLayer, delay]);
 
   // Schedule hide with delay (suppressed when isOpen is true).
   // A small hover bridge (when hideDelay is 0) lets the pointer travel from the
@@ -573,6 +580,11 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
         return;
       }
       clearTimeouts();
+      const latest = latestRef.current;
+      if (latest.isOpen === false) {
+        latest.onShow?.();
+        return;
+      }
       showLayer();
     },
     [

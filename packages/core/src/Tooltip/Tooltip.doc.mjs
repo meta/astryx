@@ -135,7 +135,8 @@ export const docs = {
         {
           name: 'isOpen',
           type: 'boolean',
-          description: 'Controlled open state for the tooltip.',
+          description:
+            'Controlled open state for the tooltip. Held closed, a hover or focus that would open it calls onOpenChange(true) once and shows nothing; held open, Escape calls onOpenChange(false) and it stays.',
         },
       ],
     },
