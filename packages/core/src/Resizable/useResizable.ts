@@ -32,6 +32,11 @@ import {
   type ResizableSnapshot,
 } from './createResizable';
 import {
+  createRegionPaneSlot,
+  registerPropsRegion,
+  type RegionPaneSlot,
+} from './resizablePane';
+import {
   DEFAULT_COLLAPSED_SIZE,
   type ResizableDirection,
 } from './resizableModel';
@@ -127,8 +132,8 @@ export interface UseResizableSingleOptions {
   defaultIsCollapsed?: boolean;
   /**
    * Controlled collapse state. When set, the caller owns collapse:
-   * `collapse()`, `expand()` and a drag past the collapse threshold report
-   * through `onCollapseChange` instead of changing state here.
+   * `collapse()`, `expand()` and a drag lifted past the collapse threshold
+   * report through `onCollapseChange` instead of changing state here.
    */
   isCollapsed?: boolean;
   /** Called when size changes during drag. */
@@ -218,8 +223,10 @@ const EMPTY_SNAPS: number[] = [];
  * factory's region through them.
  */
 function useSingleResizable(config: UseResizableSingleConfig): ResizableRegion {
+  // The region's pane: the LayoutPanel that takes these props hands it over.
+  const [regionSlot] = useState(createRegionPaneSlot);
   const {getResizable, size, isCollapsed, snapshot, collapse, expand, resize} =
-    useResizableController(config);
+    useResizableController(config, regionSlot);
   // The region's side of the handle's gesture, read at each input, so a whole
   // drag reaches the factory as it is now.
   const model = useCallback(() => {
@@ -238,6 +245,12 @@ function useSingleResizable(config: UseResizableSingleConfig): ResizableRegion {
   const onResizeEnd = useCallback(() => {
     model()?.end();
   }, [model]);
+  const onResizeRelease = useCallback(
+    (velocity: number) => {
+      model()?.end(velocity);
+    },
+    [model],
+  );
   const onResizeCancel = useCallback(() => {
     model()?.cancel();
   }, [model]);
@@ -258,6 +271,10 @@ function useSingleResizable(config: UseResizableSingleConfig): ResizableRegion {
     _isResizableProps: true,
   };
   collapseControls.set(props, {collapse, expand});
+  releaseEnds.set(props, onResizeRelease);
+  // The LayoutPanel that takes these props hands its pane to the region, and
+  // the ResizeHandle that takes them says when a pointer drags it.
+  registerPropsRegion(props, regionSlot);
   // Without a configured maximum a measured extent stands in, only once it
   // is a real measurement (an observed container, or the window).
   if (snapshot.effectiveMaxPx != null) {
@@ -327,6 +344,13 @@ type CollapseControls = {collapse: () => void; expand: () => void};
 const collapseControls = new WeakMap<ResizableProps, CollapseControls>();
 
 /**
+ * A drag's end with its release velocity, in px per second and signed like
+ * the move's delta. Kept off the exported `ResizableProps` for the same reason
+ * as the collapse controls; {@link endResizeAt} is internal.
+ */
+const releaseEnds = new WeakMap<ResizableProps, (velocity: number) => void>();
+
+/**
  * The maximum an unbounded region reports as `aria-valuemax`: a measured
  * extent that stands in for the missing configured maximum — the container's
  * content box on the active axis while a percentage bound already observes
@@ -367,6 +391,19 @@ export function getCollapseControls(
   props: ResizableProps,
 ): CollapseControls | undefined {
   return collapseControls.get(props);
+}
+
+/**
+ * Ends the drag `props` follows at a release `velocity`. A props object the
+ * hook did not return ends without one. Internal to the package.
+ */
+export function endResizeAt(props: ResizableProps, velocity: number): void {
+  const end = releaseEnds.get(props);
+  if (end == null) {
+    props._onResizeEnd();
+    return;
+  }
+  end(velocity);
 }
 
 /** Removed keys must fail even when a variable bypasses excess-property checks. */
@@ -520,12 +557,26 @@ interface ResizableReading {
  */
 function useResizableController(
   options: CreateResizableOptions,
+  regionSlot?: RegionPaneSlot,
 ): ResizableReading {
   const optionsRef = useRef(options);
   optionsRef.current = options;
   const [slot] = useState(() => createSlot(readInitialResizableState(options)));
   const [serverInitial] = useState(() =>
     readInitialResizableState(options, 'server'),
+  );
+  // Every start of the factory, the commit's and an early call's, follows the
+  // region a LayoutPanel lends.
+  const start = useCallback(
+    (passed: CreateResizableOptions): ResizableController => {
+      const resizable = createResizableAs('useResizable', null, passed);
+      if (regionSlot != null) {
+        // destroy() stops following the region.
+        readResizableInternals(resizable)?.followRegion(regionSlot);
+      }
+      return resizable;
+    },
+    [regionSlot],
   );
   // The hook keeps one factory. After an unmount or an `<Activity>` hide, the
   // same factory takes the page back (`resume`).
@@ -536,9 +587,9 @@ function useResizableController(
       return;
     }
     const passed = optionsRef.current;
-    const resizable = createResizableAs('useResizable', null, passed);
+    const resizable = start(passed);
     slot.set({resizable, passed});
-  }, [slot]);
+  }, [slot, start]);
   useIsomorphicLayoutEffect(() => {
     follow();
   });
@@ -613,11 +664,11 @@ function useResizableController(
       return entry.resizable;
     }
     const passed = optionsRef.current;
-    const resizable = createResizableAs('useResizable', null, passed);
+    const resizable = start(passed);
     readResizableInternals(resizable)?.suspend();
     slot.set({resizable, passed});
     return resizable;
-  }, [slot]);
+  }, [slot, start]);
   const collapse = useCallback(() => {
     ensureResizable().collapse();
   }, [ensureResizable]);

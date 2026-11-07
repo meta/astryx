@@ -223,8 +223,9 @@ a measured, sourced difference exists.
   (FR7). Two approved motions keep their springs until their own records change:
   the animator's `animate` (`spec:AST-107` FR3) and `useDragToSnapPoints`'s
   `settleTo` (`spec:AST-107`). AST-105's glide, swap and edge reveal are
-  tap-started layout motion and play the theme's curve tokens (`spec:AST-105`
-  FR4). Reduce Motion substitutions and continuous busy loops (such as
+  tap-started layout motion and play the theme's curve tokens, except a
+  gesture's release, which settles on its spring (`spec:AST-105` FR4). Reduce
+  Motion substitutions and continuous busy loops (such as
   ProgressBar's indeterminate pulse, `component:ProgressBar` FR6) keep their
   named roles; they are neither gesture- nor interaction-started motion. A
   component's own record states which of its roles a gesture drives.
@@ -325,8 +326,9 @@ a measured, sourced difference exists.
   pointer, a finger included. Two approved motions keep their springs until
   their own records change: the animator's `animate` (`spec:AST-107` FR3) and
   `useDragToSnapPoints`'s `settleTo` (`spec:AST-107`). AST-105's glide, swap and
-  edge reveal are tap-started layout motion and play the theme's curve tokens
-  (`spec:AST-105` FR4). Reduce Motion substitutions and continuous busy loops
+  edge reveal are tap-started layout motion and play the theme's curve tokens,
+  except a gesture's release, which settles on its spring (`spec:AST-105` FR4).
+  Reduce Motion substitutions and continuous busy loops
   (such as ProgressBar's indeterminate pulse, `component:ProgressBar` FR6) keep
   their named roles; they are neither gesture- nor interaction-started motion. A
   tap has no velocity, so it is not a gesture. Springs drive the motion of a
