@@ -615,6 +615,12 @@ layers use Layer rendering without joining Escape/platform dismissal.
 - **INV18 — Only a shown layer's trigger is an anchor.**
   A trigger carries its CSS anchor name only while its layer is shown; a closed trigger is not an anchor, so a surface that moves around it keeps its transform animation off the main thread.
   A layer that animates out through a CSS transition or keyframe animation it declares for its closed state counts as shown until those animations end; an animation a script starts is not tracked.
+- **INV19 — Content in a layer sizes against the layer.** The content root of
+  every layer that hosts page-like content (Dialog, Drawer, BottomSheet,
+  Lightbox, and MobileNav) is an inline-size container. Container queries and
+  container-relative units inside it, including Layout regions' widths,
+  resolve against the layer and never against a container around the layer's
+  opener (`spec:AST-038`) (DEC-1).
 
 This record does not make future eligible-owner, branch-association, global-host,
 or browser-support requirements current. It does not own component focus entry or
@@ -799,6 +805,20 @@ app-declared inset.
 runtime and must move to `shipped` before its requirements are incorporated into
 this current architecture record.
 
+### DEC-1 — Layers are size containers
+
+**Decider:** pending
+
+A person opening a dialog from a narrow page section sees the dialog's title,
+filters, and pager squeezed and centred, because Layout regions inside measure
+the section the dialog came from. A dialog is its own space, so its content
+measures the dialog. This matches the layer content boundary, which already
+stops the opener's layout from reaching layer content (`spec:AST-038`).
+
+Rejected: Layout regions measuring with percentages instead of container
+units, which breaks their sizing in every page container. Rejected: asking
+apps to add a container inside each dialog.
+
 ## Verification
 
 | Invariant    | Evidence                                                                                                                                                                                                                                                                                      | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                               |
@@ -817,6 +837,7 @@ this current architecture record.
 | INV17        | One runtime suite over every kind of layer root: a `useLayer` layer, inline and portaled, and the Dialog, Drawer, Lightbox, MobileNav, BottomSheetPanel, and ToastViewport content roots, each inside a plain `onClick` wrapper and a Core clickable container; nested layers                 | A click inside a layer root that reaches an ancestor bubble-phase handler, a caller's wrapper included; an outer layer's handler that receives an inner layer's press; or a document listener or light dismiss that no longer receives it                                                                                                                                                                                    |
 | INV18        | `useLayer.test.tsx` (a closed trigger has no anchor-name, and the trigger of a shown or fading layer does) and `TooltipClosedTriggerAnchor.interaction.browser.spec.ts` in Chromium and WebKit                                                                                                | A closed trigger with an anchor-name, a shown or fading layer placed away from its anchor, or a surface around a closed trigger that stops while the main thread is busy                                                                                                                                                                                                                                                     |
 | INV18        | `useLayer.test.tsx`: a closed state that declares a discrete `display` transition or a keyframe animation keeps the trigger's anchor name until those animations end, read from the closed state's style; a layer whose closed state declares neither is not read for animations at the close | A layer with such a closed-state exit placed away from its anchor while it fades, or an animation read on the close of a layer whose closed state declares no exit                                                                                                                                                                                                                                                           |
+| INV19        | Real-browser checks: a Dialog, a Drawer, and a BottomSheet opened from a section that is itself an inline-size container, each holding a Layout with a header and footer, at 390 and 1440 px                                                                                                  | Layout regions measured against the opener's container                                                                                                                                                                                                                                                                                                                                                                       |
 
 Current unit coverage proves emitted styles, reducers, state transitions, and DOM
 placement. Native Popover, `<dialog>`, focus, top-layer ordering, and rendered

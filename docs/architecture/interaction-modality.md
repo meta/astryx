@@ -238,6 +238,12 @@ work.
   `module:DropdownMenu/useMenuPress` (OQ1; implementation gap: MultiSelector
   does not mount it yet). No other member keeps its own copy of the tracking. It is not exported (`spec:AST-017`
   FR21).
+- **INV14 — A clip never cuts a focus indicator.** When an Astryx element
+  clips overflow, such as a List clipping for swipe actions or a Layout region
+  clipping its content, the focus indicator of each focusable descendant stays
+  whole: the clip leaves room for the indicator's width and offset on every
+  edge it clips. A component that cannot leave that room draws the indicator
+  inset on that descendant. Content the caller clips is the caller's (DEC-1).
 
 ## Allowed variation
 
@@ -329,10 +335,24 @@ a system architecture decision by `cixzhang` on 2026-08-30. Essential-action
 reachability, newer-intent precedence, and the evidence/scope guard were approved by
 `cixzhang` on 2026-09-10.
 
+### DEC-1 — Focus indicators stay whole inside clipping parts
+
+**Decider:** pending
+
+A keyboard user tabbing through a List sees row focus rings with their sides
+cut off, because the List clips its sides for swipe actions. The focus ring is
+how they know where they are, so a clip Astryx adds now leaves room for it, or
+the ring moves inside the row where it cannot be cut.
+
+Rejected: always drawing focus rings inset, which changes every component's
+focus look to fix the few that clip. Rejected: leaving each component to
+decide, which keeps the cut rings that exist today.
+
 ## Verification
 
 | Invariant  | Evidence                                                                                                                                                                                                                                                                              | Failure signal                                                                                                                                                                                                                                                                                              |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| INV14      | Real-browser computed-geometry checks: keyboard focus on a List row under each edge value, and on a control inside a padded LayoutContent and LayoutPanel                                                                                                                             | A focus outline whose painted box is cut on any edge                                                                                                                                                                                                                                                        |
 | INV1, INV2 | Programmatic-focus cases after keyboard and pointer input in representative component tests                                                                                                                                                                                           | Programmatic focus invents a modality, or pointer history paints the keyboard indicator                                                                                                                                                                                                                     |
 | INV3       | Direct-owner, wrapper-owner, replaceable-indicator, and nested-action cases, including a Token inside an Item and a control inside a card; `FocusRingOwner.a11y.chromium.spec.ts` covers the shared module in Selector, and the other wrappers that the gap names are not covered yet | No indicator, two indicators, replacement content that can opt out, or a component that writes the focus-owner attribute or selector itself                                                                                                                                                                 |
 | INV4       | Keyboard, mouse, touch, and pen browser paths where applicable; tap cases on an action trigger with a label tooltip and on a hint-only trigger under `touchTrigger="auto"`                                                                                                            | Hover-only behavior, sticky touch hover, unreachable action, a tap on an action trigger that opens its label tooltip, or hint-only information with no touch path                                                                                                                                           |
