@@ -25,14 +25,19 @@ import {
 // @ts-expect-error -- pngjs ships no declarations; runtime support is pinned.
 import {PNG} from 'pngjs';
 import {
+  advanceFrozenPage,
   animationStoryboard,
+  armHold,
   blockMainThread,
   busyWindowProof,
   castStoryboard,
   compareCurve,
   countBetween,
+  freezePageOn,
   freezeTimers,
+  holdAnimations,
   installLongTaskLog,
+  installPageFreeze,
   installTimerGate,
   MARKER_RGB,
   openStory,
@@ -40,6 +45,7 @@ import {
   releaseAnimations,
   springStep,
   startScreencast,
+  thawPage,
   thawTimers,
   timeline,
   touchDriver,
@@ -50,14 +56,27 @@ import {
   touchStoryboard,
   toTouchEvents,
   waitForAnimation,
+  watchAnimations,
   webInputDriver,
   withStorybook,
   writeEvidence,
   PEN_SKIP,
+  type AnimationWatch,
   type TouchDriver,
 } from '@astryxdesign/interaction-harness';
 
 const storybook = withStorybook(test);
+
+/**
+ * A segment's inline style without the touch hit insets utils/hitArea writes
+ * under a coarse pointer: only what the selection motion writes.
+ */
+function motionStyle(element: HTMLElement): string {
+  return [...element.style]
+    .filter(property => !property.startsWith('--astryx-hit-inset-'))
+    .map(property => `${property}: ${element.style.getPropertyValue(property)}`)
+    .join('; ');
+}
 
 /** UIKit's slide, from the constants table (motion/uikit/segmented.ts). */
 const SLIDE = {response: 0.4, dampingFraction: 0.85} as const;
@@ -213,10 +232,13 @@ async function waitForLens(
   {
     minProgressMs = 1,
     timeout = 5000,
-  }: {minProgressMs?: number; timeout?: number} = {},
+    watch,
+  }: {minProgressMs?: number; timeout?: number; watch?: AnimationWatch} = {},
 ): Promise<{from: number; to: number; durationMs: number; easing: string}[]> {
   // Installs the harness's curve-end reader and waits for the control to move.
-  await waitForAnimation(control.group, {minProgressMs, timeout});
+  await (watch == null
+    ? waitForAnimation(control.group, {minProgressMs, timeout})
+    : watch.started({minProgressMs, timeout}));
   const deadline = Date.now() + timeout;
   for (;;) {
     const found = await control.group.evaluate((group, minProgress) => {
@@ -255,37 +277,6 @@ async function waitForLens(
     }
     await new Promise(resolve => setTimeout(resolve, 4));
   }
-}
-
-/**
- * Pauses the running animations of both radiogroup pseudo-elements, the lens
- * and its shadow, into the harness's held set. Then `releaseAnimations` moves
- * exactly them. A pseudo-element has no inline style, so the animator holds
- * each value with a finished, filling animation. Every running animation
- * overrides those, so they are left alone.
- */
-async function holdLens(
-  control: Control,
-): Promise<{easing: string; durationMs: number; pseudo: string}[]> {
-  return control.group.evaluate(group => {
-    const held = group.getAnimations({subtree: true}).filter(a => {
-      const effect = a.effect as KeyframeEffect | null;
-      return (
-        effect?.target === group &&
-        effect.pseudoElement != null &&
-        a.playState !== 'finished'
-      );
-    });
-    for (const animation of held) {
-      animation.pause();
-    }
-    (window as unknown as {__harnessHeld: Animation[]}).__harnessHeld = held;
-    return held.map(a => ({
-      easing: String((a.effect as KeyframeEffect).getTiming().easing),
-      durationMs: Number(a.effect?.getComputedTiming().duration ?? 0),
-      pseudo: String((a.effect as KeyframeEffect).pseudoElement),
-    }));
-  });
 }
 
 /**
@@ -495,9 +486,9 @@ test('the surface lands exactly where the segment paints it', async ({
   // Gate timers: the hand-back runs from the slide's completion timer, which
   // must wait while the landed frame is photographed.
   await installTimerGate(page);
+  await freezeTimersAtLensBirth(page);
   await control.tapSegment('list');
-  await waitForLens(control);
-  await freezeTimers(page);
+  await timersFrozenAtLensBirth(page);
   // The slide runs its course on the compositor. With the timers held, the
   // hand-back waits. So this is the slide's last frame: the lens carries the
   // surface, and the segment's own is hidden.
@@ -508,9 +499,7 @@ test('the surface lands exactly where the segment paints it', async ({
   ).toBe('transparent');
   await thawTimers(page);
   await expectLensHidden(control);
-  expect(
-    await control.segment('list').evaluate(el => el.getAttribute('style')),
-  ).toBeFalsy();
+  expect(await control.segment('list').evaluate(motionStyle)).toBe('');
   const rest = await control.group.screenshot({animations: 'allow'});
   const a = PNG.sync.read(landed);
   const b = PNG.sync.read(rest);
@@ -572,11 +561,12 @@ test('the titles switch at once with the selection: no second copy of a title is
   const elements = await control.group.evaluate(
     group => group.querySelectorAll('*').length,
   );
+  await holdLensAnimationsAtBirth(page);
   await control.tapSegment('table');
-  await waitForLens(control);
-  // Mid-slide, as many elements as at rest, and nothing animates Table's
-  // title's weight or color: it already shows its selected rendering. (Its
-  // opacity comes back from the press's dim.)
+  await heldLensSlide(control);
+  // Once the slide starts, as many elements as at rest, and nothing animates
+  // Table's title's weight or color: it already shows its selected rendering.
+  // (Its opacity comes back from the press's dim.)
   expect(
     await control.group.evaluate(group => group.querySelectorAll('*').length),
   ).toBe(elements);
@@ -592,14 +582,15 @@ test('the titles switch at once with the selection: no second copy of a title is
         .filter(key => key === 'color' || key === 'fontWeight'),
     ),
   ).toEqual([]);
+  await releaseAnimations(page, {finish: true});
 });
 
 test('a second tap mid-flight retargets from what is on screen, keeping its velocity', async ({
   page,
 }) => {
+  await installPageFreeze(page);
   const control = await openControl(page);
-  await control.tapSegment('table');
-  await waitForLens(control, {minProgressMs: 60});
+  await installTimerGate(page);
   const describe = async () =>
     control.group.evaluate(async group => {
       const animations = group.getAnimations({subtree: true}).filter(a => {
@@ -628,10 +619,16 @@ test('a second tap mid-flight retargets from what is on screen, keeping its velo
         })),
       }))[0];
     });
+  // Frozen in the first tap's own task, the slide starts held at its start.
+  // The scene then moves 60 ms into it, and the second tap lands there.
+  await freezePageOn(page, 'touchend');
+  await control.tapSegment('table');
+  await advanceFrozenPage(page, 60);
   const first = await describe();
   await control.tapSegment('list');
   await expect(control.segment('list')).toHaveAttribute('aria-checked', 'true');
   const second = await describe();
+  await thawPage(page);
   expect(second.startTime).toBeGreaterThan(first.startTime);
   // The first curve, read where the second one starts.
   const at = (
@@ -738,9 +735,7 @@ test('a change mid-flight paints no press over the lens on the segment it leaves
   // Once the lens lands, Table gets its own styles back.
   await expectLensHidden(control);
   await expect
-    .poll(async () =>
-      control.segment('table').evaluate(element => element.style.cssText),
-    )
+    .poll(async () => control.segment('table').evaluate(motionStyle))
     .toBe('');
 });
 
@@ -1024,6 +1019,77 @@ async function holdLensAnimationsAtBirth(page: Page): Promise<void> {
 }
 
 /**
+ * Waits until the tap's slide is held from its first frame
+ * (`holdLensAnimationsAtBirth`), then puts `animate` back.
+ */
+async function heldLensSlide(control: Control): Promise<void> {
+  await control.group.evaluate(async group => {
+    const w = window as unknown as {
+      __harnessHeld: Animation[];
+      __restoreAnimate: () => void;
+      __harnessTimerGate?: {timeout?: typeof setTimeout};
+    };
+    const later = w.__harnessTimerGate?.timeout ?? setTimeout;
+    const isSlide = (animation: Animation) => {
+      const effect = animation.effect as KeyframeEffect;
+      return (
+        effect.target === group &&
+        effect.pseudoElement === '::before' &&
+        Number(effect.getComputedTiming().duration) > 1
+      );
+    };
+    const deadline = performance.now() + 5000;
+    while (!w.__harnessHeld.some(isSlide)) {
+      if (performance.now() > deadline) {
+        throw new Error('no lens slide was held');
+      }
+      await new Promise(resolve => later(resolve, 4));
+    }
+    w.__restoreAnimate();
+  });
+}
+
+/**
+ * Freezes the page's timers in the task that starts the lens's slide. A
+ * timer that the slide's end schedules then waits, however late the test
+ * looks. The slide itself runs on. Needs `installTimerGate` first.
+ */
+async function freezeTimersAtLensBirth(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const original = Element.prototype.animate;
+    const w = window as unknown as {
+      __harnessTimerGate: {freeze(): void};
+      __lensBorn?: boolean;
+    };
+    w.__lensBorn = false;
+    Element.prototype.animate = function (
+      this: Element,
+      ...args: Parameters<Element['animate']>
+    ): Animation {
+      const animation = original.apply(this, args);
+      const [, options] = args;
+      if (
+        this.getAttribute('role') === 'radiogroup' &&
+        typeof options === 'object' &&
+        options?.pseudoElement != null &&
+        Number(options.duration) > 1
+      ) {
+        Element.prototype.animate = original;
+        w.__harnessTimerGate.freeze();
+        w.__lensBorn = true;
+      }
+      return animation;
+    };
+  });
+}
+
+async function timersFrozenAtLensBirth(page: Page): Promise<void> {
+  await page.waitForFunction(
+    () => (window as unknown as {__lensBorn?: boolean}).__lensBorn === true,
+  );
+}
+
+/**
  * The easings of the slides that `holdLensAnimationsAtBirth` held on this
  * control's lens (its radiogroup's ::before). `Element.animate` is put back
  * first. A resting-value hold lasts 1 ms and is not a slide, and another
@@ -1104,6 +1170,34 @@ test('a hand-written calc() duration token times a click’s slide as the segmen
   }
 });
 
+test('with a mouse a click’s slide plays a theme’s linear() easing as the browser plays it, instead of landing at once', async ({
+  browser,
+}) => {
+  const {context, group} = await openWithMouse(browser);
+  try {
+    // The motion scale's easing option writes such an easing.
+    await group.evaluate(element => {
+      element.style.setProperty('--ease-standard', 'linear(0, 0.8 50%, 1)');
+    });
+    const {from, to, durationMs, themeMs, frames} = await clickSlide(
+      group,
+      'table',
+    );
+    expect(Math.abs(to - from), JSON.stringify({from, to})).toBeGreaterThan(10);
+    expect(Math.abs(durationMs - themeMs), String(durationMs)).toBeLessThan(25);
+    // Two straight runs: 80% of the way at half the time, then the rest.
+    const linear = (x: number) => (x < 0.5 ? 1.6 * x : 0.8 + 0.4 * (x - 0.5));
+    for (const {t, value} of frames.filter(frame => frame.t <= themeMs)) {
+      expect(
+        Math.abs((value - from) / (to - from) - linear(t / themeMs)),
+        `${t} ms`,
+      ).toBeLessThan(0.02);
+    }
+  } finally {
+    await context.close();
+  }
+});
+
 test('the slide plays UISegmentedControl’s measured spring, an internal motion role: no theme setting retunes it', async ({
   page,
 }) => {
@@ -1118,9 +1212,9 @@ test('the slide plays UISegmentedControl’s measured spring, an internal motion
     }
   });
   const from = boxOf(await control.boxes(), 'grid');
+  await holdLensAnimationsAtBirth(page);
   await control.tapSegment('table');
-  await waitForLens(control);
-  await holdLens(control);
+  await heldLensSlide(control);
   const samples = await sampleLens(control.group, timeline(400));
   await releaseAnimations(page);
   // Where Table is once its title has its new weight: where the lens aims.
@@ -1152,9 +1246,9 @@ test('RTL: the surface slides toward the tapped segment', async ({page}) => {
     {direction: 'rtl'},
   );
   const grid = boxOf(await control.boxes(), 'grid');
+  await holdLensAnimationsAtBirth(page);
   await control.tapSegment('table');
-  await waitForLens(control);
-  await holdLens(control);
+  await heldLensSlide(control);
   const [start, end] = await sampleLens(control.group, [0, 2000]);
   // Where Table is once its title has its new weight.
   const table = boxOf(await control.boxes(), 'table');
@@ -1280,9 +1374,10 @@ test('the slide keeps advancing every frame while the main thread is blocked', a
   );
   const control = await openControl(page);
   const cast = await startScreencast(page);
+  const watch = await watchAnimations(control.group);
   await control.tapSegment('table');
   // Running and composited before the block.
-  const [slide] = await waitForLens(control, {minProgressMs: 16});
+  const [slide] = await waitForLens(control, {minProgressMs: 16, watch});
   // The lens has no element to carry the harness's marker chip: paint the
   // lens itself in the marker colour for the frames to find it.
   await paintLensMarker(control);
@@ -1345,9 +1440,13 @@ test('the slide does no Layout or Paint per frame', async ({
   let start = 0;
   const started = Date.now();
   const trace = await traceRendering(page, async () => {
+    const watches = [
+      await watchAnimations(groups.nth(0)),
+      await watchAnimations(groups.nth(1)),
+    ];
     await next.evaluate(button => (button as HTMLButtonElement).click());
     const slides = await Promise.all(
-      [0, 1].map(async i => (await waitForAnimation(groups.nth(i)))[0]),
+      watches.map(async watch => (await watch.started())[0]),
     );
     start = Math.max(...slides.map(slide => slide.from));
     // Wait in the test runner, not in the page. Polling the page forces its
@@ -1391,6 +1490,7 @@ test(
   'storyboard: tap to slide, and a second tap mid-flight',
   {tag: '@storyboard'},
   async ({page}, testInfo) => {
+    await installPageFreeze(page);
     const control = await openControl(page);
     await installTimerGate(page);
     const measure = async () => {
@@ -1407,14 +1507,25 @@ test(
       });
       return sample;
     };
+    // A segment's own release fade starts before the slide: with a count of
+    // 2, it cannot trigger the hold alone.
+    const hold = await armHold(page, control.group, {
+      judges: {
+        target: control.group,
+        property: 'translate',
+        pseudoElement: '::before',
+      },
+      count: 2,
+      newOnly: true,
+    });
     await control.tapSegment('table');
-    await waitForLens(control);
+    const held = await hold.held();
     await freezeTimers(page);
     const {storyboard: slideBoard} = await animationStoryboard(page, {
+      held,
       name: 'segmented-tap-slide',
       times: timeline(700),
       clip: control.group,
-      scope: control.group,
       measure,
       columns: 8,
       cellScale: 1,
@@ -1430,17 +1541,22 @@ test(
     expect(Math.max(...xs)).toBeGreaterThan(centerOf(table));
     expect(Math.max(...xs) - centerOf(table)).toBeLessThan(2);
 
-    // A second tap 80 ms into a slide back to the first segment.
+    // A second tap 80 ms into a slide back to the first segment. Frozen in
+    // the first tap's own task, the slide starts held. The scene moves 80 ms
+    // on. The second tap's retarget then starts held too, and the hold takes
+    // it from there.
+    await freezePageOn(page, 'touchend');
     await control.tapSegment('grid');
-    await waitForLens(control, {minProgressMs: 80});
+    await advanceFrozenPage(page, 80);
     await control.tapSegment('list');
-    await waitForLens(control);
+    const retargetHeld = await holdAnimations(page, control.group);
+    await thawPage(page);
     await freezeTimers(page);
     const {storyboard: retargetBoard} = await animationStoryboard(page, {
+      held: retargetHeld,
       name: 'segmented-retarget',
       times: timeline(700),
       clip: control.group,
-      scope: control.group,
       measure,
       columns: 8,
       cellScale: 1,
@@ -2082,7 +2198,12 @@ test('a vetoed tap selects nothing, and the lens goes back to the selection', as
   expect(
     await control.group.evaluate(group =>
       [...group.querySelectorAll<HTMLElement>('[role="radio"]')]
-        .map(segment => segment.style.cssText)
+        .flatMap(segment =>
+          // Only what the motion writes: not utils/hitArea's touch insets.
+          [...segment.style].filter(
+            property => !property.startsWith('--astryx-hit-inset-'),
+          ),
+        )
         .join(''),
     ),
   ).toBe('');
@@ -2341,22 +2462,28 @@ test('a drag commits through the destination item’s click too: its onClick run
   await expectLensHidden(control);
 });
 
+/** The lens's slide as the page reads it: its ends, its length, its frames. */
+interface SlideRead {
+  from: number;
+  to: number;
+  durationMs: number;
+  frames: {t: number; value: number}[];
+}
+
 /**
  * Clicks the segment `value` and reads the lens's slide: where its first
- * running translate starts and ends, and how long it runs. Also reads the
- * duration that the segments' own transition resolves.
+ * running translate starts and ends, how long it runs, and its frames. Also
+ * reads the duration that the segments' own transition resolves.
  */
 async function clickSlide(
   group: Locator,
   value: string,
-): Promise<{from: number; to: number; durationMs: number; themeMs: number}> {
+): Promise<SlideRead & {themeMs: number}> {
   // From the click on, the page reads the lens's first running translate
   // animation on each frame. It notes where the animation starts and ends,
-  // and how long it runs.
+  // how long it runs, and each keyframe's time and value.
   await group.evaluate(element => {
-    const w = window as unknown as {
-      __slide: {from: number; to: number; durationMs: number} | null;
-    };
+    const w = window as unknown as {__slide: SlideRead | null};
     w.__slide = null;
     const read = () => {
       for (const animation of element.getAnimations({subtree: true})) {
@@ -2377,12 +2504,15 @@ async function clickSlide(
         const firstAtEnd = frames.find(
           (frame, i) => Math.abs(values[i] - to) < 0.01,
         );
+        const total = Number(effect.getComputedTiming().duration ?? 0);
         w.__slide = {
           from: values[0],
           to,
-          durationMs:
-            (firstAtEnd?.computedOffset ?? 1) *
-            Number(effect.getComputedTiming().duration ?? 0),
+          durationMs: (firstAtEnd?.computedOffset ?? 1) * total,
+          frames: frames.map((frame, i) => ({
+            t: (frame.computedOffset ?? 0) * total,
+            value: values[i],
+          })),
         };
         return;
       }
@@ -2404,22 +2534,15 @@ async function clickSlide(
     'aria-checked',
     'true',
   );
-  const slide = await group.page().waitForFunction(
-    () =>
-      (
-        window as unknown as {
-          __slide: {from: number; to: number; durationMs: number} | null;
-        }
-      ).__slide,
-    undefined,
-    {timeout: 3000},
-  );
-  const {from, to, durationMs} = (await slide.jsonValue()) as {
-    from: number;
-    to: number;
-    durationMs: number;
-  };
-  return {from, to, durationMs, themeMs};
+  const slide = await group
+    .page()
+    .waitForFunction(
+      () => (window as unknown as {__slide: SlideRead | null}).__slide,
+      undefined,
+      {timeout: 3000},
+    );
+  const {from, to, durationMs, frames} = (await slide.jsonValue()) as SlideRead;
+  return {from, to, durationMs, themeMs, frames};
 }
 
 /** A desktop context: a mouse, no touch, a fine primary pointer. */

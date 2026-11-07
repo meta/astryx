@@ -257,7 +257,15 @@ guidance owns the process used to propose and test APIs.
   written. The owner exports only ready-made styles that read the attribute, the
   props or writer that set it, and the runtime readers its package needs, such
   as a `closest` or `matches` helper or a getter; it never exports the raw name
-  or a selector. Every other file in that package spreads those exports and
+  or a selector. A plain-TS owner,
+  `packages/core/src/privateAttributes/<name>.ts`, may export its name and
+  selector text to its `.stylex.ts` sibling and to the theme engine in
+  `packages/core/src/theme/`; no other file imports it, and `.stylex.ts` owners
+  still never export them. When a plain-TS owner exists, its `.stylex.ts`
+  sibling is not an owner: it writes the attribute's selectors only as literals
+  for its own `stylex.create` calls, because StyleX resolves a selector only
+  where it is written, and it never exports them or sets the attribute. Every
+  other file in that package spreads those exports and
   never writes the attribute or its selector, and no package imports another
   package's owner module through an internal path. StyleX merges styles one
   whole property at a time, so an owner style carries every condition of each
@@ -444,6 +452,15 @@ Known verification gaps:
   another keeps its name until a minor renames it under INV9. Outline's
   `offset` is the distance below the top of its scroll root
   (`component:Outline` FR4), not a gap from an anchor.
+- INV3: Carousel `hasSnap` takes `boolean | SnapPaging`. Omitted or `false` does
+  not snap, `true` is native scroll snap, and a value from `useSnapPaging` is
+  snap paging. It is a known deviation from three rules: an `is…` or `has…`
+  boolean names only a true on/off with no third state (INV3); a prop that
+  chooses how a component responds to input is a `<thing>Behavior` closed union
+  (INV2); and a behavior that differs by device offers a per-device value
+  (INV3), where the paging value pages under a finger and a trackpad swipe and
+  keeps native snap under a mouse wheel. It keeps one snap prop for builders
+  (`component:Carousel/DEC-2`) and is not renamed.
 - INV22: known gaps include `useLongPress`, `usePressFeedback`,
   `useClickableContainer`, `useInputContainer`, `useOverlay`, `useCombobox`,
   `useMultiCombobox`, `useResizable`, `useTooltip`, `useHoverCard`, and

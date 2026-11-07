@@ -77,6 +77,7 @@ import {TablePlugin} from '@lexical/react/LexicalTablePlugin';
 import {HorizontalRuleExtension} from '@lexical/extension';
 import {TextSemanticsExtension} from './textSemantics';
 import {TableColumnFloorPlugin} from './TableColumnFloorPlugin';
+import {CodeBackspacePlugin} from './CodeBackspacePlugin';
 import {CodeBlockHeaderPlugin} from './CodeBlockHeaderPlugin';
 import {CodeSyntaxPlugin} from './CodeSyntaxPlugin';
 import {MarkdownExtensionsPlugin} from './MarkdownExtensionsPlugin';
@@ -84,6 +85,7 @@ import type {RichTextMarkdownExtension} from './markdownExtensions';
 import type {CodeLanguage} from '@astryxdesign/core/CodeBlock';
 import {TaskCheckboxPlugin} from './TaskCheckboxPlugin';
 import {SelectAllScopePlugin} from './SelectAllScopePlugin';
+import {ImageSourceCaretPlugin} from './ImageSourceCaretPlugin';
 import {type Transformer} from '@lexical/markdown';
 import {$generateHtmlFromNodes} from '@lexical/html';
 import {DEFAULT_NODES} from './editorNodes';
@@ -723,6 +725,9 @@ export const RichTextEditor = function RichTextEditor({
               <TableColumnFloorPlugin />
               <CodeBlockHeaderPlugin codeLanguages={codeLanguages} />
               <CodeSyntaxPlugin codeLanguages={codeLanguages} />
+              {/* Backspace at the very start of a code block makes it a
+                  paragraph, instead of merging it into the block above. */}
+              <CodeBackspacePlugin />
               {markdownExtensions != null && markdownExtensions.length > 0 ? (
                 <MarkdownExtensionsPlugin
                   extensions={markdownExtensions}
@@ -732,6 +737,7 @@ export const RichTextEditor = function RichTextEditor({
               <TabIndentationPlugin />
               <TabFocusEscapePlugin />
               <SelectAllScopePlugin />
+              <ImageSourceCaretPlugin />
               {hasMarkdownShortcuts && (
                 <MarkdownShortcutPlugin transformers={markdownTransformers} />
               )}

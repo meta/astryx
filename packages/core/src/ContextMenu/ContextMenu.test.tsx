@@ -1770,3 +1770,47 @@ describe('ContextMenu outside dismissal', () => {
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
   });
 });
+
+describe('ContextMenu: Tab from a flyout leaves the whole menu (APG menu button)', () => {
+  it('Tab on a sub-menu row closes every level, once', async () => {
+    const onOpenChange = vi.fn();
+    render(
+      <ContextMenu
+        onOpenChange={onOpenChange}
+        items={[
+          {label: 'Cut', onClick: () => {}},
+          {
+            label: 'Move to',
+            items: [
+              {label: 'Folder A', onClick: () => {}},
+              {label: 'Folder B', onClick: () => {}},
+            ],
+          },
+        ]}>
+        <div>Right-click me</div>
+      </ContextMenu>,
+    );
+    fireEvent.contextMenu(screen.getByText('Right-click me'));
+    const menu = screen.getAllByRole('menu', {hidden: true})[0];
+    const moveTo = screen.getByRole('menuitem', {
+      name: /Move to/,
+      hidden: true,
+    });
+    fireEvent.click(moveTo, {detail: 1});
+    await waitFor(() =>
+      expect(moveTo).toHaveAttribute('aria-expanded', 'true'),
+    );
+    const folder = screen.getByRole('menuitem', {
+      name: 'Folder A',
+      hidden: true,
+    });
+    act(() => folder.focus());
+    onOpenChange.mockClear();
+    const tab = fireEvent.keyDown(folder, {key: 'Tab'});
+    expect(tab).toBe(true);
+    expect(moveTo).toHaveAttribute('aria-expanded', 'false');
+    expect(menu.closest('[popover]')).not.toHaveAttribute('popover-open');
+    expect(onOpenChange).toHaveBeenCalledTimes(1);
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+});

@@ -34,11 +34,17 @@ import {useIndicatorFocusRing} from '../hooks/useIndicatorFocusRing';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useTouchHitArea} from '../utils/touchHitArea';
-import {touchHitAreaStyles} from '../utils/touchHitArea.stylex';
+import {pressBoxProps} from '../privateAttributes/pressBox.stylex';
+import {registerBoxHold} from '../utils/boxHold';
+import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {useIndicator} from '../Indicator/useIndicator';
 import {Item, type ItemAlign} from '../Item/Item';
 import {themeProps} from '../utils/themeProps';
 import {rowPressLayerStyles} from '../privateAttributes/press.stylex';
+
+// Registered here, not in the press controller, so a page with no box carries
+// none of its code.
+registerBoxHold();
 
 // The touch press's paint, declared by the shared overlay styles on the
 // element the controller writes to (`pressedAlpha`) at the press's strength,
@@ -317,6 +323,10 @@ export function RadioListItem({
 
   const radioCircle = (
     <div
+      // iOS answers a long hold on the circle with a text selection and no
+      // click. The press controller holds the row's selection for a press on
+      // the marked circle, and picks the option if no click comes.
+      {...(isDisabled ? undefined : pressBoxProps)}
       {...stylex.props(
         styles.radioWrapper,
         wrapperSizeStyles[size],

@@ -1005,6 +1005,66 @@ describe('SideNavItem', () => {
     expect(handleClick).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['button item', {}],
+    ['item with href', {href: '/dashboard'}],
+  ])(
+    'does not run a caller’s handlers other than focus and blur on a disabled %s',
+    (_name, extraProps) => {
+      const onKeyDown = vi.fn();
+      const onKeyUp = vi.fn();
+      const onPointerDown = vi.fn();
+      const onMouseDown = vi.fn();
+      const onFocus = vi.fn();
+      const onBlur = vi.fn();
+      render(
+        <SideNavItem
+          label="Dashboard"
+          isDisabled
+          onKeyDown={onKeyDown}
+          onKeyUp={onKeyUp}
+          onPointerDown={onPointerDown}
+          onMouseDown={onMouseDown}
+          onFocus={onFocus}
+          onBlur={onBlur}
+          {...extraProps}
+        />,
+      );
+      const button = screen.getByRole('button', {name: 'Dashboard'});
+      // fireEvent bypasses `pointer-events: none`, as programmatic input does.
+      fireEvent.pointerDown(button);
+      fireEvent.mouseDown(button);
+      fireEvent.keyDown(button, {key: 'x'});
+      fireEvent.keyUp(button, {key: 'x'});
+      expect(onPointerDown).not.toHaveBeenCalled();
+      expect(onMouseDown).not.toHaveBeenCalled();
+      expect(onKeyDown).not.toHaveBeenCalled();
+      expect(onKeyUp).not.toHaveBeenCalled();
+      fireEvent.focus(button);
+      fireEvent.blur(button);
+      expect(onFocus).toHaveBeenCalledTimes(1);
+      expect(onBlur).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('still runs an enabled item’s caller handlers', () => {
+    const onKeyDown = vi.fn();
+    const onPointerDown = vi.fn();
+    render(
+      <SideNavItem
+        label="Dashboard"
+        onClick={() => {}}
+        onKeyDown={onKeyDown}
+        onPointerDown={onPointerDown}
+      />,
+    );
+    const button = screen.getByRole('button', {name: 'Dashboard'});
+    fireEvent.pointerDown(button);
+    fireEvent.keyDown(button, {key: 'x'});
+    expect(onPointerDown).toHaveBeenCalledTimes(1);
+    expect(onKeyDown).toHaveBeenCalledTimes(1);
+  });
+
   it('renders a disabled item with href as a focusable button that does not navigate', () => {
     const handleClick = vi.fn();
     render(
@@ -1022,6 +1082,39 @@ describe('SideNavItem', () => {
     expect(button).toHaveAttribute('aria-disabled', 'true');
     fireEvent.click(button);
     expect(handleClick).not.toHaveBeenCalled();
+  });
+
+  it('does not run a caller’s handlers other than focus and blur on a disabled split row', () => {
+    const onKeyDown = vi.fn();
+    const onKeyUp = vi.fn();
+    const onPointerDown = vi.fn();
+    const onFocus = vi.fn();
+    const onBlur = vi.fn();
+    render(
+      <SideNavItem
+        label="Settings"
+        href="/settings"
+        collapsible
+        isDisabled
+        onKeyDown={onKeyDown}
+        onKeyUp={onKeyUp}
+        onPointerDown={onPointerDown}
+        onFocus={onFocus}
+        onBlur={onBlur}>
+        <SideNavItem label="General" href="/settings/general" />
+      </SideNavItem>,
+    );
+    const primary = screen.getByRole('button', {name: 'Settings'});
+    fireEvent.pointerDown(primary);
+    fireEvent.keyDown(primary, {key: 'x'});
+    fireEvent.keyUp(primary, {key: 'x'});
+    expect(onPointerDown).not.toHaveBeenCalled();
+    expect(onKeyDown).not.toHaveBeenCalled();
+    expect(onKeyUp).not.toHaveBeenCalled();
+    fireEvent.focus(primary);
+    fireEvent.blur(primary);
+    expect(onFocus).toHaveBeenCalledTimes(1);
+    expect(onBlur).toHaveBeenCalledTimes(1);
   });
 
   it('exposes aria-disabled on the primary of a disabled split row', () => {
@@ -1599,6 +1692,37 @@ function renderExpanded(ui: React.ReactElement) {
 // =============================================================================
 
 describe('SideNavItem (collapsed)', () => {
+  it('does not run a caller’s handlers other than focus and blur on a disabled collapsed leaf', () => {
+    const onKeyDown = vi.fn();
+    const onKeyUp = vi.fn();
+    const onPointerDown = vi.fn();
+    const onFocus = vi.fn();
+    const onBlur = vi.fn();
+    renderCollapsed(
+      <SideNavItem
+        label="Dashboard"
+        icon={<StubIcon />}
+        isDisabled
+        onKeyDown={onKeyDown}
+        onKeyUp={onKeyUp}
+        onPointerDown={onPointerDown}
+        onFocus={onFocus}
+        onBlur={onBlur}
+      />,
+    );
+    const leaf = screen.getByRole('button', {name: 'Dashboard'});
+    fireEvent.pointerDown(leaf);
+    fireEvent.keyDown(leaf, {key: 'x'});
+    fireEvent.keyUp(leaf, {key: 'x'});
+    expect(onPointerDown).not.toHaveBeenCalled();
+    expect(onKeyDown).not.toHaveBeenCalled();
+    expect(onKeyUp).not.toHaveBeenCalled();
+    fireEvent.focus(leaf);
+    fireEvent.blur(leaf);
+    expect(onFocus).toHaveBeenCalledTimes(1);
+    expect(onBlur).toHaveBeenCalledTimes(1);
+  });
+
   it('hides items without icons when collapsed', () => {
     const {container} = renderCollapsed(<SideNavItem label="No Icon Item" />);
     expect(screen.queryByText('No Icon Item')).not.toBeInTheDocument();

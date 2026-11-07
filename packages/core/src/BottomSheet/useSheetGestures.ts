@@ -64,8 +64,10 @@ import {
   type UIEvent as ReactUIEvent,
 } from 'react';
 
+import {resolveSnapPoint} from '../motion/resolveSnapPoint';
 import {rubberBand} from '../motion/rubberBand';
 import {scroll} from '../motion/uikit/scroll';
+import {sheet} from '../motion/uikit/sheet';
 import {
   computeDetentOffsets,
   peekOffsetFor,
@@ -413,6 +415,14 @@ export interface UseSheetGesturesOptions {
   hasFixedHeight?: boolean;
 }
 
+/** A drag's close: the distance left to the closed position and the speed. */
+export interface SheetDragExit {
+  /** px from the release position to the closed position. */
+  readonly distance: number;
+  /** The release velocity, px/s, positive toward closed. */
+  readonly velocity: number;
+}
+
 export interface SheetContentProps {
   style: CSSProperties;
 }
@@ -487,6 +497,11 @@ export interface UseSheetGesturesResult {
    */
   isDismissedByTouchDrag: boolean;
   /**
+   * The exit a touch drag's release started: the distance left to travel and
+   * the release speed. Null for a close that no touch drag started.
+   */
+  dragExit: SheetDragExit | null;
+  /**
    * The sheet's offset right now, in px: the settled detent at rest, the live
    * position during a drag. Written per input sample without a render; read
    * it where the live number is needed without subscribing to it.
@@ -560,31 +575,38 @@ export function useSheetGestures({
   // onDismiss() and sets `pending`; the host answers in the same update, so
   // the first render afterwards says whether it took the close (its
   // controlled state now says closed: the exit under way is the drag's) or
-  // refused it (a guarded onOpenChange left it open: the sheet snaps back and
-  // the request is spent). Either way the flag is settled during render, the
-  // prev-prop pattern, and derived back to false once the sheet is open
-  // again — so a later close from a control, Escape or code is never
-  // mistaken for a drag.
+  // refused it (a guarded onOpenChange left it open: the sheet snaps back,
+  // its scrim with it, and the request is spent). Either way the flag is
+  // settled during render, the prev-prop pattern, and derived back to false
+  // once the sheet is open again — so a later close from a control, Escape
+  // or code is never mistaken for a drag.
   const [touchDragDismissal, setTouchDragDismissal] = useState<{
     isTouch: boolean;
     pending: boolean;
+    exit: SheetDragExit | null;
   } | null>(null);
+  // The render that spends a refused request counts it. The layout effect
+  // below answers each count.
+  const [refusedDismissalCount, setRefusedDismissalCount] = useState(0);
   if (touchDragDismissal != null) {
     if (touchDragDismissal.pending) {
-      setTouchDragDismissal(
-        isOpenRequested
-          ? null
-          : {isTouch: touchDragDismissal.isTouch, pending: false},
-      );
+      if (isOpenRequested) {
+        setTouchDragDismissal(null);
+        setRefusedDismissalCount(count => count + 1);
+      } else {
+        setTouchDragDismissal({...touchDragDismissal, pending: false});
+      }
     } else if (isOpenRequested) {
       setTouchDragDismissal(null);
     }
   }
-  const isDismissedByTouchDrag =
+  const isDismissedByDrag =
     touchDragDismissal != null &&
     !touchDragDismissal.pending &&
-    touchDragDismissal.isTouch &&
     !isOpenRequested;
+  const isDismissedByTouchDrag =
+    isDismissedByDrag && touchDragDismissal.isTouch;
+  const dragExit = isDismissedByDrag ? touchDragDismissal.exit : null;
   // Whether the drag in flight has moved the sheet off its base detent. One
   // state change per drag, for hosts that react to travel beginning.
   const [isTraveling, setIsTraveling] = useState(false);
@@ -711,6 +733,24 @@ export function useSheetGestures({
     onScrimOpacityRef.current = onScrimOpacity;
     hasFixedHeightRef.current = hasFixedHeight;
   });
+
+  // The release cannot know whether the host takes the close. The host
+  // answers through `isOpenRequested` in the next render. Keep the left
+  // detent's scrim until then.
+  const restingScrimOpacityRef = useRef<number | null>(null);
+  // Syncs the host's scrim (its backdrop, written through `onScrimOpacity`)
+  // with the panel's return to rest after a refusal: the panel rests on that
+  // detent again, so the scrim the drag thinned toward the dismiss line rests
+  // with it. The refusal changes none of the host's own scrim inputs, so the
+  // drag's last value would otherwise stand.
+  useLayoutEffect(() => {
+    const restingScrimOpacity = restingScrimOpacityRef.current;
+    if (refusedDismissalCount === 0 || restingScrimOpacity == null) {
+      return;
+    }
+    restingScrimOpacityRef.current = null;
+    onScrimOpacityRef.current?.(restingScrimOpacity);
+  }, [refusedDismissalCount]);
 
   // Live drag bookkeeping (refs so pointermove doesn't churn renders).
   const dragStateRef = useRef<{
@@ -1156,37 +1196,82 @@ export function useSheetGestures({
         }
       };
 
+      const closeSheet = (exit: SheetDragExit | null) => {
+        if (!canDismissRef.current) {
+          settleAt(maxOffset);
+          return;
+        }
+        prepareScrollAreaSettle(
+          baseLayoutOffset,
+          baseOffset,
+          baseLayoutOffset,
+          baseLayoutOffset,
+          baseLayoutOffset,
+          naturalEndGap,
+          false,
+        );
+        restingScrimOpacityRef.current = scrimOpacityForOffset(
+          baseOffset,
+          offsets,
+          dismissOffset,
+          peekOffset,
+        );
+        setTouchDragDismissal({isTouch, pending: true, exit});
+        onDismissRef.current();
+      };
+      if (isTouch) {
+        // A touch release takes UIKit's sheet values, with closed counted as
+        // one position. A flick lands on the first position at or past its
+        // projection. A release that moves back toward where the drag began
+        // cancels to that detent.
+        const {
+          fastSpeed,
+          minProjectionSpeed,
+          projectionSeconds,
+          detentTolerance,
+        } = sheet.release;
+        const points = [...offsets, maxOffset + shortestDetentHeight];
+        const {index} = resolveSnapPoint({
+          points,
+          position: offset,
+          velocity: velocity * 1000,
+          flickThreshold: travel > DRAG_PROMOTION_SLOP ? fastSpeed : Infinity,
+          tolerance: detentTolerance,
+          flickPastProjection: true,
+          projection: {
+            seconds: projectionSeconds,
+            minSpeed: minProjectionSpeed,
+          },
+          start: baseOffset,
+        });
+        if (index === points.length - 1) {
+          closeSheet({
+            distance: Math.max(0, height - offset),
+            velocity: velocity * 1000,
+          });
+        } else {
+          settleAt(points[index]);
+        }
+        return;
+      }
       // A release that would coast past the dismiss line closes the sheet: a
       // throw from anywhere, or a slow drag that already crossed it.
       if (dir > 0 && projected > dismissOffset) {
-        if (canDismissRef.current) {
-          prepareScrollAreaSettle(
-            baseLayoutOffset,
-            baseOffset,
-            baseLayoutOffset,
-            baseLayoutOffset,
-            baseLayoutOffset,
-            naturalEndGap,
-            false,
-          );
-          setTouchDragDismissal({isTouch, pending: true});
-          onDismissRef.current();
-        } else {
-          settleAt(maxOffset);
-        }
+        closeSheet(null);
         return;
       }
       // Settle to the detent nearest where the release would coast to, in the
       // drag direction (never back past the starting detent), de-duped and
       // direction-clamped by the util. A throw upward projects past the
       // tallest detent and lands on it.
-      const target = resolveSettleOffset(
-        Math.min(Math.max(projected, 0), maxOffset),
-        offsets,
-        dir,
-        baseOffset,
+      settleAt(
+        resolveSettleOffset(
+          Math.min(Math.max(projected, 0), maxOffset),
+          offsets,
+          dir,
+          baseOffset,
+        ),
       );
-      settleAt(target);
     },
     [prepareScrollAreaSettle, recordSettledLayoutOffset, resolveDetents],
   );
@@ -1937,6 +2022,7 @@ export function useSheetGestures({
     isDragging,
     isTraveling,
     isDismissedByTouchDrag,
+    dragExit,
     activeOffsetRef,
     sheetHeight,
     scrollPreservationInset,
