@@ -8,8 +8,9 @@
  *   Core makes, lays out and fades one transient copy of old content
  * @position Motion foundation, internal to core; the copy mechanism the
  *   in-place swap uses (`spec:AST-105` FR8,
- *   `architecture:component-style-authoring` INV7), and the layer's exit copy.
- *   motion/animatedLayout.ts and Layer/layerExitCopy.ts import it.
+ *   `architecture:component-style-authoring` INV7). It also makes the
+ *   layer's exit copy. motion/animatedLayout.ts and Layer/layerExitCopy.ts
+ *   import it.
  *
  * A copy takes no part in the page: it is inert and hidden from assistive
  * technology, carries no ids or test ids, joins no form or radio group (a
@@ -161,7 +162,6 @@ function readInherited(element: Element): Map<string, string> {
 const FORM_CONTROLS =
   'button, fieldset, input, object, output, select, textarea';
 
-/** Whether `node` is a custom element defined as form-associated. */
 function isFormAssociated(
   node: Element,
   registry: CustomElementRegistry | undefined,

@@ -22,7 +22,12 @@
  */
 
 import type {Locator, Page, TestInfo} from '@playwright/test';
-import {holdAnimations, seekAnimations, type HeldAnimation} from './curves';
+import {
+  holdAnimations,
+  seekAnimations,
+  type HeldAnimation,
+  type HoldJudges,
+} from './curves';
 import {timeline} from './math';
 import {writeEvidence} from './output';
 import type {TouchScript} from './scripts';
@@ -258,7 +263,7 @@ async function composeSheet(
   }
 }
 
-export interface AnimationStoryboardOptions extends StoryboardOptions {
+interface AnimationStoryboardBase extends StoryboardOptions {
   /**
    * Frame times, ms from the film's start: the earliest start among the held
    * animations that end (an animation that repeats forever, such as a
@@ -269,15 +274,22 @@ export interface AnimationStoryboardOptions extends StoryboardOptions {
   readonly times?: readonly number[];
   /** Restrict to animations inside this element (when `held` is not passed). */
   readonly scope?: Locator;
-  /**
-   * What an armed hold already took (`armHold`'s `held()`): filmed instead of
-   * holding now, for an animation an action starts that a hold sent after
-   * the action could miss on a loaded runner.
-   */
-  readonly held?: readonly HeldAnimation[];
   /** Measurements per frame (runs after the seek). */
   readonly measure?: () => Promise<Readonly<Record<string, unknown>>>;
 }
+
+/**
+ * Either `held`, what an armed hold already took (`armHold`'s `held()`, which
+ * checked its judged motion): filmed instead of holding now, for an animation
+ * an action starts that a hold sent after the action could miss on a loaded
+ * runner. Or `judges`, the motion the film shows: the film holds now, and
+ * rejects as `holdAnimations` does when it took no animation of it.
+ */
+export type AnimationStoryboardOptions = AnimationStoryboardBase &
+  (
+    | {readonly held: readonly HeldAnimation[]; readonly judges?: undefined}
+    | {readonly held?: undefined; readonly judges: HoldJudges}
+  );
 
 /**
  * Holds every running animation, then seeks them together to each time and
@@ -291,7 +303,7 @@ export async function animationStoryboard(
 ): Promise<{storyboard: Storyboard; held: HeldAnimation[]}> {
   const held = options.held
     ? [...options.held]
-    : await holdAnimations(page, options.scope);
+    : await holdAnimations(page, options.scope, {judges: options.judges});
   if (held.length === 0) {
     throw new Error(`storyboard ${options.name}: no running animation to hold`);
   }

@@ -168,6 +168,52 @@ const boxOf = async (locator: Locator) =>
     };
   });
 
+/**
+ * Resolves once the surface reads the same box, scroll range, scroll
+ * position and cap for three frames in a row, the still frames waitForRest
+ * counts. A surface still moving after 5 s fails the wait by name.
+ */
+const surfaceAtRest = async (surface: Locator) =>
+  surface.evaluate(async element => {
+    await new Promise<void>((resolve, reject) => {
+      const layer = element.closest<HTMLElement>('[popover]');
+      const deadline = performance.now() + 5_000;
+      let last = '';
+      let still = 0;
+      const tick = () => {
+        const rect = element.getBoundingClientRect();
+        const cap =
+          layer == null
+            ? ''
+            : getComputedStyle(layer).getPropertyValue(
+                '--_layer-keyboard-max-block-size',
+              );
+        const now = [
+          rect.top,
+          rect.bottom,
+          element.scrollHeight,
+          element.clientHeight,
+          element.scrollTop,
+          cap,
+        ].join(' ');
+        still = now === last ? still + 1 : 0;
+        last = now;
+        if (still >= 3) {
+          resolve();
+        } else if (performance.now() > deadline) {
+          reject(
+            new Error(
+              `surfaceAtRest: the surface never held still (last: ${now})`,
+            ),
+          );
+        } else {
+          requestAnimationFrame(tick);
+        }
+      };
+      requestAnimationFrame(tick);
+    });
+  });
+
 test('a tall popover shrinks to stay 10 px above the keyboard once it has arrived, and grows back as it goes down', async ({
   page,
 }, testInfo) => {
@@ -269,8 +315,13 @@ test('with the keyboard up, a tap on the scrolled-in Save note clicks it', async
   const field = page.getByRole('textbox', {name: 'Title'});
   await field.focus();
   await keyboard(page, COVER);
-  await page.waitForTimeout(timing.keyboardNotificationMs * 1.5);
-  expect((await boxOf(surface)).keyboardCap).not.toBe('');
+  // The keyboard has arrived once the layer declares its cap. In the frames
+  // after it, the layer keeps the focused field in view: on a busy page, a
+  // scroll made before those frames is undone. Scroll once it holds still.
+  await expect
+    .poll(async () => (await boxOf(surface)).keyboardCap)
+    .not.toBe('');
+  await surfaceAtRest(surface);
   await surface.evaluate(element => {
     element.scrollTop = element.scrollHeight;
   });

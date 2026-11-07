@@ -68,13 +68,20 @@ const styles = stylex.create({
   // layer nested in a capped one does not inherit the outer cap. The surfaces
   // inside a layer read it through `layerViewportInset.maxBlockSize`. The cap
   // also writes the overflow a capped surface takes. Popover's surface reads
-  // it, so it scrolls from the commit that caps it. Both are private runtime
-  // state, never set by an app or a theme.
-  // SYNC: the properties are LAYER_KEYBOARD_CAP_PROPERTY and
-  // LAYER_KEYBOARD_OVERFLOW_PROPERTY (useLayerKeyboardClearance.ts).
-  keyboardCap: (cap: string, overflow: 'auto' | 'visible') => ({
+  // it, so it scrolls from the commit that caps it. Beside them, the
+  // keyboard's inset from the viewport's bottom lets a layer that places
+  // itself slide above the keyboard. The inset keeps its largest value until
+  // the layer closes, so that layer stays put as the keyboard goes. Every
+  // layer sets it, `initial` until a keyboard is up, so a nested layer does
+  // not inherit it. All three are private runtime state, never set by an app
+  // or a theme.
+  // SYNC: the properties are LAYER_KEYBOARD_CAP_PROPERTY,
+  // LAYER_KEYBOARD_OVERFLOW_PROPERTY and LAYER_KEYBOARD_INSET_PROPERTY
+  // (useLayerKeyboardClearance.ts).
+  keyboardCap: (cap: string, overflow: 'auto' | 'visible', inset: string) => ({
     '--_layer-keyboard-max-block-size': cap,
     '--_layer-keyboard-overflow': overflow,
+    '--_layer-keyboard-inset-block-end': inset,
   }),
   // Base reset for all layers
   base: {
@@ -519,6 +526,43 @@ function exitAnimations(layer: HTMLElement | null): Animation[] {
         animation.playState === 'running' &&
         animation.effect?.getComputedTiming().endTime !== Infinity,
     );
+}
+
+/**
+ * Whether the closed state's transition keeps `layer` shown after it hides.
+ * Only a discrete `display` transition holds a hidden layer shown, until it
+ * ends. Read it while the layer is closed: the close takes its values from
+ * the closed state's style.
+ */
+function closeTransitionKeepsShown(layer: HTMLElement): boolean {
+  const style = layer.ownerDocument.defaultView?.getComputedStyle(layer);
+  if (style == null) {
+    return false;
+  }
+  const list = (name: string) =>
+    style
+      .getPropertyValue(name)
+      .split(',')
+      .map(value => value.trim());
+  const behaviors = list('transition-behavior');
+  const durations = list('transition-duration').map(parseFloat);
+  const delays = list('transition-delay').map(parseFloat);
+  return list('transition-property').some((name, index) => {
+    const behavior = behaviors[index % behaviors.length];
+    const duration = durations[index % durations.length] || 0;
+    const delay = delays[index % delays.length] || 0;
+    return (
+      (name === 'all' || name === 'display') &&
+      behavior === 'allow-discrete' &&
+      duration + Math.max(0, delay) > 0
+    );
+  });
+}
+
+/** The keyframe animations that `layer`'s style declares, or `none`. */
+function animationNames(layer: HTMLElement): string {
+  const style = layer.ownerDocument.defaultView?.getComputedStyle(layer);
+  return style?.getPropertyValue('animation-name').trim() || 'none';
 }
 
 /**
@@ -1192,6 +1236,9 @@ function useLayerImplementation(
   // again during it. Null once it has ended.
   const exitRef = useRef<object | null>(null);
 
+  // Read at the last show, from the closed state's style.
+  const closeKeepsShownRef = useRef(false);
+
   // A closed trigger is no anchor, once the layer stops painting. A show
   // during the exit keeps the name, and so does a later exit.
   const releaseAnchor = useCallback(
@@ -1208,7 +1255,9 @@ function useLayerImplementation(
           removeAnchorName(trigger, anchorId);
         }
       };
-      const running = exitAnimations(layer);
+      // The animation read lays out the page between the writes of the close.
+      // Skip it when the layer stops painting as it hides.
+      const running = closeKeepsShownRef.current ? exitAnimations(layer) : [];
       if (running.length === 0) {
         release();
         return;
@@ -1419,6 +1468,10 @@ function useLayerImplementation(
         replayWhenSettled();
         return;
       }
+      // The close takes its values from the closed state's style. Read it
+      // before the writes of the show, so the read lays nothing out.
+      const closeTransitionHolds = closeTransitionKeepsShown(popover);
+      const closedAnimations = animationNames(popover);
       popover.removeAttribute(LAYER_CLEARS_ANCHOR_ATTRIBUTE);
       popover.removeAttribute(LAYER_SCROLLS_ATTRIBUTE);
       applyDeferredWritingContext(popover);
@@ -1443,6 +1496,13 @@ function useLayerImplementation(
         replayWhenSettled();
         return;
       }
+      // A keyframe animation that only the closed state declares starts at
+      // the close, and it can animate `display`. One that both states declare
+      // is the entrance, and the hide stops it.
+      const closeStartsAnimation =
+        closedAnimations !== 'none' &&
+        closedAnimations !== animationNames(popover);
+      closeKeepsShownRef.current = closeTransitionHolds || closeStartsAnimation;
       if (keepsAnchorClear) {
         keepAnchorClear(popover, triggerRef.current);
       }
@@ -1678,10 +1738,11 @@ function useLayerImplementation(
 
   // An anchored layer that would run under the software keyboard keeps its
   // block-start edge and ends clear of the keyboard.
-  const {cap: keyboardCap, followLayerElement} = useLayerKeyboardClearance(
-    isOpen && mode === 'context',
-    popoverRef,
-  );
+  const {
+    cap: keyboardCap,
+    inset: keyboardInset,
+    followLayerElement,
+  } = useLayerKeyboardClearance(isOpen && mode === 'context', popoverRef);
 
   const popoverRefCallback = useCallback(
     (el: HTMLElement | null) => {
@@ -1924,6 +1985,7 @@ function useLayerImplementation(
         styles.keyboardCap(
           keyboardCap == null ? '100vh' : `${keyboardCap}px`,
           keyboardCap == null ? 'visible' : 'auto',
+          keyboardInset == null ? 'initial' : `${keyboardInset}px`,
         ),
         viewportStyles,
         offsetStyle,
@@ -1984,6 +2046,7 @@ function useLayerImplementation(
       isAnchorInView,
       keepsAnchorClear,
       keyboardCap,
+      keyboardInset,
       lightDismiss,
       mountStore,
       popoverRefCallback,
@@ -2015,7 +2078,7 @@ function useLayerImplementation(
         overlayPaddingReset.reset,
         // A fixed layer is never capped; it still sets its own limit so it is
         // not clamped by a capped layer it sits in.
-        styles.keyboardCap('100vh', 'visible'),
+        styles.keyboardCap('100vh', 'visible', 'initial'),
         styles.fixed,
         xstyle,
       );

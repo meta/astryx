@@ -45,8 +45,8 @@ import {
   touchStoryboard,
   traceRendering,
   trackMarker,
-  waitForAnimation,
   waitForRest,
+  watchAnimations,
   withStorybook,
   writeEvidence,
   type TouchDriver,
@@ -178,10 +178,10 @@ interface BarFrame {
  * stack and the back button's effective opacities. The returned function
  * stops and returns them. A layer's x is its computed `translate`: the cards
  * and bars sit at the stack's leading edge, checked when the trace starts. So
- * a frame reads no layout. Under load, in a frame that comes a few
- * milliseconds late, WebKit evaluates two layers that animate on one clock
- * about a millisecond apart. This holds for boxes and translates alike.
- * `animating` says which frames an animation drives.
+ * a frame reads no layout. Under load, WebKit can evaluate two layers that
+ * share one clock at two times in one frame, as far apart as their reads.
+ * This holds for boxes and translates alike. So each card is read right
+ * before its bar. `animating` says which frames an animation drives.
  */
 async function traceBars(page: Page): Promise<() => Promise<BarFrame[]>> {
   await page.evaluate(() => {
@@ -204,15 +204,32 @@ async function traceBars(page: Page): Promise<() => Promise<BarFrame[]>> {
       const value = getComputedStyle(element).translate;
       return value === 'none' ? 0 : parseFloat(value);
     };
-    const read = (selector: string, attribute: string) => {
-      const out: Record<string, number> = {};
-      for (const element of document.querySelectorAll<HTMLElement>(selector)) {
-        const key = element.getAttribute(attribute);
-        if (key != null) {
-          out[key] = translateX(element);
+    const readLayers = () => {
+      const cards: Record<string, number> = {};
+      const bars: Record<string, number> = {};
+      for (const card of document.querySelectorAll(
+        '[data-navigation-screen]',
+      )) {
+        const key = card.getAttribute('data-navigation-screen');
+        if (key == null) {
+          continue;
+        }
+        cards[key] = translateX(card);
+        const keyBars = document.querySelectorAll(
+          `[data-navigation-bar="${CSS.escape(key)}"]`,
+        );
+        const bar = keyBars.item(keyBars.length - 1);
+        if (bar != null) {
+          bars[key] = translateX(bar);
         }
       }
-      return out;
+      for (const bar of document.querySelectorAll('[data-navigation-bar]')) {
+        const key = bar.getAttribute('data-navigation-bar');
+        if (key != null && !(key in cards)) {
+          bars[key] = translateX(bar);
+        }
+      }
+      return {cards, bars};
     };
     // A layer at rest sits at the stack's edge: its box is its translate.
     const left = stack?.getBoundingClientRect().left ?? 0;
@@ -234,8 +251,7 @@ async function traceBars(page: Page): Promise<() => Promise<BarFrame[]>> {
       const chevron = button?.firstElementChild ?? null;
       w.__bars.push({
         t: performance.now() - t0,
-        cards: read('[data-navigation-screen]', 'data-navigation-screen'),
-        bars: read('[data-navigation-bar]', 'data-navigation-bar'),
+        ...readLayers(),
         back:
           button == null || chevron == null
             ? null
@@ -435,11 +451,17 @@ test('a push follows UIKit’s push spring, the card underneath at 0.3 of its sp
   page,
 }, testInfo) => {
   const {driver, width} = await openStack(page, 'settings');
-  await driver.tap(await rowCenter(page, 'General'));
   const top = card(page, 'screen-General');
   const under = card(page, 'root');
-  await waitForAnimation(top);
-  await holdAnimations(page);
+  const watch = await watchAnimations(top);
+  await driver.tap(await rowCenter(page, 'General'));
+  await watch.started();
+  await holdAnimations(page, undefined, {
+    judges: [
+      {target: top, property: 'translate'},
+      {target: under, property: 'translate'},
+    ],
+  });
 
   const times = Array.from({length: 31}, (_, i) => i * 16.667);
   const samples: {t: number; top: number; under: number; analytic: number}[] =
@@ -776,7 +798,9 @@ test('brought back past its start, the screen follows with resistance, then spri
   frames.push({t: last.t + steps * 16.7 + 4, fingers: []});
   await driver.play(frames);
   // The return, held where it runs and read every 2 ms from its start.
-  const heldAnimations = await holdAnimations(page, top);
+  const heldAnimations = await holdAnimations(page, top, {
+    judges: {target: top, property: 'translate'},
+  });
   const returnIndex = await top.evaluate(element =>
     (
       (window as unknown as {__harnessHeld?: Animation[]}).__harnessHeld ?? []
@@ -956,10 +980,11 @@ test('a push keeps advancing every frame while the main thread is blocked', asyn
   // The compositor's own pace on this machine, from the same screencast.
   await startBusyControl(page);
   const cast = await startScreencast(page);
+  const watch = await watchAnimations(top);
   await driver.tap(await rowCenter(page, 'General'));
   // Below the bar, which overlays the screens.
   await markElement(top, {inset: 60});
-  const [push] = await waitForAnimation(top, {minProgressMs: 16});
+  const [push] = await watch.started({minProgressMs: 16});
   // The page blocks itself from inside the push, once it has run a frame. A
   // block from the test's own round trip can start before the marker paints.
   const block = await blockMainThread(page, 600, {
@@ -1035,8 +1060,9 @@ test('with a mouse, the incoming bar covers the old title while the main thread 
     });
     const cast = await startScreencast(page);
     const row = await rowCenter(page, 'General');
+    const watch = await watchAnimations(card(page, 'screen-General'));
     await page.mouse.click(row.x, row.y);
-    await waitForAnimation(card(page, 'screen-General'), {minProgressMs: 16});
+    await watch.started({minProgressMs: 16});
     const block = await blockMainThread(page, 900);
     await page.waitForTimeout(150);
     const frames = await cast.stop();
@@ -1886,8 +1912,9 @@ test('a push does no Layout or Paint per frame', async ({
         requestAnimationFrame(waitForStart);
       });
     });
+    const watch = await watchAnimations(top);
     await row.evaluate(element => (element as HTMLElement).click());
-    [push] = await waitForAnimation(top);
+    [push] = await watch.started();
     await waitForRest(top);
   });
   const motion = await page.evaluate(
@@ -1979,9 +2006,10 @@ test.describe('with Reduce Motion', () => {
   test('a push cross-fades in place instead of sliding', async ({page}) => {
     await page.emulateMedia({reducedMotion: 'reduce'});
     const {driver} = await openStack(page, 'settings');
-    await driver.tap(await rowCenter(page, 'General'));
     const top = card(page, 'screen-General');
-    await waitForAnimation(top);
+    const watch = await watchAnimations(top);
+    await driver.tap(await rowCenter(page, 'General'));
+    await watch.started();
     const midway = await top.evaluate(element => ({
       x: getComputedStyle(element).translate,
       opacity: Number(getComputedStyle(element).opacity),
@@ -2037,9 +2065,10 @@ test('a large title scrolls under the bar, which then shows the title; scrolling
 
 test('a pushed large title rides in with its screen', async ({page}) => {
   const {driver} = await openStack(page, 'large-title');
-  await driver.tap(await rowCenter(page, 'General'));
   const top = card(page, 'screen-General');
-  await waitForAnimation(top);
+  const watch = await watchAnimations(top);
+  await driver.tap(await rowCenter(page, 'General'));
+  await watch.started();
   await waitForRest(top);
   // The pushed screen here is inline; the root's large title stays with the
   // root card, under it and to the left.
@@ -2109,9 +2138,10 @@ test('a back swipe carries the large titles: each rides its own screen', async (
   page,
 }) => {
   const {driver, width, left} = await openStack(page, 'large-title');
-  await driver.tap(await rowCenter(page, 'General'));
   const top = card(page, 'screen-General');
-  await waitForAnimation(top);
+  const watch = await watchAnimations(top);
+  await driver.tap(await rowCenter(page, 'General'));
+  await watch.started();
   await waitForRest(top);
   await expect(
     page.getByRole('heading', {level: 1, name: 'Settings'}),
@@ -2270,10 +2300,11 @@ test('the bar title’s handover keeps running while the main thread is blocked'
   expect(box).not.toBeNull();
   await startBusyControl(page);
   const cast = await startScreencast(page);
+  const watch = await watchAnimations(barText);
   await card(page, 'root').evaluate(element =>
     (element.firstElementChild as HTMLElement).scrollTo({top: 300}),
   );
-  const [fade] = await waitForAnimation(barText, {minProgressMs: 16});
+  const [fade] = await watch.started({minProgressMs: 16});
   const block = await blockMainThread(page, 600, {
     during: barText,
     minProgressMs: 16,
@@ -2317,12 +2348,17 @@ test('the bar title’s handover keeps running while the main thread is blocked'
 
 test('storyboard: a push', {tag: '@storyboard'}, async ({page}, testInfo) => {
   const {driver, width} = await openStack(page, 'settings');
-  await driver.tap(await rowCenter(page, 'General'));
   const top = card(page, 'screen-General');
-  await waitForAnimation(top);
+  const watch = await watchAnimations(top);
+  await driver.tap(await rowCenter(page, 'General'));
+  await watch.started();
   const viewport = page.viewportSize() ?? {width: 402, height: 714};
   const {storyboard} = await animationStoryboard(page, {
     name: 'navigationstack-push',
+    judges: [
+      {target: top, property: 'translate'},
+      {target: card(page, 'root'), property: 'translate'},
+    ],
     clip: {x: 0, y: 0, width: viewport.width, height: viewport.height},
     // The spring is at rest by ~0.45 s; the animator holds end states after.
     times: Array.from({length: 28}, (_, i) => i * 16.667),

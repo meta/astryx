@@ -2995,6 +2995,61 @@ export function createMotionEngine(
     landings.delete(landing);
   };
 
+  /**
+   * How long `landing` still waits for its fade, in ms. A sampler that pauses
+   * the fade holds it, so it checks again later. A resumed fade holds it until
+   * the fade starts again. A fade that runs past the landing's due time, as
+   * after a pause, holds it for the rest of the fade. Any other fade holds
+   * nothing.
+   */
+  const fadeHeldFor = (landing: Landing): number => {
+    const animation = running.get('opacity');
+    const owner = segments.get('opacity')?.owner;
+    if (
+      animation == null ||
+      owner == null ||
+      (owner !== landing.owner && !landing.carried.includes(owner))
+    ) {
+      return 0;
+    }
+    if (animation.playState === 'paused') {
+      return RETIRE_RECHECK_MS;
+    }
+    // The timeline reads the frame before a long task, so the fade's current
+    // time would date a fade that has ended as still running.
+    const start = animation.startTime;
+    const duration = Number(animation.effect?.getTiming?.().duration);
+    if (!Number.isFinite(duration)) {
+      return 0;
+    }
+    if (start == null) {
+      // A fade resumed with play() has no start until its next frame.
+      return animation.playState === 'running' ? END_RECHECK_MS : 0;
+    }
+    // A fade that ends by the landing's due time holds nothing. A timer runs
+    // in whole milliseconds, so it often fires a fraction early.
+    const end = Number(start) + duration - END_HOLD_MS;
+    if (landing.due != null && end <= landing.due) {
+      return 0;
+    }
+    const left = end - now();
+    return left > 0 ? left : 0;
+  };
+
+  /**
+   * The landing's timer: it lands once its fade lets it. A call that takes the
+   * landing over lands it directly, at once.
+   */
+  const landWhenFaded = (landing: Landing) => {
+    const held = fadeHeldFor(landing);
+    if (held > 0) {
+      landing.due = now() + held;
+      landing.timer = setTimeout(() => landWhenFaded(landing), held);
+      return;
+    }
+    land(landing);
+  };
+
   /** Arms a landing from the call's start (the browser's, for a call from rest). */
   const scheduleLanding = (
     owner: HandleState,
@@ -3026,7 +3081,7 @@ export function createMotionEngine(
       }
       landing.due = start + landing.at;
       landing.timer = setTimeout(
-        () => land(landing),
+        () => landWhenFaded(landing),
         Math.max(0, landing.due - now()),
       );
     });
