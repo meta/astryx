@@ -231,8 +231,24 @@ const styles = stylex.create({
     justifyContent: 'center',
     flexShrink: 0,
   },
+  // A real box, not `display: contents`: WebKit before macOS 15 drops an
+  // accessible name computed through a `display: contents` element, so
+  // VoiceOver read a labelled Button as unnamed. The box takes the Button's
+  // own layout (it is the only in-flow child; the spinner overlay and the
+  // live region are absolutely positioned), so the content sits as before.
   contentWrapper: {
-    display: 'contents',
+    display: 'flex',
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 'auto',
+    alignSelf: 'stretch',
+    flexDirection: 'inherit',
+    flexWrap: 'inherit',
+    alignItems: 'inherit',
+    justifyContent: 'inherit',
+    gap: 'inherit',
+    // Lets a narrow row shrink the box, so the label inside still truncates.
+    minWidth: 0,
   },
   labelText: {
     overflow: 'hidden',

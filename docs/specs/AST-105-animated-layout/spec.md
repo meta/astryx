@@ -135,7 +135,12 @@ const animatedLayout = useAnimatedLayout({containerRef: scrollRef});
   measures any change, and the element's moving edge and the content on that
   edge's side move on FR4's one motion, whether that content comes after the
   element or before it (an end panel's LayoutContent comes before the panel),
-  so the content beside the edge glides with it and no gap opens. An optional
+  so the content beside the edge glides with it and no gap opens. In a
+  block-edge form, the element's own child elements slide on that motion under
+  a still clip at its content box on the side its parts enter from, so they
+  enter and leave at the moving edge; an element with text of its own, a child
+  that a translation cannot move, or a box or generated box of its own that it
+  paints, keeps a clip that moves with the edge. An optional
   two-state form holds the element's old state as FR8's swap holds it, while
   the element rides the glide of the content beside its moving edge; a reversal
   from the shown state starts from where it is. Under Reduce Motion it follows
