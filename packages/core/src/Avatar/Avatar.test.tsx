@@ -4,6 +4,8 @@ import {Profiler, useState} from 'react';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {act, render, screen, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import * as stylex from '@stylexjs/stylex';
+import {colorVars} from '../theme/tokens.stylex';
 import {Avatar} from './Avatar';
 import {AvatarStatusDot} from './AvatarStatusDot';
 import {AvatarGroup} from '../AvatarGroup';
@@ -65,6 +67,52 @@ describe('Avatar', () => {
     const icon = document.querySelector('.astryx-avatar-fallback');
     expect(icon).not.toBeNull();
     expect(icon?.querySelector('svg')).not.toBeNull();
+  });
+
+  it('paints initials in primary text on the neutral tint, a pair that holds 4.5:1 in dark mode', () => {
+    // Secondary text on the neutral tint falls below 4.5:1 in dark mode.
+    const probe = stylex.create({
+      tint: {backgroundColor: colorVars['--color-neutral']},
+      ink: {
+        color: {
+          default: colorVars['--color-text-primary'],
+          '@media (forced-colors: active)': 'currentColor',
+        },
+      },
+    });
+    render(<Avatar name="Ada Lovelace" />);
+    const initials = screen.getByText('AL');
+    const classesOf = (style: stylex.StyleXStyles) =>
+      (stylex.props(style).className ?? '')
+        .split(' ')
+        // Dev mode prepends a per-file `File__style.key` debug class that
+        // differs between the probe and the component.
+        .filter(cls => cls !== '' && !cls.includes('__'));
+    for (const cls of [...classesOf(probe.tint), ...classesOf(probe.ink)]) {
+      expect(initials.className).toContain(cls);
+    }
+  });
+
+  it('paints grouped initials in primary text too', () => {
+    // A grouped face skips the lone-avatar colour rule, so the fallback's own
+    // colour is the one it shows.
+    const probe = stylex.create({
+      ink: {color: colorVars['--color-text-primary']},
+    });
+    render(
+      <AvatarGroup>
+        <Avatar name="Ada Lovelace" />
+        <Avatar name="Grace Hopper" />
+      </AvatarGroup>,
+    );
+    const initials = screen.getByText('AL');
+    const classes = (stylex.props(probe.ink).className ?? '')
+      .split(' ')
+      .filter(cls => cls !== '' && !cls.includes('__'));
+    expect(classes.length).toBeGreaterThan(0);
+    for (const cls of classes) {
+      expect(initials.className).toContain(cls);
+    }
   });
 
   it('puts the avatar box on the element that carries the theme target', () => {

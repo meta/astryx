@@ -32,6 +32,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {CLI_ROOT} from '../fs/paths.mjs';
+import {listDir, listDirEntries} from '../fs/listing-cache.mjs';
 import {importDocModule} from '../doc-compiler/import.mjs';
 import {CLI_PROVIDER_ID} from '../identity/providers.mjs';
 import {parseReadableDoc} from '../doc-compiler/parse-readable.mjs';
@@ -135,7 +136,7 @@ export function discoverBuiltinTopics() {
   /** @type {Record<string, string>} */
   const topics = Object.create(null);
   if (!fs.existsSync(BUILTIN_DOCS_DIR)) return topics;
-  for (const file of fs.readdirSync(BUILTIN_DOCS_DIR)) {
+  for (const file of listDir(BUILTIN_DOCS_DIR)) {
     const match = file.match(BUILTIN_TOPIC_FILE_RE);
     if (match) topics[match[1]] = path.join(BUILTIN_DOCS_DIR, file);
   }
@@ -152,7 +153,7 @@ export function builtinGuideFiles() {
   const files = Object.values(discoverBuiltinTopics());
   const tree = path.join(BUILTIN_DOCS_DIR, 'tree');
   if (fs.existsSync(tree)) {
-    for (const file of fs.readdirSync(tree).sort()) {
+    for (const file of listDir(tree).sort()) {
       if (BUILTIN_TOPIC_FILE_RE.test(file)) files.push(path.join(tree, file));
     }
   }
@@ -524,7 +525,7 @@ export async function discoverIntegrationDocs(integration) {
   const files = [];
   /** @param {string} dirPath */
   function scanDir(dirPath) {
-    for (const entry of fs.readdirSync(dirPath, {withFileTypes: true})) {
+    for (const entry of listDirEntries(dirPath)) {
       if (entry.name === 'node_modules' || entry.name === '__tests__') continue;
       const full = path.join(dirPath, entry.name);
       if (entry.isDirectory()) {
@@ -737,7 +738,8 @@ export function mergeTopicReport(base, overlay) {
       // It also keeps the place an earlier `after` gave the one it replaces,
       // so sections placed after that key later still follow it.
       if (replaced[PLACED_AFTER] != null) {
-        const placed = replacing === section ? withoutPosition({...section}) : replacing;
+        const placed =
+          replacing === section ? withoutPosition({...section}) : replacing;
         for (const symbol of Object.getOwnPropertySymbols(section)) {
           if (!(symbol in placed)) {
             Object.defineProperty(

@@ -422,29 +422,45 @@ describe('ci.yml pr-a11y browser specs', () => {
   });
 
   it("runs the merge commit's runner against the PR head", () => {
+    const count = steps.find(
+      step => step.name === "Count this run's accessibility legs",
+    );
     expect(run.if).toBe(
-      "(!cancelled()) && steps.scope.outputs.has_components == 'true'",
+      "(!cancelled()) && steps.scope.outputs.has_components == 'true' && steps.legs.outputs.runs == 'true'",
     );
     // The merge commit the steps come from, not the PR's recorded base, which
-    // can lag main and predate the runner.
-    expect(run.env.WORKFLOW_SHA).toBe('${{ github.sha }}');
-    expect(run.env.BASE_SHA).toBe('${{ github.event.pull_request.base.sha }}');
-    expect(run.env.PR_TITLE).toBe('${{ github.event.pull_request.title }}');
+    // can lag main and predate the runner. The count step selects; the run
+    // step runs that leg's share with the same runner.
+    for (const step of [count, run]) {
+      expect(step.env.WORKFLOW_SHA).toBe('${{ github.sha }}');
+      expect(step.env.PR_TITLE).toBe('${{ github.event.pull_request.title }}');
+    }
+    // The base comes from the merge commit's first parent, not the event.
+    expect(count.env.BASE_SHA).toBeUndefined();
+    expect(count.run).toContain('BASE_SHA=$(git rev-parse "$WORKFLOW_SHA^1")');
+    expect(count.run).toContain(
+      'git show "$WORKFLOW_SHA:.github/scripts/a11y-pr-contracts.mjs" > "$runner"',
+    );
+    expect(count.run).toContain(
+      '--share-out "$RUNNER_TEMP/a11y-leg-share.json"',
+    );
     expect(run.run).toContain(
       'git show "$WORKFLOW_SHA:.github/scripts/a11y-pr-contracts.mjs" > "$runner"',
     );
-    expect(run.run).toContain('node "$runner"');
+    expect(run.run).toContain(
+      'node "$runner" --share "$RUNNER_TEMP/a11y-leg-share.json"',
+    );
     expect(
       JSON.parse(read('package.json')).scripts['test:a11y-contract:pr'],
     ).toBe('node .github/scripts/a11y-pr-contracts.mjs');
   });
 
-  it('uploads every spec receipt in one head-bound artifact', () => {
+  it('uploads every spec receipt in one head-bound artifact per leg', () => {
     expect(upload.if).toBe(
-      "(!cancelled()) && steps.scope.outputs.has_components == 'true'",
+      "(!cancelled()) && steps.scope.outputs.has_components == 'true' && steps.legs.outputs.runs == 'true'",
     );
     expect(upload.with.name).toBe(
-      'pr-a11y-evidence-${{ needs.build-storybook.outputs.short_hash }}',
+      'pr-a11y-evidence-${{ needs.build-storybook.outputs.short_hash }}-${{ matrix.leg }}',
     );
     for (const dir of [
       'pr-a11y-evidence/',
@@ -908,7 +924,7 @@ describe('scoped browser audits (spec:AST-030 FR9, FR13)', () => {
       'if [ -n "$DEPENDENTS" ]; then DEPENDENT_ARGS=(--dependents "$DEPENDENTS"); fi',
     );
     expect(visual.run).toContain(
-      'SCOPE_ARGS=(--tiers component --components "$COMPONENTS" "${DEPENDENT_ARGS[@]}" --no-scout)',
+      'SCOPE_ARGS=(--tiers component --components "$COMPONENTS" ${DEPENDENT_ARGS[@]+"${DEPENDENT_ARGS[@]}"} --no-scout)',
     );
     expect(visual.run).toContain(
       "FORCE_FULL_AUDITS=$(jq -r '.forceFullComponentAudits == true' analysis.json)",
