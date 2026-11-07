@@ -281,7 +281,10 @@ first.
 - The FR7 exception for a swizzled copy holds in the Babel, PostCSS, and Vite
   integrations. `withAstryx()` under Turbopack does not read the
   `astryx-swizzle.json` marker, and `astryx swizzle` does not write it, so a
-  product adds the marker to the copy's folder (FR5, FR7).
+  product adds the marker to the copy's folder (FR5, FR7). A bundler's
+  transform cache does not key on the marker, so a product deletes that cache
+  after adding or removing one, or the copy keeps class names its stylesheet
+  no longer holds (FR7).
 - Under Turbopack no maintained StyleX compiler runs in the native pipeline, so
   the FR9 fast path is a goal with a known gap: the Turbopack route compiles
   Astryx modules through a JavaScript loader running Babel and the StyleX Babel
