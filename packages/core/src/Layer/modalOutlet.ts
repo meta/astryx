@@ -7,7 +7,8 @@
  * @input The open Dialog and scrim BottomSheet `<dialog>` elements
  * @output Exports useModalOutlet, useModalOutletWithoutRef,
  *   getActiveModalOutlet, subscribeModalOutlets, notifyTopLayerEntry,
- *   markModalOutletHost, isModalOutletHost and ModalOutletChange
+ *   markModalOutletHost, isModalOutletHost, modalOutletHosts and
+ *   ModalOutletChange
  * @position Private layer infrastructure; spec:AST-003 FR18
  *
  * A native modal makes everything outside it inert and paints over every
@@ -55,8 +56,9 @@ export type ModalOutletChange = 'outlet' | 'entry';
 
 const listeners = new Set<(change: ModalOutletChange) => void>();
 
-// The global hosts that move into the latest open modal.
-const hosts = new WeakSet<Element>();
+// The global hosts that move into the latest open modal. Each host removes
+// its own mark when it goes, so the set keeps no node past its host.
+const hosts = new Set<Element>();
 
 function notify(change: ModalOutletChange): void {
   for (const listener of listeners) {
@@ -176,6 +178,11 @@ export function markModalOutletHost(element: Element): () => void {
 /** Whether `element` is a global host that moves into the latest open modal. */
 export function isModalOutletHost(element: Element): boolean {
   return hosts.has(element);
+}
+
+/** The global hosts that move into the latest open modal. */
+export function modalOutletHosts(): Element[] {
+  return [...hosts];
 }
 
 /**

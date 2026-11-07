@@ -9,13 +9,15 @@
  *   show succeeds, and none without the popover API or past the copy cap. It
  *   sits on the layer's layout box with fractions, and with the transform and
  *   opacity it was drawn with. No keyframes or transitions replay, there is
- *   one copy per layer, and it is scrolled where the layer was.
+ *   one copy per layer, and it is scrolled where the layer was. A copy taken
+ *   first stays out of the document until it is placed, and reads no
+ *   inherited values when it goes beside the layer.
  * @position Testing; the browser proofs are in
  *   __tests__/layerExitCopy.interaction.browser.spec.ts
  */
 
 import {afterEach, describe, expect, it, vi} from 'vitest';
-import {placeLayerExitCopy} from './layerExitCopy';
+import {placeLayerExitCopy, takeLayerExitCopy} from './layerExitCopy';
 
 const BOX = {left: 41, top: 204, width: 320, height: 253};
 const ATTRIBUTE = 'data-test-exit';
@@ -256,6 +258,68 @@ describe('placeLayerExitCopy', () => {
     expect(second.isConnected).toBe(true);
     expect(otherCopy.isConnected).toBe(true);
     expect(document.querySelectorAll(`[${ATTRIBUTE}]`)).toHaveLength(2);
+  });
+
+  it('takes the same copy out of the document, and places it where it would place it, taking the layer\u2019s previous copy away', () => {
+    const show = popoverApi(true);
+    if (show == null) {
+      throw new Error('no popover API');
+    }
+    const element = layer();
+    const first = place(element);
+    const taken = takeLayerExitCopy(element, ATTRIBUTE);
+    if (taken == null) {
+      throw new Error('no copy');
+    }
+    const {copy} = taken;
+    // Taken, not placed: out of the document, the first copy still shown.
+    expect(copy.isConnected).toBe(false);
+    expect(first.isConnected).toBe(true);
+    expect(copy.hasAttribute(ATTRIBUTE)).toBe(true);
+    expect(copy.hasAttribute('inert')).toBe(true);
+    expect(copy.getAttribute('popover')).toBe('manual');
+    expect(copy.style.getPropertyValue('left')).toBe(`${BOX.left}px`);
+    taken.place();
+    expect(first.isConnected).toBe(false);
+    expect(copy.previousElementSibling).toBe(element);
+    expect(show).toHaveBeenLastCalledWith();
+    expect(show.mock.contexts.at(-1)).toBe(copy);
+    expect(document.querySelectorAll(`[${ATTRIBUTE}]`)).toHaveLength(1);
+  });
+
+  it('reads no inherited values for a copy taken to go beside the layer, and carries them for one laid after an outer layer', () => {
+    popoverApi(true);
+    const sheet = document.createElement('style');
+    sheet.textContent =
+      '#layer { --menu-tone: rgb(1, 2, 3); color-scheme: dark; }';
+    document.head.append(sheet);
+    const element = layer();
+    const beside = takeLayerExitCopy(element, ATTRIBUTE);
+    const host = element.parentElement as HTMLElement;
+    const outer = document.createElement('div');
+    outer.setAttribute('popover', 'auto');
+    host.append(outer);
+    outer.append(element);
+    const after = takeLayerExitCopy(element, ATTRIBUTE);
+    sheet.remove();
+    if (beside == null || after == null) {
+      throw new Error('no copy');
+    }
+    // Beside the layer the copy inherits what the layer inherits: nothing is
+    // written for it.
+    expect(beside.copy.style.getPropertyValue('--menu-tone')).toBe('');
+    expect(beside.copy.style.getPropertyValue('color-scheme')).toBe('');
+    after.place();
+    expect(after.copy.previousElementSibling).toBe(outer);
+    expect(after.copy.style.getPropertyValue('--menu-tone')).toBe(
+      'rgb(1, 2, 3)',
+    );
+    expect(after.copy.style.getPropertyValue('color-scheme')).toBe('dark');
+  });
+
+  it('takes no copy without the popover API: the close is immediate', () => {
+    popoverApi(false);
+    expect(takeLayerExitCopy(layer(), ATTRIBUTE)).toBeNull();
   });
 
   it('stands on the layer\u2019s box, free of the live layer\u2019s anchoring, drawn with its inline scale and opacity', () => {

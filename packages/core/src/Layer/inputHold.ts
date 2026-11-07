@@ -26,7 +26,11 @@ import {
   subscribeInput,
 } from '../utils/inputStream';
 import {isDocument, isElement, isHTMLElement, isNode} from '../utils/nodeType';
-import {isModalOutletHost, notifyTopLayerEntry} from './modalOutlet';
+import {
+  isModalOutletHost,
+  modalOutletHosts,
+  notifyTopLayerEntry,
+} from './modalOutlet';
 
 /**
  * What a hold does. `'viewport'` and `'layer'` add one shield over the whole
@@ -782,24 +786,38 @@ function createPressHold(doc: Document): PressHold | null {
 
 /**
  * Makes the layer's content inert, except the shield and the global hosts,
- * and moves focus out of it. An element that turns inert while focused keeps
- * its focus and its key activation. Enter and Space still click such a button
- * until the engine's focus fixup runs, if it runs. Blurring it leaves focus on
- * the document, as that fixup does. The layer element itself stays live. An
- * inert subtree is no hit target, so the shield inside the layer still catches
- * every hit.
+ * and moves focus out of it. A global host deeper in the layer stays live
+ * with the elements around it: their other children go inert. An element
+ * that turns inert while focused keeps its focus and its key activation.
+ * Enter and Space still click such a button until the engine's focus fixup
+ * runs, if it runs. Blurring it leaves focus on the document, as that fixup
+ * does. The layer element itself stays live. An inert subtree is no hit
+ * target, so the shield inside the layer still catches every hit.
  */
 function makeContentInert(
   layer: Element,
   shield: Element,
 ): Map<Element, boolean> {
   const content = new Map<Element, boolean>();
-  for (const child of layer.children) {
-    if (child !== shield && !isModalOutletHost(child)) {
+  const hosts = modalOutletHosts().filter(host =>
+    containsAlongFlatTree(layer, host),
+  );
+  // An element that holds a global host stays live, and its other children
+  // go inert: inert content has no live descendant.
+  const makeInertAround = (parent: Element) => {
+    for (const child of parent.children) {
+      if (child === shield || hosts.includes(child)) {
+        continue;
+      }
+      if (hosts.some(host => containsAlongFlatTree(child, host))) {
+        makeInertAround(child);
+        continue;
+      }
       content.set(child, child.hasAttribute('inert'));
       child.setAttribute('inert', '');
     }
-  }
+  };
+  makeInertAround(layer);
   const focused = deepActiveElement(layer.ownerDocument);
   if (
     isHTMLElement(focused) &&
