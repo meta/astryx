@@ -76,6 +76,7 @@ import {
 } from '../Field';
 import {useInputStatusIcon, useMergedRefs} from '../hooks';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
+import {useToday} from '../hooks/useToday';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {Icon} from '../Icon';
 import {IconButton} from '../IconButton';
@@ -135,6 +136,10 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/DateInput/TouchDateField.generated';
+
+// The month math needs a date before today is known (server render,
+// hydration). The sheet's content, which shows the month, waits for today.
+const UNKNOWN_TODAY_STAND_IN = plainDateFromISO('1970-01-01');
 
 registerEnglishFallback(english);
 
@@ -696,7 +701,9 @@ export function TouchDateField({
     [],
   );
 
-  const today = useMemo(() => plainDateToday(), []);
+  // Unknown on the server and while hydrating. The sheet's content waits for
+  // it, so hydration matches the server markup.
+  const today = useToday();
   const selectedDate = useMemo(
     () =>
       optimisticValue != null && /^\d{4}-\d{2}-\d{2}$/.test(optimisticValue)
@@ -711,13 +718,17 @@ export function TouchDateField({
   // pane's scroll offset under the user mid-gesture.
   // Indexes belong to the calendar, so DateInput remounts this surface when
   // the calendar changes.
-  const [anchorMonthIndex] = useState(() =>
-    monthModel.indexOf(
+  // Without a value it opens on today's month: derived on each render until
+  // today is known, then stable for the day.
+  const [anchoredMonthIndex] = useState<number | null>(() => {
+    const opening =
       value != null && /^\d{4}-\d{2}-\d{2}$/.test(value)
         ? plainDateFromISO(value)
-        : plainDateToday(),
-    ),
-  );
+        : today;
+    return opening == null ? null : monthModel.indexOf(opening);
+  });
+  const anchorMonthIndex =
+    anchoredMonthIndex ?? monthModel.indexOf(today ?? UNKNOWN_TODAY_STAND_IN);
   const minMonthIndex =
     min != null
       ? monthModel.indexOf(plainDateFromISO(min))
@@ -727,9 +738,15 @@ export function TouchDateField({
       ? monthModel.indexOf(plainDateFromISO(max))
       : anchorMonthIndex + DEFAULT_MONTH_REACH;
 
-  const [monthIndex, setMonthIndex] = useState(() =>
-    clampIndex(anchorMonthIndex, minMonthIndex, maxMonthIndex),
+  // Set once the person moves the month; until then the opening month.
+  const [chosenMonthIndex, setMonthIndex] = useState<number | null>(() =>
+    anchoredMonthIndex == null
+      ? null
+      : clampIndex(anchoredMonthIndex, minMonthIndex, maxMonthIndex),
   );
+  const monthIndex =
+    chosenMonthIndex ??
+    clampIndex(anchorMonthIndex, minMonthIndex, maxMonthIndex);
 
   const weekdayHeaders = useMemo(
     () => getWeekdayHeaders(locale, weekStartsOn),
@@ -844,7 +861,7 @@ export function TouchDateField({
       return;
     }
     fireChange(undefined);
-    const currentMonth = monthModel.indexOf(today);
+    const currentMonth = monthModel.indexOf(plainDateToday());
     if (currentMonth < minMonthIndex || currentMonth > maxMonthIndex) {
       return;
     }
@@ -857,7 +874,6 @@ export function TouchDateField({
     isDisabled,
     fireChange,
     monthModel,
-    today,
     monthIndex,
     minMonthIndex,
     maxMonthIndex,
@@ -1396,7 +1412,7 @@ export function TouchDateField({
         // sheetBody owns the inset, including the band under the grab handle.
         padding={0}>
         <div ref={sheetBodyRef} {...stylex.props(styles.sheetBody)}>
-          {surface}
+          {today != null && surface}
         </div>
       </BottomSheet>
       {showsDisabledMessage &&
