@@ -96,7 +96,7 @@ describe('WebKit interaction proof routing', () => {
     const guards = new Set([
       "Require this pull request's Storybook build",
       'Skip the WebKit proofs outside their scope',
-      'Leave the proofs to the first leg',
+      'Leave the proofs to the other legs',
     ]);
     // Every step after the leg count also waits for this leg to have a share.
     const counted = webkit.steps.indexOf(
@@ -113,7 +113,7 @@ describe('WebKit interaction proof routing', () => {
         ),
       );
     }
-    expect(step(webkit, 'Leave the proofs to the first leg').if).toBe(
+    expect(step(webkit, 'Leave the proofs to the other legs').if).toBe(
       `${applies} && steps.legs.outputs.runs != 'true'`,
     );
   });

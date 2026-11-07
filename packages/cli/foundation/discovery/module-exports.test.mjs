@@ -10,6 +10,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
+  elementPropOrigins,
   moduleExportOrigin,
   moduleExportSource,
   staticExportObject,
@@ -206,4 +207,72 @@ describe('a library of thousands of icons', () => {
       fs.rmSync(dir, {recursive: true, force: true});
     }
   }, 60_000);
+});
+
+describe('elementPropOrigins', () => {
+  const THEME = {
+    sources: new Set(['@acme/core']),
+    name: 'Theme',
+    prop: 'theme',
+    /** @param {any} init */
+    unwrap: init =>
+      init.type === 'CallExpression' && init.callee?.name === 'extend'
+        ? init.arguments[0]
+        : null,
+  };
+
+  it('follows each element value through aliases, re-exports, unwrap and an installed package', () => {
+    const pkg = path.join(dir, 'node_modules/@acme/themes');
+    fs.mkdirSync(path.join(pkg, 'dist'), {recursive: true});
+    fs.writeFileSync(
+      path.join(pkg, 'package.json'),
+      JSON.stringify({name: '@acme/themes', exports: {'.': './dist/index.js'}}),
+    );
+    fs.writeFileSync(
+      path.join(pkg, 'dist/index.js'),
+      "export {oceanTheme} from './ocean.js';\n",
+    );
+    const ocean = path.join(pkg, 'dist/ocean.js');
+    fs.writeFileSync(ocean, 'export const oceanTheme = {};\n');
+    write(
+      'brand.ts',
+      "import {oceanTheme as base} from '@acme/themes';\nexport const brand = extend(base);\n",
+    );
+    const app = write(
+      'App.tsx',
+      [
+        "import {Theme as T} from '@acme/core';",
+        "import {oceanTheme} from '@acme/themes';",
+        "import {brand} from './brand';",
+        'const picked = oceanTheme;',
+        'export const App = ({theme}: any) => (',
+        '  <T theme={picked}><T theme={brand as any} /><T theme={theme} /><T theme={themes.x} /><T /></T>',
+        ');',
+        '',
+      ].join('\n'),
+    );
+
+    expect(elementPropOrigins(app, THEME)).toEqual([
+      {file: ocean, name: 'oceanTheme'},
+      {file: ocean, name: 'oceanTheme'},
+      {file: app, name: 'theme'},
+      null,
+    ]);
+  });
+
+  it('gives nothing for a module that never imports the element', () => {
+    const app = write(
+      'Other.tsx',
+      "import {Theme} from 'elsewhere';\nexport const A = () => <Theme theme={x} />;\n",
+    );
+    expect(elementPropOrigins(app, THEME)).toEqual([]);
+  });
+
+  it('gives null when the package a value comes from is not installed', () => {
+    const app = write(
+      'Missing.tsx',
+      "import {Theme} from '@acme/core';\nimport {gone} from '@acme/missing';\nexport const A = () => <Theme theme={gone} />;\n",
+    );
+    expect(elementPropOrigins(app, THEME)).toEqual([null]);
+  });
 });

@@ -11,6 +11,8 @@
  *   read from its frames, `pooledBusyProof`, which judges several short
  *   blocks as one, and `BusyWindowTooLateError`, for a block that began
  *   after the motion it was meant to catch had ended.
+ *   `BUSY_PROOF_LOOKAROUND_MS` is how far around its judged part a proof
+ *   reads frames.
  *   `trackControl` and `controlClock` read the control's box and its own
  *   clock from the screencast, a second control's too (`ahead`).
  * @position The busy-main-thread proof: an animation that runs on the
@@ -621,10 +623,11 @@ export interface BusyProof extends FrameStats {
    */
   readonly judged: {readonly from: number; readonly to: number};
   /**
-   * When the tracked value was seen at rest before the judged part (a frame
-   * there, no change in the 250 ms before it: a just-started animation not on
-   * screen yet), ms after the window's start of its first presented change
-   * inside the block, where judging starts; null otherwise.
+   * The ms after the window's start of the tracked value's first presented
+   * change inside the block, where judging starts. It is set when the value
+   * was seen at rest before the judged part: a frame there, and no change in
+   * the `BUSY_PROOF_LOOKAROUND_MS` before it. That is a just-started animation
+   * not on screen yet. Otherwise it is null.
    */
   readonly onScreenFromMs: number | null;
   /**
@@ -796,10 +799,10 @@ function motionStepPx(values: readonly number[]): number {
  *   judge, and that fails rather than passes.
  *
  * A just-started animation can reach the screen after the block began (its
- * hand-off to the compositor lags under load: 50–100 ms in WebKit). When the
- * tracked value was seen at rest before the judged part (a frame there, and no
- * change in the 250 ms before it), judging starts at its first presented
- * change inside the block, which the
+ * hand-off to the compositor lags under load: 50–100 ms in WebKit). The
+ * tracked value may be seen at rest before the judged part: a frame there, and
+ * no change in the `BUSY_PROOF_LOOKAROUND_MS` before it. Judging then starts at
+ * its first presented change inside the block, which the
  * proof reports as `onScreenFromMs`. So does a hold that starts before the
  * block (two frames at least at one position, the first before it) and ends
  * at the first presented change inside it: WebKit presents a just-started
@@ -864,6 +867,13 @@ function motionStepPx(values: readonly number[]): number {
  * `maxMedianFrameMs`, when given, still applies; `minMovedFraction` and the
  * absolute stall, frame and motion limits do not.
  */
+/**
+ * How far around its judged part a busy proof reads frames, ms: the rest
+ * before it and the frame cadence on both sides. A proof that decodes only
+ * part of a cast keeps the frames this far after the window.
+ */
+export const BUSY_PROOF_LOOKAROUND_MS = 250;
+
 export function busyWindowProof(
   tracked: readonly TrackedFrame[],
   window: BusyWindow,
@@ -1040,14 +1050,14 @@ export function busyWindowProof(
       previous = v.value;
     }
   }
-  // Seen at rest before the judged part (a frame there, and no change in the
-  // 250 ms before it): the first presented change is the animation's on-screen
-  // start, and judging starts there. With no frame before, nothing is known,
-  // and the window is judged from its start.
+  // Seen at rest before the judged part: a frame there, and no change in the
+  // `BUSY_PROOF_LOOKAROUND_MS` before it. The first presented change is then
+  // the animation's on-screen start, and judging starts there. With no frame
+  // before, nothing is known, and the window is judged from its start.
   const prior = tracked.filter(f => f.box != null && f.t < inner.from);
   let leadFrom = 0;
   prior.forEach((f, i) => {
-    if (f.t < inner.from - 250) {
+    if (f.t < inner.from - BUSY_PROOF_LOOKAROUND_MS) {
       leadFrom = i;
     }
   });
@@ -1104,7 +1114,11 @@ export function busyWindowProof(
   const changes = inWindow.filter(t => t > judged.from || onScreenFrom == null);
   const edges = [judged.from, ...changes, judged.to];
   const around = tracked
-    .filter(f => f.t >= inner.from - 250 && f.t <= inner.to + 250)
+    .filter(
+      f =>
+        f.t >= inner.from - BUSY_PROOF_LOOKAROUND_MS &&
+        f.t <= inner.to + BUSY_PROOF_LOOKAROUND_MS,
+    )
     .map(f => f.t);
   const intervals = around
     .slice(1)
@@ -1121,7 +1135,11 @@ export function busyWindowProof(
   // The compositor's own frames, when recorded: its interval, from the frames
   // around the judged part.
   const draws = [...(presented ?? [])]
-    .filter(t => t >= judged.from - 250 && t <= judged.to + 250)
+    .filter(
+      t =>
+        t >= judged.from - BUSY_PROOF_LOOKAROUND_MS &&
+        t <= judged.to + BUSY_PROOF_LOOKAROUND_MS,
+    )
     .sort((a, b) => a - b);
   const drawIntervals = draws
     .slice(1)

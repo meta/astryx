@@ -57,8 +57,9 @@ committed: a pull request links or attaches it.
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `scripts.ts`    | Touch scripts as data: `tap`, `drag` (hold, rest), `flick` (exact final-move speed, velocity profiles), `holdThenDrag`, `pinch`, `rotate`, `path`, `merge` (a second finger mid-gesture), `releaseVelocity`, `toTouchEvents`.                                                |
 | `touch.ts`      | `touchDriver(page).play(script)`: the script as real engine input. `installInputLog` / `readInputLog`: what the page received.                                                                                                                                               |
-| `frames.ts`     | `startScreencast` (timestamped composited frames), `markElement` (a marker chip or outline), `trackMarker` (marker box per frame), `sampleRects` (per-rAF rects), `frameStats`.                                                                                              |
+| `frames.ts`     | `startScreencast` (timestamped composited frames), `markElement` (a marker chip or outline), `trackMarker` (marker box per frame), `trackMarkers` (several colors from one decode of each frame), `sampleRects` (per-rAF rects), `frameStats`.                               |
 | `busy.ts`       | `blockMainThread(page, ms)`, which returns the window it held and the span its loop measured, and `busyWindowProof(tracked, window)`: frames presented, frames that moved, longest stall, a verdict; `presented` adds the compositor's own frames.                           |
+| `brightness.ts` | `trackBrightness(page, frames, {x, y})`: a colour channel's mean in a square per frame, as a scalar on `box.x`, for a busy-window proof of a fade or a dim.                                                                                                                  |
 | `webInput.ts`   | `webInputDriver(page)`: `wheel({x, y, dx, dy, ctrl})` and `pen(points)` as real engine input, for proofs across pointers (`spec:AST-100` FR4); `wheel` resolves once the page has the step; read back through the input log.                                                 |
 | `trace.ts`      | `traceRendering(page, body)`: main-thread counts of UpdateLayoutTree / Layout / PrePaint / Paint / Layerize / UpdateLayer / ScrollLayer / HitTest, `countBetween`, long tasks; `installLongTaskLog` / `readLongTasks`; `startCompositorTrace`: when the compositor presents. |
 | `curves.ts`     | `holdAnimations`, `armHold`, `seekAnimations`, `sampleCurve` (presented transform / opacity at any t), `waitForAnimation`, `watchAnimations`, `waitForRest`, `releaseAnimations`, `releaseAnimationLog` (frees what the recorder kept, before a heap or listener count).     |
@@ -244,7 +245,11 @@ a dialog they still wait for the backdrop's. Track a top-layer control from
 the same screencast with `trackControl(page, frames)` (`trackMarker` with
 `CONTROL_RGB`, searching only the top strip it crosses). A control mounted
 `within` a dialog moves with it, so track that one with `trackMarker(page,
-frames, {rgb: CONTROL_RGB})`. Pass either as `control`: the component passes when it moved on every frame the control
+frames, {rgb: CONTROL_RGB})`, or track the marker and the control together
+with `trackMarkers(page, frames, {colors: [MARKER_RGB, CONTROL_RGB]})`, which
+decodes each frame once. A proof reads frames up to
+`BUSY_PROOF_LOOKAROUND_MS` (250 ms) around its judged part, so a spec may
+decode only those. Pass either as `control`: the component passes when it moved on every frame the control
 moved and its longest stall is no longer than the control's. Both are read from
 the same screencast frames, so a compositor animation misses none. A window in
 which the control moved on fewer than four frames fails, since the machine
