@@ -6,10 +6,10 @@
  *   the engine's screencast (Chromium CDP `Page.startScreencast`; WebKit's
  *   `Screencast` domain)
  * @output `startScreencast` (timestamped composited frames), `markElement`
- *   (a marker outline the frames can find), `trackMarker` (per-frame marker
- *   box and the cast's position step), `trackMarkers` (several colors from
- *   one decode of each frame), `colorBlockPx` (a frame's color
- *   resolution), `sampleRects` (per-rAF rect sampling), `frameStats`.
+ *   (a marker outline the frames can find) and `trackMarker` (per-frame
+ *   marker box and the cast's position step). `trackMarkers` tracks several
+ *   colors from one decode of each frame. Also `colorBlockPx` (a frame's color
+ *   resolution), `sampleRects` (per-rAF rect sampling) and `frameStats`.
  * @position Frame evidence for motion proofs. The screencast is captured off
  *   the page's main thread, from what the compositor presents, so it keeps
  *   delivering frames while a script blocks the main thread: that is what makes
@@ -379,7 +379,7 @@ export async function trackMarker(
 }
 
 /**
- * `trackMarker` for several colors at once: each frame is decoded once and
+ * `trackMarker` for several colors at once. Each frame is decoded once and
  * searched for every color, so a proof that tracks a marker and a control
  * decodes each frame once. Returns one track per color, in order.
  */

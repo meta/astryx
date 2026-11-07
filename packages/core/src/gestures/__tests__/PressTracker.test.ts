@@ -130,6 +130,46 @@ describe('PressTracker', () => {
     expect(highlights).toEqual([true, false, true, false]);
   });
 
+  it("counts the content-touch delay from the touch's own time, so a touch delivered late still highlights on time", () => {
+    const {highlights, tracker, h} = setup();
+    const probe = scrollProbe(() => true, true);
+    // The page has run a while, so the touch's time is past zero.
+    vi.advanceTimersByTime(1000);
+    // A busy main thread delivers the touch 60 ms after it happened.
+    h.finger(1).down(150, 120, performance.now() - 60, {
+      recognizers: [],
+      consumer: tracker,
+      scroll: probe,
+    });
+    vi.advanceTimersByTime(DELAY - 60 - 1);
+    expect(highlights).toEqual([]);
+    vi.advanceTimersByTime(1);
+    expect(highlights).toEqual([true]);
+  });
+
+  it("reads a touch's time on the clock of its own window, as an iframe's touch carries", () => {
+    const {highlights, tracker, h} = setup();
+    const probe = scrollProbe(() => true, true);
+    vi.advanceTimersByTime(1000);
+    // The iframe's clock started 900 ms after this window's.
+    const frameClock = {now: () => performance.now() - 900};
+    const target = {
+      nodeType: 1,
+      ownerDocument: {defaultView: {performance: frameClock}},
+    };
+    // A busy main thread delivers the touch 60 ms after it happened.
+    h.finger(1).down(150, 120, frameClock.now() - 60, {
+      recognizers: [],
+      consumer: tracker,
+      scroll: probe,
+      target,
+    });
+    vi.advanceTimersByTime(DELAY - 60 - 1);
+    expect(highlights).toEqual([]);
+    vi.advanceTimersByTime(1);
+    expect(highlights).toEqual([true]);
+  });
+
   it('waits the content-touch delay inside a scroller, and flashes a quicker tap', () => {
     const {highlights, tracker, h} = setup();
     const probe = scrollProbe(() => true, true);

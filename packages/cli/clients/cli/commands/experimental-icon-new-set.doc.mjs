@@ -11,7 +11,7 @@ export const doc = {
   stability: 'experimental',
   summary: 'Start an icon set in your integration package',
   description:
-    "Run inside an integration package. Writes the set's folder with its descriptor, its data file, and its generated module, and declares the manifest's `experimental.iconSets` root on first use. With --from it wraps every icon component of a library, records the library and its version as the set's source, copies its license notice, and maps each Astryx icon definition whose name is an icon's id; definitions an icon only shares a word with are listed as suggestions, never written. Run it again to refresh. --variants and --default-variant declare the set's variants. Experimental: it may change or be removed in a patch release.",
+    "Run inside an integration package. Writes the set's folder with its descriptor, its data file, and its generated module, and declares the manifest's `experimental.iconSets` root on first use. With --from it wraps every icon component of a library, records the library and its version as the set's source, copies its license notice, and maps each Astryx icon definition whose name is an icon's id; definitions an icon only shares a word with are listed as suggestions, never written. A library whose export names end in looks (XOutline24WGHT500Icon) gives one icon per glyph, by its glyph id (x), in the look the default variant names, else the library's usual default. Run it again with --from to refresh. --variants and --default-variant declare the set's variants; over an existing set without --from, they, --display-name and --description update the set in place and leave its icons as they are; a set with icons changes its default variant only with --from, and only in a library whose export names encode looks. Experimental: it may change or be removed in a patch release.",
   fn: 'iconNewSet',
   args: [
     {
@@ -49,7 +49,7 @@ export const doc = {
       flag: '--default-variant <variant>',
       param: 'options.defaultVariant',
       description:
-        "With --variants: the variant each icon's own export draws (the first variant when omitted)",
+        "With --variants: the variant each icon's own export draws. When omitted: in a library whose export names encode looks, the look the icons draw (the library's usual default for a new set), which --variants must list; otherwise the set's current default, which --variants must list when the set has icons, else, on a set without icons, the first variant. A set with icons changes it only with --from, and only in a library whose export names encode looks",
     },
     {
       flag: '--display-name <text>',

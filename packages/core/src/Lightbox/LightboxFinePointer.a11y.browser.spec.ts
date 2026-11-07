@@ -246,7 +246,10 @@ async function expectSpringZoom(
   // The page holds the zoom itself as it starts: a hold sent from the test
   // would reach a busy page late. Runs that an earlier zoom left in their end
   // hold are not this zoom.
-  const hold = await armHold(page, img, {newOnly: true});
+  const hold = await armHold(page, img, {
+    judges: {target: img, property: 'scale'},
+    newOnly: true,
+  });
   await act();
   const held = await hold.held();
   expect(

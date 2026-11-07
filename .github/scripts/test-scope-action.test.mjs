@@ -181,6 +181,7 @@ describe('per-job scope step', () => {
         'spec_only',
         'tooling_only',
         'touches',
+        'vitest_full_suite',
       ].sort(),
     );
   });
