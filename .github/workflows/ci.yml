@@ -1196,7 +1196,7 @@ jobs:
           paths: '^packages/native/.*(\.swift|/Package\.swift)$|^\.github/scripts/native-swift\.sh$|^\.github/actions/test-scope/'
 
   test-native-swift:
-    needs: [heavy-ci, native-swift-runner]
+    needs: [admission, heavy-ci, native-swift-runner]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled())) }}
     runs-on: ${{ needs.native-swift-runner.outputs.applies == 'true' && 'macos-15' || 'ubuntu-slim' }}
     # The slim branch only reports that Swift is out of scope; a slim job
@@ -1205,8 +1205,16 @@ jobs:
     permissions:
       contents: read
     steps:
+      # A run CI admission turned away decides no runner either; say so, so the
+      # required check fails with the true reason.
+      - name: Stop when CI admission refused the run
+        if: needs.admission.result == 'failure'
+        run: |
+          echo "::error title=CI is full::CI admission refused this run (CI full); re-run all jobs."
+          exit 1
+
       - name: Require a decided Swift runner
-        if: needs.native-swift-runner.result != 'success'
+        if: needs.admission.result != 'failure' && needs.native-swift-runner.result != 'success'
         run: |
           echo "The Swift runner could not be decided; refusing to skip required work."
           exit 1
