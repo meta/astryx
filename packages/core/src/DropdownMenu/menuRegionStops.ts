@@ -93,7 +93,6 @@ export function moveRegionsTab(
   const cycle = collapseRadioGroups(
     [...tabbablesIn(header), menu, ...tabbablesIn(footer)],
     active,
-    event.shiftKey,
   );
   if (cycle.length === 1) {
     // Nothing else to reach: focus stays in the menu. From a flyout that has

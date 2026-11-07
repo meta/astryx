@@ -942,6 +942,46 @@ describe('useFocusTrap radio-group Tab stops', () => {
     expect(screen.getByRole('radio', {name: 'Pro'})).toHaveFocus();
   });
 
+  it('keeps a checked radio at its own place when a control sits between the radios', () => {
+    // A RadioList whose first option's description holds a link builds this
+    // shape: the checked radio, not the link, is the region's last stop.
+    render(
+      <Trap>
+        <button type="button">First</button>
+        <input type="radio" name="tier" aria-label="Basic" />
+        <button type="button">Basic details</button>
+        <input type="radio" name="tier" aria-label="Pro" defaultChecked />
+      </Trap>,
+    );
+    const pro = screen.getByRole('radio', {name: 'Pro'});
+    const details = screen.getByRole('button', {name: 'Basic details'});
+    pro.focus();
+    expect(fireEvent.keyDown(pro, {key: 'Tab'})).toBe(false);
+    expect(screen.getByRole('button', {name: 'First'})).toHaveFocus();
+    // From the control between the radios, Tab goes on to the checked radio.
+    details.focus();
+    expect(fireEvent.keyDown(details, {key: 'Tab'})).toBe(true);
+  });
+
+  it('keeps every radio of an unchecked group split by a control a stop', () => {
+    render(
+      <Trap>
+        <button type="button">First</button>
+        <input type="radio" name="tier" aria-label="Basic" />
+        <button type="button">Basic details</button>
+        <input type="radio" name="tier" aria-label="Pro" />
+      </Trap>,
+    );
+    const details = screen.getByRole('button', {name: 'Basic details'});
+    details.focus();
+    // Pro is still ahead of the control, so Tab is left to the browser.
+    expect(fireEvent.keyDown(details, {key: 'Tab'})).toBe(true);
+    const pro = screen.getByRole('radio', {name: 'Pro'});
+    pro.focus();
+    expect(fireEvent.keyDown(pro, {key: 'Tab'})).toBe(false);
+    expect(screen.getByRole('button', {name: 'First'})).toHaveFocus();
+  });
+
   it('keeps each unnamed radio its own Tab stop', () => {
     render(
       <Trap>

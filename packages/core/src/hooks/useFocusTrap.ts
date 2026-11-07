@@ -157,37 +157,34 @@ function isSameRadioGroup(a: Element, b: Element): boolean {
 }
 
 /**
- * Collapse each named radio group to the one Tab stop the browser gives it:
- * the focused radio, else the checked one, else the first radio moving forward
- * or the last moving backward. The stop takes the group's first position.
+ * Drop the radios the browser skips for Tab, leaving every other element, and
+ * each kept radio, at its own place. In a named group the browser stops only at
+ * the focused radio, else the checked one; a group with nothing checked keeps
+ * every radio, so a forward entry reaches its first and a backward entry its
+ * last.
  *
  * Exported for menus that walk their own Tab stops (DropdownMenu's header and
- * footer), so they collapse groups exactly as the focus region does.
+ * footer), so they skip radios exactly as the focus region does.
  */
 export function collapseRadioGroups(
   elements: HTMLElement[],
   active: Element | null,
-  isBackward: boolean,
 ): HTMLElement[] {
-  const result: HTMLElement[] = [];
-  const placed: HTMLElement[] = [];
-  for (const el of elements) {
+  return elements.filter(el => {
     if (radioNameOf(el) == null) {
-      result.push(el);
-      continue;
+      return true;
     }
-    if (placed.some(stop => isSameRadioGroup(stop, el))) {
-      continue;
+    if (active != null && isSameRadioGroup(el, active)) {
+      return el === active;
     }
-    const members = elements.filter(other => isSameRadioGroup(el, other));
-    const stop =
-      members.find(radio => radio === active) ??
-      members.find(radio => (radio as HTMLInputElement).checked) ??
-      (isBackward ? members[members.length - 1] : members[0]);
-    placed.push(stop);
-    result.push(stop);
-  }
-  return result;
+    return (
+      (el as HTMLInputElement).checked ||
+      !elements.some(
+        other =>
+          isSameRadioGroup(el, other) && (other as HTMLInputElement).checked,
+      )
+    );
+  });
 }
 
 /**
@@ -435,11 +432,9 @@ export function useFocusRegionContainment(
         }
 
         // jsdom groups a selector list by selector, not in document order.
-        // Sort it, then give each radio group its one stop.
         const stops = collapseRadioGroups(
           [...focusable].sort((a, b) => (precedes(a, b) ? -1 : 1)),
           active,
-          event.shiftKey,
         );
         const first = stops[0];
         const last = stops[stops.length - 1];
