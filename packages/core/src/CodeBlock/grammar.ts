@@ -13,6 +13,8 @@
  * - /packages/core/src/CodeBlock/languages/
  */
 
+import {sharedKey} from '../utils/sharedRealm';
+
 /** One grammar rule: text matching `regex` paints as `type`. */
 export type GrammarPattern = {type: string; regex: RegExp};
 
@@ -25,7 +27,7 @@ export type Grammar = {
 
 // A registered key, so a swizzled copy of this module accepts a package
 // language and the package accepts a copy's.
-const LANGUAGE = Symbol.for('@astryxdesign/core/code-language/v1');
+const LANGUAGE = sharedKey('code-language', 1);
 
 /** A flat token from a custom tokenize function: absolute offsets in `code`. */
 export type CodeLanguageToken = {type: string; start: number; end: number};

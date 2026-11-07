@@ -27,6 +27,19 @@ describe('brands a swizzled copy shares with the package', () => {
     expect(() => copy.playLayoutFrames(handle, [])()).not.toThrow();
   });
 
+  it('a copy of the snap-paging module accepts a package paging value', async () => {
+    const pkg = await import('../SnapPaging/snapPagingValue');
+    vi.resetModules();
+    const copy = await import('../SnapPaging/snapPagingValue');
+    expect(copy).not.toBe(pkg);
+    const value = pkg.makeSnapPaging(() => ({
+      detach: () => {},
+      move: () => {},
+      moveHeld: () => false,
+    }));
+    expect(copy.isSnapPaging(value)).toBe(true);
+  });
+
   it('the package and a copy give the branded types one shape', () => {
     // Two paths to Core's source that TypeScript reads as two modules each,
     // as it reads a package module and the copy of it.

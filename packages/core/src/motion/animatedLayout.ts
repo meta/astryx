@@ -82,6 +82,7 @@
  */
 
 import {LATE_START_MS} from './frameBlock';
+import {sharedKey} from '../utils/sharedRealm';
 import {
   inertCopy,
   isCopyable,
@@ -723,7 +724,7 @@ export function glideOf(element: Element): Animation | null {
 // ---------------------------------------------------------------------------
 
 // A registered key, so a swizzled copy of this module reads a package handle.
-const AREA = Symbol.for('@astryxdesign/core/animated-layout/area/v1');
+const AREA = sharedKey('animated-layout/area', 1);
 
 /**
  * The opaque handle `useAnimatedLayout` returns. A component that receives it
