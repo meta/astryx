@@ -1925,6 +1925,45 @@ test.describe('frame evidence', () => {
     expect(numbers.longestGapMs).toBeGreaterThan(FRAME_STARVATION_MS);
   });
 
+  test('a proof whose page draws every frame slowly, but evenly, fails by name as starved, and a sample cut short still did not last', async ({
+    page,
+  }) => {
+    await page.setContent(
+      '<!doctype html><div id="box" style="width:40px;height:40px;background:#000"></div>',
+    );
+    const box = page.locator('#box');
+    // Cut short on pace: 50 ms of a sample holds four frames.
+    const onPace = await sampleRects(box, 300);
+    const cut = requireFramesOutcome(onPace, {
+      min: 6,
+      during: 'a sample cut short',
+      where: sample => sample.t <= onPace[0].t + 50,
+    });
+    expect(cut).not.toBeInstanceOf(FrameStarvationError);
+    expect(String(cut)).toMatch(/the motion did not last that long/);
+    // Each frame callback now runs on every other frame the page draws: 33 ms
+    // apart, so no gap passes FRAME_STARVATION_MS.
+    await page.evaluate(() => {
+      const frame = window.requestAnimationFrame.bind(window);
+      window.requestAnimationFrame = callback => {
+        frame(() => frame(callback));
+        return 0;
+      };
+    });
+    const slow = await sampleRects(box, 300);
+    const starved = requireFramesOutcome(slow, {
+      min: 12,
+      during: 'a 300 ms sample',
+    });
+    expect(starved).toBeInstanceOf(FrameStarvationError);
+    const {numbers} = starved as FrameStarvationError;
+    expect(numbers.longestGapMs).toBeLessThanOrEqual(FRAME_STARVATION_MS);
+    expect(numbers.meanFrameMs).toBeGreaterThan(25);
+    expect(String(starved)).toMatch(
+      /Frames came every \d+\.\d ms on average, where 60 Hz draws one every 16\.7 ms/,
+    );
+  });
+
   test('the trace counts no Layout for a transform animation and one per frame for `top`', async ({
     page,
     browserName,
@@ -6096,6 +6135,18 @@ const FREEZE_FIXTURE = `<!doctype html><meta name=viewport content="width=device
 /** Now on the page's clock, in the epoch ms that run records use. */
 async function pageNow(page: Page): Promise<number> {
   return page.evaluate(() => performance.timeOrigin + performance.now());
+}
+
+/** What `requireFrames` throws for these samples, or the samples it gives. */
+function requireFramesOutcome<T extends {readonly t: number}>(
+  samples: readonly T[],
+  options: Parameters<typeof requireFrames<T>>[1],
+): unknown {
+  try {
+    return requireFrames(samples, options);
+  } catch (error) {
+    return error;
+  }
 }
 
 async function freezeFixture(page: Page) {

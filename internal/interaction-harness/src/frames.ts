@@ -801,6 +801,9 @@ export function frameStats(
  */
 export const FRAME_STARVATION_MS = 50;
 
+/** One frame at 60 Hz, ms: the rate of a page that is not starved. */
+const DISPLAY_FRAME_MS = 1000 / 60;
+
 const framesDrawn = (count: number) =>
   `${count} ${count === 1 ? 'frame' : 'frames'}`;
 
@@ -814,19 +817,30 @@ export interface FrameShortfall {
   readonly min: number;
   /** The longest gap between frames around them, ms. */
   readonly longestGapMs: number;
+  /**
+   * The mean interval between the frames the page drew, ms, when no gap was
+   * long but every frame came slowly.
+   */
+  readonly meanFrameMs?: number;
 }
 
 /**
  * The page drew too few frames for a proof, because it was starved of
- * frames: no frame came for longer than `FRAME_STARVATION_MS`. A loaded
- * machine does that, and so does a long task on the page. Such a run proves
- * nothing about the motion, so it fails, and the error says why.
+ * frames. Either no frame came for longer than `FRAME_STARVATION_MS`, or every
+ * frame came slowly. The motion then lasted long enough for the proof's frames
+ * at 60 Hz. A loaded machine does that, and so does a long task on the page.
+ * Such a run proves nothing about the motion, so it fails, and the error says
+ * why.
  */
 export class FrameStarvationError extends Error {
   readonly numbers: FrameShortfall;
   constructor(numbers: FrameShortfall) {
+    const slow =
+      numbers.meanFrameMs == null
+        ? `No frame came for ${numbers.longestGapMs.toFixed(1)} ms`
+        : `Frames came every ${numbers.meanFrameMs.toFixed(1)} ms on average, where 60 Hz draws one every ${DISPLAY_FRAME_MS.toFixed(1)} ms, and none more than ${numbers.longestGapMs.toFixed(1)} ms after the one before`;
     super(
-      `requireFrames: the page drew ${framesDrawn(numbers.frames)} while ${numbers.during}, where the proof needs ${numbers.min}. No frame came for ${numbers.longestGapMs.toFixed(1)} ms: the page was starved of frames (a loaded machine, or a long task on the page), so the run proves nothing about the motion`,
+      `requireFrames: the page drew ${framesDrawn(numbers.frames)} while ${numbers.during}, where the proof needs ${numbers.min}. ${slow}: the page was starved of frames (a loaded machine, or a long task on the page), so the run proves nothing about the motion`,
     );
     this.name = 'FrameStarvationError';
     this.numbers = numbers;
@@ -837,9 +851,12 @@ export class FrameStarvationError extends Error {
  * The samples that `where` selects from the page's own per-frame `samples`
  * (an rAF trace), when there are at least `min` of them. Else the proof
  * fails. The error is `FrameStarvationError` when no frame came for longer
- * than `FRAME_STARVATION_MS` around the selected samples. Otherwise the
- * motion did not last that long, and the error says so. `during` names what
- * the frames had to show.
+ * than `FRAME_STARVATION_MS` around the selected samples. It is also
+ * `FrameStarvationError` when the page drew fewer than `min` frames across a
+ * span that holds `min` frames at 60 Hz. When the page drew enough frames
+ * and `where` selected too few, the error says so. Otherwise the motion did
+ * not last that long, and the error says so. `during` names what the frames
+ * had to show.
  */
 export function requireFrames<T extends {readonly t: number}>(
   samples: readonly T[],
@@ -873,7 +890,25 @@ export function requireFrames<T extends {readonly t: number}>(
   if (longestGapMs > FRAME_STARVATION_MS) {
     throw new FrameStarvationError(numbers);
   }
+  // The motion's own length: from its first selected frame to its last. The
+  // page's frames across it, selected or not, show the rate it drew at.
+  const spanMs =
+    selected.length > 0 ? selected[selected.length - 1].t - selected[0].t : 0;
+  const drawn = last - first + 1;
+  const spanFrames = Math.round(spanMs / DISPLAY_FRAME_MS) + 1;
+  if (selected.length >= 2 && drawn < min && spanFrames >= min) {
+    throw new FrameStarvationError({
+      ...numbers,
+      meanFrameMs: spanMs / (drawn - 1),
+    });
+  }
+  // The page drew the frames, and `where` passed over some of them.
+  if (selected.length >= 2 && spanFrames >= min) {
+    throw new Error(
+      `requireFrames: \`where\` selected ${framesDrawn(selected.length)} while ${during}, where the proof needs ${min}. The page drew ${framesDrawn(drawn)} across those ${spanMs.toFixed(1)} ms, so the selection, not the page, came up short`,
+    );
+  }
   throw new Error(
-    `requireFrames: the page drew ${framesDrawn(selected.length)} while ${during}, where the proof needs ${min}. No frame came more than ${FRAME_STARVATION_MS} ms after the one before: the motion did not last that long`,
+    `requireFrames: the page drew ${framesDrawn(selected.length)} while ${during}, where the proof needs ${min}. No frame came more than ${FRAME_STARVATION_MS} ms after the one before, and the frames span ${spanMs.toFixed(1)} ms, time for ${framesDrawn(spanFrames)} at 60 Hz: the motion did not last that long`,
   );
 }

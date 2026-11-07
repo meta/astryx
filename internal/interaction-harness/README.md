@@ -359,8 +359,13 @@ are at least `min` of them. A loaded machine, or a long task on the page, can
 starve the page of frames. When no frame came for longer than
 `FRAME_STARVATION_MS` (50 ms) around the selected samples, the proof fails
 with `FrameStarvationError`, which names the frames drawn and the longest gap.
-So a run that cannot prove anything still fails, and says why. With too few frames on pace, the motion did not last that
-long, and the error says that instead.
+So a run that cannot prove anything still fails, and says why. A page can
+also draw every frame slowly, with no gap that long. When the page drew fewer
+than `min` frames across a span that holds `min` frames at 60 Hz, the error is
+`FrameStarvationError` too, and it names the mean frame interval. When the
+page drew enough frames and `where` selected too few, the error names the
+selection. With too few frames across a shorter span, the motion did not last
+that long, and the error says that instead, with the span.
 
 **No Layout / Paint.** `traceRendering` records a Chromium trace around the
 interaction; `countBetween` counts the steady middle of an animation (its
