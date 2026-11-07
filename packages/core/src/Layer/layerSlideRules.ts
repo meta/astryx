@@ -235,7 +235,6 @@ export function getAnchorClearFallbacks(placement: LayerPlacement): string {
   return `flip-block, ${besideRuleName('end')}, ${besideRuleName('start')}, ${fitRuleName(placement)}, ${fitRuleName(opposite)}`;
 }
 
-
 /**
  * The attribute the runtime sets on a layer that keeps its anchor clear while
  * its content overflows the box it was given; only then does it scroll, so a

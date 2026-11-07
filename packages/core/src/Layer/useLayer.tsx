@@ -59,7 +59,8 @@ import {preserveAnimations} from './preserveAnimations';
 import {useLayerContext} from './LayerContext';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {overlayPaddingReset} from '../Layout/overlayPaddingReset.stylex';
-import {containsAlongFlatTree} from '../utils/flatTree';
+import {containsAlongFlatTree, parentAcrossShadow} from '../utils/flatTree';
+import {isShadowRoot} from '../utils/nodeType';
 import {subscribeInput} from '../utils/inputStream';
 
 const styles = stylex.create({
@@ -794,13 +795,33 @@ function observeMove(element: HTMLElement, onMove: () => void): () => void {
 const SCROLL_STILL_MS = 150;
 
 /**
+ * The shadow roots along `node`'s flat-tree path. `scroll` and `scrollend`
+ * are not composed, so a scroll inside a shadow tree reaches its shadow root
+ * but not the window.
+ */
+function shadowRootsAbove(node: Node): ShadowRoot[] {
+  const roots: ShadowRoot[] = [];
+  for (
+    let current: Node | null = node;
+    current;
+    current = parentAcrossShadow(current)
+  ) {
+    const root = current.getRootNode();
+    if (isShadowRoot(root) && !roots.includes(root)) {
+      roots.push(root);
+    }
+  }
+  return roots;
+}
+
+/**
  * Calls `onStop` once each time a scroll of the page or of an ancestor of
  * `anchor` stops, in the first frame painted after it stops. During a scroll,
  * Chromium does not choose a layer's position option again, so the layer is
  * checked once the scroll stops. A scroll stops at `scrollend`; where the
  * browser does not fire it, a scroll stops after `SCROLL_STILL_MS` with no
- * `scroll` event. No handler reads layout: a scroll handler only starts the
- * timer.
+ * `scroll` event. A scroll that starts again before the check cancels it. No
+ * handler reads layout.
  */
 function observeScrollStop(
   view: Window,
@@ -819,8 +840,9 @@ function observeScrollStop(
       timer = null;
     }
   };
-  // The next frame paints, a task runs after that paint, and the frame after
-  // it calls `onStop`.
+  // At `scrollend`, and in the frame after it, Chromium still reads the
+  // anchored layer at its position before the scroll. After one painted
+  // frame it reads the position the scroll gave it.
   const callAfterNextPaint = () => {
     cancel();
     frame = view.requestAnimationFrame(() => {
@@ -836,27 +858,45 @@ function observeScrollStop(
   };
   const firesScrollEnd =
     (view as {onscrollend?: unknown}).onscrollend !== undefined;
-  const onScrollEvent = (event: Event) => {
-    if (!containsAlongFlatTree(event.target as Node, anchor)) {
-      return;
-    }
-    if (firesScrollEnd) {
-      callAfterNextPaint();
+  const isAnchorScroll = (event: Event) =>
+    containsAlongFlatTree(event.target as Node, anchor);
+  const onScroll = (event: Event) => {
+    if (!isAnchorScroll(event)) {
       return;
     }
     cancel();
-    timer = view.setTimeout(() => {
-      timer = null;
-      callAfterNextPaint();
-    }, SCROLL_STILL_MS);
+    if (!firesScrollEnd) {
+      timer = view.setTimeout(() => {
+        timer = null;
+        callAfterNextPaint();
+      }, SCROLL_STILL_MS);
+    }
   };
-  const unsubscribe = subscribeInput(
-    view,
-    firesScrollEnd ? 'scrollend' : 'scroll',
-    onScrollEvent,
-  );
+  const onScrollEnd = (event: Event) => {
+    if (isAnchorScroll(event)) {
+      callAfterNextPaint();
+    }
+  };
+  const unsubscribes = [subscribeInput(view, 'scroll', onScroll)];
+  if (firesScrollEnd) {
+    unsubscribes.push(subscribeInput(view, 'scrollend', onScrollEnd));
+  }
+  const listening = {capture: true, passive: true};
+  const shadowRoots = shadowRootsAbove(anchor);
+  for (const shadowRoot of shadowRoots) {
+    shadowRoot.addEventListener('scroll', onScroll, listening);
+    if (firesScrollEnd) {
+      shadowRoot.addEventListener('scrollend', onScrollEnd, listening);
+    }
+  }
   return () => {
-    unsubscribe();
+    for (const unsubscribe of unsubscribes) {
+      unsubscribe();
+    }
+    for (const shadowRoot of shadowRoots) {
+      shadowRoot.removeEventListener('scroll', onScroll, listening);
+      shadowRoot.removeEventListener('scrollend', onScrollEnd, listening);
+    }
     cancel();
   };
 }

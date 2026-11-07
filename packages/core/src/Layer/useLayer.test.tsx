@@ -3145,6 +3145,61 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
     }
   });
 
+  it('cancels the check when a scroll of its trigger starts again before it, where the browser fires scrollend', async () => {
+    const view = window as {onscrollend?: unknown};
+    view.onscrollend = null;
+    try {
+      const user = userEvent.setup();
+      viewport720();
+      const shown = placeBoxes(TRIGGER, rect(200, 350, 100, 200));
+      const {container} = render(<ClearHarness />);
+      await user.click(container.querySelector('button')!);
+      shown.mockRestore();
+      placeBoxes(rect(12, 380, 30, 100), rect(-40, 350, 48, 200));
+      vi.mocked(preserveAnimations).mockClear();
+      act(() => {
+        document.dispatchEvent(new Event('scrollend'));
+      });
+      await nextFrame();
+      act(() => {
+        document.dispatchEvent(new Event('scroll'));
+      });
+      await afterNextPaint();
+      expect(placedAfresh()).toBe(0);
+    } finally {
+      delete view.onscrollend;
+    }
+  });
+
+  it('hears a scroll that stops inside a shadow root above its trigger', async () => {
+    const view = window as {onscrollend?: unknown};
+    view.onscrollend = null;
+    const host = document.createElement('div');
+    document.body.append(host);
+    const shadowRoot = host.attachShadow({mode: 'open'});
+    const scroller = document.createElement('div');
+    shadowRoot.append(scroller);
+    try {
+      const user = userEvent.setup();
+      viewport720();
+      const shown = placeBoxes(TRIGGER, rect(200, 350, 100, 200));
+      render(<ClearHarness />, {container: scroller});
+      await user.click(scroller.querySelector('button')!);
+      shown.mockRestore();
+      placeBoxes(rect(12, 380, 30, 100), rect(-40, 350, 48, 200));
+      vi.mocked(preserveAnimations).mockClear();
+      // Not composed: the event stops at the shadow root.
+      act(() => {
+        scroller.dispatchEvent(new Event('scrollend'));
+      });
+      await afterNextPaint();
+      expect(placedAfresh()).toBe(1);
+    } finally {
+      delete view.onscrollend;
+      host.remove();
+    }
+  });
+
   it('checks the box once, 150 ms after the last scroll of its trigger, where the browser fires no scrollend', async () => {
     expect('onscrollend' in window).toBe(false);
     const user = userEvent.setup();

@@ -261,9 +261,10 @@ runs once each time a scroll of the page or of a scrolling ancestor of the
 anchor stops: at `scrollend`, or, where the browser does not fire it, after
 150 ms with no `scroll` event on those. It runs in the first frame painted
 after the stop: the next frame paints, a task runs after that paint, and the
-frame after reads and applies. The scroll listener is one capture-phase
-subscription to the window's input stream; it only starts that wait or that
-timer and reads nothing. Chromium fires `scrollend` per wheel step, so a long
+frame after reads and applies. The scroll listeners subscribe to the window's input stream, and listen on
+each shadow root along the anchor's flat-tree path, because `scroll` and
+`scrollend` are not composed. A `scroll` only cancels a pending check or
+starts the timer, and no handler reads layout. Chromium fires `scrollend` per wheel step, so a long
 wheel scroll is checked more than once, never during the scroll itself. An
 anchor that moves on screen without resizing, in layout or by a scroll, is
 reported only by an intersection observer on the anchor, whose root is the
