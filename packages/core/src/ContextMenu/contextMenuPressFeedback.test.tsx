@@ -139,15 +139,39 @@ const growths = () =>
   );
 
 /** Lets the shared mutation observer deliver its records. */
+// The growth starts in the next animation frame.
 const flush = async () =>
   new Promise(resolve => {
-    setTimeout(resolve, 0);
+    requestAnimationFrame(() => {
+      setTimeout(resolve, 0);
+    });
   });
+
+// Fake animation frames come every 16 ms.
+const FRAME_MS = 16;
+const FAKE_TIMERS = {
+  toFake: [
+    'setTimeout',
+    'clearTimeout',
+    'requestAnimationFrame',
+    'cancelAnimationFrame',
+    'performance',
+  ] as const,
+};
+const startsOf = () => growths().map(call => (call[2] as {at: number}).at);
+// One growth, started from rest in the first frame at or after the onset.
+const expectGrowthFromOnsetFrame = (onsetAt: number) => {
+  const starts = startsOf();
+  expect(starts).toHaveLength(1);
+  expect(starts[0]).toBeGreaterThanOrEqual(onsetAt);
+  expect(starts[0]).toBeLessThan(onsetAt + FRAME_MS);
+};
 
 describe('useContextMenuPressFeedback', () => {
   afterEach(() => {
     vi.clearAllMocks();
     animator.animated.length = 0;
+    animator.element = null;
     feedback = null;
   });
 
@@ -243,7 +267,7 @@ describe('useContextMenuPressFeedback', () => {
   });
 
   it('grows a finger at its onset, 150 ms after the landing the recognizer reports', async () => {
-    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout', 'performance']});
+    vi.useFakeTimers({toFake: [...FAKE_TIMERS.toFake]});
     try {
       const {getByTestId} = render(<Trigger />);
       vi.advanceTimersByTime(1000);
@@ -252,17 +276,15 @@ describe('useContextMenuPressFeedback', () => {
       feedback?.begin(landedAt, getByTestId('trigger'));
       await vi.advanceTimersByTimeAsync(109);
       expect(growths()).toHaveLength(0);
-      await vi.advanceTimersByTimeAsync(1);
-      expect(growths().map(call => (call[2] as {at: number}).at)).toEqual([
-        landedAt + 150,
-      ]);
+      await vi.advanceTimersByTimeAsync(1 + FRAME_MS);
+      expectGrowthFromOnsetFrame(landedAt + 150);
     } finally {
       vi.useRealTimers();
     }
   });
 
   it('keeps a finger’s onset when the press machine marks the press later', async () => {
-    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout', 'performance']});
+    vi.useFakeTimers({toFake: [...FAKE_TIMERS.toFake]});
     try {
       recognizer.isFinger = true;
       const {getByTestId} = render(<TriggerWithRecognizer />);
@@ -272,9 +294,7 @@ describe('useContextMenuPressFeedback', () => {
       await vi.advanceTimersByTimeAsync(240);
       getByTestId('trigger').setAttribute(PRESSED_ATTRIBUTE, 'on');
       await vi.advanceTimersByTimeAsync(200);
-      expect(growths().map(call => (call[2] as {at: number}).at)).toEqual([
-        landedAt + 150,
-      ]);
+      expectGrowthFromOnsetFrame(landedAt + 150);
     } finally {
       recognizer.isFinger = false;
       vi.useRealTimers();
@@ -282,19 +302,19 @@ describe('useContextMenuPressFeedback', () => {
   });
 
   it('starts a pen’s growth at its mark after a finger’s press ended', async () => {
-    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout', 'performance']});
+    vi.useFakeTimers({toFake: [...FAKE_TIMERS.toFake]});
     try {
       recognizer.isFinger = true;
       const {getByTestId} = render(<TriggerWithRecognizer />);
       const trigger = getByTestId('trigger');
       feedback?.begin(performance.now(), trigger);
-      await vi.advanceTimersByTimeAsync(150);
+      await vi.advanceTimersByTimeAsync(150 + FRAME_MS);
       expect(growths()).toHaveLength(1);
       feedback?.end(performance.now());
       // A pen's press: the press machine's mark starts its growth.
       recognizer.isFinger = false;
       trigger.setAttribute(PRESSED_ATTRIBUTE, 'on');
-      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(FRAME_MS);
       expect(growths()).toHaveLength(2);
     } finally {
       recognizer.isFinger = false;
@@ -303,18 +323,59 @@ describe('useContextMenuPressFeedback', () => {
   });
 
   it('grows only the innermost trigger for a finger the recognizer reports on a nested trigger', async () => {
-    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout', 'performance']});
+    vi.useFakeTimers({toFake: [...FAKE_TIMERS.toFake]});
     try {
       const {getByTestId} = render(<NestedTriggers />);
       const inner = getByTestId('inner');
       nested.outer?.begin(performance.now(), inner);
       nested.inner?.begin(performance.now(), inner);
-      await vi.advanceTimersByTimeAsync(150);
+      await vi.advanceTimersByTimeAsync(150 + FRAME_MS);
       expect(animator.animated).toEqual([inner]);
     } finally {
       vi.useRealTimers();
     }
   });
+
+  it('builds the motion engine in the first frame after the landing, before the onset', async () => {
+    vi.useFakeTimers({toFake: [...FAKE_TIMERS.toFake]});
+    try {
+      const {getByTestId} = render(<Trigger />);
+      const trigger = getByTestId('trigger');
+      feedback?.begin(performance.now(), trigger);
+      expect(animator.element).toBeNull();
+      await vi.advanceTimersByTimeAsync(FRAME_MS);
+      expect(animator.element).toBe(trigger);
+      expect(growths()).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([
+    ['the recognizer ends the press', () => feedback?.end(performance.now())],
+    ['the menu shows', () => feedback?.hold()],
+  ])(
+    'stops watching frames for the onset when %s before it',
+    async (_, stop) => {
+      vi.useFakeTimers({toFake: [...FAKE_TIMERS.toFake]});
+      try {
+        const {getByTestId} = render(<Trigger />);
+        feedback?.begin(performance.now(), getByTestId('trigger'));
+        await vi.advanceTimersByTimeAsync(60);
+        const frames = vi.spyOn(window, 'requestAnimationFrame');
+        try {
+          stop();
+          await vi.advanceTimersByTimeAsync(200);
+          expect(frames).not.toHaveBeenCalled();
+          expect(growths()).toHaveLength(0);
+        } finally {
+          frames.mockRestore();
+        }
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
 
   it('returns on springs.contextMenuDismiss when the menu the press opened closes', async () => {
     const {getByTestId} = render(<Trigger />);
