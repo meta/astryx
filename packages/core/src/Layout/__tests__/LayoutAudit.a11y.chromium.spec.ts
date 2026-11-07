@@ -292,8 +292,6 @@ async function observe(page: Page) {
 }
 
 test.beforeAll(async () => {
-  // Receipts from an earlier run must not count toward this build's manifest.
-  fs.rmSync(OUTPUT, {recursive: true, force: true});
   fs.mkdirSync(OUTPUT, {recursive: true});
   checkoutSha = execFileSync('git', ['rev-parse', 'HEAD'], {
     encoding: 'utf8',
@@ -573,15 +571,16 @@ for (const item of cases) {
 }
 
 test('manifest is complete', async () => {
-  const receiptFiles = fs
-    .readdirSync(OUTPUT)
-    .filter(file => file.endsWith('.sensors.json'));
-  const receipts = receiptFiles.map(
-    (file): AuditReceipt =>
-      JSON.parse(
-        fs.readFileSync(path.join(OUTPUT, file), 'utf8'),
-      ) as AuditReceipt,
-  );
+  // Read only this run's frames, so files left by another run do not count.
+  const receipts = cases.map(item => {
+    const file = path.join(OUTPUT, `${item.key}.sensors.json`);
+    return {
+      key: item.key,
+      receipt: fs.existsSync(file)
+        ? (JSON.parse(fs.readFileSync(file, 'utf8')) as AuditReceipt)
+        : null,
+    };
+  });
   fs.writeFileSync(
     path.join(OUTPUT, 'manifest.json'),
     `${JSON.stringify(
@@ -599,16 +598,18 @@ test('manifest is complete', async () => {
       2,
     )}\n`,
   );
-  expect(receiptFiles).toHaveLength(cases.length);
+  expect(
+    receipts.filter(({receipt}) => receipt == null).map(({key}) => key),
+  ).toEqual([]);
   // A receipt left by an earlier build does not count.
   expect(
     receipts
-      .filter(receipt => receipt.expected.build !== checkoutSha)
-      .map(receipt => receipt.expected),
+      .filter(({receipt}) => receipt?.expected.build !== checkoutSha)
+      .map(({key}) => key),
   ).toEqual([]);
   expect(
     receipts
-      .filter(receipt => !receipt.passed)
-      .map(receipt => ({frame: receipt.expected, failures: receipt.failures})),
+      .filter(({receipt}) => receipt?.passed !== true)
+      .map(({key, receipt}) => ({frame: key, failures: receipt?.failures})),
   ).toEqual([]);
 });
