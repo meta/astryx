@@ -432,6 +432,21 @@ describe('BreadcrumbItem in the AppShell mobile drawer', () => {
     expect(calls).toEqual(['onClick', 'close']);
   });
 
+  it('a modified click on a crumb link leaves the drawer open', () => {
+    const {closeMobileNav} = renderInDrawer(
+      <>
+        <BreadcrumbItem href="#/projects" onClick={e => e.preventDefault()}>
+          Projects
+        </BreadcrumbItem>
+        <BreadcrumbItem isCurrent>Detail</BreadcrumbItem>
+      </>,
+    );
+    fireEvent.click(screen.getByRole('link', {name: 'Projects'}), {
+      ctrlKey: true,
+    });
+    expect(closeMobileNav).not.toHaveBeenCalled();
+  });
+
   it('a crumb button calls onClick and then closes the drawer', () => {
     const {calls} = renderInDrawer(
       <>
