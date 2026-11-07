@@ -82,3 +82,31 @@ test('an enlarged day number stays inside its day button', async ({page}) => {
     expect(day.below, day.name).toBeLessThanOrEqual(1);
   }
 });
+
+test('an enlarged day owns the taps just inside its own edges', async ({
+  page,
+}) => {
+  await openCalendar(page);
+  await page.addStyleTag({
+    content: '[role="grid"] button { font-size: 40px; line-height: 54px; }',
+  });
+  const misses = await page.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>('[role="grid"] button')]
+      .filter(day => {
+        const box = day.getBoundingClientRect();
+        const middleX = box.left + box.width / 2;
+        const middleY = box.top + box.height / 2;
+        return [
+          [middleX, box.top + 1],
+          [middleX, box.bottom - 1],
+          [box.left + 1, middleY],
+          [box.right - 1, middleY],
+        ].some(
+          ([x, y]) =>
+            document.elementFromPoint(x, y)?.closest('button') !== day,
+        );
+      })
+      .map(day => day.getAttribute('aria-label') ?? ''),
+  );
+  expect(misses).toEqual([]);
+});

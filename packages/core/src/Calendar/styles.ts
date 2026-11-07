@@ -139,8 +139,11 @@ export const dayCellStyles = stylex.create({
     alignItems: 'center',
     justifyContent: 'center',
     // A minimum, so a row grows with a larger text size and its days never
-    // reach into the next row.
+    // reach into the next row. The padding keeps the gap the day's hit bleed
+    // is sized for at every size.
     minHeight: sizeVars['--size-element-md'],
+    boxSizing: 'border-box',
+    padding: BAND_INSET,
     isolation: 'isolate',
   },
 
