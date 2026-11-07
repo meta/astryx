@@ -614,7 +614,7 @@ function onPointerDown(event: PointerEvent): void {
       y: event.clientY,
       delayed: isInsideScrollView(element),
     }),
-    msSinceInput(event.timeStamp),
+    msSinceInput(event.timeStamp, event),
   );
 }
 

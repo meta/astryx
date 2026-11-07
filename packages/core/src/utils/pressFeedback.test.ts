@@ -580,13 +580,13 @@ describe('a finger waits only inside a scroller (spec:AST-094 FR11)', () => {
     expect(control.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
   });
 
-  it("counts from the listener when the touch's timestamp is not on the page's clock", () => {
-    // Zero, ahead of now, or an epoch time, as a synthetic event carries.
+  it('waits the whole delay for a touch with no time, a time ahead of now, or an epoch time taken now', () => {
     vi.advanceTimersByTime(1000);
-    for (const timeStamp of [0, performance.now() + 500, Date.now()]) {
+    const stamps = [() => 0, () => performance.now() + 500, () => Date.now()];
+    for (const stamp of stamps) {
       const control = pressable('button');
       scroller.appendChild(control);
-      press(control, 'pointerdown', 10, 10, 'touch', timeStamp);
+      press(control, 'pointerdown', 10, 10, 'touch', stamp());
       vi.advanceTimersByTime(PRESS_ONSET_MS - 1);
       expect(control.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
       vi.advanceTimersByTime(1);
@@ -595,6 +595,18 @@ describe('a finger waits only inside a scroller (spec:AST-094 FR11)', () => {
       vi.advanceTimersByTime(PRESS_FADE_MS * 2);
       control.remove();
     }
+  });
+
+  it("keeps an epoch stamp's age, as the long-press hold does", () => {
+    const control = pressable('button');
+    scroller.appendChild(control);
+    vi.advanceTimersByTime(1000);
+    // jsdom stamps an event with Date.now(); this touch is 60 ms old.
+    press(control, 'pointerdown', 10, 10, 'touch', Date.now() - 60);
+    vi.advanceTimersByTime(PRESS_ONSET_MS - 60 - 1);
+    expect(control.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    vi.advanceTimersByTime(1);
+    expect(control.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
   });
 
   it('is cancelled by travel past the slop, with no fade', () => {
