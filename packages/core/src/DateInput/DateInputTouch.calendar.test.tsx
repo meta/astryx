@@ -19,9 +19,14 @@ import {
   type ISODateTimeString,
 } from '../DateTimeInput/DateTimeInput';
 import {InternationalizationProvider} from '../i18n/InternationalizationProvider';
-import {createMonthModel} from './monthGeometry';
-import type {CalendarSystem} from '../utils/calendarSystem';
-import type {ISODateString} from '../utils/dateTypes';
+import {monthGridKeyTarget} from './MonthPane';
+import {createMonthModel, dateInMonth} from './monthGeometry';
+import {
+  type CalendarSystem,
+  calendarDateFromFields,
+  calendarDayOfMonth,
+} from '../utils/calendarSystem';
+import type {ISODateString, PlainDate} from '../utils/dateTypes';
 import {plainDateAddDays, plainDateFromISO} from '../utils/plainDate';
 
 const host = globalThis as {Temporal?: unknown};
@@ -475,5 +480,64 @@ describe('the month model', () => {
       year: 5785,
       month: 6,
     });
+  });
+
+  it('pages the keyboard focus by calendar months, and by calendar years with Shift', () => {
+    const hebrew = createMonthModel('hebrew');
+    const page = (date: PlainDate, key: string, shiftKey = false) =>
+      monthGridKeyTarget({key, shiftKey} as React.KeyboardEvent, date, {
+        calendar: 'hebrew',
+        isRTL: false,
+        weekStartsOn: 0,
+      });
+    const at = (date: PlainDate | null) =>
+      hebrew.yearMonthAt(hebrew.indexOf(date!));
+    // A month back from 1 Nisan 5784 is Adar II: the leap year has Adar I too.
+    const nisan1 = calendarDateFromFields('hebrew', {
+      year: 5784,
+      monthCode: 'M07',
+      day: 1,
+    })!;
+    expect(at(page(nisan1, 'PageUp'))).toEqual({year: 5784, month: 7});
+    // A year back from Shevat 5785 is Shevat 5784, 13 months back across
+    // Adar I, not 12.
+    const shevat10 = calendarDateFromFields('hebrew', {
+      year: 5785,
+      monthCode: 'M05',
+      day: 10,
+    })!;
+    const yearBack = page(shevat10, 'PageUp', true);
+    expect(at(yearBack)).toEqual({year: 5784, month: 5});
+    expect(calendarDayOfMonth('hebrew', yearBack!)).toBe(10);
+  });
+
+  it('moves a date by calendar months, keeping its day of the month', () => {
+    const persian = createMonthModel('persian');
+    const mehr = persian.indexOfYearMonth(1405, 7);
+    // Shahrivar has 31 days and Mehr 30, so the 31st becomes the 30th.
+    for (const [day, expected] of [
+      [15, 15],
+      [31, 30],
+    ] as const) {
+      const shahrivar = calendarDateFromFields('persian', {
+        year: 1405,
+        month: 6,
+        day,
+      })!;
+      const moved = dateInMonth(persian, shahrivar, mehr);
+      expect(persian.indexOf(moved)).toBe(mehr);
+      expect(calendarDayOfMonth('persian', moved)).toBe(expected);
+    }
+    // Adar I has 30 days in the leap year 5784; Adar of 5785 has 29.
+    const hebrew = createMonthModel('hebrew');
+    const adar = hebrew.indexOfYearMonth(5785, 6);
+    const adarI30 = calendarDateFromFields('hebrew', {
+      year: 5784,
+      month: 6,
+      day: 30,
+    })!;
+    const moved = dateInMonth(hebrew, adarI30, adar);
+    expect(hebrew.indexOf(moved)).toBe(adar);
+    expect(calendarDayOfMonth('hebrew', moved)).toBe(29);
   });
 });

@@ -84,6 +84,8 @@ import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {joinAriaIDs} from '../utils/inputAria';
 import {
   plainDateFromISO,
+  plainDateIsEqual,
+  plainDateToISO,
   plainDateToday,
   type PlainDate,
 } from '../utils/plainDate';
@@ -99,7 +101,7 @@ import {
 } from '../DateInput/MonthScroller';
 import {MonthYearWheels} from '../DateInput/MonthYearWheels';
 import {Wheel, type WheelOption} from '../DateInput/Wheel';
-import {TimeWheels} from '../DateInput/datePickerTouch';
+import {MonthPager, TimeWheels} from '../DateInput/datePickerTouch';
 import {
   hour12From24,
   hour24From12,
@@ -118,6 +120,7 @@ import {
   DEFAULT_MONTH_REACH,
   clampIndex,
   createMonthModel,
+  dateInMonth,
 } from '../DateInput/monthGeometry';
 import type {DateTimeInputProps, ISODateTimeString} from './DateTimeInput';
 import {
@@ -559,6 +562,7 @@ export function TouchDateTimeField({
   const [activePanel, setActivePanel] = useState<TouchDateTimePanel>('date');
   const [isWheelOpen, setIsWheelOpen] = useState(false);
   const {isTouch} = useTouchPresentation();
+  const MonthGrid = isTouch ? MonthPager : MonthScroller;
   const [draftTime, setDraftTime] = useState<ISOTimeString | undefined>(() =>
     normalizeISOTime(splitDateTime(value).time, hasSeconds),
   );
@@ -783,6 +787,37 @@ export function TouchDateTimeField({
       }
     },
     [clampTimeForDate, fireChange, optimisticValue, timeForWheels],
+  );
+
+  // UIDatePicker moves a chosen date with these wheels
+  // (`datePicker.calendar.monthYearWheels.changesDate`).
+  const handleWheelChange = useCallback(
+    (next: number) => {
+      setMonthIndex(next);
+      scrollerHandleRef.current?.scrollToMonth(next, 'auto');
+      if (!isTouch || selectedDate == null) {
+        return;
+      }
+      const moved = dateInMonth(
+        monthModel,
+        selectedDate,
+        next,
+        parseValidISODate(calendarMin),
+        parseValidISODate(calendarMax),
+      );
+      if (!plainDateIsEqual(moved, selectedDate) && !isDateDisabled(moved)) {
+        handleDateSelect(plainDateToISO(moved));
+      }
+    },
+    [
+      isTouch,
+      selectedDate,
+      monthModel,
+      calendarMin,
+      calendarMax,
+      isDateDisabled,
+      handleDateSelect,
+    ],
   );
 
   const commitWheelTime = useCallback(
@@ -1050,7 +1085,7 @@ export function TouchDateTimeField({
                   </div>
                 ))}
               </div>
-              <MonthScroller
+              <MonthGrid
                 key={`${minMonthIndex}:${maxMonthIndex}`}
                 handleRef={scrollerHandleRef}
                 monthModel={monthModel}
@@ -1104,10 +1139,7 @@ export function TouchDateTimeField({
                 keptDay={keptDay}
                 minMonthIndex={minMonthIndex}
                 maxMonthIndex={maxMonthIndex}
-                onChange={next => {
-                  setMonthIndex(next);
-                  scrollerHandleRef.current?.scrollToMonth(next, 'auto');
-                }}
+                onChange={handleWheelChange}
                 monthLabel={t('@astryx.dateInput.monthWheel')}
                 yearLabel={t('@astryx.dateInput.yearWheel')}
                 isActive={activePanel === 'date' && isWheelOpen}

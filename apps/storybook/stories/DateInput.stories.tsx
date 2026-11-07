@@ -594,6 +594,25 @@ export const WithMinMax: Story = {
   },
 };
 
+/**
+ * The bottom-sheet calendar pages its months like the iOS date picker. One
+ * month moves per swipe, and the title follows the drag.
+ */
+export const BottomSheetCalendar: Story = {
+  render: args => {
+    const [value, setValue] = useState<ISODateString | undefined>(
+      '2026-10-15' as ISODateString,
+    );
+    return <DateInput {...args} value={value} onChange={setValue} />;
+  },
+  args: {
+    label: 'Date',
+    presentation: 'bottom-sheet',
+    min: '2026-01-01' as ISODateString,
+    max: '2026-12-31' as ISODateString,
+  },
+};
+
 export const WithMaxDateInLayout: Story = {
   render: args => {
     const [value, setValue] = useState<ISODateString | undefined>(undefined);

@@ -108,6 +108,8 @@ import {
   rtlStyles,
   themeProps,
   plainDateFromISO,
+  plainDateIsEqual,
+  plainDateToISO,
   plainDateToday,
   type ISODateString,
 } from '../utils';
@@ -122,12 +124,15 @@ import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {normalizeDayOfWeek} from '../utils/dateTypes';
 import {getWeekdayHeaders} from '../Calendar/getWeekdayHeaderNames';
+import {MonthPager} from './datePickerTouch';
 import {MonthScroller, type MonthScrollerHandle} from './MonthScroller';
+import {useTouchPresentation} from '../utils/touchPresentation';
 import {MonthYearWheels} from './MonthYearWheels';
 import {
   DEFAULT_MONTH_REACH,
   clampIndex,
   createMonthModel,
+  dateInMonth,
 } from './monthGeometry';
 import {dateInputTouchSizes, dateInputTouchGeometry} from './tokens.stylex';
 import {
@@ -680,6 +685,8 @@ export function TouchDateField({
     isSheetOpen ? sheetBodyRef : inputRef,
   );
   const [isWheelOpen, setIsWheelOpen] = useState(false);
+  const {isTouch} = useTouchPresentation();
+  const MonthGrid = isTouch ? MonthPager : MonthScroller;
   const scrollerHandleRef = useRef<MonthScrollerHandle | null>(null);
   const previousArrowRef = useRef<HTMLButtonElement | null>(null);
   const nextArrowRef = useRef<HTMLButtonElement | null>(null);
@@ -952,11 +959,29 @@ export function TouchDateField({
 
   // A wheel commit steers the scroller immediately, even though it is behind
   // the wheels: it keeps its layout box while hidden, so by the time the
-  // wheels close it is already resting on the new month.
-  const handleWheelChange = useCallback((next: number) => {
-    setMonthIndex(next);
-    scrollerHandleRef.current?.scrollToMonth(next, 'auto');
-  }, []);
+  // wheels close it is already resting on the new month. Under a finger,
+  // UIDatePicker moves a chosen date with these wheels
+  // (datePicker.calendar.monthYearWheels.changesDate).
+  const handleWheelChange = useCallback(
+    (next: number) => {
+      setMonthIndex(next);
+      scrollerHandleRef.current?.scrollToMonth(next, 'auto');
+      if (!isTouch || selectedDate == null) {
+        return;
+      }
+      const moved = dateInMonth(
+        monthModel,
+        selectedDate,
+        next,
+        min != null ? plainDateFromISO(min) : null,
+        max != null ? plainDateFromISO(max) : null,
+      );
+      if (!plainDateIsEqual(moved, selectedDate) && !isDateDisabled(moved)) {
+        fireChange(plainDateToISO(moved));
+      }
+    },
+    [isTouch, selectedDate, monthModel, min, max, isDateDisabled, fireChange],
+  );
 
   /**
    * The calendar reports the month it has scrolled to — but only while it is
@@ -1184,7 +1209,7 @@ export function TouchDateField({
             styles.panelBeneath,
             isWheelOpen && styles.panelBeneathHidden,
           )}>
-          <MonthScroller
+          <MonthGrid
             key={`${minMonthIndex}:${maxMonthIndex}`}
             handleRef={scrollerHandleRef}
             monthModel={monthModel}
