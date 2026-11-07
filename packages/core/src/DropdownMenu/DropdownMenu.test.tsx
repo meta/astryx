@@ -2969,8 +2969,9 @@ describe('DropdownMenu entrance under a finger', () => {
   }
 
   /**
-   * Gives each popover a running entrance (Web Animations' `getAnimations()`,
-   * which jsdom lacks) whose end the test decides.
+   * Gives each popover's surface, the layer's first child where the entrance
+   * plays, a running entrance. Its end is the test's to decide, since jsdom
+   * lacks Web Animations' `getAnimations()`.
    */
   function stubEntrance() {
     let end = () => {};
@@ -2985,7 +2986,11 @@ describe('DropdownMenu entrance under a finger', () => {
     Object.defineProperty(Element.prototype, 'getAnimations', {
       configurable: true,
       value(this: Element) {
-        return this.matches('[popover]') ? [entrance] : [];
+        const layer = this.parentElement;
+        return layer?.matches('[popover]') === true &&
+          layer.firstElementChild === this
+          ? [entrance]
+          : [];
       },
     });
     return {

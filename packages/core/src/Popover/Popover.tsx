@@ -587,6 +587,9 @@ export function Popover({
     xstyle: [
       styles.surfaceViewportFit,
       hasOverflow && styles.surfaceScrollable,
+      // The entrance runs on the surface: an anchored layer lays out again on
+      // each frame its own style animates.
+      layerAnimations[placement],
       xstyle,
     ],
     className,
@@ -603,6 +606,7 @@ export function Popover({
     surfaceMotion.present(
       surfaceRef.current?.closest<HTMLElement>('[popover]') ?? null,
       anchorElementRef.current,
+      surfaceRef.current,
     );
   };
   // A controlled popover opens on the surface its presentation resolves to
@@ -1050,7 +1054,6 @@ export function Popover({
           ? width.trim()
           : clampInlineSize(width, layerViewportInset.maxInlineSizeFallback),
       );
-  const layerXstyle = [popoverSizeXstyle, layerAnimations[placement]];
 
   // One instance of the content at a time: the sheet holds it while it is
   // mounted, the anchored layer otherwise.
@@ -1100,7 +1103,7 @@ export function Popover({
         placement,
         alignment,
         offset: spacingVars['--spacing-1'],
-        xstyle: layerXstyle,
+        xstyle: popoverSizeXstyle,
       });
 
   // Sibling mode: render only the popover (no wrapper needed)

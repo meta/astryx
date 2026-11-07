@@ -248,6 +248,11 @@ set before the block is excused. Pass that position as `setBeforeBlock`, such
 as the drag's last position at the release. An animation frozen at the block's
 start holds a position of its own, and is judged as a stall. Every frame after
 its first change is judged, so a freeze later in the block still fails.
+An element off screen before the block, such as a card that enters from an
+edge, is judged from its first position inside the block. The cast's frames
+before the block must show the screen without it. A main-thread entrance
+shows no frame during the block, so it still fails. With no frame before the
+block at all, nothing is known, and the block is judged from its start.
 Any other element already moving is judged from the block's start. WebKit's
 casts are 2 px quantized: their JPEG frames hold the
 marker's color in 2 by 2 pixel chroma blocks (4:2:0, which the frame header
@@ -284,7 +289,8 @@ decode only those. Pass either as `control`: the component passes when it moved 
 moved and its longest stall is no longer than the control's. Both are read from
 the same screencast frames, so a compositor animation misses none. A window in
 which the control moved on fewer than four frames fails, since the machine
-presented too little to judge. A run of frames with no new position counts as
+presented too little to judge; the failure names the cast's frames in the
+window and its longest gap. A run of frames with no new position counts as
 moved when the change that ends it is a single cast step: the component moves
 under one step a frame there, as on an easing tail, which the cast cannot show
 on every frame. Where it moved under two steps a frame over the frames just
@@ -361,6 +367,10 @@ starve the page of frames. When no frame came for longer than
 with `FrameStarvationError`, which names the frames drawn and the longest gap.
 So a run that cannot prove anything still fails, and says why. With too few frames on pace, the motion did not last that
 long, and the error says that instead.
+`waitForRest` fails the same way when it cannot tell. The element held still
+in its last frame, or no frame came after the deadline, and no frame came for
+longer than `FRAME_STARVATION_MS`: it throws `FrameStarvationError`, not
+"still moving".
 
 **No Layout / Paint.** `traceRendering` records a Chromium trace around the
 interaction; `countBetween` counts the steady middle of an animation (its
