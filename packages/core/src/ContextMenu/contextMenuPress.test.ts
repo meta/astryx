@@ -9,7 +9,7 @@
  *   even when the timer runs late. It fails on travel past the long-press
  *   tolerance, a lift, a second finger or the browser taking the touch. The
  *   commit claims the finger and drops its click. A press that fails leaves
- *   the click alone
+ *   the click alone. Each press it takes is reported once, at its landing
  * @position Unit tests of packages/core/src/ContextMenu/contextMenuPress.ts
  */
 
@@ -178,6 +178,17 @@ describe('ContextMenuPressRecognizer', () => {
       .takenByBrowser(90);
     // The browser owns the finger now: the recognizer lets go of it at once.
     expect(states).toEqual(['failed@90', 'possible@90']);
+  });
+
+  it('reports the press it takes once, with its touch and the time it landed', () => {
+    const {harness, press} = setup();
+    const began: [string, number][] = [];
+    press.onPressBegan = (touch, time) => {
+      began.push([touch.pointerType, time]);
+    };
+    harness.finger(1).down(10, 20, 5, {recognizers: [press]});
+    harness.finger(2).down(50, 0, 120, {recognizers: [press]});
+    expect(began).toEqual([['touch', 5]]);
   });
 
   it('keeps the press while it fails, so the feedback knows which one ended', () => {

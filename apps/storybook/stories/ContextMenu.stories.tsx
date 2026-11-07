@@ -667,7 +667,7 @@ export const TouchLongPress: Story = {
     docs: {
       description: {
         story:
-          'Where the primary pointer is coarse (a touch screen), hold a finger on the card. As on iOS, a haptic plays at 400 ms where the device can play one, and the menu opens at 735 ms, or as soon as the finger lifts after 400 ms. A finger that lifts before 400 ms, or drifts more than 11.5 px on either axis before the menu opens, gets no menu. While the menu is up, the page still scrolls: a touch outside the menu closes it as it begins to pan.',
+          'Where the primary pointer is coarse (a touch screen), hold a finger on the card. As on iOS, it starts to grow after 150 ms, a haptic plays at 400 ms where the device can play one, and the menu opens at 735 ms, or as soon as the finger lifts after 400 ms. A finger that lifts before 400 ms, or drifts more than 11.5 px on either axis before the menu opens, gets no menu, and the card springs back to its size. While the menu is up, the page still scrolls: a touch outside the menu closes it as it begins to pan. The card returns to its size when the menu closes.',
       },
     },
   },

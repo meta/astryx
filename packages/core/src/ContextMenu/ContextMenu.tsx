@@ -40,6 +40,7 @@
  * - /packages/core/src/ContextMenu/ContextMenu.test.tsx
  * - /packages/core/src/ContextMenu/ContextMenuTouch.ts (the touch layer's one import site)
  * - /packages/core/src/ContextMenu/contextMenuPress.ts (touch timeline)
+ * - /packages/core/src/ContextMenu/contextMenuPressFeedback.ts (press feedback)
  * - /packages/core/src/ContextMenu/index.ts
  * - /apps/storybook/stories/ContextMenu.stories.tsx
  * - /packages/cli/assets/templates/blocks/components/ContextMenu/ (showcase blocks)
@@ -82,6 +83,7 @@ import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {useMenuDrillIn} from '../DropdownMenu/useMenuDrillIn';
 import {useInternalListFocus} from '../hooks/useListFocus';
 import {useLongPress} from '../hooks/useLongPress';
+import {pressableProps} from '../utils/pressFeedback';
 import {useMenuPress} from '../hooks/useMenuPress';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {shadowHostOf} from '../utils/flatTree';
@@ -235,6 +237,20 @@ const styles = stylex.create({
     outline: 'none',
   },
 });
+
+/** An element's own computed `scale` on each axis; 1 where it has none. */
+function ownScale(element: HTMLElement): {x: number; y: number} {
+  const value =
+    element.ownerDocument.defaultView?.getComputedStyle(element).scale ?? '';
+  if (value === '' || value === 'none') {
+    return {x: 1, y: 1};
+  }
+  const [x, y = x] = value.trim().split(/\s+/).map(Number.parseFloat);
+  return {
+    x: Number.isFinite(x) && x > 0 ? x : 1,
+    y: Number.isFinite(y) && y > 0 ? y : 1,
+  };
+}
 
 /**
  * Keeps the 1px cursor anchor inside the trigger along one axis. A point in
@@ -425,18 +441,25 @@ export function ContextMenu({
   const currentTitle = currentSubmenu?.label ?? label;
   const sheetLabel = typeof currentTitle === 'string' ? currentTitle : label;
 
-  // The mounted touch layer, which says whether it times a finger.
+  // The mounted touch layer, for its press feedback and whether it times a
+  // finger.
   const touchHandleRef = useRef<ContextMenuTouchHandle | null>(null);
+  // The menu closed: a finger's menu is over, and the trigger returns with
+  // the close itself (run by every close handler below).
+  const endTouchOpen = useCallback(() => {
+    touchHandleRef.current?.release();
+  }, []);
 
   const updateOpenState = useCallback(
     (nextIsOpen: boolean) => {
       if (!nextIsOpen) {
         setSubmenuPath([]);
+        endTouchOpen();
       }
       setIsOpen(nextIsOpen);
       onOpenChange?.(nextIsOpen);
     },
-    [onOpenChange],
+    [endTouchOpen, onOpenChange],
   );
 
   const outsidePress = useOutsidePress();
@@ -450,6 +473,7 @@ export function ContextMenu({
     keepsMountAfterShow: true,
     onHide: useCallback(() => {
       outsidePress.stop();
+      endTouchOpen();
       setIsOpen(false);
       onOpenChange?.(false);
       // Restore focus to the element that was focused before opening.
@@ -458,7 +482,7 @@ export function ContextMenu({
       if (toRestore && document.contains(toRestore)) {
         toRestore.focus();
       }
-    }, [onOpenChange, outsidePress]),
+    }, [endTouchOpen, onOpenChange, outsidePress]),
     onShow: useCallback(() => {
       setIsOpen(true);
       onOpenChange?.(true);
@@ -625,6 +649,16 @@ export function ContextMenu({
     [listNavKeyDown, closeMenu, typeahead, ownsEvent],
   );
 
+  // How much the press feedback has grown a block trigger from its center:
+  // the trigger's own `scale`, not an ancestor's transform.
+  const triggerScale = useCallback((): {x: number; y: number} => {
+    const trigger = triggerRef.current;
+    if (trigger == null || triggerAs === 'span') {
+      return {x: 1, y: 1};
+    }
+    return ownScale(trigger);
+  }, [triggerAs]);
+
   // Place the 1px cursor anchor at a point in the trigger's local
   // coordinate space and open the menu. Positioning the anchor inside the
   // trigger (rather than storing viewport coordinates on the menu itself) is
@@ -641,13 +675,29 @@ export function ContextMenu({
       focusTarget: 'first' | 'menu' = 'first',
     ) => {
       const rect = triggerRef.current?.getBoundingClientRect();
-      const x = rect ? keepAnchorInside(localX, rect.width) : localX;
-      const y = rect ? keepAnchorInside(localY, rect.height) : localY;
+      const scale = rect ? triggerScale() : {x: 1, y: 1};
+      const x = rect ? keepAnchorInside(localX, rect.width / scale.x) : localX;
+      const y = rect ? keepAnchorInside(localY, rect.height / scale.y) : localY;
       positionRef.current = {x, y};
       const anchorEl = cursorAnchorRef.current;
       if (anchorEl) {
         anchorEl.style.left = `${x}px`;
         anchorEl.style.top = `${y}px`;
+        // A trigger the press feedback has grown (from its center) would
+        // carry the anchor with it, and engines differ on whether anchor
+        // positioning follows transforms. Cancel the scale at the anchor, so
+        // its box is the same either way: where the point is on screen.
+        if (rect != null && (scale.x !== 1 || scale.y !== 1)) {
+          const centerX = rect.width / scale.x / 2;
+          const centerY = rect.height / scale.y / 2;
+          anchorEl.style.transformOrigin = '0 0';
+          anchorEl.style.scale = `${1 / scale.x} ${1 / scale.y}`;
+          anchorEl.style.translate = `${(x - centerX) * (1 / scale.x - 1)}px ${(y - centerY) * (1 / scale.y - 1)}px`;
+        } else {
+          anchorEl.style.removeProperty('transform-origin');
+          anchorEl.style.removeProperty('scale');
+          anchorEl.style.removeProperty('translate');
+        }
       }
       // Remember the element focused before opening so we can restore it on
       // close (Escape or outside-click), instead of dropping focus to <body>.
@@ -665,7 +715,7 @@ export function ContextMenu({
         layer.show();
       }
     },
-    [layer, updateOpenState, usesBottomSheet],
+    [layer, updateOpenState, usesBottomSheet, triggerScale],
   );
 
   // The hold's commit: the menu shows at its moment or at the lift, so its
@@ -684,19 +734,25 @@ export function ContextMenu({
   );
 
   // A client point in the trigger's own coordinates, where the cursor anchor
-  // lives. It stays inside the trigger's box.
+  // lives. It is the offset from the trigger's laid-out box, before the press
+  // feedback's scale, and it stays inside that box.
   const toTriggerLocal = useCallback(
     (point: {x: number; y: number}): {x: number; y: number} => {
       const rect = triggerRef.current?.getBoundingClientRect();
       if (rect == null) {
         return point;
       }
+      const scale = triggerScale();
+      const width = rect.width / scale.x;
+      const height = rect.height / scale.y;
+      const left = rect.left + (rect.width - width) / 2;
+      const top = rect.top + (rect.height - height) / 2;
       return {
-        x: Math.min(Math.max(point.x - rect.left, 0), rect.width),
-        y: Math.min(Math.max(point.y - rect.top, 0), rect.height),
+        x: Math.min(Math.max(point.x - left, 0), width),
+        y: Math.min(Math.max(point.y - top, 0), height),
       };
     },
-    [],
+    [triggerScale],
   );
 
   const handleContextMenu = useCallback(
@@ -957,6 +1013,10 @@ export function ContextMenu({
       <TriggerElement
         ref={useMergedRefs(ref, triggerRef)}
         {...triggerProps}
+        // Under the touch model, an enabled trigger is a pressable surface of
+        // core's one press machine. The touch layer installs the machine. Its
+        // press feedback follows a pen's pressed state and a finger's landing.
+        {...(touchModes && !isDisabled ? pressableProps : null)}
         onContextMenu={handleTriggerContextMenu}
         onTouchStart={handleTriggerTouchStart}
         onTouchMove={handleTriggerTouchMove}
@@ -987,6 +1047,7 @@ export function ContextMenu({
         <ContextMenuTouchLayer
           ref={touchHandleRef}
           triggerRef={triggerRef}
+          isShown={triggerAs !== 'span' && !usesBottomSheet}
           onOpen={openFromFinger}
           onCommit={prepareMenu}
           onCancel={layer.releasePrepared}

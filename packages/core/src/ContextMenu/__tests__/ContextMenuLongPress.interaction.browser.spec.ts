@@ -20,22 +20,54 @@ import {
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
 import {
+  blockMainThread,
+  busyWindowProof,
+  castStoryboard,
+  countBetween,
   drag,
+  freezeTimers,
+  holdAnimations,
   installInputLog,
+  installLongTaskLog,
+  installTimerGate,
+  markElement,
+  merge,
   openStory,
   readInputLog,
+  releaseAnimations,
+  startScreencast,
   tap,
+  thawTimers,
+  timeline,
   touchDriver,
+  trackMarker,
+  traceRendering,
+  waitForAnimation,
+  withFinger,
   withStorybook,
+  writeEvidence,
+  animationStoryboard,
   type TouchDriver,
 } from '@astryxdesign/interaction-harness';
+import {solveSpring, toSpring} from '../../motion/spring';
 import {contextMenu} from '../../motion/uikit/contextMenu';
+import {springs} from '../../motion/uikit/springs';
 
 const storybook = withStorybook(test);
-const {menuDisplayMs} = contextMenu.press;
-// Core's press machine believes a press 150 ms after it lands
-// (`utils/pressGesture.ts`). That module loads a StyleX stylesheet, which
-// this Node-side spec cannot, so the onset is restated here.
+const {commitMs, menuDisplayMs, heldScale} = contextMenu.press;
+// The growth starts at the onset, 150 ms after the finger lands
+// (`PRESS_ONSET_MS` in `utils/pressGesture.ts`). That module loads a StyleX
+// stylesheet, which this Node-side spec cannot, so the onset is restated here.
+const feedbackOnsetMs = 150;
+
+/** The growth's expected curve: `springs.contextMenuLift` from 1 to the held scale. */
+function playedCurve() {
+  const curve = solveSpring(toSpring(springs.contextMenuLift), {
+    from: 1,
+    to: heldScale,
+  });
+  return {at: (t: number) => curve.value(Math.max(0, t))};
+}
 
 interface TouchStory {
   driver: TouchDriver;
@@ -49,14 +81,17 @@ async function openTouchStory(
   story = 'core-contextmenu--touch-long-press',
 ): Promise<TouchStory> {
   await installInputLog(page);
+  await installLongTaskLog(page);
   // Note when the menu is asked to show, on the page clock (no per-frame
   // work: rendering proofs share this page).
   await page.addInitScript(() => {
     const w = window as unknown as {
       __menuShownAt?: number | null;
+      __liftHandledAt?: number | null;
       __menuShownTimerAt?: number | null;
     };
     w.__menuShownAt = null;
+    w.__liftHandledAt = null;
     w.__menuShownTimerAt = null;
     // When the timer task that runs now started. The hold's moments come from
     // the gesture arena's timers. The menu commits in the task that decides
@@ -83,6 +118,15 @@ async function openTouchStory(
         timeout,
         ...args,
       )) as typeof window.setTimeout;
+    // When the page gets to the lift (the event's own timestamp is the
+    // hardware's, or the script's): the menu shows in the same task.
+    addEventListener(
+      'touchend',
+      () => {
+        w.__liftHandledAt = performance.now();
+      },
+      {capture: true, passive: true},
+    );
     const show = HTMLElement.prototype.showPopover;
     HTMLElement.prototype.showPopover = function (
       this: HTMLElement,
@@ -146,6 +190,12 @@ async function lastInput(
 
 const touchStartedAt = async (page: Page) => lastInput(page, 'touchstart');
 
+const presentedScale = async (trigger: Locator) =>
+  trigger.evaluate(element => {
+    const scale = getComputedStyle(element).scale;
+    return scale === 'none' ? 1 : Number.parseFloat(scale);
+  });
+
 /** A finger held still for `ms`, then lifted. */
 const hold = (at: {x: number; y: number}, ms: number) => tap(at, {holdMs: ms});
 
@@ -191,6 +241,554 @@ test('the menu mounts at the commit, closed and out of the accessibility tree, a
   await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
 });
 
+test('with presentation="popover" a finger keeps today’s long press: the menu at 500 ms, with no growth and no iOS timeline', async ({
+  page,
+}) => {
+  const {driver, trigger, center} = await openTouchStory(
+    page,
+    'core-contextmenu--touch-long-press-popover',
+  );
+  // A coarse primary pointer: only the caller's choice keeps today's menu.
+  expect(
+    await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
+  ).toBe(true);
+  expect(await trigger.getAttribute('data-astryx-pressable')).toBeNull();
+  const playing = driver.play(hold(center, 1000));
+  await page.waitForTimeout(350);
+  const scaleBeforeOpen = await presentedScale(trigger);
+  // Still held: the menu is up. At the lift, emulated Chromium sends
+  // compatibility mouse events that a device sends no click for. They dismiss
+  // today's menu. The touch model's recognizer claims the finger instead.
+  await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible({
+    timeout: 550,
+  });
+  await playing;
+  const start = await touchStartedAt(page);
+  const shown = await menuShownAt(page);
+  expect(shown, 'the menu never showed').not.toBeNull();
+  const after = (shown as number) - start;
+  // Today's 500 ms, give or take a task and the render that shows the menu;
+  // far from the touch model's 735 ms.
+  expect(after).toBeGreaterThanOrEqual(500);
+  expect(after).toBeLessThan(550);
+  expect(scaleBeforeOpen).toBe(1);
+});
+
+test('a finger where the primary pointer is fine keeps today’s long press: the menu at 500 ms, with no growth', async ({
+  browser,
+  page,
+}) => {
+  // A touch screen whose primary pointer is fine (a laptop with a trackpad).
+  const context = await browser.newContext({
+    viewport: page.viewportSize() ?? {width: 402, height: 874},
+    hasTouch: true,
+    isMobile: false,
+  });
+  const fine = await context.newPage();
+  try {
+    await installInputLog(fine);
+    await openStory(fine, storybook(), 'core-contextmenu--touch-long-press');
+    const coarse = await fine.evaluate(
+      () => matchMedia('(pointer: coarse)').matches,
+    );
+    test.skip(
+      coarse,
+      'this engine reports a coarse primary pointer whenever touch is emulated; the fine-primary finger is covered in jsdom',
+    );
+    const trigger = fine.getByTestId('touch-context-menu');
+    const box = await trigger.boundingBox();
+    if (box == null) {
+      throw new Error('no trigger');
+    }
+    expect(await trigger.getAttribute('data-astryx-pressable')).toBeNull();
+    const driver = await touchDriver(fine);
+    const center = {x: box.x + box.width / 2, y: box.y + box.height / 2};
+    const playing = driver.play(hold(center, 1000));
+    await fine.waitForTimeout(350);
+    const scaleBeforeOpen = await presentedScale(trigger);
+    await expect(fine.getByRole('menu', {name: 'Photo actions'})).toBeVisible({
+      timeout: 550,
+    });
+    await playing;
+    expect(scaleBeforeOpen).toBe(1);
+  } finally {
+    await context.close();
+  }
+});
+
+test('under Reduce Motion the card does not grow, and the menu still opens at 735 ms', async ({
+  page,
+}) => {
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  const {driver, trigger, center} = await openTouchStory(page);
+  const playing = driver.play(hold(center, menuDisplayMs + 200));
+  // Sampled while the finger is down: before the commit, after it, and just
+  // before the menu.
+  const scales: number[] = [];
+  for (const wait of [300, 250, 100]) {
+    await page.waitForTimeout(wait);
+    scales.push(await presentedScale(trigger));
+  }
+  await playing;
+  const start = await touchStartedAt(page);
+  const shown = await menuShownAt(page);
+  expect(scales).toEqual([1, 1, 1]);
+  expect(await trigger.evaluate(el => el.getAnimations().length)).toBe(0);
+  expect(shown, 'the menu never showed').not.toBeNull();
+  const after = (shown as number) - start;
+  // The touch's stamp and the page clock are each coarsened (0.1 ms).
+  expect(after).toBeGreaterThanOrEqual(menuDisplayMs - 0.5);
+  expect(after).toBeLessThan(menuDisplayMs + 20);
+  await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
+});
+
+test('the trigger’s selection and callout lock: its own style keeps it off at rest, and the gesture host refuses a selection for a held press', async ({
+  page,
+}) => {
+  const {driver, trigger, center} = await openTouchStory(page);
+  // WebKit spells it `-webkit-user-select` only.
+  const readLock = async () =>
+    trigger.evaluate(el => {
+      const host = el as HTMLElement;
+      const computed = getComputedStyle(host);
+      return {
+        inline:
+          host.style.getPropertyValue('user-select') ||
+          host.style.getPropertyValue('-webkit-user-select'),
+        computed:
+          computed.getPropertyValue('user-select') ||
+          computed.getPropertyValue('-webkit-user-select'),
+      };
+    });
+  // Off iOS, the host's lock refuses a selection that starts on the element.
+  const refusesSelection = async () =>
+    trigger.evaluate(el => {
+      const event = new Event('selectstart', {bubbles: true, cancelable: true});
+      el.dispatchEvent(event);
+      return event.defaultPrevented;
+    });
+  // At rest the trigger's own style keeps selection off (spec:AST-017
+  // FR59), and nothing refuses a selection.
+  const rest = await readLock();
+  expect(rest.computed).toBe('none');
+  expect(await refusesSelection()).toBe(false);
+  // A held finger, short of the commit: the host's lock refuses a selection.
+  const playing = driver.play(hold(center, commitMs - 100));
+  await page.waitForTimeout(commitMs / 2);
+  const heldRefuses = await refusesSelection();
+  const held = await readLock();
+  await playing;
+  await page.waitForTimeout(100);
+  // Lifted with no menu: back to the rest state.
+  const liftedRefuses = await refusesSelection();
+  const lifted = await readLock();
+  expect(heldRefuses).toBe(true);
+  expect(held.computed).toBe('none');
+  expect(liftedRefuses).toBe(false);
+  expect(lifted).toEqual(rest);
+  expect(
+    await page.getByRole('menu', {name: 'Photo actions'}).isVisible(),
+  ).toBe(false);
+});
+
+test('a touch open lights no row: the menu itself takes the focus, and every row keeps its resting background', async ({
+  page,
+}) => {
+  const {driver, center} = await openTouchStory(page);
+  const playing = driver.play(hold(center, menuDisplayMs + 300));
+  const menu = page.getByRole('menu', {name: 'Photo actions'});
+  await expect(menu).toBeVisible();
+  // The focus moves on the frame after the menu shows.
+  await page.evaluate(
+    async () =>
+      new Promise<void>(resolve => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            resolve();
+          });
+        });
+      }),
+  );
+  await expect(menu).toBeFocused();
+  // An internal focus target: no browser ring on it.
+  expect(await menu.evaluate(el => getComputedStyle(el).outlineStyle)).toBe(
+    'none',
+  );
+  const backgrounds = await menu
+    .getByRole('menuitem')
+    .evaluateAll(rows =>
+      rows.map(row => getComputedStyle(row).backgroundColor),
+    );
+  expect(new Set(backgrounds).size).toBe(1);
+  await playing;
+});
+
+test('a finger lifted after the commit gets the menu at the lift, and sends no click', async ({
+  page,
+}) => {
+  const {driver, center} = await openTouchStory(page);
+  await driver.play(hold(center, 530));
+  await page.waitForTimeout(300);
+  await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
+  const {lift, shown} = await page.evaluate(() => {
+    const w = window as unknown as {
+      __menuShownAt?: number | null;
+      __liftHandledAt?: number | null;
+    };
+    return {lift: w.__liftHandledAt ?? null, shown: w.__menuShownAt ?? null};
+  });
+  expect(lift).not.toBeNull();
+  expect(shown).not.toBeNull();
+  // In the lift's own task: after it, and before the next frame could paint.
+  expect((shown as number) - (lift as number)).toBeGreaterThanOrEqual(0);
+  expect((shown as number) - (lift as number)).toBeLessThan(1000 / 60);
+  const log = await readInputLog(page);
+  const end = log.filter(record => record.type === 'touchend').at(-1);
+  expect(end?.defaultPrevented, JSON.stringify(log)).toBe(true);
+  expect(log.filter(record => record.type === 'click')).toEqual([]);
+});
+
+test('the lift after the menu shows keeps it open and sends no click', async ({
+  page,
+}) => {
+  const {driver, center} = await openTouchStory(page);
+  await driver.play(hold(center, menuDisplayMs + 150));
+  await page.waitForTimeout(300);
+  await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
+  const log = await readInputLog(page);
+  expect(log.filter(record => record.type === 'click')).toEqual([]);
+});
+
+test('the menu’s anchor sits under the finger, on screen and as laid out, while the trigger is grown, and the menu stays put', async ({
+  page,
+}) => {
+  const {driver, trigger} = await openTouchStory(page);
+  const box = await trigger.boundingBox();
+  if (box == null) {
+    throw new Error('no trigger');
+  }
+  const menu = page.getByRole('menu', {name: 'Photo actions'});
+  // The cursor anchor (the trigger's last child), on screen and as laid out
+  // (engines differ on which one anchor positioning reads), and the menu.
+  const read = async () =>
+    trigger.evaluate(el => {
+      const anchor = el.lastElementChild as HTMLElement | null;
+      const box = el.getBoundingClientRect();
+      const host = el as HTMLElement;
+      const left = box.left + (box.width - host.offsetWidth) / 2;
+      const top = box.top + (box.height - host.offsetHeight) / 2;
+      const onScreen = anchor?.getBoundingClientRect();
+      const list = document
+        .querySelector('[role="menu"]')
+        ?.getBoundingClientRect();
+      return {
+        onScreen: onScreen == null ? null : {x: onScreen.x, y: onScreen.y},
+        laidOut:
+          anchor == null
+            ? null
+            : {
+                x: left + host.clientLeft + anchor.offsetLeft,
+                y: top + host.clientTop + anchor.offsetTop,
+              },
+        menu: list == null ? null : {x: list.x, y: list.y},
+      };
+    });
+  // The middle of the card and near its far corner, where an anchor placed
+  // in the grown trigger's scaled coordinates would land furthest off.
+  for (const [fx, fy] of [
+    [0.5, 0.5],
+    [0.9, 0.85],
+  ] as const) {
+    const p = {
+      x: Math.round(box.x + box.width * fx),
+      y: Math.round(box.y + box.height * fy),
+    };
+    await driver.play(hold(p, menuDisplayMs + 100));
+    await expect(menu).toBeVisible();
+    const first = await read();
+    await page.waitForTimeout(400);
+    const later = await read();
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
+    // Let the trigger return to its size before the next press.
+    await page.waitForTimeout(1200);
+    const detail = JSON.stringify({p, first, later});
+    expect(first.onScreen?.x, detail).toBeCloseTo(p.x, 0);
+    expect(first.onScreen?.y, detail).toBeCloseTo(p.y, 0);
+    expect(first.laidOut?.x, detail).toBeCloseTo(p.x, 0);
+    expect(first.laidOut?.y, detail).toBeCloseTo(p.y, 0);
+    expect(later.menu?.x, detail).toBeCloseTo(first.menu?.x ?? NaN, 0);
+    expect(later.menu?.y, detail).toBeCloseTo(first.menu?.y ?? NaN, 0);
+  }
+});
+
+test('a drag past the tolerance after the commit opens nothing', async ({
+  page,
+}) => {
+  const {driver, center} = await openTouchStory(page);
+  await driver.play(
+    drag(
+      center,
+      {x: center.x, y: center.y + 30},
+      {durationMs: 50, holdMs: 500, restMs: 400},
+    ),
+  );
+  await page.waitForTimeout(200);
+  expect(await menuShownAt(page)).toBeNull();
+});
+
+test('an early lift opens nothing, and the card springs back to its size', async ({
+  page,
+}) => {
+  const {driver, trigger, center} = await openTouchStory(page);
+  await driver.play(hold(center, 280));
+  await page.waitForTimeout(commitMs + 200);
+  expect(await menuShownAt(page)).toBeNull();
+  // The return spring settles within ~1.2 s; then the scale is gone.
+  await expect
+    .poll(async () => trigger.evaluate(el => (el as HTMLElement).style.scale), {
+      timeout: 3000,
+    })
+    .toBe('');
+  expect(await presentedScale(trigger)).toBe(1);
+});
+
+test('a second finger landing before the commit cancels: no menu, and the card springs back', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName !== 'chromium',
+    'two-finger input is Chromium-only in Playwright (WebKit drops the first finger)',
+  );
+  const {driver, trigger, center} = await openTouchStory(page);
+  // The first finger holds; a second lands 200 ms in, before the commit.
+  await driver.play(
+    merge(
+      hold(center, menuDisplayMs + 300),
+      withFinger(hold({x: center.x + 50, y: center.y}, 400), 1, 200),
+    ),
+  );
+  await page.waitForTimeout(300);
+  expect(await menuShownAt(page)).toBeNull();
+  expect(await presentedScale(trigger)).toBeCloseTo(1, 3);
+  await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeHidden();
+});
+
+test('a drift within the tolerance still opens the menu; past it on one axis cancels', async ({
+  page,
+}) => {
+  const {driver, center} = await openTouchStory(page);
+  // (8, 8): 11.3 px away, within the tolerance on each axis (a long press's
+  // 10 px distance would cancel it). A drift past the browser's own pan slop
+  // goes to the page instead, as a scroll view's pan takes it on iOS. Lifted
+  // after the commit: the menu opens at the lift.
+  await driver.play(
+    drag(
+      center,
+      {x: center.x + 8, y: center.y + 8},
+      {durationMs: 60, holdMs: 100, restMs: commitMs},
+    ),
+  );
+  await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
+
+  const other = await openTouchStory(page);
+  await other.driver.play(
+    drag(
+      other.center,
+      {x: other.center.x, y: other.center.y + 12},
+      {durationMs: 60, holdMs: 100, restMs: commitMs},
+    ),
+  );
+  await page.waitForTimeout(200);
+  expect(await menuShownAt(page)).toBeNull();
+});
+
+test('the press feedback plays its computed curve on the compositor, frame by frame', async ({
+  page,
+}, testInfo) => {
+  const {driver, trigger, center} = await openTouchStory(page);
+  const played = playedCurve();
+  const playing = driver.play(hold(center, commitMs + 300));
+  await waitForAnimation(trigger, {minProgressMs: 16});
+  await holdAnimations(page, trigger);
+  // Seek the held curve (its time 0 is the onset after the touch) to every
+  // 60 Hz frame and read the presented scale.
+  const samples = await trigger.evaluate((element, times) => {
+    const held =
+      (window as unknown as {__harnessHeld?: Animation[]}).__harnessHeld ?? [];
+    return times.map(t => {
+      for (const animation of held) {
+        animation.currentTime = t;
+      }
+      const scale = getComputedStyle(element).scale;
+      return {t, value: scale === 'none' ? 1 : Number.parseFloat(scale)};
+    });
+  }, timeline(560));
+  await releaseAnimations(page);
+  await playing;
+  const at = (ms: number) => {
+    const t = ms - feedbackOnsetMs;
+    if (t <= 0) {
+      return 1;
+    }
+    // Linear between the seeked frames.
+    const i = samples.findIndex(s => s.t >= t);
+    if (i <= 0) {
+      return samples[Math.max(0, i)].value;
+    }
+    const a = samples[i - 1];
+    const b = samples[i];
+    return a.value + ((b.value - a.value) * (t - a.t)) / (b.t - a.t);
+  };
+  // The card is 200 px wide, so a scale error times 200 is in pixels.
+  const errors = Array.from({length: 33}, (_, i) => feedbackOnsetMs + i * 17)
+    .filter(ms => ms <= commitMs + 300)
+    .map(ms => {
+      const expected = played.at((ms - feedbackOnsetMs) / 1000);
+      return {
+        ms,
+        expected,
+        web: at(ms),
+        errorPx: Math.abs(at(ms) - expected) * 200,
+      };
+    });
+  const rms = Math.sqrt(
+    errors.reduce((sum, e) => sum + e.errorPx ** 2, 0) / errors.length,
+  );
+  await writeEvidence(
+    'curves/contextmenu-press-feedback',
+    {
+      [`${testInfo.project.name}.json`]: JSON.stringify(
+        {rmsPt: rms, errors, samples},
+        null,
+        1,
+      ),
+    },
+    testInfo,
+  );
+  testInfo.annotations.push({
+    type: 'curve-parity',
+    description: `press feedback vs its computed curve (200 px card): rms ${rms.toFixed(3)} px over ${errors.length} frames`,
+  });
+  expect(rms).toBeLessThan(0.1);
+  expect(Math.max(...errors.map(e => e.errorPx))).toBeLessThan(0.25);
+});
+
+test('the press feedback keeps advancing every frame while the main thread is blocked', async ({
+  page,
+  browserName,
+}, testInfo) => {
+  test.skip(
+    browserName === 'webkit',
+    "WebKit's Linux build runs the trigger's scale, as a transform too, on the main thread: beside a compositor control, its frames hold the trigger's width through the block (README: engine limits). The iOS simulator recording is the WebKit proof.",
+  );
+  const {driver, trigger, center} = await openTouchStory(page);
+  // A wider card grows by about a CSS pixel a frame, which the screencast
+  // resolves; it stays inside the viewport at its largest.
+  await trigger.evaluate(el => {
+    const host = el as HTMLElement;
+    (host.firstElementChild as HTMLElement).style.width = '340px';
+  });
+  const played = playedCurve();
+  await markElement(trigger, {mode: 'outline'});
+  const cast = await startScreencast(page);
+  const playing = driver.play(hold(center, 1100));
+  // The lift spring moves the card for about 200 ms, so the block covers
+  // its moving part.
+  const [feedback] = await waitForAnimation(trigger, {minProgressMs: 16});
+  const block = await blockMainThread(page, 150);
+  await playing;
+  await page.waitForTimeout(100);
+  const castFrames = await cast.stop();
+  const tracked = await trackMarker(page, castFrames);
+  const proof = busyWindowProof(tracked, block, {axis: 'width'});
+  // What the curve grows by between the first and the last frame of the
+  // judged window, in the marker's pixels, against what those frames show.
+  const scaleAt = (epoch: number) => played.at((epoch - feedback.from) / 1000);
+  const judged = tracked.filter(
+    f => f.box != null && f.t >= block.from + 20 && f.t <= block.to - 20,
+  );
+  const firstFrame = judged[0];
+  const lastFrame = judged.at(-1);
+  if (firstFrame?.box == null || lastFrame?.box == null) {
+    throw new Error('the screencast shows no marker during the block');
+  }
+  const restWidth = firstFrame.box.width / scaleAt(firstFrame.t);
+  const expectedGrowth =
+    restWidth * (scaleAt(lastFrame.t) - scaleAt(firstFrame.t));
+  const shownGrowth = lastFrame.box.width - firstFrame.box.width;
+  // Widths arrive from the screencast in steps (2 px in Chromium here). One
+  // step is the instrument's resolution, and the only allowance below.
+  const widthStep = Math.min(
+    ...judged.slice(1).flatMap((f, i) => {
+      const change = Math.abs(
+        (f.box?.width ?? 0) - (judged[i].box?.width ?? 0),
+      );
+      return change > 0 ? [change] : [];
+    }),
+  );
+  await writeEvidence(
+    'busy-main-thread/contextmenu-press-feedback',
+    {
+      [`${testInfo.project.name}.json`]: JSON.stringify(
+        {
+          block,
+          feedback,
+          proof,
+          frames: tracked.map(f => ({
+            t: +(f.t - block.from).toFixed(1),
+            w: f.box?.width ?? null,
+          })),
+        },
+        null,
+        1,
+      ),
+    },
+    testInfo,
+  );
+  const film = await castStoryboard(page, castFrames, {
+    name: 'contextmenu-press-feedback-busy-main-thread',
+    zero: block.from,
+    from: block.from - 40,
+    to: block.to + 40,
+    columns: 8,
+    cellScale: 0.35,
+    data: t => ({w: tracked.find(f => f.t === t)?.box?.width ?? -1}),
+  });
+  await film.write(testInfo, {block, feedback, expectedGrowth});
+  // Frames kept coming at display rate and the card kept growing, as much
+  // as the curve says, within the screencast's resolution.
+  expect(proof.medianFrameMs).toBeLessThan(20);
+  expect(proof.frames).toBeGreaterThanOrEqual(proof.expectedFrames - 2);
+  expect(proof.monotonic).toBe(true);
+  expect(proof.longestStallMs).toBeLessThan(4 * (1000 / 60) + 4);
+  expect(Number.isFinite(widthStep)).toBe(true);
+  expect(shownGrowth).toBeGreaterThanOrEqual(expectedGrowth - widthStep);
+});
+
+test('the press feedback does no Layout or Paint per frame', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(browserName !== 'chromium', 'rendering traces are Chromium-only');
+  const {driver, center} = await openTouchStory(page);
+  const timeOrigin = await page.evaluate(() => performance.timeOrigin);
+  const trace = await traceRendering(page, async () => {
+    // Lifted just before the commit: the feedback alone, then its return.
+    await driver.play(hold(center, commitMs - 20));
+  });
+  const start = timeOrigin + (await touchStartedAt(page));
+  const during = countBetween(
+    trace,
+    start + feedbackOnsetMs + 50,
+    start + commitMs - 30,
+  );
+  expect(during.Layout ?? 0, JSON.stringify(during)).toBe(0);
+  expect(during.Paint ?? 0, JSON.stringify(during)).toBe(0);
+  expect(trace.longTasks).toEqual([]);
+});
+
 /** The story with somewhere to scroll below it, and its trigger's center. */
 async function openScrollableStory(page: Page) {
   const story = await openTouchStory(page);
@@ -210,6 +808,24 @@ async function openScrollableStory(page: Page) {
     );
   return {...story, center, top};
 }
+
+test('the page does not scroll under the finger that held the menu open, and it does not lock the page', async ({
+  page,
+}) => {
+  const {driver, center, top} = await openScrollableStory(page);
+  const before = await top();
+  // Held until the menu shows, then dragged up 200 px.
+  await driver.play(
+    drag(
+      center,
+      {x: center.x, y: center.y - 200},
+      {durationMs: 300, holdMs: menuDisplayMs + 50, restMs: 100},
+    ),
+  );
+  expect(await top()).toBe(before);
+  await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
+  expect(await page.evaluate(() => document.body.style.position)).toBe('');
+});
 
 test('a new finger that pans outside the open menu closes it, and the page scrolls', async ({
   page,
@@ -248,3 +864,67 @@ test('a new finger that pans outside the open menu closes it, and the page scrol
     expect(await top()).toBeLessThan(before);
   }
 });
+
+test('a drag that cancels the press after the commit does not scroll the page either', async ({
+  page,
+}) => {
+  const {driver, center, top} = await openScrollableStory(page);
+  const before = await top();
+  await driver.play(
+    drag(
+      center,
+      {x: center.x, y: center.y - 200},
+      {durationMs: 300, holdMs: commitMs + 100, restMs: 100},
+    ),
+  );
+  expect(await menuShownAt(page)).toBeNull();
+  expect(await top()).toBe(before);
+});
+
+test(
+  'storyboard: the press feedback up to the menu',
+  {tag: '@storyboard'},
+  async ({page}, testInfo) => {
+    const {driver, trigger, center} = await openTouchStory(page);
+    const box = await trigger.boundingBox();
+    if (box == null) {
+      throw new Error('no trigger');
+    }
+    // Gate the page's timers first: the commit and the menu wait while the
+    // held feedback is photographed, and the finger stays down meanwhile.
+    await installTimerGate(page);
+    const playing = driver.play(hold(center, 8000));
+    await waitForAnimation(trigger, {minProgressMs: 16});
+    await freezeTimers(page);
+    const {storyboard} = await animationStoryboard(page, {
+      name: 'contextmenu-press-feedback',
+      clip: {
+        x: box.x - 24,
+        y: box.y - 24,
+        width: box.width + 48,
+        height: box.height + 48,
+      },
+      scope: trigger,
+      // t counts from the visible ramp's start, the onset after the touch.
+      times: timeline(menuDisplayMs - feedbackOnsetMs, 1000 / 30),
+      measure: async () => ({
+        scale: (await presentedScale(trigger)).toFixed(4),
+      }),
+      columns: 6,
+      cellScale: 0.6,
+    });
+    await releaseAnimations(page);
+    await thawTimers(page);
+    await playing;
+    await storyboard.write(testInfo);
+    const scales = storyboard.frames.map(f => Number(f.data.scale));
+    // The lift spring rises to its peak, overshoots by under 3% of its
+    // travel, and settles at the held scale before the menu displays.
+    const peak = scales.indexOf(Math.max(...scales));
+    expect(
+      scales.slice(0, peak + 1).every((s, i, a) => i === 0 || s >= a[i - 1]),
+    ).toBe(true);
+    expect(scales[peak]).toBeLessThan(heldScale + (heldScale - 1) * 0.03);
+    expect(scales.at(-1)).toBeCloseTo(heldScale, 2);
+  },
+);
