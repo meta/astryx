@@ -122,6 +122,9 @@ describe('usePopover public return type', () => {
     }
 
     render(<HeadlessPopover />);
+    // A direct hook composition gets the same closed semantics: no dialog
+    // until it opens.
+    expect(screen.queryByRole('dialog', {hidden: true})).toBeNull();
     fireEvent.click(screen.getByRole('button', {name: 'Open headless'}));
 
     const surface = screen.getByRole('dialog', {
@@ -189,17 +192,58 @@ describe('Popover', () => {
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
   });
 
-  it('renders popover content with role=dialog', () => {
+  it('renders popover content with role=dialog while open', () => {
     render(
       <Popover content={<span>Hello</span>} label="Greeting">
         <button type="button">Open</button>
       </Popover>,
     );
-    // The dialog is inside a popover element — hidden from accessibility tree
-    // until shown, but still present in the DOM
+    fireEvent.click(screen.getByRole('button', {name: 'Open'}));
     const dialog = screen.getByRole('dialog', {hidden: true});
     expect(dialog).toBeInTheDocument();
     expect(dialog).toHaveAttribute('aria-label', 'Greeting');
+  });
+
+  it('carries no dialog role or name while closed, before and after it opens', () => {
+    const onOpenChange = vi.fn();
+    render(
+      <Popover
+        content={<span>Hello</span>}
+        label="Greeting"
+        onOpenChange={onOpenChange}>
+        <button type="button">Open</button>
+      </Popover>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Open'});
+    const surface = document.querySelector<HTMLElement>('.astryx-popover');
+    expect(surface).not.toBeNull();
+    expect(screen.queryByRole('dialog', {hidden: true})).toBeNull();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(surface).not.toHaveAttribute('aria-label');
+
+    fireEvent.click(trigger);
+    expect(onOpenChange).toHaveBeenLastCalledWith(true);
+    expect(screen.getByRole('dialog', {hidden: true})).toHaveAttribute(
+      'aria-label',
+      'Greeting',
+    );
+
+    // Closed again, the surface stays mounted but hidden, with no dialog
+    // semantics.
+    fireEvent.click(trigger);
+    expect(onOpenChange).toHaveBeenLastCalledWith(false);
+    expect(surface).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', {hidden: true})).toBeNull();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(surface).not.toHaveAttribute('aria-label');
+    expect(surface).not.toHaveAttribute('aria-modal');
+
+    // Reopening restores them.
+    fireEvent.click(trigger);
+    const reopened = screen.getByRole('dialog', {hidden: true});
+    expect(reopened).toBe(surface);
+    expect(reopened).toHaveAttribute('aria-label', 'Greeting');
+    expect(reopened).toHaveAttribute('aria-modal', 'true');
   });
 
   it('can render a neutral wrapper when content owns its role', () => {
@@ -237,6 +281,7 @@ describe('Popover', () => {
         <button type="button">Open</button>
       </Popover>,
     );
+    fireEvent.click(screen.getByRole('button', {name: 'Open'}));
 
     const dialog = screen.getByRole('dialog', {hidden: true});
     expect(dialog).toBeInTheDocument();
@@ -1027,6 +1072,85 @@ describe('Popover', () => {
       );
     });
 
+    it('starts focus on the first enabled control, skipping a disabled one', async () => {
+      render(
+        <Popover
+          content={
+            <>
+              <button type="button" aria-disabled="true">
+                Earlier
+              </button>
+              <button type="button">Later</button>
+            </>
+          }
+          label="Pages">
+          <button type="button">Open pages</button>
+        </Popover>,
+      );
+      fireEvent.click(screen.getByRole('button', {name: 'Open pages'}), {
+        detail: 1,
+      });
+      await waitFor(() =>
+        expect(
+          screen.getByRole('button', {name: 'Later', hidden: true}),
+        ).toHaveFocus(),
+      );
+    });
+
+    it('starts focus on a roving tab stop, not an earlier member that holds tabindex -1', async () => {
+      render(
+        <Popover
+          content={
+            <div role="toolbar" aria-label="Formatting">
+              <button type="button" tabIndex={-1}>
+                Bold
+              </button>
+              <button type="button" tabIndex={0}>
+                Italic
+              </button>
+            </div>
+          }
+          label="Format">
+          <button type="button">Open format</button>
+        </Popover>,
+      );
+      fireEvent.click(screen.getByRole('button', {name: 'Open format'}), {
+        detail: 1,
+      });
+      await waitFor(() =>
+        expect(
+          screen.getByRole('button', {name: 'Italic', hidden: true}),
+        ).toHaveFocus(),
+      );
+    });
+
+    it('starts focus on the labelled surface when every control is disabled, and Tab still reaches them', async () => {
+      const user = userEvent.setup();
+      render(
+        <Popover
+          content={
+            <button type="button" aria-disabled="true">
+              Earlier
+            </button>
+          }
+          label="Pages">
+          <button type="button">Open pages</button>
+        </Popover>,
+      );
+      fireEvent.click(screen.getByRole('button', {name: 'Open pages'}));
+      await waitFor(() =>
+        expect(
+          screen.getByRole('dialog', {name: 'Pages', hidden: true}),
+        ).toHaveFocus(),
+      );
+
+      await user.tab();
+
+      expect(
+        screen.getByRole('button', {name: 'Earlier', hidden: true}),
+      ).toHaveFocus();
+    });
+
     it('keeps the fallback close button reachable by Tab', async () => {
       const user = userEvent.setup();
       render(
@@ -1276,10 +1400,9 @@ describe('Popover', () => {
       );
       const view = within(secondDocument.body);
       const trigger = view.getByRole('button', {name: 'Settings'});
-      const surface = view.getByRole('dialog', {
-        name: 'Settings',
-        hidden: true,
-      });
+      // Closed, the surface has no dialog role, so find it by its target.
+      const surface =
+        secondDocument.body.querySelector<HTMLElement>('.astryx-popover')!;
       const first = view.getByRole('button', {name: 'First', hidden: true});
       return {trigger, surface, first, view};
     }
@@ -1547,6 +1670,148 @@ describe('Popover', () => {
     expect(target).toHaveStyle({padding: '0'});
     expect(target).toContainElement(screen.getByTestId('content'));
     expect(screen.getByTestId('popover')).not.toHaveClass('consumer-popover');
+  });
+});
+
+describe('Popover touch presentation', () => {
+  interface RecordedAnimation {
+    target: Element;
+    keyframes: Keyframe[];
+    cancelled: boolean;
+  }
+  let recorded: RecordedAnimation[] = [];
+  let isCoarse = true;
+  const originalMatchMedia = window.matchMedia;
+  const originalShow = HTMLElement.prototype.showPopover;
+  const originalHide = HTMLElement.prototype.hidePopover;
+  const originalRequestFrame = window.requestAnimationFrame;
+  const originalCancelFrame = window.cancelAnimationFrame;
+  // The animation frames asked for, run by `frame()`: the touch
+  // presentation reads its geometry in the next one.
+  const frames = new Map<number, FrameRequestCallback>();
+  let lastFrame = 0;
+  const frame = () =>
+    act(() => {
+      const due = [...frames.values()];
+      frames.clear();
+      for (const callback of due) {
+        callback(performance.now());
+      }
+    });
+
+  beforeAll(() => {
+    window.requestAnimationFrame = callback => {
+      lastFrame += 1;
+      frames.set(lastFrame, callback);
+      return lastFrame;
+    };
+    window.cancelAnimationFrame = handle => {
+      frames.delete(handle);
+    };
+    // The shared resolver reads the primary pointer (one touch model on every
+    // touch device); Reduce Motion is off.
+    window.matchMedia = (query: string) => ({
+      matches: query.includes('pointer: coarse') ? isCoarse : false,
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    });
+    // The browser announces a close with `beforetoggle` while the popover is
+    // still shown, then hides it.
+    HTMLElement.prototype.hidePopover = vi.fn(function (this: HTMLElement) {
+      const before = new Event('beforetoggle');
+      Object.defineProperty(before, 'newState', {value: 'closed'});
+      this.dispatchEvent(before);
+      popoverOpenState.set(this, false);
+      const event = new Event('toggle');
+      Object.defineProperty(event, 'newState', {value: 'closed'});
+      this.dispatchEvent(event);
+    });
+    HTMLElement.prototype.animate = function (keyframes) {
+      const animation = {
+        target: this,
+        keyframes: keyframes as Keyframe[],
+        cancelled: false,
+        // Started at once, as the browser commits it (the animator holds a
+        // curve's start until it has one).
+        startTime: performance.now() as number | null,
+        finished: new Promise(() => {}),
+        cancel() {
+          this.cancelled = true;
+        },
+      };
+      recorded.push(animation);
+      return animation as unknown as Animation;
+    };
+  });
+
+  afterAll(() => {
+    window.requestAnimationFrame = originalRequestFrame;
+    window.cancelAnimationFrame = originalCancelFrame;
+    window.matchMedia = originalMatchMedia;
+    HTMLElement.prototype.showPopover = originalShow;
+    HTMLElement.prototype.hidePopover = originalHide;
+    Reflect.deleteProperty(HTMLElement.prototype, 'animate');
+  });
+
+  const open = () => {
+    recorded = [];
+    render(
+      <Popover content={<span>Filters</span>} label="Filters">
+        <button type="button">Filter</button>
+      </Popover>,
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Filter'}));
+    // The touch presentation reads its geometry in the next frame.
+    frame();
+    const layer = screen
+      .getByRole('dialog', {name: 'Filters', hidden: true})
+      .closest<HTMLElement>('[popover]');
+    expect(layer).not.toBeNull();
+    return layer!;
+  };
+
+  it('under a finger, grows the popover out of its trigger in place of the layer\u2019s entrance', () => {
+    isCoarse = true;
+    const layer = open();
+    expect(layer.style.getPropertyValue('animation-name')).toBe('none');
+    expect(layer.style.getPropertyValue('transform-origin')).not.toBe('');
+    const scale = recorded.find(
+      animation =>
+        animation.target === layer && 'scale' in animation.keyframes[0],
+    );
+    expect(scale).toBeDefined();
+    expect(String(scale!.keyframes[0].scale).split(' ')[0]).toBe('0.01');
+  });
+
+  it('under a finger, shrinks back into its trigger on a copy that outlives the close', () => {
+    isCoarse = true;
+    const layer = open();
+    fireEvent.click(screen.getByRole('button', {name: 'Filter'}));
+    const copy = layer.parentElement!.querySelector<HTMLElement>(
+      '[data-astryx-popover-exit]',
+    );
+    expect(copy).not.toBeNull();
+    expect(copy!.getAttribute('aria-hidden')).toBe('true');
+    expect(copy!.hasAttribute('inert')).toBe(true);
+  });
+
+  it('under a mouse, keeps the layer\u2019s own entrance, plays nothing and closes at once', () => {
+    isCoarse = false;
+    expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
+    const layer = open();
+    expect(layer.style.getPropertyValue('animation-name')).toBe('');
+    expect(recorded.filter(animation => animation.target === layer)).toEqual(
+      [],
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Filter'}));
+    expect(
+      layer.parentElement!.querySelector('[data-astryx-popover-exit]'),
+    ).toBeNull();
   });
 });
 

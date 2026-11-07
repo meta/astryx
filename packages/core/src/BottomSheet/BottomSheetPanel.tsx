@@ -28,6 +28,7 @@ import {
   useRef,
   useSyncExternalStore,
   type ReactNode,
+  type Ref,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
@@ -68,11 +69,15 @@ import {
   resolveSnapPoints,
   type BottomSheetSnapPoint,
 } from './snapOffsets';
+import {animatorFor, SETTLE_THRESHOLD} from '../motion/animator';
+import {resolveSettleMs} from '../motion/resolveMotion';
+import {springs} from '../motion/uikit/springs';
 import {useMobileKeyboard} from '../keyboard/useMobileKeyboard';
 import {
   scrollPreservationPadding,
   sheetLayoutHeight,
   useSheetGestures,
+  type SheetDragExit,
 } from './useSheetGestures';
 
 const HEIGHT_BUDGETS = {
@@ -99,6 +104,8 @@ function sheetReserve(viewportHeight: number): number {
   );
 }
 const MOBILE_KEYBOARD_BOTTOM_CLEARANCE = 48;
+// How many more frames a drag's close looks for its scrim's fade to adopt.
+const MAX_SCRIM_FADE_ADOPT_FRAMES = 3;
 const TRANSITION_BACKSTOP_BUFFER_MS = 50;
 // The floating handle bar's height. The bar is out of flow, so this is not
 // layout space the content pays for -- the pill (4px, centered) lands 10-14px
@@ -122,6 +129,54 @@ function hasStyles(xstyle: unknown): boolean {
     : xstyle != null && typeof xstyle === 'object';
 }
 
+function supportsWebAnimations(): boolean {
+  return (
+    typeof Element !== 'undefined' &&
+    typeof Element.prototype.animate === 'function'
+  );
+}
+
+/**
+ * How long a drag's close plays, in ms. It is the close spring's move from
+ * where the finger left the sheet, timed as the shared animator times it.
+ */
+function dragExitMs(element: Element, exit: SheetDragExit): number {
+  return resolveSettleMs(element, springs.sheetDismissSwipe, {
+    from: 0,
+    to: exit.distance,
+    velocity: exit.velocity,
+    epsilon: SETTLE_THRESHOLD.y,
+  });
+}
+
+/** The running fade that clears the scrim behind `panel`, if any. */
+function clearingScrimFade(panel: Element): Animation | undefined {
+  const dialog = panel.closest('dialog');
+  const doc = panel.ownerDocument;
+  if (dialog == null || typeof doc.getAnimations !== 'function') {
+    return undefined;
+  }
+  const fades = doc.getAnimations().filter(animation => {
+    const effect = animation.effect as KeyframeEffect | null;
+    return (
+      effect?.target === dialog &&
+      (animation as CSSTransition).transitionProperty === 'opacity' &&
+      // Skip a fade that the drag started. A style update replaces that fade.
+      Number(effect.getKeyframes().at(-1)?.opacity) === 0
+    );
+  });
+  const onBackdrop = fades.filter(
+    fade => (fade.effect as KeyframeEffect).pseudoElement === '::backdrop',
+  );
+  // An engine that reports no backdrop effect (WebKit) puts the backdrop's
+  // fade on the dialog itself, which runs no opacity transition of its own.
+  return (
+    onBackdrop.length > 0
+      ? onBackdrop
+      : fades.filter(fade => !(fade.effect as KeyframeEffect).pseudoElement)
+  ).at(-1);
+}
+
 // Measure the viewport that the height budgets use. They are `dvh`, which
 // the virtual keyboard does not shrink, so `visualViewport` would differ by
 // the keyboard's height. `useMobileKeyboard` handles the keyboard and does
@@ -130,8 +185,53 @@ function layoutViewportHeight(): number {
   return typeof window === 'undefined' ? 0 : window.innerHeight;
 }
 
-function subscribeToResize(onChange: () => void): () => void {
-  return subscribeInput(window, 'resize', onChange);
+// The layout viewport's height, as the `resize` listener last read it. While
+// the listener runs, a render reads this value, never `innerHeight`. After a
+// commit's DOM writes, a read of `innerHeight` forces a style recalculation
+// and a layout. Open sheets share one listener. With no sheet open, the value
+// is null, because nothing keeps it current.
+let viewportHeight: number | null = null;
+const viewportHeightListeners = new Set<() => void>();
+let stopViewportResize: (() => void) | null = null;
+
+function handleViewportResize(): void {
+  viewportHeight = layoutViewportHeight();
+  for (const listener of viewportHeightListeners) {
+    listener();
+  }
+}
+
+function subscribeToViewportHeight(onChange: () => void): () => void {
+  viewportHeightListeners.add(onChange);
+  if (stopViewportResize == null) {
+    stopViewportResize = subscribeInput(window, 'resize', handleViewportResize);
+    // A resize between the first render and this listener has no event left
+    // to deliver. So read the height now, and let React compare it with the
+    // height it rendered.
+    viewportHeight = layoutViewportHeight();
+    onChange();
+  }
+  return () => {
+    viewportHeightListeners.delete(onChange);
+    if (viewportHeightListeners.size === 0) {
+      stopViewportResize?.();
+      stopViewportResize = null;
+      viewportHeight = null;
+    }
+  };
+}
+
+function readViewportHeight(): number {
+  // Without a listener, nothing keeps a stored height current.
+  if (stopViewportResize == null) {
+    return layoutViewportHeight();
+  }
+  viewportHeight ??= layoutViewportHeight();
+  return viewportHeight;
+}
+
+function readNoViewportHeight(): number {
+  return 0;
 }
 
 function subscribeToNothing(): () => void {
@@ -435,7 +535,19 @@ interface BottomSheetPanelProps extends BaseProps<HTMLDivElement> {
   isPageScrollLocked?: boolean;
   onDismiss: () => void;
   onScrimOpacity: (opacity: number) => void;
+  /**
+   * The scrim's fade under a touch drag's close, in milliseconds, or null
+   * once that close ends or a reopen takes the sheet back. `panel` is the
+   * sheet's element: the commit that starts the close can detach the host's
+   * dialog ref while this runs.
+   */
+  onScrimFadeDuration?: (panel: HTMLElement, ms: number | null) => void;
   onElementChange?: (element: HTMLDivElement | null) => void;
+  /**
+   * A ref for the grab handle's element. The handle stays mounted with the
+   * panel and carries no other ref.
+   */
+  handleRef?: Ref<HTMLDivElement>;
   onMotionStart?: (motion: BottomSheetPanelMotion) => void;
   onMotionComplete?: (motion: BottomSheetPanelMotion) => void;
 }
@@ -612,7 +724,9 @@ export function BottomSheetPanel({
   isPageScrollLocked = false,
   onDismiss,
   onScrimOpacity,
+  onScrimFadeDuration,
   onElementChange,
+  handleRef,
   onMotionStart,
   onMotionComplete,
   ...props
@@ -625,6 +739,7 @@ export function BottomSheetPanel({
   const reactivatedEntranceRef = useRef(false);
   const onMotionStartRef = useRef(onMotionStart);
   const onMotionCompleteRef = useRef(onMotionComplete);
+  const onScrimFadeDurationRef = useRef(onScrimFadeDuration);
   const startedMotionRef = useRef<BottomSheetPanelMotion | null>(null);
   const pendingMotionCompleteRef = useRef<BottomSheetPanelMotion | null>(null);
 
@@ -641,7 +756,8 @@ export function BottomSheetPanel({
     previousStateRef.current = state;
     onMotionStartRef.current = onMotionStart;
     onMotionCompleteRef.current = onMotionComplete;
-  }, [onMotionComplete, onMotionStart, state]);
+    onScrimFadeDurationRef.current = onScrimFadeDuration;
+  }, [onMotionComplete, onMotionStart, onScrimFadeDuration, state]);
 
   const isInteractive = state.kind === 'open';
   const isPresented = state.kind !== 'hidden';
@@ -698,13 +814,17 @@ export function BottomSheetPanel({
   // sizes, which nothing extends by the reserve; the stretch stops at it.
   const hasTouchPointer = useMediaQuery('(any-pointer: coarse)');
   const tracksViewport = isPresented && hasTouchPointer && !isSizedByCaller;
-  const viewportHeight = useSyncExternalStore(
-    tracksViewport ? subscribeToResize : subscribeToNothing,
-    () => (tracksViewport ? layoutViewportHeight() : 0),
-    () => 0,
+  // Each argument is a module function, so React keeps one snapshot function
+  // across renders and does not re-read it in the commit.
+  const trackedViewportHeight = useSyncExternalStore(
+    tracksViewport ? subscribeToViewportHeight : subscribeToNothing,
+    tracksViewport ? readViewportHeight : readNoViewportHeight,
+    readNoViewportHeight,
   );
   const reserve =
-    viewportHeight > 0 ? sheetReserve(viewportHeight) : MIN_RESERVE;
+    trackedViewportHeight > 0
+      ? sheetReserve(trackedViewportHeight)
+      : MIN_RESERVE;
   const {
     contentProps,
     handleProps,
@@ -715,6 +835,7 @@ export function BottomSheetPanel({
     settledOffset,
     isDragging,
     isDismissedByTouchDrag,
+    dragExit,
     sheetHeight,
     scrollPreservationInset,
     settlingLayoutOffset,
@@ -757,12 +878,20 @@ export function BottomSheetPanel({
     },
     [onElementChange, sheetRef],
   );
+  // The element a drag's exit moved, until the sheet is hidden.
+  const dragExitElementRef = useRef<HTMLElement | null>(null);
   useLayoutEffect(() => {
     if (isPresentedRef.current === isPresented) {
       return;
     }
     isPresentedRef.current = isPresented;
     sheetRef(isPresented ? elementRef.current : null);
+    // A hidden sheet can stay mounted, so the exit's offset goes back to 0.
+    const exited = dragExitElementRef.current;
+    if (!isPresented && exited != null) {
+      dragExitElementRef.current = null;
+      animatorFor(exited).set({y: 0});
+    }
   }, [isPresented, sheetRef]);
   const keyboard = useMobileKeyboard(elementRef, {
     move: 'ride',
@@ -790,8 +919,33 @@ export function BottomSheetPanel({
   const isCoarseCrossFade = useMediaQuery(REDUCED_MOTION_COARSE_QUERY);
   const isCrossFade =
     isCoarseCrossFade || (isReducedMotion && isDismissedByTouchDrag);
-  // Syncs the motion with the panel's CSS transition. The motion completes when
-  // that transition ends.
+  // Without Web Animations the animator jumps the sheet to its end, so the
+  // stylesheet's exit runs.
+  const playedDragExit =
+    dragExit != null &&
+    !isCrossFade &&
+    !isReducedMotion &&
+    supportsWebAnimations()
+      ? dragExit
+      : null;
+  // Syncs the scrim's fade with a drag's close. It runs as the host takes the
+  // close, before the host clears the scrim, so the fade starts on the
+  // close's own clock.
+  useLayoutEffect(() => {
+    const element = elementRef.current;
+    if (playedDragExit == null || element == null) {
+      return;
+    }
+    onScrimFadeDurationRef.current?.(
+      element,
+      dragExitMs(element, playedDragExit),
+    );
+    return () => {
+      onScrimFadeDurationRef.current?.(element, null);
+    };
+  }, [playedDragExit]);
+  // Syncs the motion with the panel's CSS transition, or a drag's exit with
+  // the shared animator. The motion completes when that one ends.
   useLayoutEffect(() => {
     if (motion == null) {
       return;
@@ -815,6 +969,55 @@ export function BottomSheetPanel({
       complete();
       return;
     }
+    const element = elementRef.current;
+    if (motion === 'exiting' && playedDragExit != null && element != null) {
+      dragExitElementRef.current = element;
+      const exit = animatorFor(element).animate(
+        {y: playedDragExit.distance},
+        {
+          spring: springs.sheetDismissSwipe,
+          velocity: {y: playedDragExit.velocity},
+        },
+      );
+      let isCurrent = true;
+      let isFinished = false;
+      let frame: number | null = null;
+      // The scrim's fade follows the close. Once the close starts, the fade
+      // takes its start time, so the two end together. If the fade has no
+      // style yet, look for it again on each of the next few frames.
+      void exit.started.then(start => {
+        const adopt = (framesLeft: number) => {
+          frame = null;
+          if (!isCurrent) {
+            return;
+          }
+          const fade = clearingScrimFade(element);
+          if (fade != null) {
+            fade.startTime = start;
+          } else if (framesLeft > 0) {
+            frame = requestAnimationFrame(() => adopt(framesLeft - 1));
+          }
+        };
+        adopt(MAX_SCRIM_FADE_ADOPT_FRAMES);
+      });
+      void exit.finished.then(() => {
+        isFinished = true;
+        onScrimFadeDurationRef.current?.(element, null);
+        if (isCurrent) {
+          complete();
+        }
+      });
+      return () => {
+        isCurrent = false;
+        if (frame != null) {
+          cancelAnimationFrame(frame);
+        }
+        // A reopen during the exit takes the sheet back from where it is.
+        if (!isFinished) {
+          exit.retarget({y: 0});
+        }
+      };
+    }
     // What ends a motion: the fade is opacity, and the entrance, alignment and
     // exit are transforms. Under the reduced-motion cross-fade an exit fades
     // where it is, and its dialog closes only after the fade, so it waits on
@@ -826,7 +1029,7 @@ export function BottomSheetPanel({
       motion === 'fading' || crossFadeMotion ? 'opacity' : 'transform',
       complete,
     );
-  }, [motion, isCrossFade]);
+  }, [motion, isCrossFade, playedDragExit]);
   // The snap is transform-only; the layout height reconciles when it lands.
   // waitForTransition — the same helper the motion states use — resolves that
   // even when no `transitionend` is coming: inline or computed
@@ -940,7 +1143,12 @@ export function BottomSheetPanel({
     }
     const element = elementRef.current;
     if (element != null) {
-      if (consumerTransform == null) {
+      // A drag's close holds the sheet where the finger left it, so the exit
+      // starts from there. A step back to rest first would turn the sheet
+      // the wrong way.
+      const holdsDragClose =
+        dragExit != null && (!isClosing || playedDragExit != null);
+      if (consumerTransform == null && !holdsDragClose) {
         element.style.transform = sheetTransform ?? '';
       }
       if (consumerHeight == null) {
@@ -997,6 +1205,7 @@ export function BottomSheetPanel({
         },
       )}>
       <div
+        ref={handleRef}
         {...stylex.props(styles.handleBar)}
         {...handleProps}
         aria-hidden="true"

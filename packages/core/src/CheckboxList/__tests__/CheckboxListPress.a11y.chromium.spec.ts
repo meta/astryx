@@ -27,8 +27,8 @@ import {
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
 import {
+  armHold,
   freezeTimers,
-  holdAnimations,
   installTimerGate,
   releaseAnimations,
   seekAnimations,
@@ -557,15 +557,28 @@ test.describe('CheckboxList row press', () => {
       await row.press(row.label);
       await untilPressed(page);
       const held = await boxPaint(page, 'SMS');
+      // The page holds the release itself as soon as it runs. A hold the test
+      // sends after the lift arrives later on a busy machine, and the release
+      // can end first.
+      const pressed = page.locator('li[data-astryx-press]');
+      const hold = await armHold(page, pressed, {
+        judges: {
+          target: pressed,
+          property: 'opacity',
+          pseudoElement: '::before',
+        },
+      });
       await row.lift(row.label);
       await freezeTimers(page);
       expect(await rowPress(page)).toBe('fading');
-      const animations = await holdAnimations(
-        page,
-        page.locator('li[data-astryx-press]'),
+      const animations = await hold.held();
+      // The checkbox's state transitions can join the hold. The release is the
+      // row's CSS animations.
+      const release = animations.filter(
+        a => a.target?.startsWith('li') && a.kind === 'CSSAnimation',
       );
-      expect(animations.length, JSON.stringify(animations)).toBeGreaterThan(0);
-      const releaseMs = Math.max(...animations.map(a => a.durationMs));
+      expect(release.length, JSON.stringify(animations)).toBeGreaterThan(0);
+      const releaseMs = Math.max(...release.map(a => a.durationMs));
       await seekAnimations(page, releaseMs / 2);
       const mid = {
         box: await boxPaint(page, 'SMS'),

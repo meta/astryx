@@ -30,6 +30,7 @@ export * from './IconButton';
 export * from './Card';
 export * from './ClickableCard';
 export * from './Carousel';
+export * from './SnapPaging';
 export * from './Calendar';
 export * from './Center';
 export * from './CodeBlock';
@@ -185,6 +186,14 @@ export {
   type AnimatorSnapshot,
   type AnimatorValues,
 } from './animator/createAnimator';
+
+// Settling an element on snap points: from the package root only, since one
+// API has one entry. Its hook ships from './hooks'.
+export {
+  createDragToSnapPoints,
+  type DragToSnapPoints,
+  type DragToSnapPointsOptions,
+} from './dragToSnapPoints/createDragToSnapPoints';
 
 // Hooks
 export * from './hooks';

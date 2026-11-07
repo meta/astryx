@@ -33,6 +33,7 @@ import {
 } from './expandTypeScale';
 import {
   expandThemeMotion,
+  MOTION_TEMPO_PROPERTY,
   preTempoName,
   type MotionCharacter,
   type ThemeMotionConfig,
@@ -315,15 +316,23 @@ export function resolveThemeValues(
   // 4. Motion-generated tokens (spec:AST-108 FR2, FR5). A layer that writes
   // durations also writes the copies busy loops read (FR4), so an enclosing
   // theme's tempo copies never stand in for its own: without a tempo of its
-  // own, they are its durations.
+  // own, they are its durations. Such a layer also writes a tempo of 1, so
+  // its springs keep the pace of its durations inside a theme with a tempo.
   if (input.motion) {
     const motion = expandThemeMotion(input.motion);
     Object.assign(tokens, motion);
+    let writesDurations = false;
     for (const [name, value] of Object.entries(motion)) {
       const preTempo = preTempoName(name);
-      if (preTempo !== name && !(preTempo in motion)) {
-        tokens[preTempo] = value;
+      if (preTempo !== name) {
+        writesDurations = true;
+        if (!(preTempo in motion)) {
+          tokens[preTempo] = value;
+        }
       }
+    }
+    if (writesDurations && !(MOTION_TEMPO_PROPERTY in motion)) {
+      tokens[MOTION_TEMPO_PROPERTY] = '1';
     }
   }
 

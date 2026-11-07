@@ -45,7 +45,7 @@ system_specs: [spec:AST-003, spec:AST-017]
 | Behavior                | A floating card of rich, possibly interactive content anchored to a trigger. It opens on hover after `delay`, on focus, and on a tap that `touchTrigger` allows, stays open while the pointer is on the trigger or card, and closes on leave, Escape, or a tap outside. With `label` it is a named dialog the trigger advertises; without, a group that describes the trigger. With `touchTrigger="none"`, touch never opens it. |
 | End-user impact         | Mouse, keyboard, and touch users can open the preview, move into it to use its actions, and dismiss it; screen-reader users hear it as a named popup dialog or as the trigger's description. Under the default `touchTrigger="auto"`, a tap on a trigger that performs an action performs only that action.                                                                                                                      |
 | Builder impact          | `touchTrigger` answers whether it is safe to consume a tap to show the card (DEC-1): keep the default `auto` on a trigger that performs an action, pass `tap` where a tap only reveals the card, and pass `none` where a tap must never show it.                                                                                                                                                                                 |
-| Compatibility/readiness | No public API change: `touchTrigger` keeps its released values and its default `auto`. Four implementation gaps (see Current-state impact).                                                                                                                                                                                                                                                                                      |
+| Compatibility/readiness | No public API change: `touchTrigger` keeps its released values and its default `auto`. Three implementation gaps (see Current-state impact).                                                                                                                                                                                                                                                                                     |
 | Review checks           | Reject an unnamed `dialog`, a card that cannot be hovered or dismissed (WCAG 1.4.13), Escape in the page that also closes a layer underneath, `aria-expanded` set on a trigger whose role does not support it, or a tap under `touchTrigger="auto"` that both performs the trigger's action and shows the card.                                                                                                                  |
 | Governing rules         | WCAG 1.4.13, 2.1.1; `family:overlay-dismissal`; `spec:AST-003` FR4; `spec:AST-017` (lifecycle); `architecture:public-component-api` INV9, INV21; `architecture:layer-runtime`; `architecture:interaction-modality`; `architecture:component-theming-surface`.                                                                                                                                                                    |
 
@@ -78,11 +78,6 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Current-state impact
 
-- **A held-closed card still opens on focus.** With `isOpen={false}`, the hover
-  path stays shut but focus on the trigger opens the card, so a caller cannot
-  hold it closed. Escape then only reports `onOpenChange(false)`, which the
-  caller already holds, so the card stays until focus or the pointer leaves the
-  trigger or the card (FR7).
 - **Hover timing does not use the shared hover recognizer.** The card runs its
   own show and hide timers. `architecture:interaction-modality` INV11 has
   `useHoverCard` take its hover timing from the shared hover recognizer.
@@ -131,7 +126,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 | FR4  | On a hover-capable pointer, entering the trigger opens the card after `delay` ms; leaving the trigger or the card closes it after `hideDelay` ms, and moving between them keeps it open. Any focus on the trigger, keyboard, pointer, or programmatic, opens it per `focusTrigger`, except the focus a tap leaves behind, the refocus after an Escape dismiss (FR6), and the refocus after a controlled close (FR7). Under `auto`, whether focus counts is judged when it arrives: focus on the trigger itself, or within a trigger that is focusable at that moment, so a roving-tabindex member opens when the arrow keys reach it.                                      | WCAG 1.4.13; tests                                           |
 | FR5  | On touch and pen, a completed tap opens the card per `touchTrigger` on lift; a touch that becomes a scroll does not. Under `auto`, a tap opens it unless the trigger itself performs an action; an `aria-disabled` control, or a label for a disabled control, is not an action, so a disabled control's reason opens on a tap (DEC-1). Under `tap`, every tap opens it; under `none`, no tap does. A tap on the card's content keeps it open; a tap on the trigger while it is open, a tap outside, or a scroll starting outside closes it. Whether `auto` also leaves the card shut when the tap acts on a control around the trigger is open (`component:Tooltip` OQ1). | Current source and tests                                     |
 | FR6  | Escape closes a visible card through the shared dismissal stack when it is the topmost layer in the page, so a layer underneath stays open. Implementation gap: a card rendered into another document, such as an iframe or a Picture-in-Picture window, with no layer beneath it is never closed by Escape (Current-state impact). When focus was inside the card, it returns to the trigger, and that refocus does not reopen the card.                                                                                                                                                                                                                                  | WCAG 1.4.13; tests                                           |
-| FR7  | `isOpen` forces the card shown or hidden, and `isOpen={true}` suppresses hover and focus hiding; a controlled card answers Escape by calling `onOpenChange(false)` without hiding, and setting `isOpen={false}` while focus is inside the card returns focus to the trigger. `isDefaultOpen` opens it on mount, still dismissible. Implementation gap: with `isOpen={false}`, focus on the trigger still opens the card, and Escape then only reports `onOpenChange(false)` (Current-state impact). `isEnabled={false}` disables the triggers. `onOpenChange` reports each show and hide.                                                                                  | Current source and tests                                     |
+| FR7  | `isOpen` forces the card shown or hidden, and `isOpen={true}` suppresses hover and focus hiding; a controlled card answers Escape by calling `onOpenChange(false)` without hiding, and setting `isOpen={false}` while focus is inside the card returns focus to the trigger. `isDefaultOpen` opens it on mount, still dismissible. `isEnabled={false}` disables the triggers. `onOpenChange` reports each show and hide.                                                                                                                                                                                                                                                   | Current source and tests                                     |
 | FR8  | Content renders only while open; server markup and the first client render match, including a default-open card. `hasHoverIndication` (`auto`: text children: strings and numbers, with holes such as `false` and `null` ignored) adds a hover cue to the inline trigger.                                                                                                                                                                                                                                                                                                                                                                                                  | Current source and tests                                     |
 | FR11 | A press inside an open HoverCard surface acts only within that surface: it never activates the trigger, a clickable container around it, or the control a label names. Interactive content inside the card (a link, a button) keeps its own activation. The press still reaches page-level listeners, so a menu or Typeahead inside the surface keeps working. `architecture:layer-runtime` INV17 states this stop for every layer root.                                                                                                                                                                                                                                   | `component:Tooltip` FR11; `architecture:layer-runtime` INV17 |
 
@@ -152,8 +147,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ### Transformation and precedence order
 
-- **ORD1 — Open state.** `isOpen`, then the input triggers, apart from FR7's
-  focus gap.
+- **ORD1 — Open state.** `isOpen`, then the input triggers.
 
 ### Performance and resources
 
@@ -165,9 +159,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 - **AR1 — Popup semantics.** FR3.
 - **AR2 — Content on hover or focus.** FR4–FR6 keep the card hoverable,
-  dismissible, and persistent per WCAG 1.4.13, except FR6's other-document gap,
-  FR7's held-closed Escape gap, and the pointer-only hold (Current-state
-  impact).
+  dismissible, and persistent per WCAG 1.4.13, except FR6's other-document gap
+  and the pointer-only hold (Current-state impact).
 
 ## Design relationships
 

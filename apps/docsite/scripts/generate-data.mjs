@@ -1191,11 +1191,26 @@ export interface DerivedVar {
   replaces?: boolean;
 }
 
+export interface ComponentIconSlotState {
+  name: string;
+  type: string;
+  description: string;
+}
+
+export interface ComponentIconSlot {
+  slot: string;
+  description: string;
+  fallback: string;
+  state?: ComponentIconSlotState[];
+  whenNull: string;
+}
+
 export interface ThemingDoc {
   container?: boolean;
   targets: ThemingTarget[];
   vars?: ComponentVar[];
   derived?: DerivedVar[];
+  componentIcons?: ComponentIconSlot[];
 }
 
 export interface HookParamDoc {
@@ -1638,9 +1653,15 @@ async function generateBlockRegistry() {
         package: entry.package,
         cwd: DOCSITE_ROOT,
       });
-      const dirName = `${entry.package}-${entry.id}`.replace(/[^a-zA-Z0-9_-]/g, '-');
+      const dirName = `${entry.package}-${entry.id}`.replace(
+        /[^a-zA-Z0-9_-]/g,
+        '-',
+      );
       const authored = discovered.find(
-        t => t.type === 'block' && t.dirName === entry.id && pkgOf(t) === entry.package,
+        t =>
+          t.type === 'block' &&
+          t.dirName === entry.id &&
+          pkgOf(t) === entry.package,
       );
       if (!authored) throw new Error(`No authored file for ${dirName}`);
       integrationBlockFiles.set(dirName, authored.filePath);

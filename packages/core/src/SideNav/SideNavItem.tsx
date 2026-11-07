@@ -35,7 +35,6 @@
  */
 
 import {
-  createContext,
   use,
   useCallback,
   useId,
@@ -74,7 +73,10 @@ import {
 import {useSideNavRenderMode} from './SideNavRenderContext';
 import {useCloseMobileDrawerOnActivate} from '../AppShell/useCloseMobileDrawerOnActivate';
 import {themeProps} from '../utils/themeProps';
-import {disabledInteractionProps} from '../utils/disabledInteraction';
+import {
+  disabledInteractionProps,
+  withholdCallerHandlers,
+} from '../utils/disabledInteraction';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {SideNavFocusTargetsContext} from './SideNavFocusTargetsContext';
@@ -84,6 +86,7 @@ import {
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/SideNav/SideNavItem.generated';
 import {isRenderable} from '../utils/isRenderable';
+import {createSharedContext} from '../utils/sharedContext';
 
 registerEnglishFallback(english);
 // =============================================================================
@@ -296,7 +299,11 @@ const indentStyles = stylex.create({
  * 1 inside one parent, and so on. A collapsed rail's flyout resets it to 0,
  * since the flyout lists a parent's children as its own top level.
  */
-const SideNavItemDepthContext = createContext(0);
+const SideNavItemDepthContext = createSharedContext(
+  'SideNavItemDepthContext',
+  1,
+  0,
+);
 SideNavItemDepthContext.displayName = 'SideNavItemDepthContext';
 
 /**
@@ -362,14 +369,13 @@ function NavItemElement({
       ref={ref as React.Ref<HTMLButtonElement>}
       type="button"
       onClick={onClick}
-      {...rest}
+      // A disabled item keeps its tab stop, so the browser still sends it events.
+      // It runs no caller handler except `onFocus` and `onBlur`.
+      {...withholdCallerHandlers(rest, !!isDisabled)}
       {...(isDisabled
         ? {
             'aria-disabled': true,
-            ...disabledInteractionProps(
-              rest.onKeyDown as
-                React.KeyboardEventHandler<HTMLButtonElement> | undefined,
-            ),
+            ...disabledInteractionProps<HTMLButtonElement>(),
           }
         : null)}>
       {children}
