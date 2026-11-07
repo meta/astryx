@@ -190,9 +190,17 @@ export function DialogHeader({
   // avoid stealing scroll position from the surrounding page.
   // The parent Dialog detects this title (by `titleId`) via a callback ref to
   // set its default aria-labelledby — no registration handshake needed here.
+  // A header that mounts while its native dialog is still closed (in the
+  // commit that opens it) leaves focus to the Dialog, which focuses the title
+  // through its `data-autofocus` marker once the dialog is modal.
   useEffect(() => {
-    if (shouldAutoFocus && titleRef.current) {
-      titleRef.current.focus();
+    const title = titleRef.current;
+    if (!shouldAutoFocus || title == null) {
+      return;
+    }
+    const nativeDialog = title.closest('dialog');
+    if (nativeDialog == null || nativeDialog.open) {
+      title.focus();
     }
   }, [shouldAutoFocus]);
 
@@ -228,6 +236,7 @@ export function DialogHeader({
             id={titleId}
             level={2}
             tabIndex={-1}
+            data-autofocus={shouldAutoFocus ? 'dialog-title' : undefined}
             xstyle={styles.titleFocusable}>
             {title}
           </Heading>
