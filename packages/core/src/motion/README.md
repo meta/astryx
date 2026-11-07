@@ -18,6 +18,7 @@ roles through `resolveMotion`.
 | `uikit/springs.ts`                               | Interaction springs (navigation, sheets, alerts, menus, controls, keyboard, banners) and the SwiftUI / UIKit presets.                                                |
 | `uikit/scroll.ts`                                | UIScrollView: deceleration rates, rubber band, bounce-back spring, `delaysContentTouches`, scroll to top.                                                            |
 | `uikit/timing.ts`                                | Non-spring clocks and curves: press highlight, Core Animation's named curves, keyboard, Reduced Motion cross-fade.                                                   |
+| `uikit/contextMenu.ts`                           | UIContextMenuInteraction: touch timeline (feedback, commit, menu), drift tolerance, commit haptic.                                                                   |
 | `uikit/paging.ts`                                | A paging UIScrollView: the integrator that settles a release on its page, the page rule, the catch, `setContentOffset(animated:)`.                                   |
 | `uikit/alert.ts`                                 | UIAlertController: how a finger is tracked across the actions (highlight onset and bounds).                                                                          |
 | `uikit/navigation.ts`                            | UINavigationController: push velocity, parallax, dimming, transition clock, interactive pop finish rule.                                                             |
