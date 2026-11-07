@@ -45,7 +45,7 @@ system_specs: [spec:AST-002, spec:AST-020, spec:AST-029, spec:AST-032]
 | Behavior                | Send is disabled from explicit or composer readiness, stop remains enabled, state-specific actions run before a composed generic click handler, and current send artwork resolves from an explicit override before the shared fallback. |
 | End-user impact         | People receive a translated, state-appropriate send or stop action whose availability follows composer readiness.                                                                                                                       |
 | Builder impact          | None.                                                                                                                                                                                                                                   |
-| Compatibility/readiness | Records shipped behavior; no public change. One implementation gap, listed under Current-state impact.                                                                                                                                  |
+| Compatibility/readiness | Records shipped behavior plus the additive `chat-send-button-send` slot (FR3); no other public change.                                                                                                                                  |
 | Review checks           | Reject lost send/stop routing, consumer events that replace the state action, a disabled stop action, unlabelled icon-only output, dropped root inputs, or a lost explicit-first send icon or `arrowUp` fallback.                       |
 | Governing rules         | `spec:AST-032` FR2–FR3; `architecture:public-component-api` INV5–INV8; `architecture:interaction-modality`; `architecture:component-test-sufficiency`; `spec:AST-020`; `spec:AST-029`.                                                  |
 
@@ -60,7 +60,8 @@ icon, styling, and ref seams available for standalone composition.
 ## Compatibility and migration
 
 - Released default preserved: `yes`
-- Compatibility class: records shipped behavior; no public change
+- Compatibility class: records shipped behavior plus the additive
+  `chat-send-button-send` component icon slot (FR3); no other public change
 - Controlled/uncontrolled behavior: not applicable; explicit props take
   precedence over context-derived values
 - Migration decision: none
@@ -69,10 +70,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Current-state impact
 
-- **The send icon has no component-slot stage.** Send artwork resolves from
-  `sendIcon`, then the shared `arrowUp`. `spec:AST-032` FR2–FR3 put a
-  component-icon slot stage in that resolution; ChatSendButton does not offer
-  it yet (FR3).
+No known gap.
 
 ## Ownership boundary
 
@@ -102,7 +100,7 @@ observable semantic surface without duplicating the prop table.
 | Action state | send; stop                                                     | Selects the name, Button variant, icon role, disabled rule, and state action.          | Every render.                             | Composer `isStopShown`, otherwise send.                     | `component:ChatSendButton`          | Stable    | Values outside the boolean prop type are unsupported.                                       |
 | Availability | enabled; disabled                                              | Prevents send activation when content is not ready. Stop intentionally ignores it.     | Disabled applies only to send.            | Explicit `isDisabled`, otherwise inverse composer canSend.  | component and ChatComposer context  | Stable    | Values outside the boolean prop type are unsupported.                                       |
 | Action       | state callback; composer fallback; composed generic click      | Runs the state action and then an accepted consumer click handler.                     | Enabled send and stop activation.         | `onSend` or submit current value; `onStop` or context stop. | component, context, and caller      | Stable    | With no state callback or matching context action, only a supplied generic click can run.   |
-| Send icon    | explicit content; shared fallback                              | Selects artwork for the send state.                                                    | Send state.                               | `sendIcon`, then shared `arrowUp`.                          | component and caller                | Stable    | Unsupported React content follows the shared Button rendering boundary.                     |
+| Send icon    | explicit content; shared fallback                              | Selects artwork for the send state.                                                    | Send state.                               | `sendIcon`, `chat-send-button-send` slot, then `arrowUp`.   | component and caller                | Stable    | Unsupported React content follows the shared Button rendering boundary.                     |
 | Stop icon    | explicit content; shared fallback                              | Selects artwork for the stop state.                                                    | Stop state.                               | `stopIcon`, then shared `stop`.                             | component and caller                | Stable    | Unsupported React content follows the shared Button rendering boundary.                     |
 | Size         | `sm`; `md`                                                     | Selects the delegated Button size while preserving circular treatment.                 | Both states.                              | `md`.                                                       | `component:ChatSendButton`          | Stable    | Values outside the public union are rejected by TypeScript.                                 |
 | Root surface | ref; supported Button DOM/data/ARIA/events; style/class/xstyle | Extends and styles the rendered Button without replacing component-owned action logic. | Every render.                             | Omitted.                                                    | `architecture:public-component-api` | Stable    | Unsupported BaseProps omissions remain unsupported; owned semantics win accidental clashes. |
@@ -113,7 +111,7 @@ observable semantic surface without duplicating the prop table.
 | --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
 | FR1 | The send state MUST render a primary icon-only Button named by the send translation, and it MUST be disabled when explicit or context-derived readiness is false.                                                 | Current implementation, docs, tests, `spec:AST-020`, and shared Button behavior          |
 | FR2 | The stop state MUST render a secondary icon-only Button named by the stop translation, remain enabled regardless of send readiness, and invoke explicit or context stop behavior.                                 | Current implementation, docs, and tests                                                  |
-| FR3 | Send icon resolution prefers `sendIcon` and otherwise resolves the shared `arrowUp`. Implementation gap: the component-icon slot stage `spec:AST-032` FR2–FR3 require is not offered (Current-state impact).      | Current implementation, docs, tests, and current owner requirement in `spec:AST-032`     |
+| FR3 | Send icon resolution prefers `sendIcon`, then the `chat-send-button-send` component icon slot (`spec:AST-032` FR2–FR3), and otherwise resolves the shared `arrowUp`.                                              | Current implementation, docs, tests, and current owner requirement in `spec:AST-032`     |
 | FR4 | Stop icon resolution prefers `stopIcon` and otherwise resolves the shared `stop` icon.                                                                                                                            | Current implementation, docs, and tests                                                  |
 | FR5 | Explicit state, disabled, callback, icon, and size props MUST win over their context or component fallback. A generic accepted click handler MUST compose after the selected state action rather than replace it. | Current source and tests; `architecture:public-component-api` INV5–INV7                  |
 | FR6 | Supported Button DOM, data, ARIA, className, style, xstyle, and ref inputs MUST reach or compose on the rendered Button while component-owned label, state, and activation behavior remain intact.                | Current implementation plus `architecture:public-component-api/INV5-INV8`                |
@@ -147,10 +145,10 @@ observable semantic surface without duplicating the prop table.
   this component does not promise consumer cancellation of its state action.
 - **ORD3 — Resolve availability.** Stop remains enabled. Send uses explicit
   `isDisabled`, then inverse composer readiness, then disabled outside context.
-- **ORD4 — Resolve artwork.** In send, explicit `sendIcon` wins, then shared
-  `arrowUp`; in stop, explicit `stopIcon` wins, then shared `stop`. The
-  component-icon slot stage `spec:AST-032` FR2 requires is not offered yet
-  (FR3).
+- **ORD4 — Resolve artwork.** In send, explicit `sendIcon` wins, then the
+  theme's `chat-send-button-send` slot, then shared `arrowUp`
+  (`spec:AST-032` FR2–FR3); in stop, explicit `stopIcon` wins, then shared
+  `stop`.
 - **ORD5 — Compose root.** Apply component-owned Button semantics and the
   `chat-send-button` target while preserving supported consumer root inputs.
 
@@ -175,7 +173,7 @@ observable semantic surface without duplicating the prop table.
 | Anatomy or state | Design requirement                                                | Representation authority                                     | Hierarchy role           | Component contract |
 | ---------------- | ----------------------------------------------------------------- | ------------------------------------------------------------ | ------------------------ | ------------------ |
 | Action button    | Circular compact Button carrying the current send or stop action. | Current source and consumer docs; exact tuning stays in code | Primary/secondary action | FR1, FR2, FR7      |
-| Send artwork     | Upward send glyph unless explicit content wins (FR3's gap).       | Current source and docs; `spec:AST-032` FR2–FR3              | Action cue               | FR3                |
+| Send artwork     | Upward send glyph unless explicit content or the slot wins.       | Current source and docs; `spec:AST-032` FR2–FR3              | Action cue               | FR3                |
 | Stop artwork     | Shared stop glyph unless explicit content wins.                   | Current source and consumer docs                             | Action cue               | FR4                |
 
 This record selects no new dimensions, variants, icon artwork, color roles, or
@@ -193,8 +191,8 @@ co-located on that painting element.
 - `architecture:public-component-api` owns BaseProps reachability, style/ref
   composition, and deliberate event composition.
 - `architecture:icon-resolution-and-component-slots` owns the shared slot model;
-  `spec:AST-032` FR2–FR3 put a component-slot stage in send resolution, which is
-  not shipped (Current-state impact).
+  `spec:AST-032` FR2–FR3 put the `chat-send-button-send` slot stage in send
+  resolution (FR3).
 - `architecture:component-theming-surface` owns the qualification and placement
   of the co-located `chat-send-button` target.
 - `architecture:interaction-modality` and `spec:AST-020` own pointer, keyboard,
@@ -208,7 +206,7 @@ co-located on that painting element.
 | Contract                  | Verification                                                                                                         | Representative states                                                                                                    | Mutation or failure expectation                                                                                                                  | Audit section                        |
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------ |
 | FR1, FR2, AR1-AR4         | `ChatSendButton.test.tsx`, `ChatSendButton.a11y.chromium.spec.ts`, and `ChatComposer.test.tsx`                       | Enabled/disabled send, stop with and without handler, context stop, keyboard/pointer, light/dark interaction states      | Label, disabled, native activation, state routing, or interaction paint drift fails focused or exact-head browser evidence.                      | `audit:ChatSendButton/accessibility` |
-| FR3                       | `ChatSendButton.test.tsx`                                                                                            | Explicit and shared-fallback send icon                                                                                   | Losing explicit-first precedence or the `arrowUp` fallback fails focused tests; the `spec:AST-032` slot stage is not tested here.                | `audit:ChatSendButton/theming`       |
+| FR3                       | `ChatSendButton.test.tsx`                                                                                            | Explicit send icon over a slot mapping; slot mapping, `null` and the `arrowUp` fallback                                  | Losing explicit-first precedence or the `arrowUp` fallback fails focused tests, and so does a slot mapping that does not reach the glyph.        | `audit:ChatSendButton/theming`       |
 | FR4                       | `ChatSendButton.test.tsx`                                                                                            | Explicit and fallback stop icon                                                                                          | Losing explicit precedence or registry resolution fails focused assertions.                                                                      | `audit:ChatSendButton/behavior`      |
 | FR5, FR6                  | `ChatSendButton.test.tsx` callback composition, ordering, size, root passthrough, disabled-click, and keyboard tests | Send, stop, `sm`/`md`, ref/class/data/ARIA, Enter/Space                                                                  | Consumer events replacing state actions, cancellation reordering, lost root inputs, or modality drift fails focused tests.                       | `audit:ChatSendButton/api`           |
 | FR7                       | `themingTargets.test.ts` and `ChatSendButton.a11y.chromium.spec.ts`                                                  | Send and stop themes                                                                                                     | Target removal, movement off paint, or undocumented target drift fails tests or browser evidence.                                                | `audit:ChatSendButton/theming`       |
