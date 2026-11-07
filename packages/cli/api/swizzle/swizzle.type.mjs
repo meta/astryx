@@ -36,6 +36,7 @@
  * @property {number} data.filesCopied
  * @property {string[]} data.files Copied file names, relative to the component folder; the internal modules copied beside it start with `../` (spec:AST-110 FR2).
  * @property {boolean} data.usesStyleX Whether any copied file uses StyleX (requires build-time setup).
+ * @property {Record<string, string>} data.dependencies Each npm package the copied files import, other than the owner package, with the version range the owner package declares (`*` when it declares none). The copy builds once the product installs them (spec:AST-110 FR1).
  * @property {SwizzleFeedback} [data.feedback]
  */
 

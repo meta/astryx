@@ -611,6 +611,7 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
 
   return useMemo(
     (): TablePlugin<T> => ({
+      rowModel: 'flat',
       transformTableContext(children: ReactNode): ReactNode {
         return (
           <>
