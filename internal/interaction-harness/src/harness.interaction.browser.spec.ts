@@ -61,6 +61,7 @@ import {
   animationStoryboard,
   castStoryboard,
   blockMainThread,
+  BUSY_PROOF_LOOKAROUND_MS,
   busyWindowProof,
   BusyWindowTooLateError,
   castStep,
@@ -105,6 +106,7 @@ import {
   startScreencast,
   startBusyControl,
   Storyboard,
+  SUBPIXEL_STEP_PX,
   tap,
   thawPage,
   thawTimers,
@@ -712,6 +714,112 @@ test.describe('frame evidence', () => {
     const {proof: slowRaf} = await run('raf', 6, 1400, 1600);
     expect(slowRaf.verdict.pass, slowRaf.summary).toBe(false);
     expect(slowRaf.verdict.failures.join('\n')).toMatch(/longest stall/);
+    await control.remove();
+  });
+
+  test('a sub-pixel read follows a compositor slide under a pixel a frame through a blocked main thread; a rAF slide still fails', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      "WebKit's JPEG cast holds color in 2 by 2 pixel blocks, so it cannot read under a pixel",
+    );
+    await busyFixture(page);
+    const box = page.locator('#box');
+    // A chip on the box's plain face: the read takes the background there.
+    await markElement(box);
+    const control = await startBusyControl(page);
+    // At rest between pixels, the read holds still: the control keeps the cast
+    // sending frames meanwhile.
+    await box.evaluate(el => {
+      el.style.transform = 'translateY(10.37px)';
+    });
+    // The cast's first frame can be the last one the compositor drew: start
+    // it once frames have shown the box at its new place.
+    await frames(page, 3);
+    const restCast = await startScreencast(page);
+    await frames(page, 20);
+    const atRest = (
+      await trackMarker(page, await restCast.stop(), {subpixel: true})
+    ).flatMap(f => (f.box == null ? [] : [f.box.y]));
+    expect(atRest.length).toBeGreaterThan(5);
+    const spread = Math.max(...atRest) - Math.min(...atRest);
+    test.info().annotations.push({
+      type: 'sub-pixel read at rest',
+      description: `${atRest.length} frames, spread ${spread.toFixed(4)} px`,
+    });
+    expect(spread).toBeLessThan(SUBPIXEL_STEP_PX / 5);
+    // 36 px in 2 s is 0.3 px a frame at 60 Hz. A whole-pixel read shows a
+    // new position on about one frame in three.
+    const run = async (driver: 'compositor' | 'raf') => {
+      const cast = await startScreencast(page);
+      await box.evaluate((el, how) => {
+        el.getAnimations().forEach(a => a.cancel());
+        el.style.transform = 'none';
+        if (how === 'compositor') {
+          el.animate(
+            [{transform: 'translateY(0px)'}, {transform: 'translateY(36px)'}],
+            {duration: 2000, easing: 'linear'},
+          );
+        } else {
+          const start = performance.now();
+          const step = (now: number) => {
+            const p = Math.min(1, (now - start) / 2000);
+            el.style.transform = `translateY(${36 * p}px)`;
+            if (p < 1) {
+              requestAnimationFrame(step);
+            }
+          };
+          requestAnimationFrame(step);
+        }
+      }, driver);
+      // A rendering update first commits the cancel of the run before.
+      await page.evaluate(
+        () =>
+          new Promise<void>(resolve =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          ),
+      );
+      const window = await blockMainThread(
+        page,
+        600,
+        driver === 'compositor' ? {during: box} : {},
+      );
+      await page.waitForTimeout(200);
+      const shown = (await cast.stop()).filter(
+        f => f.t <= window.to + BUSY_PROOF_LOOKAROUND_MS,
+      );
+      const controlFrames = await trackControl(page, shown);
+      const judge = async (subpixel: boolean) =>
+        busyWindowProof(await trackMarker(page, shown, {subpixel}), window, {
+          axis: 'y',
+          control: controlFrames,
+        });
+      return {fine: await judge(true), whole: await judge(false), shown};
+    };
+
+    const {fine, whole, shown} = await run('compositor');
+    expect(fine.verdict.failures, fine.summary).toEqual([]);
+    expect(fine.stepPx).toBe(SUBPIXEL_STEP_PX);
+    expect(fine.pxPerFrame, fine.summary).toBeGreaterThan(0.2);
+    expect(fine.pxPerFrame, fine.summary).toBeLessThan(0.4);
+    // Every frame the read judged shows a new position; the same frames read
+    // in whole pixels show one on fewer than half of them.
+    expect(fine.moved, fine.summary).toBeGreaterThanOrEqual(
+      fine.deliveredFrames - 1,
+    );
+    expect(whole.changed, whole.summary).toBeLessThan(fine.changed / 2);
+
+    const {fine: raf} = await run('raf');
+    expect(raf.verdict.pass, raf.summary).toBe(false);
+    expect(raf.verdict.failures.join('\n')).toMatch(
+      /moved on [01] of the \d+ frames the control moved/,
+    );
+    // A JPEG frame hides the marker's edges in its chroma blocks.
+    await expect(
+      trackMarker(page, [{...shown[0], format: 'jpeg'}], {subpixel: true}),
+    ).rejects.toThrow(/needs a PNG cast/);
     await control.remove();
   });
 
