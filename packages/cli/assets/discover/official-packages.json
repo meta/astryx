@@ -7,6 +7,10 @@
       "contributions": [
         {
           "kind": "component",
+          "name": "AreaChart"
+        },
+        {
+          "kind": "component",
           "name": "Chart"
         },
         {
