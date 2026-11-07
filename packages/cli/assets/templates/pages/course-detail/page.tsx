@@ -608,7 +608,9 @@ function EnrollRail() {
             label="Enroll now"
             variant="primary"
             size="lg"
-            icon={<Icon icon={ArrowRightIcon} size="sm" xstyle={rtlStyles.mirror} />}
+            icon={
+              <Icon icon={ArrowRightIcon} size="sm" xstyle={rtlStyles.mirror} />
+            }
           />
           <Button
             label="Start lesson one free"
