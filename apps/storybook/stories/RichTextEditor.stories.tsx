@@ -244,6 +244,22 @@ export const ReadOnly: Story = {
   },
 };
 
+/**
+ * A disabled editor and toolbar: no hover or pressed feedback and a default
+ * cursor, while focus still shows. The disabled-state
+ * sweeps walk stories, so this story puts the state in their reach.
+ */
+export const Disabled: Story = {
+  args: {
+    label: 'Notes',
+    isDisabled: true,
+    toolbar: <RichTextEditorToolbar />,
+    defaultValue: markdownToEditorStateJSON(
+      'A **disabled** editor keeps its [link](https://example.com) and text.\n',
+    ),
+  },
+};
+
 const SEED = JSON.stringify({
   root: {
     children: [
