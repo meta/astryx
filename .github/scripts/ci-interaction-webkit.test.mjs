@@ -96,7 +96,7 @@ describe('WebKit interaction proof routing', () => {
     const guards = new Set([
       "Require this pull request's Storybook build",
       'Skip the WebKit proofs outside their scope',
-      'Leave the proofs to the first leg',
+      'Leave the proofs to the other legs',
     ]);
     // Every step after the leg count also waits for this leg to have a share.
     const counted = webkit.steps.indexOf(
@@ -109,11 +109,11 @@ describe('WebKit interaction proof routing', () => {
       // A leg whose plan holds no spec file runs no proofs.
       expect(candidate.if, candidate.name ?? candidate.uses).toMatch(
         new RegExp(
-          `^(always\\(\\) && )?${gate.replace(/[.()|]/g, '\\$&')}( && steps\\.plan\\.outputs\\.files != '0')?$`,
+          `^((always|failure)\\(\\) && )?${gate.replace(/[.()|]/g, '\\$&')}( && steps\\.plan\\.outputs\\.files != '0')?$`,
         ),
       );
     }
-    expect(step(webkit, 'Leave the proofs to the first leg').if).toBe(
+    expect(step(webkit, 'Leave the proofs to the other legs').if).toBe(
       `${applies} && steps.legs.outputs.runs != 'true'`,
     );
   });
@@ -437,6 +437,9 @@ describe('WebKit interaction proof routing', () => {
       'packages/core/src/hooks/useAttachment.ts',
       'packages/core/src/utils/sharedResizeObserver.ts',
       'packages/core/src/utils/scrollView.ts',
+      // The gesture host reads how old an input is, so the gesture specs'
+      // fixture bundles it.
+      'packages/core/src/utils/inputAge.ts',
       'packages/core/src/hooks/__tests__/usePager.interaction.browser.spec.ts',
       'packages/core/src/hooks/__tests__/pagerBundle.ts',
       'internal/interaction-harness/src/webInput.ts',

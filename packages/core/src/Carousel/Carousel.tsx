@@ -462,8 +462,8 @@ export function Carousel({
   // A mouse wheel gives only deltaY. Shift + wheel is the convention for a
   // horizontal scroll. A trackpad gives deltaX, so the browser scrolls the row.
   // A row that fits gets no listener, so a page scroll over it does not wait
-  // for script. The listener reads no style or layout. Only a held row's move
-  // reads the row's direction.
+  // for script. The listener reads no style or layout unless a flick holds
+  // the row.
   useAttachment(
     scrollElRef,
     el => {
