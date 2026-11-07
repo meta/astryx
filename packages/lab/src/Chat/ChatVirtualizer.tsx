@@ -13,27 +13,6 @@
  *   keeps thousands-of-messages transcripts at a bounded DOM size while
  *   owning follow-at-end and read-position stability
  *
- * The combination under evaluation:
- *   1. aggregate top/bottom spacers — rendered rows stay in normal document
- *      flow between two placeholder divs (O(1) placeholder nodes; the two
- *      largest production chat transcripts keep rows in flow too), inside
- *      one content block whose min-height floors the scroll extent;
- *   2. bottom-distance bookkeeping as the default reference frame — the
- *      desired position is stored as "px from the bottom edge", so
- *      above-viewport estimate→measured swaps and pinned tail growth are
- *      both identity operations;
- *   3. identity-anchor override while scrolled up — reading history anchors
- *      the first row intersecting the viewport top, so above-window size
- *      corrections keep the row being read visually frozen.
- *
- * Corrections are SYNCHRONOUS pre-paint: the layout effect runs the pass for
- * each commit that changes the geometry, the mounted rows, the scroller or a
- * sizing prop — measure (forced reads only for never-seen rows; the rest come
- * from ResizeObserver callbacks), recompute offsets, resize the spacers,
- * restore scrollTop from the mode — all before the browser paints. No
- * compensation deltas anywhere: position is always re-derived from the
- * stored reference, so a single miss self-heals.
- *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/lab/src/Chat/index.ts (exports)
  */
@@ -143,6 +122,8 @@ export interface ChatVirtualizerProps<T> {
    * smaller — a position loss nothing can undo. The default errs small on
    * purpose, and raising it past typical row height is the one setting that
    * can make a drag look broken.
+   *
+   * Pass a stable function: a new one each render reprices every row.
    */
   estimatedItemSize?: number | ((item: T, index: number) => number);
   /** Imperative declarations (see ChatVirtualizerHandle). */
@@ -151,6 +132,8 @@ export interface ChatVirtualizerProps<T> {
    * Optional item classifier: measured sizes feed a running average PER
    * TYPE, so a corpus mixing tool-call stubs with long markdown converges
    * to honest per-shape prices instead of one blended number.
+   *
+   * Pass a stable function: a new one each render reprices every row.
    */
   getItemType?: (item: T, index: number) => string;
   /**
@@ -450,17 +433,8 @@ export function ChatVirtualizer<T>(
     return !b || b.count === 0 || b.eff === 0 ? baseline : b.eff;
   };
 
-  // ONE repricing decision per pass, taken before the geometry is rebuilt, so
-  // a pass always prices every row from the same set of numbers.
-  //
-  // This used to live inside effectiveAvg — inside recompute's O(N) row loop —
-  // and one of its gates is a CLOCK READING. A loop long enough to straddle the
-  // instant that gate opens repriced the tail of the list and not the head: the
-  // pass published a geometry that was internally inconsistent, restored
-  // scrollTop against it, and consumed geoChanged, so the next pass — the one
-  // holding the consistent geometry — found the flag clear and never wrote. The
-  // odds scale with loop length, and the gate re-crosses 250ms after every
-  // gesture, so it is a size-amplified race rather than a large-list-only bug.
+  // Decide repricing once per pass, before the rebuild. A clock gate inside
+  // the row loop can reprice part of the list.
   const repriceBuckets = (): void => {
     if (typeof estimatedItemSize === 'function') {
       return; // a function estimate is authoritative — nothing to reprice
@@ -964,7 +938,10 @@ export function ChatVirtualizer<T>(
       }
       appended.add(key);
     }
-    newsKeysRef.current = isTailAppend ? appended : new Set();
+    // The first message of a new conversation (one row into an empty list)
+    // is news too; a larger load into an empty list stays history.
+    const isFirstMessage = previous.size === 0 && appended.size === 1;
+    newsKeysRef.current = isTailAppend || isFirstMessage ? appended : new Set();
     // HEAD CHANGE (loading older history, or trimming it). Rows arrived above
     // everything placed, so the restore owes a correction the size of the whole
     // page, paid across several passes as those rows measure in. That is a

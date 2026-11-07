@@ -845,6 +845,23 @@ describe('ChatVirtualizer', () => {
     el.remove();
   });
 
+  it('delivers the first message of an empty transcript unmarked', async () => {
+    const el = tallScroller();
+    const list = (n: number) => <div role="log">{attachedTo(rows(n), el)}</div>;
+    const {container, rerender} = render(list(0));
+    await settled();
+    const block = container.querySelector('[role="log"]')!
+      .firstElementChild as HTMLElement;
+    // The opening message arrives: news for the log, not busy.
+    act(() => rerender(list(1)));
+    expect(screen.getByText('message 0')).toBeInTheDocument();
+    expect(block.hasAttribute('aria-busy')).toBe(false);
+    // The reply is news too.
+    act(() => rerender(list(2)));
+    expect(block.hasAttribute('aria-busy')).toBe(false);
+    el.remove();
+  });
+
   it('marks a thread loaded into an empty list, or replacing the rows, as busy for the log', async () => {
     const el = tallScroller();
     const thread = (prefix: string, n: number): Row[] =>
