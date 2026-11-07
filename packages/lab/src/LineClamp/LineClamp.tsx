@@ -191,6 +191,36 @@ function handBackCallerInert(
   }
 }
 
+/**
+ * A release runs in React's commit, before the new line count is written, so
+ * a clipping pass there would lay the page out a second time. While a release
+ * flushes the queued records, every clamp hands back its caller's `inert` at
+ * once and defers its pass until the commit is done. The releasing clamp
+ * skips its own pass: its layout effect syncs it.
+ */
+let isReleaseFlushing = false;
+const deferredSyncs = new Set<() => void>();
+
+function deferSync(sync: () => void) {
+  if (deferredSyncs.size === 0) {
+    queueMicrotask(() => {
+      const syncs = [...deferredSyncs];
+      deferredSyncs.clear();
+      syncs.forEach(run => run());
+    });
+  }
+  deferredSyncs.add(sync);
+}
+
+function releaseFlush() {
+  isReleaseFlushing = true;
+  try {
+    flushMutations(MUTATION_OPTIONS);
+  } finally {
+    isReleaseFlushing = false;
+  }
+}
+
 export interface LineClampProps extends BaseProps<HTMLElement> {
   /** Ref forwarded to the root element */
   ref?: React.Ref<HTMLElement>;
@@ -273,26 +303,29 @@ export function LineClamp({
       return;
     }
     const sync = () => syncFocusableClipping(container);
-    let isReleasing = false;
+    let isReleased = false;
     const unobserveMutations = observeMutations(
       container,
       MUTATION_OPTIONS,
       records => {
         handBackCallerInert(container, records);
-        if (!isReleasing) {
-          sync();
+        if (isReleased) {
+          return;
         }
+        if (isReleaseFlushing) {
+          deferSync(sync);
+          return;
+        }
+        sync();
       },
     );
     const unobserveResize = observeResize(container, sync);
     return () => {
       // The shared observer disconnects when its last registration goes, and
       // a disconnect drops the records it holds. Hand a caller's queued
-      // `inert` back first, while this registration still receives it. The
-      // release runs in the commit, before the new clamp is written, so it
-      // does not sync: the layout effect syncs once the commit is done.
-      isReleasing = true;
-      flushMutations(MUTATION_OPTIONS);
+      // `inert` back first, while this registration still receives it.
+      isReleased = true;
+      releaseFlush();
       unobserveResize();
       unobserveMutations();
     };
