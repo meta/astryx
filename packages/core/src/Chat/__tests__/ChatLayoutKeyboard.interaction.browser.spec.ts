@@ -666,6 +666,7 @@ test.describe('Chrome on Android (spec:AST-099 FR8)', () => {
       await waitForAnimation(dock);
       const {storyboard} = await animationStoryboard(page, {
         name: 'chatlayout-keyboard-show',
+        judges: {target: dock, property: 'translate'},
         clip: {x: 0, y: 0, width: viewport.width, height: viewport.height},
         times: timeline(300, 300 / 12),
         columns: 6,
@@ -700,7 +701,11 @@ test.describe('Chrome on Android (spec:AST-099 FR8)', () => {
     expect(
       Math.abs(start - (reported - ANDROID_KEYBOARD.showReportLagMs)),
     ).toBeLessThan(2);
-    const ride = rideOf(await holdAnimations(page, dock));
+    const ride = rideOf(
+      await holdAnimations(page, dock, {
+        judges: {target: dock, property: 'translate'},
+      }),
+    );
     const samples = curveOf(
       await sampleCurve(dock, timeline(ride.offsetMs + ride.curveEndMs)),
       'translateY',
@@ -768,7 +773,11 @@ test.describe('Chrome on Android (spec:AST-099 FR8)', () => {
     expect(
       Math.abs(start - (blurAt + ANDROID_KEYBOARD.hideAfterBlurMs)),
     ).toBeLessThan(8);
-    const ride = rideOf(await holdAnimations(page, dock));
+    const ride = rideOf(
+      await holdAnimations(page, dock, {
+        judges: {target: dock, property: 'translate'},
+      }),
+    );
     const samples = curveOf(
       await sampleCurve(dock, timeline(ride.offsetMs + ride.curveEndMs)),
       'translateY',
