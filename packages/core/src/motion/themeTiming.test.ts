@@ -8,7 +8,9 @@
  *   transition, and from tokens set where the element is or at their
  *   defaults. A default that refers to a token reads it there. Also checks
  *   the values that give no curve, the progress velocity and easedProgress's
- *   curve. jsdom resolves no `calc()`; the browser proof covers it.
+ *   curve, and that a jump in an easing carries no speed. jsdom resolves no
+ *   `calc()` and plays no `linear()` or `steps()`: a stand-in plays one, and
+ *   the browser proof covers both.
  * @position Testing; validates themeTiming.ts
  */
 
@@ -16,13 +18,14 @@ import {afterEach, describe, expect, it} from 'vitest';
 import {cubicBezier} from './bezier';
 import {parseCssEasing} from './roles';
 import {
+  declaredTimingTokens,
   easedProgress,
   readThemeTiming,
   readThemeTokens,
   resolveTiming,
   type ThemeTimingTokens,
 } from './themeTiming';
-import {easeDefaults} from '../theme/tokens.stylex';
+import {durationDefaults, easeDefaults} from '../theme/tokens.stylex';
 
 const FAST: ThemeTimingTokens = {
   duration: '--duration-fast',
@@ -41,6 +44,15 @@ function element(styles: Record<string, string> = {}): HTMLElement {
   document.body.appendChild(node);
   return node;
 }
+
+describe('declaredTimingTokens', () => {
+  it('declares every timing token as the token file does', () => {
+    expect(declaredTimingTokens).toEqual({
+      ...durationDefaults,
+      ...easeDefaults,
+    });
+  });
+});
 
 describe('readThemeTiming', () => {
   afterEach(() => {
@@ -114,6 +126,51 @@ describe('readThemeTiming', () => {
     );
   });
 
+  it('plays an easing that is not a cubic Bézier as the browser does, and a jump in it hands on no speed', () => {
+    // jsdom has no Web Animations, so a stand-in plays steps(4, jump-end).
+    class StandInEffect {
+      time = 0;
+      constructor(_target: null, _frames: null, timing: {easing: string}) {
+        if (timing.easing !== 'steps(4, jump-end)') {
+          throw new TypeError(timing.easing);
+        }
+      }
+      getComputedTiming() {
+        return {progress: Math.floor((4 * this.time) / 1000) / 4};
+      }
+    }
+    class StandInAnimation {
+      constructor(readonly effect: StandInEffect) {}
+      set currentTime(ms: number) {
+        this.effect.time = ms;
+      }
+    }
+    const view = window as unknown as Record<string, unknown>;
+    const before = {
+      Animation: view.Animation,
+      KeyframeEffect: view.KeyframeEffect,
+    };
+    Object.assign(view, {
+      Animation: StandInAnimation,
+      KeyframeEffect: StandInEffect,
+    });
+    try {
+      const curve = readThemeTiming(
+        element({'--ease-standard': 'steps(4, jump-end)'}),
+        FAST,
+      );
+      // 175 ms at the default, so the jumps fall at 43.75, 87.5 and 131.25 ms.
+      expect(curve?.duration).toBeCloseTo(0.175, 6);
+      expect(curve?.at(0.05)).toBe(0.25);
+      // A retarget at a jump inherits this speed.
+      for (const t of [0.04375, 0.0875, 0.13125, 0.1749]) {
+        expect(curve?.velocity(t), `${t} s`).toBe(0);
+      }
+    } finally {
+      Object.assign(view, before);
+    }
+  });
+
   it('returns no curve for a duration that is not a positive length, or an easing it does not read', () => {
     expect(readThemeTiming(element({'--duration-fast': '0ms'}), FAST)).toBe(
       null,
@@ -121,9 +178,9 @@ describe('readThemeTiming', () => {
     expect(readThemeTiming(element({'--duration-fast': 'fast'}), FAST)).toBe(
       null,
     );
-    expect(
-      readThemeTiming(element({'--ease-standard': 'steps(4)'}), FAST),
-    ).toBe(null);
+    expect(readThemeTiming(element({'--ease-standard': 'bounce'}), FAST)).toBe(
+      null,
+    );
     expect(readThemeTiming(element({'transition-duration': '0s'}))).toBe(null);
   });
 });
@@ -159,5 +216,18 @@ describe('easedProgress', () => {
     const none = easedProgress(0, x => x);
     expect(none.at(0)).toBe(1);
     expect(none.velocity(0)).toBe(0);
+  });
+
+  it('with jumps, a jump carries no speed and a smooth stretch keeps its slope', () => {
+    const steps = (x: number) => Math.floor(4 * x) / 4;
+    // Without the option, the jump at a quarter of 300 ms reads as a spike.
+    expect(easedProgress(0.3, steps).velocity(0.075)).toBeGreaterThan(100);
+    const jumping = easedProgress(0.3, steps, {jumps: true});
+    for (const t of [0, 0.0749, 0.075, 0.0751, 0.15, 0.225, 0.2995]) {
+      expect(jumping.velocity(t), `${t} s`).toBe(0);
+    }
+    expect(
+      easedProgress(0.2, x => x * x, {jumps: true}).velocity(0.1),
+    ).toBeCloseTo(5, 1);
   });
 });

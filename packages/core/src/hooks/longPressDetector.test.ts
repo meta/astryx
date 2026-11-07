@@ -6,12 +6,13 @@
  * @output Tests the long-press detector with no React: a hand start, a touch
  *   press on the events' clock, a second finger, a late timer, a start handled
  *   late, the movement tolerance, disabled, the latest options, and a touch
- *   with no time
+ *   with no time. It also checks the claim a press makes as it fires.
  * @position Unit coverage for longPressDetector.ts; useLongPress.test.tsx
  *   covers the hook that wraps it
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {watchPressClaims} from '../utils/pressClaim';
 import {
   createLongPressDetector,
   type LongPressTouchEvent,
@@ -58,6 +59,20 @@ describe('createLongPressDetector', () => {
     detector.cancel();
     vi.advanceTimersByTime(1000);
     expect(onLongPress).toHaveBeenCalledTimes(1);
+  });
+
+  it('claims the press as it fires, and claims nothing for a press it drops', () => {
+    const onClaim = vi.fn();
+    const stopWatching = watchPressClaims(onClaim);
+    const detector = createLongPressDetector({onLongPress: () => {}});
+    detector.start({x: 0, y: 0});
+    detector.cancel();
+    vi.advanceTimersByTime(1000);
+    expect(onClaim).not.toHaveBeenCalled();
+    detector.start({x: 0, y: 0});
+    vi.advanceTimersByTime(500);
+    expect(onClaim).toHaveBeenCalledTimes(1);
+    stopWatching();
   });
 
   it('reports a touch press first when its lift is stamped past the deadline, with no timer run', () => {

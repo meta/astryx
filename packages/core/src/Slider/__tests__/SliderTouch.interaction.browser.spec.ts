@@ -445,9 +445,11 @@ test('a release coasts on UIKit’s spring to 0.4 of the momentum projection, th
   // under load. The harness counts sample times from the earliest held
   // start, so the samples are taken at the coast's own times: its offset
   // plus 0, 20, …
-  const coast = (await holdAnimations(page, thumb)).find(held =>
-    held.keyframes.some(keyframe => 'translate' in keyframe),
-  );
+  const coast = (
+    await holdAnimations(page, thumb, {
+      judges: {target: thumb, property: 'translate'},
+    })
+  ).find(held => held.keyframes.some(keyframe => 'translate' in keyframe));
   expect(coast, 'the coast plays on the compositor').toBeDefined();
   const coastOffset = coast?.offsetMs ?? 0;
   const times = Array.from({length: 31}, (_, i) => coastOffset + i * 20);
@@ -1162,17 +1164,32 @@ test('a finger held on a thumb or on the track starts no selection: the thumb’
 test('a finger lifted outside the tracking bounds coasts back to the lift value', async ({
   page,
 }) => {
-  const {driver, center, value} = await openSlider(
-    page,
-    'core-slider--default',
-  );
+  // The page reads where the thumb is drawn, in the lift's own task. The
+  // listener is added before the story loads, so it runs before the slider
+  // starts the release's coast. A read from here would hold the lift back,
+  // and a lift that late releases at rest. A drag draws the thumb in each
+  // move's own task, but its value attribute waits for a render.
+  await page.addInitScript(() => {
+    window.addEventListener(
+      'touchend',
+      () => {
+        const box = document
+          .querySelector('[role="slider"]')
+          ?.getBoundingClientRect();
+        (window as unknown as {__atLift?: number}).__atLift =
+          box == null ? undefined : box.left + box.width / 2;
+      },
+      {capture: true, passive: true},
+    );
+  });
+  const {driver, center} = await openSlider(page, 'core-slider--default');
   const at = await center();
   // Drag right 40 px, then 150 px up (outside the 70 px tracking margin),
   // and lift while moving right at 400 px/s.
   const right = {x: at.x + 40, y: at.y};
   const up = {x: right.x, y: at.y - 150};
   const out = {x: up.x + 20, y: up.y};
-  const {script, ends} = legs(
+  const {script} = legs(
     at,
     [
       {to: right, durationMs: 300},
@@ -1181,11 +1198,16 @@ test('a finger lifted outside the tracking bounds coasts back to the lift value'
     ],
     {hz: 120},
   );
-  const [atLift] = await playReading(page, driver, script, [ends[2]], value);
+  // A lift the page reads at rest releases at 0, and this proof would pass
+  // whatever the slider does. `'spacing'` fails such a play.
+  await driver.play(script, {pacing: 'spacing'});
+  const atLift = await page.evaluate(
+    () => (window as unknown as {__atLift: number}).__atLift,
+  );
   await page.waitForTimeout(900);
-  // Outside the tracking bounds the release does not project: the value
-  // settles where the finger left it.
-  expect(await value()).toBe(atLift);
+  // Outside the tracking bounds the release does not project: the thumb
+  // settles where the finger left it. One value is 3.5 px of travel.
+  expect(Math.abs((await center()).x - atLift)).toBeLessThan(0.5);
 });
 
 test('coincident range thumbs: the first movement picks the thumb that can follow it', async ({
