@@ -5,8 +5,8 @@
  * @input The keyboard module's reports and focus claim, the layout guide,
  *   rideKeyboard and the shared animator
  * @output The keyboard targets: their registry, followKeyboard for a docked
- *   or scrolling target, keepFieldAboveKeyboard, a covered field's path, and
- *   deliverTap, a claimed tap's focus and click
+ *   or scrolling target, and keepFieldAboveKeyboard, a covered field's path.
+ *   Also followsKeyboard, the touch gate, and deliverTap, a tap's delivery
  * @position Keyboard module, internal to core. useMobileKeyboard calls it.
  *
  * SYNC: When modified, update /packages/core/src/keyboard/README.md
@@ -463,9 +463,12 @@ function focusedFieldIn(target: Element): HTMLElement | null {
     : null;
 }
 
-// Whether this window keeps fields above a keyboard at all: a top-level
-// document whose visual viewport shrinks for the keyboard, under a finger.
-function followsKeyboard(win: Window | null): win is Window {
+/**
+ * Whether `win` keeps fields above a keyboard at all: a top-level document
+ * whose visual viewport shrinks for the keyboard, under a coarse primary
+ * pointer.
+ */
+export function followsKeyboard(win: Window | null): win is Window {
   return win != null && isKeyboardMeasurable(win) && isCoarsePointer(win);
 }
 

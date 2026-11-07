@@ -350,7 +350,7 @@ export function ChatLayout({
     rootRef,
     scrollRef: scrollContainerRef,
     isSelfScrolling,
-    stream: scroll,
+    scrollToBottom: scroll.scrollToBottom,
   });
 
   const defaultScrollButton = (

@@ -29,7 +29,6 @@ import {
   claimTapFocus,
   findTextEntryControl,
   getKeyboardHeight,
-  isKeyboardMeasurable,
   isTextEntryControl,
   refuseFocusReveal,
   subscribeKeyboardHeight,
@@ -39,12 +38,13 @@ import {
   getKeyboardLayoutGuide,
   keyboardProfileOf,
 } from '../keyboard/keyboardLayoutGuide';
-import {deliverTap} from '../keyboard/keyboardTarget';
+import {deliverTap, followsKeyboard} from '../keyboard/keyboardTarget';
 import type {KeyboardTransition} from '../keyboard/keyboardModel';
 import {rideKeyboard} from '../keyboard/rideKeyboard';
 import {layoutViewportHeight} from '../utils/layoutViewport';
 import {useInteractionModalityTrackingFor} from '../utils/interactionModality';
-import {TOUCH_QUERY, useTouchPresentation} from '../utils/touchPresentation';
+import {isCoarsePointer} from '../utils/coarsePointer';
+import {useTouchPresentation} from '../utils/touchPresentation';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {
   isFollowingNewest,
@@ -62,10 +62,10 @@ export interface UseChatKeyboardOptions {
    */
   isSelfScrolling: boolean;
   /**
-   * The transcript's stream scroll (useChatStreamScroll), the owner of its
-   * lock, for its jump to the newest message.
+   * The stream scroll's jump to the newest message (useChatStreamScroll), the
+   * owner of the transcript's lock.
    */
-  stream: Pick<UseChatStreamScrollReturn, 'scrollToBottom'>;
+  scrollToBottom: UseChatStreamScrollReturn['scrollToBottom'];
 }
 
 export interface UseChatKeyboardResult {
@@ -173,7 +173,7 @@ function parkFocus(region: HTMLElement, showsRing: boolean): void {
  *
  * @example
  * ```
- * const keyboard = useChatKeyboard({rootRef, scrollRef, isSelfScrolling, stream});
+ * const keyboard = useChatKeyboard({rootRef, scrollRef, isSelfScrolling, scrollToBottom});
  * <div ref={keyboard.messagesRef} {...stylex.props(styles.messages(keyboard.lift))}>…</div>
  * <div ref={keyboard.dockRef} {...stylex.props(styles.dock(keyboard.lift))}>
  *   <div ref={keyboard.composerRef}>…</div>
@@ -184,7 +184,7 @@ export function useChatKeyboard({
   rootRef,
   scrollRef,
   isSelfScrolling,
-  stream,
+  scrollToBottom,
 }: UseChatKeyboardOptions): UseChatKeyboardResult {
   const dock = useElementAnimator();
   const messages = useElementAnimator();
@@ -213,18 +213,14 @@ export function useChatKeyboard({
   // scrolled, just before the layout's last change.
   const atEndRef = useRef(false);
   const scrollBeforeRef = useRef(0);
-  // The stream scroll as of the last commit, for the keyboard's handlers.
-  const streamRef = useRef(stream);
   const commitRef = useRef<() => void>(() => {});
   const touchPresentation = useTouchPresentation();
   const readModality = useInteractionModalityTrackingFor(composerRef);
 
-  // Keeps the stream scroll the handlers read current.
-  useIsomorphicLayoutEffect(() => {
-    streamRef.current = stream;
-  });
   const isTouch = touchPresentation.isTouch;
 
+  // Synchronizes the layout with the keyboard: it subscribes to the layout
+  // guide's transitions for the ride, and takes the height a mount finds.
   useIsomorphicLayoutEffect(() => {
     const root = rootRef.current;
     const win = root?.ownerDocument.defaultView;
@@ -359,9 +355,10 @@ export function useChatKeyboard({
     commitRef.current();
   }, [keyboardHeight]);
 
-  // The layout just moved by the lift's change. The dock's translate takes
-  // the difference, as does a transcript's at its end, so nothing moves on
-  // screen. The newest message stays in view.
+  // Synchronizes the dock's and the transcript's translates, and the
+  // transcript's scroll, with the lift the layout just took. The translates
+  // take the difference, so nothing moves on screen. The newest message stays
+  // in view.
   useIsomorphicLayoutEffect(() => {
     const moved = lift - liftRef.current;
     if (Math.abs(moved) < 0.5) {
@@ -388,7 +385,7 @@ export function useChatKeyboard({
       messages.animator.set({y: 0});
     }
     if (atEndRef.current) {
-      streamRef.current.scrollToBottom({behavior: 'instant'});
+      scrollToBottom({behavior: 'instant'});
     }
     // The padding's change may have clamped the scroll already: measure from
     // where it was before the layout changed.
@@ -396,21 +393,21 @@ export function useChatKeyboard({
     if (messagesTarget != null && Math.abs(messagesTarget + shifted) >= 0.5) {
       messages.animator.set({y: messagesTarget + shifted});
     }
-  }, [lift, scrollRef, dock.animator, messages.animator]);
+  }, [lift, scrollRef, dock.animator, messages.animator, scrollToBottom]);
 
-  // A tap on the composer's text that would bring up the keyboard is the
-  // keyboard module's tap route. It focuses here without Safari's reveal,
+  // Synchronizes the keyboard module's tap route on the composer with the
+  // touch presentation. A tap on the composer's text that would bring up the
+  // keyboard takes that route. It focuses here without Safari's reveal,
   // with the caret where the finger lifted, and raises the tap's click once.
   // Under a fine primary pointer no touch listener is registered. Inside an
   // iframe nothing changes.
   useIsomorphicLayoutEffect(() => {
     const composer = composerRef.current;
-    const win = composer?.ownerDocument.defaultView;
+    const win = composer?.ownerDocument.defaultView ?? null;
     if (
       !touchPresentation.isTouch ||
       composer == null ||
-      win == null ||
-      !isKeyboardMeasurable(win)
+      !followsKeyboard(win)
     ) {
       return undefined;
     }
@@ -427,12 +424,11 @@ export function useChatKeyboard({
   // Synchronizes the keyboard module's reports, under a finger only.
   useIsomorphicLayoutEffect(() => {
     const composer = composerRef.current;
-    const win = composer?.ownerDocument.defaultView;
+    const win = composer?.ownerDocument.defaultView ?? null;
     if (
       !touchPresentation.isTouch ||
       composer == null ||
-      win == null ||
-      !isKeyboardMeasurable(win)
+      !followsKeyboard(win)
     ) {
       return undefined;
     }
@@ -457,20 +453,20 @@ export function useChatKeyboard({
     };
   }, [touchPresentation.isTouch]);
 
-  // Every other move into the composer's text is the keyboard module's focus
-  // takeover, under a finger only and where the keyboard is measured. A
+  // Synchronizes the keyboard module's focus takeover, and the region's group
+  // role, with the touch presentation. Every other move into the composer's
+  // text takes it, under a finger only and where the keyboard is measured. A
   // desktop browser keeps its own focus. The pointer is read again on every
   // blur, so a tablet that docks a mouse drops the takeover. When Done ends
   // entry, focus moves to the composer region, a group that is no tab stop.
   // The next tap or Tab then starts from the composer.
   useIsomorphicLayoutEffect(() => {
     const composer = composerRef.current;
-    const win = composer?.ownerDocument.defaultView;
+    const win = composer?.ownerDocument.defaultView ?? null;
     if (
       !touchPresentation.isTouch ||
       composer == null ||
-      win == null ||
-      !isKeyboardMeasurable(win)
+      !followsKeyboard(win)
     ) {
       return undefined;
     }
@@ -478,9 +474,7 @@ export function useChatKeyboard({
     // accessible name: the layout names none of the caller's regions.
     composer.setAttribute('role', 'group');
     const stopTakeover = refuseFocusReveal(composer.ownerDocument, {
-      isActive: () =>
-        typeof win.matchMedia === 'function' &&
-        win.matchMedia(TOUCH_QUERY).matches,
+      isActive: () => isCoarsePointer(win),
       claim: destination => findTextEntryControl(destination, composer),
       park: origin => {
         if (findTextEntryControl(origin, composer) != null) {

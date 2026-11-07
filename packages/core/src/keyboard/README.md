@@ -51,7 +51,10 @@ that times motion with it. Everything here is internal to
   `focusAtPoint(field, x, y)` focuses it with `preventScroll` and puts the
   caret under the finger. `deliverTap` (`keyboardTarget.ts`) does that and
   raises the tap's click once, since the cancelled tap raises none; the
-  module's targets and ChatLayout's composer deliver with it. A touch past
+  module's targets and ChatLayout's composer deliver with it.
+  `followsKeyboard(win)` (`keyboardTarget.ts`) is the gate for all of it: a
+  top-level document whose visual viewport shrinks for the keyboard, under
+  a coarse primary pointer. A touch past
   10 px is the browser's to scroll.
 - **The browser's own reveal pan (FR4):** `watchRevealPan(window, {owns})`
   is the one building block every keyboard-aware surface uses for a browser
