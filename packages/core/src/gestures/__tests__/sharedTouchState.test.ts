@@ -58,3 +58,37 @@ describe('the window input state a swizzled copy shares', () => {
     expect(pkg.isClickGuardArmed(document)).toBe(false);
   });
 });
+
+describe('the state the shared gesture host reads', () => {
+  it("lets a copy's layer holds reach the package's host", async () => {
+    const pkg = await import('../../Layer/inputHold');
+    vi.resetModules();
+    const copy = await import('../../Layer/inputHold');
+    expect(copy).not.toBe(pkg);
+    const layer = document.createElement('div');
+    const inside = document.createElement('span');
+    layer.append(inside);
+    document.body.append(layer);
+    const release = copy.holdInput(layer, {
+      until: new Promise(() => {}),
+      scope: 'viewport',
+    });
+    expect(pkg.isInHeldLayer(inside)).toBe(true);
+    release();
+    layer.remove();
+  });
+
+  it("lets the package's host hit-test an element a copy moves", async () => {
+    const pkg = await import('../../motion/presentation');
+    vi.resetModules();
+    const copy = await import('../../motion/presentation');
+    expect(copy).not.toBe(pkg);
+    const element = document.createElement('div');
+    const stop = copy.registerPresentedOffset(element, {
+      offset: () => ({x: 0, y: 0}),
+      resolve: () => {},
+    });
+    expect(pkg.presentedElements()).toContain(element);
+    stop();
+  });
+});
