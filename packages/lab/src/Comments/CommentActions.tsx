@@ -4,7 +4,7 @@
 
 /**
  * @file CommentActions.tsx
- * @input Uses React, React DOM flushSync, StyleX, useClipboard, IconButton,
+ * @input Uses React, React DOM flushSync, StyleX, useClipboardCopy, IconButton,
  *   Button, Tooltip, ToggleButton, OverflowList, DropdownMenu, Popover, Text
  * @output Exports CommentActions (a comment's header actions), ReactionSummary
  *   (its reaction toggles), and the action-lookup helpers rows use for focus
@@ -20,7 +20,7 @@ import {
   DropdownMenu,
   type DropdownMenuOption,
 } from '@astryxdesign/core/DropdownMenu';
-import {useClipboard} from '@astryxdesign/core/hooks';
+import {useClipboardCopy} from '@astryxdesign/core/internal/clipboard-copy';
 import {Icon} from '@astryxdesign/core/Icon';
 import {IconButton} from '@astryxdesign/core/IconButton';
 import {HStack, VStack} from '@astryxdesign/core/Layout';
@@ -256,21 +256,31 @@ export function CommentActions({
   resolveAction?: ResolveAction;
 }) {
   const t = useTranslator();
-  const {copy: copyToClipboard, isCopied: isLinkCopied} = useClipboard();
+  const linkCopyFailedLabel = t('@astryx.comments.linkCopyFailed');
+  const {
+    copy: copyToClipboard,
+    isCopied: isLinkCopied,
+    isFailed: isLinkCopyFailed,
+  } = useClipboardCopy({announceFailure: linkCopyFailedLabel});
   const [isLinkTooltipOpen, setIsLinkTooltipOpen] = useState(false);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(NO_COLLAPSED_ACTIONS);
   const clusterRef = useRef<HTMLElement | null>(null);
   const href = `#${commentAnchorId(comment.id)}`;
-  const linkLabel = isLinkCopied
-    ? t('@astryx.comments.linkCopied')
-    : t('@astryx.comments.copyLink');
+  const linkLabel = isLinkCopyFailed
+    ? linkCopyFailedLabel
+    : isLinkCopied
+      ? t('@astryx.comments.linkCopied')
+      : t('@astryx.comments.copyLink');
   const resolveLabel = t('@astryx.comments.resolve');
   const reopenLabel = t('@astryx.comments.reopen');
   const replyLabel = t('@astryx.comments.reply');
   const addReactionLabel = t('@astryx.comments.addReaction');
-  // A check mark says the copy worked until the label resets.
-  const linkIcon = isLinkCopied ? (
+  // A check mark says the copy worked, and a cross that it failed, until the
+  // label resets.
+  const linkIcon = isLinkCopyFailed ? (
+    <Icon icon="close" color="secondary" />
+  ) : isLinkCopied ? (
     <Icon icon="check" color="secondary" />
   ) : (
     <CommentIcon name="copyLink" />
@@ -452,7 +462,7 @@ export function CommentActions({
               content={linkLabel}
               // A press hides a hover tooltip; this one stays open while the
               // link reads as copied, so the press visibly worked.
-              isOpen={isLinkCopied || isLinkTooltipOpen}
+              isOpen={isLinkCopied || isLinkCopyFailed || isLinkTooltipOpen}
               onOpenChange={setIsLinkTooltipOpen}>
               <IconButton
                 label={linkLabel}

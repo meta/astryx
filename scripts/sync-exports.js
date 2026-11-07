@@ -243,6 +243,7 @@ const FILE_MODULE_SUBPATH_EXPORTS = [
   'internal/spinner-rotor',
   'internal/calendar-system',
   'internal/dialog-context',
+  'internal/clipboard-copy',
 ];
 
 /**

@@ -961,6 +961,28 @@ describe('Comments threads', () => {
     ).toBeTruthy();
   });
 
+  it('names, shows and announces a failed link copy', async () => {
+    writeText.mockRejectedValueOnce(new Error('clipboard denied'));
+    render(
+      <Sized>
+        <Comments
+          comments={[{...COMMENTS[0], replies: []}]}
+          currentUser={OTHER}
+        />
+      </Sized>,
+    );
+    await click(screen.getByRole('button', {name: 'Copy comment link'}));
+    await flush();
+    expect(
+      screen.getByRole('button', {name: 'Failed to copy value to clipboard.'}),
+    ).toBeTruthy();
+    await waitFor(() =>
+      expect(
+        document.querySelector('[data-astryx-live-region="polite"]'),
+      ).toHaveTextContent('Failed to copy value to clipboard.'),
+    );
+  });
+
   it('keeps the copied label for the full time after a second copy', async () => {
     vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
     const wait = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));
