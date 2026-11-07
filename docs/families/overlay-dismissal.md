@@ -18,6 +18,7 @@ verified_by:
     packages/core/src/Layer/useBackdropPress.test.tsx,
     packages/core/src/Drawer/Drawer.test.tsx,
     packages/core/src/hooks/useFocusTrap.test.tsx,
+    packages/core/src/hooks/useHotkeys.test.ts,
     packages/core/src/BottomSheet/BottomSheetSwitcher.test.tsx,
     packages/core/src/ContextMenu/ContextMenu.test.tsx,
     packages/core/src/CommandPalette/CommandPalette.test.tsx,
@@ -240,6 +241,16 @@ this record's current membership snapshot must be updated with it.
   that closes only the layer leaves focus inside the host: where the closed
   layer returns it, or else on the host itself. The rule is the same for a
   mouse, a pen, and a finger.
+- **FR12 — Page shortcuts stop at the topmost layer.** A `useHotkeys`
+  shortcut fires only when the key press happens in the layer that registered
+  it: the topmost present member that contains the focused element, or the page
+  when focus is outside every present member. A shortcut that the page
+  registers does not fire while focus is inside an open Dialog, Drawer,
+  Popover, menu, or sheet. A shortcut that such a layer registers fires there.
+  Tooltip and HoverCard do not count as layers for this rule, so an open
+  tooltip does not stop a page shortcut. Escape and platform close requests
+  keep FR1 to FR5, and content that claims a key first (FR5) still wins. The
+  rule applies in each document separately (FR8).
 
 ## Allowed component variation
 
@@ -314,6 +325,7 @@ modality, positioning, outside-dismissal, and open-state contracts.
 | FR8                | Source check over Drawer and MobileNav                                                                          | Drawer and MobileNav rendered from a control in a second document                                                                                                                                                                                                                                                                                                                                                                                         | A page-level surface moves into the second document                                                                                                                 |
 | FR10               | `useBackdropPress.test.tsx`; `BackdropPress.a11y.chromium.spec.ts`                                              | Dialog (`purpose="info"`), Drawer scrim, and CommandPalette, with a mouse and a finger: a press that starts and ends on the backdrop, one that starts inside and ends on it, one that starts on it and ends inside, a cancelled pointer, and a backdrop start followed by a press inside                                                                                                                                                                  | A press that crosses the edge either way dismisses, a cancelled or earlier press carries over, or a press on the backdrop alone does not dismiss                    |
 | FR11               | `useBackdropPress.test.tsx`; `BackdropPress.a11y.chromium.spec.ts`                                              | Dialog (`purpose="info"`) and Drawer scrim with a menu open inside, with a mouse and a finger: a backdrop press, then a second one; a Dialog with a Typeahead list, a DateInput calendar, a pinned InfoTip, or a ContextMenu open inside, with a mouse; a DateTimeInput time list whose field blurs at mousedown; a press while a tooltip hides on its own; a press that closes no layer above                                                            | A press that closes the menu also closes the host, or the second press leaves the host open                                                                         |
+| FR12               | `useHotkeys.test.ts`; a real-browser check in Chromium and WebKit                                               | A page shortcut with a Dialog, a Popover, a DropdownMenu, and a BottomSheet open and focus inside each; a shortcut registered inside the Dialog; the page shortcut again after the Dialog closes; a page shortcut with only a Tooltip open; an iframe with its own shortcut while the page has a Dialog open                                                                                                                                              | A page shortcut fires behind an open layer, a layer's own shortcut does not fire, or an open Tooltip stops a page shortcut                                          |
 
 ## Decision links
 
@@ -350,6 +362,21 @@ where the person acted.
 
 Rejected: one order across documents, where a press in one window dismisses a surface in another.
 
+### DEC-3 — Page shortcuts belong to the layer the person is in
+
+**Decider:** pending
+
+A person working inside a dialog expects the keys they press to act on that
+dialog. Today every `useHotkeys` shortcut listens on the window, so a page
+shortcut such as Cmd-F fires behind an open dialog. A shortcut now fires only
+in the layer that registered it (FR12). It reuses the shared stack's topmost
+rule, so it adds no public option.
+
+Rejected: suppressing page shortcuts only while a modal member is open, which
+still lets them fire from inside an open menu or popover. Rejected: an opt-in
+option on `useHotkeys`, which adds a second way to do the same job and leaves
+the default wrong.
+
 ## Open questions
 
 None. Focus entry, containment, movement, and the return target, modality,
@@ -362,7 +389,8 @@ contract can claim verified portal coverage.
 
 This file owns family membership, topmost registered Escape and platform-close
 behavior, and the logical-depth and DOM-containment signals currently used to
-order those requests. A member guarantees descendant depth only when it provides
+order those requests, and which layer a `useHotkeys` shortcut fires in
+(FR12). A member guarantees descendant depth only when it provides
 `LayerDepthProvider`; this record does not claim verified nesting through a real
 portal. It owns the document a member opens, dismisses, and returns focus in
 (FR8, FR9). It does not define focus entry, containment, movement, or the return
