@@ -37,6 +37,12 @@ import {
   DEFAULT_MIN_COLUMN_WIDTH,
 } from '../../columnUtils';
 import {observeResize} from '../../../utils/sharedResizeObserver';
+import {
+  readNoWindowWidth,
+  readWindowWidth,
+  standInMaximum,
+  subscribeToWindowWidth,
+} from '../../../utils/windowExtent';
 import {getNodeText} from '../../../utils/getNodeText';
 import {
   registerEnglishFallback,
@@ -374,21 +380,17 @@ interface DragState {
 // Resize Handle Component
 // =============================================================================
 
-function subscribeToWindowResize(onChange: () => void): () => void {
-  window.addEventListener('resize', onChange);
-  return () => window.removeEventListener('resize', onChange);
-}
-
 /**
  * The window's inline extent, which a column with no maximum announces as its
- * maximum, as an unbounded Resizable region does. The server has no window,
- * so it renders none, and hydration then reads it.
+ * maximum, as an unbounded Resizable region does. Every handle shares one
+ * store and one listener, and render reads the stored width. The server has
+ * no window, so it renders none, and hydration then reads it.
  */
 function useWindowInlineExtent(): number | null {
   return useSyncExternalStore(
-    subscribeToWindowResize,
-    () => window.innerWidth,
-    () => null,
+    subscribeToWindowWidth,
+    readWindowWidth,
+    readNoWindowWidth,
   );
 }
 
@@ -788,14 +790,13 @@ function ResizeHandle({
   // back to the column's minWidth before the width has been measured.
   const valueNow = currentWidth ?? minWidth;
   // Without a maximum, ARIA's default of 100 applies, below most column
-  // widths. So an unbounded column announces a stand-in it never goes below,
-  // and says its width in words, since the range is not a real limit.
+  // widths. So an unbounded column announces a stand-in maximum that it never
+  // goes below. That range is not a real limit, so the handle also says its
+  // value in words.
   const isUnbounded = !Number.isFinite(maxWidth);
   const windowExtent = useWindowInlineExtent();
   const announcedMax = isUnbounded
-    ? windowExtent == null
-      ? undefined
-      : Math.max(windowExtent, valueNow, minWidth)
+    ? standInMaximum(windowExtent, valueNow, minWidth)
     : maxWidth;
   const valueText = isUnbounded
     ? t('@astryx.table.columnResize.widthValue', {width: valueNow})
