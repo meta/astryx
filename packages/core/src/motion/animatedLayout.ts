@@ -82,6 +82,7 @@
  */
 
 import {LATE_START_MS} from './frameBlock';
+import {sharedKey} from '../utils/sharedRealm';
 import {
   inertCopy,
   isCopyable,
@@ -722,15 +723,26 @@ export function glideOf(element: Element): Animation | null {
 // Handles
 // ---------------------------------------------------------------------------
 
-const AREA = Symbol('astryx.animatedLayout.area');
+// A registered key, so a swizzled copy of this module reads a package handle.
+const AREA = sharedKey('animated-layout/area', 1);
 
 /**
- * The opaque handle `useAnimatedLayout` returns (`spec:AST-105` FR1): no
- * public members. A component that receives it reports its size changes to
- * the handle's container, the area the glide stays inside.
+ * The opaque handle `useAnimatedLayout` returns. A component that receives it
+ * reports its size changes to the handle's container, the area the glide
+ * stays inside.
  */
 export interface AnimatedLayout {
-  readonly [AREA]: () => Element | null;
+  /**
+   * A brand that is never present, so the handle types of the package and a
+   * swizzled copy match.
+   */
+  readonly '@astryxdesign/core/animated-layout/v1'?: never;
+}
+
+/** The container a handle reads, or null for a value that is not a handle. */
+function readArea(handle: AnimatedLayout): Element | null {
+  const read = (handle as {readonly [AREA]?: unknown})[AREA];
+  return typeof read === 'function' ? (read as () => Element | null)() : null;
 }
 
 /** A handle over `area` (the container element, read when a change runs). */
@@ -738,13 +750,11 @@ export function createAnimatedLayout(
   area: () => Element | null,
 ): AnimatedLayout {
   // Not enumerable and frozen: the handle shows no fields to a caller.
-  return Object.freeze(
-    Object.defineProperty({}, AREA, {value: area}),
-  ) as AnimatedLayout;
+  return Object.freeze(Object.defineProperty({}, AREA, {value: area}));
 }
 
 function areaOf(handle: AnimatedLayout, element: Element): Element | null {
-  const area = handle[AREA]();
+  const area = readArea(handle);
   return area != null && area !== element && area.contains(element)
     ? area
     : null;
@@ -2982,7 +2992,7 @@ export function playLayoutFrames(
   handle: AnimatedLayout | null | undefined,
   parts: LayoutSwapMotion['incoming'],
 ): () => void {
-  const area = handle?.[AREA]() ?? null;
+  const area = handle == null ? null : readArea(handle);
   const motion = area == null ? null : layoutMotion(area);
   if (area == null || motion == null || motion.kind === 'instant') {
     return () => {};
