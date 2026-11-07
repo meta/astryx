@@ -1899,6 +1899,63 @@ export function iconModulePackage(specifier) {
 }
 
 /**
+ * The set's exports that read one file of a package, where a refresh from
+ * that package's root can read them from the root instead. An export moves
+ * when the root exports the same icon: an export that resolves to the same
+ * file and binding. When the subpath export cannot be resolved, a root
+ * export of the same name counts. Each maps to the root's
+ * export and the module it reads now. Empty unless `root` is a package
+ * root, not a subpath or a ./ path.
+ * @param {Map<string, {module: string, source: string}>} origins the
+ *   set's exports ({@link generatedOrigins})
+ * @param {{file: string, module: string}} root the refreshed module
+ * @param {string[]} rootExports the root's icon exports
+ * @param {{packageDir: string, pkg: Record<string, any>}} where
+ * @returns {Map<string, {source: string, from: string}>}
+ */
+export function packageRootMoves(origins, root, rootExports, where) {
+  /** @type {Map<string, {source: string, from: string}>} */
+  const moves = new Map();
+  if (iconModulePackage(root.module) !== root.module) return moves;
+  if (root.module.startsWith('.')) return moves;
+  const subpaths = [...origins].filter(
+    ([, origin]) =>
+      !origin.module.startsWith('.') &&
+      origin.module !== root.module &&
+      iconModulePackage(origin.module) === root.module,
+  );
+  if (subpaths.length === 0) return moves;
+  /** @param {{file: string, name: string}} origin */
+  const keyOf = origin => `${origin.file}\0${origin.name}`;
+  /** @type {Map<string, string>} */
+  const byOrigin = new Map();
+  for (const name of rootExports) {
+    const origin = moduleExportOrigin(root.file, name);
+    if (origin && !byOrigin.has(keyOf(origin))) {
+      byOrigin.set(keyOf(origin), name);
+    }
+  }
+  const names = new Set(rootExports);
+  const self = {
+    name: typeof where.pkg.name === 'string' ? where.pkg.name : '',
+    dir: where.packageDir,
+  };
+  for (const [name, origin] of subpaths) {
+    const file = resolveIconModule(origin.module, where.packageDir, self);
+    const resolved = file ? moduleExportOrigin(file, origin.source) : null;
+    // A name match counts only when the subpath export cannot be resolved.
+    // A resolved export is the same icon only when it reads the same file.
+    const source = resolved
+      ? byOrigin.get(keyOf(resolved))
+      : names.has(origin.source)
+        ? origin.source
+        : undefined;
+    if (source) moves.set(name, {source, from: origin.module});
+  }
+  return moves;
+}
+
+/**
  * Write the set's generated module and its declaration file
  * ({@link generatedModuleText}). Returns whether either changed, and a
  * function that puts both back.
