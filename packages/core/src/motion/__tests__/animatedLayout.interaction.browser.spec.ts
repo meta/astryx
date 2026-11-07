@@ -2692,9 +2692,15 @@ test.describe('spec:AST-105 FR9 (the edge reveal)', () => {
       }
       window.holdAt(0);
       window.resumeAll();
+      // A frame after the reveal has ended shows it fully open, so it does
+      // not count as a frame of the motion.
+      const revealing = () =>
+        content
+          .getAnimations({subtree: true})
+          .some(animation => animation.playState === 'running');
       for (let i = 0; i < 60; i++) {
         await frame();
-        read('opening');
+        read(revealing() ? 'opening' : 'opening ended');
       }
       const openBottom = content.getBoundingClientRect().bottom;
       // The gap the layout leaves between them at rest (the rows' margins).
