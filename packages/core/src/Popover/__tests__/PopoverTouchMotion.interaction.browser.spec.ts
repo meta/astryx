@@ -460,7 +460,9 @@ test('the presentation grows out of the trigger on the theme\u2019s entrance tok
   await expect(exitCopyOf(page)).toHaveCount(0);
   await openWithTap(story);
   await scaleAnimationOf(story.layer);
-  const held = await holdAnimations(page, story.layer);
+  const held = await holdAnimations(page, story.layer, {
+    judges: {target: story.layer, property: 'scale'},
+  });
   const samples = await sampleBoxes(
     story.layer,
     final,

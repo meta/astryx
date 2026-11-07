@@ -439,7 +439,12 @@ test('a push follows UIKit’s push spring, the card underneath at 0.3 of its sp
   const top = card(page, 'screen-General');
   const under = card(page, 'root');
   await waitForAnimation(top);
-  await holdAnimations(page);
+  await holdAnimations(page, undefined, {
+    judges: [
+      {target: top, property: 'translate'},
+      {target: under, property: 'translate'},
+    ],
+  });
 
   const times = Array.from({length: 31}, (_, i) => i * 16.667);
   const samples: {t: number; top: number; under: number; analytic: number}[] =
@@ -776,7 +781,9 @@ test('brought back past its start, the screen follows with resistance, then spri
   frames.push({t: last.t + steps * 16.7 + 4, fingers: []});
   await driver.play(frames);
   // The return, held where it runs and read every 2 ms from its start.
-  const heldAnimations = await holdAnimations(page, top);
+  const heldAnimations = await holdAnimations(page, top, {
+    judges: {target: top, property: 'translate'},
+  });
   const returnIndex = await top.evaluate(element =>
     (
       (window as unknown as {__harnessHeld?: Animation[]}).__harnessHeld ?? []
@@ -2323,6 +2330,10 @@ test('storyboard: a push', {tag: '@storyboard'}, async ({page}, testInfo) => {
   const viewport = page.viewportSize() ?? {width: 402, height: 714};
   const {storyboard} = await animationStoryboard(page, {
     name: 'navigationstack-push',
+    judges: [
+      {target: top, property: 'translate'},
+      {target: card(page, 'root'), property: 'translate'},
+    ],
     clip: {x: 0, y: 0, width: viewport.width, height: viewport.height},
     // The spring is at rest by ~0.45 s; the animator holds end states after.
     times: Array.from({length: 28}, (_, i) => i * 16.667),

@@ -1450,6 +1450,11 @@ test(
       times: timeline(700),
       clip: control.group,
       scope: control.group,
+      judges: {
+        target: control.group,
+        property: 'translate',
+        pseudoElement: '::before',
+      },
       measure,
       columns: 8,
       cellScale: 1,
@@ -1476,6 +1481,11 @@ test(
       times: timeline(700),
       clip: control.group,
       scope: control.group,
+      judges: {
+        target: control.group,
+        property: 'translate',
+        pseudoElement: '::before',
+      },
       measure,
       columns: 8,
       cellScale: 1,

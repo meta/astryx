@@ -382,7 +382,9 @@ test('a flick coasts on UIKit’s curve onto the row it projects, and commits it
   await recordFingerInputs(page);
   await driver.play(script);
   const coast = stripAnimationOf(await waitForAnimation(strip));
-  const held = await holdAnimations(page, strip);
+  const held = await holdAnimations(page, strip, {
+    judges: {target: strip, property: 'translate'},
+  });
   const motion = held.find(animation => animation.kind === 'Animation');
   if (motion == null) {
     throw new Error(`no coast held: ${JSON.stringify(held)}`);
@@ -741,6 +743,7 @@ test(
       name: 'wheel-coast',
       clip,
       scope: strip,
+      judges: {target: strip, property: 'translate'},
       measure,
       columns: 8,
       cellScale: 0.5,

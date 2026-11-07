@@ -118,6 +118,10 @@ names the motion it judges, `{judges: {target, property}}` (a list for
 several; `pseudoElement` for a `::before` or `::after`), and `held()` rejects
 when the hold took no animation of it. `judges: 'count-only'` checks nothing:
 it marks a call site whose hold does not take its judged motion yet.
+A hold sent from the test (`holdAnimations`, and `animationStoryboard`
+without `held`) takes the same `judges` and rejects the same way: it takes
+what runs when it reaches the page, and on a busy runner the judged motion
+can still be to come or already over.
 Compare it with an
 oracle from `math.ts` through `compareCurve`; a tolerance states the error
 budget (for a spring baked into `linear()` stops of `h` ms, chords err by up to

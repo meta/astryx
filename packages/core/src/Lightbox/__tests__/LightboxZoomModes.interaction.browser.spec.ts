@@ -221,7 +221,9 @@ test('under Reduce Motion a double tap cross-fades to its zoom instead of travel
     doubleTap({x: rect.x + rect.width / 2, y: rect.y + rect.height / 2}),
   );
   await waitForAnimation(img);
-  const held = await holdAnimations(page, img);
+  const held = await holdAnimations(page, img, {
+    judges: {target: img, property: 'opacity'},
+  });
   const duration = Math.max(...held.map(a => a.curveEndMs));
   const samples = await sampleCurve(img, timeline(duration));
   await releaseAnimations(page);
@@ -494,7 +496,9 @@ test('under Reduce Motion a pinch released past the maximum settles in place, wi
       },
     },
   );
-  const held = await holdAnimations(page, img);
+  const held = await holdAnimations(page, img, {
+    judges: {target: img, property: 'opacity'},
+  });
   expect(held.length).toBeGreaterThan(0);
   const duration = Math.max(...held.map(a => a.curveEndMs));
   const opacity = curveOf(

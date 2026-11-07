@@ -208,7 +208,13 @@ for (const [name, story, locate] of [
       'fading',
     );
     await freezeTimers(page);
-    const held = await holdAnimations(page, opened.surface);
+    const held = await holdAnimations(page, opened.surface, {
+      judges: {
+        target: opened.surface,
+        property: 'opacity',
+        pseudoElement: '::before',
+      },
+    });
     await releaseAnimations(page, {finish: true});
     await thawTimers(page);
     // One animation, of opacity alone, finished within 200 ms; nothing
@@ -262,9 +268,11 @@ for (const [name, story, locate, pseudo] of [
         'fading',
       );
       await freezeTimers(page);
-      const held = (await holdAnimations(page, opened.surface)).filter(
-        animation => animation.kind === 'CSSAnimation',
-      );
+      const held = (
+        await holdAnimations(page, opened.surface, {
+          judges: {target: opened.surface, property: '--astryx-press-alpha'},
+        })
+      ).filter(animation => animation.kind === 'CSSAnimation');
       const layer = await opened.surface.evaluate(
         el => getComputedStyle(el, '::before').content,
       );
@@ -319,7 +327,13 @@ for (const [name, story, locate, pseudo] of [
       'fading',
     );
     await freezeTimers(page);
-    const held = await holdAnimations(page, opened.surface);
+    const held = await holdAnimations(page, opened.surface, {
+      judges: {
+        target: opened.surface,
+        property: 'opacity',
+        pseudoElement: pseudo,
+      },
+    });
     const release = held.find(
       a => a.kind === 'CSSAnimation' && a.durationMs === RELEASE_MS,
     );
@@ -739,6 +753,11 @@ test(
       name: 'button-press-release',
       clip,
       scope: opened.surface,
+      judges: {
+        target: opened.surface,
+        property: 'opacity',
+        pseudoElement: '::before',
+      },
       times: timeline(RELEASE_MS),
       measure: async () => ({
         opacity: await layerOpacity(opened.surface, '::before'),

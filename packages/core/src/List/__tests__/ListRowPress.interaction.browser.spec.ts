@@ -753,6 +753,7 @@ test(
       name: 'list-row-press-release',
       clip,
       scope: row,
+      judges: {target: row, property: 'opacity', pseudoElement: '::before'},
       measure: async () => ({
         opacity: await layerOpacity(row),
         state: await pressState(row),
