@@ -14,7 +14,8 @@
  */
 
 import {use, useMemo, type ReactNode} from 'react';
-import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
+import {createLayerScopedContext} from '../Layer/layerScopedContext';
+import type {AnimatedLayout} from '../hooks/useAnimatedLayout';
 
 export type ListDensity = 'compact' | 'balanced' | 'spacious';
 export type ListMarkerStyle = 'none' | 'disc' | 'decimal' | 'circle';
@@ -63,9 +64,17 @@ export interface ListContextValue {
    * on their List, so its text starts match RichText without a width threshold.
    */
   hasMarkerGutter?: boolean;
+  /**
+   * The list's `animatedLayout` handle, for its rows.
+   */
+  animatedLayout?: AnimatedLayout;
 }
 
-export const ListContext = createContext<ListContextValue | null>(null);
+export const ListContext = createLayerScopedContext<ListContextValue | null>(
+  'ListContext',
+  1,
+  null,
+);
 ListContext.displayName = 'ListContext';
 
 /**

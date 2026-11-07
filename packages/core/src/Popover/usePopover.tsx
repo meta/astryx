@@ -30,7 +30,11 @@ import {
   shadowVars,
 } from '../theme/tokens.stylex';
 import {Button} from '../Button';
-import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
+import {
+  FOCUSABLE_SELECTOR,
+  isDisabledWithin,
+  preferTabStops,
+} from '../hooks/focusableSelector';
 import {rtlStyles} from '../utils';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
@@ -66,9 +70,15 @@ function attemptFocus(element: HTMLElement): boolean {
 }
 
 function focusFirstContentControl(container: HTMLElement): boolean {
-  const focusable = Array.from(
-    container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
-  ).filter(element => element.closest(FALLBACK_CLOSE_SELECTOR) == null);
+  const focusable = preferTabStops(
+    Array.from(
+      container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+    ).filter(
+      element =>
+        element.closest(FALLBACK_CLOSE_SELECTOR) == null &&
+        !isDisabledWithin(element, container),
+    ),
+  );
   for (const element of focusable) {
     if (attemptFocus(element)) {
       return true;
@@ -600,6 +610,7 @@ function usePopoverImplementation(
     role === 'dialog' && !dialogLabel,
   );
 
+  const isDialogShown = role === 'dialog' && layer.isOpen;
   // Wrapped render function that includes surface styles and optional hidden close button
   const render = useCallback(
     (children: ReactNode, props?: ContextRenderProps): ReactNode => {
@@ -616,9 +627,11 @@ function usePopoverImplementation(
         <LayerDepthProvider>
           <div
             ref={contentRef}
-            role={role === 'dialog' ? 'dialog' : undefined}
-            aria-modal={role === 'dialog' && isModal ? true : undefined}
-            aria-label={role === 'dialog' ? dialogLabel : undefined}
+            // A closed surface stays mounted but hidden. It carries no dialog
+            // role or name, so selectors find no hidden dialog.
+            role={isDialogShown ? 'dialog' : undefined}
+            aria-modal={isDialogShown && isModal ? true : undefined}
+            aria-label={isDialogShown ? dialogLabel : undefined}
             tabIndex={role === 'dialog' ? -1 : undefined}
             {...mergeProps(
               {...surfaceProps, className: surfaceClassName},
@@ -662,6 +675,7 @@ function usePopoverImplementation(
       closeButtonLabel,
       contentRef,
       dialogLabel,
+      isDialogShown,
       role,
       isModal,
       xstyle,

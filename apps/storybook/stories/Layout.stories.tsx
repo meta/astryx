@@ -763,6 +763,116 @@ export const ContentOnly: Story = {
   ),
 };
 
+interface ClosedRegionsArgs {
+  isOpen: boolean;
+}
+
+/**
+ * A region hidden with `isOpen && <LayoutHeader />` leaves `false` in its
+ * slot. The closed column must match the column that omits the slots: both
+ * set `padding={6}`, so the outer inset differs from the inner one. With
+ * `contentWidth`, a closed end panel must give the no-panel composition.
+ */
+export const ClosedRegions = {
+  name: 'Closed Regions',
+  args: {isOpen: false},
+  argTypes: {
+    isOpen: {
+      control: 'boolean',
+      description: 'Open the regions that the closed examples hide',
+    },
+  },
+  render: ({isOpen}: ClosedRegionsArgs) => (
+    <VStack gap={6} xstyle={styles.storySection}>
+      <HStack gap={4}>
+        <VStack gap={2}>
+          <p {...stylex.props(styles.subheading)}>Slots omitted, padding=6</p>
+          <Card width={300} height={220} data-closed-region="omitted">
+            <Layout
+              padding={6}
+              content={
+                <LayoutContent>
+                  <p {...stylex.props(styles.bodyText)}>Content area.</p>
+                </LayoutContent>
+              }
+            />
+          </Card>
+        </VStack>
+        <VStack gap={2}>
+          <p {...stylex.props(styles.subheading)}>
+            {isOpen ? 'Regions open' : 'Regions closed'}, padding=6
+          </p>
+          <Card width={300} height={220} data-closed-region="closed">
+            <Layout
+              padding={6}
+              header={
+                isOpen && (
+                  <LayoutHeader hasDivider>
+                    <h3 {...stylex.props(styles.heading)}>Header</h3>
+                  </LayoutHeader>
+                )
+              }
+              start={
+                isOpen && (
+                  <LayoutPanel width={100} hasDivider>
+                    <NavItem active>Nav</NavItem>
+                  </LayoutPanel>
+                )
+              }
+              content={
+                <LayoutContent>
+                  <p {...stylex.props(styles.bodyText)}>Content area.</p>
+                </LayoutContent>
+              }
+              footer={
+                isOpen && (
+                  <LayoutFooter hasDivider>
+                    <p {...stylex.props(styles.bodyText)}>Footer</p>
+                  </LayoutFooter>
+                )
+              }
+            />
+          </Card>
+        </VStack>
+      </HStack>
+      <VStack gap={2}>
+        <p {...stylex.props(styles.subheading)}>
+          contentWidth=400 with the end panel closed
+        </p>
+        <div
+          data-closed-region="content-width"
+          {...stylex.props(
+            styles.cwContainer,
+            styles.cwContainer640,
+            styles.cwContainerMatrix,
+          )}>
+          <Layout
+            contentWidth={400}
+            header={
+              <LayoutHeader hasDivider>
+                <HStack hAlign="between">
+                  <span data-header-edge="start">Header start</span>
+                  <span data-header-edge="end">Header end</span>
+                </HStack>
+              </LayoutHeader>
+            }
+            content={
+              <ScrollbarProbeContent id="closed-end" label="Closed end panel" />
+            }
+            end={
+              isOpen && (
+                <LayoutPanel width={120} hasDivider>
+                  <p {...stylex.props(styles.bodyText)}>Details</p>
+                </LayoutPanel>
+              )
+            }
+          />
+        </div>
+      </VStack>
+    </VStack>
+  ),
+};
+
 export const ThemedLayout: Story = {
   name: 'Themed Layout (Neutral vs Stone)',
   render: () => (

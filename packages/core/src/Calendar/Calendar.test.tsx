@@ -1434,7 +1434,10 @@ describe('Calendar', () => {
       last.focus();
       await user.keyboard('{ArrowRight}');
       // January stays, focus stays on the max day.
-      expect(screen.getByRole('button', {name: 'Next month'})).toBeDisabled();
+      expect(screen.getByRole('button', {name: 'Next month'})).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      );
       expect(document.activeElement).toBe(getDayButton(31));
 
       // Later the range widens and the user clicks Next: no stale target
@@ -2084,14 +2087,14 @@ describe('Calendar', () => {
     render(<Calendar focusDate="2026-01-01" min="2026-01-15" />);
 
     const prevButton = getButton('Previous month');
-    expect(prevButton).toBeDisabled();
+    expect(prevButton).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('next button is disabled when focusDate month contains max', () => {
     render(<Calendar focusDate="2026-01-01" max="2026-01-15" />);
 
     const nextButton = getButton('Next month');
-    expect(nextButton).toBeDisabled();
+    expect(nextButton).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('outside days are not clickable when hasOutsideDays is true', async () => {
