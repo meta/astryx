@@ -923,39 +923,71 @@ export function Lightbox({
         caption.scrollHeight > caption.clientHeight + 1,
     );
   }, [isCaptionOpen]);
-  // Syncs the clamp, the toggle's place and the open caption's scroll with
-  // the caption's laid-out size and its text. A resize and a font load resize
-  // it, new text can keep its size, and paging attaches the next page's
-  // caption. The dialog's opening and the caption's own open attach it again.
-  // Each registration gets one delivery from the observer after the browser
-  // lays the caption out. The caption is read there, never in the commit,
-  // where a read forces a layout before the browser's own. A delivery's
-  // update changes attributes and styles only, and adds no element. Another
-  // observer that reacts to new elements then observes nothing mid-delivery.
-  // The observer watches the caption's box, two levels above its text. A
-  // delivery can show the toggle, and the toggle's observers sit deeper, so
-  // they get their deliveries in the same frame.
-  const captionAttachKey = useMemo(
-    () => ({measureCaptionLines, isOpen}),
-    [measureCaptionLines, isOpen],
+  // The caption's reads and its toggle's width wait for one microtask after
+  // the observer's callback. There the caption is read before any write, and
+  // one commit lands before the frame paints. A read after a write in that
+  // delivery would force a layout before the browser's own.
+  const measureCaptionRef = useRef(() => {});
+  // Syncs the measurement with this render's clamp and lines measures.
+  useIsomorphicLayoutEffect(() => {
+    measureCaptionRef.current = () => {
+      measureCaptionClamp();
+      measureCaptionLines();
+    };
+  });
+  const captionDeliveryRef = useRef<{
+    isCaptionDirty: boolean;
+    toggleWidth: number | null;
+  } | null>(null);
+  const noteCaptionDelivery = useCallback(
+    (isCaptionDirty: boolean, toggleWidth: number | null) => {
+      let due = captionDeliveryRef.current;
+      if (due == null) {
+        due = {isCaptionDirty: false, toggleWidth: null};
+        captionDeliveryRef.current = due;
+        queueMicrotask(() => {
+          const pending = captionDeliveryRef.current;
+          captionDeliveryRef.current = null;
+          if (pending == null) {
+            return;
+          }
+          // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- a delivery comes after layout and before paint; the caption's "more" and the toggle's place commit in that frame
+          flushSync(() => {
+            if (pending.isCaptionDirty) {
+              measureCaptionRef.current();
+            }
+            if (pending.toggleWidth != null) {
+              setCaptionToggleWidth(pending.toggleWidth);
+            }
+          });
+        });
+      }
+      due.isCaptionDirty ||= isCaptionDirty;
+      due.toggleWidth = toggleWidth ?? due.toggleWidth;
+    },
+    [],
   );
+  // Syncs the clamp, the toggle's place and the open caption's scroll with
+  // the caption's laid-out size and its text. A resize, a font load and the
+  // caption's own open resize it. New text can keep its size, and paging
+  // attaches the next page's caption. The dialog's opening attaches it again.
+  // Each registration gets one delivery after the browser lays the caption
+  // out, and the commit reads nothing. A delivery's update changes attributes
+  // and styles only, and adds no element. Another observer that reacts to new
+  // elements then observes nothing mid-delivery. The observer watches the
+  // caption's box, two levels above its text. A delivery can show the toggle,
+  // and the toggle's observers sit deeper, so they get their deliveries in the
+  // same frame.
   useAttachment(
     bandCaptionRef,
     element => {
-      const measure = () => {
-        measureCaptionClamp();
-        measureCaptionLines();
-      };
       const box = element.closest('[data-lightbox-caption]') ?? element;
       const register = (): (() => void) | undefined => {
         const stop = observeAfterLayout(box, () => {
-          // The update commits before this frame paints, so the caption
-          // paints with its "more" and its place from its first frame.
-          // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- a delivery comes after layout and before paint; the caption's "more" commits in that frame
-          flushSync(measure);
+          noteCaptionDelivery(true, null);
         });
         if (stop == null) {
-          measure();
+          measureCaptionRef.current();
           return undefined;
         }
         return stop;
@@ -972,7 +1004,7 @@ export function Lightbox({
         stopContent();
       };
     },
-    captionAttachKey,
+    isOpen,
   );
   // The caption's toggle. Under a coarse pointer it takes taps out toward
   // 44 px. A finger's tap on it is its own, as UIKit gives a control's tap
@@ -988,17 +1020,16 @@ export function Lightbox({
   usePressTracker(captionToggleRef);
   // Syncs the toggle's place in the caption's last line with its width. The
   // width is the delivery's own size, measured in the layout the delivery
-  // follows. A read of the toggle there could come after the band's update in
-  // the same delivery, and force a layout. A hidden toggle's size is zero, so
-  // the last width stays until a shown toggle's delivery brings another.
+  // follows, so nothing reads the toggle there. A hidden toggle's size is
+  // zero, so the last width stays until a shown toggle's delivery brings
+  // another.
   useAttachment(
     captionToggleRef,
     toggle => {
       const stop = observeAfterLayout(toggle, entry => {
         const width = entry.borderBoxSize?.[0]?.inlineSize ?? 0;
         if (width > 0) {
-          // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- a delivery comes after layout and before paint; the toggle's place commits in that frame
-          flushSync(() => setCaptionToggleWidth(Math.round(width)));
+          noteCaptionDelivery(false, Math.round(width));
         }
       });
       if (stop == null) {

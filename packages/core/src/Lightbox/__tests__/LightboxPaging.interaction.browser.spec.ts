@@ -1756,3 +1756,185 @@ test("the caption toggle's width comes from its own delivery, never from a read 
   );
   expect(reads).toEqual([]);
 });
+
+test('no caption read follows a write in the same resize delivery, from opening through "more", "less" and paging', async ({
+  page,
+}) => {
+  // A read after a write in one delivery forces a layout before the
+  // browser's own. A delivery lasts until the microtasks it queued have run.
+  // A transform or an opacity changes no layout, so it counts as no write.
+  // Two limits: a plain style property set by assignment is no write here,
+  // and a microtask that a queued microtask queues runs after the window.
+  await page.addInitScript(() => {
+    const reads: string[] = [];
+    (window as unknown as {__lateReads: string[]}).__lateReads = reads;
+    let isDelivering = false;
+    let hasWritten = false;
+    const Native = window.ResizeObserver;
+    window.ResizeObserver = class extends Native {
+      constructor(callback: ResizeObserverCallback) {
+        super((entries, observer) => {
+          isDelivering = true;
+          hasWritten = false;
+          try {
+            callback(entries, observer);
+          } finally {
+            // Microtasks the callback queued run before this one.
+            queueMicrotask(() => {
+              isDelivering = false;
+              hasWritten = false;
+            });
+          }
+        });
+      }
+    };
+    const noteWrite = () => {
+      if (isDelivering) {
+        hasWritten = true;
+      }
+    };
+    const setters: [object, string][] = [
+      [Element.prototype, 'className'],
+      [HTMLElement.prototype, 'hidden'],
+      [Node.prototype, 'nodeValue'],
+      [Node.prototype, 'textContent'],
+      [CharacterData.prototype, 'data'],
+    ];
+    for (const [proto, name] of setters) {
+      const own = Object.getOwnPropertyDescriptor(proto, name);
+      if (own?.set == null) {
+        continue;
+      }
+      const set = own.set;
+      Object.defineProperty(proto, name, {
+        ...own,
+        set(this: unknown, value: unknown) {
+          noteWrite();
+          set.call(this, value);
+        },
+      });
+    }
+    const methods: [Record<string, unknown>, string][] = [
+      [Element.prototype as unknown as Record<string, unknown>, 'setAttribute'],
+      [
+        Element.prototype as unknown as Record<string, unknown>,
+        'removeAttribute',
+      ],
+      [
+        CSSStyleDeclaration.prototype as unknown as Record<string, unknown>,
+        'setProperty',
+      ],
+      [
+        CSSStyleDeclaration.prototype as unknown as Record<string, unknown>,
+        'removeProperty',
+      ],
+    ];
+    const compositorOnly = new Set([
+      'translate',
+      'scale',
+      'rotate',
+      'transform',
+      'opacity',
+    ]);
+    for (const [proto, name] of methods) {
+      const method = proto[name] as (...args: unknown[]) => string | undefined;
+      proto[name] = function (
+        this: unknown,
+        ...args: unknown[]
+      ): string | undefined {
+        if (
+          !(this instanceof CSSStyleDeclaration) ||
+          !compositorOnly.has(String(args[0]))
+        ) {
+          noteWrite();
+        }
+        return method.apply(this, args);
+      };
+    }
+    const inCaption = (node: unknown) => {
+      const element =
+        node instanceof Element
+          ? node
+          : node instanceof Node
+            ? node.parentElement
+            : null;
+      return element?.closest('[data-lightbox-caption]') != null;
+    };
+    const note = (name: string, node: unknown) => {
+      if (isDelivering && hasWritten && inCaption(node)) {
+        reads.push(name);
+      }
+    };
+    const getters: [object, string][] = [
+      [HTMLElement.prototype, 'offsetWidth'],
+      [HTMLElement.prototype, 'offsetHeight'],
+      [Element.prototype, 'clientWidth'],
+      [Element.prototype, 'clientHeight'],
+      [Element.prototype, 'scrollWidth'],
+      [Element.prototype, 'scrollHeight'],
+    ];
+    for (const [proto, name] of getters) {
+      const own = Object.getOwnPropertyDescriptor(proto, name);
+      if (own?.get == null) {
+        continue;
+      }
+      const get = own.get as (this: Element) => number;
+      Object.defineProperty(proto, name, {
+        configurable: true,
+        get(this: Element): number {
+          note(name, this);
+          return get.call(this);
+        },
+      });
+    }
+    const rect = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      note('getBoundingClientRect', this);
+      return rect.call(this);
+    };
+    const rangeRect = Range.prototype.getBoundingClientRect;
+    Range.prototype.getBoundingClientRect = function (this: Range) {
+      note('Range.getBoundingClientRect', this.commonAncestorContainer);
+      return rangeRect.call(this);
+    };
+    const computed = window.getComputedStyle;
+    window.getComputedStyle = function (
+      this: Window,
+      element: Element,
+      pseudo?: string | null,
+    ) {
+      note('getComputedStyle', element);
+      return computed.call(this, element, pseudo);
+    };
+  });
+  await page.route('https://picsum.photos/**', async route => {
+    const id = /\/id\/(\d+)\//.exec(route.request().url())?.[1] ?? '10';
+    await route.fulfill({
+      contentType: 'image/svg+xml',
+      body: photoSvg(COLORS[id] ?? '#888'),
+    });
+  });
+  await openStory(page, storybook(), 'core-lightbox--gallery-with-captions');
+  await page.getByRole('button', {name: 'Open gallery with captions'}).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('button', {name: 'more'})).toBeVisible();
+  await frames(page, 2);
+  await dialog.getByRole('button', {name: 'more'}).click();
+  await expect(dialog.getByRole('button', {name: 'less'})).toBeVisible();
+  await frames(page, 2);
+  await dialog.getByRole('button', {name: 'less'}).click();
+  await expect(dialog.getByRole('button', {name: 'more'})).toBeVisible();
+  await frames(page, 2);
+  await dialog.getByRole('button', {name: 'Next'}).click();
+  await expect(dialog.getByText('2 / 4')).toBeVisible();
+  await waitForRest(dialog.locator('[data-lightbox-viewport] > div').first());
+  await frames(page, 2);
+  await page.keyboard.press('ArrowLeft');
+  await expect(dialog.getByText('1 / 4')).toBeVisible();
+  await expect(dialog.getByRole('button', {name: 'more'})).toBeVisible();
+  await frames(page, 2);
+  const reads = await page.evaluate(
+    () => (window as unknown as {__lateReads: string[]}).__lateReads,
+  );
+  expect(reads).toEqual([]);
+});
