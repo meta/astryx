@@ -27,6 +27,7 @@ import {
 } from '@astryxdesign/a11y-spec/playwright';
 import {
   animationStoryboard,
+  armHold,
   blockMainThread,
   castStoryboard,
   compareCurve,
@@ -44,7 +45,7 @@ import {
   timeline,
   touchDriver,
   traceRendering,
-  waitForAnimation,
+  watchAnimations,
   withStorybook,
   writeEvidence,
   type CastFrame,
@@ -208,7 +209,13 @@ for (const [name, story, locate] of [
       'fading',
     );
     await freezeTimers(page);
-    const held = await holdAnimations(page, opened.surface);
+    const held = await holdAnimations(page, opened.surface, {
+      judges: {
+        target: opened.surface,
+        property: 'opacity',
+        pseudoElement: '::before',
+      },
+    });
     await releaseAnimations(page, {finish: true});
     await thawTimers(page);
     // One animation, of opacity alone, finished within 200 ms; nothing
@@ -262,9 +269,11 @@ for (const [name, story, locate, pseudo] of [
         'fading',
       );
       await freezeTimers(page);
-      const held = (await holdAnimations(page, opened.surface)).filter(
-        animation => animation.kind === 'CSSAnimation',
-      );
+      const held = (
+        await holdAnimations(page, opened.surface, {
+          judges: {target: opened.surface, property: '--astryx-press-alpha'},
+        })
+      ).filter(animation => animation.kind === 'CSSAnimation');
       const layer = await opened.surface.evaluate(
         el => getComputedStyle(el, '::before').content,
       );
@@ -319,7 +328,13 @@ for (const [name, story, locate, pseudo] of [
       'fading',
     );
     await freezeTimers(page);
-    const held = await holdAnimations(page, opened.surface);
+    const held = await holdAnimations(page, opened.surface, {
+      judges: {
+        target: opened.surface,
+        property: 'opacity',
+        pseudoElement: pseudo,
+      },
+    });
     const release = held.find(
       a => a.kind === 'CSSAnimation' && a.durationMs === RELEASE_MS,
     );
@@ -534,10 +549,11 @@ test('the release of a button keeps fading on every frame while the main thread 
     (el as HTMLElement).style.setProperty('--duration-exit', '400ms'),
   );
   const cast = await startScreencast(page);
+  const watch = await watchAnimations(opened.surface);
   await opened.driver.play(tap(opened.center, {holdMs: HOLD_MS}));
   // The release is the longest animation running: the `::before`
   // opacity fade, not the 125 ms press-scale transition that starts with it.
-  const running = await waitForAnimation(opened.surface, {minProgressMs: 16});
+  const running = await watch.started({minProgressMs: 16});
   const release = longestOf(running);
   // A 1 s block, as spec:AST-094 FR5's verification names, covers the
   // whole release.
@@ -704,10 +720,11 @@ test('the release of a button does no Layout or Paint per frame', async ({
   const opened = await openSurface(page, BUTTONS, secondaryButton);
   let release = {from: 0, to: 0};
   const trace = await traceRendering(page, async () => {
+    const watch = await watchAnimations(opened.surface);
     await opened.driver.play(tap(opened.center, {holdMs: HOLD_MS}));
     // The release is the longest animation running: the `::before`
     // opacity fade, not the 125 ms press-scale transition that starts with it.
-    const running = await waitForAnimation(opened.surface);
+    const running = await watch.started();
     release = longestOf(running);
     await page.waitForTimeout(RELEASE_MS + 100);
   });
@@ -733,12 +750,25 @@ test(
       width: box.width + 32,
       height: box.height + 32,
     };
+    // The page holds the release itself as soon as it runs. A hold the test
+    // sends after the lift reaches the page later on a busy machine, and the
+    // release can end first. The press runs one animation (the scale) and the
+    // release runs two (the scale back and the layer's fade), so the hold
+    // waits for two.
+    const hold = await armHold(page, opened.surface, {
+      count: 2,
+      judges: {
+        target: opened.surface,
+        property: 'opacity',
+        pseudoElement: '::before',
+      },
+    });
     await opened.driver.play(tap(opened.center, {holdMs: HOLD_MS}));
     await freezeTimers(page);
     const {storyboard} = await animationStoryboard(page, {
       name: 'button-press-release',
       clip,
-      scope: opened.surface,
+      held: await hold.held(),
       times: timeline(RELEASE_MS),
       measure: async () => ({
         opacity: await layerOpacity(opened.surface, '::before'),

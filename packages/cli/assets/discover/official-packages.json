@@ -182,6 +182,14 @@
         },
         {
           "kind": "component",
+          "name": "TabBar"
+        },
+        {
+          "kind": "component",
+          "name": "TabBarItem"
+        },
+        {
+          "kind": "component",
           "name": "ThreeDBar"
         },
         {
@@ -282,6 +290,18 @@
         {
           "kind": "component",
           "name": "RichTextEditor"
+        },
+        {
+          "kind": "component",
+          "name": "RichTextEditorAutoLinkPlugin"
+        },
+        {
+          "kind": "component",
+          "name": "RichTextEditorToolbar"
+        },
+        {
+          "kind": "component",
+          "name": "RichTextView"
         },
         {
           "kind": "template",

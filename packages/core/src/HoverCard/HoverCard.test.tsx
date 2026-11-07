@@ -458,6 +458,24 @@ describe('HoverCard', () => {
     });
   });
 
+  it('does not open on trigger focus while controlled closed', () => {
+    const onOpenChange = vi.fn();
+    render(
+      <HoverCard
+        isOpen={false}
+        onOpenChange={onOpenChange}
+        content={<span>Card content</span>}>
+        <button type="button">Trigger</button>
+      </HoverCard>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Trigger'});
+
+    // Hover is already refused; keyboard focus must be refused the same way.
+    fireEvent.focusIn(trigger);
+    expect(screen.queryByText('Card content')).toBeNull();
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
+
   it('does not render content initially', () => {
     const {container} = render(
       <HoverCard content={<span>Card content</span>}>
@@ -1879,6 +1897,38 @@ describe('HoverCard timing, hold, and controlled state', () => {
     advance(500);
     expect(trigger).toHaveFocus();
     expect(onOpenChange).not.toHaveBeenCalledWith(true);
+  });
+
+  it('after the caller closes a focused card and lets go of isOpen, the next trigger focus opens it', () => {
+    const {trigger, onOpenChange, rerender} = renderCard({isOpen: true});
+    const action = screen.getByText('Card action');
+    act(() => {
+      action.focus();
+    });
+    const card = (isOpen: boolean | undefined) => (
+      <HoverCard
+        content={<button type="button">Card action</button>}
+        onOpenChange={onOpenChange}
+        isOpen={isOpen}>
+        <button type="button">Trigger</button>
+      </HoverCard>
+    );
+    rerender(card(false));
+    advance(500);
+    expect(trigger).toHaveFocus();
+
+    // The refocus that the close made used up the re-show guard, so the
+    // first focus after the caller lets go opens the card.
+    rerender(card(undefined));
+    act(() => {
+      trigger.blur();
+    });
+    onOpenChange.mockClear();
+    act(() => {
+      trigger.focus();
+    });
+    advance(500);
+    expect(onOpenChange).toHaveBeenCalledWith(true);
   });
 
   it('applies xstyle to the themed card surface', () => {

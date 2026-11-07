@@ -65,6 +65,9 @@ import {
 } from '../InputGroup/groupStyles';
 import {mergeProps} from '../utils/mergeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useTouchHitArea} from '../utils/touchHitArea';
+import {ButtonHitAreaContext} from './buttonHitArea';
+import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import type {LinkComponentType} from '../Link/types';
 import {themeProps} from '../utils/themeProps';
@@ -749,6 +752,10 @@ export function Button({
   const isBusyOnlyDisabled =
     !isTrueDisabled && isLoadingState && !isInterruptible;
   const buttonDisabled = isTrueDisabled || isBusyOnlyDisabled;
+  // The group draws one band for all its members.
+  // A disabled or busy-only button takes no tap.
+  const hasHitArea = buttonGroup == null && !buttonDisabled;
+  const hitAreaRef = useTouchHitArea(hasHitArea, use(ButtonHitAreaContext));
   // isIconOnly prop is the source of truth for icon-only rendering.
   // When false (default), label is always rendered as visible text.
 
@@ -761,12 +768,6 @@ export function Button({
   // mid-action would drop focus the same way the native attribute does
   // (credit @AKnassa, #4879), which is exactly the bug this PR fixes.
   const renderAsLink = href != null && !isTrueDisabled;
-
-  // Use aria-disabled (button stays focusable) when busy-only, or when a
-  // tooltip is present so keyboard users can still reach it. A genuinely
-  // isDisabled/group-disabled button (not busy) keeps native disabled.
-  const useAriaDisabled =
-    buttonDisabled && (isBusyOnlyDisabled || tooltip != null);
 
   // Attach tooltip behavior via the hook rather than wrapping the button in a
   // <Tooltip> element. The hook adds hover/focus triggers to the button itself,
@@ -783,15 +784,9 @@ export function Button({
     // a re-click while pending starts a fresh action that interrupts the prior.
     if (buttonDisabled || (actionInFlightRef.current && !isInterruptible)) {
       e.preventDefault();
-      // A native `disabled` element never dispatches a click at all, so it
-      // never reaches a wrapping element's own handler either. An
-      // aria-disabled button (busy-only, or with a tooltip) is still a real,
-      // interactive element the DOM keeps dispatching clicks on —
-      // preventDefault alone only cancels the button's OWN default action
-      // (form submit, link navigation), not propagation. Without this, an
-      // unavailable Button inside a clickable row/card/backdrop still
-      // triggers that ancestor's action, which the previously native-disabled
-      // control never did.
+      // An aria-disabled button still receives clicks. preventDefault cancels
+      // only its own default action, such as a form submit. Stop propagation
+      // so a clickable ancestor does not act.
       e.stopPropagation();
       return;
     }
@@ -808,9 +803,9 @@ export function Button({
     }
   };
 
-  // When aria-disabled, suppress activation keys (Enter/Space) but allow
-  // other keys (Escape, arrows) to reach consumer handlers.
-  const handleKeyDown = useAriaDisabled
+  // A disabled button cancels Enter and Space, its activation keys. Other
+  // keys, such as Escape and the arrows, still reach the caller's handler.
+  const handleKeyDown = buttonDisabled
     ? (e: React.KeyboardEvent<HTMLButtonElement>) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
@@ -839,7 +834,7 @@ export function Button({
     isGroupTracked && styles.trackedOverlay,
     buttonDisabled && styles.inactive,
     isTrueDisabled && styles.disabled,
-    useAriaDisabled && styles.ariaDisabled,
+    buttonDisabled && styles.ariaDisabled,
     renderAsLink && styles.link,
     !buttonGroup &&
       (isGroupTracked ? styles.pressableTracked : styles.pressable),
@@ -893,6 +888,10 @@ export function Button({
       <span
         {...stylex.props(
           styles.contentWrapper,
+          // The content wrapper's `::after` carries the touch band, so the
+          // button's own `::before` (the touch press) and `::after` (a
+          // caller's decoration) stay as they are.
+          hasHitArea && touchHitAreaStyles.layer,
           isLoadingState &&
             (delaySpinner
               ? loadingStyles.hiddenContentDelayed
@@ -968,6 +967,7 @@ export function Button({
   const mergedButtonRef = useMergedRefs(
     ref,
     tooltip != null ? tooltipHook.ref : undefined,
+    hitAreaRef,
   );
 
   let element: ReactNode;
@@ -992,7 +992,7 @@ export function Button({
         // A caller's own busy or disabled state is kept, so a component that
         // hands these props to a Button (a caller-rendered trigger) is heard.
         aria-busy={isLoadingState || props['aria-busy'] || undefined}
-        aria-disabled={useAriaDisabled || props['aria-disabled'] || undefined}
+        aria-disabled={buttonDisabled || props['aria-disabled'] || undefined}
         onClick={handleClick}
         {...(handleKeyDown ? {onKeyDown: handleKeyDown} : null)}>
         {buttonContent}
@@ -1003,7 +1003,6 @@ export function Button({
       <button
         ref={mergedButtonRef}
         type={type}
-        disabled={useAriaDisabled ? undefined : buttonDisabled}
         {...(inputGroup != null && buttonGroup == null
           ? inputGroupItemProps
           : undefined)}
@@ -1011,13 +1010,14 @@ export function Button({
         {...pressFeedback}
         {...groupItemProps}
         {...props}
+        {...(isTrueDisabled ? {name: undefined} : null)}
         {...ariaLabelProp}
         {...describedByProp}
         {...edgeCompAttr}
         // A caller's own busy or disabled state is kept, so a component that
         // hands these props to a Button (a caller-rendered trigger) is heard.
         aria-busy={isLoadingState || props['aria-busy'] || undefined}
-        aria-disabled={useAriaDisabled || props['aria-disabled'] || undefined}
+        aria-disabled={buttonDisabled || props['aria-disabled'] || undefined}
         onClick={handleClick}
         {...(handleKeyDown ? {onKeyDown: handleKeyDown} : null)}>
         {buttonContent}

@@ -11,6 +11,9 @@
  * Library files get 'astryx' prefix (.astryx78zum5), product files get 'x' (.x78zum5).
  */
 
+const path = require('node:path');
+const {isSwizzledSource} = require('./swizzle-marker');
+
 const LIBRARY_PATTERNS = [
   'packages/core/',
   'packages/themes/',
@@ -47,8 +50,17 @@ module.exports = function astryxBabelPlugin(api, options) {
   const libraryPlugin = stylexPlugin(api, libraryOpts);
   const productPlugin = stylexPlugin(api, productOpts);
 
-  function getPluginAndOpts(filename) {
-    const isLibrary = libraryPatterns.some(p => filename.includes(p));
+  // Each transform's file is classified once, not on every visitor call.
+  const libraryFiles = new WeakMap();
+  function getPluginAndOpts(state) {
+    let isLibrary = libraryFiles.get(state.file);
+    if (isLibrary === undefined) {
+      const filename = state.filename || '';
+      isLibrary =
+        libraryPatterns.some(p => filename.includes(p)) ||
+        (filename !== '' && isSwizzledSource(path.resolve(filename)));
+      if (state.file != null) libraryFiles.set(state.file, isLibrary);
+    }
     return isLibrary
       ? {plugin: libraryPlugin, opts: libraryOpts}
       : {plugin: productPlugin, opts: productOpts};
@@ -56,7 +68,7 @@ module.exports = function astryxBabelPlugin(api, options) {
 
   // Helper: call a visitor function with overridden state.opts
   function callVisitor(visitor, key, path, state) {
-    const {plugin, opts} = getPluginAndOpts(state.filename || '');
+    const {plugin, opts} = getPluginAndOpts(state);
     const v = plugin.visitor[key];
     if (!v) return;
 
