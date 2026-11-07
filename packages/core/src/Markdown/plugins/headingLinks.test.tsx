@@ -400,6 +400,23 @@ describe('createMarkdownHeadingLinks', () => {
       name: 'Copy link to Overview',
     });
     const locationBefore = window.location.href;
+    // Each new text the polite live region takes, to count announcements.
+    const announcements: string[] = [];
+    let lastAnnouncement = '';
+    const announcementObserver = new MutationObserver(() => {
+      const text =
+        document.querySelector('[data-astryx-live-region="polite"]')
+          ?.textContent ?? '';
+      if (text !== '' && text !== lastAnnouncement) {
+        announcements.push(text);
+      }
+      lastAnnouncement = text;
+    });
+    announcementObserver.observe(document.body, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+    });
 
     await act(async () => {
       fireEvent.click(permalink);
@@ -421,11 +438,15 @@ describe('createMarkdownHeadingLinks', () => {
       document.querySelector('[data-astryx-live-region="polite"]'),
     ).toHaveTextContent('Failed to copy value to clipboard.');
 
-    act(() => {
+    await act(async () => {
       vi.advanceTimersByTime(1480);
+      await Promise.resolve();
     });
     expect(permalink).toHaveAccessibleName('Copy link to Overview');
     expect(permalink).toHaveTextContent('#');
+    // The failure is announced once, not again while it shows or on reset.
+    announcementObserver.disconnect();
+    expect(announcements).toEqual(['Failed to copy value to clipboard.']);
   });
 
   it('shows a failed copy when the Clipboard API is unavailable', async () => {
