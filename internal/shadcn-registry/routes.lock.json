@@ -1378,6 +1378,11 @@
       "aliases": []
     },
     {
+      "name": "example-base-typeahead-menu",
+      "path": "examples/base-typeahead/menu",
+      "aliases": []
+    },
+    {
       "name": "example-blockquote-testimonials",
       "path": "examples/blockquote/testimonials",
       "aliases": []

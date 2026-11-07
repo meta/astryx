@@ -513,6 +513,11 @@ const itemSizeStyles = stylex.create({
 /** The result popup's maximum height in CSS pixels (`styles.dropdown`). */
 const DROPDOWN_MAX_HEIGHT = 300;
 
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file, as in `utils/devWarning.ts`.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
+const isDevBuild = process.env.NODE_ENV !== 'production';
+
 /**
  * Rows in the order the popup displays them: ungrouped source rows, then each
  * group, then the trailing entries derived from the typed text (Tokenizer's
@@ -934,6 +939,16 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // popover element directly, which useLayer reconciles like the browser's
   // own light dismiss.
   const outsidePress = useOutsidePress();
+  // A dialog-role menu holds focus. A load, an empty query or an input blur
+  // does not open or close it. Only the handle opens it. Read when it is
+  // needed, like `isDisabledRef`.
+  const isDialogMenuRef = useRef(isDialogMenu);
+  useIsomorphicLayoutEffect(() => {
+    isDialogMenuRef.current = isDialogMenu;
+  }, [isDialogMenu]);
+  // Set when a dialog-role menu closes. Its focus return to the input does
+  // not open the list, as a pick's own focus return does not.
+  const isDialogFocusReturnRef = useRef(false);
   const handleLayerShow = useCallback(() => {
     isShowingRef.current = true;
     onOpenChange?.(true);
@@ -971,6 +986,14 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
 
   const handleLayerHide = useCallback(() => {
     isShowingRef.current = false;
+    if (isDialogMenuRef.current) {
+      // The focus return runs in this close's commit; a later focus is the
+      // person's own.
+      isDialogFocusReturnRef.current = true;
+      setTimeout(() => {
+        isDialogFocusReturnRef.current = false;
+      }, 0);
+    }
     outsidePress.stop();
     onOpenChange?.(false);
     setHighlightedIndex(-1);
@@ -999,14 +1022,6 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     getRestoreFallback: () => inputRef.current,
   });
 
-  // A dialog-role menu holds the person's focus, so the list's own reasons
-  // to open or close (a load, an empty query, a blur of the input) do not
-  // open or close it; only the handle opens it. Read at that time, like
-  // `isDisabledRef`.
-  const isDialogMenuRef = useRef(isDialogMenu);
-  useIsomorphicLayoutEffect(() => {
-    isDialogMenuRef.current = isDialogMenu;
-  }, [isDialogMenu]);
   const hideList = useCallback(() => {
     if (!isDialogMenuRef.current) {
       popover.hide();
@@ -1566,6 +1581,10 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
 
   // Handle focus
   const handleFocus = useCallback(() => {
+    if (isDialogFocusReturnRef.current) {
+      isDialogFocusReturnRef.current = false;
+      return;
+    }
     openIfEligible();
   }, [openIfEligible]);
 
@@ -1825,9 +1844,8 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       return;
     }
     if (isAfterPick && !isDialogMenu) {
-      // The pick emptied the list and kept the menu open for a listbox: focus
-      // returns to the input, and the list loads its focus entries, or closes
-      // when there are none to load.
+      // The pick emptied the list. Focus goes back to the input. The list
+      // loads its focus entries, or closes when there are none.
       inputRef.current?.focus();
       if (hasEntriesOnFocus) {
         void performBootstrap();
@@ -1858,7 +1876,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // anything a person acts on must be a result, so the arrow keys reach it.
   useEffect(() => {
     if (
-      process.env.NODE_ENV === 'production' ||
+      !isDevBuild ||
       !popover.isOpen ||
       menu?.role !== 'listbox' ||
       menu.render == null

@@ -427,6 +427,102 @@ describe('BaseTypeahead menu', () => {
     });
   });
 
+  describe('closing a dialog that a pick opened, in a field with focus entries', () => {
+    function FilterField() {
+      const handleRef = useRef<BaseTypeaheadHandle>(null);
+      const [field, setField] = useState<string | null>(null);
+      return (
+        <>
+          <BaseTypeahead
+            aria-label="Filters"
+            searchSource={{
+              ...fruits,
+              bootstrap: () => [
+                {id: 'apple', label: 'Apple'},
+                {id: 'apricot', label: 'Apricot'},
+              ],
+            }}
+            value={null}
+            onChange={item => {
+              setField(item?.label ?? null);
+              handleRef.current?.open();
+            }}
+            onOpenChange={isOpen => {
+              if (!isOpen) {
+                setField(null);
+              }
+            }}
+            debounceMs={0}
+            hasEntriesOnFocus
+            handleRef={handleRef}
+            menu={
+              field == null
+                ? {role: 'listbox'}
+                : {
+                    role: 'dialog',
+                    label: field,
+                    render: ({close}) => (
+                      <button type="button" onClick={close}>
+                        Cancel
+                      </button>
+                    ),
+                  }
+            }
+          />
+          <p>Elsewhere</p>
+        </>
+      );
+    }
+
+    async function openDialogFromPick() {
+      const user = userEvent.setup();
+      render(<FilterField />);
+      const input = screen.getByRole('combobox');
+      await user.click(input);
+      await screen.findByRole('option', {name: 'Apple', hidden: true});
+      await user.keyboard('{Enter}');
+      const dialog = await screen.findByRole('dialog', {
+        name: 'Apple',
+        hidden: true,
+      });
+      await waitFor(() =>
+        expect(dialog.contains(document.activeElement)).toBe(true),
+      );
+      return {user, input};
+    }
+
+    it('Escape closes it in one press and does not reopen the list', async () => {
+      const {user, input} = await openDialogFromPick();
+      await user.keyboard('{Escape}');
+      await waitFor(() => expect(input).toHaveFocus());
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+      expect(screen.queryByRole('listbox')).toBeNull();
+    });
+
+    it('close() does not reopen the list', async () => {
+      const {user, input} = await openDialogFromPick();
+      await user.click(
+        screen.getByRole('button', {name: 'Cancel', hidden: true}),
+      );
+      await waitFor(() => expect(input).toHaveFocus());
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('a press outside closes it and leaves the list closed', async () => {
+      const {input} = await openDialogFromPick();
+      const elsewhere = screen.getByText('Elsewhere');
+      fireEvent.pointerDown(elsewhere, {composed: true});
+      fireEvent.pointerUp(elsewhere, {composed: true});
+      await waitFor(() =>
+        expect(screen.queryByRole('dialog', {hidden: true})).toBeNull(),
+      );
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+    });
+  });
+
   describe('a pick that calls open() and stays a listbox', () => {
     function Picker({hasEntriesOnFocus}: {hasEntriesOnFocus: boolean}) {
       const handleRef = useRef<BaseTypeaheadHandle>(null);
