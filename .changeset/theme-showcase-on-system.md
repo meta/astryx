@@ -2,6 +2,6 @@
 '@astryxdesign/cli': patch
 ---
 
-[fix] Build the theme showcase with Astryx layout, text and icon components, keep the standalone shell separate from the embedded preview, and make its demo inputs respond locally. Preserve its template id, gallery visibility, product fixtures and checkout/chat arrangement.
+[feat] Replace the theme showcase's custom layout, text and icon styling with Astryx components. Add a standalone top-navigation shell while keeping its embedded comparison view. Make demo inputs, cart feedback, inventory filters and chat respond locally, with clearable filters and no payment submission. Keep the template id, gallery visibility and demo content.
 
 @rubyycheung

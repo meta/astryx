@@ -37,7 +37,6 @@ import {
   LayoutContent,
   LayoutHeader,
   LayoutFooter,
-  LayoutPanel,
 } from '@astryxdesign/core/Layout';
 import {StackItem} from '@astryxdesign/core/Stack';
 import {AppShell, useAppShellMobile} from '@astryxdesign/core/AppShell';
@@ -61,7 +60,6 @@ import {Center} from '@astryxdesign/core/Center';
 import {Section} from '@astryxdesign/core/Section';
 import {AspectRatio} from '@astryxdesign/core/AspectRatio';
 import {NumberInput} from '@astryxdesign/core/NumberInput';
-import {OverflowList} from '@astryxdesign/core/OverflowList';
 import {ScrollableArea} from '@astryxdesign/core/ScrollableArea';
 import {TopNav, TopNavHeading, TopNavItem} from '@astryxdesign/core/TopNav';
 import {
@@ -75,7 +73,9 @@ import {
 
 // StackItem has no wrapping basis or height cap. Keep the card proportions
 // and bound the message viewport with these three layout declarations.
+// Stack has no body-surface variant; paint the embedded preview with its theme.
 const styles: Record<string, CSSProperties> = {
+  preview: {backgroundColor: 'var(--color-background-body)'},
   checkoutColumn: {flex: '1 1 300px'},
   chatColumn: {flex: '2 1 520px', maxHeight: 720},
 };
@@ -146,6 +146,7 @@ export default function ThemeShowcase() {
       height="auto"
       variant="surface"
       contentPadding={0}
+      data-theme-preview="true"
       topNav={<ShowcaseNavigation />}>
       <ShowcaseContent />
     </AppShell>
@@ -155,7 +156,7 @@ export default function ThemeShowcase() {
 /** Embeddable comparison surface: the host owns its application shell. */
 export function ThemeShowcaseStore(props: ThemeShowcaseProps = {}) {
   return (
-    <VStack gap={0}>
+    <VStack gap={0} data-theme-preview="true" style={styles.preview}>
       <ShowcaseNavigation />
       <ShowcaseContent {...props} />
     </VStack>
@@ -173,7 +174,7 @@ function ShowcaseContent({
       <LayoutContent padding={0} isScrollable={false}>
         <VStack gap={0}>
           <StorePreview images={images} products={products} />
-          <Section padding={6}>
+          <Section padding={6} variant="transparent">
             <CardShowcase
               images={images}
               inventory={inventory}
@@ -257,29 +258,21 @@ function CardShowcase({
           <ChatCard />
         </StackItem>
       </HStack>
-      <Layout
-        height="auto"
-        padding={0}
-        end={
-          isMobile ? undefined : (
-            <LayoutPanel padding={0} width={280} isScrollable={false}>
-              <VStack paddingInlineStart={4} height="100%">
-                {activity}
-              </VStack>
-            </LayoutPanel>
-          )
-        }>
-        <LayoutContent padding={0} isScrollable={false}>
-          <VStack gap={4}>
-            <InventoryCard
-              key={inventory.map(row => row.name).join('|')}
-              images={images}
-              inventory={inventory}
-            />
-            {isMobile && activity}
-          </VStack>
-        </LayoutContent>
-      </Layout>
+      <HStack gap={isMobile ? 4 : 0} wrap={isMobile ? 'wrap' : 'nowrap'}>
+        <StackItem size="fill">
+          <InventoryCard
+            key={inventory.map(row => row.name).join('|')}
+            images={images}
+            inventory={inventory}
+          />
+        </StackItem>
+        <VStack
+          width={isMobile ? '100%' : 280}
+          paddingInlineStart={isMobile ? 0 : 4}
+          height="100%">
+          {activity}
+        </VStack>
+      </HStack>
     </VStack>
   );
 }
@@ -292,7 +285,7 @@ function StorePreview({
   products: ProductSpec[];
 }) {
   return (
-    <Section padding={6} variant="transparent" data-theme-preview="true">
+    <Section padding={6} variant="transparent">
       <Center>
         <VStack gap={10} width="100%" maxWidth={880}>
           <Center>
@@ -346,7 +339,11 @@ function ProductCard({product, image}: {product: ProductSpec; image?: string}) {
               {product.name}
             </Heading>
             <StackItem size="fill">
-              <Text type="supporting" color="secondary" justify="center">
+              <Text
+                type="supporting"
+                color="secondary"
+                justify="center"
+                display="block">
                 {product.description}
               </Text>
             </StackItem>
@@ -1026,9 +1023,9 @@ function InventoryCard({
   inventory: InventoryRow[];
 }) {
   const [query, setQuery] = useState('');
-  const [category, setCategory] = useState<string | undefined>();
-  const [location, setLocation] = useState<string | undefined>();
-  const [tag, setTag] = useState<string | undefined>();
+  const [category, setCategory] = useState<string | null>(null);
+  const [location, setLocation] = useState<string | null>(null);
+  const [tag, setTag] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState(
     () => new Set(inventory.filter(row => row.selected).map(row => row.id)),
   );
@@ -1088,16 +1085,7 @@ function InventoryCard({
                 startIcon={<Icon icon={Search} size="sm" />}
                 width={240}
               />
-              <OverflowList
-                gap={2}
-                overflowRenderer={() => (
-                  <Button
-                    label="Filters"
-                    variant="ghost"
-                    size="sm"
-                    icon={<Icon icon={Tag} size="sm" />}
-                  />
-                )}>
+              <HStack gap={2} wrap="wrap" vAlign="center">
                 <Selector
                   label="Categories"
                   isLabelHidden
@@ -1105,6 +1093,7 @@ function InventoryCard({
                   size="sm"
                   startIcon={<Icon icon={Folder} size="sm" />}
                   value={category}
+                  hasClear
                   onChange={setCategory}
                   options={categories}
                   isDisabled={categories.length === 0}
@@ -1116,6 +1105,7 @@ function InventoryCard({
                   size="sm"
                   startIcon={<Icon icon={MapPin} size="sm" />}
                   value={location}
+                  hasClear
                   onChange={setLocation}
                   options={[...new Set(inventory.map(row => row.location))]}
                 />
@@ -1126,6 +1116,7 @@ function InventoryCard({
                   size="sm"
                   startIcon={<Icon icon={Tag} size="sm" />}
                   value={tag}
+                  hasClear
                   onChange={setTag}
                   options={[
                     ...new Set(
@@ -1135,7 +1126,7 @@ function InventoryCard({
                     ),
                   ]}
                 />
-              </OverflowList>
+              </HStack>
             </HStack>
             <HStack gap={1} vAlign="center">
               <Button

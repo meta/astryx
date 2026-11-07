@@ -123,7 +123,7 @@ describe('theme-showcase source contract', () => {
     ).toEqual([]);
   });
 
-  it('keeps only the three justified wrapping and chat-height styles', () => {
+  it('keeps only the justified body paint, wrapping and chat-height styles', () => {
     const declaration = nodesOfType('VariableDeclarator').find(
       value => (value.id as {name?: string})?.name === 'styles',
     );
@@ -139,7 +139,7 @@ describe('theme-showcase source contract', () => {
       groups.flatMap(group =>
         group.value.properties.map(property => property.key.name),
       ),
-    ).toEqual(['flex', 'flex', 'maxHeight']);
+    ).toEqual(['backgroundColor', 'flex', 'flex', 'maxHeight']);
     expect(source).not.toContain('stylex.create');
     expect(source).not.toContain('className=');
   });
@@ -181,9 +181,71 @@ describe('theme-showcase local interactions', () => {
     expect(view.container.querySelectorAll('.astryx-app-shell')).toHaveLength(
       0,
     );
+    const navigation = screen.getByRole('navigation', {
+      name: 'Theme preview navigation',
+    });
+    expect(navigation).toBeInTheDocument();
+  });
+
+  it('paints the embedded theme body and contains its navigation override without repainting the chat', () => {
+    const view = render(
+      <div data-themes-card-preview>
+        <ThemeShowcaseStore />
+      </div>,
+    );
+    const navigation = screen.getByRole('navigation', {
+      name: 'Theme preview navigation',
+    });
+    const preview = navigation.closest<HTMLElement>(
+      '[data-theme-preview="true"]',
+    );
+    expect(preview).not.toBeNull();
+    expect(preview?.style.backgroundColor).toBe('var(--color-background-body)');
+    expect(preview).toContainElement(screen.getByText('Little joys,'));
+
+    const globals = fs.readFileSync(
+      path.join(rootDir, 'apps/docsite/src/app/globals.css'),
+      'utf8',
+    );
+    const selector = globals
+      .match(/^\[data-themes-card-preview\][^{]+\{/m)?.[0]
+      .replace(/\{$/, '')
+      .trim();
+    expect(selector).toBeDefined();
+    expect(navigation.matches(selector!)).toBe(true);
+    const chatHeader = screen
+      .getByRole('heading', {name: 'Studio AI'})
+      .closest<HTMLElement>('.astryx-layout-header')!;
+    expect(chatHeader).not.toBeNull();
+    expect(chatHeader.matches(selector!)).toBe(false);
+    expect(chatHeader.parentElement?.matches(selector!)).toBe(false);
     expect(
-      screen.getByRole('navigation', {name: 'Theme preview navigation'}),
-    ).toBeInTheDocument();
+      view.container.querySelectorAll('[data-theme-preview="true"]'),
+    ).toHaveLength(1);
+  });
+
+  it('keeps the inventory and checkout rows inside matching stack boundaries', () => {
+    render(<ThemeShowcaseStore />);
+    const checkoutRow = screen
+      .getByRole('heading', {name: 'Checkout'})
+      .closest('.astryx-stack-item')?.parentElement;
+    const inventoryRow = screen
+      .getByRole('table')
+      .closest('.astryx-stack-item')?.parentElement;
+    expect(checkoutRow).not.toBeNull();
+    expect(inventoryRow).not.toBeNull();
+    expect(checkoutRow).toHaveClass('astryx-stack');
+    expect(inventoryRow).toHaveClass('astryx-stack');
+    expect(inventoryRow).not.toHaveClass('astryx-layout');
+  });
+
+  it('keeps wrapped product descriptions block-level and centered', () => {
+    render(<ThemeShowcaseStore />);
+    const description = screen.getByText(
+      'Water-resistant canvas with a quiet, modern profile.',
+    );
+    expect(getComputedStyle(description).display).toBe('block');
+    expect(getComputedStyle(description).textAlign).toBe('center');
   });
 
   it('lets checkout fields and saved-information selection change locally', async () => {
@@ -243,6 +305,79 @@ describe('theme-showcase local interactions', () => {
     expect(
       within(table).queryByText('Canvas Backpack'),
     ).not.toBeInTheDocument();
+  });
+
+  it('clears category, location and tag filters to restore the full inventory', async () => {
+    const user = userEvent.setup();
+    const common = {
+      meta: 'Preview fixture',
+      available: 30,
+      thumbnailFallback: 'I',
+      selected: false,
+    };
+    render(
+      <ThemeShowcaseStore
+        inventory={[
+          {
+            ...common,
+            id: 'first',
+            name: 'Studio Headphones',
+            category: 'Audio',
+            location: 'Aisle 1',
+            tags: [{label: 'Featured', variant: 'blue'}],
+          },
+          {
+            ...common,
+            id: 'second',
+            name: 'Canvas Bag',
+            category: 'Bags',
+            location: 'Aisle 2',
+            tags: [{label: 'Sale', variant: 'green'}],
+          },
+          {
+            ...common,
+            id: 'third',
+            name: 'Desk Speaker',
+            category: 'Audio',
+            location: 'Aisle 1',
+            tags: [{label: 'Sale', variant: 'green'}],
+          },
+        ]}
+      />,
+    );
+    const table = screen.getByRole('table');
+    async function choose(label: string, value: string) {
+      const picker = screen.getByRole('combobox', {name: label});
+      await user.click(picker);
+      expect(picker).toHaveAttribute('aria-expanded', 'true');
+      const popup = document.getElementById(
+        picker.getAttribute('aria-controls')!,
+      )!;
+      fireEvent.click(
+        within(popup).getByRole('option', {name: value, hidden: true}),
+      );
+    }
+    await choose('Categories', 'Audio');
+    expect(within(table).queryByText('Canvas Bag')).not.toBeInTheDocument();
+    await choose('Locations', 'Aisle 2');
+    expect(
+      within(table).queryByText('Studio Headphones'),
+    ).not.toBeInTheDocument();
+    expect(within(table).queryByText('Desk Speaker')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', {name: /Clear.*Locations/i}));
+    expect(within(table).getByText('Studio Headphones')).toBeInTheDocument();
+    expect(within(table).getByText('Desk Speaker')).toBeInTheDocument();
+    await choose('Tags', 'Sale');
+    expect(
+      within(table).queryByText('Studio Headphones'),
+    ).not.toBeInTheDocument();
+    expect(within(table).getByText('Desk Speaker')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', {name: /Clear.*Tags/i}));
+    expect(within(table).getByText('Studio Headphones')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', {name: /Clear.*Categories/i}));
+    expect(within(table).getByText('Studio Headphones')).toBeInTheDocument();
+    expect(within(table).getByText('Canvas Bag')).toBeInTheDocument();
+    expect(within(table).getByText('Desk Speaker')).toBeInTheDocument();
   });
 
   it('keeps category-less inventory fixtures usable without an inert category picker', async () => {
