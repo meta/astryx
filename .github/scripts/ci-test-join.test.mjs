@@ -22,6 +22,7 @@ const broad = {
   PR_INTERACTION_RESULT: 'success',
   PR_INTERACTION_WEBKIT_RESULT: 'success',
   PR_COMPONENT_A11Y_CONTRACTS_RESULT: 'success',
+  PR_A11Y_DEPENDENT_AUDITS_RESULT: 'success',
 };
 
 // An override of `null` removes the variable, as a missing `needs` result would.
@@ -67,6 +68,10 @@ describe('pull-request test join', () => {
       ['PR_COMPONENT_A11Y_CONTRACTS_RESULT', 'skipped'],
       ['PR_COMPONENT_A11Y_CONTRACTS_RESULT', 'cancelled'],
       ['PR_COMPONENT_A11Y_CONTRACTS_RESULT', null],
+      ['PR_A11Y_DEPENDENT_AUDITS_RESULT', 'failure'],
+      ['PR_A11Y_DEPENDENT_AUDITS_RESULT', 'skipped'],
+      ['PR_A11Y_DEPENDENT_AUDITS_RESULT', 'cancelled'],
+      ['PR_A11Y_DEPENDENT_AUDITS_RESULT', null],
     ]) {
       expect(run({[name]: value}), name).toMatchObject({status: 1});
     }
