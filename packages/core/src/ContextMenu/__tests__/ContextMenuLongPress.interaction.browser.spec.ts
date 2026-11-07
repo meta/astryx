@@ -172,6 +172,25 @@ test('a finger still down gets the menu at 735 ms (iOS 26.2), not before', async
   await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
 });
 
+test('the menu mounts at the commit, closed and out of the accessibility tree, and shows at 735 ms', async ({
+  page,
+}) => {
+  const {driver, center} = await openTouchStory(page);
+  const playing = driver.play(hold(center, menuDisplayMs + 200));
+  const prepared = page
+    .locator('[popover]')
+    .filter({has: page.locator('[role="menu"]')});
+  // Mounted at the commit (400 ms), well before the menu's moment (735 ms).
+  await expect(prepared).toHaveCount(1, {timeout: 700});
+  expect(await menuShownAt(page), 'the menu showed before 735 ms').toBeNull();
+  expect(await prepared.evaluate(el => el.matches(':popover-open'))).toBe(
+    false,
+  );
+  await expect(page.getByRole('menu', {name: 'Photo actions'})).toHaveCount(0);
+  await playing;
+  await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
+});
+
 /** The story with somewhere to scroll below it, and its trigger's center. */
 async function openScrollableStory(page: Page) {
   const story = await openTouchStory(page);
