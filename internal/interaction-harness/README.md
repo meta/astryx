@@ -57,7 +57,7 @@ committed: a pull request links or attaches it.
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `scripts.ts`    | Touch scripts as data: `tap`, `drag` (hold, rest), `flick` (exact final-move speed, velocity profiles), `holdThenDrag`, `pinch`, `rotate`, `path`, `merge` (a second finger mid-gesture), `releaseVelocity`, `toTouchEvents`.                                                |
 | `touch.ts`      | `touchDriver(page).play(script)`: the script as real engine input. `installInputLog` / `readInputLog`: what the page received.                                                                                                                                               |
-| `frames.ts`     | `startScreencast` (timestamped composited frames), `markElement` (a marker chip or outline), `trackMarker` (marker box per frame), `trackMarkers` (several colors from one decode of each frame), `sampleRects` (per-rAF rects), `frameStats`.                               |
+| `frames.ts`     | `startScreencast` (timestamped composited frames), `markElement` (a marker chip or outline), `trackMarker` (marker box per frame), `trackMarkers` (several colors from one decode of each frame), `sampleRects` (per-rAF rects), `frameStats`, `requireFrames`.              |
 | `busy.ts`       | `blockMainThread(page, ms)`, which returns the window it held and the span its loop measured, and `busyWindowProof(tracked, window)`: frames presented, frames that moved, longest stall, a verdict; `presented` adds the compositor's own frames.                           |
 | `brightness.ts` | `trackBrightness(page, frames, {x, y})`: a colour channel's mean in a square per frame, as a scalar on `box.x`, for a busy-window proof of a fade or a dim.                                                                                                                  |
 | `webInput.ts`   | `webInputDriver(page)`: `wheel({x, y, dx, dy, ctrl})` and `pen(points)` as real engine input, for proofs across pointers (`spec:AST-100` FR4); `wheel` resolves once the page has the step; read back through the input log.                                                 |
@@ -325,6 +325,16 @@ block presents no compositor frame at all). With the record, the 90% counts the
 compositor's frames from the first to the last moved frame; the gaps before and
 after are the stall check's. WebKit has no such trace:
 `stop()` resolves to `[]` and the screencast is judged alone.
+
+**Too few frames.** A proof that samples the page every frame (`sampleRects`,
+or a rAF trace of its own) takes its frames through `requireFrames(samples,
+{min, during, where})`. It returns the samples that `where` selects when there
+are at least `min` of them. A loaded machine, or a long task on the page, can
+starve the page of frames. When no frame came for longer than
+`FRAME_STARVATION_MS` (50 ms) around the selected samples, the proof fails
+with `FrameStarvationError`, which names the frames drawn and the longest gap.
+So a run that cannot prove anything still fails, and says why. With too few frames on pace, the motion did not last that
+long, and the error says that instead.
 
 **No Layout / Paint.** `traceRendering` records a Chromium trace around the
 interaction; `countBetween` counts the steady middle of an animation (its

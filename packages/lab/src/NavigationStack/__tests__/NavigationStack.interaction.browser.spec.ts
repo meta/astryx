@@ -36,6 +36,7 @@ import {
   markElement,
   openStory,
   releaseAnimations,
+  requireFrames,
   sampleCurve,
   sampleRects,
   startBusyControl,
@@ -506,11 +507,13 @@ test('a push’s bar: the new bar slides in with its screen, the covered one rid
   await page.waitForTimeout(900);
   const frames = await stop();
   const start = firstMove(frames, 'screen-General');
-  expect(start).toBeDefined();
-  const during = frames.filter(
-    f => f.t >= (start?.t ?? 0) && f.cards['screen-General'] > 0.5,
-  );
-  expect(during.length).toBeGreaterThan(5);
+  expect(start, 'the push started').toBeDefined();
+  const during = requireFrames(frames, {
+    min: 6,
+    during: 'the pushed screen slides in',
+    where: f =>
+      start != null && f.t >= start.t && f.cards['screen-General'] > 0.5,
+  });
   for (const f of during) {
     // UIKit's bar copy is part of its screen: it moves with the card (one
     // clock and spring). It stays within 1 % of the width, as engines sample
@@ -1320,13 +1323,14 @@ test.describe('the bars ride with their screens, as UIKit’s', () => {
     await page.locator('[data-navigation-back]').click();
     await page.waitForTimeout(900);
     const frames = await stop();
-    const moving = frames.filter(
-      f =>
+    const moving = requireFrames(frames, {
+      min: 6,
+      during: 'the popped screen and the revealed one move',
+      where: f =>
         f.cards['screen-General'] != null &&
         f.cards['screen-General'] > 0.5 &&
         f.cards.root < -0.5,
-    );
-    expect(moving.length).toBeGreaterThan(5);
+    });
     for (const f of moving) {
       expect(
         Math.abs(f.bars['screen-General'] - f.cards['screen-General']),
