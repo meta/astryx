@@ -4,7 +4,9 @@
 
 /**
  * @file ChatLayout.tsx
- * @input Uses React, StyleX, theme tokens, useChatStreamScroll, useChatNewMessages
+ * @input Uses React, StyleX, theme tokens, useChatStreamScroll, useChatNewMessages,
+ *   useGestureRecognizer, useAttachment, the keyboard dismissal pans and the
+ *   composer's bounce
  * @output Exports ChatLayout component and ChatLayoutProps
  * @position Layout shell for full chat interfaces — messages in page flow, composer fixed to bottom
  *
@@ -27,6 +29,8 @@
  * - /packages/core/src/Chat/index.ts (exports)
  * - /apps/storybook/stories/ChatLayout.stories.tsx
  * - /packages/cli/assets/templates/blocks/components/ChatLayout/ (block examples)
+ * - /packages/core/src/Chat/transcriptDismiss.ts (the dismiss line)
+ * - /packages/core/src/Chat/composerBounce.ts (the dock container's bounce)
  */
 
 import {type ReactNode, useMemo, useRef} from 'react';
@@ -38,6 +42,16 @@ import {useChatStreamScroll} from './useChatStreamScroll';
 import {useChatNewMessages} from './useChatNewMessages';
 import {ChatLayoutScrollButton} from './ChatLayoutScrollButton';
 import {ChatLayoutContext} from './ChatContext';
+import {
+  createComposerDismissPan,
+  createKeyboardDismissPan,
+  dismissKeyboardAtCrossing,
+  dismissKeyboardOnComposerDrag,
+  holdPageUnderComposer,
+} from './transcriptDismiss';
+import {bounceComposer} from './composerBounce';
+import {useGestureRecognizer} from '../gestures/useGestureRecognizer';
+import {useAttachment} from '../hooks/useAttachment';
 import {themeProps} from '../utils/themeProps';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
@@ -304,6 +318,8 @@ export function ChatLayout({
 }: ChatLayoutProps) {
   const t = useComponentTranslator();
   const rootRef = useRef<HTMLDivElement>(null);
+  const dockContainerRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLDivElement>(null);
 
   const scrollContainerRef = externalScrollRef ?? rootRef;
   const isSelfScrolling = !externalScrollRef;
@@ -327,6 +343,35 @@ export function ChatLayout({
       }}
     />
   );
+
+  useGestureRecognizer(
+    rootRef,
+    () =>
+      createKeyboardDismissPan(
+        // Where the page draws the composer. A browser's own pan to the
+        // focused field moves it with the page.
+        () =>
+          composerRef.current?.getBoundingClientRect().top ??
+          Number.POSITIVE_INFINITY,
+      ),
+    pan =>
+      dismissKeyboardAtCrossing(pan, fingerSpeed => {
+        const container = dockContainerRef.current;
+        const composer = composerRef.current;
+        if (container != null && composer != null) {
+          // No deeper than the composer's bottom padding.
+          const depth =
+            Number.parseFloat(getComputedStyle(composer).paddingBottom) || 0;
+          bounceComposer(container, fingerSpeed, depth);
+        }
+      }),
+  );
+  useGestureRecognizer(
+    composerRef,
+    () => createComposerDismissPan(() => composerRef.current),
+    dismissKeyboardOnComposerDrag,
+  );
+  useAttachment(composerRef, holdPageUnderComposer, null);
 
   // --- Layout context ---
   const layoutContext = useMemo(
@@ -385,8 +430,10 @@ export function ChatLayout({
           )}
         </div>
 
-        {/* Dock container — sticky/fixed, holds blur + scroll button + composer */}
+        {/* Dock container — sticky/fixed, holds blur + scroll button + composer.
+            Its bounce moves all three as one. */}
         <div
+          ref={dockContainerRef}
           {...stylex.props(
             styles.dockContainer,
             isSelfScrolling
@@ -399,8 +446,11 @@ export function ChatLayout({
           {/* Frosted glass layer */}
           <div {...stylex.props(styles.blurLayer, currentDensity.blurLayer)} />
 
-          {/* Composer */}
-          <div {...stylex.props(styles.dock, currentDensity.dock)}>
+          {/* Composer: a transcript drag that reaches its top, or a drag down
+              that starts on it, dismisses the software keyboard. */}
+          <div
+            ref={composerRef}
+            {...stylex.props(styles.dock, currentDensity.dock)}>
             <div {...stylex.props(styles.dockInner, currentDensity.dockInner)}>
               {composer}
             </div>
