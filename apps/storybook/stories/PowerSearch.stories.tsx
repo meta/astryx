@@ -616,24 +616,29 @@ export const NearFullTokenRow: Story = {
     const firstTokenRect = firstToken.getBoundingClientRect();
     const tokenRect = finalToken.getBoundingClientRect();
     const clearRect = clearButton.getBoundingClientRect();
-    let clearHitLeft = 0;
-    let clearHitRight = 0;
+    let clearHitRect = {left: clearRect.left, right: clearRect.right};
     if (isCoarsePointer) {
-      const clearHitStyle = getComputedStyle(clearButton, '::after');
-      clearHitLeft = Number.parseFloat(clearHitStyle.left);
-      clearHitRight = Number.parseFloat(clearHitStyle.right);
+      // Button draws its touch band as the `::after` of an element inside
+      // it, so find whichever element in the button carries the band.
+      const bandHost = [clearButton, ...clearButton.querySelectorAll('*')].find(
+        element => getComputedStyle(element, '::after').content !== 'none',
+      );
+      const bandStyle = bandHost && getComputedStyle(bandHost, '::after');
+      const bandLeft = Number.parseFloat(bandStyle?.left ?? '');
+      const bandRight = Number.parseFloat(bandStyle?.right ?? '');
       if (
-        clearHitStyle.content === 'none' ||
-        !Number.isFinite(clearHitLeft) ||
-        !Number.isFinite(clearHitRight)
+        !bandHost ||
+        !Number.isFinite(bandLeft) ||
+        !Number.isFinite(bandRight)
       ) {
         throw new Error('Clear all did not expose its coarse-pointer hit area');
       }
+      const bandHostRect = bandHost.getBoundingClientRect();
+      clearHitRect = {
+        left: bandHostRect.left + bandLeft,
+        right: bandHostRect.right - bandRight,
+      };
     }
-    const clearHitRect = {
-      left: clearRect.left + clearHitLeft,
-      right: clearRect.right - clearHitRight,
-    };
     if (Math.abs(firstTokenRect.top - tokenRect.top) > 0.5) {
       throw new Error(
         `Fixture tokens wrapped before the empty combobox check: first token top ${firstTokenRect.top.toFixed(2)}, final token top ${tokenRect.top.toFixed(2)}`,

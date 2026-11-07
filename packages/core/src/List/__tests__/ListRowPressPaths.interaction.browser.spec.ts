@@ -5,13 +5,12 @@
  * @input The built List "Interactive" and Press Feedback "Rows" stories, the
  *   interaction harness, and the release clock (the default theme's
  *   `--duration-exit`)
- * @output The row press paths beside the main release proofs: a press the
- *   browser takes for a scroll drops the highlight at once (the press
- *   controller's cancel, unchanged by the compositor layer); Reduce
- *   Motion keeps the fade (a fade, not a movement); a mouse press and hover on
- *   a fine pointer leave the press layer out of it; a row held and released
- *   between two divided rows keeps both dividers drawn (`component:List`
- *   FR11), by pixels and by computed border
+ * @output The row press paths beside the main release proofs. A press the
+ *   browser takes for a scroll drops the highlight at once: the press
+ *   controller's cancel, unchanged by the compositor layer. Reduce Motion
+ *   keeps the fade, which is not a movement. A mouse press and hover on a
+ *   fine pointer leave the press layer out of it. A row held and released
+ *   between two divided rows keeps both dividers visible through its tint.
  * @position Interaction evidence for the row press layer
  *   (privateAttributes/press.stylex.ts `rowPressLayerStyles.cell`), beside
  *   ListRowPress.interaction.browser.spec.ts
@@ -88,6 +87,57 @@ async function dividerOf(page: Page, row: Locator) {
     await strip(box.y + box.height - border.width - 4),
   ) as {data: Uint8Array};
   return {border, pixels: pixels.data, inside: inside.data};
+}
+
+/** A row's surface just inside its top and bottom edges, decoded. */
+async function surfacesOf(page: Page, row: Locator) {
+  const box = await row.boundingBox();
+  const width = await row.evaluate(el =>
+    Number.parseFloat(getComputedStyle(el).borderBottomWidth),
+  );
+  if (box == null) {
+    throw new Error('no row');
+  }
+  const strip = async (top: number) =>
+    (
+      PNG.sync.read(
+        await page.screenshot({
+          clip: {x: box.x + 12, y: top, width: box.width - 24, height: 1},
+        }),
+      ) as {data: Uint8Array}
+    ).data;
+  return {
+    top: await strip(box.y + 2),
+    bottom: await strip(box.y + box.height - width - 4),
+  };
+}
+
+/** A decoded strip's per-channel median. */
+function medianOf(data: Uint8Array): [number, number, number] {
+  const channel = (offset: number) => {
+    const values: number[] = [];
+    for (let i = offset; i < data.length; i += 4) {
+      values.push(data[i]);
+    }
+    values.sort((a, b) => a - b);
+    return values[Math.floor(values.length / 2)];
+  };
+  return [channel(0), channel(1), channel(2)];
+}
+
+/** The contrast between two decoded strips' median colors. */
+function contrastOf(a: Uint8Array, b: Uint8Array): number {
+  const luminance = ([r, g, bl]: [number, number, number]) => {
+    const linear = (value: number) => {
+      const c = value / 255;
+      return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(bl);
+  };
+  const [light, dark] = [luminance(medianOf(a)), luminance(medianOf(b))].sort(
+    (x, y) => y - x,
+  );
+  return (light + 0.05) / (dark + 0.05);
 }
 
 /** The largest channel difference between two decoded strips. */
@@ -183,7 +233,7 @@ test('Reduce Motion keeps the release fade: a fade, not a movement', async ({
   await expect.poll(async () => layerOpacity(row)).toBe(0);
 });
 
-test('under a finger, a row held and released between two divided rows keeps both dividers drawn, by pixels and computed border (component:List FR11)', async ({
+test('under a finger, a row held and released between two divided rows keeps both dividers visible through its tint, by computed border and contrast', async ({
   page,
 }) => {
   await openStory(page, storybook(), 'core-list--interactive', {
@@ -211,18 +261,27 @@ test('under a finger, a row held and released between two divided rows keeps bot
       8,
     );
   }
-  /** Each divider as it is at rest, by computed border and by pixels. */
+  /**
+   * Each divider as drawn at rest. It keeps its computed border, and it
+   * stands out from the pressed row's surface beside it as it did at rest.
+   * The row before's divider sits against the pressed row's top, and its own
+   * divider against the pressed row's bottom.
+   */
+  const restSurface = await surfacesOf(page, pressed);
   const expectDividersAsAtRest = async (phase: string) => {
-    for (const [name, target] of [
-      ['above', above],
-      ['pressed', pressed],
+    const surface = await surfacesOf(page, pressed);
+    for (const [name, target, side] of [
+      ['above', above, 'top'],
+      ['pressed', pressed, 'bottom'],
     ] as const) {
       const now = await dividerOf(page, target);
       expect(now.border, `${phase}: ${name}`).toEqual(atRest[name].border);
+      const rest = contrastOf(atRest[name].pixels, restSurface[side]);
+      const pressedContrast = contrastOf(now.pixels, surface[side]);
       expect(
-        largestDifference(now.pixels, atRest[name].pixels),
-        `${phase}: ${name}'s divider pixels`,
-      ).toBeLessThanOrEqual(8);
+        Math.abs(pressedContrast - rest),
+        `${phase}: ${name}'s divider reads ${pressedContrast.toFixed(2)}:1 beside the pressed row, ${rest.toFixed(2)}:1 at rest`,
+      ).toBeLessThanOrEqual(0.05);
     }
   };
   const box = await pressed.boundingBox();

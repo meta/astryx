@@ -453,10 +453,11 @@ describe('the pacing errors', () => {
     });
     expect(error.name).toBe('TouchPageStallError');
     expect(error.message).toMatch(
-      /the page's own touch and pointer listeners took 30 ms to handle an event, so the next reached it 46 ms later/,
+      /the page's own touch and pointer listeners took 30 ms of page wall time to handle an event, so the next reached it 46 ms later/,
     );
     expect(error.message).toMatch(
-      /the page changed the release, not the runner/,
+      /On a starved runner that time includes the page's wait for a CPU: judge a page stall from a run with CI's CPU limits/,
     );
+    expect(error.message).not.toMatch(/not the runner/);
   });
 });

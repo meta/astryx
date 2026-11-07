@@ -210,6 +210,12 @@ function runStablePublish({
       dependencies: {'@astryxdesign/core': '0.7.7'},
       ...(cliPeers ? {peerDependencies: cliPeers} : {}),
     });
+    writeJson(root, 'packages/lab/package.json', {
+      name: '@astryxdesign/lab',
+      version: '0.1.7',
+      private: true,
+      astryx: {canaryOnly: true},
+    });
     // Publishes after core in the loop and peers on it.
     writeJson(root, 'packages/themes/stone/package.json', {
       name: '@astryxdesign/theme-stone',
@@ -991,6 +997,19 @@ describe('stable publish requires the cut commit release-check (spec:AST-030 FR1
     );
     expect(result.published).not.toContain('publish ./packages/cli');
     expect(result.published).toContain('publish ./packages/core');
+  });
+
+  it('never publishes a stable package that names a canary-only one', () => {
+    const result = runStablePublish({
+      cliPeers: {'@astryxdesign/lab': '0.1.7'},
+      verifyExit: 0,
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      '@astryxdesign/cli: peerDependencies names @astryxdesign/lab, which only the canary channel publishes',
+    );
+    expect(result.published).not.toContain('publish ./packages/cli');
   });
 
   it('publishes a package whose @astryxdesign peers name this release', () => {

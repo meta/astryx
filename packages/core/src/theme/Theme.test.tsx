@@ -1,7 +1,9 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
-import {render, cleanup} from '@testing-library/react';
+import {hydrateRoot, type Root} from 'react-dom/client';
+import {renderToString} from 'react-dom/server';
+import {act, render, cleanup} from '@testing-library/react';
 import React from 'react';
 import {Theme} from './Theme';
 import {defineTheme} from './defineTheme';
@@ -333,5 +335,175 @@ describe('Theme', () => {
       .join('\n');
     expect(injected).toContain('@layer reset, astryx-base, astryx-theme;');
     expect(injected).not.toContain(':root {');
+  });
+
+  it('keeps the shared CSS until the last Theme using it unmounts', () => {
+    function App({showInner}: {showInner: boolean}) {
+      return (
+        <Theme theme={testTheme}>
+          <span>outer</span>
+          {showInner && (
+            <Theme theme={testTheme}>
+              <span>inner</span>
+            </Theme>
+          )}
+        </Theme>
+      );
+    }
+    const selector = 'style[data-astryx-theme="test"]';
+    const {rerender, unmount} = render(<App showInner={true} />);
+    expect(document.head.querySelector(selector)).not.toBeNull();
+
+    // The inner Theme injected first (effects commit children before
+    // parents); its unmount must not strip the CSS the outer one still needs.
+    rerender(<App showInner={false} />);
+    expect(document.head.querySelector(selector)).not.toBeNull();
+
+    // Re-adding an instance reuses the shared CSS without regenerating it.
+    rerender(<App showInner={true} />);
+    expect(generateThemeCSSSpy).toHaveBeenCalledTimes(1);
+    expect(document.head.querySelectorAll(selector)).toHaveLength(1);
+
+    // The last instance leaving removes it.
+    unmount();
+    expect(document.head.querySelector(selector)).toBeNull();
+  });
+
+  it('keeps the original CSS while an edited same-name theme mounts inside it and after it unmounts', () => {
+    const edited = defineTheme({
+      name: 'test',
+      tokens: {
+        '--color-accent': ['#0000AA', '#5555FF'],
+      },
+    });
+    function App({showEdited}: {showEdited: boolean}) {
+      return (
+        <Theme theme={testTheme}>
+          {showEdited && (
+            <Theme theme={edited}>
+              <span>preview</span>
+            </Theme>
+          )}
+        </Theme>
+      );
+    }
+    const selector = 'style[data-astryx-theme="test"]';
+    const {rerender, unmount} = render(<App showEdited={false} />);
+    expect(document.head.querySelector(selector)?.textContent).toMatch(
+      /#aa0000/i,
+    );
+
+    // A preview of the edited copy mounts inside the original. The first
+    // Theme that injected the name keeps its CSS in the document.
+    rerender(<App showEdited={true} />);
+    expect(document.head.querySelectorAll(selector)).toHaveLength(1);
+    expect(document.head.querySelector(selector)?.textContent).toMatch(
+      /#aa0000/i,
+    );
+
+    rerender(<App showEdited={false} />);
+    const styles = document.head.querySelectorAll(selector);
+    expect(styles).toHaveLength(1);
+    expect(styles[0].textContent).toMatch(/#aa0000/i);
+
+    unmount();
+    expect(document.head.querySelector(selector)).toBeNull();
+  });
+
+  it('keeps the CSS for one root when a Theme in another root with the same id unmounts', () => {
+    const selector = 'style[data-astryx-theme="test"]';
+    const first = document.createElement('div');
+    const second = document.createElement('div');
+    document.body.append(first, second);
+    // Hydrated roots derive useId from tree position, so both Themes get
+    // the same id.
+    const ui = <Theme theme={testTheme}>content</Theme>;
+    first.innerHTML = renderToString(ui);
+    second.innerHTML = renderToString(ui);
+    let rootA: Root | undefined;
+    let rootB: Root | undefined;
+    act(() => {
+      rootA = hydrateRoot(first, ui);
+    });
+    act(() => {
+      rootB = hydrateRoot(second, ui);
+    });
+    expect(document.head.querySelectorAll(selector)).toHaveLength(1);
+
+    act(() => rootB?.unmount());
+    expect(document.head.querySelector(selector)).not.toBeNull();
+
+    act(() => rootA?.unmount());
+    expect(document.head.querySelector(selector)).toBeNull();
+    first.remove();
+    second.remove();
+  });
+
+  it("paints the owning Theme's new definition when only its theme changes", () => {
+    const edited = defineTheme({
+      name: 'test',
+      tokens: {
+        '--color-accent': ['#0000AA', '#5555FF'],
+      },
+    });
+    function App({ownerTheme}: {ownerTheme: typeof testTheme}) {
+      return (
+        <>
+          <Theme theme={ownerTheme}>
+            <span>owner</span>
+          </Theme>
+          <Theme theme={testTheme}>
+            <span>other</span>
+          </Theme>
+        </>
+      );
+    }
+    const selector = 'style[data-astryx-theme="test"]';
+    const {rerender, unmount} = render(<App ownerTheme={testTheme} />);
+    expect(document.head.querySelector(selector)?.textContent).toMatch(
+      /#aa0000/i,
+    );
+
+    // The first Theme owns the CSS. Its own theme changes; the other keeps
+    // the original. As on main, the owner's new definition paints.
+    rerender(<App ownerTheme={edited} />);
+    const styles = document.head.querySelectorAll(selector);
+    expect(styles).toHaveLength(1);
+    expect(styles[0].textContent).toMatch(/#0000aa/i);
+
+    unmount();
+    expect(document.head.querySelector(selector)).toBeNull();
+  });
+
+  it('replaces the shared CSS when a theme is redefined under the same name', () => {
+    const redefined = defineTheme({
+      name: 'test',
+      tokens: {
+        '--color-accent': ['#0000AA', '#5555FF'],
+      },
+    });
+    function App({theme}: {theme: typeof testTheme}) {
+      return (
+        <Theme theme={theme}>
+          <Theme theme={theme}>
+            <span>inner</span>
+          </Theme>
+        </Theme>
+      );
+    }
+    const selector = 'style[data-astryx-theme="test"]';
+    const {rerender, unmount} = render(<App theme={testTheme} />);
+    expect(document.head.querySelector(selector)?.textContent).toMatch(
+      /#aa0000/i,
+    );
+
+    rerender(<App theme={redefined} />);
+    const styles = document.head.querySelectorAll(selector);
+    expect(styles).toHaveLength(1);
+    expect(styles[0].textContent).toMatch(/#0000aa/i);
+    expect(styles[0].textContent).not.toMatch(/#aa0000/i);
+
+    unmount();
+    expect(document.head.querySelector(selector)).toBeNull();
   });
 });
