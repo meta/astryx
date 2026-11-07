@@ -17,7 +17,7 @@ import {
   getCliInvocation,
   formatCliCommand,
 } from '../../../foundation/env/package-manager.mjs';
-import {jsonOut} from '../../../foundation/response/json.mjs';
+import {humanWarn, jsonOut} from '../../../foundation/response/json.mjs';
 import {resultSet, resultSetOf} from '../../../foundation/debug/index.mjs';
 import {
   emit,
@@ -70,15 +70,13 @@ function printPlaybook(playbook) {
 const SEARCH_ONLY_TYPES = ['doc', 'theme'];
 
 /**
- * In text mode, say once on stderr that a kit has no docs or themes and name
- * the search that finds them. Stdout, the JSON envelope and the exit status
- * stay as they are.
+ * Say once, as human output, that a kit has no docs or themes and name the
+ * search that finds them. `humanWarn` stays silent in JSON mode.
  * @param {string | undefined} type
- * @param {boolean} json
  */
-function pointToSearch(type, json) {
-  if (json || !type || !SEARCH_ONLY_TYPES.includes(type)) return;
-  console.error(
+function pointToSearch(type) {
+  if (!type || !SEARCH_ONLY_TYPES.includes(type)) return;
+  humanWarn(
     `Note: a build kit has no ${type}s. Find them with \`${formatCliCommand(`search <query> --type ${type}`)}\`.`,
   );
 }
@@ -106,7 +104,7 @@ export function registerBuild(program) {
         // one. Counting it as a result keeps "what did this run answer with"
         // true for the no-argument form too.
         const playbook = resultSet({count: 1, resultKind: 'doc'});
-        pointToSearch(options.type, json);
+        pointToSearch(options.type);
         if (json) {
           jsonOut(result);
           return playbook;
@@ -168,7 +166,7 @@ export function registerBuild(program) {
         jsonOut(result);
         return answered;
       }
-      pointToSearch(options.type, json);
+      pointToSearch(options.type);
 
       if (!hasResults && !start) {
         emit(
