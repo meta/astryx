@@ -42,6 +42,7 @@ import {
   useTableGroupedRows,
 } from '@astryxdesign/core/Table';
 import type {TableColumn, TablePlugin} from '@astryxdesign/core/Table';
+import {rtlStyles} from '@astryxdesign/core/utils';
 import {
   PencilIcon,
   DocumentDuplicateIcon,
@@ -700,7 +701,7 @@ const columns: TableColumn<TaskRow>[] = [
           },
           {
             label: 'Move to project',
-            icon: ArrowRightIcon,
+            icon: <Icon icon={ArrowRightIcon} xstyle={rtlStyles.mirror} />,
             onClick: () => {},
           },
           {type: 'divider' as const},
@@ -933,14 +934,19 @@ export default function DataTableTemplate() {
   // Grouping by "None" shows the rows as one plain list, with no headers.
   const grouped = useTableGroupedRows<TaskRow>({
     data: filtered,
-    groupBy: task => (groupBy === 'none' ? '' : String(task[groupBy]) || '—'),
+    // Groups are keyed by their visible label, which also names each
+    // group's toggle button.
+    groupBy: task =>
+      groupBy === 'none'
+        ? ''
+        : getGroupLabel(groupBy, String(task[groupBy]) || '—'),
     collapsedGroups,
     onToggleGroup: toggleGroup,
     getRowKey: task => task.id,
     renderGroupHeader: (key, count) => (
       <HStack gap={2} vAlign="center">
         <Text type="body" weight="bold">
-          {getGroupLabel(groupBy, key)}
+          {key}
         </Text>
         <Badge variant="neutral" label={String(count)} />
       </HStack>
