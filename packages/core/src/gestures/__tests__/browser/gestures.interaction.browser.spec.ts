@@ -3226,7 +3226,10 @@ test("a press in a same-origin iframe's scroll view waits the content-touch dela
     const row = doc.getElementById('row') as HTMLElement;
     const times: {touch?: number; handled?: number; highlight?: number} = {};
     (window as unknown as {__frameTimes: typeof times}).__frameTimes = times;
-    doc.addEventListener(
+    // On the window's capture phase, added before the host's listener there,
+    // so this reads its clocks first. The host reads its own after, never
+    // before, however long a busy machine holds the page between them.
+    view.addEventListener(
       'touchstart',
       event => {
         times.touch = event.timeStamp;
