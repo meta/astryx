@@ -105,7 +105,8 @@ const styles = stylex.create({
     flexGrow: 1,
     flexShrink: 1,
     flexWrap: 'wrap',
-    minWidth: 'min(max-content, 100%)',
+    // `fit-content` is the lane's full row, capped at the toolbar's width.
+    minWidth: stylex.firstThatWorks('fit-content', '-webkit-fit-content'),
   },
   endSlot: {
     display: 'flex',
