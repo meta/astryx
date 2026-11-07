@@ -3086,3 +3086,181 @@ describe('a refresh from a library root over icons added one per file', () => {
     expect(passed.warnings).toBe(0);
   });
 });
+
+describe('a refresh from a library root keeps what it does not rewrite', () => {
+  const lib = () => path.join(pkg, 'node_modules', '@acme', 'glyph-library');
+  /** @param {Record<string, string>} more */
+  const addExports = more => {
+    const file = path.join(lib(), 'package.json');
+    const pkgJson = JSON.parse(fs.readFileSync(file, 'utf-8'));
+    fs.writeFileSync(
+      file,
+      JSON.stringify({...pkgJson, exports: {...pkgJson.exports, ...more}}),
+    );
+  };
+  const rootArgs = [
+    'experimental',
+    'icon',
+    'new-set',
+    'outline',
+    '--from',
+    '@acme/glyph-library',
+  ];
+  const generatedFile = () =>
+    path.join(pkg, 'icon-sets', 'outline', 'outline.generated.js');
+  /** The strict check's findings, by code and message. */
+  const strictCheck = async () => {
+    const res = await runCli(
+      ['integration', 'check', '--strict', '--json'],
+      pkg,
+    );
+    const {failures} = JSON.parse(res.stdout).data;
+    return failures.map(
+      (/** @type {{code: string, message: string}} */ each) =>
+        `${each.code}: ${each.message}`,
+    );
+  };
+
+  beforeEach(() => {
+    fs.writeFileSync(
+      path.join(pkg, 'index.js'),
+      "export * from './icon-sets/outline/outline.generated.js';\n",
+    );
+  });
+
+  it('keeps a look variant on its subpath when the subpath export has the same name as a root export but is another file', async () => {
+    // The solid subpath exports the root's names, with other artwork.
+    addExports({'./solid': './solid/index.js'});
+    fs.mkdirSync(path.join(lib(), 'solid'), {recursive: true});
+    fs.writeFileSync(
+      path.join(lib(), 'solid', 'index.js'),
+      "export {Bin} from './bin.js';\nexport {Cross} from './cross.js';\n",
+    );
+    fs.writeFileSync(
+      path.join(lib(), 'solid', 'bin.js'),
+      'export function Bin(props) { return null; }\n',
+    );
+    fs.writeFileSync(
+      path.join(lib(), 'solid', 'cross.js'),
+      'export const Cross = props => null;\n',
+    );
+    expect(
+      (await json([...rootArgs, '--variants', 'outline,solid'])).code,
+    ).toBe(0);
+    const added = await json([
+      'experimental',
+      'icon',
+      'add',
+      '--variant',
+      'solid',
+      '--from',
+      '@acme/glyph-library/solid',
+      '--all',
+    ]);
+    expect(added.code, JSON.stringify(added.body)).toBe(0);
+    expect(added.body.data).toMatchObject({added: 2});
+    fs.writeFileSync(path.join(pkg, 'NOTICE'), 'MIT License.\n');
+    const before = fs.readFileSync(generatedFile(), 'utf-8');
+    const solidLines = before
+      .split('\n')
+      .filter(line => line.includes("'@acme/glyph-library/solid'"));
+    expect(solidLines).toHaveLength(2);
+    const checkedBefore = await strictCheck();
+
+    const refreshed = await json(rootArgs);
+    expect(refreshed.code, JSON.stringify(refreshed.body)).toBe(0);
+    expect(refreshed.body.data.moved).toBeUndefined();
+    const after = fs.readFileSync(generatedFile(), 'utf-8');
+    for (const line of solidLines) expect(after).toContain(line);
+    expect(after).not.toMatch(/SolidIcon\} from '@acme\/glyph-library'/u);
+    const variants = dataOf('outline').icons.map(
+      (/** @type {{id: string, variants?: unknown[]}} */ each) => [
+        each.id,
+        each.variants,
+      ],
+    );
+    expect(variants).toEqual(
+      expect.arrayContaining([
+        ['bin', [{variant: 'solid', export: 'BinSolidIcon'}]],
+        ['cross', [{variant: 'solid', export: 'CrossSolidIcon'}]],
+      ]),
+    );
+    const checkedAfter = await strictCheck();
+    expect(checkedAfter).toEqual(checkedBefore);
+    expect(checkedAfter.join('\n')).not.toMatch(
+      /icon_export_missing|icon_variant/u,
+    );
+  });
+
+  it('keeps the variant export of an icon it does not supply when that variant reads a file the root exports', async () => {
+    // A subpath to the same file as the root's Cross.
+    addExports({'./cross': './icons/cross.js'});
+    expect(
+      (await json([...rootArgs, '--variants', 'outline,solid'])).code,
+    ).toBe(0);
+    fs.mkdirSync(path.join(pkg, 'art'), {recursive: true});
+    fs.writeFileSync(
+      path.join(pkg, 'art', 'spark.js'),
+      'export const Spark = props => null;\n',
+    );
+    for (const add of [
+      ['Spark', '--from', './art/spark.js', '--definition', 'sparkles'],
+      [
+        'Cross',
+        '--from',
+        '@acme/glyph-library/cross',
+        '--id',
+        'spark',
+        '--variant',
+        'solid',
+      ],
+    ]) {
+      const added = await json(['experimental', 'icon', 'add', ...add]);
+      expect(added.code, JSON.stringify(added.body)).toBe(0);
+    }
+    fs.writeFileSync(path.join(pkg, 'NOTICE'), 'MIT License.\n');
+    const before = fs.readFileSync(generatedFile(), 'utf-8');
+    const variantLine = before
+      .split('\n')
+      .find(line => line.includes("'@acme/glyph-library/cross'"));
+    expect(variantLine).toBeTruthy();
+    const checkedBefore = await strictCheck();
+
+    const refreshed = await json(rootArgs);
+    expect(refreshed.code, JSON.stringify(refreshed.body)).toBe(0);
+    const spark = dataOf('outline').icons.find(
+      (/** @type {{id: string}} */ each) => each.id === 'spark',
+    );
+    expect(spark.variants).toEqual([
+      {variant: 'solid', export: expect.any(String)},
+    ]);
+    const after = fs.readFileSync(generatedFile(), 'utf-8');
+    // The data file and the module agree: the variant keeps its export.
+    expect(after).toContain(/** @type {string} */ (variantLine));
+    expect(after).toContain(spark.variants[0].export);
+    const checkedAfter = await strictCheck();
+    expect(checkedAfter).toEqual(checkedBefore);
+    expect(checkedAfter.join('\n')).not.toContain('icon_export_missing');
+  });
+
+  it('a LICENSE directory at the package root is no notice: the receipt asks for one and the check warns', async () => {
+    fs.mkdirSync(path.join(pkg, 'LICENSE'));
+    fs.writeFileSync(path.join(pkg, 'LICENSE', 'MIT.txt'), 'MIT License.\n');
+    const created = await json(rootArgs);
+    expect(created.code, JSON.stringify(created.body)).toBe(0);
+    expect(created.body.data.licenseNoticeMissing).toEqual({
+      library: '@acme/glyph-library@2.0.0',
+      path: 'icon-sets/outline/NOTICE',
+    });
+    expect((await strictCheck()).join('\n')).toContain(
+      'icon_license_notice_missing',
+    );
+    // A file at the root satisfies both.
+    fs.writeFileSync(path.join(pkg, 'LICENSE.md'), 'MIT License.\n');
+    const again = await json(rootArgs);
+    expect(again.body.data.licenseNoticeMissing).toBeUndefined();
+    expect((await strictCheck()).join('\n')).not.toContain(
+      'icon_license_notice_missing',
+    );
+  });
+});

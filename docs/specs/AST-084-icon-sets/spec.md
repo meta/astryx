@@ -331,11 +331,13 @@ icon, and the CLI verifies it, writes the files, and checks the set.
     unchanged, its `map` entries, and every other field, and an `id` the
     current rule spells differently is reported under `renamed`
     (`add --variant <name> --all` meets an icon the same way). A refresh
-    from a package root also refreshes an icon or variant the generated
-    module reads from a file of that package when the root exports the same
-    icon (the same export name, or the same file and binding); it moves to
-    the root import, keeps its fields, and the icon is reported under
-    `moved`. A refresh
+    from a package root also refreshes an icon the generated module reads
+    from a file of that package, and each such variant of an icon it
+    refreshes, when the root exports the same icon: an export that resolves
+    to the same file and binding, or an export of the same name when the
+    file export does not resolve. It moves to the root import, keeps its
+    fields, and the icon is reported under `moved`; every export the
+    refresh does not write again stays in the generated module. A refresh
     copies the library's license notices the set lacks, and the run that
     first records `source` takes the library's license for the descriptor
     when its `license` is still the one `new-set` wrote (the package's own,

@@ -1901,8 +1901,9 @@ export function iconModulePackage(specifier) {
 /**
  * The set's exports that read one file of a package, where a refresh from
  * that package's root can read them from the root instead. An export moves
- * when the root exports the same icon: an export of that name, or an export
- * that resolves to the same file and binding. Each maps to the root's
+ * when the root exports the same icon: an export that resolves to the same
+ * file and binding. When the subpath export cannot be resolved, a root
+ * export of the same name counts. Each maps to the root's
  * export and the module it reads now. Empty unless `root` is a package
  * root, not a subpath or a ./ path.
  * @param {Map<string, {module: string, source: string}>} origins the
@@ -1942,9 +1943,13 @@ export function packageRootMoves(origins, root, rootExports, where) {
   for (const [name, origin] of subpaths) {
     const file = resolveIconModule(origin.module, where.packageDir, self);
     const resolved = file ? moduleExportOrigin(file, origin.source) : null;
-    const source =
-      (resolved ? byOrigin.get(keyOf(resolved)) : undefined) ??
-      (names.has(origin.source) ? origin.source : undefined);
+    // A name match counts only when the subpath export cannot be resolved.
+    // A resolved export is the same icon only when it reads the same file.
+    const source = resolved
+      ? byOrigin.get(keyOf(resolved))
+      : names.has(origin.source)
+        ? origin.source
+        : undefined;
     if (source) moves.set(name, {source, from: origin.module});
   }
   return moves;

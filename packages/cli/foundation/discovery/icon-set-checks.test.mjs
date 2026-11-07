@@ -671,6 +671,23 @@ describe('iconSetIssues', () => {
       }
       expect(recheck()).toHaveLength(1);
     });
+
+    it('a directory named LICENSE counts in neither the set directory nor the package root', () => {
+      expect(withUpstream('1.2.0', false)).toHaveLength(1);
+      const recheck = () =>
+        iconSetIssues(
+          dir,
+          {name: '@acme/glyphs', iconSets: path.join(dir, 'icon-sets')},
+          new Map(),
+        ).filter(issue => !COVERAGE.has(issue.code));
+      for (const where of [dir, path.join(dir, 'icon-sets', 'glyphs')]) {
+        fs.mkdirSync(path.join(where, 'LICENSE'));
+        fs.mkdirSync(path.join(where, 'NOTICE.d'));
+      }
+      expect(recheck()).toEqual([
+        expect.objectContaining({code: 'icon_license_notice_missing'}),
+      ]);
+    });
   });
 });
 

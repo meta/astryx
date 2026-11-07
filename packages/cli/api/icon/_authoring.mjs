@@ -1236,24 +1236,31 @@ async function refreshIconSet(
       files.push(projectPath(path.relative(packageDir, target)));
     }
     if (!dryRun) {
+      const rewritten = found
+        .map(icon => ({
+          name: publicName.get(icon.export) ?? icon.name,
+          from: source.module,
+          source: icon.export,
+          adapt: icon.adapt,
+        }))
+        .filter(icon => publicName.has(icon.source))
+        .concat(movedVariants);
+      const rewrittenNames = new Set(rewritten.map(icon => icon.name));
       const written = writeGeneratedIcons(
         packageDir,
         generated,
         next,
-        found
-          .map(icon => ({
-            name: publicName.get(icon.export) ?? icon.name,
-            from: source.module,
-            source: icon.export,
-            adapt: icon.adapt,
-          }))
-          .filter(icon => publicName.has(icon.source))
-          .concat(movedVariants),
+        rewritten,
         // The icons the library no longer exports leave the module too; a
         // renamed icon keeps its export. An icon moved to the new default
         // look keeps its export, which now names that look. An export moved
-        // to the root is written again with the root import.
-        [...gone.map(icon => icon.export), ...repicked, ...rootMoves.keys()],
+        // to the root is written again with the root import. Every other
+        // export stays as it is, because the data file still lists it.
+        [
+          ...gone.map(icon => icon.export),
+          ...repicked,
+          ...[...rootMoves.keys()].filter(name => rewrittenNames.has(name)),
+        ],
       );
       files.push(...written.files);
       try {
