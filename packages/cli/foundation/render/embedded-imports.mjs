@@ -26,7 +26,7 @@ import {isAssetPath} from './assets.mjs';
  * @param {string} css
  * @returns {string[]}
  */
-function cssImports(css) {
+export function cssImports(css) {
   /** @type {string[]} */
   const out = [];
   try {

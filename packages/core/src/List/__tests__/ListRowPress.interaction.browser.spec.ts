@@ -258,7 +258,9 @@ test('a held row paints the pressed token and its release follows the exit easin
   // The page holds the release itself as soon as it runs. A hold the test
   // sends after the lift arrives later on a busy machine, and the release
   // can end first.
-  const hold = await armHold(page, row);
+  const hold = await armHold(page, row, {
+    judges: {target: row, property: 'opacity', pseudoElement: '::before'},
+  });
   await driver.play(tap(center, {holdMs: HOLD_MS}));
   expect(await pressState(row)).toBe('fading');
   await freezeTimers(page);
