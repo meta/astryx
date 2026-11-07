@@ -25,6 +25,7 @@ import {PNG} from 'pngjs';
 import {
   CONTROL_RGB,
   animationStoryboard,
+  armHold,
   blockMainThread,
   BusyWindowTooLateError,
   busyWindowProof,
@@ -37,7 +38,6 @@ import {
   frames,
   freezePageWhen,
   freezeTimers,
-  holdAnimations,
   installLongTaskLog,
   installPageFreeze,
   installTimerGate,
@@ -562,6 +562,11 @@ test('past the minimum the zoom gives way, then springs back on springs.settle',
   const centre = {x: 201, y: before.stage.y + before.stage.height / 2};
   let shown = 1;
   let pinchScale = 1;
+  // Armed before the lift starts the settle. A hold sent after it comes a
+  // round trip late, and a loaded runner can find the settle over.
+  const hold = await armHold(page, photo, {
+    judges: {target: photo, property: 'scale'},
+  });
   await driver.play(
     pinch({
       center: centre,
@@ -585,10 +590,7 @@ test('past the minimum the zoom gives way, then springs back on springs.settle',
   // (past its 8 px hysteresis); UIKit's law maps it to the shown zoom.
   const recognizerScale = pinchScale / (300 - 8);
   expect(shown).toBeCloseTo(1 / (2 - recognizerScale), 2);
-  const [settle] = await waitForAnimation(photo);
-  const held = await holdAnimations(page, photo, {
-    judges: {target: photo, property: 'scale'},
-  });
+  const held = await hold.held();
   const duration = Math.max(...held.map(a => a.curveEndMs));
   const samples = curveOf(
     await sampleCurve(photo, timeline(duration)),
@@ -603,7 +605,7 @@ test('past the minimum the zoom gives way, then springs back on springs.settle',
     'curves/lightbox-zoom-past-minimum',
     {
       [`${testInfo.project.name}.json`]: JSON.stringify(
-        {settle, held, samples, result},
+        {held, samples, result},
         null,
         1,
       ),
@@ -684,11 +686,12 @@ test('a double tap zooms until the photo fills the screen, about the tapped poin
   const before = await state();
   const at = {x: 120, y: before.stage.y + before.stage.height / 2};
   const tapped = photoPointAt(before, at);
-  await driver.play(doubleTap(at));
-  const [zoom] = await waitForAnimation(photo);
-  const held = await holdAnimations(page, photo, {
+  // Armed before the taps, so the zoom is held as it starts.
+  const hold = await armHold(page, photo, {
     judges: {target: photo, property: 'scale'},
   });
+  await driver.play(doubleTap(at));
+  const held = await hold.held();
   const duration = Math.max(...held.map(a => a.curveEndMs));
   const samples = curveOf(
     await sampleCurve(photo, timeline(duration)),
@@ -704,7 +707,7 @@ test('a double tap zooms until the photo fills the screen, about the tapped poin
     'curves/lightbox-double-tap-zoom',
     {
       [`${testInfo.project.name}.json`]: JSON.stringify(
-        {zoom, held, samples, result},
+        {held, samples, result},
         null,
         1,
       ),
@@ -1396,6 +1399,11 @@ test(
       }),
       {name: 'lightbox-pinch-zoom', clip, measure, columns: 5, cellScale: 0.4},
     );
+    // Armed before the squeeze, so the return is held as it starts.
+    const hold = await armHold(page, photo, {
+      judges: {target: photo, property: 'scale'},
+      newOnly: true,
+    });
     const squeeze = await touchStoryboard(
       page,
       driver,
@@ -1415,13 +1423,13 @@ test(
         cellScale: 0.4,
       },
     );
-    await waitForAnimation(photo);
+    const held = await hold.held();
     await freezeTimers(page);
     const {storyboard: settle} = await animationStoryboard(page, {
       name: 'lightbox-return-from-past-minimum',
       clip,
       scope: photo,
-      judges: {target: photo, property: 'scale'},
+      held,
       measure,
       columns: 6,
       cellScale: 0.35,
@@ -1445,14 +1453,18 @@ test(
       const now = await state();
       return {scale: +now.scale.toFixed(3), x: +now.x.toFixed(1)};
     };
+    // Armed before the taps, so the zoom is held as it starts.
+    const hold = await armHold(page, photo, {
+      judges: {target: photo, property: 'scale'},
+    });
     await driver.play(doubleTap({x: 120, y: s.stage.y + s.stage.height / 2}));
-    await waitForAnimation(photo);
+    const held = await hold.held();
     await freezeTimers(page);
     const {storyboard: zoomIn} = await animationStoryboard(page, {
       name: 'lightbox-double-tap-zoom-in',
       clip,
       scope: photo,
-      judges: {target: photo, property: 'scale'},
+      held,
       measure,
       columns: 6,
       cellScale: 0.35,
