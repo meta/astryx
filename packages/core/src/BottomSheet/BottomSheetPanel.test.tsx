@@ -10,6 +10,8 @@
 
 import * as stylex from '@stylexjs/stylex';
 import {act, fireEvent, render, screen} from '@testing-library/react';
+import {Suspense, use, useLayoutEffect} from 'react';
+import {renderToString} from 'react-dom/server';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
   BottomSheetPanel,
@@ -80,6 +82,98 @@ function renderPanel(
       Panel content
     </BottomSheetPanel>,
   );
+}
+
+function renderNamedPanel(name: string) {
+  return render(
+    <BottomSheetPanel
+      label={name}
+      state={{kind: 'open', entering: false}}
+      height="hug"
+      style={panelTransitionStyle}
+      onDismiss={() => {}}
+      onScrimOpacity={() => {}}>
+      {name} content
+    </BottomSheetPanel>,
+  );
+}
+
+function getNamedPanel(name: string): HTMLElement {
+  const panel = screen
+    .getByText(`${name} content`)
+    .closest<HTMLElement>('.astryx-bottom-sheet');
+  if (panel == null) {
+    throw new Error(`${name} surface not found`);
+  }
+  return panel;
+}
+
+// Counts reads of `window.innerHeight` until `restore`. A read after a
+// commit's DOM writes forces a style recalculation and a layout.
+function countViewportHeightReads() {
+  const descriptor = Object.getOwnPropertyDescriptor(window, 'innerHeight');
+  let value = window.innerHeight;
+  const reads = {
+    count: 0,
+    restore: () => {
+      if (descriptor != null) {
+        Object.defineProperty(window, 'innerHeight', descriptor);
+      }
+      window.innerHeight = value;
+    },
+  };
+  Object.defineProperty(window, 'innerHeight', {
+    configurable: true,
+    get: () => {
+      reads.count += 1;
+      return value;
+    },
+    set: next => {
+      value = next;
+    },
+  });
+  return reads;
+}
+
+// Tracks the `resize` listeners on `window` until `restore`. `attached` is
+// the number added and not yet removed.
+function trackResizeListeners() {
+  const add = vi.spyOn(window, 'addEventListener');
+  const remove = vi.spyOn(window, 'removeEventListener');
+  return {
+    attached: () => {
+      const events = [
+        ...add.mock.calls.map((call, index) => ({
+          type: call[0],
+          listener: call[1],
+          order: add.mock.invocationCallOrder[index] ?? 0,
+          isAdd: true,
+        })),
+        ...remove.mock.calls.map((call, index) => ({
+          type: call[0],
+          listener: call[1],
+          order: remove.mock.invocationCallOrder[index] ?? 0,
+          isAdd: false,
+        })),
+      ].sort((a, b) => a.order - b.order);
+      const live = new Set<unknown>();
+      for (const event of events) {
+        if (event.type !== 'resize') {
+          continue;
+        }
+        if (event.isAdd) {
+          live.add(event.listener);
+        } else {
+          live.delete(event.listener);
+        }
+      }
+      return live.size;
+    },
+    restore: () => {
+      add.mockRestore();
+      remove.mockRestore();
+    },
+  };
 }
 
 function getPanel(): HTMLElement {
@@ -234,6 +328,187 @@ describe('BottomSheetPanel', () => {
       );
     } finally {
       window.innerHeight = viewportHeight;
+    }
+  });
+
+  it('reads the viewport height from its resize listener, not from layout, when it renders again', () => {
+    stubTouchPointer();
+    const {rerender} = renderPanel({kind: 'open', entering: false});
+    const reads = countViewportHeightReads();
+    try {
+      rerender(
+        <BottomSheetPanel
+          label="Sheet details"
+          state={{kind: 'open', entering: false}}
+          height="hug"
+          style={panelTransitionStyle}
+          onDismiss={() => {}}
+          onScrimOpacity={() => {}}>
+          Panel content, changed
+        </BottomSheetPanel>,
+      );
+      expect(screen.getByText('Panel content, changed')).toBeTruthy();
+      expect(reads.count).toBe(0);
+    } finally {
+      reads.restore();
+    }
+  });
+
+  it('shares one viewport height among open sheets, and forgets it when the last one closes', () => {
+    const viewportHeight = window.innerHeight;
+    const listeners = trackResizeListeners();
+    stubTouchPointer();
+    try {
+      const first = renderNamedPanel('First sheet');
+      const second = renderNamedPanel('Second sheet');
+      act(() => {
+        window.innerHeight = 1000;
+        window.dispatchEvent(new Event('resize'));
+      });
+      expect(
+        getNamedPanel('First sheet').style.getPropertyValue('--_sheet-reserve'),
+      ).toBe('400px');
+      expect(
+        getNamedPanel('Second sheet').style.getPropertyValue(
+          '--_sheet-reserve',
+        ),
+      ).toBe('400px');
+
+      first.unmount();
+      act(() => {
+        window.innerHeight = 900;
+        window.dispatchEvent(new Event('resize'));
+      });
+      expect(
+        getNamedPanel('Second sheet').style.getPropertyValue(
+          '--_sheet-reserve',
+        ),
+      ).toBe('360px');
+
+      second.unmount();
+      expect(listeners.attached()).toBe(0);
+      // With no sheet open, a resize reads nothing.
+      const reads = countViewportHeightReads();
+      try {
+        act(() => {
+          window.innerHeight = 700;
+          window.dispatchEvent(new Event('resize'));
+        });
+        expect(reads.count).toBe(0);
+      } finally {
+        reads.restore();
+      }
+      // Nothing kept the height meanwhile, so the next sheet reads the
+      // viewport in its first commit.
+      let firstReserve = '';
+      function FirstCommit() {
+        useLayoutEffect(() => {
+          firstReserve =
+            getNamedPanel('Third sheet').style.getPropertyValue(
+              '--_sheet-reserve',
+            );
+        }, []);
+        return null;
+      }
+      render(
+        <>
+          <BottomSheetPanel
+            label="Third sheet"
+            state={{kind: 'open', entering: false}}
+            height="hug"
+            style={panelTransitionStyle}
+            onDismiss={() => {}}
+            onScrimOpacity={() => {}}>
+            Third sheet content
+          </BottomSheetPanel>
+          <FirstCommit />
+        </>,
+      );
+      expect(firstReserve).toBe('280px');
+    } finally {
+      listeners.restore();
+      window.innerHeight = viewportHeight;
+    }
+  });
+
+  it('reads the viewport again after a render that never commits', async () => {
+    const viewportHeight = window.innerHeight;
+    stubTouchPointer();
+    const never = new Promise<never>(() => {});
+    function Suspend(): null {
+      use(never);
+      return null;
+    }
+    try {
+      window.innerHeight = 900;
+      const suspended = await act(async () =>
+        render(
+          <Suspense fallback={null}>
+            <BottomSheetPanel
+              label="Hidden sheet"
+              state={{kind: 'open', entering: false}}
+              height="hug"
+              style={panelTransitionStyle}
+              onDismiss={() => {}}
+              onScrimOpacity={() => {}}>
+              Hidden sheet content
+            </BottomSheetPanel>
+            <Suspend />
+          </Suspense>,
+        ),
+      );
+      expect(screen.queryByText('Hidden sheet content')).toBeNull();
+      suspended.unmount();
+      // No listener watched the viewport since that render.
+      window.innerHeight = 650;
+      let firstReserve = '';
+      function FirstCommit() {
+        useLayoutEffect(() => {
+          firstReserve =
+            getNamedPanel('Next sheet').style.getPropertyValue(
+              '--_sheet-reserve',
+            );
+        }, []);
+        return null;
+      }
+      render(
+        <>
+          <BottomSheetPanel
+            label="Next sheet"
+            state={{kind: 'open', entering: false}}
+            height="hug"
+            style={panelTransitionStyle}
+            onDismiss={() => {}}
+            onScrimOpacity={() => {}}>
+            Next sheet content
+          </BottomSheetPanel>
+          <FirstCommit />
+        </>,
+      );
+      expect(firstReserve).toBe('260px');
+    } finally {
+      window.innerHeight = viewportHeight;
+    }
+  });
+
+  it('renders on the server without reading the viewport', () => {
+    stubTouchPointer();
+    const reads = countViewportHeightReads();
+    try {
+      const html = renderToString(
+        <BottomSheetPanel
+          label="Sheet details"
+          state={{kind: 'open', entering: false}}
+          height="hug"
+          onDismiss={() => {}}
+          onScrimOpacity={() => {}}>
+          Panel content
+        </BottomSheetPanel>,
+      );
+      expect(html).toContain('Panel content');
+      expect(reads.count).toBe(0);
+    } finally {
+      reads.restore();
     }
   });
 

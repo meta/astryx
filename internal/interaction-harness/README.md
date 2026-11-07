@@ -46,6 +46,11 @@ newly animated layer). The script keeps Mesa's shader cache on the host
 (`~/.cache/astryx-webkit-shaders/<image>`, or `ASTRYX_WEBKIT_SHADER_CACHE`), so
 only the first run on a machine pays for them.
 
+With `CI` set, the script gives the container the four CPUs of CI's WebKit
+runners as a quota, and llvmpipe as many threads. `ASTRYX_WEBKIT_CPUS` sets
+another count. On Linux the container runs only on the CPUs the script may use,
+so `taskset` limits it too.
+
 Evidence (storyboards, curve traces) is written to
 `test-results/interaction-evidence/` (override with
 `ASTRYX_INTERACTION_EVIDENCE`) and attached to the test report. It is never
@@ -198,7 +203,10 @@ only before its curve's held tail (keyframes that end in a run of identical
 values, read as `waitForRest` reads them): when the only animation running
 there started while the page waited, or the wait times out with only such
 animations, the page looked too late, and the wait rejects with
-`BusyWindowTooLateError`. The `verdict` judges the
+`BusyWindowTooLateError`. With `pseudoElement` (`'::before'` or
+`'::after'`), only that pseudo-element's animations on `during` itself count,
+as `sampleCurve` reads them: a child's animation, such as a switch thumb's
+press, does not start the block. The `verdict` judges the
 frames the screencast delivered, whatever its rate (a loaded machine's can
 deliver one frame in five or six), and tolerates nothing a frozen animation
 does: at least one frame in the judged part, no stall longer than three of the
@@ -414,6 +422,8 @@ instead, and the proof acts at an instant of the scene's own time.
   predicate holds, and rejects after its timeout.
 - `advanceFrozenPage(page, ms)` moves the page's clock and every held
   animation on together by `ms`; timers and frame callbacks stay held.
+- `holdInputUntil(page, {afterResumeMs})` makes the page handle its next lift
+  late, after the thaw, while the scene runs (below).
 
 While frozen, every animation in the document is paused where it stands (Web
 Animations, CSS animations and transitions), and so is any the page starts
@@ -450,6 +460,31 @@ animations. Chromium's `Emulation.setVirtualTimePolicy` stops
 the headless shell (300 ms into a pause the timeline had advanced 300 ms and a
 compositor animation 45 px), and its `advance` policy cannot return to real
 time: it fast-forwards whenever the page is idle.
+
+### Input the page handles late
+
+A frozen page handles input at once. A proof that needs a late handling, with
+the compositor still moving, cannot freeze through the input. A held run resumes
+only at the first frame after the thaw, and a block before that frame holds the
+screen too. `holdInputUntil(page, {afterResumeMs})`, called before the thaw,
+holds the next lift instead (`pointerup` or `touchend`; `on` names others). The
+install's window capture listener runs first in the input's task and keeps the
+main thread busy until `afterResumeMs` after that first frame. Send the input
+once `resumed()` resolves. `landed()` then gives when the input arrived, when it
+was due, and when the page let it through. The event keeps its own `timeStamp`,
+earlier than its handling, as on a busy page. An input that arrives more than a
+frame late, before that first frame, or while the page is frozen again, rejects
+`landed()` with `LiftPlacementError` and the numbers. The page cannot hold back
+an input it has not received, and a hold before the frame would stop the screen.
+Choose `afterResumeMs` above the runner's time from `resumed()` to the input's
+arrival. Under load, that round trip is what makes a hold late. The page lets
+the input through at its time, or at its arrival if that came later within the
+frame. On a starved runner it can be later still, by as long as its main thread
+did not run: `landed()` gives that as `stalledMs`.
+
+`navigator.scheduling.isInputPending()` cannot gate a lift. In Playwright's
+Chromium 149 it reports a queued mouse press or key at once, but never a touch
+sent with `Input.dispatchTouchEvent`. WebKit has no `isInputPending`.
 
 ## Engine limits (measured with Playwright 1.61)
 
