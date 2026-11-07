@@ -69,3 +69,32 @@ test('an unbounded column handle announces a range that holds its value', async 
     expect(axProperty(node, 'valuetext')).toBe(`${now} pixels`);
   }
 });
+
+test("a handle announces its column's rendered width before any resize", async ({
+  page,
+}) => {
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-tablecolumnresize--default&viewMode=story`,
+    {waitUntil: 'load'},
+  );
+  await expect(page.getByRole('separator').first()).toBeAttached();
+  const widths = await page
+    .getByRole('separator')
+    .evaluateAll(handles =>
+      handles.map(handle =>
+        Math.round(handle.closest('th')?.getBoundingClientRect().width ?? 0),
+      ),
+    );
+
+  const cdp = await page.context().newCDPSession(page);
+  await expect
+    .poll(async () => {
+      const {nodes} = (await cdp.send('Accessibility.getFullAXTree')) as {
+        nodes: AXNode[];
+      };
+      return nodes
+        .filter(node => node.role?.value === 'separator')
+        .map(node => Number(node.value?.value));
+    })
+    .toEqual(widths);
+});

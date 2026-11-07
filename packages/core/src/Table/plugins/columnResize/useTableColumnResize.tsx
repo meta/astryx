@@ -18,6 +18,7 @@ import {
   useMemo,
   useCallback,
   useEffect,
+  useState,
   useSyncExternalStore,
   type ReactNode,
 } from 'react';
@@ -419,6 +420,24 @@ function ResizeHandle({
   tableRef,
 }: ResizeHandleProps) {
   const t = useComponentTranslator();
+  // The column's rendered width, which the handle announces. The shared
+  // resize observer reports it after layout, so render never reads layout.
+  const handleRef = useRef<HTMLDivElement>(null);
+  const [renderedWidth, setRenderedWidth] = useState<number | null>(null);
+  useEffect(() => {
+    const th = handleRef.current?.closest('th');
+    if (th == null) {
+      return;
+    }
+    return observeResize(th, entry => {
+      const width =
+        entry.borderBoxSize?.[0]?.inlineSize ??
+        th.getBoundingClientRect().width;
+      if (width > 0) {
+        setRenderedWidth(Math.round(width));
+      }
+    });
+  }, []);
   const setTableDragging = useCallback(
     (dragging: boolean) => {
       const table = tableRef.current;
@@ -784,9 +803,10 @@ function ResizeHandle({
     label: getNodeText(columnHeader) || columnKey,
   });
 
-  // A focusable role="separator" requires a numeric aria-valuenow, so fall
-  // back to the column's minWidth before the width has been measured.
-  const valueNow = currentWidth ?? minWidth;
+  // A focusable role="separator" requires a numeric aria-valuenow, so it
+  // falls back to the width the table asked for, then to the column's
+  // minWidth, until the column has been measured.
+  const valueNow = renderedWidth ?? currentWidth ?? minWidth;
   // Without a maximum, ARIA's default of 100 applies, below most column
   // widths. So an unbounded column announces a stand-in it never goes below,
   // and says its width in words, since the range is not a real limit.
@@ -803,6 +823,7 @@ function ResizeHandle({
 
   return (
     <div
+      ref={handleRef}
       role="separator"
       aria-orientation="vertical"
       aria-valuenow={valueNow}
