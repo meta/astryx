@@ -284,6 +284,13 @@ export function ChatVirtualizer<T>(
   // The messages the last data change appended at the tail that have not
   // mounted yet: the only rows that mount as news.
   const newsKeysRef = React.useRef(new Set<string>());
+  // Messages that arrived at the tail while the reader was away from it. They
+  // mount on arrival, after a gap spacer below the window, so the log
+  // delivers them; they stay mounted until the window reaches them.
+  const arrivedKeysRef = React.useRef(new Set<string>());
+  // The first of those rows this render mounts, for the spacers.
+  const tailKeyRef = React.useRef<string | null>(null);
+  const gapTailRef = React.useRef<HTMLDivElement | null>(null);
   // This render's rows, and whether they mount history, for its commit.
   const pendingRenderedRef = React.useRef<ReadonlySet<string>>(new Set());
   const pendingBusyRef = React.useRef(false);
@@ -559,8 +566,15 @@ export function ChatVirtualizer<T>(
       empty || pinnedKey === null ? undefined : g.index.get(pinnedKey);
     const pinnedAbove = pinned !== undefined && pinned < w.start;
     const pinnedBelow = pinned !== undefined && pinned > w.end;
+    // The arrived tail run: from its first row to the last row.
+    const tailKey = tailKeyRef.current;
+    const tailIndex =
+      empty || tailKey === null ? undefined : g.index.get(tailKey);
+    const tail =
+      tailIndex !== undefined && tailIndex > w.end ? tailIndex : undefined;
     const first = pinnedAbove ? pinned : w.start;
-    const last = pinnedBelow ? pinned : w.end;
+    const last =
+      tail !== undefined ? g.keys.length - 1 : pinnedBelow ? pinned : w.end;
     // gestureAdj shifts the whole rendered block without touching scrollTop
     // (0 outside a touch gesture). Clamped at the very top of the list —
     // there is no spacer left to absorb into there.
@@ -584,7 +598,18 @@ export function ChatVirtualizer<T>(
     write(
       gapBottomRef,
       'height',
-      pinnedBelow ? Math.max(0, g.offsets[pinned] - offsetAfter(w.end)) : 0,
+      pinnedBelow
+        ? Math.max(0, g.offsets[pinned] - offsetAfter(w.end))
+        : tail !== undefined
+          ? Math.max(0, g.offsets[tail] - offsetAfter(w.end))
+          : 0,
+    );
+    write(
+      gapTailRef,
+      'height',
+      pinnedBelow && tail !== undefined
+        ? Math.max(0, g.offsets[tail] - offsetAfter(pinned))
+        : 0,
     );
     write(spacerBottomRef, 'height', Math.max(0, g.total - belowEnd));
     // The extent these spacers describe: the model total, plus whatever the
@@ -909,6 +934,11 @@ export function ChatVirtualizer<T>(
         break;
       }
       newsKeysRef.current.add(key);
+      // Away from the tail, the window will not reach a new message, so it
+      // mounts beside the window instead (see arrivedKeysRef).
+      if (!(mode.current.kind === 'end' && mode.current.distance === 0)) {
+        arrivedKeysRef.current.add(key);
+      }
     }
     // HEAD CHANGE (loading older history, or trimming it). Rows arrived above
     // everything placed, so the restore owes a correction the size of the whole
@@ -1330,6 +1360,36 @@ export function ChatVirtualizer<T>(
       pinnedIndex = -1;
     }
   }
+  // The arrived tail run starts at the first arrived row past the window and
+  // runs to the last row. A row the window reaches leaves the set.
+  let tailIndex = -1;
+  if (arrivedKeysRef.current.size > 0 && win.end >= win.start) {
+    const arrived = arrivedKeysRef.current;
+    const present = new Set<string>();
+    for (let i = data.length - 1; i >= 0; i--) {
+      const key = String(getRowKey(data[i], i));
+      if (!arrived.has(key)) {
+        continue;
+      }
+      present.add(key);
+      if (i <= win.end) {
+        arrived.delete(key);
+      } else {
+        tailIndex = i;
+      }
+    }
+    for (const key of arrived) {
+      if (!present.has(key)) {
+        arrived.delete(key);
+      }
+    }
+  }
+  tailKeyRef.current =
+    tailIndex < 0 ? null : String(getRowKey(data[tailIndex], tailIndex));
+  // A focused row inside the tail run is drawn by the run.
+  if (tailIndex >= 0 && pinnedIndex >= tailIndex) {
+    pinnedIndex = -1;
+  }
   pinnedKeyRef.current = pinnedIndex < 0 ? null : focusedKey;
   const renderRow = (i: number): React.ReactNode => {
     const key = String(getRowKey(data[i], i));
@@ -1361,6 +1421,18 @@ export function ChatVirtualizer<T>(
       <div key="__gapBottom" ref={gapBottomRef} aria-hidden />,
       renderRow(pinnedIndex),
     );
+  }
+  if (tailIndex >= 0) {
+    children.push(
+      pinnedIndex > win.end ? (
+        <div key="__gapTail" ref={gapTailRef} aria-hidden />
+      ) : (
+        <div key="__gapBottom" ref={gapBottomRef} aria-hidden />
+      ),
+    );
+    for (let i = tailIndex; i < data.length; i++) {
+      children.push(renderRow(i));
+    }
   }
   children.push(<div key="__bottom" ref={spacerBottomRef} aria-hidden />);
 

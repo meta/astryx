@@ -567,4 +567,33 @@ describe('ChatVirtualizer', () => {
     expect(block.hasAttribute('aria-busy')).toBe(false);
     el.remove();
   });
+
+  it('mounts a message that arrives while the reader is in history, unmarked, so the log delivers it', async () => {
+    const el = tallScroller();
+    const withText = (n: number, last?: string) =>
+      rows(n).map((row, i) =>
+        last !== undefined && i === n - 1 ? {...row, text: last} : row,
+      );
+    const list = (data: Row[]) => <div role="log">{attachedTo(data, el)}</div>;
+    const {container, rerender} = render(list(withText(60)));
+    await settled();
+    const block = container.querySelector('[role="log"]')!
+      .firstElementChild as HTMLElement;
+    // The reader scrolls up into history.
+    scrollEvent(el, 0);
+    await settled();
+    expect(screen.queryByText('message 59')).toBeNull();
+    // A reply arrives at the tail: it mounts now, and the commit is not busy.
+    act(() => rerender(list(withText(61))));
+    expect(screen.getByText('message 60')).toBeInTheDocument();
+    expect(block.hasAttribute('aria-busy')).toBe(false);
+    // The reply streams: it stays mounted, and the update is not busy either.
+    act(() => rerender(list(withText(61, 'message 60, streamed'))));
+    expect(screen.getByText('message 60, streamed')).toBeInTheDocument();
+    expect(block.hasAttribute('aria-busy')).toBe(false);
+    await settled();
+    // The rows between the window and the reply stay unmounted.
+    expect(screen.queryByText('message 59')).toBeNull();
+    el.remove();
+  });
 });
