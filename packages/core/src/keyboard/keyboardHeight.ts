@@ -29,7 +29,7 @@ export const KEYBOARD_EPSILON = 1;
 // steps.
 const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
 // How long a step of a hide waits for the next report. It is longer than
-// Gboard's whole hide (250 ms).
+// Gboard's whole hide (hideMs).
 const HIDE_STEP_WAIT_MS = 300;
 // How long a hide's steps wait in all, from the first. A toolbar's moves
 // while a lower keyboard stays up cannot hold the layout longer.
