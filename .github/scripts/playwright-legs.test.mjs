@@ -13,10 +13,12 @@ import {
   costsFor,
   countTests,
   estimateSeconds,
+  folderSpecs,
   isInteractionSpec,
   legCount,
   planLegs,
   recordLog,
+  selectProofs,
   testsReader,
 } from './playwright-legs.mjs';
 
@@ -221,15 +223,17 @@ describe('estimateSeconds and legCount', () => {
 });
 
 describe('the list reader and recordLog', () => {
-  it('reads the list report with the reader the accessibility contracts use', () => {
+  it("reads the list report and the component folder with the accessibility contracts' own helpers", () => {
     const source = fs.readFileSync(
       path.join(root, '.github/scripts/playwright-legs.mjs'),
       'utf8',
     );
-    expect(source).toContain(
-      "import {listedFiles} from './a11y-pr-contracts.mjs';",
+    expect(source).toMatch(
+      /import \{[^}]*\bisComponentPath\b[^}]*\blistedFiles\b[^}]*\bspecOwners\b[^}]*\} from '\.\/a11y-pr-contracts\.mjs';/,
     );
     expect(source).not.toMatch(/function listedFiles/);
+    // No folder rule of its own.
+    expect(source).not.toMatch(/const FOLDER =/);
   });
 
   it("records each test's gap from the line before it, under its spec file and project", () => {
@@ -409,10 +413,12 @@ describe('the interaction proof legs in ci.yml', () => {
     });
 
     // Runs the count step with the real planner on these recorded times.
+    // A shared-code change: the lane's own paths count.
+    const gestureChange = ['packages/core/src/gestures/GestureHost.ts'];
     function countFor(
       leg,
       webkitTimes,
-      changed = [],
+      changed = gestureChange,
       unrecorded = [],
       {deleted = [], sources = {}, perTest, env = {}} = {},
     ) {
@@ -494,6 +500,7 @@ describe('the interaction proof legs in ci.yml', () => {
               CHANGED_FILES: list,
               GITHUB_OUTPUT: output,
               WEBKIT_SPEC_PATHS: job.env.WEBKIT_SPEC_PATHS,
+              WEBKIT_SHARED_PATHS: job.env.WEBKIT_SHARED_PATHS,
               ...env,
             },
           },
@@ -568,9 +575,10 @@ describe('the interaction proof legs in ci.yml', () => {
       expect(
         countFor(1, times, [], [], {env: {WEBKIT_ALL_SPECS: 'true'}}),
       ).toEqual({count: '2', runs: 'true', leg: '1'});
+      // Without it, a change that touches nothing WebKit covers plans none.
       expect(
         countFor(1, times, [], [], {env: {WEBKIT_ALL_SPECS: 'false'}}),
-      ).toEqual({count: '1', runs: 'true', leg: '1'});
+      ).toEqual({count: '0', runs: 'false', leg: '1'});
     });
 
     it('writes the test counts it read for the plan, and skips a deleted spec', () => {
@@ -609,14 +617,9 @@ describe('the interaction proof legs in ci.yml', () => {
       expect(countFor(2, near)).toEqual({count: '1', runs: 'false', leg: '2'});
       // So does a planned spec with no recorded time: here the median, 500 s.
       expect(
-        countFor(
-          2,
-          near,
-          [],
-          [
-            'internal/interaction-harness/src/pointer.interaction.browser.spec.ts',
-          ],
-        ),
+        countFor(2, near, gestureChange, [
+          'internal/interaction-harness/src/pointer.interaction.browser.spec.ts',
+        ]),
       ).toEqual({count: '2', runs: 'true', leg: '2'});
       expect(
         countFor(2, near, [
@@ -672,26 +675,26 @@ describe('the interaction proof legs in ci.yml', () => {
       'packages/core/src/hooks/__tests__/usePager.interaction',
       'internal/interaction-harness/',
     ]);
-    // The leg count and the plan read the same paths; the plan adds the
-    // interaction specs this pull request changes.
-    for (const name of [
-      "Count this run's WebKit legs",
-      "Plan this leg's WebKit interaction proofs",
-    ]) {
-      const {run} = step(job, name);
-      expect(run, name).toContain(
-        'if [ "${WEBKIT_ALL_SPECS:-}" = true ]; then SPEC_PATHS=(packages/ internal/); else read -ra SPEC_PATHS <<< "$WEBKIT_SPEC_PATHS"; fi',
-      );
-      expect(run, name).toContain('"${SPEC_PATHS[@]}"');
-    }
+    // The leg count selects from the lane's paths once, and the count and
+    // the plan both read that selection, so the two legs agree. The release
+    // interaction check selects every spec.
+    const count = step(job, "Count this run's WebKit legs").run;
+    expect(count).toContain(
+      'if [ "${WEBKIT_ALL_SPECS:-}" = true ]; then SPEC_PATHS=(packages/ internal/); else read -ra SPEC_PATHS <<< "$WEBKIT_SPEC_PATHS"; fi',
+    );
+    expect(count).toContain('-- "${SPEC_PATHS[@]}" > "$selected"');
+    expect(count).toContain('-- "${SELECTED[@]}"');
     const plan = step(job, "Plan this leg's WebKit interaction proofs").run;
+    expect(plan).toContain(
+      'done < "$RUNNER_TEMP/interaction-legs/selected.txt"',
+    );
     expect(
       plan
         .slice(plan.indexOf(' -- ') + 4)
         .replaceAll('\\', '')
         .trim()
         .split(/\s+/),
-    ).toEqual(['"${SPEC_PATHS[@]}"', '"${CHANGED_SPECS[@]}"']);
+    ).toEqual(['"${PLANNED[@]}"']);
   });
 
   it("the test join reads each lane's whole result, so a failed, cancelled or skipped leg fails it", () => {
@@ -1035,5 +1038,79 @@ describe('the interaction proof legs in ci.yml', () => {
     } finally {
       fs.rmSync(path.dirname(out), {recursive: true, force: true});
     }
+  });
+});
+
+describe('what a WebKit run covers for a change', () => {
+  const listed = [
+    'packages/core/src/DateInput/DateInput.tsx',
+    'packages/core/src/DateInput/__tests__/DateInputWheel.interaction.browser.spec.ts',
+    'packages/core/src/DateInput/__tests__/DateInputTouch.interaction.browser.spec.ts',
+    'packages/core/src/Switch/__tests__/Switch.interaction.browser.spec.ts',
+    'packages/lab/src/RefreshControl/__tests__/RefreshControl.interaction.browser.spec.ts',
+    'packages/core/src/utils/__tests__/press.interaction.browser.spec.ts',
+    'packages/core/src/gestures/__tests__/browser/gestures.interaction.browser.spec.ts',
+  ];
+  const shared =
+    /^(packages\/core\/src\/gestures\/|\.github\/workflows\/ci\.yml$)/;
+  const filters = ['packages/core/src/gestures/'];
+  const select = changed => selectProofs({listed, changed, shared, filters});
+
+  it('runs every interaction spec in a component folder whose code changes, in any package', () => {
+    expect(select(['packages/core/src/DateInput/DateInput.tsx'])).toEqual([
+      'packages/core/src/DateInput/__tests__/DateInputTouch.interaction.browser.spec.ts',
+      'packages/core/src/DateInput/__tests__/DateInputWheel.interaction.browser.spec.ts',
+    ]);
+    expect(
+      select(['packages/lab/src/RefreshControl/useRefreshControl.ts']),
+    ).toEqual([
+      'packages/lab/src/RefreshControl/__tests__/RefreshControl.interaction.browser.spec.ts',
+    ]);
+  });
+
+  it('runs nothing for files that put no code on a page, or a folder without specs', () => {
+    for (const file of [
+      'packages/core/src/DateInput/DateInput.test.tsx',
+      'packages/core/src/DateInput/__tests__/DateInput.calendar.test.tsx',
+      'packages/core/src/DateInput/DateInput.doc.mjs',
+      'packages/core/src/DateInput/DateInput.stories.tsx',
+      'packages/core/src/DateInput/README.md',
+      'packages/core/src/Selector/Selector.tsx',
+      // A shared folder is the shared-code pattern's to decide.
+      'packages/core/src/utils/focusReturn.ts',
+    ]) {
+      expect(select([file]), file).toEqual([]);
+    }
+  });
+
+  it("runs the lane's own paths for shared code, and each spec a change edits", () => {
+    expect(select(['packages/core/src/gestures/GestureHost.ts'])).toEqual(
+      filters,
+    );
+    const edited =
+      'packages/core/src/Switch/__tests__/Switch.interaction.browser.spec.ts';
+    expect(select([edited])).toEqual([edited]);
+    expect(
+      select([
+        '.github/workflows/ci.yml',
+        'packages/core/src/DateInput/DateInput.tsx',
+      ]),
+    ).toEqual([
+      ...filters,
+      'packages/core/src/DateInput/__tests__/DateInputTouch.interaction.browser.spec.ts',
+      'packages/core/src/DateInput/__tests__/DateInputWheel.interaction.browser.spec.ts',
+    ]);
+  });
+
+  it("runs only the lane's own paths when the changed files are unknown", () => {
+    expect(selectProofs({listed, changed: null, shared, filters})).toEqual(
+      filters,
+    );
+  });
+
+  it('lists only interaction specs of the folder', () => {
+    expect(
+      folderSpecs(listed, ['packages/core/src/DateInput/DateInput.tsx']),
+    ).not.toContain('packages/core/src/DateInput/DateInput.tsx');
   });
 });

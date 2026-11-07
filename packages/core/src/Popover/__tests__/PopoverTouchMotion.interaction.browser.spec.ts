@@ -280,9 +280,9 @@ const WINDOW_START_MS = 400;
 /** The shortest rendering window the proof judges, ms: about 18 frames. */
 const MIN_WINDOW_MS = 300;
 
-/** The blocked-thread proof's growth: 600 ms at a constant speed. */
+/** The blocked-thread proof's growth: 1.2 s at a constant speed. */
 const STEADY_GROWTH =
-  '[popover]:has([role="dialog"]) { --duration-medium-min: 600ms; --ease-entrance: linear; }';
+  '[popover]:has([role="dialog"]) { --duration-medium-min: 1200ms; --ease-entrance: linear; }';
 
 /** The page's clock, epoch ms. */
 async function pageNow(page: Page): Promise<number> {
@@ -460,7 +460,9 @@ test('the presentation grows out of the trigger on the theme\u2019s entrance tok
   await expect(exitCopyOf(page)).toHaveCount(0);
   await openWithTap(story);
   await scaleAnimationOf(story.layer);
-  const held = await holdAnimations(page, story.layer);
+  const held = await holdAnimations(page, story.layer, {
+    judges: {target: story.layer, property: 'scale'},
+  });
   const samples = await sampleBoxes(
     story.layer,
     final,
@@ -603,18 +605,18 @@ test('the presentation keeps advancing every frame while the main thread is bloc
   await page.addStyleTag({
     content: '[popover]:has([role="dialog"]) { opacity: 1 !important; }',
   });
-  // The growth runs 600 ms at a constant speed here. Each frame then moves
-  // several pixels, and a block that starts late on a loaded machine still
-  // lands inside the growth.
+  // The growth runs 1.2 s at a constant speed here, so a 1 s block lands
+  // inside it on a loaded machine too. The marker is 240 px wide, and its
+  // width grows by about 3 px in every frame.
   await page.addStyleTag({content: STEADY_GROWTH});
-  await markElement(story.layer, {size: 24, inset: 0});
+  await markElement(story.layer, {size: 240, inset: 0});
   const entrance = await themeTiming(story.layer, POPOVER_ENTRANCE_TOKENS);
-  expect(entrance.ms).toBe(600);
+  expect(entrance.ms).toBe(1200);
   const cast = await startScreencast(page);
   // The page itself blocks once the growth has run a frame. A block sent from
   // here starts later on a busy machine.
   const opened = await pageNow(page);
-  const blocking = blockMainThread(page, 400, {
+  const blocking = blockMainThread(page, 1000, {
     during: story.layer,
     minProgressMs: 16,
   });
@@ -624,7 +626,7 @@ test('the presentation keeps advancing every frame while the main thread is bloc
   await page.waitForTimeout(100);
   const castFrames = await cast.stop();
   const tracked = await trackMarker(page, castFrames);
-  // Up to the end of the growth: until then the marker moves one way only.
+  // Up to the end of the growth: until then the marker only grows.
   const window = {
     from: block.from,
     to: Math.min(block.to, growth + entrance.ms - 20),
@@ -632,7 +634,7 @@ test('the presentation keeps advancing every frame while the main thread is bloc
   // Judging stops within 2 steps of the end, where the screencast's whole
   // pixels show plateaus.
   const proof = busyWindowProof(tracked, window, {
-    axis: 'x',
+    axis: 'width',
     settledWithinSteps: 2,
   });
   await writeEvidence(
@@ -653,7 +655,7 @@ test('the presentation keeps advancing every frame while the main thread is bloc
     to: window.to + 40,
     columns: 8,
     cellScale: 0.35,
-    data: t => ({x: tracked.find(f => f.t === t)?.box?.x ?? -1}),
+    data: t => ({width: tracked.find(f => f.t === t)?.box?.width ?? -1}),
   });
   await film.write(testInfo, {block, growth});
   expect(proof.verdict.failures, proof.summary).toEqual([]);
@@ -936,7 +938,7 @@ test('Reduce Motion: the popover cross-fades in at its size and out where it sta
 }) => {
   await page.emulateMedia({reducedMotion: 'reduce'});
   const story = await openDefault(page);
-  await openHeldWhileGrowing(page, story);
+  await openHeldWhileGrowing(page, story, 'opacity');
   const unit = {x: 0, y: 0, width: 100, height: 100};
   // design:reduced-motion DR2: opacity only, 200 ms or less, here on
   // UIKit's cross-fade curve.
@@ -968,7 +970,7 @@ test('Reduce Motion: the popover cross-fades in at its size and out where it sta
     expect(sample.opacity).toBeCloseTo(1, 3);
   }
   // The dismissal fades out where the popover stands, on the same curve.
-  const dismissal = await armExitCopyHold(story);
+  const dismissal = await armExitCopyHold(story, 'opacity');
   await page.keyboard.press('Escape');
   await dismissal.held();
   const copy = exitCopyOf(page);
@@ -1141,11 +1143,16 @@ async function holdsOn(target: Locator): Promise<boolean> {
  * Arms a hold for the exit copy before the action that closes the popover.
  * The copy does not exist yet, so the hold arms on the layer's parent. The
  * dismissal places it there for a popover in no other layer. Only motions
- * that start after arming count, and the held motion must be the copy's.
+ * that start after arming count, and the held motion must be the copy's:
+ * its `scale`, or its `opacity` under Reduce Motion.
  */
-async function armExitCopyHold(story: OpenStory) {
+async function armExitCopyHold(
+  story: OpenStory,
+  property: 'scale' | 'opacity' = 'scale',
+) {
   const page = story.layer.page();
   const armed = await armHold(page, story.layer.locator('xpath=..'), {
+    judges: {target: exitCopyOf(page), property},
     newOnly: true,
   });
   return {
@@ -1162,10 +1169,17 @@ async function armExitCopyHold(story: OpenStory) {
 /**
  * Opens the popover with a tap and holds its presentation where it starts, so
  * the next press lands while it grows. Under Reduce Motion it holds the
- * cross-fade. Returns the held motion; release it with `releaseAnimations`.
+ * cross-fade (`property: 'opacity'`). Returns the held motion; release it
+ * with `releaseAnimations`.
  */
-async function openHeldWhileGrowing(page: Page, story: OpenStory) {
-  const armed = await armHold(page, story.layer);
+async function openHeldWhileGrowing(
+  page: Page,
+  story: OpenStory,
+  property: 'scale' | 'opacity' = 'scale',
+) {
+  const armed = await armHold(page, story.layer, {
+    judges: {target: story.layer, property},
+  });
   await openWithTap(story);
   const held = await armed.held();
   expect(await holdsOn(story.layer), 'held on the popover').toBe(true);
