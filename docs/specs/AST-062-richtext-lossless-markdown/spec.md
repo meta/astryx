@@ -58,7 +58,8 @@ No source text disappears because the editor could not represent it.
 - **FR3 — Regenerated Markdown means what the editor showed.** A regenerated
   block's Markdown imports again as the same structure the editor showed: text
   that was literal stays literal, so an edited paragraph that begins with an
-  escaped `\#` never reloads as a heading.
+  escaped `\#` never reloads as a heading. A code block holds only code, so a
+  rich paste into a code block lands as plain text, one line per pasted block.
 - **FR4 — The document's envelope and line endings survive.** A byte order
   mark and anything before the first block are kept exactly, and the bytes
   after the last block are kept with it. A regenerated block keeps the line
