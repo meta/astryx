@@ -149,6 +149,10 @@ const styles = stylex.create({
   cwContainer400: {
     width: 400,
   },
+  insetFrame: {
+    width: 360,
+    height: 200,
+  },
 });
 
 // Helper components for demo content
@@ -1707,18 +1711,12 @@ export const NestedInAppShellWide: Story = {
   ),
 };
 
-const insetStyles = stylex.create({
-  frame: {
-    width: 360,
-    height: 200,
-  },
-});
-
 /**
  * LayoutContent beside each kind of neighbour, in plain frames with no
  * padding container: the inner inset is spacing step 4, and `padding={6}`
  * sets the Layout-edge inset. Each case names its content region with
- * `data-content-inset`.
+ * `data-content-inset`. With `contentWidth` and one start panel, the content
+ * children end where the header content ends.
  */
 export const ContentInsets: Story = {
   name: 'Content Insets',
@@ -1800,6 +1798,27 @@ export const ContentInsets: Story = {
         ),
       },
       {
+        id: 'content-width-start-panel',
+        label: 'contentWidth=240, start panel, padding=6',
+        layout: (
+          <Layout
+            padding={6}
+            contentWidth={240}
+            header={
+              <LayoutHeader hasDivider>
+                <h3 {...stylex.props(styles.heading)}>Header</h3>
+              </LayoutHeader>
+            }
+            start={panel}
+            content={
+              <LayoutContent data-content-inset="content-width-start-panel">
+                {body}
+              </LayoutContent>
+            }
+          />
+        ),
+      },
+      {
         id: 'nested',
         label: 'Nested Layout under a header without divider',
         layout: (
@@ -1836,7 +1855,7 @@ export const ContentInsets: Story = {
           {cases.map(({id, label, layout}) => (
             <VStack key={id} gap={2}>
               <p {...stylex.props(styles.subheading)}>{label}</p>
-              <div {...stylex.props(styles.cwContainer, insetStyles.frame)}>
+              <div {...stylex.props(styles.cwContainer, styles.insetFrame)}>
                 {layout}
               </div>
             </VStack>

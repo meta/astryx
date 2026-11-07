@@ -59,7 +59,7 @@ const EDGES: Edge[] = ['inlineStart', 'inlineEnd', 'blockStart', 'blockEnd'];
 // The number of LayoutContent regions each story renders, so a story that
 // stops rendering one fails instead of passing with nothing to check.
 const REGIONS: Record<Story, number> = {
-  'content-insets': 6,
+  'content-insets': 7,
   'content-only': 1,
   'with-sidebar': 1,
   'dual-panels': 1,
@@ -92,7 +92,13 @@ const INSETS: Record<string, Partial<Record<Edge, 0 | 4 | 6>>> = {
     blockEnd: 0,
   },
   nested: {blockStart: 4},
+  // Only the block edges: the inline padding adds the content-width gutter.
+  'content-width-start-panel': {blockStart: 4, blockEnd: 6},
 };
+
+// Cases whose Layout sets `contentWidth` with one start panel: the content
+// children must end where the header content ends.
+const ALIGNED_TO_HEADER = new Set(['content-width-start-panel']);
 
 const cases: AuditCase[] = [];
 function add(
@@ -202,8 +208,16 @@ async function observe(page: Page) {
       ) {
         parent = parent.parentElement;
       }
+      const layout = region.closest('.astryx-layout');
+      const header = Array.from(
+        layout?.querySelectorAll('.astryx-layout-header') ?? [],
+      ).find(candidate => candidate.closest('.astryx-layout') === layout);
+      const firstChild = region.firstElementChild;
+      const headerChild = header?.firstElementChild;
       return {
         insetCase: region.getAttribute('data-content-inset'),
+        childBox: firstChild == null ? null : box(firstChild),
+        headerChildBox: headerChild == null ? null : box(headerChild),
         targets: Array.from(region.classList).filter(name =>
           name.startsWith('astryx-'),
         ),
@@ -395,7 +409,10 @@ for (const item of cases) {
         const applied = region.applied[edge];
         const published = region.published[edge];
         const isInline = edge === 'inlineStart' || edge === 'inlineEnd';
-        if (CONTENT_WIDTH.has(item.story) && isInline) {
+        const hasGutter =
+          CONTENT_WIDTH.has(item.story) ||
+          ALIGNED_TO_HEADER.has(region.insetCase ?? '');
+        if (hasGutter && isInline) {
           check(
             applied >= published - 0.6,
             `${where} ${edge} applies ${applied}, less than its published ${published}`,
@@ -423,6 +440,26 @@ for (const item of cases) {
         }
       }
     });
+    observed.regions
+      .filter(region => ALIGNED_TO_HEADER.has(region.insetCase ?? ''))
+      .forEach(region => {
+        const where = `content (${region.insetCase})`;
+        const child = region.childBox;
+        const headerChild = region.headerChildBox;
+        check(
+          child != null && headerChild != null,
+          `${where} has no child or header child to compare`,
+        );
+        if (child != null && headerChild != null) {
+          const childEnd = item.direction === 'rtl' ? child.left : child.right;
+          const headerEnd =
+            item.direction === 'rtl' ? headerChild.left : headerChild.right;
+          check(
+            near(childEnd, headerEnd),
+            `${where} children end at ${childEnd}, header content ends at ${headerEnd}`,
+          );
+        }
+      });
     if (item.story === 'content-insets') {
       check(
         JSON.stringify([...insetCases].sort()) ===
@@ -450,7 +487,11 @@ for (const item of cases) {
           'without a caller main or region role, a region that fits has no role or name and a scrolling region is a named group',
         publication: CONTENT_WIDTH.has(item.story)
           ? 'block padding equals the published block padding; inline padding is at least the published inline padding'
-          : 'every edge applies exactly the padding it publishes',
+          : 'every edge applies exactly the padding it publishes, except the inline edges of a content-width case, which are at least what they publish',
+        alignedToHeader:
+          item.story === 'content-insets'
+            ? 'in the content-width start-panel case, the first content child ends where the first header child ends'
+            : 'not applicable',
         insets: item.story === 'content-insets' ? INSETS : 'not applicable',
         overflow:
           item.viewport === NARROW
