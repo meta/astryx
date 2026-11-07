@@ -1000,8 +1000,8 @@ describe('the root sync', () => {
     probeSize = '17px';
   });
 
-  // The gate is the font keyword together with the touch callout, which
-  // only iOS WebKit has.
+  // The gate is the capability alone, never a platform idiom (one touch
+  // behavior on every touch device).
   it('does nothing where the engine has no font: -apple-system-body, touch callout or not', () => {
     pretendEngine({textSize: false, touchCallout: true});
     expect(syncReaderTextSize(document)).toBeUndefined();
@@ -1009,8 +1009,8 @@ describe('the root sync', () => {
     expect(document.adoptedStyleSheets).toEqual([]);
   });
 
-  it('follows the reader text size where the engine has the keyword and the touch callout, as iOS WebKit does', () => {
-    pretendEngine({textSize: true, touchCallout: true});
+  it('follows the reader text size wherever the engine provides it, with no platform check', () => {
+    pretendEngine({textSize: true, touchCallout: false});
     probeSize = '23px';
     const cleanup = syncReaderTextSize(document);
     expect(adoptedText()).toBe(dynamicTypeScaleRule('xxxl'));
@@ -1020,16 +1020,8 @@ describe('the root sync', () => {
     cleanup?.();
   });
 
-  it('mounts no probe and no stylesheet where the engine has the keyword but no touch callout, as macOS Safari', () => {
+  it('scales nothing where the keyword follows no reader setting (a fixed 13px Body, as on a Mac)', () => {
     pretendEngine({textSize: true, touchCallout: false});
-    probeSize = '23px';
-    expect(syncReaderTextSize(document)).toBeUndefined();
-    expect(document.querySelector('[data-astryx-text-size-probe]')).toBeNull();
-    expect(document.adoptedStyleSheets).toEqual([]);
-  });
-
-  it('scales nothing where the keyword follows no reader setting (a Body size that names no category)', () => {
-    pretendEngine({textSize: true, touchCallout: true});
     probeSize = '13px';
     const cleanup = syncReaderTextSize(document);
     expect(cleanup).toBeTypeOf('function');

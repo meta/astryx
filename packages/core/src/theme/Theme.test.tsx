@@ -344,6 +344,17 @@ describe('Theme', () => {
         (property: string) => property === '-webkit-touch-callout',
       ),
     });
+    vi.stubGlobal(
+      'CSSStyleSheet',
+      class {
+        replaceSync() {}
+      },
+    );
+    Object.defineProperty(document, 'adoptedStyleSheets', {
+      configurable: true,
+      writable: true,
+      value: [],
+    });
     try {
       render(
         <Theme theme={testTheme}>
@@ -353,20 +364,19 @@ describe('Theme', () => {
       expect(
         document.querySelector('[data-astryx-text-size-probe]'),
       ).toBeNull();
-      expect(
-        document.querySelector('style[data-astryx-text-size-scales]'),
-      ).toBeNull();
+      expect(document.adoptedStyleSheets).toEqual([]);
     } finally {
       vi.unstubAllGlobals();
+      delete (document as {adoptedStyleSheets?: unknown}).adoptedStyleSheets;
     }
   });
 
-  it('keeps the page on the reader text size where the engine has the keyword and the touch callout, from the root Theme only, with nothing on <html>', () => {
+  it('keeps the page on the reader text size wherever the engine provides it, from the root Theme only, with nothing on <html>', () => {
+    // The capability and nothing else: no touch callout.
     vi.stubGlobal('CSS', {
       supports: vi.fn(
         (property: string, value?: string) =>
-          (property === 'font' && value === '-apple-system-body') ||
-          property === '-webkit-touch-callout',
+          property === 'font' && value === '-apple-system-body',
       ),
     });
     class FakeSheet {
