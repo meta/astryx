@@ -54,7 +54,7 @@ import {isRtlElement} from '../hooks/isRtlElement';
 import {Icon} from '../Icon';
 import {EDGE_COMP_ATTR} from '../Layout/edgeCompensation.stylex';
 import {themeProps} from '../utils/themeProps';
-import {foldableMarker, foldingLaneMarker} from '../internal/foldable.stylex';
+import {foldableMarker} from '../internal/foldable.stylex';
 import {useFoldingLaneWant} from '../internal/foldingLane';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {observeResize} from '../utils/sharedResizeObserver';
@@ -235,22 +235,13 @@ const FADE_FROM_START = `linear-gradient(to right, transparent ${BLEED}, black $
 const FADE_FROM_END = `linear-gradient(to left, transparent ${BLEED}, black ${SCROLL_EDGE_INSET})`;
 
 const styles = stylex.create({
-  // In a Toolbar lane: sized by the lane, not by the tabs, and no wider than
-  // all of them (`--_tab-list-tabs-width`, set from the measured tabs).
+  // As a direct child of a Toolbar lane: sized by the lane, not by the tabs,
+  // and no wider than all of them (`--_tab-list-tabs-width`, set from the
+  // measured tabs).
   inLane: {
-    contain: {
-      default: null,
-      [stylex.when.ancestor(':is(*)', foldingLaneMarker)]: 'inline-size',
-    },
-    flexGrow: {
-      default: null,
-      [stylex.when.ancestor(':is(*)', foldingLaneMarker)]: 1,
-    },
-    maxWidth: {
-      default: '100%',
-      [stylex.when.ancestor(':is(*)', foldingLaneMarker)]:
-        'var(--_tab-list-tabs-width, 100%)',
-    },
+    contain: 'inline-size',
+    flexGrow: 1,
+    maxWidth: 'var(--_tab-list-tabs-width, 100%)',
   },
   tabsWidth: (px: number) => ({'--_tab-list-tabs-width': `${px}px`}),
   nav: {
@@ -591,9 +582,9 @@ export function TabList({
     return observeResize(root, onResize);
   }, [hasScroll, listRef]);
 
-  // Inside a Toolbar lane, the tabs' own width does not size the list: it
-  // takes the room the lane has and asks the lane for the width of all its
-  // tabs. The tabs' extent is read after every render, so added or renamed
+  // As a direct child of a Toolbar lane, the tabs' own width does not size
+  // the list: it takes the room the lane has and asks the lane for the width
+  // of all its tabs. The tabs' extent is read after every render, so added or renamed
   // tabs update the request; equal readings write nothing.
   const [tabsWidth, setTabsWidth] = useState(0);
   useIsomorphicLayoutEffect(() => {
@@ -618,7 +609,7 @@ export function TabList({
       setTabsWidth(width);
     }
   });
-  useFoldingLaneWant(listRef, hasScroll ? tabsWidth : 0);
+  const isLaneChild = useFoldingLaneWant(listRef, tabsWidth, hasScroll);
 
   const scrollByPage = useCallback((direction: -1 | 1) => {
     const strip = stripRef.current;
@@ -749,8 +740,8 @@ export function TabList({
           stylex.props(
             styles.nav,
             // Tabs that scroll can give up width.
-            hasScroll && [
-              foldableMarker,
+            hasScroll && foldableMarker,
+            isLaneChild && [
               styles.inLane,
               tabsWidth > 0 && styles.tabsWidth(tabsWidth),
             ],

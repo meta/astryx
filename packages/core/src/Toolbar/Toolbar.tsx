@@ -17,7 +17,7 @@
  * - /packages/cli/assets/templates/blocks/components/Toolbar/ (showcase blocks)
  */
 
-import {useCallback, useMemo, useRef, useState, type ReactNode} from 'react';
+import {useCallback, useMemo, useState, type ReactNode} from 'react';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
 import type {SectionVariant} from '../Section/Section';
@@ -32,7 +32,7 @@ import {useKeyboardHint} from '../hooks/useKeyboardHint';
 import {SizeProvider} from '../SizeContext/SizeContext';
 import {edgeCompSlot} from '../Layout/edgeCompensation.stylex';
 import {themeProps} from '../utils/themeProps';
-import {foldableMarker, foldingLaneMarker} from '../internal/foldable.stylex';
+import {foldableMarker} from '../internal/foldable.stylex';
 import {FoldingLaneContext} from '../internal/foldingLane';
 
 /**
@@ -241,22 +241,44 @@ function ToolbarLane({
   laneStyles: ReadonlyArray<StyleXStyles | false | null | undefined>;
   children: ReactNode;
 }) {
-  const laneRef = useRef<HTMLDivElement>(null);
-  const [wants, setWants] = useState<Readonly<Record<string, number>>>({});
-  const report = useCallback((id: string, want: number) => {
-    setWants(previous =>
-      (previous[id] ?? 0) === want ? previous : {...previous, [id]: want},
+  const [laneElement, setLaneElement] = useState<HTMLDivElement | null>(null);
+  // What each foldable child last reported: its extra width, if it is a
+  // direct child of this lane.
+  const [reports, setReports] = useState<
+    Readonly<Record<string, {want: number; isLaneChild: boolean}>>
+  >({});
+  const report = useCallback(
+    (id: string, want: number, isLaneChild: boolean) => {
+      setReports(previous => {
+        const last = previous[id];
+        if (
+          last != null
+            ? last.want === want && last.isLaneChild === isLaneChild
+            : !isLaneChild && want === 0
+        ) {
+          return previous;
+        }
+        return {...previous, [id]: {want, isLaneChild}};
+      });
+    },
+    [],
+  );
+  const lane = useMemo(() => {
+    const laneChildIds = new Set(
+      Object.keys(reports).filter(id => reports[id].isLaneChild),
     );
-  }, []);
-  const lane = useMemo(() => ({laneRef, report}), [report]);
-  const grow = Object.values(wants).reduce((sum, want) => sum + want, 0);
+    return {laneElement, report, laneChildIds};
+  }, [laneElement, reports, report]);
+  const grow = Object.values(reports).reduce(
+    (sum, entry) => sum + (entry.isLaneChild ? entry.want : 0),
+    0,
+  );
   return (
     <div
-      ref={laneRef}
+      ref={setLaneElement}
       {...stylex.props(
         ...laneStyles,
         styles.foldableLane,
-        foldingLaneMarker,
         grow > 0 && laneGrowStyles.grow(grow),
       )}>
       <FoldingLaneContext value={lane}>{children}</FoldingLaneContext>

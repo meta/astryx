@@ -22,7 +22,8 @@ import {useState} from 'react';
 import {OverflowList} from './OverflowList';
 import type {OverflowItem} from './OverflowList';
 import * as stylex from '@stylexjs/stylex';
-import {foldableMarker, foldingLaneMarker} from '../internal/foldable.stylex';
+import {foldableMarker} from '../internal/foldable.stylex';
+import {Toolbar} from '../Toolbar';
 import {rulesDeclaredFor} from '../__tests__/pressState';
 
 const originalOffsetWidth = Object.getOwnPropertyDescriptor(
@@ -1146,35 +1147,42 @@ describe('OverflowList in a Toolbar lane (component:Toolbar FR2)', () => {
     expect(visibleContainer().getAttribute('style') ?? '').toContain('82px');
   });
 
-  it('asks for the width that shows every item, but only inside a Toolbar lane', () => {
-    render(
+  it('is sized by a Toolbar lane only as its direct child', () => {
+    const contained = (el: Element) =>
+      rulesDeclaredFor(el).some(rule => /contain:\s*inline-size/.test(rule));
+    const list = (testId: string, observeParent = false) => (
       <OverflowList
         gap={0}
         data-w="1000"
-        data-testid="ov"
+        data-testid={testId}
+        behavior={observeParent ? 'observeParent' : 'observeSelf'}
         overflowRenderer={trigger}>
         {items}
-      </OverflowList>,
+      </OverflowList>
     );
-    const vis = visibleContainer();
-    // Three 40px items with no gap, plus a pixel each for rounding.
-    expect(vis.getAttribute('style') ?? '').toContain('123px');
-    const laneClass = (stylex.props(foldingLaneMarker).className ?? '').split(
-      ' ',
-    )[0];
+    render(
+      <>
+        {list('alone')}
+        <Toolbar label="Direct" startContent={list('direct')} />
+        <Toolbar label="Wrapped" startContent={<div>{list('wrapped')}</div>} />
+        <Toolbar label="Parent" startContent={list('parent', true)} />
+      </>,
+    );
+    const direct = screen.getByTestId('direct');
+    expect(contained(direct)).toBe(true);
+    // Three 40px items with no gap, plus a pixel each for rounding: the
+    // widest it grows in the lane.
+    expect(direct.getAttribute('style') ?? '').toContain('123px');
     expect(
-      rulesDeclaredFor(vis).some(
-        rule =>
-          rule.includes(laneClass) &&
-          /max-width:\s*var\(--_overflow-list-natural-width\)/.test(rule),
+      rulesDeclaredFor(direct).some(rule =>
+        /max-width:\s*var\(--_overflow-list-natural-width\)/.test(rule),
       ),
     ).toBe(true);
-    // Its own items do not size it in the lane; the lane does.
-    expect(
-      rulesDeclaredFor(vis).some(
-        rule => rule.includes(laneClass) && /contain:\s*inline-size/.test(rule),
-      ),
-    ).toBe(true);
+    // Outside a lane, in a caller's wrapper, or sized by its parent, it keeps
+    // its own sizing.
+    expect(contained(screen.getByTestId('alone'))).toBe(false);
+    expect(contained(screen.getByTestId('wrapped'))).toBe(false);
+    expect(contained(screen.getByTestId('parent'))).toBe(false);
   });
 
   it('moves focus to the trigger when the focused item folds away', async () => {

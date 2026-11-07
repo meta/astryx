@@ -37,7 +37,7 @@ import {spacingVars} from '../theme/tokens.stylex';
 import {themeProps} from '../utils/themeProps';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
-import {foldableMarker, foldingLaneMarker} from '../internal/foldable.stylex';
+import {foldableMarker} from '../internal/foldable.stylex';
 import {useFoldingLaneWant} from '../internal/foldingLane';
 import {LayoutChangeSnapshot} from '../motion/LayoutChangeSnapshot';
 import {moveFocusLeftBehind, noteFocusWithin} from '../utils/focusReturn';
@@ -83,27 +83,16 @@ const foldMin = stylex.create({
   minWidth: (px: number) => ({minWidth: `${px}px`}),
 });
 
-// Inside a Toolbar lane the list's own content does not size it: it starts at
-// its minimum ("+N" plus the items `minVisibleItems` keeps), takes the room
-// the lane has, and asks the lane for the rest through useFoldingLaneWant.
-// Elsewhere it sizes as before.
+// As a direct child of a Toolbar lane the list's own items do not size it: it
+// starts at its minimum ("+N" plus the items `minVisibleItems` keeps), takes
+// the room the lane gives it up to the width of all its items, and asks the
+// lane for that width through useFoldingLaneWant. Elsewhere, including inside
+// a caller's wrapper in a lane, it sizes as before.
 const inLane = stylex.create({
   list: {
-    contain: {
-      default: null,
-      [stylex.when.ancestor(':is(*)', foldingLaneMarker)]: 'inline-size',
-    },
-    flexGrow: {
-      default: null,
-      [stylex.when.ancestor(':is(*)', foldingLaneMarker)]: 1,
-    },
-    // It grows no wider than all of its items, so an end lane keeps them at
-    // its end. `--_overflow-list-natural-width` is set per list below.
-    maxWidth: {
-      default: null,
-      [stylex.when.ancestor(':is(*)', foldingLaneMarker)]:
-        'var(--_overflow-list-natural-width)',
-    },
+    contain: 'inline-size',
+    flexGrow: 1,
+    maxWidth: 'var(--_overflow-list-natural-width)',
   },
   naturalWidth: (px: number) => ({
     '--_overflow-list-natural-width': `${px}px`,
@@ -433,12 +422,12 @@ export function OverflowList({
     },
   );
 
-  // Inside a Toolbar lane, ask for the width that shows every item.
-  useFoldingLaneWant(
+  // As a direct child of a Toolbar lane, ask for the width that shows every
+  // item. A list that sizes to its parent (`observeParent`) does not.
+  const isLaneChild = useFoldingLaneWant(
     visibleRef,
-    !isMultiRow && minVisibleItems < itemCount
-      ? foldNaturalWidth - foldMinWidth
-      : 0,
+    foldNaturalWidth - foldMinWidth,
+    !isMultiRow && !observeParent && minVisibleItems < itemCount,
   );
 
   // Reports the measured overflow to `onOverflowChange`. A ResizeObserver
@@ -486,10 +475,7 @@ export function OverflowList({
             // whose floor keeps every item cannot.
             minVisibleItems < itemCount && foldableMarker,
             !isMultiRow && foldMinWidth > 0 && foldMin.minWidth(foldMinWidth),
-            !isMultiRow && inLane.list,
-            !isMultiRow &&
-              foldNaturalWidth > 0 &&
-              inLane.naturalWidth(foldNaturalWidth),
+            isLaneChild && [inLane.list, inLane.naturalWidth(foldNaturalWidth)],
             gapStyles[gap],
             isMultiRow &&
               rowHeight > 0 &&

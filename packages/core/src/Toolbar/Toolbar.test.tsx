@@ -20,7 +20,7 @@ import {
   paddingInlineStyles,
 } from '../Layout/padding.stylex';
 import {readFileSync} from 'node:fs';
-import {foldableMarker, foldingLaneMarker} from '../internal/foldable.stylex';
+import {foldableMarker} from '../internal/foldable.stylex';
 import * as coreEntry from '../index';
 import {rulesWithSelector} from '../__tests__/pressState';
 import {OverflowList} from '../OverflowList';
@@ -660,7 +660,7 @@ describe('Toolbar lanes with foldable content (FR2)', () => {
     ).toBe(true);
   });
 
-  it('marks its start and end lanes, and lets a lane with foldable content shrink', () => {
+  it('lets a lane with foldable content shrink', () => {
     render(
       <Toolbar
         label="Bulk actions"
@@ -674,15 +674,11 @@ describe('Toolbar lanes with foldable content (FR2)', () => {
       />,
     );
     const toolbar = screen.getByRole('toolbar');
-    const laneClass = (stylex.props(foldingLaneMarker).className ?? '').split(
-      ' ',
-    )[0];
     const markerClass = (stylex.props(foldableMarker).className ?? '').split(
       ' ',
     )[0];
     const lanes = Array.from(toolbar.children).slice(0, 2);
     for (const lane of lanes) {
-      expect(lane.classList.contains(laneClass)).toBe(true);
       expect(
         rulesWithSelector(lane, ':has(').some(
           rule => rule.includes(markerClass) && /flex-shrink:\s*1\b/.test(rule),
