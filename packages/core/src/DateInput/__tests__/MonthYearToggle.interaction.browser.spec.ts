@@ -1204,7 +1204,9 @@ test(
     await installTimerGate(page);
     // The page holds the fade itself as soon as it runs. A hold sent after
     // the tap can miss the toggle's fade on a loaded runner.
-    const hold = await armHold(page, sheet);
+    const hold = await armHold(page, sheet, {
+      judges: {target: wheels, property: 'opacity'},
+    });
     await driver.tap(titleAt);
     const held = await hold.held();
     await freezeTimers(page);
