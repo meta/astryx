@@ -68,14 +68,11 @@ const styles = stylex.create({
 });
 
 /**
- * Map of modifier key names to display symbols.
- * Note: `mod` is not in this map — it resolves dynamically via platform
- * detection inside the component.
+ * Map of key names to display symbols on every platform. The modifiers
+ * (`mod`, `ctrl`, `alt`, `shift`, `meta`) are not in this map: they show
+ * Apple's symbols only on Apple platforms (`APPLE_MODIFIER_DISPLAY`).
  */
 const KEY_DISPLAY = new Map<string, string>([
-  ['ctrl', '\u2303'], // ⌃
-  ['alt', '\u2325'], // ⌥
-  ['shift', '\u21E7'], // ⇧
   ['enter', '\u21B5'], // ↵
   ['backspace', '\u232B'], // ⌫
   ['tab', '\u21E5'], // ⇥
@@ -86,19 +83,41 @@ const KEY_DISPLAY = new Map<string, string>([
   ['plus', '+'],
 ]);
 
+/** Modifier symbols on Apple platforms. */
+const APPLE_MODIFIER_DISPLAY = new Map<string, string>([
+  ['mod', '\u2318'], // ⌘
+  ['ctrl', '\u2303'], // ⌃
+  ['alt', '\u2325'], // ⌥
+  ['shift', '\u21E7'], // ⇧
+]);
+
+/** Catalog keys for the modifiers' short text elsewhere and before hydration. */
+const MODIFIER_SHORT_TEXT = new Map<string, string>([
+  ['mod', '@astryx.kbd.key.controlShort'],
+  ['ctrl', '@astryx.kbd.key.controlShort'],
+  ['alt', '@astryx.kbd.key.altShort'],
+  ['shift', '@astryx.kbd.key.shiftShort'],
+  ['meta', '@astryx.kbd.key.windowsShort'],
+]);
+
 const KBD_KEY_ALIASES = new Map<string, string>([
   ['esc', 'escape'],
   ['return', 'enter'],
 ]);
 
 /**
- * Resolves a key name to its display string. Handles the platform-aware
- * `mod` key (⌘ on macOS, Ctrl on other platforms) and falls back to
- * KEY_DISPLAY or uppercased key name.
+ * Resolves a key name to its display string. The modifiers show Apple's
+ * symbols on Apple platforms and the catalog's short text elsewhere; other
+ * keys fall back to KEY_DISPLAY or the uppercased key name.
  */
 function getKeyDisplay(key: string, isMac: boolean, t: TranslatorFn): string {
-  if (key === 'mod') {
-    return isMac ? '\u2318' : t('@astryx.kbd.key.controlShort');
+  const appleSymbol = isMac ? APPLE_MODIFIER_DISPLAY.get(key) : undefined;
+  if (appleSymbol != null) {
+    return appleSymbol;
+  }
+  const shortText = isMac ? undefined : MODIFIER_SHORT_TEXT.get(key);
+  if (shortText != null) {
+    return t(shortText);
   }
   if (key === 'escape') {
     return t('@astryx.kbd.key.escapeShort');
@@ -146,8 +165,9 @@ export interface KbdProps extends BaseProps<HTMLSpanElement> {
   ref?: React.Ref<HTMLSpanElement>;
   /**
    * Keyboard shortcut string. Use "+" to separate keys.
-   * Special keys: mod (Cmd on Mac), ctrl, alt, shift, enter, backspace, escape,
-   * tab, up, down, left, and right.
+   * Special keys: mod, ctrl, alt and shift (Apple symbols on Apple platforms,
+   * short text such as "Ctrl" elsewhere and before hydration), meta ("Win"
+   * text elsewhere), enter, backspace, escape, tab, up, down, left, and right.
    * Aliases: "esc" for "escape" and "return" for "enter".
    * Use "plus" to render a literal "+" key (e.g. "shift+plus").
    *
