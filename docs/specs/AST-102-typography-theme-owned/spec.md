@@ -92,6 +92,9 @@ the person's device.
   (`spec:AST-013` FR1, FR3). Platform font keywords that an engine does not
   recognize fall back to the rest of the theme's font stack.
 - Unsupported behavior: none beyond the font fallback above.
+- macOS Safari does not mount the probe that reads the iOS text size. The
+  probe mounts only where the engine supports both `font: -apple-system-body`
+  and `-webkit-touch-callout`, and only iOS WebKit supports both.
 - Browser evidence (`spec:AST-013` FR10): Safari on iOS proves an FR2 theme's
   body text in the system body font and FR3 across Dynamic Type categories;
   Chrome on Android in the emulator proves FR3 with the system font scale; a
@@ -113,8 +116,7 @@ the person's device.
 - Defects under FR3 and FR4:
   - Safari on iPhone follows Dynamic Type in every theme, recorded in the iOS
     simulator at the current implementation. Safari on iPad and other iOS
-    browsers are unverified, and macOS Safari's unchanged sizes are verified
-    only by unit test.
+    browsers are unverified.
   - Butter, Stone, and Y2K fix supporting text at 12 px, so it does not follow
     a larger browser or Android text size.
   - Controls hold fixed heights, such as 40 px elements, `component:Badge`

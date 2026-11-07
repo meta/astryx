@@ -361,12 +361,12 @@ describe('Theme', () => {
     }
   });
 
-  it('keeps the page on the reader text size wherever the engine provides it, from the root Theme only, with nothing on <html>', () => {
-    // The capability and nothing else: no touch callout.
+  it('keeps the page on the reader text size where the engine has the keyword and the touch callout, from the root Theme only, with nothing on <html>', () => {
     vi.stubGlobal('CSS', {
       supports: vi.fn(
         (property: string, value?: string) =>
-          property === 'font' && value === '-apple-system-body',
+          (property === 'font' && value === '-apple-system-body') ||
+          property === '-webkit-touch-callout',
       ),
     });
     class FakeSheet {

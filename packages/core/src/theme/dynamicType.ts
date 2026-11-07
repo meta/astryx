@@ -22,7 +22,9 @@
  * reads again when the probe resizes. Each theme writes a font size as its
  * own value times the scale of the text style it plays, so only sizes move.
  * Every scale is 1 at the default category and in every other browser.
- * macOS Safari knows the keyword, but its fixed 13px Body names no category.
+ * The probe mounts only where the engine has both the keyword and
+ * `-webkit-touch-callout`, which only iOS WebKit has, so macOS Safari
+ * never mounts it.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/theme/dynamicType.test.ts
@@ -383,6 +385,9 @@ function startReaderTextSizeSync(doc: Document): (() => void) | undefined {
   const view = doc.defaultView;
   if (
     !view?.CSS?.supports?.('font', '-apple-system-body') ||
+    // The touch callout is iOS WebKit's alone. macOS Safari knows the font
+    // keyword too, so without this check it would mount the probe.
+    !view.CSS.supports('-webkit-touch-callout', 'none') ||
     typeof view.CSSStyleSheet !== 'function' ||
     !Array.isArray(doc.adoptedStyleSheets)
   ) {
