@@ -5,12 +5,10 @@
 /**
  * @file modalOutlet.ts
  * @input The open Dialog and scrim BottomSheet `<dialog>` elements
- * @output Exports useModalOutlet (a modal supplies its outlet, and withdraws
- *   it through the ref it returns), useModalOutletWithoutRef (the same for a
- *   modal with no element for that ref),
- *   getActiveModalOutlet, subscribeModalOutlets (a global host follows the
- *   latest one), and notifyTopLayerEntry (a non-modal surface entered the
- *   top layer above the hosts)
+ * @output Exports useModalOutlet, useModalOutletWithoutRef,
+ *   getActiveModalOutlet, subscribeModalOutlets, notifyTopLayerEntry,
+ *   markModalOutletHost, isModalOutletHost, modalOutletHosts and
+ *   ModalOutletChange
  * @position Private layer infrastructure; spec:AST-003 FR18
  *
  * A native modal makes everything outside it inert and paints over every
@@ -57,6 +55,10 @@ const outletGroups = new WeakMap<HTMLDialogElement, string>();
 export type ModalOutletChange = 'outlet' | 'entry';
 
 const listeners = new Set<(change: ModalOutletChange) => void>();
+
+// The global hosts that move into the latest open modal. Each host removes
+// its own mark when it goes, so the set keeps no node past its host.
+const hosts = new Set<Element>();
 
 function notify(change: ModalOutletChange): void {
   for (const listener of listeners) {
@@ -159,6 +161,28 @@ export function subscribeModalOutlets(
  */
 export function notifyTopLayerEntry(): void {
   notify('entry');
+}
+
+/**
+ * Mark `element` as a global host that moves into the latest open modal. A
+ * hold that makes the modal's content inert leaves the host live. Returns the
+ * function that removes the mark.
+ */
+export function markModalOutletHost(element: Element): () => void {
+  hosts.add(element);
+  return () => {
+    hosts.delete(element);
+  };
+}
+
+/** Whether `element` is a global host that moves into the latest open modal. */
+export function isModalOutletHost(element: Element): boolean {
+  return hosts.has(element);
+}
+
+/** The global hosts that move into the latest open modal. */
+export function modalOutletHosts(): Element[] {
+  return [...hosts];
 }
 
 /**
