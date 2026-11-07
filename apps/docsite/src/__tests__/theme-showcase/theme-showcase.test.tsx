@@ -255,7 +255,7 @@ describe('theme-showcase local interactions', () => {
     expect(getComputedStyle(description).textAlign).toBe('center');
   });
 
-  it('lets checkout fields and saved-information selection change locally', async () => {
+  it('changes checkout fields locally and previews payment without submission', async () => {
     const user = userEvent.setup();
     render(<ThemeShowcaseStore />);
     const email = screen.getByLabelText('Email');
@@ -267,11 +267,6 @@ describe('theme-showcase local interactions', () => {
     expect(save).toBeChecked();
     await user.click(save);
     expect(save).not.toBeChecked();
-  });
-
-  it('shows a safe payment preview instead of submitting a payment', async () => {
-    const user = userEvent.setup();
-    render(<ThemeShowcaseStore />);
     await user.click(screen.getByRole('button', {name: 'Pay now'}));
     expect(screen.getByText('Payment preview only')).toBeInTheDocument();
     expect(
@@ -431,6 +426,7 @@ describe('theme-showcase local interactions', () => {
       '[contenteditable="true"]',
     )!;
     await user.click(screen.getByRole('button', {name: 'Reschedule delivery'}));
+    expect(composer).toHaveTextContent('Reschedule delivery');
     await user.click(composer);
     await user.keyboard('{Enter}');
     expect(
@@ -450,14 +446,5 @@ describe('theme-showcase local interactions', () => {
     Object.defineProperty(viewport, 'scrollHeight', {value: 1500});
     resizeCallbacks.get(list)!();
     expect(viewport.scrollTop).toBe(200);
-  });
-
-  it('fills the chat draft from a suggested question', async () => {
-    const user = userEvent.setup();
-    const view = render(<ThemeShowcaseStore />);
-    await user.click(screen.getByRole('button', {name: 'Reschedule delivery'}));
-    expect(
-      view.container.querySelector('[contenteditable="true"]'),
-    ).toHaveTextContent('Reschedule delivery');
   });
 });
