@@ -19,10 +19,9 @@
  *
  * Expansion state flows through an external store (TreeStore) so each
  * row's expander subscribes independently — a toggle re-renders only the
- * affected cells, not the whole body. Each row's aria-level is applied
- * imperatively via a ref callback on each <tr>, exactly like selection's
- * row styling; each subscription self-cleans when the row disconnects.
- * The expander button, not the row, carries aria-expanded.
+ * affected cells, not the whole body. A ref callback on each <tr> sets its
+ * aria-level, as selection's row styling does. Each subscription ends when
+ * its row disconnects.
  *
  * When `hasExpandableRows` is false (flat data), every transform is a
  * pass-through: adopting the plugin ahead of hierarchical data is a
