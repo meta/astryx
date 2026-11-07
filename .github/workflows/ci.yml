@@ -59,7 +59,8 @@ permissions: {}
 # nothing in its scope changed; anything undecidable runs everything.
 #
 # Visual, accessibility and RTL owners (pr-a11y*, visual-scout, pr-visual,
-# pr-rtl*) do not run on pull request updates: they run for release-check,
+# pr-rtl*) do not run on pull request updates (a shared primitive's dependent
+# audits are the one exception, below): they run for release-check,
 # which the Main heavy lanes workflow (main-heavy-lanes.yml) dispatches for
 # main's tip every three hours and before each weekday cut, and the release
 # gate dispatches before a cut. A pull request
@@ -4524,12 +4525,42 @@ jobs:
           echo "The audits read this pull request's Storybook build, which did not succeed."
           exit 1
 
+      # The workflow's own commit: this lane's environment marker and its check
+      # (in .github, a parent of the scripts, so the checkout's cone holds the
+      # marker). The head checkout below replaces the workspace, so they move
+      # out first.
+      - name: Check out the scope action
+        if: steps.leg.outputs.runs == 'true'
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            .github/actions/test-scope
+            .github/scripts
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Keep this lane's environment marker from the workflow's commit
+        if: steps.leg.outputs.runs == 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/lane-environment/.github/scripts"
+          cp .test-scope/.github/scripts/lane-environment.mjs "$RUNNER_TEMP/lane-environment/.github/scripts/"
+          cp .test-scope/.github/lane-environments.json "$RUNNER_TEMP/lane-environment/.github/"
+
       - name: Check out the head that built the Storybook
         if: steps.leg.outputs.runs == 'true'
         uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+
+      # The audits run the same specs and config as the contract job, in its
+      # environment. A head older than that environment stops here.
+      - name: Require this lane's environment in the branch
+        if: steps.leg.outputs.runs == 'true'
+        run: >-
+          node "$RUNNER_TEMP/lane-environment/.github/scripts/lane-environment.mjs" check --lane a11y-contracts
+          --workflow "$RUNNER_TEMP/lane-environment/.github/lane-environments.json"
+          --head .github/lane-environments.json
 
       - name: Setup Node and pnpm
         if: steps.leg.outputs.runs == 'true'

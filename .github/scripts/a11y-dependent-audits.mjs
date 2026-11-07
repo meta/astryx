@@ -21,26 +21,19 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 import {
+  componentFolderOf,
   fileSeconds,
   importerGraph,
+  isRenderedSource,
   parseRouting,
   planLegs,
   renderingFolders,
 } from './a11y-pr-contracts.mjs';
+import {isA11ySpecFile} from './lib/a11y-spec-files.mjs';
 
 export const PRIMITIVES_FILE = '.github/a11y-shared-primitives.json';
 export const MAX_LEGS = 3;
 const DURATIONS_FILE = '.github/a11y-contract-durations.json';
-// Files that put no code on a page: tests, stories, docs, notes.
-const NOT_RENDERED =
-  /(?:^|\/)__tests__\/|\.(?:test|spec|stories|doc)\.[^/]+$|\.md$/;
-const AUDIT_SPEC =
-  /^packages\/[^/]+\/src\/.*\.a11y\.(?:chromium|browser)\.spec\.ts$/;
-
-const folderOf = file => {
-  const match = /^packages\/([^/]+)\/src\/([^/]+)\//.exec(file);
-  return match ? `${match[1]}/${match[2]}` : null;
-};
 
 /**
  * The shared primitives, as `<package>/<Folder>`.
@@ -65,17 +58,14 @@ export function readPrimitives(root) {
 }
 
 /**
- * The primitives whose own source a change touches: a test, story, doc or note
- * in the folder renders nothing.
+ * The primitives whose own rendered source a change touches: a test, story,
+ * doc or note in the folder renders nothing.
  * @param {string[]} primitives
  * @param {string[]} changed
  */
 export function changedPrimitives(primitives, changed) {
   const touched = new Set(
-    changed
-      .filter(file => !NOT_RENDERED.test(file))
-      .map(folderOf)
-      .filter(Boolean),
+    changed.filter(isRenderedSource).map(componentFolderOf).filter(Boolean),
   );
   return primitives.filter(primitive => touched.has(primitive));
 }
@@ -87,19 +77,22 @@ export function changedPrimitives(primitives, changed) {
  */
 export function dependentAudits(specs, folders) {
   return specs
-    .filter(({file, mode}) => mode === 'audit' && folders.has(folderOf(file)))
+    .filter(
+      ({file, mode}) =>
+        mode === 'audit' && folders.has(componentFolderOf(file)),
+    )
     .map(({file}) => file)
     .sort();
 }
 
-/** Every browser accessibility spec in the tree, with its routing mode. */
+/** Every browser accessibility spec file in the tree, with its routing mode. */
 export function listAuditSpecs(root) {
   return execFileSync('git', ['ls-files', '--', 'packages'], {
     cwd: root,
     encoding: 'utf8',
   })
     .split('\n')
-    .filter(file => AUDIT_SPEC.test(file))
+    .filter(isA11ySpecFile)
     .map(file => ({
       file,
       mode: parseRouting(fs.readFileSync(path.join(root, file), 'utf8')).mode,

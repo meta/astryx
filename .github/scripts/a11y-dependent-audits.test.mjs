@@ -91,6 +91,19 @@ describe("a Button change runs its dependents' audits", () => {
     for (const file of files) expect(modeOf.get(file), file).toBe('audit');
   });
 
+  it("plans an IconButton change's own audit and its users' audits", () => {
+    const {primitives, files} = plan([
+      'packages/core/src/IconButton/IconButton.tsx',
+    ]);
+    expect(primitives).toEqual(['core/IconButton']);
+    expect(files).toEqual(
+      expect.arrayContaining([
+        'packages/core/src/DateInput/__tests__/DateInputAudit.a11y.chromium.spec.ts',
+        'packages/core/src/IconButton/__tests__/IconButtonAudit.a11y.chromium.spec.ts',
+      ]),
+    );
+  });
+
   it('fits at most three legs of ten minutes at the recorded times', () => {
     const {count, shares, longestMs, files} = plan([
       'packages/core/src/Button/Button.tsx',
@@ -162,6 +175,10 @@ describe('the dependent-audits jobs', () => {
     expect(run.run).toContain(
       'pnpm exec playwright test "${FILES[@]}" --config playwright.config.ts --project chromium',
     );
+    // The head must carry the contract lane's environment.
+    expect(
+      step(legs, "Require this lane's environment in the branch").run,
+    ).toContain('check --lane a11y-contracts');
     // Specs run at the head that built the Storybook.
     expect(
       step(legs, 'Check out the head that built the Storybook').with.ref,

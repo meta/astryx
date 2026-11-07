@@ -249,7 +249,7 @@ they are separately named.
   scope and spec-location mapping the labelled run uses. Then, in the time
   left and for at most one minute of it, it runs the `scoped` and
   `release-only` spec files of the component folders that render a touched
-  component through their source value imports, nearest first. It runs no unchanged `audit` or `always` spec. For a shared primitive named in `.github/a11y-shared-primitives.json`, FR12's touched-component rule also runs a dependent-audits leg whenever a change to it runs CI: at most three legs, each at most 10 minutes, covering the audits of components that use it. The list starts with Button and IconButton. Layer joins when a Layer change breaks release-check or a dependent audit at release; other additions are a CI & Release and chief-of-staff call. The contract job runs in parallel with the unit-test jobs and
+  component through their source value imports, nearest first. It runs no unchanged `audit` or `always` spec. For a shared primitive named in `.github/a11y-shared-primitives.json`, FR12's touched-component rule also runs a dependent-audits leg on every pull-request CI run that includes a change to it: at most three legs, each at most 10 minutes, covering the audits of components that use it. The list starts with Button and IconButton. Layer joins when a Layer change breaks release-check or a dependent audit at release; other additions are a CI & Release and chief-of-staff call. The contract job runs in parallel with the unit-test jobs and
   MUST NOT become the pull request's critical path: it starts after the
   Storybook build and MUST finish before the slowest unit-test job, so the
   time until the required `test` join reports does not grow. It stops after
@@ -1152,6 +1152,8 @@ fix-forward lands).
 
 **Reference:** `spec:AST-030/DEC-23`
 **Decider:** chief of staff with the release owner, `2026-11-05`
+**Superseded in part by:** `spec:AST-030/DEC-25` (a shared primitive's change
+runs the `audit` specs of the components that use it)
 
 A wide refactor that changed Spinner's behavior (its role and its shared
 announcement, across eight components) merged without Spinner's own motion
@@ -1168,7 +1170,8 @@ or the critical path; each file that does not fit is reported as not run with
 the label that runs it. The one-minute share holds the added runner time to about 360 minutes a day: the owned contracts are the proven catch, and the
 rendering folders' share widens only if it catches failures the owned
 contracts miss. The default touched-components check keeps its wide-change skip, and
-unchanged `audit` and `always` specs still do not run on a pull request.
+unchanged `audit` and `always` specs still do not run on a pull request, except
+the dependent audits of a shared primitive (DEC-25).
 
 Rejected: dropping the five-component limit for every audit (the visual,
 accessibility and RTL audits of a wide change do not fit the default check's
@@ -1196,9 +1199,12 @@ A change to shared Button's disabled state passed every pull-request check and
 then failed the release check in a Chat component's `audit` spec, which no
 pull request runs. A change to a shared primitive that
 `.github/a11y-shared-primitives.json` lists now runs the `audit` specs of the
-components that use it, on every CI run that includes the change, in at most
-three legs of about ten minutes each (FR12). The list starts with Button and
-IconButton (about 20 audit spec files, about ten runner-minutes a run). Layer,
+components that use it, on every pull-request CI run that includes the
+change, in at most three legs of about ten minutes each (FR12). The list starts
+with Button and IconButton. A Button change runs about 20 audit spec files in
+two legs of about five minutes each, about 11 runner-minutes a run. The legs
+start after the Storybook build and end before the slowest unit-test job, so
+the time until the required `test` join reports does not grow. Layer,
 which nearly every audited component uses, joins only when a Layer change
 breaks the release check or a dependent audit at release.
 
