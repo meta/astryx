@@ -833,7 +833,7 @@ test('the page settle keeps advancing every frame while the main thread is block
   expect(proof.verdict.failures, proof.summary).toEqual([]);
   for (const [index, run] of proof.runs.entries()) {
     if (proof.judged[index]) {
-      expect(run.monotonic, proof.summary).toBe(true);
+      expect(run?.monotonic, proof.summary).toBe(true);
     }
   }
 });
@@ -922,8 +922,10 @@ for (const late of ['two frames', '450 ms'] as const) {
     // skips.
     const first = await pooledSettleProof(page, g, ['next']);
     const blockAfterMs = first.blocks[0].from - first.settles[0].from;
-    const stillMs =
-      late === 'two frames' ? 2.2 * first.proof.runs[0].cadenceMs : 450;
+    // A run the pool left out has no frame interval to measure by.
+    const cadenceMs = first.proof.runs[0]?.cadenceMs;
+    expect(cadenceMs, first.proof.summary).toBeGreaterThan(0);
+    const stillMs = late === 'two frames' ? 2.2 * (cadenceMs ?? 0) : 450;
     await breakSettle(g, 'delayed', blockAfterMs + stillMs);
     const {proof} = await pooledSettleProof(page, g, ['next', 'next']);
     // The photo misses a frame the control moved on, past the in-flight one.
