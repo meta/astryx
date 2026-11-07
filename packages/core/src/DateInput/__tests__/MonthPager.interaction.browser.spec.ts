@@ -316,7 +316,9 @@ test('the arrow names the month at the tap and scrolls one month', async ({
   }
   // The page holds the step as soon as it runs. A hold sent once the tap
   // returns reaches a busy page late, and the step can end first.
-  const hold = await armHold(page, track);
+  const hold = await armHold(page, track, {
+    judges: {target: track, property: 'translate'},
+  });
   await driver.tap({x: box.x + box.width / 2, y: box.y + box.height / 2});
   await expect(title).toHaveText('November 2026');
   await hold.held();
@@ -389,7 +391,9 @@ test('an arrow tapped right after a release keeps the title on the month it name
   });
   // The page holds the settle as soon as it runs, so Next lands mid-settle
   // on any runner. The arrow's own step then replaces the held settle.
-  const hold = await armHold(page, track);
+  const hold = await armHold(page, track, {
+    judges: {target: track, property: 'translate'},
+  });
   await driver.play(slowDrag(center, -0.7 * width));
   expect((await hold.held()).length).toBeGreaterThan(0);
   await tapArrow(page, driver, 'Next month');
@@ -793,7 +797,9 @@ test(
     }
     // The page holds the step as soon as it runs, so a busy page cannot let
     // it end before the film starts.
-    const hold = await armHold(page, track);
+    const hold = await armHold(page, track, {
+      judges: {target: track, property: 'translate'},
+    });
     await driver.tap({x: box.x + box.width / 2, y: box.y + box.height / 2});
     const held = await hold.held();
     await freezeTimers(page);
@@ -820,7 +826,9 @@ test(
     const {driver, viewport, track, width, center} = await openCalendar(page);
     await installTimerGate(page);
     // The page holds the settle as soon as it runs, as for the arrow step.
-    const hold = await armHold(page, track);
+    const hold = await armHold(page, track, {
+      judges: {target: track, property: 'translate'},
+    });
     await driver.play(slowDrag(center, -0.7 * width));
     const held = await hold.held();
     await freezeTimers(page);
