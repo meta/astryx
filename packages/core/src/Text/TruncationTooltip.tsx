@@ -24,6 +24,7 @@ import {
   type RefObject,
 } from 'react';
 import type {LayerPlacement} from '../Layer';
+import {createModuleLoader} from '../utils/moduleLoader';
 import type {Tooltip as TooltipType} from '../Tooltip/Tooltip';
 import {useTapRecognizer} from '../Layer/useTouchTrigger';
 import {
@@ -33,25 +34,11 @@ import {
 
 type TooltipComponent = typeof TooltipType;
 
-// The Tooltip module, once loaded. A tooltip mounted from it renders at once:
-// no boundary suspends, so the first hover's delay starts on the hover.
-let loadedTooltip: TooltipComponent | null = null;
-let tooltipLoad: Promise<TooltipComponent> | null = null;
-
-async function loadTooltip(): Promise<TooltipComponent> {
-  tooltipLoad ??= import('../Tooltip/Tooltip').then(
-    mod => {
-      loadedTooltip = mod.Tooltip;
-      return mod.Tooltip;
-    },
-    (error: unknown) => {
-      // A failed load is tried again by the next truncated element.
-      tooltipLoad = null;
-      throw error;
-    },
-  );
-  return tooltipLoad;
-}
+// The Tooltip module. Once loaded, a tooltip renders from it at once: no
+// boundary suspends, so the first hover's delay starts on the hover.
+const tooltipModule = createModuleLoader(
+  async () => import('../Tooltip/Tooltip'),
+);
 
 export interface TruncationTooltipInterest {
   /** Whether a hover, tap or focus has reached the element. It stays true. */
@@ -79,7 +66,7 @@ export function useTruncationTooltipInterest(
 ): TruncationTooltipInterest {
   const [isWanted, setIsWanted] = useState(false);
   const [tooltip, setTooltip] = useState<TooltipComponent | null>(
-    () => loadedTooltip,
+    () => tooltipModule.loaded()?.Tooltip ?? null,
   );
   // Syncs with the module loader: truncated text loads the Tooltip module, so
   // the first interaction mounts the tooltip at once.
@@ -88,10 +75,10 @@ export function useTruncationTooltipInterest(
       return;
     }
     let isCurrent = true;
-    loadTooltip().then(
+    tooltipModule.load().then(
       loaded => {
         if (isCurrent) {
-          setTooltip(() => loaded);
+          setTooltip(() => loaded.Tooltip);
         }
       },
       () => {},
