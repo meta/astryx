@@ -451,10 +451,21 @@ export function Carousel({
   // While the paging holds the row, the edges follow the row as shown.
   useAttachment(
     scrollElRef,
-    scroller =>
-      attachedPaging == null
-        ? () => {}
-        : attachSnapPaging(attachedPaging, scroller, followShown),
+    scroller => {
+      if (attachedPaging == null) {
+        return () => {};
+      }
+      // The detach runs in an effect cleanup, inside React's commit, so the
+      // paging's last report there takes React's scheduling.
+      let isDetaching = false;
+      const detach = attachSnapPaging(attachedPaging, scroller, held =>
+        followShown(held, !isDetaching),
+      );
+      return () => {
+        isDetaching = true;
+        detach();
+      };
+    },
     attachedPaging,
   );
   // React's wheel listener is passive, so it can't stop the browser's own
