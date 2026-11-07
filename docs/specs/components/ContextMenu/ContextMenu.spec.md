@@ -144,12 +144,13 @@ Consumer props, content modes, and presentation policy remain documented in
 
 ### Performance and resources
 
-- **PR1 — Bounded resources.** While open, ContextMenu adds a document (and
-  shadow-root) mousedown listener for outside dismissal and removes it on
-  close, and the
-  pointer menu observes its size and content to decide whether it scrolls. With
-  `presentation="adaptive"` it subscribes to the compact-touch query while
-  mounted. A menu never opened mounts no pointer menu surface, only its layer's
+- **PR1 — Bounded resources.** While open, ContextMenu's outside-press watch
+  adds pointer listeners to the trigger's document (and shadow roots), plus a
+  mousedown listener where a mouse or a pen closes it at the press, and
+  removes them on close. The pointer menu observes its size and content to
+  decide whether it scrolls. With `presentation` omitted it subscribes to the
+  coarse-pointer query while mounted, and with `presentation="adaptive"` to
+  the compact-touch query. A menu never opened mounts no pointer menu surface, only its layer's
   inert marker: the surface mounts at the first open and stays mounted after
   it, so a page with many context menus (a table with one per cell) carries no
   closed menu surfaces. A finger's hold mounts the surface, closed, at its
