@@ -88,11 +88,14 @@ async function openTouchStory(
     const w = window as unknown as {
       __menuShownAt?: number | null;
       __liftHandledAt?: number | null;
+      __menuShownInLift?: boolean | null;
       __menuShownTimerAt?: number | null;
     };
     w.__menuShownAt = null;
     w.__liftHandledAt = null;
+    w.__menuShownInLift = null;
     w.__menuShownTimerAt = null;
+    let isInLift = false;
     // When the timer task that runs now started. The hold's moments come from
     // the gesture arena's timers. The menu commits in the task that decides
     // it, so its show runs inside that timer task.
@@ -118,12 +121,22 @@ async function openTouchStory(
         timeout,
         ...args,
       )) as typeof window.setTimeout;
-    // When the page gets to the lift (the event's own timestamp is the
-    // hardware's, or the script's): the menu shows in the same task.
+    // When the page gets to the lift. The event's own timestamp is the
+    // hardware's, or the script's. Also whether the menu shows while the
+    // lift's listeners run: then no frame paints between the two.
     addEventListener(
       'touchend',
       () => {
         w.__liftHandledAt = performance.now();
+        isInLift = true;
+        // Added during the dispatch, it runs after the page's own listeners.
+        addEventListener(
+          'touchend',
+          () => {
+            isInLift = false;
+          },
+          {once: true, passive: true},
+        );
       },
       {capture: true, passive: true},
     );
@@ -140,6 +153,7 @@ async function openTouchStory(
         // Only the first show counts, so a later one cannot stand in for it.
         if (w.__menuShownAt == null) {
           w.__menuShownAt = performance.now();
+          w.__menuShownInLift = isInLift;
           w.__menuShownTimerAt = timerAt;
         }
       }
@@ -430,18 +444,24 @@ test('a finger lifted after the commit gets the menu at the lift, and sends no c
   await driver.play(hold(center, 530));
   await page.waitForTimeout(300);
   await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
-  const {lift, shown} = await page.evaluate(() => {
+  const {lift, shown, isInLift} = await page.evaluate(() => {
     const w = window as unknown as {
       __menuShownAt?: number | null;
       __liftHandledAt?: number | null;
+      __menuShownInLift?: boolean | null;
     };
-    return {lift: w.__liftHandledAt ?? null, shown: w.__menuShownAt ?? null};
+    return {
+      lift: w.__liftHandledAt ?? null,
+      shown: w.__menuShownAt ?? null,
+      isInLift: w.__menuShownInLift ?? null,
+    };
   });
   expect(lift).not.toBeNull();
   expect(shown).not.toBeNull();
-  // In the lift's own task: after it, and before the next frame could paint.
+  // In the lift's own dispatch: after it, and before the next frame could
+  // paint, however long the menu's render takes in that task.
   expect((shown as number) - (lift as number)).toBeGreaterThanOrEqual(0);
-  expect((shown as number) - (lift as number)).toBeLessThan(1000 / 60);
+  expect(isInLift).toBe(true);
   const log = await readInputLog(page);
   const end = log.filter(record => record.type === 'touchend').at(-1);
   expect(end?.defaultPrevented, JSON.stringify(log)).toBe(true);
