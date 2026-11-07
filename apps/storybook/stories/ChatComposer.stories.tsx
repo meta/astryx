@@ -14,7 +14,13 @@ import {ProgressBar} from '@astryxdesign/core/ProgressBar';
 import {List, ListItem} from '@astryxdesign/core/List';
 import {Text} from '@astryxdesign/core/Text';
 import {Badge} from '@astryxdesign/core/Badge';
-import {useState} from 'react';
+import {VStack} from '@astryxdesign/core/Layout';
+import {
+  SegmentedControl,
+  SegmentedControlItem,
+} from '@astryxdesign/core/SegmentedControl';
+import {TextInput} from '@astryxdesign/core/TextInput';
+import {useEffect, useState} from 'react';
 
 // Inline icons for story demos (not in the default icon registry)
 const AtSignIcon = (
@@ -503,4 +509,82 @@ export const DisabledStreamingNarrow: Story = {
       '1',
     );
   },
+};
+
+/** NOT FOR LANDING: the page-global switch that the try-it's option B sets. */
+const TRY_IT_FOCUS_GATE = Symbol.for('@astryxdesign/core/try-it-focus-gate');
+
+type FocusDepthMode = 'today' | 'fine-pointer';
+
+const FOCUS_DEPTH_NOTES: Record<FocusDepthMode, string> = {
+  today:
+    'A, today: focusing a field fades in its focus depth over 125 ms, on a tap too.',
+  'fine-pointer':
+    'B: only a fine pointer shows the focus depth, as hover does. A tap shows none, as on iOS. Keyboard focus keeps the composer ring.',
+};
+
+/**
+ * NOT FOR LANDING: a try-it for the owner's card on focus depth under a
+ * finger. Tap each field on a phone, then click it and tab to it on a
+ * desktop.
+ */
+function TryItFocusDepthFixture({initialMode}: {initialMode: FocusDepthMode}) {
+  const [mode, setMode] = useState<FocusDepthMode>(initialMode);
+  const [name, setName] = useState('');
+  // The fields read the switch as they render, so it is set before they do.
+  (globalThis as Record<symbol, unknown>)[TRY_IT_FOCUS_GATE] =
+    mode === 'fine-pointer';
+  useEffect(
+    () => () => {
+      (globalThis as Record<symbol, unknown>)[TRY_IT_FOCUS_GATE] = false;
+    },
+    [],
+  );
+  return (
+    <VStack gap={4}>
+      <SegmentedControl
+        value={mode}
+        onChange={value => setMode(value as FocusDepthMode)}
+        label="Focus depth">
+        <SegmentedControlItem value="today" label="A: today" />
+        <SegmentedControlItem value="fine-pointer" label="B: fine pointer" />
+      </SegmentedControl>
+      <Text>{FOCUS_DEPTH_NOTES[mode]}</Text>
+      <div key={mode} style={{display: 'flex', flexWrap: 'wrap', gap: 24}}>
+        <div style={{flex: '1 1 260px', minWidth: 0}}>
+          <VStack gap={2}>
+            <Text weight="bold">ChatComposer</Text>
+            <ChatComposer placeholder="Ask anything" onSubmit={() => {}} />
+          </VStack>
+        </div>
+        <div style={{flex: '1 1 260px', minWidth: 0}}>
+          <VStack gap={2}>
+            <Text weight="bold">ChatComposer, flat</Text>
+            <ChatComposer
+              elevation="none"
+              placeholder="Ask anything"
+              onSubmit={() => {}}
+            />
+          </VStack>
+        </div>
+        <div style={{flex: '1 1 260px', minWidth: 0}}>
+          <TextInput
+            label="TextInput"
+            placeholder="Your name"
+            value={name}
+            onChange={setName}
+          />
+        </div>
+      </div>
+    </VStack>
+  );
+}
+
+export const TryItFocusDepth: StoryObj<{mode: FocusDepthMode}> = {
+  name: 'Try it: focus depth under a finger (not for landing)',
+  args: {mode: 'today'},
+  argTypes: {
+    mode: {control: 'inline-radio', options: ['today', 'fine-pointer']},
+  },
+  render: ({mode}) => <TryItFocusDepthFixture key={mode} initialMode={mode} />,
 };

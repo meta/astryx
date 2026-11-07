@@ -56,6 +56,7 @@ import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
+import {isTryItFocusGateOn} from '../utils/tryItFocusGate';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -340,6 +341,48 @@ const elevationStyles = stylex.create({
   },
 });
 
+// NOT FOR LANDING: the try-it story's option B. Each elevation shows its
+// focus-within depth only under a fine pointer, as its hover depth already
+// does. The keyboard ring (focusOutlineStyles) is unchanged.
+const tryItFocusGateStyles = stylex.create({
+  low: {
+    boxShadow: {
+      default: shadowVars['--shadow-low'],
+      ':hover:where(:not(:disabled,[aria-disabled="true"]))': {
+        '@media (hover: hover)': shadowVars['--shadow-med'],
+      },
+      ':focus-within': {
+        default: shadowVars['--shadow-low'],
+        '@media (hover: hover) and (pointer: fine)': shadowVars['--shadow-med'],
+      },
+    },
+  },
+  none: {
+    borderWidth: borderVars['--border-width'],
+    borderStyle: 'solid',
+    borderColor: {
+      default: colorVars['--color-border-emphasized'],
+      ':focus-within': {
+        default: colorVars['--color-border-emphasized'],
+        '@media (hover: hover) and (pointer: fine)':
+          colorVars['--color-accent'],
+      },
+    },
+    padding: `calc(var(--_chat-composer-padding) - ${borderVars['--border-width']})`,
+    boxShadow: {
+      default: 'none',
+      ':hover:not(:focus-within):where(:not(:disabled,[aria-disabled="true"]))':
+        {
+          '@media (hover: hover)': `inset 0px 0px 0px 2px color-mix(in srgb, ${colorVars['--color-border-emphasized']} 30%, transparent)`,
+        },
+      ':focus-within': {
+        default: 'none',
+        '@media (hover: hover) and (pointer: fine)': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
+      },
+    },
+  },
+});
+
 function isComposerEditor(target: EventTarget | null): target is HTMLElement {
   return (
     target instanceof HTMLElement &&
@@ -560,7 +603,9 @@ export function ChatComposer(props: ChatComposerProps) {
           onBlurCapture={handleBodyBlurCapture}
           {...stylex.props(
             styles.body,
-            elevationStyles[elevation],
+            isTryItFocusGateOn()
+              ? tryItFocusGateStyles[elevation]
+              : elevationStyles[elevation],
             hasKeyboardEditorFocus && focusOutlineStyles.focusWithin,
             density === 'compact' && styles.compact,
             xstyle,

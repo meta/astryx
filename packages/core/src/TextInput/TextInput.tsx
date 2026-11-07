@@ -89,6 +89,34 @@ const styles = stylex.create({
   },
 });
 
+// NOT FOR LANDING: the try-it story's option B. The field shows its
+// focus-within border and ring only under a fine pointer, as its hover ring
+// already does. Under forced colors a focused field keeps Highlight.
+const tryItFocusGateStyles = stylex.create({
+  wrapper: {
+    borderColor: {
+      default: colorVars['--color-border-emphasized'],
+      ':focus-within': {
+        default: colorVars['--color-border-emphasized'],
+        '@media (hover: hover) and (pointer: fine)':
+          colorVars['--color-accent'],
+        '@media (forced-colors: active)': 'Highlight',
+      },
+    },
+    boxShadow: {
+      default: 'none',
+      ':hover:not(:focus-within):where(:not(:disabled,[aria-disabled="true"]))':
+        {
+          '@media (hover: hover)': `inset 0px 0px 0px 2px color-mix(in srgb, ${colorVars['--color-border-emphasized']} 30%, transparent)`,
+        },
+      ':focus-within': {
+        default: 'none',
+        '@media (hover: hover) and (pointer: fine)': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
+      },
+    },
+  },
+});
+
 const sizeStyles = stylex.create({
   sm: {
     height: sizeVars['--size-element-sm'],
@@ -117,6 +145,7 @@ import {useInputContainer} from '../hooks/useInputContainer';
 import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
+import {isTryItFocusGateOn} from '../utils/tryItFocusGate';
 import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
 import type {BaseProps} from '../BaseProps';
 import {
@@ -501,6 +530,7 @@ export function TextInput({
         }),
         stylex.props(
           inputWrapperStyles.base,
+          isTryItFocusGateOn() && tryItFocusGateStyles.wrapper,
           sizeStyles[size],
           isDisabled && inputWrapperStyles.disabled,
           isDisabled && inputDisabledFocusStyles.ring,
