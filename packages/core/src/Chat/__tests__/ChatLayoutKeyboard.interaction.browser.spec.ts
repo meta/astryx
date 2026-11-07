@@ -46,6 +46,8 @@ const storybook = withStorybook(test);
 // The cover Mobile Safari reports on an iPhone 17 Pro (keyboard, accessory
 // bar and the floating address bar over a 714 px layout viewport).
 const COVER = 337;
+// How often Chrome's caret blinks, ms.
+const CARET_BLINK_MS = 500;
 
 /**
  * Replaces `window.visualViewport` before the page loads with one the test
@@ -548,20 +550,6 @@ test.describe('Chrome on Android (spec:AST-099 FR8)', () => {
 
   test('the rise does no Layout or Paint per frame', async ({page}) => {
     const {editable} = await openChat(page, {android: true});
-    await editable.focus();
-    // Focus starts the composer's own feedback, a short box-shadow transition
-    // that paints every frame. It is no part of the ride, so it ends before
-    // the trace, and the window counts the ride alone.
-    await page.evaluate(async () => {
-      const transitions = document
-        .getAnimations()
-        .filter(animation => animation instanceof CSSTransition);
-      await Promise.all(
-        transitions.map(async transition =>
-          transition.finished.catch(() => undefined),
-        ),
-      );
-    });
     // Records each ride the motion engine starts on the dock, when it starts
     // and when it is cancelled. Reading an animation's times reads no layout.
     // The engine sets the start in the task that makes the ride, so a
@@ -603,20 +591,44 @@ test.describe('Chrome on Android (spec:AST-099 FR8)', () => {
     // No polling inside the trace: reading a sticky element's presented style
     // from the test forces a layout every frame by itself.
     let reported = 0;
+    let focusedFor = 0;
     const trace = await traceRendering(page, async () => {
-      reported = await page.evaluate(async cover => {
-        const from = performance.timeOrigin + performance.now();
-        (window as unknown as {__keyboard: (c: number) => void}).__keyboard(
-          cover,
-        );
-        await new Promise(resolve => setTimeout(resolve, 400));
-        return from;
-      }, COVER);
+      ({reported, focusedFor} = await editable.evaluate(
+        async (element, cover) => {
+          // As on a phone, focus brings up the keyboard. Focus starts the
+          // composer's own feedback, a short box-shadow transition that paints
+          // every frame. The report waits for it to end.
+          const focusedAt = performance.timeOrigin + performance.now();
+          (element as HTMLElement).focus();
+          await Promise.all(
+            document
+              .getAnimations()
+              .filter(animation => animation instanceof CSSTransition)
+              .map(async transition =>
+                transition.finished.catch(() => undefined),
+              ),
+          );
+          const from = performance.timeOrigin + performance.now();
+          (window as unknown as {__keyboard: (c: number) => void}).__keyboard(
+            cover,
+          );
+          await new Promise(resolve => setTimeout(resolve, 400));
+          return {reported: from, focusedFor: from - focusedAt};
+        },
+        COVER,
+      ));
     });
     // The steady part of Gboard's slide, 125–220 ms after the report. Its start
     // lays out once and paints in its first two frames. From about 230 ms, its
     // end paints twice and hands the layers back with one layout.
     const steady = {from: reported + 125, to: reported + 220};
+    // The caret blinks every 500 ms from the focus, Chrome's interval, and
+    // each blink is a main-thread frame. A report soon after the focus keeps
+    // the first blink after the window.
+    expect(
+      focusedFor,
+      'the caret\u2019s first blink could fall in the window',
+    ).toBeLessThan(CARET_BLINK_MS - (steady.to - reported));
     // A ride runs through that window: it starts before the window, its slide
     // ends after it, and nothing cancels it sooner. So no rendering in the
     // window means the dock rode without it, not that nothing moved.
