@@ -145,16 +145,8 @@ export const WithRemove: Story = {
   render: () => (
     <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
       <Token label="Removable" onRemove={() => alert('Removed!')} />
-      <Token
-        label="Red tag"
-        color="red"
-        onRemove={() => alert('Removed!')}
-      />
-      <Token
-        label="Blue tag"
-        color="blue"
-        onRemove={() => alert('Removed!')}
-      />
+      <Token label="Red tag" color="red" onRemove={() => alert('Removed!')} />
+      <Token label="Blue tag" color="blue" onRemove={() => alert('Removed!')} />
     </div>
   ),
 };
@@ -294,12 +286,7 @@ export const AllVariations: Story = {
         <h4 style={{margin: '0 0 8px'}}>Clickable</h4>
         <div style={{display: 'flex', gap: '8px', flexWrap: 'wrap'}}>
           {allColors.map(color => (
-            <Token
-              key={color}
-              label={color}
-              color={color}
-              onClick={() => {}}
-            />
+            <Token key={color} label={color} color={color} onClick={() => {}} />
           ))}
         </div>
       </div>
