@@ -950,7 +950,7 @@ describe('a call from rest starts at the commit, as Core Animation does', () => 
       expect(started).toBe(false);
     });
 
-    it('the calls one frame commits start at one time, however long the frame callbacks between them run', async () => {
+    it('the calls from rest that one frame commits start at one time, however long the frame callbacks between them run', async () => {
       const first = setup();
       const second = setup();
       first.animator.animate({x: 300}, {spring: springs.settle});

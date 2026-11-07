@@ -760,8 +760,9 @@ let frameRead: {readonly frame: number; readonly time: number} | null = null;
 /**
  * The time the animation frame with timestamp `frame` runs, read once in
  * that frame. Every animator's callback in the frame takes that read, so the
- * calls one frame commits start together. A long callback before them does
- * not move their start. The read ends with the frame's task, so a frame
+ * calls from rest that one frame commits start together. A long callback
+ * before them does not move their start. A call on a moving element keeps
+ * its own clock. The read ends with the frame's task, so a frame
  * source that repeats a timestamp still reads each frame anew. A frame
  * source with no timestamp reads the clock.
  */

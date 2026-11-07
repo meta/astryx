@@ -849,7 +849,7 @@ test('no Layout or Paint runs while it animates', async ({
   expect(counts.Paint ?? 0).toBe(0);
 });
 
-test('the calls one frame commits start at one time, however long the frame callbacks between them run', async ({
+test('the calls from rest that one frame commits start at one time, however long the frame callbacks between them run', async ({
   page,
 }) => {
   await open(page);
