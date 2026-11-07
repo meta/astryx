@@ -83,7 +83,11 @@ Consumer migration instructions belong in consumer docs and release notes.
 - **A scrolling TabList in the center lane wraps the row first.** In a narrow
   container, a center lane that holds a TabList keeps all of its tabs while
   they fit the toolbar, so the row wraps and the end lane moves to a second
-  line; the tabs scroll only when they are wider than the toolbar.
+  line; the tabs scroll only when they are wider than the toolbar. With a
+  bottom divider, the selected tab's indicator sits on the rail while the lanes
+  share one line and on its tab while the row is wrapped; the toolbar reads the
+  wrap after layout, so a wrapped first paint shows it on the rail for one
+  frame.
 - **The tab stop does not follow a pointer click.** After a click on a control
   that does not hold the stop, the stop stays on the earlier control, so
   Shift+Tab from the clicked control lands on that earlier control inside the

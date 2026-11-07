@@ -132,3 +132,51 @@ for (const [size, px] of [
     }
   });
 }
+
+/** The selected tab's indicator, its tab, and the toolbar row, as boxes. */
+async function readIndicator(page: Page) {
+  return page.evaluate(() => {
+    const toolbar = document.querySelector<HTMLElement>('[role="toolbar"]');
+    const indicator = [
+      ...document.querySelectorAll<HTMLElement>('.astryx-tab-indicator'),
+    ].find(element => getComputedStyle(element).opacity !== '0');
+    const tab = indicator?.closest<HTMLElement>('.astryx-tab');
+    if (toolbar == null || indicator == null || tab == null) {
+      throw new Error('No toolbar, tab, or visible indicator');
+    }
+    return {
+      indicatorBottom: indicator.getBoundingClientRect().bottom,
+      tabBottom: tab.getBoundingClientRect().bottom,
+      toolbarBottom: toolbar.getBoundingClientRect().bottom,
+    };
+  });
+}
+
+test('with a bottom divider the indicator sits on the rail while the lanes share one line', async ({
+  page,
+}) => {
+  await page.setViewportSize({width: 1024, height: 768});
+  await setDefaultFontSize(page, 16);
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-toolbar--with-center-tab-navigation&viewMode=story`,
+  );
+  await page.locator('[role="toolbar"]').waitFor();
+  const {indicatorBottom, tabBottom} = await readIndicator(page);
+  expect(indicatorBottom).toBeGreaterThan(tabBottom + 2);
+});
+
+test('with a bottom divider a wrapped row keeps the indicator on its tab', async ({
+  page,
+}) => {
+  await setDefaultFontSize(page, 16);
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-toolbar--with-center-tab-navigation&viewMode=story`,
+  );
+  await page.locator('[role="toolbar"]').waitFor();
+  await expect
+    .poll(async () => {
+      const {indicatorBottom, tabBottom} = await readIndicator(page);
+      return Math.abs(indicatorBottom - tabBottom) <= 2;
+    })
+    .toBe(true);
+});

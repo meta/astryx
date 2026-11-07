@@ -17,7 +17,7 @@
  * - /packages/cli/assets/templates/blocks/components/Toolbar/ (showcase blocks)
  */
 
-import {useCallback, type ReactNode} from 'react';
+import {useCallback, useState, type ReactNode} from 'react';
 import type {BaseProps} from '../BaseProps';
 import type {SectionVariant} from '../Section/Section';
 import type {SpacingStep} from '../utils/types';
@@ -31,6 +31,8 @@ import {useKeyboardHint} from '../hooks/useKeyboardHint';
 import {SizeProvider} from '../SizeContext/SizeContext';
 import {EDGE_COMP_ATTR, edgeCompSlot} from '../Layout/edgeCompensation.stylex';
 import {themeProps} from '../utils/themeProps';
+import {observeResize} from '../utils/sharedResizeObserver';
+import {useAttachment} from '../hooks/useAttachment';
 
 /**
  * Map SpacingStep values to spacingVars keys.
@@ -162,6 +164,19 @@ const defaultBlockPaddingForSize: Record<ElementSize, SpacingStep> = {
   md: 2,
   lg: 2,
 };
+
+/**
+ * Whether a three-lane row has wrapped: its lanes no longer share one
+ * vertical band.
+ */
+function lanesHaveWrapped(row: Element): boolean {
+  const lanes = [...row.children].slice(0, 3);
+  const boxes = lanes.map(lane => lane.getBoundingClientRect());
+  return (
+    Math.max(...boxes.map(box => box.top)) >=
+    Math.min(...boxes.map(box => box.bottom))
+  );
+}
 
 const blockPaddingVarForSize: Record<ElementSize, string> = {
   sm: spacingVars['--spacing-2'],
@@ -304,6 +319,22 @@ export function Toolbar({
       tabStopOrder: toolbarTabStop,
     });
 
+  // A bottom divider drops a tab's indicator onto its rail through the block
+  // padding. That is right only while the lanes share one line, so a wrapped
+  // row keeps the indicator on its tab. The row reports a wrap after layout,
+  // in a resize observation.
+  const watchesWrap = hasCenterContent && hasBottomDivider;
+  const [isWrapped, setIsWrapped] = useState(false);
+  useAttachment(
+    listRef,
+    row =>
+      watchesWrap
+        ? observeResize(row, () => setIsWrapped(lanesHaveWrapped(row)))
+        : () => {},
+    watchesWrap,
+  );
+  const dropsIndicatorOnRail = hasBottomDivider && !(watchesWrap && isWrapped);
+
   const {
     hintElement,
     onKeyDown: onHintKeyDown,
@@ -377,7 +408,7 @@ export function Toolbar({
               // Without a divider, leave `--_tab-indicator-bottom` unset so a
               // nested TabList's indicator keeps its own default (hugging the
               // tab) instead of floating down into the toolbar's padding.
-              hasBottomDivider &&
+              dropsIndicatorOnRail &&
                 dynamicStyles.tabIndicatorBottom(
                   `calc(-1 * (${blockPaddingVarForSize[size]} + 1px))`,
                 ),
