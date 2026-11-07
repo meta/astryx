@@ -141,6 +141,26 @@ describe('Layout', () => {
       });
     });
 
+    it('reports a slot that renders nothing as empty', () => {
+      // `false` is what `isOpen && <LayoutHeader />` gives when closed.
+      render(
+        <Layout
+          header={false}
+          footer={false}
+          start={false}
+          end={false}
+          content={<SlotsProbe />}
+        />,
+      );
+      const slots = JSON.parse(screen.getByTestId('slots').textContent ?? '{}');
+      expect(slots).toEqual({
+        hasHeader: false,
+        hasFooter: false,
+        hasStart: false,
+        hasEnd: false,
+      });
+    });
+
     it('reports every slot filled', () => {
       render(
         <Layout
@@ -217,6 +237,23 @@ describe('Layout', () => {
       expect(
         container.querySelector('.astryx-layout-header[data-divider]'),
       ).toBeNull();
+    });
+
+    it('a nested Layout without defaultHasDividers keeps its parent default', () => {
+      const {container} = render(
+        <Layout
+          defaultHasDividers
+          content={
+            <Layout
+              header={<LayoutHeader>Nested</LayoutHeader>}
+              content={<div>c</div>}
+            />
+          }
+        />,
+      );
+      expect(
+        container.querySelector('.astryx-layout-header[data-divider]'),
+      ).not.toBeNull();
     });
 
     it('an explicit hasDivider={false} on a header overrides the context default', () => {
