@@ -244,4 +244,9 @@ describe('alpha application (conformance for charts/lab `colors.alpha`)', () => 
   it('unparseable input is preserved unchanged', () => {
     expect(applyAlpha('var(--color-accent)', 0.2)).toBe('var(--color-accent)');
   });
+
+  it('preserves names the prototype chain answers', () => {
+    expect(applyAlpha('constructor', 0.2)).toBe('constructor');
+    expect(applyAlpha('__proto__', 1)).toBe('__proto__');
+  });
 });
