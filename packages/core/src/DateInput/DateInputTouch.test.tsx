@@ -1183,9 +1183,19 @@ describe('DateInput — calendar surface', () => {
   });
 
   it('moves focus to the other arrow when a swipe reaches the end of the range while an arrow holds focus', async () => {
+    // This swipe scrolls the native scroller, which a fine primary pointer
+    // gets. Under a primary finger the calendar is MonthPager. It reports a
+    // settled month to the same callback.
+    stubTouchscreenLaptop();
+    expect(matchMedia('(pointer: coarse)').matches).toBe(false);
     await withLayout(async () => {
       render(
-        <Controlled initial="2026-03-10" min="2026-01-01" max="2026-04-30" />,
+        <Controlled
+          initial="2026-03-10"
+          min="2026-01-01"
+          max="2026-04-30"
+          presentation="bottom-sheet"
+        />,
       );
       fireEvent.click(field());
       const previous = screen.getByRole('button', {name: 'Previous month'});
