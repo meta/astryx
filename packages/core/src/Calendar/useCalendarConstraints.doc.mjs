@@ -56,7 +56,7 @@ export const docs = {
       name: 'options.minRangeSpan',
       type: 'number',
       description:
-        'Minimum days a range must span, counting both endpoints. Disables any date whose absolute day difference from rangeAnchor is strictly less than minRangeSpan (except rangeAnchor itself, which remains enabled so pickers forbidding single-day selections must refuse a second click on the anchor).',
+        'Minimum days a range must span, counting both endpoints. Disables dates that would make the range shorter than minRangeSpan days (except rangeAnchor itself, which remains enabled so pickers forbidding single-day selections must refuse a second click on the anchor).',
       required: false,
     },
     {
