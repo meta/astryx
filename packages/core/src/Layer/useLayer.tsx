@@ -85,8 +85,8 @@ const styles = stylex.create({
   }),
   // A layer that keeps its anchor clear scrolls only once its content
   // overflows the box it was given. A layer that fits has no scroll range, so
-  // a wheel over it still scrolls the page, and a tall layer's scroll chains
-  // to the page at its end.
+  // a wheel over it scrolls the page. Nothing contains the scroll, so a tall
+  // layer chains to the page at its end.
   scrollsOnOverflow: {
     overflowY: 'auto',
   },
