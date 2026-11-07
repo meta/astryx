@@ -315,7 +315,7 @@ export const docs = {
       {
         className: 'astryx-typeahead-option',
         visualProps: ['size'],
-        states: ['selected'],
+        states: ['highlighted', 'selected'],
       },
       {className: 'astryx-typeahead-item'},
     ],

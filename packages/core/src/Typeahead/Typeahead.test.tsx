@@ -332,7 +332,7 @@ describe('BaseTypeahead', () => {
     });
   });
 
-  it('reflects size and selected on the result row target', async () => {
+  it('reflects size, highlight and selection on the result row target', async () => {
     const {container} = render(
       <BaseTypeahead
         searchSource={fruitSource}
@@ -360,6 +360,19 @@ describe('BaseTypeahead', () => {
     expect(selected).toHaveLength(1);
     expect(selected[0]).toHaveAttribute('aria-selected', 'true');
     expect(selected[0]).toHaveTextContent('Apple');
+
+    // The highlight the row paints is a state of the same target.
+    fireEvent.keyDown(screen.getByRole('combobox'), {key: 'ArrowDown'});
+    await waitFor(() => {
+      const highlighted = rows.filter(
+        row => row.dataset.highlighted === 'highlighted',
+      );
+      expect(highlighted).toHaveLength(1);
+      expect(highlighted[0]).toHaveAttribute('id');
+      expect(
+        screen.getByRole('combobox').getAttribute('aria-activedescendant'),
+      ).toBe(highlighted[0].id);
+    });
   });
 
   describe('empty results active descendant (#4059)', () => {
