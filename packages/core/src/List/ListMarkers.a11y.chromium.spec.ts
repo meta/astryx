@@ -295,16 +295,20 @@ for (const {width, mode} of [
         const clipped = await page.screenshot({fullPage: true});
         await page.addStyleTag({content: UNCLIPPED});
         const whole = await page.screenshot({fullPage: true});
+        // The English Markdown story's items read left to right on either
+        // page, so their counters end on the left-to-right edge.
+        const itemDir =
+          story === 'core-markdown--long-number-markers' ? 'ltr' : dir;
         for (const [index, list] of boxes.entries()) {
-          const ink = await inkOf(page, clipped, list, dir);
+          const ink = await inkOf(page, clipped, list, itemDir);
           expect(ink, `list ${index}: whole counters`).toEqual(
-            await inkOf(page, whole, list, dir),
+            await inkOf(page, whole, list, itemDir),
           );
           for (const {start, end} of ink) {
             expect(Number.isFinite(start) && Number.isFinite(end)).toBe(true);
           }
           const edges = ink.map(({start, end}) =>
-            dir === 'rtl' ? start : end,
+            itemDir === 'rtl' ? start : end,
           );
           expect(
             Math.max(...edges) - Math.min(...edges),
