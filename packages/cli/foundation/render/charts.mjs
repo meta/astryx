@@ -84,6 +84,9 @@ export const CHART_CSS =
   '.recharts-responsive-container>.recharts-wrapper>.recharts-legend-wrapper{position:static!important;width:auto!important;height:auto!important}' +
   '.recharts-responsive-container>.recharts-wrapper:not([data-legend-side])>.recharts-legend-wrapper[style*="bottom"]{order:1}' +
   '.recharts-responsive-container>.recharts-wrapper[data-legend-side]{flex-direction:row;align-items:flex-start}' +
+  // A side is physical, as in a chart of fixed size: a right-to-left page
+  // reverses the row so the legend stays on the side it asked for.
+  '.recharts-responsive-container>.recharts-wrapper[data-legend-side]:dir(rtl){flex-direction:row-reverse}' +
   '.recharts-responsive-container>.recharts-wrapper[data-legend-side][data-legend-middle]{align-items:center}' +
   '.recharts-responsive-container>.recharts-wrapper[data-legend-side][data-legend-bottom]{align-items:flex-end}' +
   '.recharts-responsive-container>.recharts-wrapper[data-legend-side]>svg.recharts-surface{flex:1 1 0;min-width:0}' +
