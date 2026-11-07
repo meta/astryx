@@ -655,16 +655,20 @@ describe('icon definitions (map)', () => {
     // Each names the command that maps it, never a hand edit of the data.
     const error = builtIn.find(issue => issue.message.includes('"error"'));
     expect(error?.message).toContain(
-      '`astryx experimental icon map error <icon id>`',
+      '`astryx experimental icon map error <icon id> --set glyphs`',
     );
     expect(error?.message).not.toContain('add it to "map"');
     // A find hint names a search only when that search finds icons.
     for (const issue of builtIn) {
       const query =
-        /icons matching "([^"]+)": `astryx experimental icon \1 --set glyphs`/u.exec(
+        /icons matching "([^"]+)": `astryx experimental icon ('[^']+'|\S+) --set glyphs`/u.exec(
           issue.message,
         );
       if (query) {
+        // A query of several words is one shell word, so it runs as printed.
+        expect(query[2]).toBe(
+          query[1].includes(' ') ? `'${query[1]}'` : query[1],
+        );
         expect(rankIcons([readSet()], query[1]).length).toBeGreaterThan(0);
       } else {
         expect(issue.message).toContain(
@@ -758,7 +762,7 @@ describe('icon definitions (map)', () => {
     );
     const rubbish = unused.find(issue => issue.message.includes('"rubbish"'));
     expect(rubbish?.message).toContain(
-      'Suggested: astryx experimental icon map rubbish trash.',
+      'Suggested: astryx experimental icon map rubbish trash --set glyphs.',
     );
     const [coverage] = iconSetCoverage({
       name: '@acme/glyphs',
