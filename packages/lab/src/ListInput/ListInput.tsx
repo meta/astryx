@@ -306,7 +306,8 @@ const styles = stylex.create({
     display: 'flex',
     alignItems: 'center',
     alignSelf: 'end',
-    justifyContent: 'center',
+    // Remove keeps its column in a record that has no reorder handle.
+    justifyContent: 'flex-start',
     columnGap: spacingVars['--spacing-1'],
     minHeight: sizeVars['--size-element-md'],
   },
