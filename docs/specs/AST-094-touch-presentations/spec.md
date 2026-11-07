@@ -268,11 +268,15 @@ a measured, sourced difference exists.
   change during a drag starts from rest (DEC-25). A finger or a pen that lands
   on a pager's settle after a release never reaches the pager's content: no
   press feedback and no click. UIKit's content took none of 30 such touches
-  (iOS 26.2 simulator, 2026-11-06). A rebase toward the new rest shifts a
-  spring heading there whole: its curve and target move by the rest's change,
-  and it keeps its start time and velocity. On a starved page, the Switch's
-  value change then shows no step in its frame proofs; any other retarget may
-  still skip ahead by up to the browser's commit delay.
+  (iOS 26.2 simulator, 2026-11-06). A finger or a pen that lands on a pager's
+  `goTo` move stops it at the touch, and the lift settles on the nearest page;
+  the content still takes the tap. UIKit's animated `setContentOffset` stopped 2
+  to 23 ms after the touch, and its content took 24 of 30 taps (iOS 26.2
+  simulator, 2026-11-06). A rebase toward the new rest shifts a spring heading
+  there whole: its curve and target move by the rest's change, and it keeps its
+  start time and velocity. On a starved page, the Switch's value change then
+  shows no step in its frame proofs; any other retarget may still skip ahead by
+  up to the browser's commit delay.
 - **FR7 — Exits keep the native counterpart's look.** A touch presentation MUST
   play an exit with the look of its UIKit counterpart's exit, on every touch
   platform: a menu shrinks into its trigger, and an alert fades. In a component
