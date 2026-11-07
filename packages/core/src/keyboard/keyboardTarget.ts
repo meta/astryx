@@ -5,7 +5,8 @@
  * @input The keyboard module's reports and focus claim, the layout guide,
  *   rideKeyboard and the shared animator
  * @output The keyboard targets: their registry, followKeyboard for a docked
- *   or scrolling target, and keepFieldAboveKeyboard, a covered field's path
+ *   or scrolling target, keepFieldAboveKeyboard, a covered field's path, and
+ *   deliverTap, a claimed tap's focus and click
  * @position Keyboard module, internal to core. useMobileKeyboard calls it.
  *
  * SYNC: When modified, update /packages/core/src/keyboard/README.md
@@ -400,7 +401,7 @@ function reveal(
 // caller's `onClick` still runs once. The click is synthetic: its `isTrusted`
 // is false. Like a real tap's click in Chrome and Safari, it is a touch
 // `PointerEvent`, or a `MouseEvent` where no `PointerEvent` exists.
-function deliverTap(
+export function deliverTap(
   control: HTMLElement,
   x: number,
   y: number,

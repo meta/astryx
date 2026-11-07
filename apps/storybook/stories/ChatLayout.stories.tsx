@@ -487,7 +487,14 @@ export const FullAIChat: StoryObj = {
     );
 
     return (
-      <div style={{height: '100vh', display: 'flex', flexDirection: 'column'}}>
+      <div
+        style={{
+          // The visible height, less the 16px the preview pads every story
+          // with on each side, so the composer rests on screen.
+          height: 'calc(100dvh - 32px)',
+          display: 'flex',
+          flexDirection: 'column',
+        }}>
         <ChatLayout composer={composerEl}>
           <ChatMessageList>
             {messages.map(msg => {
@@ -827,7 +834,13 @@ export const PanelView: StoryObj = {
 export const WithEmptyState: StoryObj = {
   name: 'Empty State',
   render: () => (
-    <div style={{height: '100vh', display: 'flex', flexDirection: 'column'}}>
+    <div
+      style={{
+        // The visible height, less the preview's 16px padding on each side.
+        height: 'calc(100dvh - 32px)',
+        display: 'flex',
+        flexDirection: 'column',
+      }}>
       <ChatLayout
         composer={
           <ChatComposer
@@ -861,7 +874,8 @@ export const Densities: StoryObj = {
       style={{
         display: 'flex',
         gap: 16,
-        height: '100vh',
+        // The visible height, less the preview's 16px padding on each side.
+        height: 'calc(100dvh - 32px)',
         padding: 16,
         boxSizing: 'border-box',
       }}>

@@ -135,6 +135,14 @@ const SIXTY_FPS_MS = 1000 / 60;
 // gone. `!important` so an inline `auto` cannot switch anchoring back on under
 // a following container; an inline `!important` still wins, deliberately.
 const FOLLOWING_ATTR = 'data-astryx-chat-following';
+
+/**
+ * Whether the stream scroll on `scroller` follows its newest message now. It
+ * reads the mark the hook keeps in step with its lock. Internal to Chat.
+ */
+export function isFollowingNewest(scroller: Element): boolean {
+  return scroller.hasAttribute(FOLLOWING_ATTR);
+}
 const FOLLOWING_STYLE_ATTR = 'data-astryx-chat-following-style';
 
 function ensureFollowingStyle(): void {

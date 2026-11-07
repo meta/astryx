@@ -49,8 +49,10 @@ that times motion with it. Everything here is internal to
   default, lets the click guard (utils/clickGuard.ts) take the mouse events
   Safari may still send, and lets `deliver` focus the field.
   `focusAtPoint(field, x, y)` focuses it with `preventScroll` and puts the
-  caret under the finger. A touch past 10 px is
-  the browser's to scroll.
+  caret under the finger. `deliverTap` (`keyboardTarget.ts`) does that and
+  raises the tap's click once, since the cancelled tap raises none; the
+  module's targets and ChatLayout's composer deliver with it. A touch past
+  10 px is the browser's to scroll.
 - **The browser's own reveal pan (FR4):** `watchRevealPan(window, {owns})`
   is the one building block every keyboard-aware surface uses for a browser
   that pans the visual viewport to a focused field after the keyboard's
