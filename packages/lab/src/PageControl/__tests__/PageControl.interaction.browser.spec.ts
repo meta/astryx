@@ -24,6 +24,8 @@ import {
   busyWindowProof,
   CONTROL_RGB,
   drag,
+  FRAME_STARVATION_MS,
+  FrameStarvationError,
   MARKER_RGB,
   releaseAnimations,
   openStory,
@@ -647,31 +649,58 @@ test('when the window jumps, a dot that mounts starts at its size in the old win
     }, index);
   // Page 46 (index 45) is outside the window, so it is not rendered yet.
   expect(await scaleOf(45)).toBeNull();
-  // The first frame after the change: before the slide starts.
+  // Read at the commit that mounts it: the size its slide starts from, and
+  // that slide's start. Neither moves with a late frame or a long task.
   await slider.evaluate(el => {
-    el.addEventListener(
-      'keydown',
-      () => {
-        requestAnimationFrame(() => {
-          const dot = el.querySelector<HTMLElement>('[data-page="45"]');
-          (window as unknown as {mounted?: number | null}).mounted =
-            dot == null ? null : Number.parseFloat(getComputedStyle(dot).scale);
-        });
-      },
-      {capture: true, once: true},
-    );
+    const strip = el.children[0] as HTMLElement;
+    const slideOf = (target: HTMLElement) =>
+      target
+        .getAnimations()
+        .reduce<Animation | null>(
+          (last, a) =>
+            last == null || Number(a.startTime) >= Number(last.startTime)
+              ? a
+              : last,
+          null,
+        );
+    const observer = new MutationObserver(() => {
+      const dot = el.querySelector<HTMLElement>('[data-page="45"]');
+      if (dot == null) {
+        return;
+      }
+      observer.disconnect();
+      (
+        window as unknown as {
+          mounted?: {scale: number; growsAt: number; slidesAt: number};
+        }
+      ).mounted = {
+        scale: Number.parseFloat(
+          String(
+            (slideOf(dot)?.effect as KeyframeEffect | null)?.getKeyframes()[0]
+              ?.scale,
+          ),
+        ),
+        growsAt: Number(slideOf(dot)?.startTime),
+        slidesAt: Number(slideOf(strip)?.startTime),
+      };
+    });
+    observer.observe(el, {childList: true, subtree: true});
   });
   await slider.focus();
   await page.keyboard.press('End');
   await expect.poll(async () => valueNow(slider)).toBe(50);
-  // It mounted at its old-window size, 0, and grows to full size.
-  await expect
-    .poll(async () =>
-      page.evaluate(
-        () => (window as unknown as {mounted?: number | null}).mounted,
-      ),
-    )
-    .toBe(0);
+  // It mounted at its old-window size, 0, and grows with the slide's start.
+  const mounted = await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          mounted?: {scale: number; growsAt: number; slidesAt: number};
+        }
+      ).mounted,
+  );
+  expect(mounted?.scale).toBe(0);
+  expect(Number.isFinite(mounted?.slidesAt)).toBe(true);
+  expect(mounted?.growsAt).toBe(mounted?.slidesAt);
   await expect.poll(async () => scaleOf(45)).toBeCloseTo(DOT_SCALE, 3);
 });
 
@@ -691,18 +720,64 @@ test('a windowed control slides one slot 50 ms after the change, on a critically
   await slider.evaluate(el => {
     const strip = el.children[0] as HTMLElement;
     const trace: Array<{t: number; x: number; page: number}> = [];
-    const w = window as unknown as {slide: typeof trace; changedAt?: number};
+    const w = window as unknown as {
+      slide: typeof trace;
+      changedAt?: number;
+      liftTask?: boolean;
+      slideCurve?: {
+        start: number;
+        commitAt: number;
+        duration: number;
+        xs: number[][];
+        inLiftTask: boolean;
+      };
+    };
     w.slide = trace;
     const start = performance.now();
+    // The slide's own animation, read at the change's commit. Its start and
+    // its curve sit on the document timeline, which a late frame cannot move.
+    const observer = new MutationObserver(() => {
+      const animation = strip.getAnimations().at(-1);
+      if (animation == null) {
+        return;
+      }
+      observer.disconnect();
+      const effect = animation.effect as KeyframeEffect;
+      w.slideCurve = {
+        inLiftTask: w.liftTask === true,
+        commitAt: performance.now() - start,
+        start: Number(animation.startTime) - start,
+        duration: Number(effect.getComputedTiming().duration),
+        xs: effect
+          .getKeyframes()
+          .map(k => [
+            Number(k.computedOffset),
+            Number.parseFloat(String(k.translate)),
+          ]),
+      };
+    });
+    observer.observe(el, {
+      attributes: true,
+      attributeFilter: ['aria-valuenow'],
+    });
     // The change is dated when the lift that makes it begins, at its first
     // event: the pointer's, then the touch's. The page commits the change in
     // that task. The first frame that shows it and the end of the task both
     // come late on a loaded runner, so neither dates it.
+    const liftEnd = new MessageChannel();
+    liftEnd.port1.onmessage = () => {
+      w.liftTask = false;
+    };
     for (const type of ['pointerup', 'touchend']) {
       addEventListener(
         type,
         () => {
-          w.changedAt ??= performance.now() - start;
+          if (w.changedAt == null) {
+            w.changedAt = performance.now() - start;
+            // This message runs as a later task, which ends the lift's task.
+            w.liftTask = true;
+            liftEnd.port2.postMessage(null);
+          }
         },
         {capture: true, once: true},
       );
@@ -733,25 +808,52 @@ test('a windowed control slides one slot 50 ms after the change, on a critically
       ),
     )
     .toBe(true);
-  const {trace, changedAt} = await slider.evaluate(() => {
+  const {trace, changedAt, curve} = await slider.evaluate(() => {
     const w = window as unknown as {
       slide: Array<{t: number; x: number; page: number}>;
       changedAt?: number;
+      slideCurve?: {
+        start: number;
+        commitAt: number;
+        duration: number;
+        xs: number[][];
+        inLiftTask: boolean;
+      };
     };
-    return {trace: w.slide, changedAt: w.changedAt ?? NaN};
+    return {
+      trace: w.slide,
+      changedAt: w.changedAt ?? NaN,
+      curve: w.slideCurve,
+    };
   });
-  const moving = trace.filter(s => Math.abs(s.x + 18 * PITCH) > 0.2);
-  const startedAt = moving[0]?.t ?? NaN;
+  if (curve == null) {
+    throw new Error('The change started no slide on the strip.');
+  }
+  expect(curve.inLiftTask, "the change commits in the lift's own task").toBe(
+    true,
+  );
+  const startedAt = curve.start;
   expect(startedAt - changedAt).toBeGreaterThan(30);
+  // The slide starts 50 ms after the commit in the lift's own task. A lift
+  // task longer than the harness's starvation bound means a busy page.
+  const liftTaskMs = curve.commitAt - changedAt;
+  if (startedAt - changedAt >= 120 && liftTaskMs > FRAME_STARVATION_MS) {
+    throw new FrameStarvationError({
+      during: `the lift's task ran ${Math.round(liftTaskMs)} ms to its commit`,
+      frames: 0,
+      min: 1,
+      longestGapMs: Math.round(liftTaskMs),
+    });
+  }
   expect(startedAt - changedAt).toBeLessThan(120);
   // Monotonic to the next slot, settled within ~0.35 s of starting.
   const xs = trace.filter(s => s.t >= startedAt).map(s => s.x);
   for (let i = 1; i < xs.length; i++) {
     expect(xs[i]).toBeLessThanOrEqual(xs[i - 1] + 0.01);
   }
-  const settled = trace.find(s => Math.abs(s.x + 19 * PITCH) < 0.3);
+  const settled = curve.xs.find(([, x]) => Math.abs(x + 19 * PITCH) < 0.3);
   expect(settled).toBeDefined();
-  expect((settled?.t ?? Infinity) - startedAt).toBeLessThan(350);
+  expect((settled?.[0] ?? Infinity) * curve.duration).toBeLessThan(350);
   // Page 27 (index 26) grows from its 7.33 px edge size to full: 9.67 px, a
   // 10 px box at scale 0.967.
   expect(

@@ -6,7 +6,8 @@
  * @output Unit cases for `requireFrames`. Enough selected frames come back.
  *   Too few, where no frame came for longer than FRAME_STARVATION_MS, fail
  *   with FrameStarvationError and its numbers. Too few on pace fail with a
- *   plain Error. With none selected, every gap counts.
+ *   plain Error. With none selected, every gap counts. A page that drew one
+ *   frame at most in the whole sample was starved.
  * @position Node unit tests beside the harness's browser self-tests.
  *
  * SYNC: When modified, update frames.ts (requireFrames).
@@ -85,5 +86,21 @@ describe('requireFrames', () => {
     expect(() =>
       requireFrames(onPace, {min: 1, during: 'a push', where: () => false}),
     ).toThrow(/the motion did not last that long/);
+  });
+
+  it('names a page that drew one frame in the whole sample as starved', () => {
+    let error: unknown;
+    try {
+      requireFrames(trace([0]), {min: 2, during: 'a slide'});
+    } catch (thrown) {
+      error = thrown;
+    }
+    expect(error).toBeInstanceOf(FrameStarvationError);
+    expect((error as FrameStarvationError).numbers.longestGapMs).toBe(
+      Number.POSITIVE_INFINITY,
+    );
+    expect(String(error)).toMatch(
+      /the page drew 1 frame while a slide, where the proof needs 2\. No second frame came: the page was starved of frames/,
+    );
   });
 });
