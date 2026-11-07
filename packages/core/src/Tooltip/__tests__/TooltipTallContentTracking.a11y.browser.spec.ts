@@ -794,12 +794,13 @@ const STATE_ROWS: Record<
   timeline: {
     set: 'a.timeline = new ScrollTimeline({source: document.documentElement})',
   },
+  // The tooltip is a scroll container, so these follow the page by name.
   rangeStart: {
-    css: 'animation-timeline:scroll(nearest block);animation-range:entry 10% exit 80%',
+    css: 'animation-timeline:scroll(root block);animation-range:entry 10% exit 80%',
     set: "a.rangeStart = 'cover 20%'",
   },
   rangeEnd: {
-    css: 'animation-timeline:scroll(nearest block);animation-range:entry 10% exit 80%',
+    css: 'animation-timeline:scroll(root block);animation-range:entry 10% exit 80%',
     set: "a.rangeEnd = 'cover 70%'",
   },
   effect: {

@@ -364,6 +364,30 @@ test('desktop, with motion allowed: a tall tooltip opens beside its trigger, and
   expect(await sitsBesideTrigger(page)).toBe(true);
 });
 
+test('a wheel at the end of a tall tooltip moves on to the page', async ({
+  page,
+}) => {
+  // Nothing contains the tooltip's scroll: once it has scrolled to its end,
+  // the next wheel scrolls the page.
+  const viewport = {width: 1280, height: 720};
+  await hoverTallTrigger(page, viewport, 360);
+  await page.addStyleTag({content: 'body{min-height:300vh}'});
+  const s = await rect(page, TOOLTIP);
+  await page.mouse.move((s.left + s.right) / 2, (s.top + s.bottom) / 2, {
+    steps: 4,
+  });
+  await page.evaluate(sel => {
+    const el = document.querySelector(sel) as HTMLElement;
+    el.scrollTop = el.scrollHeight;
+  }, TOOLTIP);
+  await page.waitForTimeout(300);
+  const before = await page.evaluate(() => window.scrollY);
+  await page.mouse.wheel(0, 200);
+  await expect
+    .poll(async () => page.evaluate(() => window.scrollY))
+    .toBeGreaterThan(before);
+});
+
 test('phone: with no room beside, it opens below when below has more room', async ({
   page,
 }) => {
@@ -460,8 +484,8 @@ test('a wheel over a tooltip that fits still scrolls the page', async ({
 test('a horizontal wheel over a tall tooltip still scrolls a wide page', async ({
   page,
 }) => {
-  // The tooltip scrolls only on the block axis, so only that axis is
-  // contained (spec:AST-025 FR14): a horizontal wheel over it moves on to the
+  // The tooltip scrolls only on the block axis, and nothing contains its
+  // scroll (spec:AST-025 FR14): a horizontal wheel over it moves on to the
   // page.
   const viewport = {width: 1280, height: 720};
   await page.setViewportSize(viewport);
