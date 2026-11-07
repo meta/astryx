@@ -520,29 +520,27 @@ function ReviewsSection() {
                   {COURSE.ratingCount.toLocaleString('en-US')} reviews
                 </Text>
               </VStack>
-              <VStack gap={2}>
-                {ASPECTS.map(aspect => (
-                  <HStack
-                    key={aspect.label}
-                    gap={2}
-                    vAlign="center"
-                    hAlign="between">
-                    <Text type="body" color="secondary">
-                      {aspect.label}
-                    </Text>
-                    <StackItem size="fill">
+              <StackItem size="fill">
+                <VStack gap={3}>
+                  {ASPECTS.map(aspect => (
+                    <VStack key={aspect.label} gap={1}>
+                      <HStack gap={2} vAlign="center" hAlign="between">
+                        <Text type="body" color="secondary">
+                          {aspect.label}
+                        </Text>
+                        <Text type="body" color="secondary">
+                          {aspect.score.toFixed(1)}
+                        </Text>
+                      </HStack>
                       <ProgressBar
                         label={aspect.label}
                         isLabelHidden
                         value={(aspect.score / 5) * 100}
                       />
-                    </StackItem>
-                    <Text type="body" color="secondary">
-                      {aspect.score.toFixed(1)}
-                    </Text>
-                  </HStack>
-                ))}
-              </VStack>
+                    </VStack>
+                  ))}
+                </VStack>
+              </StackItem>
             </HStack>
           </VStack>
         </Card>
