@@ -901,35 +901,53 @@ export function TouchDateField({
     [monthIndex, minMonthIndex, maxMonthIndex],
   );
 
-  // An arrow steps a month. An arrow that reaches the end of the range is
-  // hidden, and a hidden element loses focus. So if this arrow holds focus
-  // and the step reaches its end, focus moves to the other arrow, or to the
-  // month-and-year button when both arrows hide.
-  // The step renders first (flushSync), because the other arrow can itself
-  // be hidden until then: in a two-month range the arrows trade places on
-  // one step.
+  // An arrow at the range end hides, and a hidden element loses focus. So
+  // when a move to `target` hides the focused arrow, focus moves to the other
+  // arrow, or to the month-and-year button when both hide. The move renders
+  // first, because in a two-month range the other arrow is hidden until then.
+  const moveMonth = useCallback(
+    (target: number, move: () => void) => {
+      const previousHides = target <= minMonthIndex;
+      const nextHides = target >= maxMonthIndex;
+      const previousArrow = previousArrowRef.current;
+      const nextArrow = nextArrowRef.current;
+      const focusOnPrevious = previousHides
+        ? noteFocusWithin(previousArrow)
+        : null;
+      const focusOnNext = nextHides ? noteFocusWithin(nextArrow) : null;
+      const focusOnArrow = focusOnPrevious ?? focusOnNext;
+      if (focusOnArrow == null) {
+        move();
+        return;
+      }
+      // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the other arrow must be shown before it can take focus
+      flushSync(move);
+      const isOnPrevious = focusOnPrevious != null;
+      const otherArrowHides = isOnPrevious ? nextHides : previousHides;
+      const destination = otherArrowHides
+        ? monthYearButtonRef.current
+        : isOnPrevious
+          ? nextArrowRef.current
+          : previousArrowRef.current;
+      moveFocusLeftBehind(
+        focusOnArrow,
+        destination,
+        isOnPrevious ? previousArrow : nextArrow,
+      );
+    },
+    [minMonthIndex, maxMonthIndex],
+  );
+
   const stepMonthFromArrow = useCallback(
-    (delta: -1 | 1, arrow: HTMLButtonElement) => {
+    (delta: -1 | 1) => {
       const target = clampIndex(
         monthIndex + delta,
         minMonthIndex,
         maxMonthIndex,
       );
-      const reachesEnd =
-        delta < 0 ? target <= minMonthIndex : target >= maxMonthIndex;
-      const focusOnArrow = reachesEnd ? noteFocusWithin(arrow) : null;
-      // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the other arrow must be shown before it can take focus
-      flushSync(() => stepMonth(delta));
-      const otherArrowStays =
-        delta < 0 ? target < maxMonthIndex : target > minMonthIndex;
-      const destination = otherArrowStays
-        ? delta < 0
-          ? nextArrowRef.current
-          : previousArrowRef.current
-        : monthYearButtonRef.current;
-      moveFocusLeftBehind(focusOnArrow, destination, arrow);
+      moveMonth(target, () => stepMonth(delta));
     },
-    [monthIndex, minMonthIndex, maxMonthIndex, stepMonth],
+    [monthIndex, minMonthIndex, maxMonthIndex, moveMonth, stepMonth],
   );
 
   // A wheel commit steers the scroller immediately, even though it is behind
@@ -963,9 +981,10 @@ export function TouchDateField({
       if (isWheelOpen) {
         return;
       }
-      setMonthIndex(next);
+      // A swipe to the range end hides an arrow, as a press does.
+      moveMonth(next, () => setMonthIndex(next));
     },
-    [isWheelOpen],
+    [isWheelOpen, moveMonth],
   );
 
   /**
@@ -1087,7 +1106,7 @@ export function TouchDateField({
             ]}
             ref={previousArrowRef}
             isDisabled={!canStepBack}
-            onClick={e => stepMonthFromArrow(-1, e.currentTarget)}
+            onClick={() => stepMonthFromArrow(-1)}
             label={t('@astryx.calendar.previousMonth')}
             icon={
               <span {...stylex.props(styles.monthArrowIcon, rtlStyles.mirror)}>
@@ -1104,7 +1123,7 @@ export function TouchDateField({
             ]}
             ref={nextArrowRef}
             isDisabled={!canStepForward}
-            onClick={e => stepMonthFromArrow(1, e.currentTarget)}
+            onClick={() => stepMonthFromArrow(1)}
             label={t('@astryx.calendar.nextMonth')}
             icon={
               <span {...stylex.props(styles.monthArrowIcon, rtlStyles.mirror)}>

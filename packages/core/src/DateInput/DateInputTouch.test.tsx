@@ -1059,6 +1059,40 @@ describe('DateInput — calendar surface', () => {
     expect(screen.getByRole('button', {name: 'Previous month'})).toHaveFocus();
   });
 
+  it('moves focus to the other arrow when a swipe reaches the end of the range while an arrow holds focus', async () => {
+    await withLayout(async () => {
+      render(
+        <Controlled initial="2026-03-10" min="2026-01-01" max="2026-04-30" />,
+      );
+      fireEvent.click(field());
+      const previous = screen.getByRole('button', {name: 'Previous month'});
+      act(() => previous.focus());
+      fireEvent.click(previous);
+      // February: the arrow is still shown, and keeps focus.
+      expect(
+        screen.getByRole('button', {name: 'Previous month'}),
+      ).toHaveFocus();
+      const scroller = document.querySelector<HTMLElement>(
+        '[data-scroller="months"]',
+      )!;
+      // A finger takes the scroller from the steer, then swipes to January,
+      // the first month: Previous month hides.
+      const touchStart = new Event('touchstart', {bubbles: true});
+      const point = {identifier: 1, clientX: 100, clientY: 100};
+      Object.defineProperties(touchStart, {
+        touches: {value: [point]},
+        targetTouches: {value: [point]},
+        changedTouches: {value: [point]},
+      });
+      scroller.dispatchEvent(touchStart);
+      scroller.scrollLeft = 0;
+      fireEvent.scroll(scroller);
+      await waitFor(() =>
+        expect(screen.getByRole('button', {name: 'Next month'})).toHaveFocus(),
+      );
+    });
+  });
+
   it('shows both arrows when there is somewhere to go in each direction', () => {
     renderAndOpen(
       <Controlled initial="2026-03-10" min="2026-01-01" max="2026-12-31" />,
