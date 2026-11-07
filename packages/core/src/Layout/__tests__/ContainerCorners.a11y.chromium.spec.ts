@@ -139,15 +139,21 @@ async function ringPixelsOnCornerDiagonal(
   });
   const png = PNG.sync.read(shot);
   const [r, g, b] = (ring.match(/\d+(\.\d+)?/g) ?? []).map(Number);
-  let hits = 0;
-  for (let i = 0; i < size; i++) {
-    const p = corner === 'top-left' ? i : size - 1 - i;
-    const offset = (p * png.width + p) * 4;
-    const distance =
+  const distanceAt = (x: number, y: number) => {
+    const offset = (y * png.width + x) * 4;
+    return (
       Math.abs(png.data[offset] - r) +
       Math.abs(png.data[offset + 1] - g) +
-      Math.abs(png.data[offset + 2] - b);
-    if (distance < 90) {
+      Math.abs(png.data[offset + 2] - b)
+    );
+  };
+  // A 2px ring drawn on a curve is anti-aliased where it crosses the
+  // diagonal, so each step also checks the pixel beside it.
+  let hits = 0;
+  for (let i = 0; i < size - 1; i++) {
+    const p = corner === 'top-left' ? i : size - 1 - i;
+    const q = corner === 'top-left' ? p + 1 : p - 1;
+    if (Math.min(distanceAt(p, p), distanceAt(q, p), distanceAt(p, q)) < 120) {
       hits++;
     }
   }
