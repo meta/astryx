@@ -329,7 +329,8 @@ icon, and the CLI verifies it, writes the files, and checks the set.
     icon is known by the library export its generated module re-exports, then
     by its own export, then by its `id`; one matched this way keeps its export
     unchanged, its `map` entries, and every other field, and an `id` the
-    current rule spells differently is reported under `renamed`
+    current rule spells differently from the same library name is reported
+    under `renamed`
     (`add --variant <name> --all` meets an icon the same way). A refresh
     from a package root also refreshes an icon the generated module reads
     from a file of that package, and each such variant of an icon it

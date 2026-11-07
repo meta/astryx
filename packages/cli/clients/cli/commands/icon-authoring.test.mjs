@@ -104,6 +104,45 @@ const dataOf = set =>
     ),
   );
 
+/**
+ * Refresh a set twice more and expect nothing to change after the refresh
+ * before them: each run exits 0, the ids, exports and map stay the same, and
+ * the data file and the generated module stay the same byte for byte.
+ * @param {string} set
+ * @param {string[]} args the refresh command
+ */
+async function expectStableRefreshes(set, args) {
+  const dir = path.join(pkg, 'icon-sets', set);
+  const files = () =>
+    [`${set}.icons.json`, `${set}.generated.js`].map(file =>
+      fs.readFileSync(path.join(dir, file), 'utf-8'),
+    );
+  const identity = () => {
+    const data = dataOf(set);
+    return {
+      icons: data.icons.map((/** @type {any} */ icon) => [
+        icon.id,
+        icon.export,
+        ...(icon.variants ?? []).map((/** @type {any} */ each) => each.export),
+      ]),
+      map: data.map,
+    };
+  };
+  let before = {files: files(), identity: identity()};
+  for (const run of ['second', 'third']) {
+    const refreshed = await json(args);
+    expect(
+      refreshed.code,
+      `${run} refresh: ${JSON.stringify(refreshed.body)}`,
+    ).toBe(0);
+    expect(refreshed.body.data.renamed, `${run} refresh`).toBeUndefined();
+    const after = {files: files(), identity: identity()};
+    expect(after.identity, `${run} refresh`).toEqual(before.identity);
+    expect(after.files, `${run} refresh`).toEqual(before.files);
+    before = after;
+  }
+}
+
 describe('experimental icon new-set --from', () => {
   it('wraps every component of a library once, names each <Name>Icon, pre-fills exact map hits, and says what to export', async () => {
     const {code, body} = await json([
@@ -2918,6 +2957,14 @@ describe('a refresh from a library root over icons added one per file', () => {
   const fileOf = (glyph, look) => `${glyph}${look}24WGHT500Icon`;
   const subpath = (/** @type {string} */ file) =>
     `@acme/weight-icons/dist/${file}`;
+  const weightsRefreshArgs = [
+    'experimental',
+    'icon',
+    'new-set',
+    'weights',
+    '--from',
+    '@acme/weight-icons',
+  ];
 
   beforeEach(() => {
     // A root barrel of default re-exports, and one file per export.
@@ -3084,6 +3131,7 @@ describe('a refresh from a library root over icons added one per file', () => {
       ),
     ).toEqual([]);
     expect(passed.warnings).toBe(0);
+    await expectStableRefreshes('weights', weightsRefreshArgs);
   });
 
   const weightSet = () => path.join(pkg, 'icon-sets', 'weights');
@@ -3121,15 +3169,7 @@ describe('a refresh from a library root over icons added one per file', () => {
       'Icons from @acme/weight-icons 3.1.0, MIT License.\n',
     );
   };
-  const refreshWeights = () =>
-    json([
-      'experimental',
-      'icon',
-      'new-set',
-      'weights',
-      '--from',
-      '@acme/weight-icons',
-    ]);
+  const refreshWeights = () => json(weightsRefreshArgs);
   /** The strict check's failures, without the skipped TypeScript work. */
   const strictWeights = async () => {
     const res = await runCli(
@@ -3210,6 +3250,7 @@ describe('a refresh from a library root over icons added one per file', () => {
     const {listed, written} = weightsExports();
     expect(written).toEqual(listed);
     expect(await strictWeights()).toEqual([]);
+    await expectStableRefreshes('weights', weightsRefreshArgs);
   });
 
   it('moves a moved icon to a new default look with the other glyphs, and keeps its id and export', async () => {
@@ -3290,6 +3331,13 @@ describe('a refresh from a library root over icons added one per file', () => {
     const {listed, written} = weightsExports();
     expect(written).toEqual(listed);
     expect(await strictWeights()).toEqual([]);
+    await expectStableRefreshes('weights', [
+      ...weightsRefreshArgs,
+      '--variants',
+      'filled,outline',
+      '--default-variant',
+      'filled',
+    ]);
   });
 
   it('leaves out a root glyph whose export a moved icon already has, and names it in the receipt', async () => {
@@ -3327,6 +3375,7 @@ describe('a refresh from a library root over icons added one per file', () => {
     const {listed, written} = weightsExports();
     expect(written).toEqual(listed);
     expect(await strictWeights()).toEqual([]);
+    await expectStableRefreshes('weights', weightsRefreshArgs);
   });
 
   it('moves each icon only through its own root export, skips a move another icon already holds, and keeps every export in use', async () => {
@@ -3439,7 +3488,123 @@ describe('a refresh from a library root over icons added one per file', () => {
     const {listed, written} = weightsExports();
     expect(written).toEqual(listed);
     expect(await strictWeights()).toEqual([]);
+    await expectStableRefreshes('weights', weightsRefreshArgs);
   });
+
+  const xFile = subpath(fileOf('X', 'Outline'));
+  const searchFile = subpath(fileOf('Search', 'Outline'));
+  /** @type {Array<[string, string[][]]>} */
+  const states = [
+    ['an empty set', []],
+    [
+      'an icon read from the root, with an id the author chose',
+      [
+        [
+          'add',
+          fileOf('X', 'Outline'),
+          '--from',
+          '@acme/weight-icons',
+          '--id',
+          'dismiss',
+          '--definition',
+          'close',
+        ],
+      ],
+    ],
+    [
+      'an icon read from one file, with a variant read from another',
+      [
+        ['add', 'XIcon', '--from', xFile, '--default', '--definition', 'close'],
+        [
+          'add',
+          'XIcon',
+          '--variant',
+          'filled',
+          '--from',
+          subpath(fileOf('X', 'Filled')),
+          '--default',
+        ],
+      ],
+    ],
+    [
+      'an icon whose id is not the glyph id',
+      [
+        [
+          'add',
+          'DismissIcon',
+          '--from',
+          xFile,
+          '--default',
+          '--definition',
+          'close',
+        ],
+      ],
+    ],
+    [
+      'an icon with the id and export of another root glyph',
+      [
+        [
+          'add',
+          'CloseIcon',
+          '--from',
+          xFile,
+          '--default',
+          '--definition',
+          'close',
+        ],
+      ],
+    ],
+    [
+      "two icons whose ids name each other's glyphs",
+      [
+        [
+          'add',
+          'CloseIcon',
+          '--from',
+          searchFile,
+          '--default',
+          '--definition',
+          'close',
+        ],
+        [
+          'add',
+          'SearchIcon',
+          '--from',
+          xFile,
+          '--default',
+          '--definition',
+          'search',
+        ],
+      ],
+    ],
+    [
+      'two icons of the same file',
+      [
+        [
+          'add',
+          'DismissIcon',
+          '--from',
+          xFile,
+          '--default',
+          '--definition',
+          'close',
+        ],
+        ['add', 'XIcon', '--from', xFile, '--default', '--definition', 'error'],
+      ],
+    ],
+  ];
+
+  it.each(states)(
+    'refreshing twice writes what refreshing once wrote: %s',
+    async (_, runs) => {
+      await weightsWith(runs);
+      const first = await refreshWeights();
+      expect(first.code, JSON.stringify(first.body)).toBe(0);
+      const {listed, written} = weightsExports();
+      expect(written).toEqual(listed);
+      await expectStableRefreshes('weights', weightsRefreshArgs);
+    },
+  );
 });
 
 describe('a refresh from a library root keeps what it does not rewrite', () => {
@@ -3646,6 +3811,64 @@ describe('a refresh from a library root keeps what it does not rewrite', () => {
       '1 icons stay on their own file, because another icon of the set already reads the same export of @acme/glyph-library: cross-alt.',
     );
     expect(await strictCheck()).toEqual(checkedBefore);
+    await expectStableRefreshes('outline', rootArgs);
+  });
+
+  it('keeps the id of an icon of one file that moves to the root, on every refresh, and leaves out the root glyph another icon of the same file would take', async () => {
+    addExports({
+      './cross': './icons/cross.js',
+      './cross-alt': './alt/cross.js',
+    });
+    fs.mkdirSync(path.join(lib(), 'alt'), {recursive: true});
+    fs.writeFileSync(
+      path.join(lib(), 'alt', 'cross.js'),
+      "export {Cross as CrossAlt} from '../icons/cross.js';\n",
+    );
+    expect(
+      (await json(['experimental', 'icon', 'new-set', 'outline'])).code,
+    ).toBe(0);
+    for (const add of [
+      [
+        'Cross',
+        '--from',
+        '@acme/glyph-library/cross',
+        '--id',
+        'dismiss',
+        '--definition',
+        'close',
+      ],
+      [
+        'CrossAlt',
+        '--from',
+        '@acme/glyph-library/cross-alt',
+        '--definition',
+        'error',
+      ],
+    ]) {
+      const added = await json(['experimental', 'icon', 'add', ...add]);
+      expect(added.code, JSON.stringify(added.body)).toBe(0);
+    }
+    fs.writeFileSync(path.join(pkg, 'NOTICE'), 'MIT License.\n');
+    const before = dataOf('outline');
+    const exportOf = (/** @type {any} */ data, /** @type {string} */ id) =>
+      data.icons.find((/** @type {{id: string}} */ each) => each.id === id)
+        ?.export;
+
+    const refreshed = await json(rootArgs);
+    expect(refreshed.code, JSON.stringify(refreshed.body)).toBe(0);
+    expect(refreshed.body.data.moved).toEqual([
+      {
+        id: 'dismiss',
+        from: '@acme/glyph-library/cross',
+        to: '@acme/glyph-library',
+      },
+    ]);
+    const after = dataOf('outline');
+    expect(exportOf(after, 'dismiss')).toBe(exportOf(before, 'dismiss'));
+    expect(exportOf(after, 'cross-alt')).toBe(exportOf(before, 'cross-alt'));
+    expect(exportOf(after, 'cross')).toBeUndefined();
+    expect(after.map).toMatchObject({close: 'dismiss', error: 'cross-alt'});
+    await expectStableRefreshes('outline', rootArgs);
   });
 
   it('a LICENSE directory at the package root is no notice: the receipt asks for one and the check warns', async () => {
