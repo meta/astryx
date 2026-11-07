@@ -1314,7 +1314,7 @@ export default function Page() {
     expect(html).not.toContain('<astryx-chart');
   }, 60_000);
 
-  it('keeps room for a legend where its props place it, in a container chart, a fixed chart and at the side', async () => {
+  it('keeps room for a fixed chart\'s legend where its props place it, and gives a container chart\'s legend its own row', async () => {
     put(
       'charts-legend.tsx',
       `import {ResponsiveContainer, LineChart, Line, XAxis, Legend} from 'recharts';
@@ -1326,9 +1326,7 @@ export default function Page() {
         <LineChart data={data}><XAxis dataKey="d" /><Line dataKey="v" /><Legend /></LineChart>
       </ResponsiveContainer>
       <LineChart width={400} height={200} data={data}><XAxis dataKey="d" /><Line dataKey="v" /><Legend /></LineChart>
-      <ResponsiveContainer width="100%" height={220}>
-        <LineChart data={data}><XAxis dataKey="d" /><Line dataKey="v" name="Visits" /><Legend layout="vertical" align="right" verticalAlign="middle" /></LineChart>
-      </ResponsiveContainer>
+      <LineChart width={550} height={220} data={data}><XAxis dataKey="d" /><Line dataKey="v" name="Visits" /><Legend layout="vertical" align="right" verticalAlign="middle" /></LineChart>
     </div>
   );
 }
@@ -1341,21 +1339,15 @@ export default function Page() {
       y: Number(/\by1="([\d.]+)"/.exec(m[0])?.[1]),
       x2: Number(/\bx2="([\d.]+)"/.exec(m[0])?.[1]),
     }));
-    // A bottom legend of one row is kept 24 px of room above the chart's
-    // bottom edge, so the x-axis sits above it: 200 - 5 - 24 - 30 = 141.
-    expect(axes[0].y).toBe(141);
+    // A container chart keeps no room in its picture: its legend takes its
+    // own row under it, so the x-axis sits at 200 - 5 - 30 = 165.
+    expect(axes[0].y).toBe(165);
+    // A fixed chart keeps a row for a bottom legend: 200 - 5 - 24 - 30 = 141.
     expect(axes[1].y).toBe(141);
     // A legend at the side keeps room on the right: the plot ends before it.
     expect(axes[2].x2).toBeLessThan(550 - 40);
-    const legends = [...html.matchAll(/<div\b[^>]*class="recharts-legend-wrapper"[^>]*>/g)].map(m => m[0]);
-    expect(legends).toHaveLength(3);
-    // In a container chart the legend is placed in percent of the starting
-    // size, so it keeps its place as the drawing scales; a fixed one in pixels.
-    expect(legends[0]).toMatch(/bottom:[\d.]+%/);
-    expect(legends[1]).toMatch(/bottom:5px/);
-    expect(legends[2]).toMatch(/right:[\d.]+%/);
-    expect(legends[2]).toMatch(/top:[\d.]+%/);
-    expect(html).toMatch(/aspect-ratio:500 \/ 200/);
+    expect(html).toContain('.recharts-responsive-container>.recharts-wrapper>.recharts-legend-wrapper{position:static!important;width:auto!important');
+    expect(html).toContain('.recharts-legend-wrapper[style*="bottom"]{order:1}');
     // Only the chart's own picture scales; a legend's icons keep their size.
     expect(html).toContain('.recharts-responsive-container>.recharts-wrapper>svg.recharts-surface{');
     expect(html).not.toContain('.recharts-responsive-container .recharts-surface');
@@ -1441,6 +1433,52 @@ export default function Page() {
     expect(warning?.message).toContain('each chart was drawn by itself');
   }, 60_000);
 
+  it('draws charts as the first render gives them, not as the page\'s effects change it', async () => {
+    put(
+      'charts-effects.tsx',
+      `import {useEffect, useState} from 'react';
+import {BarChart, Bar, XAxis} from 'recharts';
+${DATA}
+export default function Page() {
+  const [rows, setRows] = useState<string[]>([]);
+  useEffect(() => setRows(['order one']), []);
+  return (
+    <div>
+      <p>{rows.length === 0 ? 'No orders yet' : rows.join(', ')}</p>
+      {rows.length === 0 ? null : <BarChart width={300} height={150} data={data}><XAxis dataKey="d" /><Bar dataKey="v" /></BarChart>}
+      <BarChart width={300} height={150} data={data}><XAxis dataKey="d" /><Bar dataKey="v" /></BarChart>
+    </div>
+  );
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('charts-effects.tsx', {cwd: dir}));
+    const html = fs.readFileSync(path.join(dir, 'charts-effects.html'), 'utf8');
+    expect(html).toContain('No orders yet');
+    expect(html.match(/<svg[^>]*class="recharts-surface"/g)).toHaveLength(1);
+    const warning = result.data.warnings.find((/** @type {any} */ w) => w.code === 'chart-size');
+    expect(warning?.message).toContain('once its effects ran');
+  }, 60_000);
+
+  it('draws a chart with the data of the first render when an effect replaces it', async () => {
+    put(
+      'charts-effect-data.tsx',
+      `import {useEffect, useState} from 'react';
+import {BarChart, Bar, XAxis} from 'recharts';
+export default function Page() {
+  const [data, setData] = useState([{d: 'first', v: 1}]);
+  useEffect(() => setData([{d: 'later', v: 2}]), []);
+  return <BarChart width={300} height={150} data={data}><XAxis dataKey="d" /><Bar dataKey="v" /></BarChart>;
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('charts-effect-data.tsx', {cwd: dir}));
+    const html = fs.readFileSync(path.join(dir, 'charts-effect-data.html'), 'utf8');
+    expect(html).toContain('>first<');
+    expect(html).not.toContain('>later<');
+    expect(result.data.warnings.find((/** @type {any} */ w) => w.code === 'chart-size')?.message).toContain('once its effects ran');
+  }, 60_000);
+
   it('keeps room for a legend that wraps onto more rows', async () => {
     put(
       'charts-wrap.tsx',
@@ -1465,6 +1503,17 @@ export default function Page() {
     // Five names of about 120 px each wrap into two rows in 470 px, so the
     // axis sits two legend rows up: 240 - 5 - 48 - 30 = 157.
     expect(Number(/\by1="([\d.]+)"/.exec(axis)?.[1])).toBe(157);
+    // In a container chart the same legend takes its own row under the
+    // picture, which keeps no room for it, so it cannot cover the axis.
+    put('charts-wrap-rc.tsx', fs.readFileSync(path.join(dir, 'charts-wrap.tsx'), 'utf8')
+      .replace("import {LineChart,", "import {ResponsiveContainer, LineChart,")
+      .replace('<LineChart width={480} height={240} data={data}>', '<ResponsiveContainer width="100%" height={240}><LineChart data={data}>')
+      .replace('</LineChart>', '</LineChart></ResponsiveContainer>'));
+    await render('charts-wrap-rc.tsx', {cwd: dir});
+    const rc = fs.readFileSync(path.join(dir, 'charts-wrap-rc.html'), 'utf8');
+    const rcAxis = /<line\b[^>]*class="recharts-cartesian-axis-line"[^>]*>/.exec(rc)?.[0] ?? '';
+    expect(Number(/\by1="([\d.]+)"/.exec(rcAxis)?.[1])).toBe(240 - 5 - 30);
+    expect(rc).toContain('recharts-legend-wrapper');
   }, 60_000);
 
   it('names a chart of fixed size it cannot draw', async () => {

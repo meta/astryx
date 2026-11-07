@@ -536,10 +536,13 @@ export async function renderPage(entry, options = {}) {
     });
   }
   if (message.chartsAlone) {
+    const why =
+      message.chartsAlone === 'changed'
+        ? 'The page changed its charts once its effects ran (their data or props, or which charts it shows)'
+        : 'The page could not be drawn again without a browser';
     warnings.push({
       code: 'chart-size',
-      message:
-        'The page could not be drawn again without a browser, so each chart was drawn by itself: a custom tick, label or shape in a chart sees React context defaults, not the values the page provides.',
+      message: `${why}, so each chart was drawn by itself, as the first render gave it: a custom tick, label or shape in a chart sees React context defaults, not the values the page provides.`,
     });
   }
   for (const sheet of /** @type {string[]} */ (message.skippedCss ?? [])) {
