@@ -66,7 +66,7 @@ const REGIONS: Record<Story, number> = {
   'no-dividers': 1,
   'full-bleed-content': 1,
   'content-width-scrollbar-placement': 4,
-  'nested-in-app-shell': 2,
+  'nested-in-app-shell': 3,
 };
 
 // Stories whose Layout sets `contentWidth`: there the inline padding may add
@@ -193,7 +193,15 @@ async function observe(page: Page) {
       document.querySelectorAll('#storybook-root .astryx-layout-content'),
     ).map(region => {
       const style = getComputedStyle(region);
-      const parent = region.parentElement as Element;
+      // The area Layout gives the region is the nearest ancestor that
+      // generates a box.
+      let parent = region.parentElement as Element;
+      while (
+        getComputedStyle(parent).display === 'contents' &&
+        parent.parentElement != null
+      ) {
+        parent = parent.parentElement;
+      }
       return {
         insetCase: region.getAttribute('data-content-inset'),
         targets: Array.from(region.classList).filter(name =>
