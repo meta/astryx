@@ -191,6 +191,31 @@ export const Default: Story = {
 };
 
 /**
+ * The tree at `density="compact"`, whose rows are shorter than the toggle's
+ * ring would be outside it; the toggles' keyboard ring sits inside them.
+ */
+export const CompactDensity: Story = {
+  render: () => {
+    const {visibleData, treeConfig} = useTableTreeState<OrgRow>({
+      data: orgChart,
+      idKey: 'id',
+      defaultExpandedIds: ['eng'],
+    });
+    const tree = useTableTreeData({...treeConfig, hasExpandAllControl: true});
+
+    return (
+      <Table
+        data={visibleData}
+        columns={columns}
+        idKey="id"
+        density="compact"
+        plugins={{tree}}
+      />
+    );
+  },
+};
+
+/**
  * `expandAll` / `collapseAll` from the state hook, driving a deep hierarchy.
  * Indentation is `calc(level * token)` — there is no depth cap.
  */

@@ -105,7 +105,7 @@ The protocol has four layers:
 | Role                       | Participants                                                   | Contract responsibility                                                                                                                                                  |
 | -------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Container publisher        | Card, Section, Dialog, BottomSheet, ScrollableArea             | Resolve component padding or publish explicit content-box padding as logical-edge and Layout inset variables                                                             |
-| Region publisher           | LayoutHeader, LayoutContent, LayoutFooter, LayoutPanel         | Publish baseline or explicit-padding geometry; automatic-edge publication has the conformance gap below                                                                  |
+| Region publisher           | LayoutHeader, LayoutContent, LayoutFooter, LayoutPanel         | Publish baseline or explicit-padding geometry; LayoutPanel's automatic-edge publication has the conformance gap below                                                    |
 | Bleed consumer             | Section, ScrollableArea, Layout, Divider, Table, TabList, List | Subtract inherited inset on the edges each component is designed to escape; ScrollableArea does so only with `isFullBleed`, TabList and List only with `edge="bleed"`    |
 | Edge-compensation consumer | List/ListItem rows with `edge="outset"`                        | Move visible content toward the container content line while retaining component-owned interaction padding; exact alignment depends on each component's bounded geometry |
 | Alignment consumer         | Toolbar and edge-compensating child components                 | Read the current inline inset to align visible content rather than stacked touch-target padding                                                                          |
@@ -296,23 +296,17 @@ without dropping the active theme's Section default.
 
 ### Known conformance gap
 
-LayoutContent and LayoutPanel do not currently publish the padding they apply
-on every automatic edge:
+LayoutPanel does not currently publish the padding it applies on every
+automatic edge: it changes padding on shell-facing inline and block edges while
+its baseline geometry variables remain on the inner values. LayoutContent
+publishes the padding it applies on every edge (`component:LayoutContent` FR2).
 
-- LayoutContent's no-start path changes inline-start padding and writes the outer
-  value to both inline geometry variables, so with only an end panel the
-  inline-end variable carries the outer value while the applied inline-end
-  padding is the inner inset. Beside a header or footer without a divider, its
-  block edge applies zero while publishing the inner inset.
-- LayoutPanel changes padding on shell-facing inline and block edges while its
-  baseline geometry variables remain on the inner values.
-
-A full-bleed descendant in those states can therefore compensate against a value
+A full-bleed descendant of such a panel can therefore compensate against a value
 that differs from the region's applied padding. Explicit region padding and
 `padding={0}` do update/reset the geometry variables. No current browser matrix
 covers every slot and descendant-bleed combination, so this record does not claim
 exact region parity. Correcting the mismatch is runtime work with compatibility
-evidence, not part of this documentation stack.
+evidence.
 
 ## Change coupling
 
