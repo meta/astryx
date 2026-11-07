@@ -95,10 +95,18 @@ describe('calendar resolution order', () => {
     ).toBe('roc');
   });
 
-  it('ignores a -u-ca- keyword in the provider locale', () => {
-    const result = renderProbe({locale: 'th-TH-u-ca-buddhist'});
-    expect(result.requested).toBe('gregory');
-    expect(result.shown).toBe('gregory');
+  it('uses a -u-ca- keyword in the provider locale', () => {
+    expect(renderProbe({locale: 'th-TH-u-ca-buddhist'}).shown).toBe('buddhist');
+  });
+
+  it('resolves an unsupported -u-ca- keyword to gregory and warns', () => {
+    const warn = silenceWarnings();
+    expect(renderProbe({locale: 'ar-SA-u-ca-islamic-rgsa'}).requested).toBe(
+      'gregory',
+    );
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('"islamic-rgsa"'),
+    );
   });
 
   it("never applies a locale's default calendar", () => {
@@ -119,19 +127,21 @@ describe('calendar identifiers', () => {
     expect(renderProbe({locale: 'en', calendar}).requested).toBe(calendar);
   });
 
-  it('resolves the islamic identifier to gregory and warns', () => {
+  it('resolves a -u-ca-islamic keyword to islamic-tbla', () => {
+    silenceWarnings();
+    expect(renderProbe({locale: 'ar-u-ca-islamic'}).requested).toBe(
+      'islamic-tbla',
+    );
+  });
+
+  it('resolves a calendar="islamic" prop to gregory and warns', () => {
     const warn = silenceWarnings();
     const islamic = 'islamic' as CalendarSystem;
     expect(renderProbe({locale: 'ar', calendar: islamic}).requested).toBe(
       'gregory',
     );
+    expect(renderProbe(null, islamic).shown).toBe('gregory');
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('"islamic"'));
-  });
-
-  it('ignores a -u-ca-islamic keyword without a warning', () => {
-    const warn = silenceWarnings();
-    expect(renderProbe({locale: 'ar-u-ca-islamic'}).requested).toBe('gregory');
-    expect(warn).not.toHaveBeenCalled();
   });
 
   it('resolves an unknown identifier to gregory and warns once', () => {
