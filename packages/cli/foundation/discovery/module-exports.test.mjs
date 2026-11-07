@@ -10,8 +10,12 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
+  elementPropOrigins,
+  followedExportNames,
   moduleExportOrigin,
+  moduleExportOrigins,
   moduleExportSource,
+  moduleExportsName,
   staticExportObject,
 } from './module-exports.mjs';
 
@@ -206,4 +210,297 @@ describe('a library of thousands of icons', () => {
       fs.rmSync(dir, {recursive: true, force: true});
     }
   }, 60_000);
+});
+
+describe('elementPropOrigins', () => {
+  const THEME = {
+    sources: new Set(['@acme/core']),
+    name: 'Theme',
+    prop: 'theme',
+    /** @param {any} init */
+    unwrap: init =>
+      init.type === 'CallExpression' && init.callee?.name === 'extend'
+        ? init.arguments[0]
+        : null,
+  };
+
+  it('follows each element value through aliases, re-exports, unwrap and an installed package', () => {
+    const pkg = path.join(dir, 'node_modules/@acme/themes');
+    fs.mkdirSync(path.join(pkg, 'dist'), {recursive: true});
+    fs.writeFileSync(
+      path.join(pkg, 'package.json'),
+      JSON.stringify({name: '@acme/themes', exports: {'.': './dist/index.js'}}),
+    );
+    fs.writeFileSync(
+      path.join(pkg, 'dist/index.js'),
+      "export {oceanTheme} from './ocean.js';\n",
+    );
+    const ocean = path.join(pkg, 'dist/ocean.js');
+    fs.writeFileSync(ocean, 'export const oceanTheme = {};\n');
+    write(
+      'brand.ts',
+      "import {oceanTheme as base} from '@acme/themes';\nexport const brand = extend(base);\n",
+    );
+    const app = write(
+      'App.tsx',
+      [
+        "import {Theme as T} from '@acme/core';",
+        "import {oceanTheme} from '@acme/themes';",
+        "import {brand} from './brand';",
+        'const picked = oceanTheme;',
+        'export const App = ({theme}: any) => (',
+        '  <T theme={picked}><T theme={brand as any} /><T theme={theme} /><T theme={themes.x} /><T /></T>',
+        ');',
+        '',
+      ].join('\n'),
+    );
+
+    expect(elementPropOrigins(app, THEME)).toEqual([
+      {file: ocean, name: 'oceanTheme'},
+      {file: ocean, name: 'oceanTheme'},
+      {file: app, name: 'theme'},
+      null,
+    ]);
+  });
+
+  it('gives nothing for a module that never imports the element', () => {
+    const app = write(
+      'Other.tsx',
+      "import {Theme} from 'elsewhere';\nexport const A = () => <Theme theme={x} />;\n",
+    );
+    expect(elementPropOrigins(app, THEME)).toEqual([]);
+  });
+
+  it('gives null when the package a value comes from is not installed', () => {
+    const app = write(
+      'Missing.tsx',
+      "import {Theme} from '@acme/core';\nimport {gone} from '@acme/missing';\nexport const A = () => <Theme theme={gone} />;\n",
+    );
+    expect(elementPropOrigins(app, THEME)).toEqual([null]);
+  });
+
+  it('follows an import to an export declared inside a namespace, as the whole-tree reader finds it', () => {
+    const themes = write(
+      'themes.ts',
+      'namespace Palette {\n  export const ocean = {};\n}\n',
+    );
+    const app = write(
+      'Namespaced.tsx',
+      "import {Theme} from '@acme/core';\nimport {ocean} from './themes';\nexport const A = () => <Theme theme={ocean} />;\n",
+    );
+    // The icon-set reader, which reads only the top level, runs first on
+    // the same parsed module and leaves the whole-tree answer unchanged.
+    expect(moduleExportOrigin(themes, 'ocean')).toBeNull();
+    expect(elementPropOrigins(app, THEME)).toEqual([
+      {file: themes, name: 'ocean'},
+    ]);
+  });
+});
+
+describe('an export declared inside a namespace', () => {
+  const NAMESPACE =
+    'export namespace Button {\n  export function Inner() { return null; }\n}\n';
+
+  it('counts for the stable reader, as it always has', () => {
+    const file = write('button.ts', NAMESPACE);
+    expect(moduleExportSource(file, 'Inner')).toBe(file);
+    expect(moduleExportsName(file, 'Inner')).toBe(true);
+  });
+
+  it('is no export of the module for the icon-set reader, which reads only its top level', () => {
+    const file = write('button.ts', NAMESPACE);
+    expect(moduleExportOrigin(file, 'Inner')).toBeNull();
+    expect(followedExportNames(file)).not.toContain('Inner');
+  });
+
+  it('counts for the one-pass reader, in value and type reads, after the icon-set reader reads the module', () => {
+    const file = write('button.ts', NAMESPACE);
+    expect(
+      moduleExportOrigin(file, 'Inner', undefined, {types: true}),
+    ).toBeNull();
+    for (const types of [false, true]) {
+      expect(moduleExportOrigins(file, {types}).get('Inner')).toEqual({
+        file,
+        name: 'Inner',
+      });
+    }
+  });
+});
+
+describe('the one-pass reader beside the icon-set reader', () => {
+  it('reads namespace and type exports as the whole-tree reader does, while the icon-set reader skips nested declarations', () => {
+    const file = write(
+      'mixed.ts',
+      [
+        'export namespace Shapes {',
+        '  export const circle = 1;',
+        '  export interface Corner {}',
+        '}',
+        'export interface Size {}',
+        'export const top = 2;',
+        '',
+      ].join('\n'),
+    );
+    expect(moduleExportOrigin(file, 'circle')).toBeNull();
+    expect(
+      moduleExportOrigin(file, 'Corner', undefined, {types: true}),
+    ).toBeNull();
+    expect(moduleExportOrigin(file, 'Size', undefined, {types: true})).toEqual({
+      file,
+      name: 'Size',
+    });
+    const names = types =>
+      [...moduleExportOrigins(file, {types}).keys()].sort();
+    expect(names(false)).toEqual(['circle', 'top']);
+    expect(names(true)).toEqual(['Corner', 'Shapes', 'Size', 'circle', 'top']);
+    expect(moduleExportOrigins(file, {types: true}).get('Corner')).toEqual({
+      file,
+      name: 'Corner',
+    });
+  });
+});
+
+describe('moduleExportOrigins', () => {
+  /** @type {string} */
+  let dir;
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-export-origins-'));
+    const write = (name, text) => fs.writeFileSync(path.join(dir, name), text);
+    write('values.ts', 'export const a = 1;\nexport function b() {}\n');
+    write('types.ts', 'export interface Shape {}\nexport type Size = 1;\n');
+    write(
+      'local.ts',
+      "import {a as inner} from './values';\nexport {inner as renamed};\n",
+    );
+    write(
+      'index.ts',
+      [
+        "export * from './values';",
+        "export type {Shape} from './types';",
+        "export {renamed} from './local';",
+        "export * from './types';",
+        'export const own = 2;',
+        '',
+      ].join('\n'),
+    );
+  });
+  afterEach(() => {
+    fs.rmSync(dir, {recursive: true, force: true});
+  });
+
+  it('gives the origin moduleExportOrigin gives for every name', () => {
+    const index = path.join(dir, 'index.ts');
+    for (const types of [false, true]) {
+      const origins = moduleExportOrigins(index, {types});
+      const names = ['a', 'b', 'renamed', 'own', 'Shape', 'Size'];
+      for (const name of names) {
+        expect(origins.get(name) ?? null, `${name} (types: ${types})`).toEqual(
+          moduleExportOrigin(index, name, undefined, {types}),
+        );
+      }
+    }
+  });
+
+  it('follows an alias of an imported binding to where that binding is declared', () => {
+    const write = (name, text) => fs.writeFileSync(path.join(dir, name), text);
+    write('inner.ts', 'export const Inner = {};\n');
+    write(
+      'alias.ts',
+      "import {Inner as Provider} from './inner';\nexport const Public = Provider;\n",
+    );
+    const alias = path.join(dir, 'alias.ts');
+    const inner = {file: path.join(dir, 'inner.ts'), name: 'Inner'};
+    expect(moduleExportOrigin(alias, 'Public')).toEqual(inner);
+    expect(moduleExportOrigins(alias).get('Public')).toEqual(inner);
+  });
+
+  it('agrees through an export * cycle', () => {
+    const write = (name, text) => fs.writeFileSync(path.join(dir, name), text);
+    write('c.ts', 'export const w = 1;\nexport const z = 2;\n');
+    write('a.ts', "export * from './b';\nexport * from './c';\n");
+    write('b.ts', "export * from './a';\n");
+    const cycle = path.join(dir, 'cycle.ts');
+    fs.writeFileSync(cycle, "export {w} from './a';\nexport * from './b';\n");
+    const origins = moduleExportOrigins(cycle);
+    for (const name of ['w', 'z']) {
+      expect(origins.get(name) ?? null, name).toEqual(
+        moduleExportOrigin(cycle, name),
+      );
+    }
+    expect(origins.get('z')).toEqual({file: path.join(dir, 'c.ts'), name: 'z'});
+  });
+
+  it('agrees when a named re-export reaches back into an open cycle', () => {
+    const write = (name, text) => fs.writeFileSync(path.join(dir, name), text);
+    write('leaf.ts', 'export const leafValue = 1;\n');
+    write('mid.ts', "export * from './outer';\n");
+    const outer = path.join(dir, 'outer.ts');
+    fs.writeFileSync(
+      outer,
+      "export {leafValue as fromRoot} from './mid';\nexport * from './leaf';\n",
+    );
+    expect(moduleExportOrigins(outer).get('fromRoot')).toEqual({
+      file: path.join(dir, 'leaf.ts'),
+      name: 'leafValue',
+    });
+  });
+
+  it('agrees through a cycle closed by a named re-export', () => {
+    const write = (name, text) => fs.writeFileSync(path.join(dir, name), text);
+    write('leaf.ts', 'export const leafValue = 1;\n');
+    write('sub.ts', "export {leafValue as fromRoot} from './root';\n");
+    const root = path.join(dir, 'root.ts');
+    fs.writeFileSync(root, "export * from './sub';\nexport * from './leaf';\n");
+    expect(moduleExportOrigins(root).get('fromRoot')).toEqual({
+      file: path.join(dir, 'leaf.ts'),
+      name: 'leafValue',
+    });
+    expect(moduleExportOrigins(root).get('fromRoot')).toEqual(
+      moduleExportOrigin(root, 'fromRoot'),
+    );
+  });
+
+  it('lets a named export shadow export *, even when it cannot be followed', () => {
+    const write = (name, text) => fs.writeFileSync(path.join(dir, name), text);
+    write('other.ts', 'export const x = 1;\n');
+    const shadow = path.join(dir, 'shadow.ts');
+    fs.writeFileSync(
+      shadow,
+      [
+        "import {x} from 'not-installed-pkg';",
+        'export {x};',
+        "export * from './other';",
+        '',
+      ].join('\n'),
+    );
+    expect(moduleExportOrigins(shadow).get('x') ?? null).toEqual(
+      moduleExportOrigin(shadow, 'x'),
+    );
+    expect(moduleExportOrigins(shadow).has('x')).toBe(false);
+  });
+
+  it('keeps value and type reads apart in one memo', () => {
+    const index = path.join(dir, 'index.ts');
+    const memo = new Map();
+    expect(moduleExportOrigins(index, {memo}).has('Shape')).toBe(false);
+    expect(
+      moduleExportOrigins(index, {types: true, memo}).get('Shape'),
+    ).toEqual({
+      file: path.join(dir, 'types.ts'),
+      name: 'Shape',
+    });
+  });
+
+  it('follows type-only exports only when asked', () => {
+    const index = path.join(dir, 'index.ts');
+    expect(moduleExportOrigins(index).has('Shape')).toBe(false);
+    expect(moduleExportOrigins(index, {types: true}).get('Shape')).toEqual({
+      file: path.join(dir, 'types.ts'),
+      name: 'Shape',
+    });
+    expect(moduleExportOrigins(index).get('renamed')).toEqual({
+      file: path.join(dir, 'values.ts'),
+      name: 'a',
+    });
+  });
 });

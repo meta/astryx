@@ -11,8 +11,9 @@
  * @position Private to AppShell; keeps main-region ids unique on a page
  */
 
-import {createContext, use, useId, useState, useSyncExternalStore} from 'react';
+import {use, useId, useState, useSyncExternalStore} from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {createSharedContext} from '../utils/sharedContext';
 
 /** The id of the first mounted shell's main region. Consumers link to it. */
 export const MAIN_CONTENT_ID = 'astryx-app-shell-main';
@@ -21,7 +22,11 @@ export const MAIN_CONTENT_ID = 'astryx-app-shell-main';
  * True inside an AppShell. A shell nested in another shell's content never
  * takes the fixed id: the page's own shell keeps it.
  */
-export const AppShellNestingContext = createContext(false);
+export const AppShellNestingContext = createSharedContext(
+  'AppShellNestingContext',
+  1,
+  false,
+);
 AppShellNestingContext.displayName = 'AppShellNestingContext';
 
 const claims: object[] = [];

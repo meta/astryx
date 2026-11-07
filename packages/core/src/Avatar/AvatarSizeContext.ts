@@ -12,7 +12,7 @@
  * - /packages/core/src/Avatar/Avatar.doc.mjs
  */
 
-import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
+import {createLayerScopedContext} from '../Layer/layerScopedContext';
 
 /**
  * Context that provides the resolved numeric avatar size (in pixels)
@@ -20,5 +20,9 @@ import {createLayerScopedContext as createContext} from '../Layer/layerScopedCon
  *
  * Default value of 36 matches the default 'md' avatar size.
  */
-export const AvatarSizeContext = createContext<number>(36);
+export const AvatarSizeContext = createLayerScopedContext<number>(
+  'AvatarSizeContext',
+  1,
+  36,
+);
 AvatarSizeContext.displayName = 'AvatarSizeContext';

@@ -12,7 +12,7 @@
  */
 
 import {use} from 'react';
-import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
+import {createLayerScopedContext} from '../Layer/layerScopedContext';
 
 /**
  * Size variants for tab list items.
@@ -48,7 +48,12 @@ export interface TabListContextValue {
   pattern: TabListPattern;
 }
 
-export const TabListContext = createContext<TabListContextValue | null>(null);
+export const TabListContext =
+  createLayerScopedContext<TabListContextValue | null>(
+    'TabListContext',
+    1,
+    null,
+  );
 TabListContext.displayName = 'TabListContext';
 
 /**
