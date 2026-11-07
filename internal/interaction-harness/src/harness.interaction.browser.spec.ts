@@ -441,17 +441,52 @@ test.describe('touch input', () => {
     );
     expect(outcome).toBeInstanceOf(TouchLiftStallError);
     expect(String(outcome)).toMatch(
-      /the lift reached the page at least \d+ ms after its finger's last move, where the script spaces \d+ ms: .* onEvent ran \d+ ms in that gap/,
+      /the lift reached the page \d+ ms after its finger's last move, where the script spaces \d+ ms: .* onEvent ran \d+ ms in that gap/,
     );
     const {numbers} = outcome as TouchLiftStallError;
     expect(numbers.gapMs).toBeGreaterThan(40);
     expect(numbers.scriptedGapMs).toBeLessThanOrEqual(40);
-    // The page itself read the rest.
-    expect(await pageLiftGap()).toBeGreaterThan(40);
+    // The error gives the gap the page itself read.
+    const gap = await pageLiftGap();
+    expect(gap).toBeGreaterThan(40);
+    expect(Math.abs(numbers.gapMs - gap)).toBeLessThanOrEqual(2);
     // The same flick with a quick onEvent passes.
     await driver.play(script, {onEvent: () => {}});
     // A proof that reads no release from the lift opts out.
     await driver.play(script, {onEvent: slowRead, releaseUnread: true});
+  });
+
+  test('a default-paced play whose page holds its last move fails by name: TouchPageStallError, where the page stamps touches on arrival', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'webkit',
+      'only WebKit stamps a touch when it arrives; Chromium carries the scripted times',
+    );
+    const script = flick(
+      {x: 200, y: 400},
+      {velocity: {x: 0, y: -1500}, durationMs: 80, hz: 120},
+    );
+    const moves = toTouchEvents(script).filter(
+      step => step.type === 'touchMove',
+    ).length;
+    // The page's own listener holds its main thread for 80 ms on the last
+    // move. WebKit hands the page the lift only once it is free.
+    await page.route('http://last-move-hold.test/', route =>
+      route.fulfill({
+        contentType: 'text/html',
+        body: `<!doctype html><body style="margin:0;height:3000px;touch-action:none"><script>let n=0;addEventListener("touchmove",()=>{if(++n===${moves}){const end=performance.now()+80;while(performance.now()<end){}}},{passive:true})</script>`,
+      }),
+    );
+    await page.goto('http://last-move-hold.test/');
+    const driver = await touchDriver(page);
+    const outcome = await driver.play(script).then(
+      () => 'resolved',
+      (error: unknown) => error,
+    );
+    expect(outcome).toBeInstanceOf(TouchPageStallError);
+    expect(String(outcome)).toMatch(/the page read a resting finger/);
   });
 
   test('a Chromium play carries the scripted times, so a slow onEvent before its lift does not fail it', async ({
