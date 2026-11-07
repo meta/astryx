@@ -199,12 +199,11 @@ export const dayCellStyles = stylex.create({
   },
 
   // Day button - structural
-  // A minimum size that keeps the day round: under a larger text size the
-  // day grows with its number, so the number stays inside its own tap target.
+  // A minimum size: under a larger text size the day grows with its number,
+  // so the number stays inside its own tap target.
   day: {
     minWidth: sizeVars['--size-element-sm'],
     minHeight: sizeVars['--size-element-sm'],
-    aspectRatio: '1 / 1',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
