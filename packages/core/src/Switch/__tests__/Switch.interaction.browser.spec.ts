@@ -64,6 +64,7 @@ import {
 } from '@astryxdesign/interaction-harness';
 import {BROWSER_CLICK_WAIT_MS} from '../../utils/browserClickWait';
 import {CLICK_GUARD_WINDOW_MS} from '../../utils/clickGuard';
+import {PROMOTION_LINGER_MS} from '../../motion/animator';
 
 const storybook = withStorybook(test);
 
@@ -624,6 +625,173 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     // The well spring (0.68 s on) has settled.
     await page.waitForTimeout(900);
     expect(await visibleFill(page)).toBe(expected.on);
+  });
+
+  test('a page of switches holds no compositing layer at rest, and a toggled switch gives its layers back once it rests', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'The count reads Chromium’s layer tree through the DevTools protocol.',
+    );
+    const cdp = await page.context().newCDPSession(page);
+    let layers = 0;
+    cdp.on('LayerTree.layerTreeDidChange', event => {
+      if (event.layers != null) {
+        layers = event.layers.length;
+      }
+    });
+    await cdp.send('LayerTree.enable');
+    const {driver, input, thumb, center} = await openSwitch(
+      page,
+      'core-switch--in-scrolling-list',
+    );
+    // The tree after a wait and two frames, so it holds what they drew.
+    const count = async (waitMs: number) => {
+      await page.waitForTimeout(waitMs);
+      await page.evaluate(
+        async () =>
+          new Promise<void>(resolve =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          ),
+      );
+      return layers;
+    };
+    const atRest = await count(PROMOTION_LINGER_MS + 200);
+    const wasOn = await input.isChecked();
+    await driver.play(tap(center));
+    await expect(input).toBeChecked({checked: !wasOn});
+    await waitForSwitchRest(page, thumb);
+    // The fade and the shadow's settle end within a second of the thumb.
+    const afterToggle = await count(1000 + PROMOTION_LINGER_MS);
+    // The same page without its switches: what they add.
+    await page.evaluate(() =>
+      document.querySelector('#storybook-root > div')?.replaceChildren(),
+    );
+    const bare = await count(300);
+    expect(
+      atRest - bare,
+      `24 switches at rest hold ${atRest - bare} layers`,
+    ).toBe(0);
+    expect(
+      afterToggle - bare,
+      `the toggled switch holds ${afterToggle - bare} layers after it rests`,
+    ).toBe(0);
+  });
+
+  test('a toggle promotes its fade, its travel and its shadow by their first frame, and drops them only after they rest', async ({
+    page,
+  }) => {
+    const {driver, input, center} = await openSwitch(page);
+    await page.evaluate(() => {
+      const track = document.querySelector(
+        '#storybook-root .astryx-switch',
+      ) as HTMLElement;
+      const thumb = document.querySelector(
+        '#storybook-root .astryx-switch-thumb',
+      ) as HTMLElement;
+      // A curve the element or pseudo-element moves on: a hold lasts 1 ms.
+      const moves = (
+        element: HTMLElement,
+        pseudo: string | null,
+        property: string,
+      ) =>
+        element.getAnimations({subtree: true}).some(animation => {
+          const effect = animation.effect as KeyframeEffect;
+          return (
+            effect.target === element &&
+            (effect.pseudoElement ?? null) === pseudo &&
+            Number(effect.getTiming().duration) > 1 &&
+            effect.getKeyframes().some(frame => property in frame)
+          );
+        });
+      const w = window as unknown as {
+        __promotion: {
+          t: number;
+          fade?: string;
+          travel?: string;
+          shadow?: string;
+        }[];
+      };
+      w.__promotion = [];
+      const start = performance.now();
+      const tick = () => {
+        w.__promotion.push({
+          t: performance.now() - start,
+          fade: moves(track, '::after', 'opacity')
+            ? getComputedStyle(track, '::after').willChange
+            : undefined,
+          travel: moves(thumb, null, 'translate')
+            ? getComputedStyle(thumb).willChange
+            : undefined,
+          shadow: moves(thumb, '::after', 'opacity')
+            ? getComputedStyle(thumb, '::after').willChange
+            : undefined,
+        });
+        if (performance.now() - start < 3000) {
+          requestAnimationFrame(tick);
+        }
+      };
+      requestAnimationFrame(tick);
+    });
+    await driver.play(tap(center));
+    await expect(input).toBeChecked();
+    await page.waitForFunction(
+      () =>
+        ((window as unknown as {__promotion: {t: number}[]}).__promotion.at(-1)
+          ?.t ?? 0) >= 3000,
+    );
+    const frames = await page.evaluate(
+      () =>
+        (
+          window as unknown as {
+            __promotion: {
+              t: number;
+              fade?: string;
+              travel?: string;
+              shadow?: string;
+            }[];
+          }
+        ).__promotion,
+    );
+    for (const [kind, property] of [
+      ['fade', 'opacity'],
+      ['travel', 'translate'],
+      ['shadow', 'opacity'],
+    ] as const) {
+      const moving = frames.filter(frame => frame[kind] != null);
+      expect(moving.length, `the ${kind} moved on no frame`).toBeGreaterThan(0);
+      // From its first frame to its last, it has a layer.
+      for (const frame of moving) {
+        expect(
+          frame[kind],
+          `the ${kind} at ${Math.round(frame.t)} ms`,
+        ).toContain(property);
+      }
+      // At the end it rests: no curve, so no layer.
+      expect(
+        frames[frames.length - 1][kind],
+        `the ${kind} at the end`,
+      ).toBeUndefined();
+    }
+    const resting = await page.evaluate(() => {
+      const track = document.querySelector(
+        '#storybook-root .astryx-switch',
+      ) as HTMLElement;
+      const thumb = document.querySelector(
+        '#storybook-root .astryx-switch-thumb',
+      ) as HTMLElement;
+      return [
+        getComputedStyle(track, '::after').willChange,
+        getComputedStyle(thumb).willChange,
+        getComputedStyle(thumb, '::after').willChange,
+      ];
+    });
+    expect(
+      resting,
+      'will-change at rest: the track’s ::after, the thumb, its ::after',
+    ).toEqual(['auto', 'auto', 'auto']);
   });
 
   test('P1 · a tap toggles at the release: the thumb travels and the track turns on, and the lift settles back', async ({

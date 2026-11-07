@@ -163,12 +163,16 @@
  * a role.
  *
  * A pseudo-element (`options.pseudoElement`, a dialog's `::backdrop`) has no
- * inline style: its end value is held by a static filling animation (after a
- * curve ends, and after `set`) until the next animation replaces it, and for
- * as long as the pseudo-element exists. The browser makes a `::backdrop`
- * again each time its dialog opens, without the hold, so a presentation
- * calls `set` with its starting value right after `showModal()`, in the same
- * task: a `set` before it lands on the backdrop the open replaces.
+ * inline style. A static filling animation holds its end value, after a
+ * curve ends and after `set`, until the next animation replaces it. The hold
+ * lasts as long as the pseudo-element exists. A value equal to its `base`,
+ * the values its own stylesheet shows at rest, is not held. The stylesheet
+ * shows it, so the pseudo-element keeps no compositing layer at rest. In
+ * development, the first hold dropped this way checks that the stylesheet
+ * shows it. The browser makes a `::backdrop` again, without the hold, each
+ * time its dialog opens. So a presentation calls `set` with its starting
+ * value right after `showModal()`, in the same task. A `set` before it lands
+ * on the backdrop the open replaces.
  *
  * SSR-safe: nothing touches `window` or `document` at module scope, and an
  * animator created without an element only keeps state until one is attached.
@@ -197,6 +201,9 @@ import {
 } from './uikit/timing';
 import {planReducedMotion, type ReducedMotionView} from './reducedMotionPlan';
 import {themeReducesMotion} from '../privateAttributes/reducedMotion.stylex';
+import {devWarn} from '../utils/devWarning';
+
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 /**
  * A value the animator can drive.
@@ -343,12 +350,21 @@ export interface SetOptions {
 export interface AnimatorOptions {
   /**
    * Animates a pseudo-element of the element instead (`'::backdrop'` of a
-   * native dialog). A pseudo-element has no inline style, so a static filling
-   * animation holds its value after a curve ends and after `set`.
+   * native dialog). A pseudo-element has no inline style. So a static filling
+   * animation holds its value after a curve ends and after `set`, unless the
+   * value is its `base`.
    */
   pseudoElement?: string;
   /** Starting values; identity by default. Never read from the DOM. */
   initial?: MotionValues;
+  /**
+   * For a pseudo-element: the values its own stylesheet shows at rest. A
+   * value equal to its base needs no holding animation, so the
+   * pseudo-element keeps no compositing layer there. Declare only what the
+   * stylesheet shows: in development, the first hold dropped warns when the
+   * computed style differs.
+   */
+  base?: MotionValues;
   /** Clock in ms on the document timeline's time base. */
   now?: () => number;
   /**
@@ -816,6 +832,33 @@ function format(
   }
 }
 
+/**
+ * Whether a computed value shows `expected` (`format`'s text). An unset or
+ * `none` value is the channel's identity. One value of a two-value channel
+ * stands for both (scale), or for x with y at 0 (translate).
+ */
+function sameShown(channel: Channel, shown: string, expected: string): boolean {
+  const numbers = (text: string): number[] => {
+    const values = (
+      text === '' || text === 'none' ? IDENTITY_TEXT[channel] : text
+    ).match(/-?\d*\.?\d+(?:e-?\d+)?/g);
+    const list = (values ?? []).map(Number);
+    if (channel === 'translate') {
+      return [list[0] ?? 0, list[1] ?? 0];
+    }
+    if (channel === 'scale') {
+      return [list[0] ?? 1, list[1] ?? list[0] ?? 1];
+    }
+    return list.length > 0 ? list : [channel === 'opacity' ? 1 : 0];
+  };
+  const a = numbers(shown);
+  const b = numbers(expected);
+  return (
+    a.length === b.length &&
+    a.every((value, i) => Math.abs(value - b[i]) < 1e-3)
+  );
+}
+
 const shared = new WeakMap<HTMLElement, Map<string, Animator>>();
 
 /**
@@ -1003,6 +1046,7 @@ export function createMotionEngine(
     ...IDENTITY,
     ...expand(options.initial ?? {}),
   };
+  const base = expand(options.base ?? {});
   const segments = new Map<MotionProperty, Segment>();
   const running = new Map<Channel, Animation>();
   /** Drops a finished, still-filling animation once the main thread runs. */
@@ -1381,9 +1425,61 @@ export function createMotionEngine(
     return times;
   };
 
-  /** A pseudo-element's resting value, held by a static filling animation. */
+  /**
+   * Whether the pseudo-element's stylesheet shows the channel's resting
+   * value: its base, to within the sampling tolerance, which no frame shows.
+   * A curve that settles to a threshold ends that close to its target.
+   */
+  const atBase = (channel: Channel) =>
+    CHANNELS[channel].every(property => {
+      const value = base[property];
+      return (
+        value != null &&
+        Math.abs(finalValue(property) - value) <= SAMPLE_TOLERANCE[property]
+      );
+    });
+
+  let baseChecked = false;
+  /**
+   * The first hold dropped at `base` checks, in development, that the
+   * stylesheet shows it. It reads after the cancel and off the motion's task,
+   * so it adds no style read to a frame that starts a motion.
+   */
+  const checkBase = (channel: Channel) => {
+    if (process.env.NODE_ENV === 'production' || baseChecked) {
+      return;
+    }
+    baseChecked = true;
+    setTimeout(() => {
+      if (target == null) {
+        return;
+      }
+      const shown = getComputedStyle(target, pseudoElement).getPropertyValue(
+        channel,
+      );
+      const expected = format(channel, p => base[p] ?? IDENTITY[p]);
+      if (!sameShown(channel, shown, expected)) {
+        devWarn(
+          'Astryx motion',
+          `the ${pseudoElement} stylesheet shows ${channel} ` +
+            `${shown || '(unset)'}, not its declared base ${expected}, so ` +
+            'it shows the wrong value at rest. Make `base` match the ' +
+            'stylesheet.',
+        );
+      }
+    }, 0);
+  };
+
+  /**
+   * A pseudo-element's resting value, held by a static filling animation,
+   * unless its stylesheet shows it (`base`).
+   */
   const hold = (channel: Channel, time: number) => {
     if (target == null) {
+      return;
+    }
+    if (atBase(channel)) {
+      checkBase(channel);
       return;
     }
     const value = format(channel, finalValue);
