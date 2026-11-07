@@ -227,19 +227,22 @@ async function openReplacedTrigger(page: Page): Promise<number> {
 /**
  * Open the TallContent story at a viewport, scroll the trigger's centre to
  * `triggerY`, rest the pointer on the trigger and wait for the tooltip.
- * Returns how many times the tooltip toggled.
+ * Motion is held still unless `motion` is 'allowed'.
  */
 async function hoverTallTrigger(
   page: Page,
   viewport: {width: number; height: number},
   triggerY: number,
   args = '',
+  motion: 'still' | 'allowed' = 'still',
 ) {
   await page.setViewportSize(viewport);
   await page.goto(
     `${storybook.origin}/iframe.html?id=core-tooltip--tall-content&viewMode=story${args ? `&args=${args}` : ''}`,
   );
-  await holdMotionStill(page);
+  if (motion === 'still') {
+    await holdMotionStill(page);
+  }
   const trigger = page.getByRole('button', {name: 'Hover for details'});
   await expect(trigger).toBeVisible();
   await page.evaluate(
@@ -339,6 +342,25 @@ test('desktop: a tall tooltip opens beside its trigger and stays open', async ({
   // Beside the trigger, on the inline axis.
   expect(s.left >= trigger.right || s.right <= trigger.left).toBe(true);
   await expectScrollsInside(page);
+});
+
+test('desktop, with motion allowed: a tall tooltip opens beside its trigger, and no frame of its entrance covers the trigger', async ({
+  page,
+}) => {
+  // The reads while the tooltip enters take its entrance transform out. No
+  // frame of the entrance paints it over its trigger.
+  const viewport = {width: 1280, height: 720};
+  const {trigger} = await hoverTallTrigger(page, viewport, 360, '', 'allowed');
+  await page.waitForTimeout(500);
+  const s = await expectStillAndClear(page, trigger, viewport);
+  expect(s.left >= trigger.right || s.right <= trigger.left).toBe(true);
+  expect(
+    await page.evaluate(
+      sel =>
+        document.querySelector(sel)?.hasAttribute('data-astryx-clears-anchor'),
+      TOOLTIP,
+    ),
+  ).toBe(true);
 });
 
 test('phone: with no room beside, it opens below when below has more room', async ({
