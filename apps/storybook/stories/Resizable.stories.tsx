@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {useRef, useState} from 'react';
+import {useLayoutEffect, useRef, useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars, radiusVars} from '@astryxdesign/core/theme/tokens.stylex';
@@ -27,6 +27,8 @@ const ps = stylex.create({
     overflow: 'hidden',
   },
   sz: {opacity: 0.6, fontSize: 12, fontFamily: 'monospace'},
+  // NOT FOR LANDING: two splits fit one phone screen.
+  compact: {height: 300},
 });
 
 const meta: Meta<typeof ResizeHandle> = {
@@ -839,4 +841,346 @@ function CollapsingScrollPanel() {
 export const CollapsingScrollPanelFixture: Story = {
   tags: ['!autodocs', 'no-visual'],
   render: () => <CollapsingScrollPanel />,
+};
+
+/**
+ * A LayoutPanel that takes a `useResizable` region slides closed and open
+ * from the edge facing its ResizeHandle. The content beside it moves on
+ * the same motion. "Close panel" collapses it from inside, so focus moves to
+ * the handle and the collapsed panel is inert. Enter on the handle, a
+ * double-click or "Open panel" opens it again.
+ */
+function SlidingPanelSplit({
+  side,
+  lineCount = 0,
+  snaps,
+  isInitiallyCollapsed = false,
+  maxSize = 320,
+  band,
+  isCompact = false,
+}: {
+  side: 'start' | 'end';
+  lineCount?: number;
+  snaps?: number[];
+  isInitiallyCollapsed?: boolean;
+  maxSize?: number;
+  band?: 'handle' | 'grip';
+  isCompact?: boolean;
+}) {
+  const resizable = useResizable({
+    defaultSize: 200,
+    minSize: 120,
+    maxSize,
+    collapsible: true,
+    snaps,
+    defaultIsCollapsed: isInitiallyCollapsed,
+  });
+  const pane = (
+    <LayoutPanel resizable={resizable} data-testid="sliding-panel">
+      <Stack gap={2}>
+        <Heading level={4}>Panel</Heading>
+        <Button label="Close panel" onClick={resizable.collapse} />
+        {Array.from({length: lineCount}, (_, index) => (
+          <Text key={index}>Line {index + 1}</Text>
+        ))}
+      </Stack>
+    </LayoutPanel>
+  );
+  const handle = (
+    <ResizeHandle
+      resizable={resizable}
+      isReversed={side === 'end'}
+      hasDivider
+      label="Resize panel"
+    />
+  );
+  return (
+    <div
+      {...stylex.props(ps.shell, isCompact && ps.compact)}
+      data-try-it-band={band}>
+      <Layout
+        height="fill"
+        start={
+          side === 'start' ? (
+            <>
+              {pane}
+              {handle}
+            </>
+          ) : undefined
+        }
+        content={
+          <LayoutContent data-testid="sliding-content">
+            <Stack gap={2}>
+              <Text>The content glides with the panel's edge.</Text>
+              <Button label="Open panel" onClick={resizable.expand} />
+              <Button
+                label="Toggle panel"
+                onClick={
+                  resizable.isCollapsed ? resizable.expand : resizable.collapse
+                }
+              />
+            </Stack>
+          </LayoutContent>
+        }
+        end={
+          side === 'end' ? (
+            <>
+              {handle}
+              {pane}
+            </>
+          ) : undefined
+        }
+      />
+    </div>
+  );
+}
+
+export const SlidingStartPanel: Story = {
+  render: () => <SlidingPanelSplit side="start" />,
+};
+
+export const SlidingEndPanel: Story = {
+  render: () => <SlidingPanelSplit side="end" />,
+};
+
+/**
+ * NOT FOR LANDING: try-it stories. `closeLine` draws an accent line where
+ * the edge will land. `snapOnLift`
+ * lets a drag move freely between snap points and settles on the nearest at
+ * the lift. `expandFeedback` shows a drag out of a collapsed panel: a peek
+ * of its edge, or the line at the size it opens to.
+ */
+interface TryItArgs {
+  closeLine: boolean;
+  snapOnLift: boolean;
+  expandFeedback: 'none' | 'peek' | 'line';
+}
+
+const TRY_IT: TryItArgs = {
+  closeLine: true,
+  snapOnLift: false,
+  expandFeedback: 'none',
+};
+
+const TRY_IT_CONTROLS = {
+  expandFeedback: {control: 'inline-radio', options: ['none', 'peek', 'line']},
+} as const;
+
+/**
+ * NOT FOR LANDING: sets the page-global try-it switch while a try-it story
+ * shows, and clears it when the story goes, so no other story reads it.
+ */
+function useTryItSwitch(choices: object): void {
+  const key = JSON.stringify(choices);
+  useLayoutEffect(() => {
+    const page = globalThis as {__astryxResizeTryIt?: object};
+    page.__astryxResizeTryIt = JSON.parse(key) as object;
+    return () => {
+      delete page.__astryxResizeTryIt;
+    };
+  }, [key]);
+}
+
+function TryItPanel({
+  closeLine,
+  snapOnLift,
+  expandFeedback,
+  snaps,
+  isInitiallyCollapsed,
+}: TryItArgs & {snaps?: number[]; isInitiallyCollapsed?: boolean}) {
+  useTryItSwitch({
+    closeLine,
+    snapOnLift,
+    expandFeedback: expandFeedback === 'none' ? undefined : expandFeedback,
+  });
+  return (
+    <SlidingPanelSplit
+      side="start"
+      snaps={snaps}
+      isInitiallyCollapsed={isInitiallyCollapsed}
+    />
+  );
+}
+
+/** NOT FOR LANDING: on a phone, 55% of the viewport, up to 320 px. */
+function phoneMax(): number {
+  return Math.min(320, Math.round(window.innerWidth * 0.55));
+}
+
+/**
+ * NOT FOR LANDING: the slide as it ships, on a phone. The maximum is 55% of
+ * the viewport, up to 320 px, so the content beside the panel keeps room to
+ * read past the limit. `band` shows card 81d's handle band or card 81e's
+ * grip tab band.
+ */
+export const TryItSlideOnAPhone: StoryObj<{band: 'handle' | 'grip'}> = {
+  name: 'Try it: the slide on a phone',
+  args: {band: 'handle'},
+  argTypes: {band: {control: 'inline-radio', options: ['handle', 'grip']}},
+  render: ({band}) => (
+    <SlidingPanelSplit side="start" maxSize={phoneMax()} band={band} />
+  ),
+};
+
+/**
+ * NOT FOR LANDING: card 81d beside card 81e on a phone. Above, the handle
+ * bands past a limit; below, the grip tab alone bands while the handle line
+ * stays put. Re-grab and the close on the lift are the same in both.
+ */
+export const TryItHandleBesideGripOnAPhone: Story = {
+  name: 'Try it: 81d handle band beside 81e grip tab band, on a phone',
+  render: () => {
+    return (
+      <Stack gap={3}>
+        <Text>81d: the handle bands</Text>
+        <SlidingPanelSplit side="start" maxSize={phoneMax()} isCompact />
+        <Text>81e: the grip tab bands</Text>
+        <SlidingPanelSplit
+          side="start"
+          maxSize={phoneMax()}
+          band="grip"
+          isCompact
+        />
+      </Stack>
+    );
+  },
+};
+
+export const TryItSnapPoints: StoryObj<typeof TryItPanel> = {
+  name: 'Try it: snap points 120, 200, 280, settled on lift',
+  args: {...TRY_IT, snapOnLift: true},
+  argTypes: TRY_IT_CONTROLS,
+  render: args => <TryItPanel {...args} snaps={[120, 200, 280]} />,
+};
+
+export const TryItDragToOpenPeek: StoryObj<typeof TryItPanel> = {
+  name: 'Try it: drag to open, with a peek',
+  args: {...TRY_IT, expandFeedback: 'peek'},
+  argTypes: TRY_IT_CONTROLS,
+  render: args => <TryItPanel {...args} isInitiallyCollapsed />,
+};
+
+export const TryItDragToOpenLine: StoryObj<typeof TryItPanel> = {
+  name: 'Try it: drag to open, with the line at the open size',
+  args: {...TRY_IT, expandFeedback: 'line'},
+  argTypes: TRY_IT_CONTROLS,
+  render: args => <TryItPanel {...args} isInitiallyCollapsed />,
+};
+
+/** A sliding start panel with more lines than fit, for a scrolled slide. */
+export const SlidingScrolledPanelFixture: Story = {
+  tags: ['!autodocs', 'no-visual'],
+  render: () => <SlidingPanelSplit side="start" lineCount={40} />,
+};
+
+/**
+ * A start LayoutPanel whose collapse state its parent owns: `isCollapsed`
+ * with `onCollapseChange`, and a toggle that flips the parent's state. The
+ * panel slides on each controlled change too.
+ */
+function ControlledSlidingPanel() {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const resizable = useResizable({
+    defaultSize: 200,
+    minSize: 120,
+    maxSize: 320,
+    collapsible: true,
+    isCollapsed,
+    onCollapseChange: setIsCollapsed,
+  });
+  return (
+    <div {...stylex.props(ps.shell)}>
+      <Layout
+        height="fill"
+        start={
+          <>
+            <LayoutPanel resizable={resizable} data-testid="sliding-panel">
+              <Stack gap={2}>
+                <Heading level={4}>Panel</Heading>
+                <Button label="Close panel" onClick={resizable.collapse} />
+              </Stack>
+            </LayoutPanel>
+            <ResizeHandle
+              resizable={resizable}
+              hasDivider
+              label="Resize panel"
+            />
+          </>
+        }
+        content={
+          <LayoutContent data-testid="sliding-content">
+            <Stack gap={2}>
+              <Text>The parent owns whether the panel is collapsed.</Text>
+              <Button
+                label="Toggle panel"
+                onClick={() => {
+                  setIsCollapsed(!isCollapsed);
+                }}
+              />
+            </Stack>
+          </LayoutContent>
+        }
+      />
+    </div>
+  );
+}
+
+export const SlidingControlledPanel: Story = {
+  render: () => <ControlledSlidingPanel />,
+};
+
+/**
+ * Browser fixtures for two start panels. One takes the hook's own `props`
+ * and slides. The other takes a hand-built `ResizableProps` object, with the same
+ * fields in an object the hook did not return, and collapses without a slide.
+ * Both move focus inside them to the handle and go inert while collapsed.
+ */
+function PropsPanelSplit({isHandBuilt}: {isHandBuilt: boolean}) {
+  const resizable = useResizable({
+    defaultSize: 200,
+    minSize: 120,
+    maxSize: 320,
+    collapsible: true,
+  });
+  const panelValue = isHandBuilt ? {...resizable.props} : resizable.props;
+  return (
+    <div {...stylex.props(ps.shell)}>
+      <Layout
+        height="fill"
+        start={
+          <>
+            <LayoutPanel resizable={panelValue} data-testid="sliding-panel">
+              <Stack gap={2}>
+                <Heading level={4}>Panel</Heading>
+                <Button label="Close panel" onClick={resizable.collapse} />
+              </Stack>
+            </LayoutPanel>
+            <ResizeHandle
+              resizable={resizable}
+              hasDivider
+              label="Resize panel"
+            />
+          </>
+        }
+        content={
+          <LayoutContent data-testid="sliding-content">
+            <Stack gap={2}>
+              <Text>The content glides with the panel's edge.</Text>
+              <Button label="Open panel" onClick={resizable.expand} />
+            </Stack>
+          </LayoutContent>
+        }
+      />
+    </div>
+  );
+}
+
+export const SlidingPanelWithHookProps: Story = {
+  tags: ['!autodocs', 'no-visual'],
+  render: () => <PropsPanelSplit isHandBuilt={false} />,
+};
+
+export const PanelWithHandBuiltProps: Story = {
+  tags: ['!autodocs', 'no-visual'],
+  render: () => <PropsPanelSplit isHandBuilt />,
 };

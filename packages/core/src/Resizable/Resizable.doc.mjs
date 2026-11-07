@@ -184,7 +184,8 @@ export default function InvoicePreviewSplit() {
         {
           name: 'collapsedSize',
           type: 'number',
-          description: 'Pixel threshold that triggers collapse during drag.',
+          description:
+            'Pixel threshold under which the lift of a drag collapses the region.',
           default: '40',
         },
         {
@@ -325,7 +326,7 @@ export const docsDense = {
         maxSize:
           'live maximum: pixels, exact N%, or percent(value, {min: pixel(value)}) / percent(value, {max: pixel(value)})',
         collapsible: 'region can collapse to size 0?',
-        collapsedSize: 'px threshold triggering collapse during drag',
+        collapsedSize: 'px threshold under which a drag lift collapses',
         snaps: 'px values to snap to during resize',
         shrinkOrder: 'cascade priority: lower number shrinks first',
         autoSaveId: 'key for persisting sizes + collapse state to localStorage',
