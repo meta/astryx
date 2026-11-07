@@ -476,6 +476,76 @@ describe('swizzle — integration-owned components', () => {
     expect(out).toContain(`from '../Bar`);
   });
 
+  it("carries another Astryx package's internal module under a folder named after that package", async () => {
+    const core = buildFakeCore(project);
+    writeProjectPackageJson(project);
+    const {compDir} = buildIntegration(project, {
+      issuesUrl: 'https://example.com/meta/issues',
+    });
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(core, 'package.json'), 'utf-8'),
+    );
+    manifest.exports['.'] = {
+      source: './src/index.ts',
+      default: './dist/index.js',
+    };
+    manifest.exports['./internal/*'] = {
+      source: './src/internal/*.ts',
+      default: './dist/internal/*.js',
+    };
+    fs.writeFileSync(path.join(core, 'package.json'), JSON.stringify(manifest));
+    fs.mkdirSync(path.join(core, 'src', 'internal'), {recursive: true});
+    fs.mkdirSync(path.join(core, 'src', 'utils'), {recursive: true});
+    fs.writeFileSync(
+      path.join(core, 'src', 'index.ts'),
+      `export {publicName} from './utils/pub';\n`,
+    );
+    fs.writeFileSync(
+      path.join(core, 'src', 'utils', 'pub.ts'),
+      `export const publicName = 1;\n`,
+    );
+    fs.writeFileSync(
+      path.join(core, 'src', 'utils', 'priv.ts'),
+      `export const priv = 2;\n`,
+    );
+    fs.writeFileSync(
+      path.join(core, 'src', 'internal', 'touch.ts'),
+      `import {publicName} from '../utils/pub';\nimport {priv} from '../utils/priv';\nexport const touch = publicName + priv;\n`,
+    );
+    fs.writeFileSync(
+      path.join(compDir, 'MetaAppShell.tsx'),
+      `import {touch} from '@astryxdesign/core/internal/touch';\nexport function MetaAppShell() { return touch; }\n`,
+    );
+
+    const result = await runCli(
+      ['--json', 'swizzle', 'MetaAppShell', '-f'],
+      project,
+    );
+    expect(result.code).toBe(0);
+    const env = JSON.parse(result.stdout);
+    const output = path.join(project, 'components', 'astryx');
+    const read = rel => fs.readFileSync(path.join(output, rel), 'utf-8');
+    expect(read('MetaAppShell/MetaAppShell.tsx')).toContain(
+      `from '../core/internal/touch'`,
+    );
+    expect(read('core/internal/touch.ts')).toContain(
+      `import {publicName} from '@astryxdesign/core';`,
+    );
+    expect(read('core/internal/touch.ts')).toContain(`from '../utils/priv'`);
+    expect(read('core/utils/priv.ts')).toBe(`export const priv = 2;\n`);
+    expect(env.data.files).toEqual(
+      expect.arrayContaining([
+        '../core/internal/touch.ts',
+        '../core/utils/priv.ts',
+      ]),
+    );
+    for (const rel of env.data.files) {
+      expect(read(path.join('MetaAppShell', rel)), rel).not.toMatch(
+        /@astryxdesign\/core\/internal/,
+      );
+    }
+  });
+
   it('omits the feedback note when the integration ships no issuesUrl', async () => {
     buildFakeCore(project);
     writeProjectPackageJson(project);
