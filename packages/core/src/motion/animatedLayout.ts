@@ -82,10 +82,10 @@
  */
 
 import {LATE_START_MS} from './frameBlock';
+import {paintedBackground} from './inertClone';
 import {
   inertCopy,
   isCopyable,
-  paintedBackground,
   placeOver,
   visiblePartCopy,
   wrapText,
