@@ -770,22 +770,22 @@ test('Reduce Motion: no lift; a release keeps coasting and a track tap sets the 
   const releaseFrames = await watchFromLift(500);
   await driver.play(script);
   const release = await releaseFrames();
-  // The frames that show the coast run from the lift to the thumb's last
-  // move. A starved page draws too few of them to show five places. Then the
-  // proof fails by name.
+  // The frames that show the coast run from the lift, at t 0, to the
+  // thumb's last move. A starved page draws too few of them to show five
+  // places. Then the proof fails by name, even when it stalled at the lift.
   const place = (sample: Sample) => Math.round(sample.x * 4);
-  let lastMove = 0;
+  let lastMoveAt = release[0]?.t ?? 0;
   release.forEach((sample, index) => {
     if (index > 0 && place(sample) !== place(release[index - 1])) {
-      lastMove = index;
+      lastMoveAt = sample.t;
     }
   });
-  if (lastMove > 0) {
-    requireFrames(release.slice(0, lastMove + 1), {
-      min: 5,
-      during: 'the released thumb coasted',
-    });
-  }
+  const lift = {t: 0};
+  requireFrames([lift, ...release], {
+    min: 5,
+    during: 'the released thumb coasted',
+    where: sample => sample !== lift && sample.t <= lastMoveAt,
+  });
   expect(Math.min(...opacities(release))).toBe(1);
   expect(Math.max(...release.map(sample => sample.scale))).toBe(1);
   const positions = new Set(release.map(place));
