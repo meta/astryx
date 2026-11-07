@@ -253,6 +253,39 @@ describe('a PowerSearch filter token', () => {
     expect(screen.getByText('is（Status）')).toBeInTheDocument();
   });
 
+  it("names the token, its editor and its pill by one text in the locale's order", async () => {
+    const user = userEvent.setup();
+    render(
+      <InternationalizationProvider
+        locale="ja"
+        messages={{
+          ja: {
+            '@astryx.powersearch.token.labelValue': {
+              defaultMessage: '{value}（{label}）',
+            },
+          },
+        }}>
+        <PowerSearch
+          config={config}
+          filters={[openFilter]}
+          onChange={() => {}}
+        />
+      </InternationalizationProvider>,
+    );
+    const token = screen.getByRole('button', {name: 'Open（Status: is）'});
+    // The pill shows the same text it is named by.
+    expect(token).toHaveTextContent(/^Open（Status: is）$/);
+
+    await user.click(token);
+
+    expect(
+      await screen.findByRole('dialog', {
+        name: 'Open（Status: is）',
+        hidden: true,
+      }),
+    ).toBeInTheDocument();
+  });
+
   it('keeps a verb-last locale order in the remove button name', () => {
     render(
       <InternationalizationProvider
