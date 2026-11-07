@@ -131,11 +131,8 @@ const COPY_FEEDBACK_MS = 1500;
  * The per-row copy affordance: a compact ghost `IconButton` that writes the
  * row's value to the clipboard, flips `copy` → `check` for a moment, and
  * announces the copy to a polite live region (a swapped aria-label alone
- * isn't reliably announced). A rejected write shows `close` for the same
- * moment and names and announces the failure; the error itself is not shown.
- * The clipboard write, the copied and failed flags, their reset timer, and the
- * announcements are owned by `useClipboardCopy`, shared with CodeBlock's
- * built-in copy button.
+ * isn't reliably announced). The error detail of a failed write is never
+ * shown.
  *
  * Kept as its own component so its state/timer/effect only exist for rows that
  * actually opt into copying — read-only rows render no button and carry none
@@ -173,10 +170,8 @@ function CopyButton({value}: {value: string}) {
           color="inherit"
         />
       }
-      // Visible hover/focus hint via Button's built-in tooltip: 'Copy',
-      // flipping to 'Copied' after a successful copy, or to the failure text
-      // after a failed one, in step with the icon. The full 'Copy <value>'
-      // string stays the aria-label at rest for assistive tech.
+      // The tooltip stays short. At rest the name carries the full value for
+      // assistive technology.
       tooltip={
         copyFailed
           ? copyFailedLabel
