@@ -14,6 +14,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {isBuiltin} from 'node:module';
 import {packageOf} from '../../foundation/render/served-packages.mjs';
+import {resolveInstalledPackageDir} from '../../foundation/integrations/installed-package.mjs';
 import {parse} from '@babel/parser';
 import {
   inspectPackageExport,
@@ -447,8 +448,8 @@ export function planCopy({
   const files = new Map();
   /** @type {CopyPlan['dependsOn']} */
   const dependsOn = new Map();
-  /** @type {Map<string, string>} npm package -> the package dir that imports it */
-  const packages = new Map();
+  /** @type {Set<string>} */
+  const packages = new Set();
   const queue = [...entries];
   const queued = new Set(queue);
   /** @param {string} file */
@@ -589,8 +590,9 @@ export function planCopy({
     if (!name.startsWith('@astryxdesign/') || name === ownerPackage)
       return null;
     if (!/^internal(\/|$)/.test(sub)) return null;
-    const dir = installedPackageDir(file, name);
-    if (!dir) return null;
+    const installed = resolveInstalledPackageDir(name, path.dirname(file));
+    if (!installed) return null;
+    const dir = fs.realpathSync(installed.packageDir);
     /** @type {{exports?: unknown}} */
     let pkg;
     try {
@@ -601,7 +603,9 @@ export function planCopy({
       return null;
     }
     const target = sourceExportTarget(pkg, dir, `./${sub}`);
-    if (!target) return null;
+    // A StyleX module's identity is its path, so the copy keeps importing it
+    // by its exported path and agrees with the package on it.
+    if (!target || STYLEX_FILE.test(target)) return null;
     const src = path.join(dir, 'src');
     const root = target.startsWith(src + path.sep) ? src : dir;
     if (!others.has(root)) {
@@ -644,13 +648,7 @@ export function planCopy({
         }
         const builtin = ref.source.startsWith('node:') || isBuiltin(ref.source);
         const name = packageOf(ref.source);
-        if (
-          !builtin &&
-          name !== ownerPackage &&
-          name !== context.ownerPackage
-        ) {
-          if (!packages.has(name)) packages.set(name, context.packageDir);
-        }
+        if (!builtin && name !== ownerPackage) packages.add(name);
         continue;
       }
       const target = resolveRelative(file, ref.source, resolutions);
@@ -670,6 +668,7 @@ export function planCopy({
           subpathDeclaration(context.surface.exportsField, subpath).state ===
           'declared'
         ) {
+          if (context !== owner) packages.add(context.ownerPackage);
           edits.push(
             sourceEdit(
               parsed.code,
@@ -691,7 +690,7 @@ export function planCopy({
   return {
     files,
     dependsOn,
-    dependencies: declaredRanges(packages),
+    dependencies: declaredRanges(packageDir, packages),
     otherPackages: new Map(
       [...others].map(([root, c]) => [root, c.ownerPackage]),
     ),
@@ -707,6 +706,9 @@ export function planCopy({
    * @returns {PlannedEdit}
    */
   function planReference(context, file, code, ref, target) {
+    // A carried module of another package imports that package's public names
+    // from it, so the copy depends on it.
+    if (context !== owner) packages.add(context.ownerPackage);
     if (ref.kind !== 'named' && ref.kind !== 'reexportNamed') {
       const covering = context.subpathCoveringModule(target);
       return sourceEdit(
@@ -788,35 +790,25 @@ export function planCopy({
 }
 
 /**
- * The version range declared for each npm package the copy imports, by the
- * package whose module imports it; `*` for one it does not declare.
- * @param {Map<string, string>} packages npm package -> importing package dir
+ * The version range the owner package declares for each npm package the copy
+ * imports, by name; `*` for one it does not declare.
+ * @param {string} packageDir
+ * @param {Iterable<string>} names
  * @returns {Record<string, string>}
  */
-function declaredRanges(packages) {
-  /** @type {Map<string, Record<string, Record<string, string>>>} */
-  const manifests = new Map();
-  /** @param {string} dir */
-  const manifestOf = dir => {
-    if (!manifests.has(dir)) {
-      try {
-        manifests.set(
-          dir,
-          JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf-8')),
-        );
-      } catch {
-        // An unreadable manifest declares nothing.
-        manifests.set(dir, {});
-      }
-    }
-    return /** @type {Record<string, Record<string, string>>} */ (
-      manifests.get(dir)
+function declaredRanges(packageDir, names) {
+  /** @type {Record<string, Record<string, string>>} */
+  let manifest = {};
+  try {
+    manifest = JSON.parse(
+      fs.readFileSync(path.join(packageDir, 'package.json'), 'utf-8'),
     );
-  };
+  } catch {
+    // An unreadable manifest declares nothing.
+  }
   /** @type {Record<string, string>} */
   const ranges = {};
-  for (const name of [...packages.keys()].sort()) {
-    const manifest = manifestOf(/** @type {string} */ (packages.get(name)));
+  for (const name of [...names].sort()) {
     ranges[name] =
       manifest.dependencies?.[name] ??
       manifest.optionalDependencies?.[name] ??
@@ -824,23 +816,6 @@ function declaredRanges(packages) {
       '*';
   }
   return ranges;
-}
-
-/**
- * The installed folder of package `name` as a module at `fromFile` resolves
- * it: the nearest `node_modules/<name>` above it, by its real path.
- * @param {string} fromFile
- * @param {string} name
- * @returns {string|null}
- */
-function installedPackageDir(fromFile, name) {
-  for (let dir = path.dirname(fromFile); ; dir = path.dirname(dir)) {
-    const candidate = path.join(dir, 'node_modules', name);
-    if (fs.existsSync(path.join(candidate, 'package.json'))) {
-      return fs.realpathSync(candidate);
-    }
-    if (path.dirname(dir) === dir) return null;
-  }
 }
 
 /**

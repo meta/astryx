@@ -64,7 +64,9 @@ and the repository proves it before a change that could break it merges.
   Core version and a StyleX compiler, the output of
   `astryx swizzle <Name>` type-checks and bundles with no edits. It imports from
   its owner package only paths that package's `exports` lists, and never a
-  `./internal/*` path. The npm packages the copied files import are the owner
+  `./internal/*` path, except a StyleX module that another Astryx package
+  exports under `./internal/` in its package exports, which the copy keeps
+  importing by that exported path, since its identity is its path. The npm packages the copied files import are the owner
   package's own dependencies; swizzle reports each one with the version range the
   owner package declares, and the copy builds once the product installs them.
 - **FR2 — The helpers it needs come with it.** Every module the component

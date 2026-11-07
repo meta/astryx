@@ -370,6 +370,13 @@ export async function swizzleCopy(component, options = {}) {
     }
     return null;
   };
+  /** @param {string} file the version of the package a helper comes from */
+  const versionOf = file => {
+    const other = otherPackageOf(file);
+    return other
+      ? packageVersionOf(findPackageRoot(other.root) ?? other.root)
+      : ownerVersion;
+  };
   for (const file of [...allFiles].sort()) {
     if (layoutDestOf(file) != null) continue;
     const other = otherPackageOf(file);
@@ -394,15 +401,17 @@ export async function swizzleCopy(component, options = {}) {
   // A private attribute owner module and the unexported style modules it
   // imports travel whole and are replaced only with --overwrite.
   const ownerGroup = new Set();
+  /** @param {string} file the source root a carried module sits under */
+  const rootOf = file => otherPackageOf(file)?.root ?? srcRoot;
   const ownerQueue = helpers.filter(f =>
-    OWNER_MODULE.test(toModulePath(srcRoot, f)),
+    OWNER_MODULE.test(toModulePath(rootOf(f), f)),
   );
   while (ownerQueue.length > 0) {
     const file = /** @type {string} */ (ownerQueue.shift());
     if (ownerGroup.has(file)) continue;
     ownerGroup.add(file);
     for (const dep of plan.dependsOn.get(file) ?? []) {
-      if (!isComponentFile(dep) && STYLEX_MODULE.test(toModulePath(srcRoot, dep))) {
+      if (!isComponentFile(dep) && STYLEX_MODULE.test(toModulePath(rootOf(dep), dep))) {
         ownerQueue.push(dep);
       }
     }
@@ -444,7 +453,7 @@ export async function swizzleCopy(component, options = {}) {
       attempts.set(file, attempt);
       redirected.set(
         file,
-        versionedPath(baseDestOf(file), ownerVersion, attempt),
+        versionedPath(baseDestOf(file), versionOf(file), attempt),
       );
       moved = true;
     }
