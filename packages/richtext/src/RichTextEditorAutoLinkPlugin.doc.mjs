@@ -5,6 +5,8 @@
 export const docs = {
   name: 'RichTextEditorAutoLinkPlugin',
   subComponentOf: 'RichTextEditor',
+  description:
+    'Turns typed and pasted URLs and email addresses into links, in the plugins slot of RichTextEditor.',
   displayName: 'Rich Text Editor Auto-Link Plugin',
   keywords: ['richtext', 'autolink', 'link', 'url', 'email', 'plugin'],
   props: [

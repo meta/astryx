@@ -5,7 +5,7 @@
 export const docs = {
   name: 'RichTextView',
   displayName: 'Rich Text View',
-  category: 'Data Display',
+  category: 'Content',
   keywords: [
     'richtext',
     'rich text',

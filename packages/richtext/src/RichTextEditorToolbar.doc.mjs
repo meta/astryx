@@ -5,6 +5,7 @@
 export const docs = {
   name: 'RichTextEditorToolbar',
   subComponentOf: 'RichTextEditor',
+  description: 'Formatting toolbar for the toolbar slot of RichTextEditor.',
   displayName: 'Rich Text Editor Toolbar',
   keywords: ['richtext', 'toolbar', 'formatting', 'bold', 'link', 'heading'],
   props: [
