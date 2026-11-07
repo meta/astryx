@@ -88,8 +88,11 @@ permissions: {}
 # A release-check runs its browser owners in wide shards that all start at
 # once, so a full check takes minutes; pull requests keep their narrower legs
 # (spec:AST-030 FR23, DEC-17).
+# A pull request's newer push cancels its older run. A re-run takes a group of
+# its own, so re-running an older head never cancels the run for the pull
+# request's current head.
 concurrency:
-  group: "ci-${{ github.event.pull_request.number || github.event.merge_group.head_sha || (github.event_name == 'workflow_dispatch' && github.triggering_actor == 'github-actions[bot]' && 'main-heavy-lanes') || github.run_id }}"
+  group: "ci-${{ github.event.pull_request.number && (github.run_attempt == '1' && github.event.pull_request.number || format('{0}-rerun-{1}', github.event.pull_request.number, github.run_id)) || github.event.merge_group.head_sha || (github.event_name == 'workflow_dispatch' && github.triggering_actor == 'github-actions[bot]' && 'main-heavy-lanes') || github.run_id }}"
   cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' || (inputs.recheck && github.triggering_actor == 'github-actions[bot]') }}
 
 jobs:
