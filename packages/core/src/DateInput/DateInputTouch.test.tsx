@@ -73,6 +73,8 @@ import type * as IconButtonModule from '../IconButton';
 import {MonthYearWheels} from './MonthYearWheels';
 import type * as MonthYearWheelsModule from './MonthYearWheels';
 import {SHEET_SETTLE_MS} from './useWheelsWarmUp';
+import {MonthPager} from './datePickerTouch';
+import type * as DatePickerTouchModule from './datePickerTouch';
 
 // A pass-through spy: each call is one month pane rendering, which the
 // month/year toggle test counts. It wraps the module `MonthPane` imports.
@@ -94,6 +96,14 @@ vi.mock('../IconButton', async importOriginal => {
 vi.mock('./MonthYearWheels', async importOriginal => {
   const actual = await importOriginal<typeof MonthYearWheelsModule>();
   return {...actual, MonthYearWheels: vi.fn(actual.MonthYearWheels)};
+});
+// A pass-through render spy inside MonthPager's memo: each call is one pager
+// render, which the month/year toggle test reads (the toggle must not
+// re-render it).
+vi.mock('./datePickerTouch', async importOriginal => {
+  const actual = await importOriginal<typeof DatePickerTouchModule>();
+  const {memo} = await import('react');
+  return {...actual, MonthPager: memo(vi.fn(actual.MonthPager.type))};
 });
 
 // ---------------------------------------------------------------------------
@@ -3413,6 +3423,57 @@ describe('DateInput — scroll CSS (definition-level)', () => {
     expect(vi.mocked(Button)).not.toHaveBeenCalled();
     expect(vi.mocked(IconButton)).not.toHaveBeenCalled();
     expect(vi.mocked(MonthYearWheels)).toHaveBeenCalledTimes(1);
+  });
+
+  it('under a finger: the arrows the toggle keeps still move focus on at the range end', async () => {
+    // The toggle re-renders neither month arrow, so a press after the toggle
+    // runs the arrows' earlier callbacks. They must still move focus off an
+    // arrow that hides.
+    renderAndOpen(
+      <Controlled initial="2026-03-10" min="2026-01-01" max="2026-04-30" />,
+    );
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, SHEET_SETTLE_MS + 500));
+    });
+    const title = () =>
+      document.querySelector<HTMLElement>('[data-title="month-year"]')!;
+    vi.mocked(IconButton).mockClear();
+    fireEvent.click(title());
+    fireEvent.click(title());
+    expect(vi.mocked(IconButton)).not.toHaveBeenCalled();
+    const previous = screen.getByRole('button', {name: 'Previous month'});
+    act(() => previous.focus());
+    fireEvent.click(previous);
+    fireEvent.click(screen.getByRole('button', {name: 'Previous month'}));
+    // January is the first month: Previous month hides, and focus moves to
+    // the other arrow.
+    expect(screen.getByRole('button', {name: 'Next month'})).toHaveFocus();
+  });
+
+  it('under a finger: the month grid\u2019s callback the toggle keeps still moves focus on when a settled month reaches the range end', async () => {
+    // The toggle leaves the callback unchanged, so the memoized pager does not
+    // re-render. A month the pager settles on after the toggle reaches the
+    // callback from before it, which must still move focus off the arrow
+    // that hides.
+    renderAndOpen(
+      <Controlled initial="2026-03-10" min="2026-01-01" max="2026-04-30" />,
+    );
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, SHEET_SETTLE_MS + 500));
+    });
+    const title = () =>
+      document.querySelector<HTMLElement>('[data-title="month-year"]')!;
+    const pagerRenders = vi.mocked(MonthPager.type);
+    const settle = pagerRenders.mock.lastCall![0].onVisibleMonthChange;
+    pagerRenders.mockClear();
+    fireEvent.click(title());
+    fireEvent.click(title());
+    expect(pagerRenders).not.toHaveBeenCalled();
+    const previous = screen.getByRole('button', {name: 'Previous month'});
+    act(() => previous.focus());
+    // The pager settles on January, the first month: Previous month hides.
+    act(() => settle(toMonthIndex(2026, 1)));
+    expect(screen.getByRole('button', {name: 'Next month'})).toHaveFocus();
   });
 
   it('under a finger: MonthPager pages the months with the shared pager, each pane on its own layer', () => {
