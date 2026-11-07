@@ -79,6 +79,20 @@ describe('Skeleton', () => {
     // Consumer opt-out: not hidden when explicitly set false.
     expect(screen.getByTestId('sk')).toHaveAttribute('aria-hidden', 'false');
   });
+
+  it('reflects the default radius attribute on astryx-skeleton', () => {
+    render(<Skeleton width={200} height={20} data-testid="sk" />);
+    expect(screen.getByTestId('sk')).toHaveClass('astryx-skeleton');
+    expect(screen.getByTestId('sk')).toHaveAttribute('data-radius', '3');
+  });
+
+  it('reflects custom radius attribute when provided', () => {
+    render(
+      <Skeleton width={40} height={40} radius="rounded" data-testid="sk" />,
+    );
+    expect(screen.getByTestId('sk')).toHaveClass('astryx-skeleton');
+    expect(screen.getByTestId('sk')).toHaveAttribute('data-radius', 'rounded');
+  });
 });
 
 describe('pulse', () => {

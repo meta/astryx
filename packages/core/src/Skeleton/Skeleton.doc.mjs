@@ -54,7 +54,7 @@ export const docs = {
   },
   theming: {
     targets: [
-      {className: 'astryx-skeleton'},
+      {className: 'astryx-skeleton', visualProps: ['radius']},
     ],
   },
   usage: {
@@ -104,7 +104,7 @@ export const docsZh = {
   ],
   theming: {
     targets: [
-      {className: 'astryx-skeleton'},
+      {className: 'astryx-skeleton', visualProps: ['radius']},
     ],
   },
   usage: {
