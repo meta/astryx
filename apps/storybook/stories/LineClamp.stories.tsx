@@ -19,6 +19,11 @@ const meta: Meta<typeof LineClamp> = {
       control: 'boolean',
       description: 'Show full content in a tooltip when clamped',
     },
+    truncateTooltipPlacement: {
+      control: 'select',
+      options: ['above', 'below', 'start', 'end'],
+      description: 'Where the truncation tooltip opens',
+    },
     as: {
       control: 'select',
       options: ['div', 'span', 'p'],

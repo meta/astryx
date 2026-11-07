@@ -558,6 +558,78 @@ describe('LineClamp', () => {
       expect(link).toHaveAttribute('inert');
     });
 
+    it("keeps a caller's inert across an inline-ref render when it is the only clamp", async () => {
+      const rectMap = new Map<Element, {top: number; bottom: number}>();
+      // A new ref function every render: the observers re-subscribe in each
+      // commit, and with no other clamp mounted the shared observer
+      // disconnects in between.
+      const content = (isInert: boolean, maxLines = 2) => (
+        <LineClamp
+          maxLines={maxLines}
+          data-testid="clamp"
+          hasTruncateTooltip={false}
+          ref={() => {}}>
+          <a href="/more" inert={isInert}>
+            Read more
+          </a>
+        </LineClamp>
+      );
+      const {rerender} = render(content(false));
+      const link = screen.getByText('Read more');
+      rectMap.set(screen.getByTestId('clamp'), {top: 0, bottom: 40});
+      rectMap.set(link, {top: 40, bottom: 56});
+      mockRects(rectMap);
+      rerender(content(false));
+      expect(link).toHaveAttribute('data-line-clamp-hidden');
+
+      // The caller makes the clipped link inert, and the next render comes
+      // before the observer reports that write.
+      rerender(content(true));
+      rerender(content(true));
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      // The clamp widens: the link is visible, and still inert.
+      rectMap.set(link, {top: 10, bottom: 26});
+      rerender(content(true, 3));
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(link).toHaveAttribute('inert');
+    });
+
+    it("keeps a caller's inert that is set in the render that un-clips the link", async () => {
+      const rectMap = new Map<Element, {top: number; bottom: number}>();
+      const content = (isInert: boolean, maxLines = 2) => (
+        <LineClamp
+          maxLines={maxLines}
+          data-testid="clamp"
+          hasTruncateTooltip={false}>
+          <a href="/more" inert={isInert}>
+            Read more
+          </a>
+        </LineClamp>
+      );
+      const {rerender} = render(content(false));
+      const link = screen.getByText('Read more');
+      rectMap.set(screen.getByTestId('clamp'), {top: 0, bottom: 40});
+      rectMap.set(link, {top: 40, bottom: 56});
+      mockRects(rectMap);
+      rerender(content(false));
+      expect(link).toHaveAttribute('data-line-clamp-hidden');
+
+      // One render widens the clamp and makes the link inert.
+      rectMap.set(link, {top: 10, bottom: 26});
+      rerender(content(true, 3));
+      expect(link).toHaveAttribute('inert');
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(link).toHaveAttribute('inert');
+      expect(link).not.toHaveAttribute('data-line-clamp-hidden');
+    });
+
     it('never hides the element that holds focus', () => {
       const rectMap = new Map<Element, {top: number; bottom: number}>();
       const {rerender} = render(

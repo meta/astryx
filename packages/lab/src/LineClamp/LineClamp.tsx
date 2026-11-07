@@ -40,6 +40,7 @@ import {
 import {useMergedRefs} from '@astryxdesign/core/hooks';
 import {
   FOCUSABLE_SELECTOR,
+  flushMutations,
   observeMutations,
 } from '@astryxdesign/core/internal/line-clamp';
 
@@ -206,12 +207,14 @@ export interface LineClampProps extends BaseProps<HTMLElement> {
    * Show a tooltip with the full text content on hover or keyboard focus when
    * clamped. A clamped root is focusable so the tooltip can be reached without a
    * pointer.
-   * - `true` (default): show tooltip at default position
-   * - `false`: disable tooltip
-   * - Position value: show tooltip at specific position
    * @default true
    */
-  hasTruncateTooltip?: boolean | LayerPlacement;
+  hasTruncateTooltip?: boolean;
+  /**
+   * Where the truncation tooltip opens.
+   * @default 'above'
+   */
+  truncateTooltipPlacement?: LayerPlacement;
   /**
    * HTML element to render.
    * @default 'div'
@@ -243,6 +246,7 @@ export function LineClamp({
   children,
   maxLines,
   hasTruncateTooltip = true,
+  truncateTooltipPlacement = 'above',
   as: Component = 'div',
   xstyle,
   className,
@@ -279,16 +283,18 @@ export function LineClamp({
     );
     const unobserveResize = observeResize(container, sync);
     return () => {
+      // The shared observer disconnects when its last registration goes, and
+      // a disconnect drops the records it holds. Hand a caller's queued
+      // `inert` back first, while this registration still receives it.
+      flushMutations(MUTATION_OPTIONS);
       unobserveResize();
       unobserveMutations();
     };
   }, []);
   const mergedRef = useMergedRefs(ref, truncation.ref, elementRef, observeRoot);
 
-  const tooltipPlacement: LayerPlacement =
-    typeof hasTruncateTooltip === 'string' ? hasTruncateTooltip : 'above';
   const tooltipEnabled =
-    hasTruncateTooltip !== false && maxLines > 0 && truncation.isTruncated;
+    hasTruncateTooltip && maxLines > 0 && truncation.isTruncated;
 
   // Line clamping clips paint only. A link on a clipped line stays in the Tab
   // order, so mark it inert. This runs on every render; the observers above
@@ -296,6 +302,9 @@ export function LineClamp({
   useLayoutEffect(() => {
     const container = elementRef.current;
     if (container) {
+      // A caller's `inert` written in this render must reach the hand-off
+      // before the sync can un-clip that link.
+      flushMutations(MUTATION_OPTIONS);
       syncFocusableClipping(container);
     }
   });
@@ -337,7 +346,7 @@ export function LineClamp({
                 {truncation.fullText}
               </span>
             }
-            placement={tooltipPlacement}
+            placement={truncateTooltipPlacement}
           />
         </Suspense>
       )}

@@ -32,10 +32,16 @@ export const docs = {
     },
     {
       name: 'hasTruncateTooltip',
-      type: "boolean | 'above' | 'below' | 'start' | 'end'",
+      type: 'boolean',
       description:
-        'Show a tooltip with the full text content on hover or keyboard focus when clamped. A clamped root is focusable (tabindex 0) so keyboard users can reach the tooltip; a tabIndex you pass wins. true shows at default position, false disables it, or pass a placement.',
+        "Show a tooltip with the full text content on hover or keyboard focus when clamped. A clamped root is focusable (tabindex 0) so keyboard users can reach the tooltip; a tabIndex you pass wins. The tooltip props follow Text's: when Text's hasTruncateTooltip is renamed in a minor, LineClamp follows.",
       default: 'true',
+    },
+    {
+      name: 'truncateTooltipPlacement',
+      type: "'above' | 'below' | 'start' | 'end'",
+      description: 'Where the truncation tooltip opens.',
+      default: "'above'",
     },
     {
       name: 'as',
@@ -92,10 +98,16 @@ export const docsZh = {
     },
     {
       name: 'hasTruncateTooltip',
-      type: "boolean | 'above' | 'below' | 'start' | 'end'",
+      type: 'boolean',
       description:
-        '截断时在悬停或键盘聚焦时显示完整文本的工具提示；被截断的根元素可聚焦（tabindex 0），你传入的 tabIndex 优先。true 为默认位置显示，false 禁用，或传入具体位置。',
+        '截断时在悬停或键盘聚焦时显示完整文本的工具提示；被截断的根元素可聚焦（tabindex 0），你传入的 tabIndex 优先。工具提示相关属性与 Text 保持一致：Text 的 hasTruncateTooltip 在次版本中改名时，LineClamp 随之改名。',
       default: 'true',
+    },
+    {
+      name: 'truncateTooltipPlacement',
+      type: "'above' | 'below' | 'start' | 'end'",
+      description: '截断工具提示的打开位置。',
+      default: "'above'",
     },
     {
       name: 'as',
@@ -166,7 +178,8 @@ export const docsDense = {
       'Content to clamp. Composable version of maxLines — wraps arbitrary children.',
     maxLines: 'Max lines before clamping with ellipsis.',
     hasTruncateTooltip:
-      'Tooltip with full text on hover or focus when clamped. Clamped root is focusable. true/false/placement.',
+      "Tooltip with full text on hover or focus when clamped. Clamped root is focusable. Follows Text's prop name.",
+    truncateTooltipPlacement: "Tooltip placement. Default 'above'.",
     as: "HTML element to render. Default 'div'.",
   },
 };
