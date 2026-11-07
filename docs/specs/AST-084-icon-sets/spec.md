@@ -309,8 +309,11 @@ icon, and the CLI verifies it, writes the files, and checks the set.
     Without `--from`, over an existing set, those four options update it in
     place and leave its icons, `map`, and generated module as they are; a
     variant an icon has must stay declared, a set with icons keeps its
-    default variant (the refusal names the `--from` run that moves it), and
-    the receipt carries `updated`. Over an existing set, `--variants` without
+    default variant (in a library of looks the refusal names the `--from`
+    run that moves it), and the receipt carries `updated`. A set whose
+    icons' export names name no looks keeps its default variant on a
+    refresh too, since its icons keep their exports; the refusal names the
+    `add --variant <name> --from <module> --all` run that adds the look. Over an existing set, `--variants` without
     `--default-variant` keeps the set's default variant while it stays
     declared; in a library of looks, it takes the look the icons' exports
     draw, which `--variants` must list. Run again with `--from`, it

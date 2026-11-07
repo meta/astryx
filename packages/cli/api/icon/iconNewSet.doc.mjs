@@ -56,7 +56,7 @@ export const doc = {
       name: 'options.defaultVariant',
       type: 'string',
       description:
-        "With variants: the variant each icon's own export draws, written to the data file's default. In a library whose export names encode looks, it must be one of the library's look words, and when absent it is the look the icons' exports draw (with from and no icons yet, the library's usual default), which variants must list. Otherwise, when absent, an existing set keeps its default while variants declares it, else the first variant. Without from, a set with icons refuses a default other than the look they draw.",
+        "With variants: the variant each icon's own export draws, written to the data file's default. In a library whose export names encode looks, it must be one of the library's look words, and when absent it is the look the icons' exports draw (with from and no icons yet, the library's usual default), which variants must list. Otherwise, when absent, an existing set keeps its default while variants declares it, else the first variant; a set with icons and none declared needs it. Without from, a set with icons refuses a default other than the look they draw; when its icons' export names name no looks, it refuses one other than its declared default with from too.",
     },
     {
       name: 'options.displayName',
@@ -81,7 +81,7 @@ export const doc = {
   throws: [
     {
       code: 'ERR_INVALID_ARGUMENT',
-      when: 'the name is not lowercase kebab-case, package.json has no name, or a variant name or the default variant is invalid; or, without `from`, the default variant would change on a set that has icons (wrap the library again with `from` and `defaultVariant`)',
+      when: 'the name is not lowercase kebab-case, package.json has no name, or a variant name or the default variant is invalid; or the default variant would change on a set that has icons: without `from` (wrap the library again with `from` and `defaultVariant`), or with or without it when the export names of its icons name no looks (add the look as a variant instead)',
     },
     {
       code: 'ERR_INVALID_OPTION',

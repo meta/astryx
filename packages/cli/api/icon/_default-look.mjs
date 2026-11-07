@@ -6,7 +6,8 @@
  * @input the set's data and generated module, the wrapped library's look
  *   words, and the variants and default variant a command names
  * @output the variants and default variant to write, or an AstryxError that
- *   names the library's look words or the command that moves the look
+ *   names the library's look words, the command that moves the look, or the
+ *   variant to add when the library's names name no looks
  * @position used by `new-set` (create, refresh, in place) and by
  *   `add --variant` (one icon or `--all`); every command that writes or keeps
  *   `default.variant`, or adds a look, asks this module first
@@ -225,6 +226,33 @@ function inPlaceMove(name, count, now, looks, module, current) {
 }
 
 /**
+ * The refusal for a default variant that would move on a set whose
+ * library's export names name no looks. The icons' exports stay as they
+ * are on every path, so only another variant gives them another look.
+ * @param {string} name
+ * @param {number} count the set's icons
+ * @param {string} current the set's default variant
+ * @param {Looks} looks
+ */
+function unencodedMove(name, count, current, looks) {
+  const variants = [...new Set([current, ...looks.variants])];
+  return new AstryxError(
+    `Icon set "${name}" can't move its default variant from "${current}" to "${looks.default}": its icons' export names name no looks, so each of its ${count} icons draws "${current}", the look its icons' module draws. Keep "${current}" as the default, declare "${looks.default}" as a variant, and add it from the module that draws it (fill <module> with that module).`,
+    [
+      {
+        name: `astryx experimental icon new-set ${name} --variants ${variants.join(',')} --default-variant ${current}`,
+        reason: `declare ${looks.default} as a variant and keep ${current} as the default`,
+      },
+      {
+        name: `astryx experimental icon add --variant ${looks.default} --from <module> --all`,
+        reason: `give each icon its ${looks.default} look from the module that draws it`,
+      },
+    ],
+    ERROR_CODES.ERR_INVALID_ARGUMENT,
+  );
+}
+
+/**
  * The variants and default variant to write for a command that declares
  * looks, and whether the set's icons must move to a new look. Every path
  * that writes `default.variant` uses it:
@@ -241,6 +269,8 @@ function inPlaceMove(name, count, now, looks, module, current) {
  *
  * A library whose names encode no looks has no look words: there the named
  * variant, the set's current default, or the first variant is the default.
+ * Its icons keep their exports on every path, so a set with icons keeps a
+ * declared default, and with none declared the command names it.
  * @param {object} args
  * @param {string} args.name the set
  * @param {Looks | null} args.given the variants and default the command names
@@ -314,21 +344,19 @@ export function resolveDefaultLook({
 function unencodedDefault({name, given, current, icons, module, refresh}) {
   if (given.named) {
     if (current != null && given.default !== current && icons > 0) {
-      if (!refresh) {
-        throw inPlaceMove(name, icons, current, given, module, current);
-      }
-      return {looks: given, moved: true};
+      throw unencodedMove(name, icons, current, given);
     }
     return {looks: given, moved: false};
   }
   if (current != null && given.variants.includes(current)) {
     return {looks: {...given, default: current}, moved: false};
   }
-  if (current == null && icons > 0 && !refresh) {
+  if (current == null && icons > 0) {
+    const from = refresh && module ? ` --from ${shellArg(module)}` : '';
     throw new AstryxError(
       `Icon set "${name}" declares no default variant, and its icons' export names name none of ${given.variants.join(', ')}. Name the look its ${icons} icons draw with --default-variant.`,
       given.variants.map(variant => ({
-        name: `astryx experimental icon new-set ${name} --variants ${given.variants.join(',')} --default-variant ${variant}`,
+        name: `astryx experimental icon new-set ${name}${from} --variants ${given.variants.join(',')} --default-variant ${variant}`,
         reason: `if each icon draws ${variant}`,
       })),
       ERROR_CODES.ERR_INVALID_OPTION,
@@ -360,21 +388,21 @@ function keptDefault(set, drawn) {
  * @returns {{name: string, reason: string}}
  */
 export function declareVariantSuggestion(set, variant, drawn) {
-  const kept = keptDefault(set, drawn);
+  const kept = keptDefault(set, drawn) ?? '<default>';
   const declared = set.data.variants ?? [];
   const variants = [
     ...new Set([
-      ...(kept != null && !declared.includes(kept) ? [kept] : []),
-      ...(declared.length > 0 || kept != null ? declared : ['<default>']),
+      ...(declared.includes(kept) ? [] : [kept]),
+      ...declared,
       variant,
     ]),
   ];
   return {
-    name: [
-      `astryx experimental icon new-set ${set.name} --variants ${variants.join(',')}`,
-      ...(kept ? [`--default-variant ${kept}`] : []),
-    ].join(' '),
-    reason: 'declare the variants',
+    name: `astryx experimental icon new-set ${set.name} --variants ${variants.join(',')} --default-variant ${kept}`,
+    reason:
+      kept === '<default>'
+        ? 'declare the variants; fill <default> with the look the icons draw'
+        : 'declare the variants',
   };
 }
 
@@ -406,7 +434,7 @@ export function checkVariantLook({set, variant, module, positions, drawn}) {
   const declared = set.data.variants ?? [];
   if (!declared.includes(variant)) {
     throw new AstryxError(
-      `Icon set "${set.name}" declares no variant "${variant}"${declared.length > 0 ? ` (it declares ${declared.join(', ')})` : ''}. Declare it first.`,
+      `Icon set "${set.name}" declares no variant "${variant}"${declared.length > 0 ? ` (it declares ${declared.join(', ')})` : ''}. Declare it first${keptDefault(set, drawn) == null ? ', and name the look its icons draw now as the default variant in place of <default>' : ''}.`,
       [declareVariantSuggestion(set, variant, drawn)],
       ERROR_CODES.ERR_INVALID_ARGUMENT,
     );

@@ -561,7 +561,8 @@ function describedDoc(source, describe) {
  * description, in place. Its icons, map and generated module stay as they
  * are. A variant an icon still has must stay declared, and the default
  * variant is one no icon lists as an extra look. A set with icons keeps its
- * default variant: only a refresh with `--from` moves it. With none declared,
+ * default variant: only a refresh with `--from` from a library whose names
+ * name its looks moves it. With none declared,
  * its default is the look its icons' exports draw.
  * @param {string} name
  * @param {{cwd: string, dryRun: boolean, looks: Looks | null, describe: {displayName?: string, description?: string}, packageDir: string, rootPath: string, manifestPath: string}} options

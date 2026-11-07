@@ -416,10 +416,10 @@ describe('icon add', () => {
     expect(refused.code).toBe(1);
     expect(refused.body.code).toBe('ERR_INVALID_ARGUMENT');
     expect(refused.body.error).toBe(
-      'Icon set "outline" declares no variant "solid". Declare it first.',
+      'Icon set "outline" declares no variant "solid". Declare it first, and name the look its icons draw now as the default variant in place of <default>.',
     );
     expect(refused.body.suggestions[0].name).toBe(
-      'astryx experimental icon new-set outline --variants <default>,solid',
+      'astryx experimental icon new-set outline --variants <default>,solid --default-variant <default>',
     );
     expect(dataOf('outline')).toEqual(before);
 

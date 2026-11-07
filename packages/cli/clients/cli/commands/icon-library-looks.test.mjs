@@ -1286,17 +1286,86 @@ describe('progress through the logger', () => {
 });
 
 describe('the default variant on every path', () => {
-  const LIB = '@acme/vector-icons';
-  /** @param {string} source a library export, such as `XFilled24WGHT400Icon` */
-  const lookOf = source =>
-    /Filled/u.test(source)
-      ? 'filled'
-      : /Outline/u.test(source)
-        ? 'outline'
-        : null;
-  /** @param {string} look */
-  const glyphHas = (/** @type {string} */ glyph, look) =>
-    glyph !== 'heart' || look === 'filled';
+  const PLAIN = '@acme/plain-icons';
+  const PLAIN_SOLID = '@acme/plain-icons/solid';
+
+  /**
+   * Write `@acme/plain-icons`, whose export names name no looks: its root
+   * module draws each glyph in outline, and `/solid` draws the same names
+   * solid.
+   * @param {string[]} glyphs
+   */
+  function writePlainLibrary(glyphs) {
+    const lib = path.join(pkg, 'node_modules', '@acme', 'plain-icons');
+    fs.mkdirSync(path.join(lib, 'solid'), {recursive: true});
+    fs.writeFileSync(
+      path.join(lib, 'package.json'),
+      JSON.stringify({
+        name: PLAIN,
+        version: '1.0.0',
+        type: 'module',
+        exports: {'.': './index.js', './solid': './solid/index.js'},
+      }),
+    );
+    const source = glyphs
+      .map(glyph => `export function ${glyph}Icon(props) { return null; }\n`)
+      .join('');
+    fs.writeFileSync(path.join(lib, 'index.js'), source);
+    fs.writeFileSync(path.join(lib, 'solid', 'index.js'), source);
+    const manifest = path.join(pkg, 'package.json');
+    const data = JSON.parse(fs.readFileSync(manifest, 'utf-8'));
+    data.dependencies[PLAIN] = '^1.0.0';
+    fs.writeFileSync(manifest, `${JSON.stringify(data, null, 2)}\n`);
+  }
+
+  /**
+   * @typedef {object} Library
+   * @property {string} module the module a set wraps
+   * @property {() => void} write
+   * @property {(look: string) => string} moduleOf the module that draws a look
+   * @property {(glyph: string, look: string) => string} exportOf the
+   *   export that draws a glyph in a look
+   * @property {(source: string, module: string) => string | null} lookOf the
+   *   look a library export draws
+   * @property {(glyph: string, look: string) => boolean} glyphHas
+   * @property {{drawn: string, other: string}} usual the look a set wraps
+   *   without a default, and another
+   * @property {{drawn: string, other: string}} declared the default a set
+   *   declares, and another
+   */
+
+  /** @param {string} word */
+  const capital = word => word[0].toUpperCase() + word.slice(1);
+
+  /** @type {Record<string, Library>} */
+  const LIBRARIES = {
+    'looks in names': {
+      module: '@acme/vector-icons',
+      write: () => writeVectorLibrary(GLYPHS),
+      moduleOf: () => '@acme/vector-icons',
+      exportOf: (glyph, look) => `${glyph}${capital(look)}24WGHT400Icon`,
+      lookOf: source =>
+        /Filled/u.test(source)
+          ? 'filled'
+          : /Outline/u.test(source)
+            ? 'outline'
+            : null,
+      glyphHas: (glyph, look) => glyph !== 'heart' || look === 'filled',
+      usual: {drawn: 'outline', other: 'filled'},
+      declared: {drawn: 'filled', other: 'outline'},
+    },
+    'no looks in names': {
+      module: PLAIN,
+      write: () => writePlainLibrary(GLYPHS),
+      moduleOf: look => (look === 'solid' ? PLAIN_SOLID : PLAIN),
+      exportOf: glyph => `${glyph}Icon`,
+      lookOf: (_source, module) =>
+        module === PLAIN_SOLID ? 'solid' : module === PLAIN ? 'outline' : null,
+      glyphHas: () => true,
+      usual: {drawn: 'outline', other: 'solid'},
+      declared: {drawn: 'outline', other: 'solid'},
+    },
+  };
 
   /**
    * Every file of the package but its libraries, for a byte-for-byte
@@ -1320,31 +1389,46 @@ describe('the default variant on every path', () => {
    * The set as written: each icon's own export draws the default variant
    * (where the library draws the glyph in it), each variant draws its own
    * look and never the icon's, and no library export is exported twice.
+   * A default the author named for a library whose names name no looks is
+   * the author's word: the command can't read what its icons draw, so only
+   * the variants are checked.
+   * @param {Library} lib
    * @param {string | null} expected the default variant the set must record
+   * @param {{authored?: boolean}} [options]
    */
-  function expectEveryIconDrawsDefault(expected) {
+  function expectEveryIconDrawsDefault(lib, expected, options = {}) {
     const data = dataOf('brand');
     expect(data.default?.variant ?? null).toBe(expected);
-    /** @type {Map<string, string>} */
-    const sourceOf = new Map();
+    /** @type {Map<string, {source: string, module: string}>} */
+    const originOf = new Map();
     /** @type {string[]} */
-    const sources = [];
-    for (const [, source, name] of generatedOf('brand').matchAll(
-      /export \{(\w+) as (\w+)\} from '@acme\/vector-icons';/gu,
+    const origins = [];
+    for (const [, source, name, module] of generatedOf('brand').matchAll(
+      /export \{(\w+)(?: as (\w+))?\} from '([^']+)';/gu,
     )) {
-      sourceOf.set(name, source);
-      sources.push(source);
+      if (!module.startsWith('@acme/')) continue;
+      originOf.set(name ?? source, {source, module});
+      origins.push(`${module} ${source}`);
     }
-    expect(sources.length, 'no library export is exported twice').toBe(
-      new Set(sources).size,
+    expect(origins.length, 'no library export is exported twice').toBe(
+      new Set(origins).size,
     );
+    /** @param {string} name */
+    const lookOfExport = name => {
+      const origin = originOf.get(name);
+      return origin ? lib.lookOf(origin.source, origin.module) : null;
+    };
     for (const icon of data.icons) {
-      const own = lookOf(sourceOf.get(icon.export) ?? '');
-      if (expected != null && glyphHas(icon.id, expected)) {
+      const own = lookOfExport(icon.export);
+      if (
+        expected != null &&
+        !options.authored &&
+        lib.glyphHas(icon.id, expected)
+      ) {
         expect(own, `${icon.id} draws the default`).toBe(expected);
       }
       for (const variant of icon.variants ?? []) {
-        const drawn = lookOf(sourceOf.get(variant.export) ?? '');
+        const drawn = lookOfExport(variant.export);
         expect(drawn, `${icon.id} ${variant.variant}`).toBe(variant.variant);
         expect(drawn, `${icon.id} ${variant.variant} is another look`).not.toBe(
           own,
@@ -1382,39 +1466,55 @@ describe('the default variant on every path', () => {
     }
   }
 
-  /** @type {Record<string, {drawn: string, other: string, setup: () => Promise<void>}>} */
+  /** @type {Record<string, {declaresDefault: boolean, setup: (lib: Library, looks: {drawn: string, other: string}) => Promise<void>}>} */
   const STATES = {
-    'no set': {drawn: 'outline', other: 'filled', setup: async () => {}},
+    'no set': {declaresDefault: false, setup: async () => {}},
     'wrapped with no variants': {
-      drawn: 'outline',
-      other: 'filled',
-      setup: async () => {
-        await json(NEW_SET);
+      declaresDefault: false,
+      setup: async lib => {
+        await json([
+          'experimental',
+          'icon',
+          'new-set',
+          'brand',
+          '--from',
+          lib.module,
+        ]);
       },
     },
     'with variants, default declared': {
-      drawn: 'filled',
-      other: 'outline',
-      setup: async () => {
+      declaresDefault: true,
+      setup: async (lib, looks) => {
         await json([
-          ...NEW_SET,
+          'experimental',
+          'icon',
+          'new-set',
+          'brand',
+          '--from',
+          lib.module,
           '--variants',
-          'filled,outline',
+          `${looks.drawn},${looks.other}`,
           '--default-variant',
-          'filled',
+          looks.drawn,
         ]);
       },
     },
     'with variants, default undeclared': {
-      drawn: 'outline',
-      other: 'filled',
-      setup: async () => {
-        await json(NEW_SET);
+      declaresDefault: false,
+      setup: async (lib, looks) => {
+        await json([
+          'experimental',
+          'icon',
+          'new-set',
+          'brand',
+          '--from',
+          lib.module,
+        ]);
         const file = path.join(pkg, 'icon-sets', 'brand', 'brand.icons.json');
         const data = JSON.parse(fs.readFileSync(file, 'utf-8'));
         fs.writeFileSync(
           file,
-          `${JSON.stringify({...data, variants: ['filled', 'outline']}, null, 2)}\n`,
+          `${JSON.stringify({...data, variants: [looks.drawn, looks.other].sort()}, null, 2)}\n`,
         );
       },
     },
@@ -1428,67 +1528,102 @@ describe('the default variant on every path', () => {
   };
 
   /**
-   * The command for a path, and what it must do: write the set with this
-   * default, or refuse naming the look words (`looks`), the refresh
-   * (`refresh`), the look already drawn (`drawn`), or the declaration to run
-   * first (`declare`).
-   * @param {string} route
-   * @param {{drawn: string, other: string}} state
-   * @param {keyof typeof CHOICES} choice
-   * @returns {{args: string[], expect: {write: string | null} | {refuse: 'looks' | 'refresh' | 'drawn' | 'declare'}}}
+   * @typedef {{write: string | null, authored?: boolean} | {refuse: 'looks' | 'refresh' | 'drawn' | 'declare' | 'keep' | 'name' | 'own'}} Expected
+   * What a path must do: write the set with this default, or refuse naming
+   * the look words (`looks`), the refresh (`refresh`), the look already
+   * drawn (`drawn`), the declaration to run first (`declare`), the variant
+   * to add in place of a moved default (`keep`), the default to name
+   * (`name`), or the icon's own export (`own`).
    */
-  function plan(route, state, choice) {
-    const word = {drawn: state.drawn, other: state.other, unknown: 'solid'}[
+
+  /**
+   * The command for a path, and what it must do.
+   * @param {string} libName
+   * @param {string} route
+   * @param {{declaresDefault: boolean}} state
+   * @param {{drawn: string, other: string}} looks
+   * @param {keyof typeof CHOICES} choice
+   * @returns {{args: string[], expect: Expected}}
+   */
+  function plan(libName, route, state, looks, choice) {
+    const lib = LIBRARIES[libName];
+    const encoded = libName === 'looks in names';
+    const word = {drawn: looks.drawn, other: looks.other, unknown: 'solid'}[
       /** @type {'drawn'} */ (choice)
     ];
     const declare = {
       drawn: [
         '--variants',
-        `${state.drawn},${state.other}`,
+        `${looks.drawn},${looks.other}`,
         '--default-variant',
-        state.drawn,
+        looks.drawn,
       ],
-      other: ['--variants', state.other, '--default-variant', state.other],
+      other: ['--variants', looks.other, '--default-variant', looks.other],
       unknown: [
         '--variants',
-        `solid,${state.drawn}`,
+        `solid,${looks.drawn}`,
         '--default-variant',
         'solid',
       ],
-      none: ['--variants', `${state.other},${state.drawn}`],
+      none: ['--variants', `${looks.other},${looks.drawn}`],
     }[choice];
     const newSet = ['experimental', 'icon', 'new-set', 'brand'];
-    if (route === 'create --from' || route === 'refresh') {
+    if (route !== 'add --variant' && route !== 'add --variant --all') {
+      const args = [
+        ...newSet,
+        ...(route === 'in place' ? [] : ['--from', lib.module]),
+        ...declare,
+      ];
+      if (encoded) {
+        return {
+          args,
+          expect:
+            choice === 'unknown'
+              ? {refuse: 'looks'}
+              : choice === 'other'
+                ? route === 'in place'
+                  ? {refuse: 'refresh'}
+                  : {write: looks.other}
+                : {write: looks.drawn},
+        };
+      }
+      // The command can't read the look a module draws: a set that
+      // declares its default keeps it, and one that declares none takes
+      // the default the command names.
+      if (route === 'create --from') {
+        return {
+          args,
+          expect:
+            choice === 'drawn'
+              ? {write: looks.drawn}
+              : {write: looks.other, authored: true},
+        };
+      }
       return {
-        args: [...newSet, '--from', LIB, ...declare],
+        args,
         expect:
-          choice === 'unknown'
-            ? {refuse: 'looks'}
-            : {write: choice === 'other' ? state.other : state.drawn},
-      };
-    }
-    if (route === 'in place') {
-      return {
-        args: [...newSet, ...declare],
-        expect:
-          choice === 'unknown'
-            ? {refuse: 'looks'}
+          choice === 'drawn'
+            ? {write: looks.drawn}
             : choice === 'other'
-              ? {refuse: 'refresh'}
-              : {write: state.drawn},
+              ? state.declaresDefault
+                ? {refuse: 'keep'}
+                : {write: looks.other, authored: true}
+              : state.declaresDefault
+                ? {write: looks.drawn}
+                : {refuse: 'name'},
       };
     }
-    const look = choice === 'unknown' ? state.drawn : word;
-    const capital = look[0].toUpperCase() + look.slice(1);
+    const look = choice === 'unknown' ? looks.drawn : word;
+    const module = lib.moduleOf(look);
     const args =
       route === 'add --variant'
         ? [
             'experimental',
             'icon',
             'add',
-            `Star${capital}24WGHT400Icon`,
+            lib.exportOf('Star', look),
             '--from',
-            LIB,
+            module,
             '--id',
             'star',
             '--variant',
@@ -1501,79 +1636,110 @@ describe('the default variant on every path', () => {
             '--variant',
             word,
             '--from',
-            LIB,
+            module,
             '--all',
           ];
     const declared = dataOf('brand').variants ?? [];
     const kept = dataOf('brand').default?.variant ?? null;
-    return {
-      args,
-      expect:
-        choice === 'unknown'
-          ? {refuse: 'looks'}
-          : choice === 'drawn'
+    if (choice === 'unknown') return {args, expect: {refuse: 'looks'}};
+    if (choice === 'drawn') {
+      return {
+        args,
+        expect:
+          encoded || state.declaresDefault
             ? {refuse: 'drawn'}
             : declared.includes(word)
-              ? {write: kept}
+              ? {refuse: 'own'}
               : {refuse: 'declare'},
+      };
+    }
+    return {
+      args,
+      expect: declared.includes(word) ? {write: kept} : {refuse: 'declare'},
     };
   }
 
-  const CASES = [
-    ...Object.keys(CHOICES).map(choice => ({
-      route: 'create --from',
-      state: 'no set',
-      choice,
-    })),
-    ...['in place', 'refresh', 'add --variant', 'add --variant --all'].flatMap(
-      route =>
-        Object.keys(STATES)
-          .filter(state => state !== 'no set')
-          .flatMap(state =>
-            Object.keys(CHOICES)
-              .filter(choice => !route.startsWith('add') || choice !== 'none')
-              .map(choice => ({route, state, choice})),
-          ),
-    ),
-  ].map(each => ({
-    ...each,
-    title: `${each.route} · ${each.state} · ${
-      each.route.startsWith('add')
-        ? CHOICES[/** @type {keyof typeof CHOICES} */ (each.choice)].replace(
-            'named default',
-            'variant',
-          )
-        : CHOICES[/** @type {keyof typeof CHOICES} */ (each.choice)]
-    }`,
-  }));
+  const ROUTES = [
+    'in place',
+    'refresh',
+    'add --variant',
+    'add --variant --all',
+  ];
+  const CASES = Object.keys(LIBRARIES)
+    .flatMap(libName => {
+      // A library whose names name no looks has no look words, so no word
+      // is unknown to it.
+      const choices = Object.keys(CHOICES).filter(
+        choice => libName === 'looks in names' || choice !== 'unknown',
+      );
+      return [
+        ...choices.map(choice => ({
+          libName,
+          route: 'create --from',
+          state: 'no set',
+          choice,
+        })),
+        ...ROUTES.flatMap(route =>
+          Object.keys(STATES)
+            .filter(state => state !== 'no set')
+            .flatMap(state =>
+              choices
+                .filter(choice => !route.startsWith('add') || choice !== 'none')
+                .map(choice => ({libName, route, state, choice})),
+            ),
+        ),
+      ];
+    })
+    .map(each => ({
+      ...each,
+      title: `${each.libName} · ${each.route} · ${each.state} · ${
+        each.route.startsWith('add')
+          ? CHOICES[/** @type {keyof typeof CHOICES} */ (each.choice)].replace(
+              'named default',
+              'variant',
+            )
+          : CHOICES[/** @type {keyof typeof CHOICES} */ (each.choice)]
+      }`,
+    }));
 
-  it('covers every path, set and choice', () => {
-    expect(CASES).toHaveLength(46);
+  it('covers every library, path, set and choice', () => {
+    expect(
+      CASES.filter(each => each.libName === 'looks in names'),
+    ).toHaveLength(46);
+    expect(
+      CASES.filter(each => each.libName === 'no looks in names'),
+    ).toHaveLength(33);
   });
 
-  for (const {title, route, state: stateName, choice} of CASES)
+  for (const {title, libName, route, state: stateName, choice} of CASES)
     it(title, async () => {
-      writeVectorLibrary(GLYPHS);
+      const lib = LIBRARIES[libName];
+      lib.write();
       const state = STATES[stateName];
-      await state.setup();
+      const looks = state.declaresDefault ? lib.declared : lib.usual;
+      await state.setup(lib, looks);
       const step = plan(
+        libName,
         route,
         state,
+        looks,
         /** @type {keyof typeof CHOICES} */ (choice),
       );
       const before = snapshot();
       const res = await json(step.args);
       if ('write' in step.expect) {
         const expected = step.expect.write;
+        const options = {authored: step.expect.authored};
         expect(res.code, JSON.stringify(res.body)).toBe(0);
-        expectEveryIconDrawsDefault(expected);
+        expectEveryIconDrawsDefault(lib, expected, options);
         await runPrintedNotes(res.body, () =>
-          expectEveryIconDrawsDefault(expected),
+          expectEveryIconDrawsDefault(lib, expected, options),
         );
         return;
       }
       expect(res.code, JSON.stringify(res.body)).not.toBe(0);
       expect(snapshot()).toEqual(before);
+      /** @type {string[]} */
       const suggestions = (res.body.suggestions ?? []).map(
         (/** @type {any} */ each) => each.name,
       );
@@ -1584,23 +1750,80 @@ describe('the default variant on every path', () => {
         case 'drawn':
           expect(res.body.error).toContain('already draws');
           break;
+        case 'own': {
+          if (route === 'add --variant') {
+            expect(res.body.error).toContain('own export');
+            break;
+          }
+          // Every icon's own export comes from this module: the variant is
+          // the look they draw now, the default the set must declare.
+          expect(res.body.error).toBe(
+            `"${lib.moduleOf(looks.drawn)}" is the module the ${GLYPHS.length} icons of "brand" come from: its exports are those icons in the look they draw now, so "${looks.drawn}" is that look and can't be a variant of them. "brand" declares no default variant; declare "${looks.drawn}" as the default first.`,
+          );
+          expect(suggestions).toEqual([
+            `astryx experimental icon new-set brand --variants ${looks.drawn},${looks.other} --default-variant ${looks.drawn}`,
+          ]);
+          await runPrinted(suggestions[0]);
+          expectEveryIconDrawsDefault(lib, looks.drawn);
+          const again = await json(step.args);
+          expect(again.code, JSON.stringify(again.body)).not.toBe(0);
+          expect(again.body.error).toContain('already draws');
+          break;
+        }
         case 'refresh': {
-          const refresh = `astryx experimental icon new-set brand --from ${LIB}`;
+          const refresh = `astryx experimental icon new-set brand --from ${lib.module}`;
           expect(suggestions[0]).toMatch(new RegExp(`^${refresh} `, 'u'));
           await runPrinted(suggestions[0]);
-          expectEveryIconDrawsDefault(state.other);
+          expectEveryIconDrawsDefault(lib, looks.other);
+          break;
+        }
+        case 'keep': {
+          // No run moves the default; each printed command runs, the
+          // module placeholder filled with the module that draws the look.
+          expect(res.body.error).toContain('export names name no looks');
+          expect(suggestions.length).toBeGreaterThan(0);
+          for (const command of suggestions) {
+            expect(command).not.toMatch(/new-set brand --from /u);
+            await runPrinted(
+              command.replace('<module>', lib.moduleOf(looks.other)),
+            );
+          }
+          expectEveryIconDrawsDefault(lib, looks.drawn);
+          expect(
+            dataOf('brand').icons.every((/** @type {any} */ icon) =>
+              (icon.variants ?? []).some(
+                (/** @type {any} */ each) => each.variant === looks.other,
+              ),
+            ),
+          ).toBe(true);
+          break;
+        }
+        case 'name': {
+          const named = suggestions.find(command =>
+            command.endsWith(` --default-variant ${looks.drawn}`),
+          );
+          expect(named, suggestions.join('\n')).toBeDefined();
+          await runPrinted(/** @type {string} */ (named));
+          expectEveryIconDrawsDefault(lib, looks.drawn);
           break;
         }
         case 'declare': {
           expect(suggestions[0]).toMatch(
             /^astryx experimental icon new-set brand --variants /u,
           );
-          await runPrinted(suggestions[0]);
+          // A placeholder is filled with the look the message names: the
+          // look the icons draw now.
+          await runPrinted(suggestions[0].replaceAll('<default>', looks.drawn));
           const kept = dataOf('brand').default?.variant ?? null;
-          expect(kept).toBe(state.drawn);
+          expect(kept).toBe(looks.drawn);
           const again = await json(step.args);
+          if (choice === 'drawn') {
+            expect(again.code, JSON.stringify(again.body)).not.toBe(0);
+            expect(again.body.error).toContain('already draws');
+            break;
+          }
           expect(again.code, JSON.stringify(again.body)).toBe(0);
-          expectEveryIconDrawsDefault(kept);
+          expectEveryIconDrawsDefault(lib, kept);
           break;
         }
       }

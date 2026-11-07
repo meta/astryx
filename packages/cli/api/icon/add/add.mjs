@@ -650,6 +650,8 @@ async function addVariantForAll({cwd, from, selector, variant}) {
   const already = [];
   /** @type {string[]} */
   const missing = [];
+  /** @type {string[]} icons whose own export is the one the variant picks */
+  const own = [];
   const icons = set.data.icons.map(icon => {
     const origin = origins.get(icon.export);
     if (origin && iconModulePackage(origin.module) !== variantPackage) {
@@ -672,12 +674,16 @@ async function addVariantForAll({cwd, from, selector, variant}) {
     }
     // A glyph the library draws in no look of that name has no variant,
     // and neither has one whose own export is the one that look picks.
+    if (match.look && !match.look.includes(variant)) {
+      missing.push(icon.id);
+      return icon;
+    }
     if (
-      (match.look && !match.look.includes(variant)) ||
-      (match.export === librarySource &&
-        origin != null &&
-        sameIconModule(origin.module, source.module))
+      match.export === librarySource &&
+      origin != null &&
+      sameIconModule(origin.module, source.module)
     ) {
+      own.push(icon.id);
       missing.push(icon.id);
       return icon;
     }
@@ -697,6 +703,29 @@ async function addVariantForAll({cwd, from, selector, variant}) {
     added.push(icon.id);
     return {...icon, variants};
   });
+  if (
+    added.length === 0 &&
+    already.length === 0 &&
+    own.length > 0 &&
+    set.data.default?.variant == null
+  ) {
+    // The module is the one the icons' own exports come from, so the
+    // variant names the look they draw now: the set's undeclared default.
+    const variants = [
+      variant,
+      ...(set.data.variants ?? []).filter(each => each !== variant),
+    ];
+    throw new AstryxError(
+      `"${source.module}" is the module the ${own.length} icons of "${set.name}" come from: its exports are those icons in the look they draw now, so "${variant}" is that look and can't be a variant of them. "${set.name}" declares no default variant; declare "${variant}" as the default first.`,
+      [
+        {
+          name: `astryx experimental icon new-set ${set.name} --variants ${variants.join(',')} --default-variant ${variant}`,
+          reason: `declare ${variant}, the look each icon draws, as the default`,
+        },
+      ],
+      ERROR_CODES.ERR_INVALID_ARGUMENT,
+    );
+  }
   if (added.length === 0 && already.length === 0) {
     throw new AstryxError(
       `"${source.module}" exports no icon with the id of an icon in "${set.name}". Pass the module that exports the ${variant} variant under the same names.`,
