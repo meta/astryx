@@ -628,11 +628,17 @@ describe('Selector', () => {
       const popover = screen
         .getByRole('listbox', {hidden: true})
         .closest('[popover]');
+      // The measured shift, or higher by the software keyboard's term. With
+      // no keyboard inset the term falls back to the room below the anchor,
+      // so it is 0 and the shift stands.
       await waitFor(() => {
         expect(popover?.getAttribute('style')).toContain(
-          'margin-block-start: -110px',
+          '--_selector-overlay-margin: min(-110px, max(-190px, calc(-110px - var(--_layer-keyboard-inset-block-end, -110px))))',
         );
       });
+      expect(popover?.getAttribute('style')).toContain(
+        'margin-block-start: var(--_selector-overlay-margin)',
+      );
     } finally {
       restoreRects();
     }
@@ -673,7 +679,7 @@ describe('Selector', () => {
       await waitFor(() => {
         // 68px geometric alignment plus the 1px optical correction.
         expect(popover?.getAttribute('style')).toContain(
-          'margin-block-start: -69px',
+          '--_selector-overlay-margin: min(-69px,',
         );
       });
     } finally {
@@ -826,7 +832,7 @@ describe('Selector', () => {
           .closest('[popover]') as HTMLElement;
         await waitFor(() => {
           expect(popover.getAttribute('style')).toContain(
-            'margin-block-start: -110px',
+            '--_selector-overlay-margin: min(-110px,',
           );
         });
         expect(popover.style.getPropertyValue('--x-marginBlockStart')).toBe('');
@@ -3849,16 +3855,19 @@ describe('Selector search focus ring', () => {
     await waitForSearchFocus();
     const search = screen.getByRole('combobox', {hidden: true});
     await user.type(search, 'a');
+    const clear = screen.getByRole('button', {
+      name: 'Clear Search options',
+      hidden: true,
+    });
 
-    await user.tab();
-    expect(
-      screen.getByRole('button', {
-        name: 'Clear Search options',
-        hidden: true,
-      }),
-    ).toHaveFocus();
+    // Tab and Shift+Tab between the input and the clear button are the
+    // browser's own moves; the focus region leaves both alone.
+    expect(fireEvent.keyDown(search, {key: 'Tab'})).toBe(true);
+    act(() => clear.focus());
+    expect(clear).toHaveFocus();
 
-    await user.tab({shift: true});
+    expect(fireEvent.keyDown(clear, {key: 'Tab', shiftKey: true})).toBe(true);
+    act(() => search.focus());
     expect(search).toHaveFocus();
     expect(field()).toHaveAttribute('data-keyboard-focus', 'true');
   });
@@ -4061,14 +4070,19 @@ describe('Selector search affordances', () => {
     await user.type(search, 'ap');
     expect(search).toHaveFocus();
 
-    // Forward-tab lands on the clear (✕) button and the popup stays open, so
-    // the affordance is keyboard-reachable rather than being skipped when the
-    // input's Tab dismisses the popup.
-    await user.tab();
+    // The clear (✕) button is the next Tab stop after the input, the focus
+    // region leaves the input's Tab to the browser, and the popup stays open
+    // when focus moves there, so the affordance is keyboard-reachable rather
+    // than skipped by the input's Tab dismissing the popup.
     const clear = screen.getByRole('button', {
       name: 'Clear Search options',
       hidden: true,
     });
+    expect(
+      search.compareDocumentPosition(clear) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(fireEvent.keyDown(search, {key: 'Tab'})).toBe(true);
+    act(() => clear.focus());
     expect(clear).toHaveFocus();
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
   });
