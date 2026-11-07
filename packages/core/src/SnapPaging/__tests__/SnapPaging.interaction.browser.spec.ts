@@ -467,6 +467,34 @@ test.describe('with a finger and a mouse', () => {
     expect(drift).toBe(0);
     expect(await restingOffset(scroller)).toBeCloseTo(expected, 0);
   });
+
+  test('a resize while the row settles back onto its stop hands the row back: a wheel then scrolls it', async ({
+    page,
+  }) => {
+    const {scroller} = await open(
+      page,
+      'snap-paging-partial-last-page',
+      'paging',
+    );
+    for (let i = 0; i < 7; i++) {
+      await swipe(page, scroller, {px: 80, ms: 80});
+      await settled(scroller);
+    }
+    // At the end, a flick settles back onto the same stop.
+    await swipe(page, scroller, {px: 80, ms: 80});
+    expect(await isTakenOver(scroller)).toBe(true);
+    await scroller.evaluate(el => {
+      el.style.width = `${el.clientWidth - 1}px`;
+    });
+    await settled(scroller);
+    // A row the paging still holds takes the wheel and stays put.
+    const at = await offset(scroller);
+    await scroller.hover();
+    await page.keyboard.down('Shift');
+    await page.mouse.wheel(0, -150);
+    await page.keyboard.up('Shift');
+    await expect.poll(async () => offset(scroller)).toBeLessThan(at - 1);
+  });
 });
 
 test('an edge press after a flick back near the end shows no space past the last item', async ({

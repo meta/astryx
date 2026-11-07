@@ -960,9 +960,11 @@ export function createPager(
     // flight ends there), as a paging scroll view does on rotation. A finger
     // that holds a caught track keeps it; its lift settles on the new offsets.
     if (!isDragging && !caughtSettle) {
+      // A settle cut short still ends, even on the page it left.
+      const wasSettling = settleHandle != null;
       stopSettle();
       animator?.set({x: positionToX(offsetOf(target))});
-      if (settled !== target) {
+      if (settled !== target || wasSettling) {
         rest();
       }
     }
