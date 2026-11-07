@@ -226,13 +226,17 @@ function expectPaintedRide(result: PaintedRide): void {
       );
     }
   }
-  // The page drew both motions: a starved page fails here by name.
+  // The page drew both motions: a starved page fails here by name. Each
+  // phase is judged on its own reads, never across the settle between them.
   for (const phase of ['opening', 'closing'] as const) {
-    requireFrames(result.frames, {
-      min: 5,
-      during: `the ${phase === 'opening' ? 'reveal' : 'conceal'} plays`,
-      where: f => f.phase === phase && f.shown > 0.5 && f.atomic,
-    });
+    requireFrames(
+      result.frames.filter(f => f.phase.startsWith(phase)),
+      {
+        min: 5,
+        during: `the ${phase === 'opening' ? 'reveal' : 'conceal'} plays`,
+        where: f => f.phase === phase && f.shown > 0.5 && f.atomic,
+      },
+    );
   }
 }
 
@@ -447,11 +451,14 @@ test.describe('spec:AST-105 FR9: an edge reveal paints its edge on the content b
         ride.restGap - ride.beyond - 1.5,
       );
     }
-    requireFrames(ride.frames, {
-      min: 5,
-      during: 'the reveal plays',
-      where: f => f.phase === 'opening' && f.shown > 0.5 && f.atomic,
-    });
+    requireFrames(
+      ride.frames.filter(f => f.phase.startsWith('opening')),
+      {
+        min: 5,
+        during: 'the reveal plays',
+        where: f => f.phase === 'opening' && f.shown > 0.5 && f.atomic,
+      },
+    );
   });
 
   test('a Table panel row that paints its own box keeps the moving clip, and its cell stays still', async ({
