@@ -701,24 +701,23 @@ test('a second tap mid-flight retargets from what is on screen, keeping its velo
 test('a change mid-flight paints no press over the lens on the segment it leaves', async ({
   page,
 }) => {
+  await installPageFreeze(page);
   const control = await openControl(page);
+  await installTimerGate(page);
+  // The scene freezes in the tap's own task. The tap's fade on Table then
+  // holds at its start, however late the test process reads it.
+  await freezePageOn(page, 'touchend');
   await control.tapSegment('table');
   // The app changes the selection while the lens is still on its way and the
   // tap on Table still fades. A second touch would end that fade itself.
-  const paint = await control.group.evaluate(async group => {
-    const segment = (value: string): HTMLElement => {
-      const element = group.querySelector<HTMLElement>(
-        `[data-value="${value}"]`,
-      );
-      if (element == null) {
-        throw new Error(`no segment ${value}`);
-      }
-      return element;
-    };
-    segment('list').click();
-    // The layout effect that retargets has run once the frame is drawn.
-    await new Promise(resolve => requestAnimationFrame(resolve));
-    const table = segment('table');
+  await control.segment('list').evaluate(list => {
+    (list as HTMLElement).click();
+  });
+  const paint = await control.group.evaluate(group => {
+    const table = group.querySelector<HTMLElement>('[data-value="table"]');
+    if (table == null) {
+      throw new Error('no segment table');
+    }
     const style = getComputedStyle(table);
     return {
       press: table.getAttribute('data-astryx-press'),
@@ -727,6 +726,7 @@ test('a change mid-flight paints no press over the lens on the segment it leaves
       lensVisible: getComputedStyle(group, '::before').visibility === 'visible',
     };
   });
+  await thawPage(page);
   await expect(control.segment('list')).toHaveAttribute('aria-checked', 'true');
   expect(paint.press, 'the tap on Table is still fading').not.toBeNull();
   expect(paint.lensVisible).toBe(true);
