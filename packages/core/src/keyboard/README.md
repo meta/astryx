@@ -27,7 +27,9 @@ that times motion with it. Everything here is internal to
   so it reads 0; inside an iframe the height is 0. Where the app sets
   `interactive-widget=resizes-content`, Chrome shrinks the layout viewport
   with the keyboard, so the height is 0 there too and nothing rides: the
-  browser has made the inset (FR8).
+  browser has made the inset (FR8). `getResizedRoom(window)` reads that room,
+  measured once per report, so a focused field still sits 10 px clear of the
+  layout viewport's new bottom, revealed by its nearest scroller.
 - **One set of listeners (FR1, INV11):** `subscribeKeyboardHeight(window, fn)`
   delivers every report (the visual viewport's resize and scroll, the window's
   resize, and with `{focus: true}` focus moves, whose input-stream
