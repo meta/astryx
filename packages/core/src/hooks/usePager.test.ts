@@ -1048,6 +1048,63 @@ describe('createPager', () => {
     }
   });
 
+  it('a resize during a settle back to the page it left ends the settle with its callback', async () => {
+    let onResize: ResizeObserverCallback | null = null;
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(callback: ResizeObserverCallback) {
+          onResize = callback;
+        }
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
+    vi.resetModules();
+    const fresh = await import('./usePager');
+    const f = setup({defaultIndex: 0});
+    f.pager.dispose();
+    const calls: string[] = [];
+    const pager = fresh.createPager(
+      {
+        count: 5,
+        defaultIndex: 1,
+        onSettle: (i, previous) => calls.push(`settle:${i}:${previous}`),
+      },
+      {
+        host: f.host,
+        animator: f.animator,
+        requestFrame: callback => {
+          frameQueue.push(callback);
+        },
+      },
+    );
+    pager.attach(f.viewport, f.track);
+    try {
+      // A short, slow drag: the settle returns to page 1.
+      await drag(f, {from: 300, dx: -40, hold: 150});
+      await advance(16, f.clock);
+      expect(pager.isSettling).toBe(true);
+      Object.defineProperty(f.viewport, 'clientWidth', {
+        value: 300,
+        configurable: true,
+      });
+      expect(onResize).not.toBeNull();
+      onResize!(
+        [{target: f.viewport} as unknown as ResizeObserverEntry],
+        {} as ResizeObserver,
+      );
+      await advance(16, f.clock);
+      expect(pager.isSettling).toBe(false);
+      expect(f.x()).toBe(-300);
+      expect(calls).toEqual(['settle:1:1']);
+    } finally {
+      pager.dispose();
+      vi.unstubAllGlobals();
+    }
+  });
+
   // The shared resize observer is one per module. So this case loads a fresh
   // pager module after it installs its ResizeObserver.
   it('a resize after a forward wrap keeps the wrapped page: no jump and no callback', async () => {
