@@ -12,6 +12,10 @@
  * from the package set the CLI runs from (served-packages.mjs), and React and
  * StyleX always come from that set, so the page loads one copy of each.
  *
+ * Charts the page imports from recharts draw only after their effects run,
+ * so the server render sets them aside and draws them after it with React
+ * DOM in a small document (charts.mjs).
+ *
  * @input workerData {entry, root, served}
  * @output one message: {ok: true, markup, css, files, texts, logs} or
  *   {ok: false, error: {code, message, detail?}}
@@ -29,6 +33,7 @@ import {createJiti} from 'jiti';
 import {assetDataUri, isAssetPath} from './assets.mjs';
 import {SINGLE_COPY, isServedPackage, packageOf} from './served-packages.mjs';
 import {findNodeModulesPackage} from '../fs/paths.mjs';
+import {CHART_GLOBAL, CHART_ROOTS, chartDocument, chartSize, markLegends} from './charts.mjs';
 
 /** @typedef {{level: string, text: string}} PageLog */
 
@@ -136,6 +141,207 @@ const NODE_MODULES = `${path.sep}node_modules${path.sep}`;
 const isLocal = file =>
   !file.includes(NODE_MODULES) && (file === entry || file.startsWith(ROOT_PREFIX));
 
+/** Charts the server render set aside, drawn after it. @type {any[]} */
+const charts = [];
+/** The props each chart was last drawn with in the page-wide draw. @type {any[]} */
+const pageCharts = [];
+/**
+ * How often each chart rendered in the page-wide draw. A chart renders again
+ * only when the component that made it renders again, after the first
+ * commit: its effects changed its state, which a closure or context in the
+ * chart may read, so the props alone cannot say the chart is the same.
+ * @type {number[]}
+ */
+const pageRenders = [];
+
+/**
+ * A chart's props as a string that two renders of the same chart share:
+ * data by value, functions by name, elements by type and props.
+ * @param {unknown} value
+ * @param {number} [depth]
+ * @returns {string}
+ */
+function sameKey(value, depth = 0) {
+  if (depth > 8) return '…';
+  if (typeof value === 'function') return `fn:${value.name}`;
+  if (typeof value === 'symbol') return String(value);
+  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'undefined';
+  if (Array.isArray(value)) return `[${value.map(v => sameKey(v, depth + 1)).join(',')}]`;
+  const record = /** @type {Record<string, unknown>} */ (value);
+  if ('$$typeof' in record && 'props' in record) {
+    const type = /** @type {any} */ (record.type);
+    return `<${typeof type === 'string' ? type : (type?.displayName ?? type?.name ?? '?')} ${sameKey(record.props, depth + 1)}>`;
+  }
+  return `{${Object.keys(record)
+    .filter(key => !key.startsWith('_'))
+    .sort()
+    .map(key => `${key}:${sameKey(record[key], depth + 1)}`)
+    .join(',')}}`;
+}
+/** React's createElement, once the page's React has loaded. @type {any} */
+let createElement = null;
+/** React's useContext and useRef. @type {any} */
+let useContext = null;
+/** @type {any} */
+let useRef = null;
+/** Set inside a drawn chart, so a chart inside it is not wrapped again. @type {any} */
+let InChart = null;
+/**
+ * `aside` while the server render sets charts aside; `page` while the whole
+ * page is drawn again, so each chart sees the context it was rendered in;
+ * `alone` while each chart is drawn by itself, when the page cannot be.
+ * @type {'aside' | 'page' | 'alone'}
+ */
+let mode = 'aside';
+
+/**
+ * Wrap a recharts chart, or a ResponsiveContainer, so the server render sets
+ * it aside and the drawing pass draws it: a container at the size it starts
+ * at, in a box that lets the drawing fit the page's width.
+ * @param {any} Chart
+ * @param {boolean} container
+ */
+/** @type {any} */ (globalThis).__astryxRenderChart = (/** @type {any} */ Chart, /** @type {boolean} */ container) => {
+  function RenderedChart(/** @type {any} */ props) {
+    if (mode === 'aside') {
+      charts.push(createElement(RenderedChart, props));
+      return createElement('astryx-chart', {'data-chart': charts.length - 1});
+    }
+    const inside = useContext(InChart);
+    // Each chart drawn in the page notes the props it was last drawn with,
+    // by its place in the page, to compare with the first render's.
+    const place = useRef(/** @type {number | null} */ (null));
+    if (mode === 'page' && !inside) {
+      place.current ??= pageCharts.length;
+      pageCharts[place.current] = props;
+      pageRenders[place.current] = (pageRenders[place.current] ?? 0) + 1;
+    }
+    const drawn = container
+      ? createElement('div', {className: 'recharts-responsive-container'}, createElement(Chart, {...props, ...chartSize(props)}))
+      : createElement(Chart, props);
+    if (mode === 'alone' || inside) return drawn;
+    return createElement('astryx-chart', null, createElement(InChart.Provider, {value: true}, drawn));
+  }
+  return RenderedChart;
+};
+
+/**
+ * Point the page's recharts charts, and its ResponsiveContainer, at the
+ * wrapper the worker installs.
+ * @param {any} p the import of 'recharts'
+ * @param {any} t Babel's types
+ */
+function setChartsAside(p, t) {
+  for (const s of p.node.specifiers) {
+    if (s.type !== 'ImportSpecifier') continue;
+    const name = s.imported.name ?? s.imported.value;
+    const container = name === 'ResponsiveContainer';
+    if (!container && !CHART_ROOTS.has(name)) continue;
+    const original = p.scope.generateUidIdentifier(name);
+    const local = s.local.name;
+    s.local = original;
+    p.insertAfter(
+      t.variableDeclaration('const', [
+        t.variableDeclarator(
+          t.identifier(local),
+          t.callExpression(t.memberExpression(t.identifier('globalThis'), t.identifier(CHART_GLOBAL)), [
+            original,
+            t.booleanLiteral(container),
+          ]),
+        ),
+      ]),
+    );
+  }
+}
+
+/**
+ * Draw the charts the server render set aside, and put each drawing where
+ * its placeholder is.
+ *
+ * Draw the whole page first. A chart's own parts then see the React context
+ * the page gives them. If that draw throws, or the page's effects change a
+ * chart (its props, or which charts there are), draw each chart alone, from
+ * the props of the first render. A chart that fails stays empty and is
+ * counted.
+ * @param {string} markup
+ * @param {any} Page
+ * @returns {Promise<{markup: string, failed: number, alone: false | 'error' | 'changed' | 'rerendered'}>}
+ */
+async function drawCharts(markup, Page) {
+  const placeholder = /<astryx-chart data-chart="(\d+)"><\/astryx-chart>/g;
+  /** @type {any} */
+  let client;
+  /** @type {any} */
+  let flushSync;
+  try {
+    await chartDocument();
+    client = await jiti.import('react-dom/client');
+    ({flushSync} = /** @type {any} */ (await jiti.import('react-dom')));
+  } catch {
+    // Without a document to draw in, every chart stays empty and is counted.
+    return {markup: markup.replace(placeholder, ''), failed: charts.length, alone: /** @type {false} */ (false)};
+  }
+  /**
+   * Render one element in its own root and hand its host to `read`.
+   * @param {unknown} element
+   * @param {(host: any) => string[]} read
+   * @returns {string[] | null} null when the render failed
+   */
+  const drawIn = (element, read) => {
+    /** @type {unknown} */
+    let error = null;
+    const host = /** @type {any} */ (globalThis).document.createElement('div');
+    const root = client.createRoot(host, {
+      onUncaughtError: (/** @type {unknown} */ e) => {
+        error = e;
+      },
+      onRecoverableError: () => {},
+    });
+    try {
+      flushSync(() => root.render(element));
+    } catch (e) {
+      error = e;
+    }
+    if (!error) markLegends(host);
+    const out = error ? null : read(host);
+    root.unmount();
+    return out;
+  };
+  mode = 'page';
+  let drawn = drawIn(createElement(Page), host => [...host.querySelectorAll('astryx-chart')].map(el => el.innerHTML));
+  /** @type {false | 'error' | 'changed' | 'rerendered'} */
+  let alone = false;
+  if (!drawn) alone = 'error';
+  // The page's effects changed a chart: its props, which charts there are,
+  // or the state of the component that made it, which a closure or context
+  // in the chart may read.
+  else if (
+    drawn.length !== charts.length ||
+    pageCharts.length !== charts.length ||
+    charts.some((chart, i) => sameKey(chart.props) !== sameKey(pageCharts[i]))
+  ) {
+    alone = 'changed';
+  } else if (pageRenders.some(count => count > 1)) {
+    alone = 'rerendered';
+  }
+  if (alone) {
+    mode = 'alone';
+    drawn = charts.map(chart => drawIn(chart, host => [host.innerHTML])?.[0] ?? '');
+  }
+  let failed = 0;
+  // A chart that drew no picture counts as failed, once.
+  const pictures = /** @type {string[]} */ (drawn).map(html => {
+    if (html.includes('<svg')) return html;
+    failed += 1;
+    return '';
+  });
+  return {
+    markup: markup.replace(placeholder, (_, i) => pictures[Number(i)] ?? ''),
+    failed,
+    alone,
+  };
+}
+
 /**
  * Babel plugin: replace asset imports with data: URIs and stylesheet imports
  * with nothing (their CSS is inlined into the page), and record static text
@@ -148,6 +354,7 @@ function pagePlugin(filename) {
     visitor: {
       ImportDeclaration(/** @type {any} */ p) {
         const spec = /** @type {string} */ (p.node.source.value);
+        if (spec === 'recharts') setChartsAside(p, t);
         const raw = spec.split('?')[0];
         // A stylesheet, image or JSON file imported through a project alias
         // (`@/styles/site.css`) resolves the way modules do.
@@ -582,6 +789,10 @@ try {
   let server;
   try {
     React = await jiti.import('react');
+    createElement = React.createElement;
+    useContext = React.useContext;
+    useRef = React.useRef;
+    InChart = React.createContext(false);
     server = await jiti.import('react-dom/server');
   } catch (e) {
     classify(e);
@@ -589,8 +800,18 @@ try {
   }
   /** @type {string} */
   let markup;
+  let chartsFailed = 0;
+  /** @type {false | 'error' | 'changed' | 'rerendered'} */
+  let chartsAlone = false;
   try {
     markup = server.renderToStaticMarkup(React.createElement(Page));
+    if (charts.length > 0) {
+      // Drawing the page again re-runs its code: what it prints then was
+      // already reported by the server render.
+      const printed = logs.length;
+      ({markup, failed: chartsFailed, alone: chartsAlone} = await drawCharts(markup, Page));
+      logs.length = printed;
+    }
   } catch (e) {
     classify(e);
     throw null;
@@ -613,6 +834,8 @@ try {
     packageCss,
     skippedCss,
     fromSet: [...fromSet].map(([name, dir]) => ({name, dir})),
+    chartsFailed,
+    chartsAlone,
     assets: [...assetsInlined],
     files: localFiles,
     texts,
