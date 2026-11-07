@@ -58,10 +58,10 @@ const styles = stylex.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  // Three-lane layout. While the lanes fit one row, the side lanes share the
-  // free space equally, so the center stays at the middle. When the lanes do
-  // not fit, the row wraps: the end lane, and the center lane when it does not
-  // fit beside the start lane, move to a following line.
+  // Three-lane layout. The side lanes share the width the center leaves
+  // equally, so the center stays at the middle while each fits its half. When
+  // the lanes do not fit, the row wraps. The end lane moves to a following
+  // line. The center lane moves too when it does not fit beside the start lane.
   baseThreeLane: {
     display: 'flex',
     flexWrap: 'wrap',
@@ -210,8 +210,8 @@ export interface ToolbarProps extends BaseProps<HTMLDivElement> {
   /**
    * Content centered between start and end.
    * When provided, switches to the three-lane layout: the center sits at the
-   * toolbar's middle while the lanes fit one row, and the row wraps when they
-   * do not.
+   * toolbar's middle while each side lane fits in half of the width it leaves,
+   * and the row wraps when the lanes do not fit.
    */
   centerContent?: ReactNode;
   /**

@@ -72,7 +72,7 @@ export const Default: Story = {
   },
 };
 
-/** Three-slot layout. The center sits at the middle while the lanes fit one row; when they do not, the row wraps. */
+/** Three-slot layout. The center sits at the middle while each side lane fits in half of the width it leaves; when the lanes do not fit, the row wraps. */
 export const ThreeSlot: Story = {
   render: () => (
     <Toolbar

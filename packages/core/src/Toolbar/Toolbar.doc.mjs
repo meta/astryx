@@ -148,7 +148,7 @@ export const docs = {
           name: 'centerContent',
           type: 'ReactNode',
           description:
-            'Centered content. Switches to the three-lane layout: centered while the lanes fit one row, and the row wraps when they do not.',
+            'Centered content. Switches to the three-lane layout: centered while each side lane fits in half of the width it leaves, and the row wraps when the lanes do not fit.',
           slotElements: [
             {
               __element: 'Text',
@@ -314,7 +314,7 @@ export const docsZh = {
         label: '工具栏的无障碍标签，作为 aria-label 应用。',
         startContent: '起始内容（LTR 中靠左对齐）。',
         centerContent:
-          '居中内容。切换为三栏布局：各栏能放进一行时居中，放不下时换行。',
+          '居中内容。切换为三栏布局：两侧各栏都能放进中间栏剩余宽度的一半时居中；各栏放不下时换行。',
         endContent: '结束内容（LTR 中靠右对齐）。',
         size: '工具栏尺寸。控制最小高度，子组件通过 SizeContext 继承此尺寸作为默认值。',
         gap: '插槽内项目间距。',
