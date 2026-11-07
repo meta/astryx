@@ -89,6 +89,7 @@ import {spacingVars} from '../theme/tokens.stylex';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import type {LongPressGestureRecognizer} from '../gestures/LongPressGestureRecognizer';
 import {VelocityTracker} from '../gestures/VelocityTracker';
+import {inertClone, paintedBackground} from '../motion/inertClone';
 import {reorder} from '../motion/uikit/reorder';
 import {
   animatorFor,
@@ -260,20 +261,32 @@ function overlay(element: HTMLElement): HTMLElement {
 }
 
 /**
- * The preview: a copy of `row` at its place, with the same reduced emphasis
- * as the row and no elevation.
+ * A copy of `row` that takes no part in the page (`inertClone`). It has no
+ * ids, names or form, so a copied checked radio leaves the row's checked. A
+ * row holding a canvas that reads back empty is not copied: its bare box is.
+ */
+function previewCopyOf(row: HTMLElement): HTMLElement {
+  const copy = inertClone(row);
+  if (copy != null) {
+    return copy;
+  }
+  const box = row.cloneNode(false) as HTMLElement;
+  for (const name of ['id', 'data-testid', 'name', 'for', 'autofocus']) {
+    box.removeAttribute(name);
+  }
+  return box;
+}
+
+/**
+ * Makes `preview`, a copy of the dragged row, its preview at its place, with
+ * the same reduced emphasis as the row and no elevation. It only writes.
  */
 function previewOf(
-  row: HTMLElement,
+  preview: HTMLElement,
   top: number,
   span: LineSpan,
   background: string | null,
 ) {
-  const preview = row.cloneNode(true) as HTMLElement;
-  preview.removeAttribute('id');
-  for (const element of preview.querySelectorAll('[id]')) {
-    element.removeAttribute('id');
-  }
   markReorderPreview(preview);
   overlay(preview);
   Object.assign(preview.style, {
@@ -391,24 +404,6 @@ function isTransparent(color: string): boolean {
     /^rgba\(.*,\s*0\)$/.test(color) ||
     /\/\s*0\)$/.test(color)
   );
-}
-
-/**
- * The background a row is drawn on: the nearest opaque background behind
- * the list, else the page's canvas.
- */
-function surfaceColor(list: HTMLElement): string {
-  for (
-    let node: HTMLElement | null = list;
-    node != null;
-    node = node.parentElement
-  ) {
-    const color = getComputedStyle(node).backgroundColor;
-    if (!isTransparent(color)) {
-      return color;
-    }
-  }
-  return 'Canvas';
 }
 
 /** The element autoscroll writes to and its visible band in the viewport. */
@@ -1166,8 +1161,10 @@ export class ListReorderController implements ListReorderSession {
     // marks where it would land. The preview has a background, as the row
     // does. A row without its own takes the surface's behind the list.
     const background = isTransparent(getComputedStyle(row).backgroundColor)
-      ? surfaceColor(list)
+      ? paintedBackground(list)
       : null;
+    // The copy reads the row's styles, so it is made before the first write.
+    const copy = previewCopyOf(row);
     for (const element of rows) {
       if (element.style.translate === '') {
         element.style.translate = '0px 0px';
@@ -1176,7 +1173,7 @@ export class ListReorderController implements ListReorderSession {
     if (isStatic) {
       list.style.position = 'relative';
     }
-    const preview = previewOf(row, tops[dragged], previewSpan, background);
+    const preview = previewOf(copy, tops[dragged], previewSpan, background);
     // Right before its source, the preview counts for it. So in a numbered
     // list it reads the source's number. Every other row keeps its place
     // among its siblings, and the last row keeps :last-child.

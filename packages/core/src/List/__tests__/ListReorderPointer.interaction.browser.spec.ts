@@ -11,7 +11,8 @@
  *   finger does. A quick stroke moves nothing, and a held one moves the row.
  *   A row held near a scroll edge scrolls the page, or the box the list
  *   scrolls in, and stops at the end. The preview and the insertion line
- *   run along a row set in from the list's start, in either direction
+ *   run along a row set in from the list's start, in either direction. A
+ *   checked radio in the dragged row stays checked through the drag
  * @position Beside ListReorderTouch.interaction.browser.spec.ts, which proves
  *   the hold under a finger
  */
@@ -235,6 +236,54 @@ test('a row held near the bottom of a box the list scrolls in scrolls that box, 
     expect(await page.evaluate(() => window.scrollY)).toBe(0);
     await page.keyboard.press('Escape');
     await page.mouse.up();
+  } finally {
+    await story.close();
+  }
+});
+
+test('a checked radio in the dragged row stays checked through the drag and a drop in place', async ({
+  browser,
+}) => {
+  const story = await openFinePointerStory(browser);
+  try {
+    const {page} = story;
+    // Each row holds a radio of one group, and the first row's is checked.
+    await page.evaluate(() => {
+      const rows = document.querySelectorAll('#storybook-root ul > li');
+      rows.forEach((row, index) => {
+        const radio = document.createElement('input');
+        radio.type = 'radio';
+        radio.name = 'pick';
+        radio.value = String(index);
+        radio.checked = index === 0;
+        row.append(radio);
+      });
+    });
+    const checked = async () =>
+      page.evaluate(() =>
+        Array.from(
+          document.querySelectorAll<HTMLInputElement>(
+            '#storybook-root ul > li:not([data-astryx-leaving]) input[type="radio"]',
+          ),
+          radio => radio.checked,
+        ),
+      );
+    const order = await labels(page);
+    const {at, rowHeight} = await handleOf(page, order[0]);
+    await page.mouse.move(at.x, at.y);
+    await page.mouse.down();
+    await page.mouse.move(at.x, at.y + rowHeight * 0.4, {steps: 4});
+    await expect(page.locator('[data-astryx-reorder-preview]')).toHaveCount(1);
+    const during = await checked();
+    // Back to its place, and dropped there.
+    await page.mouse.move(at.x, at.y, {steps: 4});
+    await page.mouse.up();
+    await expect(page.locator('[data-astryx-reorder-preview]')).toHaveCount(0);
+    const after = await checked();
+    expect(await labels(page)).toEqual(order);
+    expect(during[0], 'during the drag').toBe(true);
+    expect(after[0], 'after the drop').toBe(true);
+    expect(after.filter(Boolean)).toHaveLength(1);
   } finally {
     await story.close();
   }
