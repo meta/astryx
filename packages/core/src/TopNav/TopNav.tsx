@@ -16,7 +16,12 @@
  * - /packages/cli/assets/templates/blocks/components/TopNav/ (showcase blocks)
  */
 
-import type {ReactNode} from 'react';
+import {isValidElement, use, useMemo, type ReactNode} from 'react';
+import {
+  AppShellDrawerFocusContext,
+  type AppShellDrawerFocus,
+} from '../AppShell/appShellDrawerFocus';
+import {TopNavShellContext} from './TopNavShellContext';
 import type {BaseProps} from '../BaseProps';
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
@@ -121,11 +126,28 @@ const styles = stylex.create({
     flexDirection: 'column',
     gap: spacingVars['--spacing-0-5'],
   },
+  // The items of a hidden top nav stay mounted in the drawer, keeping state.
+  drawerItemsHidden: {
+    display: 'none',
+  },
   drawerDivider: {
     marginBlock: spacingVars['--spacing-2'],
   },
   drawerExtraContent: {},
 });
+
+/**
+ * Whether a top nav element has items of its own to put in the phone drawer,
+ * read from its props during render. Internal: AppShell reads it to tell an
+ * empty drawer. A slot that is not a TopNav element counts as having items.
+ */
+export function topNavHasDrawerItems(topNav: ReactNode): boolean {
+  if (!isValidElement<TopNavProps>(topNav) || topNav.type !== TopNav) {
+    return true;
+  }
+  const {startContent, children, centerContent} = topNav.props;
+  return isRenderable(startContent ?? children) || isRenderable(centerContent);
+}
 
 export interface TopNavProps extends BaseProps<HTMLElement> {
   /** Ref forwarded to the root element */
@@ -211,8 +233,27 @@ export function TopNav({
   const hasStartContent = isRenderable(resolvedStartContent);
   const hasMobileContent = isRenderable(mobileContent);
   const hasCollapsibleContent = hasStartContent || hasCenterContent;
-  // Show mobile toggle when there's ANY drawer content — own items OR SideNav via context
-  const hasMobileDrawerContent = hasCollapsibleContent || hasMobileContent;
+  const shell = use(TopNavShellContext);
+  const isOwnContentHidden = shell?.isOwnContentHidden === true;
+  // Show the mobile toggle only for drawer content still visible: its own
+  // items, or the SideNav passed in through context, unless hidden.
+  const hasMobileDrawerContent =
+    (hasCollapsibleContent && !isOwnContentHidden) ||
+    (hasMobileContent && shell?.isMobileContentHidden !== true);
+  // A drawer with nothing visible closes, and its menu button is gone, so
+  // focus goes to main.
+  const drawerFocus = use(AppShellDrawerFocusContext);
+  const ownDrawerFocus = useMemo<AppShellDrawerFocus | null>(
+    () =>
+      drawerFocus == null
+        ? null
+        : {
+            main: drawerFocus.main,
+            isDrawerEmpty: () =>
+              !hasMobileDrawerContent || drawerFocus.isDrawerEmpty(),
+          },
+    [drawerFocus, hasMobileDrawerContent],
+  );
 
   // =========================================================================
   // Mobile bar mode — heading + endContent + toggle, hide nav items.
@@ -254,22 +295,34 @@ export function TopNav({
     }
 
     return (
-      <MobileNav header={heading}>
-        {hasCollapsibleContent && (
-          <div {...stylex.props(styles.drawerItems)}>
-            {resolvedStartContent}
-            {centerContent}
-          </div>
-        )}
-        {hasCollapsibleContent && hasMobileContent && (
-          <Divider xstyle={styles.drawerDivider} />
-        )}
-        {hasMobileContent && (
-          <div {...stylex.props(styles.drawerExtraContent)}>
-            {mobileContent}
-          </div>
-        )}
-      </MobileNav>
+      <AppShellDrawerFocusContext value={ownDrawerFocus}>
+        <MobileNav
+          header={isOwnContentHidden ? undefined : heading}
+          isOpen={hasMobileDrawerContent ? undefined : false}>
+          {hasCollapsibleContent && (
+            <div
+              {...stylex.props(
+                styles.drawerItems,
+                isOwnContentHidden && styles.drawerItemsHidden,
+              )}
+              inert={isOwnContentHidden || undefined}>
+              {resolvedStartContent}
+              {centerContent}
+            </div>
+          )}
+          {hasCollapsibleContent &&
+            hasMobileContent &&
+            !isOwnContentHidden &&
+            shell?.isMobileContentHidden !== true && (
+              <Divider xstyle={styles.drawerDivider} />
+            )}
+          {hasMobileContent && (
+            <div {...stylex.props(styles.drawerExtraContent)}>
+              {mobileContent}
+            </div>
+          )}
+        </MobileNav>
+      </AppShellDrawerFocusContext>
     );
   }
 

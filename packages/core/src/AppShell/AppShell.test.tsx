@@ -18,7 +18,7 @@ import {
   beforeEach,
   afterEach,
 } from 'vitest';
-import {use} from 'react';
+import {use, useState} from 'react';
 import {renderToString} from 'react-dom/server';
 import {act, render, screen, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -1568,5 +1568,414 @@ describe('AppShell layout root (FR18)', () => {
     expect(computed.getPropertyValue('--container-padding-inline-start')).toBe(
       '8px',
     );
+  });
+});
+
+describe('AppShell hiddenRegions', () => {
+  // A side nav with state of its own, to show that hiding keeps it.
+  function CountingSideNav() {
+    const [count, setCount] = useState(0);
+    return (
+      <SideNav>
+        <SideNavSection title="Test" isHeaderHidden>
+          <SideNavItem
+            label={`Count ${count}`}
+            onClick={() => setCount(count + 1)}
+          />
+        </SideNavSection>
+      </SideNav>
+    );
+  }
+
+  function Shell({
+    hiddenRegions,
+  }: {
+    hiddenRegions?: ReadonlyArray<'topNav' | 'sideNav'>;
+  }) {
+    return (
+      <AppShell
+        hiddenRegions={hiddenRegions}
+        topNav={
+          <TopNav heading={<TopNavHeading heading="App" />}>
+            <TopNavItem label="Home" href="/home" />
+          </TopNav>
+        }
+        sideNav={<CountingSideNav />}>
+        <button type="button">In content</button>
+      </AppShell>
+    );
+  }
+
+  it('keeps a hidden side nav mounted with its state', async () => {
+    const user = userEvent.setup();
+    const {rerender} = render(<Shell />);
+    await user.click(screen.getByRole('button', {name: 'Count 0'}));
+    const row = screen.getByRole('button', {name: 'Count 1'});
+    rerender(<Shell hiddenRegions={['sideNav']} />);
+    rerender(<Shell />);
+    expect(screen.getByRole('button', {name: 'Count 1'})).toBe(row);
+  });
+
+  it('makes a hidden region inert, and only while it is hidden', () => {
+    const {rerender} = render(<Shell />);
+    const nav = screen.getByText('Count 0').closest('nav') as HTMLElement;
+    const home = screen.getByText('Home');
+    expect(nav.closest('[inert]')).toBeNull();
+    expect(home.closest('[inert]')).toBeNull();
+
+    rerender(<Shell hiddenRegions={['topNav', 'sideNav']} />);
+    expect(nav.closest('[inert]')).not.toBeNull();
+    expect(home.closest('[inert]')).not.toBeNull();
+    // Content is never hidden.
+    expect(
+      screen.getByRole('button', {name: 'In content'}).closest('[inert]'),
+    ).toBeNull();
+
+    rerender(<Shell />);
+    expect(nav.closest('[inert]')).toBeNull();
+    expect(home.closest('[inert]')).toBeNull();
+  });
+
+  it('hides only the named region', () => {
+    render(<Shell hiddenRegions={['topNav']} />);
+    expect(screen.getByText('Home').closest('[inert]')).not.toBeNull();
+    expect(screen.getByText('Count 0').closest('[inert]')).toBeNull();
+  });
+
+  it('moves focus inside a region that hides to main', () => {
+    const {rerender} = render(<Shell />);
+    const row = screen.getByRole('button', {name: 'Count 0'});
+    act(() => row.focus());
+    rerender(<Shell hiddenRegions={['sideNav']} />);
+    expect(screen.getByRole('main')).toHaveFocus();
+  });
+
+  it('leaves focus in content alone when a region hides', () => {
+    const {rerender} = render(<Shell />);
+    const inContent = screen.getByRole('button', {name: 'In content'});
+    act(() => inContent.focus());
+    rerender(<Shell hiddenRegions={['topNav', 'sideNav']} />);
+    expect(inContent).toHaveFocus();
+  });
+
+  it('shows no banner landmark when every header slot is hidden', () => {
+    render(<Shell hiddenRegions={['topNav']} />);
+    expect(screen.queryByRole('banner')).toBeNull();
+  });
+
+  it('ignores an unknown region with a development warning', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    render(
+      <Shell
+        hiddenRegions={['banner' as unknown as 'topNav', 'sideNav', 'sideNav']}
+      />,
+    );
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('banner'));
+    expect(screen.getByText('Home').closest('[inert]')).toBeNull();
+    expect(screen.getByText('Count 0').closest('[inert]')).not.toBeNull();
+  });
+
+  function stubPhone() {
+    mockMql = createMockMatchMedia(true);
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue(mockMql));
+  }
+
+  function PhoneShell({
+    hiddenRegions,
+    topNav,
+  }: {
+    hiddenRegions?: ReadonlyArray<'topNav' | 'sideNav'>;
+    topNav?: React.ReactNode;
+  }) {
+    return (
+      <AppShell
+        hiddenRegions={hiddenRegions}
+        topNav={topNav}
+        sideNav={<CountingSideNav />}
+        mobileNav={{defaultIsMobile: true}}>
+        <button type="button">In content</button>
+      </AppShell>
+    );
+  }
+
+  it('on a phone, keeps the side nav mounted in the drawer while it is hidden', async () => {
+    stubPhone();
+    const user = userEvent.setup();
+    const topNav = (
+      <TopNav heading={<TopNavHeading heading="App" />}>
+        <TopNavItem label="Home" href="/home" />
+      </TopNav>
+    );
+    const {rerender} = render(<PhoneShell topNav={topNav} />);
+    await user.click(screen.getByTestId('mobile-nav-toggle'));
+    await user.click(screen.getByRole('button', {name: 'Count 0'}));
+    // Activating a row closes the drawer; its content stays mounted.
+    const row = screen.getByRole('button', {name: 'Count 1', hidden: true});
+    rerender(<PhoneShell topNav={topNav} hiddenRegions={['sideNav']} />);
+    expect(row.closest('[inert]')).not.toBeNull();
+    rerender(<PhoneShell topNav={topNav} />);
+    expect(screen.getByRole('button', {name: 'Count 1', hidden: true})).toBe(
+      row,
+    );
+  });
+
+  // Reads what AppShell reports to its subtree.
+  let probedMobile: ReturnType<typeof useAppShellMobile> | null = null;
+  function MobileProbe() {
+    probedMobile = useAppShellMobile();
+    return null;
+  }
+
+  // A top nav with no items of its own leaves only the side nav in the drawer.
+  function HeadingOnlyTopNavShell({hidden}: {hidden?: boolean}) {
+    return (
+      <AppShell
+        hiddenRegions={hidden ? ['sideNav'] : undefined}
+        topNav={<TopNav heading={<TopNavHeading heading="App" />} />}
+        sideNav={<CountingSideNav />}
+        mobileNav={{defaultIsMobile: true}}>
+        <MobileProbe />
+      </AppShell>
+    );
+  }
+
+  it('on a phone, reports a drawer with nothing left to show as closed', async () => {
+    stubPhone();
+    const user = userEvent.setup();
+    const {rerender} = render(<HeadingOnlyTopNavShell />);
+    await user.click(screen.getByTestId('mobile-nav-toggle'));
+    expect(probedMobile).toMatchObject({isMobileNavOpen: true});
+    rerender(<HeadingOnlyTopNavShell hidden />);
+    expect(probedMobile).toMatchObject({
+      isMobileNavOpen: false,
+      isMobileNavEnabled: false,
+    });
+    expect(screen.queryByTestId('mobile-nav-toggle')).toBeNull();
+  });
+
+  // A shell that hides nothing keeps the drawer it had before
+  // `hiddenRegions`, whether the list is omitted or empty.
+  describe.each([
+    {
+      shape: 'a heading-only top nav',
+      topNav: <TopNav heading={<TopNavHeading heading="App" />} />,
+      content: undefined,
+      isEnabled: true,
+      toggles: 0,
+    },
+    {
+      shape: 'a top nav with items',
+      topNav: (
+        <TopNav heading={<TopNavHeading heading="App" />}>
+          <TopNavItem label="Home" href="/home" />
+        </TopNav>
+      ),
+      content: undefined,
+      isEnabled: true,
+      toggles: 1,
+    },
+    {
+      shape: 'app drawer content',
+      topNav: <TopNav heading={<TopNavHeading heading="App" />} />,
+      content: <div>App drawer</div>,
+      isEnabled: true,
+      toggles: 0,
+    },
+    {
+      shape: 'no navigation',
+      topNav: undefined,
+      content: undefined,
+      isEnabled: false,
+      toggles: 0,
+    },
+  ])('on a phone, a shell that hides nothing, with $shape', row => {
+    it.each([
+      ['omitted', undefined],
+      ['empty', []],
+    ])('keeps its drawer with hiddenRegions %s', (_, hiddenRegions) => {
+      stubPhone();
+      render(
+        <AppShell
+          hiddenRegions={hiddenRegions}
+          topNav={row.topNav}
+          mobileNav={{defaultIsMobile: true, content: row.content}}>
+          <MobileProbe />
+        </AppShell>,
+      );
+      expect(probedMobile).toMatchObject({
+        isMobile: true,
+        isMobileNavEnabled: row.isEnabled,
+      });
+      expect(screen.queryAllByTestId('mobile-nav-toggle')).toHaveLength(
+        row.toggles,
+      );
+    });
+  });
+
+  // An app's own wrapper around a heading-only TopNav.
+  function AppTopNav() {
+    return <TopNav heading={<TopNavHeading heading="App" />} />;
+  }
+
+  it('on a phone, shows no menu button for a wrapped top nav with only the side nav hidden', () => {
+    stubPhone();
+    render(
+      <AppShell
+        hiddenRegions={['sideNav']}
+        topNav={<AppTopNav />}
+        sideNav={<CountingSideNav />}
+        mobileNav={{defaultIsMobile: true}}>
+        <button type="button">In content</button>
+      </AppShell>,
+    );
+    expect(screen.queryByTestId('mobile-nav-toggle')).toBeNull();
+  });
+
+  it('on a phone, keeps the drawer closed when a region hidden while it was open shows again', async () => {
+    stubPhone();
+    const user = userEvent.setup();
+    const topNav = (
+      <TopNav heading={<TopNavHeading heading="App" />}>
+        <TopNavItem label="Home" href="/home" />
+      </TopNav>
+    );
+    function Shell({hidden}: {hidden?: boolean}) {
+      return (
+        <AppShell
+          hiddenRegions={hidden ? ['sideNav'] : undefined}
+          topNav={topNav}
+          sideNav={<CountingSideNav />}
+          mobileNav={{defaultIsMobile: true}}>
+          <MobileProbe />
+        </AppShell>
+      );
+    }
+    const {rerender} = render(<Shell />);
+    await user.click(screen.getByTestId('mobile-nav-toggle'));
+    expect(probedMobile).toMatchObject({isMobileNavOpen: true});
+    rerender(<Shell hidden />);
+    expect(probedMobile).toMatchObject({isMobileNavOpen: false});
+    rerender(<Shell />);
+    expect(probedMobile).toMatchObject({isMobileNavOpen: false});
+    // The menu button opens it again.
+    await user.click(screen.getByTestId('mobile-nav-toggle'));
+    expect(probedMobile).toMatchObject({isMobileNavOpen: true});
+  });
+
+  it('on a phone, reports a controlled drawer closed after a hide without writing its state', () => {
+    stubPhone();
+    const onOpenChange = vi.fn();
+    function Shell({hidden}: {hidden?: boolean}) {
+      return (
+        <AppShell
+          hiddenRegions={hidden ? ['sideNav'] : undefined}
+          topNav={<AppTopNav />}
+          sideNav={<CountingSideNav />}
+          mobileNav={{defaultIsMobile: true, isOpen: true, onOpenChange}}>
+          <MobileProbe />
+        </AppShell>
+      );
+    }
+    const {rerender} = render(<Shell />);
+    expect(probedMobile).toMatchObject({isMobileNavOpen: true});
+    rerender(<Shell hidden />);
+    expect(probedMobile).toMatchObject({isMobileNavOpen: false});
+    rerender(<Shell />);
+    expect(probedMobile).toMatchObject({isMobileNavOpen: false});
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
+
+  it('on a phone, keeps an app drawer that hides nothing as it is', () => {
+    stubPhone();
+    render(
+      <AppShell
+        topNav={<TopNav heading={<TopNavHeading heading="App" />} />}
+        mobileNav={{defaultIsMobile: true, content: <div>App drawer</div>}}>
+        <MobileProbe />
+      </AppShell>,
+    );
+    expect(probedMobile).toMatchObject({isMobileNavEnabled: true});
+  });
+
+  it('on a phone, keeps the app drawer content when both navs hide', () => {
+    stubPhone();
+    render(
+      <AppShell
+        hiddenRegions={['topNav', 'sideNav']}
+        topNav={<TopNav heading={<TopNavHeading heading="App" />} />}
+        sideNav={<CountingSideNav />}
+        mobileNav={{defaultIsMobile: true, content: <div>App drawer</div>}}>
+        <MobileProbe />
+      </AppShell>,
+    );
+    expect(probedMobile).toMatchObject({isMobileNavEnabled: true});
+  });
+
+  it('on a phone, moves focus to main when the drawer closes because its side nav hid', async () => {
+    stubPhone();
+    vi.useFakeTimers({shouldAdvanceTime: true});
+    try {
+      const user = userEvent.setup({advanceTimers: vi.advanceTimersByTime});
+      const {rerender} = render(<PhoneShell />);
+      const toggle = screen.getByTestId('mobile-nav-toggle');
+      act(() => toggle.focus());
+      await user.click(toggle);
+      rerender(<PhoneShell hiddenRegions={['sideNav']} />);
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
+      expect(screen.getByRole('main')).toHaveFocus();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('on a phone, keeps a banner landmark on the side nav bar when only the top nav hides', () => {
+    stubPhone();
+    render(
+      <PhoneShell
+        topNav={
+          <TopNav heading={<TopNavHeading heading="App" />}>
+            <TopNavItem label="Home" href="/home" />
+          </TopNav>
+        }
+        hiddenRegions={['topNav']}
+      />,
+    );
+    expect(screen.getAllByRole('banner')).toHaveLength(1);
+  });
+
+  it('on a phone, closes the drawer and disables it when the side nav it holds hides', () => {
+    mockMql = createMockMatchMedia(true);
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue(mockMql));
+    let mobile: ReturnType<typeof useAppShellMobile> | null = null;
+    function Probe() {
+      mobile = useAppShellMobile();
+      return null;
+    }
+    const onOpenChange = vi.fn();
+    function PhoneShell({hidden}: {hidden?: boolean}) {
+      return (
+        <AppShell
+          hiddenRegions={hidden ? ['sideNav'] : undefined}
+          sideNav={<TestSideNav />}
+          mobileNav={{defaultIsMobile: true, isOpen: true, onOpenChange}}>
+          <Probe />
+        </AppShell>
+      );
+    }
+    const {rerender} = render(<PhoneShell />);
+    expect(mobile).toMatchObject({
+      isMobileNavOpen: true,
+      isMobileNavEnabled: true,
+    });
+    rerender(<PhoneShell hidden />);
+    expect(mobile).toMatchObject({
+      isMobile: true,
+      isMobileNavOpen: false,
+      isMobileNavEnabled: false,
+    });
+    // Hiding never writes the app's open state.
+    expect(onOpenChange).not.toHaveBeenCalled();
   });
 });
