@@ -395,7 +395,10 @@ const styles = stylex.create({
     display: 'flex',
     flexDirection: 'column',
     gap: spacingVars['--spacing-3'],
-    // Clears the sheet's floating grab handle.
+    // The sheet keeps a band under its grab bar above the content. The sticky
+    // header rises into that band at rest and keeps its own padding, so it
+    // clears the bar both at rest and while stuck.
+    marginBlockStart: `calc(-1 * ${spacingVars['--spacing-6']})`,
     paddingBlockStart: spacingVars['--spacing-6'],
     paddingBlockEnd: spacingVars['--spacing-3'],
     paddingInline: spacingVars['--spacing-4'],
