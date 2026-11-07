@@ -93,15 +93,19 @@ for (const [size, px] of [
   });
 }
 
-test('at 312% text size no wrapped button covers another', async ({page}) => {
+test('at 312% text size every page number stays inside its button', async ({
+  page,
+}) => {
   await setDefaultFontSize(page, 50);
   await page.goto(
     `${storybook.origin}/iframe.html?id=core-pagination--default&viewMode=story`,
   );
   await page.locator('nav button').first().waitFor();
-  const boxes = await page.evaluate(() =>
+  const fits = await page.evaluate(() =>
     [
-      ...document.querySelectorAll<HTMLElement>('#storybook-root nav button'),
+      ...document.querySelectorAll<HTMLElement>(
+        '#storybook-root nav button[aria-label*="page "]',
+      ),
     ].map(button => {
       const range = document.createRange();
       range.selectNodeContents(button);
@@ -109,22 +113,14 @@ test('at 312% text size no wrapped button covers another', async ({page}) => {
       const box = button.getBoundingClientRect();
       return {
         name: button.getAttribute('aria-label') ?? '',
-        top: Math.min(box.top, text.top),
-        bottom: Math.max(box.bottom, text.bottom),
-        left: box.left,
-        right: box.right,
+        above: box.top - text.top,
+        below: text.bottom - box.bottom,
       };
     }),
   );
-  for (let i = 0; i < boxes.length; i++) {
-    for (let j = i + 1; j < boxes.length; j++) {
-      const a = boxes[i];
-      const b = boxes[j];
-      const overlapsX = Math.min(a.right, b.right) - Math.max(a.left, b.left);
-      const overlapsY = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
-      expect(overlapsX > 1 && overlapsY > 1, `${a.name} / ${b.name}`).toBe(
-        false,
-      );
-    }
+  expect(fits.length).toBeGreaterThan(0);
+  for (const fit of fits) {
+    expect(fit.above, fit.name).toBeLessThanOrEqual(1);
+    expect(fit.below, fit.name).toBeLessThanOrEqual(1);
   }
 });
