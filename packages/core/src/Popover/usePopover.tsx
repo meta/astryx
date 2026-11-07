@@ -600,8 +600,8 @@ function usePopoverImplementation(
     role === 'dialog' && !dialogLabel,
   );
 
-  // Wrapped render function that includes surface styles and optional hidden close button
   const isDialogShown = role === 'dialog' && layer.isOpen;
+  // Wrapped render function that includes surface styles and optional hidden close button
   const render = useCallback(
     (children: ReactNode, props?: ContextRenderProps): ReactNode => {
       // `mergeProps` is positional — a third OBJECT argument is read as
@@ -617,9 +617,8 @@ function usePopoverImplementation(
         <LayerDepthProvider>
           <div
             ref={contentRef}
-            // A closed surface stays mounted but hidden, so it carries no
-            // dialog role or name: queries and audits find no dialog that is
-            // not on screen.
+            // A closed surface stays mounted but hidden. It carries no dialog
+            // role or name, so selectors find no hidden dialog.
             role={isDialogShown ? 'dialog' : undefined}
             aria-modal={isDialogShown && isModal ? true : undefined}
             aria-label={isDialogShown ? dialogLabel : undefined}

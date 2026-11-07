@@ -127,7 +127,7 @@ async function openDefault(page: Page): Promise<OpenStory> {
   return {
     driver,
     trigger,
-    layer: page.locator('[popover]:has([role="dialog"])').first(),
+    layer: page.locator('[popover]:has(.astryx-popover)').first(),
     center: {
       x: triggerBox.x + triggerBox.width / 2,
       y: triggerBox.y + triggerBox.height / 2,
@@ -272,7 +272,7 @@ async function logScaleStarts(page: Page) {
  * copy, which the dismissal clones from it.
  */
 const LONG_MOTIONS =
-  '[popover]:has([role="dialog"]) { --duration-medium-min: 1200ms; --duration-exit: 1200ms; }';
+  '[popover]:has(.astryx-popover) { --duration-medium-min: 1200ms; --duration-exit: 1200ms; }';
 
 /** Where each rendering window starts, ms after its motion starts. */
 const WINDOW_START_MS = 400;
@@ -282,7 +282,7 @@ const MIN_WINDOW_MS = 300;
 
 /** The blocked-thread proof's growth: 1.2 s at a constant speed. */
 const STEADY_GROWTH =
-  '[popover]:has([role="dialog"]) { --duration-medium-min: 1200ms; --ease-entrance: linear; }';
+  '[popover]:has(.astryx-popover) { --duration-medium-min: 1200ms; --ease-entrance: linear; }';
 
 /** The page's clock, epoch ms. */
 async function pageNow(page: Page): Promise<number> {
@@ -330,7 +330,7 @@ async function waitPastScaleStart(
  * `::before` or `::after`. Reading them restyles nothing.
  */
 async function contentPromotions(layer: Locator): Promise<string[]> {
-  return layer.locator('[role="dialog"]').evaluate(dialog =>
+  return layer.locator('.astryx-popover').evaluate(dialog =>
     Array.from(dialog.querySelectorAll<HTMLElement>('*')).flatMap(element => {
       const name = element.classList.item(0) ?? element.tagName;
       return Array.from(element.style)
@@ -411,7 +411,7 @@ test.describe('with a mouse (a fine primary pointer)', () => {
     ).toBe(false);
     await trigger.click();
     await expect(trigger).toHaveAttribute('aria-expanded', 'true');
-    const layer = page.locator('[popover]:has([role="dialog"])').first();
+    const layer = page.locator('[popover]:has(.astryx-popover)').first();
     // The layer's own CSS entrance runs; no UIKit scale is set or played.
     const entrance = await layer.evaluate(element => ({
       inlineScale: (element as HTMLElement).style.getPropertyValue('scale'),
@@ -527,7 +527,7 @@ test('the dismissal shrinks back into the trigger on the theme\u2019s exit token
   // where it stood, out of the accessibility tree and out of reach.
   const state = await page.evaluate(() => {
     const layer = document.querySelector<HTMLElement>(
-      '[popover]:has([role="dialog"])',
+      '[popover]:has(.astryx-popover)',
     )!;
     const exitCopy = document.querySelector<HTMLElement>(
       '[data-astryx-popover-exit]',
@@ -603,7 +603,7 @@ test('the presentation keeps advancing every frame while the main thread is bloc
   // important declaration outranks the animation. The scale, composited the
   // same way, carries the evidence.
   await page.addStyleTag({
-    content: '[popover]:has([role="dialog"]) { opacity: 1 !important; }',
+    content: '[popover]:has(.astryx-popover) { opacity: 1 !important; }',
   });
   // The growth runs 1.2 s at a constant speed here, so a 1 s block lands
   // inside it on a loaded machine too. The marker is 240 px wide, and its
@@ -901,7 +901,7 @@ test('a style read after the opening tap finds no CSS entrance running on the la
     const probe = window as unknown as {__entrance?: Promise<string[]>};
     probe.__entrance = new Promise(resolve => {
       const look = () => {
-        const layer = document.querySelector('[popover]:has([role="dialog"])');
+        const layer = document.querySelector('[popover]:has(.astryx-popover)');
         if (layer == null || !layer.matches(':popover-open')) {
           requestAnimationFrame(look);
           return;
