@@ -19,7 +19,6 @@ import {
   type Locator,
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
-import {themeTempo} from '../../motion/themeTempo';
 // @ts-expect-error -- pngjs ships no declarations; runtime support is pinned.
 import {PNG} from 'pngjs';
 import {
@@ -64,6 +63,7 @@ import {
   type TouchScript,
 } from '@astryxdesign/interaction-harness';
 import {recordLiftOffset} from './liftOffset';
+import {slowViewer} from './viewerTempo';
 
 const storybook = withStorybook(test);
 
@@ -317,8 +317,9 @@ for (const theme of SHIPPED_THEMES) {
     await tapOn(dialog.getByRole('button', {name: 'Next'}));
     await expect(dialog.getByText('2 / 4')).toBeVisible();
     const img = dialog.getByRole('img', {name: 'Mountain lake'});
-    // The stage, and whatever moved inside it to show the second photo, rests.
-    await waitForRest(dialog.getByRole('button', {name: 'Zoom'}));
+    // The viewport, and whatever moved inside it to show the second photo,
+    // rests.
+    await waitForRest(dialog.locator('[data-lightbox-viewport]'));
     const rect = await img.boundingBox();
     if (rect == null) {
       throw new Error('no photo');
@@ -405,6 +406,149 @@ for (const theme of SHIPPED_THEMES) {
       expect(ratios[name], name).toBeGreaterThanOrEqual(3);
     }
     expect(ratios.counter, 'counter').toBeGreaterThanOrEqual(4.5);
+  });
+}
+
+test("with zoom, a theme's button and Text colours reach neither the controls' icons nor the counter's text", async ({
+  page,
+}) => {
+  await page.goto(
+    `${storybook()}/iframe.html?id=core-lightbox--gallery-with-zoom&viewMode=story`,
+  );
+  await page.locator('#storybook-root > *').first().waitFor();
+  // Rules shaped as a theme writes them: the component's class and its
+  // reflected prop, more specific than a component's own styles.
+  await page.addStyleTag({
+    content:
+      '.astryx-button[data-variant="ghost"] { color: rgb(17, 17, 17); } .astryx-text[data-color="primary"] { color: rgb(17, 17, 17); }',
+  });
+  const driver = await touchDriver(page);
+  const trigger = await page
+    .getByRole('button', {name: 'Open gallery with zoom'})
+    .boundingBox();
+  if (trigger == null) {
+    throw new Error('no trigger');
+  }
+  await driver.tap({
+    x: trigger.x + trigger.width / 2,
+    y: trigger.y + trigger.height / 2,
+  });
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  // The on-dark colour as this theme resolves it, inside the viewer.
+  const onDark = await dialog.evaluate(element => {
+    const probe = element.ownerDocument.createElement('span');
+    probe.style.color = 'var(--color-on-dark)';
+    element.append(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  });
+  for (const name of ['Close', 'Previous', 'Next']) {
+    const icon = await dialog
+      .getByRole('button', {name})
+      .evaluate(
+        element =>
+          getComputedStyle(element.querySelector('svg') ?? element).color,
+      );
+    expect(icon, name).toBe(onDark);
+  }
+  const counter = await dialog
+    .getByText('1 / 4')
+    .evaluate(element => getComputedStyle(element).color);
+  expect(counter).toBe(onDark);
+});
+
+for (const [photo, fill] of [
+  ['mid-grey', '#7f7f7f'],
+  ['white', '#ffffff'],
+] as const) {
+  test(`the caption keeps 4.5:1 on its backing, in its band and open, over a ${photo} photo`, async ({
+    page,
+  }) => {
+    await page.route('https://picsum.photos/**', async route =>
+      route.fulfill({
+        contentType: 'image/svg+xml',
+        // A tall photo fills the stage, so an open caption lies over it.
+        body: `<svg xmlns="http://www.w3.org/2000/svg" width="2000" height="4000"><rect width="2000" height="4000" fill="${fill}"/></svg>`,
+      }),
+    );
+    await page.goto(
+      `${storybook()}/iframe.html?id=core-lightbox--gallery-with-captions&viewMode=story`,
+    );
+    await page.locator('#storybook-root > *').first().waitFor();
+    await frames(page, 2);
+    const driver = await touchDriver(page);
+    const tapOn = async (locator: Locator) => {
+      const b = await locator.boundingBox();
+      if (b == null) {
+        throw new Error('nothing to tap');
+      }
+      await driver.tap({x: b.x + b.width / 2, y: b.y + b.height / 2});
+    };
+    await tapOn(page.getByRole('button', {name: 'Open gallery with captions'}));
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    // The current photo has loaded, so it has its box.
+    await expect
+      .poll(async () =>
+        dialog
+          .locator('[data-current] img')
+          .first()
+          .evaluate(img => (img as HTMLImageElement).naturalWidth),
+      )
+      .toBe(2000);
+    const caption = dialog
+      .locator('[data-current] [data-lightbox-caption] .astryx-text')
+      .first();
+    // The caption's colour against the lightest pixel in its top padding,
+    // above its first line: what the text sits on, with no glyph there.
+    const ratio = async () => {
+      await frames(page, 2);
+      const {color, points, isOverPhoto} = await caption.evaluate(element => {
+        const style = getComputedStyle(element);
+        const box = element.getBoundingClientRect();
+        const y = box.top + parseFloat(style.paddingTop) / 2;
+        const spots = [0.25, 0.5, 0.75].map(f => ({
+          x: box.left + box.width * f,
+          y,
+        }));
+        const photo = element
+          .closest('[data-current]')
+          ?.querySelector('img')
+          ?.getBoundingClientRect();
+        return {
+          color: style.color,
+          points: spots,
+          isOverPhoto:
+            photo != null &&
+            spots.every(
+              ({x, y: top}) =>
+                top >= photo.top &&
+                top <= photo.bottom &&
+                x >= photo.left &&
+                x <= photo.right,
+            ),
+        };
+      });
+      const shot = PNG.sync.read(await page.screenshot());
+      const scale = shot.width / (page.viewportSize()?.width ?? shot.width);
+      return {
+        value: contrast(parseRgb(color), lightestAt(shot, scale, points)),
+        isOverPhoto,
+      };
+    };
+    const inBand = await ratio();
+    expect(inBand.value, 'in the band').toBeGreaterThanOrEqual(4.5);
+    await tapOn(dialog.getByRole('button', {name: 'more'}));
+    await expect(dialog.getByRole('button', {name: 'less'})).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    // Open, its first lines lie over the photo's bottom.
+    const open = await ratio();
+    expect(open.isOverPhoto).toBe(true);
+    expect(open.value, 'open').toBeGreaterThanOrEqual(4.5);
   });
 }
 
@@ -782,6 +926,51 @@ test('a zoomed pan tracks the finger, rubber-bands past the edge and returns', a
   expect(back.scale).toBeCloseTo(zoomed.scale, 6);
 });
 
+test("a single zoomed photo's drag outward from the edge it rests at rubber-bands and returns", async ({
+  page,
+}) => {
+  const {driver, photo, state} = await openViewer(page);
+  const before = await state();
+  const mid = {x: 201, y: before.stage.y + before.stage.height / 2};
+  await driver.play(doubleTap(mid));
+  await waitForAnimation(photo);
+  await waitForRest(photo);
+  const zoomed = await state();
+  // First the photo comes to rest with its left edge on the screen's.
+  const room = -(zoomed.fit.x + zoomed.x);
+  await driver.play(
+    drag(mid, {x: mid.x + room + 10, y: mid.y}, {durationMs: 400, restMs: 150}),
+  );
+  await waitForRest(photo);
+  const atEdge = await state();
+  expect(atEdge.fit.x + atEdge.x).toBeCloseTo(0, 1);
+  // Then a drag that starts there and heads outward. With no pager to take
+  // it, the pan begins and gives past the edge, as on main.
+  const overshoot = 120;
+  const xs: number[] = [];
+  await driver.play(
+    drag(
+      mid,
+      {x: mid.x + overshoot + 10, y: mid.y},
+      {durationMs: 500, restMs: 150},
+    ),
+    {
+      onEvent: async step => {
+        if (step.type === 'touchMove') {
+          xs.push((await state()).x);
+        }
+      },
+    },
+  );
+  const d = zoomed.stage.width;
+  const banded = (1 - 1 / ((overshoot * 0.55) / d + 1)) * d;
+  expect(xs.at(-1)).toBeCloseTo(atEdge.x + banded, 0);
+  await waitForRest(photo);
+  const back = await state();
+  expect(back.fit.x + back.x).toBeCloseTo(0, 1);
+  expect(back.scale).toBeCloseTo(zoomed.scale, 6);
+});
+
 test('a zoomed flick coasts and stops at the far edge', async ({page}) => {
   const {driver, photo, state} = await openViewer(page);
   const before = await state();
@@ -901,6 +1090,9 @@ test('a finger left down after a pinch keeps panning without a jump', async ({
   const xs: {type: string; x: number}[] = [];
   await driver.play(script, {
     onEvent: async step => {
+      // A touchmove nothing has cancelled yet reaches the page with the next
+      // frame (Chromium aligns them to it): read once it has.
+      await frames(page, 1);
       xs.push({type: step.type, x: (await state()).x});
     },
   });
@@ -952,7 +1144,7 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
   // With the main thread blocked, a loaded runner's compositor presents a
   // frame every 100 to 250 ms. The spring moves for half a second, which
   // leaves too few frames to judge. So the zoom plays at a slow tempo.
-  await slowZoom(page);
+  await slowViewer(page, ZOOM_TEMPO);
   const since = await page.evaluate(() => performance.now());
   const cast = await startScreencast(page);
   // The page itself waits for the zoom and blocks one frame into it. The
@@ -1024,27 +1216,6 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
 });
 
 /**
- * The custom property Lightbox's motion reads its tempo from, asked of
- * `themeTempo` itself. A rename there renames it here too.
- */
-function tempoProperty(): string {
-  let read = '';
-  const view = {
-    getComputedStyle: () => ({
-      getPropertyValue: (name: string) => {
-        read = name;
-        return '';
-      },
-    }),
-  };
-  themeTempo({ownerDocument: {defaultView: view}} as unknown as Element);
-  if (!read.startsWith('--')) {
-    throw new Error(`themeTempo read no custom property: "${read}"`);
-  }
-  return read;
-}
-
-/**
  * The tempo the busy zoom proof plays the viewer at. Blocked, WebKit's
  * software compositor on a loaded runner presents a frame only every 190 to
  * 250 ms. At tempo 5 the spring moves for over two seconds, so its judged
@@ -1063,18 +1234,6 @@ const ZOOM_BLOCK_MS = 2500;
  * there.
  */
 const ZOOM_SETTLED_STEPS = 24;
-
-/**
- * Plays the viewer's motion at `ZOOM_TEMPO`, through the property its motion
- * reads. A theme's tempo stops at 1.5, so this tempo is for the busy proof
- * only. Every element in the viewer carries it, so no nested theme's own
- * tempo wins.
- */
-async function slowZoom(page: Page): Promise<void> {
-  await page.addStyleTag({
-    content: `dialog, dialog * { ${tempoProperty()}: ${ZOOM_TEMPO} !important; }`,
-  });
-}
 
 /** Each animated property's curve length, and whether it still runs. */
 function curvesByProperty(runs: ReadonlyArray<ActiveAnimation>) {
@@ -1134,7 +1293,7 @@ for (const pace of ['main-thread', 'frozen'] as const) {
     const before = await state();
     await markElement(photo, {mode: 'outline'});
     await startBusyControl(page);
-    await slowZoom(page);
+    await slowViewer(page, ZOOM_TEMPO);
     await breakZoom(page, pace);
     const cast = await startScreencast(page);
     await driver.play(
