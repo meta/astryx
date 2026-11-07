@@ -78,8 +78,12 @@ async function startSampling(
           shown:
             Math.abs(row.scrollLeft) - (lead == null ? 0 : translateX(lead)),
           travel: row.scrollWidth - row.clientWidth,
-          startDisabled: (startButton as HTMLButtonElement).disabled,
-          endDisabled: (endButton as HTMLButtonElement).disabled,
+          startDisabled:
+            (startButton as HTMLButtonElement).getAttribute('aria-disabled') ===
+            'true',
+          endDisabled:
+            (endButton as HTMLButtonElement).getAttribute('aria-disabled') ===
+            'true',
           held,
         });
         if (samples.length < 600) {
