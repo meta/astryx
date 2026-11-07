@@ -252,25 +252,49 @@ test(`the first frame that shows the clamped caption at open already ends it in 
   await page.route(/picsum\.photos/, async route =>
     route.fulfill({contentType: 'image/svg+xml', body: PHOTO_SVG}),
   );
+  // A frame's resize observers deliver after its animation-frame callbacks
+  // and before it paints, and a delivery may commit an update. So each
+  // delivery reads the frame again, after its observer's own callback.
+  await page.addInitScript(() => {
+    const Native = window.ResizeObserver;
+    window.ResizeObserver = class extends Native {
+      constructor(callback: ResizeObserverCallback) {
+        super((entries, observer) => {
+          callback(entries, observer);
+          (window as unknown as {__afterResize?: () => void}).__afterResize?.();
+        });
+      }
+    };
+  });
   await page.goto(
     `${storybook.origin}/iframe.html?id=core-lightbox--gallery-with-captions&viewMode=story`,
   );
   // Each frame from here on: whether the open viewer shows the current
-  // caption, and whether its "more" is there. A frame's animation-frame
-  // callbacks see what that frame paints.
+  // caption, and whether its "more" is there, as the frame paints it.
   await page.evaluate(() => {
     const frames: {isShown: boolean; hasMore: boolean}[] = [];
     (window as unknown as {__captionFrames: typeof frames}).__captionFrames =
       frames;
-    const read = () => {
+    const sample = () => {
       const caption = document.querySelector(
         'dialog[open] [data-current] [data-lightbox-caption]',
       );
       const text = caption?.querySelector('.astryx-text');
       const isShown = text != null && text.getBoundingClientRect().height > 0;
-      frames.push({isShown, hasMore: caption?.querySelector('button') != null});
+      // The toggle stays mounted, hidden until the caption is clamped.
+      const toggle = caption?.querySelector('button');
+      const hasMore = toggle != null && toggle.getClientRects().length > 0;
+      return {isShown, hasMore};
+    };
+    const read = () => {
+      frames.push(sample());
       if (frames.length < 600 && !frames.some(frame => frame.hasMore)) {
         requestAnimationFrame(read);
+      }
+    };
+    (window as unknown as {__afterResize: () => void}).__afterResize = () => {
+      if (frames.length > 0) {
+        frames[frames.length - 1] = sample();
       }
     };
     requestAnimationFrame(read);
@@ -291,6 +315,52 @@ test(`the first frame that shows the clamped caption at open already ends it in 
     isShown: true,
     hasMore: true,
   });
+});
+
+test('the caption opens, closes and pages with no ResizeObserver loop error', async ({
+  page,
+}) => {
+  // Storybook's preview observes the document body again for each element a
+  // commit adds. An element added in a resize delivery joins that loop late,
+  // and the browser reports the loop as an error.
+  await page.addInitScript(() => {
+    const errors: string[] = [];
+    (window as unknown as {__pageErrors: string[]}).__pageErrors = errors;
+    window.addEventListener('error', event => {
+      errors.push(event.message);
+    });
+  });
+  const dialog = await openCaptionGallery(page, {width: 402, height: 874});
+  await expect(dialog.getByRole('button', {name: 'more'})).toBeVisible();
+  for (let round = 0; round < 2; round++) {
+    await dialog.getByRole('button', {name: 'more'}).click();
+    await expect(dialog.getByRole('button', {name: 'less'})).toBeVisible();
+    await dialog.getByRole('button', {name: 'less'}).click();
+    await expect(dialog.getByRole('button', {name: 'more'})).toBeVisible();
+  }
+  await dialog.getByRole('button', {name: 'Next'}).click();
+  await expect(dialog.getByText('2 / 4')).toBeVisible();
+  await dialog.getByRole('button', {name: 'Previous'}).click();
+  await expect(dialog.getByText('1 / 4')).toBeVisible();
+  // An arrow key pages from the focused "more", which opens the caption.
+  await dialog.getByRole('button', {name: 'more'}).click();
+  await expect(dialog.getByRole('button', {name: 'less'})).toBeVisible();
+  await page.keyboard.press('ArrowRight');
+  await expect(dialog.getByText('2 / 4')).toBeVisible();
+  await page.keyboard.press('ArrowLeft');
+  await expect(dialog.getByText('1 / 4')).toBeVisible();
+  await expect(dialog.getByRole('button', {name: 'more'})).toBeVisible();
+  // Two frames, so the last frame's deliveries have run.
+  await page.evaluate(
+    async () =>
+      new Promise(resolve => {
+        requestAnimationFrame(() => requestAnimationFrame(resolve));
+      }),
+  );
+  const errors = await page.evaluate(
+    () => (window as unknown as {__pageErrors: string[]}).__pageErrors,
+  );
+  expect(errors).toEqual([]);
 });
 
 test(`a caption whose text grows while its box keeps two lines gets "more" at the end of its second line`, async ({

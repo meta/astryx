@@ -26,6 +26,7 @@ import {
   BusyWindowTooLateError,
   castStoryboard,
   CONTROL_RGB,
+  countBetween,
   drag,
   frames,
   markElement,
@@ -38,6 +39,7 @@ import {
   type TouchDriver,
   type TouchScript,
   touchStoryboard,
+  traceRendering,
   trackMarker,
   waitForAnimation,
   waitForRest,
@@ -1452,3 +1454,233 @@ test("two pages on, a rotation keeps a zoomed photo's centre point", async ({
   expect(Math.abs(after.u - before.u)).toBeLessThan(0.02);
   expect(Math.abs(after.v - before.v)).toBeLessThan(0.02);
 });
+
+/**
+ * The layouts inside the task of one input: from the document's capture
+ * listener to its bubble listener. React commits a discrete input in a
+ * microtask after its root's listener, so that commit falls inside. A layout
+ * there is one that script forced, by reading geometry the browser had not laid
+ * out yet.
+ */
+async function taskLayouts(
+  page: Page,
+  type: 'click' | 'keydown',
+  act: () => Promise<unknown>,
+): Promise<{layouts: number; events: string[]}> {
+  await page.evaluate(eventType => {
+    const at = () => performance.timeOrigin + performance.now();
+    const marks = {from: 0, to: 0};
+    (window as unknown as {__task: typeof marks}).__task = marks;
+    document.addEventListener(
+      eventType,
+      () => {
+        marks.from = at();
+      },
+      {capture: true, once: true},
+    );
+    document.addEventListener(
+      eventType,
+      () => {
+        marks.to = at();
+      },
+      {once: true},
+    );
+  }, type);
+  const trace = await traceRendering(page, async () => {
+    await act();
+    await page.waitForTimeout(100);
+  });
+  const task = await page.evaluate(
+    () => (window as unknown as {__task: {from: number; to: number}}).__task,
+  );
+  expect(task.to).toBeGreaterThan(task.from);
+  return {
+    layouts: countBetween(trace, task.from, task.to).Layout ?? 0,
+    events: trace.events
+      .filter(e => e.t >= task.from && e.t <= task.to)
+      .map(e => `${e.name}@${(e.t - task.from).toFixed(1)}`),
+  };
+}
+
+test('opening a gallery on a clamped caption lays out no more than opening one without captions', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(browserName !== 'chromium', 'rendering traces are Chromium-only');
+  await page.route('https://picsum.photos/**', async route => {
+    const id = /\/id\/(\d+)\//.exec(route.request().url())?.[1] ?? '10';
+    await route.fulfill({
+      contentType: 'image/svg+xml',
+      body: photoSvg(COLORS[id] ?? '#888'),
+    });
+  });
+  // Opens the story's gallery with a click. In the captioned story, the first
+  // page's caption is clamped, with its "more".
+  const measure = async (story: string, trigger: string) => {
+    await openStory(page, storybook(), story);
+    const open = await taskLayouts(page, 'click', async () =>
+      page.getByRole('button', {name: trigger}).click(),
+    );
+    await expect(page.getByRole('dialog')).toBeVisible();
+    return open;
+  };
+  const captioned = await measure(
+    'core-lightbox--gallery-with-captions',
+    'Open gallery with captions',
+  );
+  await expect(
+    page.getByRole('dialog').getByRole('button', {name: 'more'}),
+  ).toBeVisible();
+  const plain = await measure(
+    'core-lightbox--gallery-with-zoom',
+    'Open gallery with zoom',
+  );
+  // The caption's sizes are read after the browser lays the page out, so
+  // its band and its "more" force no layout of their own.
+  expect(
+    captioned.layouts,
+    JSON.stringify({captioned, plain}),
+  ).toBeLessThanOrEqual(plain.layouts);
+});
+
+/**
+ * Logs every geometry read of an element inside a caption in the task of the
+ * next input of `type`. The task runs from the document's capture listener to
+ * its bubble listener, React's commit included. The log is
+ * `window.__captionReads`.
+ */
+async function logCaptionReadsInTask(page: Page, type: 'click' | 'keydown') {
+  await page.evaluate(eventType => {
+    const reads: string[] = [];
+    (window as unknown as {__captionReads: string[]}).__captionReads = reads;
+    let isInTask = false;
+    document.addEventListener(
+      eventType,
+      () => {
+        isInTask = true;
+      },
+      {capture: true, once: true},
+    );
+    document.addEventListener(
+      eventType,
+      () => {
+        isInTask = false;
+      },
+      {once: true},
+    );
+    const inCaption = (node: unknown) => {
+      const element =
+        node instanceof Element
+          ? node
+          : node instanceof Node
+            ? node.parentElement
+            : null;
+      return element?.closest('[data-lightbox-caption]') != null;
+    };
+    const note = (name: string, node: unknown) => {
+      if (isInTask && inCaption(node)) {
+        reads.push(name);
+      }
+    };
+    const getters: [object, string][] = [
+      [HTMLElement.prototype, 'offsetWidth'],
+      [HTMLElement.prototype, 'offsetHeight'],
+      [Element.prototype, 'clientWidth'],
+      [Element.prototype, 'clientHeight'],
+      [Element.prototype, 'scrollWidth'],
+      [Element.prototype, 'scrollHeight'],
+    ];
+    for (const [proto, name] of getters) {
+      const own = Object.getOwnPropertyDescriptor(proto, name);
+      if (own?.get == null) {
+        continue;
+      }
+      const get = own.get as (this: Element) => number;
+      Object.defineProperty(proto, name, {
+        configurable: true,
+        get(this: Element): number {
+          note(name, this);
+          return get.call(this);
+        },
+      });
+    }
+    const rect = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      note('getBoundingClientRect', this);
+      return rect.call(this);
+    };
+    const rangeRect = Range.prototype.getBoundingClientRect;
+    Range.prototype.getBoundingClientRect = function (this: Range) {
+      note('Range.getBoundingClientRect', this.commonAncestorContainer);
+      return rangeRect.call(this);
+    };
+    const computed = window.getComputedStyle;
+    window.getComputedStyle = function (
+      this: Window,
+      element: Element,
+      pseudo?: string | null,
+    ) {
+      note('getComputedStyle', element);
+      return computed.call(this, element, pseudo);
+    };
+  }, type);
+  return async () =>
+    page.evaluate(
+      () => (window as unknown as {__captionReads: string[]}).__captionReads,
+    );
+}
+
+for (const viewport of [
+  {width: 402, height: 874},
+  {width: 1440, height: 900},
+]) {
+  test(`the caption is measured after layout, never in the task that opens the gallery or pages it (${viewport.width}×${viewport.height})`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    // A delivery that resizes what its observer watches leaves that one for
+    // the next frame, and the browser reports the loop as an error.
+    await page.addInitScript(() => {
+      const errors: string[] = [];
+      (window as unknown as {__pageErrors: string[]}).__pageErrors = errors;
+      window.addEventListener('error', event => {
+        errors.push(event.message);
+      });
+    });
+    await page.route('https://picsum.photos/**', async route => {
+      const id = /\/id\/(\d+)\//.exec(route.request().url())?.[1] ?? '10';
+      await route.fulfill({
+        contentType: 'image/svg+xml',
+        body: photoSvg(COLORS[id] ?? '#888'),
+      });
+    });
+    await openStory(page, storybook(), 'core-lightbox--gallery-with-captions');
+    // The first page's caption is clamped, with its "more". The second
+    // page's fits its two lines.
+    const openReads = await logCaptionReadsInTask(page, 'click');
+    await page
+      .getByRole('button', {name: 'Open gallery with captions'})
+      .click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByRole('button', {name: 'more'})).toBeVisible();
+    const opening = await openReads();
+    await dialog.getByRole('button', {name: 'Next'}).click();
+    await expect(dialog.getByText('2 / 4')).toBeVisible();
+    await waitForRest(dialog.locator('[data-lightbox-viewport] > div').first());
+    await frames(page, 2);
+    const backReads = await logCaptionReadsInTask(page, 'keydown');
+    await page.keyboard.press('ArrowLeft');
+    await expect(dialog.getByText('1 / 4')).toBeVisible();
+    await expect(dialog.getByRole('button', {name: 'more'})).toBeVisible();
+    const back = await backReads();
+    await frames(page, 2);
+    const errors = await page.evaluate(
+      () => (window as unknown as {__pageErrors: string[]}).__pageErrors,
+    );
+    expect({opening, back, errors}).toEqual({
+      opening: [],
+      back: [],
+      errors: [],
+    });
+  });
+}

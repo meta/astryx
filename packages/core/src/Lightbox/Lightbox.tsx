@@ -35,6 +35,7 @@ import {
   type ComponentProps,
   type ReactNode,
 } from 'react';
+import {flushSync} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {
@@ -429,6 +430,10 @@ const styles = stylex.create({
         '0 calc(var(--astryx-hit-inset-right, 0px) * -1) calc(var(--astryx-hit-inset-bottom, 0px) * -1) calc(var(--astryx-hit-inset-left, 0px) * -1)',
     },
   },
+  // The toggle's own display wins over `hidden`'s, so this hides it.
+  captionToggleHidden: {
+    display: 'none',
+  },
   // An open caption that scrolls keeps its toggle's width clear at every
   // line's end. The toggle stays in view as the lines move.
   captionTextBesideToggle: (width: number) => ({
@@ -567,6 +572,31 @@ const KEYBOARD_PAN_OFFSETS: Record<string, [number, number]> = {
 
 /** The height of a video's native controls, px: no browser reports it. */
 const VIDEO_CONTROLS_BAND = 48;
+
+/**
+ * Calls `onDelivery` in each delivery of the shared ResizeObserver for
+ * `element`. It skips the call that registers it, which runs in React's
+ * commit, where a read forces a layout before the browser's own. The first
+ * delivery comes after the browser lays `element` out. Where no
+ * ResizeObserver exists (jsdom), it returns null and the caller measures at
+ * once.
+ */
+function observeAfterLayout(
+  element: Element,
+  onDelivery: () => void,
+): (() => void) | null {
+  if (typeof ResizeObserver === 'undefined') {
+    return null;
+  }
+  let isRegistered = false;
+  const stop = observeResize(element, () => {
+    if (isRegistered) {
+      onDelivery();
+    }
+  });
+  isRegistered = true;
+  return stop;
+}
 
 /**
  * A fullscreen overlay for viewing images at full resolution.
@@ -893,12 +923,18 @@ export function Lightbox({
         caption.scrollHeight > caption.clientHeight + 1,
     );
   }, [isCaptionOpen]);
-  // Syncs the toggle's place and the open caption's scroll with the caption's
-  // laid-out size and its text. A resize and a font load resize it, new text
-  // can keep its size, and paging attaches the next page's caption.
-  // A closed dialog lays its caption out at no size, so the attachment runs
-  // again as the dialog opens. showModal() above has run by then, and the
-  // caption paints with its "more" from its first frame.
+  // Syncs the clamp, the toggle's place and the open caption's scroll with
+  // the caption's laid-out size and its text. A resize and a font load resize
+  // it, new text can keep its size, and paging attaches the next page's
+  // caption. The dialog's opening and the caption's own open attach it again.
+  // Each registration gets one delivery from the observer after the browser
+  // lays the caption out. The caption is read there, never in the commit,
+  // where a read forces a layout before the browser's own. A delivery's
+  // update changes attributes and styles only, and adds no element. Another
+  // observer that reacts to new elements then observes nothing mid-delivery.
+  // The observer watches the caption's box, two levels above its text. A
+  // delivery can show the toggle, and the toggle's observers sit deeper, so
+  // they get their deliveries in the same frame.
   const captionAttachKey = useMemo(
     () => ({measureCaptionLines, isOpen}),
     [measureCaptionLines, isOpen],
@@ -906,13 +942,33 @@ export function Lightbox({
   useAttachment(
     bandCaptionRef,
     element => {
-      // The clamp too, at once, so the caption paints with its toggle.
-      measureCaptionClamp();
-      measureCaptionLines();
-      const stopResize = observeResize(element, measureCaptionLines);
-      const stopContent = observeContent(element, measureCaptionLines);
+      const measure = () => {
+        measureCaptionClamp();
+        measureCaptionLines();
+      };
+      const box = element.closest('[data-lightbox-caption]') ?? element;
+      const register = (): (() => void) | undefined => {
+        const stop = observeAfterLayout(box, () => {
+          // The update commits before this frame paints, so the caption
+          // paints with its "more" and its place from its first frame.
+          // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- a delivery comes after layout and before paint; the caption's "more" commits in that frame
+          flushSync(measure);
+        });
+        if (stop == null) {
+          measure();
+          return undefined;
+        }
+        return stop;
+      };
+      let stopResize = register();
+      // New text in a box that keeps its size fires no resize. A new
+      // registration gets its own delivery after the next layout.
+      const stopContent = observeContent(element, () => {
+        stopResize?.();
+        stopResize = register();
+      });
       return () => {
-        stopResize();
+        stopResize?.();
         stopContent();
       };
     },
@@ -930,13 +986,23 @@ export function Lightbox({
     null,
   );
   usePressTracker(captionToggleRef);
-  // Syncs the toggle's place in the caption's last line with its width.
+  // Syncs the toggle's place in the caption's last line with its width. The
+  // width is read in the observer's deliveries, after layout. A hidden toggle
+  // has no size and gets no delivery, so the last width stays until a shown
+  // toggle reads another.
   useAttachment(
     captionToggleRef,
     toggle => {
       const measureToggle = () => setCaptionToggleWidth(toggle.offsetWidth);
-      measureToggle();
-      return observeResize(toggle, measureToggle);
+      const stop = observeAfterLayout(toggle, () => {
+        // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- a delivery comes after layout and before paint; the toggle's place commits in that frame
+        flushSync(measureToggle);
+      });
+      if (stop == null) {
+        measureToggle();
+        return () => {};
+      }
+      return stop;
     },
     null,
   );
@@ -1701,9 +1767,14 @@ export function Lightbox({
                                           {mediaArray[i].caption}
                                         </div>
                                       </Text>
-                                      {i === index && hasCaptionToggle && (
+                                      {i === index && (
+                                        // Mounted with the caption, and hidden
+                                        // until the caption needs it. So a
+                                        // measurement only shows or hides it,
+                                        // and adds no element.
                                         <Button
                                           ref={captionToggleRef}
+                                          hidden={!hasCaptionToggle}
                                           variant="ghost"
                                           size="sm"
                                           label={
@@ -1722,7 +1793,11 @@ export function Lightbox({
                                               isCaptionOpen ? null : index,
                                             )
                                           }
-                                          xstyle={styles.captionToggle}
+                                          xstyle={[
+                                            styles.captionToggle,
+                                            !hasCaptionToggle &&
+                                              styles.captionToggleHidden,
+                                          ]}
                                         />
                                       )}
                                     </div>

@@ -7,7 +7,7 @@
 
 import {act, render, screen, waitFor} from '@testing-library/react';
 import {afterEach, describe, it, expect, vi} from 'vitest';
-import {useCallback} from 'react';
+import {useCallback, useEffect} from 'react';
 import type * as layoutEffects from '../hooks/useIsomorphicLayoutEffect';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useHeldTruncation, useTruncation} from './useTruncation';
@@ -176,8 +176,23 @@ describe('useTruncation', () => {
   });
 
   describe('useHeldTruncation', () => {
-    function HeldProbe({isHeld, height}: {isHeld: boolean; height: number}) {
+    // The caller measures after each commit, as Lightbox does after layout.
+    function HeldProbe({
+      isHeld,
+      height,
+      measures = true,
+    }: {
+      isHeld: boolean;
+      height: number;
+      measures?: boolean;
+    }) {
       const truncation = useHeldTruncation({maxLines: 2, isHeld});
+      const {measure} = truncation;
+      useEffect(() => {
+        if (measures) {
+          measure();
+        }
+      });
       return (
         <>
           <span ref={truncation.ref} data-height={height}>
@@ -220,7 +235,23 @@ describe('useTruncation', () => {
       expect(layoutEffect).toHaveBeenCalled();
     });
 
-    it('keeps its last answer while held, and measures again on release', async () => {
+    it('reads nothing by itself: its caller measures', () => {
+      const restore = stubHeights();
+      const reads = vi.mocked(
+        Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight')!
+          .get!,
+      );
+      try {
+        reads.mockClear();
+        render(<HeldProbe isHeld={false} height={120} measures={false} />);
+        expect(reads).not.toHaveBeenCalled();
+        expect(screen.getByTestId('truncated')).toHaveTextContent('false');
+      } finally {
+        restore();
+      }
+    });
+
+    it('keeps its last answer while held, and its caller measures it again on release', async () => {
       const restore = stubHeights();
       try {
         const {rerender} = render(<HeldProbe isHeld={false} height={120} />);
