@@ -219,8 +219,8 @@ test("under a finger the pixels on a toggle's own edges are the toggle's: the gr
 }) => {
   await openStory(page, storybook(), STORY);
   await expect(page.getByRole('group').first()).toBeVisible();
-  // Each toggle's top edge, and its start edge, exactly on its box: the index
-  // of the member there (-1 for anything else, such as the group).
+  // Each toggle's top edge and start edge, exactly on its box. It gives the
+  // index of the member there, or -1 for anything else, such as the group.
   const owners = await page.evaluate(() => {
     const group = document.querySelector('[role="group"]');
     const members = group == null ? [] : [...group.querySelectorAll('button')];

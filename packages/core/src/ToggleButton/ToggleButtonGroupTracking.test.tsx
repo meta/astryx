@@ -198,6 +198,37 @@ describe('ToggleButtonGroup tracks a held pointer across its toggles (family:act
     }
   });
 
+  it("draws each tracked toggle's touch band on the group's hit layer: a tracked toggle draws none of its own, and a toggle without a value keeps its own", () => {
+    const band = (stylex.props(touchHitAreaStyles.layer).className ?? '')
+      .split(' ')
+      .filter(Boolean);
+    expect(band.length).toBeGreaterThan(0);
+    const hasOwnBand = (toggle: Element) =>
+      [...toggle.querySelectorAll('*')].some(element =>
+        band.every(name => element.classList.contains(name)),
+      );
+    const view = render(
+      <ToggleButtonGroup
+        type="multiple"
+        label="Formatting"
+        value={[]}
+        onChange={vi.fn()}
+        data-testid="group">
+        <ToggleButton label="Bold" value="bold" data-testid="bold" />
+        <ToggleButton label="Italic" value="italic" data-testid="italic" />
+        <ToggleButton
+          label="Wrap"
+          isPressed={false}
+          onPressedChange={vi.fn()}
+          data-testid="wrap"
+        />
+      </ToggleButtonGroup>,
+    );
+    expect(hasOwnBand(view.getByTestId('bold'))).toBe(false);
+    expect(hasOwnBand(view.getByTestId('italic'))).toBe(false);
+    expect(hasOwnBand(view.getByTestId('wrap'))).toBe(true);
+  });
+
   it('gives the root its hit layer only under a coarse primary pointer, so a desktop root keeps its stacking', () => {
     const layer = (
       stylex.props(touchHitAreaStyles.layerBelowChildren).className ?? ''
