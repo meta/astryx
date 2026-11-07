@@ -4,9 +4,9 @@
  * @file LayerCloseLayout.interaction.browser.spec.ts
  * @input The Core/Popover and Core/DropdownMenu default stories, the
  *   interaction harness's Chromium rendering trace
- * @output Proves the close of an anchored layer runs the hide's own layout
- *   and no other. The trigger stops being a CSS anchor inside that layout.
- *   The read that decides it is no layout read
+ * @output Proves the closes that move focus (Escape, a menu pick, a press on
+ *   the menu's trigger) run the hide's own layout and no other. The element
+ *   that held the anchor name stops being a CSS anchor inside that layout
  * @position Interaction proofs for the layer runtime's anchor names, run in
  *   Chromium, the engine with a rendering trace
  */
@@ -34,40 +34,85 @@ test.use({
 });
 
 const CLOSES = 5;
+const HOLDER = 'data-test-anchor-holder';
 
 interface Closes {
   readonly layouts: ReadonlyArray<number>;
   readonly anchorNames: ReadonlyArray<string>;
 }
 
+interface CloseRoute {
+  readonly name: string;
+  readonly story: string;
+  readonly trigger: (page: Page) => Locator;
+  readonly shown: (page: Page) => Locator;
+  // What a press closes the layer on. Without one, Escape closes it.
+  readonly press?: (page: Page) => Locator;
+}
+
+async function frames(page: Page): Promise<void> {
+  await page.evaluate(
+    async () =>
+      new Promise(resolve =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      ),
+  );
+}
+
 // Opens and closes the layer CLOSES times. Each close, from the Escape press
-// until the layer is hidden, runs under the rendering trace.
-async function traceCloses(
-  page: Page,
-  trigger: Locator,
-  shown: Locator,
-): Promise<Closes> {
+// or the pointer press until the layer is hidden, runs under the rendering
+// trace. Before it, the pointer rests on what it presses, so the trace holds
+// no hover change.
+async function traceCloses(page: Page, route: CloseRoute): Promise<Closes> {
+  const trigger = route.trigger(page);
+  const shown = route.shown(page);
   const layouts: number[] = [];
   const anchorNames: string[] = [];
   for (let close = 0; close < CLOSES; close++) {
+    await page.mouse.move(5, 5);
     await trigger.click();
     await expect(shown).toBeVisible();
+    // The trigger, or the element that wraps it, holds the anchor name while
+    // the layer is open.
+    const held = await trigger.evaluate((element, attribute) => {
+      for (
+        let node: Element | null = element;
+        node != null;
+        node = node.parentElement
+      ) {
+        if (getComputedStyle(node).getPropertyValue('anchor-name') !== 'none') {
+          node.setAttribute(attribute, '');
+          return true;
+        }
+      }
+      return false;
+    }, HOLDER);
+    expect(held, 'an anchor name while the layer is open').toBe(true);
+    if (route.press != null) {
+      const box = await route.press(page).boundingBox();
+      if (box == null) {
+        throw new Error(`nothing to press in ${route.name}`);
+      }
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    }
     // The open's own frames end before the close is traced.
-    await page.evaluate(
-      async () =>
-        new Promise(resolve =>
-          requestAnimationFrame(() => requestAnimationFrame(resolve)),
-        ),
-    );
+    await frames(page);
     const trace = await traceRendering(page, async () => {
-      await page.keyboard.press('Escape');
+      if (route.press == null) {
+        await page.keyboard.press('Escape');
+      } else {
+        await page.mouse.down();
+        await page.mouse.up();
+      }
       await expect(shown).toBeHidden();
     });
     layouts.push(trace.layout);
+    const holder = page.locator(`[${HOLDER}]`);
     anchorNames.push(
-      await trigger.evaluate(el =>
-        getComputedStyle(el).getPropertyValue('anchor-name'),
-      ),
+      await holder.evaluate((element, attribute) => {
+        element.removeAttribute(attribute);
+        return getComputedStyle(element).getPropertyValue('anchor-name');
+      }, HOLDER),
     );
   }
   return {layouts, anchorNames};
@@ -77,28 +122,40 @@ function median(values: ReadonlyArray<number>): number {
   return [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)];
 }
 
-for (const {name, story, trigger, shown} of [
+const popover = {
+  story: 'core-popover--default',
+  trigger: (page: Page) => page.getByRole('button', {name: 'Settings'}),
+  shown: (page: Page) => page.locator('[popover]:has([role="dialog"])').first(),
+};
+const menu = {
+  story: 'core-dropdownmenu--default',
+  trigger: (page: Page) => page.getByRole('button', {name: 'Actions'}),
+  shown: (page: Page) => page.getByRole('menuitem', {name: 'Edit'}),
+};
+
+const routes: ReadonlyArray<CloseRoute> = [
+  {name: 'Escape on a Popover', ...popover},
+  {name: 'Escape on a DropdownMenu', ...menu},
   {
-    name: 'a Popover',
-    story: 'core-popover--default',
-    trigger: (page: Page) => page.getByRole('button', {name: 'Settings'}),
-    shown: (page: Page) =>
-      page.locator('[popover]:has([role="dialog"])').first(),
+    name: 'a pick in a DropdownMenu',
+    ...menu,
+    press: page => page.getByRole('menuitem', {name: 'Edit'}),
   },
   {
-    name: 'a DropdownMenu',
-    story: 'core-dropdownmenu--default',
-    trigger: (page: Page) => page.getByRole('button', {name: 'Actions'}),
-    shown: (page: Page) => page.getByRole('menuitem', {name: 'Edit'}),
+    name: 'a press on a DropdownMenu\u2019s trigger',
+    ...menu,
+    press: page => page.getByRole('button', {name: 'Actions'}),
   },
-]) {
-  test(`the close of ${name} runs one layout and leaves its trigger no anchor`, async ({
+];
+
+for (const route of routes) {
+  test(`${route.name} closes with one layout and leaves its trigger no anchor`, async ({
     page,
     browserName,
   }) => {
     test.skip(browserName !== 'chromium', 'rendering traces are Chromium-only');
-    await openStory(page, storybook(), story);
-    const closes = await traceCloses(page, trigger(page), shown(page));
+    await openStory(page, storybook(), route.story);
+    const closes = await traceCloses(page, route);
     const detail = JSON.stringify(closes);
     // The hide's own layout: the trace counts it.
     expect(Math.min(...closes.layouts), detail).toBeGreaterThanOrEqual(1);
