@@ -4,7 +4,8 @@
  * @file snapPagingValue.ts
  * @input A scrolling row of snap items
  * @output The `SnapPaging` value, the calls Carousel makes on it
- *   (`isSnapPaging`, `attachSnapPaging`, `moveHeldSnapPaging`), and stops
+ *   (`isSnapPaging`, `attachSnapPaging`, `moveSnapPaging`,
+ *   `moveHeldSnapPaging`), where a held row is shown, and stops
  * @position Carousel's only link to snap paging. It imports no pager code,
  *   so a Carousel without `hasSnap={useSnapPaging()}` bundles none
  */
@@ -34,11 +35,29 @@ export interface SnapPaging {
 /** The paging attached to one row. */
 export interface SnapPagingAttachment {
   readonly detach: () => void;
+  readonly move: (target: (at: number, end: number) => number) => void;
   readonly moveHeld: (target: (at: number, end: number) => number) => boolean;
 }
 
+/**
+ * Where a row the paging holds is shown: its offset toward the end, and the
+ * travel it was taken over with.
+ */
+export interface HeldRow {
+  readonly offset: number;
+  readonly travel: number;
+}
+
+/** Hears a held row on each frame of the hold, and null at the hand-back. */
+export type HeldRowListener = (held: HeldRow | null) => void;
+
+type Attach = (
+  element: HTMLElement,
+  onHeld?: HeldRowListener,
+) => SnapPagingAttachment;
+
 interface SnapPagingValue {
-  readonly attach: (element: HTMLElement) => SnapPagingAttachment;
+  readonly attach: Attach;
 }
 
 const values = new WeakSet<object>();
@@ -46,9 +65,7 @@ const values = new WeakSet<object>();
 const attachments = new WeakMap<HTMLElement, SnapPagingAttachment>();
 
 /** A `SnapPaging` value that attaches with `attach`. */
-export function makeSnapPaging(
-  attach: (element: HTMLElement) => SnapPagingAttachment,
-): SnapPaging {
+export function makeSnapPaging(attach: Attach): SnapPaging {
   const value: SnapPagingValue = {attach};
   values.add(value);
   return value as unknown as SnapPaging;
@@ -59,17 +76,41 @@ export function isSnapPaging(value: unknown): value is SnapPaging {
   return typeof value === 'object' && value !== null && values.has(value);
 }
 
-/** Attaches snap paging to `element`; the returned function detaches it. */
+/**
+ * Attaches snap paging to `element`; the returned function detaches it.
+ * `onHeld` hears where the row is shown while the paging holds it.
+ */
 export function attachSnapPaging(
   value: SnapPaging,
   element: HTMLElement,
+  onHeld?: HeldRowListener,
 ): () => void {
-  const attachment = (value as unknown as SnapPagingValue).attach(element);
+  const attachment = (value as unknown as SnapPagingValue).attach(
+    element,
+    onHeld,
+  );
   attachments.set(element, attachment);
   return () => {
     attachments.delete(element);
     attachment.detach();
   };
+}
+
+/**
+ * Moves the row through the paging to `target(shown, end)`, an offset toward
+ * the end, and takes the row over first when it is at rest. `end` is its
+ * travel. False when no paging is attached.
+ */
+export function moveSnapPaging(
+  element: HTMLElement,
+  target: (shown: number, end: number) => number,
+): boolean {
+  const attachment = attachments.get(element);
+  if (attachment == null) {
+    return false;
+  }
+  attachment.move(target);
+  return true;
 }
 
 /**
@@ -92,6 +133,16 @@ export function nearestStop(stops: ReadonlyArray<number>, at: number): number {
 }
 
 /**
+ * The scale a scaled ancestor gives the row's rects: the rect's width over the
+ * row's layout width. Scroll offsets do not have it.
+ */
+export function rowScale(element: HTMLElement, box: DOMRect): number {
+  return element.offsetWidth > 0 && box.width > 0
+    ? box.width / element.offsetWidth
+    : 1;
+}
+
+/**
  * Each item's snap stop: the scroll offset that aligns its start edge with
  * the scroll padding, clamped to `end`. Read from the items' rects, with the
  * position `shown` added back. Stops closer than half a pixel are one stop.
@@ -103,11 +154,7 @@ export function snapStops(
 ): number[] {
   const rtl = isRtlElement(element);
   const box = element.getBoundingClientRect();
-  // A scaled ancestor scales the rects, not the scroll offsets.
-  const scale =
-    element.offsetWidth > 0 && box.width > 0
-      ? box.width / element.offsetWidth
-      : 1;
+  const scale = rowScale(element, box);
   const border = rtl
     ? element.offsetWidth - element.clientWidth - element.clientLeft
     : element.clientLeft;

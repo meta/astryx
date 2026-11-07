@@ -11,10 +11,13 @@
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {createRef} from 'react';
 import {act, render, renderHook, screen} from '@testing-library/react';
-import {Carousel} from '../Carousel/Carousel';
+import {Carousel, type CarouselHandle} from '../Carousel/Carousel';
 import {useSnapPaging} from './SnapPaging';
 import {
+  type HeldRow,
+  type HeldRowListener,
   isSnapPaging,
   makeSnapPaging,
   nearestStop,
@@ -61,6 +64,7 @@ afterEach(() => {
 
 const attachment = (detach = () => {}): SnapPagingAttachment => ({
   detach,
+  move: () => {},
   moveHeld: () => false,
 });
 
@@ -86,6 +90,11 @@ describe('useSnapPaging', () => {
     expect(Object.keys(entry)).toEqual(['useSnapPaging']);
   });
 });
+
+// A disabled Button stays focusable: it sets `aria-disabled`, not the native
+// `disabled` property.
+const isDisabled = (button: HTMLElement) =>
+  button.getAttribute('aria-disabled') === 'true';
 
 describe('Carousel with hasSnap', () => {
   function scroller() {
@@ -240,5 +249,128 @@ describe('Carousel with hasSnap', () => {
     expect(attached).toEqual(['first']);
     act(() => unmount());
     expect(attached).toEqual(['first', 'first detached']);
+  });
+
+  describe('a scroll call under snap paging', () => {
+    // A paging value that records each move it is asked for.
+    function renderMoves() {
+      const moves: ((at: number, end: number) => number)[] = [];
+      const value = makeSnapPaging(() => ({
+        ...attachment(),
+        move: target => {
+          moves.push(target);
+        },
+      }));
+      const handle = createRef<CarouselHandle>();
+      render(
+        <Carousel aria-label="Items" hasSnap={value} handleRef={handle}>
+          <div>One</div>
+          <div>Two</div>
+          <div>Three</div>
+        </Carousel>,
+      );
+      const row = scroller();
+      const scrollTo = vi.fn();
+      const scrollBy = vi.fn();
+      row.scrollTo = scrollTo;
+      row.scrollBy = scrollBy;
+      return {moves, handle, scrollTo, scrollBy};
+    }
+
+    it('moves the row at rest through the paging, not with a native smooth scroll', () => {
+      const {moves, handle, scrollTo, scrollBy} = renderMoves();
+      act(() => handle.current?.scrollNext());
+      act(() => handle.current?.scrollPrev());
+      expect(moves).toHaveLength(2);
+      expect(scrollTo).not.toHaveBeenCalled();
+      expect(scrollBy).not.toHaveBeenCalled();
+    });
+
+    it('moves the row through the paging for a scroll to an item', () => {
+      const {moves, handle, scrollTo, scrollBy} = renderMoves();
+      act(() => handle.current?.scrollTo(2));
+      expect(moves).toHaveLength(1);
+      expect(scrollTo).not.toHaveBeenCalled();
+      expect(scrollBy).not.toHaveBeenCalled();
+    });
+
+    it('moves a scroll to an item onto its snap stop, inside the scroll padding', () => {
+      const {moves, handle} = renderMoves();
+      const row = scroller();
+      // Three 100 px items in a 300 px row with 16 px of scroll padding.
+      row.style.setProperty('scroll-padding-left', '16px');
+      row.getBoundingClientRect = () => new DOMRect(0, 0, 300, 100);
+      Array.from(row.children).forEach((child, i) => {
+        child.getBoundingClientRect = () => new DOMRect(i * 100, 0, 100, 100);
+      });
+      act(() => handle.current?.scrollTo(2));
+      // The stop is the item's start less the padding, not its border edge.
+      expect(moves[0](0, 500)).toBe(184);
+    });
+  });
+
+  describe('the edge buttons follow a held row as shown', () => {
+    // A paging value that reports a held row on demand, as the pager does on
+    // each frame of a hold.
+    function renderHeld() {
+      let listener: HeldRowListener | undefined;
+      const value = makeSnapPaging((_element, onHeld) => {
+        listener = onHeld;
+        return attachment();
+      });
+      render(
+        <Carousel aria-label="Items" hasSnap={value}>
+          <div>One</div>
+          <div>Two</div>
+          <div>Three</div>
+        </Carousel>,
+      );
+      const button = (name: string) =>
+        screen.getByRole<HTMLButtonElement>('button', {name, hidden: true});
+      return {
+        report: (held: HeldRow | null) => act(() => listener?.(held)),
+        start: button('Scroll left'),
+        end: button('Scroll right'),
+      };
+    }
+
+    it('enables and disables each button as the held row leaves or reaches its edge, before the hand-back', () => {
+      const {report, start, end} = renderHeld();
+      // jsdom lays nothing out, so at rest the scroll offset gives no room.
+      expect([isDisabled(start), isDisabled(end)]).toEqual([true, true]);
+      report({offset: 0, travel: 600});
+      expect([isDisabled(start), isDisabled(end)]).toEqual([true, false]);
+      report({offset: 300, travel: 600});
+      expect([isDisabled(start), isDisabled(end)]).toEqual([false, false]);
+      report({offset: 599.5, travel: 600});
+      expect([isDisabled(start), isDisabled(end)]).toEqual([false, true]);
+    });
+
+    it('keeps the held edges for one frame after the hand-back, then reads the scroll offset again', async () => {
+      const {report, start} = renderHeld();
+      report({offset: 300, travel: 600});
+      report({offset: 300, travel: 600});
+      report(null);
+      expect(isDisabled(start)).toBe(false);
+      await act(
+        async () =>
+          new Promise<void>(resolve => {
+            requestAnimationFrame(() => resolve());
+          }),
+      );
+      expect(isDisabled(start)).toBe(true);
+    });
+
+    it('hands focus to the scroll area once, when the held row reaches the edge of the focused button', () => {
+      const {report, end} = renderHeld();
+      report({offset: 300, travel: 600});
+      act(() => end.focus());
+      const focus = vi.spyOn(scroller(), 'focus');
+      report({offset: 600, travel: 600});
+      expect(focus).toHaveBeenCalledTimes(1);
+      expect(document.activeElement).toBe(scroller());
+      report({offset: 600, travel: 600});
+      expect(focus).toHaveBeenCalledTimes(1);
+    });
   });
 });

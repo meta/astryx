@@ -57,12 +57,7 @@ import {
 } from './validate-integration.mjs';
 import {rootProblem} from '../../foundation/integrations/validate-contributions.mjs';
 import {normalizeProviderId} from '../../foundation/identity/provider-identity.mjs';
-
-/** @param {string} value */
-export function shellArg(value) {
-  if (/^[A-Za-z0-9@/._-]+$/.test(value)) return value;
-  return `'${value.replace(/'/g, `'\\''`)}'`;
-}
+import {shellArg} from '../../foundation/text/shell-arg.mjs';
 
 /**
  * The provider ID a package without a name is checked under: a valid bare

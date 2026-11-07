@@ -16,7 +16,9 @@ import {cubicBezier} from './bezier';
 import {
   applyLayoutChangeTransition,
   createAnimatedLayout,
+  glideOf,
   holdLayoutExit,
+  landLayoutGlideSideways,
   playLayoutChange,
   releaseLayoutExit,
   reportLayoutChange,
@@ -361,7 +363,7 @@ describe('one shared motion (spec:AST-105 FR4)', () => {
     );
   }
 
-  it("plays the changed element and its followers on the theme's move curve over --duration-medium-min, with one duration", async () => {
+  it("plays the changed element and its followers on the theme's move curve over --duration-medium, with one duration", async () => {
     // With no stylesheet, the tokens read core's declared values.
     await changeOnce();
     const follower = played.find(p => (p.element as HTMLElement).id === 'a');
@@ -369,16 +371,16 @@ describe('one shared motion (spec:AST-105 FR4)', () => {
     expect(follower).toBeDefined();
     expect(own).toBeDefined();
     expect(own?.options.duration).toBe(follower?.options.duration);
-    expect(Number(follower?.options.duration)).toBeCloseTo(310, 6);
-    const remaining = remainingOn([0.24, 1, 0.4, 1], 310);
+    expect(Number(follower?.options.duration)).toBeCloseTo(410, 6);
+    const remaining = remainingOn([0.24, 1, 0.4, 1], 410);
     for (const {t, y} of verticalCurveOf(follower as Played)) {
       expect(y).toBeCloseTo(-80 * remaining(t), 3);
     }
   });
 
-  it('plays the --duration-medium-min and --ease-move of the theme the area is in', async () => {
+  it('plays the --duration-medium and --ease-move of the theme the area is in', async () => {
     await changeOnce(
-      '--duration-medium-min: 200ms; --ease-move: cubic-bezier(0, 0, 1, 1)',
+      '--duration-medium: 200ms; --ease-move: cubic-bezier(0, 0, 1, 1)',
     );
     const follower = played.find(p => (p.element as HTMLElement).id === 'a');
     expect(Number(follower?.options.duration)).toBeCloseTo(200, 6);
@@ -389,17 +391,15 @@ describe('one shared motion (spec:AST-105 FR4)', () => {
 
   it("follows the theme's tempo through its duration token, never scaled twice (spec:AST-108 FR2)", async () => {
     // A theme at tempo 1.5 writes the scaled token beside its tempo.
-    await changeOnce(
-      '--duration-medium-min: 465ms; --_astryx-motion-tempo: 1.5',
-    );
+    await changeOnce('--duration-medium: 615ms; --_astryx-motion-tempo: 1.5');
     const follower = played.find(p => (p.element as HTMLElement).id === 'a');
     const own = played.find(p => (p.element as HTMLElement).id === 'changed');
-    expect(Number(follower?.options.duration)).toBeCloseTo(465, 6);
+    expect(Number(follower?.options.duration)).toBeCloseTo(615, 6);
     expect(own?.options.duration).toBe(follower?.options.duration);
   });
 
   it('lands at once when the theme sets a zero duration', async () => {
-    await changeOnce('--duration-medium-min: 0ms');
+    await changeOnce('--duration-medium: 0ms');
     expect(played).toEqual([]);
   });
 
@@ -424,7 +424,7 @@ describe('one shared motion (spec:AST-105 FR4)', () => {
   it('retargets an element already gliding: one glide, started from where it is on screen', async () => {
     // A long, even curve, so the first glide still moves fast 100 ms in.
     const {area, changed, phase} = setUp(
-      '<div id="area" style="--duration-medium-min: 1000ms; --ease-move: cubic-bezier(0, 0, 1, 1)"><div id="changed"></div><div id="a"></div></div>',
+      '<div id="area" style="--duration-medium: 1000ms; --ease-move: cubic-bezier(0, 0, 1, 1)"><div id="changed"></div><div id="a"></div></div>',
     );
     const a = document.getElementById('a') as HTMLElement;
     let top = 0;
@@ -759,14 +759,14 @@ describe('the indicator transition', () => {
     expect(chevron.style.getPropertyValue('transition-timing-function')).toBe(
       'cubic-bezier(0.24, 1, 0.4, 1)',
     );
-    expect(chevron.style.getPropertyValue('transition-duration')).toBe('310ms');
+    expect(chevron.style.getPropertyValue('transition-duration')).toBe('410ms');
     applyLayoutChangeTransition(null, chevron);
     expect(chevron.style.getPropertyValue('transition-duration')).toBe('');
   });
 
   it('takes the timing read where the area is, whatever scope sits between them', () => {
-    document.body.innerHTML = `<div id="area" style="--duration-medium-min: 465ms; --ease-move: cubic-bezier(0, 0, 0.2, 1)">
-      <div style="--duration-medium-min: 620ms; --ease-move: cubic-bezier(0.3, 1.2, 0.5, 1)"><svg id="chevron"></svg></div></div>`;
+    document.body.innerHTML = `<div id="area" style="--duration-medium: 465ms; --ease-move: cubic-bezier(0, 0, 0.2, 1)">
+      <div style="--duration-medium: 620ms; --ease-move: cubic-bezier(0.3, 1.2, 0.5, 1)"><svg id="chevron"></svg></div></div>`;
     const area = document.getElementById('area') as HTMLElement;
     const chevron = document.getElementById(
       'chevron',
@@ -1210,5 +1210,94 @@ describe('the walk reaches what the changes can move (spec:AST-105 FR3)', () => 
     );
     expect(glide).toBeDefined();
     expect(translateOf(glide!).y).toBeCloseTo(-80);
+  });
+});
+
+describe('landLayoutGlideSideways', () => {
+  /** The glides here also expose their frames, as a browser's do. */
+  function withFrames() {
+    const animate = Element.prototype.animate;
+    Element.prototype.animate = function (
+      this: Element,
+      ...args: Parameters<Element['animate']>
+    ) {
+      const animation = animate.apply(this, args);
+      const entry = played[played.length - 1];
+      return Object.assign(animation, {
+        effect: {
+          getKeyframes: () => entry.keyframes,
+          setKeyframes: (next: Keyframe[]) => {
+            entry.keyframes = next;
+          },
+        },
+      });
+    };
+  }
+
+  /** A row that showed 40 px to the left as the change was read. */
+  async function glidingRow() {
+    withFrames();
+    const {area, changed, phase} = setUp(
+      '<div id="area"><div id="changed"></div><p id="row">Row</p></div>',
+    );
+    const row = document.getElementById('row') as HTMLElement;
+    placeAt(row, {before: [-40, 0, 400, 40], after: [0, 80, 400, 40]}, phase);
+    const layout = createAnimatedLayout(() => area);
+    const change = reportLayoutChange(layout, () => changed);
+    change.measureBefore();
+    phase.current = 'after';
+    change.animate();
+    await flushMicrotasks();
+    const glide = played.find(entry => entry.element === row);
+    if (glide == null) {
+      throw new Error('no glide');
+    }
+    return {area, changed, row, layout, glide};
+  }
+
+  it("lands a glide's sideways part in its frames and keeps its vertical move and its animation", async () => {
+    const {row, glide} = await glidingRow();
+    expect(translateOf(glide)).toEqual({x: -40, y: -80});
+    const animation = glideOf(row);
+    landLayoutGlideSideways(row);
+    expect(
+      glide.keyframes.every(frame =>
+        String(frame.translate).startsWith('0px '),
+      ),
+    ).toBe(true);
+    expect(translateOf(glide)).toEqual({x: 0, y: -80});
+    expect(glideOf(row)).toBe(animation);
+  });
+
+  it('a later change carries only the vertical move', async () => {
+    const {changed, row, layout, glide} = await glidingRow();
+    landLayoutGlideSideways(row);
+    // The change grows again, and the row moves 40 px lower.
+    const second = {current: 'before' as 'before' | 'after'};
+    placeAt(
+      changed,
+      {before: [0, 0, 400, 80], after: [0, 0, 400, 120]},
+      second,
+    );
+    placeAt(row, {before: [0, 80, 400, 40], after: [0, 120, 400, 40]}, second);
+    const change = reportLayoutChange(layout, () => changed);
+    change.measureBefore();
+    second.current = 'after';
+    change.animate();
+    await flushMicrotasks();
+    const next = played.filter(entry => entry.element === row).at(-1);
+    expect(next).not.toBe(glide);
+    expect(
+      next?.keyframes.every(frame =>
+        String(frame.translate).startsWith('0px '),
+      ),
+    ).toBe(true);
+  });
+
+  it('forgets the glide when it ends', async () => {
+    const {row, glide} = await glidingRow();
+    landLayoutGlideSideways(row);
+    glide.finish?.();
+    expect(glideOf(row)).toBeNull();
   });
 });
