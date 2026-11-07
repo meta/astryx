@@ -167,7 +167,7 @@ export interface KbdProps extends BaseProps<HTMLSpanElement> {
    * Keyboard shortcut string. Use "+" to separate keys.
    * Special keys: mod, ctrl, alt and shift (Apple symbols on Apple platforms,
    * short text such as "Ctrl" elsewhere and before hydration), meta ("Win"
-   * text elsewhere), enter, backspace, escape, tab, up, down, left, and right.
+   * text elsewhere and before hydration), enter, backspace, escape, tab, up, down, left, and right.
    * Aliases: "esc" for "escape" and "return" for "enter".
    * Use "plus" to render a literal "+" key (e.g. "shift+plus").
    *

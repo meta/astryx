@@ -90,16 +90,16 @@ describe('Kbd', () => {
     },
   );
 
-  it('shows the catalog text for ctrl, alt and shift on the server, even on a Mac', () => {
+  it('shows the catalog text for ctrl, alt, shift and meta on the server, even on a Mac', () => {
     Object.defineProperty(navigator, 'platform', {
       value: 'MacIntel',
       configurable: true,
     });
     const container = document.createElement('div');
-    container.innerHTML = renderToString(<Kbd keys="ctrl+alt+shift+k" />);
+    container.innerHTML = renderToString(<Kbd keys="ctrl+alt+shift+meta+k" />);
     document.body.appendChild(container);
     try {
-      for (const text of ['Ctrl', 'Alt', 'Shift']) {
+      for (const text of ['Ctrl', 'Alt', 'Shift', 'Win']) {
         expect(within(container).getByText(text)).toBeInTheDocument();
       }
       expect(within(container).queryByText('\u2325')).not.toBeInTheDocument();
