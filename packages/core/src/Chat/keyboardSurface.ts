@@ -4,7 +4,8 @@
 
 /**
  * @file keyboardSurface.ts
- * @input React context, the keyboard module's touch gate (followsKeyboard)
+ * @input createSharedContext, the keyboard module's touch gate
+ *   (followsKeyboard)
  * @output Exports KeyboardSurfaceContext and focusInKeyboardSurface: whether a
  *   composer sits in ChatLayout's composer region, and the focus it delivers
  * @position Internal to Chat: ChatLayout provides it; ChatComposer and
@@ -16,11 +17,14 @@
  * SYNC: update ChatLayout.tsx, ChatComposer.tsx and ChatComposerInput.tsx
  */
 
-import {createContext} from 'react';
 import {followsKeyboard} from '../keyboard/keyboardTarget';
+import {createSharedContext} from '../utils/sharedContext';
 
-export const KeyboardSurfaceContext = createContext(false);
-KeyboardSurfaceContext.displayName = 'KeyboardSurfaceContext';
+export const KeyboardSurfaceContext = createSharedContext(
+  'KeyboardSurfaceContext',
+  1,
+  false,
+);
 
 /** Focuses `element` the way its surface wants (see the file header). */
 export function focusInKeyboardSurface(
