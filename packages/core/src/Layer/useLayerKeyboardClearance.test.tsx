@@ -7,7 +7,9 @@
  * @output Checks the software keyboard's part of the viewport caps. The cap
  *   sits 10 px above the keyboard. It is written once a rising keyboard has
  *   arrived, and taken off as a falling one starts down. A keyboard already
- *   up at the open caps the layer before paint. The field stays in view,
+ *   up at the open caps the layer before paint. A layer the viewport fit
+ *   shifted over its trigger keeps that block-start edge through the cap.
+ *   The field stays in view,
  *   unless a person touched the layer after the cap. A component's own
  *   scroll keeps the reveal, and so does the next keyboard change. A layer
  *   clear of the keyboard, a bottom-held layer and a layer in another
@@ -33,6 +35,7 @@ import type {BrowserClickWaitHandlers} from '../utils/browserClickWait';
 import type * as KeyboardHeightModule from '../keyboard/keyboardHeight';
 import {
   keyboardClearanceCap,
+  keyboardLiftStyle,
   LAYER_ANCHORED_ATTRIBUTE,
   LAYER_KEYBOARD_CAP_PROPERTY,
   LAYER_KEYBOARD_CLEARANCE_PX,
@@ -122,6 +125,7 @@ function Harness({
   layerKey = 'a',
   entering,
   shiftedTop,
+  ignoresLift = false,
   slidesAboveKeyboard = false,
 }: {
   isOpen?: boolean;
@@ -141,6 +145,8 @@ function Harness({
    * `box` and over its trigger; any shorter, it sits at `box`.
    */
   shiftedTop?: number;
+  /** Stays below its trigger whatever the lift's insets say. */
+  ignoresLift?: boolean;
   /**
    * Places itself by the keyboard inset, as Selector's overlay does: while an
    * inset is out, the layer ends above it.
@@ -148,7 +154,7 @@ function Harness({
   slidesAboveKeyboard?: boolean;
 }) {
   const layerRef = useRef<HTMLDivElement>(null);
-  const {cap, inset, followLayerElement} = useLayerKeyboardClearance(
+  const {cap, lift, inset, followLayerElement} = useLayerKeyboardClearance(
     isOpen,
     layerRef,
   );
@@ -173,6 +179,8 @@ function Harness({
           ? {}
           : {[LAYER_KEYBOARD_INSET_PROPERTY]: `${inset}px`}),
         ...(entering == null ? {} : {transform: `translateY(${entering}px)`}),
+        // As the runtime applies it: the insets move the layer's anchor area.
+        ...keyboardLiftStyle(lift),
       }}
       data-testid="layer"
       ref={el => {
@@ -202,7 +210,8 @@ function Harness({
               slidesAboveKeyboard && !Number.isNaN(keyboardInset)
                 ? Math.min(placed, VIEWPORT - keyboardInset - h)
                 : placed;
-            const top = (heldBottom ? box.bottom - h : start) + shift;
+            const lifted = ignoresLift ? 0 : liftOf(el);
+            const top = (heldBottom ? box.bottom - h : start) - lifted + shift;
             return {
               top,
               bottom: top + h,
@@ -291,6 +300,12 @@ const capOf = (container: HTMLElement) =>
   container
     .querySelector<HTMLElement>('[data-testid="layer"]')!
     .style.getPropertyValue(LAYER_KEYBOARD_CAP_PROPERTY);
+
+/** The lift the runtime applies, read back from the layer's insets. */
+function liftOf(layer: HTMLElement): number {
+  const end = parseFloat(layer.style.insetBlockEnd);
+  return Number.isNaN(end) ? 0 : end;
+}
 
 const insetOf = (container: HTMLElement) =>
   container
@@ -469,18 +484,19 @@ describe('useLayerKeyboardClearance', () => {
     );
   });
 
-  it('takes the cap off a layer that does not read the inset at once as the keyboard goes down, even where that moves it (spec:AST-059 FR10)', () => {
+  it('takes the cap off a layer that does not read the inset at once as the keyboard goes down, and its block-start stays (spec:AST-059 FR9, FR10)', () => {
     // At its full height the viewport fit places this layer over its
-    // trigger; capped, it sits below the trigger.
+    // trigger. Shorter, it would fit below the trigger, at 300.
     const {container} = render(
       <Harness box={{top: 300, bottom: 700}} shiftedTop={120} />,
     );
     guide.emit({kind: 'change', from: 0, to: COVER, animated: false});
-    expect(capOf(container)).not.toBe('');
+    expect(capOf(container)).toBe(`${VIEWPORT - COVER - 10 - 120}px`);
     const layer = screen.getByTestId('layer');
-    expect(layer.getBoundingClientRect().top).toBe(300);
+    expect(layer.getBoundingClientRect().top).toBe(120);
     guide.emit({kind: 'hide', from: COVER, to: 0});
     expect(capOf(container)).toBe('');
+    expect(liftOf(layer)).toBe(0);
     expect(layer.getBoundingClientRect().top).toBe(120);
   });
 
@@ -537,10 +553,32 @@ describe('useLayerKeyboardClearance', () => {
     expect(capOf(container)).toBe('');
   });
 
-  it('caps a layer the viewport fit pushed up over its trigger from where it starts once it is shorter', () => {
+  it('keeps the block-start edge of a layer the viewport fit pushed up over its trigger: shorter, it fits below the trigger, and the cap lifts it back (spec:AST-059 FR9)', () => {
     const {container} = render(<Harness shiftedTop={40} />);
     guide.emit({kind: 'change', from: 0, to: COVER, animated: false});
+    const layer = screen.getByTestId('layer');
+    expect(capOf(container)).toBe(`${VIEWPORT - COVER - 10 - 40}px`);
+    expect(liftOf(layer)).toBe(BOX.top - 40);
+    expect(layer.getBoundingClientRect().top).toBe(40);
+    expect(layer.getBoundingClientRect().bottom).toBe(VIEWPORT - COVER - 10);
+  });
+
+  it('keeps that block-start edge at the next keyboard change', () => {
+    const {container} = render(<Harness shiftedTop={40} />);
+    guide.emit({kind: 'change', from: 0, to: COVER, animated: false});
+    guide.emit({kind: 'change', from: COVER, to: COVER + 20, animated: false});
+    const layer = screen.getByTestId('layer');
+    expect(capOf(container)).toBe(`${VIEWPORT - COVER - 20 - 10 - 40}px`);
+    expect(layer.getBoundingClientRect().top).toBe(40);
+  });
+
+  it('caps a layer from below its trigger where the engine does not move it by the lift', () => {
+    const {container} = render(<Harness shiftedTop={40} ignoresLift />);
+    guide.emit({kind: 'change', from: 0, to: COVER, animated: false});
+    const layer = screen.getByTestId('layer');
     expect(capOf(container)).toBe(CAPPED);
+    expect(liftOf(layer)).toBe(0);
+    expect(layer.getBoundingClientRect().top).toBe(BOX.top);
   });
 
   it('reads a layer that is still entering without its entrance transform, in one read (spec:AST-059 FR8)', () => {
@@ -771,6 +809,7 @@ describe('useLayerKeyboardClearance', () => {
     advance(timing.keyboardNotificationMs + 1);
     // A shorter box would move its top down and still end under the keyboard.
     expect(capOf(container)).toBe('');
+    expect(liftOf(screen.getByTestId('layer'))).toBe(0);
   });
 
   it('keeps the cap through a press inside the layer until its click', () => {

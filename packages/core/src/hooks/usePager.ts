@@ -412,6 +412,14 @@ class SettleCatcher extends LongPressGestureRecognizer {
     this.clearTimer();
   }
 
+  /**
+   * Takes the touch from the content under it: no press and no click. In
+   * UIKit, the touch that stops a scroll view never reaches its content.
+   */
+  takeFromContent(): void {
+    this.cancelTouchesInView();
+  }
+
   protected override touchesBegan(
     touches: ReadonlyArray<GestureTouch>,
     event: GestureEventContext,
@@ -650,6 +658,8 @@ export function createPager(
   let settled = target;
   let settleHandle: MotionHandle | null = null;
   let isSwipeSettle = false;
+  // Whether the running settle follows a release, not the program's `goTo`.
+  let isReleaseSettle = false;
   let settleToken = 0;
   let isDragging = false;
 
@@ -721,6 +731,7 @@ export function createPager(
     clearCatchTimer();
     flushReport();
     isSwipeSettle = false;
+    isReleaseSettle = false;
     if (settleHandle != null) {
       settleToken += 1;
       settleHandle = null;
@@ -874,10 +885,16 @@ export function createPager(
    * travel. A settle that a touch's release starts (`touchRelease`)
    * cross-fades on any pointer. Any other motion, such as `goTo` or a mouse's
    * or a pen's release, cross-fades on a coarse pointer. It lands at once on
-   * any other pointer.
+   * any other pointer. `isRelease` marks a release's settle, which a finger
+   * that catches it takes from the content.
    */
-  function play(curve: MotionCurve, touchRelease = false): void {
+  function play(
+    curve: MotionCurve,
+    touchRelease = false,
+    isRelease = false,
+  ): void {
     isSwipeSettle = false;
+    isReleaseSettle = isRelease;
     if (animator == null) {
       return;
     }
@@ -925,7 +942,7 @@ export function createPager(
       rest();
       return;
     }
-    play(curve, touchRelease);
+    play(curve, touchRelease, true);
   }
 
   function measure(): void {
@@ -941,7 +958,13 @@ export function createPager(
     if (isChildPages()) {
       const offsets = measureChildOffsets();
       if (!sameOffsets(offsets, childOffsets)) {
+        // A drag's release moves at most one page from where the drag began.
+        // New pages renumber, so the drag keeps the page nearest that offset.
+        const dragFrom = isDragging ? offsetOf(dragStartIndex) : null;
         childOffsets = offsets;
+        if (dragFrom != null) {
+          dragStartIndex = nearestPage(dragFrom);
+        }
         changed = true;
         const pageCount = offsets.length;
         deliver(() => options.onPagesChange?.(pageCount));
@@ -1088,6 +1111,10 @@ export function createPager(
   function onCatch(recognizer: LongPressGestureRecognizer): void {
     if (recognizer.state === 'began') {
       holdSelection(true);
+      // A mouse keeps its click. A finger or a pen loses it.
+      if (isReleaseSettle && catcher.pointerType !== 'mouse') {
+        catcher.takeFromContent();
+      }
       clearCatchTimer();
       caughtSettle = false;
       isCatchTimerArmed = true;

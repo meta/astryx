@@ -61,6 +61,7 @@ import {
   animationStoryboard,
   castStoryboard,
   blockMainThread,
+  BUSY_PROOF_LOOKAROUND_MS,
   busyWindowProof,
   BusyWindowTooLateError,
   castStep,
@@ -74,6 +75,8 @@ import {
   drag,
   flick,
   frames,
+  FRAME_STARVATION_MS,
+  FrameStarvationError,
   freezePage,
   freezePageOn,
   freezePageWhen,
@@ -96,6 +99,7 @@ import {
   readInputLog,
   readLongTasks,
   releaseAnimations,
+  requireFrames,
   retakeOnWheelPacing,
   sampleCurve,
   sampleRects,
@@ -105,14 +109,17 @@ import {
   startScreencast,
   startBusyControl,
   Storyboard,
+  SUBPIXEL_STEP_PX,
   tap,
   thawPage,
   thawTimers,
   timeline,
+  toTouchEvents,
   touchDriver,
   trackBrightness,
   TouchPageStallError,
   touchStoryboard,
+  TouchLiftStallError,
   traceRendering,
   trackControl,
   trackMarker,
@@ -390,6 +397,156 @@ test.describe('touch input', () => {
     expect(String(outcome)).toMatch(
       /the page's own touch and pointer listeners took \d+ ms/,
     );
+  });
+
+  /** A flick up a page that takes every touch, its lift right after its last move. */
+  async function liftStallPage(page: Page) {
+    await page.route('http://lift-stall.test/', route =>
+      route.fulfill({
+        contentType: 'text/html',
+        body: '<!doctype html><body style="margin:0;height:3000px;touch-action:none"><script>window.touches=[];for(const type of ["touchmove","touchend"])addEventListener(type,e=>touches.push([type,e.timeStamp]),{passive:true})</script>',
+      }),
+    );
+    await page.goto('http://lift-stall.test/');
+    const script = flick(
+      {x: 200, y: 400},
+      {velocity: {x: 0, y: -1500}, durationMs: 80, hz: 120},
+    );
+    const lastMove = toTouchEvents(script).length - 2;
+    // Page work at the last move, as a busy runner's round trip.
+    const slowRead = async (_: unknown, index: number) => {
+      if (index === lastMove) {
+        await page.evaluate(
+          () => new Promise(resolve => setTimeout(resolve, 60)),
+        );
+      }
+    };
+    // The page's own gap from the last move to the lift, ms.
+    const pageLiftGap = () =>
+      page.evaluate(() => {
+        const {touches} = window as unknown as {touches: [string, number][]};
+        const lift = touches.findIndex(([type]) => type === 'touchend');
+        return touches[lift][1] - touches[lift - 1][1];
+      });
+    return {driver: await touchDriver(page), script, slowRead, pageLiftGap};
+  }
+
+  test('a play whose onEvent holds its lift back past the stillness interval fails by name, where the page stamps touches on arrival', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'webkit',
+      'only WebKit stamps a touch when it arrives; Chromium carries the scripted times',
+    );
+    const {driver, script, slowRead, pageLiftGap} = await liftStallPage(page);
+    const outcome = await driver.play(script, {onEvent: slowRead}).then(
+      () => 'resolved',
+      (error: unknown) => error,
+    );
+    expect(outcome).toBeInstanceOf(TouchLiftStallError);
+    expect(String(outcome)).toMatch(
+      /the lift reached the page \d+ ms after its finger's last move, where the script spaces \d+ ms: .* onEvent ran \d+ ms in that gap/,
+    );
+    const {numbers} = outcome as TouchLiftStallError;
+    expect(numbers.gapMs).toBeGreaterThan(40);
+    expect(numbers.scriptedGapMs).toBeLessThanOrEqual(40);
+    // The error gives the gap the page itself read.
+    const gap = await pageLiftGap();
+    expect(gap).toBeGreaterThan(40);
+    expect(Math.abs(numbers.gapMs - gap)).toBeLessThanOrEqual(2);
+    // The same flick with a quick onEvent passes.
+    await driver.play(script, {onEvent: () => {}});
+    // A proof that reads no release from the lift opts out.
+    await driver.play(script, {onEvent: slowRead, releaseUnread: true});
+  });
+
+  test('a default-paced play whose page holds its last move fails by name: TouchPageStallError, where the page stamps touches on arrival', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'webkit',
+      'only WebKit stamps a touch when it arrives; Chromium carries the scripted times',
+    );
+    const script = flick(
+      {x: 200, y: 400},
+      {velocity: {x: 0, y: -1500}, durationMs: 80, hz: 120},
+    );
+    const moves = toTouchEvents(script).filter(
+      step => step.type === 'touchMove',
+    ).length;
+    // The page's own listener holds its main thread for 80 ms on the last
+    // move. WebKit hands the page the lift only once it is free.
+    await page.route('http://last-move-hold.test/', route =>
+      route.fulfill({
+        contentType: 'text/html',
+        body: `<!doctype html><body style="margin:0;height:3000px;touch-action:none"><script>let n=0;addEventListener("touchmove",()=>{if(++n===${moves}){const end=performance.now()+80;while(performance.now()<end){}}},{passive:true})</script>`,
+      }),
+    );
+    await page.goto('http://last-move-hold.test/');
+    const driver = await touchDriver(page);
+    const outcome = await driver.play(script).then(
+      () => 'resolved',
+      (error: unknown) => error,
+    );
+    expect(outcome).toBeInstanceOf(TouchPageStallError);
+    expect(String(outcome)).toMatch(/the page read a resting finger/);
+  });
+
+  test('a play behind its schedule never shrinks a scripted gap, so page work in onEvent cannot eat the rest before its lift, where the page stamps touches on arrival', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'webkit',
+      'only WebKit stamps a touch when it arrives; Chromium carries the scripted times',
+    );
+    const {driver} = await liftStallPage(page);
+    // A slow drag that rests 150 ms before the lift. Page work on every move
+    // puts the play behind its schedule by more than that rest.
+    const script = drag(
+      {x: 200, y: 600},
+      {x: 200, y: 300},
+      {durationMs: 300, restMs: 150},
+    );
+    const steps = toTouchEvents(script);
+    await driver.play(script, {
+      onEvent: async step => {
+        if (step.type === 'touchMove') {
+          await page.evaluate(
+            () => new Promise(resolve => setTimeout(resolve, 30)),
+          );
+        }
+      },
+    });
+    const stamps = await page.evaluate(() =>
+      (window as unknown as {touches: [string, number][]}).touches.map(
+        ([, t]) => t,
+      ),
+    );
+    // The page stamps every move and the lift. No gap is more than the
+    // answer's slack short of the script's, the rest before the lift too.
+    expect(stamps).toHaveLength(steps.length - 1);
+    for (let index = 1; index < stamps.length; index++) {
+      const scripted = steps[index + 1].t - steps[index].t;
+      expect(
+        stamps[index] - stamps[index - 1],
+        `gap ${index} of ${stamps.length - 1}`,
+      ).toBeGreaterThanOrEqual(scripted - ANSWER_SLACK_MS - 1);
+    }
+  });
+
+  test('a Chromium play carries the scripted times, so a slow onEvent before its lift does not fail it', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'Chromium carries the scripted times; WebKit stamps a touch when it arrives',
+    );
+    const {driver, script, slowRead} = await liftStallPage(page);
+    await driver.play(script, {onEvent: slowRead});
   });
 
   test("a touch play reaches a page that takes touches late with no gap more than 2 ms short of the script's", async ({
@@ -712,6 +869,112 @@ test.describe('frame evidence', () => {
     const {proof: slowRaf} = await run('raf', 6, 1400, 1600);
     expect(slowRaf.verdict.pass, slowRaf.summary).toBe(false);
     expect(slowRaf.verdict.failures.join('\n')).toMatch(/longest stall/);
+    await control.remove();
+  });
+
+  test('a sub-pixel read follows a compositor slide under a pixel a frame through a blocked main thread; a rAF slide still fails', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      "WebKit's JPEG cast holds color in 2 by 2 pixel blocks, so it cannot read under a pixel",
+    );
+    await busyFixture(page);
+    const box = page.locator('#box');
+    // A chip on the box's plain face: the read takes the background there.
+    await markElement(box);
+    const control = await startBusyControl(page);
+    // At rest between pixels, the read holds still: the control keeps the cast
+    // sending frames meanwhile.
+    await box.evaluate(el => {
+      el.style.transform = 'translateY(10.37px)';
+    });
+    // The cast's first frame can be the last one the compositor drew: start
+    // it once frames have shown the box at its new place.
+    await frames(page, 3);
+    const restCast = await startScreencast(page);
+    await frames(page, 20);
+    const atRest = (
+      await trackMarker(page, await restCast.stop(), {subpixel: true})
+    ).flatMap(f => (f.box == null ? [] : [f.box.y]));
+    expect(atRest.length).toBeGreaterThan(5);
+    const spread = Math.max(...atRest) - Math.min(...atRest);
+    test.info().annotations.push({
+      type: 'sub-pixel read at rest',
+      description: `${atRest.length} frames, spread ${spread.toFixed(4)} px`,
+    });
+    expect(spread).toBeLessThan(SUBPIXEL_STEP_PX / 5);
+    // 36 px in 2 s is 0.3 px a frame at 60 Hz. A whole-pixel read shows a
+    // new position on about one frame in three.
+    const run = async (driver: 'compositor' | 'raf') => {
+      const cast = await startScreencast(page);
+      await box.evaluate((el, how) => {
+        el.getAnimations().forEach(a => a.cancel());
+        el.style.transform = 'none';
+        if (how === 'compositor') {
+          el.animate(
+            [{transform: 'translateY(0px)'}, {transform: 'translateY(36px)'}],
+            {duration: 2000, easing: 'linear'},
+          );
+        } else {
+          const start = performance.now();
+          const step = (now: number) => {
+            const p = Math.min(1, (now - start) / 2000);
+            el.style.transform = `translateY(${36 * p}px)`;
+            if (p < 1) {
+              requestAnimationFrame(step);
+            }
+          };
+          requestAnimationFrame(step);
+        }
+      }, driver);
+      // A rendering update first commits the cancel of the run before.
+      await page.evaluate(
+        () =>
+          new Promise<void>(resolve =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          ),
+      );
+      const window = await blockMainThread(
+        page,
+        600,
+        driver === 'compositor' ? {during: box} : {},
+      );
+      await page.waitForTimeout(200);
+      const shown = (await cast.stop()).filter(
+        f => f.t <= window.to + BUSY_PROOF_LOOKAROUND_MS,
+      );
+      const controlFrames = await trackControl(page, shown);
+      const judge = async (subpixel: boolean) =>
+        busyWindowProof(await trackMarker(page, shown, {subpixel}), window, {
+          axis: 'y',
+          control: controlFrames,
+        });
+      return {fine: await judge(true), whole: await judge(false), shown};
+    };
+
+    const {fine, whole, shown} = await run('compositor');
+    expect(fine.verdict.failures, fine.summary).toEqual([]);
+    expect(fine.stepPx).toBe(SUBPIXEL_STEP_PX);
+    expect(fine.pxPerFrame, fine.summary).toBeGreaterThan(0.2);
+    expect(fine.pxPerFrame, fine.summary).toBeLessThan(0.4);
+    // Every frame the read judged shows a new position; the same frames read
+    // in whole pixels show one on fewer than half of them.
+    expect(fine.moved, fine.summary).toBeGreaterThanOrEqual(
+      fine.deliveredFrames - 1,
+    );
+    expect(whole.changed, whole.summary).toBeLessThan(fine.changed / 2);
+
+    const {fine: raf} = await run('raf');
+    expect(raf.verdict.pass, raf.summary).toBe(false);
+    expect(raf.verdict.failures.join('\n')).toMatch(
+      /moved on [01] of the \d+ frames the control moved/,
+    );
+    // A JPEG frame hides the marker's edges in its chroma blocks.
+    await expect(
+      trackMarker(page, [{...shown[0], format: 'jpeg'}], {subpixel: true}),
+    ).rejects.toThrow(/needs a PNG cast/);
     await control.remove();
   });
 
@@ -1628,6 +1891,40 @@ test.describe('frame evidence', () => {
     );
   });
 
+  test('a proof whose page the machine starves of frames fails by name: FrameStarvationError', async ({
+    page,
+  }) => {
+    await page.setContent(
+      '<!doctype html><div id="box" style="width:40px;height:40px;background:#000"></div>',
+    );
+    const box = page.locator('#box');
+    // On pace, a 300 ms sample holds enough frames.
+    const onPace = await sampleRects(box, 300);
+    expect(requireFrames(onPace, {min: 6, during: 'a 300 ms sample'})).toEqual(
+      onPace,
+    );
+    // Each frame now comes 100 ms after the one before, as on a starved
+    // machine.
+    await page.evaluate(() => {
+      const frame = window.requestAnimationFrame.bind(window);
+      window.requestAnimationFrame = callback => {
+        setTimeout(() => frame(callback), 100);
+        return 0;
+      };
+    });
+    const starved = await sampleRects(box, 300);
+    let outcome: unknown = 'resolved';
+    try {
+      requireFrames(starved, {min: 6, during: 'a 300 ms sample'});
+    } catch (error) {
+      outcome = error;
+    }
+    expect(outcome).toBeInstanceOf(FrameStarvationError);
+    const {numbers} = outcome as FrameStarvationError;
+    expect(numbers.frames).toBeLessThan(6);
+    expect(numbers.longestGapMs).toBeGreaterThan(FRAME_STARVATION_MS);
+  });
+
   test('the trace counts no Layout for a transform animation and one per frame for `top`', async ({
     page,
     browserName,
@@ -1732,6 +2029,55 @@ test.describe('frame evidence', () => {
       await page.waitForTimeout(500);
     });
     expect(steady(busy)).toBeGreaterThan(10);
+  });
+
+  test('a traced Paint names the node it painted, and a style recalculation counts the elements it restyled', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'rendering traces are Chromium-only (README: engine limits)',
+    );
+    await page.setContent(
+      `<style>body { margin: 0; }</style><div id="list"><span>a</span><span>b</span><span>c</span><span>d</span><span>e</span></div><div id="patch" style="width: 50px; height: 50px; background: red; will-change: transform"></div>`,
+    );
+    await frames(page, 3);
+    // One frame restyles the five spans; a later one repaints the patch,
+    // which has its own layer.
+    const trace = await traceRendering(page, async () => {
+      await page.evaluate(async () => {
+        const twoFrames = () =>
+          new Promise(resolve =>
+            requestAnimationFrame(() => requestAnimationFrame(resolve)),
+          );
+        for (const span of document.querySelectorAll('#list span')) {
+          (span as HTMLElement).style.color = 'blue';
+        }
+        await twoFrames();
+        (document.getElementById('patch') as HTMLElement).style.background =
+          'blue';
+        await twoFrames();
+      });
+    });
+    const restyled = trace.events
+      .filter(e => e.name === 'UpdateLayoutTree')
+      .map(e => e.elements);
+    expect(restyled).toContain(5);
+    expect(restyled).toContain(1);
+    const painted = trace.events
+      .filter(e => e.name === 'Paint')
+      .map(e => e.node);
+    expect(painted).toContain("DIV id='patch'");
+    // Only those two events carry the fields.
+    expect(
+      trace.events.filter(
+        e =>
+          e.name !== 'Paint' &&
+          e.name !== 'UpdateLayoutTree' &&
+          (e.node != null || e.elements != null),
+      ),
+    ).toEqual([]);
   });
 
   test("the trace counts no Layout from the harness's own animation recorder, which stands down while it runs", async ({

@@ -342,6 +342,14 @@ export {
 // PageControl: UIPageControl's row of page indicators.
 export {PageControl, type PageControlProps} from './PageControl';
 
+// TabBar: the floating bottom tab bar of iOS 26's UITabBarController.
+export {
+  TabBar,
+  TabBarItem,
+  type TabBarItemProps,
+  type TabBarProps,
+} from './TabBar';
+
 // RichTextEditor (RFC meta/astryx#3899) moved out of @astryxdesign/lab into
 // its own package, @astryxdesign/richtext. Import it from there:
 //   import {RichTextEditor, RichTextView} from '@astryxdesign/richtext';

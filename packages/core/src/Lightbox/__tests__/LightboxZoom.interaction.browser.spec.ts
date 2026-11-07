@@ -25,6 +25,7 @@ import {PNG} from 'pngjs';
 import {
   CONTROL_RGB,
   animationStoryboard,
+  armHold,
   blockMainThread,
   BusyWindowTooLateError,
   busyWindowProof,
@@ -35,9 +36,12 @@ import {
   drag,
   flick,
   frames,
+  freezePageOn,
+  freezePageWhen,
   freezeTimers,
   holdAnimations,
   installLongTaskLog,
+  installPageFreeze,
   installTimerGate,
   markElement,
   openStory,
@@ -48,9 +52,9 @@ import {
   springStep,
   startBusyControl,
   startScreencast,
+  thawPage,
   timeline,
   touchDriver,
-  touchStoryboard,
   traceRendering,
   trackMarker,
   waitForAnimation,
@@ -559,6 +563,11 @@ test('past the minimum the zoom gives way, then springs back on springs.settle',
   const centre = {x: 201, y: before.stage.y + before.stage.height / 2};
   let shown = 1;
   let pinchScale = 1;
+  // Armed before the lift starts the settle. A hold sent after it comes a
+  // round trip late, and a loaded runner can find the settle over.
+  const hold = await armHold(page, photo, {
+    judges: {target: photo, property: 'scale'},
+  });
   await driver.play(
     pinch({
       center: centre,
@@ -582,10 +591,7 @@ test('past the minimum the zoom gives way, then springs back on springs.settle',
   // (past its 8 px hysteresis); UIKit's law maps it to the shown zoom.
   const recognizerScale = pinchScale / (300 - 8);
   expect(shown).toBeCloseTo(1 / (2 - recognizerScale), 2);
-  const [settle] = await waitForAnimation(photo);
-  const held = await holdAnimations(page, photo, {
-    judges: {target: photo, property: 'scale'},
-  });
+  const held = await hold.held();
   const duration = Math.max(...held.map(a => a.curveEndMs));
   const samples = curveOf(
     await sampleCurve(photo, timeline(duration)),
@@ -600,7 +606,7 @@ test('past the minimum the zoom gives way, then springs back on springs.settle',
     'curves/lightbox-zoom-past-minimum',
     {
       [`${testInfo.project.name}.json`]: JSON.stringify(
-        {settle, held, samples, result},
+        {held, samples, result},
         null,
         1,
       ),
@@ -681,11 +687,12 @@ test('a double tap zooms until the photo fills the screen, about the tapped poin
   const before = await state();
   const at = {x: 120, y: before.stage.y + before.stage.height / 2};
   const tapped = photoPointAt(before, at);
-  await driver.play(doubleTap(at));
-  const [zoom] = await waitForAnimation(photo);
-  const held = await holdAnimations(page, photo, {
+  // Armed before the taps, so the zoom is held as it starts.
+  const hold = await armHold(page, photo, {
     judges: {target: photo, property: 'scale'},
   });
+  await driver.play(doubleTap(at));
+  const held = await hold.held();
   const duration = Math.max(...held.map(a => a.curveEndMs));
   const samples = curveOf(
     await sampleCurve(photo, timeline(duration)),
@@ -701,7 +708,7 @@ test('a double tap zooms until the photo fills the screen, about the tapped poin
     'curves/lightbox-double-tap-zoom',
     {
       [`${testInfo.project.name}.json`]: JSON.stringify(
-        {zoom, held, samples, result},
+        {held, samples, result},
         null,
         1,
       ),
@@ -833,21 +840,57 @@ test('a zoomed flick coasts and stops at the far edge', async ({page}) => {
 test('a finger landing on a coasting photo stops it where it shows', async ({
   page,
 }) => {
+  // The page clock that lets the scene stop mid-coast, before the story
+  // loads.
+  await installPageFreeze(page);
   const {driver, photo, state} = await openViewer(page);
+  await installTimerGate(page);
   const before = await state();
   const mid = {x: 201, y: before.stage.y + before.stage.height / 2};
   await driver.play(doubleTap(mid));
   await waitForAnimation(photo);
   await waitForRest(photo);
+  // The photo's offset at the flick's lift, read in the page.
+  await recordLiftOffset(photo);
+  await photo.evaluate(el => el.setAttribute('data-freeze-photo', ''));
+  // The scene stops once the coast has carried the photo 10 px past the
+  // lift, however late this process reacts. A poll from here can land the
+  // finger after the coast ends.
+  const coasting = freezePageWhen(
+    page,
+    () => {
+      const lift = (globalThis as unknown as {__liftOffset?: number})
+        .__liftOffset;
+      const img = document.querySelector('[data-freeze-photo]') as Element;
+      const translate = getComputedStyle(img).translate;
+      const x = translate === 'none' ? 0 : parseFloat(translate);
+      return (
+        lift != null &&
+        x < lift - 10 &&
+        img.getAnimations().some(a => a.playState === 'running')
+      );
+    },
+    undefined,
+  );
   await driver.play(
     flick(mid, {velocity: {x: -900, y: 0}, durationMs: 80, hz: 120}),
   );
-  // The finger lands once the coast has carried the photo on past the
-  // release, then rests 250 ms and lifts without moving.
-  const released = (await state()).x;
-  await expect
-    .poll(async () => (await state()).x, {timeout: 2000})
-    .toBeLessThan(released - 10);
+  await coasting;
+  // The landing must find the coast still running, or it proves nothing.
+  await photo.evaluate(el => {
+    // The pointer event comes first, and the photo stops on it.
+    window.addEventListener(
+      'pointerdown',
+      () => {
+        (globalThis as unknown as {coastAtTouch?: boolean}).coastAtTouch = el
+          .getAnimations()
+          .some(a => a.playState === 'running');
+      },
+      {capture: true, once: true},
+    );
+  });
+  // The finger lands in the frozen scene. The scene thaws after the first
+  // read, and the finger rests 250 ms and lifts without moving.
   const reads: PhotoState[] = [];
   await driver.play(
     [
@@ -855,11 +898,19 @@ test('a finger landing on a coasting photo stops it where it shows', async ({
       {t: 250, fingers: []},
     ],
     {
-      onEvent: async () => {
+      onEvent: async (_step, index) => {
         reads.push(await state());
+        if (index === 0) {
+          await thawPage(page);
+        }
       },
     },
   );
+  expect(
+    await page.evaluate(
+      () => (globalThis as unknown as {coastAtTouch?: boolean}).coastAtTouch,
+    ),
+  ).toBe(true);
   // Read at the touch-down and at the lift.
   expect(reads).toHaveLength(2);
   const [{x: caughtX}, {x: heldX, stage, fit, scale}] = reads;
@@ -1176,12 +1227,41 @@ test('the zoom settles and the pinch do no Layout or Paint per frame', async ({
   const before = await state();
   let zoom = {from: 0, to: 0};
   let pinchWindow = {from: 0, to: 0};
-  const trace = await traceRendering(page, async () => {
+  // The zoom is announced in a polite live region, the page's or the
+  // viewer's own, which empties 2 s later and lays out then. The pinch is
+  // traced once that has happened.
+  const politeRegions =
+    '[data-astryx-live-region="polite"], [data-astryx-modal-live-region="polite"]';
+  await page.evaluate(selector => {
+    const record = window as unknown as {zoomAnnounced?: boolean};
+    new MutationObserver(() => {
+      const regions = document.querySelectorAll(selector);
+      if (Array.from(regions).some(region => region.textContent !== '')) {
+        record.zoomAnnounced = true;
+      }
+    }).observe(document, {childList: true, characterData: true, subtree: true});
+  }, politeRegions);
+  const zoomTrace = await traceRendering(page, async () => {
     await driver.play(
       doubleTap({x: 201, y: before.stage.y + before.stage.height / 2}),
     );
     [zoom] = await waitForAnimation(photo);
     await waitForRest(photo);
+  });
+  await expect
+    .poll(async () =>
+      page.evaluate(
+        selector =>
+          (window as unknown as {zoomAnnounced?: boolean}).zoomAnnounced ===
+            true &&
+          Array.from(document.querySelectorAll(selector)).every(
+            region => region.textContent === '',
+          ),
+        politeRegions,
+      ),
+    )
+    .toBe(true);
+  const pinchTrace = await traceRendering(page, async () => {
     const start = Date.now();
     await driver.play(
       pinch({
@@ -1194,17 +1274,17 @@ test('the zoom settles and the pinch do no Layout or Paint per frame', async ({
     );
     pinchWindow = {from: start, to: Date.now()};
   });
-  const during = countBetween(trace, zoom.from + 50, zoom.to - 50);
+  const during = countBetween(zoomTrace, zoom.from + 50, zoom.to - 50);
   expect(during.Layout ?? 0, JSON.stringify(during)).toBe(0);
   expect(during.Paint ?? 0, JSON.stringify(during)).toBe(0);
   // While the fingers move: no layout (a style write per event, composited).
   const moving = countBetween(
-    trace,
+    pinchTrace,
     pinchWindow.from + 100,
     pinchWindow.to - 150,
   );
   expect(moving.Layout ?? 0, JSON.stringify(moving)).toBe(0);
-  expect(trace.longTasks).toEqual([]);
+  expect([...zoomTrace.longTasks, ...pinchTrace.longTasks]).toEqual([]);
 });
 
 test('the zoomed photo is redrawn sharp', async ({page}, testInfo) => {
@@ -1319,9 +1399,10 @@ test('the zoomed photo is redrawn sharp', async ({page}, testInfo) => {
 });
 
 test(
-  'storyboard: pinch to zoom and the return from past the minimum',
+  'storyboard: the return from past the minimum',
   {tag: '@storyboard'},
   async ({page}, testInfo) => {
+    await installPageFreeze(page);
     const {driver, photo, state} = await openViewer(page);
     await installTimerGate(page);
     const viewport = page.viewportSize() ?? {width: 402, height: 714};
@@ -1336,9 +1417,10 @@ test(
         y: +now.y.toFixed(1),
       };
     };
-    const spread = await touchStoryboard(
-      page,
-      driver,
+    // A pinch zooms in, then a squeeze past the minimum lets go. Only the
+    // return is filmed: a film of each gesture's steps takes longer than the
+    // test on a loaded runner.
+    await driver.play(
       pinch({
         center: centre,
         fromDistance: 80,
@@ -1347,11 +1429,12 @@ test(
         hz: 30,
         restMs: 100,
       }),
-      {name: 'lightbox-pinch-zoom', clip, measure, columns: 5, cellScale: 0.4},
     );
-    const squeeze = await touchStoryboard(
-      page,
-      driver,
+    await waitForRest(photo);
+    // Frozen in the lift's own task, the return starts held at its start, and
+    // the hold takes it there however late this process reacts.
+    await freezePageOn(page, 'touchend');
+    await driver.play(
       pinch({
         center: centre,
         fromDistance: 300,
@@ -1360,27 +1443,21 @@ test(
         hz: 30,
         restMs: 100,
       }),
-      {
-        name: 'lightbox-pinch-past-minimum',
-        clip,
-        measure,
-        columns: 5,
-        cellScale: 0.4,
-      },
     );
-    await waitForAnimation(photo);
+    const held = await holdAnimations(page, photo, {
+      judges: {target: photo, property: 'scale'},
+    });
+    await thawPage(page);
     await freezeTimers(page);
     const {storyboard: settle} = await animationStoryboard(page, {
       name: 'lightbox-return-from-past-minimum',
       clip,
       scope: photo,
-      judges: {target: photo, property: 'scale'},
+      held,
       measure,
       columns: 6,
       cellScale: 0.35,
     });
-    await spread.write(testInfo);
-    await squeeze.write(testInfo);
     await settle.write(testInfo);
   },
 );
@@ -1398,14 +1475,18 @@ test(
       const now = await state();
       return {scale: +now.scale.toFixed(3), x: +now.x.toFixed(1)};
     };
+    // Armed before the taps, so the zoom is held as it starts.
+    const hold = await armHold(page, photo, {
+      judges: {target: photo, property: 'scale'},
+    });
     await driver.play(doubleTap({x: 120, y: s.stage.y + s.stage.height / 2}));
-    await waitForAnimation(photo);
+    const held = await hold.held();
     await freezeTimers(page);
     const {storyboard: zoomIn} = await animationStoryboard(page, {
       name: 'lightbox-double-tap-zoom-in',
       clip,
       scope: photo,
-      judges: {target: photo, property: 'scale'},
+      held,
       measure,
       columns: 6,
       cellScale: 0.35,

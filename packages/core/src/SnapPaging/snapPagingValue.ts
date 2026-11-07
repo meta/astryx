@@ -4,8 +4,8 @@
  * @file snapPagingValue.ts
  * @input A scrolling row of snap items
  * @output The `SnapPaging` value, the calls Carousel makes on it
- *   (`isSnapPaging`, `attachSnapPaging`, `moveHeldSnapPaging`), where a held
- *   row is shown, and stops
+ *   (`isSnapPaging`, `attachSnapPaging`, `moveSnapPaging`,
+ *   `moveHeldSnapPaging`), where a held row is shown, and stops
  * @position Carousel's only link to snap paging. It imports no pager code,
  *   so a Carousel without `hasSnap={useSnapPaging()}` bundles none
  */
@@ -35,6 +35,7 @@ export interface SnapPaging {
 /** The paging attached to one row. */
 export interface SnapPagingAttachment {
   readonly detach: () => void;
+  readonly move: (target: (at: number, end: number) => number) => void;
   readonly moveHeld: (target: (at: number, end: number) => number) => boolean;
 }
 
@@ -96,6 +97,23 @@ export function attachSnapPaging(
 }
 
 /**
+ * Moves the row through the paging to `target(shown, end)`, an offset toward
+ * the end, and takes the row over first when it is at rest. `end` is its
+ * travel. False when no paging is attached.
+ */
+export function moveSnapPaging(
+  element: HTMLElement,
+  target: (shown: number, end: number) => number,
+): boolean {
+  const attachment = attachments.get(element);
+  if (attachment == null) {
+    return false;
+  }
+  attachment.move(target);
+  return true;
+}
+
+/**
  * Moves a row the paging holds to `target(shown, end)`, an offset toward the
  * end. `end` is its travel when taken over. False when it is not held.
  */
@@ -115,6 +133,16 @@ export function nearestStop(stops: ReadonlyArray<number>, at: number): number {
 }
 
 /**
+ * The scale a scaled ancestor gives the row's rects: the rect's width over the
+ * row's layout width. Scroll offsets do not have it.
+ */
+export function rowScale(element: HTMLElement, box: DOMRect): number {
+  return element.offsetWidth > 0 && box.width > 0
+    ? box.width / element.offsetWidth
+    : 1;
+}
+
+/**
  * Each item's snap stop: the scroll offset that aligns its start edge with
  * the scroll padding, clamped to `end`. Read from the items' rects, with the
  * position `shown` added back. Stops closer than half a pixel are one stop.
@@ -126,11 +154,7 @@ export function snapStops(
 ): number[] {
   const rtl = isRtlElement(element);
   const box = element.getBoundingClientRect();
-  // A scaled ancestor scales the rects, not the scroll offsets.
-  const scale =
-    element.offsetWidth > 0 && box.width > 0
-      ? box.width / element.offsetWidth
-      : 1;
+  const scale = rowScale(element, box);
   const border = rtl
     ? element.offsetWidth - element.clientWidth - element.clientLeft
     : element.clientLeft;
