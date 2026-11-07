@@ -5,13 +5,9 @@
 /**
  * @file modalOutlet.ts
  * @input The open Dialog and scrim BottomSheet `<dialog>` elements
- * @output Exports useModalOutlet (a modal supplies its outlet, and withdraws
- *   it through the ref it returns). Also useModalOutletWithoutRef (the same
- *   for a modal with no element for that ref). Also getActiveModalOutlet and
- *   subscribeModalOutlets (a global host follows the latest one). Also
- *   notifyTopLayerEntry (a surface entered the top layer above the hosts).
- *   Also markModalOutletHost and isModalOutletHost: a modal's input hold
- *   leaves a marked global host live
+ * @output Exports useModalOutlet, useModalOutletWithoutRef,
+ *   getActiveModalOutlet, subscribeModalOutlets, notifyTopLayerEntry,
+ *   markModalOutletHost, isModalOutletHost and ModalOutletChange
  * @position Private layer infrastructure; spec:AST-003 FR18
  *
  * A native modal makes everything outside it inert and paints over every

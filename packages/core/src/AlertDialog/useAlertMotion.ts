@@ -4,13 +4,10 @@
 
 /**
  * @file useAlertMotion.ts
- * @input Whether the alert is open, whether it takes the touch look, the
- *   dialog element's CSS animations, and the Layer module's input hold. It
- *   checks nodes with utils/nodeType, which reads another window's nodes too
- * @output Exports useAlertMotion and AlertMotion: whether the Dialog is
- *   presented, which touch style applies, and the dialog's callback ref. The
- *   Dialog stays open while the alert fades out. Meanwhile its input is held
- *   and its content is inert
+ * @input Uses React, the settled-open and hydration hooks, the Layer input
+ *   hold, alertController and utils/nodeType
+ * @output Exports useAlertMotion, AlertMotion, AlertMotionOptions, AlertLook
+ *   and SCALE_FROM_PROPERTY
  * @position Internal hook of AlertDialog; the touch presentation's motion.
  *   AlertDialog's styles play it on the theme's dialog entrance and exit.
  *
@@ -96,6 +93,10 @@ export interface AlertMotion {
   readonly ref: (element: HTMLElement | null) => void;
 }
 
+/**
+ * Plays the alert's touch motion. The Dialog stays open while the alert fades
+ * out; meanwhile its input is held and its content is inert.
+ */
 export function useAlertMotion({
   isOpen,
   isEnabled,

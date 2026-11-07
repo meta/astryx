@@ -647,7 +647,7 @@ test.describe('under a finger', () => {
   }, testInfo) => {
     test.skip(
       browserName !== 'chromium',
-      'screencast frame evidence is Chromium-only in Playwright (WebKit: the iOS simulator rig)',
+      "WebKit's screencast frames are JPEGs, whose noise can hide the one-level change this proof reads; the iOS simulator covers it",
     );
     const {driver, trigger, dialog} = await openPage(page);
     // Both motions run 2 s on straight curves here, so the 1 s block always
