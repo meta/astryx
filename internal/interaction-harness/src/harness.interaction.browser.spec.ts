@@ -3044,7 +3044,7 @@ test.describe('holding', () => {
     await releaseAnimations(page, {finish: true});
   });
 
-  test('a judged custom property is found in its @keyframes rule', async ({
+  test('a judged custom property is found in its @keyframes rule, inside a layer', async ({
     page,
   }) => {
     await fixture(page);
@@ -3053,7 +3053,7 @@ test.describe('holding', () => {
       const style = document.createElement('style');
       style.textContent =
         "@property --harness-strength { syntax: '<number>'; inherits: false; initial-value: 0; }" +
-        '@keyframes harness-strength { from { --harness-strength: 1; } to { --harness-strength: 0; } }' +
+        '@layer harness { @keyframes harness-strength { from { --harness-strength: 1; } to { --harness-strength: 0; } } }' +
         '#box { animation: harness-strength 2s linear; }';
       document.head.append(style);
     });

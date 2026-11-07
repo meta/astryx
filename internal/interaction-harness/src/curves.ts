@@ -998,26 +998,34 @@ async function expectJudgedMotionsHeld(
               letter.toUpperCase(),
             );
       // Chromium's `getKeyframes()` leaves out a custom property that a CSS
-      // animation animates. The `@keyframes` rule of that name lists it.
+      // animation animates. The `@keyframes` rule of that name lists it. The
+      // rule can sit inside a grouping rule (`@layer`, `@media`).
+      const keyframesRules = (rules: readonly CSSRule[]): CSSKeyframesRule[] =>
+        rules.flatMap(rule =>
+          rule instanceof CSSKeyframesRule
+            ? [rule]
+            : rule instanceof CSSGroupingRule
+              ? keyframesRules([...rule.cssRules])
+              : [],
+        );
       const ruleProperties = (name: string) =>
-        [...document.styleSheets].flatMap(sheet => {
-          let rules: CSSRule[] = [];
-          try {
-            rules = [...sheet.cssRules];
-          } catch {
-            // A cross-origin sheet does not expose its rules.
-          }
-          return rules
-            .filter(
-              (rule): rule is CSSKeyframesRule =>
-                rule instanceof CSSKeyframesRule && rule.name === name,
-            )
-            .flatMap(rule =>
-              [...rule.cssRules].flatMap(keyframe => [
-                ...(keyframe as CSSKeyframeRule).style,
-              ]),
-            );
-        });
+        [...document.styleSheets, ...document.adoptedStyleSheets].flatMap(
+          sheet => {
+            let rules: CSSRule[] = [];
+            try {
+              rules = [...sheet.cssRules];
+            } catch {
+              // A cross-origin sheet does not expose its rules.
+            }
+            return keyframesRules(rules)
+              .filter(rule => rule.name === name)
+              .flatMap(rule =>
+                [...rule.cssRules].flatMap(keyframe => [
+                  ...(keyframe as CSSKeyframeRule).style,
+                ]),
+              );
+          },
+        );
       const properties = (animation: Animation) => [
         ...new Set([
           ...((animation.effect as KeyframeEffect | null)?.getKeyframes() ?? [])
