@@ -22,11 +22,11 @@ import {
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
 import {
+  BUSY_PROOF_LOOKAROUND_MS,
   castStoryboard,
   animationStoryboard,
   armHold,
   blockMainThread,
-  busyWindowProof,
   compareCurve,
   cubicBezier,
   controlClock,
@@ -55,15 +55,32 @@ import {
   trackControl,
   trackMarker,
   waitForRest,
-  watchAnimations,
   withStorybook,
   writeEvidence,
+  pooledBusyProof,
+  trackBrightness,
+  type BusyRun,
   type CastFrame,
   type TouchDriver,
   CONTROL_SIDE,
 } from '@astryxdesign/interaction-harness';
 import {BROWSER_CLICK_WAIT_MS} from '../../utils/browserClickWait';
 import {CLICK_GUARD_WINDOW_MS} from '../../utils/clickGuard';
+
+/** How close to its end colour the fade is when its block ends: the cast's noise, red units. */
+const FADE_SETTLED = 6;
+/** Where judging the fade stops, red units from its end (see its proof). */
+const FADE_TAIL = 16;
+/**
+ * How long the toggle proof blocks the main thread, ms. The travel rests
+ * about 330 ms into the block, so its last frames in the block show it at rest.
+ */
+const TOGGLE_BLOCK_MS = 400;
+/**
+ * Where judging the toggle's travel stops, px from rest: the harness's
+ * two-step tail rule on the sub-pixel read's 0.05 px steps (see its proof).
+ */
+const TOGGLE_TAIL = 0.4;
 
 const storybook = withStorybook(test);
 
@@ -2380,136 +2397,234 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
   }, testInfo) => {
     test.skip(
       browserName !== 'chromium',
-      'screencast frame evidence is Chromium-only in Playwright (WebKit: checked on the iOS simulator instead)',
+      "WebKit's JPEG cast holds color in 2 by 2 pixel blocks, so it cannot read the thumb's sub-pixel travel",
     );
-    const {driver, input, thumb, center} = await openSwitch(page);
-    await markElement(thumb, {size: 6, inset: 2});
-    // The block starts in the page once the travel is one frame into its
-    // curve, from a task queued in that frame. So it holds the same part of
-    // the travel whatever the page's own timing. The lift starts at
-    // touch-down, and a round trip from here would start the block late.
-    await page.evaluate(() => {
-      const w = window as unknown as {
-        __block?: {from: number; to: number; spins: number};
-        __travel?: {from: number; to: number};
-      };
-      const input = document.querySelector('#storybook-root [role="switch"]')!;
-      const thumb = document.querySelector<HTMLElement>(
-        '#storybook-root .astryx-switch-thumb',
-      )!;
-      const onScreen = () =>
-        thumb
-          .getAnimations()
-          .filter(
-            a =>
-              a.playState === 'running' &&
-              !a.pending &&
-              Number(a.currentTime ?? 0) >= 16 &&
-              (a.effect as KeyframeEffect)
-                .getKeyframes()
-                .some(k => 'translate' in k),
-          )
-          .at(-1);
-      const whenOnScreen = (run: () => void) => {
-        const tick = () => {
-          if (onScreen() == null) {
-            requestAnimationFrame(tick);
-          } else {
-            setTimeout(run, 0);
-          }
+    const {driver, input, thumb, center} = await openSwitch(page, undefined, {
+      belowControls: true,
+    });
+    // The marker sits on the thumb's transform origin, its centre, at either
+    // width (16 px off, 20 px on). So neither the lift nor the width change at
+    // the value change moves the marker's centre, and the proof reads that.
+    await markElement(thumb, {size: 6});
+    await page.addStyleTag({
+      content:
+        '#storybook-root .astryx-switch-thumb [data-harness-marker-chip] { left: calc(50% - 3px) !important; top: calc(50% - 3px) !important }',
+    });
+    // The harness's busy-window control: a box the compositor moves along the
+    // top edge, in the same screencast. Each travel is judged against what the
+    // compositor presented in its block, not against a frame rate. Under a CPU
+    // quota the compositor presents fewer frames in a block, the control's too.
+    const control = await startBusyControl(page);
+    // A travel lasts 0.3 s, so one block leaves few frames to judge. The proof
+    // pools four runs, on and off twice, and judges them as one longer window.
+    // On a loaded machine a run can be starved; the others still count, and
+    // each direction keeps at least one judged run.
+    const runs: BusyRun[] = [];
+    const evidence: unknown[] = [];
+    const directions = [true, false, true, false];
+    const landings: {inBlock: boolean; gap: number}[] = [];
+    for (const on of directions) {
+      // The block starts in the page once the travel is one frame into its
+      // curve, from a task queued in that frame. So it holds the same part of
+      // the travel whatever the page's own timing. The lift starts at
+      // touch-down, and a round trip from here would start the block late.
+      await page.evaluate(blockMs => {
+        const w = window as unknown as {
+          __block?: {from: number; to: number; spins: number};
+          __travel?: {from: number; to: number};
         };
-        requestAnimationFrame(tick);
-      };
-      input.addEventListener(
-        'change',
-        () =>
-          whenOnScreen(() => {
-            const travel = onScreen();
-            if (travel?.startTime != null) {
-              const effect = travel.effect as KeyframeEffect;
-              const from = performance.timeOrigin + Number(travel.startTime);
-              const ends = effect
-                .getKeyframes()
-                .map(k => k.computedOffset)
-                .filter(o => o < 1);
-              w.__travel = {
+        delete w.__block;
+        delete w.__travel;
+        const input = document.querySelector(
+          '#storybook-root [role="switch"]',
+        )!;
+        const thumb = document.querySelector<HTMLElement>(
+          '#storybook-root .astryx-switch-thumb',
+        )!;
+        const onScreen = () =>
+          thumb
+            .getAnimations()
+            .filter(
+              a =>
+                a.playState === 'running' &&
+                !a.pending &&
+                Number(a.currentTime ?? 0) >= 16 &&
+                (a.effect as KeyframeEffect)
+                  .getKeyframes()
+                  .some(k => 'translate' in k),
+            )
+            .at(-1);
+        // A travel rebuilt from a curve that began earlier reads as running
+        // once the page commits it, before the compositor shows a frame of it.
+        // So the block waits until the page sees the same travel on two frames.
+        const whenOnScreen = (run: () => void) => {
+          let seen: Animation | undefined;
+          const tick = () => {
+            const moving = onScreen();
+            if (moving == null || moving !== seen) {
+              seen = moving;
+              requestAnimationFrame(tick);
+            } else {
+              setTimeout(run, 0);
+            }
+          };
+          requestAnimationFrame(tick);
+        };
+        input.addEventListener(
+          'change',
+          () =>
+            whenOnScreen(() => {
+              const travel = onScreen();
+              if (travel?.startTime != null) {
+                const effect = travel.effect as KeyframeEffect;
+                const from = performance.timeOrigin + Number(travel.startTime);
+                const ends = effect
+                  .getKeyframes()
+                  .map(k => k.computedOffset)
+                  .filter(o => o < 1);
+                w.__travel = {
+                  from,
+                  to:
+                    from +
+                    Number(effect.getComputedTiming().activeDuration) *
+                      Math.max(...ends),
+                };
+              }
+              const from = performance.timeOrigin + performance.now();
+              const end = performance.now() + blockMs;
+              let spins = 0;
+              while (performance.now() < end) {
+                spins++;
+              }
+              w.__block = {
                 from,
-                to:
-                  from +
-                  Number(effect.getComputedTiming().activeDuration) *
-                    Math.max(...ends),
+                to: performance.timeOrigin + performance.now(),
+                spins,
               };
-            }
-            const from = performance.timeOrigin + performance.now();
-            const end = performance.now() + 700;
-            let spins = 0;
-            while (performance.now() < end) {
-              spins++;
-            }
-            w.__block = {
-              from,
-              to: performance.timeOrigin + performance.now(),
-              spins,
-            };
-          }),
-        {once: true},
+            }),
+          {once: true},
+        );
+      }, TOGGLE_BLOCK_MS);
+      const cast = await startScreencast(page);
+      await driver.play(tap(center, {holdMs: 50}));
+      if (on) {
+        await expect(input).toBeChecked();
+      } else {
+        await expect(input).not.toBeChecked();
+      }
+      await page.waitForFunction(
+        () => (window as unknown as {__block?: unknown}).__block != null,
       );
+      const {block, travel} = await page.evaluate(() => {
+        const w = window as unknown as {
+          __block: {from: number; to: number; spins: number};
+          __travel: {from: number; to: number};
+        };
+        return {block: w.__block, travel: w.__travel};
+      });
+      expect(
+        travel,
+        'the travel was running when the block began',
+      ).toBeDefined();
+      await page.waitForTimeout(150);
+      const castFrames = await cast.stop();
+      // Only the frames the proof reads are decoded.
+      const read = castFrames.filter(
+        f =>
+          f.t >= block.from - BUSY_PROOF_LOOKAROUND_MS &&
+          f.t <= block.to + BUSY_PROOF_LOOKAROUND_MS,
+      );
+      const tracked = (await trackMarker(page, read, {subpixel: true})).map(
+        f =>
+          f.box == null
+            ? f
+            : {...f, box: {...f.box, x: f.box.x + f.box.width / 2}},
+      );
+      runs.push({
+        tracked,
+        control: await trackControl(page, read),
+        window: {from: block.from, to: Math.min(block.to, travel.to)},
+      });
+      evidence.push({
+        on,
+        block,
+        travel,
+        frames: tracked.map(f => ({
+          t: +(f.t - block.from).toFixed(1),
+          x: f.box?.x ?? null,
+          w: f.box?.width ?? null,
+        })),
+      });
+      // It lands while the thread is still blocked: the last frame the block
+      // presented shows the thumb at the rest it keeps.
+      const shown = tracked.filter(f => f.box != null);
+      const last = shown.filter(f => f.t < block.to).at(-1);
+      landings.push({
+        inBlock: (last?.t ?? 0) > block.from,
+        gap: Math.abs((last?.box?.x ?? 0) - (shown.at(-1)?.box?.x ?? 0)),
+      });
+    }
+    await control.remove();
+    // The read places the marker under a pixel, in 0.05 px steps. The
+    // harness's tail rule stops judging once the travel moves under two steps
+    // a frame. On UISwitch's 0.3 s spring, the thumb's 16 px travel does so
+    // 0.39 px from rest, 268 ms in. One presented frame cannot show the travel moving,
+    // so a run whose control moved on fewer than two frames is too little to
+    // judge. At least two runs must count.
+    const proof = pooledBusyProof(runs, {
+      axis: 'x',
+      settledWithin: TOGGLE_TAIL,
+      minRunFrames: 2,
+      minJudgedRuns: 2,
     });
-    const cast = await startScreencast(page);
-    await driver.play(tap(center, {holdMs: 50}));
-    await expect(input).toBeChecked();
-    await page.waitForFunction(
-      () => (window as unknown as {__block?: unknown}).__block != null,
-    );
-    const {block, travel} = await page.evaluate(() => {
-      const w = window as unknown as {
-        __block: {from: number; to: number; spins: number};
-        __travel: {from: number; to: number};
-      };
-      return {block: w.__block, travel: w.__travel};
-    });
-    expect(travel, 'the travel was running when the block began').toBeDefined();
-    await page.waitForTimeout(150);
-    const castFrames = await cast.stop();
-    const tracked = await trackMarker(page, castFrames);
-    const proof = busyWindowProof(
-      tracked,
-      {from: block.from, to: Math.min(block.to, travel.to)},
-      // The screencast places the marker to the whole px. On UISwitch's 0.3 s
-      // spring, the 13 px travel moves under 1 px per frame once 4.3 px remain
-      // (110 ms). From there a frame can show no change while the thumb moves,
-      // so it is judged until then.
-      {axis: 'x', settledWithin: 4.5},
-    );
     await writeEvidence(
       'busy-main-thread/switch-toggle',
       {
         [`${testInfo.project.name}.json`]: JSON.stringify(
-          {
-            block,
-            travel,
-            proof,
-            frames: tracked.map(f => ({
-              t: +(f.t - block.from).toFixed(1),
-              x: f.box?.x ?? null,
-              w: f.box?.width ?? null,
-            })),
-          },
+          {runs: evidence, summary: proof.summary},
           null,
           1,
         ),
       },
       testInfo,
     );
-    expect(proof.monotonic).toBe(true);
-    // The travel is 13 px: past its first half it moves less than a
-    // screencast pixel per frame, so not every frame changes...
-    expect(proof.changed).toBeGreaterThanOrEqual(Math.floor(proof.frames / 2));
-    // ...but most of it happened while the main thread was held.
-    const held = tracked.filter(
-      f => f.t >= block.from && f.t <= block.to && f.box != null,
-    );
-    expect(held.at(-1)!.box!.x - held[0].box!.x).toBeGreaterThanOrEqual(8);
+    test.info().annotations.push({
+      type: 'busy window',
+      description: proof.summary,
+    });
+    // The travel moves on every frame the control moves on, and in each run
+    // it stalls no longer than the control.
+    expect(proof.verdict.failures, proof.summary).toEqual([]);
+    // The proof claims the travel both ways, so a run each way is judged.
+    const judged = directions.filter((_, i) => proof.judged[i]);
+    expect(
+      judged.includes(true) && judged.includes(false),
+      `the judged runs cover both directions. ${proof.summary}`,
+    ).toBe(true);
+    proof.runs.forEach((run, i) => {
+      // A run the pool leaves out is named in the summary and never passes.
+      if (!proof.judged[i] || run == null) {
+        return;
+      }
+      // It never steps back...
+      expect(run.monotonic, `run ${i + 1}: ${run.summary}`).toBe(true);
+      // ...it lands inside its block...
+      expect(
+        landings[i].inBlock,
+        `run ${i + 1}: the block presented a frame. ${run.summary}`,
+      ).toBe(true);
+      expect(
+        landings[i].gap,
+        `run ${i + 1}: the block's last frame shows the thumb ${landings[i].gap.toFixed(2)} px from its rest, past the ${TOGGLE_TAIL} px tail. ${run.summary}`,
+      ).toBeLessThan(TOGGLE_TAIL);
+      // ...and each run's own block shows it at a new position.
+      const read = run.control;
+      const moved = (read?.movedWith ?? 0) - (read?.belowStep ?? 0);
+      expect(
+        moved,
+        `run ${i + 1}: the travel showed a new position on ${moved} frames in its block. ${run.summary}`,
+      ).toBeGreaterThanOrEqual(1);
+    });
   });
 
   test('P10 · the touch press keeps fading out on every frame while the main thread is blocked', async ({
@@ -2662,13 +2777,17 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
   }, testInfo) => {
     test.skip(
       browserName !== 'chromium',
-      'screencast frame evidence is Chromium-only in Playwright (WebKit: checked on the iOS simulator instead)',
+      "in WebKit's container the pooled fade judges one run of two, too few to decide",
     );
-    const {driver, input, onLayer, center} = await openSwitch(page);
-    // Hide the thumb (its animations still run) so the whole track shows
-    // its colour.
+    const {driver, input, center} = await openSwitch(page, undefined, {
+      belowControls: true,
+    });
+    // Hide the thumb and the press layer (their animations still run), so
+    // the probe reads the colour fade alone. The track then rests before the
+    // fade, and a fade that reaches the screen late is judged from there.
     await page.addStyleTag({
-      content: '#storybook-root .astryx-switch-thumb { visibility: hidden }',
+      content:
+        '#storybook-root .astryx-switch-thumb, #storybook-root .astryx-switch::before { visibility: hidden }',
     });
     const box = await page
       .locator('#storybook-root .astryx-switch')
@@ -2677,45 +2796,196 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     if (box == null) {
       throw new Error('no track');
     }
-    const cast = await startScreencast(page);
-    const watch = await watchAnimations(onLayer);
-    await driver.play(tap(center, {holdMs: 50}));
-    await expect(input).toBeChecked();
-    await watch.started({minProgressMs: 16});
-    const block = await blockMainThread(page, 700);
-    await page.waitForTimeout(150);
-    const castFrames = await cast.stop();
-    const luma = await sampleLuma(page, castFrames, {
-      x: box.x + 4,
-      y: box.y + 4,
-      width: box.width - 8,
-      height: box.height - 8,
+    // The track's colour on a flat part of it, away from its rounded ends:
+    // JPEG noise on an edge reads as change.
+    const probe = {x: box.x + box.width / 2 - 4, y: box.y + box.height / 2 - 4};
+    const control = await startBusyControl(page);
+    // A fade gives few frames in one block. The proof pools two runs, in and
+    // then out, and judges them as one longer window.
+    const runs: BusyRun[] = [];
+    const evidence: unknown[] = [];
+    const landings: {inBlock: boolean; gap: number}[] = [];
+    for (const on of [true, false]) {
+      // The block starts in the page once the fade is one frame in, from a
+      // task queued in that frame. A round trip from here would start it
+      // late on a loaded runner, after most of the fade.
+      await page.evaluate(() => {
+        const w = window as unknown as {
+          __block?: {from: number; to: number};
+          __fade?: {from: number; to: number};
+        };
+        delete w.__block;
+        delete w.__fade;
+        const input = document.querySelector(
+          '#storybook-root [role="switch"]',
+        )!;
+        const track = document.querySelector<HTMLElement>(
+          '#storybook-root .astryx-switch',
+        )!;
+        const onScreen = () =>
+          track
+            .getAnimations({subtree: true})
+            .filter(
+              a =>
+                a.playState === 'running' &&
+                !a.pending &&
+                Number(a.currentTime ?? 0) >= 16 &&
+                (a.effect as KeyframeEffect).target === track &&
+                (a.effect as KeyframeEffect).pseudoElement === '::after',
+            )
+            .at(-1);
+        // A fade swapped onto the running clock reads as running once the page
+        // commits it, before the compositor shows a frame of it. So the block
+        // waits until the page sees the same fade on two frames.
+        const whenOnScreen = (run: () => void) => {
+          let seen: Animation | undefined;
+          const tick = () => {
+            const moving = onScreen();
+            if (moving == null || moving !== seen) {
+              seen = moving;
+              requestAnimationFrame(tick);
+            } else {
+              setTimeout(run, 0);
+            }
+          };
+          requestAnimationFrame(tick);
+        };
+        input.addEventListener(
+          'change',
+          () =>
+            whenOnScreen(() => {
+              const fade = onScreen();
+              if (fade?.startTime != null) {
+                const effect = fade.effect as KeyframeEffect;
+                const from = performance.timeOrigin + Number(fade.startTime);
+                const ends = effect
+                  .getKeyframes()
+                  .map(k => k.computedOffset)
+                  .filter(o => o < 1);
+                w.__fade = {
+                  from,
+                  to:
+                    from +
+                    Number(effect.getComputedTiming().activeDuration) *
+                      Math.max(...ends),
+                };
+              }
+              const from = performance.timeOrigin + performance.now();
+              const end = performance.now() + 700;
+              while (performance.now() < end) {
+                // the page's main thread is busy
+              }
+              w.__block = {
+                from,
+                to: performance.timeOrigin + performance.now(),
+              };
+            }),
+          {once: true},
+        );
+      });
+      const cast = await startScreencast(page);
+      await driver.play(tap(center, {holdMs: 50}));
+      if (on) {
+        await expect(input).toBeChecked();
+      } else {
+        await expect(input).not.toBeChecked();
+      }
+      await page.waitForFunction(
+        () => (window as unknown as {__block?: unknown}).__block != null,
+      );
+      const {block, fade} = await page.evaluate(() => {
+        const w = window as unknown as {
+          __block: {from: number; to: number};
+          __fade: {from: number; to: number};
+        };
+        return {block: w.__block, fade: w.__fade};
+      });
+      expect(fade, 'the fade was running when the block began').toBeDefined();
+      await page.waitForTimeout(150);
+      const castFrames = await cast.stop();
+      // The red channel's mean in an 8 px square: a scalar on x.
+      const tracked = await trackBrightness(page, castFrames, {
+        ...probe,
+        size: 8,
+      });
+      runs.push({
+        tracked,
+        control: await trackControl(page, castFrames),
+        window: {from: block.from, to: Math.min(block.to, fade.to)},
+      });
+      evidence.push({
+        on,
+        block,
+        fade,
+        frames: tracked.map(f => ({
+          t: +(f.t - block.from).toFixed(1),
+          red: +(f.box?.x ?? 0).toFixed(1),
+        })),
+      });
+      // It lands while the thread is still blocked: the last frame the block
+      // presented shows the colour the track keeps.
+      const last = tracked.filter(f => f.t < block.to).at(-1);
+      landings.push({
+        inBlock: (last?.t ?? 0) > block.from,
+        gap: Math.abs((last?.box?.x ?? 0) - (tracked.at(-1)?.box?.x ?? 0)),
+      });
+    }
+    await control.remove();
+    // The harness's tail rule for a curve, on a brightness channel: judging
+    // stops once the fade moves under two levels a frame. A loaded cast can
+    // then show no change between two frames. On the well springs, critically
+    // damped over the track's 166-level red span, that is 16 levels from rest
+    // for wellOn and 9 for wellOff. The pool takes one bound, the larger.
+    const proof = pooledBusyProof(runs, {
+      axis: 'x',
+      settledWithin: FADE_TAIL,
+      minRunFrames: 2,
+      minJudgedRuns: 2,
     });
     await writeEvidence(
       'busy-main-thread/switch-track-colour',
       {
         [`${testInfo.project.name}.json`]: JSON.stringify(
-          {
-            block,
-            frames: luma.map(f => ({
-              t: +(f.t - block.from).toFixed(1),
-              luma: +f.luma.toFixed(1),
-            })),
-          },
+          {runs: evidence, summary: proof.summary},
           null,
           1,
         ),
       },
       testInfo,
     );
-    const off = luma[0].luma;
-    const on = luma.at(-1)!.luma;
-    const held = luma.filter(
-      f => f.t >= block.from + 20 && f.t <= block.to - 20,
-    );
-    expect(held.length).toBeGreaterThan(20);
-    // Most of the fade happened while the main thread was held.
-    expect(held[0].luma - held.at(-1)!.luma).toBeGreaterThan(0.5 * (off - on));
+    test.info().annotations.push({
+      type: 'busy window',
+      description: proof.summary,
+    });
+    // The colour changes on every frame the control moves on, and in each run
+    // it stalls no longer than the control.
+    expect(proof.verdict.failures, proof.summary).toEqual([]);
+    // Each judged run lands inside its block.
+    proof.runs.forEach((run, i) => {
+      if (!proof.judged[i] || run == null) {
+        return;
+      }
+      expect(
+        landings[i].inBlock,
+        `run ${i + 1}: the block presented a frame. ${run.summary}`,
+      ).toBe(true);
+      expect(
+        landings[i].gap,
+        `run ${i + 1}: the block's last frame shows the colour ${landings[i].gap.toFixed(1)} levels from its end. ${run.summary}`,
+      ).toBeLessThan(FADE_SETTLED);
+    });
+    proof.runs.forEach((run, i) => {
+      if (!proof.judged[i] || run == null) {
+        return;
+      }
+      expect(run.monotonic, `run ${i + 1}: ${run.summary}`).toBe(true);
+      const read = run.control;
+      const moved = (read?.movedWith ?? 0) - (read?.belowStep ?? 0);
+      expect(
+        moved,
+        `run ${i + 1}: the colour showed a new value on ${moved} frames in its block. ${run.summary}`,
+      ).toBeGreaterThanOrEqual(1);
+    });
   });
 
   test('P10 · a change does no Layout or Paint per frame', async ({
