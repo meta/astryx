@@ -1734,6 +1734,55 @@ test.describe('frame evidence', () => {
     expect(steady(busy)).toBeGreaterThan(10);
   });
 
+  test('a traced Paint names the node it painted, and a style recalculation counts the elements it restyled', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'rendering traces are Chromium-only (README: engine limits)',
+    );
+    await page.setContent(
+      `<style>body { margin: 0; }</style><div id="list"><span>a</span><span>b</span><span>c</span><span>d</span><span>e</span></div><div id="patch" style="width: 50px; height: 50px; background: red; will-change: transform"></div>`,
+    );
+    await frames(page, 3);
+    // One frame restyles the five spans; a later one repaints the patch,
+    // which has its own layer.
+    const trace = await traceRendering(page, async () => {
+      await page.evaluate(async () => {
+        const twoFrames = () =>
+          new Promise(resolve =>
+            requestAnimationFrame(() => requestAnimationFrame(resolve)),
+          );
+        for (const span of document.querySelectorAll('#list span')) {
+          (span as HTMLElement).style.color = 'blue';
+        }
+        await twoFrames();
+        (document.getElementById('patch') as HTMLElement).style.background =
+          'blue';
+        await twoFrames();
+      });
+    });
+    const restyled = trace.events
+      .filter(e => e.name === 'UpdateLayoutTree')
+      .map(e => e.elements);
+    expect(restyled).toContain(5);
+    expect(restyled).toContain(1);
+    const painted = trace.events
+      .filter(e => e.name === 'Paint')
+      .map(e => e.node);
+    expect(painted).toContain("DIV id='patch'");
+    // Only those two events carry the fields.
+    expect(
+      trace.events.filter(
+        e =>
+          e.name !== 'Paint' &&
+          e.name !== 'UpdateLayoutTree' &&
+          (e.node != null || e.elements != null),
+      ),
+    ).toEqual([]);
+  });
+
   test("the trace counts no Layout from the harness's own animation recorder, which stands down while it runs", async ({
     page,
     browserName,

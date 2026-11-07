@@ -341,7 +341,9 @@ after are the stall check's. WebKit has no such trace:
 **No Layout / Paint.** `traceRendering` records a Chromium trace around the
 interaction; `countBetween` counts the steady middle of an animation (its
 first and last frames may commit). A transform/opacity animation does no
-Layout or Paint there; a layout-property animation does one per frame. The
+Layout or Paint there; a layout-property animation does one per frame. Each
+counted `Paint` names the node it painted (`node`), and each `UpdateLayoutTree`
+counts the elements it restyled (`elements`). The
 harness's own animation recorder stands down while the trace runs, since its
 frame loop would make every frame a main-thread one, restyling each running
 animation's target and laying out an anchored one: it reads only the element a
