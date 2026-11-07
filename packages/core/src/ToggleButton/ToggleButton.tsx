@@ -31,6 +31,7 @@ import {useToggleButtonGroup} from './ToggleButtonGroup';
 import type {BaseProps} from '../BaseProps';
 import {themeDataAttributes, themeProps} from '../utils/themeProps';
 import {mergeProps} from '../utils/mergeProps';
+import {useSize} from '../SizeContext';
 
 // =============================================================================
 // Styles
@@ -268,7 +269,7 @@ export function ToggleButton({
     group && value != null
       ? group.selectedValues.has(value)
       : (isPressedProp ?? false);
-  const size = sizeProp ?? group?.size ?? 'md';
+  const size = useSize(sizeProp ?? group?.size, 'md');
   // Either source disabling this button is enough. `??` could not express that:
   // the group always supplies a boolean (its own prop defaults to false), so the
   // fallback never ran and an enabled group handed a member that had disabled
