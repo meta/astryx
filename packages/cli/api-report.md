@@ -918,6 +918,11 @@ type TonalPaletteCoordinationDiagnostics
   stop: number
   strongestFamily: string | null
   weakestFamily: string | null
+type TonalPaletteDarkChromaTaper
+  edgeMultiplier: number
+  familyMultipliers?: Record<string, number> | undefined
+  recoverAtStop: number
+  throughStop: number
 type TonalPaletteFamilyInput
   anchors?: TonalPaletteAnchor[] | undefined
   id: string
@@ -925,6 +930,7 @@ type TonalPaletteFamilyInput
   name?: string | undefined
   seed: string
 type TonalPaletteGenerationInput
+  darkChromaTaper?: TonalPaletteDarkChromaTaper | undefined
   families: TonalPaletteFamilyInput[]
   modeStrategy?: "light-only" | "dark-only" | "light-and-dark" | undefined
   neutralProfile?: "custom" | "neutral-v1" | "warm-v1" | "cool-v1" | undefined
@@ -940,6 +946,7 @@ type TonalPaletteGenerationReceipt
   request: TonalPaletteNormalizedRequest
   schemaVersion: 1
 type TonalPaletteNormalizedRequest
+  darkChromaTaper?: { edgeMultiplier: number; throughStop: number; recoverAtStop: number; familyMultipliers: Record<string, number> } | undefined
   families: Array<{ id: string; name: string; seed: string; kind: "chromatic" | "neutral"; anchors: TonalPaletteAnchor[] }>
   modeStrategy: "light-only" | "dark-only" | "light-and-dark"
   neutralProfile: "neutral-v1" | "warm-v1" | "cool-v1" | "custom"
