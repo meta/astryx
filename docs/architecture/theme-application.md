@@ -132,6 +132,19 @@ standard width map.
 - **INV11 — Icon resolution agrees across server and client.** Server rendering
   and hydration resolve every icon and slot request to the same node for the
   active theme.
+- **INV12 — An inverted surface is a media surface.** Every surface Astryx
+  paints inverted from the page, such as a Toast and a Tooltip, is a
+  `MediaTheme` surface, so the components inside it (Text, Kbd, Button, Icon)
+  resolve their tokens for that surface and stay readable. A component does not
+  paint an inverted background and light text on its own while leaving its
+  children on page tokens (DEC-2).
+- **INV13 — The theme decides whether an internal surface inverts.** A theme
+  may set the media mode of each surface Astryx inverts internally, such as a
+  Toast and a Tooltip: inverted (the default) or the page surface. A component
+  takes no per-call prop for it. Inside a media surface, a theme styles
+  components through its `onDark` and `onLight` overrides
+  (`architecture:theme-authoring-contract` INV7). The theme setting reaches
+  nested providers as other theme settings do (DEC-3).
 
 This record does not own theme authoring, token definitions, compiler output, or
 which component parts are public theme targets.
@@ -168,6 +181,33 @@ which component parts are public theme targets.
   them reaches `Theme` from client code.
 - `spec:AST-108/DEC-1` lets a theme's `reducedMotion: 'always'` reach nested
   providers (INV1).
+
+### DEC-2 — Inverted surfaces make their children adapt
+
+**Decider:** pending
+
+A person reading a tooltip that shows a keyboard shortcut sees the label vanish,
+because the tooltip paints a dark background while the text and key inside keep
+their light-page colours. Toast already wraps its content in a media surface,
+so its children adapt. INV12 makes every inverted surface work the same way.
+
+Rejected: giving each child component an inverse variant, which multiplies
+variants and still misses app content. Rejected: leaving it to callers, who
+cannot fix colours they do not control.
+
+### DEC-3 — Inversion is a theme decision
+
+**Decider:** pending
+
+A team moving its own design system onto Astryx needs toasts that use its
+normal surface, not an inverted one, and today it cannot change that. Whether
+an internal surface inverts is a visual choice, so the theme owns it, like
+`reducedMotion` (`spec:AST-108/DEC-1`). Builders keep one Toast API, and every
+toast in a themed app looks the same.
+
+Rejected: a per-call prop on Toast and Tooltip, which lets toasts in one app
+differ and adds public API for a visual choice. Rejected: keeping inversion
+fixed, which blocks design systems with a different toast look.
 
 ## Verification
 
