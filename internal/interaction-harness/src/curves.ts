@@ -658,22 +658,51 @@ export interface HeldAnimation {
  * An animation the page cancels after the hold (retargeting a CSS transition
  * cancels it) leaves the held set: seeking, sampling and releasing skip it
  * rather than revive it.
+ *
+ * `judges` names the motion that the test reads from the hold, as for
+ * `armHold`. A hold sent from the test takes what runs when it reaches the
+ * page: the judged motion can still be to come, or already over on a busy
+ * runner, while other animations under the scope run. So the call rejects
+ * when it took no animation of each judged motion.
  */
 export async function holdAnimations(
   page: Page,
-  scope?: Locator,
+  scope: Locator | undefined,
+  options: HoldOptions,
 ): Promise<HeldAnimation[]> {
+  const motions = judgedMotions('holdAnimations', options?.judges);
   const scopeHandle = scope ? await scope.elementHandle() : null;
   await installCurveEnd(page);
-  return page.evaluate(
-    root =>
-      (
-        window as unknown as {
-          __harnessHold: (root: Element | null) => HeldAnimation[];
-        }
-      ).__harnessHold(root),
-    scopeHandle,
+  holdKeys += 1;
+  const key = holdKeys;
+  const held = await page.evaluate(
+    ([root, id, judged]) => {
+      const w = window as unknown as {
+        __harnessHold: (root: Element | null) => HeldAnimation[];
+        __harnessHeld?: Animation[];
+        __harnessTook?: Record<number, Animation[]>;
+      };
+      const took = w.__harnessHold(root);
+      // The hold appends what it took to the held set. The judged-motion
+      // check reads these animations.
+      if (judged && took.length > 0) {
+        w.__harnessTook = {
+          ...w.__harnessTook,
+          [id]: (w.__harnessHeld ?? []).slice(-took.length),
+        };
+      }
+      return took;
+    },
+    [scopeHandle, key, motions.length > 0] as const,
   );
+  await expectJudgedMotionsHeld(page, key, motions, {
+    caller: 'holdAnimations',
+    cause:
+      'The judged motion did not run when the hold reached the page (not started yet, or already over)',
+    remedy:
+      'Arm the hold before the action that starts the motion (armHold), so the page holds it as it starts.',
+  });
+  return held;
 }
 
 /** An armed hold (`armHold`): the page holds on its own; read what it held. */
@@ -706,16 +735,37 @@ export interface JudgedMotion {
  */
 export type HoldJudges = JudgedMotion | readonly JudgedMotion[] | 'count-only';
 
-/** How an armed hold waits (`armHold`), and what it must take. */
-export interface ArmHoldOptions {
+/** What a hold must take (`holdAnimations`). */
+export interface HoldOptions {
   readonly judges: HoldJudges;
+}
+
+/** How an armed hold waits (`armHold`), and what it must take. */
+export interface ArmHoldOptions extends HoldOptions {
   readonly count?: number;
   readonly minProgressMs?: number;
   readonly newOnly?: boolean;
   readonly timeout?: number;
 }
 
-let armedHolds = 0;
+/** Keys each hold's record of what it took, for the judged-motion check. */
+let holdKeys = 0;
+
+/**
+ * The judged motions as a list: empty for `'count-only'`. Throws when the
+ * caller names none.
+ */
+function judgedMotions(
+  caller: string,
+  judges: HoldJudges | undefined,
+): readonly JudgedMotion[] {
+  if (judges == null) {
+    throw new Error(
+      `${caller}: name the motion that the test judges ({judges: {target, property}}). Other animations can be what the hold takes while that motion does not run. Pass 'count-only' only for a call site that does not hold its judged motion yet.`,
+    );
+  }
+  return judges === 'count-only' ? [] : 'target' in judges ? [judges] : judges;
+}
 
 /**
  * Arms the page to hold every running animation under `scope` (the whole
@@ -766,19 +816,13 @@ export async function armHold(
     newOnly = false,
     timeout = 5_000,
   } = options ?? ({} as Partial<ArmHoldOptions>);
-  if (judges == null) {
-    throw new Error(
-      "armHold: name the motion that the test judges ({judges: {target, property}}). Other animations can meet a count of running animations before that motion starts. Pass 'count-only' only for a call site that does not hold its judged motion yet.",
-    );
-  }
-  const motions: readonly JudgedMotion[] =
-    judges === 'count-only' ? [] : 'target' in judges ? [judges] : judges;
+  const motions = judgedMotions('armHold', judges);
   const scopeHandle = scope ? await scope.elementHandle() : null;
   await installCurveEnd(page);
-  armedHolds += 1;
-  const id = armedHolds;
+  holdKeys += 1;
+  const id = holdKeys;
   await page.evaluate(
-    ([root, needed, minProgress, fresh, wait, key]) => {
+    ([root, needed, minProgress, fresh, wait, key, judged]) => {
       const w = window as unknown as {
         __harnessHold: (
           root: Element | null,
@@ -791,7 +835,7 @@ export async function armHold(
           timeout?: typeof setTimeout;
         };
         __harnessArmed?: Record<number, Promise<unknown[]>>;
-        __harnessArmedTook?: Record<number, Animation[]>;
+        __harnessTook?: Record<number, Animation[]>;
       };
       // The harness's own waits run on the real timers: a frozen timer gate
       // (story.ts) holds only the page's.
@@ -854,13 +898,12 @@ export async function armHold(
               const took = w.__harnessHold(root, before);
               // The hold appends what it took to the held set. `held()` reads
               // these animations to find the judged motions.
-              w.__harnessArmedTook = {
-                ...w.__harnessArmedTook,
-                [key]:
-                  took.length === 0
-                    ? []
-                    : (w.__harnessHeld ?? []).slice(-took.length),
-              };
+              if (judged && took.length > 0) {
+                w.__harnessTook = {
+                  ...w.__harnessTook,
+                  [key]: (w.__harnessHeld ?? []).slice(-took.length),
+                };
+              }
               resolve(took);
             } catch (error) {
               reject(error);
@@ -889,6 +932,7 @@ export async function armHold(
       newOnly,
       timeout,
       id,
+      motions.length > 0,
     ] as const,
   );
   return {
@@ -904,28 +948,36 @@ export async function armHold(
         delete w.__harnessArmed?.[key];
         return armed;
       }, id);
-      await expectJudgedMotionsHeld(page, id, motions, count);
+      await expectJudgedMotionsHeld(page, id, motions, {
+        caller: 'armHold',
+        cause: `Other animations met its count of ${Math.max(count, 1)} first`,
+        remedy:
+          'Arm the hold so that it waits for the judged motion (count, newOnly, minProgressMs, scope).',
+      });
       return held;
     },
   };
 }
 
 /**
- * Throws unless the armed hold `key` took an animation of each judged motion.
- * The targets resolve only now: the action that the hold waits for can add
- * them to the page.
+ * Throws unless the hold `key` took an animation of each judged motion. The
+ * targets resolve only now: the action that an armed hold waits for can add
+ * them to the page. `cause` and `remedy` complete the error for the caller.
  */
 async function expectJudgedMotionsHeld(
   page: Page,
   key: number,
   motions: readonly JudgedMotion[],
-  count: number,
+  failure: {caller: string; cause: string; remedy: string},
 ): Promise<void> {
+  if (motions.length === 0) {
+    return;
+  }
   const targets = await Promise.all(
     motions.map(motion =>
       motion.target.elementHandle({timeout: 5_000}).catch(() => {
         throw new Error(
-          `armHold: the judged target ${motion.target.toString()} is not on the page`,
+          `${failure.caller}: the judged target ${motion.target.toString()} is not on the page`,
         );
       }),
     ),
@@ -933,10 +985,10 @@ async function expectJudgedMotionsHeld(
   const {missing, took} = await page.evaluate(
     ([armed, elements, wanted]) => {
       const w = window as unknown as {
-        __harnessArmedTook?: Record<number, Animation[]>;
+        __harnessTook?: Record<number, Animation[]>;
       };
-      const animations = w.__harnessArmedTook?.[armed] ?? [];
-      delete w.__harnessArmedTook?.[armed];
+      const animations = w.__harnessTook?.[armed] ?? [];
+      delete w.__harnessTook?.[armed];
       // `getKeyframes()` names a property in camel case, except a custom
       // property.
       const keyframeName = (property: string) =>
@@ -945,9 +997,38 @@ async function expectJudgedMotionsHeld(
           : property.replace(/-([a-z])/g, (_, letter: string) =>
               letter.toUpperCase(),
             );
+      // Chromium's `getKeyframes()` leaves out a custom property that a CSS
+      // animation animates. The `@keyframes` rule of that name lists it. The
+      // rule can sit inside a grouping rule (`@layer`, `@media`).
+      const keyframesRules = (rules: readonly CSSRule[]): CSSKeyframesRule[] =>
+        rules.flatMap(rule =>
+          rule instanceof CSSKeyframesRule
+            ? [rule]
+            : rule instanceof CSSGroupingRule
+              ? keyframesRules([...rule.cssRules])
+              : [],
+        );
+      const ruleProperties = (name: string) =>
+        [...document.styleSheets, ...document.adoptedStyleSheets].flatMap(
+          sheet => {
+            let rules: CSSRule[] = [];
+            try {
+              rules = [...sheet.cssRules];
+            } catch {
+              // A cross-origin sheet does not expose its rules.
+            }
+            return keyframesRules(rules)
+              .filter(rule => rule.name === name)
+              .flatMap(rule =>
+                [...rule.cssRules].flatMap(keyframe => [
+                  ...(keyframe as CSSKeyframeRule).style,
+                ]),
+              );
+          },
+        );
       const properties = (animation: Animation) => [
-        ...new Set(
-          ((animation.effect as KeyframeEffect | null)?.getKeyframes() ?? [])
+        ...new Set([
+          ...((animation.effect as KeyframeEffect | null)?.getKeyframes() ?? [])
             .flatMap(keyframe => Object.keys(keyframe))
             .filter(
               name =>
@@ -955,7 +1036,10 @@ async function expectJudgedMotionsHeld(
                   name,
                 ),
             ),
-        ),
+          ...(animation instanceof CSSAnimation
+            ? ruleProperties(animation.animationName).map(keyframeName)
+            : []),
+        ]),
       ];
       const describe = (animation: Animation) => {
         const effect = animation.effect as KeyframeEffect | null;
@@ -1004,10 +1088,10 @@ async function expectJudgedMotionsHeld(
       })
       .join(', ');
     throw new Error(
-      `armHold: the hold took no animation of the judged motion (${judged}). ` +
-        `Other animations met its count of ${Math.max(count, 1)} first; it took: ` +
+      `${failure.caller}: the hold took no animation of the judged motion (${judged}). ` +
+        `${failure.cause}; it took: ` +
         `${took.length > 0 ? took.join('; ') : 'nothing'}. ` +
-        'Arm the hold so that it waits for the judged motion (count, newOnly, minProgressMs, scope).',
+        failure.remedy,
     );
   }
 }
