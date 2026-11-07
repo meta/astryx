@@ -392,7 +392,8 @@ describe('createMarkdownHeadingLinks', () => {
     expect(permalink).toHaveTextContent('#');
   });
 
-  it('fails softly without navigation when clipboard writing rejects', async () => {
+  it('shows and announces a failed copy without navigation when clipboard writing rejects', async () => {
+    vi.useFakeTimers();
     clipboardWrite().mockRejectedValueOnce(new Error('clipboard denied'));
     render(<Markdown plugins={[headingLinks]}>{'# Overview'}</Markdown>);
     const permalink = screen.getByRole('button', {
@@ -406,14 +407,28 @@ describe('createMarkdownHeadingLinks', () => {
     });
 
     expect(window.location.href).toBe(locationBefore);
-    expect(permalink).toHaveAccessibleName('Copy link to Overview');
-    expect(permalink).toHaveTextContent('#');
+    expect(permalink).toHaveAccessibleName(
+      'Failed to copy value to clipboard.',
+    );
+    expect(permalink).not.toHaveTextContent('#');
+    expect(permalink.querySelector('.astryx-icon')).toBeInTheDocument();
+
+    await act(async () => {
+      vi.advanceTimersByTime(20);
+      await Promise.resolve();
+    });
     expect(
       document.querySelector('[data-astryx-live-region="polite"]'),
-    ).toBeNull();
+    ).toHaveTextContent('Failed to copy value to clipboard.');
+
+    act(() => {
+      vi.advanceTimersByTime(1480);
+    });
+    expect(permalink).toHaveAccessibleName('Copy link to Overview');
+    expect(permalink).toHaveTextContent('#');
   });
 
-  it('fails softly when the Clipboard API is unavailable', async () => {
+  it('shows a failed copy when the Clipboard API is unavailable', async () => {
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: undefined,
@@ -430,8 +445,9 @@ describe('createMarkdownHeadingLinks', () => {
     });
 
     expect(window.location.href).toBe(locationBefore);
-    expect(permalink).toHaveAccessibleName('Copy link to Overview');
-    expect(permalink).toHaveTextContent('#');
+    expect(permalink).toHaveAccessibleName(
+      'Failed to copy value to clipboard.',
+    );
   });
 
   it('ignores modified and non-primary pointer activation', () => {

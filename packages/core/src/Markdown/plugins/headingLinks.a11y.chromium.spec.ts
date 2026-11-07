@@ -843,10 +843,12 @@ test('heading copy buttons are honest, aligned, discoverable, and stable in ever
   const failureLocation = failurePage.url();
   const failureGeometryBefore = await measureHeading(failureHeading);
   await failureButton.click();
+  // A failed write shows the cross and names the failure for 1.5s, without
+  // moving the heading row.
   await expect(failureButton).toHaveAccessibleName(
-    'Copy link to Linkable headings',
+    'Failed to copy value to clipboard.',
   );
-  await expect(failureButton).toHaveText('#');
+  await expect(failureButton).not.toHaveText('#');
   await expect(failurePage).toHaveURL(failureLocation);
   const failureGeometryAfter = await measureHeading(failureHeading);
   expectSameRect(failureGeometryBefore.row, failureGeometryAfter.row);
