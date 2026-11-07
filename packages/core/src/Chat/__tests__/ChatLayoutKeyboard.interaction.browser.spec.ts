@@ -7,9 +7,9 @@
  *   interaction harness
  * @output Proofs that on Chrome's profile the dock rides Gboard's slide up
  *   and down with no Layout or Paint per frame. Under Reduce Motion it never
- *   travels. The transcript stays at its newest message. A tap on the
- *   composer's text scrolls no page. Done's park shows the focus ring after
- *   typing only. A storyboard shows the rise
+ *   travels, also on a hide reported in steps. The transcript stays at its
+ *   newest message. A tap on the composer's text scrolls no page. Done's park
+ *   shows the focus ring after typing only. A storyboard shows the rise
  * @position Browser proofs for Chat/useChatKeyboard.ts and
  *   keyboard/keyboardLayoutGuide.ts. Headless browsers have no software
  *   keyboard, so the test shrinks the page's `visualViewport` as Mobile
@@ -820,5 +820,65 @@ test.describe('Chrome on Android (spec:AST-099 FR8)', () => {
     }
     expect(ys.at(-1)).toBeCloseTo(-lift, 0);
     expect(await dock.evaluate(el => getComputedStyle(el).opacity)).toBe('1');
+  });
+
+  test('Reduce Motion: a hide Chrome reports in steps moves the dock once, after the keyboard has gone', async ({
+    page,
+  }) => {
+    await page.emulateMedia({reducedMotion: 'reduce'});
+    const {dock, editable, lift} = await openChat(page, {android: true});
+    await editable.focus();
+    await showKeyboard(page);
+    // The layout has taken the keyboard's lift: the show is over.
+    await expect
+      .poll(async () =>
+        dock.evaluate(el => parseFloat(getComputedStyle(el).bottom) || 0),
+      )
+      .toBeCloseTo(lift, 0);
+    await expect.poll(async () => dockY(dock)).toBeCloseTo(-lift, 0);
+    // Under Remove animations, Chrome reports Back's hide as lower keyboards
+    // that are still up, then none. Each frame records where the dock is drawn
+    // and the layout's offset.
+    const frames = await dock.evaluate(async (el, cover) => {
+      const out: {y: number; bottom: number}[] = [];
+      const read = () => {
+        const style = getComputedStyle(el);
+        const translate =
+          style.translate === 'none'
+            ? 0
+            : parseFloat(style.translate.split(' ')[1] ?? '0') || 0;
+        const bottom = parseFloat(style.bottom) || 0;
+        out.push({y: translate - bottom, bottom});
+      };
+      const until = performance.now() + 900;
+      const sample = () => {
+        read();
+        if (performance.now() < until) {
+          requestAnimationFrame(sample);
+        }
+      };
+      requestAnimationFrame(sample);
+      const keyboard = (window as unknown as {__keyboard: (c: number) => void})
+        .__keyboard;
+      for (const share of [0.6, 0.35, 0.15, 0]) {
+        await new Promise(resolve => setTimeout(resolve, 40));
+        keyboard(Math.round(cover * share));
+      }
+      await new Promise(resolve => setTimeout(resolve, 900));
+      return out;
+    }, COVER);
+    const detail = JSON.stringify(
+      frames.map(({y, bottom}) => [Math.round(y), Math.round(bottom)]),
+    );
+    // Every frame draws the dock where the keyboard's top was, or at rest.
+    for (const {y} of frames) {
+      expect(Math.abs(y + lift) < 0.5 || Math.abs(y) < 0.5, detail).toBe(true);
+    }
+    // The layout's offset changes once: from the lift to none.
+    expect(
+      [...new Set(frames.map(({bottom}) => Math.round(bottom)))],
+      detail,
+    ).toEqual([Math.round(lift), 0]);
+    expect(frames.at(-1)?.y ?? Number.NaN, detail).toBeCloseTo(0, 0);
   });
 });

@@ -243,6 +243,13 @@ keyboard module measures them from the visual viewport, as in every browser
   dated back `hideReportLagMs`, the lag measured on blurs. Chrome can report
   Back later in the slide, so on Back the content starts down after the
   keyboard does.
+- Under Remove animations (`prefers-reduced-motion: reduce`), Chrome reports
+  a hide in steps: lower keyboards that are still up, then none. There, the
+  keyboard module holds such a step and keeps reporting the shown height. The
+  report of none, a report back up, or 300 ms without a new height ends the
+  hold, and it lasts 1 s at most. A pan reports the same height and leaves it
+  as it is. So every reader lays out once, after the keyboard has gone, and its
+  Reduce Motion cross-fade plays once.
 - When focus moves from one field to another through something that brings up
   no keyboard (a popover's container), Chrome reports the keyboard gone and
   back within about 50 ms. A hide reported while a field that gained focus less
