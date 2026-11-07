@@ -21,6 +21,7 @@ import {
   frames,
   MARKER_RGB,
   openStory,
+  requireFrames,
   startScreencast,
   touchDriver,
   trackMarker,
@@ -411,6 +412,14 @@ test.describe('with a finger', () => {
     await waitForRest(thumb);
     await frames(page, 6);
     const shot = await cast.stop();
+    // A loaded machine draws too few frames to show every frame of the drag
+    // and its coast. Then the proof fails by name, with the frames drawn and
+    // the longest gap.
+    requireFrames(shot, {
+      min: 31,
+      during:
+        'the thumb and its value tooltip moved through a drag and its coast',
+    });
     const thumbs = await trackMarker(page, shot);
     const tooltips = await trackMarker(page, shot, {rgb: CONTROL_RGB});
     const pairs = thumbs.flatMap((frame, index) => {
