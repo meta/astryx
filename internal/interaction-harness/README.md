@@ -62,7 +62,7 @@ committed: a pull request links or attaches it.
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `scripts.ts`    | Touch scripts as data: `tap`, `drag` (hold, rest), `flick` (exact final-move speed, velocity profiles), `holdThenDrag`, `pinch`, `rotate`, `path`, `merge` (a second finger mid-gesture), `releaseVelocity`, `toTouchEvents`.                                                |
 | `touch.ts`      | `touchDriver(page).play(script)`: the script as real engine input. `installInputLog` / `readInputLog`: what the page received.                                                                                                                                               |
-| `frames.ts`     | `startScreencast` (timestamped composited frames), `markElement` (a marker chip or outline), `trackMarker` (marker box per frame), `trackMarkers` (several colors from one decode of each frame), `sampleRects` (per-rAF rects), `frameStats`.                               |
+| `frames.ts`     | `startScreencast` (timestamped composited frames), `markElement` (a marker chip or outline), `trackMarker` (marker box per frame), `trackMarkers` (several colors from one decode of each frame), `sampleRects` (per-rAF rects), `frameStats`, `requireFrames`.              |
 | `busy.ts`       | `blockMainThread(page, ms)`, which returns the window it held and the span its loop measured, and `busyWindowProof(tracked, window)`: frames presented, frames that moved, longest stall, a verdict; `presented` adds the compositor's own frames.                           |
 | `brightness.ts` | `trackBrightness(page, frames, {x, y})`: a colour channel's mean in a square per frame, as a scalar on `box.x`, for a busy-window proof of a fade or a dim.                                                                                                                  |
 | `webInput.ts`   | `webInputDriver(page)`: `wheel({x, y, dx, dy, ctrl})` and `pen(points)` as real engine input, for proofs across pointers (`spec:AST-100` FR4); `wheel` resolves once the page has the step; read back through the input log.                                                 |
@@ -123,6 +123,10 @@ names the motion it judges, `{judges: {target, property}}` (a list for
 several; `pseudoElement` for a `::before` or `::after`), and `held()` rejects
 when the hold took no animation of it. `judges: 'count-only'` checks nothing:
 it marks a call site whose hold does not take its judged motion yet.
+A hold sent from the test (`holdAnimations`, and `animationStoryboard`
+without `held`) takes the same `judges` and rejects the same way: it takes
+what runs when it reaches the page, and on a busy runner the judged motion
+can still be to come or already over.
 Compare it with an
 oracle from `math.ts` through `compareCurve`; a tolerance states the error
 budget (for a spring baked into `linear()` stops of `h` ms, chords err by up to
@@ -182,7 +186,19 @@ in the cast's own position steps, read from the cast (`castStep`, from the
 by another color carries none, and `castStep` refuses it): 1 px in Chromium's PNG cast and 2 px in
 WebKit's JPEG cast, whose 4:2:0 chroma holds the marker's color in 2 by 2
 pixel blocks and so makes the tail's plateaus longer. Two steps stop at the
-same tail in either engine while a freeze further from rest is still judged. A judged part shorter than four of the
+same tail in either engine while a freeze further from rest is still judged.
+
+Motion slower than two whole pixels a frame needs a finer read. In Chromium,
+`trackMarker(page, frames, {subpixel: true})` reads the marker under a pixel
+from its anti-aliased edges: a 10 px slide over 60 frames read 0.164 to 0.169
+px a frame, where it moves 0.167 px, and a box at rest between pixels read the
+same value on every frame. Each frame then carries `SUBPIXEL_STEP_PX`
+(0.05 px) as its step, and the proof counts a change from half of it. The
+marker must be opaque on a plain background. Use the default chip marker: an
+outline marker's window holds the element's own content. WebKit's JPEG cast
+holds color in 2 by 2 pixel blocks, so the read throws there.
+
+A judged part shorter than four of the
 screencast's intervals fails: the animation under test was not moving during
 the block. One that had already settled when the judged part began (nothing in
 the window to judge) throws `BusyWindowTooLateError`, with the numbers: the
@@ -199,7 +215,10 @@ only before its curve's held tail (keyframes that end in a run of identical
 values, read as `waitForRest` reads them): when the only animation running
 there started while the page waited, or the wait times out with only such
 animations, the page looked too late, and the wait rejects with
-`BusyWindowTooLateError`. The `verdict` judges the
+`BusyWindowTooLateError`. With `pseudoElement` (`'::before'` or
+`'::after'`), only that pseudo-element's animations on `during` itself count,
+as `sampleCurve` reads them: a child's animation, such as a switch thumb's
+press, does not start the block. The `verdict` judges the
 frames the screencast delivered, whatever its rate (a loaded machine's can
 deliver one frame in five or six), and tolerates nothing a frozen animation
 does: at least one frame in the judged part, no stall longer than three of the
@@ -309,8 +328,10 @@ frames over all the runs, the component on every one of them, and in each run
 its longest stall may be no longer than that run's control's, since a stall
 belongs to its run. A run whose control moved on fewer frames than
 `minRunFrames` (1 by default) is too little to judge: the summary names it,
-and the pool leaves it out, so it never counts as a pass. The pool fails with
-fewer than `minJudgedRuns` judged runs (half, rounded up). In each judged run,
+and the pool leaves it out, so it never counts as a pass. A run whose block
+began after its motion had settled is left out the same way: its `runs` entry
+is null, and `late` holds its `BusyWindowTooLateError`. The pool fails with
+fewer than `minJudgedRuns` judged runs (half of all the runs, rounded up). In each judged run,
 the component must move on every frame its control moved on, so a freeze fails
 its run.
 
@@ -331,10 +352,22 @@ compositor's frames from the first to the last moved frame; the gaps before and
 after are the stall check's. WebKit has no such trace:
 `stop()` resolves to `[]` and the screencast is judged alone.
 
+**Too few frames.** A proof that samples the page every frame (`sampleRects`,
+or a rAF trace of its own) takes its frames through `requireFrames(samples,
+{min, during, where})`. It returns the samples that `where` selects when there
+are at least `min` of them. A loaded machine, or a long task on the page, can
+starve the page of frames. When no frame came for longer than
+`FRAME_STARVATION_MS` (50 ms) around the selected samples, the proof fails
+with `FrameStarvationError`, which names the frames drawn and the longest gap.
+So a run that cannot prove anything still fails, and says why. With too few frames on pace, the motion did not last that
+long, and the error says that instead.
+
 **No Layout / Paint.** `traceRendering` records a Chromium trace around the
 interaction; `countBetween` counts the steady middle of an animation (its
 first and last frames may commit). A transform/opacity animation does no
-Layout or Paint there; a layout-property animation does one per frame. The
+Layout or Paint there; a layout-property animation does one per frame. Each
+counted `Paint` names the node it painted (`node`), and each `UpdateLayoutTree`
+counts the elements it restyled (`elements`). The
 harness's own animation recorder stands down while the trace runs, since its
 frame loop would make every frame a main-thread one, restyling each running
 animation's target and laying out an anchored one: it reads only the element a
@@ -484,7 +517,7 @@ sent with `Input.dispatchTouchEvent`. WebKit has no `isInputPending`.
 |                                                        | Chromium 149                                                                                                           | WebKit 26.5 (Linux build)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Trusted touch + pointer events, multi-touch            | yes                                                                                                                    | yes (a `touchstart` lists only the fingers that landed in it; pointer events exact)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| Page sees the scripted timestamps                      | yes, exactly                                                                                                           | no: real dispatch time; pacing keeps velocities within ~1 ms on an idle runner; after a stall each step waits its gap, less 2 ms, after WebKit answered the one before (unless a `'schedule'` play has `onEvent`); `pacing: 'spacing'` fails a play whose page read a resting finger where the script moves, a throw where the script rests, or fewer than two moves, or, given `releaseTolerance`, a release straying further from the script's (each read as Core's velocity tracker reads it): `TouchPageStallError` when the page's own touch or pointer listeners held an event back, `TouchPacingError` otherwise; the lift's `release` names what the page read |
+| Page sees the scripted timestamps                      | yes, exactly                                                                                                           | no: real dispatch time; pacing keeps velocities within ~1 ms on an idle runner; after a stall each step waits its gap, less 2 ms, after WebKit answered the one before, even with `onEvent`, so no gap can shrink; a play fails when its page read a resting finger where the script moves, a throw where the script rests, or fewer than two moves, or, given `releaseTolerance`, a release straying further from the script's (each read as Core's tracker reads it): `TouchLiftStallError` when `onEvent` held the lift back, `TouchPageStallError` when the page's listeners held an event, else `TouchPacingError`; the lift's `release` names what the page read |
 | Sub-pixel touch positions                              | yes                                                                                                                    | no: integer CSS px                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | Native scroll, fling, pinch-zoom from injected touches | yes                                                                                                                    | no                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | Lifting one finger while others stay down              | yes                                                                                                                    | pointer events right, but that `touchend` lists no remaining `touches`: skip with `PARTIAL_LIFT_SKIP`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
@@ -503,6 +536,19 @@ lifting while another stays down, finger tracking under a busy main thread, and
 anything iOS-only — needs Mobile Safari itself, on a device or the iOS
 simulator. Skip such a proof on the driver's flag, citing the reason:
 `test.skip(!driver.partialLifts, PARTIAL_LIFT_SKIP)`.
+
+A touch play waits for its `onEvent` before it sends the next event, so page
+work there delays that event by a round trip. WebKit stamps a touch when it
+arrives. So a lift that reaches the page past the 40 ms stillness interval
+after its finger's last move reads as a resting finger. The page releases it
+at 0. Every WebKit play reads its release from the page's own stamps, however
+it is paced, and fails by name when the page's release is not the script's.
+The error is `TouchLiftStallError` when `onEvent` ran for the lift gap's
+excess. Record what the page did in a listener of its own, or let the script
+rest before the lift. A runner too loaded to dispatch in time stretches a
+gesture the same way, and the play fails with `TouchPacingError`. A play whose
+proof reads no release from the lift, such as a pinch's end, passes
+`releaseUnread`.
 
 A wheel gesture is a run of steps, and `wheel` waits for each step's round
 trip, so on a loaded runner awaited steps land as far apart as a round trip

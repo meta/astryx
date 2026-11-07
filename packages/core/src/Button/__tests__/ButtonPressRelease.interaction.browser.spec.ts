@@ -27,6 +27,7 @@ import {
 } from '@astryxdesign/a11y-spec/playwright';
 import {
   animationStoryboard,
+  armHold,
   blockMainThread,
   castStoryboard,
   compareCurve,
@@ -208,7 +209,13 @@ for (const [name, story, locate] of [
       'fading',
     );
     await freezeTimers(page);
-    const held = await holdAnimations(page, opened.surface);
+    const held = await holdAnimations(page, opened.surface, {
+      judges: {
+        target: opened.surface,
+        property: 'opacity',
+        pseudoElement: '::before',
+      },
+    });
     await releaseAnimations(page, {finish: true});
     await thawTimers(page);
     // One animation, of opacity alone, finished within 200 ms; nothing
@@ -262,9 +269,11 @@ for (const [name, story, locate, pseudo] of [
         'fading',
       );
       await freezeTimers(page);
-      const held = (await holdAnimations(page, opened.surface)).filter(
-        animation => animation.kind === 'CSSAnimation',
-      );
+      const held = (
+        await holdAnimations(page, opened.surface, {
+          judges: {target: opened.surface, property: '--astryx-press-alpha'},
+        })
+      ).filter(animation => animation.kind === 'CSSAnimation');
       const layer = await opened.surface.evaluate(
         el => getComputedStyle(el, '::before').content,
       );
@@ -319,7 +328,13 @@ for (const [name, story, locate, pseudo] of [
       'fading',
     );
     await freezeTimers(page);
-    const held = await holdAnimations(page, opened.surface);
+    const held = await holdAnimations(page, opened.surface, {
+      judges: {
+        target: opened.surface,
+        property: 'opacity',
+        pseudoElement: pseudo,
+      },
+    });
     const release = held.find(
       a => a.kind === 'CSSAnimation' && a.durationMs === RELEASE_MS,
     );
@@ -735,12 +750,25 @@ test(
       width: box.width + 32,
       height: box.height + 32,
     };
+    // The page holds the release itself as soon as it runs. A hold the test
+    // sends after the lift reaches the page later on a busy machine, and the
+    // release can end first. The press runs one animation (the scale) and the
+    // release runs two (the scale back and the layer's fade), so the hold
+    // waits for two.
+    const hold = await armHold(page, opened.surface, {
+      count: 2,
+      judges: {
+        target: opened.surface,
+        property: 'opacity',
+        pseudoElement: '::before',
+      },
+    });
     await opened.driver.play(tap(opened.center, {holdMs: HOLD_MS}));
     await freezeTimers(page);
     const {storyboard} = await animationStoryboard(page, {
       name: 'button-press-release',
       clip,
-      scope: opened.surface,
+      held: await hold.held(),
       times: timeline(RELEASE_MS),
       measure: async () => ({
         opacity: await layerOpacity(opened.surface, '::before'),

@@ -70,10 +70,14 @@ describe('discover() dispatcher routing', () => {
     // leaf returns the multi-match discover.search envelope. Proves free-text
     // routing reaches the search leaf and projects its envelope. Search also
     // matches package names, so the package itself is listed after them.
+    // Official packages' components can match too, so only this fixture's
+    // package is compared.
     const r = await discover('a');
     expect(r.type).toBe('discover.search');
     expect(
-      r.data.matches.filter(m => m.kind === 'component').map(m => m.component),
+      r.data.matches
+        .filter(m => m.kind === 'component' && m.package === '@acme/widgets')
+        .map(m => m.component),
     ).toEqual(['Alpha', 'Beta']);
     expect(r.data.matches).toContainEqual({
       package: '@acme/widgets',

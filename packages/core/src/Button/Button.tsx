@@ -769,12 +769,6 @@ export function Button({
   // (credit @AKnassa, #4879), which is exactly the bug this PR fixes.
   const renderAsLink = href != null && !isTrueDisabled;
 
-  // Use aria-disabled (button stays focusable) when busy-only, or when a
-  // tooltip is present so keyboard users can still reach it. A genuinely
-  // isDisabled/group-disabled button (not busy) keeps native disabled.
-  const useAriaDisabled =
-    buttonDisabled && (isBusyOnlyDisabled || tooltip != null);
-
   // Attach tooltip behavior via the hook rather than wrapping the button in a
   // <Tooltip> element. The hook adds hover/focus triggers to the button itself,
   // so no extra DOM node is inserted — the button stays a direct child of its
@@ -790,15 +784,9 @@ export function Button({
     // a re-click while pending starts a fresh action that interrupts the prior.
     if (buttonDisabled || (actionInFlightRef.current && !isInterruptible)) {
       e.preventDefault();
-      // A native `disabled` element never dispatches a click at all, so it
-      // never reaches a wrapping element's own handler either. An
-      // aria-disabled button (busy-only, or with a tooltip) is still a real,
-      // interactive element the DOM keeps dispatching clicks on —
-      // preventDefault alone only cancels the button's OWN default action
-      // (form submit, link navigation), not propagation. Without this, an
-      // unavailable Button inside a clickable row/card/backdrop still
-      // triggers that ancestor's action, which the previously native-disabled
-      // control never did.
+      // An aria-disabled button still receives clicks. preventDefault cancels
+      // only its own default action, such as a form submit. Stop propagation
+      // so a clickable ancestor does not act.
       e.stopPropagation();
       return;
     }
@@ -815,9 +803,9 @@ export function Button({
     }
   };
 
-  // When aria-disabled, suppress activation keys (Enter/Space) but allow
-  // other keys (Escape, arrows) to reach consumer handlers.
-  const handleKeyDown = useAriaDisabled
+  // A disabled button cancels Enter and Space, its activation keys. Other
+  // keys, such as Escape and the arrows, still reach the caller's handler.
+  const handleKeyDown = buttonDisabled
     ? (e: React.KeyboardEvent<HTMLButtonElement>) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
@@ -846,7 +834,7 @@ export function Button({
     isGroupTracked && styles.trackedOverlay,
     buttonDisabled && styles.inactive,
     isTrueDisabled && styles.disabled,
-    useAriaDisabled && styles.ariaDisabled,
+    buttonDisabled && styles.ariaDisabled,
     renderAsLink && styles.link,
     !buttonGroup &&
       (isGroupTracked ? styles.pressableTracked : styles.pressable),
@@ -1004,7 +992,7 @@ export function Button({
         // A caller's own busy or disabled state is kept, so a component that
         // hands these props to a Button (a caller-rendered trigger) is heard.
         aria-busy={isLoadingState || props['aria-busy'] || undefined}
-        aria-disabled={useAriaDisabled || props['aria-disabled'] || undefined}
+        aria-disabled={buttonDisabled || props['aria-disabled'] || undefined}
         onClick={handleClick}
         {...(handleKeyDown ? {onKeyDown: handleKeyDown} : null)}>
         {buttonContent}
@@ -1015,7 +1003,6 @@ export function Button({
       <button
         ref={mergedButtonRef}
         type={type}
-        disabled={useAriaDisabled ? undefined : buttonDisabled}
         {...(inputGroup != null && buttonGroup == null
           ? inputGroupItemProps
           : undefined)}
@@ -1023,13 +1010,14 @@ export function Button({
         {...pressFeedback}
         {...groupItemProps}
         {...props}
+        {...(isTrueDisabled ? {name: undefined} : null)}
         {...ariaLabelProp}
         {...describedByProp}
         {...edgeCompAttr}
         // A caller's own busy or disabled state is kept, so a component that
         // hands these props to a Button (a caller-rendered trigger) is heard.
         aria-busy={isLoadingState || props['aria-busy'] || undefined}
-        aria-disabled={useAriaDisabled || props['aria-disabled'] || undefined}
+        aria-disabled={buttonDisabled || props['aria-disabled'] || undefined}
         onClick={handleClick}
         {...(handleKeyDown ? {onKeyDown: handleKeyDown} : null)}>
         {buttonContent}

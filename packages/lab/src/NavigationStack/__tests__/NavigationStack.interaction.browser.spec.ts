@@ -21,21 +21,28 @@ import {
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
 import {
+  advanceFrozenPage,
   animationStoryboard,
+  armHold,
   blockMainThread,
+  BusyWindowTooLateError,
   busyWindowProof,
   castStoryboard,
   CONTROL_RGB,
   countBetween,
   drag,
   flick,
+  FRAME_STARVATION_MS,
+  FrameStarvationError,
+  freezePageOn,
   freezePageWhen,
   holdAnimations,
   installPageFreeze,
   installTimerGate,
-  markElement,
+  MARKER_RGB,
   openStory,
   releaseAnimations,
+  requireFrames,
   sampleCurve,
   sampleRects,
   startBusyControl,
@@ -49,7 +56,9 @@ import {
   watchAnimations,
   withStorybook,
   writeEvidence,
+  type BlockedWindow,
   type TouchDriver,
+  type TrackedFrame,
 } from '@astryxdesign/interaction-harness';
 
 const storybook = withStorybook(test);
@@ -450,13 +459,21 @@ const rowCenter = async (page: Page, name: string) => {
 test('a push follows UIKit’s push spring, the card underneath at 0.3 of its speed', async ({
   page,
 }, testInfo) => {
-  const {driver, width} = await openStack(page, 'settings');
+  const {driver, stack, width} = await openStack(page, 'settings');
   const top = card(page, 'screen-General');
   const under = card(page, 'root');
-  const watch = await watchAnimations(top);
+  // The push moves both cards at once: with a count of 2, the row's own
+  // release fade cannot trigger the hold alone.
+  const hold = await armHold(page, stack, {
+    judges: [
+      {target: top, property: 'translate'},
+      {target: under, property: 'translate'},
+    ],
+    count: 2,
+    newOnly: true,
+  });
   await driver.tap(await rowCenter(page, 'General'));
-  await watch.started();
-  await holdAnimations(page);
+  await hold.held();
 
   const times = Array.from({length: 31}, (_, i) => i * 16.667);
   const samples: {t: number; top: number; under: number; analytic: number}[] =
@@ -523,11 +540,13 @@ test('a push’s bar: the new bar slides in with its screen, the covered one rid
   await page.waitForTimeout(900);
   const frames = await stop();
   const start = firstMove(frames, 'screen-General');
-  expect(start).toBeDefined();
-  const during = frames.filter(
-    f => f.t >= (start?.t ?? 0) && f.cards['screen-General'] > 0.5,
-  );
-  expect(during.length).toBeGreaterThan(5);
+  expect(start, 'the push started').toBeDefined();
+  const during = requireFrames(frames, {
+    min: 6,
+    during: 'the pushed screen slides in',
+    where: f =>
+      start != null && f.t >= start.t && f.cards['screen-General'] > 0.5,
+  });
   for (const f of during) {
     // UIKit's bar copy is part of its screen: it moves with the card (one
     // clock and spring). It stays within 1 % of the width, as engines sample
@@ -793,7 +812,9 @@ test('brought back past its start, the screen follows with resistance, then spri
   frames.push({t: last.t + steps * 16.7 + 4, fingers: []});
   await driver.play(frames);
   // The return, held where it runs and read every 2 ms from its start.
-  const heldAnimations = await holdAnimations(page, top);
+  const heldAnimations = await holdAnimations(page, top, {
+    judges: {target: top, property: 'translate'},
+  });
   const returnIndex = await top.evaluate(element =>
     (
       (window as unknown as {__harnessHeld?: Animation[]}).__harnessHeld ?? []
@@ -960,6 +981,49 @@ test('a sideways drag in the content pops (iOS 26’s full-width back swipe)', a
   await expect.poll(topTitle).toBe('General');
 });
 
+/**
+ * Marks screen `key`'s card as it mounts, with the chip `markElement` draws.
+ * The marker then paints in the push's first frame, before a block that the
+ * page starts a frame later.
+ */
+async function markScreenOnMount(page: Page, key: string, inset: number) {
+  await page.evaluate(
+    ({screen, offset, rgb}) => {
+      const selector = `[data-navigation-screen="${screen}"]`;
+      const observer = new MutationObserver(() => {
+        const element = document.querySelector<HTMLElement>(selector);
+        if (element == null) {
+          return;
+        }
+        observer.disconnect();
+        if (getComputedStyle(element).position === 'static') {
+          element.style.position = 'relative';
+        }
+        const chip = document.createElement('div');
+        chip.setAttribute('aria-hidden', 'true');
+        chip.style.cssText = `position:absolute;top:${offset}px;left:${offset}px;width:16px;height:16px;background:rgb(${rgb.join(',')});z-index:2147483647;pointer-events:none;`;
+        element.append(chip);
+      });
+      observer.observe(document.body, {childList: true, subtree: true});
+    },
+    {screen: key, offset: inset, rgb: [...MARKER_RGB]},
+  );
+}
+
+/**
+ * Blocks the main thread from inside a push from the root, for `ms`. Call it
+ * before the action and await it after. The page then waits from before the
+ * push, and blocks once the covered screen's bar has run a frame. That bar
+ * rides the push from its first frame, and nothing else animates in it. So
+ * the row's own release fade cannot start the block before the push.
+ */
+function blockDuringPush(page: Page, ms: number) {
+  return blockMainThread(page, ms, {
+    during: page.locator('[data-navigation-bar="root"]'),
+    minProgressMs: 16,
+  });
+}
+
 test('a push keeps advancing every frame while the main thread is blocked', async ({
   page,
   browserName,
@@ -974,16 +1038,13 @@ test('a push keeps advancing every frame while the main thread is blocked', asyn
   await startBusyControl(page);
   const cast = await startScreencast(page);
   const watch = await watchAnimations(top);
-  await driver.tap(await rowCenter(page, 'General'));
   // Below the bar, which overlays the screens.
-  await markElement(top, {inset: 60});
+  await markScreenOnMount(page, 'screen-General', 60);
+  const row = await rowCenter(page, 'General');
+  const blocked = blockDuringPush(page, 600);
+  await driver.tap(row);
+  const block = await blocked;
   const [push] = await watch.started({minProgressMs: 16});
-  // The page blocks itself from inside the push, once it has run a frame. A
-  // block from the test's own round trip can start before the marker paints.
-  const block = await blockMainThread(page, 600, {
-    during: top,
-    minProgressMs: 16,
-  });
   await page.waitForTimeout(150);
   const castFrames = await cast.stop();
   const tracked = await trackMarker(page, castFrames);
@@ -1053,17 +1114,17 @@ test('with a mouse, the incoming bar covers the old title while the main thread 
     });
     const cast = await startScreencast(page);
     const row = await rowCenter(page, 'General');
-    const watch = await watchAnimations(card(page, 'screen-General'));
+    // The block outlasts the push, whose spring is at rest by about 0.45 s.
+    const blocked = blockDuringPush(page, 900);
     await page.mouse.click(row.x, row.y);
-    await watch.started({minProgressMs: 16});
-    const block = await blockMainThread(page, 900);
+    const block = await blocked;
     await page.waitForTimeout(150);
     const frames = await cast.stop();
     const tracked = await trackMarker(page, frames);
     const trace = JSON.stringify(
       tracked.map(f => [Math.round(f.t - block.from), f.box?.x ?? null]),
     );
-    const during = tracked.filter(f => f.t > block.from && f.t < block.to - 20);
+    const during = titleFramesInBlock(tracked, block);
     // Seen while blocked, then covered before the block ends.
     expect(
       during.some(f => f.box != null),
@@ -1074,6 +1135,51 @@ test('with a mouse, the incoming bar covers the old title while the main thread 
     await context.close();
   }
 });
+
+/**
+ * The screencast frames inside the block, once the block has caught the
+ * title. A block cannot begin before the push's first frame, and a page that
+ * is starved of frames begins it late. When the push had already covered the
+ * title, the window holds nothing to judge, and the run fails by name. A
+ * frame by the block's start shows the title gone, or the block's first frame
+ * does, within `FRAME_STARVATION_MS`. A push that froze presents no frame that
+ * early, so it fails on the assertion. The numbers come from the frames.
+ */
+function titleFramesInBlock(
+  tracked: readonly TrackedFrame[],
+  block: BlockedWindow,
+): TrackedFrame[] {
+  const during = tracked.filter(f => f.t > block.from && f.t < block.to - 20);
+  const lastSeen = tracked.filter(f => f.box != null).at(-1);
+  const firstInBlock = tracked.find(f => f.t > block.from);
+  const goneAtStart =
+    lastSeen != null &&
+    lastSeen.t <= block.from &&
+    (tracked.some(
+      f => f.box == null && f.t > lastSeen.t && f.t <= block.from,
+    ) ||
+      (firstInBlock?.box === null &&
+        firstInBlock.t - block.from <= FRAME_STARVATION_MS));
+  if (!during.some(f => f.box != null) && lastSeen != null && goneAtStart) {
+    // The title rides the covered bar, so its first move is the push's
+    // first frame.
+    const restX = tracked.find(f => f.box != null)?.box?.x ?? 0;
+    const moved =
+      tracked.find(f => f.box == null || Math.abs(f.box.x - restX) >= 1) ??
+      lastSeen;
+    const pushBeforeBlockMs = block.from - moved.t;
+    const lastSeenBeforeBlockMs = block.from - lastSeen.t;
+    const pushFrame =
+      pushBeforeBlockMs >= 0
+        ? `${pushBeforeBlockMs.toFixed(0)} ms before`
+        : `${(-pushBeforeBlockMs).toFixed(0)} ms after`;
+    throw new BusyWindowTooLateError(
+      `the push's first frame came ${pushFrame} the block began, and the title was last seen ${lastSeenBeforeBlockMs.toFixed(0)} ms before it: the push had covered the title by the block's first frame, so the block holds nothing to judge`,
+      {pushBeforeBlockMs, lastSeenBeforeBlockMs},
+    );
+  }
+  return during;
+}
 
 /**
  * How much of bar `key` its clip box shows inside the stack. It is a
@@ -1124,21 +1230,18 @@ test('under a finger, the incoming screen cuts the old title while the main thre
     element.append(chip);
   });
   const cast = await startScreencast(page);
-  await driver.tap(await rowCenter(page, 'General'));
-  // The page blocks itself from inside the push, once it has run a frame. A
-  // block after a further round trip can land after the bar has already
-  // covered the title.
-  const block = await blockMainThread(page, 900, {
-    during: page.getByTestId('navigation-stack'),
-    minProgressMs: 16,
-  });
+  const row = await rowCenter(page, 'General');
+  // The block outlasts the push, whose spring is at rest by about 0.45 s.
+  const blocked = blockDuringPush(page, 900);
+  await driver.tap(row);
+  const block = await blocked;
   await page.waitForTimeout(150);
   const frames = await cast.stop();
   const tracked = await trackMarker(page, frames);
   const trace = JSON.stringify(
     tracked.map(f => [Math.round(f.t - block.from), f.box?.x ?? null]),
   );
-  const during = tracked.filter(f => f.t > block.from && f.t < block.to - 20);
+  const during = titleFramesInBlock(tracked, block);
   // Seen while blocked, then cut before the block ends.
   expect(
     during.some(f => f.box != null),
@@ -1339,13 +1442,14 @@ test.describe('the bars ride with their screens, as UIKit’s', () => {
     await page.locator('[data-navigation-back]').click();
     await page.waitForTimeout(900);
     const frames = await stop();
-    const moving = frames.filter(
-      f =>
+    const moving = requireFrames(frames, {
+      min: 6,
+      during: 'the popped screen and the revealed one move',
+      where: f =>
         f.cards['screen-General'] != null &&
         f.cards['screen-General'] > 0.5 &&
         f.cards.root < -0.5,
-    );
-    expect(moving.length).toBeGreaterThan(5);
+    });
     for (const f of moving) {
       expect(
         Math.abs(f.bars['screen-General'] - f.cards['screen-General']),
@@ -1701,8 +1805,24 @@ test.describe('edge cases', () => {
     });
     await page.waitForTimeout(700);
     const frames = await stop();
-    const first = frames.find(f => f.cards['screen-About'] != null);
+    const firstAt = frames.findIndex(f => f.cards['screen-About'] != null);
+    const first = firstAt >= 0 ? frames[firstAt] : undefined;
     // A lone push starts the card off screen: so does one that interrupts.
+    // Its first frame shows that, unless the page drew none for a while as
+    // the push began: such a run fails by name.
+    const gapMs = firstAt > 0 ? frames[firstAt].t - frames[firstAt - 1].t : 0;
+    if (
+      firstAt >= 0 &&
+      (first?.cards['screen-About'] ?? 0) <= width * 0.5 &&
+      gapMs > FRAME_STARVATION_MS
+    ) {
+      throw new FrameStarvationError({
+        during: 'the interrupting push’s card was still off screen',
+        frames: 0,
+        min: 1,
+        longestGapMs: gapMs,
+      });
+    }
     expect(
       first?.cards['screen-About'] ?? 0,
       JSON.stringify(first),
@@ -1998,19 +2118,25 @@ test.describe('with Reduce Motion', () => {
 
   test('a push cross-fades in place instead of sliding', async ({page}) => {
     await page.emulateMedia({reducedMotion: 'reduce'});
+    await installPageFreeze(page);
     const {driver} = await openStack(page, 'settings');
+    await installTimerGate(page);
     const top = card(page, 'screen-General');
-    const watch = await watchAnimations(top);
+    // Frozen in the tap's own task, the fade starts held at its start. The
+    // scene then moves halfway into the 200 ms fade on its own clock.
+    await freezePageOn(page, 'touchend');
     await driver.tap(await rowCenter(page, 'General'));
-    await watch.started();
+    await advanceFrozenPage(page, 100);
     const midway = await top.evaluate(element => ({
       x: getComputedStyle(element).translate,
       opacity: Number(getComputedStyle(element).opacity),
     }));
+    await thawPage(page);
     await waitForRest(top);
-    // No travel: the incoming screen is already where it lands, fading in.
+    // No travel: the incoming screen is already where it lands, halfway
+    // faded in.
     expect(midway.x === 'none' || parseFloat(midway.x) === 0).toBe(true);
-    expect(midway.opacity).toBeLessThan(1);
+    expect(midway.opacity).toBeCloseTo(0.5, 1);
     expect(await translateX(top)).toBe(0);
   });
 });
@@ -2340,13 +2466,23 @@ test('the bar title’s handover keeps running while the main thread is blocked'
 });
 
 test('storyboard: a push', {tag: '@storyboard'}, async ({page}, testInfo) => {
-  const {driver, width} = await openStack(page, 'settings');
+  const {driver, stack, width} = await openStack(page, 'settings');
   const top = card(page, 'screen-General');
-  const watch = await watchAnimations(top);
+  // The push moves both cards at once: with a count of 2, the row's own
+  // release fade cannot trigger the hold alone.
+  const hold = await armHold(page, stack, {
+    judges: [
+      {target: top, property: 'translate'},
+      {target: card(page, 'root'), property: 'translate'},
+    ],
+    count: 2,
+    newOnly: true,
+  });
   await driver.tap(await rowCenter(page, 'General'));
-  await watch.started();
+  const held = await hold.held();
   const viewport = page.viewportSize() ?? {width: 402, height: 714};
   const {storyboard} = await animationStoryboard(page, {
+    held,
     name: 'navigationstack-push',
     clip: {x: 0, y: 0, width: viewport.width, height: viewport.height},
     // The spring is at rest by ~0.45 s; the animator holds end states after.
