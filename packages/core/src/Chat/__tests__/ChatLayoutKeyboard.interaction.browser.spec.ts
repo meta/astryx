@@ -8,8 +8,8 @@
  * @output Proofs that on Chrome's profile the dock rides Gboard's slide up
  *   and down with no Layout or Paint per frame. Under Reduce Motion it never
  *   travels. The transcript stays at its newest message. A tap on the
- *   composer's text scrolls no page, and Done's park shows the focus ring. A
- *   storyboard shows the rise
+ *   composer's text scrolls no page. Done's park shows the focus ring after
+ *   typing only. A storyboard shows the rise
  * @position Browser proofs for Chat/useChatKeyboard.ts and
  *   keyboard/keyboardLayoutGuide.ts. Headless browsers have no software
  *   keyboard, so the test shrinks the page's `visualViewport` as Mobile
