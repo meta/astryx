@@ -31,11 +31,7 @@ import {
 import {cliError} from '../lib/cli-error.mjs';
 import {firstSentence} from '../../../foundation/text/string-utils.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
-import {
-  DEPRECATED_BUILD_DOMAIN_ID,
-  DEPRECATED_BUILD_DOMAINS,
-  build as buildApi,
-} from '../../../api/build/build.mjs';
+import {build as buildApi} from '../../../api/build/build.mjs';
 import {doc as buildCommand} from './build.doc.mjs';
 import {doc as buildFn} from '../../../api/build/build.doc.mjs';
 
@@ -70,6 +66,23 @@ function printPlaybook(playbook) {
   );
 }
 
+/** The domains search finds that a build kit has no group for. */
+const SEARCH_ONLY_TYPES = ['doc', 'theme'];
+
+/**
+ * In text mode, say once on stderr that a kit has no docs or themes and name
+ * the search that finds them. Stdout, the JSON envelope and the exit status
+ * stay as they are.
+ * @param {string | undefined} type
+ * @param {boolean} json
+ */
+function pointToSearch(type, json) {
+  if (json || !type || !SEARCH_ONLY_TYPES.includes(type)) return;
+  console.error(
+    `Note: a build kit has no ${type}s. Find them with \`${formatCliCommand(`search <query> --type ${type}`)}\`.`,
+  );
+}
+
 /**
  * @param {import('commander').Command} program
  */
@@ -78,7 +91,7 @@ export function registerBuild(program) {
     fn: buildFn,
     action: async (
       /** @type {string | undefined} */ query,
-      /** @type {{type?: import('../../../api/build/build.type.mjs').BuildOptions['type'], limit?: string, verbose?: boolean}} */ options,
+      /** @type {{type?: import('../../../api/search/search.type.mjs').SearchDomain, limit?: string, verbose?: boolean}} */ options,
     ) => {
       const run = getCliInvocation();
       const json = program.opts().json || false;
@@ -93,6 +106,7 @@ export function registerBuild(program) {
         // one. Counting it as a result keeps "what did this run answer with"
         // true for the no-argument form too.
         const playbook = resultSet({count: 1, resultKind: 'doc'});
+        pointToSearch(options.type, json);
         if (json) {
           jsonOut(result);
           return playbook;
@@ -150,38 +164,11 @@ export function registerBuild(program) {
         fallbackKind: options.type ?? 'mixed',
       });
 
-      // doc and theme are deprecated for build (a kit has no doc or theme
-      // group): JSON carries the lifecycle entry, text warns once on stderr,
-      // and the command's own output is unchanged.
-      const deprecated =
-        options.type != null && DEPRECATED_BUILD_DOMAINS.includes(options.type)
-          ? options.type
-          : null;
       if (json) {
-        jsonOut(
-          deprecated
-            ? {
-                ...result,
-                meta: {
-                  deprecations: [
-                    {
-                      id: DEPRECATED_BUILD_DOMAIN_ID,
-                      replacements: [
-                        `astryx search <query> --type ${deprecated}`,
-                      ],
-                    },
-                  ],
-                },
-              }
-            : result,
-        );
+        jsonOut(result);
         return answered;
       }
-      if (deprecated) {
-        console.error(
-          `Note: \`build --type ${deprecated}\` is deprecated: a kit has no ${deprecated}s, and the next minor release refuses it. Run \`${formatCliCommand(`search <query> --type ${deprecated}`)}\` instead.`,
-        );
-      }
+      pointToSearch(options.type, json);
 
       if (!hasResults && !start) {
         emit(

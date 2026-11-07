@@ -1,11 +1,9 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `--type` on build and search: for each command the help text, the CLI
- * choices, the API doc and the invalid-type error name the same set, so they
- * cannot drift apart. Build's doc and theme are deprecated (DEP-0018): they
- * still run with unchanged output, warn once on stderr in text mode, and carry
- * the lifecycle entry in JSON.
+ * @file `--type` on build and search accepts exactly search's domains, and
+ * the help text, the CLI choices, the API doc and the invalid-type error all
+ * name that same set, so the four cannot drift apart.
  */
 
 import {spawnSync} from 'node:child_process';
@@ -16,15 +14,8 @@ import {doc as buildCommand} from './build.doc.mjs';
 import {doc as searchCommand} from './search.doc.mjs';
 import {doc as buildFn} from '../../../api/build/build.doc.mjs';
 import {doc as searchFn} from '../../../api/search/search.doc.mjs';
-import {
-  BUILD_DOMAINS,
-  DEPRECATED_BUILD_DOMAIN_ID,
-  DEPRECATED_BUILD_DOMAINS,
-  build,
-} from '../../../api/build/build.mjs';
+import {build} from '../../../api/build/build.mjs';
 import {search} from '../../../api/search/search.mjs';
-
-const BIN = fileURLToPath(new URL('../bin/astryx.mjs', import.meta.url));
 
 /** @param {any} d */
 const typeOption = d =>
@@ -35,7 +26,8 @@ const typeParam = d =>
 
 /**
  * What build returns for each domain: template names a start; component and
- * hook list only that domain; deprecated doc and theme return an empty kit.
+ * hook list only that domain; the kit has no doc or theme group, so doc and
+ * theme return an empty kit.
  * @param {string} type
  * @param {any} data
  */
@@ -47,7 +39,7 @@ const checkBuild = (type, data) => {
   expect(data.start).toBeNull();
   expect(data.pages).toEqual([]);
   expect(data.blocks).toEqual([]);
-  if (DEPRECATED_BUILD_DOMAINS.includes(type)) expect(data.domain).toEqual([]);
+  if (type === 'doc' || type === 'theme') expect(data.domain).toEqual([]);
   else for (const entry of data.domain) expect(entry.domain).toBe(type);
 };
 
@@ -68,8 +60,6 @@ describe.each([
     (/** @type {string} */ t) =>
       build('settings page', {type: /** @type {any} */ (t)}),
     checkBuild,
-    BUILD_DOMAINS,
-    DEPRECATED_BUILD_DOMAINS,
   ],
   [
     'search',
@@ -78,84 +68,67 @@ describe.each([
     (/** @type {string} */ t) =>
       search('button', {type: /** @type {any} */ (t)}),
     checkSearch,
-    SEARCH_DOMAINS,
-    [],
   ],
-])('%s --type', (_name, command, fn, run, check, domains, deprecated) => {
-  const accepted = [...domains, ...deprecated];
-
-  it('lists the accepted domains in the CLI choices and help text', () => {
+])('%s --type', (_name, command, fn, run, check) => {
+  it('lists exactly the accepted domains in the CLI choices and help text', () => {
     const option = typeOption(command);
-    expect(option.choices).toEqual(accepted);
-    expect(option.description).toContain(`(${domains.join('|')})`);
-    if (deprecated.length)
-      expect(option.description).toContain(
-        `${deprecated.join(' and ')} are deprecated`,
-      );
+    expect(option.choices).toEqual(SEARCH_DOMAINS);
+    expect(option.description).toContain(`(${SEARCH_DOMAINS.join('|')})`);
   });
 
-  it('lists the accepted domains in the API doc', () => {
+  it('lists exactly the accepted domains in the API doc', () => {
     const named = [...typeParam(fn).type.matchAll(/'([a-z]+)'/g)].map(
       m => m[1],
     );
-    expect(named).toEqual(accepted);
+    expect(named).toEqual(SEARCH_DOMAINS);
   });
 
   it('names the same domains in the invalid-type error', async () => {
-    const {suggestions} = await run('bogus').catch(e => e);
-    expect(suggestions.map((/** @type {any} */ s) => s.name)).toEqual(accepted);
-    for (const s of suggestions.slice(domains.length))
-      expect(s.reason).toBe(
-        `deprecated: use astryx search <query> --type ${s.name}`,
-      );
+    await expect(run('bogus')).rejects.toMatchObject({
+      suggestions: SEARCH_DOMAINS.map(d => ({name: d, reason: 'valid type'})),
+    });
   });
 
-  it.each(accepted)('accepts %s', async type => {
+  it.each(SEARCH_DOMAINS)('accepts %s', async type => {
     const response = /** @type {any} */ (await run(type));
     expect(response).toBeTruthy();
     check(type, response.data);
   });
 });
 
-describe('build --type doc|theme deprecation', () => {
+describe('build --type doc|theme points to search', () => {
+  const BIN = fileURLToPath(new URL('../bin/astryx.mjs', import.meta.url));
   /** @param {string[]} args */
   const cli = args =>
-    spawnSync(process.execPath, [BIN, 'build', 'neutral', ...args], {
-      encoding: 'utf8',
-    });
+    spawnSync(process.execPath, [BIN, 'build', ...args], {encoding: 'utf8'});
 
-  it.each(DEPRECATED_BUILD_DOMAINS)(
-    'warns once on stderr for %s and leaves stdout alone',
-    type => {
-      const run = cli(['--type', type]);
+  it.each([
+    ['doc', ['neutral']],
+    ['theme', ['neutral']],
+    ['doc', []],
+    ['theme', []],
+  ])(
+    'names search once on stderr for %s (query: %j)',
+    (type, query) => {
+      const run = cli([...query, '--type', type]);
       expect(run.status).toBe(0);
-      const notes = run.stderr.match(/is deprecated/g) ?? [];
-      expect(notes).toHaveLength(1);
+      expect(run.stderr.match(/Note: a build kit has no/g) ?? []).toHaveLength(
+        1,
+      );
       expect(run.stderr).toContain(`search <query> --type ${type}`);
-      expect(run.stdout).not.toContain('deprecated');
+      expect(run.stdout).not.toContain('Note: a build kit');
     },
     60_000,
   );
 
-  it.each(DEPRECATED_BUILD_DOMAINS)(
-    'carries the lifecycle entry in JSON for %s',
-    type => {
-      const run = cli(['--type', type, '--json']);
-      expect(run.status).toBe(0);
-      expect(run.stderr).not.toContain('deprecated');
-      expect(JSON.parse(run.stdout).meta.deprecations).toEqual([
-        {
-          id: DEPRECATED_BUILD_DOMAIN_ID,
-          replacements: [`astryx search <query> --type ${type}`],
-        },
-      ]);
-    },
-    60_000,
-  );
-
-  it('adds nothing for a current kind', () => {
-    const run = cli(['--type', 'component', '--json']);
-    expect(run.stderr).not.toContain('deprecated');
-    expect(JSON.parse(run.stdout).meta.deprecations).toBeUndefined();
+  it('says nothing in JSON mode or for a kind a kit has', () => {
+    expect(cli(['neutral', '--type', 'doc', '--json']).stderr).toBe('');
+    expect(cli(['neutral', '--type', 'component']).stderr).toBe('');
   }, 60_000);
+
+  it('reads an empty --type as no filter', async () => {
+    const none = await build('settings page');
+    const empty = await build('settings page', {type: /** @type {any} */ ('')});
+    expect(empty).toEqual(none);
+  });
 });

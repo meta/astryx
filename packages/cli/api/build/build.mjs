@@ -30,49 +30,16 @@ import {BUILD_TREE} from './tree.mjs';
 export {buildHelp, buildKit};
 
 /**
- * The domains a build kit can be narrowed to with `type`.
- */
-export const BUILD_DOMAINS = Object.freeze(['component', 'hook', 'template']);
-
-/**
- * Domains `type` still accepts but deprecates (DEP-0018): a kit has no doc or
- * theme group, so they return an empty kit. Search's own `type` finds them.
- * The next minor release refuses them.
- */
-export const DEPRECATED_BUILD_DOMAINS = Object.freeze(['doc', 'theme']);
-
-/** The lifecycle id of the doc and theme deprecation. */
-export const DEPRECATED_BUILD_DOMAIN_ID = 'DEP-0018';
-
-/**
  * The page-building assistant. No query → the playbook signal; a query → the
  * grouped composition kit.
  *
  * @param {string} [query] what you're building (e.g. "analytics dashboard")
- * @param {import('./build.type.mjs').BuildOptions} [options]
+ * @param {{cwd?: string, type?: import('../search/search.type.mjs').SearchDomain, limit?: number}} [options]
  * @returns {Promise<import('./build.type.mjs').BuildHelpResponse | import('./build.type.mjs').BuildKitResponse>}
  */
 export async function build(query, options = {}) {
   if (!query || !String(query).trim()) {
     return buildHelp();
-  }
-  const {type} = options;
-  if (
-    type != null &&
-    !BUILD_DOMAINS.includes(type) &&
-    !DEPRECATED_BUILD_DOMAINS.includes(type)
-  ) {
-    throw new AstryxError(
-      `Unknown --type "${String(type)}"`,
-      [
-        ...BUILD_DOMAINS.map(d => ({name: d, reason: 'valid type'})),
-        ...DEPRECATED_BUILD_DOMAINS.map(d => ({
-          name: d,
-          reason: `deprecated: use astryx search <query> --type ${d}`,
-        })),
-      ],
-      ERROR_CODES.ERR_INVALID_ARGUMENT,
-    );
   }
   if (
     options.limit != null &&
