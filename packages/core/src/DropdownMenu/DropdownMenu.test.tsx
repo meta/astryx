@@ -2602,6 +2602,10 @@ describe('DropdownMenu keyboard access for menuitemradio/menuitemcheckbox (#3829
 describe('DropdownMenu open focus follows input modality (#4477)', () => {
   const items = [{label: 'Edit'}, {label: 'Duplicate'}, {label: 'Delete'}];
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('pointer open focuses the menu container, not the first item (items mode)', async () => {
     const user = userEvent.setup();
     render(<DropdownMenu button={{label: 'Actions'}} items={items} />);
@@ -2632,6 +2636,71 @@ describe('DropdownMenu open focus follows input modality (#4477)', () => {
     expect(
       screen.getByRole('menuitem', {name: 'Edit', hidden: true}),
     ).not.toHaveFocus();
+  });
+
+  it('a row the pointer lit before the open frame keeps focus after a pointer open', async () => {
+    // The open's frame waits until the test runs it, as on a loaded page
+    // where the pointer reaches a row first.
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => {
+      frames.push(callback);
+      return frames.length;
+    });
+    const user = userEvent.setup();
+    render(<DropdownMenu button={{label: 'Actions'}} items={items} />);
+
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+    const edit = screen.getByRole('menuitem', {name: 'Edit', hidden: true});
+    fireEvent.pointerMove(edit, {pointerType: 'mouse'});
+    expect(edit).toHaveFocus();
+    act(() => {
+      for (const callback of frames.splice(0)) {
+        callback(performance.now());
+      }
+    });
+
+    expect(edit).toHaveFocus();
+  });
+
+  it('a pointer open with no row lit before the open frame still focuses the menu container', async () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => {
+      frames.push(callback);
+      return frames.length;
+    });
+    const user = userEvent.setup();
+    render(<DropdownMenu button={{label: 'Actions'}} items={items} />);
+
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+    act(() => {
+      for (const callback of frames.splice(0)) {
+        callback(performance.now());
+      }
+    });
+
+    expect(screen.getByRole('menu', {hidden: true})).toHaveFocus();
+  });
+
+  it('a keyboard open via Space still focuses the first enabled item when its frame runs', async () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => {
+      frames.push(callback);
+      return frames.length;
+    });
+    const user = userEvent.setup();
+    render(<DropdownMenu button={{label: 'Actions'}} items={items} />);
+
+    screen.getByRole('button', {name: /Actions/}).focus();
+    await user.keyboard(' ');
+    act(() => {
+      for (const callback of frames.splice(0)) {
+        callback(performance.now());
+      }
+    });
+
+    expect(
+      screen.getByRole('menuitem', {name: 'Edit', hidden: true}),
+    ).toHaveFocus();
   });
 
   it('first ArrowDown after a pointer open moves focus to the first enabled item', async () => {

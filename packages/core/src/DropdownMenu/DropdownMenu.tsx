@@ -1204,8 +1204,18 @@ function DropdownMenuPopover({
     requestAnimationFrame(() => {
       const focusEnd = focusLastOnOpenRef.current ? focusLast : focusFirst;
       focusLastOnOpenRef.current = false;
-      if (openModalityRef.current === 'pointer' || !focusEnd()) {
-        listRef.current?.focus();
+      const isPointerOpen = openModalityRef.current === 'pointer';
+      // A pointer that lit a row before this frame keeps that row's
+      // highlight: the row under the pointer stays the focused row.
+      const list = listRef.current;
+      const active = list?.ownerDocument.activeElement;
+      const isRowLit =
+        isPointerOpen &&
+        active != null &&
+        active !== list &&
+        list?.contains(active) === true;
+      if (!isRowLit && (isPointerOpen || !focusEnd())) {
+        list?.focus();
       }
       openModalityRef.current = 'keyboard';
     });
