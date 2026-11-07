@@ -37,8 +37,12 @@ const styles = stylex.create({
     placeItems: 'center',
     flexShrink: 0,
   },
+  // A flex layer is exactly as tall as the 24px avatar; a block layer
+  // follows the taller line box and lets the avatar's edge show under the
+  // checkbox.
   layer: {
     gridArea: '1 / 1',
+    display: 'flex',
   },
   // The checkbox covers the avatar while it shows, so the two never read as
   // one mark.

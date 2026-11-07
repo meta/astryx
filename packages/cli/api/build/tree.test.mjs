@@ -119,8 +119,8 @@ const PINNED = [
       'TableSortableTable',
       'TableGridDividersTable',
       'TableGroupedRowsTable',
-      'TableLeadingMarkSelection',
       'TableShowcase',
+      'TableLeadingMarkSelection',
     ],
   ],
   [
