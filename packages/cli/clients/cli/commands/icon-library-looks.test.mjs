@@ -15,6 +15,7 @@ import {createRequire} from 'node:module';
 import {pathToFileURL} from 'node:url';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import {runCli} from '../../../test-utils/run-cli.mjs';
+import {doc as newSetDoc} from '../../../api/icon/iconNewSet.doc.mjs';
 import {
   libraryIcons,
   lookPositions,
@@ -757,7 +758,9 @@ describe('reading a large library again', () => {
     expect(refresh.stderr).toContain(
       'Reading 1021 exports of @acme/vector-icons...',
     );
-    expect(refresh.stderr).toContain('Found 1020 icons in @acme/vector-icons.');
+    expect(refresh.stderr).toContain(
+      'Found 1020 exports in @acme/vector-icons.',
+    );
     const listing = await runCli(
       [
         'experimental',
@@ -1827,6 +1830,24 @@ describe('the default variant on every path', () => {
     });
 
   /**
+   * The code each new-set refusal raises, and the words its reference doc
+   * lists that refusal by under that code.
+   */
+  const NEW_SET_REFUSALS = /** @type {const} */ ({
+    looks: [
+      'ERR_INVALID_ARGUMENT',
+      'no look word of a library whose export names encode looks',
+    ],
+    refresh: ['ERR_INVALID_ARGUMENT', 'without `from`'],
+    keep: [
+      'ERR_INVALID_ARGUMENT',
+      'when the export names of its icons name no looks',
+    ],
+    drop: ['ERR_INVALID_OPTION', '`variants` leave out the default variant'],
+    name: ['ERR_INVALID_OPTION', 'declares no default'],
+  });
+
+  /**
    * Check that a path wrote the set it must, or refused as it must, and run
    * the commands it printed.
    * @param {object} args
@@ -1859,6 +1880,15 @@ describe('the default variant on every path', () => {
     }
     expect(res.code, JSON.stringify(res.body)).not.toBe(0);
     expect(snapshot()).toEqual(before);
+    if (!route.startsWith('add')) {
+      const kind = /** @type {keyof typeof NEW_SET_REFUSALS} */ (
+        step.expect.refuse
+      );
+      const [code, phrase] = NEW_SET_REFUSALS[kind];
+      expect(res.body.code, JSON.stringify(res.body)).toBe(code);
+      const listed = newSetDoc.throws?.find(each => each.code === code);
+      expect(listed?.when).toContain(phrase);
+    }
     /** @type {string[]} */
     const suggestions = (res.body.suggestions ?? []).map(
       (/** @type {any} */ each) => each.name,

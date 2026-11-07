@@ -1111,7 +1111,7 @@ export function everyLibraryIcon(file, options = {}) {
     file,
     {label, progress: options.progress},
     () => collectLibraryIcons(file, options),
-    icons => `Found ${icons.length} icons in ${label}.`,
+    icons => `Found ${icons.length} exports in ${label}.`,
   );
 }
 

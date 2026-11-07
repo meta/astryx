@@ -81,11 +81,11 @@ export const doc = {
   throws: [
     {
       code: 'ERR_INVALID_ARGUMENT',
-      when: 'the name is not lowercase kebab-case, package.json has no name, or a variant name or the default variant is invalid; or the default variant would change on a set that has icons: without `from` (wrap the library again with `from` and `defaultVariant`), or with or without it when the export names of its icons name no looks (add the look as a variant instead)',
+      when: 'the name is not lowercase kebab-case, package.json has no name, or a variant name or the default variant is invalid; the default variant is no look word of a library whose export names encode looks; or the default variant would change on a set that has icons: without `from` (wrap the library again with `from` and `defaultVariant`), or with or without it when the export names of its icons name no looks (add the look as a variant instead)',
     },
     {
       code: 'ERR_INVALID_OPTION',
-      when: '`exclude` is given without `from`, or `defaultVariant` without `variants`',
+      when: '`exclude` is given without `from`, or `defaultVariant` without `variants`; `variants` leave out the default variant: the look the icons draw in a library whose export names encode looks, or the declared default of a set with icons whose export names name no looks; or such a set declares no default and `defaultVariant` names none',
     },
     {
       code: 'ERR_FILE_EXISTS',

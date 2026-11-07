@@ -278,6 +278,23 @@ describe('elementPropOrigins', () => {
     );
     expect(elementPropOrigins(app, THEME)).toEqual([null]);
   });
+
+  it('follows an import to an export declared inside a namespace, as the whole-tree reader finds it', () => {
+    const themes = write(
+      'themes.ts',
+      'namespace Palette {\n  export const ocean = {};\n}\n',
+    );
+    const app = write(
+      'Namespaced.tsx',
+      "import {Theme} from '@acme/core';\nimport {ocean} from './themes';\nexport const A = () => <Theme theme={ocean} />;\n",
+    );
+    // The icon-set reader, which reads only the top level, runs first on
+    // the same parsed module and leaves the whole-tree answer unchanged.
+    expect(moduleExportOrigin(themes, 'ocean')).toBeNull();
+    expect(elementPropOrigins(app, THEME)).toEqual([
+      {file: themes, name: 'ocean'},
+    ]);
+  });
 });
 
 describe('an export declared inside a namespace', () => {
