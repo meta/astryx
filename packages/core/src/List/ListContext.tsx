@@ -15,6 +15,7 @@
 
 import {use, useMemo, type ReactNode} from 'react';
 import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
+import type {AnimatedLayout} from '../hooks/useAnimatedLayout';
 
 export type ListDensity = 'compact' | 'balanced' | 'spacious';
 export type ListMarkerStyle = 'none' | 'disc' | 'decimal' | 'circle';
@@ -71,6 +72,10 @@ export interface ListContextValue {
    * column for the other rows.
    */
   isOutsideNumberColumns?: boolean;
+  /**
+   * The list's `animatedLayout` handle, for its rows.
+   */
+  animatedLayout?: AnimatedLayout;
 }
 
 export const ListContext = createContext<ListContextValue | null>(null);

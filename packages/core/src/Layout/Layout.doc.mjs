@@ -128,7 +128,8 @@ export const docs = {
     {
       name: 'height',
       type: "'fill' | 'auto'",
-      description: 'Height behavior: fill the container or grow with content.',
+      description:
+        "Height behavior: fill the container's height or grow with content. Fill needs a container with a set height, such as AppShell's content area; under an app root with no height, the layout grows with its content.",
       default: "'fill'",
     },
     {

@@ -14,12 +14,22 @@
  *   where the primary pointer is fine
  */
 
-import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
+import {
+  armHold,
+  releaseAnimations,
+  seekAnimations,
+} from '@astryxdesign/interaction-harness';
 
 let storybook: StaticServer;
 test.beforeAll(async () => {
@@ -222,94 +232,77 @@ function settleProgress(ms: number): number {
 }
 
 /**
- * Samples the photo's width every frame from the first `startEvent` on,
- * while `act` zooms it 2×, and checks that the zoom settles on
- * `springs.settle` from rest.
+ * Checks that the photo's zoom, which `act` starts, settles on
+ * `springs.settle` from rest. The zoom's own animations on the photo are held
+ * as they start, and its width is read at set times on their clock. A busy
+ * runner's late frames then move no reading.
  */
 async function expectSpringZoom(
   page: Page,
+  img: Locator,
   fitted: Box,
-  startEvent: 'keydown' | 'dblclick',
   act: () => Promise<void>,
 ): Promise<void> {
-  // The sampler is in place before the input, through an awaited install. A
-  // sampler the page gets later would wait for an input that already came.
-  await page.evaluate(type => {
-    (window as unknown as {__samples: Promise<[number, number][]>}).__samples =
-      new Promise<[number, number][]>(resolve => {
-        const img = document.querySelector('dialog img');
-        const samples: [number, number][] = [];
-        let start: number | null = null;
-        window.addEventListener(
-          type,
-          () => {
-            start = performance.now();
-          },
-          {capture: true, once: true},
-        );
-        const tick = (now: number) => {
-          if (start != null && img != null) {
-            samples.push([now - start, img.getBoundingClientRect().width]);
-          }
-          if (start == null || now - start < 1000) {
-            requestAnimationFrame(tick);
-          } else {
-            resolve(samples);
-          }
-        };
-        requestAnimationFrame(tick);
-      });
-  }, startEvent);
+  // The page holds the zoom itself as it starts: a hold sent from the test
+  // would reach a busy page late. Runs that an earlier zoom left in their end
+  // hold are not this zoom.
+  const hold = await armHold(page, img, {
+    judges: {target: img, property: 'scale'},
+    newOnly: true,
+  });
   await act();
-  const samples = await page.evaluate(
-    async () =>
-      (window as unknown as {__samples: Promise<[number, number][]>}).__samples,
-  );
+  const held = await hold.held();
+  expect(
+    held.length,
+    'the zoom runs as animations on the photo',
+  ).toBeGreaterThan(0);
+  // Its animations start together, so one instant reads them all.
+  expect(held.every(({offsetMs}) => offsetMs === 0)).toBe(true);
   const to = fitted.width * 2;
-  const progress = (width: number) =>
-    (width - fitted.width) / (to - fitted.width);
-  // Timed from the last frame before the photo moved. An engine can start
-  // the animation a frame or more after the input, more on a busy runner.
-  // The start-up is not the curve.
-  const first = samples.findIndex(([, width]) => progress(width) > 0.001);
-  expect(first).toBeGreaterThanOrEqual(0);
-  const origin = first > 0 ? samples[first - 1][0] : 0;
-  // Progress `ms` in, interpolated between the frames around it.
-  const progressAt = (ms: number) => {
-    const after = samples.findIndex(([t]) => t - origin >= ms);
-    expect(after).toBeGreaterThan(0);
-    const [t0, w0] = samples[after - 1];
-    const [t1, w1] = samples[after];
-    return progress(w0 + ((w1 - w0) * (origin + ms - t0)) / (t1 - t0));
+  const progressAt = async (ms: number) => {
+    await seekAnimations(page, ms);
+    return ((await boxOf(img)).width - fitted.width) / (to - fitted.width);
   };
   // The spring's own course: about 0.36 at 100 ms, where a 200 ms ease-out
-  // is past 0.6, and 0.72 at 200 ms.
+  // is past 0.6, and 0.72 at 200 ms. A spring 5 % slower or faster reads
+  // more than 0.02 off at 100 and 200 ms.
   for (const ms of [100, 200, 300]) {
     expect(
-      Math.abs(progressAt(ms) - settleProgress(ms)),
+      Math.abs((await progressAt(ms)) - settleProgress(ms)),
       `${ms} ms`,
-    ).toBeLessThan(0.08);
+    ).toBeLessThan(0.02);
   }
-  // It comes within half a percent of the target near 0.59 s.
-  const doneAt = samples.find(([, width]) => progress(width) > 0.995)?.[0];
-  expect(doneAt).toBeDefined();
-  expect((doneAt ?? 0) - origin).toBeGreaterThan(450);
-  expect((doneAt ?? Number.POSITIVE_INFINITY) - origin).toBeLessThan(800);
+  // It comes within half a percent of the target near 0.59 s: not yet at
+  // 450 ms, and by 800 ms.
+  expect(await progressAt(450)).toBeLessThanOrEqual(0.995);
+  expect(await progressAt(800)).toBeGreaterThan(0.995);
+  await releaseAnimations(page, {finish: true});
 }
 
 test('the keyboard’s zoom settles on springs.settle', async ({page}) => {
-  const {stage, fitted} = await openViewer(page);
+  const {stage, img, fitted} = await openViewer(page);
+  // Unpaused, the keyboard's zoom reaches 2× and returns to the fitted size.
+  await stage.focus();
+  await page.keyboard.press('Enter');
+  await expect
+    .poll(async () => (await boxOf(img)).width)
+    .toBeCloseTo(fitted.width * 2, 0);
+  await page.keyboard.press('Enter');
+  await expect
+    .poll(async () => (await boxOf(img)).width)
+    .toBeCloseTo(fitted.width, 0);
+  await settled(page);
   // Enter zooms 2× about the centre, on the spring every zoom plays.
-  await expectSpringZoom(page, fitted, 'keydown', async () => {
+  await expectSpringZoom(page, img, fitted, async () => {
     await stage.focus();
     await page.keyboard.press('Enter');
   });
 });
 
 test('a mouse double-click settles on springs.settle too', async ({page}) => {
-  const {stageBox, fitted} = await openViewer(page);
+  const {stageBox, img, fitted} = await openViewer(page);
   const middle = centre(stageBox);
-  await expectSpringZoom(page, fitted, 'dblclick', async () => {
+  await expectSpringZoom(page, img, fitted, async () => {
     await page.mouse.dblclick(middle.x, middle.y);
   });
 });

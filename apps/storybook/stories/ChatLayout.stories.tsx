@@ -776,7 +776,12 @@ export const PanelView: StoryObj = {
           border: '1px solid #ccc',
           borderRadius: 8,
           overflow: 'hidden',
-        }}>
+          // A flex column, so the layout fills the panel and its composer
+          // rests at the panel's bottom edge.
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+        data-testid="panel-view">
         <ChatLayout composer={composerEl}>
           <ChatMessageList>
             {messages.map(msg => {
