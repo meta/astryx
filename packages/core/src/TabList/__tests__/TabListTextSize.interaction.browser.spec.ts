@@ -36,31 +36,38 @@ async function setDefaultFontSize(page: Page, px: number): Promise<void> {
   });
 }
 
-/** Every element in the TabList that clips its own block overflow. */
-async function clippedTabText(page: Page) {
+/** Tabs that leave the tab strip's box, which clips its overflow. */
+async function tabsOutsideStrip(page: Page) {
   return page.evaluate(() =>
-    [
-      ...document.querySelectorAll<HTMLElement>(
-        '.astryx-tab-strip, .astryx-tab, [role="tab"]',
-      ),
-    ]
-      .filter(element => {
-        const style = getComputedStyle(element);
-        return /hidden|clip/.test(style.overflowY);
-      })
-      .filter(element => element.scrollHeight > element.clientHeight + 1)
-      .map(element => ({
-        text: element.innerText.trim().slice(0, 40),
-        clientHeight: element.clientHeight,
-        scrollHeight: element.scrollHeight,
-      })),
+    [...document.querySelectorAll<HTMLElement>('.astryx-tab-strip')].flatMap(
+      strip => {
+        const stripBox = strip.getBoundingClientRect();
+        return [
+          ...strip.querySelectorAll<HTMLElement>(
+            '.astryx-tab, .astryx-tab-menu',
+          ),
+        ]
+          .filter(tab => {
+            const tabBox = tab.getBoundingClientRect();
+            return (
+              tabBox.top < stripBox.top - 1 ||
+              tabBox.bottom > stripBox.bottom + 1
+            );
+          })
+          .map(tab => tab.innerText.trim());
+      },
+    ),
   );
 }
 
 /** Each tab's label box against the tab's own box. */
 async function labelFit(page: Page) {
   return page.evaluate(() =>
-    [...document.querySelectorAll<HTMLElement>('.astryx-tab')].map(tab => {
+    [
+      ...document.querySelectorAll<HTMLElement>(
+        '.astryx-tab, .astryx-tab-menu',
+      ),
+    ].map(tab => {
       const tabBox = tab.getBoundingClientRect();
       const range = document.createRange();
       range.selectNodeContents(tab);
@@ -86,7 +93,7 @@ for (const percent of [200, 250]) {
         `${storybook.origin}/iframe.html?id=core-tablist--${story}&viewMode=story`,
       );
       await page.locator('.astryx-tab-strip').first().waitFor();
-      expect(await clippedTabText(page)).toEqual([]);
+      expect(await tabsOutsideStrip(page)).toEqual([]);
       for (const fit of await labelFit(page)) {
         expect(fit.textTop, fit.label).toBeGreaterThanOrEqual(fit.tabTop - 1);
         expect(fit.textBottom, fit.label).toBeLessThanOrEqual(
