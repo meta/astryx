@@ -24,6 +24,9 @@ minimumReleaseAge: 10080
 minimumReleaseAgeExclude:
   - '@astryxdesign/*'
   - 'dompurify'
+  # Security release 2026-11-03 (next 16.4.5); remove on/after 2026-11-10.
+  - 'next'
+  - '@next/*'
 
 # Single source of truth for the workspace's vite version: every consumer
 # (root test config, packages/build) declares "vite": "catalog:", so a bump
@@ -88,10 +91,6 @@ overrides:
   # consumer in the graph already resolves inside ^4 on its own.
   read-yaml-file: ^2.1.0
   read-yaml-file>js-yaml: ^4.3.1
-  # next's optional sharp stays on 0.34.5, inheriting four libvips advisories
-  # patched only in 0.35 — out of reach of its own ^0.34 range. Drop when next
-  # depends on 0.35 itself.
-  sharp: ^0.35.3
 
 # pnpm 11 replaced the onlyBuiltDependencies allowlist with an allowBuilds map
 # (managed via `pnpm approve-builds`). These are the same packages previously
