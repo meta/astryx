@@ -439,9 +439,8 @@ describe('ComplexSelector', () => {
       </ComplexSelector>,
     );
 
-    const popover = screen
-      .getByRole('dialog', {hidden: true})
-      .closest('[popover]');
+    // Closed, the surface carries no dialog role, so find the layer itself.
+    const popover = document.querySelector('[popover]');
     expect(popover?.getAttribute('style')).toContain(
       'position-area: self-block-end span-self-inline-start',
     );

@@ -1719,6 +1719,77 @@ describe('DateInput', () => {
         expect(calendarGrid()).toBeNull();
       }
     });
+
+    it('opens on the day grid, not a disabled month button, when the range is one month', async () => {
+      // The range is one month, so both month buttons are disabled.
+      render(
+        <DateInput
+          label="Date"
+          min="2026-04-01"
+          max="2026-04-30"
+          onChange={() => {}}
+        />,
+      );
+      fireEvent.click(getButton('Open calendar'));
+      const grid = await waitFor(() => {
+        const found = document.querySelector('[role="grid"]');
+        expect(found).not.toBeNull();
+        return found!;
+      });
+      const tabStop = grid.querySelector('button[tabindex="0"]');
+      await waitFor(() => {
+        expect(tabStop).toHaveFocus();
+      });
+      expect(getButton('Previous month')).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      );
+      expect(getButton('Next month')).toHaveAttribute('aria-disabled', 'true');
+    });
+
+    it("opens on the selected day, the grid's Tab stop", async () => {
+      render(
+        <DateInput
+          label="Date"
+          value="2026-04-06"
+          min="2026-04-01"
+          max="2026-04-30"
+          onChange={() => {}}
+        />,
+      );
+      fireEvent.click(getButton('Open calendar'));
+      await waitFor(() => {
+        expect(document.activeElement).toHaveAttribute(
+          'data-date',
+          '2026-04-06',
+        );
+      });
+      expect(document.activeElement).toHaveAttribute('tabindex', '0');
+    });
+
+    it("opens on today when it is in range and nothing is selected, the grid's Tab stop", async () => {
+      vi.useFakeTimers({toFake: ['Date']});
+      vi.setSystemTime(new Date(2026, 3, 20, 12));
+      try {
+        render(
+          <DateInput
+            label="Date"
+            min="2026-04-01"
+            max="2026-04-30"
+            onChange={() => {}}
+          />,
+        );
+        fireEvent.click(getButton('Open calendar'));
+        await waitFor(() => {
+          expect(document.activeElement).toHaveAttribute(
+            'data-date',
+            '2026-04-20',
+          );
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   describe('weekStartsOn', () => {
