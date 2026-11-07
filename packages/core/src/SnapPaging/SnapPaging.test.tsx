@@ -89,6 +89,11 @@ describe('useSnapPaging', () => {
   });
 });
 
+// A disabled Button stays focusable: it sets `aria-disabled`, not the native
+// `disabled` property.
+const isDisabled = (button: HTMLElement) =>
+  button.getAttribute('aria-disabled') === 'true';
+
 describe('Carousel with hasSnap', () => {
   function scroller() {
     return screen
@@ -272,13 +277,13 @@ describe('Carousel with hasSnap', () => {
     it('enables and disables each button as the held row leaves or reaches its edge, before the hand-back', () => {
       const {report, start, end} = renderHeld();
       // jsdom lays nothing out, so at rest the scroll offset gives no room.
-      expect([start.disabled, end.disabled]).toEqual([true, true]);
+      expect([isDisabled(start), isDisabled(end)]).toEqual([true, true]);
       report({offset: 0, travel: 600});
-      expect([start.disabled, end.disabled]).toEqual([true, false]);
+      expect([isDisabled(start), isDisabled(end)]).toEqual([true, false]);
       report({offset: 300, travel: 600});
-      expect([start.disabled, end.disabled]).toEqual([false, false]);
+      expect([isDisabled(start), isDisabled(end)]).toEqual([false, false]);
       report({offset: 599.5, travel: 600});
-      expect([start.disabled, end.disabled]).toEqual([false, true]);
+      expect([isDisabled(start), isDisabled(end)]).toEqual([false, true]);
     });
 
     it('keeps the held edges for one frame after the hand-back, then reads the scroll offset again', async () => {
@@ -286,14 +291,14 @@ describe('Carousel with hasSnap', () => {
       report({offset: 300, travel: 600});
       report({offset: 300, travel: 600});
       report(null);
-      expect(start.disabled).toBe(false);
+      expect(isDisabled(start)).toBe(false);
       await act(
         async () =>
           new Promise<void>(resolve => {
             requestAnimationFrame(() => resolve());
           }),
       );
-      expect(start.disabled).toBe(true);
+      expect(isDisabled(start)).toBe(true);
     });
 
     it('hands focus to the scroll area once, when the held row reaches the edge of the focused button', () => {
