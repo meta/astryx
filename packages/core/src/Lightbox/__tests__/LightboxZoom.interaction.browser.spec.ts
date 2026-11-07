@@ -842,12 +842,34 @@ test('a finger landing on a coasting photo stops it where it shows', async ({
   await driver.play(doubleTap(mid));
   await waitForAnimation(photo);
   await waitForRest(photo);
+  // The photo's offset at the flick's lift, read in the page.
+  await recordLiftOffset(photo);
+  await photo.evaluate(el => el.setAttribute('data-freeze-photo', ''));
+  // The scene stops once the coast has carried the photo 10 px past the
+  // lift, however late this process reacts. A poll from here can land the
+  // finger after the coast ends.
+  const coasting = freezePageWhen(
+    page,
+    () => {
+      const lift = (globalThis as unknown as {__liftOffset?: number})
+        .__liftOffset;
+      const img = document.querySelector('[data-freeze-photo]') as Element;
+      const translate = getComputedStyle(img).translate;
+      const x = translate === 'none' ? 0 : parseFloat(translate);
+      return (
+        lift != null &&
+        x < lift - 10 &&
+        img.getAnimations().some(a => a.playState === 'running')
+      );
+    },
+    undefined,
+  );
   await driver.play(
     flick(mid, {velocity: {x: -900, y: 0}, durationMs: 80, hz: 120}),
   );
+  await coasting;
   // The landing must find the coast still running, or it proves nothing.
   await photo.evaluate(el => {
-    el.setAttribute('data-freeze-photo', '');
     // The pointer event comes first, and the photo stops on it.
     window.addEventListener(
       'pointerdown',
@@ -859,20 +881,6 @@ test('a finger landing on a coasting photo stops it where it shows', async ({
       {capture: true, once: true},
     );
   });
-  // The scene stops once the coast has carried the photo 10 px on, however
-  // late this process reacts. A poll from here can land the finger after
-  // the coast ends.
-  const released = (await state()).x;
-  await freezePageWhen(
-    page,
-    ({to}) => {
-      const img = document.querySelector('[data-freeze-photo]') as Element;
-      const translate = getComputedStyle(img).translate;
-      const x = translate === 'none' ? 0 : parseFloat(translate);
-      return x < to && img.getAnimations().some(a => a.playState === 'running');
-    },
-    {to: released - 10},
-  );
   // The finger lands in the frozen scene. The scene thaws after the first
   // read, and the finger rests 250 ms and lifts without moving.
   const reads: PhotoState[] = [];
