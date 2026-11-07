@@ -941,7 +941,13 @@ export function createPager(
     if (isChildPages()) {
       const offsets = measureChildOffsets();
       if (!sameOffsets(offsets, childOffsets)) {
+        // A drag's release moves at most one page from where the drag began.
+        // New pages renumber, so the drag keeps the page nearest that offset.
+        const dragFrom = isDragging ? offsetOf(dragStartIndex) : null;
         childOffsets = offsets;
+        if (dragFrom != null) {
+          dragStartIndex = nearestPage(dragFrom);
+        }
         changed = true;
         const pageCount = offsets.length;
         deliver(() => options.onPagesChange?.(pageCount));

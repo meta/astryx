@@ -1107,6 +1107,81 @@ describe('createPager', () => {
 
   // The shared resize observer is one per module. So this case loads a fresh
   // pager module after it installs its ResizeObserver.
+  it('a resize during a drag renumbers the pages, and the release still moves one page from where the drag began', async () => {
+    let onResize: ResizeObserverCallback | null = null;
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(callback: ResizeObserverCallback) {
+          onResize = callback;
+        }
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
+    vi.resetModules();
+    const fresh = await import('./usePager');
+    const f = setup({defaultIndex: 0});
+    f.pager.dispose();
+    // Three views of a nine-item row. A narrower view gives five.
+    let pages = [0, 308, 616];
+    const calls: string[] = [];
+    const pager = fresh.createPager(
+      {
+        count: 3,
+        pages: 'children',
+        measurePages: () => pages,
+        defaultIndex: 2,
+        onSettle: (i, previous) => calls.push(`settle:${i}:${previous}`),
+      },
+      {
+        host: f.host,
+        animator: f.animator,
+        requestFrame: callback => {
+          frameQueue.push(callback);
+        },
+      },
+    );
+    pager.attach(f.viewport, f.track);
+    try {
+      expect(f.x()).toBe(-616);
+      touch('touchstart', f.page, 300, 100, now);
+      // An 88 px drag toward the end, well past half the next page.
+      for (let i = 1; i <= 22; i++) {
+        await advance(8, f.clock);
+        touch('touchmove', f.page, 300 - 4 * i, 100, now);
+        if (i === 6) {
+          pages = [0, 205.3, 410.7, 616, 716];
+          Object.defineProperty(f.viewport, 'clientWidth', {
+            value: 200,
+            configurable: true,
+          });
+          expect(onResize).not.toBeNull();
+          onResize!(
+            [{target: f.viewport} as unknown as ResizeObserverEntry],
+            {} as ResizeObserver,
+          );
+        }
+      }
+      // A still finger before the lift: the release has no speed.
+      await advance(120, f.clock);
+      touch('touchend', f.page, 212, 100, now);
+      for (let i = 0; i < 80 && pager.isSettling; i++) {
+        await advance(16, f.clock);
+      }
+      await advance(16, f.clock);
+      // The drag began on the page at 616, and the page at 716 is the next one.
+      expect(f.x()).toBe(-716);
+      expect(calls).toEqual(['settle:4:2']);
+    } finally {
+      pager.dispose();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  // The shared resize observer is one per module. So this case loads a fresh
+  // pager module after it installs its ResizeObserver.
   it('a resize after a forward wrap keeps the wrapped page: no jump and no callback', async () => {
     let onResize: ResizeObserverCallback | null = null;
     vi.stubGlobal(
