@@ -131,10 +131,10 @@ function appendPseudoToSelectorList(selector: string, pseudo: string): string {
 }
 
 /**
- * The touch press model (utils/interactionOverlay.stylex.ts, pressFeedback.ts):
- * a mouse keeps `:active`, and under a coarse primary pointer the press
- * controller marks a press it believes (`PRESS_BELIEVED_SELECTOR`), so a
- * finger paints no press on the touch or through a scroll.
+ * The touch press model (utils/interactionOverlay.stylex.ts, pressFeedback.ts).
+ * A mouse keeps `:active`. Under a coarse primary pointer, the press
+ * controller marks a press it believes. A finger then paints no press on the
+ * touch or through a scroll.
  */
 const COARSE_POINTER_QUERY = '(pointer: coarse)';
 const ACTIVE_PSEUDO = /:active(?![-\w])/g;

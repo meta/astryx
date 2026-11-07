@@ -421,10 +421,11 @@ a measured, sourced difference exists.
   unclaimed, which FR19 allows (DEC-14). FR6's
   rule that at most one row of a menu is lit still holds, so a finger that
   slides from one row to another lights only the row under it.
-  A theme's `:active` override follows the press model: under a fine pointer
-  it applies on `:active`; under a coarse pointer it applies while Core
-  believes the press (`data-astryx-press="on"`), so a scroll that starts on a
-  control never shows it.
+  A theme's `:active` override paints with the component's own press paint:
+  under a coarse pointer only while Core believes the press
+  (`data-astryx-press="on"` on the pressed element or around it), so a scroll
+  that starts on a control never shows it; under a fine pointer from the
+  press's start.
 - **FR12 — Long press and rubber band are per use.** A long press MUST use the
   thresholds its UIKit counterpart uses: 0.5 s and 10 pt for a plain long
   press, the measured values for context menus and menus. A rubber band MUST
