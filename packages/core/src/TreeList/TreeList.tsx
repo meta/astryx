@@ -47,9 +47,9 @@ import {
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {useFocusLeavingChange} from '../utils/useFocusLeavingChange';
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useAnimatedLayout} from '../hooks/useAnimatedLayout';
 import {
   applyLayoutChangeTransition,
-  createAnimatedLayout,
   holdLayoutExit,
   playLayoutChange,
   releaseLayoutExit,
@@ -317,10 +317,7 @@ export function TreeList({
   // after a toggled row glide while its group fades on the same timing.
   // Content after the tree takes its place at once, because only an app's own
   // handle moves it.
-  const ownLayout = useMemo(
-    () => createAnimatedLayout(() => treeElementRef.current),
-    [],
-  );
+  const ownLayout = useAnimatedLayout({containerRef: treeElementRef});
   const animatedLayout =
     animatedLayoutProp ?? (isTouch ? ownLayout : undefined);
   // The rows expanded now, whatever expanded them (a click, the keyboard, or
