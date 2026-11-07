@@ -390,7 +390,7 @@ describe('TransferList', () => {
       );
     });
 
-    it('disables search and enables reordering by default', () => {
+    it('disables search by default, and shows a reorder handle with reorderable', () => {
       render(<ControlledTransferList initialValue={['name']} />);
 
       expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
