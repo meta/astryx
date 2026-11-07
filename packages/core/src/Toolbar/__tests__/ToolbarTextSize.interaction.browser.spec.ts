@@ -98,7 +98,11 @@ test('at the default text size the center sits at the middle', async ({
   expect(
     Math.abs((center.left + center.right) / 2 - toolbarCenter),
   ).toBeLessThan(1);
-  expect(new Set(lanes.map(lane => Math.round(lane.top))).size).toBe(1);
+  // One line: the lanes' contents differ in height but share a vertical band.
+  expect(
+    Math.max(...lanes.map(lane => lane.top)) <
+      Math.min(...lanes.map(lane => lane.bottom)),
+  ).toBe(true);
 });
 
 for (const [size, px] of [
