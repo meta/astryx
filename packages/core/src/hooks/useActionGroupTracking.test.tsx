@@ -337,6 +337,85 @@ describe('useActionGroupTracking', () => {
     expect(createActionGroupTracker).toHaveBeenCalledTimes(1);
   });
 
+  /** A caller's resolution that always picks the second action. */
+  const pickSecond = () =>
+    vi.fn(
+      (
+        _x: number,
+        _y: number,
+        targets: ReadonlyArray<ActionGroupTrackerModule.ActionGroupTarget>,
+        _neighbours: ReadonlyArray<ActionGroupTrackerModule.ActionGroupTarget>,
+      ) => targets[1]?.element ?? null,
+    );
+
+  it("picks a finger's action through the caller's resolveTarget, handing it the press's neighbours", () => {
+    const resolveTarget = pickSecond();
+    const {cancel, del, message, onCancel, onDelete} = mount({
+      options: {resolveTarget},
+    });
+    const f = finger();
+    // On the message, outside both actions, where no margin reaches.
+    f.down(message, centerOf(MESSAGE));
+    expect(paintOf(del)).toBe('on');
+    expect(paintOf(cancel)).toBeNull();
+    f.up(message, centerOf(MESSAGE));
+    expect(onDelete).toHaveBeenCalledTimes(1);
+    expect(onCancel).not.toHaveBeenCalled();
+    // No action is disabled, so the press has no neighbours.
+    expect(resolveTarget).toHaveBeenCalledWith(
+      centerOf(MESSAGE).x,
+      centerOf(MESSAGE).y,
+      expect.any(Array),
+      [],
+    );
+  });
+
+  it("hands the caller's resolveTarget a disabled action as a neighbour", () => {
+    const resolveTarget = pickSecond();
+    const {cancel, del} = mount({
+      isDeleteDisabled: true,
+      options: {resolveTarget},
+    });
+    const f = finger();
+    f.down(cancel, centerOf(CANCEL));
+    const neighbours = resolveTarget.mock.calls[0]?.[3] as
+      ReadonlyArray<ActionGroupTrackerModule.ActionGroupTarget> | undefined;
+    expect(neighbours?.map(neighbour => neighbour.element)).toEqual([del]);
+    f.up(cancel, centerOf(CANCEL));
+  });
+
+  it("lets a mouse hit-test the exact rects even with a resolveTarget, which is a finger's (family:action-groups FR5)", () => {
+    const resolveTarget = pickSecond();
+    const {cancel, del, message, onCancel, onDelete} = mount({
+      options: {resolveTarget},
+    });
+    const mouse = (type: string, point: {x: number; y: number}) => {
+      time += 16;
+      const event = new PointerEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        pointerId: 1,
+        pointerType: 'mouse',
+        isPrimary: true,
+        button: 0,
+        buttons: type === 'pointerup' ? 0 : 1,
+        clientX: point.x,
+        clientY: point.y,
+      });
+      Object.defineProperty(event, 'timeStamp', {value: time});
+      message.dispatchEvent(event);
+    };
+    // A mouse beside a coarse primary pointer, on the message: outside both
+    // actions it highlights nothing and runs nothing.
+    mouse('pointerdown', centerOf(MESSAGE));
+    expect(paintOf(del)).toBeNull();
+    expect(paintOf(cancel)).toBeNull();
+    mouse('pointerup', centerOf(MESSAGE));
+    expect(onDelete).not.toHaveBeenCalled();
+    expect(onCancel).not.toHaveBeenCalled();
+    expect(resolveTarget).not.toHaveBeenCalled();
+  });
+
   it("tracks a mouse under a fine pointer: a press on Delete slid to Cancel runs Cancel once, and the browser's own click runs nothing more (family:action-groups FR5)", () => {
     const {cancel, del, onCancel, onDelete} = mountFine();
     mouseOn(del, 'pointerdown', centerOf(DELETE));
@@ -637,7 +716,7 @@ describe('useActionGroupTracking', () => {
 
   it('leaves a touch the caller rejects to the browser', () => {
     const {cancel, message, onCancel} = mount({
-      options: {shouldTrack: target => target !== message},
+      options: {shouldTrack: touch => touch.target !== message},
     });
     const f = finger();
     f.down(message, {x: 50, y: 40});
@@ -666,6 +745,29 @@ describe('useActionGroupTracking', () => {
       f.move(message, centerOf(CANCEL), 30);
       expect(paintOf(cancel)).toBeNull();
       f.up(message, centerOf(CANCEL));
+      expect(onCancel).not.toHaveBeenCalled();
+    });
+
+    it("lights a mouse's press at once: a finger and a pen wait the content-touch delay", () => {
+      restorePointer();
+      restorePointer = pointerQuery(false).restore;
+      const {del, cancel, onCancel} = mountInScroller();
+      runAttachFrame();
+      mouseOn(del, 'pointerdown', centerOf(DELETE));
+      expect(paintOf(del)).toBe('on');
+      mouseOn(del, 'pointermove', centerOf(CANCEL));
+      expect(paintOf(cancel)).toBe('on');
+      mouseOn(cancel, 'pointerup', centerOf(CANCEL));
+      expect(onCancel).toHaveBeenCalledTimes(1);
+    });
+
+    it("leaves a pen's flick to the scroller, as a finger's: travel past the slop before the delay tracks nothing", () => {
+      const {message, cancel, onCancel} = mountInScroller();
+      pen(message, 'pointerdown', {x: 50, y: 40});
+      pen(message, 'pointermove', {x: 50, y: 40 + UIKIT_PRESS.slop.value + 2});
+      pen(message, 'pointermove', centerOf(CANCEL));
+      expect(paintOf(cancel)).toBeNull();
+      pen(message, 'pointerup', centerOf(CANCEL));
       expect(onCancel).not.toHaveBeenCalled();
     });
 

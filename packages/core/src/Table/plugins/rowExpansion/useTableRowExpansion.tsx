@@ -4,7 +4,8 @@
 
 /**
  * @file useTableRowExpansion.tsx
- * @input React, StyleX, Icon, Table types, table context (density), i18n
+ * @input React, StyleX, Icon, the theme's `table-row-expand` icon slot, Table
+ *   types, table context (density), i18n
  *   (useComponentTranslator)
  * @output Exports useTableRowExpansion hook + config type
  * @position Row-expansion plugin (detail panel); consumed by Table via plugins prop
@@ -39,6 +40,8 @@ import {tableRowMarker} from '../../table.stylex';
 import {panelDividerFor} from '../../rowDivider';
 import {useTheme, useThemeName} from '../../../theme/useTheme';
 import {Icon} from '../../../Icon';
+import {ComponentIcon} from '../../../Icon/ComponentIcon';
+import {iconBoxSizeStyles} from '../../../Icon/IconSize.stylex';
 import {VisuallyHidden} from '../../../VisuallyHidden';
 import {resolveContextActions} from '../../tableContextMenu';
 import {useTableContext} from '../../useTableCellStyles';
@@ -65,6 +68,7 @@ import {
   type LayoutChange,
 } from '../../../motion/animatedLayout';
 import {
+  dividerOffset,
   GLIDING_ATTRIBUTE,
   glidingDividerStyles,
   markGlidingRows,
@@ -215,6 +219,21 @@ const expansionStyles = stylex.create({
     ':hover:where(:not(:disabled,[aria-disabled="true"]))': {
       color: colorVars['--color-icon-primary'],
     },
+  },
+  // The button takes its baseline from this fixed box. A theme's glyph size
+  // or a hidden glyph then keeps the row height. The box is the toggle's
+  // first child, which the glide gives its spring, so it carries the turn.
+  glyphBox: {
+    display: 'inline-block',
+    position: 'relative',
+    flexShrink: 0,
+  },
+  glyphCenter: {
+    position: 'absolute',
+    inset: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   chevron: {
     transitionProperty: 'transform',
@@ -387,16 +406,23 @@ function ExpansionChevron({
       }}
       aria-label={ariaLabel}
       aria-expanded={isExpanded}>
-      <Icon
-        icon="chevronRight"
-        size="xsm"
-        xstyle={[
+      <span
+        {...stylex.props(
+          expansionStyles.glyphBox,
+          iconBoxSizeStyles.xsm,
           expansionStyles.chevron,
           isExpanded
             ? expansionStyles.chevronExpanded
             : expansionStyles.chevronCollapsed,
-        ]}
-      />
+        )}>
+        <span {...stylex.props(expansionStyles.glyphCenter)}>
+          <ComponentIcon
+            slot="table-row-expand"
+            state={{expanded: isExpanded}}
+            fallback={{icon: 'chevronRight', size: 'xsm'}}
+          />
+        </span>
+      </span>
     </button>
   );
 }
@@ -740,6 +766,7 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
       row: HTMLElement;
       panel: HTMLElement | null;
       entrance: Animation | null;
+      panelOffset: number | null;
       edges: Map<Element, BottomEdge>;
     }[] = [];
     for (const pending of pendings) {
@@ -759,6 +786,7 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
             ? next
             : null,
         entrance: null as Animation | null,
+        panelOffset: null as number | null,
         edges: new Map<Element, BottomEdge>(),
       };
       // Read where the glide reads the layout, before anything moves: the
@@ -779,6 +807,8 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
           const edge = rowEdge(record.panel);
           if (edge != null) {
             record.edges.set(record.panel, edge);
+            // Its entrance moves its cell: read where its line hangs first.
+            record.panelOffset = dividerOffset(record.panel, edge);
           }
           record.entrance = playLayoutChange(animatedLayout, record.panel);
         }
@@ -806,12 +836,12 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
     // one runs after it, before the frame paints, and only writes.
     queueMicrotask(() => {
       const stopped = Promise.all(
-        moved.map(async ({row, panel, entrance, edges}) =>
+        moved.map(async ({row, panel, entrance, panelOffset, edges}) =>
           markGlidingRows(
             row,
             edges,
             panel != null && entrance != null
-              ? {row: panel, animation: entrance}
+              ? {row: panel, animation: entrance, offset: panelOffset}
               : null,
             glideOf,
           ),

@@ -11,6 +11,8 @@ An accessibility spec (`*.a11y.browser.spec.ts`, under
 [`playwright.config.ts`](../../playwright.config.ts)) may use the animation
 holds and the timer gate too, to check a state an animation passes through.
 
+The exemplar to copy is
+[`BottomSheetDetent.interaction.browser.spec.ts`](../../packages/core/src/BottomSheet/__tests__/BottomSheetDetent.interaction.browser.spec.ts).
 The harness proves its own instruments in
 [`src/harness.interaction.browser.spec.ts`](src/harness.interaction.browser.spec.ts).
 The busy-main-thread proof and the rendering-trace counts have a negative
@@ -24,7 +26,7 @@ self-tests check an instrument against a known answer.
 pnpm storybook:build                      # the specs read stories from the built Storybook
 pnpm exec playwright install chromium webkit
 pnpm test:interaction --project chromium  # everything, Chromium
-pnpm test:interaction <spec file>         # one spec, both engines
+pnpm test:interaction BottomSheetDetent   # one spec, both engines
 pnpm storyboards                          # only the tests tagged @storyboard
 ```
 
@@ -55,8 +57,9 @@ committed: a pull request links or attaches it.
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `scripts.ts`    | Touch scripts as data: `tap`, `drag` (hold, rest), `flick` (exact final-move speed, velocity profiles), `holdThenDrag`, `pinch`, `rotate`, `path`, `merge` (a second finger mid-gesture), `releaseVelocity`, `toTouchEvents`.                                                |
 | `touch.ts`      | `touchDriver(page).play(script)`: the script as real engine input. `installInputLog` / `readInputLog`: what the page received.                                                                                                                                               |
-| `frames.ts`     | `startScreencast` (timestamped composited frames), `markElement` (a marker chip or outline), `trackMarker` (marker box per frame), `sampleRects` (per-rAF rects), `frameStats`.                                                                                              |
+| `frames.ts`     | `startScreencast` (timestamped composited frames), `markElement` (a marker chip or outline), `trackMarker` (marker box per frame), `trackMarkers` (several colors from one decode of each frame), `sampleRects` (per-rAF rects), `frameStats`.                               |
 | `busy.ts`       | `blockMainThread(page, ms)`, which returns the window it held and the span its loop measured, and `busyWindowProof(tracked, window)`: frames presented, frames that moved, longest stall, a verdict; `presented` adds the compositor's own frames.                           |
+| `brightness.ts` | `trackBrightness(page, frames, {x, y})`: a colour channel's mean in a square per frame, as a scalar on `box.x`, for a busy-window proof of a fade or a dim.                                                                                                                  |
 | `webInput.ts`   | `webInputDriver(page)`: `wheel({x, y, dx, dy, ctrl})` and `pen(points)` as real engine input, for proofs across pointers (`spec:AST-100` FR4); `wheel` resolves once the page has the step; read back through the input log.                                                 |
 | `trace.ts`      | `traceRendering(page, body)`: main-thread counts of UpdateLayoutTree / Layout / PrePaint / Paint / Layerize / UpdateLayer / ScrollLayer / HitTest, `countBetween`, long tasks; `installLongTaskLog` / `readLongTasks`; `startCompositorTrace`: when the compositor presents. |
 | `curves.ts`     | `holdAnimations`, `armHold`, `seekAnimations`, `sampleCurve` (presented transform / opacity at any t), `waitForAnimation`, `watchAnimations`, `waitForRest`, `releaseAnimations`, `releaseAnimationLog` (frees what the recorder kept, before a heap or listener count).     |
@@ -139,9 +142,13 @@ page's own `requestAnimationFrame`, the CSS animation and transition events,
 and `Element.animate` as it is called, pending animations included. So
 `waitForAnimation` also reports one that started after the last
 `waitForRest`, `waitForAnimation` or `watchAnimations` and has already finished (`finishedAt`
-set): a short entrance no longer races the first look on a cold page. When the
-action may be the page's first contact with the harness, take
-`watchAnimations(locator)` before it and read `watch.started()` after.
+set): a short entrance no longer races the first look on a cold page. A run
+that the page cancels while it plays ended there, with no finish event. Core's
+motion animator retires each run with `cancel()` once its curve ends. The
+recorder dates such a run at the cancel, and a wait reports it once it
+presented `minProgressMs`. When the action may be the page's first contact
+with the harness, take `watchAnimations(locator)` before it and read
+`watch.started()` after.
 
 **Busy main thread.** Mark the element, start the screencast, start the
 animation, wait until it runs (`waitForAnimation`: an animation cannot start
@@ -238,7 +245,11 @@ a dialog they still wait for the backdrop's. Track a top-layer control from
 the same screencast with `trackControl(page, frames)` (`trackMarker` with
 `CONTROL_RGB`, searching only the top strip it crosses). A control mounted
 `within` a dialog moves with it, so track that one with `trackMarker(page,
-frames, {rgb: CONTROL_RGB})`. Pass either as `control`: the component passes when it moved on every frame the control
+frames, {rgb: CONTROL_RGB})`, or track the marker and the control together
+with `trackMarkers(page, frames, {colors: [MARKER_RGB, CONTROL_RGB]})`, which
+decodes each frame once. A proof reads frames up to
+`BUSY_PROOF_LOOKAROUND_MS` (250 ms) around its judged part, so a spec may
+decode only those. Pass either as `control`: the component passes when it moved on every frame the control
 moved and its longest stall is no longer than the control's. Both are read from
 the same screencast frames, so a compositor animation misses none. A window in
 which the control moved on fewer than four frames fails, since the machine
@@ -269,6 +280,13 @@ the screencast's stamps. A loaded machine stamps frames late, and
 `inPresentationOrder` can then put a frame after frames that came after it.
 The clock takes the cycle origin that most frames agree with, so such a frame
 moves only its own reading. A frame within 36 px of a turn gets no reading.
+A proof that needs every frame read starts a second control after the first,
+`startBusyControl(page, {ahead: true})`: an `AHEAD_CONTROL_RGB` box in the
+strip below, half a leg (200 ms) ahead. Wherever the first control is near a
+turn, the one ahead is mid-leg. Track it with `trackControl(page, frames,
+{ahead: true})` and read it with its own `controlClock`. `startBusyControl`
+resolves with each control's `start` on the page clock, where its own time
+is zero. Keep the component's marker out of the top 28 px then.
 
 An animation that lasts a fraction of a second, such as a 0.2 s fade, leaves a
 block only a few frames to judge: in WebKit, or on a loaded machine, the control
@@ -277,7 +295,12 @@ and judge the runs pooled (`pooledBusyProof(runs)`, each run with its own
 tracked frames, control and window): the control must move on at least four
 frames over all the runs, the component on every one of them, and in each run
 its longest stall may be no longer than that run's control's, since a stall
-belongs to its run.
+belongs to its run. A run whose control moved on fewer frames than
+`minRunFrames` (1 by default) is too little to judge: the summary names it,
+and the pool leaves it out, so it never counts as a pass. The pool fails with
+fewer than `minJudgedRuns` judged runs (half, rounded up). In each judged run,
+the component must move on every frame its control moved on, so a freeze fails
+its run.
 
 On a loaded machine Chromium's screencast can skip frames the compositor
 still presents. `startCompositorTrace(page)`, started with the screencast and

@@ -92,6 +92,12 @@ const styles = stylex.create({
   scrollable: {
     overflow: 'auto',
   },
+  // At width 0 the padding box is 0 too, so the clip hides every child.
+  zeroWidth: {
+    paddingInlineStart: 0,
+    paddingInlineEnd: 0,
+    overflow: 'clip',
+  },
   // For start panel: divider on end edge
   dividerEnd: {
     borderInlineEndWidth: 1,
@@ -307,11 +313,18 @@ export function LayoutPanel({
   const isEndPanel = area === 'end';
 
   const isZeroPadding = padding === 0;
+  // A collapsed region sizes its panel to 0.
+  const isZeroWidth = effectiveWidth === 0;
 
   // When no divider, collapse spacing for seamless visual flow
   const shouldCollapseSpacing =
-    !hasDivider && !isZeroPadding && padding == null;
-  const region = useScrollRegionProps({isScrollable, role, label});
+    !hasDivider && !isZeroPadding && padding == null && !isZeroWidth;
+  // At width 0 the panel clips its content, so it does not scroll.
+  const region = useScrollRegionProps({
+    isScrollable: isScrollable && !isZeroWidth,
+    role,
+    label,
+  });
   const mergedRef = useMergedRefs(ref, region.ref, elementRef, lendRef);
 
   // Select divider style based on position
@@ -354,6 +367,7 @@ export function LayoutPanel({
           padding != null && containerPaddingBlockEndVarStyles[padding],
           hasDivider && dividerStyle,
           shouldCollapseSpacing && collapseStyle,
+          isZeroWidth && styles.zeroWidth,
           xstyle,
         ),
         className,

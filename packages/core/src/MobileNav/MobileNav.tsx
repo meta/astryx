@@ -77,6 +77,7 @@ import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
+import {matchesMediaQuery} from '../utils/coarsePointer';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useScrollLock} from '../hooks/useScrollLock';
@@ -341,7 +342,10 @@ function resolveCloseDelay(dialog: HTMLDialogElement): number {
   // Reduced motion makes the close sooner; it must not make the hold shorter.
   // Shrinking both leaves no slack — one slow frame between the commit and this
   // macrotask and the drawer has already stopped being rendered.
-  const cap = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  const cap = matchesMediaQuery(
+    dialog.ownerDocument.defaultView,
+    '(prefers-reduced-motion: reduce)',
+  )
     ? 0
     : MAX_CLOSE_DELAY_MS;
 
@@ -701,6 +705,9 @@ export function MobileNav({
   );
 
   const isStart = resolvedSide === 'start';
+  const navigationLabel =
+    label ??
+    (typeof header === 'string' ? header : t('@astryx.mobileNav.navigation'));
 
   return (
     <dialog
@@ -723,12 +730,7 @@ export function MobileNav({
       )}
       {...rest}
       data-testid={testId}
-      aria-label={
-        label ??
-        (typeof header === 'string'
-          ? header
-          : t('@astryx.mobileNav.navigation'))
-      }
+      aria-label={navigationLabel}
       // Presses inside the navigation do not reach handlers around where it
       // is written.
       {...layerClickBoundary({
@@ -773,8 +775,16 @@ export function MobileNav({
                 />
               </div>
 
-              {/* Scrollable content */}
-              <div {...stylex.props(styles.content)}>{children}</div>
+              {/* Scrollable content, the drawer's navigation landmark: a
+                  modal dialog is not a landmark. */}
+              <nav
+                // Named as the dialog is: by the caller's aria-labelledby when
+                // it resolves, else by the dialog's own label.
+                aria-labelledby={rest['aria-labelledby']}
+                aria-label={navigationLabel}
+                {...stylex.props(styles.content)}>
+                {children}
+              </nav>
             </div>
           </LayerContentBoundary>
         </LayerDepthProvider>

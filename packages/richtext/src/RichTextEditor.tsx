@@ -84,6 +84,7 @@ import type {RichTextMarkdownExtension} from './markdownExtensions';
 import type {CodeLanguage} from '@astryxdesign/core/CodeBlock';
 import {TaskCheckboxPlugin} from './TaskCheckboxPlugin';
 import {SelectAllScopePlugin} from './SelectAllScopePlugin';
+import {ImageSourceCaretPlugin} from './ImageSourceCaretPlugin';
 import {type Transformer} from '@lexical/markdown';
 import {$generateHtmlFromNodes} from '@lexical/html';
 import {DEFAULT_NODES} from './editorNodes';
@@ -732,6 +733,7 @@ export const RichTextEditor = function RichTextEditor({
               <TabIndentationPlugin />
               <TabFocusEscapePlugin />
               <SelectAllScopePlugin />
+              <ImageSourceCaretPlugin />
               {hasMarkdownShortcuts && (
                 <MarkdownShortcutPlugin transformers={markdownTransformers} />
               )}

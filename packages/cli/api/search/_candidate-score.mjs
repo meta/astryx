@@ -37,9 +37,10 @@
 
 import {
   stem,
-  wordForms,
   sameWord,
-  startsAWordOf,
+  sameTermWord,
+  startsATermWordOf,
+  termWords,
   wordsOf,
   joined,
   typoDistance,
@@ -78,14 +79,14 @@ function spellsOut(term, name, description) {
 /**
  * Whether a one-word term is a name's last word and every word before it is a
  * single letter: Stack in VStack and HStack.
- * @param {string} term
+ * @param {import('./_words.mjs').TermWords} t
  * @param {string} name
  */
-function headOfLetters(term, name) {
+function headOfLetters(t, name) {
   const parts = wordsOf(name);
   return (
     parts.length >= 2 &&
-    sameWord(term, parts[parts.length - 1]) &&
+    sameTermWord(t, parts[parts.length - 1]) &&
     parts.slice(0, -1).every(p => p.length === 1)
   );
 }
@@ -96,14 +97,14 @@ const FAMILY_MEMBERS = 3;
 /**
  * A derived name's score for a term: 60 for the same word, 40 for a word the
  * term starts, else 0.
- * @param {string} term - Lowercased search term.
+ * @param {import('./_words.mjs').TermWords} t - The lowercased search term.
  * @param {string} kw - The derived name as authored.
  * @returns {number}
  */
-function weakKeywordScore(term, kw) {
+function weakKeywordScore(t, kw) {
   const kwLower = String(kw).toLowerCase();
-  if (kwLower === term || sameWord(term, kwLower)) return 60;
-  return startsAWordOf(term, kw) ? 40 : 0;
+  if (kwLower === t.term || sameTermWord(t, kwLower)) return 60;
+  return startsATermWordOf(t, kw) ? 40 : 0;
 }
 
 /**
@@ -146,6 +147,8 @@ export function scoreCandidate(
     _family,
     _familyIndex,
   } = candidate;
+  // The term's forms, worked out once for every word below.
+  const t = termWords(term);
   let best = 0;
   let reason = '';
   /** @type {'partial' | 'keyword' | false} */
@@ -208,18 +211,18 @@ export function scoreCandidate(
       // outranks the Token component for `tokens`.
       consider(99, 'plural of the name');
     } else {
-      if (sameWord(term, nameLower)) consider(95, `name "${candidateName}"`);
+      if (sameTermWord(t, nameLower)) consider(95, `name "${candidateName}"`);
       // The term is a word of the name, or starts one: "input" in TextInput.
       else if (
         !part &&
         domain !== 'doc' &&
         domain !== 'theme' &&
-        headOfLetters(term, candidateName)
+        headOfLetters(t, candidateName)
       ) {
         // The whole query is the name's head word after single letters (Stack
         // in VStack, HStack): a variant named by its head, as a keyword is.
         consider(90, `name "${candidateName}" ends in "${term}"`);
-      } else if (startsAWordOf(term, candidateName)) {
+      } else if (startsATermWordOf(t, candidateName)) {
         consider(60, `name contains "${term}"`);
       }
       if (fuzzy) {
@@ -273,11 +276,11 @@ export function scoreCandidate(
       consider(90, `keyword "${kw}"`, 'keyword');
       continue;
     }
-    if (sameWord(term, kwLower)) {
+    if (sameTermWord(t, kwLower)) {
       consider(88, `keyword "${kw}"`);
       continue;
     }
-    if (startsAWordOf(term, kw)) consider(70, `keyword "${kw}"`);
+    if (startsATermWordOf(t, kw)) consider(70, `keyword "${kw}"`);
     if (fuzzy) {
       const dist = typoDistance(term, kwLower);
       if (dist != null && dist <= 2) {
@@ -294,9 +297,9 @@ export function scoreCandidate(
   // A bound skips the read when no name the page can yield matches the term,
   // and then no weak keyword can match it either.
   const bound = candidate.weakKeywordBound;
-  if (!bound || bound.some(kw => weakKeywordScore(term, kw) > 0)) {
+  if (!bound || bound.some(kw => weakKeywordScore(t, kw) > 0)) {
     for (const kw of candidate.weakKeywords ?? []) {
-      const score = weakKeywordScore(term, kw);
+      const score = weakKeywordScore(t, kw);
       if (score > 0) consider(score, `renders ${kw}`);
     }
   }
@@ -307,7 +310,7 @@ export function scoreCandidate(
   if (term.length >= 3) {
     // Any form of the term, with any common suffix: `spacing` finds
     // "space" and "spaces", `tables` finds "table".
-    const roots = [...new Set([stem(term), ...wordForms(term)])]
+    const roots = [...new Set([stem(term), ...t.forms])]
       .filter(f => f.length >= 3)
       .map(f => f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
     const re = new RegExp(`\\b(?:${roots.join('|')})(s|es|ing|ed|ies)?\\b`);

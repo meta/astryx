@@ -21,7 +21,7 @@ const SRC = path.join(__dirname, '..');
 
 /** Names of the motion module beneath the public animator. */
 const INTERNAL = [
-  'createMotionAnimator',
+  'createMotionEngine',
   'createAttachableAnimator',
   'animatorFor',
   'coast',
@@ -67,6 +67,6 @@ describe('the public animator surface', () => {
       'utf8',
     );
     expect(motion).not.toMatch(/export function createAnimator\b/);
-    expect(motion).toMatch(/export function createMotionAnimator\b/);
+    expect(motion).toMatch(/export function createMotionEngine\b/);
   });
 });

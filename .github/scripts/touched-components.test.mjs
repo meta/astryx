@@ -223,6 +223,27 @@ describe('wide changes', () => {
     expect(decideWideChange(owners(1), behaviour).wideChange).toBe(false);
   });
 
+  it('never counts a test, story, doc or note in a foundation folder as a shared style', () => {
+    const notStyles = [
+      'packages/core/src/theme/derivedVarRegistry.test.ts',
+      'packages/core/src/theme/__tests__/themingTargets.test.ts',
+      'packages/themes/neutral/src/__tests__/neutralTheme.test.ts',
+      'packages/themes/neutral/src/neutralTheme.stories.tsx',
+      'packages/core/src/theme/theme.doc.mjs',
+      'packages/themes/neutral/README.md',
+      'packages/core/src/Layer/__tests__/layer.stylex.test.ts',
+    ];
+    expect(foundationChanges(notStyles)).toEqual([]);
+    expect(decideWideChange(owners(2), notStyles).wideChange).toBe(false);
+    // A real foundation beside them still makes the change wide.
+    expect(
+      decideWideChange(owners(2), [
+        ...notStyles,
+        'packages/core/src/theme/tokens.stylex.ts',
+      ]).wideChange,
+    ).toBe(true);
+  });
+
   it('writes a skipped visual verdict for a wide change, carrying the run identity', () => {
     const verdict = wideVisualVerdict(
       {componentCount: 7},
@@ -590,8 +611,9 @@ describe('pr-touched-components routing', () => {
       'Download Storybook artifact',
       'Install Playwright',
     ]) {
+      // A changed story no other audit covers needs the same setup (FR12).
       expect(step(name).if).toBe(
-        "steps.touched.outputs.has_components == 'true'",
+        "(steps.touched.outputs.has_components == 'true' || steps.touched.outputs.changed_stories == 'true')",
       );
     }
     expect(step('Upload touched-components results').with.path).not.toContain(
@@ -643,7 +665,8 @@ describe('pr-touched-components routing', () => {
     expect(
       step('Skip when no component changed or the change is wide').if,
     ).toBe("steps.touched.outputs.has_components != 'true'");
-    // Every later step runs for touched components only.
+    // Every later step runs for touched components only, or for a changed
+    // story no other audit covers (FR12).
     const skipIndex = job.steps.findIndex(
       candidate =>
         candidate.name ===
@@ -651,7 +674,7 @@ describe('pr-touched-components routing', () => {
     );
     for (const candidate of job.steps.slice(skipIndex + 1)) {
       expect(candidate.if, candidate.name).toMatch(
-        /steps\.touched\.outputs\.has_components == 'true'/,
+        /steps\.touched\.outputs\.(has_components|changed_stories) == 'true'/,
       );
     }
   });
@@ -672,7 +695,7 @@ describe('pr-component-a11y-contracts routing', () => {
     "Run the touched components' accessibility contracts",
   );
   const ran =
-    "steps.touched.outputs.has_components == 'true' || steps.specs.outputs.has_specs == 'true'";
+    "steps.touched.outputs.contract_owners != '' || steps.specs.outputs.has_specs == 'true'";
 
   it('starts after the Storybook build, beside the test owners, never after pr-visual or the touched check', () => {
     expect(contracts.needs).toEqual([
@@ -723,7 +746,7 @@ describe('pr-component-a11y-contracts routing', () => {
     );
     for (const candidate of contracts.steps.slice(skipIndex + 1)) {
       expect(candidate.if, candidate.name).toMatch(
-        /steps\.scope\.outputs\.applies == 'true'|steps\.touched\.outputs\.has_components == 'true'|steps\.contracts\.outcome/,
+        /steps\.scope\.outputs\.applies == 'true'|steps\.touched\.outputs\.contract_owners != ''|steps\.contracts\.outcome/,
       );
     }
   });
@@ -805,16 +828,20 @@ describe('pr-component-a11y-contracts routing', () => {
       'git show "$WORKFLOW_SHA:.github/scripts/a11y-pr-contracts.mjs" > "$runner"',
     );
     expect(runStep.run).toContain(
-      'node "$runner" --changed-only "$SPECS_PATH" --changed-files "$FILES_PATH" --owned-by "$OWNERS"',
+      'node "$runner" --changed-only "$SPECS_PATH" --changed-files "$FILES_PATH" --owned-by "$OWNERS" --dependents-of "$FOLDERS"',
     );
     // Every changed path, not only the changed specs: a change in a
     // component folder owns that folder's specs.
     expect(runStep.env.FILES_PATH).toBe(
       '${{ steps.scope.outputs.changed_files_path }}',
     );
-    // A wide change has no owned specs.
+    // A wide change still runs the touched components' own specs, then the
+    // specs of the folders that render them (FR12).
     expect(runStep.env.OWNERS).toBe(
-      "${{ steps.touched.outputs.has_components == 'true' && steps.touched.outputs.a11y_owners || '' }}",
+      '${{ steps.touched.outputs.contract_owners }}',
+    );
+    expect(runStep.env.FOLDERS).toBe(
+      '${{ steps.touched.outputs.contract_folders }}',
     );
     expect(runStep.env.A11Y_CONTRACT_WORKERS).toBe(4);
     expect(runStep.env.WORKFLOW_SHA).toBe('${{ github.sha }}');
@@ -833,5 +860,166 @@ describe('pr-component-a11y-contracts routing', () => {
     expect(contractStep('Upload contract evidence').with.path).toContain(
       'pr-a11y-evidence/',
     );
+  });
+});
+
+// A story the change adds or changes that no other audit covers is audited
+// on its own (spec:AST-030 FR12), new violations only.
+describe('the audit of changed stories no other audit covers', () => {
+  const audit = step(
+    'Accessibility audit for changed stories no other audit covers',
+  );
+  const either =
+    "(steps.touched.outputs.has_components == 'true' || steps.touched.outputs.changed_stories == 'true')";
+
+  it('runs after the Storybook build and browser are in place, whenever a story file changed', () => {
+    expect(audit.if).toBe(
+      "always() && steps.playwright.outcome == 'success' && steps.touched.outputs.changed_stories == 'true'",
+    );
+    for (const name of [
+      'Setup Node and pnpm',
+      'Download Storybook artifact',
+      'Install Playwright',
+    ]) {
+      expect(step(name).if, name).toBe(either);
+    }
+    expect(job.steps.indexOf(audit)).toBeGreaterThan(
+      job.steps.indexOf(step('Install Playwright')),
+    );
+  });
+
+  it("audits only those stories, against the head's baseline, failing on a new violation", () => {
+    expect(audit.env).toEqual({
+      FILES_PATH: '${{ steps.scope.outputs.changed_files_path }}',
+      TOUCHED_AUDIT:
+        "${{ steps.touched.outputs.has_components == 'true' && steps.touched.outputs.a11y_owners != '' }}",
+    });
+    expect(audit.run).toContain('--changed-story-files "$FILES_PATH"');
+    // The touched components' audit already runs their stories: the same
+    // filters it uses are left out here.
+    expect(audit.run).toContain(
+      'COVERED=$(node .github/scripts/a11y-pr-scope.mjs analysis.json)',
+    );
+    expect(audit.run).toContain('--covered-components "$COVERED"');
+    expect(
+      step('Accessibility audit for the touched components').run,
+    ).toContain(
+      'COMPONENTS=$(node .github/scripts/a11y-pr-scope.mjs analysis.json)',
+    );
+    expect(audit.run).toContain(
+      '--baseline .head-baseline/.github/a11y-baseline.json',
+    );
+    expect(audit.run).toContain('--fail-on-new');
+    expect(audit.run).not.toContain('--components');
+    expect(step('Upload touched-components results').with.path).toContain(
+      'a11y-stories-report.json',
+    );
+  });
+
+  it('still leaves a Lab-only pull request to its own lane (FR26)', () => {
+    expect(job.if).toContain(
+      "needs.build-storybook.outputs.lab_only != 'true'",
+    );
+  });
+
+  it('reports whether a story file changed, wide change or not', async () => {
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const {execFileSync} = await import('node:child_process');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'touched-stories-'));
+    try {
+      const run = files => {
+        fs.writeFileSync(path.join(dir, 'files.txt'), `${files.join('\n')}\n`);
+        fs.writeFileSync(path.join(dir, 'analysis.json'), '{}');
+        const out = path.join(dir, 'out.txt');
+        fs.writeFileSync(out, '');
+        execFileSync(
+          'node',
+          [
+            new URL('./touched-components.mjs', import.meta.url).pathname,
+            'scope',
+            '--analysis',
+            path.join(dir, 'analysis.json'),
+            '--files',
+            path.join(dir, 'files.txt'),
+            '--out',
+            path.join(dir, 'touched.json'),
+          ],
+          {env: {...process.env, GITHUB_OUTPUT: out}},
+        );
+        return Object.fromEntries(
+          fs
+            .readFileSync(out, 'utf8')
+            .split('\n')
+            .filter(Boolean)
+            .map(line => line.split('=')),
+        );
+      };
+      expect(
+        run(['apps/storybook/stories/ScrollRegionA11y.stories.tsx'])
+          .changed_stories,
+      ).toBe('true');
+      expect(
+        run(['packages/core/src/Layout/LayoutContent.tsx']).changed_stories,
+      ).toBe('false');
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
+
+  it("gives the contract job the touched components and folders, wide change or not (#7910's shape)", async () => {
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const {execFileSync} = await import('node:child_process');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'touched-contracts-'));
+    try {
+      const owners = [
+        'core/FieldStatus',
+        'core/Spinner',
+        'core/Tokenizer',
+        'core/Typeahead',
+        'core/CheckboxList',
+        'lab/EmojiPicker',
+        'lab/Schedule',
+      ];
+      fs.writeFileSync(
+        path.join(dir, 'files.txt'),
+        'packages/core/src/Spinner/Spinner.tsx\n',
+      );
+      fs.writeFileSync(
+        path.join(dir, 'analysis.json'),
+        JSON.stringify({modifiedComponentOwners: owners}),
+      );
+      const out = path.join(dir, 'out.txt');
+      fs.writeFileSync(out, '');
+      execFileSync(
+        'node',
+        [
+          new URL('./touched-components.mjs', import.meta.url).pathname,
+          'scope',
+          '--analysis',
+          path.join(dir, 'analysis.json'),
+          '--files',
+          path.join(dir, 'files.txt'),
+          '--out',
+          path.join(dir, 'touched.json'),
+        ],
+        {env: {...process.env, GITHUB_OUTPUT: out, GITHUB_STEP_SUMMARY: ''}},
+      );
+      const outputs = Object.fromEntries(
+        fs
+          .readFileSync(out, 'utf8')
+          .split('\n')
+          .filter(Boolean)
+          .map(line => line.split('=')),
+      );
+      expect(outputs.wide_change).toBe('true');
+      expect(outputs.has_components).toBe('false');
+      expect(outputs.contract_owners.split(',')).toEqual([...owners].sort());
+      expect(outputs.contract_folders.split(',')).toContain('core/Spinner');
+      expect(outputs.contract_folders.split(',')).toContain('lab/Schedule');
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
   });
 });
