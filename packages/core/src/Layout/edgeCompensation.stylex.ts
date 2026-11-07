@@ -63,4 +63,16 @@ export const edgeCompSlot = stylex.create({
       [`:has(> [${EDGE_COMP_ATTR}]:last-child)`]: `calc(-1 * ${amount})`,
     },
   }),
+  // For a flex item whose share of the row starts from a zero basis: the
+  // inset's negative margins count toward its share, so this basis gives
+  // that width back. The item's share then excludes its compensation, as a
+  // grid track's would.
+  flexBasis: (amount: string) => ({
+    flexBasis: {
+      default: '0px',
+      [`:has(> [${EDGE_COMP_ATTR}]:first-child)`]: amount,
+      [`:has(> [${EDGE_COMP_ATTR}]:last-child)`]: amount,
+      [`:has(> [${EDGE_COMP_ATTR}]:first-child):has(> [${EDGE_COMP_ATTR}]:last-child)`]: `calc(2 * ${amount})`,
+    },
+  }),
 });

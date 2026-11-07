@@ -102,7 +102,6 @@ const styles = stylex.create({
   sideLane: {
     flexGrow: 1,
     flexShrink: 1,
-    flexBasis: 0,
   },
   endSlot: {
     display: 'flex',
@@ -374,6 +373,7 @@ export function Toolbar({
                 {...stylex.props(
                   styles.startSlot,
                   styles.sideLane,
+                  edgeCompSlot.flexBasis(edgeCompInsetForSize[size]),
                   edgeCompSlot.inset(edgeCompInsetForSize[size]),
                   dynamicStyles.gap(gapVar),
                 )}>
@@ -387,6 +387,7 @@ export function Toolbar({
                 {...stylex.props(
                   styles.endSlot,
                   styles.sideLane,
+                  edgeCompSlot.flexBasis(edgeCompInsetForSize[size]),
                   edgeCompSlot.inset(edgeCompInsetForSize[size]),
                   dynamicStyles.gap(gapVar),
                 )}>
