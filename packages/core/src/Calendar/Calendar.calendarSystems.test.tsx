@@ -131,9 +131,13 @@ describe('Calendar in the Persian calendar', () => {
       />,
     );
     // min is the first day of Aban: no earlier day is in range.
-    expect(screen.getByRole('button', {name: 'Previous month'})).toBeDisabled();
+    expect(
+      screen.getByRole('button', {name: 'Previous month'}),
+    ).toHaveAttribute('aria-disabled', 'true');
     // max is the first day of Azar: a later day is in range.
-    expect(screen.getByRole('button', {name: 'Next month'})).toBeEnabled();
+    expect(
+      screen.getByRole('button', {name: 'Next month'}),
+    ).not.toHaveAttribute('aria-disabled');
   });
 
   it('shows ISO 8601 week numbers', () => {

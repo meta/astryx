@@ -893,6 +893,21 @@
       "aliases": []
     },
     {
+      "name": "component-richtext-rich-text-editor-auto-link-plugin",
+      "path": "components/richtext/rich-text-editor-auto-link-plugin",
+      "aliases": []
+    },
+    {
+      "name": "component-richtext-rich-text-editor-toolbar",
+      "path": "components/richtext/rich-text-editor-toolbar",
+      "aliases": []
+    },
+    {
+      "name": "component-richtext-rich-text-view",
+      "path": "components/richtext/rich-text-view",
+      "aliases": []
+    },
+    {
       "name": "component-scrollable-area",
       "path": "components/scrollable-area",
       "aliases": []

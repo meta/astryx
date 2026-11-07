@@ -292,6 +292,18 @@
           "name": "RichTextEditor"
         },
         {
+          "kind": "component",
+          "name": "RichTextEditorAutoLinkPlugin"
+        },
+        {
+          "kind": "component",
+          "name": "RichTextEditorToolbar"
+        },
+        {
+          "kind": "component",
+          "name": "RichTextView"
+        },
+        {
           "kind": "template",
           "name": "RichTextEditorShowcase"
         }
