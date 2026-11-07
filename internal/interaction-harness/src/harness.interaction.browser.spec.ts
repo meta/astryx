@@ -810,6 +810,8 @@ test.describe('frame evidence', () => {
         alone,
         tracked,
         leftAt,
+        // Every place a frame left the box before the block.
+        leftBefore: written.filter(w => w.at < window.from).map(w => w.y),
       };
     };
 
@@ -828,30 +830,33 @@ test.describe('frame evidence', () => {
       alone: rafAlone,
       tracked: rafTracked,
       leftAt,
+      leftBefore,
     } = await run('raf');
     testInfo.annotations.push({
       type: 'busy-main-thread rAF control',
       description: raf.summary,
     });
-    // Frozen for the block: the compositor sends no frame while nothing on
-    // screen changes, so at most the frame presented as the block starts
-    // moved, and the bound's verdict fails it as the control's does.
-    expect(raf.changed).toBeLessThanOrEqual(1);
-    // Still where the last frame before the block left it, within a cast
-    // step. A starved compositor can present that frame late in the block.
-    const last = rafTracked
-      .filter(
-        f => f.box != null && f.t > raf.judged.from && f.t < raf.judged.to,
-      )
-      .at(-1);
+    // Frozen for the block: every frame inside it shows a place a frame left
+    // the box before the block, within a cast step. A starved compositor can
+    // present the last frames before the block late, inside it.
+    const inBlock = rafTracked.filter(
+      f => f.box != null && f.t > raf.judged.from && f.t < raf.judged.to,
+    );
     expect(leftAt, 'a frame moved the box before the block').toBeDefined();
-    const shown = (last?.box?.y ?? Number.NaN) - rest.cast;
+    for (const frame of inBlock) {
+      const shown = (frame.box?.y ?? Number.NaN) - rest.cast;
+      expect(
+        leftBefore.some(
+          y => Math.abs(y - rest.page - shown) <= compositor.stepPx,
+        ),
+        `the frame at +${(frame.t - raf.window.from).toFixed(0)} ms shows the box ${shown.toFixed(1)} px down, where no frame left it before the block. ${raf.summary}`,
+      ).toBe(true);
+    }
+    // The block ends where the last frame before it left the box.
+    const shown = (inBlock.at(-1)?.box?.y ?? Number.NaN) - rest.cast;
     const left = (leftAt ?? Number.NaN) - rest.page;
     expect(Math.abs(shown - left), raf.summary).toBeLessThanOrEqual(
       compositor.stepPx,
-    );
-    expect(raf.verdict.failures.join('\n')).toMatch(
-      /moved on [01] of the \d+ frames the control moved/,
     );
     expect(raf.verdict.failures.join('\n')).toMatch(
       /longest stall .* longer than the control's/,
@@ -869,6 +874,46 @@ test.describe('frame evidence', () => {
     const {proof: slowRaf} = await run('raf', 6, 1400, 1600);
     expect(slowRaf.verdict.pass, slowRaf.summary).toBe(false);
     expect(slowRaf.verdict.failures.join('\n')).toMatch(/longest stall/);
+    await control.remove();
+  });
+
+  test('a busy proof whose cast the machine starved fails by name: FrameStarvationError', async ({
+    page,
+  }) => {
+    await busyFixture(page);
+    const box = page.locator('#box');
+    await markElement(box, {mode: 'outline'});
+    const control = await startBusyControl(page);
+    // One presented frame in 40 reaches the proof, as on a starved machine.
+    // The block then holds fewer than four of the control's frames, with gaps
+    // past FRAME_STARVATION_MS between them.
+    const cast = await startScreencast(page, {everyNthFrame: 40});
+    await box.evaluate(el =>
+      el.animate(
+        [{transform: 'translateY(0px)'}, {transform: 'translateY(560px)'}],
+        {duration: 1100, easing: 'linear'},
+      ),
+    );
+    const window = await blockMainThread(page, 700, {during: box});
+    const frames = await cast.stop();
+    const tracked = await trackMarker(page, frames);
+    const controlFrames = await trackControl(page, frames);
+    const outcome = (() => {
+      try {
+        return busyWindowProof(tracked, window, {
+          axis: 'y',
+          control: controlFrames,
+        }).summary;
+      } catch (error) {
+        return error;
+      }
+    })();
+    expect(outcome).toBeInstanceOf(FrameStarvationError);
+    const {numbers} = outcome as FrameStarvationError;
+    expect(numbers.by).toBe('busyWindowProof');
+    expect(numbers.min).toBe(4);
+    expect(numbers.frames).toBeLessThan(4);
+    expect(numbers.longestGapMs).toBeGreaterThan(FRAME_STARVATION_MS);
     await control.remove();
   });
 
@@ -968,8 +1013,10 @@ test.describe('frame evidence', () => {
 
     const {fine: raf} = await run('raf');
     expect(raf.verdict.pass, raf.summary).toBe(false);
+    // Frozen for the block, it stalls longer than the control. A starved
+    // compositor can present the last frames before the block late, inside it.
     expect(raf.verdict.failures.join('\n')).toMatch(
-      /moved on [01] of the \d+ frames the control moved/,
+      /longest stall .* longer than the control's/,
     );
     // A JPEG frame hides the marker's edges in its chroma blocks.
     await expect(
@@ -1620,13 +1667,25 @@ test.describe('frame evidence', () => {
     };
 
     const compositor = await runs('compositor');
-    const single = busyWindowProof(
-      compositor[0].tracked,
-      compositor[0].window,
-      {axis: 'y', control: compositor[0].control},
-    );
-    expect(single.verdict.failures.join('\n'), single.summary).toMatch(
-      /too little in this window to judge/,
+    // One run is too little to judge: its verdict says so, or, when the
+    // machine also starved its cast, the proof throws by name.
+    const single = (() => {
+      try {
+        const proof = busyWindowProof(
+          compositor[0].tracked,
+          compositor[0].window,
+          {axis: 'y', control: compositor[0].control},
+        );
+        return `${proof.verdict.failures.join('\n')} ${proof.summary}`;
+      } catch (error) {
+        if (!(error instanceof FrameStarvationError)) {
+          throw error;
+        }
+        return String(error);
+      }
+    })();
+    expect(single).toMatch(
+      /too little in this window to judge|FrameStarvationError: busyWindowProof/,
     );
     const pooled = pooledBusyProof(compositor, {axis: 'y'});
     testInfo.annotations.push({

@@ -18,7 +18,7 @@
 
 import {describe, expect, it} from 'vitest';
 import {busyWindowProof, BusyWindowTooLateError, pooledBusyProof} from './busy';
-import type {TrackedFrame} from './frames';
+import {FrameStarvationError, type TrackedFrame} from './frames';
 
 const FRAME = 1000 / 60;
 const BLOCK = {from: 1000, to: 1700};
@@ -283,6 +283,34 @@ describe('busyWindowProof against a control', () => {
     expect(proof.onScreenFromMs).toBeGreaterThanOrEqual(20);
   });
 
+  it('throws FrameStarvationError for a run the machine starved: its control moved on too few frames, and no frame came for longer than 50 ms', () => {
+    const run = () =>
+      busyWindowProof(starvedCast(), BLOCK, {
+        control: asControl(starvedCast()),
+      });
+    expect(run).toThrow(FrameStarvationError);
+    expect(run).toThrow(
+      /busyWindowProof: the page drew 3 frames while a 700 ms block held the main thread, and the control moved on 3 of them, where the proof needs 4\. No frame came for 2\d\d\.\d ms/,
+    );
+  });
+
+  it('fails a component hidden inside an on-pace block as the component, not as starvation', () => {
+    // Every 60 Hz frame came, and none inside the 90 ms block showed the
+    // component: the cast's own frames show it was not starved.
+    const block = {from: 1000, to: 1090};
+    const hidden = moving().map(f =>
+      f.t > block.from && f.t < block.to
+        ? ({...f, box: null} as TrackedFrame)
+        : f,
+    );
+    const proof = busyWindowProof(hidden, block, {
+      control: asControl(moving()),
+    });
+    expect(proof.verdict.failures.join('\n')).toMatch(
+      /moved on 0 of the 3 frames the control moved/,
+    );
+  });
+
   it('fails a window in which the control itself presented too little to judge', () => {
     const still = asControl(
       moving().map(f => ({...f, box: {...f.box!, y: 0}}) as TrackedFrame),
@@ -294,6 +322,17 @@ describe('busyWindowProof against a control', () => {
     );
   });
 });
+
+/**
+ * `moving()` with three frames in `BLOCK`, about 200 ms apart, as a cast the
+ * machine starved delivers.
+ */
+function starvedCast(): TrackedFrame[] {
+  const kept = [at(1150), at(1350), at(1550)];
+  return moving().filter(
+    (f, i) => f.t < BLOCK.from || f.t > BLOCK.to || kept.includes(i),
+  );
+}
 
 /** A 90 ms block from `from`: its judged part holds three 60 Hz frames. */
 const short = (from: number) => ({from, to: from + 90});
@@ -577,6 +616,21 @@ describe('pooledBusyProof', () => {
       moved: single.control?.moved,
       movedWith: single.control?.movedWith,
     });
+  });
+
+  it('reads a run the machine starved without throwing, and judges it with the others', () => {
+    const run = (tracked: TrackedFrame[]) => ({
+      tracked,
+      control: asControl(tracked),
+      window: BLOCK,
+    });
+    const pooled = pooledBusyProof([
+      run(moving()),
+      run(moving()),
+      run(starvedCast()),
+    ]);
+    expect(pooled.judged).toEqual([true, true, true]);
+    expect(pooled.verdict.failures, pooled.summary).toEqual([]);
   });
 
   it('throws on no runs', () => {

@@ -35,6 +35,7 @@ import {
   curveOf,
   drag,
   flick,
+  FrameStarvationError,
   frames,
   freezePageOn,
   freezePageWhen,
@@ -1210,6 +1211,11 @@ for (const pace of ['main-thread', 'frozen'] as const) {
         control,
       }).verdict.failures;
     } catch (error) {
+      // A run the machine starved proves nothing, so it fails by name and
+      // never counts as this proof's red.
+      if (error instanceof FrameStarvationError) {
+        throw error;
+      }
       // A zoom that never moved has settled before the window: a red too.
       expect(error).toBeInstanceOf(BusyWindowTooLateError);
       failures = [(error as Error).message];
