@@ -37,7 +37,9 @@
  * presentation) or Reduce Motion, the rows jump to their new places.
  *
  * HOW IT RUNS. Everything after the drag begins is imperative: no React
- * render and no layout read until the drop. The begin reads each row's
+ * render and no layout read until the drop, but one. After a scroll the
+ * engine did not cause, a later frame reads the scroller's offset once,
+ * before it writes. The begin reads each row's
  * layout once. Each move writes one `translate` on the preview, through the
  * shared per-element animator's `set`. A position change writes one on the
  * insertion line. The list root carries `data-astryx-reordering` from the
@@ -99,6 +101,7 @@ import {
   releaseMotion,
 } from '../utils/rowMotion';
 import {edgeAutoscroll, type EdgeAutoscroll} from '../utils/edgeAutoscroll';
+import {subscribeInput} from '../utils/inputStream';
 import {nearestScroller} from '../utils/scrollingAncestor';
 import {useTouchPresentation} from '../utils/touchPresentation';
 import {useTouchHitArea} from '../utils/touchHitArea';
@@ -472,6 +475,19 @@ interface DragSession {
   readonly preview: HTMLElement;
   /** The preview's offset from its row's place, as last written. */
   previewOffset: number;
+  /**
+   * A scroll the engine did not cause moved the scroller since its offset
+   * was last read (`syncScroll`).
+   */
+  scrollStale: boolean;
+  /** The engine's own scroll still waits for its scroll event. */
+  ownScroll: boolean;
+  /** The engine wrote since the last frame that renders its writes. */
+  wrote: boolean;
+  /** A fold waits for a later frame (`foldInFrame`). */
+  foldArmed: boolean;
+  /** Stops watching the scroller's scroll events. */
+  stopScrollWatch: () => void;
 }
 
 /** The inline values a drag overrides until its rows rest. */
@@ -1212,8 +1228,14 @@ export class ListReorderController implements ListReorderSession {
       restore,
       preview,
       previewOffset: 0,
+      scrollStale: false,
+      ownScroll: false,
+      wrote: true,
+      foldArmed: false,
+      stopScrollWatch: () => {},
     };
     this.session = session;
+    session.stopScrollWatch = this.watchScroll(session);
     // Rows still sliding from an earlier drag go to their places.
     this.moveTo(dragged);
     this.track(y);
@@ -1244,7 +1266,11 @@ export class ListReorderController implements ListReorderSession {
     if (session == null) {
       return;
     }
+    if (session.scrollStale) {
+      this.syncScroll(session);
+    }
     session.lastY = y;
+    session.wrote = true;
     const {geometry, dragged} = session;
     const row = geometry.rows[dragged];
     const origin = session.origin - session.scrolled;
@@ -1316,6 +1342,9 @@ export class ListReorderController implements ListReorderSession {
     if (this.session !== session) {
       return 0;
     }
+    if (session.scrollStale) {
+      this.syncScroll(session);
+    }
     const {geometry, dragged} = session;
     const top = this.draggedTop(session, session.lastY);
     return this.stepFor(session, top, geometry.rows[dragged].height);
@@ -1338,8 +1367,85 @@ export class ListReorderController implements ListReorderSession {
     scroller.element.scrollTop = next;
     session.scrolled += moved;
     scroller.position = next;
+    // Its scroll event comes in the next frame, before that frame's
+    // callbacks. A write that moves nothing sends none.
+    session.ownScroll = true;
+    requestAnimationFrame(() => {
+      session.ownScroll = false;
+    });
     this.track(session.lastY);
     return moved;
+  }
+
+  /**
+   * Watches the scroller for a scroll the engine did not cause, such as a
+   * wheel or a key. A later frame folds it in (`armFold`).
+   */
+  private watchScroll(session: DragSession): () => void {
+    const doc = session.list.ownerDocument;
+    const view = doc.defaultView;
+    if (view == null) {
+      return () => {};
+    }
+    const {element} = session.scroller;
+    // The page's own scroll is reported on the document.
+    const target =
+      element === (doc.scrollingElement ?? doc.documentElement) ? doc : element;
+    return subscribeInput(view, 'scroll', event => {
+      if (event.target !== target || this.session !== session) {
+        return;
+      }
+      if (session.ownScroll) {
+        session.ownScroll = false;
+        return;
+      }
+      session.scrollStale = true;
+      this.armFold(session);
+    });
+  }
+
+  /**
+   * Folds a scroll into the drag in the next frame without a move or a tick.
+   * The writes made so far render first, so its one read forces no layout.
+   */
+  private armFold(session: DragSession): void {
+    if (session.foldArmed) {
+      return;
+    }
+    session.foldArmed = true;
+    requestAnimationFrame(() => {
+      // Everything written so far renders after this frame's callbacks.
+      session.wrote = false;
+      requestAnimationFrame(() => this.foldInFrame(session));
+    });
+  }
+
+  private foldInFrame(session: DragSession): void {
+    session.foldArmed = false;
+    if (this.session !== session || !session.scrollStale) {
+      return;
+    }
+    if (session.wrote) {
+      // The engine wrote in this frame, so the read waits another frame.
+      session.wrote = false;
+      session.foldArmed = true;
+      requestAnimationFrame(() => this.foldInFrame(session));
+      return;
+    }
+    this.track(session.lastY);
+  }
+
+  /**
+   * Reads the scroller's offset once and adds what a scroll the engine did
+   * not cause moved to the drag. It runs before any write in its frame or
+   * task.
+   */
+  private syncScroll(session: DragSession): void {
+    session.scrollStale = false;
+    const {scroller} = session;
+    const position = scroller.element.scrollTop;
+    session.scrolled += position - scroller.position;
+    scroller.position = position;
   }
 
   private stopAutoscroll(session: DragSession): void {
@@ -1356,8 +1462,12 @@ export class ListReorderController implements ListReorderSession {
     if (session == null) {
       return;
     }
+    if (session.scrollStale) {
+      this.track(session.lastY);
+    }
     this.session = null;
     this.stopAutoscroll(session);
+    session.stopScrollWatch();
     const {geometry, dragged, position, rows, list} = session;
     const element = rows[dragged];
     // Where the preview is now: on the commit the dragged row glides from
@@ -1415,6 +1525,7 @@ export class ListReorderController implements ListReorderSession {
     }
     this.session = null;
     this.stopAutoscroll(session);
+    session.stopScrollWatch();
     // Nothing moved: the preview and the line go and the row is itself again
     // at once.
     this.clearOverlays(session);
