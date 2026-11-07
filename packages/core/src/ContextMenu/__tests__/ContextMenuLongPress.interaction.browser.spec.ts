@@ -611,7 +611,9 @@ test('the press feedback plays its computed curve on the compositor, frame by fr
   const played = playedCurve();
   const playing = driver.play(hold(center, commitMs + 300));
   await waitForAnimation(trigger, {minProgressMs: 16});
-  await holdAnimations(page, trigger);
+  await holdAnimations(page, trigger, {
+    judges: {target: trigger, property: 'scale'},
+  });
   // Seek the held curve (its time 0 is the onset after the touch) to every
   // 60 Hz frame and read the presented scale.
   const samples = await trigger.evaluate((element, times) => {
@@ -905,6 +907,7 @@ test(
         height: box.height + 48,
       },
       scope: trigger,
+      judges: {target: trigger, property: 'scale'},
       // t counts from the visible ramp's start, the onset after the touch.
       times: timeline(menuDisplayMs - feedbackOnsetMs, 1000 / 30),
       measure: async () => ({
