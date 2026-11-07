@@ -963,6 +963,10 @@
     "defaultMessage": "Resize column {label}",
     "description": "Accessible name for a Table column-resize handle (a vertical separator between header cells). `label` is the column header's visible text, or the column key when the header has no text."
   },
+  "@astryx.table.columnResize.widthValue": {
+    "defaultMessage": "{width} pixels",
+    "description": "Value a screen reader announces for a Table column-resize handle when the column has no maximum width. `width` is the column's current width as a whole number of CSS pixels, for example \"133 pixels\"."
+  },
   "@astryx.table.filter.allPlaceholder": {
     "defaultMessage": "All",
     "description": "Placeholder on a per-column filter dropdown when nothing is selected, meaning \"no filter — all rows match\". Determiner form (as in \"all values\"), not the pronoun."

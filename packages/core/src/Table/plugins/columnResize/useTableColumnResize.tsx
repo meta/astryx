@@ -13,7 +13,14 @@
  * - /packages/core/src/Table/index.ts (exports)
  */
 
-import {useRef, useMemo, useCallback, useEffect, type ReactNode} from 'react';
+import {
+  useRef,
+  useMemo,
+  useCallback,
+  useEffect,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react';
 import {useIsomorphicLayoutEffect} from '../../../hooks/useIsomorphicLayoutEffect';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars} from '../../../theme/tokens.stylex';
@@ -366,6 +373,24 @@ interface DragState {
 // =============================================================================
 // Resize Handle Component
 // =============================================================================
+
+function subscribeToWindowResize(onChange: () => void): () => void {
+  window.addEventListener('resize', onChange);
+  return () => window.removeEventListener('resize', onChange);
+}
+
+/**
+ * The window's inline extent, which a column with no maximum announces as its
+ * maximum, as an unbounded Resizable region does. The server has no window,
+ * so it renders none, and hydration then reads it.
+ */
+function useWindowInlineExtent(): number | null {
+  return useSyncExternalStore(
+    subscribeToWindowResize,
+    () => window.innerWidth,
+    () => null,
+  );
+}
 
 interface ResizeHandleProps {
   columnKey: string;
@@ -759,15 +784,31 @@ function ResizeHandle({
     label: getNodeText(columnHeader) || columnKey,
   });
 
+  // A focusable role="separator" requires a numeric aria-valuenow, so fall
+  // back to the column's minWidth before the width has been measured.
+  const valueNow = currentWidth ?? minWidth;
+  // Without a maximum, ARIA's default of 100 applies, below most column
+  // widths. So an unbounded column announces a stand-in it never goes below,
+  // and says its width in words, since the range is not a real limit.
+  const isUnbounded = !Number.isFinite(maxWidth);
+  const windowExtent = useWindowInlineExtent();
+  const announcedMax = isUnbounded
+    ? windowExtent == null
+      ? undefined
+      : Math.max(windowExtent, valueNow, minWidth)
+    : maxWidth;
+  const valueText = isUnbounded
+    ? t('@astryx.table.columnResize.widthValue', {width: valueNow})
+    : undefined;
+
   return (
     <div
       role="separator"
       aria-orientation="vertical"
-      // A focusable role="separator" requires a numeric aria-valuenow, so fall
-      // back to the column's minWidth before the width has been measured.
-      aria-valuenow={currentWidth ?? minWidth}
+      aria-valuenow={valueNow}
       aria-valuemin={minWidth}
-      aria-valuemax={maxWidth === Infinity ? undefined : maxWidth}
+      aria-valuemax={announcedMax}
+      aria-valuetext={valueText}
       aria-label={ariaLabel}
       tabIndex={0}
       // Lets the height observer find its own handles without matching any
