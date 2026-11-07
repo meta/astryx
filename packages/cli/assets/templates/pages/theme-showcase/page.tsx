@@ -71,9 +71,8 @@ import {
   useChatStreamScroll,
 } from '@astryxdesign/core/Chat';
 
-// StackItem has no wrapping basis or height cap. Keep the card proportions
-// and bound the message viewport with these three layout declarations.
-// Stack has no body-surface variant; paint the embedded preview with its theme.
+// StackItem has no wrapping basis or height cap; Stack has no body variant.
+// Keep the card proportions, bounded chat viewport and themed preview paint.
 const styles: Record<string, CSSProperties> = {
   preview: {backgroundColor: 'var(--color-background-body)'},
   checkoutColumn: {flex: '1 1 300px'},
@@ -267,6 +266,7 @@ function CardShowcase({
           />
         </StackItem>
         <VStack
+          as={StackItem}
           width={isMobile ? '100%' : 280}
           paddingInlineStart={isMobile ? 0 : 4}
           height="100%">

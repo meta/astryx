@@ -237,6 +237,12 @@ describe('theme-showcase local interactions', () => {
     expect(checkoutRow).toHaveClass('astryx-stack');
     expect(inventoryRow).toHaveClass('astryx-stack');
     expect(inventoryRow).not.toHaveClass('astryx-layout');
+    const activity = screen
+      .getByRole('heading', {name: 'Revenue'})
+      .closest('.astryx-stack-item')!;
+    expect(activity.parentElement).toBe(inventoryRow);
+    expect(getComputedStyle(activity).width).toBe('280px');
+    expect(getComputedStyle(activity).flexShrink).toBe('0');
   });
 
   it('keeps wrapped product descriptions block-level and centered', () => {
