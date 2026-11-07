@@ -715,7 +715,7 @@ export function Dialog({
 
   // Host app-global surfaces (toasts) inside this modal while it is open, so
   // they stay visible and operable above it.
-  useModalOutlet(dialogRef, isOpen && !isInline);
+  const outletRef = useModalOutlet(dialogRef, isOpen && !isInline);
 
   // Lock body scroll when dialog is open (iOS Safari workaround)
   // Skip for inline rendering — no modal overlay to compensate for.
@@ -803,6 +803,7 @@ export function Dialog({
 
   const innerContent = (
     <div
+      ref={outletRef}
       {...stylex.props(
         styles.inner,
         ...container(
