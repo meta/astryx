@@ -669,7 +669,9 @@ test('a mouse under reduced motion: the group comes and goes at once, and the ch
     const {group, child, toggle, chevron} = parts(page);
     await expect(parts(page).below).toBeVisible();
     // The page holds the chevron's turn as soon as it runs.
-    const turn = await armHold(page, chevron);
+    const turn = await armHold(page, chevron, {
+      judges: {target: chevron, property: 'transform'},
+    });
     await toggle.click();
     await expect(child).toBeVisible();
     const held = await turn.held();
@@ -699,10 +701,12 @@ test('under reduced motion and a finger, an expand cross-fades the group in plac
 }) => {
   await page.emulateMedia({reducedMotion: 'reduce'});
   await open(page);
-  const {parent, child, chevron, below} = parts(page);
+  const {parent, group, child, chevron, below} = parts(page);
   // The page holds the fade as it starts: a hold sent after the tap can come
   // too late on a busy machine.
-  const fadeIn = await armHold(page, parent);
+  const fadeIn = await armHold(page, parent, {
+    judges: {target: group, property: 'opacity'},
+  });
   await tapToggle(page);
   await expect(child).toBeVisible();
   expectReducedMotionCrossFade(await fadeIn.held());
@@ -711,7 +715,10 @@ test('under reduced motion and a finger, an expand cross-fades the group in plac
   expect(await rotation(chevron)).toBeCloseTo(90, 1);
   await releaseAnimations(page, {finish: true});
   // A collapse fades the group out where it is, and nothing travels.
-  const fadeOut = await armHold(page, parent, {newOnly: true});
+  const fadeOut = await armHold(page, parent, {
+    newOnly: true,
+    judges: {target: group, property: 'opacity'},
+  });
   await tapToggle(page);
   expectReducedMotionCrossFade(await fadeOut.held());
   expect(await translateY(below)).toBe(0);
@@ -778,7 +785,10 @@ test('content after the tree takes its place by layout at once, while the rows b
       .evaluate(el => el.getBoundingClientRect().top);
   const rest = (await button.boundingBox())?.y ?? 0;
 
-  const glide = await armHold(page, page.locator('[role="tree"]'), {count: 2});
+  const glide = await armHold(page, page.locator('[role="tree"]'), {
+    count: 2,
+    judges: {target: below, property: 'translate'},
+  });
   await tapToggle(page);
   await glide.held();
   await seekAnimations(page, 0);
@@ -868,6 +878,7 @@ test(
       times: [0, 1, 2, 3, 4, 5, 6, 7].map(k => Math.round((k * ms) / 7)),
       columns: 8,
       cellScale: 0.45,
+      judges: {target: parts(page).below, property: 'translate'},
     });
     await releaseAnimations(page, {finish: true});
     await storyboard.write(testInfo);
