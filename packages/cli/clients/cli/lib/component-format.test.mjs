@@ -253,7 +253,7 @@ describe('formatBrief signature stays terse', () => {
 });
 
 describe('theme custom-variant annotation', () => {
-  // Regression guard for #5059: built themes never carried runtime variant
+  // Regression guard: built themes never carried runtime variant
   // metadata, so every `themeData?.variants` read below was dead code and the
   // `*` annotation could not fire for ANY built theme. `astryx theme build`
   // now exports `themeVariants: { [componentKey]: { [prop]: value[] } }`
@@ -318,7 +318,7 @@ describe('theme custom-variant annotation', () => {
   });
 
   it('stays silent for a theme without runtime variants (older built module)', () => {
-    // A theme built by a pre-#5059 CLI resolves with `variants: null` —
+    // A theme built by an older CLI resolves with `variants: null` —
     // the docs must not crash, star anything, or print the footnote.
     const out = formatFull(docs, {
       themeData: {name: 'vartheme', variants: null},

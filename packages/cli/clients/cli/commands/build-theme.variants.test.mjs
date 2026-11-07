@@ -2,7 +2,7 @@
 
 /**
  * @file Regression tests for custom-variant type augmentations and runtime
- * discovery emitted by `astryx theme build` (#3391, #3371, #5059).
+ * discovery emitted by `astryx theme build`.
  *
  * When a theme declares a custom component prop value (e.g.
  * `button['variant:accentOutline']`), the build emits a `<name>.variants.d.ts`
@@ -23,7 +23,7 @@
  *   5. The custom variants existed only as that type augmentation — the built
  *      JS module carried no runtime metadata, so `resolveTheme()` always
  *      handed the CLI `variants: null` and `astryx component`'s
- *      `*`-annotation for theme-added variants could never fire (#5059). The
+ *      `*`-annotation for theme-added variants could never fire. The
  *      module now exports `themeVariants` beside (never inside) the theme
  *      object, keyed by component and prop.
  *
@@ -45,6 +45,8 @@ import {
   removeLinkedFixture,
 } from '../../../test-utils/linked-fixture.mjs';
 
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const CLI_ROOT = path.resolve(HERE, '../../..');
 const TSC = createRequire(import.meta.url).resolve('typescript/bin/tsc');
 // A consumer project type-checks against core and React's types.
 const CONSUMER_PACKAGES = ['@astryxdesign', 'react', '@types/react'];
@@ -853,7 +855,7 @@ describe('theme build custom-variant augmentations', () => {
 
   it('emits no themeVariants export when the theme adds no custom variants', async () => {
     // Themes without custom values keep the historical module shape — no
-    // `themeVariants` export or declaration, matching what a pre-#5059 CLI
+    // `themeVariants` export or declaration, matching what an older CLI
     // produced and what component-format.mjs treats as "no theme variants".
     const themeFile = writeTheme(
       tmpDir,
@@ -880,6 +882,45 @@ describe('theme build custom-variant augmentations', () => {
     expect(
       fs.readFileSync(path.join(tmpDir, 'variants-theme.d.ts'), 'utf-8'),
     ).not.toContain('themeVariants');
+  });
+
+  it('writes the icon variant augmentation and no themeVariants export for a theme with icon variants and no custom values', async () => {
+    const themeFile = writeTheme(
+      tmpDir,
+      `export default {
+        name: 'variants-theme',
+        tokens: { '--color-bg': '#fff' },
+        iconVariants: ['outline', 'filled'],
+      };\n`,
+    );
+
+    const result = await runCli(
+      ['theme', 'build', path.relative(tmpDir, themeFile)],
+      tmpDir,
+    );
+    expect(result.code).toBe(0);
+
+    const variantsDts = fs.readFileSync(
+      path.join(tmpDir, 'variants-theme.variants.d.ts'),
+      'utf-8',
+    );
+    expect(variantsDts).toContain(`declare module '@astryxdesign/core/Icon'`);
+    expect(variantsDts).toContain('interface IconVariantMap');
+    expect(
+      [...variantsDts.matchAll(/'([^']+)': true;/g)].map(([, value]) => value),
+    ).toEqual(['outline', 'filled']);
+    const built = await import(
+      pathToFileURL(path.join(tmpDir, 'variants-theme.js')).href
+    );
+    expect('themeVariants' in built).toBe(false);
+    const dts = fs.readFileSync(
+      path.join(tmpDir, 'variants-theme.d.ts'),
+      'utf-8',
+    );
+    expect(dts).toContain(
+      '/// <reference path="./variants-theme.variants.d.ts" />',
+    );
+    expect(dts).not.toContain('themeVariants');
   });
 
   it('references the variants file from the main .d.ts so the augmentation loads', async () => {
