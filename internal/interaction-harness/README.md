@@ -46,6 +46,11 @@ newly animated layer). The script keeps Mesa's shader cache on the host
 (`~/.cache/astryx-webkit-shaders/<image>`, or `ASTRYX_WEBKIT_SHADER_CACHE`), so
 only the first run on a machine pays for them.
 
+With `CI` set, the script gives the container the four CPUs of CI's WebKit
+runners as a quota, and llvmpipe as many threads. `ASTRYX_WEBKIT_CPUS` sets
+another count. On Linux the container runs only on the CPUs the script may use,
+so `taskset` limits it too.
+
 Evidence (storyboards, curve traces) is written to
 `test-results/interaction-evidence/` (override with
 `ASTRYX_INTERACTION_EVIDENCE`) and attached to the test report. It is never
@@ -118,6 +123,10 @@ names the motion it judges, `{judges: {target, property}}` (a list for
 several; `pseudoElement` for a `::before` or `::after`), and `held()` rejects
 when the hold took no animation of it. `judges: 'count-only'` checks nothing:
 it marks a call site whose hold does not take its judged motion yet.
+A hold sent from the test (`holdAnimations`, and `animationStoryboard`
+without `held`) takes the same `judges` and rejects the same way: it takes
+what runs when it reaches the page, and on a busy runner the judged motion
+can still be to come or already over.
 Compare it with an
 oracle from `math.ts` through `compareCurve`; a tolerance states the error
 budget (for a spring baked into `linear()` stops of `h` ms, chords err by up to
@@ -177,7 +186,19 @@ in the cast's own position steps, read from the cast (`castStep`, from the
 by another color carries none, and `castStep` refuses it): 1 px in Chromium's PNG cast and 2 px in
 WebKit's JPEG cast, whose 4:2:0 chroma holds the marker's color in 2 by 2
 pixel blocks and so makes the tail's plateaus longer. Two steps stop at the
-same tail in either engine while a freeze further from rest is still judged. A judged part shorter than four of the
+same tail in either engine while a freeze further from rest is still judged.
+
+Motion slower than two whole pixels a frame needs a finer read. In Chromium,
+`trackMarker(page, frames, {subpixel: true})` reads the marker under a pixel
+from its anti-aliased edges: a 10 px slide over 60 frames read 0.164 to 0.169
+px a frame, where it moves 0.167 px, and a box at rest between pixels read the
+same value on every frame. Each frame then carries `SUBPIXEL_STEP_PX`
+(0.05 px) as its step, and the proof counts a change from half of it. The
+marker must be opaque on a plain background. Use the default chip marker: an
+outline marker's window holds the element's own content. WebKit's JPEG cast
+holds color in 2 by 2 pixel blocks, so the read throws there.
+
+A judged part shorter than four of the
 screencast's intervals fails: the animation under test was not moving during
 the block. One that had already settled when the judged part began (nothing in
 the window to judge) throws `BusyWindowTooLateError`, with the numbers: the
@@ -194,7 +215,10 @@ only before its curve's held tail (keyframes that end in a run of identical
 values, read as `waitForRest` reads them): when the only animation running
 there started while the page waited, or the wait times out with only such
 animations, the page looked too late, and the wait rejects with
-`BusyWindowTooLateError`. The `verdict` judges the
+`BusyWindowTooLateError`. With `pseudoElement` (`'::before'` or
+`'::after'`), only that pseudo-element's animations on `during` itself count,
+as `sampleCurve` reads them: a child's animation, such as a switch thumb's
+press, does not start the block. The `verdict` judges the
 frames the screencast delivered, whatever its rate (a loaded machine's can
 deliver one frame in five or six), and tolerates nothing a frozen animation
 does: at least one frame in the judged part, no stall longer than three of the

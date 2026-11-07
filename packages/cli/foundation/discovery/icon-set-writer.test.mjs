@@ -10,6 +10,7 @@ import {
   entryWiringNote,
   generatedModuleText,
   iconIdOf,
+  packageRootMoves,
 } from './icon-set-writer.mjs';
 
 describe('iconIdOf', () => {
@@ -97,6 +98,64 @@ describe('entryWiringNote over a types file a formatter rewrote', () => {
       ).toBe(
         "Add `export * from './icon-sets/brand/brand.generated.js';` to index.js, so the icons import from @acme/icons.",
       );
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
+});
+
+describe('packageRootMoves', () => {
+  it('moves an export to the root only when it reads the file the root exports; a name match counts only when the subpath does not resolve', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-root-moves-'));
+    try {
+      const lib = path.join(dir, 'node_modules', '@acme', 'glyphs');
+      fs.mkdirSync(path.join(lib, 'solid'), {recursive: true});
+      fs.writeFileSync(
+        path.join(lib, 'package.json'),
+        JSON.stringify({
+          name: '@acme/glyphs',
+          version: '1.0.0',
+          type: 'module',
+          exports: {
+            '.': './index.js',
+            './solid': './solid/index.js',
+            './bin': './bin.js',
+            './gone': './gone.js',
+          },
+        }),
+      );
+      fs.writeFileSync(
+        path.join(lib, 'index.js'),
+        "export {Bin as BinIcon} from './bin.js';\nexport {Cross} from './cross.js';\nexport {Star} from './star.js';\n",
+      );
+      fs.writeFileSync(path.join(lib, 'bin.js'), 'export const Bin = 1;\n');
+      fs.writeFileSync(path.join(lib, 'cross.js'), 'export const Cross = 1;\n');
+      fs.writeFileSync(path.join(lib, 'star.js'), 'export const Star = 1;\n');
+      fs.writeFileSync(
+        path.join(lib, 'solid', 'index.js'),
+        'export const Cross = 2;\n',
+      );
+      const origins = new Map([
+        // The same file and binding, under another name: it moves.
+        ['BinOutlineIcon', {module: '@acme/glyphs/bin', source: 'Bin'}],
+        // The same name, but other artwork: it stays.
+        ['CrossSolidIcon', {module: '@acme/glyphs/solid', source: 'Cross'}],
+        // The subpath does not resolve, so the name decides.
+        ['StarIcon', {module: '@acme/glyphs/gone', source: 'Star'}],
+        // Not a subpath of this package.
+        ['SparkIcon', {module: './art/spark.js', source: 'Star'}],
+        ['OtherIcon', {module: '@acme/other/star', source: 'Star'}],
+      ]);
+      const moves = packageRootMoves(
+        origins,
+        {file: path.join(lib, 'index.js'), module: '@acme/glyphs'},
+        ['BinIcon', 'Cross', 'Star'],
+        {packageDir: dir, pkg: {name: '@acme/icons'}},
+      );
+      expect(Object.fromEntries(moves)).toEqual({
+        BinOutlineIcon: {source: 'BinIcon', from: '@acme/glyphs/bin'},
+        StarIcon: {source: 'Star', from: '@acme/glyphs/gone'},
+      });
     } finally {
       fs.rmSync(dir, {recursive: true, force: true});
     }

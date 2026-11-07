@@ -106,10 +106,11 @@ function fromProject(file) {
 
 describe.skipIf(asRoot)('a swizzle that fails part-way undoes what it wrote', () => {
   it('restores replaced files, removes created ones, and says nothing was written', async () => {
-    // Learn the component's files, in copy order, from a successful swizzle.
+    // Learn the component's own files, in copy order, from a successful
+    // swizzle. The helpers it carries (`../…`) are written after them.
     const probe = await json(['swizzle', 'Button', '--output', 'probe']);
     expect(probe.status, JSON.stringify(probe.body).slice(0, 200)).toBe(0);
-    const files = probe.body.data.files;
+    const files = probe.body.data.files.filter(f => !f.startsWith('../'));
     expect(files.length).toBeGreaterThan(1);
     const outDir = path.join(dir, 'out', path.basename(probe.body.data.outputDir));
 
@@ -150,7 +151,7 @@ describe.skipIf(asRoot)('a swizzle that fails part-way undoes what it wrote', ()
   it('undoes the copy when a destination cannot be read back', async () => {
     const probe = await json(['swizzle', 'Button', '--output', 'probe']);
     expect(probe.status, JSON.stringify(probe.body).slice(0, 200)).toBe(0);
-    const files = probe.body.data.files;
+    const files = probe.body.data.files.filter(f => !f.startsWith('../'));
     const outDir = path.join(dir, 'out', path.basename(probe.body.data.outputDir));
 
     // A directory where the last file goes: the rollback snapshot cannot read

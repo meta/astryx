@@ -968,7 +968,10 @@ describe('ListInput', () => {
 
     renderListInput({maxItems: 2, onChange});
 
-    expect(screen.getByRole('button', {name: 'Add guest'})).toBeDisabled();
+    expect(screen.getByRole('button', {name: 'Add guest'})).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
     const remove = screen.getByRole('button', {name: 'Remove guest 1'});
     expect(remove).toBeEnabled();
 
@@ -1111,7 +1114,10 @@ describe('ListInput', () => {
     for (const field of screen.getAllByRole('textbox')) {
       expect(field).toBeDisabled();
     }
-    expect(screen.getByRole('button', {name: /add guest/i})).toBeDisabled();
+    expect(screen.getByRole('button', {name: /add guest/i})).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
     // The handle stays focusable but moves nothing (spec:AST-085 FR1, FR2).
     const handle = screen.getByRole('button', {name: 'Reorder guest 1'});
     expect(handle).toHaveAttribute('aria-disabled', 'true');

@@ -510,12 +510,32 @@ test.describe('with a finger and a mouse', () => {
       await swipe(page, scroller, {px: 80, ms: 80});
       await settled(scroller);
     }
-    // At the end, a flick settles back onto the same stop.
-    await swipe(page, scroller, {px: 80, ms: 80});
-    expect(await isTakenOver(scroller)).toBe(true);
+    // At the end, a flick settles back onto the same stop. The page narrows
+    // the row by 1 px 60 ms after the lift, so the resize lands mid-settle
+    // whatever the runner's lag.
     await scroller.evaluate(el => {
-      el.style.width = `${el.clientWidth - 1}px`;
+      const flags = window as unknown as {heldAtResize?: boolean};
+      el.addEventListener(
+        'touchend',
+        () => {
+          setTimeout(() => {
+            flags.heldAtResize = Array.from(el.children).some(
+              child => (child as HTMLElement).style.translate !== '',
+            );
+            el.style.width = `${el.clientWidth - 1}px`;
+          }, 60);
+        },
+        {once: true},
+      );
     });
+    await swipe(page, scroller, {px: 80, ms: 80});
+    await expect
+      .poll(async () =>
+        page.evaluate(
+          () => (window as unknown as {heldAtResize?: boolean}).heldAtResize,
+        ),
+      )
+      .toBe(true);
     await settled(scroller);
     // A row the paging still holds takes the wheel and stays put.
     const at = await offset(scroller);
