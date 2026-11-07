@@ -12,6 +12,8 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {describe, expect, it} from 'vitest';
+import {themePaletteGenerate} from '../packages/cli/api/theme/palette/generate/generate.mjs';
+import {assertPaletteReceiptsMatch} from './palette-receipt-test-utils.mjs';
 import {
   countSelectedRefs,
   discoverSelectedRefs,
@@ -51,6 +53,61 @@ export const theme = {
 `;
 
 describe('Neutral selected palette ref generation', () => {
+  // theme-compilation INV3: the committed palette is what its saved config
+  // generates, including the muted dark edge (darkChromaTaper).
+  it('reproduces the committed full palette and receipt from its config', () => {
+    const temp = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'astryx-neutral-palette-'),
+    );
+    try {
+      fs.copyFileSync(
+        path.join(ROOT, 'packages/themes/neutral/palette.config.json'),
+        path.join(temp, 'palette.config.json'),
+      );
+      themePaletteGenerate(
+        'palette.config.json',
+        {out: 'neutralPalettes.generated.ts'},
+        {cwd: temp},
+      );
+      const generated = fs.readFileSync(
+        path.join(temp, 'neutralPalettes.generated.ts'),
+        'utf8',
+      );
+      const committed = fs
+        .readFileSync(
+          path.join(
+            ROOT,
+            'packages/themes/neutral/src/neutralPalettes.generated.ts',
+          ),
+          'utf8',
+        )
+        .replace(
+          '// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n',
+          '',
+        );
+      expect(generated).toBe(committed);
+      assertPaletteReceiptsMatch(
+        JSON.parse(
+          fs.readFileSync(
+            path.join(temp, 'neutralPalettes.generated.receipt.json'),
+            'utf8',
+          ),
+        ),
+        JSON.parse(
+          fs.readFileSync(
+            path.join(
+              ROOT,
+              'packages/themes/neutral/src/neutralPalettes.generated.receipt.json',
+            ),
+            'utf8',
+          ),
+        ),
+      );
+    } finally {
+      fs.rmSync(temp, {recursive: true, force: true});
+    }
+  });
+
   it('uses first-reference family and mode order with unique sorted stops', () => {
     const {content, selected} = renderSelectedRefs(THEME_SOURCE, FULL_PALETTE);
 
