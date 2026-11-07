@@ -38,7 +38,6 @@
  */
 
 import {
-  createContext,
   use,
   useCallback,
   useEffect,
@@ -58,6 +57,7 @@ import {
   useComponentTranslator,
 } from '../../../i18n/useComponentTranslator';
 import english from '../../../i18n/generated-english/Table/plugins/selection/useTableSelection.generated';
+import {createSharedContext} from '../../../utils/sharedContext';
 
 registerEnglishFallback(english);
 
@@ -190,7 +190,11 @@ function applyRowSelectionStyle(
 // =============================================================================
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const SelectionStoreContext = createContext<SelectionStore<any> | null>(null);
+const SelectionStoreContext = createSharedContext<SelectionStore<any> | null>(
+  'SelectionStoreContext',
+  1,
+  null,
+);
 SelectionStoreContext.displayName = 'SelectionStoreContext';
 
 // =============================================================================
@@ -395,6 +399,7 @@ export function useTableSelection<T extends Record<string, unknown>>(
 
   return useMemo(
     (): TablePlugin<T> => ({
+      rowModel: 'flat',
       transformTableContext(children: ReactNode) {
         return (
           <SelectionStoreContext value={store}>

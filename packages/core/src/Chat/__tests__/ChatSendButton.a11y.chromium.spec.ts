@@ -547,7 +547,7 @@ async function readSensors(page: Page, interaction: Interaction) {
       role:
         element?.getAttribute('role') ?? element?.tagName.toLowerCase() ?? null,
       accessibleName: element?.getAttribute('aria-label') ?? null,
-      disabled: element?.disabled ?? false,
+      disabled: element?.getAttribute('aria-disabled') === 'true',
       size: element?.getAttribute('data-size') ?? null,
       variant: element?.getAttribute('data-variant') ?? null,
       direction: style?.direction ?? '',
@@ -735,7 +735,7 @@ async function capture(
     parseRgb(actual.pressedOverlayToken),
   );
   const representation = fixture.disabled
-    ? 'Disabled: native disabled, muted and non-interactive'
+    ? 'Disabled: aria-disabled, muted and non-interactive'
     : interaction === 'hover'
       ? 'Hovered: overlay style'
       : interaction === 'focus-visible'

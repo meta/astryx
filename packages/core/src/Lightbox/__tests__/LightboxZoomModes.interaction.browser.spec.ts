@@ -20,13 +20,13 @@ import {
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
 import {
+  armHold,
   curveOf,
   drag,
   flick,
   frames,
   freezePageOn,
   freezePageWhen,
-  holdAnimations,
   installPageFreeze,
   installTimerGate,
   openStory,
@@ -36,7 +36,6 @@ import {
   thawPage,
   timeline,
   touchDriver,
-  waitForAnimation,
   waitForRest,
   withStorybook,
   type TouchScript,
@@ -218,11 +217,15 @@ test('under Reduce Motion a double tap cross-fades to its zoom instead of travel
   if (rect == null) {
     throw new Error('no photo');
   }
+  // Armed before the taps, so the fade is held as it starts. A hold sent
+  // after them can come after a 200 ms fade ends on a loaded runner.
+  const hold = await armHold(page, img, {
+    judges: {target: img, property: 'opacity'},
+  });
   await driver.play(
     doubleTap({x: rect.x + rect.width / 2, y: rect.y + rect.height / 2}),
   );
-  await waitForAnimation(img);
-  const held = await holdAnimations(page, img);
+  const held = await hold.held();
   const duration = Math.max(...held.map(a => a.curveEndMs));
   const samples = await sampleCurve(img, timeline(duration));
   await releaseAnimations(page);
@@ -498,6 +501,9 @@ test('under Reduce Motion a pinch released past the maximum settles in place, wi
   // The fade then starts held, however late this process reacts. A hold sent
   // after the lift can come after a 200 ms fade ends on a loaded runner.
   await freezePageOn(page, 'touchend');
+  const hold = await armHold(page, img, {
+    judges: {target: img, property: 'opacity'},
+  });
   await driver.play(
     pinch({
       center: centre,
@@ -514,7 +520,7 @@ test('under Reduce Motion a pinch released past the maximum settles in place, wi
       },
     },
   );
-  const held = await holdAnimations(page, img);
+  const held = await hold.held();
   expect(held.length).toBeGreaterThan(0);
   const duration = Math.max(...held.map(a => a.curveEndMs));
   const opacity = curveOf(

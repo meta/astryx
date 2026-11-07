@@ -747,12 +747,16 @@ test(
       width: page.viewportSize()?.width ?? 402,
       height: box.height + 32,
     };
+    // Armed before the press, so the film starts where the release starts.
+    const hold = await armHold(page, row, {
+      judges: {target: row, property: 'opacity', pseudoElement: '::before'},
+    });
     await driver.play(tap(center, {holdMs: HOLD_MS}));
     await freezeTimers(page);
     const {storyboard} = await animationStoryboard(page, {
       name: 'list-row-press-release',
       clip,
-      scope: row,
+      held: await hold.held(),
       measure: async () => ({
         opacity: await layerOpacity(row),
         state: await pressState(row),
