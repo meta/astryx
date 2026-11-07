@@ -66,12 +66,13 @@ const animatedLayout = useAnimatedLayout({containerRef: scrollRef});
   `animatedLayout` prop or option.
 - **FR2 — Without a handle, nothing changes.** A component without a handle
   keeps its behavior: the changed element shows its change as its own record
-  says, and content after it takes its place at once. AppShell's content area and
-  the SideNav rail animate their own change during a side nav collapse or
+  says, and content after it takes its place at once. AppShell's content area
+  and the SideNav rail animate their own change during a side nav collapse or
   expand, and a resizable pane a LayoutPanel renders animates its own collapse
   and open, as their records state (`component:AppShell` FR17,
   `component:SideNav` FR6, `component:Resizable` FR8, `component:LayoutPanel`
-  FR7).
+  FR7). Under a coarse pointer, a TreeList with no handle from the app animates
+  its own expand and collapse inside the tree (`component:TreeList` FR8).
 - **FR3 — The content after a change glides within the area.** For any change
   a component holding the handle reports, such as a disclosure opening,
   content loading in, a message appearing, or an item inserted or removed,
