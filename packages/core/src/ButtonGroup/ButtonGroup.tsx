@@ -35,7 +35,7 @@ import {
   useGroupPressTracking,
 } from '../hooks/useGroupPressTracking';
 import {useTouchPresentation} from '../utils/touchPresentation';
-import {touchHitAreaStyles} from '../utils/touchHitArea.stylex';
+import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {mergeProps, composeEventHandlers} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {ButtonGroupContext} from './ButtonGroupContext';

@@ -719,7 +719,7 @@ function StandaloneBottomSheet({
   // top one closes. A Dialog opened from a sheet stays above every sheet. A
   // closing sheet stops supplying when it starts to close. Passive: it runs
   // after the layout effects that present.
-  useModalOutlet(
+  const outletRef = useModalOutlet(
     dialogRef,
     isOpen && hasScrim,
     stackView.isTop,
@@ -991,6 +991,7 @@ function StandaloneBottomSheet({
         onScrimOpacity={handleScrimOpacity}
         onScrimFadeDuration={handleScrimFadeDuration}
         onElementChange={handlePanelElementChange}
+        handleRef={outletRef}
         onMotionStart={handleMotionStart}
         onMotionComplete={handleMotionComplete}>
         <ModalAnnounceProvider

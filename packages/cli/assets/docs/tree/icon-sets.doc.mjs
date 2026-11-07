@@ -121,11 +121,11 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: "Every component the library exports becomes an icon (an alias of one component is recorded once), named `<Name>Icon`, with an id from its name (`Squares2X2Icon` is `squares-2x2`: a dimension stays one word). `map` is filled only where a definition's name is an icon's id (`delete` → icon `delete`), and the receipt lists those entries under Mapped by name: a library can draw another meaning under the same name (one library's `delete` is a backspace key), so check each. An icon whose id is only one of a definition's words (`trash` for `delete`) may mean something else in this library, so the receipt lists it under Suggestions, with the `experimental icon map <definition> <icon>` command for each, and writes nothing for it: check the meaning, then run the ones that fit. Run it again after a library release to refresh the icons that library supplies; `map` entries whose icon still exists are kept, and the receipt names any icon the library dropped, any icon `--exclude` left out, and the `map` entries each took with it. Icons you added from your own files or another library are left as they are. An icon you already have is known by the library export it re-exports, so it keeps its export name exactly, its `map` entries, variants, and words, even when a newer CLI spells its id differently or your `--exclude` lets a library prefix come off new ids; the receipt lists each changed id under `renamed`. A refresh with `--dry-run` writes nothing and prints the Mapped by name and Suggestions lists again; `--display-name` and `--description` on a refresh rewrite the descriptor. Variants added with `add --variant … --all` are kept too; run that `add` again to pick up icons the release added. `experimental icon --list` shows how many definitions the set maps.",
+          text: "Every component the library exports becomes an icon (an alias of one component is recorded once), named `<Name>Icon`, with an id from its name (`Squares2X2Icon` is `squares-2x2`: a dimension stays one word). `map` is filled only where a definition's name is an icon's id (`delete` → icon `delete`), and the receipt lists those entries under Mapped by name: a library can draw another meaning under the same name (one library's `delete` is a backspace key), so check each. An icon whose id is only one of a definition's words (`trash` for `delete`) may mean something else in this library, so the receipt lists it under Suggestions, with the `experimental icon map <definition> <icon>` command for each, and writes nothing for it: check the meaning, then run the ones that fit. Run it again after a library release to refresh the icons that library supplies; `map` entries whose icon still exists are kept, and the receipt names any icon the library dropped, any icon `--exclude` left out, and the `map` entries each took with it. Icons you added from your own files or another library are left as they are. Icons you added one file at a time from the same package (`--from <package>/dist/XIcon`) move to the root import when you refresh from the package root and the root exports the same icon; each keeps its id, export, `map` entries, variants, and words on that refresh and every later one, and the receipt lists it under `moved`. A library icon whose id or name a moved icon already has is left out. When another icon of the set already reads the same root export, the icon stays on its own file, and the receipt says why. An icon you already have is known by the library export it re-exports, so it keeps its export name exactly, its `map` entries, variants, and words, even when a newer CLI spells its id differently or your `--exclude` lets a library prefix come off new ids; the receipt lists each changed id under `renamed`. An id you chose that is not a spelling of the library name (`dismiss` for `XIcon`) is kept. A refresh with `--dry-run` writes nothing and prints the Mapped by name and Suggestions lists again; `--display-name` and `--description` on a refresh rewrite the descriptor. Variants added with `add --variant … --all` are kept too; run that `add` again to pick up icons the release added. `experimental icon --list` shows how many definitions the set maps.",
         },
         {
           type: 'prose',
-          text: "With a package or package subpath, it also records the installed library and version as the data file's `source`, so `integration check` warns when your dependency moves to another version; copies the library's LICENSE (and NOTICE) files into the set directory; and sets the descriptor's `license` to the library's. A set you started without `--from` gets the same the first time a refresh records its source, unless you already changed `license`: a `license` you set is kept (the receipt names the library's), and every later refresh keeps it too. Your package.json `license` is never changed. Edit `license` when the artwork's license differs from the library's package license.",
+          text: "With a package or package subpath, it also records the installed library and version as the data file's `source`, so `integration check` warns when your dependency moves to another version; copies the library's LICENSE (and NOTICE) files into the set directory; and sets the descriptor's `license` to the library's. A set you started without `--from` gets the same the first time a refresh records its source, unless you already changed `license`: a `license` you set is kept (the receipt names the library's), and every later refresh keeps it too. Your package.json `license` is never changed. Edit `license` when the artwork's license differs from the library's package license. When the library ships no license file to copy, the receipt says so under `licenseNoticeMissing` and in its notes, and the CLI writes nothing: add a `NOTICE` file to the set directory (`icon-sets/<set>/NOTICE`) that names the library, its version, and its license. `integration check` accepts a file named `LICENSE`, `LICENCE`, `NOTICE`, or `COPYING`, in any case and with an optional suffix such as `NOTICE.md` or `LICENSE-MIT`, in the set directory or the package root; without one it reports `icon_license_notice_missing`.",
         },
         {
           type: 'prose',
@@ -139,7 +139,7 @@ astryx experimental icon add --variant solid --from @heroicons/react/24/solid --
         },
         {
           type: 'prose',
-          text: "A library that redraws its artwork for small sizes (Heroicons' 20px mini and 16px micro) ships each of those as its own set in its own package (their export names match the 24px ones), not as variants: a variant's size comes from CSS. `--variants` lists the variants; `--default-variant` names the one each icon's own export draws (the first variant when omitted). `--all` adds the variant for every icon whose id an export of `--from` has (`TrashIcon` in the solid module becomes `TrashSolidIcon`, the solid variant of `trash`), and the receipt lists the icons the module has no export for. Running it again changes nothing.",
+          text: "A library that redraws its artwork for small sizes (Heroicons' 20px mini and 16px micro) ships each of those as its own set in its own package (their export names match the 24px ones), not as variants: a variant's size comes from CSS. `--variants` lists the variants; `--default-variant` names the one each icon's own export draws (when omitted, the look a library that names its looks draws; otherwise the set's current default, else, on a set without icons, the first variant; a set with icons changes it only with `--from`, and only in a library that names its looks). `--all` adds the variant for every icon whose id an export of `--from` has (`TrashIcon` in the solid module becomes `TrashSolidIcon`, the solid variant of `trash`), and the receipt lists the icons the module has no export for. Running it again changes nothing.",
         },
         {
           type: 'prose',
@@ -177,7 +177,7 @@ astryx experimental icon add --variant solid --from @heroicons/react/24/solid --
         },
         {
           type: 'prose',
-          text: "An optional render test you can copy. Save it inside your package directory and run it there, since it imports your package by name through its `exports`, and install `react-dom` first (`npm install -D react-dom`). A library may add its own classes beside yours, so it checks the class list. A library that sets `width` and `height` attributes (24, say) still fills its box: CSS sizing, such as the `Icon` component's, overrides SVG size attributes.",
+          text: 'An optional render test you can copy. Save it inside your package directory and run it there, since it imports your package by name through its `exports`, and install `react-dom` first (`npm install -D react-dom`). A library may add its own classes beside yours, so it checks the class list. A component that writes its own `width` and `height` attributes (24, from a `size` prop, say) still fills its box when it passes `style` through to its svg: the `Icon` component and `themeIcons` size the svg with CSS, which overrides size attributes. The test checks that too.',
         },
         {
           type: 'code',
@@ -191,6 +191,8 @@ for (const [name, Icon] of Object.entries(icons)) {
   const html = renderToStaticMarkup(createElement(Icon, {className: 'x'}));
   if (!/class="([^"]* )?x( [^"]*)?"/.test(html)) throw new Error(\`\${name} drops className\`);
   if (!html.includes('currentColor')) throw new Error(\`\${name} has a fixed color\`);
+  const styled = renderToStaticMarkup(createElement(Icon, {style: {width: '1em'}}));
+  if (!styled.includes('width:1em')) throw new Error(\`\${name} drops style, so CSS cannot size it\`);
 }`,
         },
       ],
@@ -214,6 +216,10 @@ for (const [name, Icon] of Object.entries(icons)) {
             [
               'A subpath per style',
               '`experimental icon add --variant solid --from @acme/glyph-library/solid --all` for every icon at once, or `experimental icon add Bin --from @acme/glyph-library/solid --id bin --variant solid` for one (the set must declare the variant: `new-set --variants`)',
+            ],
+            [
+              'Every look in its export names (`XOutline24WGHT500Icon`, `XFilled24WGHT500Icon`)',
+              "`experimental icon new-set meta --from @acme/vector-icons` wraps each glyph once as `x` (`XIcon`), in the look `--default-variant` names or the library's usual default (outline, the middle weight). For another look: `experimental icon new-set meta --variants outline,filled` declares it in place, then `experimental icon add --variant filled --from @acme/vector-icons --all`",
             ],
             [
               'One file per icon, default export',
@@ -262,7 +268,7 @@ export function adapt(data) {
       content: [
         {
           type: 'prose',
-          text: 'The generated module also exports `themeIcons`: one entry per built-in definition in `map`, each an element of your own icon, hidden from assistive technology and sized `1em`. The CLI rewrites it on every `experimental icon add` and `experimental icon map`, so you never write it by hand, and `integration check` proves it matches `map`. A theme uses it in one line:',
+          text: "The generated module also exports `themeIcons`: one entry per built-in definition in `map`, each an element of your own icon, hidden from assistive technology and sized `1em` by its attributes and by CSS (its `style`), so it fills the theme's icon box even when your component writes its own size attributes. The CLI rewrites it on every `experimental icon add` and `experimental icon map`, so you never write it by hand, and `integration check` proves it matches `map`. A theme uses it in one line:",
         },
         {
           type: 'code',
