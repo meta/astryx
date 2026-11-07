@@ -43,6 +43,7 @@ import {stableClassName} from '../naming';
 const CORE_SRC_DIR = join(__dirname, '..');
 const LAB_SRC_DIR = join(__dirname, '../../../lab/src');
 const RICHTEXT_SRC_DIR = join(__dirname, '../../../richtext/src');
+const CHARTS_SRC_DIR = join(__dirname, '../../../charts/src');
 const LAB_PROMOTION_MANIFEST = join(
   __dirname,
   '../../../../internal/lab-readiness/manifest.mjs',
@@ -741,7 +742,7 @@ type DocBlock = {theming?: {targets?: DocTarget[]}};
 type ComponentDocModule = {docs?: DocBlock; docsZh?: DocBlock};
 
 interface ComponentInfo {
-  packageName: 'core' | 'lab' | 'richtext';
+  packageName: 'core' | 'lab' | 'richtext' | 'charts';
   dir: string;
   sites: ThemeTargetSite[];
   /** Absolute paths of the source files in `dir`, without tests. */
@@ -883,7 +884,7 @@ function discoverComponents(
       }
     }
     const participates =
-      packageName === 'core'
+      packageName === 'core' || packageName === 'charts'
         ? docBlocks.length > 0
         : requiredDirs.has(dir) || docBlocks.length > 0;
     if (!participates) {
@@ -909,12 +910,13 @@ const participatingComponents = [
   ...discoverComponents(CORE_SRC_DIR, 'core'),
   ...discoverComponents(LAB_SRC_DIR, 'lab', LAB_PROMOTION_DIRS),
   ...discoverComponents(RICHTEXT_SRC_DIR, 'richtext'),
+  ...discoverComponents(CHARTS_SRC_DIR, 'charts'),
 ];
 
 describe('theming.targets matches the themeProps() call sites', () => {
   const components = participatingComponents;
 
-  it('finds participating Core and Lab components', () => {
+  it('finds participating Core, Lab, richtext, and charts components', () => {
     // A refactor that renames themeProps or drops the Lab package from this
     // inventory must not silently disable either side of the guard.
     expect(components.some(component => component.packageName === 'core')).toBe(
@@ -928,6 +930,11 @@ describe('theming.targets matches the themeProps() call sites', () => {
     // on an unchecked package rather than fail.
     expect(
       components.some(component => component.packageName === 'richtext'),
+    ).toBe(true);
+    // charts enrolls the same way: a package that starts participating must
+    // stay discovered, or the guard passes on an unchecked package.
+    expect(
+      components.some(component => component.packageName === 'charts'),
     ).toBe(true);
   });
 
@@ -1017,6 +1024,11 @@ const UNREFLECTED_STYLE_AXIS_EXCEPTIONS: ReadonlyMap<string, string> = new Map([
     'ChatComposer.elevation',
     'The composer body paints the elevation but has no target. How to expose ' +
       'the body to themes is an open owner decision.',
+  ],
+  [
+    'ChartSwatchImpl.variant',
+    'ChartSwatch has no theming target. It paints the variant shape only. ' +
+      'Whether the swatch becomes a target is an open owner decision.',
   ],
   [
     'Skeleton.radius',

@@ -137,6 +137,11 @@
       "aliases": []
     },
     {
+      "name": "component-charts-metric-tile",
+      "path": "components/charts/metric-tile",
+      "aliases": []
+    },
+    {
       "name": "component-chat-composer",
       "path": "components/chat-composer",
       "aliases": []
