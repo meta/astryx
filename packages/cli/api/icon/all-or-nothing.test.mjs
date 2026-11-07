@@ -184,6 +184,7 @@ const COMMANDS = [
         displayName: 'Acme Glyphs',
         description: 'Acme glyphs.',
         variants: 'outline,solid',
+        defaultVariant: 'outline',
       }),
   ],
   [
