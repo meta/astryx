@@ -604,6 +604,95 @@ test('a drift within the tolerance still opens the menu; past it on one axis can
   expect(await menuShownAt(page)).toBeNull();
 });
 
+test('a touch that reaches the page late grows from the first frame at its onset, from rest', async ({
+  page,
+}) => {
+  const {driver, center} = await openTouchStory(page);
+  test.skip(
+    !driver.scriptedTimestamps,
+    'only a Chromium touch takes its timestamp from the script',
+  );
+  const played = playedCurve();
+  await page.evaluate(() => {
+    const trigger = document.querySelector<HTMLElement>(
+      '[data-testid="touch-context-menu"]',
+    );
+    const record = {
+      touchedAt: 0,
+      handledAt: 0,
+      frames: [] as {t: number; scale: number}[],
+    };
+    (window as unknown as {__lateTouch: typeof record}).__lateTouch = record;
+    const sample = (t: number) => {
+      const scale = getComputedStyle(trigger as HTMLElement).scale;
+      record.frames.push({
+        t,
+        scale: scale === 'none' ? 1 : Number.parseFloat(scale),
+      });
+      if (t - record.touchedAt < 320) {
+        requestAnimationFrame(sample);
+      }
+    };
+    addEventListener(
+      'touchstart',
+      event => {
+        record.touchedAt = event.timeStamp;
+        record.handledAt = performance.now();
+        // Added during the dispatch, it runs after the page's own touchstart
+        // listeners. So each frame, the sampler reads after the page's work.
+        addEventListener('touchstart', () => requestAnimationFrame(sample), {
+          once: true,
+          passive: true,
+        });
+      },
+      {capture: true, once: true, passive: true},
+    );
+  });
+  const cdp = await page.context().newCDPSession(page);
+  // The touch reaches the page 90 ms after its own timestamp, as through a
+  // slow input path. Chromium then holds the page's timers until about
+  // 100 ms after it handles the touch.
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{...center, id: 1, radiusX: 1, radiusY: 1, force: 1}],
+    timestamp: (Date.now() - 90) / 1000,
+  });
+  await page.waitForTimeout(250);
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchEnd',
+    touchPoints: [],
+    timestamp: Date.now() / 1000,
+  });
+  const {touchedAt, handledAt, frames} = await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          __lateTouch: {
+            touchedAt: number;
+            handledAt: number;
+            frames: {t: number; scale: number}[];
+          };
+        }
+      ).__lateTouch,
+  );
+  expect(handledAt - touchedAt).toBeGreaterThanOrEqual(80);
+  const grown = frames.findIndex(frame => frame.scale > 1);
+  expect(grown, 'the trigger never grew').toBeGreaterThan(0);
+  const before = frames[grown - 1];
+  const first = frames[grown];
+  const frameMs = first.t - before.t;
+  // From rest: the frame before is at rest, and the first grown frame is no
+  // further along than the spring one frame in.
+  expect(before.scale).toBe(1);
+  expect(first.scale).toBeLessThanOrEqual(played.at(frameMs / 1000) + 0.0005);
+  // On time: the curve starts in the first frame at or after the onset. So
+  // its first grown frame comes within two frames of the onset.
+  expect(before.t - touchedAt).toBeGreaterThanOrEqual(feedbackOnsetMs);
+  expect(first.t - touchedAt).toBeLessThanOrEqual(
+    feedbackOnsetMs + 2 * frameMs + 1,
+  );
+});
+
 test('the press feedback plays its computed curve on the compositor, frame by frame', async ({
   page,
 }, testInfo) => {
