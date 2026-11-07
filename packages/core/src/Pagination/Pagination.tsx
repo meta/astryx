@@ -184,7 +184,7 @@ const PAGE_SIZE_SELECTOR_WIDTH = 80;
 
 const styles = stylex.create({
   // Both rows wrap when their controls do not fit, as at a larger text size,
-  // so no control leaves the screen. When they fit, nothing changes.
+  // so no control leaves the screen.
   root: {
     display: 'flex',
     flexWrap: 'wrap',
@@ -197,6 +197,8 @@ const styles = stylex.create({
     flexWrap: 'wrap',
     alignItems: 'center',
     gap: spacingVars['--spacing-1'],
+    // Lets the controls row narrow to the landmark's width, so it wraps
+    // instead of pushing past it.
     minWidth: 0,
   },
   compactFirst: {
