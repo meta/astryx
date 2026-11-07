@@ -158,7 +158,7 @@ function mayKeepKeyboard(): boolean {
  *
  * @example
  * ```
- * const keyboard = useMobileKeyboard(panelRef, {move: 'ride', inset: true, offset: 48, isEnabled, isExpanded, isOpen, isPageScrollLocked});
+ * const keyboard = useMobileKeyboard(panelRef, {move: 'ride', inset: true, isEnabled, isExpanded, isOpen, isPageScrollLocked});
  * ```
  */
 export function useMobileKeyboard(
@@ -575,10 +575,8 @@ export function useMobileKeyboard(
 
         const measuredBodyRect = body.getBoundingClientRect();
         const overlap = overlapOf(measuredBodyRect.bottom, obstructionTop);
-        // The extra clearance leaves space for mobile suggestion UI, but only
-        // while the visual viewport actually overlaps the sheet. With no
-        // obstruction, ordinary desktop and hardware-keyboard focus must not
-        // shift an already visible control.
+        // Desktop and hardware-keyboard focus must not move a visible control.
+        // So the clearance applies only while the keyboard covers the sheet.
         const clearance = overlap > 0 ? offset : 0;
         keyboardGeometry =
           overlap > 0
