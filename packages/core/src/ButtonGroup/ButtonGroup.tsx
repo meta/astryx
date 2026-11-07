@@ -35,7 +35,7 @@ import {
   useGroupPressTracking,
 } from '../hooks/useGroupPressTracking';
 import {useTouchPresentation} from '../utils/touchPresentation';
-import {touchHitAreaStyles} from '../utils/touchHitArea.stylex';
+import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {mergeProps, composeEventHandlers} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {ButtonGroupContext} from './ButtonGroupContext';
@@ -145,8 +145,8 @@ const elevationStyles = stylex.create({
  * styles in pure CSS.
  *
  * The group is a single tab stop: arrow keys move between members along the
- * orientation, Home/End jump to the ends, focus wraps, and disabled members are
- * skipped (the APG roving tabindex technique, via `useListFocus`).
+ * orientation, Home/End jump to the ends, and focus wraps (the APG roving
+ * tabindex technique, via `useListFocus`).
  *
  * Members that render their own layer — a Button with a `tooltip`, or a
  * DropdownMenu — compose correctly, including as the trailing member.

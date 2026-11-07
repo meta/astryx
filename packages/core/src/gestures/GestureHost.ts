@@ -191,6 +191,7 @@ import {
 } from '../utils/selectionLock';
 import {isCoarsePointer, watchCoarsePointer} from '../utils/coarsePointer';
 import {gestureHosts} from './hostRegistry';
+import {isElement, isHTMLElement, isNode} from '../utils/nodeType';
 
 interface Registration {
   readonly recognizers: GestureRecognizer[];
@@ -888,12 +889,11 @@ export class GestureHost {
         height: doc.defaultView?.innerHeight ?? 0,
       }),
       // The writing direction through core's one helper.
-      isRtl: view =>
-        view instanceof Element && isRtlElement(view as HTMLElement),
+      isRtl: view => isElement(view) && isRtlElement(view as HTMLElement),
       // A screen-edge pan tells a view within its edge band from any other
       // by its box (spec:AST-094 FR18).
       viewRect: view => {
-        if (!(view instanceof Element)) {
+        if (!isElement(view)) {
           return null;
         }
         const {left, top, width, height} = view.getBoundingClientRect();
@@ -1214,7 +1214,7 @@ export class GestureHost {
       return native;
     }
     const found = hit;
-    const node = native instanceof Node ? native : null;
+    const node = isNode(native) ? native : null;
     const isAboutMover = movers.some(
       mover =>
         containsAlongFlatTree(mover, found) ||
@@ -1278,12 +1278,12 @@ export class GestureHost {
     pointerType: string,
   ): void {
     const view = this.doc.defaultView;
-    if (!(target instanceof Element) || !target.isConnected || view == null) {
+    if (!isElement(target) || !target.isConnected || view == null) {
       return;
     }
     armClickGuard(this.doc, {takesLateMouse: pointerType === 'touch'});
     if (
-      target instanceof view.HTMLElement &&
+      isHTMLElement(target) &&
       target.matches('input, textarea, select, [contenteditable]')
     ) {
       target.focus();
@@ -1426,7 +1426,7 @@ export class GestureHost {
   }
 
   private refresh(element: Element, registration: Registration): void {
-    if (registration.manageStyle && element instanceof HTMLElement) {
+    if (registration.manageStyle && isHTMLElement(element)) {
       this.applyStyle(element, registration);
     }
     this.syncTouchMoveListener(element, registration);
@@ -2093,7 +2093,7 @@ export class GestureHost {
       // The window's own blur; an element's blur (a Node's) reaches the
       // window's capture phase too and means nothing here.
       subscribeInput(view, 'blur', event => {
-        if (!(event.target instanceof view.Node)) {
+        if (!isNode(event.target)) {
           this.onBlur();
         }
       }),
@@ -2151,18 +2151,18 @@ export class GestureHost {
     // The host asks the hold, so the hold needs nothing from gestures/. A
     // root-entry component can then use the hold with no gesture code.
     if (
-      target instanceof Node &&
+      isNode(target) &&
       (holdsTouch(target) || [...this.touchGates].some(gate => gate(target)))
     ) {
       return {recognizers, consumer, consumerElement};
     }
     let hasConsumerOwner = pointerType == null;
     for (
-      let node: Node | null = target instanceof Node ? target : null;
+      let node: Node | null = isNode(target) ? target : null;
       node != null;
       node = parentAcrossShadow(node)
     ) {
-      if (!(node instanceof Element)) {
+      if (!isElement(node)) {
         continue;
       }
       const registration = this.registry.get(node);
@@ -2224,7 +2224,7 @@ export class GestureHost {
       const lock = recognizer.selectionLock;
       if (
         lock != null &&
-        recognizer.view instanceof Element &&
+        isElement(recognizer.view) &&
         managed(recognizer.view, recognizer)
       ) {
         const elements = byLock.get(lock) ?? new Set<Element>();
@@ -2522,11 +2522,11 @@ export class GestureHost {
     });
     const takers: GestureRecognizer[] = [];
     for (
-      let node: Node | null = target instanceof Node ? target : null;
+      let node: Node | null = isNode(target) ? target : null;
       node != null;
       node = parentAcrossShadow(node)
     ) {
-      if (!(node instanceof Element)) {
+      if (!isElement(node)) {
         continue;
       }
       for (const recognizer of this.registry.get(node)?.recognizers ?? []) {
@@ -2626,7 +2626,7 @@ export class GestureHost {
     keepsBoundary: boolean,
   ): boolean {
     for (
-      let node: Node | null = target instanceof Node ? target : null;
+      let node: Node | null = isNode(target) ? target : null;
       node != null;
       node = parentAcrossShadow(node)
     ) {
@@ -2634,7 +2634,7 @@ export class GestureHost {
         break;
       }
       if (
-        node instanceof Element &&
+        isElement(node) &&
         canElementScroll(node, isHorizontal ? -dx : 0, isHorizontal ? 0 : -dy)
       ) {
         return true;
@@ -2717,7 +2717,7 @@ export class GestureHost {
         // every touch. An element's blur reaches the window's capture phase
         // too and means nothing here.
         subscribeInput(view, 'blur', event => {
-          if (!(event.target instanceof view.Node)) {
+          if (!isNode(event.target)) {
             cancelWheel();
           }
         }),
@@ -3007,10 +3007,9 @@ export class GestureHost {
       if (previous != null) {
         stale.push(previous);
       }
-      const native =
-        touch.target instanceof Node
-          ? landedOn(event, touch.target)
-          : landedOn(event);
+      const native = isNode(touch.target)
+        ? landedOn(event, touch.target)
+        : landedOn(event);
       const target = this.presentedTarget(
         native,
         touch.clientX,
@@ -3095,7 +3094,7 @@ export class GestureHost {
     // Stamped after the consumers judged the touch: the brake asks whether
     // an EARLIER finger is still driving a scroll.
     const landed = landedOn(event);
-    if (landed instanceof Node) {
+    if (isNode(landed)) {
       this.lastTouch = {target: landed, time};
     }
   };
@@ -3188,8 +3187,8 @@ export class GestureHost {
         finger.pointerType !== 'touch' ||
         finger.phase === 'ended' ||
         finger.phase === 'cancelled' ||
-        !(finger.target instanceof Node) ||
-        !(touch.target instanceof Node) ||
+        !isNode(finger.target) ||
+        !isNode(touch.target) ||
         // Along the flat tree, both ways: the finger's target can be inside
         // an open shadow root while its touches reach the host retargeted.
         !(
@@ -3326,7 +3325,7 @@ export class GestureHost {
     }
     // The lift is when momentum starts: the clock the brake wants most.
     const landed = landedOn(event);
-    if (landed instanceof Node) {
+    if (isNode(landed)) {
       this.lastTouch = {target: landed, time};
     }
     const dispositions =
@@ -3980,7 +3979,7 @@ export class GestureHost {
     disarmClickGuard(this.doc);
     const target = touch.target;
     const view = this.doc.defaultView;
-    if (!(target instanceof Element) || !target.isConnected || view == null) {
+    if (!isElement(target) || !target.isConnected || view == null) {
       return;
     }
     withoutClickGuard(() =>
@@ -4054,7 +4053,7 @@ export class GestureHost {
   private readonly onScroll = (event: Event): void => {
     const time = eventTime(event);
     const scroller = event.target === this.doc ? this.doc : event.target;
-    if (!(scroller instanceof Node) || this.ownedScrolls.has(scroller)) {
+    if (!isNode(scroller) || this.ownedScrolls.has(scroller)) {
       return;
     }
     // A scroll is a finger's only if that finger was inside this scroller,
@@ -4079,7 +4078,7 @@ export class GestureHost {
         continue;
       }
       if (
-        touch.target instanceof Node &&
+        isNode(touch.target) &&
         containsAlongFlatTree(scroller, touch.target) &&
         // Only a pan this finger drove takes the touch: the browser starts
         // one only once the finger has travelled the take distance
@@ -4102,7 +4101,7 @@ export class GestureHost {
     const fingers: Node[] = [];
     for (const touch of touchesOf(event.touches)) {
       if ((touch as StylusTouch).touchType !== 'stylus') {
-        if (touch.target instanceof Node) {
+        if (isNode(touch.target)) {
           fingers.push(touch.target);
         }
       }

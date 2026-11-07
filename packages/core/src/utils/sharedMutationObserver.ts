@@ -5,8 +5,8 @@
 /**
  * @file sharedMutationObserver.ts
  * @input MutationObserver API
- * @output Exports observeMutations (one shared observer per set of options)
- *   and observeContent, its text-and-children form
+ * @output Exports observeMutations (one shared observer per set of options),
+ *   observeContent, its text-and-children form, and flushMutations
  * @position Internal utility; consumed by useTruncation, hitArea, AppShell's
  *   main-overflow observer, ModalAnnounceProvider's presentation watch and
  *   CheckboxList's required group. The mutation counterpart of sharedResizeObserver:
@@ -25,6 +25,7 @@ const CONTENT_OPTIONS: MutationObserverInit = {
 interface SharedObserver {
   readonly observer: MutationObserver;
   readonly callbacks: Map<Node, Set<MutationCallback>>;
+  readonly deliver: (records: MutationRecord[]) => void;
 }
 
 /**
@@ -49,7 +50,7 @@ function optionsKey(options: MutationObserverInit): string {
 function createSharedObserver(options: MutationObserverInit): SharedObserver {
   const callbacks = new Map<Node, Set<MutationCallback>>();
   const isSubtree = options.subtree === true;
-  const observer = new MutationObserver(records => {
+  const deliver = (records: MutationRecord[]) => {
     // One call per callback per batch, however many records it received.
     // With `subtree`, a record's target can be any descendant, so walk up to
     // the observed roots; without it, the target is the observed node.
@@ -70,8 +71,8 @@ function createSharedObserver(options: MutationObserverInit): SharedObserver {
       }
     }
     pending.forEach(callback => callback());
-  });
-  return {observer, callbacks};
+  };
+  return {observer: new MutationObserver(deliver), callbacks, deliver};
 }
 
 /**
@@ -134,4 +135,17 @@ export function observeContent(
   callback: MutationCallback,
 ): () => void {
   return observeMutations(element, CONTENT_OPTIONS, callback);
+}
+
+/**
+ * Deliver at once the records that the shared observer for `options` holds
+ * but has not yet delivered. The observer delivers a mutation in a microtask.
+ * A read in the same task calls this first to see it.
+ */
+export function flushMutations(options: MutationObserverInit): void {
+  const shared = observers.get(optionsKey(options));
+  const records = shared?.observer.takeRecords() ?? [];
+  if (shared != null && records.length > 0) {
+    shared.deliver(records);
+  }
 }
