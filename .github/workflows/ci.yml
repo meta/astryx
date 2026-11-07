@@ -2721,12 +2721,12 @@ jobs:
   # of every iOS browser, for the code where WebKit and Chromium differ on
   # touch: the gesture host and recognizers, the motion runtime, the touch and
   # press helpers, the menu press model and the pager, plus the harness and the
-  # shared setup that runs them (spec:AST-030 FR13). A pull request runs the
-  # specs whose bundles reach only that same code, the interaction specs it
-  # changes, and the specs in the folder of any component code it changes, so
-  # a WebKit break elsewhere never turns an unrelated pull request red; the
-  # motion adopters spec renders Storybook components and stays with the
-  # Chromium proofs. A release interaction check (an `interaction-check/`
+  # shared setup that runs them (spec:AST-030 FR13). A pull request that
+  # changes that code runs the specs whose bundles reach only it. Any pull
+  # request also runs the interaction specs it changes and those in the folder
+  # of any component code it changes, so a WebKit break elsewhere never turns
+  # an unrelated pull request red; the motion adopters spec renders Storybook
+  # components and stays with the Chromium proofs. A release interaction check (an `interaction-check/`
   # branch from the release tooling) runs every spec (spec:AST-030 FR28).
   # Out of scope every step after the scope step skips and the job reports
   # success, so the `test` join reads it without a new required context. Specs that need Chromium-only evidence skip themselves
