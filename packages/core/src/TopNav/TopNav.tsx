@@ -19,7 +19,7 @@
 import type {ReactNode} from 'react';
 import type {BaseProps} from '../BaseProps';
 import * as stylex from '@stylexjs/stylex';
-import {sizeVars, spacingVars, typeScaleVars} from '../theme/tokens.stylex';
+import {spacingVars} from '../theme/tokens.stylex';
 import {mergeProps} from '../utils';
 import {TopNavSlotContext} from './TopNavContext';
 import {useTopNavRenderMode} from './TopNavRenderContext';
@@ -41,12 +41,6 @@ registerEnglishFallback(english);
 /**
  * Base TopNav styles
  */
-// Controls keep their element height while their labels grow with the text
-// size, so a label can stand out of its control. Lines that the bar or a
-// region wraps onto sit that much further apart, so a label never reaches
-// into the line above or below and a tap lands on the control it shows.
-const LABEL_OVERHANG = `max(0px, ${typeScaleVars['--text-label-leading']} - ${sizeVars['--size-element-md']})`;
-
 const styles = stylex.create({
   base: {
     alignItems: 'center',
@@ -60,7 +54,6 @@ const styles = stylex.create({
   baseFlex: {
     display: 'flex',
     flexWrap: 'wrap',
-    rowGap: LABEL_OVERHANG,
   },
   // Three regions (used when centerContent is present). While they fit one
   // row, the center takes its content width and the start and end regions
@@ -68,7 +61,6 @@ const styles = stylex.create({
   baseThreeRegion: {
     display: 'flex',
     flexWrap: 'wrap',
-    rowGap: LABEL_OVERHANG,
   },
   // A region keeps its items on one line, so the bar wraps before the region
   // does; only a region wider than the whole bar wraps its own items.
@@ -78,7 +70,6 @@ const styles = stylex.create({
     flexWrap: 'wrap',
     alignItems: 'center',
     gap: spacingVars['--spacing-4'],
-    rowGap: `calc(${spacingVars['--spacing-4']} + ${LABEL_OVERHANG})`,
     flex: '1 1 0%',
     minWidth: stylex.firstThatWorks('fit-content', '-webkit-fit-content'),
   },
@@ -92,7 +83,6 @@ const styles = stylex.create({
     flexWrap: 'wrap',
     alignItems: 'center',
     gap: spacingVars['--spacing-1'],
-    rowGap: `calc(${spacingVars['--spacing-1']} + ${LABEL_OVERHANG})`,
   },
   // The center claims its content's minimum width when the bar decides where
   // to wrap, then grows first, up to its content width. Only a center wider
@@ -114,7 +104,6 @@ const styles = stylex.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
     gap: spacingVars['--spacing-1'],
-    rowGap: `calc(${spacingVars['--spacing-1']} + ${LABEL_OVERHANG})`,
     flex: '1 1 0%',
     minWidth: stylex.firstThatWorks('fit-content', '-webkit-fit-content'),
   },
@@ -124,7 +113,6 @@ const styles = stylex.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
     gap: spacingVars['--spacing-1'],
-    rowGap: `calc(${spacingVars['--spacing-1']} + ${LABEL_OVERHANG})`,
     flexShrink: 0,
     marginInlineStart: 'auto',
     minWidth: stylex.firstThatWorks('fit-content', '-webkit-fit-content'),
