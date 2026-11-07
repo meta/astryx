@@ -44,7 +44,7 @@ system_specs: [spec:AST-020]
 | Behavior                | A Section-wrapped `role="toolbar"` row with start, optional center, and end lanes. The row is one tab stop; arrow keys, Home, and End move focus among its controls along its orientation.                                          |
 | End-user impact         | Keyboard users Tab into the toolbar once and move between its controls with arrows, without losing text-caret keys inside an input or arrow keys inside an open menu; screen-reader users hear a named toolbar and its orientation. |
 | Builder impact          | None.                                                                                                                                                                                                                               |
-| Compatibility/readiness | Records shipped behavior; no public change. Four implementation gaps (see Current-state impact).                                                                                                                                    |
+| Compatibility/readiness | Changes layout output for a start or end lane that holds foldable content (FR2); no public API change. Four implementation gaps (see Current-state impact).                                                                         |
 | Review checks           | Reject more than one tab stop, arrows that steal caret keys from a text input mid-line, caller props that replace `role`, `aria-label`, or `aria-orientation`, or moving outer chrome into Toolbar.                                 |
 | Governing rules         | `family:layout-regions`; `spec:AST-020` (toolbar pattern binding); `architecture:container-padding`.                                                                                                                                |
 
@@ -75,12 +75,10 @@ Consumer migration instructions belong in consumer docs and release notes.
   start or end lane change from overflowing to folding:
   - the Toolbar story "Composition: Tab Navigation" (TabList, start): its tabs
     scroll and "New item" stays whole;
-  - the CLI block "Table filter" (OverflowList, start);
   - the CLI block "With tabs" (TabList, start);
-  - the "Settings sidebar" page (TabList, start);
   - TableSelectionToolbar with an OverflowList in `startContent`: the count and
     Clear stay whole (`component:TableSelectionToolbar` FR4);
-  - the edge-compensation "With tabs" story: no visible change at 360 or 480 px.
+  - the edge-compensation "With tabs" story: no visible change at 360 or 480 px;
   - outside a Toolbar, every one-row OverflowList that can fold, Tokenizer's
     token row included, keeps a minimum width of its indicator plus the items
     `minVisibleItems` keeps (`component:OverflowList` FR7).

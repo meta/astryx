@@ -474,7 +474,10 @@ export function OverflowList({
             // A list that can fold gives up width in a Toolbar lane; one
             // whose floor keeps every item cannot.
             minVisibleItems < itemCount && foldableMarker,
-            !isMultiRow && foldMinWidth > 0 && foldMin.minWidth(foldMinWidth),
+            !isMultiRow &&
+              minVisibleItems < itemCount &&
+              foldMinWidth > 0 &&
+              foldMin.minWidth(foldMinWidth),
             isLaneChild && [inLane.list, inLane.naturalWidth(foldNaturalWidth)],
             gapStyles[gap],
             isMultiRow &&

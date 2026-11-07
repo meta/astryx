@@ -1145,6 +1145,19 @@ describe('OverflowList in a Toolbar lane (component:Toolbar FR2)', () => {
       </OverflowList>,
     );
     expect(visibleContainer().getAttribute('style') ?? '').toContain('82px');
+    // A list that keeps every item cannot fold, so it gets no minimum: it
+    // sizes as before and may overflow a narrow container.
+    rerender(
+      <OverflowList
+        gap={0}
+        data-w="1000"
+        data-testid="ov"
+        minVisibleItems={items.length}
+        overflowRenderer={trigger}>
+        {items}
+      </OverflowList>,
+    );
+    expect(visibleContainer().getAttribute('style') ?? '').not.toMatch(/\d+px/);
   });
 
   it('is sized by a Toolbar lane only as its direct child', () => {
