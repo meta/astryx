@@ -363,8 +363,9 @@ test('an edge button steps about one view: the viewport less half an item, on th
 });
 
 /**
- * Flicks the row (toward the start with `back`), then presses the edge button
- * while the paging still holds the row past `until`. True if it was held.
+ * Drags the row past half a view, toward the start with `back`. Then it
+ * presses the edge button while the paging still holds the row past `until`.
+ * True if it was held.
  */
 async function pressInSettle(
   page: Page,
@@ -381,7 +382,17 @@ async function pressInSettle(
   // The settle's frames go through the gate, so the freeze below holds them.
   await installTimerGate(page);
   await scroller.evaluate(el => el.setAttribute('data-press-in-settle', ''));
-  await swipe(page, scroller, {px: 80, ms: 80, rtl: back});
+  // A drag past half a view that rests before the lift releases at 0, so the
+  // row settles on the nearest page, the next one. A flick's release reads
+  // its speed from when the touches arrive, and a starved page receives
+  // them late.
+  const view = await scroller.evaluate(el => el.clientWidth);
+  await swipe(page, scroller, {
+    px: Math.round(view * 0.6),
+    ms: 240,
+    restMs: 100,
+    rtl: back,
+  });
   // The scene stops in the first frame where the paging holds the row past
   // `until`. A read from this process comes a round trip late, and a loaded
   // runner can miss the whole pass in that time. A settle that hands the row
@@ -430,7 +441,7 @@ test('an edge press late in a settle steps on to a stop', async ({page}) => {
   const stops = await stopsOf(scroller);
   expect(await pressInSettle(page, scroller, stops[3] * 0.9)).toBe(true);
   const at = await restingOffset(scroller);
-  // At least one stop past the flick's own target.
+  // At least one stop past the drag's own target.
   expect(at).toBeGreaterThan(stops[4] - 0.5);
   expect(Math.min(...stops.map(stop => Math.abs(stop - at)))).toBeLessThan(1);
 });
@@ -547,7 +558,7 @@ test.describe('with a finger and a mouse', () => {
   });
 });
 
-test('an edge press after a flick back near the end shows no space past the last item', async ({
+test('an edge press after a drag back near the end shows no space past the last item', async ({
   page,
 }) => {
   const {scroller} = await open(page, 'snap-paging-three-up', 'paging', {
@@ -573,7 +584,7 @@ test('an edge press after a flick back near the end shows no space past the last
     }
     return widest;
   });
-  // Once the flick back widens the overflow by its translate.
+  // Once the drag back widens the overflow by its translate.
   expect(await pressInSettle(page, scroller, stops[5] - 15, true)).toBe(true);
   expect(await space).toBeLessThan(1);
   const at = await restingOffset(scroller);

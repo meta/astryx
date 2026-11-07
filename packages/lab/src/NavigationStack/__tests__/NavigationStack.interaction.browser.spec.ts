@@ -21,7 +21,9 @@ import {
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
 import {
+  advanceFrozenPage,
   animationStoryboard,
+  armHold,
   blockMainThread,
   busyWindowProof,
   castStoryboard,
@@ -29,6 +31,7 @@ import {
   countBetween,
   drag,
   flick,
+  freezePageOn,
   freezePageWhen,
   holdAnimations,
   installPageFreeze,
@@ -451,18 +454,21 @@ const rowCenter = async (page: Page, name: string) => {
 test('a push follows UIKit’s push spring, the card underneath at 0.3 of its speed', async ({
   page,
 }, testInfo) => {
-  const {driver, width} = await openStack(page, 'settings');
+  const {driver, stack, width} = await openStack(page, 'settings');
   const top = card(page, 'screen-General');
   const under = card(page, 'root');
-  const watch = await watchAnimations(top);
-  await driver.tap(await rowCenter(page, 'General'));
-  await watch.started();
-  await holdAnimations(page, undefined, {
+  // The push moves both cards at once: with a count of 2, the row's own
+  // release fade cannot trigger the hold alone.
+  const hold = await armHold(page, stack, {
     judges: [
       {target: top, property: 'translate'},
       {target: under, property: 'translate'},
     ],
+    count: 2,
+    newOnly: true,
   });
+  await driver.tap(await rowCenter(page, 'General'));
+  await hold.held();
 
   const times = Array.from({length: 31}, (_, i) => i * 16.667);
   const samples: {t: number; top: number; under: number; analytic: number}[] =
@@ -2009,19 +2015,25 @@ test.describe('with Reduce Motion', () => {
 
   test('a push cross-fades in place instead of sliding', async ({page}) => {
     await page.emulateMedia({reducedMotion: 'reduce'});
+    await installPageFreeze(page);
     const {driver} = await openStack(page, 'settings');
+    await installTimerGate(page);
     const top = card(page, 'screen-General');
-    const watch = await watchAnimations(top);
+    // Frozen in the tap's own task, the fade starts held at its start. The
+    // scene then moves halfway into the 200 ms fade on its own clock.
+    await freezePageOn(page, 'touchend');
     await driver.tap(await rowCenter(page, 'General'));
-    await watch.started();
+    await advanceFrozenPage(page, 100);
     const midway = await top.evaluate(element => ({
       x: getComputedStyle(element).translate,
       opacity: Number(getComputedStyle(element).opacity),
     }));
+    await thawPage(page);
     await waitForRest(top);
-    // No travel: the incoming screen is already where it lands, fading in.
+    // No travel: the incoming screen is already where it lands, halfway
+    // faded in.
     expect(midway.x === 'none' || parseFloat(midway.x) === 0).toBe(true);
-    expect(midway.opacity).toBeLessThan(1);
+    expect(midway.opacity).toBeCloseTo(0.5, 1);
     expect(await translateX(top)).toBe(0);
   });
 });
@@ -2351,18 +2363,24 @@ test('the bar title’s handover keeps running while the main thread is blocked'
 });
 
 test('storyboard: a push', {tag: '@storyboard'}, async ({page}, testInfo) => {
-  const {driver, width} = await openStack(page, 'settings');
+  const {driver, stack, width} = await openStack(page, 'settings');
   const top = card(page, 'screen-General');
-  const watch = await watchAnimations(top);
-  await driver.tap(await rowCenter(page, 'General'));
-  await watch.started();
-  const viewport = page.viewportSize() ?? {width: 402, height: 714};
-  const {storyboard} = await animationStoryboard(page, {
-    name: 'navigationstack-push',
+  // The push moves both cards at once: with a count of 2, the row's own
+  // release fade cannot trigger the hold alone.
+  const hold = await armHold(page, stack, {
     judges: [
       {target: top, property: 'translate'},
       {target: card(page, 'root'), property: 'translate'},
     ],
+    count: 2,
+    newOnly: true,
+  });
+  await driver.tap(await rowCenter(page, 'General'));
+  const held = await hold.held();
+  const viewport = page.viewportSize() ?? {width: 402, height: 714};
+  const {storyboard} = await animationStoryboard(page, {
+    held,
+    name: 'navigationstack-push',
     clip: {x: 0, y: 0, width: viewport.width, height: viewport.height},
     // The spring is at rest by ~0.45 s; the animator holds end states after.
     times: Array.from({length: 28}, (_, i) => i * 16.667),
