@@ -640,7 +640,7 @@ const columns: TableColumn<TaskRow>[] = [
   {
     key: 'created',
     header: 'Created',
-    width: pixel(72),
+    width: pixel(88),
     renderCell: task => (
       <Text type="supporting" color="secondary">
         {task.created}
@@ -650,7 +650,7 @@ const columns: TableColumn<TaskRow>[] = [
   {
     key: 'updated',
     header: 'Updated',
-    width: pixel(72),
+    width: pixel(88),
     renderCell: task => (
       <Text type="supporting" color="secondary">
         {task.updated}
@@ -660,7 +660,7 @@ const columns: TableColumn<TaskRow>[] = [
   {
     key: 'assignee',
     header: 'Assignee',
-    width: pixel(52),
+    width: pixel(88),
     renderCell: task => <Avatar name={task.assignee} size="sm" />,
   },
   {
