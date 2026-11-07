@@ -863,6 +863,11 @@
       "source": "./src/internal/dialog-context.ts",
       "types": "./dist/internal/dialog-context.d.ts",
       "default": "./dist/internal/dialog-context.js"
+    },
+    "./internal/clipboard-copy": {
+      "source": "./src/internal/clipboard-copy.ts",
+      "types": "./dist/internal/clipboard-copy.d.ts",
+      "default": "./dist/internal/clipboard-copy.js"
     }
   },
   "files": [
