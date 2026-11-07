@@ -75,6 +75,8 @@ import {
   drag,
   flick,
   frames,
+  FRAME_STARVATION_MS,
+  FrameStarvationError,
   freezePage,
   freezePageOn,
   freezePageWhen,
@@ -97,6 +99,7 @@ import {
   readInputLog,
   readLongTasks,
   releaseAnimations,
+  requireFrames,
   retakeOnWheelPacing,
   sampleCurve,
   sampleRects,
@@ -1886,6 +1889,40 @@ test.describe('frame evidence', () => {
     expect(samples.at(-1)?.box?.x ?? NaN).toBeGreaterThan(
       samples[0].box?.x ?? NaN,
     );
+  });
+
+  test('a proof whose page the machine starves of frames fails by name: FrameStarvationError', async ({
+    page,
+  }) => {
+    await page.setContent(
+      '<!doctype html><div id="box" style="width:40px;height:40px;background:#000"></div>',
+    );
+    const box = page.locator('#box');
+    // On pace, a 300 ms sample holds enough frames.
+    const onPace = await sampleRects(box, 300);
+    expect(requireFrames(onPace, {min: 6, during: 'a 300 ms sample'})).toEqual(
+      onPace,
+    );
+    // Each frame now comes 100 ms after the one before, as on a starved
+    // machine.
+    await page.evaluate(() => {
+      const frame = window.requestAnimationFrame.bind(window);
+      window.requestAnimationFrame = callback => {
+        setTimeout(() => frame(callback), 100);
+        return 0;
+      };
+    });
+    const starved = await sampleRects(box, 300);
+    let outcome: unknown = 'resolved';
+    try {
+      requireFrames(starved, {min: 6, during: 'a 300 ms sample'});
+    } catch (error) {
+      outcome = error;
+    }
+    expect(outcome).toBeInstanceOf(FrameStarvationError);
+    const {numbers} = outcome as FrameStarvationError;
+    expect(numbers.frames).toBeLessThan(6);
+    expect(numbers.longestGapMs).toBeGreaterThan(FRAME_STARVATION_MS);
   });
 
   test('the trace counts no Layout for a transform animation and one per frame for `top`', async ({
