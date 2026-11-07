@@ -29,6 +29,8 @@
  * order itself, like every Astryx stylesheet, so it holds in any load order.
  * Consumer styles (unlayered) always override all Astryx layers.
  * The reset has the lowest priority and can be overridden by any other layer.
+ * One exception: the [hidden] rule's `display: none !important` beats any
+ * `display` from a later layer or an unlayered style, `!important` included.
  *
  * Similar to:
  * - Tailwind CSS Preflight
@@ -337,12 +339,16 @@
   }
 
   /*
-   * Ensure hidden elements are actually hidden. `hidden="until-found"` keeps
-   * the browser's own rendering, `content-visibility: hidden`, so find in page
-   * and text fragment links can still find its content and reveal it.
+   * Ensure hidden elements are actually hidden, whatever `display` the
+   * element's own styles set: `!important` in this lowest layer outranks
+   * every later layer and unlayered rule (an inline `!important` style, or
+   * an `!important` in a layer declared before `reset`, still wins).
+   * `hidden="until-found"` keeps the browser's own rendering,
+   * `content-visibility: hidden`, so find in page and text fragment links
+   * can still find its content and reveal it.
    */
   :where([hidden]:not([hidden='until-found' i])) {
-    display: none;
+    display: none !important;
   }
 
   /*
