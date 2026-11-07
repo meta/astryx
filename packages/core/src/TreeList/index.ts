@@ -30,5 +30,10 @@ export interface TreeListVariantMap {
 }
 
 export {TreeList} from './TreeList';
-export type {TreeListProps, TreeListDensity, TreeListVariant} from './TreeList';
+export type {
+  TreeListProps,
+  TreeListDensity,
+  TreeListVariant,
+  TreeListExpandIconState,
+} from './TreeList';
 export type {TreeListItemData} from './TreeListTypes';

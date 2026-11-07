@@ -3,7 +3,7 @@
 /**
  * @file TreeListTypes.ts
  * @input Uses React types
- * @output Exports TreeListItemData, TreeListDensity, TreeListVariant types
+ * @output Exports TreeListItemData, TreeListDensity, TreeListVariant, TreeListExpandIconState types
  * @position Type definitions; consumed by TreeList.tsx, TreeListItem.tsx, index.ts
  *
  * SYNC: When modified, update these files to stay in sync:
@@ -25,6 +25,18 @@ export type TreeListDensity = 'compact' | 'balanced' | 'spacious';
  * - `noGuides`: no connector lines; indentation alone conveys nesting
  */
 export type TreeListVariant = keyof TreeListVariantMap;
+
+/** State passed to TreeList's `renderExpandIcon` render prop. */
+export interface TreeListExpandIconState {
+  /** Whether the item is currently expanded. Always false for leaf items. */
+  isExpanded: boolean;
+
+  /** Whether the item has nested children (i.e. renders a toggle). */
+  hasChildren: boolean;
+
+  /** Whether the item is disabled. */
+  isDisabled: boolean;
+}
 
 /** Recursive item configuration for TreeList. */
 export interface TreeListItemData {

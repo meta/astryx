@@ -11,6 +11,7 @@ import {Badge} from '@astryxdesign/core/Badge';
 import {Theme, defineTheme} from '@astryxdesign/core/theme';
 import {
   FolderIcon,
+  FolderOpenIcon,
   DocumentIcon,
   Cog6ToothIcon,
   ChevronRightIcon,
@@ -143,6 +144,18 @@ export const WithIcons: Story = {
         startContent: <Icon icon={DocumentIcon} />,
       },
     ],
+  },
+};
+
+export const CustomExpandIcons: Story = {
+  args: {
+    items: fileTreeItems,
+    renderExpandIcon: ({isExpanded, hasChildren}) =>
+      hasChildren ? (
+        <Icon icon={isExpanded ? FolderOpenIcon : FolderIcon} size="sm" />
+      ) : (
+        <Icon icon={DocumentIcon} size="sm" />
+      ),
   },
 };
 
