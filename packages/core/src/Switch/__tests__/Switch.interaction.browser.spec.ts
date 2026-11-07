@@ -1994,7 +1994,10 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     };
   }
 
-  function expectCaughtWithoutAJump(samples: [number, number][]): void {
+  function expectCaughtWithoutAJump(
+    samples: [number, number][],
+    read: [number, number][] = samples,
+  ): void {
     const xs = samples.map(([, x]) => x);
     const farthest = Math.max(...xs) - xs[0];
     // It turned around mid-travel, short of the on end...
@@ -2004,14 +2007,14 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     // measured against the time its frames span. So a frame read late, two
     // vsyncs of motion in one sample, is not a jump.
     const FRAME_MS = 1000 / 60;
-    const perFrame = samples
+    const perFrame = read
       .slice(1)
       .map(
         ([time, x], i) =>
-          (Math.abs(x - samples[i][1]) * FRAME_MS) /
-          Math.max(time - samples[i][0], FRAME_MS),
+          (Math.abs(x - read[i][1]) * FRAME_MS) /
+          Math.max(time - read[i][0], FRAME_MS),
       );
-    expect(Math.max(...perFrame), JSON.stringify(samples)).toBeLessThan(4);
+    expect(Math.max(...perFrame), JSON.stringify(read)).toBeLessThan(4);
   }
 
   test('P14 · a second tap mid-travel catches the thumb where it is and sends it back, without a jump', async ({
@@ -2043,7 +2046,12 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     const samples = await record.stop(scene);
     await expect(input).not.toBeChecked();
     expect(await thumbOffset(page)).toBeCloseTo(0, 0);
-    expectCaughtWithoutAJump(samples.filter((_, index) => index % 3 === 0));
+    // The turn is part of the scene, so every frame reads it. A frame in three
+    // can miss it. Only the jump check reads one frame in three.
+    expectCaughtWithoutAJump(
+      samples,
+      samples.filter((_, index) => index % 3 === 0),
+    );
   });
 
   /** The side of the marker on the thumb, px (`markElement`). */
