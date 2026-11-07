@@ -63,7 +63,6 @@ function nodesOfType(type: string): Array<Record<string, unknown>> {
 }
 
 const resizeCallbacks = new Map<Element, () => void>();
-
 beforeEach(() => {
   vi.spyOn(HTMLElement.prototype, 'showPopover').mockImplementation(function (
     this: HTMLElement,
@@ -125,14 +124,11 @@ afterEach(() => {
 });
 
 describe('theme-showcase source contract', () => {
-  it('uses Astryx instead of raw layout, text and icon markup', () => {
+  it('keeps source, metadata and checked-in assets on Astryx conventions', () => {
     const tags = nodesOfType('JSXOpeningElement')
       .map(node => (node.name as {name?: string})?.name)
       .filter(Boolean) as string[];
     expect(tags.filter(tag => /^[a-z]/.test(tag))).toEqual(['img', 'img']);
-  });
-
-  it('keeps only the justified body paint, wrapping and chat-height styles', () => {
     const declaration = nodesOfType('VariableDeclarator').find(
       value => (value.id as {name?: string})?.name === 'styles',
     );
@@ -152,9 +148,6 @@ describe('theme-showcase source contract', () => {
     expect(source).not.toContain('stylex.create');
     expect(source).not.toContain('className=');
     expect(source).not.toContain('Track →');
-  });
-
-  it('describes the actual shell and keeps the preview hidden from the gallery', () => {
     expect(doc.type).toBe('page');
     expect(doc.displayName).toBe('Theme Showcase');
     expect(doc.category).toBe('Shell - Top Nav');
@@ -162,9 +155,6 @@ describe('theme-showcase source contract', () => {
     expect(doc.isReady).toBe(true);
     expect(doc.description).toContain('comparison shell');
     expect(doc.description).toContain('embeddable');
-  });
-
-  it('uses checked-in demo assets and component-owned media fitting', () => {
     const images = [...source.matchAll(/'(\/template-assets\/[^']+)'/g)].map(
       match => match[1],
     );
@@ -182,26 +172,34 @@ describe('theme-showcase source contract', () => {
 });
 
 describe('theme-showcase local interactions', () => {
-  it('keeps the standalone shell separate from the embedded themed preview', () => {
+  it('keeps standalone and embedded previews accessible and aligned', () => {
     const view = render(<ThemeShowcase />);
+    expect(screen.getByRole('heading', {level: 1})).toHaveAttribute(
+      'data-type',
+      'display-2',
+    );
     expect(view.container.querySelectorAll('.astryx-app-shell')).toHaveLength(
       1,
     );
     view.rerender(
       <div data-themes-card-preview>
+        <h1>Host page</h1>
         <ThemeShowcaseStore />
       </div>,
     );
     expect(view.container.querySelectorAll('.astryx-app-shell')).toHaveLength(
       0,
     );
+    expect(screen.getAllByRole('heading', {level: 1})).toHaveLength(1);
+    expect(
+      screen.getByRole('heading', {level: 2, name: /Little joys/}),
+    ).toHaveAttribute('data-type', 'display-2');
     const navigation = screen.getByRole('navigation', {
       name: 'Theme preview navigation',
     });
     const preview = navigation.closest<HTMLElement>(
       '[data-theme-preview="true"]',
     );
-    expect(preview).not.toBeNull();
     expect(preview?.style.backgroundColor).toBe('var(--color-background-body)');
     expect(preview).toContainElement(screen.getByText('Little joys,'));
 
@@ -213,21 +211,15 @@ describe('theme-showcase local interactions', () => {
       .match(/^\[data-themes-card-preview\][^{]+\{/m)?.[0]
       .replace(/\{$/, '')
       .trim();
-    expect(selector).toBeDefined();
     expect(navigation.matches(selector!)).toBe(true);
     const chatHeader = screen
       .getByRole('heading', {name: 'Studio AI'})
       .closest<HTMLElement>('.astryx-layout-header')!;
-    expect(chatHeader).not.toBeNull();
     expect(chatHeader.matches(selector!)).toBe(false);
     expect(chatHeader.parentElement?.matches(selector!)).toBe(false);
     expect(
       view.container.querySelectorAll('[data-theme-preview="true"]'),
     ).toHaveLength(1);
-  });
-
-  it('keeps the inventory and checkout rows inside matching stack boundaries', () => {
-    render(<ThemeShowcaseStore />);
     const checkoutRow = screen
       .getByRole('heading', {name: 'Checkout'})
       .closest('.astryx-stack-item')?.parentElement;
@@ -235,6 +227,7 @@ describe('theme-showcase local interactions', () => {
       .getByRole('table')
       .closest('.astryx-stack-item')?.parentElement;
     expect(checkoutRow).toHaveClass('astryx-stack');
+    expect((checkoutRow?.children[1] as HTMLElement).style.maxHeight).toBe('');
     expect(inventoryRow).toHaveClass('astryx-stack');
     expect(inventoryRow).not.toHaveClass('astryx-layout');
     const activity = screen
@@ -244,10 +237,6 @@ describe('theme-showcase local interactions', () => {
     expect(activity.style.height).toBe('');
     expect(getComputedStyle(activity).width).toBe('280px');
     expect(getComputedStyle(activity).flexShrink).toBe('0');
-  });
-
-  it('keeps wrapped product descriptions block-level and centered', () => {
-    render(<ThemeShowcaseStore />);
     const description = screen.getByText(
       'Water-resistant canvas with a quiet, modern profile.',
     );
@@ -418,6 +407,7 @@ describe('theme-showcase local interactions', () => {
     const viewport = screen.getByLabelText(
       'Studio AI conversation',
     ) as HTMLElement;
+    expect(viewport.style.maxHeight).toBe('720px');
     Object.defineProperties(viewport, {
       clientHeight: {configurable: true, value: 200},
       scrollHeight: {configurable: true, value: 900},

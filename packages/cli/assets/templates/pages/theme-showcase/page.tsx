@@ -72,12 +72,13 @@ import {
   useChatStreamScroll,
 } from '@astryxdesign/core/Chat';
 
-// StackItem has no wrapping basis or height cap; Stack has no body variant.
-// Keep the card proportions, bounded chat viewport and themed preview paint.
+// StackItem has no wrapping basis; Stack has no body variant.
+// LayoutContent has no height cap; keep the message viewport bounded.
 const styles: Record<string, CSSProperties> = {
   preview: {backgroundColor: 'var(--color-background-body)'},
   checkoutColumn: {flex: '1 1 300px'},
-  chatColumn: {flex: '2 1 520px', maxHeight: 720},
+  chatColumn: {flex: '2 1 520px'},
+  chatViewport: {maxHeight: 720},
 };
 
 const PRODUCT_IMAGE_KEYS = ['watch', 'headphones', 'backpack'];
@@ -148,7 +149,7 @@ export default function ThemeShowcase() {
       contentPadding={0}
       data-theme-preview="true"
       topNav={<ShowcaseNavigation />}>
-      <ShowcaseContent />
+      <ShowcaseContent headingLevel={1} />
     </AppShell>
   );
 }
@@ -167,13 +168,18 @@ function ShowcaseContent({
   images = DEFAULT_IMAGES,
   products = DEFAULT_PRODUCTS,
   inventory = DEFAULT_INVENTORY,
-}: ThemeShowcaseProps = {}) {
+  headingLevel = 2,
+}: ThemeShowcaseProps & {headingLevel?: 1 | 2} = {}) {
   const {isMobile} = useAppShellMobile();
   return (
     <Layout height="auto" padding={0}>
       <LayoutContent padding={0} isScrollable={false}>
         <VStack gap={0}>
-          <StorePreview images={images} products={products} />
+          <StorePreview
+            images={images}
+            products={products}
+            headingLevel={headingLevel}
+          />
           <Section padding={6} variant="transparent">
             <CardShowcase
               images={images}
@@ -280,9 +286,11 @@ function CardShowcase({
 function StorePreview({
   images,
   products,
+  headingLevel,
 }: {
   images: Record<string, string>;
   products: ProductSpec[];
+  headingLevel: 1 | 2;
 }) {
   return (
     <Section padding={6} variant="transparent">
@@ -292,6 +300,7 @@ function StorePreview({
             <VStack gap={4} hAlign="center" maxWidth={560}>
               <Heading
                 level={1}
+                accessibilityLevel={headingLevel}
                 type="display-2"
                 color="accent"
                 justify="center">
@@ -655,6 +664,7 @@ function ChatCard() {
         }>
         <LayoutContent
           ref={scrollRef}
+          style={styles.chatViewport}
           padding={0}
           label="Studio AI conversation">
           <ChatMessageList ref={contentRef}>
