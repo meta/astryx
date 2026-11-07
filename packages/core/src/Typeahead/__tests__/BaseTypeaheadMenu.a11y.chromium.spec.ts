@@ -1,0 +1,110 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y scope ^(packages/core/src/Typeahead/|packages/core/src/Tokenizer/|packages/core/src/Popover/|apps/storybook/stories/BaseTypeahead)
+
+/**
+ * @file BaseTypeaheadMenu.a11y.chromium.spec.ts
+ * @input The `Core/BaseTypeahead` Menu story in a built Storybook, in Chromium.
+ * @output Real-browser proof of component:BaseTypeahead FR13–FR16: the arrow
+ *   keys move through the listbox menu's options with information around it,
+ *   a pick switches the same open layer to a named dialog that takes focus,
+ *   and closing the dialog returns focus to the element that opened it.
+ * @position Runs in pr-a11y when Typeahead, Tokenizer, Popover or this story
+ *   changes. jsdom has no top layer and no real focus movement on close.
+ */
+
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
+import {
+  DEFAULT_STORYBOOK_DIR,
+  serveStorybook,
+  type StaticServer,
+} from '@astryxdesign/a11y-spec/storybook';
+
+const STORY = 'core-basetypeahead--menu';
+
+let storybook: StaticServer;
+
+test.beforeAll(async () => {
+  storybook = await serveStorybook(DEFAULT_STORYBOOK_DIR);
+});
+
+test.afterAll(async () => {
+  await storybook?.close();
+});
+
+async function openStory(page: Page) {
+  await page.goto(`${storybook.origin}/iframe.html?id=${STORY}&viewMode=story`);
+  const input = page.getByRole('combobox', {name: 'Add a filter'});
+  await expect(input).toBeVisible();
+  return input;
+}
+
+test('the arrow keys move through the options, with information around the list', async ({
+  page,
+}) => {
+  const input = await openStory(page);
+  await input.click();
+  await expect(page.getByRole('listbox')).toBeVisible();
+  await expect(page.getByText('Filter by')).toBeVisible();
+  await expect(page.getByText('Arrow keys move, Enter picks')).toBeVisible();
+
+  const active = async () =>
+    page.evaluate(() => {
+      const field = document.querySelector('[role="combobox"]');
+      const id = field?.getAttribute('aria-activedescendant');
+      return id == null ? null : document.getElementById(id)?.textContent;
+    });
+  await expect.poll(active).toContain('Status');
+  await input.press('ArrowDown');
+  await expect.poll(active).toContain('Priority');
+  await input.press('ArrowDown');
+  await expect.poll(active).toContain('Owner');
+  // Focus never left the input.
+  await expect(input).toBeFocused();
+});
+
+test('a pick switches the open layer to a named dialog that takes focus', async ({
+  page,
+}) => {
+  const input = await openStory(page);
+  await input.click();
+  await input.press('ArrowDown');
+  // The menu's layer: the open popover that holds the result list.
+  const layer = page.locator('[popover]:popover-open:has([role="listbox"])');
+  await expect(layer).toHaveCount(1);
+  const layerId = await layer.getAttribute('id');
+
+  await input.press('Enter');
+
+  const dialog = page.getByRole('dialog', {name: 'Priority filter'});
+  await expect(dialog).toBeVisible();
+  // The same layer now holds the dialog: it never closed in between.
+  await expect(
+    page.locator('[popover]:popover-open:has([role="dialog"])'),
+  ).toHaveAttribute('id', layerId ?? '');
+  await expect(input).toHaveAttribute('aria-haspopup', 'dialog');
+  await expect(dialog.getByRole('radio', {name: 'High'})).toBeFocused();
+});
+
+test('Escape returns focus to the filter button that opened the dialog', async ({
+  page,
+}) => {
+  const input = await openStory(page);
+  await input.click();
+  await input.press('Enter');
+  await page
+    .getByRole('dialog', {name: 'Status filter'})
+    .getByRole('button', {name: 'Apply'})
+    .click();
+  const filter = page.getByRole('button', {name: 'Status: Open'});
+  await expect(filter).toBeVisible();
+
+  await filter.focus();
+  await filter.press('Enter');
+  const dialog = page.getByRole('dialog', {name: 'Status filter'});
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('radio', {name: 'Open'})).toBeFocused();
+  await page.keyboard.press('Escape');
+
+  await expect(dialog).toBeHidden();
+  await expect(filter).toBeFocused();
+});

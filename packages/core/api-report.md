@@ -112,6 +112,7 @@ component BaseTypeahead(props: BaseTypeaheadProps)
   prop ariaLabelledBy?: string
   prop debounceMs?: number = 150
   prop emptySearchText?: ReactNode = 'No results found'
+  prop handleRef?: React.Ref<BaseTypeaheadHandle>
   prop hasAutoFocus?: boolean = false
   prop hasEntriesOnFocus?: boolean = false
   prop inputId?: string
@@ -120,6 +121,7 @@ component BaseTypeahead(props: BaseTypeaheadProps)
   prop isDisabled?: boolean = false
   prop isFocusableDisabled?: boolean = false
   prop maxMenuItems?: number = 10
+  prop menu?: BaseTypeaheadMenu
   prop menuWidth?: number
   prop minQueryLength?: number = 1 — every non-empty query is searched.
   prop onChange: (item: T | null) => void
@@ -2655,6 +2657,7 @@ component Tokenizer(props: TokenizerProps)
   prop labelTooltip?: string
   prop maxEntries?: number
   prop maxMenuItems?: number = 10
+  prop menu?: BaseTypeaheadMenu
   prop menuWidth?: number
   prop minQueryLength?: number = 1
   prop onBlur?: (e: React.FocusEvent) => void
@@ -2662,6 +2665,7 @@ component Tokenizer(props: TokenizerProps)
   prop onChangeQuery?: (query: string) => void
   prop onFocus?: (e: React.FocusEvent) => void
   prop onKeyDown?: React.KeyboardEventHandler<HTMLElement>
+  prop onOpenChange?: (isOpen: boolean) => void
   prop placeholder?: string
   prop presentation?: TokenizerPresentation = 'adaptive'
   prop ref?: React.Ref<HTMLInputElement>
@@ -2806,6 +2810,7 @@ component Typeahead(props: TypeaheadProps)
   prop description?: string
   prop disabledMessage?: string
   prop emptySearchText?: ReactNode = 'No results found'
+  prop handleRef?: React.Ref<BaseTypeaheadHandle>
   prop hasAutoFocus?: boolean = false
   prop hasClear?: boolean = true
   prop hasEntriesOnFocus?: boolean = false
@@ -2816,6 +2821,7 @@ component Typeahead(props: TypeaheadProps)
   prop label: string
   prop labelTooltip?: string
   prop maxMenuItems?: number = 10
+  prop menu?: BaseTypeaheadMenu
   prop minQueryLength?: number = 1
   prop onChange: (item: T | null) => void
   prop onChangeQuery?: (query: string) => void
@@ -3633,6 +3639,19 @@ interface BaseTableProps<T extends Record<string, unknown>> extends BaseProps<HT
   textOverflow?: 'wrap' | 'truncate' = 'wrap'
   xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
+interface BaseTypeaheadDialogMenuInfo
+  close: () => void
+  query: string
+interface BaseTypeaheadHandle
+  close: () => void
+  open: () => void
+interface BaseTypeaheadListboxMenuInfo
+  close: () => void
+  hasNoResults: boolean
+  isBusy: boolean
+  listbox: ReactNode
+  query: string
+type BaseTypeaheadMenu = { role: 'listbox'; render?: (info: BaseTypeaheadListboxMenuInfo) => ReactNode } | { role: 'dialog'; label: string; render: (info: BaseTypeaheadDialogMenuInfo) => ReactNode }
 interface BaseTypeaheadProps<T extends SearchableItem> extends Omit<BaseProps<HTMLElement>, 'onChange'> (props of BaseTypeahead)
 type BlockNode<Extension extends MarkdownExtensionNode = never> = LegacyBlockNodeKind<Extension> & BlockMetadata
 type BlockNodeWithMath<Extension extends MarkdownExtensionNode = never> = MathEnabledBlockNodeKind<Extension> & BlockMetadata
@@ -5731,7 +5750,9 @@ type TokenValue = string | [light: string, dark: string]
 type TokenizerChange<T extends SearchableItem> = { item: T; type: 'add' } | { item: T; type: 'create' } | { item: T; type: 'remove' } | { type: 'reorder' }
 interface TokenizerHandle
   blur: () => void
+  close: () => void
   focus: () => void
+  open: () => void
 type TokenizerOverflowBehavior = 'none' | 'unfocusedInline' | 'unfocusedLayer'
 type TokenizerPresentation = AdaptivePresentation
 interface TokenizerProps<T extends SearchableItem> extends Omit<FieldInputBaseProps<HTMLInputElement>, 'onChange' | 'onFocus' | 'onBlur' | 'onKeyDown'> (props of Tokenizer)
@@ -9083,6 +9104,10 @@ TreeListVariantMap (.)
 
 ```text
 BaseTypeahead (.)
+BaseTypeaheadDialogMenuInfo (.)
+BaseTypeaheadHandle (.)
+BaseTypeaheadListboxMenuInfo (.)
+BaseTypeaheadMenu (.)
 BaseTypeaheadProps (.)
 CreateStaticSourceOptions (.)
 SearchContext (.)

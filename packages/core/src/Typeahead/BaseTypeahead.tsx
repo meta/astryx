@@ -24,6 +24,7 @@ import React, {
   useCallback,
   useEffect,
   useId,
+  useImperativeHandle,
   useInsertionEffect,
   useMemo,
   useRef,
@@ -74,6 +75,7 @@ import type {SearchContext, SearchableItem, SearchSource} from './types';
 import {themeProps} from '../utils/themeProps';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
 import {clampInlineSize} from '../Layer/clampInlineSize';
@@ -88,6 +90,63 @@ registerEnglishFallback(english);
 // =============================================================================
 // Types
 // =============================================================================
+
+/** What a listbox-role menu's `render` receives. */
+export interface BaseTypeaheadListboxMenuInfo {
+  /** The result list. Render it once; the arrow keys move through it. */
+  listbox: ReactNode;
+  /** The query in the input. */
+  query: string;
+  /** Whether a search or focus load is running. */
+  isBusy: boolean;
+  /** Whether the last search for the query found nothing. */
+  hasNoResults: boolean;
+  /** Closes the menu. */
+  close: () => void;
+}
+
+/** What a dialog-role menu's `render` receives. */
+export interface BaseTypeaheadDialogMenuInfo {
+  /** The query in the input. */
+  query: string;
+  /** Closes the menu and returns focus to where it was when it opened. */
+  close: () => void;
+}
+
+/**
+ * What the typeahead's menu shows. Astryx owns the menu's layer: its
+ * position, top layer, outside press, Escape, focus return, and the ARIA that
+ * ties it to the input. The caller only fills it.
+ *
+ * - `listbox`: the result list, with focus kept in the input. `render` may
+ *   put information around the list, such as a header or a hint. Anything a
+ *   person acts on goes in the list as a result, so the arrow keys reach it.
+ * - `dialog`: content that takes focus, named by `label`. Switching from
+ *   `listbox` to `dialog` keeps the menu open on the same anchor.
+ */
+export type BaseTypeaheadMenu =
+  | {
+      role: 'listbox';
+      render?: (info: BaseTypeaheadListboxMenuInfo) => ReactNode;
+    }
+  | {
+      role: 'dialog';
+      /** The dialog's accessible name. */
+      label: string;
+      render: (info: BaseTypeaheadDialogMenuInfo) => ReactNode;
+    };
+
+/** Imperative handle for BaseTypeahead `handleRef`. */
+export interface BaseTypeaheadHandle {
+  /**
+   * Opens the menu. A dialog-role menu opens at once; a listbox-role menu
+   * shows its results, loading them first if needed. Called from `onChange`,
+   * it keeps the menu open through the pick.
+   */
+  open(): void;
+  /** Closes the menu. */
+  close(): void;
+}
 
 export interface BaseTypeaheadProps<T extends SearchableItem> extends Omit<
   BaseProps<HTMLElement>,
@@ -193,9 +252,20 @@ export interface BaseTypeaheadProps<T extends SearchableItem> extends Omit<
   onChangeQuery?: (query: string) => void;
 
   /**
-   * Callback when dropdown opens/closes.
+   * Callback when dropdown opens/closes. It reports changes only; drive the
+   * menu with `handleRef`.
    */
   onOpenChange?: (isOpen: boolean) => void;
+
+  /**
+   * What the menu shows: the result list (`role: 'listbox'`, the default),
+   * optionally with information around it, or content that takes focus
+   * (`role: 'dialog'`). See {@link BaseTypeaheadMenu}.
+   */
+  menu?: BaseTypeaheadMenu;
+
+  /** Imperative handle to open and close the menu. */
+  handleRef?: React.Ref<BaseTypeaheadHandle>;
 
   /**
    * Entries derived from the query text rather than fetched for it — today,
@@ -345,6 +415,16 @@ const styles = stylex.create({
   popoverCustomWidth: (width: string) => ({
     width,
   }),
+  // A dialog-role menu sizes to its content, capped like any layer.
+  dialog: {
+    boxSizing: 'border-box',
+    maxHeight: stylex.firstThatWorks(
+      `calc(${layerViewportInset.maxBlockSize})`,
+      `calc(${layerViewportInset.maxBlockSizeFallback})`,
+    ),
+    overflowY: 'auto',
+    outline: 'none',
+  },
   groupHeading: {
     paddingInline: spacingVars['--spacing-2'],
     paddingBlockStart: spacingVars['--spacing-2'],
@@ -526,6 +606,8 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   hasAutoFocus = false,
   onChangeQuery,
   onOpenChange,
+  menu,
+  handleRef,
   __queryEntries,
   inputId: externalInputId,
   ariaDescribedBy,
@@ -843,6 +925,15 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // the same event that opened the list still reload it.
   const isShowingRef = useRef(false);
 
+  // Set by the handle's `open()`. A pick reads it to keep the menu open, and
+  // the open itself runs after the commit, so it uses the menu the caller
+  // rendered in the same event (a token press that switches to a dialog).
+  const openRequestedRef = useRef(false);
+  const [openRequest, setOpenRequest] = useState(0);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  // Whether focus entered the dialog-role menu since it opened.
+  const dialogHadFocusRef = useRef(false);
+
   // Layer for dropdown. The list is a manual popover (see usePopover below):
   // while it is open, a press on the combobox itself (its input or its
   // buttons) or in the list is inside, and a press anywhere else closes it
@@ -905,6 +996,19 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // (see pointerActiveRef).
   // Read at show time, so a search or bootstrap that settles after the field
   // became disabled does not open the list (spec:AST-085 FR2).
+  const isDialogMenu = menu?.role === 'dialog';
+  // A dialog-role menu holds the person's focus, so the list's own reasons
+  // to close (an empty query, an empty load, a blur of the input) do not
+  // close it. Read at close time, like `isDisabledRef`.
+  const isDialogMenuRef = useRef(isDialogMenu);
+  useIsomorphicLayoutEffect(() => {
+    isDialogMenuRef.current = isDialogMenu;
+  }, [isDialogMenu]);
+  const hideList = useCallback(() => {
+    if (!isDialogMenuRef.current) {
+      popover.hide();
+    }
+  }, [popover]);
   const isDisabledRef = useRef(isDisabled);
   useIsomorphicLayoutEffect(() => {
     isDisabledRef.current = isDisabled;
@@ -1147,7 +1251,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         shown.length === 0 &&
         highlightedIndex === -1
       ) {
-        popover.hide();
+        hideList();
         return;
       }
       setHeldHeight(null);
@@ -1156,7 +1260,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       if (bootstrapResults.length > 0) {
         showLayer();
       } else {
-        popover.hide();
+        hideList();
       }
     },
     [
@@ -1165,7 +1269,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       results.length,
       showLayer,
       replaceResults,
-      popover,
+      hideList,
     ],
   );
 
@@ -1230,7 +1334,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       return;
     }
     if (isAtCommitLimit) {
-      popover.hide();
+      hideList();
       return;
     }
     if (!isShowingRef.current && !hadPendingSearch) {
@@ -1243,7 +1347,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       return;
     }
     if (!hasEntriesOnFocus || (results.length === 0 && !hadPendingSearch)) {
-      popover.hide();
+      hideList();
       return;
     }
     void performBootstrap();
@@ -1256,7 +1360,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     results.length,
     performSearch,
     performBootstrap,
-    popover,
+    hideList,
   ]);
   // The latest reload, read when the key changes, as an effect event.
   const reloadForCommittedChoicesRef = useRef(reloadForCommittedChoices);
@@ -1317,7 +1421,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         if (derived.length > 0) {
           showLayer();
         } else {
-          popover.hide();
+          hideList();
         }
         return;
       }
@@ -1348,7 +1452,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       showLayer,
       performSearch,
       performBootstrap,
-      popover,
+      hideList,
       debounceMs,
       searchSource,
       announce,
@@ -1379,7 +1483,12 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         searchTimeoutRef.current = null;
       }
       searchSource.cancel?.();
+      // A caller that opens the menu from `onChange` (to switch it to a
+      // dialog, say) keeps it open through the pick, so it does not flicker.
+      openRequestedRef.current = false;
       onChange(item);
+      const keepsMenuOpen = openRequestedRef.current;
+      openRequestedRef.current = false;
       setQuery('');
       // The pick empties the input, which is a change to the query like any
       // typed one. A query that was already empty (a pick from the focus list)
@@ -1394,6 +1503,9 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       // clear this itself. Selecting a stale result while the next search is
       // still in flight would otherwise leave the field spinning.
       setLoading(false);
+      if (keepsMenuOpen) {
+        return;
+      }
       popover.hide();
       inputRef.current?.focus();
     },
@@ -1488,7 +1600,8 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // input, so this only closes on a genuine focus-out of the whole field.
   const handleBlur = useCallback(
     (e: React.FocusEvent<HTMLInputElement>) => {
-      if (!popover.isOpen) {
+      // A dialog-role menu takes focus from the input, so a blur keeps it.
+      if (!popover.isOpen || isDialogMenuRef.current) {
         return;
       }
       const anchorEl = anchorRef?.current ?? fallbackAnchorRef.current;
@@ -1573,6 +1686,16 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         return;
       }
 
+      // A dialog-role menu has no options for the input to move through, so
+      // the input only closes it.
+      if (isDialogMenu) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          popover.hide();
+        }
+        return;
+      }
+
       switch (e.key) {
         case 'ArrowDown':
           e.preventDefault();
@@ -1628,6 +1751,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     },
     [
       isDisabled,
+      isDialogMenu,
       popover,
       results,
       displayedResults,
@@ -1641,6 +1765,137 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       externalOnKeyDown,
     ],
   );
+
+  // The handle's listbox open: show current results, or load them.
+  const openListbox = useCallback(() => {
+    const hasResultsFromCurrentSource =
+      results.length > 0 && resultsGenRef.current >= sourceGenRef.current;
+    const isQueryBelowMinLength = isBelowMinQueryLength(query, minQueryLength);
+    if (hasResultsFromCurrentSource) {
+      showLayer();
+    } else if (query.length > 0 && !isQueryBelowMinLength) {
+      void performSearch(query);
+    } else if (hasEntriesOnFocus && !isQueryBelowMinLength) {
+      void performBootstrap();
+    }
+  }, [
+    results.length,
+    query,
+    minQueryLength,
+    hasEntriesOnFocus,
+    showLayer,
+    performSearch,
+    performBootstrap,
+  ]);
+
+  useImperativeHandle(
+    handleRef,
+    () => ({
+      open() {
+        openRequestedRef.current = true;
+        setOpenRequest(request => request + 1);
+      },
+      close() {
+        popover.hide();
+      },
+    }),
+    [popover],
+  );
+
+  const handledOpenRequestRef = useRef(openRequest);
+  useIsomorphicLayoutEffect(() => {
+    if (handledOpenRequestRef.current === openRequest) {
+      return;
+    }
+    handledOpenRequestRef.current = openRequest;
+    if (isDisabled || popover.isOpen) {
+      return;
+    }
+    if (isDialogMenu) {
+      showLayer();
+    } else {
+      openListbox();
+    }
+  }, [
+    openRequest,
+    isDisabled,
+    popover.isOpen,
+    isDialogMenu,
+    showLayer,
+    openListbox,
+  ]);
+
+  // A dialog-role menu takes focus when it opens or when the menu switches
+  // to it: its first control, or the dialog itself.
+  useEffect(() => {
+    if (!popover.isOpen || !isDialogMenu) {
+      return;
+    }
+    const frame = requestAnimationFrame(() => {
+      const dialog = dialogRef.current;
+      if (
+        dialog == null ||
+        dialog.contains(dialog.ownerDocument.activeElement)
+      ) {
+        return;
+      }
+      const target =
+        dialog.querySelector<HTMLElement>('[autofocus]') ??
+        dialog.querySelector<HTMLElement>(FOCUSABLE_SELECTOR) ??
+        dialog;
+      target.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [popover.isOpen, isDialogMenu]);
+
+  // After a dialog-role menu closes, the popover returns focus to the element
+  // focused when it opened. When that element is gone, focus goes to the
+  // input instead of the page.
+  useEffect(() => {
+    if (popover.isOpen || !dialogHadFocusRef.current) {
+      return;
+    }
+    dialogHadFocusRef.current = false;
+    const input = inputRef.current;
+    if (input == null) {
+      return;
+    }
+    const doc = input.ownerDocument;
+    const active = doc.activeElement;
+    const layer = doc.getElementById(popover.id);
+    if (
+      active == null ||
+      active === doc.body ||
+      !active.isConnected ||
+      (layer?.contains(active) ?? false)
+    ) {
+      input.focus();
+    }
+  }, [popover.isOpen, popover.id]);
+
+  // A listbox-role menu's content outside the list is information only:
+  // anything a person acts on must be a result, so the arrow keys reach it.
+  useEffect(() => {
+    if (!popover.isOpen || menu?.role !== 'listbox' || menu.render == null) {
+      return;
+    }
+    const list = dropdownRef.current;
+    const layer = list?.closest<HTMLElement>('[popover]');
+    if (list == null || layer == null) {
+      return;
+    }
+    const outsideList = Array.from(
+      layer.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+    ).filter(element => !list.contains(element));
+    if (outsideList.length > 0) {
+      warnOnce(
+        'base-typeahead:menu-control-outside-list',
+        'BaseTypeahead',
+        'A listbox menu renders a control outside the result list. The arrow ' +
+          'keys cannot reach it: make it a result in the list instead.',
+      );
+    }
+  });
 
   // Option ids follow the item, not the row, so the active descendant keeps
   // naming the same option while rows are added after it and a screen reader
@@ -1696,6 +1951,123 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     };
   }, []);
 
+  const listbox = (
+    <div
+      ref={dropdownRef}
+      id={listboxId}
+      role="listbox"
+      aria-label={t('@astryx.typeahead.searchResults')}
+      {...mergeProps(
+        themeProps('typeahead-dropdown'),
+        stylex.props(
+          styles.dropdown,
+          heldHeight != null && styles.dropdownHeld(heldHeight),
+        ),
+      )}>
+      {results.length === 0 && hasSearched && !isSearchPending ? (
+        <div
+          ref={emptyStateRef}
+          role="option"
+          aria-disabled="true"
+          {...mergeProps(
+            themeProps('typeahead-empty-state'),
+            stylex.props(styles.emptyState),
+          )}>
+          {emptySearchText}
+        </div>
+      ) : (
+        (() => {
+          let flatIndex = 0;
+          const renderOption = (item: T) => {
+            const index = flatIndex++;
+            const itemKey = getKey(item.id, index);
+            const isSelected = itemKey === selectedKey;
+            return (
+              <div
+                key={itemKey}
+                id={getItemId(index)}
+                role="option"
+                aria-selected={isSelected}
+                tabIndex={-1}
+                onClick={() => handleSelect(item)}
+                // Highlight follows pointer movement, not pointer
+                // presence: a menu that opens or reflows under a resting
+                // pointer keeps its keyboard highlight, so Enter acts on
+                // the option the user was shown, not the one that
+                // happened to appear under the cursor.
+                onMouseMove={() => highlightOnHover(index)}
+                {...stylex.props(
+                  styles.item,
+                  itemSizeStyles[size],
+                  index === highlightedIndex && styles.itemHighlighted,
+                  isSelected && styles.itemSelected,
+                )}>
+                <span {...stylex.props(styles.itemContent)}>
+                  {renderItem ? (
+                    renderItem(item)
+                  ) : (
+                    <TypeaheadItem item={item} xstyle={styles.defaultItem} />
+                  )}
+                </span>
+                {isSelected && <Icon icon="check" size="sm" color="primary" />}
+              </div>
+            );
+          };
+
+          const sourceEnd = results.length - queryEntryCount;
+          const grouped = groupItems(results.slice(0, sourceEnd), {
+            ungroupedFirst: true,
+          }).map(group => {
+            const options = group.items.map(renderOption);
+            if (group.heading == null) {
+              return options;
+            }
+            return (
+              <div
+                key={`group-${group.heading}`}
+                role="group"
+                aria-label={group.heading}>
+                <div aria-hidden="true" {...stylex.props(styles.groupHeading)}>
+                  {group.heading}
+                </div>
+                {options}
+              </div>
+            );
+          });
+          // Entries derived from the typed text follow every group
+          // (spec:AST-092 FR1).
+          return [...grouped, ...results.slice(sourceEnd).map(renderOption)];
+        })()
+      )}
+    </div>
+  );
+  const closeMenu = () => popover.hide();
+  let menuContent: ReactNode = listbox;
+  if (menu?.role === 'dialog') {
+    menuContent = (
+      <div
+        ref={dialogRef}
+        id={listboxId}
+        role="dialog"
+        aria-label={menu.label}
+        tabIndex={-1}
+        onFocus={() => {
+          dialogHadFocusRef.current = true;
+        }}
+        {...stylex.props(styles.dialog)}>
+        {menu.render({query, close: closeMenu})}
+      </div>
+    );
+  } else if (menu?.render != null) {
+    menuContent = menu.render({
+      listbox,
+      query,
+      isBusy: isLoading,
+      hasNoResults: results.length === 0 && hasSearched && !isSearchPending,
+      close: closeMenu,
+    });
+  }
+
   return (
     <>
       <input
@@ -1706,8 +2078,10 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         role="combobox"
         aria-expanded={popover.isOpen}
         aria-controls={listboxId}
+        aria-haspopup={isDialogMenu ? 'dialog' : undefined}
         aria-activedescendant={
           popover.isOpen &&
+          !isDialogMenu &&
           highlightedIndex >= 0 &&
           highlightedIndex < results.length
             ? getItemId(highlightedIndex)
@@ -1786,121 +2160,21 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
           </SpinnerOwnerContext>
         </span>
       )}
-      {popover.render(
-        <div
-          ref={dropdownRef}
-          id={listboxId}
-          role="listbox"
-          aria-label={t('@astryx.typeahead.searchResults')}
-          {...mergeProps(
-            themeProps('typeahead-dropdown'),
-            stylex.props(
-              styles.dropdown,
-              heldHeight != null && styles.dropdownHeld(heldHeight),
-            ),
-          )}>
-          {results.length === 0 && hasSearched && !isSearchPending ? (
-            <div
-              ref={emptyStateRef}
-              role="option"
-              aria-disabled="true"
-              {...mergeProps(
-                themeProps('typeahead-empty-state'),
-                stylex.props(styles.emptyState),
-              )}>
-              {emptySearchText}
-            </div>
-          ) : (
-            (() => {
-              let flatIndex = 0;
-              const renderOption = (item: T) => {
-                const index = flatIndex++;
-                const itemKey = getKey(item.id, index);
-                const isSelected = itemKey === selectedKey;
-                return (
-                  <div
-                    key={itemKey}
-                    id={getItemId(index)}
-                    role="option"
-                    aria-selected={isSelected}
-                    tabIndex={-1}
-                    onClick={() => handleSelect(item)}
-                    // Highlight follows pointer movement, not pointer
-                    // presence: a menu that opens or reflows under a resting
-                    // pointer keeps its keyboard highlight, so Enter acts on
-                    // the option the user was shown, not the one that
-                    // happened to appear under the cursor.
-                    onMouseMove={() => highlightOnHover(index)}
-                    {...stylex.props(
-                      styles.item,
-                      itemSizeStyles[size],
-                      index === highlightedIndex && styles.itemHighlighted,
-                      isSelected && styles.itemSelected,
-                    )}>
-                    <span {...stylex.props(styles.itemContent)}>
-                      {renderItem ? (
-                        renderItem(item)
-                      ) : (
-                        <TypeaheadItem
-                          item={item}
-                          xstyle={styles.defaultItem}
-                        />
-                      )}
-                    </span>
-                    {isSelected && (
-                      <Icon icon="check" size="sm" color="primary" />
-                    )}
-                  </div>
-                );
-              };
-
-              const sourceEnd = results.length - queryEntryCount;
-              const grouped = groupItems(results.slice(0, sourceEnd), {
-                ungroupedFirst: true,
-              }).map(group => {
-                const options = group.items.map(renderOption);
-                if (group.heading == null) {
-                  return options;
-                }
-                return (
-                  <div
-                    key={`group-${group.heading}`}
-                    role="group"
-                    aria-label={group.heading}>
-                    <div
-                      aria-hidden="true"
-                      {...stylex.props(styles.groupHeading)}>
-                      {group.heading}
-                    </div>
-                    {options}
-                  </div>
-                );
-              });
-              // Entries derived from the typed text follow every group
-              // (spec:AST-092 FR1).
-              return [
-                ...grouped,
-                ...results.slice(sourceEnd).map(renderOption),
-              ];
-            })()
-          )}
-        </div>,
-        {
-          placement: 'below',
-          alignment: 'start',
-          offset: spacingVars['--spacing-1'],
-          xstyle: [
-            styles.popover,
-            menuWidth != null &&
-              styles.popoverCustomWidth(
-                clampInlineSize(
-                  menuWidth,
-                  layerViewportInset.maxInlineSizeFallback,
-                ),
+      {popover.render(menuContent, {
+        placement: 'below',
+        alignment: 'start',
+        offset: spacingVars['--spacing-1'],
+        xstyle: [
+          styles.popover,
+          menuWidth != null &&
+            styles.popoverCustomWidth(
+              clampInlineSize(
+                menuWidth,
+                layerViewportInset.maxInlineSizeFallback,
               ),
-          ],
-        },
-      )}
+            ),
+        ],
+      })}
     </>
   );
 } as <T extends SearchableItem>(

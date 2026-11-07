@@ -104,6 +104,7 @@
     "/templates/BannerStatuses/",
     "/templates/BannerWithActionButton/",
     "/templates/BaseTypeaheadCustomSearch/",
+    "/templates/BaseTypeaheadMenu/",
     "/templates/BaseTypeaheadShowcase/",
     "/templates/BlockquoteShowcase/",
     "/templates/BlockquoteTestimonials/",

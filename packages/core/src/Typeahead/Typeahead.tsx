@@ -36,7 +36,11 @@ import {
   useIsBusy,
   type BusyIndicatorLane,
 } from './busyIndicatorLane';
-import {BaseTypeahead} from './BaseTypeahead';
+import {
+  BaseTypeahead,
+  type BaseTypeaheadHandle,
+  type BaseTypeaheadMenu,
+} from './BaseTypeahead';
 import {useSize} from '../SizeContext/SizeContext';
 import {
   Field,
@@ -219,6 +223,14 @@ export interface TypeaheadProps<T extends SearchableItem> extends Omit<
   onChangeQuery?: (query: string) => void;
   /** Callback when dropdown opens/closes. */
   onOpenChange?: (isOpen: boolean) => void;
+  /**
+   * What the menu shows: the result list, optionally with information around
+   * it, or content that takes focus. Forwarded to BaseTypeahead; see
+   * `BaseTypeaheadMenu`.
+   */
+  menu?: BaseTypeaheadMenu;
+  /** Imperative handle to open and close the menu. */
+  handleRef?: React.Ref<BaseTypeaheadHandle>;
 }
 
 // =============================================================================
@@ -425,6 +437,8 @@ export function Typeahead<T extends SearchableItem>({
   debounceMs,
   onChangeQuery,
   onOpenChange,
+  menu,
+  handleRef,
   onKeyDown,
   width,
   containerXstyle,
@@ -759,6 +773,8 @@ export function Typeahead<T extends SearchableItem>({
                 aria-invalid={status?.type === 'error' || rest['aria-invalid']}
                 onChangeQuery={onChangeQuery}
                 onOpenChange={handleOpenChange}
+                menu={menu}
+                handleRef={handleRef}
                 debounceMs={debounceMs}
                 anchorRef={wrapperRef}
                 onKeyDown={handleKeyDown}
