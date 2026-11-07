@@ -37,7 +37,7 @@ import {useBusyIndicatorLane} from './busyIndicatorLane';
 import {useTrailingKeyDown} from './trailingKeyDown';
 import {useCommittedChoices} from './committedChoicesKey';
 import type {StyleXStyles} from '@stylexjs/stylex';
-import {usePopover} from '../Popover/usePopover';
+import {usePopoverInternal} from '../Popover/usePopover';
 import {useAnnounce} from '../hooks/useAnnounce';
 import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
 import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
@@ -99,8 +99,8 @@ export interface BaseTypeaheadListboxMenuInfo {
   query: string;
   /** Whether a search or focus load is running. */
   isBusy: boolean;
-  /** Whether the last search for the query found nothing. */
-  hasNoResults: boolean;
+  /** Whether the search for the query completed with no results (an empty search). */
+  isEmptySearch: boolean;
   /** Closes the menu. */
   close: () => void;
 }
@@ -415,16 +415,6 @@ const styles = stylex.create({
   popoverCustomWidth: (width: string) => ({
     width,
   }),
-  // A dialog-role menu sizes to its content, capped like any layer.
-  dialog: {
-    boxSizing: 'border-box',
-    maxHeight: stylex.firstThatWorks(
-      `calc(${layerViewportInset.maxBlockSize})`,
-      `calc(${layerViewportInset.maxBlockSizeFallback})`,
-    ),
-    overflowY: 'auto',
-    outline: 'none',
-  },
   groupHeading: {
     paddingInline: spacingVars['--spacing-2'],
     paddingBlockStart: spacingVars['--spacing-2'],
@@ -930,9 +920,10 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // rendered in the same event (a token press that switches to a dialog).
   const openRequestedRef = useRef(false);
   const [openRequest, setOpenRequest] = useState(0);
-  const dialogRef = useRef<HTMLDivElement>(null);
-  // Whether focus entered the dialog-role menu since it opened.
-  const dialogHadFocusRef = useRef(false);
+  // Set when a pick kept the menu open; the open after the commit then
+  // reloads a listbox or lets a dialog take focus.
+  const pickKeptOpenRef = useRef(false);
+  const isDialogMenu = menu?.role === 'dialog';
 
   // Layer for dropdown. The list is a manual popover (see usePopover below):
   // while it is open, a press on the combobox itself (its input or its
@@ -951,9 +942,21 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       outsidePress.stop();
       return;
     }
-    // The list's own element sits inside the popover element.
-    const findLayer = () =>
-      dropdownRef.current?.closest<HTMLElement>('[popover]') ?? null;
+    // The element the input controls (the list, or the dialog's layer) sits
+    // inside the popover element, or is it.
+    const findLayer = () => {
+      const input = inputRef.current;
+      const controlsId = input?.getAttribute('aria-controls');
+      if (input == null || controlsId == null) {
+        return null;
+      }
+      // The field may sit in a shadow root, so look the id up there.
+      const root = input.getRootNode() as Document | ShadowRoot;
+      return (
+        root.getElementById(controlsId)?.closest<HTMLElement>('[popover]') ??
+        null
+      );
+    };
     outsidePress.start(
       anchorEl,
       path =>
@@ -976,7 +979,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     searchSource.cancel?.();
   }, [onOpenChange, searchSource, outsidePress]);
 
-  const popover = usePopover({
+  const popover = usePopoverInternal({
     onShow: handleLayerShow,
     onHide: handleLayerHide,
     // A manual popover: the browser's light dismiss counts a press in the
@@ -986,20 +989,20 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     // shared layer stack.
     hasLightDismiss: false,
     hasCloseButton: false,
-    hasAutoFocus: false,
-    // The popup's own role="listbox" is the exposed semantics; the input keeps
-    // DOM focus, so wrapping it in a modal dialog would misrepresent it.
-    role: 'none',
+    // A listbox-role menu: the popup's own role="listbox" is the exposed
+    // semantics and the input keeps DOM focus, so the popover takes no role
+    // and no focus. A dialog-role menu: the popover is the named dialog, takes
+    // focus, and returns it on close, to the input when the opener is gone.
+    hasAutoFocus: isDialogMenu,
+    role: isDialogMenu ? 'dialog' : 'none',
+    dialogLabel: menu?.role === 'dialog' ? menu.label : undefined,
+    getRestoreFallback: () => inputRef.current,
   });
 
-  // Show the layer, deferring past the active click if a pointer is down
-  // (see pointerActiveRef).
-  // Read at show time, so a search or bootstrap that settles after the field
-  // became disabled does not open the list (spec:AST-085 FR2).
-  const isDialogMenu = menu?.role === 'dialog';
   // A dialog-role menu holds the person's focus, so the list's own reasons
-  // to close (an empty query, an empty load, a blur of the input) do not
-  // close it. Read at close time, like `isDisabledRef`.
+  // to open or close (a load, an empty query, a blur of the input) do not
+  // open or close it; only the handle opens it. Read at that time, like
+  // `isDisabledRef`.
   const isDialogMenuRef = useRef(isDialogMenu);
   useIsomorphicLayoutEffect(() => {
     isDialogMenuRef.current = isDialogMenu;
@@ -1009,6 +1012,10 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       popover.hide();
     }
   }, [popover]);
+  // Show the layer, deferring past the active click if a pointer is down
+  // (see pointerActiveRef).
+  // Read at show time, so a search or bootstrap that settles after the field
+  // became disabled does not open the list (spec:AST-085 FR2).
   const isDisabledRef = useRef(isDisabled);
   useIsomorphicLayoutEffect(() => {
     isDisabledRef.current = isDisabled;
@@ -1031,7 +1038,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     }
   }, [isDisabled]);
   const showLayer = useCallback(() => {
-    if (isDisabledRef.current) {
+    if (isDisabledRef.current || isDialogMenuRef.current) {
       return;
     }
     isShowingRef.current = true;
@@ -1504,6 +1511,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       // still in flight would otherwise leave the field spinning.
       setLoading(false);
       if (keepsMenuOpen) {
+        pickKeptOpenRef.current = true;
         return;
       }
       popover.hide();
@@ -1653,6 +1661,9 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       }
 
       if (!popover.isOpen) {
+        if (isDialogMenu) {
+          return;
+        }
         if (e.key === 'ArrowDown' && (hasEntriesOnFocus || query.length > 0)) {
           e.preventDefault();
           // Results held from a replaced search source are not current
@@ -1808,75 +1819,50 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       return;
     }
     handledOpenRequestRef.current = openRequest;
-    if (isDisabled || popover.isOpen) {
+    const isAfterPick = pickKeptOpenRef.current;
+    pickKeptOpenRef.current = false;
+    if (isDisabled) {
+      return;
+    }
+    if (isAfterPick && !isDialogMenu) {
+      // The pick emptied the list and kept the menu open for a listbox: focus
+      // returns to the input, and the list loads its focus entries, or closes
+      // when there are none to load.
+      inputRef.current?.focus();
+      if (hasEntriesOnFocus) {
+        void performBootstrap();
+      } else {
+        popover.hide();
+      }
+      return;
+    }
+    if (popover.isOpen) {
       return;
     }
     if (isDialogMenu) {
-      showLayer();
+      popover.show();
     } else {
       openListbox();
     }
   }, [
     openRequest,
     isDisabled,
-    popover.isOpen,
+    popover,
     isDialogMenu,
-    showLayer,
+    hasEntriesOnFocus,
+    performBootstrap,
     openListbox,
   ]);
-
-  // A dialog-role menu takes focus when it opens or when the menu switches
-  // to it: its first control, or the dialog itself.
-  useEffect(() => {
-    if (!popover.isOpen || !isDialogMenu) {
-      return;
-    }
-    const frame = requestAnimationFrame(() => {
-      const dialog = dialogRef.current;
-      if (
-        dialog == null ||
-        dialog.contains(dialog.ownerDocument.activeElement)
-      ) {
-        return;
-      }
-      const target =
-        dialog.querySelector<HTMLElement>('[autofocus]') ??
-        dialog.querySelector<HTMLElement>(FOCUSABLE_SELECTOR) ??
-        dialog;
-      target.focus();
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [popover.isOpen, isDialogMenu]);
-
-  // After a dialog-role menu closes, the popover returns focus to the element
-  // focused when it opened. When that element is gone, focus goes to the
-  // input instead of the page.
-  useEffect(() => {
-    if (popover.isOpen || !dialogHadFocusRef.current) {
-      return;
-    }
-    dialogHadFocusRef.current = false;
-    const input = inputRef.current;
-    if (input == null) {
-      return;
-    }
-    const doc = input.ownerDocument;
-    const active = doc.activeElement;
-    const layer = doc.getElementById(popover.id);
-    if (
-      active == null ||
-      active === doc.body ||
-      !active.isConnected ||
-      (layer?.contains(active) ?? false)
-    ) {
-      input.focus();
-    }
-  }, [popover.isOpen, popover.id]);
 
   // A listbox-role menu's content outside the list is information only:
   // anything a person acts on must be a result, so the arrow keys reach it.
   useEffect(() => {
-    if (!popover.isOpen || menu?.role !== 'listbox' || menu.render == null) {
+    if (
+      process.env.NODE_ENV === 'production' ||
+      !popover.isOpen ||
+      menu?.role !== 'listbox' ||
+      menu.render == null
+    ) {
       return;
     }
     const list = dropdownRef.current;
@@ -2044,26 +2030,14 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   const closeMenu = () => popover.hide();
   let menuContent: ReactNode = listbox;
   if (menu?.role === 'dialog') {
-    menuContent = (
-      <div
-        ref={dialogRef}
-        id={listboxId}
-        role="dialog"
-        aria-label={menu.label}
-        tabIndex={-1}
-        onFocus={() => {
-          dialogHadFocusRef.current = true;
-        }}
-        {...stylex.props(styles.dialog)}>
-        {menu.render({query, close: closeMenu})}
-      </div>
-    );
+    // The popover itself is the named dialog (usePopover's dialog role).
+    menuContent = menu.render({query, close: closeMenu});
   } else if (menu?.render != null) {
     menuContent = menu.render({
       listbox,
       query,
       isBusy: isLoading,
-      hasNoResults: results.length === 0 && hasSearched && !isSearchPending,
+      isEmptySearch: results.length === 0 && hasSearched && !isSearchPending,
       close: closeMenu,
     });
   }
@@ -2077,7 +2051,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         type="text"
         role="combobox"
         aria-expanded={popover.isOpen}
-        aria-controls={listboxId}
+        aria-controls={isDialogMenu ? popover.id : listboxId}
         aria-haspopup={isDialogMenu ? 'dialog' : undefined}
         aria-activedescendant={
           popover.isOpen &&

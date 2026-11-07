@@ -50,6 +50,18 @@ const anatomy = [
       'Caller content supplied through renderItem or item.element inside the stable result row.',
   },
   {
+    name: 'Menu content',
+    required: false,
+    description:
+      'Caller content from menu.render: information around the result list in the listbox role, or the content of the dialog role.',
+  },
+  {
+    name: 'Menu dialog',
+    required: false,
+    description:
+      'The named dialog a dialog-role menu shows in the anchored layer; it takes focus and returns it on close.',
+  },
+  {
     name: 'Selected result state',
     required: false,
     description:
@@ -241,7 +253,7 @@ export const docs = {
       name: 'menu',
       type: 'BaseTypeaheadMenu',
       description:
-        "What the menu shows. role 'listbox' (default) is the result list; its optional render({listbox, query, isBusy, hasNoResults, close}) places information such as a header or a hint around it, and anything a person acts on stays a result so the arrow keys reach it. role 'dialog' shows render({query, close}) in a dialog named by label that takes focus; Escape, an outside press or close() returns focus to where it was when the menu opened. Astryx owns the layer either way. Switching from listbox to dialog keeps the menu open: call handleRef.open() from onChange.",
+        "What the menu shows. role 'listbox' (default) is the result list; its optional render({listbox, query, isBusy, isEmptySearch, close}) places information such as a header or a hint around it, and anything a person acts on stays a result so the arrow keys reach it. role 'dialog' shows render({query, close}) in a dialog named by label that takes focus; Escape, an outside press or close() returns focus to where it was when the menu opened. Astryx owns the layer either way. Switching from listbox to dialog keeps the menu open: call handleRef.open() from onChange.",
     },
     {
       name: 'handleRef',
@@ -411,7 +423,7 @@ export const docsZh = {
       name: 'menu',
       type: 'BaseTypeaheadMenu',
       description:
-        "菜单显示的内容。role 为 'listbox'（默认）时显示结果列表；可选的 render({listbox, query, isBusy, hasNoResults, close}) 可在列表周围放置标题或提示等信息，用户可操作的内容仍需作为结果放在列表中，以便方向键可达。role 为 'dialog' 时在以 label 命名的对话框中显示 render({query, close})，并将焦点移入；按 Escape、点击外部或调用 close() 后焦点回到菜单打开时的位置。两种情况下图层都由 Astryx 管理。从 listbox 切换到 dialog 时菜单保持打开：在 onChange 中调用 handleRef.open()。",
+        "菜单显示的内容。role 为 'listbox'（默认）时显示结果列表；可选的 render({listbox, query, isBusy, isEmptySearch, close}) 可在列表周围放置标题或提示等信息，用户可操作的内容仍需作为结果放在列表中，以便方向键可达。role 为 'dialog' 时在以 label 命名的对话框中显示 render({query, close})，并将焦点移入；按 Escape、点击外部或调用 close() 后焦点回到菜单打开时的位置。两种情况下图层都由 Astryx 管理。从 listbox 切换到 dialog 时菜单保持打开：在 onChange 中调用 handleRef.open()。",
     },
     {
       name: 'handleRef',
@@ -507,7 +519,7 @@ export const docsDense = {
       'Keydown before internal nav. preventDefault() skips internal handling.',
     onChangeQuery: 'Fired on query text change.',
     onOpenChange: 'Fired on dropdown open/close.',
-    menu: "Menu content: {role:'listbox', render?({listbox,query,isBusy,hasNoResults,close})} (info around the list; actions stay results) | {role:'dialog', label, render({query,close})} (takes focus; close returns focus to opener, else input). Astryx owns the layer. open() from onChange keeps it open across a role switch.",
+    menu: "Menu content: {role:'listbox', render?({listbox,query,isBusy,isEmptySearch,close})} (info around the list; actions stay results) | {role:'dialog', label, render({query,close})} (takes focus; close returns focus to opener, else input). Astryx owns the layer. open() from onChange keeps it open across a role switch.",
     handleRef:
       'Handle: open(), close(). No controlled isOpen; onOpenChange reports.',
     inputId:

@@ -35,15 +35,15 @@ system_specs: [spec:AST-085]
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                                                                      |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | None changes. Typeahead takes BaseTypeahead's search props plus field props (`label`, `description`, `status`, `isRequired`, `size`), `hasClear`, `isDisabled` and `disabledMessage`, start content, and `container*` and `control*` styling. |
-| Behavior                | A Field-wrapped BaseTypeahead whose selected value shows as a Token; clicking the Token edits it; clear sets `null`; a disabled field stays focusable, with or without a reason.                                                              |
-| End-user impact         | People search and pick one value, see it as a token, and edit or clear it.                                                                                                                                                                    |
-| Builder impact          | Builders style the field through `container*` and `control*` and theme four Typeahead targets.                                                                                                                                                |
-| Compatibility/readiness | Records shipped behavior; no API, default, or DOM change. Caller handlers while disabled are listed under Current-state impact.                                                                                                               |
-| Review checks           | Reject a lost target, a Token beside the input instead of over it, an input left in the Tab order behind a Token, a caller key handler that cancels navigation, or a reason not linked from the input.                                        |
-| Governing rules         | `family:input-fields`; `spec:AST-085` FR1, FR2; `component:BaseTypeahead`; `architecture:component-theming-surface`.                                                                                                                          |
+| Area                    | Contract                                                                                                                                                                                                                                                                                        |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | Adds `menu` and `handleRef`, forwarded to BaseTypeahead (FR11). Typeahead takes BaseTypeahead's search props plus field props (`label`, `description`, `status`, `isRequired`, `size`), `hasClear`, `isDisabled` and `disabledMessage`, start content, and `container*` and `control*` styling. |
+| Behavior                | A Field-wrapped BaseTypeahead whose selected value shows as a Token; clicking the Token edits it; clear sets `null`; a disabled field stays focusable, with or without a reason.                                                                                                                |
+| End-user impact         | People search and pick one value, see it as a token, and edit or clear it.                                                                                                                                                                                                                      |
+| Builder impact          | Builders style the field through `container*` and `control*` and theme four Typeahead targets.                                                                                                                                                                                                  |
+| Compatibility/readiness | Additive: without `menu` and `handleRef`, no default or DOM change. Caller handlers while disabled are listed under Current-state impact.                                                                                                                                                       |
+| Review checks           | Reject a lost target, a Token beside the input instead of over it, an input left in the Tab order behind a Token, a caller key handler that cancels navigation, or a reason not linked from the input.                                                                                          |
+| Governing rules         | `family:input-fields`; `spec:AST-085` FR1, FR2; `component:BaseTypeahead`; `architecture:component-theming-surface`.                                                                                                                                                                            |
 
 This table is a review projection; the body below is authoritative.
 
@@ -55,8 +55,8 @@ Field shell and delegates its combobox engine and popup results to BaseTypeahead
 ## Compatibility and migration
 
 - Released default preserved: `yes`
-- Compatibility class: records shipped behavior; no public prop, default,
-  export, or DOM change
+- Compatibility class: additive. It adds the optional `menu` and
+  `handleRef` props (FR11); without them, no default or DOM changes
 - Controlled/uncontrolled behavior: `value` is controlled
 - Migration decision: none
 

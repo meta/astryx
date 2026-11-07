@@ -3647,8 +3647,8 @@ interface BaseTypeaheadHandle
   open: () => void
 interface BaseTypeaheadListboxMenuInfo
   close: () => void
-  hasNoResults: boolean
   isBusy: boolean
+  isEmptySearch: boolean
   listbox: ReactNode
   query: string
 type BaseTypeaheadMenu = { role: 'listbox'; render?: (info: BaseTypeaheadListboxMenuInfo) => ReactNode } | { role: 'dialog'; label: string; render: (info: BaseTypeaheadDialogMenuInfo) => ReactNode }

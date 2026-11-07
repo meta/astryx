@@ -8,7 +8,7 @@
  */
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
-import {act, render, screen, waitFor} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {createRef, useRef, useState} from 'react';
 import {
@@ -219,12 +219,16 @@ describe('BaseTypeahead menu', () => {
       const input = screen.getByRole('combobox');
       expect(input).toHaveAttribute('aria-haspopup', 'dialog');
       expect(input).toHaveAttribute('aria-expanded', 'true');
-      expect(input).toHaveAttribute('aria-controls', dialog.id);
+      const controlled = document.getElementById(
+        input.getAttribute('aria-controls') ?? '',
+      );
+      expect(controlled?.contains(dialog)).toBe(true);
       expect(input).not.toHaveAttribute('aria-activedescendant');
+      // Focus moves to a control inside the dialog. (jsdom's selector engine
+      // lists a comma selector's matches by group, so which control comes
+      // first differs from a browser; the Chromium spec checks the first.)
       await waitFor(() =>
-        expect(
-          screen.getByRole('textbox', {name: 'Value', hidden: true}),
-        ).toHaveFocus(),
+        expect(dialog.contains(document.activeElement)).toBe(true),
       );
     });
 
@@ -239,7 +243,10 @@ describe('BaseTypeahead menu', () => {
         name: 'Value',
         hidden: true,
       });
-      await waitFor(() => expect(value).toHaveFocus());
+      const dialog = screen.getByRole('dialog', {hidden: true});
+      await waitFor(() =>
+        expect(dialog.contains(document.activeElement)).toBe(true),
+      );
       await user.keyboard('{Escape}');
 
       await waitFor(() => expect(opener).toHaveFocus());
@@ -256,14 +263,66 @@ describe('BaseTypeahead menu', () => {
         name: 'Cancel',
         hidden: true,
       });
+      const dialog = screen.getByRole('dialog', {hidden: true});
       await waitFor(() =>
-        expect(
-          screen.getByRole('textbox', {name: 'Value', hidden: true}),
-        ).toHaveFocus(),
+        expect(dialog.contains(document.activeElement)).toBe(true),
       );
       await user.click(cancel);
 
       await waitFor(() => expect(screen.getByRole('combobox')).toHaveFocus());
+    });
+
+    it('closes on a press outside the field and the dialog, and keeps a press inside', async () => {
+      const user = userEvent.setup();
+      render(
+        <>
+          <Editor />
+          <p>Elsewhere</p>
+        </>,
+      );
+      await user.click(screen.getByRole('button', {name: 'Status: is Open'}));
+      const value = await screen.findByRole('textbox', {
+        name: 'Value',
+        hidden: true,
+      });
+      await waitFor(() => expect(isLayerOpen(value)).toBe(true));
+      const press = (target: Element) => {
+        fireEvent.pointerDown(target, {composed: true});
+        fireEvent.pointerUp(target, {composed: true});
+      };
+      press(value);
+      expect(isLayerOpen(value)).toBe(true);
+      press(screen.getByText('Elsewhere'));
+      await waitFor(() => expect(isLayerOpen(value)).toBe(false));
+    });
+
+    it('opens only from the handle: typing, focus and ArrowDown leave it closed', async () => {
+      const user = userEvent.setup();
+      const onOpenChange = vi.fn();
+      render(
+        <BaseTypeahead
+          aria-label="Filters"
+          searchSource={fruits}
+          value={null}
+          onChange={() => {}}
+          debounceMs={0}
+          hasEntriesOnFocus
+          onOpenChange={onOpenChange}
+          menu={{
+            role: 'dialog',
+            label: 'Status',
+            render: () => <input aria-label="Value" />,
+          }}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      await user.click(input);
+      await user.type(input, 'ap');
+      await user.keyboard('{ArrowDown}');
+      expect(input).toHaveValue('ap');
+      expect(input).toHaveFocus();
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+      expect(onOpenChange).not.toHaveBeenCalled();
     });
 
     it('stays open when the input is emptied or loses focus', async () => {
@@ -364,6 +423,56 @@ describe('BaseTypeahead menu', () => {
         expect(
           screen.getByRole('textbox', {name: 'Value', hidden: true}),
         ).toHaveFocus(),
+      );
+    });
+  });
+
+  describe('a pick that calls open() and stays a listbox', () => {
+    function Picker({hasEntriesOnFocus}: {hasEntriesOnFocus: boolean}) {
+      const handleRef = useRef<BaseTypeaheadHandle>(null);
+      return (
+        <BaseTypeahead
+          aria-label="Fruit"
+          searchSource={{
+            ...fruits,
+            bootstrap: () => [{id: 'banana', label: 'Banana'}],
+          }}
+          value={null}
+          onChange={() => handleRef.current?.open()}
+          debounceMs={0}
+          hasEntriesOnFocus={hasEntriesOnFocus}
+          handleRef={handleRef}
+          menu={{role: 'listbox'}}
+        />
+      );
+    }
+
+    it('reloads the focus entries, with focus back in the input', async () => {
+      const user = userEvent.setup();
+      render(<Picker hasEntriesOnFocus />);
+      const input = screen.getByRole('combobox');
+      await user.type(input, 'apr');
+      await user.click(
+        await screen.findByRole('option', {name: 'Apricot', hidden: true}),
+      );
+      expect(input).toHaveFocus();
+      expect(
+        await screen.findByRole('option', {name: 'Banana', hidden: true}),
+      ).toBeInTheDocument();
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    it('closes with focus in the input when there are no focus entries', async () => {
+      const user = userEvent.setup();
+      render(<Picker hasEntriesOnFocus={false} />);
+      const input = screen.getByRole('combobox');
+      await user.type(input, 'apr');
+      await user.click(
+        await screen.findByRole('option', {name: 'Apricot', hidden: true}),
+      );
+      expect(input).toHaveFocus();
+      await waitFor(() =>
+        expect(input).toHaveAttribute('aria-expanded', 'false'),
       );
     });
   });

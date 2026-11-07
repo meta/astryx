@@ -108,3 +108,15 @@ test('Escape returns focus to the filter button that opened the dialog', async (
   await expect(dialog).toBeHidden();
   await expect(filter).toBeFocused();
 });
+
+test('a press outside the field and the dialog closes the dialog', async ({
+  page,
+}) => {
+  const input = await openStory(page);
+  await input.click();
+  await input.press('Enter');
+  const dialog = page.getByRole('dialog', {name: 'Status filter'});
+  await expect(dialog).toBeVisible();
+  await page.mouse.click(5, 5);
+  await expect(dialog).toBeHidden();
+});

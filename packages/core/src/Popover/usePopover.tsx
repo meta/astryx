@@ -374,6 +374,10 @@ interface InternalPopoverOptions extends UsePopoverOptions {
    * A close that plays out after the popover is hidden starts here.
    */
   onCloseStart?: () => void;
+  /**
+   * Where focus returns on close when the element focused at open is gone.
+   */
+  getRestoreFallback?: () => HTMLElement | null;
 }
 
 /**
@@ -437,6 +441,7 @@ function usePopoverImplementation(
     dialogLabel,
     role = 'dialog',
     isModal = true,
+    getRestoreFallback,
   } = options;
 
   const t = useComponentTranslator();
@@ -480,6 +485,7 @@ function usePopoverImplementation(
       isActive: layer.isOpen,
       onEscape: hasEscapeDismiss || hasLightDismiss ? layer.hide : undefined,
       getRestoreTarget,
+      getRestoreFallback,
     });
 
   const focusInitialTarget = useCallback(() => {

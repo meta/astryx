@@ -560,14 +560,22 @@ interface InternalFocusTrapOptions extends UseFocusTrapOptions {
    * falls back to the element focused at activation.
    */
   getRestoreTarget?: () => HTMLElement | null;
+  /**
+   * Where focus goes on deactivation when the restore target is gone (no
+   * longer connected), read at deactivation. Without it, focus is left where
+   * the browser puts it.
+   */
+  getRestoreFallback?: () => HTMLElement | null;
 }
 
 export function useFocusTrapInternal<T extends HTMLElement = HTMLElement>(
   options: InternalFocusTrapOptions,
 ): UseFocusTrapReturn<T> {
-  const {isActive, onEscape, getRestoreTarget} = options;
+  const {isActive, onEscape, getRestoreTarget, getRestoreFallback} = options;
   const getRestoreTargetRef = useRef(getRestoreTarget);
   getRestoreTargetRef.current = getRestoreTarget;
+  const getRestoreFallbackRef = useRef(getRestoreFallback);
+  getRestoreFallbackRef.current = getRestoreFallback;
 
   const containerRef = useRef<T | null>(null);
 
@@ -670,12 +678,23 @@ export function useFocusTrapInternal<T extends HTMLElement = HTMLElement>(
         return;
       }
 
+      // The page itself is no place to return to: an opener removed before
+      // the overlay opened leaves the body as the element focused then.
+      const isPage =
+        previouslyFocused === doc.body ||
+        previouslyFocused === doc.documentElement;
       if (
         previouslyFocused != null &&
         previouslyFocused.isConnected &&
-        typeof previouslyFocused.focus === 'function'
+        typeof previouslyFocused.focus === 'function' &&
+        !(isPage && getRestoreFallbackRef.current != null)
       ) {
         previouslyFocused.focus();
+        return;
+      }
+      const fallback = getRestoreFallbackRef.current?.();
+      if (fallback != null && fallback.isConnected) {
+        fallback.focus();
       }
     };
   }, [isActive]);
