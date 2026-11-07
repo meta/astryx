@@ -4,8 +4,8 @@
  * @file snapPagingValue.ts
  * @input A scrolling row of snap items
  * @output The `SnapPaging` value, the calls Carousel makes on it
- *   (`isSnapPaging`, `attachSnapPaging`, `moveHeldSnapPaging`), where a held
- *   row is shown, and stops
+ *   (`isSnapPaging`, `attachSnapPaging`, `moveSnapPaging`,
+ *   `moveHeldSnapPaging`), where a held row is shown, and stops
  * @position Carousel's only link to snap paging. It imports no pager code,
  *   so a Carousel without `hasSnap={useSnapPaging()}` bundles none
  */
@@ -35,6 +35,7 @@ export interface SnapPaging {
 /** The paging attached to one row. */
 export interface SnapPagingAttachment {
   readonly detach: () => void;
+  readonly move: (target: (at: number, end: number) => number) => void;
   readonly moveHeld: (target: (at: number, end: number) => number) => boolean;
 }
 
@@ -93,6 +94,23 @@ export function attachSnapPaging(
     attachments.delete(element);
     attachment.detach();
   };
+}
+
+/**
+ * Moves the row through the paging to `target(shown, end)`, an offset toward
+ * the end, and takes the row over first when it is at rest. `end` is its
+ * travel. False when no paging is attached.
+ */
+export function moveSnapPaging(
+  element: HTMLElement,
+  target: (shown: number, end: number) => number,
+): boolean {
+  const attachment = attachments.get(element);
+  if (attachment == null) {
+    return false;
+  }
+  attachment.move(target);
+  return true;
 }
 
 /**

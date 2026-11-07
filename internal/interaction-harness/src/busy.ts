@@ -662,6 +662,7 @@ export interface BusyProof extends FrameStats {
    * The cast's position step, CSS px: the largest of 0.5, 1 and 2 that every
    * change of the tracked value in the judged part is a multiple of, or 0.5
    * when it does not change there (WebKit's casts step 2: see the README).
+   * A sub-pixel read (`trackMarker` with `subpixel`) uses its own step.
    */
   readonly stepPx: number;
   /** The tracked value's mean motion per screencast interval in the judged part, px. */
@@ -993,6 +994,15 @@ export function busyWindowProof(
       'busyWindowProof: give settledWithin or settledWithinSteps, not both',
     );
   }
+  // A sub-pixel read (`trackMarker` with `subpixel`) shows changes far under
+  // a pixel. There a change counts from half its step; on a whole-pixel read,
+  // from 0.25 px.
+  const readStepPx = tracked.some(f => f.step != null)
+    ? castStep(tracked, axis)
+    : null;
+  const subpixelStepPx =
+    readStepPx != null && readStepPx < 0.5 ? readStepPx : null;
+  const epsilon = subpixelStepPx == null ? 0.25 : subpixelStepPx / 2;
   // The cast's own position step, for a proof that bounds its settle in it.
   const castStepPx =
     settledWithinSteps == null ? null : castStep(tracked, axis);
@@ -1070,7 +1080,7 @@ export function busyWindowProof(
     if (
       v.value != null &&
       previous != null &&
-      Math.abs(v.value - previous) > 0.25
+      Math.abs(v.value - previous) > epsilon
     ) {
       inWindow.push(v.t);
     }
@@ -1091,7 +1101,7 @@ export function busyWindowProof(
   });
   const lead = prior.flatMap(f => (f.box == null ? [] : [f.box[axis]]));
   const movedBefore = lead.some(
-    (value, i) => i > leadFrom && Math.abs(value - lead[i - 1]) > 0.25,
+    (value, i) => i > leadFrom && Math.abs(value - lead[i - 1]) > epsilon,
   );
   // Held from before the block to its first presented change inside it: in
   // WebKit a just-started compositor animation is presented late (a sheet's
@@ -1105,7 +1115,7 @@ export function busyWindowProof(
   let holdStart = lead.length - 1;
   while (
     holdStart > 0 &&
-    Math.abs(lead[holdStart - 1] - lead[lead.length - 1]) <= 0.25
+    Math.abs(lead[holdStart - 1] - lead[lead.length - 1]) <= epsilon
   ) {
     holdStart -= 1;
   }
@@ -1116,15 +1126,14 @@ export function busyWindowProof(
       v =>
         v.value != null &&
         v.t < (inWindow[0] ?? -Infinity) &&
-        Math.abs(v.value - lead[lead.length - 1]) <= 0.25,
+        Math.abs(v.value - lead[lead.length - 1]) <= epsilon,
     ).length;
   // A late hand-off holds the page's last position. An animation that froze
   // at the block's start holds a position of its own. Within one cast step:
   // WebKit's cast reads positions on a 2 px grid, so a held position can read
-  // up to a step off. A cast with no step is read within a pixel.
-  const matchPx = tracked.some(f => f.step != null)
-    ? castStep(tracked, axis)
-    : 1;
+  // up to a step off. A cast with no step is read within a pixel, and a
+  // sub-pixel read within half a pixel.
+  const matchPx = subpixelStepPx != null ? 0.5 : (readStepPx ?? 1);
   const heldFromBeforeBlock =
     setBeforeBlock != null &&
     lead.length > 0 &&
@@ -1155,6 +1164,7 @@ export function busyWindowProof(
   const stats = frameStats(
     tracked.map(f => ({t: f.t, value: f.box == null ? null : f.box[axis]})),
     judged,
+    epsilon,
   );
   const cadence =
     intervals.length >= 4
@@ -1253,14 +1263,16 @@ export function busyWindowProof(
         : deliveredFrames;
   const movedFraction = (moved + recorderSkipped) / Math.max(1, judgedFrames);
   // The cast's position step for the tracked value, read from the judged
-  // part.
-  const stepPx = motionStepPx(
-    tracked.flatMap(f =>
-      f.box != null && f.t >= judged.from && f.t <= judged.to
-        ? [f.box[axis]]
-        : [],
-    ),
-  );
+  // part. A sub-pixel read carries its own.
+  const stepPx =
+    subpixelStepPx ??
+    motionStepPx(
+      tracked.flatMap(f =>
+        f.box != null && f.t >= judged.from && f.t <= judged.to
+          ? [f.box[axis]]
+          : [],
+      ),
+    );
   const judgedValues = tracked.flatMap(f =>
     f.box != null && f.t >= judged.from && f.t <= judged.to
       ? [{t: f.t, value: f.box[axis]}]
@@ -1322,7 +1334,7 @@ export function busyWindowProof(
     );
     const seriesIndex = new Map(series.map((f, i) => [f.t, i]));
     const same = (a: number, b: number) =>
-      Math.abs(series[a].value - series[b].value) <= 0.25;
+      Math.abs(series[a].value - series[b].value) <= epsilon;
     // The first frame of the run of equal positions that holds frame i.
     const runStart = (i: number): number => {
       let s = i;

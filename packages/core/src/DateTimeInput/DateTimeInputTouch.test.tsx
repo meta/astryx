@@ -752,7 +752,7 @@ describe('DateTimeInput touch surface', () => {
       openDateSheet();
       const saveDateButton = getOnlyButton('Save date');
 
-      expect(saveDateButton).toBeDisabled();
+      expect(saveDateButton).toHaveAttribute('aria-disabled', 'true');
       fireEvent.click(saveDateButton);
       expect(screen.getByRole('radio', {name: 'Date'})).toHaveAttribute(
         'aria-checked',
@@ -768,11 +768,11 @@ describe('DateTimeInput touch surface', () => {
       render(<ControlledDateTimeInput />);
       openDateSheet();
       const saveDateButton = getOnlyButton('Save date');
-      expect(saveDateButton).toBeDisabled();
+      expect(saveDateButton).toHaveAttribute('aria-disabled', 'true');
 
       fireEvent.click(getOnlyButton('Saturday, March 21, 2026'));
       expect(dateField()).toHaveValue('March 21, 2026');
-      expect(saveDateButton).not.toBeDisabled();
+      expect(saveDateButton).not.toHaveAttribute('aria-disabled');
 
       fireEvent.click(saveDateButton);
       expect(dateField()).toHaveAttribute('aria-expanded', 'false');
@@ -795,11 +795,11 @@ describe('DateTimeInput touch surface', () => {
       );
       openDateSheet();
       const saveDateButton = getOnlyButton('Save date');
-      expect(saveDateButton).not.toBeDisabled();
+      expect(saveDateButton).not.toHaveAttribute('aria-disabled');
 
       fireEvent.click(getOnlyButton('Reset'));
       expect(dateField()).toHaveValue('');
-      expect(saveDateButton).toBeDisabled();
+      expect(saveDateButton).toHaveAttribute('aria-disabled', 'true');
 
       fireEvent.click(saveDateButton);
       expect(screen.getByRole('radio', {name: 'Date'})).toHaveAttribute(

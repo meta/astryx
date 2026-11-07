@@ -317,8 +317,10 @@ describe('Lightbox', () => {
       // focused control and drops focus to <body>.
       const prev = screen.getByLabelText('Previous');
       expect(prev).toBeInTheDocument();
-      expect(prev).toBeDisabled();
-      expect(screen.getByLabelText('Next')).not.toBeDisabled();
+      expect(prev).toHaveAttribute('aria-disabled', 'true');
+      expect(screen.getByLabelText('Next')).not.toHaveAttribute(
+        'aria-disabled',
+      );
     });
 
     it('keeps next mounted and disabled on last item', () => {
@@ -332,8 +334,10 @@ describe('Lightbox', () => {
       );
       const next = screen.getByLabelText('Next');
       expect(next).toBeInTheDocument();
-      expect(next).toBeDisabled();
-      expect(screen.getByLabelText('Previous')).not.toBeDisabled();
+      expect(next).toHaveAttribute('aria-disabled', 'true');
+      expect(screen.getByLabelText('Previous')).not.toHaveAttribute(
+        'aria-disabled',
+      );
     });
 
     it('does not drop focus to <body> when navigating to the last item', () => {
