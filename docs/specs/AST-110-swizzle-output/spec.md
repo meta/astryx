@@ -191,14 +191,12 @@ and the repository proves it before a change that could break it merges.
 - Copies include spec records and test files and leave out nested folders
   (FR2), and `swizzle --list` offers folders that are not components
   (`spec:AST-035` FR12).
-- The layer stack, the modal outlet, the layer contexts, and `useAnnounce`
-  keep module state, so a copied Dialog, BottomSheet, or `useToast` starts its
-  own stack, misses the package's provider, or mounts a second pair of live
-  regions, breaking `spec:AST-086` FR9's one channel per document (FR3).
-- In the reverse direction, package components inside a copied Dialog or
-  overlay do not see its layer boundary or modal: a package picker announces
-  outside the copied modal (`spec:AST-086` FR14), and package group context
-  crosses into it (`spec:AST-038` FR7) (FR3).
+- The layer stack, the modal outlet, and `useAnnounce` keep module state, so
+  a copied Dialog or BottomSheet starts its own stack, or mounts a second pair
+  of live regions, breaking `spec:AST-086` FR9's one channel per document
+  (FR3).
+- In the reverse direction, a package picker inside a copied Dialog announces
+  outside the copied modal (`spec:AST-086` FR14) (FR3).
 - The result does not yet report whether each shared module was written,
   reused or replaced (FR2's impact bullet); adding that receipt field is the CLI
   owner's call.
@@ -229,7 +227,7 @@ and the repository proves it before a change that could break it merges.
 | FR6      | The component's own interaction and accessibility checks run against the copy                                                                                  | Keyboard, pointer, screen-reader tree                                                                                                                                                                                                                                                                                                                               | A check that passes on the package fails on the copy                                                                                                                                                                                                                                                                                                                                                                                                        |
 | FR7      | The required test lane's swizzle proof and the release-time proof; both cover Core's list and every integration package's components through `--package`       | A change to component source; a change to the swizzle copy; an unrelated change; Core, Lab, Charts, RichText, Vega                                                                                                                                                                                                                                                  | An offered component missing from the proof, a failure that does not block, a new required context, the proof adding wall-clock time to the slowest required check, or the proof pushing its job past the pull-request time budget                                                                                                                                                                                                                          |
 
-Known verification gap: none of these checks exist on `main`.
+Known verification gap: only FR3's shared-context checks (`sharedContexts.test.tsx`) exist; the other rows have no check on `main`.
 
 ## Decision log
 
