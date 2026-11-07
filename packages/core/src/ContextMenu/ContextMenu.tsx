@@ -932,8 +932,8 @@ function useContextMenuElement(
   const layerAnchorRef = layer.ref;
   // Syncs the menu's popover anchoring with the caller's DOM: the layer
   // anchors to the caller's cursor anchor, and the open handlers measure the
-  // caller's trigger. It runs before the handlers below are published, so a
-  // trigger that replays a held invocation finds both in place.
+  // caller's trigger. It runs before the next Effect publishes the handlers,
+  // so a trigger that replays a held invocation finds both in place.
   useIsomorphicLayoutEffect(() => {
     if (externalTrigger == null) {
       return;

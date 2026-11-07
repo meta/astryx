@@ -14,8 +14,8 @@ import {act} from 'react';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import {hydrateRoot} from 'react-dom/client';
 import {renderToString} from 'react-dom/server';
-// Loaded while this file is collected, which is untimed. Each fresh module
-// graph below runs these modules again without that cost.
+// Vitest loads these while it collects this file, which is untimed. Each
+// fresh module graph below runs these modules again without that cost.
 import './Table';
 import './tableContextMenu';
 import type {TableContextAction} from './types';

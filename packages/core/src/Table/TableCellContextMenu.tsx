@@ -10,8 +10,8 @@
  * @position Renders a cell's `contextMenuActions` for TableCell and
  * TableHeaderCell. The menu code loads only for cells that have actions. The
  * cell renders the trigger, and the menu loads beside it, so the content
- * keeps its node, focus and state. An invocation before the load is held and
- * replayed when the menu arrives.
+ * keeps its node, focus and state. The cell holds an invocation that comes
+ * before the load and replays it when the menu arrives.
  */
 
 import {lazy, Suspense, useEffect, useRef, type ReactNode} from 'react';
@@ -86,7 +86,7 @@ function takeHeldInvocation(owner: object): HeldInvocation | null {
 
 /**
  * A cell's content, wrapped in a right-click context menu when `actions` can
- * open one. Without actions the content is returned untouched, so the native
+ * open one. Without actions it returns the content untouched, so the native
  * browser menu passes through and the menu code never loads.
  */
 export function TableCellContextMenu({
@@ -159,8 +159,8 @@ function CellTrigger({
   // component that has not loaded would abort hydration. The trigger holds
   // an invocation until the menu renders right after hydration.
   const isHydrating = useIsHydrating();
-  // The menu reads how the user last interacted when it opens. Tracking
-  // starts here, so a press held before the menu mounts is recorded.
+  // The menu reads the last input type when it opens. The cell starts
+  // tracking here, so the tracker records a press before the menu mounts.
   const {ref: modalityRef} = useInteractionModalityTracking();
   const mergedTriggerRef = useMergedRefs(triggerRef, modalityRef);
 
