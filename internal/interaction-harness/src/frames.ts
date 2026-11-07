@@ -6,8 +6,10 @@
  *   the engine's screencast (Chromium CDP `Page.startScreencast`; WebKit's
  *   `Screencast` domain)
  * @output `startScreencast` (timestamped composited frames), `markElement`
- *   (a marker outline the frames can find), `trackMarker` (per-frame marker
- *   box), `sampleRects` (per-rAF rect sampling), `frameStats`.
+ *   (a marker outline the frames can find) and `trackMarker` (per-frame
+ *   marker box and the cast's position step). `trackMarkers` tracks several
+ *   colors from one decode of each frame. Also `colorBlockPx` (a frame's color
+ *   resolution), `sampleRects` (per-rAF rect sampling) and `frameStats`.
  * @position Frame evidence for motion proofs. The screencast is captured off
  *   the page's main thread, from what the compositor presents, so it keeps
  *   delivering frames while a script blocks the main thread: that is what makes
@@ -292,11 +294,68 @@ export interface TrackedFrame {
   readonly box: Box | null;
   /** Marker pixels found (a fading element finds fewer at the same tolerance). */
   readonly pixels: number;
+  /**
+   * The cast's position step at this frame, CSS px per axis: one block of
+   * the frame's color resolution (`colorBlockPx`) over the bitmap's scale to
+   * the viewport. `trackMarker` sets it only for the default marker
+   * (`MARKER_RGB`), whose edges were measured on these blocks: 2 px in
+   * WebKit's JPEG cast, whose 4:2:0 chroma holds color in 2 by 2 pixel
+   * blocks, and 1 px in Chromium's PNG cast, both at the viewport's size.
+   * Another color carries none: a cyan control in the same WebKit frames
+   * moves by odd px.
+   */
+  readonly step?: {readonly x: number; readonly y: number};
+}
+
+/**
+ * The bitmap pixels per block of a cast frame's color resolution, per axis:
+ * 1 for a PNG; for a JPEG, its chroma subsampling, read from the frame header
+ * (4:2:0 holds color in 2 by 2 blocks, 4:2:2 in 2 by 1, 4:4:4 in 1 by 1).
+ */
+export function colorBlockPx(
+  data: string,
+  format: 'png' | 'jpeg',
+): {x: number; y: number} {
+  if (format === 'png') {
+    return {x: 1, y: 1};
+  }
+  const bytes = Buffer.from(data, 'base64');
+  // Segments follow the start-of-image marker, each FF, a marker byte and a
+  // big-endian length that counts itself, up to a frame header (SOF0-SOF15,
+  // which leave out C4, C8 and CC).
+  let i = 2;
+  while (i + 4 <= bytes.length && bytes[i] === 0xff) {
+    const marker = bytes[i + 1];
+    if (
+      marker >= 0xc0 &&
+      marker <= 0xcf &&
+      marker !== 0xc4 &&
+      marker !== 0xc8 &&
+      marker !== 0xcc
+    ) {
+      const count = bytes[i + 9];
+      const factors = Array.from(
+        {length: count},
+        (_, k) => bytes[i + 11 + 3 * k],
+      );
+      const horizontal = factors.map(f => f >> 4);
+      const vertical = factors.map(f => f & 15);
+      // The most subsampled component sets the color's resolution.
+      return {
+        x: Math.max(...horizontal) / Math.min(...horizontal),
+        y: Math.max(...vertical) / Math.min(...vertical),
+      };
+    }
+    i += 2 + bytes.readUInt16BE(i + 2);
+  }
+  throw new Error('colorBlockPx: the JPEG has no frame header (SOF)');
 }
 
 /**
  * Finds the marker in every frame. Decoding runs in a scratch page of the same
  * browser, so neither the page under test nor Node needs an image decoder.
+ * With `region` (CSS px), only that part of each frame is searched. On a
+ * loaded machine, a search of every pixel can take longer than the test.
  */
 export async function trackMarker(
   page: Page,
@@ -304,19 +363,59 @@ export async function trackMarker(
   {
     rgb = MARKER_RGB,
     tolerance = 40,
-  }: {rgb?: readonly [number, number, number]; tolerance?: number} = {},
+    region,
+  }: {
+    rgb?: readonly [number, number, number];
+    tolerance?: number;
+    region?: Box;
+  } = {},
 ): Promise<TrackedFrame[]> {
+  const [tracked] = await trackMarkers(page, frames, {
+    colors: [rgb],
+    tolerance,
+    region,
+  });
+  return tracked;
+}
+
+/**
+ * `trackMarker` for several colors at once. Each frame is decoded once and
+ * searched for every color, so a proof that tracks a marker and a control
+ * decodes each frame once. Returns one track per color, in order.
+ */
+export async function trackMarkers(
+  page: Page,
+  frames: readonly CastFrame[],
+  {
+    colors,
+    tolerance = 40,
+    region,
+  }: {
+    colors: readonly (readonly [number, number, number])[];
+    tolerance?: number;
+    region?: Box;
+  },
+): Promise<TrackedFrame[][]> {
+  const isDefaultMarker = colors.map(rgb =>
+    rgb.every((value, i) => value === MARKER_RGB[i]),
+  );
   const scratch = await page.context().newPage();
   try {
-    const out: TrackedFrame[] = [];
+    const out: TrackedFrame[][] = colors.map(() => []);
     // Batches keep each evaluate payload moderate.
     for (let i = 0; i < frames.length; i += 12) {
       const batch = frames.slice(i, i + 12);
-      const boxes = await scratch.evaluate(
-        async ({batch: items, color, tol}) => {
-          const results: {
-            box: {x: number; y: number; width: number; height: number} | null;
-            pixels: number;
+      const results = await scratch.evaluate(
+        async ({batch: items, palette, tol, area}) => {
+          const found: {
+            boxes: ({
+              x: number;
+              y: number;
+              width: number;
+              height: number;
+            } | null)[];
+            pixels: number[];
+            scale: number;
           }[] = [];
           for (const item of items) {
             const blob = await (
@@ -329,56 +428,77 @@ export async function trackMarker(
               throw new Error('no 2d context');
             }
             context.drawImage(bitmap, 0, 0);
+            const scale = bitmap.width / item.viewportWidth;
+            const left = area == null ? 0 : Math.floor(area.x * scale);
+            const top = area == null ? 0 : Math.floor(area.y * scale);
+            const right =
+              area == null
+                ? bitmap.width
+                : Math.min(
+                    bitmap.width,
+                    Math.ceil((area.x + area.width) * scale),
+                  );
+            const bottom =
+              area == null
+                ? bitmap.height
+                : Math.min(
+                    bitmap.height,
+                    Math.ceil((area.y + area.height) * scale),
+                  );
             const {data, width, height} = context.getImageData(
-              0,
-              0,
-              bitmap.width,
-              bitmap.height,
+              left,
+              top,
+              right - left,
+              bottom - top,
             );
-            let minX = Infinity;
-            let minY = Infinity;
-            let maxX = -Infinity;
-            let maxY = -Infinity;
-            let pixels = 0;
+            const minX = palette.map(() => Infinity);
+            const minY = palette.map(() => Infinity);
+            const maxX = palette.map(() => -Infinity);
+            const maxY = palette.map(() => -Infinity);
+            const pixels = palette.map(() => 0);
             for (let y = 0; y < height; y += 1) {
               for (let x = 0; x < width; x += 1) {
                 const o = (y * width + x) * 4;
-                if (
-                  Math.abs(data[o] - color[0]) <= tol &&
-                  Math.abs(data[o + 1] - color[1]) <= tol &&
-                  Math.abs(data[o + 2] - color[2]) <= tol
-                ) {
-                  pixels += 1;
-                  if (x < minX) {
-                    minX = x;
-                  }
-                  if (x > maxX) {
-                    maxX = x;
-                  }
-                  if (y < minY) {
-                    minY = y;
-                  }
-                  if (y > maxY) {
-                    maxY = y;
+                for (let c = 0; c < palette.length; c += 1) {
+                  const color = palette[c];
+                  if (
+                    Math.abs(data[o] - color[0]) <= tol &&
+                    Math.abs(data[o + 1] - color[1]) <= tol &&
+                    Math.abs(data[o + 2] - color[2]) <= tol
+                  ) {
+                    pixels[c] += 1;
+                    if (x < minX[c]) {
+                      minX[c] = x;
+                    }
+                    if (x > maxX[c]) {
+                      maxX[c] = x;
+                    }
+                    if (y < minY[c]) {
+                      minY[c] = y;
+                    }
+                    if (y > maxY[c]) {
+                      maxY[c] = y;
+                    }
                   }
                 }
               }
             }
-            const scale = width / item.viewportWidth;
-            results.push({
-              box:
-                pixels === 0
+            found.push({
+              boxes: palette.map((_, c) =>
+                pixels[c] === 0
                   ? null
                   : {
-                      x: minX / scale,
-                      y: minY / scale,
-                      width: (maxX - minX + 1) / scale,
-                      height: (maxY - minY + 1) / scale,
+                      x: (left + minX[c]) / scale,
+                      y: (top + minY[c]) / scale,
+                      width: (maxX[c] - minX[c] + 1) / scale,
+                      height: (maxY[c] - minY[c] + 1) / scale,
                     },
+              ),
               pixels,
+              scale,
             });
           }
-          return results;
+          return found;
         },
         {
           batch: batch.map(f => ({
@@ -386,13 +506,32 @@ export async function trackMarker(
             format: f.format,
             viewportWidth: f.viewportWidth,
           })),
-          color: [...rgb],
+          palette: colors.map(rgb => [...rgb]),
           tol: tolerance,
+          area: region ?? null,
         },
       );
-      boxes.forEach((result, k) =>
-        out.push({t: batch[k].t, box: result.box, pixels: result.pixels}),
-      );
+      results.forEach((result, k) => {
+        const block = isDefaultMarker.some(Boolean)
+          ? colorBlockPx(batch[k].data, batch[k].format)
+          : null;
+        colors.forEach((_, c) => {
+          out[c].push(
+            isDefaultMarker[c] && block != null
+              ? {
+                  t: batch[k].t,
+                  box: result.boxes[c],
+                  pixels: result.pixels[c],
+                  step: {x: block.x / result.scale, y: block.y / result.scale},
+                }
+              : {
+                  t: batch[k].t,
+                  box: result.boxes[c],
+                  pixels: result.pixels[c],
+                },
+          );
+        });
+      });
     }
     return out;
   } finally {

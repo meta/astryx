@@ -20,18 +20,22 @@ import {
   type Browser,
   type Locator,
   type Page,
-} from '@playwright/test';
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   castStoryboard,
   animationStoryboard,
+  armHold,
   blockMainThread,
   busyWindowProof,
   compareCurve,
   cubicBezier,
   countBetween,
+  advanceFrozenPage,
   drag,
+  freezePageOn,
   freezeTimers,
   holdAnimations,
+  installPageFreeze,
   installTimerGate,
   markElement,
   openStory,
@@ -40,20 +44,20 @@ import {
   springStep,
   startScreencast,
   tap,
+  thawPage,
   thawTimers,
   timeline,
   touchDriver,
   touchStoryboard,
   traceRendering,
   trackMarker,
-  waitForAnimation,
   waitForRest,
+  watchAnimations,
   withStorybook,
   writeEvidence,
   type CastFrame,
   type TouchDriver,
 } from '@astryxdesign/interaction-harness';
-import {press} from '../../motion/uikit/timing';
 import {BROWSER_CLICK_WAIT_MS} from '../../utils/browserClickWait';
 import {CLICK_GUARD_WINDOW_MS} from '../../utils/clickGuard';
 
@@ -81,12 +85,33 @@ const LIFT_SCALE = 1 + INSET / THUMB_OFF;
  * opacity-only cross-fade of this many ms or less.
  */
 const REDUCED_FADE_MAX_MS = 200;
-/** The shared press release (motion/uikit/timing.ts `press`), ms. */
-const PRESS_RELEASE_MS = press.highlightOutMs;
-const pressReleaseEase = cubicBezier(...press.highlightOutCurve);
-/** The press layer's opacity t ms into the release, 1 → 0. */
-const pressReleaseAt = (t: number) =>
-  1 - pressReleaseEase(Math.min(1, Math.max(0, t / PRESS_RELEASE_MS)));
+/** The release's clock and curve: the theme's exit motion tokens. */
+interface Exit {
+  readonly ms: number;
+  readonly curve: readonly [number, number, number, number];
+  readonly ease: (t: number) => number;
+}
+
+/** Reads `--duration-exit` and `--ease-exit` where the press paints. */
+async function exitOf(surface: Locator): Promise<Exit> {
+  const {ms, curve} = await surface.evaluate(el => {
+    const style = getComputedStyle(el);
+    const time = style.getPropertyValue('--duration-exit').trim();
+    const points = (
+      style.getPropertyValue('--ease-exit').match(/-?\d*\.?\d+/g) ?? []
+    ).map(Number);
+    return {
+      ms: time.endsWith('ms') ? parseFloat(time) : parseFloat(time) * 1000,
+      curve: points,
+    };
+  });
+  const points = curve as unknown as Exit['curve'];
+  return {ms, curve: points, ease: cubicBezier(...points)};
+}
+
+/** The layer's opacity t ms into the release: the strength, 1 → 0. */
+const strengthAt = (exit: Exit, t: number) =>
+  1 - exit.ease(Math.min(1, Math.max(0, t / exit.ms)));
 
 interface ChangeSample {
   t: number;
@@ -886,6 +911,7 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     expect(await pressState(page)).toBe('fading');
     await freezeTimers(page);
     const row = page.locator('#storybook-root [data-astryx-pressable]').first();
+    const exit = await exitOf(row);
     const held = await holdAnimations(page, row);
     // One CSS animation per press layer runs the release, the track's and
     // the thumb's (design:user-states DR1), each its opacity on the shared
@@ -897,27 +923,27 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
       JSON.stringify(held),
     ).toEqual(['astryx-switch', 'astryx-switch-thumb']);
     for (const animation of css) {
-      expect(animation.durationMs).toBe(PRESS_RELEASE_MS);
+      expect(animation.durationMs).toBe(exit.ms);
     }
     // The lift's settle started at the lift's touch event, a frame or two
     // before the attribute's change started the release. So seek on the
     // release's own clock.
     const samples: {t: number; value: number}[] = [];
-    for (const t of timeline(PRESS_RELEASE_MS)) {
+    for (const t of timeline(exit.ms)) {
       await seekAnimations(page, t + css[0].offsetMs);
       samples.push({t, value: (await pressLayer(page)) ?? 0});
     }
     await restoreHeldRates(page);
     await releaseAnimations(page, {finish: true});
     await thawTimers(page);
-    const comparison = compareCurve(samples, pressReleaseAt, 0.005);
+    const comparison = compareCurve(samples, t => strengthAt(exit, t), 0.005);
     await writeEvidence(
       'curves/switch-press-release',
       {
         [`${testInfo.project.name}.json`]: JSON.stringify(
           {
-            releaseMs: PRESS_RELEASE_MS,
-            curve: press.highlightOutCurve,
+            releaseMs: exit.ms,
+            curve: exit.curve,
             held,
             samples,
             comparison,
@@ -937,21 +963,24 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     expect(await pressLayer(page)).toBeNull();
   });
 
-  test('the press layers’ release follows the theme’s tempo, and Reduce Motion never lengthens it', async ({
+  test('the press layers’ release plays the theme’s exit duration, no longer than DR2’s bound under Reduce Motion', async ({
     page,
   }) => {
-    // The shared release scales its clock by the theme's tempo, up to 1.5;
-    // under Reduce Motion a tempo may shorten it, never lengthen it.
+    // The shared release plays `--duration-exit` (spec:AST-094 FR5); under
+    // Reduce Motion it is no longer than design:reduced-motion DR2's bound.
     const releaseMsUnder = async (
       reducedMotion: 'reduce' | 'no-preference',
     ): Promise<number[]> => {
       await page.emulateMedia({reducedMotion});
       const {driver, center} = await openSwitch(page);
+      // On the pressable itself: a theme root nearer than the document
+      // declares its own exit duration.
       await page.evaluate(() =>
-        document.documentElement.style.setProperty(
-          '--_astryx-motion-tempo',
-          '1.5',
-        ),
+        document
+          .querySelector<HTMLElement>(
+            '#storybook-root [data-astryx-pressable]',
+          )!
+          .style.setProperty('--duration-exit', '333ms'),
       );
       // Hold the release timer and each release animation from its start, so
       // a loaded machine still reads them before the clock runs out.
@@ -994,8 +1023,8 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
       return css.map(a => a.durationMs);
     };
     for (const [reducedMotion, releaseMs] of [
-      ['no-preference', PRESS_RELEASE_MS * 1.5],
-      ['reduce', PRESS_RELEASE_MS],
+      ['no-preference', 333],
+      ['reduce', REDUCED_FADE_MAX_MS],
     ] as const) {
       const durations = await releaseMsUnder(reducedMotion);
       for (const durationMs of durations) {
@@ -1695,72 +1724,166 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
   }
 
   /**
-   * Resolves once the thumb's travel is on screen: its newest `translate`
-   * animation running, started, and one frame into its curve. A page-side
-   * wait, so a loaded machine starts what follows at the same point of the
-   * travel, not at a fixed time after the tap.
+   * Whether the thumb's travel is on screen. Its newest `translate` animation
+   * is running and started, one frame into its curve. The thumb is 1 px or
+   * more off `rest`. It runs in the page.
    */
-  async function travelOnScreen(page: Page, rest?: number): Promise<void> {
-    await page.waitForFunction(
-      rest => {
-        const thumb = document.querySelector<HTMLElement>(
-          '#storybook-root .astryx-switch-thumb',
-        )!;
-        // The travel shows on screen: the thumb is 1 px or more off its rest.
-        if (rest != null) {
-          const box = thumb.getBoundingClientRect();
-          if (Math.abs(box.left + box.width / 2 - rest) < 1) {
-            return false;
-          }
-        }
-        return document
-          .querySelector<HTMLElement>('#storybook-root .astryx-switch-thumb')!
-          .getAnimations()
-          .some(
-            a =>
-              a.playState === 'running' &&
-              !a.pending &&
-              Number(a.currentTime ?? 0) >= 16 &&
-              (a.effect as KeyframeEffect)
-                .getKeyframes()
-                .some(k => 'translate' in k),
-          );
-      },
-      rest ?? null,
-      {polling: 'raf'},
-    );
+  function travelShows(rest: number | null): boolean {
+    const thumb = document.querySelector<HTMLElement>(
+      '#storybook-root .astryx-switch-thumb',
+    )!;
+    if (rest != null) {
+      const box = thumb.getBoundingClientRect();
+      if (Math.abs(box.left + box.width / 2 - rest) < 1) {
+        return false;
+      }
+    }
+    return thumb
+      .getAnimations()
+      .some(
+        a =>
+          a.playState === 'running' &&
+          !a.pending &&
+          Number(a.currentTime ?? 0) >= 16 &&
+          (a.effect as KeyframeEffect)
+            .getKeyframes()
+            .some(k => 'translate' in k),
+      );
   }
 
-  /** P14's two taps: the second lands once the first one's travel is on screen. */
+  /** How far into the first travel a frozen catch's second tap lands, ms. */
+  const CATCH_AT_MS = 60;
+
+  /**
+   * A frozen catch, page ms. `at` is the freeze's instant on the scene's
+   * clock. `frozenAt`, `readAt` and `thawedAt` are real times: the freeze, a
+   * read before the scene moves on, and the thaw. The scene runs
+   * `offsetBefore` behind real time before the freeze, and `offsetAfter`
+   * after the thaw.
+   */
+  interface FrozenCatch {
+    at: number;
+    frozenAt: number;
+    readAt: number;
+    thawedAt: number;
+    offsetBefore: number;
+    offsetAfter: number;
+  }
+
+  /**
+   * P14's two taps. By default the second lands at a point of the scene's own
+   * time. The scene stops in the first lift's own task, before the switch
+   * hears it, so the travel starts held at its start. The scene then moves on
+   * `CATCH_AT_MS`, takes the second tap frozen, and thaws. Sent from here
+   * once the travel shows, a loaded runner's tap can land after the 0.3 s
+   * travel ends. A frozen catch needs `installPageFreeze` before the story
+   * loads, then `installTimerGate`. With `frozen: false`, the second tap goes
+   * out once the travel shows, and the travel keeps moving.
+   */
   async function secondTapMidTravel(
     page: Page,
     driver: TouchDriver,
     center: {x: number; y: number},
-  ): Promise<void> {
+    input: Locator,
+    {frozen = true}: {frozen?: boolean} = {},
+  ): Promise<FrozenCatch | null> {
     const finger = {id: 0, ...center};
-    const rest = await page.evaluate(() => {
-      const box = document
-        .querySelector<HTMLElement>('#storybook-root .astryx-switch-thumb')!
-        .getBoundingClientRect();
-      return box.left + box.width / 2;
-    });
+    /** The thumb's center as the page draws it now, px. */
+    const thumbCenter = async () =>
+      page.evaluate(() => {
+        const box = document
+          .querySelector<HTMLElement>('#storybook-root .astryx-switch-thumb')!
+          .getBoundingClientRect();
+        return box.left + box.width / 2;
+      });
+    const rest = await thumbCenter();
     // Each tap is the browser's click (WebKit's comes only from its own tap
     // path).
-    if (driver.engine === 'webkit') {
-      await driver.tap(center);
-      await travelOnScreen(page, rest);
-      await driver.tap(center);
-    } else {
-      await driver.play([
-        {t: 0, fingers: [finger]},
-        {t: 40, fingers: []},
-      ]);
-      await travelOnScreen(page, rest);
-      await driver.play([
-        {t: 0, fingers: [finger]},
-        {t: 30, fingers: []},
-      ]);
+    const tapWith = async (liftMs: number) => {
+      if (driver.engine === 'webkit') {
+        await driver.tap(center);
+      } else {
+        await driver.play([
+          {t: 0, fingers: [finger]},
+          {t: liftMs, fingers: []},
+        ]);
+      }
+    };
+    if (!frozen) {
+      await tapWith(40);
+      await page.waitForFunction(travelShows, rest, {polling: 'raf'});
+      await tapWith(30);
+      return null;
     }
+    /** The freeze's own clock readings, in the page. */
+    const readFreeze = async () =>
+      page.evaluate(() => {
+        const freeze = (
+          window as unknown as {
+            __harnessFreeze: {realNow(): number; offset: number};
+          }
+        ).__harnessFreeze;
+        return {
+          now: performance.now(),
+          real: freeze.realNow(),
+          offset: freeze.offset,
+        };
+      });
+    await freezePageOn(page, 'pointerup');
+    await tapWith(40);
+    await expect(input).toBeChecked();
+    const atFreeze = await readFreeze();
+    await advanceFrozenPage(page, CATCH_AT_MS);
+    const drawn = await thumbCenter();
+    await tapWith(30);
+    await expect(input).not.toBeChecked();
+    // The return starts where the frozen scene drew the thumb. The frames
+    // cannot show this alone: a slow thaw lets the tap's own frame replace
+    // the drawn one.
+    expect(
+      Math.abs((await thumbCenter()) - drawn),
+      'the catch starts at the drawn thumb',
+    ).toBeLessThan(1);
+    await thawPage(page);
+    const {offset} = await readFreeze();
+    return {
+      at: atFreeze.now,
+      frozenAt: atFreeze.now + atFreeze.offset,
+      readAt: atFreeze.real,
+      thawedAt: atFreeze.now + CATCH_AT_MS + offset,
+      offsetBefore: atFreeze.offset,
+      offsetAfter: offset,
+    };
+  }
+
+  /**
+   * Chromium's catch frames on the scene's clock. The cast stamps real time
+   * and sends no frame while the scene stands still. So on its stamps, the
+   * first frame after the thaw sits the whole frozen span after the frozen
+   * one. A jump there would read as that span's slow motion. Of the frames
+   * sent after the read, while frozen, the last one shows the caught thumb.
+   * That is the scene's move on, or the tap's return, which starts there
+   * (`secondTapMidTravel` checks it). It takes the freeze's instant plus
+   * `CATCH_AT_MS`.
+   */
+  function onSceneClock(
+    samples: [number, number][],
+    {at, frozenAt, readAt, thawedAt, offsetBefore, offsetAfter}: FrozenCatch,
+    timeOrigin: number,
+  ): [number, number][] {
+    const timed = samples.map(([t, x]) => [t - timeOrigin, x] as const);
+    const frozen = timed.filter(([t]) => t >= readAt && t < thawedAt);
+    // Present: the cast shows the caught thumb while the scene stands still.
+    expect(frozen.length, 'a frame of the frozen catch').toBeGreaterThan(0);
+    return [
+      ...timed
+        .filter(([t]) => t < frozenAt)
+        .map(([t, x]): [number, number] => [t - offsetBefore, x]),
+      [at + CATCH_AT_MS, frozen[frozen.length - 1][1]],
+      ...timed
+        .filter(([t]) => t >= thawedAt)
+        .map(([t, x]): [number, number] => [t - offsetAfter, x]),
+    ];
   }
 
   /**
@@ -1774,9 +1897,19 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     page: Page,
     thumb: Locator,
     browserName: string,
-  ): Promise<{stop: () => Promise<[number, number][]>}> {
+  ): Promise<{
+    stop: (scene: FrozenCatch | null) => Promise<[number, number][]>;
+  }> {
     if (browserName !== 'chromium') {
+      // Frame callbacks read the page's clock and wait out a freeze, so these
+      // samples are on the scene's clock already. The first one is the thumb
+      // at rest: a freeze that lands before it would hold it until the thaw.
       await recordThumbCenters(page);
+      await page.waitForFunction(
+        () =>
+          (window as unknown as {__thumbXs: [number, number][]}).__thumbXs
+            .length > 0,
+      );
       return {
         stop: async () =>
           page.evaluate(
@@ -1788,7 +1921,7 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     await markElement(thumb, {size: 6, inset: 2});
     const cast = await startScreencast(page);
     return {
-      stop: async () => {
+      stop: async scene => {
         const tracked = await trackMarker(page, await cast.stop());
         const shown = tracked.filter(
           (f): f is typeof f & {box: NonNullable<typeof f.box>} =>
@@ -1797,7 +1930,17 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
         // Present and painted first: the marked thumb in the frames, with a
         // box.
         expect(shown.length).toBeGreaterThan(10);
-        return shown.map(f => [f.t, f.box.x + f.box.width / 2]);
+        const samples = shown.map((f): [number, number] => [
+          f.t,
+          f.box.x + f.box.width / 2,
+        ]);
+        return scene == null
+          ? samples
+          : onSceneClock(
+              samples,
+              scene,
+              await page.evaluate(() => performance.timeOrigin),
+            );
       },
     };
   }
@@ -1826,11 +1969,13 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     page,
     browserName,
   }) => {
+    await installPageFreeze(page);
     const {driver, input, thumb, center} = await openSwitch(page);
+    await installTimerGate(page);
     const record = await recordCatch(page, thumb, browserName);
-    await secondTapMidTravel(page, driver, center);
+    const scene = await secondTapMidTravel(page, driver, center, input);
     await waitForSwitchRest(page, thumb);
-    const samples = await record.stop();
+    const samples = await record.stop(scene);
     await expect(input).not.toBeChecked();
     expect(await thumbOffset(page)).toBeCloseTo(0, 0);
     expectCaughtWithoutAJump(samples);
@@ -1840,11 +1985,13 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     page,
     browserName,
   }) => {
+    await installPageFreeze(page);
     const {driver, input, thumb, center} = await openSwitch(page);
+    await installTimerGate(page);
     const record = await recordCatch(page, thumb, browserName);
-    await secondTapMidTravel(page, driver, center);
+    const scene = await secondTapMidTravel(page, driver, center, input);
     await waitForSwitchRest(page, thumb);
-    const samples = await record.stop();
+    const samples = await record.stop(scene);
     await expect(input).not.toBeChecked();
     expect(await thumbOffset(page)).toBeCloseTo(0, 0);
     expectCaughtWithoutAJump(samples.filter((_, index) => index % 3 === 0));
@@ -1886,7 +2033,9 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
       );
     });
     const cast = await startScreencast(page);
-    await secondTapMidTravel(page, driver, center);
+    // The travel has to keep moving through the block, so this second tap is
+    // not frozen.
+    await secondTapMidTravel(page, driver, center, input, {frozen: false});
     await waitForSwitchRest(page, thumb);
     const castFrames = await cast.stop();
     await expect(input).not.toBeChecked();
@@ -2023,13 +2172,23 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
   test('the travel and the track colour follow the UIKit springs, sampled frame by frame', async ({
     page,
   }, testInfo) => {
-    const {thumb} = await openSwitch(page);
+    await openSwitch(page);
     // The travel and the track color, from a programmatic change: the thumb
     // starts at rest, as UISwitch's `setOn(_:animated:)` does.
     await openStory(page, storybook(), 'core-switch--controlled-update');
+    const hold = await armHold(
+      page,
+      page.locator('#storybook-root .astryx-switch'),
+      {
+        judges: {
+          target: page.locator('#storybook-root .astryx-switch-thumb'),
+          property: 'translate',
+        },
+        newOnly: true,
+      },
+    );
     await page.getByRole('button', {name: 'Turn on remotely'}).click();
-    await waitForAnimation(thumb);
-    await holdAnimations(page, page.locator('#storybook-root .astryx-switch'));
+    await hold.held();
     const travelSamples = await sampleThumb(page, timeline(500));
     await releaseAnimations(page);
     const travelResult = compareCurve(
@@ -2210,6 +2369,13 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
       'screencast frame evidence is Chromium-only in Playwright (WebKit: checked on the iOS simulator instead)',
     );
     const {driver, input, onLayer, center} = await openSwitch(page);
+    // A long exit duration on the pressable, so the block spans enough
+    // delivered frames to judge whatever the theme's own value is.
+    await page.evaluate(() =>
+      document
+        .querySelector<HTMLElement>('#storybook-root [data-astryx-pressable]')!
+        .style.setProperty('--duration-exit', '400ms'),
+    );
     // Only the press layer may change the probe. The thumb is hidden, though
     // its animations still run, and the colour fade is off. The value stays
     // off: every click is stopped before it reaches the input.
@@ -2360,9 +2526,10 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
       throw new Error('no track');
     }
     const cast = await startScreencast(page);
+    const watch = await watchAnimations(onLayer);
     await driver.play(tap(center, {holdMs: 50}));
     await expect(input).toBeChecked();
-    await waitForAnimation(onLayer, {minProgressMs: 16});
+    await watch.started({minProgressMs: 16});
     const block = await blockMainThread(page, 700);
     await page.waitForTimeout(150);
     const castFrames = await cast.stop();
@@ -2479,13 +2646,21 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     'storyboard: tap — travel',
     {tag: '@storyboard'},
     async ({page}, testInfo) => {
-      const {driver, thumb, center} = await openSwitch(page);
+      const {driver, center, thumb} = await openSwitch(page);
       await installTimerGate(page);
       const clip = page.locator('#storybook-root .astryx-switch');
+      // The press starts two animations. The release starts its travel with
+      // several others at once, so a count of 3 holds at the release.
+      const hold = await armHold(page, clip, {
+        judges: {target: thumb, property: 'translate'},
+        count: 3,
+        newOnly: true,
+      });
       await driver.play(tap(center, {holdMs: 50}));
-      await waitForAnimation(thumb);
+      const held = await hold.held();
       await freezeTimers(page);
       const {storyboard} = await animationStoryboard(page, {
+        held,
         name: 'switch-tap',
         // The motion: the track colour settles last, about 1.2 s after the
         // release.

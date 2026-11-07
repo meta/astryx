@@ -358,6 +358,8 @@ export function useChatStreamScroll({
 
   // --- Event listeners ---
 
+  // Syncs scroll and scrollend listeners on the stream container with
+  // `enabled`.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el || !enabled) {

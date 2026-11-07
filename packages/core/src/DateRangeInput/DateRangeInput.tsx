@@ -4,7 +4,8 @@
 
 /**
  * @file DateRangeInput.tsx
- * @input Uses React, Field, Calendar (range mode), VisuallyHidden, usePopover
+ * @input Uses React, Field, Calendar (range mode), the resolved calendar,
+ *   VisuallyHidden, usePopover
  * @output Exports DateRangeInput component, DateRangeInputProps
  * @position Core implementation; consumed by index.ts, tested by DateRangeInput.test.tsx
  *
@@ -28,12 +29,18 @@ import * as stylex from '@stylexjs/stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {
   plainDateFromISO,
-  plainDateToday,
-  plainDateFormat,
   plainDateDiffDays,
+  type PlainDate,
   DATE_FORMAT_SHORT,
   DATE_FORMAT_SHORT_WITH_YEAR,
 } from '../utils/plainDate';
+import {
+  type CalendarSystem,
+  calendarMonthOf,
+  calendarYearMonthOf,
+  formatCalendarDate,
+} from '../utils/calendarSystem';
+import {useCalendarSystem} from '../i18n/useCalendarSystem';
 import {
   colorVars,
   sizeVars,
@@ -77,6 +84,7 @@ import {useSize} from '../SizeContext/SizeContext';
 import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useToday} from '../hooks/useToday';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
@@ -238,7 +246,7 @@ const styles = stylex.create({
   },
   presetButtonActive: {
     backgroundColor: colorVars['--color-accent-muted'],
-    color: colorVars['--color-accent'],
+    color: colorVars['--color-text-accent'],
   },
   presetButtonDisabled: {
     color: colorVars['--color-text-disabled'],
@@ -262,17 +270,27 @@ const sizeStyles = stylex.create({
   },
 });
 
-function formatRangeDisplay(range: DateRange | null, locale: Locale): string {
+function formatRangeDisplay(
+  range: DateRange | null,
+  locale: Locale,
+  calendar: CalendarSystem,
+  today: PlainDate | null,
+): string {
   if (!range) {
     return '';
   }
   const start = plainDateFromISO(range.start);
   const end = plainDateFromISO(range.end);
-  const currentYear = plainDateToday().year;
-  const sameYear = start.year === end.year && start.year === currentYear;
+  const yearOf = (pd: PlainDate) =>
+    calendarYearMonthOf(calendar, calendarMonthOf(calendar, pd)).year;
+  // While today is unknown (server render, hydration) the year shows.
+  const sameYear =
+    today != null &&
+    yearOf(start) === yearOf(end) &&
+    yearOf(start) === yearOf(today);
 
   const fmt = sameYear ? DATE_FORMAT_SHORT : DATE_FORMAT_SHORT_WITH_YEAR;
-  return `${plainDateFormat(start, fmt, locale)} – ${plainDateFormat(end, fmt, locale)}`;
+  return `${formatCalendarDate(calendar, start, fmt, locale)} – ${formatCalendarDate(calendar, end, fmt, locale)}`;
 }
 
 function isRangeEqual(a: DateRange | null, b: DateRange | null): boolean {
@@ -498,6 +516,22 @@ export interface DateRangeInputProps extends Omit<
   numberOfMonths?: 1 | 2;
 
   /**
+   * The calendar the trigger text and the popover calendar show, such as
+   * `'persian'`, `'hebrew'`, or `'buddhist'`. `value`, `onChange`, `min`,
+   * `max`, and presets stay Gregorian ISO dates in every calendar. Calendars
+   * other than `gregory`, `iso8601`, `buddhist`, `roc`, and `japanese` need
+   * `Temporal`, native or a polyfill the application loads; without it the
+   * field shows Gregorian dates.
+   *
+   * @default the InternationalizationProvider's calendar, else `'gregory'`
+   * @example
+   * ```
+   * <DateRangeInput label="Stay" calendar="persian" value={range} onChange={setRange} />
+   * ```
+   */
+  calendar?: CalendarSystem;
+
+  /**
    * First day of week in the calendar. Accepts a number
    * (0 = Sunday … 6 = Saturday) or a three-letter day name ('sun'–'sat',
    * case-insensitive).
@@ -553,6 +587,7 @@ export function DateRangeInput({
   labelTooltip,
   numberOfMonths = 2,
   weekStartsOn,
+  calendar: calendarProp,
   width,
   containerXstyle,
   containerClassName,
@@ -578,6 +613,7 @@ export function DateRangeInput({
   } = rest;
   const t = useComponentTranslator();
   const locale = useLocale();
+  const calendar = useCalendarSystem(calendarProp, 'DateRangeInput');
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const placeholder =
     placeholderFromProps ?? t('@astryx.dateRangeInput.placeholder');
@@ -631,9 +667,10 @@ export function DateRangeInput({
       .filter(Boolean)
       .join(' ') || undefined;
 
+  const today = useToday();
   const displayValue = useMemo(
-    () => formatRangeDisplay(optimisticValue, locale),
-    [optimisticValue, locale],
+    () => formatRangeDisplay(optimisticValue, locale, calendar, today),
+    [optimisticValue, locale, calendar, today],
   );
 
   const popover = usePopover({
@@ -910,6 +947,7 @@ export function DateRangeInput({
               calendar only while it is open. */}
             {popover.isOpen && (
               <Calendar
+                calendar={calendar}
                 mode="range"
                 value={optimisticValue}
                 onChange={handleRangeSelect}

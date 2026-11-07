@@ -52,7 +52,6 @@ import type {BaseProps} from '../BaseProps';
 import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
 import {useAnnounce} from '../hooks/useAnnounce';
-import {useResolvedRequired} from '../hooks/useResolvedRequired';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {usePressFeedback} from '../hooks/usePressFeedback';
@@ -63,9 +62,9 @@ import {
 import english from '../i18n/generated-english/Switch/Switch.generated';
 
 registerEnglishFallback(english);
+import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
 import {
   interactionOverlayStyles,
-  pressConsts,
   pressVars,
 } from '../utils/interactionOverlay.stylex';
 import {pressHoldsDragProps} from '../privateAttributes/pressHoldsDrag.stylex';
@@ -94,14 +93,15 @@ const PRESS_FADING = '[data-astryx-press="fading"]';
 
 /**
  * The shared press release, for the press layers the switch fades on the
- * compositor. The clock scales by the theme's tempo, and the curve is the
- * controller's own. Switch.test.tsx compares the two.
+ * compositor: the theme's exit motion tokens, no longer than the Reduce
+ * Motion fade under Reduce Motion. Switch.test.tsx compares them with
+ * the overlay's.
  * SYNC: utils/interactionOverlay.stylex.ts PRESS_RELEASE_DURATION,
  * PRESS_RELEASE_DURATION_REDUCED and RELEASE_EASE.
  */
-const PRESS_RELEASE_DURATION = `calc(${pressConsts.releaseMs}ms * min(var(--_astryx-motion-tempo, 1), 1.5))`;
-const PRESS_RELEASE_DURATION_REDUCED = `min(${pressConsts.releaseMs}ms, calc(${pressConsts.releaseMs}ms * var(--_astryx-motion-tempo, 1)))`;
-const PRESS_RELEASE_EASE = 'cubic-bezier(0, 0, 0.2, 1)';
+const PRESS_RELEASE_DURATION = durationVars['--duration-exit'];
+const PRESS_RELEASE_DURATION_REDUCED = `min(${durationVars['--duration-exit']}, ${reducedMotionFadeConsts.duration})`;
+const PRESS_RELEASE_EASE = easeVars['--ease-exit'];
 
 // The measured hit insets (utils/hitArea), 0 until measured.
 const HIT_TOP = 'var(--astryx-hit-inset-top, 0px)';
@@ -867,10 +867,6 @@ export function Switch({
   const pressable = usePressFeedback();
   const descriptionID = useId();
   const statusMessageID = useId();
-  // Announce the effective required state (form default included) while the
-  // native `required` stays bound to the explicit `isRequired` so a layout
-  // default never switches on browser validation.
-  const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
 
   const [, startTransition] = useTransition();
   const [optimisticValue, setOptimisticValue] = useOptimistic(value);
@@ -1003,7 +999,8 @@ export function Switch({
         aria-disabled={isDisabled ? 'true' : undefined}
         form={isDisabled ? '' : undefined}
         required={isRequired}
-        aria-required={isEffectivelyRequired ? 'true' : undefined}
+        // A form's required default sets nothing here: an off switch is an answer.
+        aria-required={isRequired ? 'true' : undefined}
         onChange={e => {
           if (isDisabled || isBusy) {
             return;

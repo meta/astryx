@@ -9,6 +9,7 @@
 import {readFileSync} from 'node:fs';
 import * as path from 'node:path';
 import {requireCoreDir} from '../../foundation/fs/paths.mjs';
+import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
 import {
   reusedWhileUnchanged,
   unchangedSince,
@@ -37,12 +38,21 @@ export function requireSearchCoreDir(cwd) {
 }
 
 /**
- * Gathers every candidate the query's domains hold.
+ * Gathers every candidate the query's domains hold. The gather runs in one
+ * listing-cache operation, so its discovery helpers list each folder once, as
+ * in the CLI's searches. A caller that runs its own operation shares it.
  *
  * @param {{cwd?: string, type?: string}} options
  * @returns {Promise<{all: Candidate[], components: Candidate[], searchedComponents: boolean, outside: boolean, coreSkipped: string | null}>}
  */
-export async function gatherCandidates(options) {
+export function gatherCandidates(options) {
+  return withListingCache(() => gatherDomains(options));
+}
+
+/**
+ * @param {{cwd?: string, type?: string}} options
+ */
+async function gatherDomains(options) {
   const {cwd = process.cwd(), type} = options;
   // `astryx docs` reads docs without @astryxdesign/core, and `astryx theme
   // list` reads themes without it (bundled themes need no project), so a

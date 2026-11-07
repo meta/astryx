@@ -6,7 +6,8 @@
  * @file DialogContext.ts
  * @input React context
  * @output Internal dialog context for child focus behavior and default labelling
- * @position Dialog internals; consumed by focus-managing children and DialogHeader
+ * @position Dialog internals; consumed by focus-managing children and DialogHeader,
+ *   and by Lab's DialogHeroHeader through the internal/dialog-context entry
  */
 
 import {createContext, use} from 'react';
@@ -21,6 +22,12 @@ export interface DialogContextValue {
    * when the title actually rendered — never pointing at a nonexistent id.
    */
   titleId?: string;
+  /**
+   * Checks the default aria-labelledby again. The dialog looks for its title
+   * when it mounts; a composed header whose title element appears, changes,
+   * or leaves after that calls this so the dialog's name follows it.
+   */
+  syncDefaultName?: () => void;
 }
 
 export const DialogContext = createContext<DialogContextValue | null>(null);

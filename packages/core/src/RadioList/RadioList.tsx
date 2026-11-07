@@ -29,9 +29,10 @@ import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import {Field} from '../Field/Field';
 import type {InputStatus} from '../Field/types';
-import {useTooltip} from '../Tooltip';
+import {useTooltip} from '../Tooltip/useTooltip';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
-import {composeEventHandlers, mergeProps} from '../utils';
+import {composeEventHandlers} from '../utils/composeEventHandlers';
+import {mergeProps} from '../utils/mergeProps';
 import {joinAriaIDs} from '../utils/inputAria';
 import {
   type FieldInputBaseProps,

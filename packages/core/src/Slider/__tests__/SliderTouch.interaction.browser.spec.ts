@@ -13,7 +13,12 @@
  *   are useSliderTouch.test.tsx and motion/uikit/slider.test.ts.
  */
 
-import {expect, test, type Locator, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   blockMainThread,
   busyWindowProof,
@@ -1157,17 +1162,32 @@ test('a finger held on a thumb or on the track starts no selection: the thumb’
 test('a finger lifted outside the tracking bounds coasts back to the lift value', async ({
   page,
 }) => {
-  const {driver, center, value} = await openSlider(
-    page,
-    'core-slider--default',
-  );
+  // The page reads where the thumb is drawn, in the lift's own task. The
+  // listener is added before the story loads, so it runs before the slider
+  // starts the release's coast. A read from here would hold the lift back,
+  // and a lift that late releases at rest. A drag draws the thumb in each
+  // move's own task, but its value attribute waits for a render.
+  await page.addInitScript(() => {
+    window.addEventListener(
+      'touchend',
+      () => {
+        const box = document
+          .querySelector('[role="slider"]')
+          ?.getBoundingClientRect();
+        (window as unknown as {__atLift?: number}).__atLift =
+          box == null ? undefined : box.left + box.width / 2;
+      },
+      {capture: true, passive: true},
+    );
+  });
+  const {driver, center} = await openSlider(page, 'core-slider--default');
   const at = await center();
   // Drag right 40 px, then 150 px up (outside the 70 px tracking margin),
   // and lift while moving right at 400 px/s.
   const right = {x: at.x + 40, y: at.y};
   const up = {x: right.x, y: at.y - 150};
   const out = {x: up.x + 20, y: up.y};
-  const {script, ends} = legs(
+  const {script} = legs(
     at,
     [
       {to: right, durationMs: 300},
@@ -1176,11 +1196,16 @@ test('a finger lifted outside the tracking bounds coasts back to the lift value'
     ],
     {hz: 120},
   );
-  const [atLift] = await playReading(page, driver, script, [ends[2]], value);
+  // A lift the page reads at rest releases at 0, and this proof would pass
+  // whatever the slider does. `'spacing'` fails such a play.
+  await driver.play(script, {pacing: 'spacing'});
+  const atLift = await page.evaluate(
+    () => (window as unknown as {__atLift: number}).__atLift,
+  );
   await page.waitForTimeout(900);
-  // Outside the tracking bounds the release does not project: the value
-  // settles where the finger left it.
-  expect(await value()).toBe(atLift);
+  // Outside the tracking bounds the release does not project: the thumb
+  // settles where the finger left it. One value is 3.5 px of travel.
+  expect(Math.abs((await center()).x - atLift)).toBeLessThan(0.5);
 });
 
 test('coincident range thumbs: the first movement picks the thumb that can follow it', async ({
@@ -1302,10 +1327,6 @@ test(
       'core-slider--touch-tracking',
       {name: 'Brightness'},
     );
-    test.skip(
-      !driver.scriptedTimestamps,
-      'WebKit stamps an injected touch when it arrives, so a stalled dispatch bunches the throw, and its cast moves in 2 px steps (README: engine limits)',
-    );
     await markElement(thumb);
     // A compositor-only control in the same screencast: the coast is judged
     // against what this machine's compositor presented in the block.
@@ -1322,20 +1343,35 @@ test(
       during: fillOf(thumb),
       minProgressMs: 48,
     });
-    // A moderate iPhone flick, 900 px/s over 60 ms, with the script's own
-    // timestamps.
-    await driver.play(flick(at, {velocity: {x: 900, y: 0}, durationMs: 60}));
+    // A moderate iPhone flick, 900 px/s over 60 ms. WebKit stamps a touch
+    // when it arrives, so the play keeps the script's spacing after a
+    // stalled dispatch. A page that read a resting finger, or no throw,
+    // fails the play and names whose fault it was.
+    const played = await driver.play(
+      flick(at, {velocity: {x: 900, y: 0}, durationMs: 60}),
+      {pacing: 'spacing'},
+    );
     const block = await blocking;
     await page.waitForTimeout(150);
     const castFrames = await cast.stop();
     const tracked = await trackMarker(page, castFrames);
     const control = await trackMarker(page, castFrames, {rgb: CONTROL_RGB});
-    // Judged until 2 px from rest: two of the cast's 1 px position steps.
+    // Judged until two of the cast's own steps from rest: 2 px in
+    // Chromium's PNG cast, 4 px in WebKit's JPEG cast. WebKit's tail then
+    // shows the cast's 2 px plateaus, not a stall.
     const proof = busyWindowProof(tracked, block, {
       axis: 'x',
-      settledWithin: 2,
+      settledWithinSteps: 2,
       control,
     });
+    // A slow runner stretches the throw, and a slow throw coasts too little
+    // to judge. The verdict names the release the page read, so that red
+    // names the runner.
+    const release = played.at(-1)?.release;
+    const summary =
+      release == null
+        ? proof.summary
+        : `${proof.summary}; the page read ${release.pagePxPerS.toFixed(0)} px/s of the script's ${release.scriptPxPerS.toFixed(0)} px/s`;
     await writeEvidence(
       'busy-main-thread/slider-coast',
       {
@@ -1343,6 +1379,7 @@ test(
           {
             block,
             proof,
+            release,
             frames: tracked.map(f => ({
               t: +(f.t - block.from).toFixed(1),
               x: f.box?.x ?? null,
@@ -1367,9 +1404,9 @@ test(
     await film.write(testInfo, {block, judged: proof.judged});
     testInfo.annotations.push({
       type: 'busy-main-thread',
-      description: proof.summary,
+      description: summary,
     });
-    expect(proof.verdict.failures, proof.summary).toEqual([]);
+    expect(proof.verdict.failures, summary).toEqual([]);
   },
 );
 

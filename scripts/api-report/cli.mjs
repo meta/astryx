@@ -36,12 +36,19 @@ import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {expandWorkspaceDirs} from '../lib/workspace-globs.mjs';
 import {isStableReleasePackage} from '../release/active-release.mjs';
-import {computeChanges, renderChanges} from './changes.mjs';
+import {
+  computeChanges,
+  renderChanges,
+  staleReportWarnings,
+} from './changes.mjs';
 import {generateReport} from './generate.mjs';
 
 export const REPORT_FILE = 'api-report.md';
 export const SURFACE_FILE = 'surface.json';
-/** api-changes.json's shape; 2 added `baseRecord`, `baseSource`, `staleRows`. */
+/**
+ * api-changes.json's shape. Version 2 has `baseRecord`, `baseSource`, `staleRows`
+ * and `staleOwnRows`; a reader of version 2 accepts a missing `staleOwnRows`.
+ */
 export const CHANGES_VERSION = 2;
 const REPO_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -312,6 +319,9 @@ async function main() {
         2,
       ) + '\n',
     );
+    const fileOf = new Map(results.map(r => [r.pkg, r.file]));
+    for (const warning of staleReportWarnings(changes, pkg => fileOf.get(pkg)))
+      console.log(warning);
     const total = changes.reduce((n, c) => n + c.rows.length, 0);
     const stale = changes.filter(c => c.stale || c.missing).map(c => c.pkg);
     console.log(

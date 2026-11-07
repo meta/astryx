@@ -4,12 +4,14 @@
 
 /**
  * @file CheckboxListContext.tsx
- * @input Uses the private layer-scoped context factory
+ * @input Uses the private layer-scoped context factory and the RequiredGroup
+ *   type
  * @output Exports CheckboxListContext for parent-child communication
  * @position Internal context; consumed by CheckboxList.tsx and CheckboxListItem.tsx
  */
 
 import {createLayerScopedContext} from '../Layer/layerScopedContext';
+import type {RequiredGroup} from './requiredGroup';
 
 export interface CheckboxListContextValue {
   value?: string[];
@@ -49,6 +51,12 @@ export interface CheckboxListContextValue {
    * when idle.
    */
   loadingValues?: ReadonlyArray<string>;
+  /**
+   * Present when the list is `isRequired`. Each item registers its checkbox,
+   * so that while no box is checked the first enabled box carries native
+   * `required`.
+   */
+  requiredGroup?: RequiredGroup;
 }
 
 export const CheckboxListContext =

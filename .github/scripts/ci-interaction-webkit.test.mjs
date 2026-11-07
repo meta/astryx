@@ -6,15 +6,19 @@
  * pr-interaction runs the touch interaction proofs in Chromium only, so a
  * WebKit- or iOS-only correction (a tap on content that moved under the
  * finger, Safari's own pointer events) had no CI guard. pr-interaction-webkit
- * runs the same proofs in WebKit, but only for the code where the engines
- * differ on touch: the gesture host and recognizers, the motion runtime, the
- * touch helpers, press feedback and the menu press model, plus the harness and
- * config that drive them. Out of that scope it skips visibly and reports
- * success, and the existing `test` join requires it, so it adds no required
- * context. The scope step's own behavior is in test-scope-action.test.mjs.
+ * runs the proofs in WebKit for what a change reaches: its own paths for the
+ * code where the engines differ on touch (the gesture host and recognizers,
+ * the motion runtime, the touch helpers, press feedback and the menu press
+ * model, plus the harness and config that drive them), each interaction spec
+ * the change edits, and every interaction spec in a component folder whose
+ * code it changes. With nothing to run it skips visibly and reports success,
+ * and the existing `test` join requires it, so it adds no required context.
+ * The scope step's own behavior is in test-scope-action.test.mjs.
  */
 
+import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 import {build} from 'esbuild';
@@ -22,6 +26,7 @@ import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
 
 import {ungated} from './ci-pr-gate.mjs';
+import {isInteractionSpec, selectProofs} from './playwright-legs.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const ci = yaml.parse(
@@ -34,7 +39,33 @@ const step = (job, name) =>
 const decide = job => job.steps.find(candidate => candidate.id === 'scope');
 const applies = "steps.scope.outputs.applies == 'true'";
 const inScope = touched => new RegExp(decide(webkit).with.paths).test(touched);
-const runs = files => files.some(inScope);
+// Every interaction spec in the repository, as the legs step lists them.
+function specsUnder(dir) {
+  const out = [];
+  for (const entry of fs.readdirSync(path.join(root, dir), {
+    withFileTypes: true,
+  })) {
+    const file = `${dir}/${entry.name}`;
+    if (entry.isDirectory()) {
+      if (entry.name !== 'node_modules' && entry.name !== 'dist')
+        out.push(...specsUnder(file));
+    } else if (isInteractionSpec(file)) out.push(file);
+  }
+  return out;
+}
+const listedSpecs = [...specsUnder('packages'), ...specsUnder('internal')];
+// What the WebKit legs run for a change: nothing outside the scope step's
+// paths, else what the legs step selects.
+const proofs = files =>
+  files.some(inScope)
+    ? selectProofs({
+        listed: listedSpecs,
+        changed: files,
+        shared: new RegExp(webkit.env.WEBKIT_SHARED_PATHS),
+        filters: webkit.env.WEBKIT_SPEC_PATHS.trim().split(/\s+/),
+      })
+    : [];
+const runs = files => proofs(files).length > 0;
 
 describe('WebKit interaction proof routing', () => {
   it('is joined by test, adding no required context of its own', () => {
@@ -73,7 +104,8 @@ describe('WebKit interaction proof routing', () => {
   });
 
   it('decides its own scope first, skips visibly, and gates every later step on it', () => {
-    expect(webkit.steps[0].with['sparse-checkout']).toBe(
+    // The scope action first; the leg planner shares the checkout.
+    expect(webkit.steps[0].with['sparse-checkout'].trim().split('\n')[0]).toBe(
       '.github/actions/test-scope',
     );
     expect(decide(webkit).uses).toBe(
@@ -93,15 +125,26 @@ describe('WebKit interaction proof routing', () => {
     const guards = new Set([
       "Require this pull request's Storybook build",
       'Skip the WebKit proofs outside their scope',
+      'Leave the proofs to the other legs',
     ]);
-    for (const candidate of webkit.steps.slice(2)) {
-      if (guards.has(candidate.name)) continue;
+    // Every step after the leg count also waits for this leg to have a share.
+    const counted = webkit.steps.indexOf(
+      step(webkit, "Count this run's WebKit legs"),
+    );
+    const share = "steps.legs.outputs.runs == 'true'";
+    for (const [index, candidate] of webkit.steps.entries()) {
+      if (index < 2 || guards.has(candidate.name)) continue;
+      const gate = index <= counted ? applies : `${applies} && ${share}`;
+      // A leg whose plan holds no spec file runs no proofs.
       expect(candidate.if, candidate.name ?? candidate.uses).toMatch(
         new RegExp(
-          `^(always\\(\\) && )?${applies.replace(/[.()|]/g, '\\$&')}$`,
+          `^((always|failure)\\(\\) && )?${gate.replace(/[.()|]/g, '\\$&')}( && steps\\.plan\\.outputs\\.files != '0')?$`,
         ),
       );
     }
+    expect(step(webkit, 'Leave the proofs to the other legs').if).toBe(
+      `${applies} && steps.legs.outputs.runs != 'true'`,
+    );
   });
 
   it('runs the interaction config in WebKit against the exact PR head', () => {
@@ -113,13 +156,74 @@ describe('WebKit interaction proof routing', () => {
     expect(checkout?.with?.ref).toBe(
       '${{ github.event.pull_request.head.sha }}',
     );
-    expect(step(webkit, 'Install Playwright WebKit').run).toContain(
-      'npx playwright install --with-deps webkit',
+    // The image already holds WebKit and its system libraries: no apt step.
+    expect(step(webkit, 'Install Playwright WebKit').run).toBe(
+      'pnpm install --frozen-lockfile && npx playwright install webkit chromium-headless-shell',
     );
     const run = step(webkit, 'Run WebKit interaction proofs').run;
     expect(run).toContain('--config playwright.interaction.config.ts');
     expect(run).toContain('--project webkit');
     expect(run).not.toContain('--project chromium');
+  });
+
+  it("installs Chromium's headless shell when an interaction spec launches Chromium", () => {
+    // A changed interaction spec runs in the WebKit legs too, so a spec that
+    // launches Chromium (to decode a WebKit recording) needs the shell there.
+    const launchesChromium = source => /\bchromium\.launch\(/.test(source);
+    expect(launchesChromium('const decoder = await chromium.launch();')).toBe(
+      true,
+    );
+    expect(launchesChromium('await webkit.launch();')).toBe(false);
+    const specs = execFileSync(
+      'git',
+      ['ls-files', '*.interaction.browser.spec.ts'],
+      {cwd: root, encoding: 'utf8'},
+    )
+      .split('\n')
+      .filter(Boolean);
+    const launchers = specs.filter(file =>
+      launchesChromium(fs.readFileSync(path.join(root, file), 'utf8')),
+    );
+    if (launchers.length > 0) {
+      expect(
+        step(webkit, 'Install Playwright WebKit').run.split(/\s+/),
+        launchers.join(', '),
+      ).toContain('chromium-headless-shell');
+    }
+  });
+
+  it("runs in Playwright's image for exactly the Playwright version the lockfile resolves", () => {
+    expect(webkit['runs-on']).toBe('ubuntu-latest');
+    expect(webkit.container).toEqual({
+      image: expect.stringMatching(
+        /^mcr\.microsoft\.com\/playwright:v\d+\.\d+\.\d+-noble$/,
+      ),
+      options: '--ipc=host',
+    });
+    // Steps keep the runner's bash, and git trusts the root-owned checkout
+    // before the head check reads it.
+    expect(webkit.defaults).toEqual({run: {shell: 'bash'}});
+    const trust = step(webkit, 'Trust the checkout in the container');
+    expect(trust.run).toBe(
+      'git config --global --add safe.directory "$GITHUB_WORKSPACE"',
+    );
+    expect(webkit.steps.indexOf(trust)).toBe(
+      webkit.steps.indexOf(step(webkit, 'Verify evidence checkout')) - 1,
+    );
+    const tag = /:v(\d+\.\d+\.\d+)-/.exec(webkit.container.image)[1];
+    const lock = fs.readFileSync(path.join(root, 'pnpm-lock.yaml'), 'utf8');
+    // Every resolved copy of the three packages, so a bump of any one of them
+    // fails here until the image tag moves with it.
+    for (const name of ['@playwright/test', 'playwright', 'playwright-core']) {
+      const pattern = new RegExp(
+        `^  '?${name.replace(/[/.]/g, '\\$&')}@(\\d+\\.\\d+\\.\\d+)'?:`,
+        'gm',
+      );
+      const versions = new Set(
+        [...lock.matchAll(pattern)].map(match => match[1]),
+      );
+      expect([...versions], name).toEqual([tag]);
+    }
   });
 
   it("caps llvmpipe's threads at the job's cgroup CPU quota before Playwright runs", async () => {
@@ -158,7 +262,11 @@ describe('WebKit interaction proof routing', () => {
   });
 
   it('runs only the specs whose code its scope covers', () => {
-    const run = step(webkit, 'Run WebKit interaction proofs').run;
+    // Each leg plans its share from these paths and runs only that share.
+    const run = webkit.env.WEBKIT_SPEC_PATHS;
+    const count = step(webkit, "Count this run's WebKit legs").run;
+    expect(count).toContain('--shared "$WEBKIT_SHARED_PATHS"');
+    expect(count).toContain('-- "${SPEC_PATHS[@]}" > "$selected"');
     const targets = [
       'packages/core/src/gestures/',
       'packages/core/src/motion/__tests__/animatedLayout.interaction',
@@ -172,21 +280,148 @@ describe('WebKit interaction proof routing', () => {
     }
     // The adopters spec renders Storybook components (Collapsible, TreeList,
     // ScrollableArea), and component specs (DateInput, TabList, TreeList,
-    // SideNav) stay with the Chromium proofs.
+    // SideNav) run for a change to their own folder, not for shared code.
     expect(run).not.toContain('animatedLayoutAdopters');
     expect(run).not.toMatch(/motion\/ /);
-    // Carousel paging renders its Storybook story, so it stays there too, and
-    // its files start no WebKit run.
     expect(run).not.toContain('CarouselPaging');
-    for (const file of [
-      'packages/core/src/Carousel/useCarouselPaging.ts',
-      'packages/core/src/Carousel/__tests__/CarouselPaging.interaction.browser.spec.ts',
-    ]) {
-      expect(inScope(file), file).toBe(false);
-    }
+    // A component's own code runs that folder's interaction specs, and no
+    // shared proof.
+    expect(proofs(['packages/core/src/Carousel/useCarouselPaging.ts'])).toEqual(
+      [
+        'packages/core/src/Carousel/__tests__/Carousel.interaction.browser.spec.ts',
+      ],
+    );
     for (const component of ['DateInput', 'TabList', 'TreeList', 'SideNav']) {
       expect(run).not.toContain(component);
     }
+  });
+
+  // A pull request that changes an interaction spec, outside a Lab-only pull
+  // request (which runs no interaction proofs, spec:AST-030 FR26), runs that
+  // spec in both lanes, wherever it lives: the Chromium legs plan every spec,
+  // and the WebKit plan adds the changed ones to its paths.
+  describe('a changed interaction spec', () => {
+    const spec =
+      'packages/core/src/List/__tests__/ListRowPress.interaction.browser.spec.ts';
+
+    it('starts both lanes', () => {
+      expect(inScope(spec)).toBe(true);
+      expect(new RegExp(decide(chromium).with.paths).test(spec)).toBe(true);
+      expect(
+        inScope(
+          'packages/core/src/Carousel/__tests__/CarouselPaging.interaction.browser.spec.ts',
+        ),
+      ).toBe(true);
+      // The component's code runs its folder's specs; a unit test runs none.
+      const listCode = proofs(['packages/core/src/List/ListRow.tsx']);
+      expect(listCode.length).toBeGreaterThan(0);
+      expect(
+        listCode.every(file => file.startsWith('packages/core/src/List/')),
+      ).toBe(true);
+      expect(
+        proofs(['packages/core/src/List/__tests__/ListRow.test.tsx']),
+      ).toEqual([]);
+    });
+
+    it('lists the changed files for the WebKit plan', () => {
+      expect(decide(webkit).with['component-audit']).toBe('true');
+      const count = step(webkit, "Count this run's WebKit legs");
+      expect(count.env.CHANGED_FILES).toBe(
+        '${{ steps.scope.outputs.changed_files_path }}',
+      );
+      expect(count.run).toContain('--changed "${CHANGED_FILES:-}"');
+      // The Chromium legs plan every spec file, with no path filter.
+      expect(
+        step(chromium, "Plan this leg's interaction proofs").run,
+      ).not.toContain(' -- ');
+    });
+
+    // Runs a step's script with a stub `node` that prints its arguments, over
+    // the legs step's selection, and returns them with the step's outputs.
+    function runStep(name, selected, present) {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'webkit-plan-'));
+      try {
+        for (const file of present) {
+          fs.mkdirSync(path.join(dir, path.dirname(file)), {recursive: true});
+          fs.writeFileSync(path.join(dir, file), '');
+        }
+        fs.mkdirSync(path.join(dir, 'interaction-legs'));
+        fs.writeFileSync(
+          path.join(dir, 'interaction-legs/selected.txt'),
+          selected.map(file => `${file}\n`).join(''),
+        );
+        const bin = path.join(dir, 'bin');
+        fs.mkdirSync(bin);
+        fs.writeFileSync(
+          path.join(bin, 'node'),
+          // `select` prints the selection it was handed; the rest print args.
+          '#!/usr/bin/env bash\nif [ "$2" = select ]; then cat "$RUNNER_TEMP/interaction-legs/selected.txt"; else printf "%s\\n" "$@"; fi\n',
+          {mode: 0o755},
+        );
+        const output = path.join(dir, 'output.txt');
+        fs.writeFileSync(output, '');
+        // The scope checkout the legs step lists the tree from.
+        fs.writeFileSync(
+          path.join(bin, 'git'),
+          '#!/usr/bin/env bash\nexit 0\n',
+          {mode: 0o755},
+        );
+        const script = step(webkit, name)
+          .run.replaceAll('${{ steps.legs.outputs.leg }}', '1')
+          .replaceAll('${{ steps.legs.outputs.count }}', '2')
+          .replaceAll('${{ matrix.leg }}', '1')
+          .replaceAll('${{ strategy.job-total }}', '2');
+        const out = execFileSync('bash', ['-e', '-c', script], {
+          cwd: dir,
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            PATH: `${bin}:${process.env.PATH}`,
+            RUNNER_TEMP: dir,
+            GITHUB_OUTPUT: output,
+            CHANGED_FILES: '',
+            WEBKIT_SPEC_PATHS: webkit.env.WEBKIT_SPEC_PATHS,
+            WEBKIT_SHARED_PATHS: webkit.env.WEBKIT_SHARED_PATHS,
+          },
+        });
+        return {
+          args: out.trim().split('\n'),
+          outputs: fs.readFileSync(output, 'utf8'),
+        };
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true});
+      }
+    }
+    const plan = (selected, present) =>
+      runStep("Plan this leg's WebKit interaction proofs", selected, present);
+
+    it("plans the selected specs the head has, and the lane's own paths", () => {
+      const {args} = plan(['packages/core/src/gestures/', spec], [spec]);
+      const paths = args.slice(args.indexOf('--') + 1);
+      expect(paths).toEqual(['packages/core/src/gestures/', spec]);
+    });
+
+    it('leaves out a spec the pull request deletes', () => {
+      const deleted =
+        'packages/core/src/List/__tests__/Old.interaction.browser.spec.ts';
+      const {args} = plan([deleted, 'internal/interaction-harness/'], []);
+      expect(args).not.toContain(deleted);
+      expect(args.at(-1)).toBe('internal/interaction-harness/');
+    });
+
+    it('plans no file, and never every spec, when the head has none of the selected specs', () => {
+      const deleted =
+        'packages/core/src/List/__tests__/Old.interaction.browser.spec.ts';
+      const {args, outputs} = plan([deleted], []);
+      expect(outputs).toContain('files=0');
+      expect(args.join('\n')).not.toContain(' plan');
+    });
+
+    it('runs no leg when the selection is empty', () => {
+      const {outputs} = runStep("Count this run's WebKit legs", [], []);
+      expect(outputs).toContain('count=0');
+      expect(outputs).toContain('runs=false');
+    });
   });
 
   // Every source file the WebKit specs bundle into their pages is in scope,
@@ -241,6 +476,16 @@ describe('WebKit interaction proof routing', () => {
       'packages/core/src/utils/touchPresentation.ts',
       'packages/core/src/utils/primaryClick.ts',
       'packages/core/src/utils/isApplePlatform.ts',
+      // The gesture host asks the Layer module's input hold about each touch,
+      // so the gesture specs' fixture bundles it.
+      'packages/core/src/Layer/inputHold.ts',
+      // The input hold is moving to read the modal outlet's host checks, which
+      // brings the outlet into the gesture fixtures and the pager bundle; the
+      // scope covers it before that import lands.
+      'packages/core/src/Layer/modalOutlet.ts',
+      // The animated-layout glide reads its timing through the theme-timing
+      // reader, which resolves token references, so its bundle carries them.
+      'packages/core/src/theme/tokenReferences.ts',
       'packages/core/src/hooks/useMenuPress.ts',
       'packages/core/src/hooks/menuPressGesture.ts',
       'packages/core/src/hooks/useLongPress.ts',
@@ -249,6 +494,10 @@ describe('WebKit interaction proof routing', () => {
       'packages/core/src/hooks/useIsomorphicLayoutEffect.ts',
       'packages/core/src/hooks/useAttachment.ts',
       'packages/core/src/utils/sharedResizeObserver.ts',
+      'packages/core/src/utils/scrollView.ts',
+      // The gesture host reads how old an input is, so the gesture specs'
+      // fixture bundles it.
+      'packages/core/src/utils/inputAge.ts',
       'packages/core/src/hooks/__tests__/usePager.interaction.browser.spec.ts',
       'packages/core/src/hooks/__tests__/pagerBundle.ts',
       'internal/interaction-harness/src/webInput.ts',
@@ -266,23 +515,38 @@ describe('WebKit interaction proof routing', () => {
       '.github/actions/test-scope/action.yml',
     ]) {
       expect(inScope(touched), touched).toBe(true);
+      expect(runs([touched]), touched).toBe(true);
     }
   });
 
-  it('skips for everything else, including components the Chromium proofs cover', () => {
+  it('runs every interaction spec of a component folder whose code changes, in every package', () => {
+    const folderOf = file =>
+      /^(packages\/[^/]+\/src\/[A-Z][^/]*)\//.exec(file)?.[1];
+    const folders = [...new Set(listedSpecs.map(folderOf).filter(Boolean))];
+    // Lab's own proofs too, not only Core's. A pull request that changes
+    // only Lab takes the Lab-only lane, which runs no interaction proofs
+    // (spec:AST-030 FR26), so Lab's folders run beside a change outside Lab.
+    expect(folders).toContain('packages/lab/src/RefreshControl');
+    for (const folder of folders) {
+      const change = `${folder}/Changed.tsx`;
+      expect(inScope(change), change).toBe(true);
+      const own = listedSpecs.filter(file => folderOf(file) === folder);
+      expect(proofs([change]), folder).toEqual(expect.arrayContaining(own));
+    }
+  });
+
+  it('runs nothing for everything else, including components with no interaction spec', () => {
     for (const untouched of [
-      'packages/core/src/Toast/Toast.tsx',
       'packages/core/src/Selector/useSelectorPresentation.ts',
       'packages/core/src/utils/focusReturn.ts',
       'packages/core/src/internal/focus.ts',
-      'packages/core/src/DateInput/DateInput.tsx',
       'packages/core/locales/en.json',
       'packages/core/package.json',
       'packages/themes/neutral/package.json',
       'docs/specs/AST-030/spec.md',
       '.github/workflows/release.yml',
     ]) {
-      expect(inScope(untouched), untouched).toBe(false);
+      expect(runs([untouched]), untouched).toBe(false);
     }
   });
 
@@ -307,14 +571,19 @@ describe('WebKit interaction proof routing', () => {
         'packages/core/src/utils/pressFeedback.ts',
       ]),
     ).toBe(true);
-    // #9016 (Toast timer), #9025 (TextArea counter), #9048 (CI cache).
+    // #9016 (Toast timer) runs Toast's own proofs, and only those.
+    const toast = proofs([
+      '.changeset/toast-pause-sources.md',
+      'packages/core/src/Toast/Toast.tsx',
+      'packages/core/src/Toast/ToastViewport.test.tsx',
+      'docs/specs/components/Toast/Toast.spec.md',
+    ]);
+    expect(toast.length).toBeGreaterThan(0);
+    expect(
+      toast.every(file => file.startsWith('packages/core/src/Toast/')),
+    ).toBe(true);
+    // #9025 (TextArea counter), #9048 (CI cache).
     for (const files of [
-      [
-        '.changeset/toast-pause-sources.md',
-        'packages/core/src/Toast/Toast.tsx',
-        'packages/core/src/Toast/ToastViewport.test.tsx',
-        'docs/specs/components/Toast/Toast.spec.md',
-      ],
       [
         '.changeset/textarea-counter-i18n.md',
         'packages/core/locales/en.json',

@@ -18,7 +18,7 @@
  *   and TreeList.spec.md.
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -102,6 +102,8 @@ interface EdgeRide {
    * on the content can show.
    */
   beyond: number;
+  /** How much shows as the close starts: its conceal's first keyframe. */
+  concealStart: number;
 }
 
 /**
@@ -111,7 +113,8 @@ interface EdgeRide {
  * shown bottom edge stands against the content after it. Both sides are read
  * on the module's own clock: the clip from its animation's keyframes and the
  * content after it from its glide's keyframes, at their current time (WebKit
- * evaluates a main-thread clip and a compositor translate a little apart).
+ * evaluates a main-thread clip and a compositor translate a little apart). It
+ * also reads where the close starts: its conceal's first keyframe.
  */
 async function edgeRide(
   page: Page,
@@ -152,6 +155,24 @@ async function edgeRide(
         ? (parseFloat(b) / 100) * box.height
         : parseFloat(b);
     };
+    // A block edge's reveal slides the element's parts under a still clip:
+    // the first part's slide, on its own clock, says how much is hidden.
+    const slideOf = (element: HTMLElement) =>
+      element.firstElementChild
+        ?.getAnimations()
+        .filter(a =>
+          (a.effect as KeyframeEffect)
+            .getKeyframes()
+            .some(k => k.translate != null),
+        )
+        .at(-1) ?? null;
+    const slidHidden = (slide: Animation) => {
+      const frames = (slide.effect as KeyframeEffect).getKeyframes();
+      const {i, f} = bracket(frames, at(slide));
+      const y0 = y(frames[i].translate);
+      const y1 = y(frames[i + 1].translate);
+      return Math.max(0, -(y0 + (y1 - y0) * f));
+    };
     const insetBottom = (element: HTMLElement) => {
       const box = element.getBoundingClientRect();
       const animation = element
@@ -163,7 +184,10 @@ async function edgeRide(
         )
         .at(-1);
       if (animation == null) {
-        return bottomOf(getComputedStyle(element).clipPath, box);
+        const slide = slideOf(element);
+        return slide == null
+          ? bottomOf(getComputedStyle(element).clipPath, box)
+          : slidHidden(slide);
       }
       const frames = (animation.effect as KeyframeEffect).getKeyframes();
       const {i, f} = bracket(frames, at(animation));
@@ -175,8 +199,8 @@ async function edgeRide(
       [...String(value).matchAll(/(-?[\d.e+-]+)px/g)].map(m =>
         Number(m[1]),
       )[1] ?? 0;
-    const glideTop = (element: HTMLElement) => {
-      const rect = element.getBoundingClientRect();
+    // An element's glide offset from its keyframes at its current time.
+    const glideY = (element: HTMLElement) => {
       const animation = element
         .getAnimations()
         .filter(a =>
@@ -186,15 +210,30 @@ async function edgeRide(
         )
         .at(-1);
       if (animation == null) {
-        return rect.top;
+        return 0;
       }
       const frames = (animation.effect as KeyframeEffect).getKeyframes();
       const {i, f} = bracket(frames, at(animation));
       const y0 = y(frames[i].translate);
       const y1 = y(frames[i + 1].translate);
-      return (
-        rect.top - y(getComputedStyle(element).translate) + y0 + (y1 - y0) * f
-      );
+      return y0 + (y1 - y0) * f;
+    };
+    // A box's top on the module's clock: where layout puts it (offsets ignore
+    // transforms), plus each glide that carries it. No evaluated transform is
+    // read, because WebKit evaluates a running translate a little ahead.
+    // Offsets are whole pixels, as this story lays out.
+    const clockTop = (element: HTMLElement) => {
+      let top = 0;
+      let node: HTMLElement | null = element;
+      while (node != null) {
+        top += node.offsetTop + (node === element ? 0 : node.clientTop);
+        node = node.offsetParent as HTMLElement | null;
+      }
+      for (let n: HTMLElement | null = element; n != null;) {
+        top += glideY(n);
+        n = n.parentElement;
+      }
+      return top;
     };
     const frames: EdgeRideFrame[] = [];
     const read = (phase: string) => {
@@ -202,15 +241,13 @@ async function edgeRide(
       if (element == null) {
         return;
       }
-      const box = element.getBoundingClientRect();
+      const height = element.offsetHeight;
       const hidden = insetBottom(element);
       frames.push({
         phase,
-        gap: glideTop(next) - (box.bottom - hidden),
+        gap: clockTop(next) - (clockTop(element) + height - hidden),
         shown:
-          getComputedStyle(element).display === 'none'
-            ? 0
-            : box.height - hidden,
+          getComputedStyle(element).display === 'none' ? 0 : height - hidden,
       });
     };
     const frame = async () =>
@@ -244,15 +281,22 @@ async function edgeRide(
       animation.currentTime = 120;
     }
     read('reversed');
-    const clipOf = () =>
-      content()
-        ?.getAnimations()
-        .filter(a =>
-          (a.effect as KeyframeEffect)
-            .getKeyframes()
-            .some(k => k.clipPath != null),
-        )
-        .at(-1) ?? null;
+    const clipOf = () => {
+      const element = content();
+      if (element == null) {
+        return null;
+      }
+      return (
+        element
+          .getAnimations()
+          .filter(a =>
+            (a.effect as KeyframeEffect)
+              .getKeyframes()
+              .some(k => k.clipPath != null),
+          )
+          .at(-1) ?? slideOf(element)
+      );
+    };
     const opening = clipOf();
     button.click();
     // Until the close commits (a component may commit its state in a later
@@ -262,6 +306,17 @@ async function edgeRide(
         setTimeout(resolve, 0);
       });
     }
+    const conceal = clipOf();
+    const [start] =
+      (conceal?.effect as KeyframeEffect | undefined)?.getKeyframes() ?? [];
+    const startBox = (content() as HTMLElement).getBoundingClientRect();
+    const concealStart =
+      start == null
+        ? Number.NaN
+        : startBox.height -
+          (start.clipPath == null
+            ? Math.max(0, -y(start.translate))
+            : bottomOf(start.clipPath, startBox));
     for (const animation of document.getAnimations()) {
       if (animation.playState === 'paused') {
         animation.play();
@@ -271,7 +326,7 @@ async function edgeRide(
       await frame();
       read('closing');
     }
-    return {frames, restGap, height, beyond};
+    return {frames, restGap, height, beyond, concealStart};
   }, selectors);
 }
 
@@ -294,12 +349,14 @@ function expectEdgeRide(result: EdgeRide): void {
     expect(f.gap, detail).toBeGreaterThan(result.restGap - result.beyond - 1.5);
   }
   const reversed = result.frames.find(f => f.phase === 'reversed');
-  const next = result.frames.find(f => f.phase === 'closing');
   expect(reversed?.shown).toBeGreaterThan(2);
   expect(reversed?.shown).toBeLessThan(result.height - 2);
-  expect(Math.abs((next?.shown ?? 0) - (reversed?.shown ?? 0))).toBeLessThan(
-    result.height / 4,
-  );
+  // Read at its first keyframe, not on a later frame, where a quick curve
+  // has already moved on. The clip may also show the container gap that the
+  // content after it travels.
+  const start = result.concealStart - (reversed?.shown ?? 0);
+  expect(start).toBeGreaterThan(-1);
+  expect(start).toBeLessThan(result.beyond + 1);
 }
 
 async function viewportScroll(page: Page): Promise<number> {
@@ -430,7 +487,18 @@ test.describe('component:Collapsible FR10 and component:TreeList FR9 (spec:AST-1
           )
           .at(-1);
         if (animation == null) {
-          return bottomOf(getComputedStyle(element).clipPath, height);
+          // A slide: the first part's translate on its own clock.
+          const slide = element.firstElementChild
+            ?.getAnimations()
+            .filter(a =>
+              (a.effect as KeyframeEffect)
+                .getKeyframes()
+                .some(k => k.translate != null),
+            )
+            .at(-1);
+          return slide == null
+            ? bottomOf(getComputedStyle(element).clipPath, height)
+            : Math.max(0, -glideY(element.firstElementChild as HTMLElement));
         }
         const effect = animation.effect as KeyframeEffect;
         const frames = effect.getKeyframes();
@@ -452,6 +520,60 @@ test.describe('component:Collapsible FR10 and component:TreeList FR9 (spec:AST-1
         const b1 = bottomOf(frames[i + 1].clipPath, height);
         return b0 + (b1 - b0) * f;
       };
+      // A box's top on the module's clock, as the clip is read. It is where
+      // layout puts it, since offsets ignore transforms, plus each glide that
+      // carries it at its current time. No evaluated transform is read:
+      // WebKit evaluates a running translate a little ahead. Offsets are whole
+      // pixels, as this story lays out.
+      const yOf = (value: unknown) =>
+        [...String(value).matchAll(/(-?[\d.e+-]+)px/g)].map(m =>
+          Number(m[1]),
+        )[1] ?? 0;
+      const glideY = (node: HTMLElement) => {
+        const animation = node
+          .getAnimations()
+          .filter(a =>
+            (a.effect as KeyframeEffect)
+              .getKeyframes()
+              .some(k => k.translate != null),
+          )
+          .at(-1);
+        if (animation == null) {
+          return 0;
+        }
+        const effect = animation.effect as KeyframeEffect;
+        const frames = effect.getKeyframes();
+        const at = Math.min(
+          1,
+          Math.max(
+            0,
+            Number(animation.currentTime) / Number(effect.getTiming().duration),
+          ),
+        );
+        let i = 0;
+        while (i < frames.length - 2 && frames[i + 1].computedOffset < at) {
+          i += 1;
+        }
+        const o0 = frames[i].computedOffset;
+        const o1 = frames[i + 1].computedOffset;
+        const f = o1 > o0 ? (at - o0) / (o1 - o0) : 1;
+        const y0 = yOf(frames[i].translate);
+        const y1 = yOf(frames[i + 1].translate);
+        return y0 + (y1 - y0) * f;
+      };
+      const clockTop = (element: HTMLElement) => {
+        let top = 0;
+        let node: HTMLElement | null = element;
+        while (node != null) {
+          top += node.offsetTop + (node === element ? 0 : node.clientTop);
+          node = node.offsetParent as HTMLElement | null;
+        }
+        for (let n: HTMLElement | null = element; n != null;) {
+          top += glideY(n);
+          n = n.parentElement;
+        }
+        return top;
+      };
       const frame = async () =>
         new Promise<void>(resolve => {
           requestAnimationFrame(() => resolve());
@@ -472,19 +594,19 @@ test.describe('component:Collapsible FR10 and component:TreeList FR9 (spec:AST-1
         if (element == null || getComputedStyle(element).display === 'none') {
           continue;
         }
-        const box = element.getBoundingClientRect();
         const hidden = hiddenBottom(element);
+        const bottom = clockTop(element) + element.offsetHeight;
         frames.push({
-          gap: nextItem().getBoundingClientRect().top - (box.bottom - hidden),
-          shown: box.height - hidden,
+          gap: clockTop(nextItem()) - (bottom - hidden),
+          shown: element.offsetHeight - hidden,
         });
       }
       await settle();
-      const box = (content() as HTMLElement).getBoundingClientRect();
+      const rest = content() as HTMLElement;
       return {
         frames,
-        restGap: nextItem().getBoundingClientRect().top - box.bottom,
-        height: box.height,
+        restGap: clockTop(nextItem()) - (clockTop(rest) + rest.offsetHeight),
+        height: rest.offsetHeight,
       };
     });
     const shown = result.frames.filter(f => f.shown > 0.5);

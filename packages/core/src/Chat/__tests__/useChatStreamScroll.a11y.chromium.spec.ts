@@ -12,7 +12,7 @@
 import {once} from 'node:events';
 import {createServer, type Server} from 'node:http';
 import {fileURLToPath} from 'node:url';
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {build} from 'esbuild';
 
 const SETTLE_TIMEOUT_MS = 6000;

@@ -155,6 +155,8 @@ export function useLayerDismissal(
 
   const isRegistered = isActive && isEnabled;
 
+  // Syncs the shared dismissal stack with `isRegistered`. A registered layer
+  // gets Escape and outside presses in stack order.
   useEffect(() => {
     if (!isRegistered) {
       wasRegisteredRef.current = false;

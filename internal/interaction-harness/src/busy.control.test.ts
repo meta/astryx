@@ -413,9 +413,89 @@ describe('pooledBusyProof', () => {
         window: short(from),
       })),
     );
-    expect(pooled.verdict.failures.join('\n')).toMatch(
-      /the control moved on 0 frames over 2 runs, under 4/,
+    expect(pooled.verdict.failures).toEqual([
+      '0 of 2 runs judged, under 1: the compositor presented too little in the others to judge',
+    ]);
+  });
+
+  /** `frames` held at the position they had at `from`, from `from` to `to`. */
+  const held = (frames: TrackedFrame[], from: number, to: number) =>
+    frames.map(f =>
+      f.t >= from && f.t <= to
+        ? ({...f, box: {...f.box!, y: 3 * at(from)}} as TrackedFrame)
+        : f,
     );
+
+  it('names a run whose control presented nothing as too little to judge and leaves it out: the other runs decide', () => {
+    // The control stands still through run 2's block only, as if the machine
+    // starved it there.
+    const pooled = pooledBusyProof(
+      [1000, 1300, 1600].map(from => ({
+        tracked: moving(),
+        control: asControl(held(moving(), 1300, 1390)),
+        window: short(from),
+      })),
+    );
+    expect(pooled.verdict.failures, pooled.summary).toEqual([]);
+    expect(pooled.judged).toEqual([true, false, true]);
+    expect(pooled.control).toEqual({moved: 6, movedWith: 6});
+    expect(pooled.summary).toMatch(
+      /^3 runs pooled, 2 judged: .*; run 2: too little to judge, the control moved on 0 frames, under 1: /,
+    );
+  });
+
+  it('fails a pool in which every run but one was too little to judge, even when that run holds enough frames', () => {
+    const windows = [1000, 1300, 1600].map(from => ({from, to: from + 200}));
+    const starved = held(held(moving(), 1300, 1500), 1600, 1800);
+    const pooled = pooledBusyProof(
+      windows.map(window => ({
+        tracked: moving(),
+        control: asControl(starved),
+        window,
+      })),
+    );
+    expect(pooled.judged).toEqual([true, false, false]);
+    expect(pooled.control.moved).toBeGreaterThanOrEqual(4);
+    expect(pooled.verdict.failures.join('\n'), pooled.summary).toMatch(
+      /1 of 3 runs judged, under 2: the compositor presented too little in the others to judge/,
+    );
+  });
+
+  it('judges a run in which the component froze while its control moved: it is never left out, and it fails on its own', () => {
+    const pooled = pooledBusyProof(
+      [1000, 1300, 1600].map(from => ({
+        tracked: held(moving(), 1300, 1390),
+        control: asControl(moving()),
+        window: short(from),
+      })),
+    );
+    expect(pooled.judged).toEqual([true, true, true]);
+    const failures = pooled.verdict.failures.join('\n');
+    expect(failures).toMatch(
+      /moved on 6 of the 9 frames the control moved over 3 runs/,
+    );
+    expect(failures).toMatch(
+      /run 2: moved on 0 of the 3 frames its control moved/,
+    );
+    expect(failures).not.toMatch(/run [13]: moved on/);
+    expect(failures).toMatch(
+      /run 2: longest stall .* longer than the control's/,
+    );
+  });
+
+  it('throws when it needs more judged runs than it has, or none', () => {
+    expect(() =>
+      pooledBusyProof(
+        [{tracked: moving(), control: asControl(moving()), window: BLOCK}],
+        {minJudgedRuns: 2},
+      ),
+    ).toThrow(/minJudgedRuns 2 is not between 1 and the 1 runs/);
+    expect(() =>
+      pooledBusyProof(
+        [{tracked: moving(), control: asControl(moving()), window: BLOCK}],
+        {minJudgedRuns: 0},
+      ),
+    ).toThrow(/minJudgedRuns 0 is not between 1 and the 1 runs/);
   });
 
   it('judges one long run as busyWindowProof judges it against the control', () => {
@@ -456,17 +536,105 @@ describe('a hold that starts before the block', () => {
     });
   };
   const control = asControl(moving());
+  // The position the page set last, at the release: where the sheet holds.
+  const released = sheet()
+    .filter(f => f.t < holdFrom)
+    .at(-1)!.box!.y;
 
-  it('is judged from its first presented change inside the block', () => {
-    const proof = busyWindowProof(sheet(), BLOCK, {axis: 'y', control});
+  it('is judged from its first presented change inside the block when it holds the position the page set', () => {
+    const proof = busyWindowProof(sheet(), BLOCK, {
+      axis: 'y',
+      control,
+      setBeforeBlock: released,
+    });
     expect(proof.verdict.failures, proof.summary).toEqual([]);
     expect(proof.onScreenFromMs).toBeGreaterThanOrEqual(100);
+  });
+
+  it('is not excused without the position the page set', () => {
+    const proof = busyWindowProof(sheet(), BLOCK, {axis: 'y', control});
+    expect(proof.verdict.pass, proof.summary).toBe(false);
+    expect(proof.onScreenFromMs).toBeNull();
+  });
+
+  it('is not excused when it holds a position the page did not set', () => {
+    const proof = busyWindowProof(sheet(), BLOCK, {
+      axis: 'y',
+      control,
+      setBeforeBlock: released + 6,
+    });
+    expect(proof.verdict.pass, proof.summary).toBe(false);
+    expect(proof.onScreenFromMs).toBeNull();
+  });
+
+  it('is excused on a 2 px cast that reads the held position up to a step off', () => {
+    // WebKit's cast reads positions on a 2 px grid: a hold at a half pixel
+    // reads up to 1.5 px off.
+    const grid = sheet().map(f => ({...f, step: {x: 2, y: 2}}));
+    const proof = busyWindowProof(grid, BLOCK, {
+      axis: 'y',
+      control,
+      setBeforeBlock: released + 1.5,
+    });
+    expect(proof.verdict.failures, proof.summary).toEqual([]);
+    expect(proof.onScreenFromMs).toBeGreaterThanOrEqual(100);
+  });
+
+  it('matches the held position within a pixel on a cast that carries no step', () => {
+    const proof = busyWindowProof(sheet(), BLOCK, {
+      axis: 'y',
+      control,
+      setBeforeBlock: released + 1.5,
+    });
+    expect(proof.verdict.pass, proof.summary).toBe(false);
+    expect(proof.onScreenFromMs).toBeNull();
+  });
+
+  it('is not excused when the position it holds shows on one frame only', () => {
+    // Moving up to the last frame before the block, then not found on any
+    // frame until 150 ms in, then moving on. The position the page set
+    // shows on one frame only, which is no hold. So the window is judged
+    // from the judged part's start.
+    let y = 0;
+    const frames = moving().map(f => {
+      y += 3;
+      return (
+        f.t >= BLOCK.from && f.t < BLOCK.from + 150
+          ? {...f, box: null}
+          : {...f, box: {...f.box!, y}}
+      ) as TrackedFrame;
+    });
+    const last = frames.filter(f => f.t < BLOCK.from).at(-1)!.box!.y;
+    const proof = busyWindowProof(frames, BLOCK, {
+      axis: 'y',
+      control,
+      setBeforeBlock: last,
+    });
+    expect(proof.verdict.pass, proof.summary).toBe(false);
+    expect(proof.onScreenFromMs).toBeNull();
+  });
+
+  it('fails an animation that was moving, freezes from just before the block for 50 ms, then moves on', () => {
+    // Moving every frame up to the block, frozen from the frame before it
+    // until 50 ms in, then moving on every frame. This is a compositor
+    // animation stalled at the block's start, at none of the page's positions.
+    let y = 0;
+    const frames = moving().map(f => {
+      if (f.t < BLOCK.from - 5 || f.t >= BLOCK.from + 50) {
+        y += 3;
+      }
+      return {...f, box: {...f.box!, y}} as TrackedFrame;
+    });
+    const proof = busyWindowProof(frames, BLOCK, {axis: 'y', control});
+    expect(proof.verdict.pass, proof.summary).toBe(false);
+    expect(proof.onScreenFromMs).toBeNull();
   });
 
   it('still fails when the element changes once inside the block and then freezes', () => {
     const proof = busyWindowProof(sheet({freezeAfterFirst: true}), BLOCK, {
       axis: 'y',
       control,
+      setBeforeBlock: released,
     });
     expect(proof.verdict.pass, proof.summary).toBe(false);
   });
@@ -479,7 +647,35 @@ describe('a hold that starts before the block', () => {
       }
       return {...f, box: {...f.box!, y}} as TrackedFrame;
     });
-    const proof = busyWindowProof(frames, BLOCK, {axis: 'y', control});
+    // Even at the last position before the judged part, as if the page had
+    // set it.
+    const proof = busyWindowProof(frames, BLOCK, {
+      axis: 'y',
+      control,
+      setBeforeBlock: frames.filter(f => f.t < BLOCK.from + 20).at(-1)!.box!.y,
+    });
+    expect(proof.verdict.pass, proof.summary).toBe(false);
+    expect(proof.onScreenFromMs).toBeNull();
+  });
+
+  it('is not excused when its first held frame is the one at the block start', () => {
+    // Moving up to the frame presented as the block starts, then held on it
+    // and the frames after until 250 ms in. The hold has two frames before
+    // the judged part, at the position the page set, but starts inside the
+    // block.
+    let y = 0;
+    const frames = moving().map(f => {
+      if (f.t <= BLOCK.from || f.t >= BLOCK.from + 250) {
+        y += 3;
+      }
+      return {...f, box: {...f.box!, y}} as TrackedFrame;
+    });
+    const held = frames.find(f => f.t >= BLOCK.from)!.box!.y;
+    const proof = busyWindowProof(frames, BLOCK, {
+      axis: 'y',
+      control,
+      setBeforeBlock: held,
+    });
     expect(proof.verdict.pass, proof.summary).toBe(false);
     expect(proof.onScreenFromMs).toBeNull();
   });

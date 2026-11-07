@@ -2,7 +2,8 @@
 
 /**
  * @file inputPresentation.ts
- * @input A presentation policy, the deprecated nativePicker value, and pointer type
+ * @input A presentation policy, the deprecated nativePicker value, whether the
+ *   native date control can show the calendar, and pointer type
  * @output The resolved picker surface for DateInput, DateTimeInput, and TimeInput
  * @position Shared presentation vocabulary (AST-043)
  *
@@ -111,6 +112,25 @@ export function effectiveInputPresentation(
     return presentationFromNativePicker(nativePicker, component);
   }
   return DEFAULT_INPUT_PRESENTATION;
+}
+
+/**
+ * The policy a date picker follows in its calendar. `<input type="date">` is
+ * Gregorian, so in a calendar it cannot show, the policies that use it
+ * (`native` and `adaptive-native`) use the Astryx popover on a fine pointer and
+ * the bottom sheet on a coarse one instead.
+ */
+export function calendarPickerPresentation(
+  presentation: PickerPresentation,
+  isNativeCalendar: boolean,
+): PickerPresentation {
+  if (
+    !isNativeCalendar &&
+    (presentation === 'native' || presentation === 'adaptive-native')
+  ) {
+    return 'adaptive-bottom-sheet';
+  }
+  return presentation;
 }
 
 /** Resolve a picker-only policy to the surface rendered for the current pointer. */

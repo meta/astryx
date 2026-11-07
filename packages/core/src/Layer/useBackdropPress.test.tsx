@@ -4,8 +4,9 @@
  * @file useBackdropPress.test.tsx
  * @input Dialog, Drawer and CommandPalette with their backdrop dismissal on
  * @output Tests that a backdrop press dismisses only when it starts and ends
- *   on the backdrop, for a mouse and for a finger, and that a cancelled
- *   pointer ends the press
+ *   on the backdrop, for a mouse and for a finger, that a cancelled pointer
+ *   ends the press, and that a press which light-dismisses a popover open
+ *   above the host closes only that popover
  * @position The shared backdrop-press rule (useBackdropPress) through every
  *   member that uses it
  */
@@ -16,6 +17,8 @@ import type {ReactElement} from 'react';
 import {Dialog} from '../Dialog/Dialog';
 import {Drawer} from '../Drawer/Drawer';
 import {CommandPalette} from '../CommandPalette/CommandPalette';
+import {DateTimeInput} from '../DateTimeInput/DateTimeInput';
+import type {ISODateTimeString} from '../DateTimeInput/DateTimeInput';
 import {createStaticSource} from '../Typeahead/createStaticSource';
 import {resetLayerStackForTests} from './layerStack';
 
@@ -183,5 +186,133 @@ describe.each([
     fireEvent.click(backdrop);
 
     expect(onOpenChange).not.toHaveBeenCalled();
+  });
+});
+
+// jsdom has no Popover API. An element that carries `data-open` stands for a
+// popover the browser shows; a press closes it the way light dismiss does, at
+// pointer-up.
+function PopoverInside() {
+  return (
+    <>
+      <div data-testid="inner-popover" popover="auto" data-open="">
+        <button type="button">Rename</button>
+      </div>
+      <div data-testid="inner-tip" popover="manual" data-open="">
+        Help text
+      </div>
+    </>
+  );
+}
+
+describe.each([
+  {
+    name: 'Dialog (purpose="info")',
+    render: (onOpenChange: (isOpen: boolean) => void) => (
+      <Dialog isOpen onOpenChange={onOpenChange} aria-label="Note">
+        <PopoverInside />
+      </Dialog>
+    ),
+  },
+  {
+    name: 'Drawer (scrim)',
+    render: (onOpenChange: (isOpen: boolean) => void) => (
+      <Drawer isOpen onOpenChange={onOpenChange} label="Note">
+        <PopoverInside />
+      </Drawer>
+    ),
+  },
+])(
+  'a backdrop press while a popover inside $name is open',
+  ({render: renderMember}) => {
+    beforeEach(() => {
+      const matches = Element.prototype.matches;
+      vi.spyOn(Element.prototype, 'matches').mockImplementation(function (
+        this: Element,
+        selector: string,
+      ) {
+        if (selector === ':popover-open') {
+          return this.isConnected && this.hasAttribute('data-open');
+        }
+        return matches.call(this, selector);
+      });
+    });
+
+    for (const pointerType of ['mouse', 'touch'] as const) {
+      it(`with a ${pointerType}, closes only the popover; the next press closes the host`, () => {
+        const onOpenChange = vi.fn();
+        render(renderMember(onOpenChange));
+        const backdrop = backdropOf();
+        const popover = screen.getByTestId('inner-popover');
+
+        fireEvent.pointerDown(backdrop, {pointerType});
+        // The browser light-dismisses the popover at pointer-up.
+        popover.removeAttribute('data-open');
+        fireEvent.pointerUp(backdrop, {pointerType});
+        fireEvent.click(backdrop);
+        expect(onOpenChange).not.toHaveBeenCalled();
+
+        fireEvent.pointerDown(backdrop, {pointerType});
+        fireEvent.pointerUp(backdrop, {pointerType});
+        fireEvent.click(backdrop);
+        expect(onOpenChange).toHaveBeenCalledWith(false);
+      });
+    }
+
+    it('closes the host when a tooltip hides during the press for another reason', () => {
+      const onOpenChange = vi.fn();
+      render(renderMember(onOpenChange));
+      const backdrop = backdropOf();
+      fireEvent.pointerDown(backdrop, {pointerType: 'mouse'});
+      // A tooltip whose trigger lost focus hides on its own delay.
+      screen.getByTestId('inner-tip').removeAttribute('data-open');
+      fireEvent.pointerUp(backdrop, {pointerType: 'mouse'});
+      fireEvent.click(backdrop);
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+
+    it('closes the host when the press dismisses no layer above it', () => {
+      const onOpenChange = vi.fn();
+      render(renderMember(onOpenChange));
+      const backdrop = backdropOf();
+      // The popover stays open: this press is not its dismissal.
+      fireEvent.pointerDown(backdrop, {pointerType: 'mouse'});
+      fireEvent.pointerUp(backdrop, {pointerType: 'mouse'});
+      fireEvent.click(backdrop);
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+  },
+);
+
+describe('a backdrop press while a DateTimeInput time list inside a Dialog is open', () => {
+  it('with a mouse, closes only the list when the field blurs at mousedown; the next press closes the Dialog', () => {
+    const onOpenChange = vi.fn();
+    render(
+      <Dialog isOpen onOpenChange={onOpenChange} aria-label="Note">
+        <DateTimeInput
+          label="Meeting"
+          value={'2026-03-15T14:00' as ISODateTimeString}
+          timeOptionInterval={60}
+          onChange={() => {}}
+        />
+      </Dialog>,
+    );
+    const backdrop = backdropOf();
+    const timeInput = screen.getByLabelText('Meeting time');
+    fireEvent.keyDown(timeInput, {key: 'ArrowDown', altKey: true});
+    expect(timeInput).toHaveAttribute('aria-expanded', 'true');
+
+    fireEvent.pointerDown(backdrop, {pointerType: 'mouse'});
+    // The mousedown moves focus from the field to the dialog.
+    fireEvent.blur(timeInput, {relatedTarget: backdrop});
+    fireEvent.pointerUp(backdrop, {pointerType: 'mouse'});
+    fireEvent.click(backdrop);
+    expect(timeInput).toHaveAttribute('aria-expanded', 'false');
+    expect(onOpenChange).not.toHaveBeenCalled();
+
+    fireEvent.pointerDown(backdrop, {pointerType: 'mouse'});
+    fireEvent.pointerUp(backdrop, {pointerType: 'mouse'});
+    fireEvent.click(backdrop);
+    expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 });

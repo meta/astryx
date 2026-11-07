@@ -13,9 +13,15 @@
  *     sorts by score desc then name asc.
  * The doc-file reading (Pass 2) is exercised end-to-end elsewhere; here we use
  * a non-existent coreDir so Pass 2 is a no-op and the tests stay pure + fast.
+ * One case writes a doc in a temporary folder: Pass 2 looks for each doc once
+ * per operation.
  */
 
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import {describe, it, expect} from 'vitest';
+import {withListingCache} from '../fs/listing-cache.mjs';
 import {
   findClosestComponents,
   searchComponents,
@@ -81,6 +87,31 @@ describe('findClosestComponents', () => {
 });
 
 describe('searchComponents', () => {
+  it('looks for each doc once per operation and fresh outside one', async () => {
+    const core = fs.mkdtempSync(path.join(os.tmpdir(), 'as-su-once-'));
+    try {
+      const dir = path.join(core, 'src', 'Card');
+      fs.mkdirSync(dir, {recursive: true});
+      const matchesKeyword = async () =>
+        (await searchComponents('panel', core, {Card: ['Card']})).some(
+          result => result.reason === 'keyword "panel"',
+        );
+      await withListingCache(async () => {
+        expect(await matchesKeyword()).toBe(false);
+        fs.writeFileSync(
+          path.join(dir, 'Card.doc.mjs'),
+          "export const docs = {keywords: ['panel']};\n",
+        );
+        // The operation looked for the doc once, so the new doc does not
+        // reach it.
+        expect(await matchesKeyword()).toBe(false);
+      });
+      expect(await matchesKeyword()).toBe(true);
+    } finally {
+      fs.rmSync(core, {recursive: true, force: true});
+    }
+  });
+
   it('scores an exact name match 100', async () => {
     const results = await searchComponents('Button', NO_CORE, COMPONENTS);
     expect(results[0]).toEqual({

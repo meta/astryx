@@ -39,7 +39,7 @@ import {
   rulesDeclaredFor,
   rulesWithSelector,
 } from '../__tests__/pressState';
-import {press as uikitPress} from '../motion/uikit/timing';
+import {PRESS_FADE_MS} from '../utils/pressGesture';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import {InternationalizationProvider} from '../i18n';
 import {installPressFeedback} from '../utils/pressFeedback';
@@ -665,9 +665,9 @@ describe('Switch', () => {
 
   // Retained after review. The shared contract's switch.required.declared
   // accepts either the native attribute or aria-required, because a non-native
-  // switch can only offer the latter — and Switch sets aria-required from a
-  // form-level default too. Only this test pins `isRequired` to the NATIVE
-  // attribute, which is what makes the browser block submission.
+  // switch can only offer the latter. Switch sets aria-required from its own
+  // `isRequired` only. This test pins `isRequired` to the NATIVE attribute,
+  // which is what makes the browser block submission.
   it('sets required attribute when isRequired is true', () => {
     render(
       <Switch
@@ -1200,9 +1200,7 @@ describe('Switch', () => {
         false,
       );
       for (const part of [track, thumb]) {
-        expect(
-          releasesOnLayer(part, '::before', uikitPress.highlightOutMs),
-        ).toBe(true);
+        expect(releasesOnLayer(part, '::before', PRESS_FADE_MS)).toBe(true);
       }
       // Nothing reads the strength under a finger, so its main-thread
       // release stops there; any other pointer keeps it (the desktop rule).

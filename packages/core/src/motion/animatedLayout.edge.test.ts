@@ -67,6 +67,8 @@ beforeEach(() => {
   played = [];
   media = {};
   setTimeline(1000);
+  // The page's clock reads the timeline's frame time: no block since it.
+  vi.spyOn(performance, 'now').mockImplementation(timelineNow);
   Element.prototype.animate = function (
     this: Element,
     keyframes: Keyframe[] | PropertyIndexedKeyframes | null,
@@ -452,9 +454,11 @@ describe('the two-state edge reveal (spec:AST-105 FR9)', () => {
     // Every frame of the copy follows the column's glide.
     const glide = lastOn(column) as Played;
     expect(clip.keyframes).toHaveLength(glide.keyframes.length);
-    // The panel, raised above its copy while it conceals, shows the caller's
-    // own frames, and drops the raise once the reveal ends.
-    expect(side.style.zIndex).toBe('2');
+    // The copy paints at the panel's own level: just before it, with no
+    // z-index, and the panel takes none either.
+    expect(copy.nextElementSibling).toBe(side);
+    expect(copy.style.zIndex).toBe('');
+    expect(side.style.zIndex).toBe('');
     expect(icons).toHaveBeenCalled();
     clip.finish?.();
     expect(side.style.zIndex).toBe('');
@@ -730,9 +734,12 @@ describe('the edge reveal of a resized element, with no copy (spec:AST-105 FR9)'
     expect(pane.style.getPropertyValue('inline-size')).toBe('');
     expect(conceal.cancel).toHaveBeenCalled();
     const [reveal] = clipsOf(pane);
-    expect(String(reveal.keyframes[0].clipPath)).toBe(
-      `inset(0px ${260 - shown}px 0px 0px)`,
+    const start = Number(
+      /^inset\(0px ([\d.]+)px 0px 0px\)$/.exec(
+        String(reveal.keyframes[0].clipPath),
+      )?.[1],
     );
+    expect(start).toBeCloseTo(260 - shown, 9);
   });
 
   it('cancel ends it at once and puts back what it held', () => {

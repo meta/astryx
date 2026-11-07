@@ -11,7 +11,7 @@
  *   layout, so it cannot tell whether a time fits beside a title.
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
   finishEvidence,
   openStory,

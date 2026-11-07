@@ -6,12 +6,14 @@
  * @output `openStory` turns Storybook's highlight module off, so an insertion
  *   in a story carries no `getComputedStyle` scan of the page; with the module
  *   on (the control), every insertion carries one. Both engines; Chromium's
- *   trace also counts the style recalculations the scan forces
+ *   trace also counts the style recalculations the scan forces. `openStory`
+ *   returns once Storybook has finished the story's render, so no listener
+ *   Storybook adds to the document or the window lands after it
  * @position Self-test for story.ts; it needs the built Storybook, as every
  *   component proof does
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {openStory, withStorybook} from './story';
 import {countBetween, traceRendering} from './trace';
 
@@ -56,6 +58,69 @@ async function insertCopy(page: Page) {
     return {from, to, scanned, elements};
   });
 }
+
+/**
+ * Records every listener added to the document or the window, and when, from
+ * before Storybook loads.
+ */
+function recordListeners(): void {
+  const w = window as unknown as {
+    __listeners: {type: string; target: string; at: number}[];
+  };
+  w.__listeners = [];
+  const add = EventTarget.prototype.addEventListener;
+  EventTarget.prototype.addEventListener = function (
+    this: EventTarget,
+    ...args: Parameters<EventTarget['addEventListener']>
+  ) {
+    if (this === document || this === window) {
+      w.__listeners.push({
+        type: args[0],
+        target: this === document ? 'document' : 'window',
+        at: performance.now(),
+      });
+    }
+    return add.apply(this, args);
+  };
+}
+
+test("openStory returns once Storybook has finished the story's render: no listener Storybook adds lands after it", async ({
+  page,
+}) => {
+  await page.addInitScript(recordListeners);
+  await openStory(page, storybook(), 'core-button--primary');
+  const returned = await page.evaluate(() => ({
+    at: performance.now(),
+    phase: (
+      window as unknown as {
+        __STORYBOOK_PREVIEW__?: {currentRender?: {phase?: string}};
+      }
+    ).__STORYBOOK_PREVIEW__?.currentRender?.phase,
+  }));
+  // Two frames and 300 ms more, longer than Storybook's post-render tail
+  // (about 150 ms): a listener a render still in flight adds lands by then;
+  // a finished render adds none.
+  await page.evaluate(
+    () =>
+      new Promise<void>(resolve =>
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => setTimeout(resolve, 300)),
+        ),
+      ),
+  );
+  const late = await page.evaluate(
+    at =>
+      (
+        window as unknown as {
+          __listeners: {type: string; target: string; at: number}[];
+        }
+      ).__listeners
+        .filter(listener => listener.at > at)
+        .map(({type, target}) => `${target} ${type}`),
+    returned.at,
+  );
+  expect({phase: returned.phase, late}).toEqual({phase: 'finished', late: []});
+});
 
 test("openStory turns Storybook's highlight module off: an insertion in a story carries no getComputedStyle scan of the page", async ({
   page,

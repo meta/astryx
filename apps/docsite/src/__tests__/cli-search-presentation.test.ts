@@ -34,6 +34,17 @@ describe('site search presentation', () => {
       {title: 'Theme', context: 'Component', icon: Shapes},
     ],
     [
+      result({
+        domain: 'component',
+        name: 'OldTheme',
+        deprecated: {
+          replacement: 'Theme',
+          description: 'Render a Theme instead.',
+        },
+      }),
+      {title: 'OldTheme', context: 'Component · Deprecated', icon: Shapes},
+    ],
+    [
       result({domain: 'hook', name: 'useTheme'}),
       {title: 'useTheme', context: 'Hook', icon: Webhook},
     ],

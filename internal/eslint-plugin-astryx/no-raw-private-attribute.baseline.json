@@ -1,9 +1,5 @@
 {
-  "packages/core/src/Button/Button.tsx": [
-    "data-astryx-press",
-    "data-astryx-press",
-    "data-astryx-press"
-  ],
+  "packages/core/src/Button/Button.tsx": ["data-astryx-press"],
   "packages/core/src/Chat/ChatComposerInput.tsx": [
     "data-astryx-dictation-interim"
   ],

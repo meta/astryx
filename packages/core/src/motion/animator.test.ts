@@ -19,7 +19,7 @@ import path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
   animatorFor,
-  createAnimator,
+  createMotionEngine,
   END_HOLD_MS,
   PROMOTION_LINGER_MS,
   type AnimatorOptions,
@@ -52,6 +52,8 @@ interface Recorded {
   /** Finished from outside (a sampler's `finish()`), keeping its start. */
   finished: boolean;
   readonly playState: 'idle' | 'paused' | 'running' | 'finished';
+  /** Its timing, as the browser reports it: the duration it was given. */
+  readonly effect: {getTiming(): {duration: number}};
   ready: Promise<Recorded>;
   commit(at: number): void;
   finish(): void;
@@ -136,6 +138,11 @@ beforeEach(() => {
       cancelled: false,
       paused: false,
       finished: false,
+      effect: {
+        getTiming: () => ({
+          duration: Number((options as KeyframeAnimationOptions)?.duration),
+        }),
+      },
       get playState() {
         return this.cancelled
           ? 'idle'
@@ -205,7 +212,7 @@ function setup({
 }: AnimatorOptions & {reduced?: boolean; coarse?: boolean} = {}) {
   stubMedia(reduced, coarse);
   const element = document.createElement('div');
-  const animator = createAnimator(element, {
+  const animator = createMotionEngine(element, {
     now: () => clock,
     requestFrame,
     ...options,
@@ -584,10 +591,16 @@ describe('animate: keyframes on the compositor', () => {
     clock += firstCurve - 10;
     await vi.advanceTimersByTimeAsync(firstCurve - 10);
     expect(frameQueue.length).toBeGreaterThan(0);
-    // Retargeted before that frame comes; the page then draws no frame until
-    // the new curve is inside its own last frame.
+    // Retargeted before that frame comes. The first curve shows as at rest
+    // by now, so the call waits for the browser's start, as one from rest
+    // does. The frame the old look waits for starts it, and that look leaves
+    // it running. The page then draws no frame until the new curve is inside
+    // its own last frame.
     animator.animate({x: 200}, {spring: springs.settle});
     const second = live('translate').at(-1) as Recorded;
+    expect(second.startTime).toBeNull();
+    await commitFrame(clock);
+    expect(second.cancelled).toBe(false);
     datedPerFrame(second);
     const secondCurve = Number(second.options.duration) - END_HOLD_MS;
     const secondEnd = (second.startTime as number) + secondCurve;
@@ -665,6 +678,48 @@ describe('a call from rest starts at the commit, as Core Animation does', () => 
       curve.value(0.1),
       1,
     );
+  });
+
+  it('a call on a settle tail starts at the commit too, so a late first frame skips none of its curve', async () => {
+    const {animator} = setup();
+    animator.animate({x: 300}, {spring: springs.settle});
+    const [first] = live('translate');
+    await commitFrame(1000);
+    // A time inside the first curve's tail: within half a pixel of its
+    // target and slower than a quarter pixel a frame, before its end.
+    let t = 0;
+    while (
+      (Math.abs(curve.value(t) - 300) > 0.5 ||
+        Math.abs(curve.velocity(t)) > 15) &&
+      t < 5
+    ) {
+      t += 0.001;
+    }
+    expect(t).toBeLessThan(5);
+    const at = 1000 + Math.ceil(t * 1000);
+    expect(at - 1000).toBeLessThan(
+      Number(first.options.duration) - END_HOLD_MS,
+    );
+    clock = at;
+    const from = animator.get('x');
+    const handle = animator.animate({x: 0}, {spring: springs.settle});
+    const second = live('translate').at(-1) as Recorded;
+    expect(second.startTime).toBeNull();
+    // The main thread is blocked for 80 ms; the first frame shows the new
+    // curve's first value, not 80 ms into it.
+    clock = at + 80;
+    await commitFrame(clock);
+    await expect(handle.started).resolves.toBe(clock);
+    expect(animator.get('x', clock)).toBeCloseTo(from, 6);
+  });
+
+  it('a call while the curve still moves starts at the call, from the value and velocity on screen', async () => {
+    const {animator} = setup();
+    animator.animate({x: 300}, {spring: springs.settle});
+    await commitFrame(1000);
+    clock = 1100;
+    animator.animate({x: 0}, {spring: springs.settle});
+    expect((live('translate').at(-1) as Recorded).startTime).toBe(1100);
   });
 
   it('a start the browser dates before the block (WebKit) moves to after it', async () => {
@@ -2023,11 +2078,11 @@ describe('promotion: a compositing layer while it moves', () => {
         .mock.calls.filter(([read]) => read === node).length;
     const removed = document.createElement('div');
     document.body.append(removed);
-    createAnimator(removed, {now: () => clock, requestFrame});
+    createMotionEngine(removed, {now: () => clock, requestFrame});
     removed.remove();
     const kept = document.createElement('div');
     document.body.append(kept);
-    createAnimator(kept, {now: () => clock, requestFrame});
+    createMotionEngine(kept, {now: () => clock, requestFrame});
     await vi.advanceTimersByTimeAsync(0);
     expect(readsOf(removed)).toBe(0);
     // A node still in the document is read, once, in that task.
@@ -2041,7 +2096,7 @@ describe('promotion: a compositing layer while it moves', () => {
     stylesheet['will-change'] = 'transform, opacity';
     stubMedia(false, false);
     const element = document.createElement('div');
-    const animator = createAnimator(element, {
+    const animator = createMotionEngine(element, {
       now: () => clock,
       requestFrame,
     });
@@ -2786,7 +2841,7 @@ describe('Reduced Motion (design:reduced-motion)', () => {
 
   it('a running dip survives any re-attach, so the move never passes in view', async () => {
     const halfway = async (
-      animator: ReturnType<typeof createAnimator>,
+      animator: ReturnType<typeof createMotionEngine>,
       start: number,
     ): Promise<number> => {
       // The plan lands by timer: step the clock to the landing.
@@ -2999,6 +3054,94 @@ describe('Reduced Motion (design:reduced-motion)', () => {
       expect(animator.get('opacity')).toBe(1);
       await expect(handle.finished).resolves.toBe(true);
     }
+  });
+
+  it('a landing waits while a sampler pauses its fade after the browser started it, and lands once the fade resumes', async () => {
+    const {animator} = reduced();
+    const handle = animator.animate({x: 100}, {spring: springs.navigationPush});
+    let settled: boolean | undefined;
+    void handle.finished.then(value => {
+      settled = value;
+    });
+    await commitFrame(clock);
+    await advance(fade / 4);
+    // A harness holds the fade mid-way, after the browser started it.
+    const [fadeOut] = live('opacity');
+    fadeOut.paused = true;
+    await advance(5000);
+    // The travel waits for the fade, which still shows the element.
+    expect(animator.get('x')).toBe(0);
+    expect(settled).toBeUndefined();
+    fadeOut.paused = false;
+    for (let step = 0; step < 16; step++) {
+      await advance(fade / 4);
+    }
+    expect(animator.get('x')).toBe(100);
+    expect(animator.get('opacity')).toBe(1);
+    expect(settled).toBe(true);
+  });
+
+  it('a landing waits while a resumed fade has no start yet, and lands once the fade plays to its end', async () => {
+    const {animator} = reduced();
+    const handle = animator.animate({x: 100}, {spring: springs.navigationPush});
+    let settled: boolean | undefined;
+    void handle.finished.then(value => {
+      settled = value;
+    });
+    await commitFrame(clock);
+    await advance(fade / 4);
+    const [fadeOut] = live('opacity');
+    fadeOut.paused = true;
+    // The fade shows the frame it was paused at, a quarter of the way in.
+    Object.defineProperty(fadeOut, 'currentTime', {
+      configurable: true,
+      get: () => fade / 4,
+    });
+    for (let step = 0; step < 300; step++) {
+      await advance(1);
+    }
+    // play(): the fade waits for the browser's next frame, with no start.
+    fadeOut.paused = false;
+    fadeOut.startTime = null;
+    fadeOut.startDelayFrames = 1_000;
+    for (let step = 0; step < 300; step++) {
+      await advance(1);
+    }
+    expect(animator.get('x')).toBe(0);
+    expect(settled).toBeUndefined();
+    // The browser starts it, and it plays to its end.
+    fadeOut.startDelayFrames = 0;
+    Reflect.deleteProperty(fadeOut, 'currentTime');
+    for (let step = 0; step < 16; step++) {
+      await advance(fade / 4);
+    }
+    expect(animator.get('x')).toBe(100);
+    expect(settled).toBe(true);
+  });
+
+  it('an exit whose fade a sampler pauses after its start settles only once the fade resumes', async () => {
+    const {animator} = reduced();
+    const handle = animator.animate(
+      {x: 100, opacity: 0},
+      {spring: springs.navigationPush},
+    );
+    let settled: boolean | undefined;
+    void handle.finished.then(value => {
+      settled = value;
+    });
+    await commitFrame(clock);
+    await advance(fade / 4);
+    const [fadeOut] = live('opacity');
+    fadeOut.paused = true;
+    await advance(5000);
+    // A component that removes the element when the call settles keeps it
+    // while the fade is held on screen.
+    expect(settled).toBeUndefined();
+    fadeOut.paused = false;
+    for (let step = 0; step < 16; step++) {
+      await advance(fade / 4);
+    }
+    expect(settled).toBe(true);
   });
 
   it('a landing later than the whole fade back in shows the element at once and settles then', async () => {
@@ -4123,7 +4266,7 @@ describe('pseudoElement: a dialog\u2019s ::backdrop', () => {
 
 describe('attach', () => {
   it('keeps state without an element and resumes the curve on attach', () => {
-    const animator = createAnimator(null, {
+    const animator = createMotionEngine(null, {
       now: () => clock,
     });
     animator.animate({x: 300}, {spring: springs.settle});
@@ -4214,7 +4357,7 @@ describe('attach', () => {
 
   it('writes nothing for channels at identity', () => {
     const element = document.createElement('div');
-    createAnimator(element);
+    createMotionEngine(element);
     expect(element.getAttribute('style')).toBeNull();
   });
 });
@@ -4304,5 +4447,40 @@ describe('the presented offset iOS hit testing reads', () => {
     animator.animate({y: 0}, {spring: springs.sheetPresent});
     expect(presentedOffsetOf(element).y).toBeCloseTo(0, 6);
     animator.dispose();
+  });
+});
+
+describe("a theme's reduced-motion mark", () => {
+  // The person's setting is off and the pointer is fine: only the mark can
+  // reduce the motion.
+  function underMark(marked: boolean) {
+    stubMedia(false, false);
+    const theme = document.createElement('div');
+    if (marked) {
+      theme.setAttribute('data-astryx-reduced-motion', '');
+    }
+    const element = document.createElement('div');
+    theme.append(element);
+    document.body.append(theme);
+    const animator = createMotionEngine(element, {
+      now: () => clock,
+      requestFrame,
+    });
+    return {theme, animator};
+  }
+
+  it('counts as the Reduce Motion setting: a move lands at once on a fine pointer', () => {
+    const {theme, animator} = underMark(true);
+    animator.animate({x: 100}, {spring: springs.navigationPush});
+    expect(recorded).toHaveLength(0);
+    expect(animator.get('x')).toBe(100);
+    theme.remove();
+  });
+
+  it('without the mark, the same move springs', () => {
+    const {theme, animator} = underMark(false);
+    animator.animate({x: 100}, {spring: springs.navigationPush});
+    expect(recorded.length).toBeGreaterThan(0);
+    theme.remove();
   });
 });

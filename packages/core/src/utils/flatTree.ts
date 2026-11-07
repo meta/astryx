@@ -3,12 +3,15 @@
 /**
  * @file flatTree.ts
  * @input A DOM node
- * @output Exports parentAcrossShadow, and containsAlongFlatTree, which walks it
+ * @output Exports parentAcrossShadow, containsAlongFlatTree, which walks it,
+ *   and deepActiveElement
  * @position The flat-tree parent the browser scrolls and dispatches
- *   through, shared by the gesture host's native-scroll probe and the
+ *   through, shared by the gesture host's native-scroll probe, the
  *   selection lock (which the press feedback controller uses without the
- *   gesture system)
+ *   gesture system) and the Layer module's input hold
  */
+
+import {isShadowRoot} from './nodeType';
 
 /** The node's parent, crossing out of shadow roots. */
 export function parentAcrossShadow(node: Node): Node | null {
@@ -19,7 +22,7 @@ export function parentAcrossShadow(node: Node): Node | null {
     return slot;
   }
   if (node.parentNode != null) {
-    return node.parentNode instanceof ShadowRoot
+    return isShadowRoot(node.parentNode)
       ? node.parentNode.host
       : node.parentNode;
   }
@@ -37,4 +40,15 @@ export function containsAlongFlatTree(ancestor: Node, node: Node): boolean {
     }
   }
   return false;
+}
+
+/** The focused element of `doc`, inside open shadow roots too. */
+export function deepActiveElement(
+  doc: Document | null | undefined,
+): Element | null {
+  let active = doc?.activeElement ?? null;
+  while (active?.shadowRoot?.activeElement != null) {
+    active = active.shadowRoot.activeElement;
+  }
+  return active;
 }
