@@ -229,7 +229,7 @@ describe.each(Object.entries(WORKFLOWS))(
           ].join('\n'),
         );
         expect(share.env.SCOPED).toBe(
-          "${{ github.event_name == 'pull_request' && steps.scope.outputs.full_suite == 'false' }}",
+          "${{ github.event_name == 'pull_request' && steps.scope.outputs.vitest_full_suite == 'false' }}",
         );
         // The Node lane runs the same scoped share, guards included.
         const node = workflow.jobs['test-node'].steps.find(
@@ -401,6 +401,29 @@ describe.each(Object.entries(WORKFLOWS))(
     }
   },
 );
+
+describe('Vitest scoping for shared infrastructure the module graph reaches (spec:AST-030 FR13)', () => {
+  const workflow = load('ci.yml');
+  const scopedEnv = (job, name) =>
+    workflow.jobs[job].steps.find(step => step.name === name).env.SCOPED;
+
+  it('scopes the UI and Node Vitest lanes by vitest_full_suite', () => {
+    for (const [job, name] of [
+      ['test-ui', 'Run this shard of the UI tests'],
+      ['test-node', 'Run this shard of the Node tests'],
+    ]) {
+      expect(scopedEnv(job, name)).toBe(
+        "${{ github.event_name == 'pull_request' && steps.scope.outputs.vitest_full_suite == 'false' }}",
+      );
+    }
+  });
+
+  it('keeps every other owner on full_suite', () => {
+    const text = read('.github/workflows/ci.yml');
+    expect(text.match(/outputs\.vitest_full_suite/g)).toHaveLength(2);
+    expect(text).toContain("steps.scope.outputs.full_suite == 'false'");
+  });
+});
 
 describe('ci.yml pr-a11y browser specs', () => {
   const steps = load('ci.yml').jobs['pr-a11y-specs'].steps;

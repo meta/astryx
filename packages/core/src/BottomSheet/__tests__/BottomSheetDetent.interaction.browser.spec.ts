@@ -222,7 +222,9 @@ test('the settle lands on the detent, its curve recorded frame by frame', async 
   // that the test sends after the lift can come after the settle ends.
   await freezePageOn(page, 'touchend');
   await driver.play(slowDragTo(handle, dy));
-  const held = await holdAnimations(page, sheet);
+  const held = await holdAnimations(page, sheet, {
+    judges: {target: sheet, property: 'transform'},
+  });
   const transition = held.find(a => a.name === 'transform');
   if (transition == null) {
     throw new Error(`no transform transition held: ${JSON.stringify(held)}`);
@@ -432,6 +434,7 @@ test(
       name: 'bottomsheet-settle',
       clip,
       scope: sheet,
+      judges: {target: sheet, property: 'transform'},
       measure,
       columns: 7,
       cellScale: 0.4,

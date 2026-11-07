@@ -19,7 +19,9 @@ import {
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
 import {
+  advanceFrozenPage,
   animationStoryboard,
+  armHold,
   blockMainThread,
   busyWindowProof,
   castStoryboard,
@@ -28,8 +30,10 @@ import {
   countBetween,
   curveOf,
   flick,
+  freezePageOn,
   freezeTimers,
   holdAnimations,
+  installPageFreeze,
   installTimerGate,
   markElement,
   openStory,
@@ -40,6 +44,7 @@ import {
   startCompositorTrace,
   startScreencast,
   tap,
+  thawPage,
   thawTimers,
   timeline,
   touchDriver,
@@ -47,8 +52,9 @@ import {
   toTouchEvents,
   traceRendering,
   trackMarker,
-  waitForAnimation,
+  type waitForAnimation,
   waitForRest,
+  watchAnimations,
   retakeOnWheelPacing,
   webInputDriver,
   WHEEL_SKIP,
@@ -380,9 +386,17 @@ test('a flick coasts on UIKit’s curve onto the row it projects, and commits it
   const {script, offsetAtLift} = flickUp(start);
   expect(releaseVelocity(script).y).toBeCloseTo(-FLICK_VELOCITY, -1);
   await recordFingerInputs(page);
+  // The wheel ends a coast from a timer: gate the page's timers so the held
+  // coast is not ended while it is sampled.
+  await installTimerGate(page);
+  const watch = await watchAnimations(strip);
+  const hold = await armHold(page, strip, {
+    judges: {target: strip, property: 'translate'},
+    newOnly: true,
+  });
   await driver.play(script);
-  const coast = stripAnimationOf(await waitForAnimation(strip));
-  const held = await holdAnimations(page, strip);
+  const held = await hold.held();
+  await freezeTimers(page);
   const motion = held.find(animation => animation.kind === 'Animation');
   if (motion == null) {
     throw new Error(`no coast held: ${JSON.stringify(held)}`);
@@ -392,6 +406,8 @@ test('a flick coasts on UIKit’s curve onto the row it projects, and commits it
     'translateY',
   ).map(sample => ({t: sample.t, value: -sample.value}));
   await releaseAnimations(page);
+  await thawTimers(page);
+  const coast = stripAnimationOf(await watch.started());
 
   const from = samples[0].value;
   const rest = samples[samples.length - 1].value;
@@ -520,10 +536,9 @@ test('the coast keeps advancing every frame while the main thread is blocked', a
   // The compositor's own record of the frames it presents: a frame the
   // screencast skips under load is not a stall (busyWindowProof).
   const compositor = await startCompositorTrace(page);
+  const watch = await watchAnimations(strip);
   await driver.play(script);
-  const coast = stripAnimationOf(
-    await waitForAnimation(strip, {minProgressMs: 16}),
-  );
+  const coast = stripAnimationOf(await watch.started({minProgressMs: 16}));
   // Read the coast the page is playing, from its keyframes: where the strip is
   // at each moment. WebKit's real-time input gives the page its own release
   // velocity.
@@ -672,14 +687,29 @@ test('the coast does no Layout or Paint per frame', async ({
 test('a finger landing on the coasting wheel stops it where it is, then it eases onto the nearest row', async ({
   page,
 }) => {
+  await installPageFreeze(page);
   const {driver, field, strip, start} = await openWheel(page);
+  await installTimerGate(page);
   const before = await stripOffset(strip);
-  await driver.play(flickUp(start).script);
-  const coast = stripAnimationOf(
-    await waitForAnimation(strip, {minProgressMs: 16}),
-  );
+  const watch = await watchAnimations(strip);
+  // The flick plays on the scene's clock. Frozen from its first touch, the
+  // scene moves on by each step's scripted time. So the page reads the
+  // script's release however loaded the runner is.
+  const {script} = flickUp(start);
+  const times = toTouchEvents(script).map(step => step.t);
+  await freezePageOn(page, 'touchstart');
+  await driver.play(script, {
+    onEvent: async (_step, index) => {
+      if (index + 1 < times.length) {
+        await advanceFrozenPage(page, times[index + 1] - times[index]);
+      }
+    },
+  });
+  // The coast starts held at the lift. The scene moves 300 ms into it, and
+  // the finger lands there.
+  await advanceFrozenPage(page, 300);
+  const coast = stripAnimationOf(await watch.started({minProgressMs: 16}));
   const coastEnd = -stripYOf(coast.keyframes?.at(-1));
-  await page.waitForTimeout(300);
   // Land and hold still: the wheel stops at once, between rows.
   const hold = tap(start, {holdMs: 300});
   let caught = NaN;
@@ -688,6 +718,7 @@ test('a finger landing on the coasting wheel stops it where it is, then it eases
   await driver.play(hold, {
     onEvent: async () => {
       if (step++ === 0) {
+        await thawPage(page);
         await page.waitForTimeout(50);
         caught = await stripOffset(strip);
         await page.waitForTimeout(150);
@@ -712,6 +743,7 @@ test(
   'storyboard: a flick and its coast onto a row',
   {tag: '@storyboard'},
   async ({page}, testInfo) => {
+    await installPageFreeze(page);
     const {driver, minutes, strip, start} = await openWheel(page);
     const box = await minutes.boundingBox();
     if (box == null) {
@@ -728,6 +760,9 @@ test(
     // The wheel ends a motion from a timer; gate the page's timers so the
     // held coast is not finished behind the filmstrip's back.
     await installTimerGate(page);
+    // Frozen in the lift's own task, the coast starts held at its start, and
+    // the hold takes it there however long the flick's film took.
+    await freezePageOn(page, 'touchend');
     const flickBoard = await touchStoryboard(page, driver, script, {
       name: 'wheel-flick',
       clip,
@@ -735,12 +770,15 @@ test(
       columns: 6,
       cellScale: 0.5,
     });
-    await waitForAnimation(strip);
+    const held = await holdAnimations(page, strip, {
+      judges: {target: strip, property: 'translate'},
+    });
+    await thawPage(page);
     await freezeTimers(page);
     const {storyboard: coastBoard} = await animationStoryboard(page, {
+      held,
       name: 'wheel-coast',
       clip,
-      scope: strip,
       measure,
       columns: 8,
       cellScale: 0.5,
