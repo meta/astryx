@@ -65,8 +65,8 @@ the person's device.
   value, so components pick it up without change (FR1).
 
 - **FR3 — A text size the person set wins; otherwise the theme's.** When the
-  person has set a text size, through iOS Dynamic Type, the Android font scale,
-  the browser's default font size, or zoom, Core and Lab web text follows it in
+  person has set a text size, through iOS Dynamic Type, the browser's default
+  font size, or zoom, Core and Lab web text follows it in
   every theme, branded included: the theme's sizes scale from the person's
   size, each role keeps its order, and the family stays the theme's. When the
   person has not set one, or the platform gives no signal, text uses exactly
@@ -76,7 +76,9 @@ the person's device.
   replaces the mobile reading base of `design:mobile-typography` DR1, smaller
   or larger, and DR2's pin does not apply: every role scales from that size;
   DR1 and DR2 apply when none is set, and the iOS text-entry floor of
-  `family:input-fields` FR9 still holds.
+  `family:input-fields` FR9 still holds. In Chrome on Android, the system font
+  scale does not reach the page's root font size; Chrome's Default zoom scales
+  the whole page, which rem-based sizing follows with no Astryx code.
 - **FR4 — Larger text stays usable.** Up to 200% of the theme's sizes, every
   component keeps all of its content and function (WCAG 2.2 success criterion
   1.4.4). Above 200%, reading text keeps growing; a label inside a dense control, such
@@ -94,8 +96,8 @@ the person's device.
 - Unsupported behavior: none beyond the font fallback above.
 - Browser evidence (`spec:AST-013` FR10): Safari on iOS proves an FR2 theme's
   body text in the system body font and FR3 across Dynamic Type categories;
-  Chrome on Android in the emulator proves FR3 with the system font scale; a
-  desktop browser proves FR3 with its default font size and zoom, and FR4 at
+  Chrome on Android in the emulator proves FR3's Android behavior with the
+  system font scale; a desktop browser proves FR3 with its default font size and zoom, and FR4 at
   200% and above; token and source checks prove FR1.
 
 ## Current-state impact
@@ -113,14 +115,17 @@ the person's device.
 - Defects under FR3 and FR4:
   - On iOS and iPadOS, text ignores Dynamic Type in every theme.
   - Butter, Stone, and Y2K fix supporting text at 12 px, so it does not follow
-    a larger browser or Android text size.
+    a larger browser text size.
   - Controls hold fixed heights, such as 40 px elements, `component:Badge`
     FR1's block size, `component:Button` FR4's and `component:Token` FR1's
     element sizes, and InputGroup's row height in `family:input-fields`, so a
     larger label can overflow; those records treat their sizes as minimums
     under FR4.
-  - Whether Chrome on Android carries the system font scale to Astryx text is
-    unverified until the emulator check FR3 names.
+- Chrome on Android (Chrome 133 in the emulator at system font scale 1.3,
+  recorded 2026-11-07) does not carry the system font scale to pages: the root
+  font size stays 16 px, and every text role and control height is unchanged.
+  Its Accessibility settings offer Default zoom, which stays at 100% under the
+  system font scale, and no text-scaling setting.
 
 ## Verification
 
