@@ -72,7 +72,7 @@ export const Default: Story = {
   },
 };
 
-/** Three-slot layout: CSS grid 1fr auto 1fr. Center content stays centered regardless of start/end width. */
+/** Three-slot layout. The center sits at the middle while the lanes fit one row; when they do not, the row wraps. */
 export const ThreeSlot: Story = {
   render: () => (
     <Toolbar

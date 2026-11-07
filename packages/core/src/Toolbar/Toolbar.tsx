@@ -29,7 +29,7 @@ import {Section} from '../Section/Section';
 import {oneTabStopAmong, useInternalListFocus} from '../hooks/useListFocus';
 import {useKeyboardHint} from '../hooks/useKeyboardHint';
 import {SizeProvider} from '../SizeContext/SizeContext';
-import {edgeCompSlot} from '../Layout/edgeCompensation.stylex';
+import {EDGE_COMP_ATTR, edgeCompSlot} from '../Layout/edgeCompensation.stylex';
 import {themeProps} from '../utils/themeProps';
 
 /**
@@ -135,6 +135,17 @@ const sizeStyles = stylex.create({
 const dynamicStyles = stylex.create({
   gap: (gapValue: string) => ({
     gap: gapValue,
+  }),
+  // Edge compensation pulls a side lane out by a negative margin, which flex
+  // counts toward the lane's share of the row. This basis gives that width
+  // back, so the lane's share excludes it and the center stays at the middle.
+  sideLaneBasis: (amount: string) => ({
+    flexBasis: {
+      default: '0px',
+      [`:has(> [${EDGE_COMP_ATTR}]:first-child)`]: amount,
+      [`:has(> [${EDGE_COMP_ATTR}]:last-child)`]: amount,
+      [`:has(> [${EDGE_COMP_ATTR}]:first-child):has(> [${EDGE_COMP_ATTR}]:last-child)`]: `calc(2 * ${amount})`,
+    },
   }),
   tabIndicatorBottom: (offset: string) => ({
     '--_tab-indicator-bottom': offset,
@@ -380,7 +391,7 @@ export function Toolbar({
                 {...stylex.props(
                   styles.startSlot,
                   styles.sideLane,
-                  edgeCompSlot.flexBasis(edgeCompInsetForSize[size]),
+                  dynamicStyles.sideLaneBasis(edgeCompInsetForSize[size]),
                   edgeCompSlot.inset(edgeCompInsetForSize[size]),
                   dynamicStyles.gap(gapVar),
                 )}>
@@ -394,7 +405,7 @@ export function Toolbar({
                 {...stylex.props(
                   styles.endSlot,
                   styles.sideLane,
-                  edgeCompSlot.flexBasis(edgeCompInsetForSize[size]),
+                  dynamicStyles.sideLaneBasis(edgeCompInsetForSize[size]),
                   edgeCompSlot.inset(edgeCompInsetForSize[size]),
                   dynamicStyles.gap(gapVar),
                 )}>
