@@ -342,7 +342,9 @@ export function isTimeInRange(
 
 /**
  * Clamps a time to a min/max range. Without seconds, a bound that falls
- * between whole minutes gives the nearest whole minute inside the range.
+ * between whole minutes gives the nearest whole minute inside the range. With
+ * no whole minute inside it, the bound itself answers, seconds included:
+ * dropping them there would put the answer outside the range.
  */
 export function clampTime(
   time: ISOTimeString,
@@ -358,19 +360,15 @@ export function clampTime(
   if (min && compareTime(time, min) < 0) {
     const parsedMin = parseISOTime(min);
     if (parsedMin) {
-      return formatISOTime(
-        onWholeMinute(parsedMin, 1, includeSeconds, max),
-        includeSeconds,
-      );
+      const reached = onWholeMinute(parsedMin, 1, includeSeconds, max);
+      return formatISOTime(reached, includeSeconds || reached.second !== 0);
     }
   }
   if (max && compareTime(time, max) > 0) {
     const parsedMax = parseISOTime(max);
     if (parsedMax) {
-      return formatISOTime(
-        onWholeMinute(parsedMax, -1, includeSeconds, min),
-        includeSeconds,
-      );
+      const reached = onWholeMinute(parsedMax, -1, includeSeconds, min);
+      return formatISOTime(reached, includeSeconds || reached.second !== 0);
     }
   }
 
