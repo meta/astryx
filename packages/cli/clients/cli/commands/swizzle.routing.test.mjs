@@ -363,6 +363,38 @@ describe('swizzle — integration-owned components', () => {
     expect(JSON.parse(again.stdout).code).toBe('ERR_FILE_EXISTS');
     expect(fs.readFileSync(owner, 'utf-8')).toContain('// edited');
   });
+  it.each([
+    ['a `./*` pattern with a source condition', {'./*': {source: './components/*/index.ts', default: './dist/*/index.js'}}],
+    ['a `./*` pattern with a plain string', {'./*': './components/*/index.ts'}],
+    ['a plain-string subpath', {'./Bar': './components/Bar/index.ts'}],
+  ])('imports another public component from the package when exports use %s', async (_shape, exportsField) => {
+    buildFakeCore(project);
+    writeProjectPackageJson(project);
+    const {intDir} = buildIntegration(project, {componentName: 'Foo'});
+    fs.writeFileSync(
+      path.join(intDir, 'package.json'),
+      JSON.stringify({name: '@test/meta', version: '1.2.3', exports: exportsField}),
+    );
+    const bar = path.join(intDir, 'components', 'Bar');
+    fs.mkdirSync(bar, {recursive: true});
+    fs.writeFileSync(path.join(bar, 'Bar.tsx'), `export function Bar() { return null; }\n`);
+    fs.writeFileSync(path.join(bar, 'index.ts'), `export {Bar} from './Bar';\n`);
+    fs.writeFileSync(
+      path.join(intDir, 'components', 'Foo', 'Foo.tsx'),
+      [`import {Bar} from '../Bar';`, `export function Foo() { return Bar(); }`, ''].join('\n'),
+    );
+
+    const result = await runCli(['--json', 'swizzle', 'Foo', '-f'], project);
+    expect(result.code).toBe(0);
+    const env = JSON.parse(result.stdout);
+    const out = fs.readFileSync(
+      path.join(project, 'components', 'astryx', 'Foo', 'Foo.tsx'),
+      'utf-8',
+    );
+    expect(out).toContain(`from '@test/meta/Bar'`);
+    expect(env.data.files.some(f => f.includes('Bar'))).toBe(false);
+  });
+
   it('omits the feedback note when the integration ships no issuesUrl', async () => {
     buildFakeCore(project);
     writeProjectPackageJson(project);

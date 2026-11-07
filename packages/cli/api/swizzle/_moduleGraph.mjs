@@ -17,7 +17,6 @@ import {
   moduleExportOrigins,
   resolveLocalModule,
 } from '../../foundation/discovery/module-exports.mjs';
-import {sourceExportTarget} from '../../foundation/discovery/package-exports.mjs';
 import {subpathDeclaration} from '../../foundation/integrations/exports-subpaths.mjs';
 
 /** The extensions an extensionless import may name, in resolution order. */
@@ -230,6 +229,78 @@ function visitDynamicReferences(node, onLiteral) {
  */
 
 /**
+ * The file an `exports` entry names: its `source` condition, else a plain
+ * string, `import` or `default` target.
+ * @param {unknown} value
+ * @returns {string|null}
+ */
+function exportTargetOf(value) {
+  if (typeof value === 'string') return value;
+  if (!value || typeof value !== 'object') return null;
+  const conditions = /** @type {Record<string, unknown>} */ (value);
+  for (const condition of ['source', 'import', 'default']) {
+    const target = exportTargetOf(conditions[condition]);
+    if (target) return target;
+  }
+  return null;
+}
+
+/**
+ * Every public subpath of a package with the source file it names under
+ * `root`. A `*` entry is expanded against the files its target pattern
+ * matches. `./internal/*` paths are never public.
+ * @param {Record<string, unknown>|undefined} exportsField
+ * @param {string} packageDir
+ * @param {string} root
+ * @returns {Array<[string, string]>}
+ */
+function exportedSourceFiles(exportsField, packageDir, root) {
+  /** @type {Array<[string, string]>} */
+  const found = [];
+  const isInternal = (/** @type {string} */ subpath) =>
+    /^\.\/internal(\/|$)/.test(subpath);
+  const usable = (/** @type {string} */ file) =>
+    file.startsWith(root + path.sep) &&
+    !DECLARATION_FILE.test(file) &&
+    fs.existsSync(file) &&
+    fs.statSync(file).isFile();
+  for (const [key, value] of Object.entries(exportsField ?? {})) {
+    if (isInternal(key)) continue;
+    const target = exportTargetOf(value);
+    if (!target || !target.startsWith('./')) continue;
+    if (!key.includes('*')) {
+      const file = path.resolve(packageDir, target);
+      if (usable(file)) found.push([key, file]);
+      continue;
+    }
+    const star = target.indexOf('*');
+    const prefix = target.slice(2, star);
+    const suffix = target.slice(star + 1);
+    const base = path.resolve(
+      packageDir,
+      prefix.slice(0, prefix.lastIndexOf('/') + 1),
+    );
+    if (!base.startsWith(root) || !fs.existsSync(base)) continue;
+    const files = fs.readdirSync(base, {recursive: true, withFileTypes: true});
+    for (const entry of files) {
+      const file = path.join(entry.parentPath, entry.name);
+      const rel = toPosix(path.relative(packageDir, file));
+      const fits = rel.startsWith(prefix) && rel.endsWith(suffix);
+      if (!fits || rel.length < prefix.length + suffix.length) continue;
+      if (path.relative(base, file).split(path.sep).includes('node_modules')) {
+        continue;
+      }
+      const subpath = key.replace(
+        '*',
+        rel.slice(prefix.length, rel.length - suffix.length),
+      );
+      if (!isInternal(subpath) && usable(file)) found.push([subpath, file]);
+    }
+  }
+  return found;
+}
+
+/**
  * The owner package's public surface, read from its `exports` map: each
  * subpath with a `source` condition under the source root, and the
  * declarations it exports. `./internal/*` subpaths are not public.
@@ -256,10 +327,11 @@ function publicSurfaceOf(packageDir, srcRoot, originsOf) {
   const byOrigin = {value: new Map(), type: new Map()};
   /** @type {PublicSurface['byFile']} */
   const byFile = new Map();
-  for (const subpath of Object.keys(exportsField ?? {})) {
-    if (subpath.includes('*') || /^\.\/internal(\/|$)/.test(subpath)) continue;
-    const sourceFile = sourceExportTarget(pkg, packageDir, subpath);
-    if (!sourceFile || !sourceFile.startsWith(srcRoot + path.sep)) continue;
+  for (const [subpath, sourceFile] of exportedSourceFiles(
+    exportsField,
+    packageDir,
+    srcRoot,
+  )) {
     byFile.set(sourceFile, subpath);
     if (!CODE_FILE.test(sourceFile)) continue;
     for (const kind of /** @type {const} */ (['value', 'type'])) {

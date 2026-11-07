@@ -355,23 +355,26 @@ export async function swizzleCopy(component, options = {}) {
   };
   const allFiles = [...plan.files.keys()];
   // Such a module takes a folder named after the package when its own path
-  // is a destination of a module in the layout, so two modules never share
-  // one file.
-  const layoutDests = new Set(
+  // is already a destination, so two modules never share one file.
+  const takenDests = new Set(
     allFiles.map(layoutDestOf).filter(dest => dest != null),
   );
-  /** @param {string} file */
-  const baseDestOf = file => {
-    const inLayout = layoutDestOf(file);
-    if (inLayout != null) return inLayout;
+  /** @type {Map<string, string>} */
+  const rootDests = new Map();
+  for (const file of [...allFiles].sort()) {
+    if (layoutDestOf(file) != null) continue;
     const packagePath = path.relative(graphRoot, file);
     let dest = path.join(outputBase, packagePath);
-    for (let n = 1; layoutDests.has(dest); n++) {
+    for (let n = 1; takenDests.has(dest); n++) {
       const folder = n === 1 ? path.basename(packageDir) : `${path.basename(packageDir)}-${n}`;
       dest = path.join(outputBase, folder, packagePath);
     }
-    return dest;
-  };
+    takenDests.add(dest);
+    rootDests.set(file, dest);
+  }
+  /** @param {string} file */
+  const baseDestOf = file =>
+    layoutDestOf(file) ?? /** @type {string} */ (rootDests.get(file));
 
   const componentFiles = allFiles.filter(isComponentFile);
   const helpers = allFiles.filter(f => !isComponentFile(f));
