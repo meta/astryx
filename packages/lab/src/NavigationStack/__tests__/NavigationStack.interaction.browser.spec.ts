@@ -56,7 +56,6 @@ import {
   watchAnimations,
   withStorybook,
   writeEvidence,
-  type ActiveAnimation,
   type BlockedWindow,
   type TouchDriver,
   type TrackedFrame,
@@ -1115,19 +1114,17 @@ test('with a mouse, the incoming bar covers the old title while the main thread 
     });
     const cast = await startScreencast(page);
     const row = await rowCenter(page, 'General');
-    const watch = await watchAnimations(card(page, 'screen-General'));
     // The block outlasts the push, whose spring is at rest by about 0.45 s.
     const blocked = blockDuringPush(page, 900);
     await page.mouse.click(row.x, row.y);
     const block = await blocked;
-    const [push] = await watch.started({minProgressMs: 16});
     await page.waitForTimeout(150);
     const frames = await cast.stop();
     const tracked = await trackMarker(page, frames);
     const trace = JSON.stringify(
       tracked.map(f => [Math.round(f.t - block.from), f.box?.x ?? null]),
     );
-    const during = titleFramesInBlock(tracked, block, push);
+    const during = titleFramesInBlock(tracked, block);
     // Seen while blocked, then covered before the block ends.
     expect(
       during.some(f => f.box != null),
@@ -1143,12 +1140,13 @@ test('with a mouse, the incoming bar covers the old title while the main thread 
  * The screencast frames inside the block, once the block has caught the
  * title. A block cannot begin before the push's first frame, and a page that
  * is starved of frames begins it late. When the push had already covered the
- * title, the window holds nothing to judge, and the run fails by name.
+ * title, the window holds nothing to judge, and the run fails by name. The
+ * numbers come from the frames: the push's first moved frame and the title's
+ * last sighting, before the block.
  */
 function titleFramesInBlock(
   tracked: readonly TrackedFrame[],
   block: BlockedWindow,
-  push: ActiveAnimation,
 ): TrackedFrame[] {
   const during = tracked.filter(f => f.t > block.from && f.t < block.to - 20);
   const lastSeen = tracked.filter(f => f.box != null).at(-1);
@@ -1157,11 +1155,17 @@ function titleFramesInBlock(
     lastSeen != null &&
     lastSeen.t <= block.from
   ) {
-    const blockAfterPushMs = block.from - push.from;
+    // The title rides the covered bar, so its first move is the push's
+    // first frame.
+    const restX = tracked.find(f => f.box != null)?.box?.x ?? 0;
+    const moved =
+      tracked.find(f => f.box == null || Math.abs(f.box.x - restX) >= 1) ??
+      lastSeen;
+    const pushBeforeBlockMs = block.from - moved.t;
     const lastSeenBeforeBlockMs = block.from - lastSeen.t;
     throw new BusyWindowTooLateError(
-      `the block began ${blockAfterPushMs.toFixed(0)} ms into the push, and the title was last seen ${lastSeenBeforeBlockMs.toFixed(0)} ms before that: the push had covered it, so the block holds nothing to judge`,
-      {blockAfterPushMs, lastSeenBeforeBlockMs},
+      `the push's first frame came ${pushBeforeBlockMs.toFixed(0)} ms before the block, and the title was last seen ${lastSeenBeforeBlockMs.toFixed(0)} ms before it: the push had covered the title, so the block holds nothing to judge`,
+      {pushBeforeBlockMs, lastSeenBeforeBlockMs},
     );
   }
   return during;
@@ -1217,19 +1221,17 @@ test('under a finger, the incoming screen cuts the old title while the main thre
   });
   const cast = await startScreencast(page);
   const row = await rowCenter(page, 'General');
-  const watch = await watchAnimations(card(page, 'screen-General'));
   // The block outlasts the push, whose spring is at rest by about 0.45 s.
   const blocked = blockDuringPush(page, 900);
   await driver.tap(row);
   const block = await blocked;
-  const [push] = await watch.started({minProgressMs: 16});
   await page.waitForTimeout(150);
   const frames = await cast.stop();
   const tracked = await trackMarker(page, frames);
   const trace = JSON.stringify(
     tracked.map(f => [Math.round(f.t - block.from), f.box?.x ?? null]),
   );
-  const during = titleFramesInBlock(tracked, block, push);
+  const during = titleFramesInBlock(tracked, block);
   // Seen while blocked, then cut before the block ends.
   expect(
     during.some(f => f.box != null),
