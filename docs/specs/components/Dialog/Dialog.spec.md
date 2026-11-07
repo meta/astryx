@@ -180,10 +180,9 @@ Core's shared focus-region module provides that containment: the Tab
 containment `useFocusTrap` applies for Drawer and Popover. Each modal
 presentation applies the same module instead of
 leaving Tab to the browser: Dialog, and AlertDialog and CommandPalette through
-it, a modal BottomSheet, Lightbox, and a modal Drawer. A fault in the wrapping
-is fixed in that module, not worked around in a component. The one exception
-is a step of the deprecated BottomSheetSwitcher (DEP-0015): it keeps native
-containment under `component:BottomSheetSwitcher/DEC-1`.
+it, a modal BottomSheet, standalone or the active step of a
+BottomSheetSwitcher, Lightbox, and a modal Drawer. A fault in the wrapping is
+fixed in that module, not worked around in a component.
 
 Rejected: leaving Tab to native `showModal()`, which sends focus to the browser's own interface from inside a modal.
 
