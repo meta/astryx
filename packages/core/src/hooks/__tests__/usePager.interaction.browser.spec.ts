@@ -1186,11 +1186,11 @@ test('a settle keeps advancing every frame through an 800 ms main-thread block',
   expect(proof.verdict.failures, proof.summary).toEqual([]);
   // Each run's own block has to show the settle at a new position.
   proof.runs.forEach((run, i) => {
-    const read = run.control;
+    const read = run?.control;
     const settleFrames = (read?.movedWith ?? 0) - (read?.belowStep ?? 0);
     expect(
       settleFrames,
-      `run ${i + 1}: the settle showed a new position on ${settleFrames} frames in its block. ${run.summary}`,
+      `run ${i + 1}: the settle showed a new position on ${settleFrames} frames in its block. ${run?.summary ?? proof.late[i]?.message}`,
     ).toBeGreaterThanOrEqual(1);
   });
 });

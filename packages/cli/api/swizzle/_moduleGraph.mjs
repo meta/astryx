@@ -12,6 +12,8 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {isBuiltin} from 'node:module';
+import {packageOf} from '../../foundation/render/served-packages.mjs';
 import {parse} from '@babel/parser';
 import {
   inspectPackageExport,
@@ -388,6 +390,9 @@ function publicSurfaceOf(packageDir, srcRoot, originsOf) {
  *   file the copy holds (absolute source path), with the edits its imports need
  * @property {Map<string, Set<string>>} dependsOn file -> carried files its
  *   computed specifiers point at
+ * @property {Record<string, string>} dependencies each npm package the copied
+ *   files import, other than the owner package and Node's built-in modules,
+ *   with the range the owner package declares
  */
 
 /**
@@ -454,6 +459,8 @@ export function planCopy({
   const files = new Map();
   /** @type {CopyPlan['dependsOn']} */
   const dependsOn = new Map();
+  /** @type {Set<string>} */
+  const packages = new Set();
   const queue = [...entries];
   const queued = new Set(queue);
   /** @param {string} file */
@@ -554,7 +561,12 @@ export function planCopy({
     files.set(file, {code: parsed.code, edits});
     if (!CODE_FILE.test(file)) continue;
     for (const ref of parsed.references) {
-      if (!ref.source.startsWith('.')) continue;
+      if (!ref.source.startsWith('.')) {
+        const builtin = ref.source.startsWith('node:') || isBuiltin(ref.source);
+        const name = packageOf(ref.source);
+        if (!builtin && name !== ownerPackage) packages.add(name);
+        continue;
+      }
       const target = resolveRelative(file, ref.source, resolutions);
       // A dangling import is left for the build to report.
       if (!target) continue;
@@ -585,7 +597,7 @@ export function planCopy({
       edits.push(planReference(file, parsed.code, ref, target));
     }
   }
-  return {files, dependsOn};
+  return {files, dependsOn, dependencies: declaredRanges(packageDir, packages)};
 
   /**
    * Decide one reference that leaves the component folder.
@@ -667,6 +679,35 @@ export function planCopy({
       render: specifierOf => renderStatements(ref, groups, specifierOf),
     };
   }
+}
+
+/**
+ * The version range the owner package declares for each npm package the copy
+ * imports, by name; `*` for one it does not declare.
+ * @param {string} packageDir
+ * @param {Iterable<string>} names
+ * @returns {Record<string, string>}
+ */
+function declaredRanges(packageDir, names) {
+  /** @type {Record<string, Record<string, string>>} */
+  let manifest = {};
+  try {
+    manifest = JSON.parse(
+      fs.readFileSync(path.join(packageDir, 'package.json'), 'utf-8'),
+    );
+  } catch {
+    // An unreadable manifest declares nothing.
+  }
+  /** @type {Record<string, string>} */
+  const ranges = {};
+  for (const name of [...names].sort()) {
+    ranges[name] =
+      manifest.dependencies?.[name] ??
+      manifest.optionalDependencies?.[name] ??
+      manifest.peerDependencies?.[name] ??
+      '*';
+  }
+  return ranges;
 }
 
 /**
