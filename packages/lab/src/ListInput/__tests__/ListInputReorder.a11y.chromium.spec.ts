@@ -189,3 +189,74 @@ test.describe('with a mouse', () => {
     ).toBeLessThan(6);
   });
 });
+
+test.describe('the record columns', () => {
+  for (const viewport of [
+    {width: 390, height: 844},
+    {width: 1024, height: 768},
+  ]) {
+    test(`at ${viewport.width} px, the Add button and each reorder handle stay inside the list's columns`, async ({
+      page,
+    }) => {
+      await page.setViewportSize(viewport);
+      await page.goto(
+        `${storybook.origin}/iframe.html?id=${STORY}&viewMode=story`,
+      );
+      await page.locator(HANDLE).first().waitFor();
+      const overflow = await page.evaluate(() => {
+        const right = (element: Element | null) =>
+          element?.getBoundingClientRect().right ?? Number.NaN;
+        const fieldsEnd = Math.max(
+          ...Array.from(
+            document.querySelectorAll(
+              '[data-list-input-row] [data-list-input-cell]',
+            ),
+            right,
+          ),
+        );
+        const handles = Array.from(
+          document.querySelectorAll(
+            '[data-list-input-row] button[data-astryx-list-reorder]',
+          ),
+        );
+        const listEnd = right(
+          document.querySelector('[data-list-input-row]')?.closest('ol') ??
+            null,
+        );
+        return {
+          addPastFields:
+            right(
+              document.querySelector('[data-list-input-add-content] button'),
+            ) - fieldsEnd,
+          handlePastList: Math.max(
+            ...handles.map(handle => right(handle) - listEnd),
+          ),
+          handlePastRecord: Math.max(
+            ...handles.map(
+              handle =>
+                right(handle) - right(handle.closest('[data-list-input-row]')),
+            ),
+          ),
+          handles: handles.length,
+        };
+      });
+      expect(overflow.handles, JSON.stringify(overflow)).toBeGreaterThan(1);
+      // The Add button ends where the record fields end, in the Remove
+      // column's gap.
+      expect(
+        overflow.addPastFields,
+        JSON.stringify(overflow),
+      ).toBeLessThanOrEqual(0.5);
+      // A handle and its focus ring, which sits inside it, end inside the
+      // record and the list.
+      expect(
+        overflow.handlePastRecord,
+        JSON.stringify(overflow),
+      ).toBeLessThanOrEqual(0.5);
+      expect(
+        overflow.handlePastList,
+        JSON.stringify(overflow),
+      ).toBeLessThanOrEqual(0.5);
+    });
+  }
+});

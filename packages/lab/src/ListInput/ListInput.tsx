@@ -188,6 +188,9 @@ interface PendingMutationMotion<T> {
   matchesValue: (nextValue: T[]) => boolean;
 }
 
+// Core List's reorder handle is 28 px wide for every pointer.
+const REORDER_HANDLE_SIZE = 28;
+
 const styles = stylex.create({
   group: {
     display: 'flex',
@@ -224,6 +227,9 @@ const styles = stylex.create({
       '@container list-input (max-width: 640px)': spacingVars['--spacing-2'],
     },
     minWidth: 0,
+    // Core's reorder handle reaches into a ListItem row's inline inset. A
+    // record has no inset, so the handle and its focus ring end at its edge.
+    '--_item-inset-inline': '0px',
   },
   rowFieldsOnly: {
     gridTemplateColumns: 'minmax(0, 1fr)',
@@ -232,9 +238,11 @@ const styles = stylex.create({
     gridTemplateColumns: `minmax(0, 1fr) ${sizeVars['--size-element-md']}`,
   },
   // Fields, then Remove and the reorder handle in one cell at the row's end
-  // (UIKit's reorder control is the trailing control of an editing row).
+  // (UIKit's reorder control is the trailing control of an editing row). The
+  // cell's track is fixed, so the Add row, which has no controls, keeps the
+  // fields' width.
   rowWithRemoveAndHandle: {
-    gridTemplateColumns: 'minmax(0, 1fr) auto',
+    gridTemplateColumns: `minmax(0, 1fr) calc(${sizeVars['--size-element-md']} + ${spacingVars['--spacing-1']} + ${REORDER_HANDLE_SIZE}px)`,
   },
   fields: {
     display: {
