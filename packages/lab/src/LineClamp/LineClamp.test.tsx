@@ -722,6 +722,41 @@ describe('LineClamp', () => {
       expect(screen.getByTestId('clamp')).not.toHaveAttribute('tabindex');
     });
 
+    it('sets no native title on a truncated clamp: the Tooltip alone carries the full text', async () => {
+      mockOverflow();
+      render(
+        <LineClamp maxLines={2} data-testid="clamp">
+          Long text
+        </LineClamp>,
+      );
+      await waitFor(() => {
+        expect(screen.getByTestId('clamp')).toHaveAttribute('tabindex', '0');
+      });
+      expect(screen.getByTestId('clamp')).not.toHaveAttribute('title');
+    });
+
+    it("calls a caller's stable ref once across re-renders", async () => {
+      mockOverflow();
+      const ref = vi.fn();
+      const {rerender} = render(
+        <LineClamp maxLines={2} ref={ref}>
+          Long text
+        </LineClamp>,
+      );
+      rerender(
+        <LineClamp maxLines={2} ref={ref}>
+          Long text
+        </LineClamp>,
+      );
+      rerender(
+        <LineClamp maxLines={2} ref={ref}>
+          Long text, changed
+        </LineClamp>,
+      );
+      expect(ref).toHaveBeenCalledTimes(1);
+      expect(ref).toHaveBeenCalledWith(expect.any(HTMLElement));
+    });
+
     it("lets a caller's tabIndex win and skips the stop when the tooltip is off", async () => {
       mockOverflow();
       render(
