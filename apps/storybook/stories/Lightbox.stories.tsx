@@ -188,6 +188,11 @@ export const GalleryWithCaptions: Story = {
   },
 };
 
+/**
+ * A controlled gallery whose parent keeps its index, paging only with its own
+ * buttons, say while a change is confirmed. A swipe returns to the photo the
+ * parent shows.
+ */
 export const GalleryKeepsIndex: Story = {
   render: () => {
     const [isOpen, setIsOpen] = useState(false);
