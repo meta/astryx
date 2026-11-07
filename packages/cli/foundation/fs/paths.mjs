@@ -16,6 +16,7 @@ import {fileURLToPath} from 'node:url';
 import {
   findEntry,
   listDir,
+  listDirEntries,
   listingCacheActive,
   pathExists,
 } from './listing-cache.mjs';
@@ -811,7 +812,7 @@ export function discoverExternalPackages(startDir = process.cwd()) {
   /** @param {string} searchDir */
   const scanDir = searchDir => {
     if (!fs.existsSync(searchDir)) return;
-    const entries = fs.readdirSync(searchDir, {withFileTypes: true});
+    const entries = listDirEntries(searchDir);
 
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;

@@ -1766,7 +1766,7 @@ describe('agent docs never go into the home folder', () => {
     try {
       expect(() => installAgentDocs(link)).toThrow(AgentDocsHomeError);
     } finally {
-      fs.rmSync(link);
+      fs.unlinkSync(link);
     }
   });
 

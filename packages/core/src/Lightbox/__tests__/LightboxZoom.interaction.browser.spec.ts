@@ -60,8 +60,10 @@ import {
   type ActiveAnimation,
   type TouchDriver,
   type TouchFrame,
+  toTouchEvents,
   type TouchScript,
 } from '@astryxdesign/interaction-harness';
+import {recordLiftOffset} from './liftOffset';
 
 const storybook = withStorybook(test);
 
@@ -448,6 +450,9 @@ test('a pinch keeps the photo point under the fingers, and the page does not zoo
   const errors: number[] = [];
   const scales: number[] = [];
   let moves = 0;
+  const lastMove = toTouchEvents(moved)
+    .map(step => step.type)
+    .lastIndexOf('touchMove');
   // The centroid of the touches the page received (the engine may round a
   // scripted position), which is what the stage follows.
   await page.evaluate(() => {
@@ -464,11 +469,17 @@ test('a pinch keeps the photo point under the fingers, and the page does not zoo
     );
   });
   await driver.play(moved, {
-    onEvent: async step => {
+    onEvent: async (step, index) => {
       if (step.type !== 'touchMove' || step.fingers.length < 2) {
         return;
       }
       moves++;
+      // A read after the last move holds the lift back by its round trip.
+      // Past the 40 ms stillness interval, the page then reads a resting
+      // finger.
+      if (index === lastMove) {
+        return;
+      }
       // The photo and the touches the page received, in one evaluate. The
       // page takes a touch with its frame, after the dispatch returns. So two
       // reads could straddle one on a busy page: the photo from one move and
@@ -795,24 +806,17 @@ test('a zoomed flick coasts and stops at the far edge', async ({page}) => {
     ),
   );
   await waitForRest(photo);
-  const zoomed = await state();
   const script = flick(mid, {
     velocity: {x: -1500, y: 0},
     durationMs: 80,
     hz: 120,
   });
-  let released = zoomed;
-  await driver.play(script, {
-    onEvent: async step => {
-      if (step.type === 'touchMove') {
-        released = await state();
-      }
-    },
-  });
+  const liftOffset = await recordLiftOffset(photo);
+  await driver.play(script);
   await frames(page, 6);
   const coasting = await state();
   // The photo kept moving after the lift.
-  expect(coasting.x).toBeLessThan(released.x - 5);
+  expect(coasting.x).toBeLessThan((await liftOffset()) - 5);
   await waitForRest(photo, {timeout: 8_000});
   const rest = await state();
   // At the right edge: the photo's right edge on the stage's.
@@ -946,26 +950,26 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
   await waitForAnimation(photo);
   await waitForRest(photo);
   // With the main thread blocked, a loaded runner's compositor presents a
-  // frame every 100 to 135 ms. The spring moves for half a second, which
-  // leaves too few frames to judge. So the zoom plays at tempo 3.
+  // frame every 100 to 250 ms. The spring moves for half a second, which
+  // leaves too few frames to judge. So the zoom plays at a slow tempo.
   await slowZoom(page);
   const since = await page.evaluate(() => performance.now());
   const cast = await startScreencast(page);
   // The page itself waits for the zoom and blocks one frame into it. The
   // spring covers most of its travel early, and a round trip from the test
   // would start the block too late.
-  const blocking = blockMainThread(page, 1500, {during: photo});
+  const blocking = blockMainThread(page, ZOOM_BLOCK_MS, {during: photo});
   await driver.play(doubleTap(at));
   const block = await blocking;
-  // Lightbox's own zoom played at tempo 3: each curve three times as long
-  // as at tempo 1, and still running on the compositor after the block.
-  const atTempo3 = curvesByProperty(await waitForAnimation(photo, {since}));
-  expect([...atTempo3.keys()].sort()).toEqual([...atTempo1.keys()].sort());
-  expect(atTempo3.size).toBeGreaterThan(0);
-  for (const [property, run] of atTempo3) {
+  // Lightbox's own zoom played at that tempo. Each curve is that many times
+  // as long as at tempo 1, and still runs after the block.
+  const slowed = curvesByProperty(await waitForAnimation(photo, {since}));
+  expect([...slowed.keys()].sort()).toEqual([...atTempo1.keys()].sort());
+  expect(slowed.size).toBeGreaterThan(0);
+  for (const [property, run] of slowed) {
     const ratio = run.ms / (atTempo1.get(property)?.ms ?? Number.NaN);
-    expect(ratio, property).toBeGreaterThan(2.9);
-    expect(ratio, property).toBeLessThan(3.1);
+    expect(ratio, property).toBeGreaterThan(ZOOM_TEMPO - 0.1);
+    expect(ratio, property).toBeLessThan(ZOOM_TEMPO + 0.1);
     expect(run.isRunning, property).toBe(true);
   }
   // A few frames after the block, so the screencast holds its end.
@@ -973,14 +977,9 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
   const castFrames = await cast.stop();
   const tracked = await trackMarker(page, castFrames);
   const control = await trackMarker(page, castFrames, {rgb: CONTROL_RGB});
-  // The spring slows hard at its end. At a third of its speed, each 60 Hz
-  // frame near the end moves it about 0.07 of what remains (2π / 1.5 s,
-  // critically damped). So within about 14.3 cast steps of its end a frame
-  // moves less than one step, and the cast shows plateaus there. Judging
-  // stops 15 cast steps from the end.
   const proof = busyWindowProof(tracked, block, {
     axis: 'height',
-    settledWithinSteps: 15,
+    settledWithinSteps: ZOOM_SETTLED_STEPS,
     control,
   });
   await writeEvidence(
@@ -1046,14 +1045,34 @@ function tempoProperty(): string {
 }
 
 /**
- * Plays the viewer's motion at tempo 3, through the property its motion
- * reads. A theme's tempo stops at 1.5, so tempo 3 is for this proof only.
- * Every element in the viewer carries it, so no nested theme's own tempo
- * wins.
+ * The tempo the busy zoom proof plays the viewer at. Blocked, WebKit's
+ * software compositor on a loaded runner presents a frame only every 190 to
+ * 250 ms. At tempo 5 the spring moves for over two seconds, so its judged
+ * part holds about eight such frames. At tempo 3 it held three to six.
+ */
+const ZOOM_TEMPO = 5;
+
+/** How long the busy zoom proof blocks the main thread, ms. */
+const ZOOM_BLOCK_MS = 2500;
+
+/**
+ * Where the busy zoom proof stops judging, in cast steps from the zoom's
+ * end. Near the end, each 60 Hz frame moves the spring about 0.042 of what
+ * remains (2π / 2.5 s, critically damped). So within about 23.9 cast steps
+ * of its end a frame moves less than one step, and the cast shows plateaus
+ * there.
+ */
+const ZOOM_SETTLED_STEPS = 24;
+
+/**
+ * Plays the viewer's motion at `ZOOM_TEMPO`, through the property its motion
+ * reads. A theme's tempo stops at 1.5, so this tempo is for the busy proof
+ * only. Every element in the viewer carries it, so no nested theme's own
+ * tempo wins.
  */
 async function slowZoom(page: Page): Promise<void> {
   await page.addStyleTag({
-    content: `dialog, dialog * { ${tempoProperty()}: 3 !important; }`,
+    content: `dialog, dialog * { ${tempoProperty()}: ${ZOOM_TEMPO} !important; }`,
   });
 }
 
@@ -1123,7 +1142,7 @@ for (const pace of ['main-thread', 'frozen'] as const) {
     );
     // Neither runs on the compositor, so the block starts after the tap.
     await page.waitForTimeout(150);
-    const block = await blockMainThread(page, 1500);
+    const block = await blockMainThread(page, ZOOM_BLOCK_MS);
     await frames(page, 6);
     const castFrames = await cast.stop();
     const tracked = await trackMarker(page, castFrames);
@@ -1132,7 +1151,7 @@ for (const pace of ['main-thread', 'frozen'] as const) {
     try {
       failures = busyWindowProof(tracked, block, {
         axis: 'height',
-        settledWithinSteps: 15,
+        settledWithinSteps: ZOOM_SETTLED_STEPS,
         control,
       }).verdict.failures;
     } catch (error) {

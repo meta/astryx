@@ -310,18 +310,23 @@ test('the scroll offset holds through a swipe, so the edge fades and buttons sta
   const y = box.y + box.height / 2;
   const from = {x: box.x + box.width / 2 + 40, y};
   const to = {x: from.x - 80, y};
-  const seen: number[] = [];
-  const driver = await touchDriver(page);
-  await driver.play(drag(from, to, {durationMs: 80, restMs: 0}), {
-    onEvent: async step => {
-      if (step.type === 'touchMove') {
-        seen.push(await offset(scroller));
-      }
-    },
+  // The page reads the offset at each move. A read from here holds the lift
+  // back, and a lift past the stillness interval releases at rest.
+  await scroller.evaluate(el => {
+    const seen: number[] = [];
+    (window as unknown as {__seen: number[]}).__seen = seen;
+    window.addEventListener('touchmove', () => seen.push(el.scrollLeft), {
+      passive: true,
+    });
   });
+  const driver = await touchDriver(page);
+  await driver.play(drag(from, to, {durationMs: 80, restMs: 0}));
+  const seen = await page.evaluate(
+    () => (window as unknown as {__seen: number[]}).__seen,
+  );
   expect(seen.length).toBeGreaterThan(0);
   for (const at of seen) {
-    expect(at).toBeCloseTo(stops[3], 0);
+    expect(Math.abs(at)).toBeCloseTo(stops[3], 0);
   }
   await settled(scroller);
   await expect.poll(async () => offset(scroller)).toBeCloseTo(stops[6], 0);
@@ -386,7 +391,9 @@ async function pressInSettle(
 /** The row's offset once two reads a while apart agree. */
 async function restingOffset(scroller: Locator) {
   await settled(scroller);
-  let at = await offset(scroller);
+  // The first poll only reads. Two reads in one frame agree even while a
+  // native smooth scroll runs.
+  let at = Number.NaN;
   await expect
     .poll(async () => {
       const before = at;
@@ -464,6 +471,34 @@ test.describe('with a finger and a mouse', () => {
     expect(Math.abs(expected - stops[5])).toBeGreaterThan(1);
     expect(drift).toBe(0);
     expect(await restingOffset(scroller)).toBeCloseTo(expected, 0);
+  });
+
+  test('a resize while the row settles back onto its stop hands the row back: a wheel then scrolls it', async ({
+    page,
+  }) => {
+    const {scroller} = await open(
+      page,
+      'snap-paging-partial-last-page',
+      'paging',
+    );
+    for (let i = 0; i < 7; i++) {
+      await swipe(page, scroller, {px: 80, ms: 80});
+      await settled(scroller);
+    }
+    // At the end, a flick settles back onto the same stop.
+    await swipe(page, scroller, {px: 80, ms: 80});
+    expect(await isTakenOver(scroller)).toBe(true);
+    await scroller.evaluate(el => {
+      el.style.width = `${el.clientWidth - 1}px`;
+    });
+    await settled(scroller);
+    // A row the paging still holds takes the wheel and stays put.
+    const at = await offset(scroller);
+    await scroller.hover();
+    await page.keyboard.down('Shift');
+    await page.mouse.wheel(0, -150);
+    await page.keyboard.up('Shift');
+    await expect.poll(async () => offset(scroller)).toBeLessThan(at - 1);
   });
 });
 

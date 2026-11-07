@@ -89,7 +89,7 @@ const animatedLayout = useAnimatedLayout({containerRef: scrollRef});
   element plays its own animation, entering, exiting, or resizing, and the
   content after it moves with it. Both play the same motion, so the timing is
   governed centrally, never per component: the theme's move curve,
-  `--ease-move`, over `--duration-medium-min`, which follow the theme's
+  `--ease-move`, over `--duration-medium`, which follow the theme's
   `character` and `tempo` (`spec:AST-108` FR1, FR2). The glide is curve
   tokens, never a spring, and no character or option plays a
   platform-measured curve for it (`spec:AST-094` FR45). Both start on the same
@@ -135,7 +135,12 @@ const animatedLayout = useAnimatedLayout({containerRef: scrollRef});
   measures any change, and the element's moving edge and the content on that
   edge's side move on FR4's one motion, whether that content comes after the
   element or before it (an end panel's LayoutContent comes before the panel),
-  so the content beside the edge glides with it and no gap opens. An optional
+  so the content beside the edge glides with it and no gap opens. In a
+  block-edge form, the element's own child elements slide on that motion under
+  a still clip at its content box on the side its parts enter from, so they
+  enter and leave at the moving edge; an element with text of its own, a child
+  that a translation cannot move, or a box or generated box of its own that it
+  paints, keeps a clip that moves with the edge. An optional
   two-state form holds the element's old state as FR8's swap holds it, while
   the element rides the glide of the content beside its moving edge; a reversal
   from the shown state starts from where it is. Under Reduce Motion it follows
@@ -269,6 +274,18 @@ collapses content carries no velocity, so the glide that follows plays curve
 tokens, never a spring (`spec:AST-094` FR45).
 
 Rejected: the measured spring as the glide; a platform-measured opt-in, such as a separate character.
+
+### DEC-3 — The glide takes the medium duration
+
+**Reference:** `spec:AST-105/DEC-3`
+**Decider:** `cixzhang`, `2026-11-06`
+
+The glide plays over `--duration-medium`, the middle of the theme's medium
+durations: 300 ms in the Neutral theme and 410 ms with no theme, both scaled
+by `tempo`. Collapsible, TreeList, Table's row expansion and AppShell's
+content area share it, as one motion.
+
+Rejected: `--duration-medium-min`.
 
 ## Open questions
 
