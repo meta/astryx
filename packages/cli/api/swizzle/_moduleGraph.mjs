@@ -14,6 +14,10 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {parse} from '@babel/parser';
 import {
+  inspectPackageExport,
+  sourceExportTarget,
+} from '../../foundation/discovery/package-exports.mjs';
+import {
   moduleExportOrigins,
   resolveLocalModule,
 } from '../../foundation/discovery/module-exports.mjs';
@@ -229,75 +233,102 @@ function visitDynamicReferences(node, onLiteral) {
  */
 
 /**
- * The file an `exports` entry names: its `source` condition, else a plain
- * string, `import` or `default` target.
- * @param {unknown} value
- * @returns {string|null}
- */
-function exportTargetOf(value) {
-  if (typeof value === 'string') return value;
-  if (!value || typeof value !== 'object') return null;
-  const conditions = /** @type {Record<string, unknown>} */ (value);
-  for (const condition of ['source', 'import', 'default']) {
-    const target = exportTargetOf(conditions[condition]);
-    if (target) return target;
-  }
-  return null;
-}
-
-/**
- * Every public subpath of a package with the source file it names under
- * `root`. A `*` entry is expanded against the files its target pattern
- * matches. `./internal/*` paths are never public.
- * @param {Record<string, unknown>|undefined} exportsField
+ * Every public subpath of a package with the source file under `root` that
+ * the shared export readers give it. `./internal/*` is never public.
+ * @param {{exports?: unknown}} pkg
  * @param {string} packageDir
  * @param {string} root
  * @returns {Array<[string, string]>}
  */
-function exportedSourceFiles(exportsField, packageDir, root) {
-  /** @type {Array<[string, string]>} */
-  const found = [];
-  const isInternal = (/** @type {string} */ subpath) =>
-    /^\.\/internal(\/|$)/.test(subpath);
-  const usable = (/** @type {string} */ file) =>
-    file.startsWith(root + path.sep) &&
-    !DECLARATION_FILE.test(file) &&
-    fs.existsSync(file) &&
-    fs.statSync(file).isFile();
-  for (const [key, value] of Object.entries(exportsField ?? {})) {
-    if (isInternal(key)) continue;
-    const target = exportTargetOf(value);
-    if (!target || !target.startsWith('./')) continue;
-    if (!key.includes('*')) {
-      const file = path.resolve(packageDir, target);
-      if (usable(file)) found.push([key, file]);
-      continue;
-    }
-    const star = target.indexOf('*');
-    const prefix = target.slice(2, star);
-    const suffix = target.slice(star + 1);
-    const base = path.resolve(
-      packageDir,
-      prefix.slice(0, prefix.lastIndexOf('/') + 1),
-    );
-    if (!base.startsWith(root) || !fs.existsSync(base)) continue;
-    const files = fs.readdirSync(base, {recursive: true, withFileTypes: true});
-    for (const entry of files) {
-      const file = path.join(entry.parentPath, entry.name);
-      const rel = toPosix(path.relative(packageDir, file));
-      const fits = rel.startsWith(prefix) && rel.endsWith(suffix);
-      if (!fits || rel.length < prefix.length + suffix.length) continue;
-      if (path.relative(base, file).split(path.sep).includes('node_modules')) {
+function exportedSourceFiles(pkg, packageDir, root) {
+  const exportsField = pkg.exports;
+  const subpathMap =
+    exportsField != null &&
+    typeof exportsField === 'object' &&
+    !Array.isArray(exportsField) &&
+    Object.keys(exportsField).some(key => key.startsWith('.'));
+  /** @type {Set<string>} */
+  const candidates = new Set(['.']);
+  if (subpathMap) {
+    const map = /** @type {Record<string, unknown>} */ (exportsField);
+    for (const [key, value] of Object.entries(map)) {
+      if (!key.includes('*')) {
+        candidates.add(key);
         continue;
       }
-      const subpath = key.replace(
-        '*',
-        rel.slice(prefix.length, rel.length - suffix.length),
-      );
-      if (!isInternal(subpath) && usable(file)) found.push([subpath, file]);
+      for (const subpath of wildcardSubpaths(packageDir, root, key, value)) {
+        candidates.add(subpath);
+      }
+    }
+  }
+  /** @type {Array<[string, string]>} */
+  const found = [];
+  for (const subpath of candidates) {
+    if (/^\.\/internal(\/|$)/.test(subpath)) continue;
+    const inspected = inspectPackageExport(pkg, packageDir, subpath);
+    if (!inspected.exported) continue;
+    const file =
+      sourceExportTarget(pkg, packageDir, subpath) ?? inspected.target;
+    if (
+      file &&
+      file.startsWith(root + path.sep) &&
+      !DECLARATION_FILE.test(file)
+    ) {
+      found.push([subpath, file]);
     }
   }
   return found;
+}
+
+/**
+ * The subpaths a `*` key names: one per file its target patterns match.
+ * @param {string} packageDir
+ * @param {string} root
+ * @param {string} key
+ * @param {unknown} value
+ * @returns {string[]}
+ */
+function wildcardSubpaths(packageDir, root, key, value) {
+  /** @type {string[]} */
+  const patterns = [];
+  const collect = (/** @type {unknown} */ node) => {
+    if (typeof node === 'string') patterns.push(node);
+    else if (Array.isArray(node)) node.forEach(collect);
+    else if (node && typeof node === 'object')
+      Object.values(node).forEach(collect);
+  };
+  collect(value);
+  /** @type {string[]} */
+  const subpaths = [];
+  for (const pattern of patterns) {
+    if (!pattern.startsWith('./') || !pattern.includes('*')) continue;
+    const fixed = pattern.slice(2, pattern.indexOf('*'));
+    const base = path.resolve(
+      packageDir,
+      fixed.slice(0, fixed.lastIndexOf('/') + 1),
+    );
+    if (!base.startsWith(root) || !fs.existsSync(base)) continue;
+    for (const entry of fs.readdirSync(base, {
+      recursive: true,
+      withFileTypes: true,
+    })) {
+      if (!entry.isFile()) continue;
+      const file = path.join(entry.parentPath, entry.name);
+      if (path.relative(base, file).split(path.sep).includes('node_modules'))
+        continue;
+      const rel = toPosix(path.relative(packageDir, file));
+      if (!rel.startsWith(fixed)) continue;
+      const rest = rel.slice(fixed.length);
+      for (let end = 1; end <= rest.length; end++) {
+        const star = rest.slice(0, end);
+        if (pattern.slice(2).replaceAll('*', star) === rel) {
+          subpaths.push(key.replace('*', star));
+          break;
+        }
+      }
+    }
+  }
+  return subpaths;
 }
 
 /**
@@ -328,7 +359,7 @@ function publicSurfaceOf(packageDir, srcRoot, originsOf) {
   /** @type {PublicSurface['byFile']} */
   const byFile = new Map();
   for (const [subpath, sourceFile] of exportedSourceFiles(
-    exportsField,
+    pkg,
     packageDir,
     srcRoot,
   )) {

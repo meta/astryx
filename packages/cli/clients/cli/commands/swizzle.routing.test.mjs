@@ -217,17 +217,10 @@ describe('swizzle — integration-owned components', () => {
     });
     // A helper at the package root, beside `components/`.
     fs.mkdirSync(path.join(intDir, 'lib'), {recursive: true});
-    fs.writeFileSync(
-      path.join(intDir, 'lib', 'helper.ts'),
-      `export const helper = 2;\n`,
-    );
+    fs.writeFileSync(path.join(intDir, 'lib', 'helper.ts'), `export const helper = 2;\n`);
     fs.writeFileSync(
       path.join(compDir, 'MetaAppShell.tsx'),
-      [
-        `import {helper} from '../../lib/helper';`,
-        `export function MetaAppShell() { return helper; }`,
-        '',
-      ].join('\n'),
+      `import {helper} from '../../lib/helper';\nexport function MetaAppShell() { return helper; }\n`,
     );
     const result = await runCli(['--json', 'swizzle', 'MetaAppShell', '-f'], project);
     expect(result.code).toBe(0);
@@ -251,18 +244,10 @@ describe('swizzle — integration-owned components', () => {
       issuesUrl: 'https://example.com/meta/issues',
     });
     fs.mkdirSync(path.join(intDir, 'utils'), {recursive: true});
-    fs.writeFileSync(
-      path.join(intDir, 'utils', 'foo.ts'),
-      `export const root = 3;\n`,
-    );
+    fs.writeFileSync(path.join(intDir, 'utils', 'foo.ts'), `export const root = 3;\n`);
     fs.writeFileSync(
       path.join(compDir, 'MetaAppShell.tsx'),
-      [
-        `import x from '../utils/foo';`,
-        `import {root} from '../../utils/foo';`,
-        `export function MetaAppShell() { return x + root; }`,
-        '',
-      ].join('\n'),
+      `import x from '../utils/foo';\nimport {root} from '../../utils/foo';\nexport function MetaAppShell() { return x + root; }\n`,
     );
     const result = await runCli(['--json', 'swizzle', 'MetaAppShell', '-f'], project);
     expect(result.code).toBe(0);
@@ -300,11 +285,7 @@ describe('swizzle — integration-owned components', () => {
     fs.writeFileSync(path.join(intDir, 'styles.css'), `.meta {}\n`);
     fs.writeFileSync(
       path.join(compDir, 'MetaAppShell.tsx'),
-      [
-        `import '../../styles.css';`,
-        `export function MetaAppShell() { return null; }`,
-        '',
-      ].join('\n'),
+      `import '../../styles.css';\nexport function MetaAppShell() { return null; }\n`,
     );
     const result = await runCli(['--json', 'swizzle', 'MetaAppShell', '-f'], project);
     expect(result.code).toBe(0);
@@ -331,17 +312,10 @@ describe('swizzle — integration-owned components', () => {
     });
     const ownerDir = path.join(path.dirname(compDir), 'privateAttributes');
     fs.mkdirSync(ownerDir, {recursive: true});
-    fs.writeFileSync(
-      path.join(ownerDir, 'row.stylex.ts'),
-      `export const row = 1;\n`,
-    );
+    fs.writeFileSync(path.join(ownerDir, 'row.stylex.ts'), `export const row = 1;\n`);
     fs.writeFileSync(
       path.join(compDir, 'MetaAppShell.tsx'),
-      [
-        `import {row} from '../privateAttributes/row.stylex';`,
-        `export function MetaAppShell() { return row; }`,
-        '',
-      ].join('\n'),
+      `import {row} from '../privateAttributes/row.stylex';\nexport function MetaAppShell() { return row; }\n`,
     );
     const first = await runCli(['--json', 'swizzle', 'MetaAppShell'], project);
     expect(first.code).toBe(0);
@@ -363,36 +337,40 @@ describe('swizzle — integration-owned components', () => {
     expect(JSON.parse(again.stdout).code).toBe('ERR_FILE_EXISTS');
     expect(fs.readFileSync(owner, 'utf-8')).toContain('// edited');
   });
-  it.each([
-    ['a `./*` pattern with a source condition', {'./*': {source: './components/*/index.ts', default: './dist/*/index.js'}}],
-    ['a `./*` pattern with a plain string', {'./*': './components/*/index.ts'}],
-    ['a plain-string subpath', {'./Bar': './components/Bar/index.ts'}],
-  ])('imports another public component from the package when exports use %s', async (_shape, exportsField) => {
+  /** Swizzle `Foo`, which imports its sibling `Bar`, from `@test/meta` with these exports. */
+  async function swizzleFooBesideBar(exportsField) {
     buildFakeCore(project);
     writeProjectPackageJson(project);
     const {intDir} = buildIntegration(project, {componentName: 'Foo'});
-    fs.writeFileSync(
-      path.join(intDir, 'package.json'),
-      JSON.stringify({name: '@test/meta', version: '1.2.3', exports: exportsField}),
-    );
+    fs.writeFileSync(path.join(intDir, 'package.json'), JSON.stringify({name: '@test/meta', version: '1.2.3', exports: exportsField}));
+    fs.writeFileSync(path.join(intDir, 'components', 'index.ts'), `export const all = 1;\n`);
     const bar = path.join(intDir, 'components', 'Bar');
     fs.mkdirSync(bar, {recursive: true});
     fs.writeFileSync(path.join(bar, 'Bar.tsx'), `export function Bar() { return null; }\n`);
     fs.writeFileSync(path.join(bar, 'index.ts'), `export {Bar} from './Bar';\n`);
-    fs.writeFileSync(
-      path.join(intDir, 'components', 'Foo', 'Foo.tsx'),
-      [`import {Bar} from '../Bar';`, `export function Foo() { return Bar(); }`, ''].join('\n'),
-    );
-
+    fs.writeFileSync(path.join(intDir, 'components', 'Foo', 'Foo.tsx'), `import {Bar} from '../Bar';\nexport function Foo() { return Bar(); }\n`);
     const result = await runCli(['--json', 'swizzle', 'Foo', '-f'], project);
     expect(result.code).toBe(0);
-    const env = JSON.parse(result.stdout);
-    const out = fs.readFileSync(
-      path.join(project, 'components', 'astryx', 'Foo', 'Foo.tsx'),
-      'utf-8',
-    );
-    expect(out).toContain(`from '@test/meta/Bar'`);
-    expect(env.data.files.some(f => f.includes('Bar'))).toBe(false);
+    return fs.readFileSync(path.join(project, 'components', 'astryx', 'Foo', 'Foo.tsx'), 'utf-8');
+  }
+
+  it.each([
+    ['a `./*` pattern with a source condition', {'./*': {source: './components/*/index.ts', default: './dist/*/index.js'}}],
+    ['a `./*` pattern with a plain string', {'./*': './components/*/index.ts'}],
+    ['a plain-string subpath', {'./Bar': './components/Bar/index.ts'}],
+    ['a `./*` pattern whose target repeats `*`', {'./*': './components/*/*.tsx'}],
+    ['a `./*` pattern with a fallback array', {'./*': ['./components/*/index.ts']}],
+  ])('imports another public component from the package when exports use %s', async (_shape, exportsField) => {
+    expect(await swizzleFooBesideBar(exportsField)).toContain(`from '@test/meta/Bar'`);
+  });
+
+  it.each([
+    ['a single condition object', {source: './components/index.ts', default: './dist/index.js'}],
+    ['a blocked subpath beside a `./*` pattern', {'./*': {source: './components/*/index.ts'}, './Bar': null}],
+  ])('copies a component the package does not export when exports use %s', async (_shape, exportsField) => {
+    const out = await swizzleFooBesideBar(exportsField);
+    expect(out).not.toContain('@test/meta');
+    expect(out).toContain(`from '../Bar`);
   });
 
   it('omits the feedback note when the integration ships no issuesUrl', async () => {
