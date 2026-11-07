@@ -70,23 +70,28 @@ export function chartSize({width, height, aspect}) {
 
 /**
  * A chart drawn at its starting size scales to the width the page gives it
- * and keeps its shape, so it never overflows its card.
+ * and keeps its shape, so it never overflows its card. Its legend stays out
+ * of the scaled picture: it takes its own row in normal flow, under the
+ * picture, or above it when it asks for the top, so its text never covers
+ * the chart however narrow the page is.
  */
 export const CHART_CSS =
   '.recharts-responsive-container{width:100%}' +
-  // The wrapper keeps the starting shape (its aspect-ratio is set when the
-  // chart is drawn), so a legend placed in percent stays where it was put.
-  '.recharts-responsive-container>.recharts-wrapper{width:100%!important;height:auto!important}' +
+  '.recharts-responsive-container>.recharts-wrapper{width:100%!important;height:auto!important;display:flex;flex-direction:column}' +
   // Only the chart's own picture scales; a legend's icons keep their size.
-  '.recharts-responsive-container>.recharts-wrapper>svg.recharts-surface{width:100%!important;height:auto!important}';
+  '.recharts-responsive-container>.recharts-wrapper>svg.recharts-surface{width:100%!important;height:auto!important}' +
+  '.recharts-responsive-container>.recharts-wrapper>.recharts-legend-wrapper{position:static!important;width:auto!important;height:auto!important}' +
+  '.recharts-responsive-container>.recharts-wrapper>.recharts-legend-wrapper[style*="bottom"]{order:1}';
 
 /**
  * The box a legend would measure in a browser, estimated from its items, so
- * recharts keeps room for it where its props place it: one row for a
- * horizontal legend, one line per item for a vertical one.
+ * a chart of fixed size keeps room for it where its props place it: rows for
+ * a horizontal legend, one line per item for a vertical one. A chart sized by
+ * its container keeps no room, because its legend takes its own row.
  * @param {any} el the legend wrapper
  */
 function legendBox(el) {
+  if (el.closest?.('.recharts-responsive-container')) return box(0, 0);
   const items = [...el.querySelectorAll('.recharts-legend-item')];
   const widths = items.map(item => 14 + 4 + 7 * (item.textContent ?? '').length + 10);
   const vertical = items.some(item => /display:\s*block/.test(item.getAttribute('style') ?? ''));
@@ -101,29 +106,6 @@ function legendBox(el) {
 
 /** @param {number} width @param {number} height */
 const box = (width, height) => ({x: 0, y: 0, top: 0, left: 0, right: width, bottom: height, width, height});
-
-/**
- * Turn a drawn container chart's legend position from pixels into percent of
- * the starting size, and give its wrapper that shape, so the legend keeps its
- * place when the drawing scales.
- * @param {any} root the element the chart was drawn in
- */
-export function fitLegends(root) {
-  for (const wrapper of root.querySelectorAll('.recharts-responsive-container > .recharts-wrapper')) {
-    const width = Number(wrapper.getAttribute('width'));
-    const height = Number(wrapper.getAttribute('height'));
-    if (!(width > 0 && height > 0)) continue;
-    wrapper.setAttribute('style', `${wrapper.getAttribute('style') ?? ''};aspect-ratio:${width} / ${height}`);
-    for (const legend of wrapper.querySelectorAll(':scope > .recharts-legend-wrapper')) {
-      const style = (legend.getAttribute('style') ?? '').replace(
-        /\b(left|right|width|top|bottom|height)\s*:\s*(-?[\d.]+)px/g,
-        (/** @type {string} */ _, /** @type {string} */ prop, /** @type {string} */ px) =>
-          `${prop}:${((Number(px) / (/left|right|width/.test(prop) ? width : height)) * 100).toFixed(3)}%`,
-      );
-      legend.setAttribute('style', style);
-    }
-  }
-}
 
 /**
  * Give this thread the small document a chart draws in: no layout, no

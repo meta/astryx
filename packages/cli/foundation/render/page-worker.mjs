@@ -33,7 +33,7 @@ import {createJiti} from 'jiti';
 import {assetDataUri, isAssetPath} from './assets.mjs';
 import {SINGLE_COPY, isServedPackage, packageOf} from './served-packages.mjs';
 import {findNodeModulesPackage} from '../fs/paths.mjs';
-import {CHART_GLOBAL, CHART_ROOTS, chartDocument, chartSize, fitLegends} from './charts.mjs';
+import {CHART_GLOBAL, CHART_ROOTS, chartDocument, chartSize} from './charts.mjs';
 
 /** @typedef {{level: string, text: string}} PageLog */
 
@@ -141,12 +141,41 @@ const NODE_MODULES = `${path.sep}node_modules${path.sep}`;
 const isLocal = file =>
   !file.includes(NODE_MODULES) && (file === entry || file.startsWith(ROOT_PREFIX));
 
-/** Charts the server render set aside, drawn after it. @type {unknown[]} */
+/** Charts the server render set aside, drawn after it. @type {any[]} */
 const charts = [];
+/** The props each chart was last drawn with in the page-wide draw. @type {any[]} */
+const pageCharts = [];
+
+/**
+ * A chart's props as a string that two renders of the same chart share:
+ * data by value, functions by name, elements by type and props.
+ * @param {unknown} value
+ * @param {number} [depth]
+ * @returns {string}
+ */
+function sameKey(value, depth = 0) {
+  if (depth > 8) return '…';
+  if (typeof value === 'function') return `fn:${value.name}`;
+  if (typeof value === 'symbol') return String(value);
+  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'undefined';
+  if (Array.isArray(value)) return `[${value.map(v => sameKey(v, depth + 1)).join(',')}]`;
+  const record = /** @type {Record<string, unknown>} */ (value);
+  if ('$$typeof' in record && 'props' in record) {
+    const type = /** @type {any} */ (record.type);
+    return `<${typeof type === 'string' ? type : (type?.displayName ?? type?.name ?? '?')} ${sameKey(record.props, depth + 1)}>`;
+  }
+  return `{${Object.keys(record)
+    .filter(key => !key.startsWith('_'))
+    .sort()
+    .map(key => `${key}:${sameKey(record[key], depth + 1)}`)
+    .join(',')}}`;
+}
 /** React's createElement, once the page's React has loaded. @type {any} */
 let createElement = null;
-/** React's useContext. @type {any} */
+/** React's useContext and useRef. @type {any} */
 let useContext = null;
+/** @type {any} */
+let useRef = null;
 /** Set inside a drawn chart, so a chart inside it is not wrapped again. @type {any} */
 let InChart = null;
 /**
@@ -171,6 +200,13 @@ let mode = 'aside';
       return createElement('astryx-chart', {'data-chart': charts.length - 1});
     }
     const inside = useContext(InChart);
+    // Each chart drawn in the page notes the props it was last drawn with,
+    // by its place in the page, to compare with the first render's.
+    const place = useRef(/** @type {number | null} */ (null));
+    if (mode === 'page' && !inside) {
+      place.current ??= pageCharts.length;
+      pageCharts[place.current] = props;
+    }
     const drawn = container
       ? createElement('div', {className: 'recharts-responsive-container'}, createElement(Chart, {...props, ...chartSize(props)}))
       : createElement(Chart, props);
@@ -211,14 +247,16 @@ function setChartsAside(p, t) {
 
 /**
  * Draw the charts the server render set aside, and put each drawing where
- * its placeholder is. The whole page is drawn again first, so a chart's own
- * parts (a custom tick, label or shape) see the React context they were
- * rendered in; when the page cannot be drawn that way, or draws a different
- * set of charts, each chart is drawn by itself. A chart that fails stays
- * empty and is counted.
+ * its placeholder is.
+ *
+ * Draw the whole page first. A chart's own parts then see the React context
+ * the page gives them. If that draw throws, or the page's effects change a
+ * chart (its props, or which charts there are), draw each chart alone, from
+ * the props of the first render. A chart that fails stays empty and is
+ * counted.
  * @param {string} markup
  * @param {any} Page
- * @returns {Promise<{markup: string, failed: number, alone: boolean}>}
+ * @returns {Promise<{markup: string, failed: number, alone: false | 'error' | 'changed'}>}
  */
 async function drawCharts(markup, Page) {
   const placeholder = /<astryx-chart data-chart="(\d+)"><\/astryx-chart>/g;
@@ -232,7 +270,7 @@ async function drawCharts(markup, Page) {
     ({flushSync} = /** @type {any} */ (await jiti.import('react-dom')));
   } catch {
     // Without a document to draw in, every chart stays empty and is counted.
-    return {markup: markup.replace(placeholder, ''), failed: charts.length, alone: false};
+    return {markup: markup.replace(placeholder, ''), failed: charts.length, alone: /** @type {false} */ (false)};
   }
   /**
    * Render one element in its own root and hand its host to `read`.
@@ -255,17 +293,23 @@ async function drawCharts(markup, Page) {
     } catch (e) {
       error = e;
     }
-    let out = null;
-    if (!error) {
-      fitLegends(host);
-      out = read(host);
-    }
+    const out = error ? null : read(host);
     root.unmount();
     return out;
   };
   mode = 'page';
   let drawn = drawIn(createElement(Page), host => [...host.querySelectorAll('astryx-chart')].map(el => el.innerHTML));
-  const alone = !drawn || drawn.length !== charts.length;
+  /** @type {false | 'error' | 'changed'} */
+  let alone = false;
+  if (!drawn) alone = 'error';
+  // The page's effects changed a chart: its props, or which charts there are.
+  else if (
+    drawn.length !== charts.length ||
+    pageCharts.length !== charts.length ||
+    charts.some((chart, i) => sameKey(chart.props) !== sameKey(pageCharts[i]))
+  ) {
+    alone = 'changed';
+  }
   if (alone) {
     mode = 'alone';
     drawn = charts.map(chart => drawIn(chart, host => [host.innerHTML])?.[0] ?? '');
@@ -733,6 +777,7 @@ try {
     React = await jiti.import('react');
     createElement = React.createElement;
     useContext = React.useContext;
+    useRef = React.useRef;
     InChart = React.createContext(false);
     server = await jiti.import('react-dom/server');
   } catch (e) {
@@ -742,6 +787,7 @@ try {
   /** @type {string} */
   let markup;
   let chartsFailed = 0;
+  /** @type {false | 'error' | 'changed'} */
   let chartsAlone = false;
   try {
     markup = server.renderToStaticMarkup(React.createElement(Page));
