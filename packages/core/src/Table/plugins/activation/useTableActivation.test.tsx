@@ -14,7 +14,11 @@ import {render, renderHook, screen, fireEvent} from '@testing-library/react';
 import {createPortal} from 'react-dom';
 import {Table} from '../../Table';
 import {useTableActivation} from './useTableActivation';
-import {selectionEndsIntersectRow} from './useTableActivation';
+import {
+  getActiveWashClassNames,
+  getClickableRowClassNames,
+  selectionEndsIntersectRow,
+} from './useTableActivation';
 import {useTableSelection} from '../selection/useTableSelection';
 import type {BodyRowRenderProps, TableColumn, TablePlugin} from '../../types';
 import {__resetDevWarnings} from '../../../utils/devWarning';
@@ -1064,14 +1068,68 @@ describe('paint ownership and cleanup', () => {
     // inline active wash would race it. A stylesheet class always loses to
     // inline, making selection precedence deterministic.
     expect(rows[1].style.backgroundColor).toBe('');
-    const activeClasses = new Set(rows[1].className.split(/\s+/));
-    for (const row of [rows[0], rows[2]]) {
-      for (const cls of row.className.split(/\s+/)) {
-        activeClasses.delete(cls);
+    // The wash classes ride every transformed row; only the live
+    // `data-active` attribute paints them, so a className rewrite from
+    // stale transform props can neither strand nor steal the wash.
+    const washClasses = getActiveWashClassNames();
+    expect(washClasses.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      for (const cls of washClasses) {
+        expect(row.classList.contains(cls)).toBe(true);
       }
     }
-    // Only the wash classes distinguish the active row.
-    expect(activeClasses.size).toBeGreaterThan(0);
+    expect(rows[1].getAttribute('data-active')).toBe('true');
+    expect(rows[0].hasAttribute('data-active')).toBe(false);
+    expect(rows[2].hasAttribute('data-active')).toBe(false);
+  });
+
+  it('keeps paint on the live active row across TableContext re-renders', () => {
+    function Harness({
+      striped,
+      dividers,
+    }: {
+      striped: boolean;
+      dividers: 'rows' | 'none';
+    }) {
+      const [activeKey, setActiveKey] = useState<string | null>('2');
+      const plugin = useTableActivation<Member>({
+        activeKey,
+        onActivate: (_item, key) => setActiveKey(key),
+      });
+      return (
+        <Table
+          data={members}
+          columns={memberColumns}
+          idKey="id"
+          isStriped={striped}
+          dividers={dividers}
+          plugins={{activation: plugin}}
+        />
+      );
+    }
+    const {rerender} = render(<Harness striped={false} dividers="none" />);
+    // Move the active row through the store path, then re-render rows from
+    // TableContext alone: the memoized rows reuse their transform props
+    // while TableRow recomputes className, which used to repaint the
+    // previous row as active and strip the fill from the current one.
+    fireEvent.click(bodyRows()[0]);
+    expect(bodyRows()[0].getAttribute('data-active')).toBe('true');
+    rerender(<Harness striped={true} dividers="none" />);
+    rerender(<Harness striped={true} dividers="rows" />);
+    rerender(<Harness striped={false} dividers="rows" />);
+    const rows = bodyRows();
+    expect(rows[0].getAttribute('data-active')).toBe('true');
+    expect(rows[1].hasAttribute('data-active')).toBe(false);
+    expect(rows[2].hasAttribute('data-active')).toBe(false);
+    // The styling hook is unconditional on every row, so no rewrite drops
+    // it; the attribute gates the paint.
+    const washClasses = getActiveWashClassNames();
+    for (const row of rows) {
+      for (const cls of washClasses) {
+        expect(row.classList.contains(cls)).toBe(true);
+      }
+      expect(row.style.backgroundColor).toBe('');
+    }
   });
 
   it('composes with selection without clobbering either state', () => {
@@ -1156,17 +1214,17 @@ describe('review follow-ups', () => {
     }
     const {rerender} = render(<Harness activeKey="1" />);
     const rows = bodyRows();
-    const addSpies = rows.map(row => vi.spyOn(row.classList, 'add'));
-    const removeSpies = rows.map(row => vi.spyOn(row.classList, 'remove'));
+    const setSpies = rows.map(row => vi.spyOn(row, 'setAttribute'));
+    const removeSpies = rows.map(row => vi.spyOn(row, 'removeAttribute'));
     try {
       rerender(<Harness activeKey="2" />);
       // The untouched row is never rewritten; only old/new active rows repaint.
-      expect(addSpies[2]).not.toHaveBeenCalled();
+      expect(setSpies[2]).not.toHaveBeenCalled();
       expect(removeSpies[2]).not.toHaveBeenCalled();
       expect(rows[0].hasAttribute('data-active')).toBe(false);
       expect(rows[1].getAttribute('data-active')).toBe('true');
     } finally {
-      for (const spy of [...addSpies, ...removeSpies]) {
+      for (const spy of [...setSpies, ...removeSpies]) {
         spy.mockRestore();
       }
     }
@@ -1197,16 +1255,7 @@ describe('review follow-ups', () => {
     expect(predicateCalls).toBeGreaterThan(0);
     const setSpies = rows.map(row => vi.spyOn(row, 'setAttribute'));
     const removeSpies = rows.map(row => vi.spyOn(row, 'removeAttribute'));
-    const addSpies = rows.map(row => vi.spyOn(row.classList, 'add'));
-    const removeClassSpies = rows.map(row => vi.spyOn(row.classList, 'remove'));
-    const toggleSpies = rows.map(row => vi.spyOn(row.classList, 'toggle'));
-    const spies = [
-      ...setSpies,
-      ...removeSpies,
-      ...addSpies,
-      ...removeClassSpies,
-      ...toggleSpies,
-    ];
+    const spies = [...setSpies, ...removeSpies];
     try {
       // Same key, new `onActivate` identity: only the active bucket is
       // notified, so the predicate re-runs for the active row alone and
@@ -1215,7 +1264,7 @@ describe('review follow-ups', () => {
       const newCalls = getIsItemActivatable.mock.calls.slice(predicateCalls);
       expect(newCalls.length).toBeGreaterThan(0);
       for (const [item] of newCalls) {
-        expect((item as Member).id).toBe('1');
+        expect(item.id).toBe('1');
       }
       for (const spy of spies) {
         expect(spy).not.toHaveBeenCalled();
@@ -1253,21 +1302,23 @@ describe('review follow-ups', () => {
       <Harness getIsItemActivatable={item => item.id !== '2'} />,
     );
     const rows = bodyRows();
-    // The pointer class is whatever distinguishes the eligible rows here:
-    // with no active row, only eligibility differs between them.
-    const pointerClasses = new Set(rows[0].className.split(/\s+/));
-    for (const cls of rows[1].className.split(/\s+/)) {
-      if (cls !== '') {
-        pointerClasses.delete(cls);
+    // The cursor hook rides every row; only the eligibility attribute
+    // paints the pointer, so a className rewrite from stale transform
+    // props can neither strand nor steal it.
+    const cursorClasses = getClickableRowClassNames();
+    expect(cursorClasses.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      for (const cls of cursorClasses) {
+        expect(row.classList.contains(cls)).toBe(true);
       }
     }
-    expect(pointerClasses.size).toBeGreaterThan(0);
+    expect(rows[0].getAttribute('data-activation-eligible')).toBe('true');
+    expect(rows[1].hasAttribute('data-activation-eligible')).toBe(false);
+    expect(rows[2].getAttribute('data-activation-eligible')).toBe('true');
     // A later flip converges through the same live update as the tab stop.
     rerender(<Harness getIsItemActivatable={() => true} />);
     const flipped = bodyRows();
-    for (const cls of pointerClasses) {
-      expect(flipped[1].classList.contains(cls)).toBe(true);
-    }
+    expect(flipped[1].getAttribute('data-activation-eligible')).toBe('true');
     expect(flipped[1].getAttribute('tabindex')).toBe('0');
   });
 

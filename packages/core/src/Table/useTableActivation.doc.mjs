@@ -62,6 +62,6 @@ export const docsDense = {
     onActivate:
       'Called once with (item, key) on activation. Earlier handlers run first; preventDefault cancels; nested/portalled controls, selections, aux clicks, and repeats never activate.',
     getIsItemActivatable:
-      'Control which rows are activatable. Ineligible rows get no handler, keyboard affordance, or active presentation. Defaults to all rows.',
+      'Control which rows are activatable. Ineligible rows get no keyboard affordance, pointer cursor, or active presentation. Defaults to all rows.',
   },
 };

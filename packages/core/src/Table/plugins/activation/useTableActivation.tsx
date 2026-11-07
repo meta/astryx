@@ -155,6 +155,22 @@ function createActivationStore<T extends Record<string, unknown>>(
 const activeWash = colorVars['--color-accent-muted'];
 const activeBarColor = colorVars['--color-accent'];
 
+/**
+ * Attribute gate for the active wash. `data-active` is maintained
+ * imperatively by the store subscriber (and seeded declaratively below), so
+ * it survives a `className` rewrite from stale transform props; `:where`
+ * keeps the specificity of the plain class it replaces, so the settled
+ * stripe/hover/selection precedence is unchanged.
+ */
+const ACTIVE_ROW: string = ':where([data-active="true"])';
+
+/**
+ * Attribute gate for the press-target cursor. The subscriber maintains it
+ * alongside the tab stop: present while the row takes activation presses
+ * (eligible with no competing current owner), absent otherwise.
+ */
+const ELIGIBLE_ROW: string = ':where([data-activation-eligible="true"])';
+
 /** Width of the leading-edge active bar, the non-colour active cue. */
 const ACTIVE_BAR_WIDTH_PX = 3;
 
@@ -168,9 +184,10 @@ function hasCompetingCurrentOwner(row: Element | null): boolean {
  * Apply or remove active styling on a `<tr>` element.
  *
  * Active state is a `data-active` attribute, `aria-current="true"`, plus
- * paint on the existing row anatomy: an accent wash class and a leading-edge
- * accent bar on the first cell. The wash rides the shared row-overlay
- * variable so pinned cells replay it through the freeze line. The bar is an
+ * paint on the existing row anatomy: an accent wash and a leading-edge accent
+ * bar on the first cell. The wash rides the shared row-overlay variable so
+ * pinned cells replay it through the freeze line; its stylesheet rule keys
+ * off `data-active`, so no class toggling is needed here. The bar is an
  * inset shadow on the first cell; under forced colors the shadow maps to
  * nothing and the pinned overlay covers the cell, so there the marker is an
  * outline, which draws over the cell in a system color. No selection
@@ -199,7 +216,6 @@ function applyRowActivationStyle(
     row.setAttribute('data-active', 'true');
     row.setAttribute('aria-current', 'true');
     row.setAttribute('data-activation-current', 'true');
-    row.classList.add(...getActiveWashClassNames());
   } else {
     clearRowActivationStyle(row);
     return;
@@ -234,14 +250,17 @@ function applyRowActivationStyle(
 }
 /**
  * Remove everything this module wrote on a `<tr>`: the active attribute and
- * current-state exposure, the wash, plus the bar from whichever cell carries
- * it. Cleanup paths call this rather than only unsubscribing, so a row that
- * becomes ineligible, loses its plugin, or loses `idKey` while mounted never
- * keeps stale active paint. Only the `aria-current="true"` this module wrote
- * is removed; a competing owner's value stays untouched.
+ * current-state exposure, the eligibility attribute, plus the bar from
+ * whichever cell carries it. The wash and cursor classes stay: they are
+ * stamped on every transformed row and their rules key off the attributes
+ * removed here. Cleanup paths call this rather than only unsubscribing, so a
+ * row that becomes ineligible, loses its plugin, or loses `idKey` while
+ * mounted never keeps stale active paint. Only the `aria-current="true"`
+ * this module wrote is removed; a competing owner's value stays untouched.
  */
 function clearRowActivationStyle(row: HTMLTableRowElement): void {
   row.removeAttribute('data-active');
+  row.removeAttribute('data-activation-eligible');
   // Only the exposure this module wrote comes off: the marker tracks it, so
   // a competing owner's value survives cleanup.
   if (row.hasAttribute('data-activation-current')) {
@@ -249,12 +268,6 @@ function clearRowActivationStyle(row: HTMLTableRowElement): void {
     if (row.getAttribute('aria-current') === 'true') {
       row.removeAttribute('aria-current');
     }
-  }
-  if (activeWashClassNames != null && activeWashClassNames.length > 0) {
-    row.classList.remove(...activeWashClassNames);
-  }
-  if (clickableRowClassNames != null && clickableRowClassNames.length > 0) {
-    row.classList.remove(...clickableRowClassNames);
   }
   const barCell = row.querySelector<HTMLTableCellElement>(
     '[data-activation-bar="true"]',
@@ -400,11 +413,18 @@ function selectionIntersectsRow(row: Element): boolean {
 // =============================================================================
 
 const activationStyles = stylex.create({
-  /** Eligible rows are press targets: signal interactivity. */
+  /**
+   * Press-target cursor, gated on the eligibility attribute rather than on
+   * class presence. These classes are stamped on every transformed row and
+   * stay in `className` across re-renders, so a `TableRow` re-render from a
+   * `TableContext` change (stripes, dividers, hover) that reuses stale
+   * transform props cannot strand or steal the cursor: only the live
+   * attribute paints it.
+   */
   clickableRow: {
     cursor: {
-      default: 'pointer',
-      ':is(:disabled,[aria-disabled="true"])': 'default',
+      default: null,
+      [`${ELIGIBLE_ROW}:not(:disabled,[aria-disabled="true"])`]: 'pointer',
     },
   },
   /**
@@ -413,18 +433,25 @@ const activationStyles = stylex.create({
    * keeps the selection fill however the two plugins interleave; an
    * unselected active row shows this wash. The overlay variable rides along
    * so pinned cells replay the active state through the freeze line, under
-   * the same contract striping, hover, and selection honour.
+   * the same contract striping, hover, and selection honour. Gated on the
+   * active attribute for the same staleness reason as the cursor above.
    */
   activeWash: {
-    backgroundColor: activeWash,
-    '--table-row-overlay': activeWash,
+    backgroundColor: {
+      default: null,
+      [ACTIVE_ROW]: activeWash,
+    },
+    '--table-row-overlay': {
+      default: null,
+      [ACTIVE_ROW]: activeWash,
+    },
   },
 });
 
-/** Stylesheet classes for the active wash, resolved once and toggled imperatively. */
+/** Stylesheet classes for the active wash, resolved once and stamped on every transformed row. */
 let activeWashClassNames: ReadonlyArray<string> | null = null;
 
-function getActiveWashClassNames(): ReadonlyArray<string> {
+export function getActiveWashClassNames(): ReadonlyArray<string> {
   if (activeWashClassNames == null) {
     activeWashClassNames = Object.freeze(
       (stylex.props(activationStyles.activeWash).className ?? '')
@@ -435,10 +462,10 @@ function getActiveWashClassNames(): ReadonlyArray<string> {
   return activeWashClassNames;
 }
 
-/** Stylesheet classes for the pointer cursor, resolved once and toggled imperatively. */
+/** Stylesheet classes for the pointer cursor, resolved once and stamped on every transformed row. */
 let clickableRowClassNames: ReadonlyArray<string> | null = null;
 
-function getClickableRowClassNames(): ReadonlyArray<string> {
+export function getClickableRowClassNames(): ReadonlyArray<string> {
   if (clickableRowClassNames == null) {
     clickableRowClassNames = Object.freeze(
       (stylex.props(activationStyles.clickableRow).className ?? '')
@@ -587,21 +614,25 @@ export function useTableActivation<T extends Record<string, unknown>>(
             }
             lastInteractive = interactive;
             lastActive = active;
-            if (!interactive) {
-              row.removeAttribute('tabindex');
-              row.removeAttribute('aria-keyshortcuts');
-            } else {
+            // Paint first: clearing inactive paint also clears the
+            // eligibility attribute, which the liveness update below
+            // re-applies for rows that keep it.
+            applyRowActivationStyle(row, active);
+            // Press-taking liveness rides the eligibility attribute, and the
+            // tab stop and key announcements follow it: a row a later plugin
+            // marked current, or one the caller predicate now excludes, is
+            // not a tab stop, shows no pointer, and announces no key
+            // affordances. Classes stay untouched: the wash and cursor rules
+            // key off live attributes, so a `className` rewrite from stale
+            // transform props cannot strand or steal them.
+            if (interactive) {
+              row.setAttribute('data-activation-eligible', 'true');
               row.setAttribute('tabindex', String(tabIndex));
               row.setAttribute('aria-keyshortcuts', keyShortcuts);
-            }
-            for (const className of getClickableRowClassNames()) {
-              row.classList.toggle(className, interactive);
-            }
-            // Paint first: clearing inactive paint must not strip the
-            // cursor this row keeps while eligible.
-            applyRowActivationStyle(row, active);
-            for (const className of getClickableRowClassNames()) {
-              row.classList.toggle(className, interactive);
+            } else {
+              row.removeAttribute('data-activation-eligible');
+              row.removeAttribute('tabindex');
+              row.removeAttribute('aria-keyshortcuts');
             }
           };
           // The first apply reuses the render-time eligibility above, so the
@@ -632,22 +663,25 @@ export function useTableActivation<T extends Record<string, unknown>>(
           ...props,
           htmlProps: {
             ...props.htmlProps,
-            // Declarative reflection alongside the imperative applies above:
-            // a row re-render (a TableContext change rewrites the className
-            // React owns) recomputes these from the live key, so the wash
-            // and the pointer cursor never go stale between store
-            // notifications.
-            ...(activeNow || eligible
-              ? {
-                  className: [
-                    props.htmlProps.className,
-                    ...(activeNow ? getActiveWashClassNames() : []),
-                    ...(eligible ? getClickableRowClassNames() : []),
-                  ]
-                    .filter(Boolean)
-                    .join(' '),
-                  ...(activeNow ? {'data-active': 'true' as const} : null),
-                }
+            // The wash and cursor classes ride every transformed row,
+            // unconditionally: their rules key off the `data-active` and
+            // `data-activation-eligible` attributes the subscriber maintains,
+            // so a row re-render (a TableContext change rewrites the
+            // className React owns without re-running this transform) keeps
+            // paint and cursor from the live attributes instead of stale
+            // render-time values.
+            className: [
+              props.htmlProps.className,
+              ...getActiveWashClassNames(),
+              ...getClickableRowClassNames(),
+            ]
+              .filter(Boolean)
+              .join(' '),
+            ...(activeNow ? {'data-active': 'true' as const} : null),
+            // Seeded from the render-time eligibility; the subscriber
+            // corrects it against competing owners and later flips.
+            ...(eligible
+              ? {'data-activation-eligible': 'true' as const}
               : null),
             // Ineligible rows are no tab stop and announce no keys until
             // the subscriber promotes them; the handlers below stay
