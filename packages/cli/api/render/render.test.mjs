@@ -1327,6 +1327,9 @@ export default function Page() {
       </ResponsiveContainer>
       <LineChart width={400} height={200} data={data}><XAxis dataKey="d" /><Line dataKey="v" /><Legend /></LineChart>
       <LineChart width={550} height={220} data={data}><XAxis dataKey="d" /><Line dataKey="v" name="Visits" /><Legend layout="vertical" align="right" verticalAlign="middle" /></LineChart>
+      <ResponsiveContainer width="100%" height={220}>
+        <LineChart data={data}><XAxis dataKey="d" /><Line dataKey="v" name="Visits" /><Legend layout="vertical" align="right" verticalAlign="middle" /></LineChart>
+      </ResponsiveContainer>
     </div>
   );
 }
@@ -1348,6 +1351,13 @@ export default function Page() {
     expect(axes[2].x2).toBeLessThan(550 - 40);
     expect(html).toContain('.recharts-responsive-container>.recharts-wrapper>.recharts-legend-wrapper{position:static!important;width:auto!important');
     expect(html).toContain('.recharts-legend-wrapper[style*="bottom"]{order:1}');
+    // A vertical legend in a container chart sits beside the picture, centered.
+    const sided = [...html.matchAll(/<div\b[^>]*class="recharts-wrapper"[^>]*>/g)].map(m => m[0]).filter(tag => tag.includes('data-legend-side'));
+    expect(sided).toHaveLength(1);
+    expect(sided[0]).toContain('data-legend-side="right"');
+    expect(sided[0]).toContain('data-legend-middle=""');
+    expect(html).toContain('[data-legend-side]{flex-direction:row');
+    expect(html).toContain('[data-legend-side="right"]>.recharts-legend-wrapper{order:1}');
     // Only the chart's own picture scales; a legend's icons keep their size.
     expect(html).toContain('.recharts-responsive-container>.recharts-wrapper>svg.recharts-surface{');
     expect(html).not.toContain('.recharts-responsive-container .recharts-surface');
@@ -1458,6 +1468,32 @@ export default function Page() {
     expect(html.match(/<svg[^>]*class="recharts-surface"/g)).toHaveLength(1);
     const warning = result.data.warnings.find((/** @type {any} */ w) => w.code === 'chart-size');
     expect(warning?.message).toContain('once its effects ran');
+  }, 60_000);
+
+  it('draws a chart as the first render gave it when an effect changes state a closure in it reads', async () => {
+    put(
+      'charts-effect-closure.tsx',
+      `import {useEffect, useState} from 'react';
+import {BarChart, Bar, XAxis} from 'recharts';
+const data = [{d: 'Mon', v: 1}, {d: 'Tue', v: 2}];
+export default function Page() {
+  const [unit, setUnit] = useState('items');
+  useEffect(() => setUnit('km'), []);
+  return (
+    <div>
+      <p>Unit: {unit}</p>
+      <BarChart width={300} height={150} data={data}><XAxis dataKey="d" tickFormatter={(v: string) => v + ' ' + unit} /><Bar dataKey="v" /></BarChart>
+    </div>
+  );
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('charts-effect-closure.tsx', {cwd: dir}));
+    const html = fs.readFileSync(path.join(dir, 'charts-effect-closure.html'), 'utf8');
+    expect(html).toContain('Unit: items');
+    expect(html).toContain('Mon items');
+    expect(html).not.toContain('Mon km');
+    expect(result.data.warnings.find((/** @type {any} */ w) => w.code === 'chart-size')?.message).toContain('once its effects ran');
   }, 60_000);
 
   it('draws a chart with the data of the first render when an effect replaces it', async () => {
