@@ -2,7 +2,7 @@
 
 'use client';
 
-import React, {useState, useMemo} from 'react';
+import {useState, useMemo} from 'react';
 import {useResizable, ResizeHandle} from '@astryxdesign/core/Resizable';
 import type {ResizableProps} from '@astryxdesign/core/Resizable';
 import {
@@ -37,17 +37,13 @@ import {Divider} from '@astryxdesign/core/Divider';
 import {MetadataList, MetadataListItem} from '@astryxdesign/core/MetadataList';
 import {
   Table,
-  TableBody,
-  TableRow,
-  TableCell,
   proportional,
   pixel,
-  resolveColumnWidths,
+  useTableGroupedRows,
 } from '@astryxdesign/core/Table';
-import type {TableColumn} from '@astryxdesign/core/Table';
+import type {TableColumn, TablePlugin} from '@astryxdesign/core/Table';
+import {rtlStyles} from '@astryxdesign/core/utils';
 import {
-  ChevronRightIcon,
-  ChevronDownIcon,
   PencilIcon,
   DocumentDuplicateIcon,
   ArrowRightIcon,
@@ -58,16 +54,6 @@ import {
 } from '@heroicons/react/24/outline';
 import {XMarkIcon} from '@heroicons/react/24/outline';
 import {ChartBarIcon} from '@heroicons/react/24/solid';
-
-// Plain inline styles using Astryx design-token CSS variables (declared at
-// :root by `@astryxdesign/core/astryx.css`). No StyleX compiler required.
-// The group-header background + cursor live on the colSpan TableCell (which
-// reliably forwards `style`) so they fill the full row width.
-const groupHeaderCell: React.CSSProperties = {
-  cursor: 'pointer',
-  backgroundColor: 'var(--color-background-muted)',
-  padding: 'var(--spacing-3) var(--spacing-4)',
-};
 
 // Types
 type TaskStatus = 'in_progress' | 'todo' | 'backlog' | 'done';
@@ -571,8 +557,6 @@ const STATUS_LABEL: Record<TaskStatus, string> = {
   done: 'Done',
 };
 
-const GROUP_ORDER: TaskStatus[] = ['in_progress', 'todo', 'backlog', 'done'];
-
 type GroupByField = 'status' | 'priority' | 'project' | 'assignee' | 'none';
 
 const GROUP_BY_OPTIONS: {value: GroupByField; label: string}[] = [
@@ -582,26 +566,6 @@ const GROUP_BY_OPTIONS: {value: GroupByField; label: string}[] = [
   {value: 'project', label: 'Project'},
   {value: 'assignee', label: 'Assignee'},
 ];
-
-function groupTasks(
-  tasks: TaskRow[],
-  groupBy: GroupByField,
-): Map<string, TaskRow[]> {
-  if (groupBy === 'none') {
-    return new Map([['All', tasks]]);
-  }
-  const map = new Map<string, TaskRow[]>();
-  for (const task of tasks) {
-    const key = String(task[groupBy]) || '—';
-    let group = map.get(key);
-    if (!group) {
-      group = [];
-      map.set(key, group);
-    }
-    group.push(task);
-  }
-  return map;
-}
 
 function getGroupLabel(groupBy: GroupByField, key: string): string {
   if (groupBy === 'status') {
@@ -625,36 +589,137 @@ const columns: TableColumn<TaskRow>[] = [
     key: 'status',
     header: '',
     width: pixel(44),
+    renderCell: task => (
+      <Center axis="horizontal">
+        <StatusDot
+          variant={STATUS_DOT_VARIANT[task.status]}
+          label={STATUS_LABEL[task.status]}
+        />
+      </Center>
+    ),
   },
   {
     key: 'title',
     header: 'Issue',
     width: proportional(1),
+    renderCell: task => (
+      <HStack gap={3} vAlign="center">
+        <Icon
+          icon={ChartBarIcon}
+          size="sm"
+          color={PRIORITY_COLOR[task.priority]}
+        />
+        <Text type="supporting" color="secondary">
+          {task.taskId}
+        </Text>
+        <Text type="body" maxLines={1}>
+          {task.title}
+        </Text>
+        {task.subtitle && (
+          <Text type="body" color="secondary" maxLines={1}>
+            › {task.subtitle}
+          </Text>
+        )}
+      </HStack>
+    ),
   },
   {
     key: 'project',
     header: 'Project',
     width: pixel(180),
+    renderCell: task =>
+      task.project ? (
+        <Text type="body" maxLines={1}>
+          {task.project}
+        </Text>
+      ) : (
+        <Text type="supporting" color="secondary">
+          —
+        </Text>
+      ),
   },
   {
     key: 'created',
     header: 'Created',
-    width: pixel(72),
+    width: pixel(88),
+    renderCell: task => (
+      <Text type="supporting" color="secondary">
+        {task.created}
+      </Text>
+    ),
   },
   {
     key: 'updated',
     header: 'Updated',
-    width: pixel(72),
+    width: pixel(88),
+    renderCell: task => (
+      <Text type="supporting" color="secondary">
+        {task.updated}
+      </Text>
+    ),
   },
   {
     key: 'assignee',
     header: 'Assignee',
-    width: pixel(52),
+    width: pixel(88),
+    renderCell: task => <Avatar name={task.assignee} size="sm" />,
   },
   {
     key: 'actions',
     header: '',
     width: pixel(56),
+    renderCell: () => (
+      <DropdownMenu
+        button={{
+          label: 'Actions',
+          variant: 'ghost',
+          size: 'sm',
+          icon: <Icon icon={EllipsisHorizontalIcon} size="sm" />,
+          isIconOnly: true,
+        }}
+        hasChevron={false}
+        items={[
+          {
+            label: 'Edit issue',
+            icon: PencilIcon,
+            onClick: () => {},
+          },
+          {
+            label: 'Assign to...',
+            icon: UserIcon,
+            onClick: () => {},
+          },
+          {
+            label: 'Add label',
+            icon: TagIcon,
+            onClick: () => {},
+          },
+          {
+            label: 'Duplicate',
+            icon: DocumentDuplicateIcon,
+            onClick: () => {},
+          },
+          {
+            label: 'Move to project',
+            icon: (
+              <Icon
+                icon={ArrowRightIcon}
+                size="sm"
+                color="secondary"
+                xstyle={rtlStyles.mirror}
+              />
+            ),
+            onClick: () => {},
+          },
+          {type: 'divider' as const},
+          {
+            label: 'Delete issue',
+            icon: TrashIcon,
+            onClick: () => {},
+          },
+        ]}
+      />
+    ),
   },
 ];
 
@@ -840,8 +905,8 @@ export default function DataTableTemplate() {
     ReadonlyArray<PowerSearchFilter>
   >([]);
   const [groupBy, setGroupBy] = useState<GroupByField>('status');
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
-    () => new Set(GROUP_ORDER as string[]),
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
+    () => new Set(),
   );
 
   const filtered = useMemo(() => {
@@ -861,19 +926,8 @@ export default function DataTableTemplate() {
     return data;
   }, [search, priorityFilter]);
 
-  const grouped = useMemo(
-    () => groupTasks(filtered, groupBy),
-    [filtered, groupBy],
-  );
-
-  const groupKeys = useMemo(() => Array.from(grouped.keys()), [grouped]);
-
-  React.useEffect(() => {
-    setExpandedGroups(new Set(groupKeys));
-  }, [groupKeys]);
-
   const toggleGroup = (key: string) => {
-    setExpandedGroups(prev => {
+    setCollapsedGroups(prev => {
       const next = new Set(prev);
       if (next.has(key)) {
         next.delete(key);
@@ -884,14 +938,47 @@ export default function DataTableTemplate() {
     });
   };
 
+  // Grouping by "None" shows the rows as one plain list, with no headers.
+  const grouped = useTableGroupedRows<TaskRow>({
+    data: filtered,
+    // Groups are keyed by their visible label, which also names each
+    // group's toggle button.
+    groupBy: task =>
+      groupBy === 'none'
+        ? ''
+        : getGroupLabel(groupBy, String(task[groupBy]) || '—'),
+    collapsedGroups,
+    onToggleGroup: toggleGroup,
+    getRowKey: task => task.id,
+    renderGroupHeader: (key, count) => (
+      <HStack gap={2} vAlign="center">
+        <Text type="body" weight="bold">
+          {key}
+        </Text>
+        <Badge variant="neutral" label={String(count)} />
+      </HStack>
+    ),
+  });
+
+  // Clicking an issue row opens its details. Group header rows keep their
+  // own toggle.
+  const openTaskPlugin: TablePlugin<TaskRow> = {
+    transformBodyRow(props, task) {
+      if (task.id === '') {
+        return props;
+      }
+      return {
+        ...props,
+        htmlProps: {...props.htmlProps, onClick: () => setSelectedTask(task)},
+      };
+    },
+  };
+
   const detailPanel = useResizable({
     defaultSize: 360,
     minSize: 280,
     maxSize: 500,
   });
-
-  const COL_COUNT = columns.length;
-  const resolvedWidths = resolveColumnWidths(columns);
 
   return (
     <>
@@ -931,7 +1018,10 @@ export default function DataTableTemplate() {
                       <RadioList
                         label="Group by"
                         value={groupBy}
-                        onChange={v => setGroupBy(v as GroupByField)}>
+                        onChange={v => {
+                          setGroupBy(v as GroupByField);
+                          setCollapsedGroups(new Set());
+                        }}>
                         {GROUP_BY_OPTIONS.map(opt => (
                           <RadioListItem
                             key={opt.value}
@@ -951,181 +1041,19 @@ export default function DataTableTemplate() {
         content={
           <LayoutContent role="main" padding={0}>
             <Table
+              data={groupBy === 'none' ? filtered : grouped.data}
               columns={columns}
+              idKey={groupBy === 'none' ? 'id' : grouped.idKey}
               density="balanced"
               dividers="rows"
               textOverflow="truncate"
-              hasHover>
-              <colgroup>
-                {columns.map(col => (
-                  <col
-                    key={col.key}
-                    style={resolvedWidths.columns.get(col.key)?.style}
-                  />
-                ))}
-              </colgroup>
-              <TableBody>
-                {groupKeys.map(key => {
-                  const tasks = grouped.get(key);
-                  if (!tasks || tasks.length === 0) {
-                    return null;
-                  }
-                  const isExpanded = expandedGroups.has(key);
-
-                  return (
-                    <React.Fragment key={key}>
-                      {groupBy !== 'none' && (
-                        <TableRow
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => toggleGroup(key)}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault();
-                              toggleGroup(key);
-                            }
-                          }}>
-                          <TableCell
-                            colSpan={COL_COUNT}
-                            style={groupHeaderCell}>
-                            <HStack gap={2} vAlign="center">
-                              <Icon
-                                icon={
-                                  isExpanded
-                                    ? ChevronDownIcon
-                                    : ChevronRightIcon
-                                }
-                                size="sm"
-                                color="secondary"
-                              />
-                              <Text type="body" weight="bold">
-                                {getGroupLabel(groupBy, key)}
-                              </Text>
-                              <Badge
-                                variant="neutral"
-                                label={String(tasks.length)}
-                              />
-                            </HStack>
-                          </TableCell>
-                        </TableRow>
-                      )}
-                      {(groupBy === 'none' || isExpanded) &&
-                        tasks.map(task => (
-                          <TableRow
-                            key={task.id}
-                            onClick={() => setSelectedTask(task)}>
-                            <TableCell>
-                              <Center axis="horizontal">
-                                <StatusDot
-                                  variant={STATUS_DOT_VARIANT[task.status]}
-                                  label={STATUS_LABEL[task.status]}
-                                />
-                              </Center>
-                            </TableCell>
-                            <TableCell>
-                              <HStack gap={3} vAlign="center">
-                                <Icon
-                                  icon={ChartBarIcon}
-                                  size="sm"
-                                  color={PRIORITY_COLOR[task.priority]}
-                                />
-                                <Text type="supporting" color="secondary">
-                                  {task.taskId}
-                                </Text>
-                                <Text type="body" maxLines={1}>
-                                  {task.title}
-                                </Text>
-                                {task.subtitle && (
-                                  <Text
-                                    type="body"
-                                    color="secondary"
-                                    maxLines={1}>
-                                    › {task.subtitle}
-                                  </Text>
-                                )}
-                              </HStack>
-                            </TableCell>
-                            <TableCell>
-                              {task.project ? (
-                                <Text type="body" maxLines={1}>
-                                  {task.project}
-                                </Text>
-                              ) : (
-                                <Text type="supporting" color="secondary">
-                                  —
-                                </Text>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              <Text type="supporting" color="secondary">
-                                {task.created}
-                              </Text>
-                            </TableCell>
-                            <TableCell>
-                              <Text type="supporting" color="secondary">
-                                {task.updated}
-                              </Text>
-                            </TableCell>
-                            <TableCell>
-                              <Avatar name={task.assignee} size="sm" />
-                            </TableCell>
-                            <TableCell>
-                              <DropdownMenu
-                                button={{
-                                  label: 'Actions',
-                                  variant: 'ghost',
-                                  size: 'sm',
-                                  icon: (
-                                    <Icon
-                                      icon={EllipsisHorizontalIcon}
-                                      size="sm"
-                                    />
-                                  ),
-                                  isIconOnly: true,
-                                }}
-                                hasChevron={false}
-                                items={[
-                                  {
-                                    label: 'Edit issue',
-                                    icon: PencilIcon,
-                                    onClick: () => {},
-                                  },
-                                  {
-                                    label: 'Assign to...',
-                                    icon: UserIcon,
-                                    onClick: () => {},
-                                  },
-                                  {
-                                    label: 'Add label',
-                                    icon: TagIcon,
-                                    onClick: () => {},
-                                  },
-                                  {
-                                    label: 'Duplicate',
-                                    icon: DocumentDuplicateIcon,
-                                    onClick: () => {},
-                                  },
-                                  {
-                                    label: 'Move to project',
-                                    icon: ArrowRightIcon,
-                                    onClick: () => {},
-                                  },
-                                  {type: 'divider' as const},
-                                  {
-                                    label: 'Delete issue',
-                                    icon: TrashIcon,
-                                    onClick: () => {},
-                                  },
-                                ]}
-                              />
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                    </React.Fragment>
-                  );
-                })}
-              </TableBody>
-            </Table>
+              hasHover
+              plugins={
+                groupBy === 'none'
+                  ? {openTask: openTaskPlugin}
+                  : {grouped: grouped.plugin, openTask: openTaskPlugin}
+              }
+            />
           </LayoutContent>
         }
         end={

@@ -1038,7 +1038,8 @@ export const ExitFocusControlRemoved: Story = {
 
 /**
  * Browser fixture: Done closes the sheet, and 100 ms into the exit the Done
- * control is disabled. The sheet goes inert and hidden as focus leaves it.
+ * control is disabled. Focus stays on Done and returns to "Open sheet" when
+ * the sheet closes (FR9).
  */
 export const ExitFocusControlDisabled: Story = {
   tags: ['!autodocs'],

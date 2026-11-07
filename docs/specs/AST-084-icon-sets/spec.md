@@ -296,7 +296,9 @@ icon, and the CLI verifies it, writes the files, and checks the set.
     data file's `exclude`, which every refresh honors. From an installed
     package it records `source` (the library and version), copies the
     library's license notices into the set, and takes the library's license
-    for the descriptor. Its receipt names, as the exact text to add, the
+    for the descriptor; when the library ships none and the set and package
+    have none, the receipt names the NOTICE file to add under
+    `licenseNoticeMissing`, and nothing is written. Its receipt names, as the exact text to add, the
     entry change that makes the generated module public (an `export *` line
     for an entry file in the package, relative to it; for a package with no
     entry, `index.js`, `index.d.ts`, and their package.json `main`, `types`,
@@ -327,8 +329,20 @@ icon, and the CLI verifies it, writes the files, and checks the set.
     icon is known by the library export its generated module re-exports, then
     by its own export, then by its `id`; one matched this way keeps its export
     unchanged, its `map` entries, and every other field, and an `id` the
-    current rule spells differently is reported under `renamed`
+    current rule spells differently from the same library name is reported
+    under `renamed`
     (`add --variant <name> --all` meets an icon the same way). A refresh
+    from a package root also refreshes an icon the generated module reads
+    from a file of that package, and each such variant of an icon it
+    refreshes, when the root exports the same icon: an export that resolves
+    to the same file and binding, or an export of the same name when the
+    file export does not resolve. It moves to the root import, keeps its
+    id, export, and other fields, and the icon is reported under `moved`.
+    It is matched only through that root export, and a root icon with its
+    id or export is left out. An export stays on its file, and the receipt
+    says so, when another export of the set already reads that root export
+    or an earlier move takes it. Every export the refresh does not write
+    again stays in the generated module. A refresh
     copies the library's license notices the set lacks, and the run that
     first records `source` takes the library's license for the descriptor
     when its `license` is still the one `new-set` wrote (the package's own,

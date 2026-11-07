@@ -62,8 +62,7 @@ export type Engine = 'chromium' | 'webkit';
  * `'spacing'` an event also waits for its interval, less ANSWER_SLACK_MS,
  * after the engine answered the event before. WebKit stamps a touch no later
  * than its answer, so a stall stretches the gesture instead of bunching it.
- * A WebKit `'schedule'` play waits for the answer too, unless it watches each
- * step (`onEvent`).
+ * A WebKit `'schedule'` play waits for the answer too.
  */
 export type TouchPacing = 'schedule' | 'spacing';
 
@@ -113,8 +112,11 @@ export interface PlayOptions {
    * page read a resting finger where the script moves, a throw where the
    * script rests, or fewer than two moves. Given `releaseTolerance`, it also
    * throws when the page's release strays further than that share. The error
-   * is `TouchPageStallError` when the page's own touch and pointer listeners
-   * held an event back, else `TouchPacingError` (see `touchPacingFault`).
+   * is `TouchLiftStallError` when the play's own `onEvent` held the lift back.
+   * It is `TouchPageStallError` when the page's own touch and pointer
+   * listeners held an event back, else `TouchPacingError` (see
+   * `touchPacingFault`). A `'spacing'` play also throws when the page received
+   * fewer touch events than it sent; any other play is then not judged.
    */
   readonly pacing?: TouchPacing;
   /**
@@ -125,7 +127,19 @@ export interface PlayOptions {
    * needs a throw reads the page's release from the lift.
    */
   readonly releaseTolerance?: number;
-  /** Called after each event is dispatched, before the next one (storyboards). */
+  /**
+   * The proof reads no release from this play's lift, such as a pinch's end
+   * (default false). Then the play does not judge the release its page read
+   * (see `pacing`).
+   */
+  readonly releaseUnread?: boolean;
+  /**
+   * Called after each event is dispatched, before the next one (storyboards).
+   * The next event waits for it, so page work here delays that event by a
+   * round trip. On a page that stamps touches on arrival, that delay before a
+   * lift can read as a resting finger. Record what the page did in a listener
+   * of its own instead.
+   */
   readonly onEvent?: (
     step: TouchEventStep,
     index: number,
@@ -534,6 +548,72 @@ export class TouchPageStallError extends Error {
   }
 }
 
+/**
+ * A play's lift reached the page more than the stillness interval after its
+ * finger's last move, where the script throws. The play's own `onEvent` ran
+ * for that excess: page work there holds the next event back by a round trip.
+ * On a page that stamps touches on arrival (WebKit), the page then reads a
+ * resting finger and releases at 0.
+ */
+export class TouchLiftStallError extends Error {
+  constructor(
+    readonly numbers: {
+      /** The gap the script spaces from the last move to the lift, ms. */
+      readonly scriptedGapMs: number;
+      /** The same gap as the page received it, ms. */
+      readonly gapMs: number;
+      /** How long `onEvent` ran in that gap, ms. */
+      readonly onEventMs: number;
+    },
+  ) {
+    const {scriptedGapMs, gapMs, onEventMs} = numbers;
+    super(
+      `touchDriver: the lift reached the page ${gapMs.toFixed(0)} ms after its finger's last move, where the script spaces ${scriptedGapMs.toFixed(0)} ms: past the ${TOUCH_STILLNESS_MS} ms stillness interval, the page reads a resting finger. onEvent ran ${onEventMs.toFixed(0)} ms in that gap: page work there holds the next event back. Read the page in a listener of its own, or rest the script before the lift`,
+    );
+    this.name = 'TouchLiftStallError';
+  }
+}
+
+/**
+ * The `TouchLiftStallError` for a fault the play's own `onEvent` explains. The
+ * page read a rest, and `onEvent` ran for the lift gap's excess over the
+ * script. Null for any other fault.
+ */
+function liftStallError(
+  steps: readonly TouchEventStep[],
+  arrivals: readonly TouchArrival[],
+  fault: TouchPacingFault,
+  onEventMs: readonly number[],
+): TouchLiftStallError | null {
+  if (fault.kind !== 'rest') {
+    return null;
+  }
+  const lift = steps.length - 1;
+  const id = steps[lift].changed[0]?.id;
+  let lastMoved = 0;
+  let at = '';
+  steps.forEach((step, k) => {
+    const finger =
+      step.type === 'touchStart' || step.type === 'touchMove'
+        ? step.changed.find(f => f.id === id)
+        : undefined;
+    const key =
+      finger == null ? at : `${Math.round(finger.x)},${Math.round(finger.y)}`;
+    if (key !== at) {
+      lastMoved = k;
+      at = key;
+    }
+  });
+  const scriptedGapMs = steps[lift].t - steps[lastMoved].t;
+  const gapMs = arrivals[lift].stamp - arrivals[lastMoved].stamp;
+  const ranMs = onEventMs
+    .slice(lastMoved, lift)
+    .reduce((sum, ms) => sum + ms, 0);
+  return ranMs >= gapMs - scriptedGapMs
+    ? new TouchLiftStallError({scriptedGapMs, gapMs, onEventMs: ranMs})
+    : null;
+}
+
 /** Records what the page saw of a paced play's touches (WebKit). */
 interface TouchArrivalProbe {
   arm(): Promise<void>;
@@ -552,20 +632,24 @@ async function playSteps(
     onEvent,
     pacing = 'schedule',
     releaseTolerance,
+    releaseUnread = false,
   } = options;
   const steps = toTouchEvents(script);
   // Only where the page reads a velocity from arrival times: scripted
-  // timestamps carry it.
-  const judges = probe != null && realtime && pacing === 'spacing';
-  // A driver gives a probe only where the page stamps touches on arrival. A
-  // play that watches each step keeps its scripted times.
-  const keepsGaps = probe != null && onEvent == null;
+  // timestamps carry it. Every real-time play is judged there, unless its
+  // proof reads no release.
+  const judges = probe != null && realtime && !releaseUnread;
+  // A driver gives a probe only where the page stamps touches on arrival.
+  // There, a play behind its schedule never shrinks a scripted gap, so page
+  // work in `onEvent` cannot eat the rest before a lift.
+  const keepsGaps = probe != null;
   if (judges) {
     await probe.arm();
   }
   const played: PlayedEvent[] = [];
   const origin = performance.now();
   let previous: {sentAt: number; returnedAt: number} | null = null;
+  const onEventMs: number[] = [];
   for (const [index, step] of steps.entries()) {
     if (realtime) {
       await until(
@@ -578,21 +662,29 @@ async function playSteps(
     await dispatch(step, timestamp);
     previous = {sentAt, returnedAt: performance.now()};
     played.push({...step, dispatchedAt, returnedAt: Date.now(), timestamp});
+    const watched = performance.now();
     await onEvent?.(step, index);
+    onEventMs.push(performance.now() - watched);
   }
   // Judged once the lift is out, so no finger is left down.
   if (judges) {
     const arrivals = await probe.read();
-    if (arrivals.length !== steps.length) {
+    // A page that lost events, such as a target removed mid-gesture, gives no
+    // release to read. Only a `'spacing'` play, which asks for the
+    // judgment, fails then.
+    if (arrivals.length !== steps.length && pacing === 'spacing') {
       throw new Error(
         `touchDriver: the page received ${arrivals.length} of a paced play's ${steps.length} touch events`,
       );
     }
     const fault = touchPacingFault(steps, arrivals, releaseTolerance);
     if (fault != null) {
-      throw fault.heldByPage == null
-        ? new TouchPacingError(fault)
-        : new TouchPageStallError({...fault, heldByPage: fault.heldByPage});
+      throw (
+        liftStallError(steps, arrivals, fault, onEventMs) ??
+        (fault.heldByPage == null
+          ? new TouchPacingError(fault)
+          : new TouchPageStallError({...fault, heldByPage: fault.heldByPage}))
+      );
     }
     const reading = readRelease(steps, arrivals);
     if (reading != null) {

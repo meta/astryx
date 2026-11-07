@@ -770,7 +770,9 @@ test(
       columns: 6,
       cellScale: 0.5,
     });
-    const held = await holdAnimations(page, strip);
+    const held = await holdAnimations(page, strip, {
+      judges: {target: strip, property: 'translate'},
+    });
     await thawPage(page);
     await freezeTimers(page);
     const {storyboard: coastBoard} = await animationStoryboard(page, {

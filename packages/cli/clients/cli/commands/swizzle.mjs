@@ -3,11 +3,10 @@
 /**
  * @file swizzle command — thin wrapper around api/swizzle.
  *
- * Copies a component's source into the consumer project for customization
- * (imports rewritten to the owner package's subpaths). All logic — owner
- * resolution, copy, import rewriting, StyleX detection, maintainer feedback —
- * lives in api/swizzle; this file only parses flags, prints, and prefixes
- * commands for the caller's package manager.
+ * Copies a component's source into the consumer project for customization,
+ * with the internal modules it needs. All logic — owner resolution, the copy,
+ * StyleX detection, maintainer feedback — lives in api/swizzle; this file only
+ * parses flags, prints, and prefixes commands for the caller's package manager.
  */
 
 import {jsonOut} from '../../../foundation/response/json.mjs';
@@ -85,18 +84,18 @@ export function registerSwizzle(program) {
         text(`[ok] Copied ${filesCopied} files to ${outputDir}/`),
         text(
           [
-            `Relative imports have been rewritten to use ${ownerPackage}.`,
+            `What ${ownerPackage} exports is imported from ${ownerPackage}; the internal modules the component needs are copied beside it.`,
             'You can now customize the component source freely.',
           ].join('\n'),
         ),
       ];
-      // Files the copy wrote outside the component folder: the owner modules
-      // and their unexported style modules (spec:AST-110 FR4).
+      // Files the copy wrote outside the component folder: the internal
+      // modules it needs, in the package's folder layout.
       const shared = (result.data.files ?? []).filter(f => f.startsWith('../'));
       if (shared.length > 0) {
         out.push(
           text(
-            `Shared modules: ${shared.join(', ')} (copied whole; their imports between each other stay relative)`,
+            `Copied beside it: ${shared.join(', ')} (in the package's folder layout; imported by relative path)`,
           ),
         );
       }

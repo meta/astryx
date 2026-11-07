@@ -4,12 +4,13 @@
  * @file BottomSheetDetent.interaction.browser.spec.ts
  * @input The built "Snap points" BottomSheet story, real touch input
  *   (Chromium CDP / WebKit's input command) and the interaction harness
- * @output Interaction and animation proofs for dragging the sheet to a
- *   detent: the drag follows the finger and a slow release settles on the
- *   nearest detent; a flick dismisses; the settle lands on the detent, its
- *   sampled curve recorded; the settle keeps advancing every frame through a blocked
- *   main thread; the settle does no Layout or Paint per frame; a storyboard of
- *   the drag and the settle.
+ * @output Interaction and animation proofs for dragging the sheet to a detent.
+ *   The drag follows the finger, and a slow release settles on the nearest
+ *   detent. A flick dismisses. A softer flick lands on the half detent, also
+ *   when one early move arrives late. The settle lands on the detent, its
+ *   sampled curve recorded. It keeps advancing every frame through a blocked
+ *   main thread, and does no Layout or Paint per frame. A storyboard shows the
+ *   drag and the settle.
  * @position The exemplar for `*.interaction.browser.spec.ts`: component lanes
  *   copy this shape. Each test names the instrument it uses from
  *   @astryxdesign/interaction-harness, so the evidence layer is explicit.
@@ -69,6 +70,16 @@ import {
 } from '@astryxdesign/interaction-harness';
 
 const storybook = withStorybook(test);
+
+// How far a flick's release, as WebKit stamps its touches on arrival, may
+// stray from the script's before the play fails by name. Each keeps the
+// release where the test's landing holds.
+// 1,200 px/s from tall: the script reads 1,225. It lands on half from the
+// flick speed, 1,008, up to 2,048, where its projection passes half.
+const HALF_FLICK_TOLERANCE = 0.17;
+// 2,000 px/s from tall, 160 px of travel: the 0.1 s projection passes half
+// above 1,409 px/s.
+const DISMISS_FLICK_TOLERANCE = 0.29;
 
 // The settle's timing, from the theme the story renders in: `--ease-standard`
 // is the default cubic-bezier(0.24, 1, 0.4, 1), and `--duration-medium` is the
@@ -186,7 +197,10 @@ test('a downward flick dismisses the sheet', async ({page}) => {
     hz: 120,
   });
   expect(releaseVelocity(script).y).toBeCloseTo(2000, -1);
-  await driver.play(script);
+  await driver.play(script, {
+    pacing: 'spacing',
+    releaseTolerance: DISMISS_FLICK_TOLERANCE,
+  });
   await expect(page.getByRole('dialog', {name: 'Nearby places'})).toBeHidden();
 });
 
@@ -202,7 +216,41 @@ test('a softer downward flick from the tall detent lands on the half detent', as
     hz: 120,
   });
   expect(releaseVelocity(script).y).toBeCloseTo(1200, -1);
-  await driver.play(script);
+  await driver.play(script, {
+    pacing: 'spacing',
+    releaseTolerance: HALF_FLICK_TOLERANCE,
+  });
+  await waitForRest(sheet);
+  await expect(page.getByRole('dialog', {name: 'Nearby places'})).toBeVisible();
+  expect(await sheetTop(sheet)).toBeCloseTo(halfTop, 0);
+});
+
+test('a softer flick with one early move 70 ms late still lands on the half detent', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName !== 'webkit',
+    'only WebKit stamps a touch when it arrives; Chromium carries the scripted times',
+  );
+  const {driver, sheet, handle, halfTop} = await openSheet(page);
+  const script = flick(handle, {
+    velocity: {x: 0, y: 1200},
+    durationMs: 80,
+    hz: 120,
+  });
+  // The move after this step reaches the page 70 ms late, as a stalled
+  // dispatch delivers it. The last two moves keep their spacing.
+  const late = toTouchEvents(script).length - 5;
+  await driver.play(script, {
+    pacing: 'spacing',
+    releaseTolerance: HALF_FLICK_TOLERANCE,
+    onEvent: async (_, index) => {
+      if (index === late) {
+        await new Promise(resolve => setTimeout(resolve, 70));
+      }
+    },
+  });
   await waitForRest(sheet);
   await expect(page.getByRole('dialog', {name: 'Nearby places'})).toBeVisible();
   expect(await sheetTop(sheet)).toBeCloseTo(halfTop, 0);
@@ -222,7 +270,9 @@ test('the settle lands on the detent, its curve recorded frame by frame', async 
   // that the test sends after the lift can come after the settle ends.
   await freezePageOn(page, 'touchend');
   await driver.play(slowDragTo(handle, dy));
-  const held = await holdAnimations(page, sheet);
+  const held = await holdAnimations(page, sheet, {
+    judges: {target: sheet, property: 'transform'},
+  });
   const transition = held.find(a => a.name === 'transform');
   if (transition == null) {
     throw new Error(`no transform transition held: ${JSON.stringify(held)}`);
@@ -432,6 +482,7 @@ test(
       name: 'bottomsheet-settle',
       clip,
       scope: sheet,
+      judges: {target: sheet, property: 'transform'},
       measure,
       columns: 7,
       cellScale: 0.4,
