@@ -388,6 +388,34 @@ test('a wheel at the end of a tall tooltip moves on to the page', async ({
     .toBeGreaterThan(before);
 });
 
+test('a sticky child pins inside the tooltip, which is its scroll container', async ({
+  page,
+}) => {
+  const viewport = {width: 1280, height: 720};
+  await hoverTallTrigger(page, viewport, 360);
+  const pinned = await page.evaluate(async sel => {
+    const tooltip = document.querySelector(sel) as HTMLElement;
+    const content = tooltip.firstElementChild as HTMLElement;
+    const sticky = document.createElement('div');
+    sticky.textContent = 'Sticky heading';
+    sticky.style.position = 'sticky';
+    sticky.style.insetBlockStart = '0';
+    content.prepend(sticky);
+    tooltip.scrollTop = 200;
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    return {
+      tooltipTop: tooltip.getBoundingClientRect().top,
+      stickyTop: sticky.getBoundingClientRect().top,
+      scrolled: tooltip.scrollTop,
+    };
+  }, TOOLTIP);
+  expect(pinned.scrolled).toBeGreaterThan(0);
+  // It stays at the tooltip's top edge (inside its padding) as the content
+  // scrolls under it.
+  expect(pinned.stickyTop - pinned.tooltipTop).toBeGreaterThanOrEqual(0);
+  expect(pinned.stickyTop - pinned.tooltipTop).toBeLessThan(24);
+});
+
 test('phone: with no room beside, it opens below when below has more room', async ({
   page,
 }) => {
