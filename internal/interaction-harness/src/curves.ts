@@ -997,9 +997,30 @@ async function expectJudgedMotionsHeld(
           : property.replace(/-([a-z])/g, (_, letter: string) =>
               letter.toUpperCase(),
             );
+      // Chromium's `getKeyframes()` leaves out a custom property that a CSS
+      // animation animates. The `@keyframes` rule of that name lists it.
+      const ruleProperties = (name: string) =>
+        [...document.styleSheets].flatMap(sheet => {
+          let rules: CSSRule[] = [];
+          try {
+            rules = [...sheet.cssRules];
+          } catch {
+            // A cross-origin sheet does not expose its rules.
+          }
+          return rules
+            .filter(
+              (rule): rule is CSSKeyframesRule =>
+                rule instanceof CSSKeyframesRule && rule.name === name,
+            )
+            .flatMap(rule =>
+              [...rule.cssRules].flatMap(keyframe => [
+                ...(keyframe as CSSKeyframeRule).style,
+              ]),
+            );
+        });
       const properties = (animation: Animation) => [
-        ...new Set(
-          ((animation.effect as KeyframeEffect | null)?.getKeyframes() ?? [])
+        ...new Set([
+          ...((animation.effect as KeyframeEffect | null)?.getKeyframes() ?? [])
             .flatMap(keyframe => Object.keys(keyframe))
             .filter(
               name =>
@@ -1007,7 +1028,10 @@ async function expectJudgedMotionsHeld(
                   name,
                 ),
             ),
-        ),
+          ...(animation instanceof CSSAnimation
+            ? ruleProperties(animation.animationName).map(keyframeName)
+            : []),
+        ]),
       ];
       const describe = (animation: Animation) => {
         const effect = animation.effect as KeyframeEffect | null;

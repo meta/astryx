@@ -3044,6 +3044,26 @@ test.describe('holding', () => {
     await releaseAnimations(page, {finish: true});
   });
 
+  test('a judged custom property is found in its @keyframes rule', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    await page.evaluate(() => {
+      const style = document.createElement('style');
+      style.textContent =
+        "@property --harness-strength { syntax: '<number>'; inherits: false; initial-value: 0; }" +
+        '@keyframes harness-strength { from { --harness-strength: 1; } to { --harness-strength: 0; } }' +
+        '#box { animation: harness-strength 2s linear; }';
+      document.head.append(style);
+    });
+    const held = await holdAnimations(page, box, {
+      judges: {target: box, property: '--harness-strength'},
+    });
+    expect(held.map(a => a.name)).toEqual(['harness-strength']);
+    await releaseAnimations(page, {finish: true});
+  });
+
   test('a film that holds now refuses to start without the motion it shows', async ({
     page,
   }) => {
