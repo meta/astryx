@@ -166,6 +166,31 @@ describe('a PowerSearch filter token', () => {
     );
   });
 
+  it('names a token whose field the config lacks by its field key', async () => {
+    const user = userEvent.setup();
+    render(
+      <PowerSearch
+        config={config}
+        filters={[{...openFilter, field: 'priority'}]}
+        onChange={() => {}}
+      />,
+    );
+
+    const token = screen
+      .getAllByRole('button', {name: 'priority'})
+      .find(button => button.getAttribute('aria-haspopup') === 'dialog');
+    expect(token).toBeDefined();
+    expect(token).toHaveTextContent(/^priority$/);
+    expect(
+      screen.getByRole('button', {name: 'Remove priority'}),
+    ).toBeInTheDocument();
+    await user.click(token!);
+
+    expect(
+      await screen.findByRole('dialog', {name: 'priority', hidden: true}),
+    ).toBeInTheDocument();
+  });
+
   it('keeps the plain popover for a token from a components override', async () => {
     const user = userEvent.setup();
     function CustomToken({onClick}: PowerSearchTokenProps) {
