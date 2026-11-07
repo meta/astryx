@@ -218,6 +218,9 @@ Platform-specific details stay inside that compiler.
     them unless the theme sets them too.
   - `--color-on-<status>-muted` is the fill's hue at the lightness that reaches
     4.5:1 on the theme's pale status fill over the default surface.
+  - `--color-on-accent`, when the theme sets `--color-accent` but not
+    `--color-on-accent`, is chosen the same way as `--color-on-<status>`
+    (`architecture:theme-tokens` DEC-3).
 
   Fills are never derived: a `--color-<status>` or `--color-<status>-muted` the
   theme does not set is Core's. A role is derived again when the theme sets a
@@ -234,6 +237,14 @@ Platform-specific details stay inside that compiler.
   which use concrete colours. A value the theme sets always wins over a derived
   one. A derived value is emitted in the scope where its source is set
   (INV16), and runtime and static output derive the same values.
+
+- **INV18 — A pair below its floor is reported.** When a theme sets one or
+  both colours of a pair whose floor `architecture:theme-tokens` INV11, INV12,
+  or INV13 names, and the pair measures below that floor in a colour mode, the
+  compiler appends one warning that names the pair, the mode, and the measured
+  ratio, through INV14's channel. The theme's value still wins and the
+  generated CSS does not change. A pair that cannot be measured, such as one
+  with an unresolved reference, is not reported.
 
 This record does not own:
 
@@ -349,6 +360,7 @@ tiers.
 | INV15            | CLI build fixtures with function entries, slot functions, a variant list, and an inherited entry under a replaced list, compared with runtime resolution                                                                                                                                                                                                                                  | Built and runtime icons differ, a function is dropped silently, or tooling enumerates a variant an entry cannot receive                                                                                                                                                                           |
 | INV16            | Root, adaptation, media, nested-theme, and CLI-built status-alias fixtures                                                                                                                                                                                                                                                                                                                | A generated role escapes its source scope, overrides an authored role, changes cascade meaning, cycles, or differs by output path                                                                                                                                                                 |
 | INV17            | A minimal custom theme that sets only its four status fills, compiled at runtime and through the CLI build, plus themes that set a light fill, a grey fill, an unresolved fill, an unresolved card surface, only a surface, only a hue text token, a fill only inside an adaptation rule, and one that `extends` a theme setting a status role, each also read through non-CSS resolution | A content or text role is missing, misses an INV11 floor in light or dark mode, is grey, ignores a value the theme set, or differs between runtime, build, and non-CSS resolution; an icon or border role does not follow the text role; a fill is derived; or an inherited role is derived again |
+| INV18            | A theme that sets a dark-mode accent with white content below 4.5:1, a theme that sets a status fill and its content below the floor, a theme with an unresolved reference, compiled at runtime and through the CLI build                                                                                                                                                                 | A below-floor pair compiles silently, a report changes the generated CSS, or an unmeasurable pair is reported                                                                                                                                                                                     |
 
 ## Known conformance and verification gaps
 
@@ -358,6 +370,10 @@ its text and pale-fill content reach their roles as INV16 aliases rather than
 derived values. Inside adaptation rules, each rule's derived
 values combine the root with that rule alone, so rules that match together and
 each set a measured colour do not yet derive from their combination.
+
+The derived `--color-on-accent` in INV17 and the below-floor report in INV18
+are accepted but not yet shipped; INV18 reports through INV14's channel once
+that collector ships, and through runtime warnings until then.
 
 Declaration-boundary enforcement and the warnings-array collector in INV13–INV14
 are accepted but not yet shipped. Their verification obligations above describe
