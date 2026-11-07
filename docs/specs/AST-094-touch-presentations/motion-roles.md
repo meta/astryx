@@ -21,6 +21,7 @@ The owner's goal: "The main goals are consistent timings and well-coordinated pi
 | `springs.menuOpen`              | spring   | response 0.32 s, damping ratio 0.8                              | `spec:AST-094` FR4      |
 | `springs.quickChange`           | spring   | duration 0.5 s, bounce 0.15                                     | `spec:AST-094` FR4      |
 | `springs.settle`                | spring   | duration 0.5 s, bounce 0                                        | `spec:AST-094` FR4      |
+| `springs.sheetDismissSwipe`     | spring   | response 0.3441442326 s, damping ratio 0.8                      | `component:BottomSheet` |
 | `springs.sliderDrop`            | spring   | response 0.5 s, damping ratio 0.7                               | `component:Slider`      |
 | `springs.sliderLift`            | spring   | response 0.215 s, damping ratio 0.6                             | `component:Slider`      |
 | `springs.sliderRelease`         | spring   | response 0.4 s, damping ratio 1                                 | `component:Slider`      |

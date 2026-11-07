@@ -27,7 +27,7 @@ import {
   type ReactNode,
   type Ref,
 } from 'react';
-import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
+import {createLayerScopedContext} from '../Layer/layerScopedContext';
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import type {ButtonSize} from '../Button';
@@ -36,7 +36,7 @@ import {PressGroupContext} from '../hooks/pressGroupContext';
 import {useTouchPresentation} from '../utils/touchPresentation';
 import {useGroupPressTracking} from '../hooks/useGroupPressTracking';
 import {useMergedRefs} from '../hooks/useMergedRefs';
-import {touchHitAreaStyles} from '../utils/touchHitArea.stylex';
+import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {mergeProps} from '../utils';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {themeProps} from '../utils/themeProps';
@@ -59,7 +59,11 @@ interface ToggleButtonGroupContextValue {
 }
 
 const ToggleButtonGroupContext =
-  createContext<ToggleButtonGroupContextValue | null>(null);
+  createLayerScopedContext<ToggleButtonGroupContextValue | null>(
+    'ToggleButtonGroupContext',
+    1,
+    null,
+  );
 ToggleButtonGroupContext.displayName = 'ToggleButtonGroupContext';
 
 /**

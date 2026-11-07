@@ -20,7 +20,7 @@ import {
   pointerQuery,
 } from '../gestures/__tests__/pointerQuery';
 import {isPressGroupItem} from '../privateAttributes/pressGroupItem.stylex';
-import {touchHitAreaStyles} from '../utils/touchHitArea.stylex';
+import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {Button} from '../Button/Button';
 import {ToggleButton} from './ToggleButton';
 import {ToggleButtonGroup} from './ToggleButtonGroup';
