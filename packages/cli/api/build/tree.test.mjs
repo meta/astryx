@@ -120,7 +120,7 @@ const PINNED = [
       'TableGridDividersTable',
       'TableGroupedRowsTable',
       'TableShowcase',
-      'TableStripedTable',
+      'TableLeadingMarkSelection',
     ],
   ],
   [
