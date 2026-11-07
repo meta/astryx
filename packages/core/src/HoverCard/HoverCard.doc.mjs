@@ -144,7 +144,7 @@ export const docs = {
           name: 'isOpen',
           type: 'boolean',
           description:
-            'Controlled open state. true holds the card open. false holds it closed against hover, but focus on the trigger still opens it. A controlled card answers Escape by calling onOpenChange(false) without closing; it closes when you set isOpen to false, and focus inside the card then returns to the trigger.',
+            'Controlled open state. true holds the card open. false holds it closed against hover and focus. A controlled card answers Escape by calling onOpenChange(false) without closing; it closes when you set isOpen to false, and focus inside the card then returns to the trigger.',
         },
         {
           name: 'xstyle',
@@ -349,7 +349,7 @@ export const docsZh = {
           name: 'isOpen',
           type: 'boolean',
           description:
-            '受控的打开状态。true 保持卡片打开。false 使悬停无法打开卡片，但触发元素获得焦点时仍会打开。受控卡片响应 Escape 时调用 onOpenChange(false) 而不关闭；将 isOpen 设为 false 时关闭，此时卡片内的焦点返回触发元素。',
+            '受控的打开状态。true 保持卡片打开。false 使悬停和焦点都无法打开卡片。受控卡片响应 Escape 时调用 onOpenChange(false) 而不关闭；将 isOpen 设为 false 时关闭，此时卡片内的焦点返回触发元素。',
         },
         {
           name: 'xstyle',
@@ -496,7 +496,7 @@ export const docsDense = {
           'Dashed underline on a text trigger. auto = text children (strings/numbers, holes ignored); no effect on element triggers.',
         isDefaultOpen: 'Show hover card on mount. Still dismissible.',
         isOpen:
-          'Controlled open state. true holds open; false holds closed against hover, but trigger focus still opens it. Escape calls onOpenChange(false) without closing; setting false returns focus inside the card to the trigger.',
+          'Controlled open state. true holds open; false holds closed against hover and focus. Escape calls onOpenChange(false) without closing; setting false returns focus inside the card to the trigger.',
         xstyle: 'StyleX styles for the card surface (hover-card target).',
         className: 'Class added to the card surface.',
         style: 'Inline styles for the card surface.',

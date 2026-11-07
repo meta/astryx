@@ -3,8 +3,9 @@
 /**
  * @file pressFeedback.ts
  * @input The press state machine (pressGesture.ts), the menu-press and
- *   press-group markers, the scroll-view test (scrollView.ts) and the document's pointer, keyboard, scroll and
- *   visibility events
+ *   press-group markers and the scroll-view test (scrollView.ts). Also the
+ *   input clock (inputAge.ts) and the document's pointer, keyboard, scroll
+ *   and visibility events
  * @output PRESSABLE_ATTRIBUTE, PRESSED_ATTRIBUTE, pressableProps,
  *   pressFadeMs, installPressFeedback, cancelPress and installBoxHold
  * @position The DOM half of the touch press model. usePressFeedback installs
@@ -28,8 +29,9 @@
 //
 // A finger waits only inside a scroller. Outside one, a surface highlights in
 // the frame the finger lands, as a UIControl does. Inside one, it waits the
-// content-touch delay, because the touch can become a scroll. Rows follow the
-// same rule.
+// content-touch delay, because the touch can become a scroll. The delay counts
+// from the touch's own timestamp, so a late listener does not add to it. Rows
+// follow the same rule.
 //
 // A surface's hold does nothing, so it keeps the browser's long-press text
 // selection (AST-094). Only an element whose hold does something suppresses
@@ -49,8 +51,10 @@ import {
 import {isCoarsePointer, watchCoarsePointer} from './coarsePointer';
 import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
 import {parseMotionRoleValue} from '../motion/roles';
+import {readThemeTokens} from '../motion/themeTiming';
 import {subscribeInput} from './inputStream';
 import {isInsideScrollView} from './scrollView';
+import {msSinceInput} from './inputAge';
 import {TOUCH_QUERY} from './touchPresentation';
 import {holdsPressThroughDrag} from '../privateAttributes/pressHoldsDrag.stylex';
 import {isTrackedByGroup} from '../privateAttributes/pressGroupItem.stylex';
@@ -200,16 +204,14 @@ const TIMER_MS: Record<NonNullable<PressStep['timer']>, number> = {
 
 /**
  * The release fade's clock on `element`, read once, at the release, from the
- * token its stylesheet reads: the theme's `--duration-exit`. Without a
- * readable value it is the token's default. Under Reduce Motion it is no
- * longer than the Reduce Motion fade, as in the stylesheet.
+ * token its stylesheet reads. That token is the theme's `--duration-exit`,
+ * resolved as the release animation's duration resolves it. A value that is
+ * not a time gives the token's default. Under Reduce Motion it is no longer
+ * than the Reduce Motion fade, as in the stylesheet.
  */
 export function pressFadeMs(element: Element): number {
   const exit =
-    parseMotionRoleValue(
-      'duration',
-      getComputedStyle(element).getPropertyValue('--duration-exit'),
-    ) ?? PRESS_FADE_MS;
+    readThemeTokens(element, {duration: '--duration-exit'}).ms ?? PRESS_FADE_MS;
   const reduced =
     typeof window.matchMedia === 'function' &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -329,7 +331,7 @@ function clearTimer(slot: Slot): void {
  * - The same during the fade strands `fading` and the tracking slot, which
  *   holds an element that a virtualized list may have unmounted.
  */
-function apply(slot: Slot, step: PressStep): void {
+function apply(slot: Slot, step: PressStep, sinceEventMs = 0): void {
   const live = slot.live;
   if (live == null) {
     return;
@@ -368,8 +370,13 @@ function apply(slot: Slot, step: PressStep): void {
     } else {
       // A TIMER, never `requestAnimationFrame`: iOS throttles frame callbacks
       // while a scroll runs, so a frame-based delay would fire late, after the
-      // scroll, and paint a control nobody is pressing any more.
-      const timer = setTimeout(fire, TIMER_MS[kind]);
+      // scroll, and paint a control nobody is pressing any more. The onset
+      // counts from the touch, so the time the listener waited comes off it.
+      const delay =
+        kind === 'onset'
+          ? Math.max(0, TIMER_MS.onset - sinceEventMs)
+          : TIMER_MS[kind];
+      const timer = setTimeout(fire, delay);
       live.timer = () => clearTimeout(timer);
     }
   }
@@ -606,6 +613,7 @@ function onPointerDown(event: PointerEvent): void {
       y: event.clientY,
       delayed: isInsideScrollView(element),
     }),
+    msSinceInput(event.timeStamp, event),
   );
 }
 

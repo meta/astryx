@@ -1,5 +1,83 @@
 # @xds/cli
 
+# 0.7.11
+
+#### New Features
+
+- `astryx build` ranks Core blocks of component families its picker was not fitted with somewhat better: the block picker's doc-side word weights are refitted from paraphrases of each block's own source. (#10355)
+
+#### Fixes
+
+- `astryx build` names its two alternative page templates in the same order it chooses the start from, so the three templates it shows for a whole page are its best three. The start, the number of alternatives, the blocks and the JSON shape are unchanged. (#10357)
+- `astryx build --type doc` and `--type theme` now point to `astryx search <query> --type doc` or `--type theme`: a build kit has no docs or themes, so build says so once on stderr and names the search that finds them. Stdout, JSON output and exit codes are unchanged. (#10401)
+- `astryx doctor` no longer warns that no theme is wired in an app that imports its themes itself. Without a generated theme module or a package.json `astryx.theme`, the `themes` check now passes when the source of the app imports a theme's built module or stylesheet (the imports `theme add` writes) or passes a theme to `Theme`, followed through module-scope variables, `defineTheme({extends})`, re-exports and installed packages to its package, and names the file. Only a theme whose package is installed, or a local theme, counts. A theme passed to `Theme` that doctor cannot trace (a prop, a function result, a variable declared inside a component) is reported as not confirmed (info), not as missing. (#10353)
+- The CLI's semver range check reads `^0` as any 0.x.y and `^0.0` as any 0.0.y, and reads a hyphen range (`1.0.0 - 2.0.0`) as inclusive bounds, with a partial upper bound (`1.0.0 - 2`) covering its whole series as npm does. Before, `^0` and `^0.0` were locked to a single patch version and a hyphen range could never match, so `astryx doctor` and the peer-version checks reported a false mismatch for projects that declare those ranges. (#10184)
+- The reminder to run `astryx init` in a project that has not run it no longer prints before every command. It now prints after a command that succeeds, at most once a day per project, recorded in the per-user state as the daily hints are. It does not print with `--json`, after a command that fails, or when `CI` is set. `astryx doctor` still reports the missing setup in its agent-docs check every time. No JSON shape or exit code changes. (#10343)
+- In a folder inside an Astryx project whose own `package.json` declares no Astryx package, such as a tool folder that installs its own `@astryxdesign/core`, the setup reminder's `init` command now names the project's release, as run from the project's folder: the project's own CLI when it installs one, otherwise the package runner pinned to the project's Core, such as `npx @astryxdesign/cli@0.7.3 init`. It used to pin the release of the CLI that answered the run, whatever the project records. No JSON shape or exit code changes. (#10343)
+- `astryx experimental render`: a page outside a project now renders. Outside a project (no Core or CLI the folder reads, and no package.json that declares one), the page takes the `@astryxdesign/*` packages its folder lacks, and the integrations a host approves, from the copy the CLI itself runs with, instead of failing with ERR_RENDER_MISSING_DEPENDENCY. React and StyleX come from that copy too, so the page loads one copy of each, even in a React app that installs its own. When that copy's Core cannot be downloaded, a page that needs it fails with ERR_VERSIONS_UNAVAILABLE, as other commands that read Core do. Inside a project, the page uses only the project's own packages. (#10362)
+- A link to a topic that an integration replaces under the same name opens the replacement. In an app whose integration replaced `theme` or `getting-started`, `doctor` reported Core's links to them as naming no doc. (#10342)
+- `swizzle` no longer copies a component's browser test harnesses (`*.spec.ts`, `*.spec.tsx`, such as Item's `ItemMarkerColumns.a11y.chromium.spec.ts`) when the installed Core source holds them: `@astryxdesign/core` 0.7.5 and earlier, or Core's repository source. They import Playwright and an unpublished test package, so a project that swizzled such a component failed to type-check or build. Core 0.7.6 and later ship no harnesses, so swizzling from them is unchanged. (#10230)
+- `astryx theme build` no longer depends on the order it loads the core component docs. A parent doc that lists a sub-component by name only, such as `Avatar.doc.mjs` listing `AvatarStatusDot`, erased the values the sub-component's own doc declares when it loaded after that doc; when `Avatar.doc.mjs` loaded last, `avatar-status-dot` `variant:success` counted as a custom value. The build now merges every doc's entry for a component. (#10288)
+- `astryx integration verify` no longer reports `theme_module_stale` for a theme whose built module differs only in the command its comment says built it, such as a theme built with `yarn astryx` and verified where `pnpm exec astryx` runs. Any other difference still fails. (#10344)
+
+#### Performance
+
+- A compact or full hook list, and the suggestions for an unknown hook name, list each of Core's folders once. Before, they listed a folder again for each hook they looked up. (#10324)
+- A search, build or component read lists each folder once. A process that runs several reads, such as a docs site's search or an agent harness, reuses a folder's listing once the folder has stayed unchanged for two seconds. A later read lists the folder again after an entry is added, removed or renamed. (#10274)
+- Within one operation, component discovery reads each component doc once, and the component matcher looks for each component's doc once, not once for each name they resolve. Resolving 30 names that only the matcher finds, such as names in another case, makes 14,794 file-system calls instead of 305,108. Results are unchanged. (#10277)
+
+#### Documentation
+
+- The Authoring guides (Quick Start, Field reference, Building Blocks, Ship, Help, and Make your integration work globally) now carry the keyword "authoring", so `astryx search authoring` lists them right after the Authoring overview instead of after API function pages. (#10354)
+- `astryx build --help` lists every value `--type` accepts (component, hook, doc, template, theme), matching the invalid-type error and what build actually runs, and says that `doc` and `theme` give an empty kit, since the kit has no doc or theme group. A test keeps the help text, the choices, the API doc and the error message on build and search naming the same set, and checks what each value returns. (#10361)
+- Getting Started has an Upgrade section: upgrade every Astryx package your app lists in one command, to the same release, then run `astryx upgrade`. If your package manager holds new releases back, exempt the whole `@astryxdesign/*` scope, not only some of its packages. (#10241)
+- The custom theme guide names the files of a local theme, including the same-stem descriptor `theme add` reads. (#10347)
+- The CLI's bundled colour token docs say the status icon colours (`--color-icon-<status>`) paint status marks on the page or a card, such as a StatusDot. (#10204)
+- New block, "Table — Selection in the Leading Mark": row selection with no checkbox column. Each row shows its avatar, and the checkbox takes the avatar's slot while a mouse is over it, on keyboard focus, and on every row once anything is selected. On touch screens the checkbox always shows. It uses the existing `useTableSelectionState` and renders the checkboxes in the name column, so no new Table API is involved. (#10395)
+
+#### Other Changes
+
+- Internal: the export reader can report type-only exports and map a module's whole public surface in one pass. No change to any command's output. (#10365)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+- @josephfarina
+- @thecodebasedot
+- @utsavo-afk
+- @vjeux
+
+---
+
+# 0.7.10
+
+#### New Features
+
+- `astryx discover` lists the experimental PageControl component from `@astryxdesign/lab`. (#9684)
+- `createDragToSnapPoints` and its hook `useDragToSnapPoints` let a drag move an element along one axis and settle it on snap points (px offsets from its resting position) at the release: the nearest one, the next one in its direction after a flick faster than `flickThreshold` (default 1008 px/s), or the one it started from when the release moves back. The settle continues the release velocity, `settleTo(index)` settles without a drag, and `onSettle(index)` reports where it landed. `createDragToSnapPoints` is exported from the package root and `useDragToSnapPoints` from `@astryxdesign/core/hooks`; the CLI's templates gain a playing-card example of each. (#8658)
+
+#### Fixes
+
+- Inserting a token through `ChatComposerInput`'s handle (`insertToken`) now reports the new value through `onChange` once, as typing does, and hides the placeholder. Before, a controlled host's Send button stayed disabled or sent a stale prompt. The `ai-chat-landing` page template drops the input-event workaround it used to sync the composer after an insert. (#10167)
+- The CLI no longer lists `@astryxdesign/theme-neutral`, `@astryxdesign/lab` or `@astryxdesign/charts` as optional peers. Before, a package manager could keep a theme from an older release as the CLI's peer after an app removed the theme and upgraded Core, and then warn that the theme's Core peer was not met. `@astryxdesign/core` stays the CLI's one optional peer. In a Yarn Plug'n'Play workspace member, or a pnpm workspace member with `hoist: false`, a legacy `package.json#astryx.theme` of `neutral` now makes `astryx component` warn that it cannot resolve the theme. Add the theme to the app with `astryx theme add neutral` instead. (#10232)
+
+#### Documentation
+
+- A new `useMultiCombobox — Issue Labels` example block builds a Labels field on `useMultiCombobox`: typing filters the labels, the arrow keys move the active option while focus stays in the field, Enter or a click toggles a label and the list stays open, and selected labels show as removable tokens above the field. Copy it with `astryx template useMultiComboboxHookUsage <path>`. (#9578)
+- A `useSnapPaging — Onboarding Pages` example block: onboarding cards in a Carousel with `hasSnap={useSnapPaging()}` move one view per flick, and a switch moves one card per flick through the hook's `pages` option. Copy it with `astryx template CarouselSnapPaging <path>`. (#8153)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+- @kyu-rong
+- @vjeux
+
+---
+
 # 0.7.9
 
 #### Experimental APIs

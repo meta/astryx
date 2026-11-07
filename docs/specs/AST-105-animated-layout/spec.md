@@ -57,6 +57,9 @@ const animatedLayout = useAnimatedLayout({containerRef: scrollRef});
 
 - **FR1 — One hook, one handle, one prop.** `useAnimatedLayout({containerRef})`
   returns an opaque `animatedLayout` handle with no public methods or fields.
+  The handle's type carries one optional phantom brand member typed `never`,
+  so a package handle and a swizzled copy's handle match (`spec:AST-110` FR3);
+  it is never present at runtime and offers nothing to read or set.
   An app passes it to a component whose size changes through that
   component's `animatedLayout` prop, or a hook's `animatedLayout` option where
   the component is a hook, and the component reports each change.
@@ -135,7 +138,12 @@ const animatedLayout = useAnimatedLayout({containerRef: scrollRef});
   measures any change, and the element's moving edge and the content on that
   edge's side move on FR4's one motion, whether that content comes after the
   element or before it (an end panel's LayoutContent comes before the panel),
-  so the content beside the edge glides with it and no gap opens. An optional
+  so the content beside the edge glides with it and no gap opens. In a
+  block-edge form, the element's own child elements slide on that motion under
+  a still clip at its content box on the side its parts enter from, so they
+  enter and leave at the moving edge; an element with text of its own, a child
+  that a translation cannot move, or a box or generated box of its own that it
+  paints, keeps a clip that moves with the edge. An optional
   two-state form holds the element's old state as FR8's swap holds it, while
   the element rides the glide of the content beside its moving edge; a reversal
   from the shown state starts from where it is. Under Reduce Motion it follows
@@ -277,8 +285,8 @@ Rejected: the measured spring as the glide; a platform-measured opt-in, such as 
 
 The glide plays over `--duration-medium`, the middle of the theme's medium
 durations: 300 ms in the Neutral theme and 410 ms with no theme, both scaled
-by `tempo`. Collapsible, TreeList, Table's row expansion and AppShell's
-content area share it, as one motion.
+by `tempo`. Collapsible, TreeList, Table's row expansion, AppShell's content
+area and List share it, as one motion.
 
 Rejected: `--duration-medium-min`.
 

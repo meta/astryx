@@ -2170,3 +2170,64 @@ describe('Dialog focus region (DEC-2)', () => {
     expect(fireEvent.keyDown(only, {key: 'Tab'})).toBe(true);
   });
 });
+
+// A same-name native radio group is one Tab stop: its checked radio, or its
+// first when none is checked. Medium is checked and is neither first nor last.
+function SizeRadios({name}: {name: string}) {
+  return (
+    <fieldset>
+      <legend>Size</legend>
+      <input type="radio" name={name} value="s" aria-label="Small" />
+      <input
+        type="radio"
+        name={name}
+        value="m"
+        aria-label="Medium"
+        defaultChecked
+      />
+      <input type="radio" name={name} value="l" aria-label="Large" />
+    </fieldset>
+  );
+}
+
+function expectRadioGroupEndsTheCycle() {
+  const medium = screen.getByRole('radio', {name: 'Medium', hidden: true});
+  const first = screen.getByRole('button', {name: 'First', hidden: true});
+  medium.focus();
+  expect(fireEvent.keyDown(medium, {key: 'Tab'})).toBe(false);
+  expect(first).toHaveFocus();
+  expect(fireEvent.keyDown(first, {key: 'Tab', shiftKey: true})).toBe(false);
+  expect(medium).toHaveFocus();
+}
+
+function expectRadioGroupStartsTheCycle() {
+  const medium = screen.getByRole('radio', {name: 'Medium', hidden: true});
+  const last = screen.getByRole('button', {name: 'Last', hidden: true});
+  medium.focus();
+  expect(fireEvent.keyDown(medium, {key: 'Tab', shiftKey: true})).toBe(false);
+  expect(last).toHaveFocus();
+  expect(fireEvent.keyDown(last, {key: 'Tab'})).toBe(false);
+  expect(medium).toHaveFocus();
+}
+
+describe('Dialog focus region: a radio group is one Tab stop', () => {
+  it('wraps Tab from the checked radio of a group that ends the dialog', () => {
+    render(
+      <Dialog isOpen onOpenChange={() => {}} aria-label="Visit">
+        <button type="button">First</button>
+        <SizeRadios name="size" />
+      </Dialog>,
+    );
+    expectRadioGroupEndsTheCycle();
+  });
+
+  it('wraps Shift+Tab from the checked radio of a group that starts the dialog', () => {
+    render(
+      <Dialog isOpen onOpenChange={() => {}} aria-label="Visit">
+        <SizeRadios name="size" />
+        <button type="button">Last</button>
+      </Dialog>,
+    );
+    expectRadioGroupStartsTheCycle();
+  });
+});

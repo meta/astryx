@@ -53,8 +53,13 @@ that times motion with it. Everything here is internal to
   default, lets the click guard (utils/clickGuard.ts) take the mouse events
   Safari may still send, and lets `deliver` focus the field.
   `focusAtPoint(field, x, y)` focuses it with `preventScroll` and puts the
-  caret under the finger. A touch past 10 px is
-  the browser's to scroll.
+  caret under the finger. `deliverTap` (`keyboardTarget.ts`) does that and
+  raises the tap's click once, since the cancelled tap raises none; the
+  module's targets and ChatLayout's composer deliver with it.
+  `followsKeyboard(win)` (`keyboardTarget.ts`) is the gate for all of it: a
+  top-level document whose visual viewport shrinks for the keyboard, under
+  a coarse primary pointer. A touch past
+  10 px is the browser's to scroll.
 - **The browser's own reveal pan (FR4):** `watchRevealPan(window, {owns})`
   is the one building block every keyboard-aware surface uses for a browser
   that pans the visual viewport to a focused field after the keyboard's
@@ -68,7 +73,9 @@ that times motion with it. Everything here is internal to
   `touchstart` subscription on the window's input stream, which lives only
   while a surface watches. BottomSheet's hook watches while its sheet is presented
   under a coarse primary pointer; under a fine one it registers no touch
-  listener.
+  listener. `watchPans(win, owns)` (`keyboardTarget.ts`) runs that loop on
+  each height the module reports: the keyboard targets and ChatLayout's
+  composer watch with it.
 - **Keyboard targets (`keyboardTarget.ts`):** a target keeps the focused field
   inside it above the keyboard, and registers so a field inside moves nothing
   itself (`registerKeyboardTarget`, `isInsideKeyboardTarget`).
@@ -151,10 +158,11 @@ that times motion with it. Everything here is internal to
   the content to its place on the same spring. A field focused before the
   keyboard is down rides it back up. Focus moving to a select starts no ride:
   iOS puts the select's picker where the keyboard was. Nor does focus moving
-  into a frame, an open shadow host or a custom element, whose own field can
-  keep the keyboard up. Firefox for Android takes the same path, but reports
-  the hide once, at its end, and the content moves at that report (AST-099
-  Gap 12). Safari's and Firefox's reveals are unchanged.
+  to a field inside an open shadow root, or into a frame or a custom element
+  whose field the page cannot see. A plain control inside an open shadow root
+  rides as any control does. Firefox for Android takes the same path, but
+  reports the hide once, at its end, and the content moves at that report
+  (AST-099 Gap 12). Safari's and Firefox's reveals are unchanged.
 - **When the keyboard goes:** the body's scroll goes back to where it was
   when the keyboard came up, within the range left once the inset drops. A
   field that keeps focus, as after iOS's downward keyboard dismissal, is then
@@ -242,6 +250,13 @@ keyboard module measures them from the visual viewport, as in every browser
   dated back `hideReportLagMs`, the lag measured on blurs. Chrome can report
   Back later in the slide, so on Back the content starts down after the
   keyboard does.
+- Under Remove animations (`prefers-reduced-motion: reduce`), Chrome reports
+  a hide in steps: lower keyboards that are still up, then none. There, the
+  keyboard module holds such a step and keeps reporting the shown height. The
+  report of none, a report back up, or 300 ms without a new height ends the
+  hold, and it lasts 1 s at most. A pan reports the same height and leaves it
+  as it is. So every reader lays out once, after the keyboard has gone, and its
+  Reduce Motion cross-fade plays once.
 - When focus moves from one field to another through something that brings up
   no keyboard (a popover's container), Chrome reports the keyboard gone and
   back within about 50 ms. A hide reported while a field that gained focus less

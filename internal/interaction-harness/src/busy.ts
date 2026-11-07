@@ -11,6 +11,8 @@
  *   read from its frames, `pooledBusyProof`, which judges several short
  *   blocks as one, and `BusyWindowTooLateError`, for a block that began
  *   after the motion it was meant to catch had ended.
+ *   `BUSY_PROOF_LOOKAROUND_MS` is how far around its judged part a proof
+ *   reads frames.
  *   `trackControl` and `controlClock` read the control's box and its own
  *   clock from the screencast, a second control's too (`ahead`).
  * @position The busy-main-thread proof: an animation that runs on the
@@ -397,6 +399,9 @@ export interface BlockedWindow extends BusyWindow {
  * animation inside `during` counts but the busy-window control's own
  * (`startBusyControl`, mounted inside a dialog with `within`), so pick an
  * element that runs nothing else meanwhile.
+ * With `pseudoElement`, only that pseudo-element's animations on `during`
+ * itself count, as `sampleCurve` reads them. A child's animation, such as a
+ * switch thumb's press, then does not start the block.
  *
  * An animation counts once it is no longer pending and has run at least one
  * frame (`minProgressMs` below 16 ms is raised to 16). One created in the
@@ -441,10 +446,21 @@ export async function blockMainThread(
   {
     during,
     minProgressMs = 16,
+    pseudoElement,
     timeout = 5_000,
-  }: {during?: Locator; minProgressMs?: number; timeout?: number} = {},
+  }: {
+    during?: Locator;
+    minProgressMs?: number;
+    pseudoElement?: '::before' | '::after';
+    timeout?: number;
+  } = {},
 ): Promise<BlockedWindow> {
   const minProgress = Math.max(minProgressMs, ONE_FRAME_MS);
+  if (pseudoElement != null && during == null) {
+    throw new TypeError(
+      'blockMainThread: pseudoElement names a part of `during`; pass `during` too',
+    );
+  }
   if (during == null) {
     return page.evaluate(duration => {
       // The harness's own work: a trace sets it apart (trace.ts HARNESS_READ).
@@ -479,7 +495,7 @@ export async function blockMainThread(
   // wait and not awaited, so the wait starts no later than it did.
   const defined = page.evaluate(defineCurveEnd);
   const waited = during.evaluate(
-    (element, {duration, minProgress, wait}) =>
+    (element, {duration, minProgress, pseudo, wait}) =>
       new Promise<BlockedWindow>((resolve, reject) => {
         // The harness's own waits run on the real timers: a frozen timer gate
         // (story.ts) holds only the page's.
@@ -505,6 +521,18 @@ export async function blockMainThread(
             target.closest('[data-harness-control]') != null
           );
         };
+        // With a pseudo-element, only its own animations on the element.
+        const counts = (a: Animation) => {
+          if (isControl(a)) {
+            return false;
+          }
+          const effect = a.effect as KeyframeEffect | null;
+          return (
+            pseudo == null ||
+            (effect?.target === element &&
+              (effect.pseudoElement ?? null) === pseudo)
+          );
+        };
         // Where each animation's curve ends, its held tail excluded.
         const curveEnd =
           (
@@ -519,7 +547,9 @@ export async function blockMainThread(
             );
           });
         // What already ran when the wait began.
-        const before = new Set(element.getAnimations({subtree: true}));
+        const before = new Set(
+          element.getAnimations({subtree: true}).filter(counts),
+        );
         const numbersOf = (a: Animation) => ({
           currentTimeMs: Number(a.currentTime ?? 0),
           curveEndMs: curveEnd(a),
@@ -536,7 +566,7 @@ export async function blockMainThread(
             .getAnimations({subtree: true})
             .filter(
               a =>
-                !isControl(a) &&
+                counts(a) &&
                 a.playState === 'running' &&
                 !a.pending &&
                 Number(a.currentTime ?? 0) >= minProgress,
@@ -583,7 +613,7 @@ export async function blockMainThread(
         };
         frame(tick);
       }),
-    {duration: ms, minProgress, wait: timeout},
+    {duration: ms, minProgress, pseudo: pseudoElement ?? null, wait: timeout},
   );
   try {
     const [, held] = await Promise.all([defined, waited]);
@@ -621,16 +651,18 @@ export interface BusyProof extends FrameStats {
    */
   readonly judged: {readonly from: number; readonly to: number};
   /**
-   * When the tracked value was seen at rest before the judged part (a frame
-   * there, no change in the 250 ms before it: a just-started animation not on
-   * screen yet), ms after the window's start of its first presented change
-   * inside the block, where judging starts; null otherwise.
+   * The ms after the window's start of the tracked value's first presented
+   * change inside the block, where judging starts. It is set when the value
+   * was seen at rest before the judged part: a frame there, and no change in
+   * the `BUSY_PROOF_LOOKAROUND_MS` before it. That is a just-started animation
+   * not on screen yet. Otherwise it is null.
    */
   readonly onScreenFromMs: number | null;
   /**
    * The cast's position step, CSS px: the largest of 0.5, 1 and 2 that every
    * change of the tracked value in the judged part is a multiple of, or 0.5
    * when it does not change there (WebKit's casts step 2: see the README).
+   * A sub-pixel read (`trackMarker` with `subpixel`) uses its own step.
    */
   readonly stepPx: number;
   /** The tracked value's mean motion per screencast interval in the judged part, px. */
@@ -796,10 +828,10 @@ function motionStepPx(values: readonly number[]): number {
  *   judge, and that fails rather than passes.
  *
  * A just-started animation can reach the screen after the block began (its
- * hand-off to the compositor lags under load: 50–100 ms in WebKit). When the
- * tracked value was seen at rest before the judged part (a frame there, and no
- * change in the 250 ms before it), judging starts at its first presented
- * change inside the block, which the
+ * hand-off to the compositor lags under load: 50–100 ms in WebKit). The
+ * tracked value may be seen at rest before the judged part: a frame there, and
+ * no change in the `BUSY_PROOF_LOOKAROUND_MS` before it. Judging then starts at
+ * its first presented change inside the block, which the
  * proof reports as `onScreenFromMs`. So does a hold that starts before the
  * block (two frames at least at one position, the first before it) and ends
  * at the first presented change inside it: WebKit presents a just-started
@@ -864,6 +896,13 @@ function motionStepPx(values: readonly number[]): number {
  * `maxMedianFrameMs`, when given, still applies; `minMovedFraction` and the
  * absolute stall, frame and motion limits do not.
  */
+/**
+ * How far around its judged part a busy proof reads frames, ms: the rest
+ * before it and the frame cadence on both sides. A proof that decodes only
+ * part of a cast keeps the frames this far after the window.
+ */
+export const BUSY_PROOF_LOOKAROUND_MS = 250;
+
 export function busyWindowProof(
   tracked: readonly TrackedFrame[],
   window: BusyWindow,
@@ -955,6 +994,15 @@ export function busyWindowProof(
       'busyWindowProof: give settledWithin or settledWithinSteps, not both',
     );
   }
+  // A sub-pixel read (`trackMarker` with `subpixel`) shows changes far under
+  // a pixel. There a change counts from half its step; on a whole-pixel read,
+  // from 0.25 px.
+  const readStepPx = tracked.some(f => f.step != null)
+    ? castStep(tracked, axis)
+    : null;
+  const subpixelStepPx =
+    readStepPx != null && readStepPx < 0.5 ? readStepPx : null;
+  const epsilon = subpixelStepPx == null ? 0.25 : subpixelStepPx / 2;
   // The cast's own position step, for a proof that bounds its settle in it.
   const castStepPx =
     settledWithinSteps == null ? null : castStep(tracked, axis);
@@ -1032,7 +1080,7 @@ export function busyWindowProof(
     if (
       v.value != null &&
       previous != null &&
-      Math.abs(v.value - previous) > 0.25
+      Math.abs(v.value - previous) > epsilon
     ) {
       inWindow.push(v.t);
     }
@@ -1040,20 +1088,20 @@ export function busyWindowProof(
       previous = v.value;
     }
   }
-  // Seen at rest before the judged part (a frame there, and no change in the
-  // 250 ms before it): the first presented change is the animation's on-screen
-  // start, and judging starts there. With no frame before, nothing is known,
-  // and the window is judged from its start.
+  // Seen at rest before the judged part: a frame there, and no change in the
+  // `BUSY_PROOF_LOOKAROUND_MS` before it. The first presented change is then
+  // the animation's on-screen start, and judging starts there. With no frame
+  // before, nothing is known, and the window is judged from its start.
   const prior = tracked.filter(f => f.box != null && f.t < inner.from);
   let leadFrom = 0;
   prior.forEach((f, i) => {
-    if (f.t < inner.from - 250) {
+    if (f.t < inner.from - BUSY_PROOF_LOOKAROUND_MS) {
       leadFrom = i;
     }
   });
   const lead = prior.flatMap(f => (f.box == null ? [] : [f.box[axis]]));
   const movedBefore = lead.some(
-    (value, i) => i > leadFrom && Math.abs(value - lead[i - 1]) > 0.25,
+    (value, i) => i > leadFrom && Math.abs(value - lead[i - 1]) > epsilon,
   );
   // Held from before the block to its first presented change inside it: in
   // WebKit a just-started compositor animation is presented late (a sheet's
@@ -1067,7 +1115,7 @@ export function busyWindowProof(
   let holdStart = lead.length - 1;
   while (
     holdStart > 0 &&
-    Math.abs(lead[holdStart - 1] - lead[lead.length - 1]) <= 0.25
+    Math.abs(lead[holdStart - 1] - lead[lead.length - 1]) <= epsilon
   ) {
     holdStart -= 1;
   }
@@ -1078,15 +1126,14 @@ export function busyWindowProof(
       v =>
         v.value != null &&
         v.t < (inWindow[0] ?? -Infinity) &&
-        Math.abs(v.value - lead[lead.length - 1]) <= 0.25,
+        Math.abs(v.value - lead[lead.length - 1]) <= epsilon,
     ).length;
   // A late hand-off holds the page's last position. An animation that froze
   // at the block's start holds a position of its own. Within one cast step:
   // WebKit's cast reads positions on a 2 px grid, so a held position can read
-  // up to a step off. A cast with no step is read within a pixel.
-  const matchPx = tracked.some(f => f.step != null)
-    ? castStep(tracked, axis)
-    : 1;
+  // up to a step off. A cast with no step is read within a pixel, and a
+  // sub-pixel read within half a pixel.
+  const matchPx = subpixelStepPx != null ? 0.5 : (readStepPx ?? 1);
   const heldFromBeforeBlock =
     setBeforeBlock != null &&
     lead.length > 0 &&
@@ -1104,7 +1151,11 @@ export function busyWindowProof(
   const changes = inWindow.filter(t => t > judged.from || onScreenFrom == null);
   const edges = [judged.from, ...changes, judged.to];
   const around = tracked
-    .filter(f => f.t >= inner.from - 250 && f.t <= inner.to + 250)
+    .filter(
+      f =>
+        f.t >= inner.from - BUSY_PROOF_LOOKAROUND_MS &&
+        f.t <= inner.to + BUSY_PROOF_LOOKAROUND_MS,
+    )
     .map(f => f.t);
   const intervals = around
     .slice(1)
@@ -1113,6 +1164,7 @@ export function busyWindowProof(
   const stats = frameStats(
     tracked.map(f => ({t: f.t, value: f.box == null ? null : f.box[axis]})),
     judged,
+    epsilon,
   );
   const cadence =
     intervals.length >= 4
@@ -1121,7 +1173,11 @@ export function busyWindowProof(
   // The compositor's own frames, when recorded: its interval, from the frames
   // around the judged part.
   const draws = [...(presented ?? [])]
-    .filter(t => t >= judged.from - 250 && t <= judged.to + 250)
+    .filter(
+      t =>
+        t >= judged.from - BUSY_PROOF_LOOKAROUND_MS &&
+        t <= judged.to + BUSY_PROOF_LOOKAROUND_MS,
+    )
     .sort((a, b) => a - b);
   const drawIntervals = draws
     .slice(1)
@@ -1207,14 +1263,16 @@ export function busyWindowProof(
         : deliveredFrames;
   const movedFraction = (moved + recorderSkipped) / Math.max(1, judgedFrames);
   // The cast's position step for the tracked value, read from the judged
-  // part.
-  const stepPx = motionStepPx(
-    tracked.flatMap(f =>
-      f.box != null && f.t >= judged.from && f.t <= judged.to
-        ? [f.box[axis]]
-        : [],
-    ),
-  );
+  // part. A sub-pixel read carries its own.
+  const stepPx =
+    subpixelStepPx ??
+    motionStepPx(
+      tracked.flatMap(f =>
+        f.box != null && f.t >= judged.from && f.t <= judged.to
+          ? [f.box[axis]]
+          : [],
+      ),
+    );
   const judgedValues = tracked.flatMap(f =>
     f.box != null && f.t >= judged.from && f.t <= judged.to
       ? [{t: f.t, value: f.box[axis]}]
@@ -1276,7 +1334,7 @@ export function busyWindowProof(
     );
     const seriesIndex = new Map(series.map((f, i) => [f.t, i]));
     const same = (a: number, b: number) =>
-      Math.abs(series[a].value - series[b].value) <= 0.25;
+      Math.abs(series[a].value - series[b].value) <= epsilon;
     // The first frame of the run of equal positions that holds frame i.
     const runStart = (i: number): number => {
       let s = i;
@@ -1422,8 +1480,17 @@ export function busyWindowProof(
   }
   if (controlRead != null) {
     if (controlRead.moved < minJudgedFrames) {
+      // How starved the cast was over the whole block, as the pacing and
+      // frame errors say it.
+      const blockFrames = tracked
+        .filter(f => f.box != null && f.t > window.from && f.t < window.to)
+        .map(f => f.t);
+      const castEdges = [window.from, ...blockFrames, window.to];
+      const castGapMs = Math.max(
+        ...castEdges.slice(1).map((t, k) => t - castEdges[k]),
+      );
       failures.push(
-        `the control moved on ${controlRead.moved} frames in the judged part, under ${minJudgedFrames}: the compositor presented too little in this window to judge`,
+        `the control moved on ${controlRead.moved} frames in the judged part, under ${minJudgedFrames}: the compositor presented too little in this window to judge (the cast delivered ${blockFrames.length} frame${blockFrames.length === 1 ? '' : 's'} in the ${Math.round(window.to - window.from)} ms block, none for ${Math.round(castGapMs)} ms)`,
       );
     }
     const visible = controlRead.movedWith - controlRead.belowStep;
@@ -1522,10 +1589,17 @@ export interface PooledBusyProof {
    * Each run judged on its own against its control: read its numbers, not its
    * verdict (one short run can hold too few frames to judge).
    */
-  readonly runs: readonly BusyProof[];
+  readonly runs: readonly (BusyProof | null)[];
+  /**
+   * For each run, the `BusyWindowTooLateError` its window threw, or null. Such
+   * a run's block began after its motion had settled, so its `runs` entry is
+   * null: the run holds nothing to judge.
+   */
+  readonly late: readonly (BusyWindowTooLateError | null)[];
   /**
    * Whether each run was judged. A run whose control moved on fewer than
-   * `minRunFrames` frames is too little to judge, and the pool leaves it out.
+   * `minRunFrames` frames is too little to judge, and so is a run that began
+   * too late (`late`). The pool leaves both out.
    */
   readonly judged: readonly boolean[];
   /**
@@ -1546,7 +1620,9 @@ export interface PooledBusyProof {
  * present fewer than `minJudgedFrames` in one run, and one run cannot decide.
  * A run whose control moved on fewer than `minRunFrames` frames (1 by
  * default) is too little to judge: the machine starved it. The summary names
- * it, and the pool leaves it out, so it never counts as a pass.
+ * it, and the pool leaves it out, so it never counts as a pass. A run whose
+ * window throws `BusyWindowTooLateError` is left out the same way: its block
+ * began after its motion had settled.
  * The judged runs are judged as one long window is:
  * - at least `minJudgedRuns` runs are judged (by default, half the runs,
  *   rounded up);
@@ -1586,15 +1662,31 @@ export function pooledBusyProof(
       `pooledBusyProof: minJudgedRuns ${minJudgedRuns} is not between 1 and the ${runs.length} runs`,
     );
   }
-  const proofs = runs.map(run =>
-    busyWindowProof(run.tracked, run.window, {
-      ...windowOptions,
-      control: run.control,
-    }),
+  const late: (BusyWindowTooLateError | null)[] = [];
+  const proofs = runs.map(run => {
+    try {
+      const proof = busyWindowProof(run.tracked, run.window, {
+        ...windowOptions,
+        control: run.control,
+      });
+      late.push(null);
+      return proof;
+    } catch (error) {
+      if (!(error instanceof BusyWindowTooLateError)) {
+        throw error;
+      }
+      late.push(error);
+      return null;
+    }
+  });
+  const reads = proofs.map(proof =>
+    proof == null ? null : (proof.control as BusyControlRead),
   );
-  const reads = proofs.map(proof => proof.control as BusyControlRead);
-  const judged = reads.map(read => read.moved >= minRunFrames);
-  const judgedReads = reads.filter((_, i) => judged[i]);
+  const judged = reads.map(read => read != null && read.moved >= minRunFrames);
+  const judgedReads = reads.filter(
+    (read, i): read is BusyControlRead => judged[i] && read != null,
+  );
+  const lateRuns = late.filter(error => error != null).length;
   const total = (key: 'moved' | 'movedWith' | 'belowStep') =>
     judgedReads.reduce((sum, read) => sum + read[key], 0);
   const moved = total('moved');
@@ -1606,7 +1698,9 @@ export function pooledBusyProof(
   const failures: string[] = [];
   if (judgedReads.length < minJudgedRuns) {
     failures.push(
-      `${judgedReads.length} of ${runs.length} runs judged, under ${minJudgedRuns}: the compositor presented too little in the others to judge`,
+      lateRuns === 0
+        ? `${judgedReads.length} of ${runs.length} runs judged, under ${minJudgedRuns}: the compositor presented too little in the others to judge`
+        : `${judgedReads.length} of ${runs.length} runs judged, under ${minJudgedRuns}: ${lateRuns} began after the motion had settled, and the compositor presented too little in any other to judge`,
     );
   }
   if (judgedReads.length > 0 && moved < minJudgedFrames) {
@@ -1626,15 +1720,18 @@ export function pooledBusyProof(
     );
   }
   proofs.forEach((proof, i) => {
+    if (proof == null) {
+      return;
+    }
     if (proof.frames > 0 && proof.medianFrameMs > maxMedianFrameMs) {
       failures.push(
         `run ${i + 1}: median frame interval ${proof.medianFrameMs.toFixed(1)} ms > ${maxMedianFrameMs} ms`,
       );
     }
-    if (!judged[i]) {
+    const read = reads[i];
+    if (!judged[i] || read == null) {
       return;
     }
-    const read = reads[i];
     if (read.movedWith < read.moved) {
       failures.push(
         `run ${i + 1}: moved on ${read.movedWith} of the ${read.moved} frames its control moved`,
@@ -1654,13 +1751,16 @@ export function pooledBusyProof(
     `: moved on ${movedWith} of the control's ${moved} frames` +
     proofs
       .map((proof, i) =>
-        judged[i]
-          ? `; run ${i + 1}: ${proof.summary}`
-          : `; run ${i + 1}: too little to judge, the control moved on ${reads[i].moved} frames, under ${minRunFrames}: ${proof.summary}`,
+        proof == null
+          ? `; run ${i + 1}: too late to judge: ${late[i]?.message ?? ''}`
+          : judged[i]
+            ? `; run ${i + 1}: ${proof.summary}`
+            : `; run ${i + 1}: too little to judge, the control moved on ${reads[i]?.moved ?? 0} frames, under ${minRunFrames}: ${proof.summary}`,
       )
       .join('');
   return {
     runs: proofs,
+    late,
     judged,
     control: {moved, movedWith},
     verdict: {pass: failures.length === 0, failures},

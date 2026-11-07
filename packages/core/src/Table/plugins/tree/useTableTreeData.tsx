@@ -30,7 +30,6 @@
  */
 
 import {
-  createContext,
   use,
   useCallback,
   useEffect,
@@ -40,7 +39,13 @@ import {
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {colorVars, radiusVars, spacingVars} from '../../../theme/tokens.stylex';
+import {
+  colorVars,
+  focusVars,
+  radiusVars,
+  spacingVars,
+} from '../../../theme/tokens.stylex';
+import {focusOutlineProps} from '../../../utils/focusOutline.stylex';
 import {Icon} from '../../../Icon';
 import {mergeRefs} from '../../../utils';
 import {
@@ -58,8 +63,10 @@ import {
   useComponentTranslator,
 } from '../../../i18n/useComponentTranslator';
 import english from '../../../i18n/generated-english/Table/plugins/tree/useTableTreeData.generated';
+import {createSharedContext} from '../../../utils/sharedContext';
 
 registerEnglishFallback(english);
+import {TableContext} from '../../TableContext';
 
 // =============================================================================
 // Types
@@ -172,7 +179,11 @@ function createTreeStore<T extends Record<string, unknown>>(
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const TreeStoreContext = createContext<TreeStore<any> | null>(null);
+const TreeStoreContext = createSharedContext<TreeStore<any> | null>(
+  'TreeStoreContext',
+  1,
+  null,
+);
 TreeStoreContext.displayName = 'TreeStoreContext';
 
 /** Indent token -> index, for the primitive row snapshot. */
@@ -258,6 +269,14 @@ const treeStyles = stylex.create({
   indent: (paddingInlineStart: string) => ({
     paddingInlineStart,
   }),
+  // A compact row is shorter than the ring around the 24px toggle, and the
+  // cell clips its overflow, so there the ring sits inside the toggle.
+  expanderFocusInset: {
+    outlineOffset: {
+      default: null,
+      ':focus-visible': `calc(-1 * ${focusVars['--focus-outline-width']})`,
+    },
+  },
   expanderButton: {
     display: 'inline-flex',
     alignItems: 'center',
@@ -346,6 +365,7 @@ function TreeExpander({
   rowLabel?: string;
 }) {
   const t = useComponentTranslator();
+  const isCompact = use(TableContext)?.density === 'compact';
   const normalizedRowLabel = rowLabel?.trim();
   const ariaLabel = normalizedRowLabel
     ? isExpanded
@@ -358,7 +378,10 @@ function TreeExpander({
   return (
     <button
       type="button"
-      {...stylex.props(treeStyles.expanderButton)}
+      {...focusOutlineProps.focusVisible(
+        treeStyles.expanderButton,
+        isCompact && treeStyles.expanderFocusInset,
+      )}
       onClick={e => {
         e.stopPropagation();
         onToggle();
@@ -399,11 +422,15 @@ function TreeExpandAllToggle({
   onCollapseAll: () => void;
 }) {
   const t = useComponentTranslator();
+  const isCompact = use(TableContext)?.density === 'compact';
   const allExpanded = isAllExpanded === true;
   return (
     <button
       type="button"
-      {...stylex.props(treeStyles.expanderButton)}
+      {...focusOutlineProps.focusVisible(
+        treeStyles.expanderButton,
+        isCompact && treeStyles.expanderFocusInset,
+      )}
       onClick={e => {
         e.stopPropagation();
         if (allExpanded) {
