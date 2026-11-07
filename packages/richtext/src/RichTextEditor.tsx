@@ -80,6 +80,7 @@ import {TableColumnFloorPlugin} from './TableColumnFloorPlugin';
 import {CodeBackspacePlugin} from './CodeBackspacePlugin';
 import {CodeBlockHeaderPlugin} from './CodeBlockHeaderPlugin';
 import {CodeSyntaxPlugin} from './CodeSyntaxPlugin';
+import {BlockDirectionPlugin} from './BlockDirectionPlugin';
 import {MarkdownExtensionsPlugin} from './MarkdownExtensionsPlugin';
 import type {RichTextMarkdownExtension} from './markdownExtensions';
 import type {CodeLanguage} from '@astryxdesign/core/CodeBlock';
@@ -710,6 +711,7 @@ export const RichTextEditor = function RichTextEditor({
               />
               <HistoryPlugin />
               <ListPlugin />
+              <BlockDirectionPlugin />
               <TaskCheckboxPlugin isReadOnly={isReadOnly || isDisabled} />
               <LinkPlugin />
               {/* Tab keeps its editor meaning inside a table (indent, and
