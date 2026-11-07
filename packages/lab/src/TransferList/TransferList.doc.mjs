@@ -420,7 +420,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          "Migrating from isReorderable: pass reorderable={createReorderable({onReorder, isReorderable})} instead. The isReorderable prop and each option's isReorderDisabled are gone; return false from the object's isReorderable(value) for an option that stays put. Without reorderable, the selected options keep their order.",
+          "With no `reorderable`, TransferList no longer reorders; pass `reorderable={createReorderable(…)}`. Migrating from isReorderable: pass reorderable={createReorderable({onReorder, isReorderable})} instead. The isReorderable prop and each option's isReorderDisabled are gone; return false from the object's isReorderable(value) for an option that stays put.",
       },
       {
         guidance: true,
