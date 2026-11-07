@@ -69,6 +69,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
+import {costOf, splitByDuration} from '../../scripts/lib/duration-split.mjs';
+
 export const EVIDENCE_DIR = 'pr-a11y-evidence';
 
 const MODES = new Set(['always', 'audit', 'release-only', 'scoped']);
@@ -685,50 +687,24 @@ function median(values) {
 export const LEG_BUDGET_MS = 10 * 60 * 1000;
 
 /**
- * Split files into `count` legs of about the same recorded time: the longest
- * file first, each onto the leg with the least time so far. Each leg lists its
- * files in path order, the order Playwright runs them.
- * @param {string[]} files
- * @param {(file: string) => number} secondsOf
- * @param {number} count
- */
-export function legShares(files, secondsOf, count) {
-  const legs = Array.from({length: Math.max(1, count)}, () => ({
-    seconds: 0,
-    files: [],
-  }));
-  const longestFirst = [...files].sort(
-    (a, b) => secondsOf(b) - secondsOf(a) || a.localeCompare(b),
-  );
-  for (const file of longestFirst) {
-    const leg = legs.reduce((least, next) =>
-      next.seconds < least.seconds ? next : least,
-    );
-    leg.seconds += secondsOf(file);
-    leg.files.push(file);
-  }
-  return legs.map(leg => leg.files.sort((a, b) => a.localeCompare(b)));
-}
-
-/**
  * The legs an opt-in run needs: enough that each leg's recorded time fits
- * LEG_BUDGET_MS, at most `maxLegs`. The recorded times come from release legs
- * that run four files at once on four cores; one file alone on a
- * pull-request runner runs faster, so a leg sums them without the default
- * check's margin. A file with no recorded time counts the median.
+ * LEG_BUDGET_MS, at most `maxLegs`, split slowest first onto the leg with the
+ * least time (`splitByDuration`, as the other leg planners). The recorded
+ * times come from release legs that run four files at once on four cores; one
+ * file alone on a pull-request runner runs faster, so a leg sums them without
+ * the default check's margin.
  * @param {string[]} files
  * @param {Record<string, number>} seconds
  * @param {number} maxLegs
  */
 export function planLegs(files, seconds, maxLegs) {
-  const fallback = median(Object.values(seconds));
-  const secondsOf = file => seconds[file] ?? fallback;
-  const sum = list => list.reduce((total, file) => total + secondsOf(file), 0);
+  const cost = costOf(files, seconds);
+  const sum = list => list.reduce((total, file) => total + cost(file), 0);
   const count = Math.min(
     Math.max(1, maxLegs),
     Math.max(1, Math.ceil((sum(files) * 1000) / LEG_BUDGET_MS)),
   );
-  const shares = legShares(files, secondsOf, count);
+  const shares = splitByDuration(files, count, cost);
   return {
     count,
     shares,
@@ -1085,8 +1061,13 @@ function main() {
   const countLegsValue = flagValue(argv, '--count-legs');
   const legValue = flagValue(argv, '--leg');
   const ofValue = flagValue(argv, '--of');
-  if ((countLegsValue != null || legValue != null) && changedOnlyFile != null) {
-    throw new Error('--count-legs and --leg split the opt-in run only');
+  const shareOutFile = flagValue(argv, '--share-out');
+  const shareFile = flagValue(argv, '--share');
+  if (
+    (countLegsValue != null || shareFile != null) &&
+    changedOnlyFile != null
+  ) {
+    throw new Error('--count-legs and --share split the opt-in run only');
   }
   if (
     (ownedByValue != null ||
@@ -1113,6 +1094,8 @@ function main() {
     countLegsValue,
     legValue,
     ofValue,
+    shareOutFile,
+    shareFile,
   ]);
   // Outside CI, a run with no base compares with origin/main.
   const base =
@@ -1169,7 +1152,7 @@ function main() {
   // The opt-in run splits into legs by recorded time. The count step plans
   // them before any install; each leg then runs only its share.
   const legs =
-    countLegsValue != null || legValue != null
+    countLegsValue != null
       ? planLegs(
           budgeted.run.map(({file}) => file),
           readDurations(root, policySha),
@@ -1187,6 +1170,15 @@ function main() {
         `::warning title=Accessibility specs over ten minutes::${legs.count} legs still leave ${minutes} min of recorded time in one leg. The selection needs more legs.`,
       );
     }
+    // The run step reads this leg's share from here, so it runs exactly
+    // what this count planned, never a selection of its own.
+    if (shareOutFile) {
+      const share = new Set(legs.shares[leg - 1] ?? []);
+      fs.writeFileSync(
+        shareOutFile,
+        `${JSON.stringify(budgeted.run.filter(({file}) => share.has(file)))}\n`,
+      );
+    }
     if (process.env.GITHUB_OUTPUT) {
       fs.appendFileSync(
         process.env.GITHUB_OUTPUT,
@@ -1196,10 +1188,12 @@ function main() {
     return 0;
   }
   const legIndex = legValue != null ? Number(legValue) : 1;
-  const share = legs && new Set(legs.shares[legIndex - 1] ?? []);
-  const selected = share
-    ? budgeted.run.filter(({file}) => share.has(file))
-    : budgeted.run;
+  // A leg runs the share its count step wrote. A missing or unreadable share
+  // fails the leg, so a planned file is never dropped.
+  const selected =
+    shareFile != null
+      ? JSON.parse(fs.readFileSync(shareFile, 'utf8'))
+      : budgeted.run;
   const [audited] = auditedComponents(title);
   const auditConfigFile = '.github/a11y-audit-axe.json';
   const plan = planFor(
@@ -1232,8 +1226,8 @@ function main() {
     )}\n`,
   );
   console.log(
-    legs
-      ? `PR accessibility specs, leg ${legIndex} of ${legs.count}: ${selected.length} of the ${budgeted.run.length} selected (${specs.length} discovered).`
+    shareFile != null
+      ? `PR accessibility specs, leg ${legIndex} of ${ofValue ?? '?'}: the ${selected.length} spec files of this leg's share.`
       : `PR accessibility specs: ${selected.length} of ${specs.length} discovered.`,
   );
   for (const {file, reason} of selected) console.log(`  ${file}  (${reason})`);

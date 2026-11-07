@@ -25,7 +25,7 @@ const ci = yaml.parse(
 );
 const step = Object.values(ci.jobs)
   .flatMap(job => job.steps ?? [])
-  .find(s => s.name === 'Run browser accessibility specs');
+  .find(s => s.name === "Count this run's accessibility legs");
 const scratch = [];
 afterAll(() => {
   for (const dir of scratch) fs.rmSync(dir, {recursive: true, force: true});
@@ -65,6 +65,8 @@ function repository() {
       '',
     ].join('\n'),
   );
+  // The runner's shared duration split, which the step copies beside it.
+  write('scripts/lib/duration-split.mjs', '');
   git(origin, 'add', '-A');
   git(origin, 'commit', '-qm', 'opened on', '--no-verify');
   const openedOn = git(origin, 'rev-parse', 'HEAD');

@@ -422,20 +422,34 @@ describe('ci.yml pr-a11y browser specs', () => {
   });
 
   it("runs the merge commit's runner against the PR head", () => {
+    const count = steps.find(
+      step => step.name === "Count this run's accessibility legs",
+    );
     expect(run.if).toBe(
       "(!cancelled()) && steps.scope.outputs.has_components == 'true' && steps.legs.outputs.runs == 'true'",
     );
     // The merge commit the steps come from, not the PR's recorded base, which
-    // can lag main and predate the runner.
-    expect(run.env.WORKFLOW_SHA).toBe('${{ github.sha }}');
+    // can lag main and predate the runner. The count step selects; the run
+    // step runs that leg's share with the same runner.
+    for (const step of [count, run]) {
+      expect(step.env.WORKFLOW_SHA).toBe('${{ github.sha }}');
+      expect(step.env.PR_TITLE).toBe('${{ github.event.pull_request.title }}');
+    }
     // The base comes from the merge commit's first parent, not the event.
-    expect(run.env.BASE_SHA).toBeUndefined();
-    expect(run.run).toContain('BASE_SHA=$(git rev-parse "$WORKFLOW_SHA^1")');
-    expect(run.env.PR_TITLE).toBe('${{ github.event.pull_request.title }}');
+    expect(count.env.BASE_SHA).toBeUndefined();
+    expect(count.run).toContain('BASE_SHA=$(git rev-parse "$WORKFLOW_SHA^1")');
+    expect(count.run).toContain(
+      'git show "$WORKFLOW_SHA:.github/scripts/a11y-pr-contracts.mjs" > "$runner"',
+    );
+    expect(count.run).toContain(
+      '--share-out "$RUNNER_TEMP/a11y-leg-share.json"',
+    );
     expect(run.run).toContain(
       'git show "$WORKFLOW_SHA:.github/scripts/a11y-pr-contracts.mjs" > "$runner"',
     );
-    expect(run.run).toContain('node "$runner"');
+    expect(run.run).toContain(
+      'node "$runner" --share "$RUNNER_TEMP/a11y-leg-share.json"',
+    );
     expect(
       JSON.parse(read('package.json')).scripts['test:a11y-contract:pr'],
     ).toBe('node .github/scripts/a11y-pr-contracts.mjs');

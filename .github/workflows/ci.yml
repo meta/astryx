@@ -2297,9 +2297,11 @@ jobs:
           name: pr-analysis
 
       # How many legs the selection needs, from the specs' recorded times, and
-      # whether this leg has a share. It runs before any install, so a leg
-      # without a share costs only its checkout. The runner, its routing lines
-      # and the times come from the merge commit, as for the run below.
+      # this leg's share, which the run step reads. It runs before the
+      # Storybook download and the Chromium install; listing the specs installs
+      # the workspace's dependencies. The runner, its routing lines and the
+      # times come from the merge commit. The merge commit's first parent is
+      # the base branch tip that it merges into.
       - name: Count this run's accessibility legs
         id: legs
         if: steps.scope.outputs.has_components == 'true'
@@ -2308,12 +2310,14 @@ jobs:
           PR_TITLE: ${{ github.event.pull_request.title }}
           WORKFLOW_SHA: ${{ github.sha }}
         run: |
-          runner="$RUNNER_TEMP/a11y-pr-contracts.mjs"
+          runner="$RUNNER_TEMP/a11y/.github/scripts/a11y-pr-contracts.mjs"
+          mkdir -p "$RUNNER_TEMP/a11y/.github/scripts" "$RUNNER_TEMP/a11y/scripts/lib"
           git fetch --quiet --no-tags --depth=2 origin "$WORKFLOW_SHA"
           git show "$WORKFLOW_SHA:.github/scripts/a11y-pr-contracts.mjs" > "$runner"
+          git show "$WORKFLOW_SHA:scripts/lib/duration-split.mjs" > "$RUNNER_TEMP/a11y/scripts/lib/duration-split.mjs"
           BASE_SHA=$(git rev-parse "$WORKFLOW_SHA^1")
           export BASE_SHA
-          node "$runner" --count-legs ${{ strategy.job-total }} --leg ${{ matrix.leg }}
+          node "$runner" --count-legs ${{ strategy.job-total }} --leg ${{ matrix.leg }} --share-out "$RUNNER_TEMP/a11y-leg-share.json"
 
       - name: Leave the specs to the legs that have a share
         if: steps.scope.outputs.has_components == 'true' && steps.legs.outputs.runs != 'true'
@@ -2340,17 +2344,12 @@ jobs:
           ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           WORKFLOW_SHA: ${{ github.sha }}
-        # The merge commit's first parent is the base branch tip that it
-        # merges into. The event's base SHA stays at the base the pull request
-        # was opened on, so after the base is merged into the head, a merge
-        # base from it counts the base's own changes as the pull request's.
+        # This leg runs exactly the share its count step planned, with the
+        # merge commit's runner, which the count step fetched.
         run: |
-          runner="$RUNNER_TEMP/a11y-pr-contracts.mjs"
-          git fetch --quiet --no-tags --depth=2 origin "$WORKFLOW_SHA"
+          runner="$RUNNER_TEMP/a11y/.github/scripts/a11y-pr-contracts.mjs"
           git show "$WORKFLOW_SHA:.github/scripts/a11y-pr-contracts.mjs" > "$runner"
-          BASE_SHA=$(git rev-parse "$WORKFLOW_SHA^1")
-          export BASE_SHA
-          node "$runner" --leg ${{ steps.legs.outputs.leg }} --of ${{ steps.legs.outputs.count }}
+          node "$runner" --share "$RUNNER_TEMP/a11y-leg-share.json" --leg ${{ steps.legs.outputs.leg }} --of ${{ steps.legs.outputs.count }}
 
       - name: Upload browser accessibility evidence
         if: (!cancelled()) && steps.scope.outputs.has_components == 'true' && steps.legs.outputs.runs == 'true'
@@ -4354,9 +4353,11 @@ jobs:
           FOLDERS: ${{ steps.touched.outputs.contract_folders }}
           A11Y_CONTRACT_WORKERS: 4
         run: |
-          runner="$RUNNER_TEMP/a11y-pr-contracts.mjs"
+          runner="$RUNNER_TEMP/a11y/.github/scripts/a11y-pr-contracts.mjs"
+          mkdir -p "$RUNNER_TEMP/a11y/.github/scripts" "$RUNNER_TEMP/a11y/scripts/lib"
           git cat-file -e "$WORKFLOW_SHA^{commit}" 2>/dev/null || git fetch --quiet --no-tags --depth=1 origin "$WORKFLOW_SHA"
           git show "$WORKFLOW_SHA:.github/scripts/a11y-pr-contracts.mjs" > "$runner"
+          git show "$WORKFLOW_SHA:scripts/lib/duration-split.mjs" > "$RUNNER_TEMP/a11y/scripts/lib/duration-split.mjs"
           node "$runner" --changed-only "$SPECS_PATH" --changed-files "$FILES_PATH" --owned-by "$OWNERS" --dependents-of "$FOLDERS"
 
       - name: Upload contract evidence

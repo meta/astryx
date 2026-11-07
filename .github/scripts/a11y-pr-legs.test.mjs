@@ -19,7 +19,7 @@ import path from 'node:path';
 import {afterAll, describe, expect, it} from 'vitest';
 import yaml from 'yaml';
 
-import {LEG_BUDGET_MS, legShares, planLegs} from './a11y-pr-contracts.mjs';
+import {LEG_BUDGET_MS, planLegs} from './a11y-pr-contracts.mjs';
 import {matrixFor} from './ci-matrix.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
@@ -72,9 +72,9 @@ describe('the opt-in accessibility specs split into legs', () => {
     expect(all.longestMs).toBeGreaterThan(LEG_BUDGET_MS);
   });
 
-  it('puts the longest files first onto the leg with the least time, and lists each leg in path order', () => {
-    const ms = {a: 4, b: 3, c: 2, d: 2, e: 1};
-    expect(legShares(Object.keys(ms), file => ms[file], 2)).toEqual([
+  it('splits slowest first onto the leg with the least time, as the other leg planners do', () => {
+    const ms = {a: 400, b: 300, c: 200, d: 200, e: 100};
+    expect(planLegs(Object.keys(ms), ms, 2).shares).toEqual([
       ['a', 'd'],
       ['b', 'c', 'e'],
     ]);
@@ -96,7 +96,7 @@ describe('the browser-specs job', () => {
     );
   });
 
-  it('counts the legs before any install, and only a leg with a share installs and runs', () => {
+  it('counts the legs before the Storybook download and the Chromium install, and only a leg with a share runs its share', () => {
     const names = job.steps.map(s => s.name);
     const count = step("Count this run's accessibility legs");
     expect(names.indexOf(count.name)).toBeLessThan(
@@ -106,7 +106,11 @@ describe('the browser-specs job', () => {
       names.indexOf('Install Playwright'),
     );
     expect(count.run).toContain(
-      'node "$runner" --count-legs ${{ strategy.job-total }} --leg ${{ matrix.leg }}',
+      'node "$runner" --count-legs ${{ strategy.job-total }} --leg ${{ matrix.leg }} --share-out "$RUNNER_TEMP/a11y-leg-share.json"',
+    );
+    // The runner imports the shared duration split, so it is copied beside it.
+    expect(count.run).toContain(
+      'git show "$WORKFLOW_SHA:scripts/lib/duration-split.mjs" > "$RUNNER_TEMP/a11y/scripts/lib/duration-split.mjs"',
     );
     expect(count.run).toContain('BASE_SHA=$(git rev-parse "$WORKFLOW_SHA^1")');
     for (const name of [
@@ -120,8 +124,10 @@ describe('the browser-specs job', () => {
       );
     }
     const run = step('Run browser accessibility specs');
+    // The run step runs the share the count step wrote, never a selection
+    // of its own.
     expect(run.run).toContain(
-      'node "$runner" --leg ${{ steps.legs.outputs.leg }} --of ${{ steps.legs.outputs.count }}',
+      'node "$runner" --share "$RUNNER_TEMP/a11y-leg-share.json" --leg ${{ steps.legs.outputs.leg }} --of ${{ steps.legs.outputs.count }}',
     );
     // One worker per leg: the recorded times assume one browser per core.
     expect(run.env.A11Y_CONTRACT_WORKERS).toBeUndefined();
@@ -143,6 +149,8 @@ describe('the browser-specs job', () => {
           String(legs),
           '--leg',
           String(leg),
+          '--share-out',
+          path.join(dir, `share-${legs}-${leg}.json`),
         ],
         {
           cwd: root,
@@ -174,6 +182,14 @@ describe('the browser-specs job', () => {
     expect(['1', '2', '3']).toContain(third.output.count);
     expect(third.output.runs).toBe(String(Number(third.output.count) >= 3));
     expect(third.stdout).toMatch(/^Accessibility legs: \d for \d+ spec files/m);
-    expect(count(1, 1).output).toEqual({count: '1', runs: 'true', leg: '1'});
+    const one = count(1, 1);
+    expect(one.output).toEqual({count: '1', runs: 'true', leg: '1'});
+    // One leg's share is the whole selection, each file with its reason.
+    const share = JSON.parse(
+      fs.readFileSync(path.join(dir, 'share-1-1.json'), 'utf8'),
+    );
+    expect(share.length).toBeGreaterThan(0);
+    for (const entry of share)
+      expect(Object.keys(entry).sort()).toEqual(['file', 'reason']);
   });
 });
