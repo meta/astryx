@@ -5,9 +5,8 @@
  * @input A scroller (an element, or the document for the page's own scroll),
  *   its document's scroll and scrollend events, and the gesture host's
  *   finger record
- * @output Exports watchFingerScrolls and isFingerScroll, which reads the scroll
- *   now or at a past time. A watcher can ask to hear when a finger's scroll
- *   ends.
+ * @output Exports watchFingerScrolls and isFingerScroll (now or at a past
+ *   time). A watcher can ask to hear when a finger's scroll ends.
  * @position Finger-scroll watch of packages/core/src/gestures (useFingerScroll
  *   reads it), in its own module so a page that never asks never ships it;
  *   internal to the touch module, not in the gestures barrel
@@ -19,12 +18,8 @@
  * scroll the program starts while no finger is down there (`scrollTo`, a
  * status-bar tap) is not. Where the browser sends no `scrollend`, a quiet
  * spell of `SCROLL_END_FALLBACK_MS` after its last scroll event ends a
- * finger's scroll instead. Each scroller also keeps its last finger scroll's
- * span on the page's clock, from its finger's landing to its end. So a report
- * that runs late, such as an IntersectionObserver callback on a busy page,
- * reads the scroll at the time it describes. The host keeps the one finger
- * record; this module adds only passive scroll listeners, and only while
- * something is watched.
+ * finger's scroll instead. The host keeps the one finger record; this module
+ * adds only passive scroll listeners, and only while something is watched.
  */
 
 import {subscribeInput} from '../utils/inputStream';
@@ -293,7 +288,9 @@ export function watchFingerScrolls(
  * Whether the scroll now moving a watched `scroller` is a finger's. Given a
  * time on the page's clock (`performance.now()`, like an IntersectionObserver
  * entry's `time`), whether the scroll at that time was a finger's. A finger's
- * scroll runs from the finger's landing to its end, momentum included.
+ * scroll runs from the finger's landing to its end, momentum included. A
+ * report that runs late, such as an IntersectionObserver callback on a busy
+ * page, passes the time it describes.
  * Internal: not exported from the package.
  */
 export function isFingerScroll(
