@@ -276,6 +276,50 @@ function addShield(layer: Element, isFull: boolean): HTMLElement {
 
 const MOUSE_OPENING_HALF_SIDE_PX = 2;
 
+interface Opening {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
+/**
+ * The square opening around each point. Two openings that overlap become one
+ * box that covers both: under the nonzero rule, the overlap of two openings
+ * drawn the same way round would count twice and close again.
+ */
+function openings(points: ReadonlyArray<MousePoint>): Opening[] {
+  const boxes: Opening[] = [];
+  for (const {x, y} of points) {
+    let box: Opening = {
+      left: x - MOUSE_OPENING_HALF_SIDE_PX,
+      right: x + MOUSE_OPENING_HALF_SIDE_PX,
+      top: y - MOUSE_OPENING_HALF_SIDE_PX,
+      bottom: y + MOUSE_OPENING_HALF_SIDE_PX,
+    };
+    for (let index = boxes.length - 1; index >= 0; index--) {
+      const other = boxes[index];
+      if (
+        box.left < other.right &&
+        other.left < box.right &&
+        box.top < other.bottom &&
+        other.top < box.bottom
+      ) {
+        box = {
+          left: Math.min(box.left, other.left),
+          right: Math.max(box.right, other.right),
+          top: Math.min(box.top, other.top),
+          bottom: Math.max(box.bottom, other.bottom),
+        };
+        boxes.splice(index, 1);
+        index = boxes.length;
+      }
+    }
+    boxes.push(box);
+  }
+  return boxes;
+}
+
 /**
  * Leaves the mouse a way through a presentation's shield that takes hits.
  * The browser hit-tests a press before any script reads its pointer. So a
@@ -311,11 +355,9 @@ function openToMouse(state: HeldLayer, doc: Document): void {
   // The viewport, then each opening drawn the other way round. The nonzero
   // rule leaves the openings out, and a clipped-out area takes no hits.
   const outline = ['0 0', '100% 0', '100% 100%', '0 100%'];
-  for (const point of mouse == null ? presses : [mouse, ...presses]) {
-    const left = point.x - MOUSE_OPENING_HALF_SIDE_PX;
-    const right = point.x + MOUSE_OPENING_HALF_SIDE_PX;
-    const top = point.y - MOUSE_OPENING_HALF_SIDE_PX;
-    const bottom = point.y + MOUSE_OPENING_HALF_SIDE_PX;
+  for (const {left, right, top, bottom} of openings(
+    mouse == null ? presses : [mouse, ...presses],
+  )) {
     outline.push(
       `0 ${top}px`,
       `${left}px ${top}px`,

@@ -622,6 +622,44 @@ describe("holdInput decides by each event's pointer (spec:AST-094 FR35)", () => 
     outside.remove();
   });
 
+  it('merges an earlier press opening that overlaps the still-mouse opening into one box', () => {
+    const {layer} = mountLayer();
+    mouseRestsAt(100, 100);
+    lastPointerWas('touch');
+    const stops = (['pointerdown', 'pointerup', 'pointercancel'] as const).map(
+      type => subscribeInput(window, type, () => {}),
+    );
+    document.body.dispatchEvent(
+      new PointerEvent('pointerdown', {
+        ...INIT,
+        pointerId: 81,
+        pointerType: 'touch',
+        clientX: 103,
+        clientY: 101,
+      }),
+    );
+    hold(layer);
+    const shield = layer.lastElementChild as HTMLElement;
+    expect(shield.style.getPropertyValue('clip-path')).toBe(
+      'polygon(0 0, 100% 0, 100% 100%, 0 100%, 0 98px, 98px 98px, 98px 103px, 105px 103px, 105px 98px, 0 98px)',
+    );
+    document.body.dispatchEvent(
+      new PointerEvent('pointerup', {
+        ...INIT,
+        pointerId: 81,
+        pointerType: 'touch',
+        clientX: 103,
+        clientY: 101,
+      }),
+    );
+    expect(shield.style.getPropertyValue('clip-path')).toBe(
+      openingAt(100, 100),
+    );
+    for (const stop of stops) {
+      stop();
+    }
+  });
+
   it("gives no opening to a press the press hold holds, and none on a dismissal's shield", () => {
     const {layer, child} = mountLayer();
     const stops = (['pointerdown', 'pointerup', 'pointercancel'] as const).map(
