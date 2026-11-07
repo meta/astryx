@@ -30,6 +30,7 @@ import {
 } from '@astryxdesign/core/SegmentedControl';
 import {RadioList, RadioListItem} from '@astryxdesign/core/RadioList';
 import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
+import {rtlStyles} from '@astryxdesign/core/utils';
 import type {CSSProperties, ReactNode} from 'react';
 
 // Custom CSS here is limited to what Astryx components can't express today:
@@ -607,7 +608,7 @@ function EnrollRail() {
             label="Enroll now"
             variant="primary"
             size="lg"
-            icon={<Icon icon={ArrowRightIcon} size="sm" />}
+            icon={<Icon icon={ArrowRightIcon} size="sm" xstyle={rtlStyles.mirror} />}
           />
           <Button
             label="Start lesson one free"
