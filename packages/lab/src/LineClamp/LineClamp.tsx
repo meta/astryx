@@ -273,19 +273,25 @@ export function LineClamp({
       return;
     }
     const sync = () => syncFocusableClipping(container);
+    let isReleasing = false;
     const unobserveMutations = observeMutations(
       container,
       MUTATION_OPTIONS,
       records => {
         handBackCallerInert(container, records);
-        sync();
+        if (!isReleasing) {
+          sync();
+        }
       },
     );
     const unobserveResize = observeResize(container, sync);
     return () => {
       // The shared observer disconnects when its last registration goes, and
       // a disconnect drops the records it holds. Hand a caller's queued
-      // `inert` back first, while this registration still receives it.
+      // `inert` back first, while this registration still receives it. The
+      // release runs in the commit, before the new clamp is written, so it
+      // does not sync: the layout effect syncs once the commit is done.
+      isReleasing = true;
       flushMutations(MUTATION_OPTIONS);
       unobserveResize();
       unobserveMutations();
