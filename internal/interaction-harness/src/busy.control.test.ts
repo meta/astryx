@@ -17,7 +17,7 @@
  */
 
 import {describe, expect, it} from 'vitest';
-import {busyWindowProof, pooledBusyProof} from './busy';
+import {busyWindowProof, BusyWindowTooLateError, pooledBusyProof} from './busy';
 import type {TrackedFrame} from './frames';
 
 const FRAME = 1000 / 60;
@@ -301,6 +301,58 @@ describe('pooledBusyProof', () => {
     expect(pooled.summary).toMatch(
       /^3 runs pooled: moved on 9 of the control's 9 frames; run 1: /,
     );
+  });
+
+  it('leaves out a run whose block began after its motion had settled, and names it', () => {
+    const control = asControl(moving());
+    // Settled 50 ms before the run's block: nothing in it is left to judge.
+    const settled = moving().map(f =>
+      f.t < 950
+        ? f
+        : ({...f, box: {...f.box!, y: 3 * at(950)}} as TrackedFrame),
+    );
+    const pooled = pooledBusyProof(
+      [
+        {tracked: settled, control, window: short(1000)},
+        {tracked: moving(), control, window: short(1300)},
+        {tracked: moving(), control, window: short(1600)},
+      ],
+      {settledWithin: 2},
+    );
+    expect(pooled.verdict.failures, pooled.summary).toEqual([]);
+    expect(pooled.judged).toEqual([false, true, true]);
+    expect(pooled.runs[0]).toBeNull();
+    expect(pooled.late[0]).toBeInstanceOf(BusyWindowTooLateError);
+    expect(pooled.late.slice(1)).toEqual([null, null]);
+    // Only the judged runs' frames count toward the pool's floors.
+    expect(pooled.control).toEqual({moved: 6, movedWith: 6});
+    expect(pooled.summary).toMatch(
+      /^3 runs pooled, 2 judged: .*; run 1: too late to judge: busyWindowProof: /,
+    );
+  });
+
+  it('fails by name a pool left with fewer judged runs than its minimum, however many began too late', () => {
+    const control = asControl(moving());
+    const settled = moving().map(f =>
+      f.t < 950
+        ? f
+        : ({...f, box: {...f.box!, y: 3 * at(950)}} as TrackedFrame),
+    );
+    // One long run passes every floor alone, beside two that began too late.
+    const pooled = pooledBusyProof(
+      [
+        {tracked: settled, control, window: short(1000)},
+        {tracked: settled, control, window: short(1000)},
+        {tracked: moving(), control, window: {from: 1100, to: 1700}},
+      ],
+      {settledWithin: 2},
+    );
+    expect(pooled.verdict.pass).toBe(false);
+    expect(pooled.verdict.failures).toEqual([
+      '1 of 3 runs judged, under 2: 2 began after the motion had settled, and the compositor presented too little in any other to judge',
+    ]);
+    expect(pooled.summary).toMatch(/run 1: too late to judge/);
+    expect(pooled.summary).toMatch(/run 2: too late to judge/);
   });
 
   it('still fails a component that is frozen in every run while the control moves', () => {

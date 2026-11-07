@@ -177,6 +177,27 @@ describe('swizzle — core feedback routing via config', () => {
   });
 });
 
+describe('swizzle — the npm packages a copy imports', () => {
+  it('prints an install line with each range quoted for the shell', async () => {
+    buildFakeCore(project);
+    writeProjectPackageJson(project);
+    const core = path.join(project, 'node_modules', '@astryxdesign', 'core');
+    const manifest = JSON.parse(fs.readFileSync(path.join(core, 'package.json'), 'utf-8'));
+    manifest.dependencies = {'d3-scale': '^4.0.2'};
+    manifest.peerDependencies = {react: '>=19.0.0'};
+    fs.writeFileSync(path.join(core, 'package.json'), JSON.stringify(manifest));
+    fs.writeFileSync(
+      path.join(core, 'src', 'Button', 'Button.tsx'),
+      `import {scaleLinear} from 'd3-scale';\nimport {useState} from 'react';\nexport const Button = () => [scaleLinear, useState];\n`,
+    );
+
+    const result = await runCli(['swizzle', 'Button', '-f'], project);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain(`d3-scale@"^4.0.2"`);
+    expect(result.stdout).toContain(`react@">=19.0.0"`);
+  });
+});
+
 describe('swizzle — integration-owned components', () => {
   it('copies the component and the unexported helper it imports, without its test or doc, and routes feedback to the integration issuesUrl', async () => {
     buildFakeCore(project);
