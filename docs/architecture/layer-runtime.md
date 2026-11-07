@@ -615,6 +615,13 @@ layers use Layer rendering without joining Escape/platform dismissal.
 - **INV18 — Only a shown layer's trigger is an anchor.**
   A trigger carries its CSS anchor name only while its layer is shown; a closed trigger is not an anchor, so a surface that moves around it keeps its transform animation off the main thread.
   A layer that animates out through a CSS transition or keyframe animation it declares for its closed state counts as shown until those animations end; an animation a script starts is not tracked.
+- **INV20 — A closed layer costs nothing until first shown.** Every Core
+  surface built on `useLayer` in context mode (Tooltip, HoverCard, Popover,
+  DropdownMenu, ContextMenu, Selector's and MultiSelector's lists, and the
+  date pickers) mounts its layer on its first show, not with its trigger, and
+  keeps it mounted after that first show. A closed trigger renders only the
+  trigger. This uses `useLayer`'s existing `lazyMount` internally and adds no
+  public prop (DEC-2).
 
 This record does not make future eligible-owner, branch-association, global-host,
 or browser-support requirements current. It does not own component focus entry or
@@ -799,6 +806,19 @@ app-declared inset.
 runtime and must move to `shipped` before its requirements are incorporated into
 this current architecture record.
 
+### DEC-2 — Closed layers mount on first show
+
+**Decider:** pending
+
+A person opening a table where each row has a few tooltips waits seconds,
+because every tooltip mounts its layer with its trigger. `useLayer` already
+supports mounting on first show. Core surfaces now use it, so a page pays for a
+layer only when a person opens it.
+
+Rejected: a public `lazyMount` prop on each surface, which makes every caller
+opt in to the fast path. Rejected: unmounting after every close, which repeats
+the mount cost and loses state on each open.
+
 ## Verification
 
 | Invariant    | Evidence                                                                                                                                                                                                                                                                                      | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                               |
@@ -817,6 +837,7 @@ this current architecture record.
 | INV17        | One runtime suite over every kind of layer root: a `useLayer` layer, inline and portaled, and the Dialog, Drawer, Lightbox, MobileNav, BottomSheetPanel, and ToastViewport content roots, each inside a plain `onClick` wrapper and a Core clickable container; nested layers                 | A click inside a layer root that reaches an ancestor bubble-phase handler, a caller's wrapper included; an outer layer's handler that receives an inner layer's press; or a document listener or light dismiss that no longer receives it                                                                                                                                                                                    |
 | INV18        | `useLayer.test.tsx` (a closed trigger has no anchor-name, and the trigger of a shown or fading layer does) and `TooltipClosedTriggerAnchor.interaction.browser.spec.ts` in Chromium and WebKit                                                                                                | A closed trigger with an anchor-name, a shown or fading layer placed away from its anchor, or a surface around a closed trigger that stops while the main thread is busy                                                                                                                                                                                                                                                     |
 | INV18        | `useLayer.test.tsx`: a closed state that declares a discrete `display` transition or a keyframe animation keeps the trigger's anchor name until those animations end, read from the closed state's style; a layer whose closed state declares neither is not read for animations at the close | A layer with such a closed-state exit placed away from its anchor while it fades, or an animation read on the close of a layer whose closed state declares no exit                                                                                                                                                                                                                                                           |
+| INV20        | Mount-count tests per surface plus a real-browser trace: a table of 100 rows with five tooltips each, before and after first hover                                                                                                                                                            | A closed trigger that mounts its layer, or a layer that unmounts after its first close                                                                                                                                                                                                                                                                                                                                       |
 
 Current unit coverage proves emitted styles, reducers, state transitions, and DOM
 placement. Native Popover, `<dialog>`, focus, top-layer ordering, and rendered
