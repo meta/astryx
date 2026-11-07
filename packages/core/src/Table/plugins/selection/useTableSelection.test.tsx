@@ -217,6 +217,35 @@ describe('useTableSelection', () => {
     expect(headers).toHaveLength(3);
   });
 
+  describe('table-row selected state', () => {
+    it('reflects selected on a checked row for themes, and removes it on uncheck', async () => {
+      const user = userEvent.setup();
+      render(<SelectionTable />);
+      const rowCheckboxes = screen.getAllByLabelText('Select row');
+
+      await user.click(rowCheckboxes[0]);
+      let rows = screen.getAllByRole('row');
+      expect(rows[1]).toHaveClass('astryx-table-row');
+      expect(rows[1]).toHaveAttribute('data-selected', 'selected');
+      expect(rows[2]).not.toHaveAttribute('data-selected');
+
+      await user.click(rowCheckboxes[0]);
+      rows = screen.getAllByRole('row');
+      expect(rows[1]).not.toHaveAttribute('data-selected');
+    });
+
+    it('reflects selected when hasRowHighlight is false, which removes only the wash', async () => {
+      const user = userEvent.setup();
+      render(<SelectionTable hasRowHighlight={false} />);
+
+      await user.click(screen.getAllByLabelText('Select row')[0]);
+
+      const row = screen.getAllByRole('row')[1];
+      expect(row.style.backgroundColor).toBe('');
+      expect(row).toHaveAttribute('data-selected', 'selected');
+    });
+  });
+
   describe('hasRowHighlight', () => {
     const selectedBgColor = colorVars['--color-accent-muted'];
 
