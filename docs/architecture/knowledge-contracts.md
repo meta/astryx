@@ -879,9 +879,10 @@ this flow passes the historical review benchmark and is enforced on pull request
   request and binds the approved spec content, not a commit. Approval for every
   record kind derives from `.github/ENGOWNERS`; current design and theme records,
   normative design assets, and DD-only current component/module changes
-  additionally accept `.github/DESIGNOWNERS`, except that a design owner's own
-  `/approve-spec` does not alone approve an accessibility requirement or a
-  deprecation, even inside a current design record (DEC-14). A mixed DD plus other
+  additionally accept `.github/DESIGNOWNERS`, except that a design owner's
+  approval (a review or `/approve-spec`) does not alone approve an accessibility
+  requirement or a deprecation, even inside a current design or theme record
+  (DEC-14). A mixed DD plus other
   component/module edit requires both groups. An owner-gated Markdown file with
   no authority of its own, such as a generated table beside a spec, requires an
   engineering owner. Record metadata never
@@ -1179,17 +1180,20 @@ supplies it.
   owner approves again. Reactions are not approvals.
   Eligibility follows the owner groups above. An ENGOWNER author may approve
   their own pull request with `/approve-spec`; an approving review by the
-  author never counts. A design owner listed in `.github/DESIGNOWNERS` may
-  approve design rules and decisions (visual and interaction look) on their
-  own pull requests and records with `/approve-spec`. Public API, behavior
-  rules, accessibility requirements and deprecations need an engineering owner
-  (`.github/ENGOWNERS`), including an accessibility requirement or a
-  deprecation inside a current design or theme record. Current gap: the gate
-  routes approval by record kind, so it accepts a design owner's own
-  `/approve-spec` on a current design or theme record even when the change
-  carries an accessibility requirement or a deprecation. The follow-up changes
-  `.github/scripts/spec-owner-decision.cjs` to require an engineering owner for
-  such a change.
+  author never counts. Design owners listed in `.github/DESIGNOWNERS` approve
+  design and theme records (design rules and decisions: the visual and
+  interaction look), including on their own pull requests with
+  `/approve-spec`. Public API, behavior rules, accessibility requirements and
+  deprecations need an engineering owner (`.github/ENGOWNERS`): a design
+  owner's approval (a review or `/approve-spec`) does not alone approve an
+  accessibility requirement or a deprecation, even inside a current design or
+  theme record. Current gap: the gate routes approval by record kind, so a
+  design owner's approval alone clears a current design or theme record whose
+  change carries an accessibility requirement or a deprecation, both their own
+  `/approve-spec` on their pull request and their approving review on a
+  contributor's pull request. `.github/scripts/spec-owner-decision.cjs` picks
+  the owner group by record kind only and has no check for an accessibility
+  requirement or a deprecation.
 
 - **What keeps approval.** Commits that change only other paths, merges from
   the base branch, rebases, and approval bookkeeping keep the fingerprint, so
@@ -1291,7 +1295,7 @@ because the reader never sees the hook wired.
 | INV20, DEC-9                      | `scripts/check-knowledge.test.mjs` and `scripts/review-global-baselines.mjs`                                                                                                                                             | A matching review misses a current global claim, loads a draft/nonmatching claim, loses base-commit provenance, or treats the rest of a routed record as authority                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | INV21, DEC-10                     | `.github/scripts/component-design-decisions.test.mjs`, `.github/scripts/review-signal-decision.test.mjs`, `.github/scripts/spec-owner-decision.test.mjs`, and `.github/scripts/lib/classify-visual.test.mjs`             | A malformed/local DD escapes validation, stale approval clears a new head, owner routing loses mixed-change gates, or executable/API/unknown runtime code is misclassified as appearance-only                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | DEC-14                            | `.github/scripts/spec-owner-reconcile.test.mjs`, `.github/scripts/spec-owner-decision.test.mjs`, `.github/scripts/spec-owner-workflow.test.mjs`, and `.github/scripts/knowledge-paths.test.mjs`                          | A non-spec commit, base merge, rebase, or status flip resets approval; changed spec text or a new spec path keeps it; a command naming other spec content, a reaction, a non-owner act, or an author review approves; `review-required` succeeds while spec approval is missing or before the spec decision is published; a revoke or request for changes naming other spec content is ignored; a missing approval reports failure; an evaluation leaves its head without a terminal state; or a current record `check:knowledge` discovers, or an owner-gated Markdown file with no authority of its own, changes without an owner |
-| DEC-14 (design owner's own PR)    | `.github/scripts/spec-owner-reconcile.test.mjs` "accepts a DESIGNOWNER author's own /approve-spec on a design record"; the accessibility-requirement and deprecation limit has no gate check (the Current gap in DEC-14) | A DESIGNOWNER author's own `/approve-spec` does not approve a current design record on their own pull request; once the follow-up lands, a DESIGNOWNER approval alone passes an accessibility requirement or a deprecation                                                                                                                                                                                                                                                                                                                                                                                                          |
+| DEC-14 (design owner's own PR)    | `.github/scripts/spec-owner-reconcile.test.mjs` "accepts a DESIGNOWNER author's own /approve-spec on a design record"; the accessibility-requirement and deprecation limit has no gate check (the Current gap in DEC-14) | A DESIGNOWNER author's own `/approve-spec` does not approve a current design record on their own pull request; the accessibility-requirement and deprecation limit has no failure signal because the gate does not check it (Current gap)                                                                                                                                                                                                                                                                                                                                                                                           |
 | DEC-11                            | `.github/scripts/review-signal-decision.test.mjs`, `.github/scripts/review-clear-workflow.test.mjs`, and `.github/scripts/review-signal-workflow.test.mjs`                                                               | An app approval clears a read-only or fork author or an earlier head; a later app request for changes or dismissal leaves the gate clear; an app approval overrides an ENGOWNER request for changes; or an unset app or unreadable permission clears the gate                                                                                                                                                                                                                                                                                                                                                                       |
 
 | Invariant            | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                   | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                                     |
