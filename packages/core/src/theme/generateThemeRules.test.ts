@@ -206,7 +206,9 @@ describe('generateThemeRules', () => {
     const coarse = css.match(
       /@media \(pointer: coarse\) \{\s*([^{]+)\{([^}]*)\}/,
     );
-    expect(coarse?.[1]).toContain('.astryx-button[data-astryx-press="on"]');
+    expect(coarse?.[1]).toContain(
+      '.astryx-button:is([data-astryx-press="on"], [data-astryx-press="on"] *, :has([data-astryx-press="on"]))',
+    );
     expect(coarse?.[1]).not.toContain(':active');
     expect(coarse?.[2]).toContain('background-color: rebeccapurple');
     // No bare :active rule a finger would match on the touch.
@@ -215,6 +217,24 @@ describe('generateThemeRules', () => {
       '',
     );
     expect(outsideFineArm).not.toContain('.astryx-button:active');
+  });
+
+  // The press controller marks Switch's row, which wraps the themed
+  // `astryx-switch`, so the coarse arm reaches a mark around the element.
+  it('reaches a press marked on a wrapper or inside the themed element under a coarse pointer', () => {
+    const pressTheme = defineTheme({
+      name: 'press-dual-switch',
+      components: {
+        switch: {base: {':active': {backgroundColor: 'rebeccapurple'}}},
+      },
+    });
+    const css = generateThemeRules(pressTheme).join('\n');
+    const coarse = css.match(
+      /@media \(pointer: coarse\) \{\s*([^{]+)\{([^}]*)\}/,
+    );
+    expect(coarse?.[1]).toContain(
+      '.astryx-switch:is([data-astryx-press="on"], [data-astryx-press="on"] *, :has([data-astryx-press="on"]))',
+    );
   });
 
   it('keeps the rest of a selector around a themed :active in both arms', () => {
@@ -230,7 +250,9 @@ describe('generateThemeRules', () => {
     });
     const css = generateThemeRules(pressTheme).join('\n');
     expect(css).toContain(':active:not(:focus-visible)');
-    expect(css).toContain('[data-astryx-press="on"]:not(:focus-visible)');
+    expect(css).toContain(
+      ':has([data-astryx-press="on"])):not(:focus-visible)',
+    );
   });
 
   it('applies pseudo-class suffixes to the canonical selector', () => {
