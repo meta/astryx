@@ -53,7 +53,7 @@ import {listReorderHandleProps} from '../privateAttributes/listReorder.stylex';
 import {reorderingHandleStyles} from '../privateAttributes/reordering.stylex';
 import {reorderLineStyles} from '../privateAttributes/reorderLine.stylex';
 import {useTouchHitArea} from '../utils/touchHitArea';
-import {touchHitAreaStyles} from '../utils/touchHitArea.stylex';
+import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {
   registerEnglishFallback,
   useComponentTranslator,
