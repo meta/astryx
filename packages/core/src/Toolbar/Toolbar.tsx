@@ -98,12 +98,14 @@ const styles = stylex.create({
     maxWidth: 'max-content',
   },
   // A start or end lane beside a center lane: the two share the width the
-  // center leaves, and each keeps at least its content's minimum width. A
-  // lane whose controls do not fit even on a line of their own wraps them.
+  // center leaves. A lane keeps its controls on one line, so the row wraps
+  // before the lane does; only a lane wider than the whole toolbar wraps its
+  // own controls.
   sideLane: {
     flexGrow: 1,
     flexShrink: 1,
     flexWrap: 'wrap',
+    minWidth: 'min(max-content, 100%)',
   },
   endSlot: {
     display: 'flex',
