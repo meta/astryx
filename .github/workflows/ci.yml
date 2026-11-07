@@ -130,6 +130,7 @@ jobs:
       started: ${{ steps.room.outputs.started }}
       looks: ${{ steps.room.outputs.looks }}
       next: ${{ steps.room.outputs.next }}
+      attempt: ${{ github.run_attempt }}
     steps:
       - name: Check out the admission action
         uses: actions/checkout@v7
@@ -150,6 +151,14 @@ jobs:
           max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 12 }}
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 30 || 2 }}
           label-legs: '{"ci:run-visual": 6, "ci:run-rtl": 9, "ci:run-a11y": 5}'
+
+      # A run stopped for no room fails here, so a re-run of its failed jobs
+      # waits again from this job, not from this look's result.
+      - name: Stop when CI is full
+        if: steps.room.outputs.full == 'true'
+        run: |
+          echo "::error title=CI is full::CI is full: re-run all jobs or push later. The run found no room under the CI ceiling."
+          exit 1
 
   admission:
     needs: [room]
@@ -182,8 +191,11 @@ jobs:
         uses: ./.ci-admission/.github/actions/ci-admission
         continue-on-error: true
         timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 125 || 13 }}
+        # A re-run of this job alone reuses an earlier attempt's room
+        # outputs, whose clock has run out, so it waits for the whole run on
+        # its own clock.
         with:
-          phase: rest
+          phase: ${{ needs.room.outputs.attempt == github.run_attempt && 'rest' || 'whole' }}
           fits: ${{ needs.room.outputs.fits }}
           started: ${{ needs.room.outputs.started }}
           looks: ${{ needs.room.outputs.looks }}
@@ -1207,15 +1219,16 @@ jobs:
       contents: read
     steps:
       # A run CI admission turned away decides no runner either; say so, so the
-      # required check fails with the true reason.
+      # required check fails with the true reason. Admission skips when the
+      # first wait (room) stopped the run.
       - name: Stop when CI admission refused the run
-        if: needs.admission.result == 'failure'
+        if: needs.admission.result == 'failure' || needs.admission.result == 'skipped'
         run: |
           echo "::error title=CI is full::CI admission refused this run (CI full); re-run all jobs."
           exit 1
 
       - name: Require a decided Swift runner
-        if: needs.admission.result != 'failure' && needs.native-swift-runner.result != 'success'
+        if: needs.admission.result != 'failure' && needs.admission.result != 'skipped' && needs.native-swift-runner.result != 'success'
         run: |
           echo "The Swift runner could not be decided; refusing to skip required work."
           exit 1
