@@ -235,6 +235,13 @@ Platform-specific details stay inside that compiler.
   one. A derived value is emitted in the scope where its source is set
   (INV16), and runtime and static output derive the same values.
 
+- **INV19 — Astryx CSS keeps its order inside any app.** Astryx's built and
+  precompiled CSS declares its layers nested under one `astryx` layer, so its
+  internal order holds whatever layer statement the app writes, and the app
+  places that one layer where it wants. Precompiled CSS uses an Astryx-only
+  atomic class prefix, so its classes never share a name with another StyleX
+  build on the same page (DEC-1).
+
 This record does not own:
 
 - token names and defaults, including the meanings of theme-local names;
@@ -332,10 +339,25 @@ theme-level variant list that built resolution and icon-artwork tooling use. The
 outputs and the guaranteed, best-effort, public-semantic, and private implementation
 tiers.
 
+### DEC-1 — One Astryx layer and its own class prefix
+
+**Decider:** pending
+
+Teams migrating page by page load Astryx next to another StyleX library. Their
+focus and hover styles lose, because both builds emit the same atomic class
+names, and appending Astryx's imports to an existing stylesheet silently flips
+the layer order. One nested layer and a unique class prefix make the order and
+the class names independent of what else the app loads.
+
+Rejected: documenting the layer statement more loudly, which still breaks
+silently when an app registers its layers first. Rejected: asking apps to
+rebuild Astryx with their own prefix.
+
 ## Verification
 
 | Invariant        | Evidence                                                                                                                                                                                                                                                                                                                                                                                  | Failure signal                                                                                                                                                                                                                                                                                    |
 | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| INV19            | Real-browser fixtures: Astryx CSS appended after an app's Tailwind imports, and loaded next to another StyleX build                                                                                                                                                                                                                                                                       | An Astryx focus or hover rule that loses, or two builds that share an atomic class name                                                                                                                                                                                                           |
 | INV1, INV2, INV3 | Compiler imports and runtime/build comparison fixtures                                                                                                                                                                                                                                                                                                                                    | Runtime and build use different theme-to-CSS logic or produce different web rules                                                                                                                                                                                                                 |
 | INV4             | `generateThemeRules.test.ts` and source/distribution cascade tests                                                                                                                                                                                                                                                                                                                        | Scope or layer order differs by output path                                                                                                                                                                                                                                                       |
 | INV5             | Existing per-property fixtures (partial; gap below)                                                                                                                                                                                                                                                                                                                                       | A guaranteed property compiles but does not produce its promised observable effect                                                                                                                                                                                                                |

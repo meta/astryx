@@ -133,6 +133,12 @@ standard width map.
   and hydration resolve every icon and slot request to the same node for the
   active theme.
 
+- **INV14 — Theme does not repaint an app's inherited text.** A nested
+  `Theme`, or a root `Theme` in an app whose page colours are its own, sets
+  text colour only on Astryx's own parts, not on its wrapper's inherited
+  `color`. An app that styles its page in its own dark palette keeps readable
+  text under a `Theme` whose mode follows the operating system (DEC-4).
+
 This record does not own theme authoring, token definitions, compiler output, or
 which component parts are public theme targets.
 
@@ -169,10 +175,25 @@ which component parts are public theme targets.
 - `spec:AST-108/DEC-1` lets a theme's `reducedMotion: 'always'` reach nested
   providers (INV1).
 
+### DEC-4 — Theme leaves inherited text to the app
+
+**Decider:** pending
+
+A team that adds a Theme provider to an app with its own dark palette sees
+near-black text on its dark surfaces on a light-mode laptop, because the
+provider repaints inherited text for the system's mode. Astryx parts already
+take their colours from tokens, so the wrapper does not need to repaint the
+app's text.
+
+Rejected: defaulting the mode to light, which breaks system-following apps.
+Rejected: documentation only, which keeps the failure invisible on dark-mode
+machines.
+
 ## Verification
 
 | Invariant        | Evidence                                                                                                                                                                                                                                                                                                                                                                                            | Failure signal                                                                                                                                                                                                     |
 | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| INV14            | Real-browser fixture: an app with its own dark `:root` palette under `Theme` in system mode, on light and dark OS settings                                                                                                                                                                                                                                                                          | App text that changes colour under the provider, or an Astryx part that loses its theme colour                                                                                                                     |
 | INV1, INV2, INV3 | `Theme.test.tsx` and portal/root fixtures                                                                                                                                                                                                                                                                                                                                                           | A nested provider changes `<html>`, or portal content cannot find the root theme                                                                                                                                   |
 | INV4, INV5       | Runtime injection and cleanup tests                                                                                                                                                                                                                                                                                                                                                                 | A built theme injects CSS, duplicate providers duplicate CSS, or one unmount removes shared styles                                                                                                                 |
 | INV6             | `useTheme.test.tsx`                                                                                                                                                                                                                                                                                                                                                                                 | Provider consumers observe the DOM, or fallback observers leak                                                                                                                                                     |
