@@ -1014,11 +1014,6 @@ const UNREFLECTED_STYLE_AXIS_EXCEPTIONS: ReadonlyMap<string, string> = new Map([
       'missing row target is a recorded reachability gap.',
   ],
   [
-    'ChatComposer.elevation',
-    'The composer body paints the elevation but has no target. How to expose ' +
-      'the body to themes is an open owner decision.',
-  ],
-  [
     'Skeleton.radius',
     'component:Skeleton FR2: radius is callsite geometry, like width and ' +
       'height, and is not reflected.',
