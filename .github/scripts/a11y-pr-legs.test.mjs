@@ -8,7 +8,9 @@
  * only stretch each file. The job instead splits the selection into up to
  * three legs by recorded time, each about ten minutes or less, inside the
  * job's fifteen minutes. A leg the selection does not need stops after its
- * count step, before the Storybook download and the Chromium install.
+ * count step, after the Storybook download (a changed multi-component folder
+ * resolves its components through its story index) and before the Chromium
+ * install.
  */
 
 import {spawnSync} from 'node:child_process';
@@ -96,12 +98,17 @@ describe('the browser-specs job', () => {
     );
   });
 
-  it('counts the legs before the Storybook download and the Chromium install, and only a leg with a share runs its share', () => {
+  it('counts the legs after the Storybook download and before the Chromium install, and only a leg with a share runs its share', () => {
     const names = job.steps.map(s => s.name);
     const count = step("Count this run's accessibility legs");
-    expect(names.indexOf(count.name)).toBeLessThan(
-      names.indexOf('Download Storybook artifact'),
+    // A pull request that changes a multi-component folder resolves its
+    // components through the built Storybook's story index, so every leg
+    // downloads it before counting.
+    const download = step('Download Storybook artifact');
+    expect(names.indexOf(download.name)).toBeLessThan(
+      names.indexOf(count.name),
     );
+    expect(download.if).toBe(count.if);
     expect(names.indexOf(count.name)).toBeLessThan(
       names.indexOf('Install Playwright'),
     );
@@ -114,7 +121,6 @@ describe('the browser-specs job', () => {
     );
     expect(count.run).toContain('BASE_SHA=$(git rev-parse "$WORKFLOW_SHA^1")');
     for (const name of [
-      'Download Storybook artifact',
       'Install Playwright',
       'Run browser accessibility specs',
       'Upload browser accessibility evidence',

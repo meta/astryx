@@ -4,7 +4,7 @@
 
 /**
  * @file Layout.tsx
- * @input Uses React, stack/stackItem utilities, LayoutAreaContext, LayoutSlotsContext
+ * @input Uses React, stack/stackItem utilities, isRenderable, LayoutAreaContext, LayoutSlotsContext
  * @output Exports Layout component and LayoutProps, LayoutHeight types
  * @position General five-slot layout primitive for arranging header, start, content, end, and footer regions.
  *   Building a page area with a side panel? Use Layout with start/end slots.
@@ -25,6 +25,7 @@ import {LayoutDividerContext} from './LayoutDividerContext';
 import {stack} from '../Stack/stack.stylex';
 import {stackItem} from '../Stack/stackItem.stylex';
 import {mergeProps} from '../utils/mergeProps';
+import {isRenderable} from '../utils/isRenderable';
 import {layoutFooterMarker, layoutHeaderMarker} from './layoutEdges.stylex';
 import type {BaseProps} from '../BaseProps';
 import type {SizeValue, SpacingStep} from '../utils/types';
@@ -366,11 +367,12 @@ export function Layout({
     [defaultHasDividers],
   );
 
-  // Memoize slots info to avoid unnecessary re-renders
-  const hasHeader = header != null;
-  const hasFooter = footer != null;
-  const hasStart = start != null;
-  const hasEnd = end != null;
+  // A slot that renders nothing, such as `false` from `isOpen && <LayoutHeader />`,
+  // is absent, so its neighbours take the outer inset on that side.
+  const hasHeader = isRenderable(header);
+  const hasFooter = isRenderable(footer);
+  const hasStart = isRenderable(start);
+  const hasEnd = isRenderable(end);
   const hasBothPanels = hasStart && hasEnd;
   const hasSinglePanel = hasStart !== hasEnd;
   const usesInternalContentWidth =

@@ -88,8 +88,11 @@ permissions: {}
 # A release-check runs its browser owners in wide shards that all start at
 # once, so a full check takes minutes; pull requests keep their narrower legs
 # (spec:AST-030 FR23, DEC-17).
+# A pull request's newer push cancels its older run. A re-run takes a group of
+# its own, so re-running an older head never cancels the run for the pull
+# request's current head.
 concurrency:
-  group: "ci-${{ github.event.pull_request.number || github.event.merge_group.head_sha || (github.event_name == 'workflow_dispatch' && github.triggering_actor == 'github-actions[bot]' && 'main-heavy-lanes') || github.run_id }}"
+  group: "ci-${{ github.event.pull_request.number && (github.run_attempt == '1' && github.event.pull_request.number || format('{0}-rerun-{1}', github.event.pull_request.number, github.run_id)) || github.event.merge_group.head_sha || (github.event_name == 'workflow_dispatch' && github.triggering_actor == 'github-actions[bot]' && 'main-heavy-lanes') || github.run_id }}"
   cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' || (inputs.recheck && github.triggering_actor == 'github-actions[bot]') }}
 
 jobs:
@@ -1193,7 +1196,7 @@ jobs:
           paths: '^packages/native/.*(\.swift|/Package\.swift)$|^\.github/scripts/native-swift\.sh$|^\.github/actions/test-scope/'
 
   test-native-swift:
-    needs: [heavy-ci, native-swift-runner]
+    needs: [admission, heavy-ci, native-swift-runner]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled())) }}
     runs-on: ${{ needs.native-swift-runner.outputs.applies == 'true' && 'macos-15' || 'ubuntu-slim' }}
     # The slim branch only reports that Swift is out of scope; a slim job
@@ -1202,8 +1205,16 @@ jobs:
     permissions:
       contents: read
     steps:
+      # A run CI admission turned away decides no runner either; say so, so the
+      # required check fails with the true reason.
+      - name: Stop when CI admission refused the run
+        if: needs.admission.result == 'failure'
+        run: |
+          echo "::error title=CI is full::CI admission refused this run (CI full); re-run all jobs."
+          exit 1
+
       - name: Require a decided Swift runner
-        if: needs.native-swift-runner.result != 'success'
+        if: needs.admission.result != 'failure' && needs.native-swift-runner.result != 'success'
         run: |
           echo "The Swift runner could not be decided; refusing to skip required work."
           exit 1
@@ -2298,10 +2309,20 @@ jobs:
         with:
           name: pr-analysis
 
+      # Before the count: a pull request that changes a multi-component folder
+      # (Chat, Layer, Chart and the like) resolves its components through the
+      # built Storybook's story index.
+      - name: Download Storybook artifact
+        if: steps.scope.outputs.has_components == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: storybook-${{ needs.build-storybook.outputs.short_hash }}
+          path: apps/storybook/dist
+
       # How many legs the selection needs, from the specs' recorded times, and
       # this leg's share, which the run step reads. It runs before the
-      # Storybook download and the Chromium install; listing the specs installs
-      # the workspace's dependencies. The runner, its routing lines and the
+      # Chromium install; listing the specs installs the workspace's
+      # dependencies. The runner, its routing lines and the
       # times come from the merge commit. The merge commit's first parent is
       # the base branch tip that it merges into.
       - name: Count this run's accessibility legs
@@ -2324,13 +2345,6 @@ jobs:
       - name: Leave the specs to the legs that have a share
         if: steps.scope.outputs.has_components == 'true' && steps.legs.outputs.runs != 'true'
         run: echo "This leg runs no accessibility specs (${{ steps.legs.outputs.count }} leg(s) planned for this selection)."
-
-      - name: Download Storybook artifact
-        if: steps.scope.outputs.has_components == 'true' && steps.legs.outputs.runs == 'true'
-        uses: actions/download-artifact@v8
-        with:
-          name: storybook-${{ needs.build-storybook.outputs.short_hash }}
-          path: apps/storybook/dist
 
       - name: Install Playwright
         if: steps.scope.outputs.has_components == 'true' && steps.legs.outputs.runs == 'true'
@@ -2684,9 +2698,10 @@ jobs:
       # A proof that fails on a head older than main may fail for a reason
       # main already fixed. Name each newer main commit that changed a spec
       # this leg ran, or the harness, so the fix is to update the branch and
-      # not to retry or debug it.
+      # not to retry or debug it. It runs only after this leg's plan
+      # succeeded: a failed plan leaves no spec list to read.
       - name: Explain a failure on an older head
-        if: failure() && steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true' && steps.plan.outputs.files != '0'
+        if: failure() && steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true' && steps.plan.outcome == 'success' && steps.plan.outputs.files != '0'
         continue-on-error: true
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
@@ -2706,12 +2721,15 @@ jobs:
   # of every iOS browser, for the code where WebKit and Chromium differ on
   # touch: the gesture host and recognizers, the motion runtime, the touch and
   # press helpers, the menu press model and the pager, plus the harness and the
-  # shared setup that runs them (spec:AST-030 FR13). The run is limited to the specs
-  # whose bundles reach only that same code, so a WebKit break elsewhere never
-  # turns an unrelated pull request red; the motion adopters spec renders
-  # Storybook components and stays with the Chromium proofs. Out of scope every step after the scope step skips and
-  # the job reports success, so the `test` join reads it without a new
-  # required context. Specs that need Chromium-only evidence skip themselves
+  # shared setup that runs them (spec:AST-030 FR13). A pull request runs the
+  # specs whose bundles reach only that same code, the interaction specs it
+  # changes, and the specs in the folder of any component code it changes, so
+  # a WebKit break elsewhere never turns an unrelated pull request red; the
+  # motion adopters spec renders Storybook components and stays with the
+  # Chromium proofs. A release interaction check (an `interaction-check/`
+  # branch from the release tooling) runs every spec (spec:AST-030 FR28).
+  # Out of scope every step after the scope step skips and the job reports
+  # success, so the `test` join reads it without a new required context. Specs that need Chromium-only evidence skip themselves
   # in WebKit.
   pr-interaction-webkit:
     name: pr-interaction-webkit (${{ matrix.leg }}/${{ strategy.job-total }})
@@ -2991,9 +3009,10 @@ jobs:
       # A proof that fails on a head older than main may fail for a reason
       # main already fixed. Name each newer main commit that changed a spec
       # this leg ran, or the harness, so the fix is to update the branch and
-      # not to retry or debug it.
+      # not to retry or debug it. It runs only after this leg's plan
+      # succeeded: a failed plan leaves no spec list to read.
       - name: Explain a failure on an older head
-        if: failure() && steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true' && steps.plan.outputs.files != '0'
+        if: failure() && steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true' && steps.plan.outcome == 'success' && steps.plan.outputs.files != '0'
         continue-on-error: true
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}

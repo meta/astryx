@@ -95,7 +95,7 @@ export const docs = {
       {guidance: false, description: "Don't nest ButtonGroups. If you need multiple groups, place them side by side with a gap."},
       {guidance: true, description: 'Name the group for what its buttons act on. The label is the group\'s accessible name and a screen reader reads it before each member.'},
       {guidance: true, description: 'Keep the group a single Tab stop. Arrow keys move between members along the orientation, and Home/End jump to the ends. This is the WAI-ARIA APG roving tabindex technique: https://www.w3.org/WAI/ARIA/apg/practices/keyboard-interface/#kbd_roving_tabindex'},
-      {guidance: false, description: "Don't disable the group to show that an action is in flight. A disabled member drops focus, so a keyboard user loses their place; leave the group enabled and show progress on the button that started the work."},
+      {guidance: false, description: "Don't disable the group to show that an action is in flight. Leave the group enabled and show progress on the button that started the work."},
     ],
     anatomy: [
       {name: 'Button', required: true, description: 'One or more Button or IconButton children that form the connected group.'},
@@ -136,7 +136,7 @@ export const docsZh = {
       {guidance: false, description: '不要嵌套 ButtonGroup。如需多个组，请并排放置并留有间隔。'},
       {guidance: true, description: '按钮组的标签应说明这些按钮作用于什么。该标签是按钮组的无障碍名称，屏幕阅读器会在每个成员之前朗读它。'},
       {guidance: true, description: '按钮组是单个 Tab 停靠点。方向键沿排列方向在成员间移动焦点，Home/End 跳到首尾，禁用成员会被跳过——即 WAI-ARIA APG 的 roving tabindex 技术。'},
-      {guidance: false, description: '不要用禁用整个按钮组来表示操作进行中。禁用的成员会失去焦点，键盘用户会丢失位置；请保持按钮组可用，并在发起操作的按钮上显示进度。'},
+      {guidance: false, description: '不要用禁用整个按钮组来表示操作进行中。请保持按钮组可用，并在发起操作的按钮上显示进度。'},
     ],
     anatomy: [
       {name: '按钮', required: true, description: '一个或多个 Button 或 IconButton 子元素，形成连接的组。'},
@@ -161,7 +161,7 @@ export const docsDense = {
       {guidance: true, description: 'Label the group for what its buttons act on; it is the accessible name.'},
       {guidance: true, description: 'Single Tab stop; arrows move between members, Home/End to ends (APG roving tabindex).'},
       {guidance: true, description: 'Under the touch presentation a press tracks like a menu: slide across, the lifted button runs, a lift outside runs nothing. A mouse press acts as a native button\'s. Finger targets grow toward 44 px, up to half the gap to a neighbour; a menu trigger keeps its own opening.'},
-      {guidance: false, description: "Don't disable the group for an in-flight action; a disabled member drops focus."},
+      {guidance: false, description: "Don't disable the group for an in-flight action; show progress on the active button instead."},
     ],
   },
   components: [
