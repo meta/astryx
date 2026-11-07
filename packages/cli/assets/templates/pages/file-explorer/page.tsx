@@ -461,7 +461,7 @@ export default function FileExplorerPage() {
                   }>
                   <Section
                     width={240}
-                    minHeight="100%"
+                    height="100%"
                     padding={2}
                     variant="transparent"
                     dividers={showDivider ? ['end'] : undefined}>
