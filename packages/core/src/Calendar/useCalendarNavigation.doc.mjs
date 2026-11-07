@@ -57,7 +57,7 @@ export const docs = {
       name: 'options.calendar',
       type: 'CalendarSystem',
       description:
-        "Calendar system whose months the hook steps and formats (e.g. 'gregory', 'persian', 'hebrew'). Default is 'gregory'.",
+        "Calendar system whose months the hook steps and formats (e.g. 'gregory', 'persian', 'hebrew'). Calendars other than gregory, iso8601, buddhist, roc and japanese need Temporal. The provider's calendar is never read. Default is 'gregory'.",
       default: "'gregory'",
       required: false,
     },
@@ -158,7 +158,7 @@ export const docsDense = {
     bestPractices: [
       {
         guidance: true,
-        description: 'Wire navigateMonth(-1) and navigateMonth(1) to previous/next month buttons.',
+        description: 'Wire navigateMonth(-1) and navigateMonth(1) to Previous/Next buttons.',
       },
       {
         guidance: true,

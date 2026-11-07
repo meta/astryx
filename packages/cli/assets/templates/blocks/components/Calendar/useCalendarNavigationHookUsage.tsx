@@ -139,8 +139,13 @@ export default function UseCalendarNavigationHookUsage() {
                       }
                     }}
                     disabled={day.isOutside}
+                    aria-hidden={day.isOutside || undefined}
                     onKeyDown={e => handleKeyDown(e, day)}
-                    aria-label={`${monthYearLabel} ${day.dayNumber}`}
+                    aria-label={
+                      day.isOutside
+                        ? undefined
+                        : `${monthYearLabel} ${day.dayNumber}`
+                    }
                     tabIndex={day.isOutside ? -1 : 0}
                     style={{
                       width: 32,

@@ -176,4 +176,28 @@ describe('UseCalendarNavigationHookUsage', () => {
     });
     getComputedStyleSpy.mockRestore();
   });
+
+  it('ensures no two day buttons share an accessible name', () => {
+    expect(container.textContent).toContain('June 2026');
+
+    // Inside the accessibility tree, only active days in the current month have accessible names
+    const activeDayButtons = Array.from(
+      container.querySelectorAll('tbody button:not([aria-hidden="true"])'),
+    ) as HTMLButtonElement[];
+
+    expect(activeDayButtons.length).toBe(30);
+
+    const names = activeDayButtons.map(btn => btn.getAttribute('aria-label'));
+    const uniqueNames = new Set(names);
+    expect(uniqueNames.size).toBe(activeDayButtons.length);
+
+    // Outside filler days are aria-hidden and do not expose colliding month names
+    const outsideButtons = Array.from(
+      container.querySelectorAll('tbody button[aria-hidden="true"]'),
+    ) as HTMLButtonElement[];
+    expect(outsideButtons.length).toBeGreaterThan(0);
+    for (const btn of outsideButtons) {
+      expect(btn.getAttribute('aria-label')).toBeNull();
+    }
+  });
 });
