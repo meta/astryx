@@ -10,8 +10,10 @@
  *   keyboard has arrived. It ends 10 px above the keyboard, with its content
  *   scrollable and its last control reachable. It takes its full height back
  *   as the keyboard starts down. One opened while the keyboard is already up
- *   is clear of it from the first frame that shows it. A popover clear of the
- *   keyboard is left alone. A storyboard shows both states.
+ *   is clear of it from the first frame that shows it. One taller than both
+ *   sides of its trigger keeps its block-start edge, and its field, through
+ *   the cap, as does a hardware keyboard's shortcut bar. A popover clear of
+ *   the keyboard is left alone. A storyboard shows both states.
  * @position Browser proofs for Layer/useLayerKeyboardClearance.ts.
  *   Headless browsers have no software keyboard. So the page's
  *   `visualViewport` is replaced by one the test shrinks the way Mobile
@@ -46,6 +48,12 @@ const storybook = withStorybook(test);
 // The cover Mobile Safari reports on an iPhone 17 Pro (keyboard, accessory
 // bar and the floating address bar over a 714 px layout viewport).
 const COVER = 337;
+// The cover an iPad on iOS 26.2 reports for a hardware keyboard's shortcut
+// bar: the visual viewport ends 71 px higher.
+const SHORTCUT_BAR = 71;
+// The story's popover with 700 px more content below its field: taller than
+// the room on both sides of its trigger.
+const TALLER = '[data-layer-anchored] button { margin-block-start: 700px; }';
 
 /**
  * Replaces `window.visualViewport` before the page loads with one the test
@@ -99,10 +107,13 @@ async function openPopover(
   page: Page,
   story: string,
   name: string,
-  options: {chrome?: boolean} = {},
+  options: {chrome?: boolean; style?: string} = {},
 ): Promise<Opened> {
   await installKeyboard(page, options);
   await openStory(page, storybook(), story);
+  if (options.style != null) {
+    await page.addStyleTag({content: options.style});
+  }
   const driver = await touchDriver(page);
   const trigger = page.getByRole('button', {name});
   const box = await trigger.boundingBox();
@@ -547,6 +558,84 @@ test('opened while the keyboard is already up, its content stays inside its box 
   // So the surface already clips and scrolls its content in that frame.
   expect(first.overflowY).not.toBe('visible');
 });
+
+for (const [what, cover] of [
+  ['the software keyboard', COVER],
+  ["a hardware keyboard's shortcut bar", SHORTCUT_BAR],
+] as const) {
+  test(`a popover taller than both sides of its trigger keeps its block-start edge and its field in place as ${what} caps it and goes`, async ({
+    page,
+  }) => {
+    const {surface, trigger} = await openPopover(
+      page,
+      'core-popover--keyboard-avoidance',
+      'Add note',
+      {style: TALLER},
+    );
+    const field = page.getByRole('textbox', {name: 'Title'});
+    await field.focus();
+    const layer = page.locator('[popover]:has([role="dialog"])').first();
+    const before = await boxOf(layer);
+    const fieldTop = await field.evaluate(
+      element => element.getBoundingClientRect().top,
+    );
+    // The viewport fit shifts the layer up over its trigger.
+    expect(before.top).toBeLessThan((await boxOf(trigger)).bottom);
+    // Every frame from here on: the layer's top and the field's.
+    await layer.evaluate(element => {
+      const input = element.querySelector('input');
+      if (input == null) {
+        throw new Error('no field in the popover');
+      }
+      const w = window as unknown as {__tops: number[][]; __track: boolean};
+      w.__tops = [];
+      w.__track = true;
+      const tick = () => {
+        if (w.__track) {
+          w.__tops.push([
+            element.getBoundingClientRect().top,
+            input.getBoundingClientRect().top,
+          ]);
+          requestAnimationFrame(tick);
+        }
+      };
+      requestAnimationFrame(tick);
+    });
+
+    await keyboard(page, cover);
+    await expect
+      .poll(async () => (await boxOf(surface)).keyboardCap)
+      .not.toBe('');
+    await frames(page, 6);
+    const capped = await boxOf(layer);
+    expect(Math.abs(capped.top - before.top)).toBeLessThanOrEqual(0.5);
+    expect(
+      Math.abs(
+        capped.bottom -
+          (before.innerHeight - cover - LAYER_KEYBOARD_CLEARANCE_PX),
+      ),
+    ).toBeLessThanOrEqual(1);
+    await expect(field).toBeFocused();
+
+    // Going down: the full height comes back, and the layer stays where it is.
+    await keyboard(page, 0);
+    await frames(page, 6);
+    const restored = await boxOf(layer);
+    expect((await boxOf(surface)).keyboardCap).toBe('');
+    expect(Math.abs(restored.top - before.top)).toBeLessThanOrEqual(0.5);
+
+    const tops = await page.evaluate(() => {
+      const w = window as unknown as {__tops: number[][]; __track: boolean};
+      w.__track = false;
+      return w.__tops;
+    });
+    expect(tops.length).toBeGreaterThan(12);
+    for (const [layerTop, inputTop] of tops) {
+      expect(Math.abs(layerTop - before.top)).toBeLessThanOrEqual(0.5);
+      expect(Math.abs(inputTop - fieldTop)).toBeLessThanOrEqual(0.5);
+    }
+  });
+}
 
 test('a popover clear of the keyboard is left as it is', async ({page}) => {
   const {surface} = await openPopover(
