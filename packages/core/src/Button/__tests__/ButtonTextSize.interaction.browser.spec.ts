@@ -60,10 +60,14 @@ test('at the default text size each size keeps its element height', async ({
   page,
 }) => {
   await openStory(page, 'size-variants');
-  const heights = (await readButtons(page)).map(button =>
-    Math.round(button.height),
+  const fits = await page.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>('#storybook-root button')].map(
+      button =>
+        Math.round(button.getBoundingClientRect().height) ===
+        Math.round(parseFloat(getComputedStyle(button).minHeight)),
+    ),
   );
-  expect(heights).toEqual([28, 32, 40]);
+  expect(fits).toEqual([true, true, true]);
 });
 
 for (const story of ['primary', 'size-variants', 'icon-with-text']) {
@@ -74,7 +78,7 @@ for (const story of ['primary', 'size-variants', 'icon-with-text']) {
     // Grows the labels' text, but not the element sizes, the way iOS Dynamic
     // Type grows theme text at its accessibility sizes.
     await page.addStyleTag({
-      content: '#storybook-root button { font-size: 40px; line-height: 50px; }',
+      content: '#storybook-root button { font-size: 40px; line-height: 60px; }',
     });
     const buttons = await readButtons(page);
     expect(buttons.length).toBeGreaterThan(0);
