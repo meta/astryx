@@ -13,6 +13,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {isBuiltin} from 'node:module';
+import {packageOf} from '../../foundation/render/served-packages.mjs';
 import {parse} from '@babel/parser';
 import {
   inspectPackageExport,
@@ -560,8 +561,9 @@ export function planCopy({
     if (!CODE_FILE.test(file)) continue;
     for (const ref of parsed.references) {
       if (!ref.source.startsWith('.')) {
-        const name = packageNameOf(ref.source);
-        if (name && name !== ownerPackage) packages.add(name);
+        const builtin = ref.source.startsWith('node:') || isBuiltin(ref.source);
+        const name = packageOf(ref.source);
+        if (!builtin && name !== ownerPackage) packages.add(name);
         continue;
       }
       const target = resolveRelative(file, ref.source, resolutions);
@@ -676,17 +678,6 @@ export function planCopy({
       render: specifierOf => renderStatements(ref, groups, specifierOf),
     };
   }
-}
-
-/**
- * The npm package a bare specifier names, or null for a Node built-in module.
- * @param {string} specifier
- * @returns {string|null}
- */
-function packageNameOf(specifier) {
-  if (specifier.startsWith('node:') || isBuiltin(specifier)) return null;
-  const parts = specifier.split('/');
-  return specifier.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0];
 }
 
 /**
