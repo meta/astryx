@@ -35,7 +35,6 @@ import {
   countBetween,
   drag,
   freezeTimers,
-  holdAnimations,
   installLongTaskLog,
   installTimerGate,
   markElement,
@@ -211,17 +210,6 @@ function expectedBox(final: Box, trigger: Box, p: number): Box {
     width: final.width * frame.scaleX,
     height: final.height * frame.scaleY,
   };
-}
-
-/** The layer's own scale animation among those running in it. */
-async function scaleAnimationOf(locator: Locator) {
-  for (;;) {
-    const found = await waitForAnimation(locator);
-    const scale = found.find(a => a.keyframes.some(k => 'scale' in k));
-    if (scale != null) {
-      return scale;
-    }
-  }
 }
 
 /** A scale animation's `animate()` call and its own start, epoch ms. */
@@ -458,11 +446,7 @@ test('the presentation grows out of the trigger on the theme\u2019s entrance tok
   await expect(story.trigger).toHaveAttribute('aria-expanded', 'false');
   // Presenting during the dismissal would turn back from the closing frame.
   await expect(exitCopyOf(page)).toHaveCount(0);
-  await openWithTap(story);
-  await scaleAnimationOf(story.layer);
-  const held = await holdAnimations(page, story.layer, {
-    judges: {target: story.layer, property: 'scale'},
-  });
+  const held = await openHeldWhileGrowing(page, story);
   const samples = await sampleBoxes(
     story.layer,
     final,
@@ -1167,10 +1151,11 @@ async function armExitCopyHold(
 }
 
 /**
- * Opens the popover with a tap and holds its presentation where it starts, so
- * the next press lands while it grows. Under Reduce Motion it holds the
- * cross-fade (`property: 'opacity'`). Returns the held motion; release it
- * with `releaseAnimations`.
+ * Opens the popover with a tap and holds its presentation where it starts.
+ * The page takes the hold itself, so a busy runner cannot miss the motion. A
+ * test then samples the growth, or presses while it grows. Under Reduce
+ * Motion it holds the cross-fade (`property: 'opacity'`). Returns the held
+ * motion; release it with `releaseAnimations`.
  */
 async function openHeldWhileGrowing(
   page: Page,
