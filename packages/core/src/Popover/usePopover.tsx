@@ -30,7 +30,7 @@ import {
   shadowVars,
 } from '../theme/tokens.stylex';
 import {Button} from '../Button';
-import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
+import {FOCUSABLE_SELECTOR, isDisabledWithin} from '../hooks/focusableSelector';
 import {rtlStyles} from '../utils';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
@@ -68,7 +68,11 @@ function attemptFocus(element: HTMLElement): boolean {
 function focusFirstContentControl(container: HTMLElement): boolean {
   const focusable = Array.from(
     container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
-  ).filter(element => element.closest(FALLBACK_CLOSE_SELECTOR) == null);
+  ).filter(
+    element =>
+      element.closest(FALLBACK_CLOSE_SELECTOR) == null &&
+      !isDisabledWithin(element, container),
+  );
   for (const element of focusable) {
     if (attemptFocus(element)) {
       return true;

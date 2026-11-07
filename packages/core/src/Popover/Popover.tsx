@@ -61,7 +61,7 @@ import {matchesMediaQuery, watchMediaQuery} from '../utils/coarsePointer';
 import type {BaseProps} from '../BaseProps';
 import {FALLBACK_CLOSE_SELECTOR, usePopoverInternal} from './usePopover';
 import {usePopoverSurfaceMotion} from './PopoverTouch';
-import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
+import {FOCUSABLE_SELECTOR, isDisabledWithin} from '../hooks/focusableSelector';
 import type {LayerAlignment, LayerPlacement} from '../Layer/useLayer';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
@@ -647,8 +647,8 @@ export function Popover({
   }, []);
   // Focus enters the sheet at each opening as it enters the anchored popover
   // (FR2): a caller's `[data-autofocus]`, else the first genuine content
-  // control (never the injected fallback close, never BottomSheet's own
-  // scroll area), else that scroll area: the sheet's labelled surface, which
+  // control (never the injected fallback close, a disabled control, or
+  // BottomSheet's own scroll area), else that scroll area: the sheet's labelled surface, which
   // paints the shared focus ring under the keyboard. It runs a frame after
   // BottomSheet presents the dialog; BottomSheet is unchanged.
   useEffect(() => {
@@ -682,7 +682,8 @@ export function Popover({
             // BottomSheet's scroll area is the panel's own child; content
             // sits inside it.
             element.parentElement !== sheetPanel &&
-            element.closest(FALLBACK_CLOSE_SELECTOR) == null,
+            element.closest(FALLBACK_CLOSE_SELECTOR) == null &&
+            !isDisabledWithin(element, sheetPanel),
         );
       if (target != null) {
         target.focus({preventScroll: true});

@@ -1719,6 +1719,33 @@ describe('DateInput', () => {
         expect(calendarGrid()).toBeNull();
       }
     });
+
+    it('opens on the day grid, not a disabled month button, when the range is one month', async () => {
+      // The range is one month, so both month buttons are disabled.
+      render(
+        <DateInput
+          label="Date"
+          min="2026-04-01"
+          max="2026-04-30"
+          onChange={() => {}}
+        />,
+      );
+      fireEvent.click(getButton('Open calendar'));
+      const grid = await waitFor(() => {
+        const found = document.querySelector('[role="grid"]');
+        expect(found).not.toBeNull();
+        return found!;
+      });
+      const tabStop = grid.querySelector('button[tabindex="0"]');
+      await waitFor(() => {
+        expect(tabStop).toHaveFocus();
+      });
+      expect(getButton('Previous month')).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      );
+      expect(getButton('Next month')).toHaveAttribute('aria-disabled', 'true');
+    });
   });
 
   describe('weekStartsOn', () => {

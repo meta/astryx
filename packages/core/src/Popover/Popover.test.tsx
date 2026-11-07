@@ -1027,6 +1027,58 @@ describe('Popover', () => {
       );
     });
 
+    it('starts focus on the first enabled control, skipping a disabled one', async () => {
+      render(
+        <Popover
+          content={
+            <>
+              <button type="button" aria-disabled="true">
+                Earlier
+              </button>
+              <button type="button">Later</button>
+            </>
+          }
+          label="Pages">
+          <button type="button">Open pages</button>
+        </Popover>,
+      );
+      fireEvent.click(screen.getByRole('button', {name: 'Open pages'}), {
+        detail: 1,
+      });
+      await waitFor(() =>
+        expect(
+          screen.getByRole('button', {name: 'Later', hidden: true}),
+        ).toHaveFocus(),
+      );
+    });
+
+    it('starts focus on the labelled surface when every control is disabled, and Tab still reaches them', async () => {
+      const user = userEvent.setup();
+      render(
+        <Popover
+          content={
+            <button type="button" aria-disabled="true">
+              Earlier
+            </button>
+          }
+          label="Pages">
+          <button type="button">Open pages</button>
+        </Popover>,
+      );
+      fireEvent.click(screen.getByRole('button', {name: 'Open pages'}));
+      await waitFor(() =>
+        expect(
+          screen.getByRole('dialog', {name: 'Pages', hidden: true}),
+        ).toHaveFocus(),
+      );
+
+      await user.tab();
+
+      expect(
+        screen.getByRole('button', {name: 'Earlier', hidden: true}),
+      ).toHaveFocus();
+    });
+
     it('keeps the fallback close button reachable by Tab', async () => {
       const user = userEvent.setup();
       render(
