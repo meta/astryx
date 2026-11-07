@@ -354,27 +354,34 @@ test.afterEach(async ({page}, testInfo) => {
  * the input, so it holds the motion at its first frame. A long input can
  * outlast the hold's own 5 s. The driver paces its events on the wall clock,
  * and on a loaded runner they play much longer than scripted. Then the hold
- * is armed again for what is left of 5 s from the input's end.
+ * is armed again for what is left of 5 s from the input's end. `property` is
+ * the track's judged motion: `translate`, or `opacity` for a cross-fade.
  */
 async function playHeld(
   page: Page,
   track: Locator,
   driver: TouchDriver,
   script: TouchScript,
+  property: 'translate' | 'opacity' = 'translate',
 ): Promise<ArmedHold> {
-  const judges = {target: track, property: 'translate'};
+  const judges = {target: track, property};
   const first = await armHold(page, track, {judges});
   const caught = first.held().then(
     held => ({held}),
-    () => null,
+    (error: unknown) => ({error}),
   );
   await driver.play(script);
   const inputEnd = Date.now();
   return {
     held: async () => {
       const outcome = await caught;
-      if (outcome != null) {
+      if ('held' in outcome) {
         return outcome.held;
+      }
+      // Only a hold that ran out of time is armed again. A hold that took
+      // the wrong motion fails here.
+      if (!String(outcome.error).includes('no animation under the scope ran')) {
+        throw outcome.error;
       }
       const again = await armHold(page, track, {
         judges,
@@ -389,10 +396,18 @@ async function playHeld(
   };
 }
 
-/** Calls `goTo(index)` with the motion it starts held at its first frame. */
-const goToHeld = async (page: Page, track: Locator, index: number) => {
+/**
+ * Calls `goTo(index)` with the motion it starts held at its first frame.
+ * `property` is the track's judged motion, as for `playHeld`.
+ */
+const goToHeld = async (
+  page: Page,
+  track: Locator,
+  index: number,
+  property: 'translate' | 'opacity' = 'translate',
+) => {
   const hold = await armHold(page, track, {
-    judges: {target: track, property: 'translate'},
+    judges: {target: track, property},
   });
   await page.evaluate(next => {
     window.armFrames();
@@ -923,7 +938,7 @@ test('under Reduce Motion the settle and goTo do not travel: an opacity cross-fa
     {x: 320, y: 200},
     {velocity: {x: -1500, y: 0}, durationMs: 80},
   );
-  const hold = await playHeld(page, track, driver, throwScript);
+  const hold = await playHeld(page, track, driver, throwScript, 'opacity');
   crossFadesOnly(await hold.held());
   await releaseAnimations(page);
   await expect
@@ -931,7 +946,7 @@ test('under Reduce Motion the settle and goTo do not travel: an opacity cross-fa
     .toBe(false);
   expect(await page.evaluate(() => window.pager.index)).toBe(2);
   // goTo cross-fades too.
-  crossFadesOnly(await goToHeld(page, track, 4));
+  crossFadesOnly(await goToHeld(page, track, 4, 'opacity'));
   await releaseAnimations(page);
   await expect
     .poll(async () => page.evaluate(() => window.pager.isSettling))
