@@ -111,7 +111,9 @@ the person's device.
   element size tokens keep their values when a size is set; a control grows
   with its text under FR4.
 - Defects under FR3 and FR4:
-  - On iOS and iPadOS, text ignores Dynamic Type in every theme.
+  - Safari on iPhone follows Dynamic Type in every theme, recorded in the iOS
+    simulator at the current implementation. Safari on iPad, other iOS
+    browsers, and macOS Safari at its default text size are unverified.
   - Butter, Stone, and Y2K fix supporting text at 12 px, so it does not follow
     a larger browser or Android text size.
   - Controls hold fixed heights, such as 40 px elements, `component:Badge`

@@ -90,9 +90,17 @@ describe('generateThemeRules', () => {
   it('includes :scope token block with type scale tokens', () => {
     const scopeRule = rules.find(r => r.includes(':scope'));
     expect(scopeRule).toBeDefined();
-    // Raw size tokens are rem values
-    expect(scopeRule).toContain('--font-size-base: 0.875rem');
-    expect(scopeRule).toContain('--font-size-2xl: 1.5rem');
+    // Raw size tokens are rem values, scaled by the reader's text size where
+    // the root Theme gives the page one (spec:AST-102 FR3; 1 elsewhere)
+    expect(scopeRule).toContain(
+      '--_scaled-font-size-base: min(calc(0.875rem * var(--_dynamic-type-body, 1)), var(--_scaled-font-size-lg))',
+    );
+    expect(scopeRule).toContain(
+      '--font-size-base: var(--_scaled-font-size-base)',
+    );
+    expect(scopeRule).toContain(
+      '--_scaled-font-size-2xl: min(calc(1.5rem * var(--_dynamic-type-title1, 1)), var(--_scaled-font-size-3xl))',
+    );
     // Semantic tokens are var() refs
     expect(scopeRule).toContain('--text-heading-1-size: var(--font-size-2xl)');
     expect(scopeRule).toContain('--text-heading-4-size: var(--font-size-base)');
@@ -117,9 +125,16 @@ describe('generateThemeRules', () => {
       '--font-size-4xl',
     ];
     for (const token of rawSizeTokens) {
-      const match = scopeRule.match(new RegExp(`${token}: ([^;]+)`));
+      const match = scopeRule.match(new RegExp(`\\s${token}: ([^;]+)`));
       expect(match).not.toBeNull();
-      expect(match![1]).toMatch(/rem$/);
+      // The step reads its private scaled size: the theme's own rem value,
+      // times the reader's scale for its step.
+      const scaled = `--_scaled-${token.slice(2)}`;
+      expect(match![1]).toBe(`var(${scaled})`);
+      const own = scopeRule.match(new RegExp(`${scaled}: ([^;]+)`));
+      expect(own![1]).toMatch(
+        /^min\(calc\([\d.]+rem \* var\(--_dynamic-type-[a-z0-9-]+, 1\)\), var\(--_scaled-font-size-[a-z0-9]+\)\)$/,
+      );
     }
   });
 
