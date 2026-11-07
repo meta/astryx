@@ -48,6 +48,7 @@ import {
   lookPositions,
   moduleNaming,
   nonIconExports,
+  packageRootMoves,
   resolveIconSource,
   peerNote,
   typecheckNote,
@@ -61,6 +62,10 @@ import {
   resolveDefaultLook,
 } from './_default-look.mjs';
 import {shellArg} from '../../foundation/text/shell-arg.mjs';
+import {
+  hasLicenseNotice,
+  licenseNoticeFix,
+} from '../../foundation/discovery/icon-set-discovery.mjs';
 import {astryxIconDefinitions} from '../../foundation/discovery/icon-definition-discovery.mjs';
 import {suggestedIcons} from '../../foundation/discovery/icon-set-checks.mjs';
 import {
@@ -481,6 +486,11 @@ export async function addIconSet(name, options) {
     writtenFiles,
     dryRun,
   );
+  const missingNotice = noticeToAdd(
+    library,
+    packageDir,
+    projectPath(path.relative(packageDir, setDir)),
+  );
   {
     result.data.icons = icons.length;
     if (from != null) {
@@ -526,12 +536,36 @@ export async function addIconSet(name, options) {
       ...(from != null && lookFound.summary != null
         ? lookNotes(lookFound.summary, icons.length, from, looks, name)
         : []),
+      ...(missingNotice ? [missingNotice.note] : []),
       ...mappedNotes(map, name),
       ...suggestionNotes(suggestions, name),
       'Run `astryx integration check` to see the icon definitions still to map.',
     ];
+    if (missingNotice) {
+      result.data.licenseNoticeMissing = missingNotice.receipt;
+    }
   }
   return result;
+}
+
+/**
+ * The license notice the author must add when the wrapped library ships no
+ * license file to copy and the package root has none. The CLI never writes
+ * it: the license text is the author's to state. Null when nothing is
+ * missing.
+ * @param {{package: string, version: string, notices: string[]} | null} library
+ * @param {string} packageDir
+ * @param {string} setDir the set directory, from the package root
+ * @returns {{note: string, receipt: {library: string, path: string}} | null}
+ */
+function noticeToAdd(library, packageDir, setDir) {
+  if (!library || library.notices.length > 0) return null;
+  if (hasLicenseNotice(packageDir)) return null;
+  const named = `${library.package}@${library.version}`;
+  return {
+    note: `${named} ships no LICENSE or NOTICE file to copy, so the set has no license notice. ${licenseNoticeFix(setDir, named)}`,
+    receipt: {library: named, path: `${setDir}/NOTICE`},
+  };
 }
 
 /**
@@ -972,9 +1006,22 @@ async function refreshIconSet(
     // map entries and variants.
     const generatedBefore = generatedModulePath(set, packageDir);
     const origins = generatedOrigins(packageDir, generatedBefore);
+    // A refresh from a package root also supplies the exports that read one
+    // file of that package, when the root exports the same icon. They move to
+    // the root import, so the set has one import style.
+    const rootMoves = packageRootMoves(
+      origins,
+      source,
+      everyIcon.map(icon => icon.export),
+      where,
+    );
+    /** @param {string} name the set's export */
+    const libraryExportOf = name =>
+      rootMoves.get(name)?.source ?? origins.get(name)?.source;
     /** @param {{export: string, module?: string}} icon */
     const suppliedHere = icon => {
       if ((icon.module ?? set.data.module) !== set.data.module) return false;
+      if (rootMoves.has(icon.export)) return true;
       const origin = origins.get(icon.export);
       return origin != null && sameIconModule(origin.module, source.module);
     };
@@ -990,7 +1037,7 @@ async function refreshIconSet(
     const byId = new Map(supplied.map(icon => [icon.id, icon]));
     const byExport = new Map(supplied.map(icon => [icon.export, icon]));
     const bySource = new Map(
-      supplied.map(icon => [origins.get(icon.export)?.source, icon]),
+      supplied.map(icon => [libraryExportOf(icon.export), icon]),
     );
     // One icon per glyph. A look the set already wraps keeps its icon and id.
     // A new glyph comes in once, in the preferred look. A new default variant
@@ -1065,6 +1112,32 @@ async function refreshIconSet(
       ];
     });
     const icons = [...fromLibrary, ...others];
+    // Each kept icon that moves to the root, and its variants that move too.
+    /** @type {Array<{id: string, from: string, to: string}>} */
+    const movedIcons = [];
+    /** @type {import('../../foundation/discovery/icon-set-writer.mjs').GeneratedIcon[]} */
+    const movedVariants = [];
+    for (const icon of fromLibrary) {
+      const variantMoves = (icon.variants ?? []).filter(each =>
+        rootMoves.has(each.export),
+      );
+      for (const each of variantMoves) {
+        const move = /** @type {{source: string, from: string}} */ (
+          rootMoves.get(each.export)
+        );
+        movedVariants.push({
+          name: each.export,
+          from: source.module,
+          source: move.source,
+          adapt: iconByExport.get(move.source)?.adapt ?? false,
+        });
+      }
+      const from = (
+        rootMoves.get(icon.export) ?? rootMoves.get(variantMoves[0]?.export)
+      )?.from;
+      if (from) movedIcons.push({id: icon.id, from, to: source.module});
+    }
+    movedIcons.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     // The icons this module supplied that it no longer exports: they leave
     // the set and its generated module, and the receipt names them.
     // Each is named for why it left: `--exclude` (or the data file's
@@ -1074,7 +1147,7 @@ async function refreshIconSet(
     const keptExports = new Set(fromLibrary.map(each => each.export));
     const gone = supplied.filter(icon => !keptExports.has(icon.export));
     const isExcluded = (/** @type {{export: string}} */ icon) =>
-      excludedNames.has(origins.get(icon.export)?.source ?? '') ||
+      excludedNames.has(libraryExportOf(icon.export) ?? '') ||
       excludedNames.has(icon.export);
     const goneExcluded = gone.filter(isExcluded);
     const goneMissing = gone.filter(icon => !isExcluded(icon));
@@ -1174,11 +1247,13 @@ async function refreshIconSet(
             source: icon.export,
             adapt: icon.adapt,
           }))
-          .filter(icon => publicName.has(icon.source)),
+          .filter(icon => publicName.has(icon.source))
+          .concat(movedVariants),
         // The icons the library no longer exports leave the module too; a
         // renamed icon keeps its export. An icon moved to the new default
-        // look keeps its export, which now names that look.
-        [...gone.map(icon => icon.export), ...repicked],
+        // look keeps its export, which now names that look. An export moved
+        // to the root is written again with the root import.
+        [...gone.map(icon => icon.export), ...repicked, ...rootMoves.keys()],
       );
       files.push(...written.files);
       try {
@@ -1230,11 +1305,28 @@ async function refreshIconSet(
     if (renames.size > 0) {
       result.data.renamed = [...renames].map(([from, to]) => ({from, to}));
     }
+    if (movedIcons.length > 0) result.data.moved = movedIcons;
+    const missingNotice = hasLicenseNotice(set.dir)
+      ? null
+      : noticeToAdd(
+          library,
+          packageDir,
+          projectPath(path.relative(packageDir, set.dir)),
+        );
+    if (missingNotice) {
+      result.data.licenseNoticeMissing = missingNotice.receipt;
+    }
     result.data.notes = [
       ...(licenseNote ? [licenseNote] : []),
+      ...(missingNotice ? [missingNotice.note] : []),
       ...(renames.size > 0
         ? [
             `${renames.size} icons have a new id under this release's id rule, and keep their map entries, variants, and words: ${[...renames].map(([from, to]) => `${from} -> ${to}`).join(', ')}.`,
+          ]
+        : []),
+      ...(movedIcons.length > 0
+        ? [
+            `${movedIcons.length} icons now import from ${source.module} instead of one file each, and keep their ids, exports, map entries, variants, and words: ${movedIcons.map(each => each.id).join(', ')}.`,
           ]
         : []),
       ...mappedNotes(byName, name),

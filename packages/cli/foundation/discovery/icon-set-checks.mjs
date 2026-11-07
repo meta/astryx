@@ -46,6 +46,7 @@ import {satisfiesRange} from '../env/semver.mjs';
 import {
   NOTICE_FILE_RE,
   discoverIconSetDirectory,
+  licenseNoticeFix,
   resolveIconModule,
   splitSpecifier,
 } from './icon-set-discovery.mjs';
@@ -1010,7 +1011,7 @@ function checkUpstream(set, packageDir, pkg) {
     issues.push(
       issueWarning(
         ICON_LICENSE_NOTICE_MISSING,
-        `${label} is generated from ${source.package} but ships no license notice. Copy the library's LICENSE (and NOTICE, if any) into the set directory or the package root.`,
+        `${label} is generated from ${source.package}@${source.version} but ships no license notice. ${licenseNoticeFix(path.relative(packageDir, set.dir).split(path.sep).join('/'), `${source.package}@${source.version}`)} If the library ships a LICENSE or NOTICE file, copy that file there instead.`,
       ),
     );
   }

@@ -296,7 +296,9 @@ icon, and the CLI verifies it, writes the files, and checks the set.
     data file's `exclude`, which every refresh honors. From an installed
     package it records `source` (the library and version), copies the
     library's license notices into the set, and takes the library's license
-    for the descriptor. Its receipt names, as the exact text to add, the
+    for the descriptor; when the library ships none and the set and package
+    have none, the receipt names the NOTICE file to add under
+    `licenseNoticeMissing`, and nothing is written. Its receipt names, as the exact text to add, the
     entry change that makes the generated module public (an `export *` line
     for an entry file in the package, relative to it; for a package with no
     entry, `index.js`, `index.d.ts`, and their package.json `main`, `types`,
@@ -329,6 +331,11 @@ icon, and the CLI verifies it, writes the files, and checks the set.
     unchanged, its `map` entries, and every other field, and an `id` the
     current rule spells differently is reported under `renamed`
     (`add --variant <name> --all` meets an icon the same way). A refresh
+    from a package root also refreshes an icon or variant the generated
+    module reads from a file of that package when the root exports the same
+    icon (the same export name, or the same file and binding); it moves to
+    the root import, keeps its fields, and the icon is reported under
+    `moved`. A refresh
     copies the library's license notices the set lacks, and the run that
     first records `source` takes the library's license for the descriptor
     when its `license` is still the one `new-set` wrote (the package's own,

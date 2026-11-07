@@ -15,6 +15,7 @@ import {pathToFileURL} from 'node:url';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import {runCli} from '../../../test-utils/run-cli.mjs';
 import {writeIconSetProject} from '../../../test-utils/icon-set-fixture.mjs';
+import {ICON_NAMES} from '../../../authoring/doctypes/icon-set/icon-names.mjs';
 
 /** @type {string} */
 let tmp;
@@ -2119,6 +2120,58 @@ describe('a refresh that first records the source', () => {
   });
 });
 
+describe('a library that ships no license file', () => {
+  it('new-set --from and a refresh name the NOTICE file to add, and write none', async () => {
+    const instruction =
+      'Add a NOTICE (or LICENSE) file to icon-sets/outline that names @acme/glyph-library@2.0.0 and its license: `icon-sets/outline/NOTICE`.';
+    const args = [
+      'experimental',
+      'icon',
+      'new-set',
+      'outline',
+      '--from',
+      '@acme/glyph-library',
+    ];
+    const created = await json(args);
+    expect(created.code).toBe(0);
+    expect(created.body.data.licenseNoticeMissing).toEqual({
+      library: '@acme/glyph-library@2.0.0',
+      path: 'icon-sets/outline/NOTICE',
+    });
+    expect(created.body.data.notes.join('\n')).toContain(
+      `@acme/glyph-library@2.0.0 ships no LICENSE or NOTICE file to copy, so the set has no license notice. ${instruction}`,
+    );
+    const set = path.join(pkg, 'icon-sets', 'outline');
+    expect(
+      fs.readdirSync(set).filter(file => /notice|licen/iu.test(file)),
+    ).toEqual([]);
+    const refreshed = await json(args);
+    expect(refreshed.body.data.licenseNoticeMissing).toEqual(
+      created.body.data.licenseNoticeMissing,
+    );
+    expect(refreshed.body.data.notes.join('\n')).toContain(instruction);
+    const strict = await runCli(
+      ['integration', 'check', '--strict', '--json'],
+      pkg,
+    );
+    // The check's finding gives the same instruction.
+    const finding = JSON.parse(strict.stdout).data.failures.find(
+      (/** @type {{code: string}} */ each) =>
+        each.code === 'icon_license_notice_missing',
+    );
+    expect(finding.message).toContain(instruction);
+
+    // Once the author adds it, nothing asks for it again.
+    fs.writeFileSync(
+      path.join(set, 'NOTICE'),
+      'Icons from @acme/glyph-library 2.0.0, MIT License.\n',
+    );
+    const again = await json(args);
+    expect(again.body.data.licenseNoticeMissing).toBeUndefined();
+    expect(again.body.data.notes.join('\n')).not.toContain('NOTICE');
+  });
+});
+
 describe('a first-source refresh over a license the author chose', () => {
   it('keeps it, and the receipt names both licenses', async () => {
     const lib = path.join(pkg, 'node_modules', '@acme', 'glyph-library');
@@ -2845,5 +2898,191 @@ describe('a refresh with --exclude', () => {
     );
     expect(notes.join('\n')).not.toContain('no longer exports');
     expect(dataOf('outline').exclude).toEqual(['Cross']);
+  });
+});
+
+describe('a refresh from a library root over icons added one per file', () => {
+  /**
+   * Glyphs of a library whose export names encode the look: one per
+   * built-in definition, so the set can pass the strict check.
+   */
+  const pascal = (/** @type {string} */ name) =>
+    name[0].toUpperCase() + name.slice(1);
+  const glyphs = [
+    ...new Set([...ICON_NAMES.map(pascal), 'Search', 'X']),
+  ].sort();
+  const kebab = (/** @type {string} */ name) =>
+    name.replace(/([a-z])([A-Z])/gu, '$1-$2').toLowerCase();
+  const looks = ['Outline', 'Filled'];
+  /** @param {string} glyph @param {string} look */
+  const fileOf = (glyph, look) => `${glyph}${look}24WGHT500Icon`;
+  const subpath = (/** @type {string} */ file) =>
+    `@acme/weight-icons/dist/${file}`;
+
+  beforeEach(() => {
+    // A root barrel of default re-exports, and one file per export.
+    const lib = path.join(pkg, 'node_modules', '@acme', 'weight-icons');
+    fs.mkdirSync(path.join(lib, 'dist'), {recursive: true});
+    fs.writeFileSync(
+      path.join(lib, 'package.json'),
+      JSON.stringify({
+        name: '@acme/weight-icons',
+        version: '3.1.0',
+        type: 'module',
+        exports: {'.': './dist/index.js', './dist/*': './dist/*.js'},
+      }),
+    );
+    /** @type {string[]} */
+    const barrel = [];
+    for (const glyph of glyphs) {
+      for (const look of looks) {
+        const file = fileOf(glyph, look);
+        fs.writeFileSync(
+          path.join(lib, 'dist', `${file}.js`),
+          `export default function ${file}(props) { return null; }\n`,
+        );
+        barrel.push(`export {default as ${file}} from './${file}.js';`);
+      }
+    }
+    fs.writeFileSync(
+      path.join(lib, 'dist', 'index.js'),
+      `${barrel.join('\n')}\n`,
+    );
+    const manifest = path.join(pkg, 'package.json');
+    const pkgJson = JSON.parse(fs.readFileSync(manifest, 'utf-8'));
+    pkgJson.dependencies['@acme/weight-icons'] = '^3.1.0';
+    fs.writeFileSync(manifest, JSON.stringify(pkgJson, null, 2));
+  });
+
+  it('moves each per-file icon to the root import, keeps its id, export, map entries, variants and words, and lists the moves', async () => {
+    const created = await json([
+      'experimental',
+      'icon',
+      'new-set',
+      'weights',
+      '--variants',
+      'outline,filled',
+      '--default-variant',
+      'outline',
+    ]);
+    expect(created.code, JSON.stringify(created.body)).toBe(0);
+    for (const [name, glyph, definition] of [
+      ['XIcon', 'X', 'close'],
+      ['SearchIcon', 'Search', 'search'],
+    ]) {
+      const added = await json([
+        'experimental',
+        'icon',
+        'add',
+        name,
+        '--from',
+        subpath(fileOf(glyph, 'Outline')),
+        '--default',
+        '--definition',
+        definition,
+      ]);
+      expect(added.code, JSON.stringify(added.body)).toBe(0);
+    }
+    const variant = await json([
+      'experimental',
+      'icon',
+      'add',
+      'XIcon',
+      '--variant',
+      'filled',
+      '--from',
+      subpath(fileOf('X', 'Filled')),
+      '--default',
+    ]);
+    expect(variant.code, JSON.stringify(variant.body)).toBe(0);
+    const set = path.join(pkg, 'icon-sets', 'weights');
+    const before = dataOf('weights');
+    const byId = (/** @type {any} */ data, /** @type {string} */ id) =>
+      data.icons.find((/** @type {{id: string}} */ each) => each.id === id);
+    // An author's own words stay with the icon.
+    before.icons = before.icons.map((/** @type {any} */ icon) =>
+      icon.id === 'x' ? {...icon, words: [...icon.words, 'dismiss']} : icon,
+    );
+    fs.writeFileSync(
+      path.join(set, 'weights.icons.json'),
+      `${JSON.stringify(before, null, 2)}\n`,
+    );
+
+    const refreshed = await json([
+      'experimental',
+      'icon',
+      'new-set',
+      'weights',
+      '--from',
+      '@acme/weight-icons',
+    ]);
+    expect(refreshed.code, JSON.stringify(refreshed.body)).toBe(0);
+    expect(refreshed.body.data.moved).toEqual([
+      {
+        id: 'search',
+        from: subpath(fileOf('Search', 'Outline')),
+        to: '@acme/weight-icons',
+      },
+      {
+        id: 'x',
+        from: subpath(fileOf('X', 'Outline')),
+        to: '@acme/weight-icons',
+      },
+    ]);
+    expect(refreshed.body.data.notes.join('\n')).toContain(
+      '2 icons now import from @acme/weight-icons instead of one file each, and keep their ids, exports, map entries, variants, and words: search, x.',
+    );
+    const after = dataOf('weights');
+    const ids = after.icons.map((/** @type {{id: string}} */ each) => each.id);
+    // One icon per glyph: the root's other glyphs come in, nothing is doubled.
+    expect(ids.sort()).toEqual(glyphs.map(kebab).sort());
+    expect(byId(after, 'x')).toMatchObject({
+      export: 'XIcon',
+      variants: [
+        {variant: 'filled', export: byId(before, 'x').variants[0].export},
+      ],
+    });
+    expect(byId(after, 'x').words).toContain('dismiss');
+    expect(byId(after, 'search').export).toBe('SearchIcon');
+    expect(after.map).toMatchObject({close: 'x', search: 'search'});
+    const generated = fs.readFileSync(
+      path.join(set, 'weights.generated.js'),
+      'utf-8',
+    );
+    // One import style: every icon and variant reads the library root.
+    expect(generated).not.toContain('@acme/weight-icons/dist/');
+    expect(generated).toContain(
+      `export {${fileOf('X', 'Outline')} as XIcon} from '@acme/weight-icons';`,
+    );
+    expect(generated).toContain(
+      `export {${fileOf('X', 'Filled')} as ${byId(before, 'x').variants[0].export}} from '@acme/weight-icons';`,
+    );
+    fs.writeFileSync(
+      path.join(pkg, 'index.js'),
+      "export * from './icon-sets/weights/weights.generated.js';\n",
+    );
+    const strict = await runCli(
+      ['integration', 'check', '--strict', '--json'],
+      pkg,
+    );
+    const checked = JSON.parse(strict.stdout).data;
+    // The library ships no license file, so the author adds a NOTICE.
+    expect(JSON.stringify(checked)).toContain('icon_license_notice_missing');
+    fs.writeFileSync(
+      path.join(set, 'NOTICE'),
+      'Icons from @acme/weight-icons 3.1.0, MIT License.\n',
+    );
+    const passed = JSON.parse(
+      (await runCli(['integration', 'check', '--strict', '--json'], pkg))
+        .stdout,
+    ).data;
+    // The fixture has no TypeScript, so only that skipped work remains.
+    expect(
+      passed.failures.filter(
+        (/** @type {{code: string}} */ each) =>
+          each.code !== 'doc_types_skipped',
+      ),
+    ).toEqual([]);
+    expect(passed.warnings).toBe(0);
   });
 });
