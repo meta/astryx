@@ -1370,6 +1370,8 @@ export default function Page() {
     // A bottom legend goes under the picture only when it is not beside it.
     expect(html).toContain('.recharts-wrapper:not([data-legend-side])>.recharts-legend-wrapper[style*="bottom"]{order:1}');
     expect(html).toContain('[data-legend-side]{flex-direction:row');
+    // A side is physical: a right-to-left page reverses the row.
+    expect(html).toContain('[data-legend-side]:dir(rtl){flex-direction:row-reverse}');
     expect(html).toContain('[data-legend-side="right"]>.recharts-legend-wrapper{order:1}');
     // Only the chart's own picture scales; a legend's icons keep their size.
     expect(html).toContain('.recharts-responsive-container>.recharts-wrapper>svg.recharts-surface{');
