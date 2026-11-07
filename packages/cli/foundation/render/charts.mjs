@@ -71,9 +71,10 @@ export function chartSize({width, height, aspect}) {
 /**
  * A chart drawn at its starting size scales to the width the page gives it
  * and keeps its shape, so it never overflows its card. Its legend stays out
- * of the scaled picture: it takes its own row in normal flow, under the
- * picture, or above it when it asks for the top, so its text never covers
- * the chart however narrow the page is.
+ * of the scaled picture, so its text never covers the chart however narrow
+ * the page is. A horizontal legend takes its own row under the picture, or
+ * above it when it asks for the top. A vertical legend sits beside the
+ * picture, on the side it asks for.
  */
 export const CHART_CSS =
   '.recharts-responsive-container{width:100%}' +
@@ -81,7 +82,36 @@ export const CHART_CSS =
   // Only the chart's own picture scales; a legend's icons keep their size.
   '.recharts-responsive-container>.recharts-wrapper>svg.recharts-surface{width:100%!important;height:auto!important}' +
   '.recharts-responsive-container>.recharts-wrapper>.recharts-legend-wrapper{position:static!important;width:auto!important;height:auto!important}' +
-  '.recharts-responsive-container>.recharts-wrapper>.recharts-legend-wrapper[style*="bottom"]{order:1}';
+  '.recharts-responsive-container>.recharts-wrapper>.recharts-legend-wrapper[style*="bottom"]{order:1}' +
+  '.recharts-responsive-container>.recharts-wrapper[data-legend-side]{flex-direction:row;align-items:flex-start}' +
+  '.recharts-responsive-container>.recharts-wrapper[data-legend-side][data-legend-middle]{align-items:center}' +
+  '.recharts-responsive-container>.recharts-wrapper[data-legend-side]>svg.recharts-surface{flex:1 1 0;min-width:0}' +
+  '.recharts-responsive-container>.recharts-wrapper[data-legend-side]>.recharts-legend-wrapper{flex:none}' +
+  // recharts puts the legend before the picture; one on the right goes after it.
+  '.recharts-responsive-container>.recharts-wrapper[data-legend-side="right"]>.recharts-legend-wrapper{order:1}';
+
+/**
+ * Mark each container chart whose legend is vertical with the side it asked
+ * for, and whether it is centered, for {@link CHART_CSS}. recharts places a
+ * right-aligned legend with `right`, and a vertically centered one with a
+ * `top` near the middle (no room is kept for it in a container chart).
+ * @param {any} root the element the charts were drawn in
+ */
+export function markLegends(root) {
+  for (const wrapper of root.querySelectorAll('.recharts-responsive-container > .recharts-wrapper')) {
+    const legend = wrapper.querySelector(':scope > .recharts-legend-wrapper');
+    if (!legend) continue;
+    const vertical = [...legend.querySelectorAll('.recharts-legend-item')].some(item =>
+      /display:\s*block/.test(item.getAttribute('style') ?? ''),
+    );
+    if (!vertical) continue;
+    const style = legend.getAttribute('style') ?? '';
+    wrapper.setAttribute('data-legend-side', /(?:^|;)\s*right\s*:/.test(style) ? 'right' : 'left');
+    const top = Number(/(?:^|;)\s*top\s*:\s*(-?[\d.]+)px/.exec(style)?.[1]);
+    const height = Number(wrapper.getAttribute('height'));
+    if (top > 0 && height > 0 && top > height * 0.2) wrapper.setAttribute('data-legend-middle', '');
+  }
+}
 
 /**
  * The box a legend would measure in a browser, estimated from its items, so

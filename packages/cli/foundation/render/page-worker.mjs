@@ -33,7 +33,7 @@ import {createJiti} from 'jiti';
 import {assetDataUri, isAssetPath} from './assets.mjs';
 import {SINGLE_COPY, isServedPackage, packageOf} from './served-packages.mjs';
 import {findNodeModulesPackage} from '../fs/paths.mjs';
-import {CHART_GLOBAL, CHART_ROOTS, chartDocument, chartSize} from './charts.mjs';
+import {CHART_GLOBAL, CHART_ROOTS, chartDocument, chartSize, markLegends} from './charts.mjs';
 
 /** @typedef {{level: string, text: string}} PageLog */
 
@@ -145,6 +145,14 @@ const isLocal = file =>
 const charts = [];
 /** The props each chart was last drawn with in the page-wide draw. @type {any[]} */
 const pageCharts = [];
+/**
+ * How often each chart rendered in the page-wide draw. A chart renders again
+ * only when the component that made it renders again, after the first
+ * commit: its effects changed its state, which a closure or context in the
+ * chart may read, so the props alone cannot say the chart is the same.
+ * @type {number[]}
+ */
+const pageRenders = [];
 
 /**
  * A chart's props as a string that two renders of the same chart share:
@@ -206,6 +214,7 @@ let mode = 'aside';
     if (mode === 'page' && !inside) {
       place.current ??= pageCharts.length;
       pageCharts[place.current] = props;
+      pageRenders[place.current] = (pageRenders[place.current] ?? 0) + 1;
     }
     const drawn = container
       ? createElement('div', {className: 'recharts-responsive-container'}, createElement(Chart, {...props, ...chartSize(props)}))
@@ -293,6 +302,7 @@ async function drawCharts(markup, Page) {
     } catch (e) {
       error = e;
     }
+    if (!error) markLegends(host);
     const out = error ? null : read(host);
     root.unmount();
     return out;
@@ -302,10 +312,13 @@ async function drawCharts(markup, Page) {
   /** @type {false | 'error' | 'changed'} */
   let alone = false;
   if (!drawn) alone = 'error';
-  // The page's effects changed a chart: its props, or which charts there are.
+  // The page's effects changed a chart: its props, which charts there are,
+  // or the state of the component that made it, which a closure or context
+  // in the chart may read.
   else if (
     drawn.length !== charts.length ||
     pageCharts.length !== charts.length ||
+    pageRenders.some(count => count > 1) ||
     charts.some((chart, i) => sameKey(chart.props) !== sameKey(pageCharts[i]))
   ) {
     alone = 'changed';
