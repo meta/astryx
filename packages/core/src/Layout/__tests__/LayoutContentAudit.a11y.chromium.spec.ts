@@ -410,10 +410,12 @@ for (const item of cases) {
         const applied = region.applied[edge];
         const published = region.published[edge];
         const isInline = edge === 'inlineStart' || edge === 'inlineEnd';
+        // With one start panel, only the open end edge carries the gutter.
         const hasGutter =
-          CONTENT_WIDTH.has(item.story) ||
-          ALIGNED_TO_HEADER.has(region.insetCase ?? '');
-        if (hasGutter && isInline) {
+          (CONTENT_WIDTH.has(item.story) && isInline) ||
+          (ALIGNED_TO_HEADER.has(region.insetCase ?? '') &&
+            edge === 'inlineEnd');
+        if (hasGutter) {
           check(
             applied >= published - 0.6,
             `${where} ${edge} applies ${applied}, less than its published ${published}`,
@@ -491,7 +493,7 @@ for (const item of cases) {
           'without a caller main or region role, a region that fits has no role or name and a scrolling region is a named group',
         publication: CONTENT_WIDTH.has(item.story)
           ? 'block padding equals the published block padding; inline padding is at least the published inline padding'
-          : 'every edge applies exactly the padding it publishes, except the inline edges of a content-width case, which are at least what they publish',
+          : 'every edge applies exactly the padding it publishes, except the open end edge of the content-width start-panel case, which is at least what it publishes',
         alignedToHeader:
           item.story === 'content-insets'
             ? 'in the content-width start-panel case, the first content child ends one step-6 inset inside the end of the first header child, which spans the content-width frame'
