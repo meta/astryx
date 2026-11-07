@@ -53,7 +53,7 @@ export const doc = {
       name: 'options.newDefinition',
       type: 'string',
       description:
-        "Add the set's own definition with this name, then map the icon to it.",
+        "Add the set's own definition with this name, in camelCase (`aiHelper`) or kebab-case (`ai-helper`), then map the icon to it.",
     },
     {
       name: 'options.description',
@@ -119,7 +119,7 @@ export const doc = {
     },
     {
       code: 'ERR_INVALID_ARGUMENT',
-      when: 'the export is data rather than a component, a new definition is named like an Astryx one, or the variant is not one the set declares',
+      when: "the export is data rather than a component, a new definition is named like an Astryx one, or the variant is not one the set declares, is the look each icon's own export already draws, or is no look word of a library whose export names encode looks",
     },
     {code: 'ERR_FILE_EXISTS', when: 'another icon already has the id'},
     {

@@ -44,7 +44,7 @@ import {
   timeline,
   touchDriver,
   traceRendering,
-  waitForAnimation,
+  watchAnimations,
   withStorybook,
   writeEvidence,
   type CastFrame,
@@ -534,10 +534,11 @@ test('the release of a button keeps fading on every frame while the main thread 
     (el as HTMLElement).style.setProperty('--duration-exit', '400ms'),
   );
   const cast = await startScreencast(page);
+  const watch = await watchAnimations(opened.surface);
   await opened.driver.play(tap(opened.center, {holdMs: HOLD_MS}));
   // The release is the longest animation running: the `::before`
   // opacity fade, not the 125 ms press-scale transition that starts with it.
-  const running = await waitForAnimation(opened.surface, {minProgressMs: 16});
+  const running = await watch.started({minProgressMs: 16});
   const release = longestOf(running);
   // A 1 s block, as spec:AST-094 FR5's verification names, covers the
   // whole release.
@@ -704,10 +705,11 @@ test('the release of a button does no Layout or Paint per frame', async ({
   const opened = await openSurface(page, BUTTONS, secondaryButton);
   let release = {from: 0, to: 0};
   const trace = await traceRendering(page, async () => {
+    const watch = await watchAnimations(opened.surface);
     await opened.driver.play(tap(opened.center, {holdMs: HOLD_MS}));
     // The release is the longest animation running: the `::before`
     // opacity fade, not the 125 ms press-scale transition that starts with it.
-    const running = await waitForAnimation(opened.surface);
+    const running = await watch.started();
     release = longestOf(running);
     await page.waitForTimeout(RELEASE_MS + 100);
   });
