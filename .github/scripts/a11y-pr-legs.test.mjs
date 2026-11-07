@@ -8,7 +8,7 @@
  * only stretch each file. The job instead splits the selection into up to
  * three legs by recorded time, each about ten minutes or less, inside the
  * job's fifteen minutes. A leg the selection does not need stops after its
- * count step, before any install.
+ * count step, before the Storybook download and the Chromium install.
  */
 
 import {spawnSync} from 'node:child_process';
@@ -136,10 +136,11 @@ describe('the browser-specs job', () => {
     );
   });
 
+  // Each count lists every spec through Playwright, a few seconds apiece.
   it("writes the leg count and this leg's share for the steps after it", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'a11y-legs-'));
     scratch.push(dir);
-    const count = (legs, leg) => {
+    const count = (legs, leg, env = {}) => {
       const output = path.join(dir, `output-${legs}-${leg}`);
       const result = spawnSync(
         process.execPath,
@@ -161,6 +162,8 @@ describe('the browser-specs job', () => {
             GITHUB_EVENT_NAME: 'workflow_dispatch',
             GITHUB_OUTPUT: output,
             WORKFLOW_SHA: '',
+            BASE_SHA: '',
+            ...env,
           },
         },
       );
@@ -182,14 +185,30 @@ describe('the browser-specs job', () => {
     expect(['1', '2', '3']).toContain(third.output.count);
     expect(third.output.runs).toBe(String(Number(third.output.count) >= 3));
     expect(third.stdout).toMatch(/^Accessibility legs: \d for \d+ spec files/m);
+    // A leg that cannot list the pull request's files runs the whole
+    // selection as the only leg, so no planned file is left out.
+    const lost = count(3, 2, {
+      GITHUB_EVENT_NAME: 'pull_request',
+      GITHUB_ACTIONS: 'true',
+    });
+    expect(lost.output).toEqual({count: '1', runs: 'true', leg: '1'});
+    expect(lost.stdout).toContain(
+      '::warning title=Accessibility scope unknown::',
+    );
+    const lostShare = JSON.parse(
+      fs.readFileSync(path.join(dir, 'share-3-2.json'), 'utf8'),
+    );
+    expect(lostShare.scopeKnown).toBe(false);
+    expect(lostShare.run.length).toBeGreaterThan(0);
     const one = count(1, 1);
     expect(one.output).toEqual({count: '1', runs: 'true', leg: '1'});
     // One leg's share is the whole selection, each file with its reason.
     const share = JSON.parse(
       fs.readFileSync(path.join(dir, 'share-1-1.json'), 'utf8'),
     );
-    expect(share.length).toBeGreaterThan(0);
-    for (const entry of share)
+    expect(share.scopeKnown).toBe(true);
+    expect(share.run.length).toBeGreaterThan(0);
+    for (const entry of share.run)
       expect(Object.keys(entry).sort()).toEqual(['file', 'reason']);
-  });
+  }, 180_000);
 });

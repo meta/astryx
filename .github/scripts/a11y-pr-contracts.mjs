@@ -52,8 +52,9 @@
  * first), in the time left. It reads no title and runs no component audit; a
  * changed `audit` spec still waits for its audit pull request. To stay inside the job's 15-minute budget
  * it takes at most CHANGED_SPEC_LIMIT changed files, starts each file only
- * when the run still fits DEFAULT_CHECK_BUDGET_MS at that file's recorded time
- * (.github/a11y-contract-durations.json), and stops at that budget. Each file
+ * when the run still fits PLAN_BUDGET_MS at that file's recorded time
+ * (.github/a11y-contract-durations.json), and stops at
+ * DEFAULT_CHECK_BUDGET_MS. Each file
  * it leaves out is reported as not run, never as passed or failed. Locally,
  * `pnpm test:a11y-contract:pr origin/main --dry-run` prints what a PR from
  * this branch would run.
@@ -317,6 +318,14 @@ export const CHANGED_SPEC_LIMIT = 4;
 
 /** The default check's wall-clock bound, inside the job's 15 minutes. */
 export const DEFAULT_CHECK_BUDGET_MS = 8 * 60 * 1000;
+
+/**
+ * The time the default check plans: three quarters of its stop. A
+ * pull-request runner can run a file slower than its recorded time even with
+ * the margin, and a file that the stop cuts fails the run, so the plan keeps
+ * the last quarter free.
+ */
+export const PLAN_BUDGET_MS = 6 * 60 * 1000;
 
 /**
  * The times come from the release legs. A pull-request runner can be slower,
@@ -734,7 +743,7 @@ export function planDefaultCheck({
   dependents = [],
   seconds,
   workers,
-  budgetMs = DEFAULT_CHECK_BUDGET_MS,
+  budgetMs = PLAN_BUDGET_MS,
   dependentShareMs = DEPENDENT_SHARE_MS,
 }) {
   const {run: changedInLimit, notRun} = withinBudget(changed);
@@ -756,7 +765,7 @@ export function planDefaultCheck({
     if (STARTUP_MS + projectedMs(withFile, msOf, workers) > budgetMs) {
       notRun.push({
         file: entry.file,
-        reason: `${entry.reason}; its expected ${Math.round(secondsOf(entry.file))} s does not fit the default check's ${budgetMs / 60000}-minute budget; add ci:run-a11y to run it`,
+        reason: `${entry.reason}; its expected ${Math.round(secondsOf(entry.file))} s does not fit the default check's ${budgetMs / 60000}-minute plan; add ci:run-a11y to run it`,
       });
     } else if (!fits(withFile)) {
       notRun.push({
@@ -1150,17 +1159,35 @@ function main() {
   })();
   const notRun = budgeted.notRun;
   // The opt-in run splits into legs by recorded time. The count step plans
-  // them before any install; each leg then runs only its share.
+  // them before the Storybook download and the Chromium install; each leg
+  // then runs only its share.
+  const scopeKnown = changedPaths != null;
+  // Every leg counts on its own runner. A leg that cannot tell this pull
+  // request's files would split another list than the other legs, so it
+  // plans itself as the only leg, with the whole selection, as the
+  // interaction legs do.
+  const scopeLost = countLegsValue != null && isPullRequest && !scopeKnown;
   const legs =
     countLegsValue != null
-      ? planLegs(
-          budgeted.run.map(({file}) => file),
-          readDurations(root, policySha),
-          Number(countLegsValue ?? ofValue ?? 1),
-        )
+      ? scopeLost
+        ? planLegs(
+            budgeted.run.map(({file}) => file),
+            {},
+            1,
+          )
+        : planLegs(
+            budgeted.run.map(({file}) => file),
+            readDurations(root, policySha),
+            Number(countLegsValue),
+          )
       : null;
   if (countLegsValue != null) {
-    const leg = Number(legValue ?? 1);
+    const leg = scopeLost ? 1 : Number(legValue ?? 1);
+    if (scopeLost) {
+      console.log(
+        "::warning title=Accessibility scope unknown::This leg could not list the pull request's files, so it runs the whole selection as the only leg.",
+      );
+    }
     const minutes = (legs.longestMs / 60000).toFixed(1);
     console.log(
       `Accessibility legs: ${legs.count} for ${budgeted.run.length} spec files (the longest leg's recorded time ${minutes} min).`,
@@ -1176,7 +1203,7 @@ function main() {
       const share = new Set(legs.shares[leg - 1] ?? []);
       fs.writeFileSync(
         shareOutFile,
-        `${JSON.stringify(budgeted.run.filter(({file}) => share.has(file)))}\n`,
+        `${JSON.stringify({scopeKnown, run: budgeted.run.filter(({file}) => share.has(file))})}\n`,
       );
     }
     if (process.env.GITHUB_OUTPUT) {
@@ -1190,10 +1217,9 @@ function main() {
   const legIndex = legValue != null ? Number(legValue) : 1;
   // A leg runs the share its count step wrote. A missing or unreadable share
   // fails the leg, so a planned file is never dropped.
-  const selected =
-    shareFile != null
-      ? JSON.parse(fs.readFileSync(shareFile, 'utf8'))
-      : budgeted.run;
+  const share =
+    shareFile != null ? JSON.parse(fs.readFileSync(shareFile, 'utf8')) : null;
+  const selected = share ? share.run : budgeted.run;
   const [audited] = auditedComponents(title);
   const auditConfigFile = '.github/a11y-audit-axe.json';
   const plan = planFor(
@@ -1214,7 +1240,7 @@ function main() {
       {
         head: process.env.ASTRYX_HEAD_SHA ?? null,
         discovered: specs.length,
-        scopeKnown: changedPaths != null,
+        scopeKnown: share ? share.scopeKnown : scopeKnown,
         components,
         ownedBy,
         audit: plan && {component: audited, ...plan},
