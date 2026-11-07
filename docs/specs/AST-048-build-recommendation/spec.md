@@ -206,8 +206,8 @@ own ranking and output, and template owners own what each template is.
   what it returns without the note: the empty kit for a query, the playbook
   without one, with the same stdout, JSON response and exit status. In text
   mode, with or without a query, build MUST also print one stderr note naming
-  `astryx search <query> --type doc` or `--type theme`, through the CLI's
-  human-output primitive; JSON mode prints no note.
+  `astryx search <query> --type doc` or `--type theme`; JSON mode prints no
+  note.
 
 ### Platform support
 
