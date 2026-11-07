@@ -5,7 +5,7 @@
  * exports (`XOutline24WGHT400Icon`): one root barrel of default re-exports
  * and a file per export, as large vector libraries ship. `new-set`, `add`
  * and a refresh wrap each glyph once, by its glyph id, in the look the set
- * prefers (AST-084 FR13).
+ * prefers.
  */
 
 import * as fs from 'node:fs';
@@ -989,13 +989,13 @@ describe('add <Export> for a glyph the set already wraps in another look', () =>
     const listed = await json(base);
     expect(listed.code, JSON.stringify(listed.body)).toBe(0);
     expect(listed.body.data.variant).toBe(
-      'astryx experimental icon add XFilled24WGHT500Icon --from @acme/vector-icons --id x --variant filled',
+      'astryx experimental icon add XFilled24WGHT500Icon --from @acme/vector-icons --set brand --id x --variant filled',
     );
     const close = listed.body.data.matches.find(
       (/** @type {{name: string}} */ each) => each.name === 'close',
     );
     expect(close.command).toBe(
-      'astryx experimental icon add XFilled24WGHT500Icon --from @acme/vector-icons --definition close',
+      'astryx experimental icon add XFilled24WGHT500Icon --from @acme/vector-icons --set brand --definition close',
     );
     const text = await runCli(base, pkg);
     expect(text.stdout).toContain('Add this one as its variant');
@@ -1049,7 +1049,7 @@ describe('add <Export> for a glyph the set already wraps in another look', () =>
     // Another style: the style word is a declared variant, not the default.
     const otherStyle = await listedCommands('XFilled24WGHT500Icon');
     expect(otherStyle.variant).toBe(
-      'astryx experimental icon add XFilled24WGHT500Icon --from @acme/vector-icons --id x --variant filled',
+      'astryx experimental icon add XFilled24WGHT500Icon --from @acme/vector-icons --set brand --id x --variant filled',
     );
     for (const command of [...sameStyle.commands, ...otherStyle.commands]) {
       restore();
@@ -1445,23 +1445,76 @@ describe('the default variant on every path', () => {
   }
 
   /**
-   * Run every command a receipt prints to declare or add a look, unless it
-   * names a placeholder for the author to fill.
+   * The commands a result prints: its suggestions, and each command quoted
+   * in its notes.
    * @param {any} body
+   * @returns {string[]}
+   */
+  function printedCommands(body) {
+    return [
+      ...(body.suggestions ?? []).map((/** @type {any} */ each) => each.name),
+      ...(body.data?.notes ?? []).flatMap((/** @type {string} */ note) =>
+        [...note.matchAll(/`(astryx [^`]+)`/gu)].map(match => match[1]),
+      ),
+    ].filter(command => command.startsWith('astryx experimental icon '));
+  }
+
+  /**
+   * Each printed command names the set it acts on: `new-set brand`, or
+   * `--set brand` on a command that takes one.
+   * @param {any} body
+   */
+  function expectEveryCommandNamesTheSet(body) {
+    for (const command of printedCommands(body)) {
+      if (/^astryx experimental icon new-set /u.test(command)) {
+        expect(command).toMatch(
+          /^astryx experimental icon new-set brand(?: |$)/u,
+        );
+      } else {
+        expect(command, command).toMatch(/ --set brand(?: |$)/u);
+      }
+    }
+  }
+
+  /**
+   * A printed command with its named placeholders filled: the module that
+   * draws the look it adds, a look other than the set's default, the look
+   * the icons draw, and an icon and definition of the receipt.
+   * @param {string} command
+   * @param {Library} lib
+   * @param {{drawn: string, other: string}} looks
+   * @param {any} body
+   */
+  function filled(command, lib, looks, body) {
+    const another =
+      dataOf('brand').default?.variant === looks.other
+        ? looks.drawn
+        : looks.other;
+    const withLook = command
+      .replaceAll('<look>', another)
+      .replaceAll('<name>', another)
+      .replaceAll('<default>', looks.drawn);
+    const variant = /--variant (\S+)/u.exec(withLook)?.[1] ?? looks.other;
+    const pair = body.data?.suggestions?.[0] ?? body.data?.mapped?.[0];
+    return withLook
+      .replaceAll('<module>', lib.moduleOf(variant))
+      .replaceAll('<Export>', lib.exportOf('Search', variant))
+      .replaceAll('<icon>', pair?.icon ?? 'search')
+      .replaceAll('<definition>', pair?.definition ?? 'search');
+  }
+
+  /**
+   * Run every command a receipt's notes print, its named placeholders
+   * filled.
+   * @param {any} body
+   * @param {Library} lib
+   * @param {{drawn: string, other: string}} looks
    * @param {() => void} check
    */
-  async function runPrintedNotes(body, check) {
-    const commands = (body.data?.notes ?? [])
-      .flatMap((/** @type {string} */ note) =>
-        [...note.matchAll(/`(astryx [^`]+)`/gu)].map(match => match[1]),
-      )
-      .filter(
-        (/** @type {string} */ command) =>
-          /^astryx experimental icon (?:new-set|add) /u.test(command) &&
-          !command.includes('<'),
-      );
+  async function runPrintedNotes(body, lib, looks, check) {
+    const commands = printedCommands({data: body.data});
     for (const command of commands) {
-      await runPrinted(command);
+      await runPrinted(filled(command, lib, looks, body));
       check();
     }
   }
@@ -1525,15 +1578,17 @@ describe('the default variant on every path', () => {
     other: 'named default is another existing look',
     unknown: 'named default is an unknown word',
     none: 'no default named',
+    drop: 'no default named, --variants leave out the drawn look',
   };
 
   /**
-   * @typedef {{write: string | null, authored?: boolean} | {refuse: 'looks' | 'refresh' | 'drawn' | 'declare' | 'keep' | 'name' | 'own'}} Expected
+   * @typedef {{write: string | null, authored?: boolean} | {refuse: 'looks' | 'refresh' | 'drawn' | 'declare' | 'keep' | 'name' | 'own' | 'drop'}} Expected
    * What a path must do: write the set with this default, or refuse naming
    * the look words (`looks`), the refresh (`refresh`), the look already
    * drawn (`drawn`), the declaration to run first (`declare`), the variant
    * to add in place of a moved default (`keep`), the default to name
-   * (`name`), or the icon's own export (`own`).
+   * (`name`), the icon's own export (`own`), or the `--variants` that keep
+   * the drawn look as the default (`drop`).
    */
 
   /**
@@ -1543,9 +1598,10 @@ describe('the default variant on every path', () => {
    * @param {{declaresDefault: boolean}} state
    * @param {{drawn: string, other: string}} looks
    * @param {keyof typeof CHOICES} choice
+   * @param {string[]} named `--set brand` when the package has two sets
    * @returns {{args: string[], expect: Expected}}
    */
-  function plan(libName, route, state, looks, choice) {
+  function plan(libName, route, state, looks, choice, named) {
     const lib = LIBRARIES[libName];
     const encoded = libName === 'looks in names';
     const word = {drawn: looks.drawn, other: looks.other, unknown: 'solid'}[
@@ -1566,6 +1622,7 @@ describe('the default variant on every path', () => {
         'solid',
       ],
       none: ['--variants', `${looks.other},${looks.drawn}`],
+      drop: ['--variants', looks.other],
     }[choice];
     const newSet = ['experimental', 'icon', 'new-set', 'brand'];
     if (route !== 'add --variant' && route !== 'add --variant --all') {
@@ -1578,13 +1635,15 @@ describe('the default variant on every path', () => {
         return {
           args,
           expect:
-            choice === 'unknown'
-              ? {refuse: 'looks'}
-              : choice === 'other'
-                ? route === 'in place'
-                  ? {refuse: 'refresh'}
-                  : {write: looks.other}
-                : {write: looks.drawn},
+            choice === 'drop'
+              ? {refuse: 'drop'}
+              : choice === 'unknown'
+                ? {refuse: 'looks'}
+                : choice === 'other'
+                  ? route === 'in place'
+                    ? {refuse: 'refresh'}
+                    : {write: looks.other}
+                  : {write: looks.drawn},
         };
       }
       // The command can't read the look a module draws: a set that
@@ -1609,7 +1668,9 @@ describe('the default variant on every path', () => {
                 ? {refuse: 'keep'}
                 : {write: looks.other, authored: true}
               : state.declaresDefault
-                ? {write: looks.drawn}
+                ? choice === 'drop'
+                  ? {refuse: 'drop'}
+                  : {write: looks.drawn}
                 : {refuse: 'name'},
       };
     }
@@ -1628,6 +1689,7 @@ describe('the default variant on every path', () => {
             'star',
             '--variant',
             word,
+            ...named,
           ]
         : [
             'experimental',
@@ -1638,6 +1700,7 @@ describe('the default variant on every path', () => {
             '--from',
             module,
             '--all',
+            ...named,
           ];
     const declared = dataOf('brand').variants ?? [];
     const kept = dataOf('brand').default?.variant ?? null;
@@ -1665,6 +1728,9 @@ describe('the default variant on every path', () => {
     'add --variant',
     'add --variant --all',
   ];
+  // A second set wraps the same library, so a printed command that names
+  // no set fails as printed.
+  const SETS = ['one set', 'two sets'];
   const CASES = Object.keys(LIBRARIES)
     .flatMap(libName => {
       // A library whose names name no looks has no look words, so no word
@@ -1684,15 +1750,20 @@ describe('the default variant on every path', () => {
             .filter(state => state !== 'no set')
             .flatMap(state =>
               choices
-                .filter(choice => !route.startsWith('add') || choice !== 'none')
+                .filter(
+                  choice =>
+                    !route.startsWith('add') ||
+                    (choice !== 'none' && choice !== 'drop'),
+                )
                 .map(choice => ({libName, route, state, choice})),
             ),
         ),
       ];
     })
+    .flatMap(each => SETS.map(sets => ({...each, sets})))
     .map(each => ({
       ...each,
-      title: `${each.libName} · ${each.route} · ${each.state} · ${
+      title: `${each.libName} · ${each.sets} · ${each.route} · ${each.state} · ${
         each.route.startsWith('add')
           ? CHOICES[/** @type {keyof typeof CHOICES} */ (each.choice)].replace(
               'named default',
@@ -1705,127 +1776,205 @@ describe('the default variant on every path', () => {
   it('covers every library, path, set and choice', () => {
     expect(
       CASES.filter(each => each.libName === 'looks in names'),
-    ).toHaveLength(46);
+    ).toHaveLength(2 * 53);
     expect(
       CASES.filter(each => each.libName === 'no looks in names'),
-    ).toHaveLength(33);
+    ).toHaveLength(2 * 40);
   });
 
-  for (const {title, libName, route, state: stateName, choice} of CASES)
+  for (const {title, libName, sets, route, state: stateName, choice} of CASES)
     it(title, async () => {
       const lib = LIBRARIES[libName];
       lib.write();
+      const two = sets === 'two sets';
+      if (two) {
+        const spare = await json([
+          'experimental',
+          'icon',
+          'new-set',
+          'spare',
+          '--from',
+          lib.module,
+        ]);
+        expect(spare.code, JSON.stringify(spare.body)).toBe(0);
+      }
+      /** @returns {Record<string, string>} */
+      const spareFiles = () =>
+        Object.fromEntries(
+          Object.entries(snapshot()).filter(([file]) =>
+            file.startsWith(path.join('icon-sets', 'spare')),
+          ),
+        );
       const state = STATES[stateName];
       const looks = state.declaresDefault ? lib.declared : lib.usual;
       await state.setup(lib, looks);
+      const spareBefore = spareFiles();
       const step = plan(
         libName,
         route,
         state,
         looks,
         /** @type {keyof typeof CHOICES} */ (choice),
+        two ? ['--set', 'brand'] : [],
       );
       const before = snapshot();
       const res = await json(step.args);
-      if ('write' in step.expect) {
-        const expected = step.expect.write;
-        const options = {authored: step.expect.authored};
-        expect(res.code, JSON.stringify(res.body)).toBe(0);
-        expectEveryIconDrawsDefault(lib, expected, options);
-        await runPrintedNotes(res.body, () =>
-          expectEveryIconDrawsDefault(lib, expected, options),
-        );
-        return;
-      }
-      expect(res.code, JSON.stringify(res.body)).not.toBe(0);
-      expect(snapshot()).toEqual(before);
-      /** @type {string[]} */
-      const suggestions = (res.body.suggestions ?? []).map(
-        (/** @type {any} */ each) => each.name,
+      expectEveryCommandNamesTheSet(res.body);
+      await checkRefusalOrWrite({lib, route, choice, step, looks, res, before});
+      expect(spareFiles(), 'every printed command acts on its own set').toEqual(
+        spareBefore,
       );
-      switch (step.expect.refuse) {
-        case 'looks':
-          expect(res.body.error).toContain('filled or outline');
+    });
+
+  /**
+   * Check that a path wrote the set it must, or refused as it must, and run
+   * the commands it printed.
+   * @param {object} args
+   * @param {Library} args.lib
+   * @param {string} args.route
+   * @param {string} args.choice
+   * @param {{args: string[], expect: Expected}} args.step
+   * @param {{drawn: string, other: string}} args.looks
+   * @param {{code: number, body: any}} args.res
+   * @param {Record<string, string>} args.before
+   */
+  async function checkRefusalOrWrite({
+    lib,
+    route,
+    choice,
+    step,
+    looks,
+    res,
+    before,
+  }) {
+    if ('write' in step.expect) {
+      const expected = step.expect.write;
+      const options = {authored: step.expect.authored};
+      expect(res.code, JSON.stringify(res.body)).toBe(0);
+      expectEveryIconDrawsDefault(lib, expected, options);
+      await runPrintedNotes(res.body, lib, looks, () =>
+        expectEveryIconDrawsDefault(lib, expected, options),
+      );
+      return;
+    }
+    expect(res.code, JSON.stringify(res.body)).not.toBe(0);
+    expect(snapshot()).toEqual(before);
+    /** @type {string[]} */
+    const suggestions = (res.body.suggestions ?? []).map(
+      (/** @type {any} */ each) => each.name,
+    );
+    switch (step.expect.refuse) {
+      case 'looks':
+        expect(res.body.error).toContain('filled or outline');
+        break;
+      case 'drawn':
+        expect(res.body.error).toContain('already draws');
+        break;
+      case 'own': {
+        if (route === 'add --variant') {
+          expect(res.body.error).toContain('own export');
           break;
-        case 'drawn':
-          expect(res.body.error).toContain('already draws');
-          break;
-        case 'own': {
-          if (route === 'add --variant') {
-            expect(res.body.error).toContain('own export');
-            break;
-          }
-          // Every icon's own export comes from this module: the variant is
-          // the look they draw now, the default the set must declare.
-          expect(res.body.error).toBe(
-            `"${lib.moduleOf(looks.drawn)}" is the module the ${GLYPHS.length} icons of "brand" come from: its exports are those icons in the look they draw now, so "${looks.drawn}" is that look and can't be a variant of them. "brand" declares no default variant; declare "${looks.drawn}" as the default first.`,
+        }
+        // Every icon's own export comes from this module: the variant is
+        // the look they draw now, the default the set must declare.
+        expect(res.body.error).toBe(
+          `"${lib.moduleOf(looks.drawn)}" is the module the ${GLYPHS.length} icons of "brand" come from: its exports are those icons in the look they draw now, so "${looks.drawn}" is that look and can't be a variant of them. "brand" declares no default variant; declare "${looks.drawn}" as the default first.`,
+        );
+        expect(suggestions).toEqual([
+          `astryx experimental icon new-set brand --variants ${looks.drawn},${looks.other} --default-variant ${looks.drawn}`,
+        ]);
+        await runPrinted(suggestions[0]);
+        expectEveryIconDrawsDefault(lib, looks.drawn);
+        const again = await json(step.args);
+        expect(again.code, JSON.stringify(again.body)).not.toBe(0);
+        expect(again.body.error).toContain('already draws');
+        break;
+      }
+      case 'refresh': {
+        const refresh = `astryx experimental icon new-set brand --from ${lib.module}`;
+        expect(suggestions[0]).toMatch(new RegExp(`^${refresh} `, 'u'));
+        await runPrinted(suggestions[0]);
+        expectEveryIconDrawsDefault(lib, looks.other);
+        break;
+      }
+      case 'keep': {
+        // No run moves the default; each printed command runs, the
+        // module placeholder filled with the module that draws the look.
+        expect(res.body.error).toContain('export names name no looks');
+        expect(suggestions.length).toBeGreaterThan(0);
+        for (const command of suggestions) {
+          expect(command).not.toMatch(/new-set brand --from /u);
+          await runPrinted(
+            command.replace('<module>', lib.moduleOf(looks.other)),
           );
+        }
+        expectEveryIconDrawsDefault(lib, looks.drawn);
+        expect(
+          dataOf('brand').icons.every((/** @type {any} */ icon) =>
+            (icon.variants ?? []).some(
+              (/** @type {any} */ each) => each.variant === looks.other,
+            ),
+          ),
+        ).toBe(true);
+        break;
+      }
+      case 'name': {
+        if (choice === 'drop') {
+          // The command names only the variants it was given: the
+          // default it writes is the author's word.
           expect(suggestions).toEqual([
-            `astryx experimental icon new-set brand --variants ${looks.drawn},${looks.other} --default-variant ${looks.drawn}`,
+            `astryx experimental icon new-set brand${route === 'refresh' ? ` --from ${lib.module}` : ''} --variants ${looks.other} --default-variant ${looks.other}`,
           ]);
           await runPrinted(suggestions[0]);
-          expectEveryIconDrawsDefault(lib, looks.drawn);
-          const again = await json(step.args);
+          expectEveryIconDrawsDefault(lib, looks.other, {authored: true});
+          break;
+        }
+        const named = suggestions.find(command =>
+          command.endsWith(` --default-variant ${looks.drawn}`),
+        );
+        expect(named, suggestions.join('\n')).toBeDefined();
+        await runPrinted(/** @type {string} */ (named));
+        expectEveryIconDrawsDefault(lib, looks.drawn);
+        break;
+      }
+      case 'declare': {
+        expect(suggestions[0]).toMatch(
+          /^astryx experimental icon new-set brand --variants /u,
+        );
+        // A placeholder is filled with the look the message names: the
+        // look the icons draw now.
+        await runPrinted(suggestions[0].replaceAll('<default>', looks.drawn));
+        const kept = dataOf('brand').default?.variant ?? null;
+        expect(kept).toBe(looks.drawn);
+        const again = await json(step.args);
+        if (choice === 'drawn') {
           expect(again.code, JSON.stringify(again.body)).not.toBe(0);
           expect(again.body.error).toContain('already draws');
           break;
         }
-        case 'refresh': {
-          const refresh = `astryx experimental icon new-set brand --from ${lib.module}`;
-          expect(suggestions[0]).toMatch(new RegExp(`^${refresh} `, 'u'));
-          await runPrinted(suggestions[0]);
-          expectEveryIconDrawsDefault(lib, looks.other);
-          break;
-        }
-        case 'keep': {
-          // No run moves the default; each printed command runs, the
-          // module placeholder filled with the module that draws the look.
-          expect(res.body.error).toContain('export names name no looks');
-          expect(suggestions.length).toBeGreaterThan(0);
-          for (const command of suggestions) {
-            expect(command).not.toMatch(/new-set brand --from /u);
-            await runPrinted(
-              command.replace('<module>', lib.moduleOf(looks.other)),
-            );
-          }
-          expectEveryIconDrawsDefault(lib, looks.drawn);
-          expect(
-            dataOf('brand').icons.every((/** @type {any} */ icon) =>
-              (icon.variants ?? []).some(
-                (/** @type {any} */ each) => each.variant === looks.other,
-              ),
-            ),
-          ).toBe(true);
-          break;
-        }
-        case 'name': {
-          const named = suggestions.find(command =>
-            command.endsWith(` --default-variant ${looks.drawn}`),
-          );
-          expect(named, suggestions.join('\n')).toBeDefined();
-          await runPrinted(/** @type {string} */ (named));
-          expectEveryIconDrawsDefault(lib, looks.drawn);
-          break;
-        }
-        case 'declare': {
-          expect(suggestions[0]).toMatch(
-            /^astryx experimental icon new-set brand --variants /u,
-          );
-          // A placeholder is filled with the look the message names: the
-          // look the icons draw now.
-          await runPrinted(suggestions[0].replaceAll('<default>', looks.drawn));
-          const kept = dataOf('brand').default?.variant ?? null;
-          expect(kept).toBe(looks.drawn);
-          const again = await json(step.args);
-          if (choice === 'drawn') {
-            expect(again.code, JSON.stringify(again.body)).not.toBe(0);
-            expect(again.body.error).toContain('already draws');
-            break;
-          }
-          expect(again.code, JSON.stringify(again.body)).toBe(0);
-          expectEveryIconDrawsDefault(lib, kept);
-          break;
-        }
+        expect(again.code, JSON.stringify(again.body)).toBe(0);
+        expectEveryIconDrawsDefault(lib, kept);
+        break;
       }
-    });
+      case 'drop': {
+        // The set keeps the look its icons draw: each printed command
+        // runs, the module placeholder filled with the module that draws
+        // the other look.
+        expect(res.body.error).toContain(`"${looks.drawn}"`);
+        expect(suggestions[0]).toMatch(
+          new RegExp(
+            `^astryx experimental icon new-set brand(?: --from \\S+)? --variants ${looks.drawn},${looks.other}$`,
+            'u',
+          ),
+        );
+        for (const command of suggestions) {
+          await runPrinted(
+            command.replace('<module>', lib.moduleOf(looks.other)),
+          );
+        }
+        expectEveryIconDrawsDefault(lib, looks.drawn);
+        break;
+      }
+    }
+  }
 });

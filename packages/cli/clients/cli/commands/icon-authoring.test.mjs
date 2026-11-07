@@ -347,7 +347,7 @@ describe('icon add', () => {
       name: 'delete',
       source: 'astryx',
       command:
-        'astryx experimental icon add Bin --from @acme/glyph-library --definition delete',
+        'astryx experimental icon add Bin --from @acme/glyph-library --set outline --definition delete',
     });
     expect(dataOf('outline').icons).toEqual([]);
   });

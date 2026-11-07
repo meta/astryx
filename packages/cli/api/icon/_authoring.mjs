@@ -526,8 +526,8 @@ export async function addIconSet(name, options) {
       ...(from != null && lookFound.summary != null
         ? lookNotes(lookFound.summary, icons.length, from, looks, name)
         : []),
-      ...mappedNotes(map),
-      ...suggestionNotes(suggestions),
+      ...mappedNotes(map, name),
+      ...suggestionNotes(suggestions, name),
       'Run `astryx integration check` to see the icon definitions still to map.',
     ];
   }
@@ -770,24 +770,26 @@ function definitionSuggestions(icons, map) {
 /**
  * The receipt's note for the suggestions, if any.
  * @param {Array<{definition: string, icon: string}>} suggestions
+ * @param {string} name the set's name
  */
-function suggestionNotes(suggestions) {
+function suggestionNotes(suggestions, name) {
   if (suggestions.length === 0) return [];
   const count = new Set(suggestions.map(each => each.definition)).size;
   return [
-    `${count} unmapped icon definitions have possible icons (listed under Suggestions; nothing was written for them). Check each meaning, then map the ones that fit: \`astryx experimental icon map <definition> <icon>\`.`,
+    `${count} unmapped icon definitions have possible icons (listed under Suggestions; nothing was written for them). Check each meaning, then map the ones that fit: \`astryx experimental icon map <definition> <icon> --set ${name}\`.`,
   ];
 }
 
 /**
  * The receipt's note for the entries an exact name wrote, if any.
  * @param {Record<string, string>} map
+ * @param {string} name the set's name
  */
-function mappedNotes(map) {
+function mappedNotes(map, name) {
   const count = Object.keys(map).length;
   if (count === 0) return [];
   return [
-    `${count} icon definitions were mapped because an icon has their exact name (listed under Mapped by name). A library can draw another meaning under the same name, such as a backspace key named delete: check each, and remap with \`astryx experimental icon map <definition> <icon>\`.`,
+    `${count} icon definitions were mapped because an icon has their exact name (listed under Mapped by name). A library can draw another meaning under the same name, such as a backspace key named delete: check each, and remap with \`astryx experimental icon map <definition> <icon> --set ${name}\`.`,
   ];
 }
 
@@ -1239,8 +1241,8 @@ async function refreshIconSet(
             `${renames.size} icons have a new id under this release's id rule, and keep their map entries, variants, and words: ${[...renames].map(([from, to]) => `${from} -> ${to}`).join(', ')}.`,
           ]
         : []),
-      ...mappedNotes(byName),
-      ...suggestionNotes(suggestions),
+      ...mappedNotes(byName, name),
+      ...suggestionNotes(suggestions, name),
       ...(goneMissing.length > 0
         ? [
             `${goneMissing.length} icons the library no longer exports were removed from the set: ${goneMissing.map(icon => icon.id).join(', ')}.`,

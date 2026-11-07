@@ -263,7 +263,6 @@ export async function iconAdd(exportName, options) {
 
     if (definition == null && newDefinition == null && !asVariant) {
       return definitionMatches(set, exportName, from, id, {
-        set: selector,
         useDefault,
         id: givenId,
         look:
@@ -472,7 +471,7 @@ export async function iconAdd(exportName, options) {
  * @param {string} exportName
  * @param {string} from
  * @param {string} id
- * @param {{set?: string, useDefault?: boolean, id?: string, look?: string | null, glyphId?: string}} passed the
+ * @param {{useDefault?: boolean, id?: string, look?: string | null, glyphId?: string}} passed the
  *   options the author passed, repeated in each listed command so it runs as
  *   printed; `look`, when the set already has an icon for the export's
  *   glyph (`glyphId`): the variant it is of that icon
@@ -523,7 +522,7 @@ function definitionMatches(set, exportName, from, id, passed = {}) {
   }
   const base = [
     `astryx experimental icon add ${exportName} --from ${shellArg(from)}`,
-    ...(passed.set != null ? [`--set ${shellArg(passed.set)}`] : []),
+    `--set ${shellArg(set.name)}`,
     ...(passed.useDefault ? ['--default'] : []),
     ...(passed.id != null ? [`--id ${shellArg(passed.id)}`] : []),
   ].join(' ');
@@ -554,7 +553,7 @@ function definitionMatches(set, exportName, from, id, passed = {}) {
     passed.look && passed.glyphId
       ? [
           `astryx experimental icon add ${exportName} --from ${shellArg(from)}`,
-          ...(passed.set != null ? [`--set ${shellArg(passed.set)}`] : []),
+          `--set ${shellArg(set.name)}`,
           ...(passed.useDefault ? ['--default'] : []),
           `--id ${passed.glyphId} --variant ${passed.look}`,
         ].join(' ')

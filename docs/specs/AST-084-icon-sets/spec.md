@@ -313,7 +313,7 @@ icon, and the CLI verifies it, writes the files, and checks the set.
     run that moves it), and the receipt carries `updated`. A set whose
     icons' export names name no looks keeps its default variant on a
     refresh too, since its icons keep their exports; the refusal names the
-    `add --variant <name> --from <module> --all` run that adds the look. Over an existing set, `--variants` without
+    `add --variant <name> --from <module> --all --set <set>` run that adds the look. Over an existing set, `--variants` without
     `--default-variant` keeps the set's default variant while it stays
     declared; in a library of looks, it takes the look the icons' exports
     draw, which `--variants` must list. Run again with `--from`, it
@@ -347,8 +347,8 @@ icon, and the CLI verifies it, writes the files, and checks the set.
     that declared variant of an existing icon, and names a variant the set
     does not declare with the command that declares it, which names the
     set's default variant. Each command it
-    lists repeats `--set`, `--default`, and `--id` as passed, so it runs as
-    printed. A new definition is named in camelCase or kebab-case and written
+    lists names the set with `--set` and repeats `--default` and `--id` as
+    passed, so it runs as printed. A new definition is named in camelCase or kebab-case and written
     in camelCase. From a library of looks it names the icon by its glyph;
     when the set already exports that glyph's name for another export of the
     library, the export keeps its look words in its id and name, or takes

@@ -277,6 +277,9 @@ describe('elementPropOrigins', () => {
       "import {Theme} from '@acme/core';\nimport {gone} from '@acme/missing';\nexport const A = () => <Theme theme={gone} />;\n",
     );
     expect(elementPropOrigins(app, THEME)).toEqual([null]);
+  });
+});
+
 describe('an export declared inside a namespace', () => {
   const NAMESPACE =
     'export namespace Button {\n  export function Inner() { return null; }\n}\n';

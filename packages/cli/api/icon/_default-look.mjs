@@ -244,11 +244,39 @@ function unencodedMove(name, count, current, looks) {
         reason: `declare ${looks.default} as a variant and keep ${current} as the default`,
       },
       {
-        name: `astryx experimental icon add --variant ${looks.default} --from <module> --all`,
+        name: `astryx experimental icon add --variant ${looks.default} --from <module> --all --set ${name}`,
         reason: `give each icon its ${looks.default} look from the module that draws it`,
       },
     ],
     ERROR_CODES.ERR_INVALID_ARGUMENT,
+  );
+}
+
+/**
+ * The refusal for `--variants` that leave out the default variant of a set
+ * whose library's export names name no looks. Its icons keep their exports,
+ * so they still draw the default, and the set must keep declaring it.
+ * @param {string} name
+ * @param {number} count the set's icons
+ * @param {string} current the set's default variant
+ * @param {Looks} looks
+ * @param {string} from ` --from <module>` on a refresh, else empty
+ */
+function droppedDefault(name, count, current, looks, from) {
+  const others = looks.variants.filter(variant => variant !== current);
+  return new AstryxError(
+    `--variants (${looks.variants.join(', ')}) leaves out "${current}", the default variant of icon set "${name}". Its icons' export names name no looks, so each of its ${count} icons still draws "${current}", the look its icons' module draws. List "${current}" in --variants, and add each other look as a variant from the module that draws it (fill <module> with that module).`,
+    [
+      {
+        name: `astryx experimental icon new-set ${name}${from} --variants ${[current, ...others].join(',')}`,
+        reason: `keep ${current}, the look each icon draws, as the default`,
+      },
+      ...others.map(variant => ({
+        name: `astryx experimental icon add --variant ${variant} --from <module> --all --set ${name}`,
+        reason: `give each icon its ${variant} look from the module that draws it`,
+      })),
+    ],
+    ERROR_CODES.ERR_INVALID_OPTION,
   );
 }
 
@@ -270,7 +298,8 @@ function unencodedMove(name, count, current, looks) {
  * A library whose names encode no looks has no look words: there the named
  * variant, the set's current default, or the first variant is the default.
  * Its icons keep their exports on every path, so a set with icons keeps a
- * declared default, and with none declared the command names it.
+ * declared default, `--variants` must list it, and with none declared the
+ * command names it.
  * @param {object} args
  * @param {string} args.name the set
  * @param {Looks | null} args.given the variants and default the command names
@@ -351,8 +380,11 @@ function unencodedDefault({name, given, current, icons, module, refresh}) {
   if (current != null && given.variants.includes(current)) {
     return {looks: {...given, default: current}, moved: false};
   }
+  const from = refresh && module ? ` --from ${shellArg(module)}` : '';
+  if (current != null && icons > 0) {
+    throw droppedDefault(name, icons, current, given, from);
+  }
   if (current == null && icons > 0) {
-    const from = refresh && module ? ` --from ${shellArg(module)}` : '';
     throw new AstryxError(
       `Icon set "${name}" declares no default variant, and its icons' export names name none of ${given.variants.join(', ')}. Name the look its ${icons} icons draw with --default-variant.`,
       given.variants.map(variant => ({

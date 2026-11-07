@@ -141,7 +141,7 @@ export function registerExperimentalIcon(group, program) {
             ),
           ),
           text(
-            `Built-in definitions are the ones every set maps. Map one: ${run} experimental icon map <definition> <icon id>`,
+            `Built-in definitions are the ones every set maps. Map one: ${run} experimental icon map <definition> <icon id> --set <set>`,
           ),
         );
         return answered;
@@ -158,7 +158,9 @@ export function registerExperimentalIcon(group, program) {
                 `${each.id}: ${each.words.join(', ')}${each.definitions.length > 0 ? ` = ${each.definitions.join(', ')}` : ''}`,
             ),
           ),
-          text(`Map one: ${run} experimental icon map <definition> <id>`),
+          text(
+            `Map one: ${run} experimental icon map <definition> <id> --set ${set}`,
+          ),
         );
         return answered;
       }
@@ -561,7 +563,7 @@ export function registerExperimentalIcon(group, program) {
               list(
                 data.suggestions.map(
                   each =>
-                    `${each.definition} -> ${each.icon} (${each.word}): ${formatCliCommand(`astryx experimental icon map ${each.definition} ${each.icon}`)}`,
+                    `${each.definition} -> ${each.icon} (${each.word}): ${formatCliCommand(`astryx experimental icon map ${each.definition} ${each.icon} --set ${data.name}`)}`,
                 ),
               ),
             ]
