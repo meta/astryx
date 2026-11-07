@@ -564,6 +564,8 @@ test.describe('frame evidence', () => {
     // The control's motion keeps the cast sending frames meanwhile.
     const restCast = await startScreencast(page);
     await frames(page, 3);
+    // WebKit's first cast frame can lag several frames on a busy page.
+    await expect.poll(() => restCast.frameCount()).toBeGreaterThan(0);
     const [atRest] = await trackMarker(page, (await restCast.stop()).slice(-1));
     expect(atRest?.box, 'the cast shows the box at rest').toBeTruthy();
     const rest = {
