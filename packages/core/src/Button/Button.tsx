@@ -65,6 +65,9 @@ import {
 } from '../InputGroup/groupStyles';
 import {mergeProps} from '../utils/mergeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useTouchHitArea} from '../utils/touchHitArea';
+import {ButtonHitAreaContext} from './buttonHitArea';
+import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import type {LinkComponentType} from '../Link/types';
 import {themeProps} from '../utils/themeProps';
@@ -231,8 +234,24 @@ const styles = stylex.create({
     justifyContent: 'center',
     flexShrink: 0,
   },
+  // A real box, not `display: contents`: WebKit before macOS 15 drops an
+  // accessible name computed through a `display: contents` element, so
+  // VoiceOver read a labelled Button as unnamed. The box takes the Button's
+  // own layout (it is the only in-flow child; the spinner overlay and the
+  // live region are absolutely positioned), so the content sits as before.
   contentWrapper: {
-    display: 'contents',
+    display: 'flex',
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 'auto',
+    alignSelf: 'stretch',
+    flexDirection: 'inherit',
+    flexWrap: 'inherit',
+    alignItems: 'inherit',
+    justifyContent: 'inherit',
+    gap: 'inherit',
+    // Lets a narrow row shrink the box, so the label inside still truncates.
+    minWidth: 0,
   },
   labelText: {
     overflow: 'hidden',
@@ -733,6 +752,10 @@ export function Button({
   const isBusyOnlyDisabled =
     !isTrueDisabled && isLoadingState && !isInterruptible;
   const buttonDisabled = isTrueDisabled || isBusyOnlyDisabled;
+  // The group draws one band for all its members.
+  // A disabled or busy-only button takes no tap.
+  const hasHitArea = buttonGroup == null && !buttonDisabled;
+  const hitAreaRef = useTouchHitArea(hasHitArea, use(ButtonHitAreaContext));
   // isIconOnly prop is the source of truth for icon-only rendering.
   // When false (default), label is always rendered as visible text.
 
@@ -877,6 +900,10 @@ export function Button({
       <span
         {...stylex.props(
           styles.contentWrapper,
+          // The content wrapper's `::after` carries the touch band, so the
+          // button's own `::before` (the touch press) and `::after` (a
+          // caller's decoration) stay as they are.
+          hasHitArea && touchHitAreaStyles.layer,
           isLoadingState &&
             (delaySpinner
               ? loadingStyles.hiddenContentDelayed
@@ -952,6 +979,7 @@ export function Button({
   const mergedButtonRef = useMergedRefs(
     ref,
     tooltip != null ? tooltipHook.ref : undefined,
+    hitAreaRef,
   );
 
   let element: ReactNode;

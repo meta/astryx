@@ -36,7 +36,7 @@
     "storyboards": "playwright test --config playwright.interaction.config.ts --grep @storyboard",
     "typecheck": "pnpm -r --no-bail --workspace-concurrency=1 --if-present --filter \"!@astryxdesign/docsite\" --filter \"!@astryxdesign/sandbox\" run typecheck",
     "check:package-boundaries": "node scripts/check-package-boundaries.js",
-    "check:repo": "pnpm check:visual-owner && pnpm check:sync && pnpm check:neutral-palette-refs && pnpm check:stone-palette-refs && pnpm check:gothic-palette-refs && pnpm check:matcha-palette-refs && pnpm check:butter-palette-refs && pnpm check:y2k-palette-refs && pnpm check:data-tokens && pnpm check:token-docs && pnpm check:motion-roles && pnpm check:knowledge && pnpm check:package-boundaries && pnpm check:changesets && pnpm check:demo-media && pnpm check:executable-bits && pnpm check:cli-structure && pnpm check:use-client && pnpm check:portable-scripts && pnpm check:i18n-runtime && pnpm check:i18n-catalog && pnpm check:cldr-weekdays && pnpm check:cldr-month-capitals && pnpm check:fixtures && pnpm check:setup-contract",
+    "check:repo": "pnpm check:visual-owner && pnpm check:published-manifests && pnpm check:sync && pnpm check:neutral-palette-refs && pnpm check:stone-palette-refs && pnpm check:gothic-palette-refs && pnpm check:matcha-palette-refs && pnpm check:butter-palette-refs && pnpm check:y2k-palette-refs && pnpm check:data-tokens && pnpm check:token-docs && pnpm check:motion-roles && pnpm check:knowledge && pnpm check:package-boundaries && pnpm check:changesets && pnpm check:demo-media && pnpm check:executable-bits && pnpm check:cli-structure && pnpm check:use-client && pnpm check:portable-scripts && pnpm check:i18n-runtime && pnpm check:i18n-catalog && pnpm check:cldr-weekdays && pnpm check:cldr-month-capitals && pnpm check:fixtures && pnpm check:setup-contract",
     "check:visual-owner": "node scripts/check-visual-workflow-owner.mjs",
     "check:fixtures": "node internal/vibe-tests/scripts/fixture-suite.mjs verify",
     "generate:cldr-weekdays": "node scripts/generate-cldr-weekdays.mjs",
@@ -100,7 +100,8 @@
     "npm:prune-canaries": "node scripts/npm/prune-canaries.mjs",
     "check:knowledge": "node scripts/check-knowledge.mjs",
     "review:pre": "node scripts/pre-review.mjs",
-    "specs:for": "node scripts/specs-for-file.mjs"
+    "specs:for": "node scripts/specs-for-file.mjs",
+    "check:published-manifests": "node scripts/npm/published-manifests.mjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",

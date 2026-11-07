@@ -44,7 +44,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Build the page with Astryx components as usual, then render it. The page module needs a default export; it renders on your machine with the React and Astryx packages your project installed.',
+          text: 'Build the page with Astryx components as usual, then render it. The page module needs a default export; it renders on your machine with the React and Astryx packages your project installed. Outside a project (no Astryx Core or CLI installed or declared for the folder), it renders with the Astryx, React and StyleX that the CLI itself runs with, so a single page file renders anywhere, a React app included.',
         },
         {
           type: 'code',
