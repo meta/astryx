@@ -34,20 +34,24 @@ import {
   countBetween,
   cubicBezier,
   freezeTimers,
-  holdAnimations,
   installTimerGate,
   openStory,
   releaseAnimations,
+  requireFrames,
   seekAnimations,
+  startBusyControl,
   startScreencast,
   tap,
   thawTimers,
   timeline,
   touchDriver,
   traceRendering,
+  trackControl,
+  waitForRest,
   watchAnimations,
   withStorybook,
   writeEvidence,
+  type ArmedHold,
   type CastFrame,
   type TouchDriver,
 } from '@astryxdesign/interaction-harness';
@@ -204,18 +208,23 @@ for (const [name, story, locate] of [
     await page.emulateMedia({reducedMotion: 'reduce'});
     const opened = await openSurface(page, story, locate);
     await installTimerGate(page);
-    await opened.driver.play(tap(opened.center, {holdMs: HOLD_MS}));
-    expect(await opened.surface.getAttribute('data-astryx-press')).toBe(
-      'fading',
-    );
-    await freezeTimers(page);
-    const held = await holdAnimations(page, opened.surface, {
+    // The page holds the release itself as soon as it runs. A hold the test
+    // sends after the lift reaches the page later on a busy machine, and the
+    // release can end first. Under reduced motion the press runs no
+    // animation, so the first one is the release.
+    const hold = await armHold(page, opened.surface, {
       judges: {
         target: opened.surface,
         property: 'opacity',
         pseudoElement: '::before',
       },
     });
+    await opened.driver.play(tap(opened.center, {holdMs: HOLD_MS}));
+    expect(await opened.surface.getAttribute('data-astryx-press')).toBe(
+      'fading',
+    );
+    await freezeTimers(page);
+    const held = await hold.held();
     await releaseAnimations(page, {finish: true});
     await thawTimers(page);
     // One animation, of opacity alone, finished within 200 ms; nothing
@@ -264,16 +273,35 @@ for (const [name, story, locate, pseudo] of [
         await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
       ).toBe(false);
       await installTimerGate(page);
-      await opened.driver.play(tap(opened.center, {holdMs: HOLD_MS}));
+      // The page holds the release itself as soon as it runs. A hold the
+      // test sends after the lift reaches the page later on a busy machine,
+      // and the release can end first. The press runs the scale, and the
+      // release runs the strength's animation alone. So the hold is armed
+      // once the press is at rest, before the lift.
+      let hold: ArmedHold | undefined;
+      await opened.driver.play(tap(opened.center, {holdMs: HOLD_MS}), {
+        onEvent: async step => {
+          if (step.type === 'touchStart') {
+            await waitForRest(opened.surface);
+            hold = await armHold(page, opened.surface, {
+              judges: {
+                target: opened.surface,
+                property: '--astryx-press-alpha',
+              },
+            });
+          }
+        },
+      });
       expect(await opened.surface.getAttribute('data-astryx-press')).toBe(
         'fading',
       );
       await freezeTimers(page);
-      const held = (
-        await holdAnimations(page, opened.surface, {
-          judges: {target: opened.surface, property: '--astryx-press-alpha'},
-        })
-      ).filter(animation => animation.kind === 'CSSAnimation');
+      if (hold == null) {
+        throw new Error('the press started no hold');
+      }
+      const held = (await hold.held()).filter(
+        animation => animation.kind === 'CSSAnimation',
+      );
       const layer = await opened.surface.evaluate(
         el => getComputedStyle(el, '::before').content,
       );
@@ -323,18 +351,25 @@ for (const [name, story, locate, pseudo] of [
     // Gate the page's timers before the press, so the release timer (which
     // removes the attribute when the clock runs out) holds while seeking.
     await installTimerGate(page);
-    await opened.driver.play(tap(opened.center, {holdMs: HOLD_MS}));
-    expect(await opened.surface.getAttribute('data-astryx-press')).toBe(
-      'fading',
-    );
-    await freezeTimers(page);
-    const held = await holdAnimations(page, opened.surface, {
+    // The page holds the release itself as soon as it runs. A hold the test
+    // sends after the lift reaches the page later on a busy machine, and the
+    // release can end first. The press runs one animation (the scale) and the
+    // release runs two (the scale back and the layer's fade), so the hold
+    // waits for two.
+    const hold = await armHold(page, opened.surface, {
+      count: 2,
       judges: {
         target: opened.surface,
         property: 'opacity',
         pseudoElement: pseudo,
       },
     });
+    await opened.driver.play(tap(opened.center, {holdMs: HOLD_MS}));
+    expect(await opened.surface.getAttribute('data-astryx-press')).toBe(
+      'fading',
+    );
+    await freezeTimers(page);
+    const held = await hold.held();
     const release = held.find(
       a => a.kind === 'CSSAnimation' && a.durationMs === RELEASE_MS,
     );
@@ -548,18 +583,29 @@ test('the release of a button keeps fading on every frame while the main thread 
   await opened.surface.evaluate(el =>
     (el as HTMLElement).style.setProperty('--duration-exit', '400ms'),
   );
+  // The harness's busy-window control: a box the compositor moves, in the
+  // same screencast. The cast's frames are judged against what the compositor
+  // presented, not against a frame rate.
+  const busyControl = await startBusyControl(page);
   const cast = await startScreencast(page);
   const watch = await watchAnimations(opened.surface);
+  // A 1 s block, as spec:AST-094 FR5's verification names, covers the
+  // whole release. The page starts it itself once the layer's fade has run a
+  // frame. A block the test sends after the lift reaches the page later on a
+  // busy machine, and most of the release can be over first.
+  const blocked = blockMainThread(page, 1000, {
+    during: opened.surface,
+    pseudoElement: '::before',
+  });
   await opened.driver.play(tap(opened.center, {holdMs: HOLD_MS}));
-  // The release is the longest animation running: the `::before`
-  // opacity fade, not the 125 ms press-scale transition that starts with it.
+  const block = await blocked;
+  // The release is the longest animation: the `::before` opacity fade, not
+  // the 125 ms press-scale transition that starts with it.
   const running = await watch.started({minProgressMs: 16});
   const release = longestOf(running);
-  // A 1 s block, as spec:AST-094 FR5's verification names, covers the
-  // whole release.
-  const block = await blockMainThread(page, 1000);
   await page.waitForTimeout(150);
   const frames = await cast.stop();
+  await busyControl.remove();
   const pixels = await samplePixel(page, frames, opened.probe);
   const rest = pixels[0].value;
   const pressed = Math.min(
@@ -572,13 +618,16 @@ test('the release of a button keeps fading on every frame while the main thread 
     t: +(p.t - block.from).toFixed(1),
     strength: +strength(p.value).toFixed(3),
   }));
-  const intervals = during
-    .map((p, i) => (i === 0 ? p.t - block.from : p.t - during[i - 1].t))
-    .filter(dt => dt > 0);
-  const longestGap = Math.max(
-    end - (during.at(-1)?.t ?? block.from),
-    ...intervals,
+  // The frames on which the compositor presented a new position of the
+  // control: each is a frame that the release had to show.
+  const controlFrames = await trackControl(
+    page,
+    frames.filter(f => f.t >= block.from - 100 && f.t <= end + 100),
   );
+  const presented = controlFrames.filter((frame, i) => {
+    const before = controlFrames[i - 1]?.box;
+    return frame.box != null && before != null && frame.box.x !== before.x;
+  });
   await writeEvidence(
     'busy-main-thread/button-press-release',
     {
@@ -604,10 +653,12 @@ test('the release of a button keeps fading on every frame while the main thread 
   });
   await film.write(testInfo, {block, release});
   expect(rest - pressed).toBeGreaterThan(10);
-  expect(during.length, JSON.stringify(strengths)).toBeGreaterThanOrEqual(
-    Math.floor((end - block.from) / (1000 / 60)) - 2,
-  );
-  expect(longestGap).toBeLessThan(40);
+  // A page starved of frames fails here by name, not on a bare count.
+  requireFrames(presented, {
+    min: 4,
+    during: 'the release faded under the block',
+    where: frame => frame.t > block.from && frame.t <= end,
+  });
   for (let i = 1; i < strengths.length; i++) {
     expect(strengths[i].strength).toBeLessThanOrEqual(
       strengths[i - 1].strength + 0.01,
