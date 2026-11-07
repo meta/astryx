@@ -1140,9 +1140,10 @@ test('with a mouse, the incoming bar covers the old title while the main thread 
  * The screencast frames inside the block, once the block has caught the
  * title. A block cannot begin before the push's first frame, and a page that
  * is starved of frames begins it late. When the push had already covered the
- * title, the window holds nothing to judge, and the run fails by name. The
- * numbers come from the frames: the push's first moved frame and the title's
- * last sighting, before the block.
+ * title, the window holds nothing to judge, and the run fails by name. A
+ * frame by the block's start shows the title gone, or the block's first frame
+ * does, within `FRAME_STARVATION_MS`. A push that froze presents no frame that
+ * early, so it fails on the assertion. The numbers come from the frames.
  */
 function titleFramesInBlock(
   tracked: readonly TrackedFrame[],
@@ -1150,11 +1151,16 @@ function titleFramesInBlock(
 ): TrackedFrame[] {
   const during = tracked.filter(f => f.t > block.from && f.t < block.to - 20);
   const lastSeen = tracked.filter(f => f.box != null).at(-1);
-  if (
-    !during.some(f => f.box != null) &&
+  const firstInBlock = tracked.find(f => f.t > block.from);
+  const goneAtStart =
     lastSeen != null &&
-    lastSeen.t <= block.from
-  ) {
+    lastSeen.t <= block.from &&
+    (tracked.some(
+      f => f.box == null && f.t > lastSeen.t && f.t <= block.from,
+    ) ||
+      (firstInBlock?.box === null &&
+        firstInBlock.t - block.from <= FRAME_STARVATION_MS));
+  if (!during.some(f => f.box != null) && lastSeen != null && goneAtStart) {
     // The title rides the covered bar, so its first move is the push's
     // first frame.
     const restX = tracked.find(f => f.box != null)?.box?.x ?? 0;
@@ -1163,8 +1169,12 @@ function titleFramesInBlock(
       lastSeen;
     const pushBeforeBlockMs = block.from - moved.t;
     const lastSeenBeforeBlockMs = block.from - lastSeen.t;
+    const pushFrame =
+      pushBeforeBlockMs >= 0
+        ? `${pushBeforeBlockMs.toFixed(0)} ms before`
+        : `${(-pushBeforeBlockMs).toFixed(0)} ms after`;
     throw new BusyWindowTooLateError(
-      `the push's first frame came ${pushBeforeBlockMs.toFixed(0)} ms before the block, and the title was last seen ${lastSeenBeforeBlockMs.toFixed(0)} ms before it: the push had covered the title, so the block holds nothing to judge`,
+      `the push's first frame came ${pushFrame} the block began, and the title was last seen ${lastSeenBeforeBlockMs.toFixed(0)} ms before it: the push had covered the title by the block's first frame, so the block holds nothing to judge`,
       {pushBeforeBlockMs, lastSeenBeforeBlockMs},
     );
   }
