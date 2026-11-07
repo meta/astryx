@@ -647,3 +647,94 @@ export const BottomSheetSubmenu: Story = {
     }
   },
 };
+
+const touchStyles = stylex.create({
+  demo: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: '12px',
+  },
+  card: {
+    width: '200px',
+    height: '120px',
+    display: 'grid',
+    placeItems: 'center',
+    borderRadius: '12px',
+    backgroundColor: '#e5e7eb',
+    color: '#374151',
+    userSelect: 'none',
+  },
+});
+
+export const TouchLongPress: Story = {
+  name: 'Touch / long press',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Where the primary pointer is coarse (a touch screen), hold a finger on the card. As on iOS, it starts to grow after 150 ms, a haptic plays at 400 ms where the device can play one, and the menu opens at 735 ms, or as soon as the finger lifts after 400 ms. Once the menu is up, the same finger may slide onto an action without lifting: lifting over an action picks it, and lifting over no action leaves the menu open. The last action picked shows below the card. A finger that lifts before 400 ms, or drifts more than 11.5 px on either axis before the menu opens, gets no menu, and the card springs back to its size. While the menu is up, the page still scrolls: a touch outside the menu closes it as it begins to pan. The card returns to its size when the menu closes.',
+      },
+    },
+  },
+  render: () => <TouchLongPressDemo />,
+};
+
+/** The touch story's menu, and the last action it picked. */
+function TouchLongPressDemo() {
+  const [lastAction, setLastAction] = useState<string | null>(null);
+  const pick = (label: string) => () => setLastAction(label);
+  return (
+    <div {...stylex.props(touchStyles.demo)}>
+      <ContextMenu
+        data-testid="touch-context-menu"
+        label="Photo actions"
+        items={[
+          {label: 'Copy', icon: ClipboardIcon, onClick: pick('Copy')},
+          {label: 'Share', icon: ShareIcon, onClick: pick('Share')},
+          {
+            label: 'Save to Files',
+            icon: ArrowDownTrayIcon,
+            onClick: pick('Save to Files'),
+          },
+          {type: 'divider'},
+          {
+            label: 'Delete',
+            icon: TrashIcon,
+            variant: 'destructive',
+            onClick: pick('Delete'),
+          },
+        ]}>
+        <div {...stylex.props(touchStyles.card)}>Hold for actions</div>
+      </ContextMenu>
+      <p data-testid="touch-context-menu-last">
+        {lastAction == null ? 'No action yet' : `Last action: ${lastAction}`}
+      </p>
+    </div>
+  );
+}
+
+export const TouchLongPressPopover: Story = {
+  name: 'Touch / long press, presentation="popover"',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'With `presentation="popover"`, ContextMenu keeps today’s menu on every device: a finger held for 500 ms opens it at the finger, with no growth and no iOS timeline. A finger on a device whose primary pointer is fine (a mouse or a trackpad) gets the same long press.',
+      },
+    },
+  },
+  render: () => (
+    <ContextMenu
+      data-testid="touch-context-menu"
+      label="Photo actions"
+      presentation="popover"
+      items={[
+        {label: 'Copy', icon: ClipboardIcon, onClick: () => {}},
+        {label: 'Share', icon: ShareIcon, onClick: () => {}},
+        {label: 'Save to Files', icon: ArrowDownTrayIcon, onClick: () => {}},
+      ]}>
+      <div {...stylex.props(touchStyles.card)}>Hold for actions</div>
+    </ContextMenu>
+  ),
+};
