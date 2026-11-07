@@ -400,22 +400,25 @@ describe('createMarkdownHeadingLinks', () => {
       name: 'Copy link to Overview',
     });
     const locationBefore = window.location.href;
-    // Each new text the polite live region takes, to count announcements.
+    // One entry per write that adds text to a live region, to count
+    // announcements. A failure is an error, so it goes to the assertive one.
     const announcements: string[] = [];
-    let lastAnnouncement = '';
-    const announcementObserver = new MutationObserver(() => {
-      const text =
-        document.querySelector('[data-astryx-live-region="polite"]')
-          ?.textContent ?? '';
-      if (text !== '' && text !== lastAnnouncement) {
-        announcements.push(text);
+    const announcementObserver = new MutationObserver(records => {
+      for (const {target, addedNodes} of records) {
+        const text = addedNodes.length ? target.textContent?.trim() : '';
+        if (
+          text &&
+          (target as Element).matches?.('[data-astryx-live-region]')
+        ) {
+          announcements.push(
+            `${(target as Element).getAttribute('data-astryx-live-region')}: ${text}`,
+          );
+        }
       }
-      lastAnnouncement = text;
     });
     announcementObserver.observe(document.body, {
       subtree: true,
       childList: true,
-      characterData: true,
     });
 
     await act(async () => {
@@ -435,7 +438,7 @@ describe('createMarkdownHeadingLinks', () => {
       await Promise.resolve();
     });
     expect(
-      document.querySelector('[data-astryx-live-region="polite"]'),
+      document.querySelector('[data-astryx-live-region="assertive"]'),
     ).toHaveTextContent('Failed to copy value to clipboard.');
 
     await act(async () => {
@@ -444,9 +447,16 @@ describe('createMarkdownHeadingLinks', () => {
     });
     expect(permalink).toHaveAccessibleName('Copy link to Overview');
     expect(permalink).toHaveTextContent('#');
+    // One more frame after the reset, so a repeat on reset would be seen.
+    await act(async () => {
+      vi.advanceTimersByTime(50);
+      await Promise.resolve();
+    });
     // The failure is announced once, not again while it shows or on reset.
     announcementObserver.disconnect();
-    expect(announcements).toEqual(['Failed to copy value to clipboard.']);
+    expect(announcements).toEqual([
+      'assertive: Failed to copy value to clipboard.',
+    ]);
   });
 
   it('shows a failed copy when the Clipboard API is unavailable', async () => {

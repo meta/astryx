@@ -135,7 +135,7 @@ another row descendant owns focus; keyboard reachable without `display: none` or
 semantics. The in-flow control box has the computed block-size of its adjacent heading
 line, so it never raises the heading line-height or changes wrapping. One stable logical
 inline slot at the final visual line end keeps heading text, the control, and adjacent
-controls disjoint in either direction; reveal and the `#`/check swap change no row
+controls disjoint in either direction; reveal and the `#`/check/cross swap change no row
 geometry or spacing. On coarse input, the interactive and focus geometry meets the
 24px AA target minimum, centered on that line-height box through overflow-visible
 internal geometry rather than block-size in flow. The extension remains unclipped and cannot overlap or
@@ -156,12 +156,12 @@ context-menu semantics. Custom headings remain outside this renderer contract.
 
 ## Design relationships
 
-| State              | Design requirement                                                                                    | Representation authority    | Module contract |
-| ------------------ | ----------------------------------------------------------------------------------------------------- | --------------------------- | --------------- |
-| Built-in heading   | Preserve semantic h1–h6 content while adding the projected ID and sibling copy control.               | Current source and Markdown | FR5, FR7, FR10  |
-| Copy control       | Align `#`/check in the heading line box; reveal canonically and extend only to the 24px AA hit floor. | Button and module contract  | FR10            |
-| Custom heading     | Forward the projected ID without wrapping or adding sibling presentation.                             | Caller                      | FR7             |
-| No-plugin Markdown | Preserve released root-only identity and nested-heading behavior byte-for-byte.                       | Current source and Markdown | FR5             |
+| State              | Design requirement                                                                                          | Representation authority    | Module contract |
+| ------------------ | ----------------------------------------------------------------------------------------------------------- | --------------------------- | --------------- |
+| Built-in heading   | Preserve semantic h1–h6 content while adding the projected ID and sibling copy control.                     | Current source and Markdown | FR5, FR7, FR10  |
+| Copy control       | Align `#`/check/cross in the heading line box; reveal canonically and extend only to the 24px AA hit floor. | Button and module contract  | FR10            |
+| Custom heading     | Forward the projected ID without wrapping or adding sibling presentation.                                   | Caller                      | FR7             |
+| No-plugin Markdown | Preserve released root-only identity and nested-heading behavior byte-for-byte.                             | Current source and Markdown | FR5             |
 
 The module adds no Markdown-local theme target. The button uses Button's existing target;
 the row is private layout.
