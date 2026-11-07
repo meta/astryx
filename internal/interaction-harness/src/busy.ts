@@ -399,6 +399,9 @@ export interface BlockedWindow extends BusyWindow {
  * animation inside `during` counts but the busy-window control's own
  * (`startBusyControl`, mounted inside a dialog with `within`), so pick an
  * element that runs nothing else meanwhile.
+ * With `pseudoElement`, only that pseudo-element's animations on `during`
+ * itself count, as `sampleCurve` reads them. A child's animation, such as a
+ * switch thumb's press, then does not start the block.
  *
  * An animation counts once it is no longer pending and has run at least one
  * frame (`minProgressMs` below 16 ms is raised to 16). One created in the
@@ -443,10 +446,21 @@ export async function blockMainThread(
   {
     during,
     minProgressMs = 16,
+    pseudoElement,
     timeout = 5_000,
-  }: {during?: Locator; minProgressMs?: number; timeout?: number} = {},
+  }: {
+    during?: Locator;
+    minProgressMs?: number;
+    pseudoElement?: '::before' | '::after';
+    timeout?: number;
+  } = {},
 ): Promise<BlockedWindow> {
   const minProgress = Math.max(minProgressMs, ONE_FRAME_MS);
+  if (pseudoElement != null && during == null) {
+    throw new TypeError(
+      'blockMainThread: pseudoElement names a part of `during`; pass `during` too',
+    );
+  }
   if (during == null) {
     return page.evaluate(duration => {
       // The harness's own work: a trace sets it apart (trace.ts HARNESS_READ).
@@ -481,7 +495,7 @@ export async function blockMainThread(
   // wait and not awaited, so the wait starts no later than it did.
   const defined = page.evaluate(defineCurveEnd);
   const waited = during.evaluate(
-    (element, {duration, minProgress, wait}) =>
+    (element, {duration, minProgress, pseudo, wait}) =>
       new Promise<BlockedWindow>((resolve, reject) => {
         // The harness's own waits run on the real timers: a frozen timer gate
         // (story.ts) holds only the page's.
@@ -507,6 +521,18 @@ export async function blockMainThread(
             target.closest('[data-harness-control]') != null
           );
         };
+        // With a pseudo-element, only its own animations on the element.
+        const counts = (a: Animation) => {
+          if (isControl(a)) {
+            return false;
+          }
+          const effect = a.effect as KeyframeEffect | null;
+          return (
+            pseudo == null ||
+            (effect?.target === element &&
+              (effect.pseudoElement ?? null) === pseudo)
+          );
+        };
         // Where each animation's curve ends, its held tail excluded.
         const curveEnd =
           (
@@ -521,7 +547,9 @@ export async function blockMainThread(
             );
           });
         // What already ran when the wait began.
-        const before = new Set(element.getAnimations({subtree: true}));
+        const before = new Set(
+          element.getAnimations({subtree: true}).filter(counts),
+        );
         const numbersOf = (a: Animation) => ({
           currentTimeMs: Number(a.currentTime ?? 0),
           curveEndMs: curveEnd(a),
@@ -538,7 +566,7 @@ export async function blockMainThread(
             .getAnimations({subtree: true})
             .filter(
               a =>
-                !isControl(a) &&
+                counts(a) &&
                 a.playState === 'running' &&
                 !a.pending &&
                 Number(a.currentTime ?? 0) >= minProgress,
@@ -585,7 +613,7 @@ export async function blockMainThread(
         };
         frame(tick);
       }),
-    {duration: ms, minProgress, wait: timeout},
+    {duration: ms, minProgress, pseudo: pseudoElement ?? null, wait: timeout},
   );
   try {
     const [, held] = await Promise.all([defined, waited]);

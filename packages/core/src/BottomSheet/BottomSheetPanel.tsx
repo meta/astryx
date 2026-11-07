@@ -185,8 +185,53 @@ function layoutViewportHeight(): number {
   return typeof window === 'undefined' ? 0 : window.innerHeight;
 }
 
-function subscribeToResize(onChange: () => void): () => void {
-  return subscribeInput(window, 'resize', onChange);
+// The layout viewport's height, as the `resize` listener last read it. While
+// the listener runs, a render reads this value, never `innerHeight`. After a
+// commit's DOM writes, a read of `innerHeight` forces a style recalculation
+// and a layout. Open sheets share one listener. With no sheet open, the value
+// is null, because nothing keeps it current.
+let viewportHeight: number | null = null;
+const viewportHeightListeners = new Set<() => void>();
+let stopViewportResize: (() => void) | null = null;
+
+function handleViewportResize(): void {
+  viewportHeight = layoutViewportHeight();
+  for (const listener of viewportHeightListeners) {
+    listener();
+  }
+}
+
+function subscribeToViewportHeight(onChange: () => void): () => void {
+  viewportHeightListeners.add(onChange);
+  if (stopViewportResize == null) {
+    stopViewportResize = subscribeInput(window, 'resize', handleViewportResize);
+    // A resize between the first render and this listener has no event left
+    // to deliver. So read the height now, and let React compare it with the
+    // height it rendered.
+    viewportHeight = layoutViewportHeight();
+    onChange();
+  }
+  return () => {
+    viewportHeightListeners.delete(onChange);
+    if (viewportHeightListeners.size === 0) {
+      stopViewportResize?.();
+      stopViewportResize = null;
+      viewportHeight = null;
+    }
+  };
+}
+
+function readViewportHeight(): number {
+  // Without a listener, nothing keeps a stored height current.
+  if (stopViewportResize == null) {
+    return layoutViewportHeight();
+  }
+  viewportHeight ??= layoutViewportHeight();
+  return viewportHeight;
+}
+
+function readNoViewportHeight(): number {
+  return 0;
 }
 
 function subscribeToNothing(): () => void {
@@ -769,13 +814,17 @@ export function BottomSheetPanel({
   // sizes, which nothing extends by the reserve; the stretch stops at it.
   const hasTouchPointer = useMediaQuery('(any-pointer: coarse)');
   const tracksViewport = isPresented && hasTouchPointer && !isSizedByCaller;
-  const viewportHeight = useSyncExternalStore(
-    tracksViewport ? subscribeToResize : subscribeToNothing,
-    () => (tracksViewport ? layoutViewportHeight() : 0),
-    () => 0,
+  // Each argument is a module function, so React keeps one snapshot function
+  // across renders and does not re-read it in the commit.
+  const trackedViewportHeight = useSyncExternalStore(
+    tracksViewport ? subscribeToViewportHeight : subscribeToNothing,
+    tracksViewport ? readViewportHeight : readNoViewportHeight,
+    readNoViewportHeight,
   );
   const reserve =
-    viewportHeight > 0 ? sheetReserve(viewportHeight) : MIN_RESERVE;
+    trackedViewportHeight > 0
+      ? sheetReserve(trackedViewportHeight)
+      : MIN_RESERVE;
   const {
     contentProps,
     handleProps,

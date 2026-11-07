@@ -11,9 +11,11 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {
   elementPropOrigins,
+  followedExportNames,
   moduleExportOrigin,
   moduleExportOrigins,
   moduleExportSource,
+  moduleExportsName,
   staticExportObject,
 } from './module-exports.mjs';
 
@@ -276,6 +278,86 @@ describe('elementPropOrigins', () => {
     );
     expect(elementPropOrigins(app, THEME)).toEqual([null]);
   });
+
+  it('follows an import to an export declared inside a namespace, as the whole-tree reader finds it', () => {
+    const themes = write(
+      'themes.ts',
+      'namespace Palette {\n  export const ocean = {};\n}\n',
+    );
+    const app = write(
+      'Namespaced.tsx',
+      "import {Theme} from '@acme/core';\nimport {ocean} from './themes';\nexport const A = () => <Theme theme={ocean} />;\n",
+    );
+    // The icon-set reader, which reads only the top level, runs first on
+    // the same parsed module and leaves the whole-tree answer unchanged.
+    expect(moduleExportOrigin(themes, 'ocean')).toBeNull();
+    expect(elementPropOrigins(app, THEME)).toEqual([
+      {file: themes, name: 'ocean'},
+    ]);
+  });
+});
+
+describe('an export declared inside a namespace', () => {
+  const NAMESPACE =
+    'export namespace Button {\n  export function Inner() { return null; }\n}\n';
+
+  it('counts for the stable reader, as it always has', () => {
+    const file = write('button.ts', NAMESPACE);
+    expect(moduleExportSource(file, 'Inner')).toBe(file);
+    expect(moduleExportsName(file, 'Inner')).toBe(true);
+  });
+
+  it('is no export of the module for the icon-set reader, which reads only its top level', () => {
+    const file = write('button.ts', NAMESPACE);
+    expect(moduleExportOrigin(file, 'Inner')).toBeNull();
+    expect(followedExportNames(file)).not.toContain('Inner');
+  });
+
+  it('counts for the one-pass reader, in value and type reads, after the icon-set reader reads the module', () => {
+    const file = write('button.ts', NAMESPACE);
+    expect(
+      moduleExportOrigin(file, 'Inner', undefined, {types: true}),
+    ).toBeNull();
+    for (const types of [false, true]) {
+      expect(moduleExportOrigins(file, {types}).get('Inner')).toEqual({
+        file,
+        name: 'Inner',
+      });
+    }
+  });
+});
+
+describe('the one-pass reader beside the icon-set reader', () => {
+  it('reads namespace and type exports as the whole-tree reader does, while the icon-set reader skips nested declarations', () => {
+    const file = write(
+      'mixed.ts',
+      [
+        'export namespace Shapes {',
+        '  export const circle = 1;',
+        '  export interface Corner {}',
+        '}',
+        'export interface Size {}',
+        'export const top = 2;',
+        '',
+      ].join('\n'),
+    );
+    expect(moduleExportOrigin(file, 'circle')).toBeNull();
+    expect(
+      moduleExportOrigin(file, 'Corner', undefined, {types: true}),
+    ).toBeNull();
+    expect(moduleExportOrigin(file, 'Size', undefined, {types: true})).toEqual({
+      file,
+      name: 'Size',
+    });
+    const names = types =>
+      [...moduleExportOrigins(file, {types}).keys()].sort();
+    expect(names(false)).toEqual(['circle', 'top']);
+    expect(names(true)).toEqual(['Corner', 'Shapes', 'Size', 'circle', 'top']);
+    expect(moduleExportOrigins(file, {types: true}).get('Corner')).toEqual({
+      file,
+      name: 'Corner',
+    });
+  });
 });
 
 describe('moduleExportOrigins', () => {
@@ -317,6 +399,19 @@ describe('moduleExportOrigins', () => {
         );
       }
     }
+  });
+
+  it('follows an alias of an imported binding to where that binding is declared', () => {
+    const write = (name, text) => fs.writeFileSync(path.join(dir, name), text);
+    write('inner.ts', 'export const Inner = {};\n');
+    write(
+      'alias.ts',
+      "import {Inner as Provider} from './inner';\nexport const Public = Provider;\n",
+    );
+    const alias = path.join(dir, 'alias.ts');
+    const inner = {file: path.join(dir, 'inner.ts'), name: 'Inner'};
+    expect(moduleExportOrigin(alias, 'Public')).toEqual(inner);
+    expect(moduleExportOrigins(alias).get('Public')).toEqual(inner);
   });
 
   it('agrees through an export * cycle', () => {
