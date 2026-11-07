@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] A labelled `Button` grows with its label when the text size grows (as under iOS Dynamic Type). Its size is now a minimum height, so the label stays inside its own tap target, and stacked buttons no longer take each other's taps. At the default text size every button keeps its size, and icon-only buttons keep their fixed square size.
+[fix] A labelled `Button`'s size is now a minimum height: a label larger than the element size grows the button, so the label stays inside it. At the default text size Buttons keep their size, and icon-only buttons keep their fixed square. A caller `height` override no longer brings a labelled Button below its size; override `minHeight` instead.
 
 @cixzhang

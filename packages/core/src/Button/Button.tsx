@@ -268,10 +268,8 @@ const dynamicStyles = stylex.create({
   width: (width: SizeValue | null) => ({width}),
 });
 
-// A labelled button's size is a minimum, not a fixed height: when the text
-// size grows (iOS Dynamic Type), the button grows with its label, so the label
-// stays inside its own tap target. The button has no block padding, so its
-// label's line box decides the height above that minimum.
+// A label can outgrow the element size when the text size grows. The size is
+// a minimum, so the button grows and its label stays inside the tap target.
 const sizeStyles = stylex.create({
   sm: {minHeight: sizeVars['--size-element-sm']},
   md: {minHeight: sizeVars['--size-element-md']},
