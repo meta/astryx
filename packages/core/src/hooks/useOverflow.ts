@@ -420,9 +420,20 @@ export function useOverflowInternal(
         const sumWithGaps = (list: number[]) =>
           list.reduce((sum, width) => sum + width + 1, 0) +
           gap * Math.max(0, list.length - 1);
+        // The widest the row asks for: the items the cap lets show, plus the
+        // indicator when the cap holds some back.
+        const cap = Math.min(maxVisibleItems ?? widths.length, widths.length);
+        const shown =
+          collapseFrom === 'end'
+            ? widths.slice(0, cap)
+            : widths.slice(widths.length - cap);
+        const natural =
+          cap < widths.length && hasIndicator
+            ? [...shown, indicatorWidth]
+            : shown;
         const next = {
           minWidth: sumWithGaps(parts),
-          naturalWidth: sumWithGaps(widths),
+          naturalWidth: sumWithGaps(natural),
         };
         const applied = appliedFoldRef.current;
         if (

@@ -539,7 +539,7 @@ export const FoldingLanes: Story = {
             label="Wrapped actions"
             size="sm"
             startContent={
-              // A list inside the caller's own wrapper keeps its minimum.
+              // A list in the caller's own wrapper sizes as outside a Toolbar.
               <div>
                 <FoldingList labels={FOLD_ACTIONS} label="Actions" />
               </div>

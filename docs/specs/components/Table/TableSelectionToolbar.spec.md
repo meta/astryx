@@ -57,8 +57,9 @@ Consumer syntax and examples belong in `TableSelectionToolbar.doc.mjs`.
 
 - Released default preserved: `yes` — `sm`, `muted`, localized "Bulk
   actions", "{count} selected", and "Unselect All".
-- Compatibility class: records shipped behavior; no public prop, default, DOM,
-  target, or styling output changes.
+- Compatibility class: no public prop, default, DOM, or target change. Layout
+  output changes for an OverflowList in `startContent`: its actions fold and
+  the count and Clear keep their width (FR4).
 - Controlled/uncontrolled behavior: the selection is the shared state the
   caller passes.
 - Migration decision: none

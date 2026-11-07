@@ -39,6 +39,7 @@ import {themeProps} from '../utils/themeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {foldableMarker} from '../internal/foldable.stylex';
 import {useFoldingLaneWant} from '../internal/foldingLane';
+import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
 import {LayoutChangeSnapshot} from '../motion/LayoutChangeSnapshot';
 import {moveFocusLeftBehind, noteFocusWithin} from '../utils/focusReturn';
 import {useFocusLeavingChange} from '../utils/useFocusLeavingChange';
@@ -98,10 +99,6 @@ const inLane = stylex.create({
     '--_overflow-list-natural-width': `${px}px`,
   }),
 });
-
-/** What can take focus inside the "+N" trigger the caller renders. */
-const FOCUSABLE =
-  'button, a[href], input, select, [tabindex]:not([tabindex="-1"])';
 
 const multiRowHeight = stylex.create({
   height: (maxRows: number, rowHeight: number, gapPx: number) => ({
@@ -416,9 +413,9 @@ export function OverflowList({
       const target =
         trigger == null
           ? null
-          : trigger.matches(FOCUSABLE)
+          : trigger.matches(FOCUSABLE_SELECTOR)
             ? trigger
-            : trigger.querySelector(FOCUSABLE);
+            : trigger.querySelector(FOCUSABLE_SELECTOR);
       moveFocusLeftBehind(noted, target as HTMLElement | null);
     },
   );

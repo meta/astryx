@@ -1230,6 +1230,29 @@ describe('OverflowList in a Toolbar lane (component:Toolbar FR2)', () => {
     expect(document.activeElement).toBe(within(vis).getByText('more:1,2'));
   });
 
+  it('asks a lane only for the width its maxVisibleItems cap lets show', () => {
+    render(
+      <Toolbar
+        label="Capped"
+        startContent={
+          <OverflowList
+            gap={0}
+            data-w="1000"
+            data-testid="ov"
+            maxVisibleItems={1}
+            overflowRenderer={trigger}>
+            {items}
+          </OverflowList>
+        }
+      />,
+    );
+    // One 40px item and the 40px trigger, plus a pixel each for rounding,
+    // not all three items.
+    expect(visibleContainer().getAttribute('style') ?? '').toMatch(
+      /--_overflow-list-natural-width:\s*82px/,
+    );
+  });
+
   it('moves focus from the trigger to the last item when every item comes back', async () => {
     render(
       <OverflowList
