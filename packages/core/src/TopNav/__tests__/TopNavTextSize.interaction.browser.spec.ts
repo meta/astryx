@@ -29,6 +29,11 @@ test.afterAll(async () => {
   await storybook?.close();
 });
 
+test.skip(
+  ({browserName}) => browserName !== 'chromium',
+  'Page.setFontSizes is a Chromium DevTools command',
+);
+
 test.use({viewport: {width: 1280, height: 800}});
 
 /** Sets the browser's default font size, which rem-based text follows. */
