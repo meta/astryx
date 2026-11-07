@@ -347,7 +347,7 @@ export function Heading({
             </span>
           }
           placement={tooltipPlacement}
-          interestRef={tooltipInterest.interestRef}
+          interest={tooltipInterest}
         />
       )}
     </>

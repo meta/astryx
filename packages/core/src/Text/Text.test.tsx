@@ -565,6 +565,38 @@ describe('the truncation tooltip mounts on the first interaction', () => {
     }
   });
 
+  it('opens on the first hover after the hover delay, not later', async () => {
+    const {showPopover, restore} = withOverflowAndPopover();
+    try {
+      render(
+        <Text type="body" maxLines={1}>
+          {LABEL}
+        </Text>,
+      );
+      // Truncation is measured and the Tooltip module loads.
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      });
+      vi.useFakeTimers();
+      const text = screen.getByText(LABEL);
+      act(() => {
+        fireEvent.pointerEnter(text, {pointerType: 'mouse'});
+        fireEvent.mouseEnter(text);
+      });
+      act(() => {
+        vi.advanceTimersByTime(199);
+      });
+      expect(showPopover).not.toHaveBeenCalled();
+      act(() => {
+        vi.advanceTimersByTime(1);
+      });
+      expect(showPopover).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+      restore();
+    }
+  });
+
   it('opens no tooltip when the pointer leaves before the hover delay ends', async () => {
     const {showPopover, restore} = withOverflowAndPopover();
     try {

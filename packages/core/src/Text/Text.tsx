@@ -353,7 +353,7 @@ export function Text({
             </span>
           }
           placement={tooltipPlacement}
-          interestRef={tooltipInterest.interestRef}
+          interest={tooltipInterest}
         />
       )}
     </>

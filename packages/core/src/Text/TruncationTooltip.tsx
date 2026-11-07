@@ -5,18 +5,17 @@
 /**
  * @file TruncationTooltip.tsx
  * @input A truncated element's ref, its full text and the tooltip placement
- * @output Exports `useTruncationTooltipInterest`, which tracks the first
- *   hover, tap or focus on a truncated element, and `TruncationTooltip`, the
- *   lazily loaded Tooltip that mounts on that interaction
+ * @output Exports `useTruncationTooltipInterest`, which loads the Tooltip
+ *   module once text is truncated and tracks the first hover, tap or focus on
+ *   it, and `TruncationTooltip`, the Tooltip that mounts on that interaction
  * @position Shared by Text and Heading. Until the first interaction a page of
  *   truncated text mounts no tooltip layers, and the tooltip that then mounts
  *   answers that interaction as it would once mounted.
  */
 
 import {
-  lazy,
-  Suspense,
   useCallback,
+  useEffect,
   useRef,
   useState,
   type FocusEvent,
@@ -25,19 +24,40 @@ import {
   type RefObject,
 } from 'react';
 import type {LayerPlacement} from '../Layer';
+import type {Tooltip as TooltipType} from '../Tooltip/Tooltip';
 import {useTapRecognizer} from '../Layer/useTouchTrigger';
 import {
   TooltipPresentInterestContext,
   type TooltipPresentInterestState,
 } from '../Tooltip/tooltipPresentInterest';
 
-const LazyTooltip = lazy(async () =>
-  import('../Tooltip/Tooltip').then(mod => ({default: mod.Tooltip})),
-);
+type TooltipComponent = typeof TooltipType;
+
+// The Tooltip module, once loaded. A tooltip mounted from it renders at once:
+// no boundary suspends, so the first hover's delay starts on the hover.
+let loadedTooltip: TooltipComponent | null = null;
+let tooltipLoad: Promise<TooltipComponent> | null = null;
+
+async function loadTooltip(): Promise<TooltipComponent> {
+  tooltipLoad ??= import('../Tooltip/Tooltip').then(
+    mod => {
+      loadedTooltip = mod.Tooltip;
+      return mod.Tooltip;
+    },
+    (error: unknown) => {
+      // A failed load is tried again by the next truncated element.
+      tooltipLoad = null;
+      throw error;
+    },
+  );
+  return tooltipLoad;
+}
 
 export interface TruncationTooltipInterest {
   /** Whether a hover, tap or focus has reached the element. It stays true. */
   readonly isWanted: boolean;
+  /** The Tooltip component, once its module has loaded. */
+  readonly tooltip: TooltipComponent | null;
   /** The interaction that mounted the tooltip, until the tooltip reads it. */
   readonly interestRef: RefObject<TooltipPresentInterestState>;
   readonly onPointerEnter: (event: PointerEvent<HTMLElement>) => void;
@@ -58,6 +78,28 @@ export function useTruncationTooltipInterest(
   isEnabled: boolean,
 ): TruncationTooltipInterest {
   const [isWanted, setIsWanted] = useState(false);
+  const [tooltip, setTooltip] = useState<TooltipComponent | null>(
+    () => loadedTooltip,
+  );
+  // Syncs with the module loader: truncated text loads the Tooltip module, so
+  // the first interaction mounts the tooltip at once.
+  useEffect(() => {
+    if (!isEnabled || tooltip != null) {
+      return;
+    }
+    let isCurrent = true;
+    loadTooltip().then(
+      loaded => {
+        if (isCurrent) {
+          setTooltip(() => loaded);
+        }
+      },
+      () => {},
+    );
+    return () => {
+      isCurrent = false;
+    };
+  }, [isEnabled, tooltip]);
   const interestRef = useRef<TooltipPresentInterestState>({
     interest: null,
     tapEvent: null,
@@ -114,6 +156,7 @@ export function useTruncationTooltipInterest(
   const onBlur = useCallback(() => forget('focus'), [forget]);
   return {
     isWanted,
+    tooltip,
     interestRef,
     onPointerEnter,
     onPointerLeave,
@@ -128,22 +171,22 @@ export function TruncationTooltip({
   anchorRef,
   content,
   placement,
-  interestRef,
+  interest,
 }: {
   anchorRef: RefObject<HTMLElement | null>;
   content: ReactNode;
   placement: LayerPlacement;
-  interestRef: RefObject<TooltipPresentInterestState>;
+  interest: TruncationTooltipInterest;
 }): ReactNode {
+  // A first interaction before the module loads mounts the tooltip once it
+  // has: the interaction is held until the tooltip reads it.
+  const Tooltip = interest.tooltip;
+  if (Tooltip == null) {
+    return null;
+  }
   return (
-    <Suspense fallback={null}>
-      <TooltipPresentInterestContext value={interestRef}>
-        <LazyTooltip
-          anchorRef={anchorRef}
-          content={content}
-          placement={placement}
-        />
-      </TooltipPresentInterestContext>
-    </Suspense>
+    <TooltipPresentInterestContext value={interest.interestRef}>
+      <Tooltip anchorRef={anchorRef} content={content} placement={placement} />
+    </TooltipPresentInterestContext>
   );
 }
