@@ -392,13 +392,34 @@ describe('createMarkdownHeadingLinks', () => {
     expect(permalink).toHaveTextContent('#');
   });
 
-  it('fails softly without navigation when clipboard writing rejects', async () => {
+  it('shows and announces a failed copy without navigation when clipboard writing rejects', async () => {
+    vi.useFakeTimers();
     clipboardWrite().mockRejectedValueOnce(new Error('clipboard denied'));
     render(<Markdown plugins={[headingLinks]}>{'# Overview'}</Markdown>);
     const permalink = screen.getByRole('button', {
       name: 'Copy link to Overview',
     });
     const locationBefore = window.location.href;
+    // One entry per write that adds text to a live region, to count
+    // announcements. A failure is an error, so it goes to the assertive one.
+    const announcements: string[] = [];
+    const announcementObserver = new MutationObserver(records => {
+      for (const {target, addedNodes} of records) {
+        const text = addedNodes.length ? target.textContent?.trim() : '';
+        if (
+          text &&
+          (target as Element).matches?.('[data-astryx-live-region]')
+        ) {
+          announcements.push(
+            `${(target as Element).getAttribute('data-astryx-live-region')}: ${text}`,
+          );
+        }
+      }
+    });
+    announcementObserver.observe(document.body, {
+      subtree: true,
+      childList: true,
+    });
 
     await act(async () => {
       fireEvent.click(permalink);
@@ -406,14 +427,39 @@ describe('createMarkdownHeadingLinks', () => {
     });
 
     expect(window.location.href).toBe(locationBefore);
+    expect(permalink).toHaveAccessibleName(
+      'Failed to copy value to clipboard.',
+    );
+    expect(permalink).not.toHaveTextContent('#');
+    expect(permalink.querySelector('.astryx-icon')).toBeInTheDocument();
+
+    await act(async () => {
+      vi.advanceTimersByTime(20);
+      await Promise.resolve();
+    });
+    expect(
+      document.querySelector('[data-astryx-live-region="assertive"]'),
+    ).toHaveTextContent('Failed to copy value to clipboard.');
+
+    await act(async () => {
+      vi.advanceTimersByTime(1480);
+      await Promise.resolve();
+    });
     expect(permalink).toHaveAccessibleName('Copy link to Overview');
     expect(permalink).toHaveTextContent('#');
-    expect(
-      document.querySelector('[data-astryx-live-region="polite"]'),
-    ).toBeNull();
+    // One more frame after the reset, so a repeat on reset would be seen.
+    await act(async () => {
+      vi.advanceTimersByTime(50);
+      await Promise.resolve();
+    });
+    // The failure is announced once, not again while it shows or on reset.
+    announcementObserver.disconnect();
+    expect(announcements).toEqual([
+      'assertive: Failed to copy value to clipboard.',
+    ]);
   });
 
-  it('fails softly when the Clipboard API is unavailable', async () => {
+  it('shows a failed copy when the Clipboard API is unavailable', async () => {
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: undefined,
@@ -430,8 +476,9 @@ describe('createMarkdownHeadingLinks', () => {
     });
 
     expect(window.location.href).toBe(locationBefore);
-    expect(permalink).toHaveAccessibleName('Copy link to Overview');
-    expect(permalink).toHaveTextContent('#');
+    expect(permalink).toHaveAccessibleName(
+      'Failed to copy value to clipboard.',
+    );
   });
 
   it('ignores modified and non-primary pointer activation', () => {
