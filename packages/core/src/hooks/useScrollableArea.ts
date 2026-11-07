@@ -119,6 +119,52 @@ const styles = stylex.create({
   ) => ({overflowX, overflowY}),
 });
 
+/**
+ * The inline declarations of an ancestor that change what the hook measures
+ * without changing a box: the axis mapping, and whether the boxes exist. A
+ * size change reaches the hook through the resize observers whatever caused
+ * it.
+ */
+const ANCESTOR_STYLE_PROPERTIES = [
+  'direction',
+  'writing-mode',
+  'display',
+  'visibility',
+  'content-visibility',
+] as const;
+
+function inlineDeclaration(
+  cssText: string | null,
+  property: string,
+): string | null {
+  if (cssText == null || !cssText.includes(property)) {
+    return null;
+  }
+  const match = new RegExp(`(?:^|;)\\s*${property}\\s*:\\s*([^;]*)`, 'i').exec(
+    cssText,
+  );
+  return match == null ? null : match[1].trim();
+}
+
+/**
+ * Whether an ancestor's `style` attribute changed a declaration the
+ * measurement depends on (ANCESTOR_STYLE_PROPERTIES), between its old and new
+ * text.
+ */
+function inlineStyleChangesMapping(
+  before: string | null,
+  after: string | null,
+): boolean {
+  if (before === after) {
+    return false;
+  }
+  return ANCESTOR_STYLE_PROPERTIES.some(
+    property =>
+      inlineDeclaration(before, property) !==
+      inlineDeclaration(after, property),
+  );
+}
+
 function axisIsRequested(requested: ScrollAxis, axis: 'inline' | 'block') {
   return requested === axis || requested === 'both';
 }
@@ -374,10 +420,38 @@ export function useScrollableArea({
 
     // Geometry invalidation is independent of keyboard eligibility. The latter
     // is inspected only on native keyboard entry, never by these observers.
+    // An ancestor's inline style reaches the measurement two ways: through the
+    // viewport's or the content's box, which the resize observers report, or
+    // through the axis mapping and the boxes' existence. So an ancestor's
+    // `style` mutation measures only when one of those declarations changed.
+    // A surface that moves under a finger writes its transform on every input
+    // sample; measuring on each of those forced a style recalculation and a
+    // layout every frame of the drag.
+    const onMutation = (records: MutationRecord[]) => {
+      for (const record of records) {
+        const target = record.target;
+        const isAncestorStyle =
+          record.type === 'attributes' &&
+          record.attributeName === 'style' &&
+          target instanceof Element &&
+          !viewport.contains(target) &&
+          !content.contains(target);
+        if (
+          !isAncestorStyle ||
+          inlineStyleChangesMapping(
+            record.oldValue,
+            target.getAttribute('style'),
+          )
+        ) {
+          scheduleMeasure();
+          return;
+        }
+      }
+    };
     const mutationObserver =
       typeof MutationObserver === 'undefined'
         ? null
-        : new MutationObserver(scheduleMeasure);
+        : new MutationObserver(onMutation);
     mutationObserver?.observe(viewport, {
       attributes: true,
       attributeFilter: ['class', 'dir', 'hidden', 'style'],
@@ -394,6 +468,7 @@ export function useScrollableArea({
       mutationObserver?.observe(ancestor, {
         attributes: true,
         attributeFilter: ['class', 'dir', 'hidden', 'style'],
+        attributeOldValue: true,
       });
       ancestor = ancestor.parentElement;
     }
