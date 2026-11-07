@@ -33,6 +33,8 @@ const PAGER_CODE = new RegExp(
     'motion/(animator|paging|presentation|projection|reducedMotionPlan|resolveMotion|resolveSnapPoint|roleValue|rubberBand|spring|themeTempo)\\.ts',
     'motion/uikit/(gestures|paging|scroll)\\.ts',
     'Layer/inputHold\\.ts',
+    // The input hold leaves a modal outlet's global host live.
+    'Layer/modalOutlet\\.ts',
     'utils/(clickGuard|isApplePlatform|primaryClick|selectionLock)\\.ts',
     'privateAttributes/(hapticSwitch|reducedMotion)\\.stylex\\.ts',
   ].join('|')})`,
