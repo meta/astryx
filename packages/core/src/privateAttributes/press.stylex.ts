@@ -81,8 +81,19 @@ const RELEASE_EASE = easeVars['--ease-exit'];
 const DIVIDER_WIDTH = borderVars['--border-width'];
 /** How far a highlighted row's tint reaches past its edge: one divider. */
 const PAST_DIVIDER = `calc(-1 * ${DIVIDER_WIDTH})`;
-/** A tint one divider tall, just above the row: over the row before's divider. */
-const tintAbove = (tint: string) => `0 ${PAST_DIVIDER} 0 0 ${tint}`;
+/**
+ * The surface a travelling List row rides on (travelling.stylex.ts sets it).
+ * A row of a List with dividers adds it to its own shadows.
+ */
+const TRAVELLING_SURFACE = 'var(--_travelling-surface, none)';
+/** The same surface as one shadow in a list of them. */
+const TRAVELLING_SURFACE_LAYER = 'var(--_travelling-surface, 0 0 transparent)';
+/**
+ * A tint one divider tall, just above the row: over the row before's divider.
+ * A travelling row keeps its surface under the tint.
+ */
+const tintAbove = (tint: string) =>
+  `0 ${PAST_DIVIDER} 0 0 ${tint}, ${TRAVELLING_SURFACE_LAYER}`;
 
 export const rowPressLayerStyles = stylex.create({
   /**
@@ -213,18 +224,19 @@ export const rowPressLayerStyles = stylex.create({
    * tint. The tint also covers the divider above it, as a shadow, under a
    * mouse or a finger. Under a coarse pointer, the press layer covers both
    * dividers, so they fade with it on the release. The tint is translucent,
-   * so a divider under it reads as it does at rest.
+   * so a divider under it reads as it does at rest. Each shadow here keeps a
+   * travelling row's surface, which this shadow replaces otherwise.
    */
   overDividers: {
     boxShadow: {
-      default: null,
+      default: TRAVELLING_SURFACE,
       [ENABLED]: {
         default: null,
         ':not(:first-child)': {
           default: null,
           ':active': {
             default: tintAbove(colorVars['--color-overlay-pressed']),
-            [COARSE]: 'none',
+            [COARSE]: TRAVELLING_SURFACE,
           },
           [HOVER_HOVER]: {
             default: null,
@@ -236,11 +248,11 @@ export const rowPressLayerStyles = stylex.create({
           // row's own press paint, which follows the release's strength.
           [PRESSED_ON]: {
             default: tintAbove('var(--_press-paint)'),
-            [COARSE]: 'none',
+            [COARSE]: TRAVELLING_SURFACE,
           },
           [PRESSED_FADING]: {
             default: tintAbove('var(--_press-paint)'),
-            [COARSE]: 'none',
+            [COARSE]: TRAVELLING_SURFACE,
           },
         },
       },

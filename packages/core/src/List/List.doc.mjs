@@ -51,6 +51,11 @@ export const docs = {
       default: 'false',
     },
     {
+      name: 'animatedLayout',
+      type: 'AnimatedLayout',
+      description: 'The handle from useAnimatedLayout({containerRef}). With it, when rows are inserted, removed or reordered, an inserted row enters, a removed row collapses in place, a row that crosses rows moving the other way rides above them with the surface color behind it, and the rows after a change and the content after the list, up to that container, glide to their new places, all on one shared motion, under every pointer. Under Reduce Motion nothing travels. A row is identified by its itemKey: a row without one changes at once. Without a handle the list changes at once.',
+    },
+    {
       name: 'edge',
       type: "'padded' | 'flush' | 'outset' | 'bleed'",
       description:

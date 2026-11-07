@@ -181,10 +181,10 @@ interface BarFrame {
  * stack and the back button's effective opacities. The returned function
  * stops and returns them. A layer's x is its computed `translate`: the cards
  * and bars sit at the stack's leading edge, checked when the trace starts. So
- * a frame reads no layout. Under load, in a frame that comes a few
- * milliseconds late, WebKit evaluates two layers that animate on one clock
- * about a millisecond apart. This holds for boxes and translates alike.
- * `animating` says which frames an animation drives.
+ * a frame reads no layout. Under load, WebKit can evaluate two layers that
+ * share one clock at two times in one frame, as far apart as their reads.
+ * This holds for boxes and translates alike. So each card is read right
+ * before its bar. `animating` says which frames an animation drives.
  */
 async function traceBars(page: Page): Promise<() => Promise<BarFrame[]>> {
   await page.evaluate(() => {
@@ -207,15 +207,32 @@ async function traceBars(page: Page): Promise<() => Promise<BarFrame[]>> {
       const value = getComputedStyle(element).translate;
       return value === 'none' ? 0 : parseFloat(value);
     };
-    const read = (selector: string, attribute: string) => {
-      const out: Record<string, number> = {};
-      for (const element of document.querySelectorAll<HTMLElement>(selector)) {
-        const key = element.getAttribute(attribute);
-        if (key != null) {
-          out[key] = translateX(element);
+    const readLayers = () => {
+      const cards: Record<string, number> = {};
+      const bars: Record<string, number> = {};
+      for (const card of document.querySelectorAll(
+        '[data-navigation-screen]',
+      )) {
+        const key = card.getAttribute('data-navigation-screen');
+        if (key == null) {
+          continue;
+        }
+        cards[key] = translateX(card);
+        const keyBars = document.querySelectorAll(
+          `[data-navigation-bar="${CSS.escape(key)}"]`,
+        );
+        const bar = keyBars.item(keyBars.length - 1);
+        if (bar != null) {
+          bars[key] = translateX(bar);
         }
       }
-      return out;
+      for (const bar of document.querySelectorAll('[data-navigation-bar]')) {
+        const key = bar.getAttribute('data-navigation-bar');
+        if (key != null && !(key in cards)) {
+          bars[key] = translateX(bar);
+        }
+      }
+      return {cards, bars};
     };
     // A layer at rest sits at the stack's edge: its box is its translate.
     const left = stack?.getBoundingClientRect().left ?? 0;
@@ -237,8 +254,7 @@ async function traceBars(page: Page): Promise<() => Promise<BarFrame[]>> {
       const chevron = button?.firstElementChild ?? null;
       w.__bars.push({
         t: performance.now() - t0,
-        cards: read('[data-navigation-screen]', 'data-navigation-screen'),
-        bars: read('[data-navigation-bar]', 'data-navigation-bar'),
+        ...readLayers(),
         back:
           button == null || chevron == null
             ? null
@@ -788,7 +804,9 @@ test('brought back past its start, the screen follows with resistance, then spri
   frames.push({t: last.t + steps * 16.7 + 4, fingers: []});
   await driver.play(frames);
   // The return, held where it runs and read every 2 ms from its start.
-  const heldAnimations = await holdAnimations(page, top);
+  const heldAnimations = await holdAnimations(page, top, {
+    judges: {target: top, property: 'translate'},
+  });
   const returnIndex = await top.evaluate(element =>
     (
       (window as unknown as {__harnessHeld?: Animation[]}).__harnessHeld ?? []

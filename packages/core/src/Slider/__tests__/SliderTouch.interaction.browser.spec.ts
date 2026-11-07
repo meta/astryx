@@ -445,9 +445,11 @@ test('a release coasts on UIKit’s spring to 0.4 of the momentum projection, th
   // under load. The harness counts sample times from the earliest held
   // start, so the samples are taken at the coast's own times: its offset
   // plus 0, 20, …
-  const coast = (await holdAnimations(page, thumb)).find(held =>
-    held.keyframes.some(keyframe => 'translate' in keyframe),
-  );
+  const coast = (
+    await holdAnimations(page, thumb, {
+      judges: {target: thumb, property: 'translate'},
+    })
+  ).find(held => held.keyframes.some(keyframe => 'translate' in keyframe));
   expect(coast, 'the coast plays on the compositor').toBeDefined();
   const coastOffset = coast?.offsetMs ?? 0;
   const times = Array.from({length: 31}, (_, i) => coastOffset + i * 20);
