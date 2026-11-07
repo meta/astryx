@@ -536,10 +536,13 @@ export async function renderPage(entry, options = {}) {
     });
   }
   if (message.chartsAlone) {
-    const why =
-      message.chartsAlone === 'changed'
-        ? 'The page changed its charts once its effects ran (their data or props, or which charts it shows)'
-        : 'The page could not be drawn again without a browser';
+    /** @type {Record<string, string>} */
+    const causes = {
+      changed: 'The page changed its charts once its effects ran (their data or props, or which charts it shows)',
+      rerendered: 'A component that makes a chart rendered again once the page\'s effects ran',
+      error: 'The page could not be drawn again without a browser',
+    };
+    const why = causes[message.chartsAlone] ?? causes.error;
     warnings.push({
       code: 'chart-size',
       message: `${why}, so each chart was drawn by itself, as the first render gave it: a custom tick, label or shape in a chart sees React context defaults, not the values the page provides.`,
