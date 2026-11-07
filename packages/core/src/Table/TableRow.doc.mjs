@@ -7,7 +7,7 @@ export const docs = {
   subComponentOf: 'Table',
   displayName: 'Table Row',
   isHiddenFromOverview: true,
-  description: '<tr> wrapper that reads TableContext to apply striped, hover, and divider styles when used inside Table.',
+  description: '<tr> wrapper that reads TableContext to apply striped, hover, and divider styles when used inside Table. Rows activated through useTableActivation carry data-active="true" plus the active presentation.',
   props: [
     {
       name: 'children',

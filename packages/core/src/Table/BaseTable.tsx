@@ -23,6 +23,7 @@ import {
   type Ref,
 } from 'react';
 import {isRenderable} from '../utils/isRenderable';
+import {warnOnce} from '../utils/devWarning';
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import type {
@@ -144,6 +145,16 @@ interface TableRowProps<T extends Record<string, unknown>> {
   item: T;
   rowIndex: number;
   rowKey: string | number;
+  /**
+   * The resolved canonical key for first-party plugin consumption. Passed as
+   * an internal fourth `transformBodyRow` argument to plugins that declare
+   * the `usesCanonicalRowKey` opt-in, until the parent `TableRowContext`
+   * protocol lands; external transforms keep three args. `undefined` when
+   * the table has no explicit `idKey` — index-keyed rows carry no stable
+   * identity, so identity-dependent plugins stay inert instead of keying
+   * by position.
+   */
+  resolvedRowKey: string | number | undefined;
   columns: TableColumn<T>[];
   plugins: TablePlugin<T>[];
   textOverflow: 'wrap' | 'truncate';
@@ -166,6 +177,7 @@ function TableRowInner<T extends Record<string, unknown>>({
   item,
   rowIndex,
   rowKey,
+  resolvedRowKey,
   columns,
   plugins,
   textOverflow,
@@ -239,9 +251,21 @@ function TableRowInner<T extends Record<string, unknown>>({
   // Apply plugin transforms for row (with pre-rendered children).
   // Seed `aria-rowindex` (when the table opts into ARIA row indexing) as a
   // base htmlProp so plugins compose over it and can still override.
+  // First-party transforms may read a fourth argument, the resolved canonical
+  // key, when their plugin declares the `usesCanonicalRowKey` opt-in; the
+  // argument stays out of the public `transformBodyRow` type until the
+  // parent `TableRowContext` protocol lands.
   const rowRenderProps = applyPlugins(
     plugins,
-    p => p.transformBodyRow,
+    p =>
+      p.transformBodyRow as
+        | ((
+            props: BodyRowRenderProps,
+            item: T,
+            index: number,
+            rowKey: string | number | undefined,
+          ) => BodyRowRenderProps)
+        | undefined,
     {
       htmlProps: ariaRowIndex == null ? {} : {'aria-rowindex': ariaRowIndex},
       xstyle: [],
@@ -249,6 +273,7 @@ function TableRowInner<T extends Record<string, unknown>>({
     } satisfies BodyRowRenderProps,
     item,
     rowIndex,
+    resolvedRowKey,
   );
 
   const row = (
@@ -289,6 +314,9 @@ function areRowPropsEqual<T extends Record<string, unknown>>(
   nextProps: TableRowProps<T>,
 ): boolean {
   if (prevProps.rowKey !== nextProps.rowKey) {
+    return false;
+  }
+  if (prevProps.resolvedRowKey !== nextProps.resolvedRowKey) {
     return false;
   }
   if (
@@ -574,6 +602,89 @@ function BaseTableInner<T extends Record<string, unknown>>({
         }
       : mergedStyle;
 
+  // Canonical identity for the new-capability path. A plugin consumes
+  // identity by declaring the internal `usesCanonicalRowKey` opt-in; until
+  // the parent row-context protocol lands, that flag is the opt-in signal.
+  // Tables without such a plugin keep released key behavior exactly,
+  // with no diagnostics.
+  const canonicalIdentityOptIn = plugins.some(
+    p => p.transformBodyRow != null && p.usesCanonicalRowKey === true,
+  );
+  const isFunctionIdKey = typeof idKey === 'function';
+  // Property-name keys convert valid strings and finite numbers with
+  // `String`; function keys keep their string/finite-number type. Missing,
+  // null, nonprimitive, nonfinite, and duplicate values are invalid.
+  const projectCanonicalKey = (raw: unknown): string | number | undefined => {
+    if (typeof raw === 'string') {
+      return raw;
+    }
+    if (typeof raw === 'number' && Number.isFinite(raw)) {
+      return isFunctionIdKey ? raw : String(raw);
+    }
+    return undefined;
+  };
+  // First pass over the logical dataset, so a repeated value invalidates
+  // every row that shares it rather than the losers alone.
+  const canonicalKeys: (string | number | undefined)[] =
+    canonicalIdentityOptIn && idKey != null && hasData
+      ? data.map(item =>
+          projectCanonicalKey(
+            typeof idKey === 'function' ? idKey(item) : item[idKey],
+          ),
+        )
+      : [];
+  const canonicalCounts = new Map<string | number, number>();
+  for (const key of canonicalKeys) {
+    if (key !== undefined) {
+      canonicalCounts.set(key, (canonicalCounts.get(key) ?? 0) + 1);
+    }
+  }
+  const resolvedKeys: (string | number | undefined)[] = canonicalKeys.map(
+    key =>
+      key !== undefined && (canonicalCounts.get(key) ?? 0) > 1
+        ? undefined
+        : key,
+  );
+  if (
+    resolvedKeys.some(
+      (key, index) => key === undefined && canonicalKeys[index] !== undefined,
+    )
+  ) {
+    warnOnce(
+      'table-duplicate-row-key',
+      'Table',
+      'Table rows share an idKey value, so those rows carry no stable identity. ' +
+        'Give every row a unique id.',
+    );
+  }
+  // An identity-dependent plugin without an explicit idKey stays inert on
+  // every row: the plugin cannot tell a missing idKey from an invalid value,
+  // so the parent owns this diagnostic and the plugin stays silent.
+  if (canonicalIdentityOptIn && idKey == null && hasData) {
+    warnOnce(
+      'table-identity-plugin-without-idkey',
+      'Table',
+      'Table hosts a plugin that reads row identity but has no explicit idKey, ' +
+        'so identity-dependent behavior is inert. Pass a stable unique idKey.',
+    );
+  }
+  // Rows with no usable identity value stay inert with a deterministic
+  // per-record fallback; duplicates warn above, so this covers the missing
+  // and invalid remainder with one development diagnostic.
+  if (
+    canonicalIdentityOptIn &&
+    idKey != null &&
+    hasData &&
+    canonicalKeys.some(key => key === undefined)
+  ) {
+    warnOnce(
+      'table-missing-row-key',
+      'Table',
+      'Table rows have no usable idKey value, so those rows carry no stable identity. ' +
+        'Give every row a usable id.',
+    );
+  }
+
   let tableElement: ReactNode = (
     <table
       ref={ref}
@@ -605,18 +716,45 @@ function BaseTableInner<T extends Record<string, unknown>>({
           <TableBody>
             {hasData
               ? data.map((item, rowIndex) => {
+                  // The canonical key identity consumers use. Without the
+                  // opt-in this is the released logic exactly: the row index,
+                  // the function result, or the string projection (even of a
+                  // missing value). On the opt-in path a valid unique key
+                  // resolves, anything else stays inert with a deterministic
+                  // per-record fallback; function keys keep their type in
+                  // callbacks while type-tagged React keys tell numeric `0`
+                  // from string `"0"`.
+                  const resolvedRowKey =
+                    canonicalIdentityOptIn && idKey != null
+                      ? resolvedKeys[rowIndex]
+                      : undefined;
                   const rowKey =
-                    idKey == null
-                      ? rowIndex
-                      : typeof idKey === 'function'
-                        ? idKey(item)
-                        : String(item[idKey]);
+                    canonicalIdentityOptIn && idKey != null
+                      ? (resolvedRowKey ?? `row:${rowIndex}`)
+                      : idKey == null
+                        ? rowIndex
+                        : typeof idKey === 'function'
+                          ? idKey(item)
+                          : String(item[idKey]);
+                  // Type-tagged reconciliation keys live only on the
+                  // new-capability path; the released path keeps its keys
+                  // exactly. Valid keys carry a type tag and invalid rows a
+                  // per-index fallback, so a repeated or invalid row at index
+                  // 0 never shares a React key with a valid row whose id is
+                  // `row:0`.
+                  const reactKey =
+                    canonicalIdentityOptIn && idKey != null
+                      ? resolvedRowKey !== undefined
+                        ? `${typeof resolvedRowKey}:${String(resolvedRowKey)}`
+                        : `invalid:${rowIndex}`
+                      : rowKey;
                   return (
                     <MemoizedTableRow<T>
-                      key={rowKey}
+                      key={reactKey}
                       item={item}
                       rowIndex={rowIndex}
                       rowKey={rowKey}
+                      resolvedRowKey={resolvedRowKey}
                       columns={resolvedColumns}
                       plugins={plugins}
                       textOverflow={textOverflow}

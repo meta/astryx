@@ -101,6 +101,9 @@ const VALID_TRANSFORM_KEYS = new Set([
   'transformTableContext',
 ]);
 
+/** Known non-transform fields on the TablePlugin interface. */
+const VALID_NON_TRANSFORM_KEYS = new Set(['usesCanonicalRowKey']);
+
 /**
  * Validate a plugin object in development mode.
  * Warns about common mistakes like misspelled transform names,
@@ -117,7 +120,7 @@ function validatePlugin<T extends Record<string, unknown>>(
 
   // Warn about unknown keys (likely misspelled transform names)
   for (const key of keys) {
-    if (!VALID_TRANSFORM_KEYS.has(key)) {
+    if (!VALID_TRANSFORM_KEYS.has(key) && !VALID_NON_TRANSFORM_KEYS.has(key)) {
       devWarn(
         'Table',
         `Plugin "${name}" has unknown key "${key}". ` +

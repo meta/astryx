@@ -1,0 +1,757 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+'use client';
+
+/**
+ * @file useTableActivation.tsx
+ * @input React, StyleX, Table types, shared click guards, theme tokens
+ * @output Exports useTableActivation hook and UseTableActivationConfig type
+ * @position Row-activation plugin; consumed by Table via plugins prop
+ *
+ * SYNC: When modified, update these files to stay in sync:
+ * - /packages/core/src/Table/useTableActivation.doc.mjs (config prop table)
+ * - /packages/core/src/Table/Table.doc.mjs (activation documentation)
+ * - /packages/core/src/Table/index.ts (exports)
+ */
+
+import {useEffect, useMemo, useRef} from 'react';
+import * as stylex from '@stylexjs/stylex';
+import {colorVars} from '../../../theme/tokens.stylex';
+import {focusOutlineStyles} from '../../../utils/focusOutline.stylex';
+import {mergeRefs} from '../../../utils/mergeRefs';
+import {warnOnce} from '../../../utils/devWarning';
+import {isRtlElement} from '../../../hooks/isRtlElement';
+import {hasInteractiveAncestor} from '../../../hooks/useClickableContainer';
+import type {TablePlugin, BodyRowRenderProps} from '../../types';
+
+// =============================================================================
+// Config Type
+// =============================================================================
+
+/**
+ * Configuration for useTableActivation (master-detail current-row state).
+ *
+ * The consumer owns the `activeKey` state (via `useState`); the plugin makes
+ * eligible rows activatable by primary click or Enter/Space and reflects the
+ * controlled key back onto the matching row.
+ */
+export interface UseTableActivationConfig<T extends Record<string, unknown>> {
+  /**
+   * The currently active row's resolved key, or `null` for no active row.
+   * Compared with Table's resolved canonical key using strict equality, so a
+   * string `"42"` never matches the number `42`. Fully controlled: the plugin
+   * never mutates it — respond to `onActivate` to update it.
+   */
+  activeKey: string | number | null;
+  /**
+   * Called once with `(item, key)` when an eligible row is activated by a
+   * primary click or non-repeated Enter/Space. Receives the same resolved
+   * key Table used for the comparison.
+   */
+  onActivate: (item: T, key: string | number) => void;
+  /**
+   * Control which rows are activatable. Ineligible rows get no keyboard
+   * affordance, no pointer cursor, and no active presentation, even when
+   * their key equals `activeKey`; their press handlers stay attached but
+   * ignore the press, so a later flip needs no row update. @default all rows activatable
+   */
+  getIsItemActivatable?: (item: T) => boolean;
+}
+
+// =============================================================================
+// Activation Store (external store for fine-grained row subscriptions)
+// =============================================================================
+
+/**
+ * Lightweight external store that lets each row subscribe to activation
+ * changes independently, following the useTableSelection pattern. Row state
+ * is applied imperatively through per-row ref callbacks, so changing only
+ * `activeKey` touches at most the old and new active rows instead of
+ * re-rendering the table.
+ *
+ * Subscriptions are bucketed by canonical row key. A key-only update
+ * notifies only the buckets for the previous and current active keys; a
+ * predicate change notifies every bucket, because any row may have flipped
+ * eligibility. Anything else notifies only the current active bucket — a
+ * new `onActivate` identity included, since it changes no row state — and
+ * the subscriber writes only where its snapshot changed, which keeps the
+ * bound for the documented inline-callback usage.
+ */
+interface ActivationStore<T extends Record<string, unknown>> {
+  subscribe: (key: string | number, listener: () => void) => () => void;
+  notify: () => void;
+  getConfig: () => UseTableActivationConfig<T>;
+}
+
+function createActivationStore<T extends Record<string, unknown>>(
+  configRef: React.RefObject<UseTableActivationConfig<T>>,
+): ActivationStore<T> {
+  const buckets = new Map<string | number, Set<() => void>>();
+  let previous = configRef.current;
+
+  const notifyBuckets = (keys: ReadonlyArray<string | number | null>) => {
+    for (const key of keys) {
+      if (key == null) {
+        continue;
+      }
+      for (const listener of buckets.get(key) ?? []) {
+        listener();
+      }
+    }
+  };
+
+  return {
+    subscribe(key: string | number, listener: () => void) {
+      let bucket = buckets.get(key);
+      if (bucket == null) {
+        bucket = new Set();
+        buckets.set(key, bucket);
+      }
+      bucket.add(listener);
+      return () => {
+        bucket.delete(listener);
+        // Empty buckets leave the map: the store keeps no entry for a row
+        // id it no longer serves.
+        if (bucket.size === 0) {
+          buckets.delete(key);
+        }
+      };
+    },
+    notify() {
+      const current = configRef.current;
+      if (current.getIsItemActivatable !== previous.getIsItemActivatable) {
+        for (const bucket of buckets.values()) {
+          for (const listener of bucket) {
+            listener();
+          }
+        }
+      } else if (current.activeKey !== previous.activeKey) {
+        notifyBuckets([previous.activeKey, current.activeKey]);
+      } else {
+        notifyBuckets([current.activeKey]);
+      }
+      // A new `onActivate` identity alone changes no row state: presses
+      // read the live config at press time, and the subscriber below skips
+      // rows whose snapshot did not change.
+      previous = current;
+    },
+    getConfig() {
+      return configRef.current;
+    },
+  };
+}
+
+// =============================================================================
+// Active-state reflection
+// =============================================================================
+
+/**
+ * The row's active fill, republished for pinned cells to read. The same
+ * `--table-row-overlay` contract useTableSelection and TableRow honour for
+ * striping, hover, and selection: a pinned column paints its own opaque
+ * background over the row, and replays this variable so the active state
+ * reads on through the freeze line.
+ */
+const activeWash = colorVars['--color-accent-muted'];
+const activeBarColor = colorVars['--color-accent'];
+
+/**
+ * Attribute gate for the active wash. `data-active` is maintained
+ * imperatively by the store subscriber (and seeded declaratively below), so
+ * it survives a `className` rewrite from stale transform props; `:where`
+ * keeps the specificity of the plain class it replaces, so the settled
+ * stripe/hover/selection precedence is unchanged.
+ */
+const ACTIVE_ROW: string = ':where([data-active="true"])';
+
+/**
+ * Attribute gate for the press-target cursor. The subscriber maintains it
+ * alongside the tab stop: present while the row takes activation presses
+ * (eligible with no competing current owner), absent otherwise.
+ */
+const ELIGIBLE_ROW: string = ':where([data-activation-eligible="true"])';
+
+/** Width of the leading-edge active bar, the non-colour active cue. */
+const ACTIVE_BAR_WIDTH_PX = 3;
+
+/** Whether a row already exposes current state this module must not overwrite. */
+function hasCompetingCurrentOwner(row: Element | null): boolean {
+  const current = row?.getAttribute('aria-current');
+  return current != null && current !== 'true';
+}
+
+/**
+ * Apply or remove active styling on a `<tr>` element.
+ *
+ * Active state is a `data-active` attribute, `aria-current="true"`, plus
+ * paint on the existing row anatomy: an accent wash and a leading-edge accent
+ * bar on the first cell. The wash rides the shared row-overlay variable so
+ * pinned cells replay it through the freeze line; its stylesheet rule keys
+ * off `data-active`, so no class toggling is needed here. The bar is an
+ * inset shadow on the first cell; under forced colors the shadow maps to
+ * nothing and the pinned overlay covers the cell, so there the marker is an
+ * outline, which draws over the cell in a system color. No selection
+ * semantics are inferred: `aria-selected` is never written here.
+ */
+
+function applyRowActivationStyle(
+  row: HTMLTableRowElement,
+  isActive: boolean,
+): void {
+  if (isActive) {
+    // A pre-existing current-state owner keeps its semantics: activation
+    // stays off this row rather than overwriting navigation or selection
+    // state it does not own. The declarative snapshot below cannot see the
+    // DOM, so a conflicting row sheds that paint here on mount.
+    if (hasCompetingCurrentOwner(row)) {
+      warnOnce(
+        'table-activation-current-owner',
+        'useTableActivation',
+        'Table row already exposes its own aria-current state, so row activation stays inert for it. ' +
+          'Remove the competing state or the activation plugin for this row.',
+      );
+      clearRowActivationStyle(row);
+      return;
+    }
+    row.setAttribute('data-active', 'true');
+    row.setAttribute('aria-current', 'true');
+    row.setAttribute('data-activation-current', 'true');
+  } else {
+    clearRowActivationStyle(row);
+    return;
+  }
+  // The bar lives on the first cell rather than the row: box-shadow does not
+  // paint reliably on `<tr>`. Direction reads the row's own computed style,
+  // not the nearest ancestor that names one.
+  const firstCell = row.cells[0];
+  const previousBarCell = row.querySelector<HTMLTableCellElement>(
+    '[data-activation-bar="true"]',
+  );
+  if (previousBarCell != null && previousBarCell !== firstCell) {
+    clearBarCell(previousBarCell);
+    previousBarCell.removeAttribute('data-activation-bar');
+  }
+  if (firstCell == null) {
+    return;
+  }
+  if (forcedColorsActive()) {
+    firstCell.style.boxShadow = '';
+    firstCell.style.outline = `${ACTIVE_BAR_WIDTH_PX}px solid CanvasText`;
+    firstCell.style.outlineOffset = `-${ACTIVE_BAR_WIDTH_PX}px`;
+  } else {
+    firstCell.style.outline = '';
+    firstCell.style.outlineOffset = '';
+    const bar = `inset ${isRtlElement(row) ? '-' : ''}${ACTIVE_BAR_WIDTH_PX}px 0 0 ${activeBarColor}`;
+    if (firstCell.style.boxShadow !== bar) {
+      firstCell.style.boxShadow = bar;
+    }
+  }
+  firstCell.setAttribute('data-activation-bar', 'true');
+}
+/**
+ * Remove everything this module wrote on a `<tr>`: the active attribute and
+ * current-state exposure, the eligibility attribute, plus the bar from
+ * whichever cell carries it. The wash and cursor classes stay: they are
+ * stamped on every transformed row and their rules key off the attributes
+ * removed here. Cleanup paths call this rather than only unsubscribing, so a
+ * row that becomes ineligible, loses its plugin, or loses `idKey` while
+ * mounted never keeps stale active paint. Only the `aria-current="true"`
+ * this module wrote is removed; a competing owner's value stays untouched.
+ */
+function clearRowActivationStyle(row: HTMLTableRowElement): void {
+  row.removeAttribute('data-active');
+  row.removeAttribute('data-activation-eligible');
+  // Only the exposure this module wrote comes off: the marker tracks it, so
+  // a competing owner's value survives cleanup.
+  if (row.hasAttribute('data-activation-current')) {
+    row.removeAttribute('data-activation-current');
+    if (row.getAttribute('aria-current') === 'true') {
+      row.removeAttribute('aria-current');
+    }
+  }
+  const barCell = row.querySelector<HTMLTableCellElement>(
+    '[data-activation-bar="true"]',
+  );
+  if (barCell != null) {
+    clearBarCell(barCell);
+    barCell.removeAttribute('data-activation-bar');
+  }
+}
+
+/** Clear every bar style the module may have written on a bar cell. */
+function clearBarCell(cell: HTMLTableCellElement): void {
+  cell.style.boxShadow = '';
+  cell.style.outline = '';
+  cell.style.outlineOffset = '';
+}
+
+/** Whether the forced-colors media query currently matches. */
+function forcedColorsActive(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(forced-colors: active)').matches
+  );
+}
+
+// =============================================================================
+// Event guards
+// =============================================================================
+
+/**
+ * Whether a pointer press must not activate its row: portalled content
+ * rendered outside the row, nested interactive descendants (buttons, links,
+ * inputs, and equivalent roles share one definition in
+ * `useClickableContainer`), editable surfaces, or a text selection
+ * intersecting this row. Descendant behavior itself is never suppressed —
+ * only the row's activation request is.
+ */
+function shouldSuppressActivation(
+  row: HTMLTableRowElement,
+  target: EventTarget | null,
+): boolean {
+  if (!(target instanceof Element)) {
+    return true;
+  }
+  if (!row.contains(target)) {
+    return true;
+  }
+  if (target !== row && hasInteractiveAncestor(target, row)) {
+    return true;
+  }
+  // A row another owner marked current stays fully inactive: presses neither
+  // request activation nor repaint it.
+  if (hasCompetingCurrentOwner(row)) {
+    return true;
+  }
+  // A press on a read-only control belongs to that control: the shared
+  // guard excludes `aria-readonly` from interactive, so without this the row
+  // would activate under it.
+  if (target !== row) {
+    const readonlyScope = target.closest('[aria-readonly="true"]');
+    if (readonlyScope != null && row.contains(readonlyScope)) {
+      return true;
+    }
+  }
+  // An edit inside a contenteditable region is not a row press. The shared
+  // guard does not cover contenteditable (it would change every other
+  // clickable surface), so the row path checks it separately.
+  if (
+    target !== row &&
+    target.closest('[contenteditable]:not([contenteditable="false"])') != null
+  ) {
+    return true;
+  }
+  if (selectionIntersectsRow(row)) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Whether two selection ends intersect the row: either end inside it, or the
+ * ends on opposite sides of it in document order (a drag spanning across the
+ * row). Pure over the end nodes so tests can pin the geometry without
+ * depending on Selection range normalization.
+ */
+export function selectionEndsIntersectRow(
+  row: Element,
+  anchorNode: Node | null,
+  focusNode: Node | null,
+): boolean {
+  if (anchorNode == null || focusNode == null) {
+    return false;
+  }
+  if (row.contains(anchorNode) || row.contains(focusNode)) {
+    return true;
+  }
+  // Either end inside the row is covered above; what remains is a selection
+  // spanning across it, with the ends on opposite sides in document order.
+  const anchorPosition = row.compareDocumentPosition(anchorNode);
+  const focusPosition = row.compareDocumentPosition(focusNode);
+  const anchorBefore =
+    (anchorPosition & Node.DOCUMENT_POSITION_PRECEDING) !== 0;
+  const anchorAfter = (anchorPosition & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+  const focusBefore = (focusPosition & Node.DOCUMENT_POSITION_PRECEDING) !== 0;
+  const focusAfter = (focusPosition & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+  return (anchorBefore && focusAfter) || (anchorAfter && focusBefore);
+}
+
+/**
+ * Whether a live text selection intersects the row. Every selected range is
+ * checked, so a multi-range selection (one range per table cell in some
+ * browsers) suppresses the click when any range touches the row. Endpoints
+ * are compared in document order rather than through
+ * `selection.containsNode`: equivalent semantics, and jsdom's `containsNode`
+ * answers true for disjoint nodes, which would make any page selection block
+ * every row under test.
+ */
+function selectionIntersectsRow(row: Element): boolean {
+  if (typeof document === 'undefined' || !('getSelection' in document)) {
+    return false;
+  }
+  const selection = document.getSelection();
+  if (selection == null || selection.isCollapsed) {
+    return false;
+  }
+  for (let i = 0; i < selection.rangeCount; i++) {
+    const range = selection.getRangeAt(i);
+    if (range.collapsed) {
+      continue;
+    }
+    if (
+      selectionEndsIntersectRow(row, range.startContainer, range.endContainer)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// =============================================================================
+// Styles
+// =============================================================================
+
+const activationStyles = stylex.create({
+  /**
+   * Press-target cursor, gated on the eligibility attribute rather than on
+   * class presence. These classes are stamped on every transformed row and
+   * stay in `className` across re-renders, so a `TableRow` re-render from a
+   * `TableContext` change (stripes, dividers, hover) that reuses stale
+   * transform props cannot strand or steal the cursor: only the live
+   * attribute paints it.
+   */
+  clickableRow: {
+    cursor: {
+      default: null,
+      [`${ELIGIBLE_ROW}:not(:disabled,[aria-disabled="true"])`]: 'pointer',
+    },
+  },
+  /**
+   * Active-row wash as a stylesheet rule rather than an inline style.
+   * Selection writes its wash inline, so a selected row deterministically
+   * keeps the selection fill however the two plugins interleave; an
+   * unselected active row shows this wash. The overlay variable rides along
+   * so pinned cells replay the active state through the freeze line, under
+   * the same contract striping, hover, and selection honour. Gated on the
+   * active attribute for the same staleness reason as the cursor above.
+   */
+  activeWash: {
+    backgroundColor: {
+      default: null,
+      [ACTIVE_ROW]: activeWash,
+    },
+    '--table-row-overlay': {
+      default: null,
+      [ACTIVE_ROW]: activeWash,
+    },
+  },
+});
+
+/** Stylesheet classes for the active wash, resolved once and stamped on every transformed row. */
+let activeWashClassNames: ReadonlyArray<string> | null = null;
+
+export function getActiveWashClassNames(): ReadonlyArray<string> {
+  if (activeWashClassNames == null) {
+    activeWashClassNames = Object.freeze(
+      (stylex.props(activationStyles.activeWash).className ?? '')
+        .split(/\s+/)
+        .filter(Boolean),
+    );
+  }
+  return activeWashClassNames;
+}
+
+/** Stylesheet classes for the pointer cursor, resolved once and stamped on every transformed row. */
+let clickableRowClassNames: ReadonlyArray<string> | null = null;
+
+export function getClickableRowClassNames(): ReadonlyArray<string> {
+  if (clickableRowClassNames == null) {
+    clickableRowClassNames = Object.freeze(
+      (stylex.props(activationStyles.clickableRow).className ?? '')
+        .split(/\s+/)
+        .filter(Boolean),
+    );
+  }
+  return clickableRowClassNames;
+}
+
+// =============================================================================
+// Hook
+// =============================================================================
+
+/**
+ * Returns a TablePlugin that makes rows activatable for master-detail,
+ * preview, and inspector layouts.
+ *
+ * The consumer owns the `activeKey` state (via `useState`); the plugin adds
+ * one whole-row press path — primary click or Enter/Space, after any earlier
+ * row handlers run (`preventDefault` cancels) — and reflects the controlled
+ * key as `data-active` plus component-owned active styling that reaches
+ * pinned cells.
+ *
+ * Requires an explicit `idKey` on the Table: without stable row identity the
+ * plugin stays inert. The eligible active row exposes `aria-current="true"`
+ * (removed when it stops being the current row); `aria-selected` is never
+ * written — activation is not selection, and callers that need selection
+ * semantics own them through the selection surface.
+ *
+ * @example
+ * ```
+ * const [activeKey, setActiveKey] = useState<string | null>(null);
+ * const activation = useTableActivation({
+ *   activeKey,
+ *   onActivate: (item, key) => setActiveKey(key),
+ * });
+ * <Table data={orders} columns={columns} idKey="id" plugins={{activation}} />;
+ * ```
+ */
+export function useTableActivation<T extends Record<string, unknown>>(
+  config: UseTableActivationConfig<T>,
+): TablePlugin<T> {
+  const configRef = useRef(config);
+  configRef.current = config;
+
+  const storeRef = useRef<ActivationStore<T> | null>(null);
+  if (storeRef.current == null) {
+    storeRef.current = createActivationStore(configRef);
+  }
+  const store = storeRef.current;
+
+  // Notify subscribers on every render — row ref subscribers re-apply
+  // imperative styling only where their snapshot changed. Callback and key
+  // changes ride the store, so the returned plugin keeps a stable identity.
+  useEffect(() => {
+    store.notify();
+  });
+
+  return useMemo(
+    (): TablePlugin<T> => ({
+      // Canonical identity opt-in: Table hands this transform the resolved
+      // key as its fourth argument (see `usesCanonicalRowKey`).
+      usesCanonicalRowKey: true,
+      transformBodyRow(
+        props: BodyRowRenderProps,
+        item: T,
+        _index: number,
+        rowKey?: string | number,
+      ): BodyRowRenderProps {
+        const {getIsItemActivatable} = store.getConfig();
+        // Eligibility resolves once per row update; the first subscriber
+        // apply below reuses this result rather than re-invoking the caller
+        // predicate, while later applies and every press re-resolve it live.
+        const eligible = getIsItemActivatable?.(item) ?? true;
+        // No stable identity without an explicit idKey: stay inert rather
+        // than keying activation by row position. The parent owns the
+        // missing-idKey diagnostic, so an invalid value under an explicit
+        // idKey stays silent here.
+        if (rowKey === undefined) {
+          return props;
+        }
+        // A row an earlier plugin already marked current keeps its
+        // semantics: activation stays fully off it rather than adding a tab
+        // stop and key affordances that would do nothing. Presses and paint
+        // shed competing owners independently of plugin order.
+        if (props.htmlProps['aria-current'] != null) {
+          warnOnce(
+            'table-activation-current-owner-early',
+            'useTableActivation',
+            'Table row already exposes its own aria-current state, so row activation stays inert for it. ' +
+              'Remove the competing state or the activation plugin for this row.',
+          );
+          return props;
+        }
+        const key: string | number = rowKey;
+
+        const priorOnClick = props.htmlProps.onClick;
+        const priorOnKeyDown = props.htmlProps.onKeyDown;
+
+        // An earlier plugin's explicit tabIndex (including -1 for roving
+        // focus) stays authoritative; rows are sequential stops by default.
+        const tabIndex = props.htmlProps.tabIndex ?? 0;
+
+        // Compose Enter/Space discoverability with earlier metadata instead
+        // of replacing it.
+        const priorShortcuts = props.htmlProps['aria-keyshortcuts'];
+        const shortcutTokens = new Set(
+          (typeof priorShortcuts === 'string' ? priorShortcuts : '')
+            .split(/\s+/)
+            .filter(Boolean),
+        );
+        shortcutTokens.add('Enter');
+        shortcutTokens.add('Space');
+        const keyShortcuts = [...shortcutTokens].join(' ');
+
+        // Imperative active-state reflection, subscribed to the store: a
+        // controlled-key change reaches mounted rows without re-rendering
+        // the table, touching at most the rows whose state flips. Eligibility
+        // re-resolves live on every apply and every press, so flipping the
+        // caller predicate takes effect without waiting for a row update;
+        // the render-time value below only decides the static affordances.
+        const isEligibleNow = () =>
+          store.getConfig().getIsItemActivatable?.(item) ?? true;
+        const activationRef: React.RefCallback<HTMLTableRowElement> = row => {
+          if (!row) {
+            return;
+          }
+          // Last applied reflection for this row: a store broadcast over
+          // an unchanged row stays a DOM no-op, so key-only updates keep
+          // the at-most-two-rows bound even with an inline `onActivate`.
+          let lastInteractive: boolean | null = null;
+          let lastActive = false;
+          const applyStyle = (eligibleNow: boolean) => {
+            // Keyboard affordances and the pointer cursor follow the same
+            // liveness as paint and presses: a row a later plugin marked
+            // current, or one the caller predicate now excludes, is not a
+            // tab stop, shows no pointer, and announces no key affordances.
+            // The transform runs before later plugins, so this converges
+            // imperatively wherever the store reaches the row; full
+            // order-independence waits on the parent admission protocol.
+            const interactive = eligibleNow && !hasCompetingCurrentOwner(row);
+            const active = eligibleNow && key === store.getConfig().activeKey;
+            if (interactive === lastInteractive && active === lastActive) {
+              return;
+            }
+            lastInteractive = interactive;
+            lastActive = active;
+            // Paint first: clearing inactive paint also clears the
+            // eligibility attribute, which the liveness update below
+            // re-applies for rows that keep it.
+            applyRowActivationStyle(row, active);
+            // Press-taking liveness rides the eligibility attribute, and the
+            // tab stop and key announcements follow it: a row a later plugin
+            // marked current, or one the caller predicate now excludes, is
+            // not a tab stop, shows no pointer, and announces no key
+            // affordances. Classes stay untouched: the wash and cursor rules
+            // key off live attributes, so a `className` rewrite from stale
+            // transform props cannot strand or steal them.
+            if (interactive) {
+              row.setAttribute('data-activation-eligible', 'true');
+              row.setAttribute('tabindex', String(tabIndex));
+              row.setAttribute('aria-keyshortcuts', keyShortcuts);
+            } else {
+              row.removeAttribute('data-activation-eligible');
+              row.removeAttribute('tabindex');
+              row.removeAttribute('aria-keyshortcuts');
+            }
+          };
+          // The first apply reuses the render-time eligibility above, so the
+          // caller predicate runs once per row on mount; later notifies
+          // re-resolve it live.
+          applyStyle(eligible);
+          const unsubscribe = store.subscribe(key, () => {
+            if (!row.isConnected) {
+              clearRowActivationStyle(row);
+              unsubscribe();
+              return;
+            }
+            applyStyle(isEligibleNow());
+          });
+          return () => {
+            clearRowActivationStyle(row);
+            unsubscribe();
+          };
+        };
+
+        // Declarative snapshot for this render; the subscriber above keeps
+        // it fresh between renders. Ineligible rows keep the press handlers.
+        // The handlers check eligibility live, so a later flip needs no
+        // row update.
+        const activeNow = eligible && key === store.getConfig().activeKey;
+
+        return {
+          ...props,
+          htmlProps: {
+            ...props.htmlProps,
+            // The wash and cursor classes ride every transformed row,
+            // unconditionally: their rules key off the `data-active` and
+            // `data-activation-eligible` attributes the subscriber maintains,
+            // so a row re-render (a TableContext change rewrites the
+            // className React owns without re-running this transform) keeps
+            // paint and cursor from the live attributes instead of stale
+            // render-time values.
+            className: [
+              props.htmlProps.className,
+              ...getActiveWashClassNames(),
+              ...getClickableRowClassNames(),
+            ]
+              .filter(Boolean)
+              .join(' '),
+            ...(activeNow ? {'data-active': 'true' as const} : null),
+            // Seeded from the render-time eligibility; the subscriber
+            // corrects it against competing owners and later flips.
+            ...(eligible
+              ? {'data-activation-eligible': 'true' as const}
+              : null),
+            // Ineligible rows are no tab stop and announce no keys until
+            // the subscriber promotes them; the handlers below stay
+            // attached and self-guard on the live eligibility check.
+            ...(eligible
+              ? {
+                  tabIndex,
+                  'aria-keyshortcuts': keyShortcuts,
+                }
+              : null),
+            onClick: (event: React.MouseEvent<HTMLTableRowElement>) => {
+              const row = event.currentTarget;
+              // Earlier accumulated handlers run first and may cancel the
+              // activation request with preventDefault; their own side
+              // effects are preserved either way.
+              priorOnClick?.(event);
+              if (event.defaultPrevented) {
+                return;
+              }
+              if (!isEligibleNow()) {
+                return;
+              }
+              // Primary-button presses only; auxiliary clicks stay with
+              // earlier handlers.
+              if (event.button !== 0) {
+                return;
+              }
+              if (shouldSuppressActivation(row, event.target)) {
+                return;
+              }
+              store.getConfig().onActivate(item, key);
+            },
+            onKeyDown: (event: React.KeyboardEvent<HTMLTableRowElement>) => {
+              priorOnKeyDown?.(event);
+              if (event.defaultPrevented) {
+                return;
+              }
+              if (!isEligibleNow()) {
+                return;
+              }
+              const isEnter = event.key === 'Enter';
+              const isSpace = event.key === ' ';
+              if (!isEnter && !isSpace) {
+                return;
+              }
+              // A keypress that started in a nested control belongs to that
+              // control, even when focus is inside an activatable row.
+              if (event.target !== event.currentTarget) {
+                return;
+              }
+              if (hasCompetingCurrentOwner(event.currentTarget)) {
+                return;
+              }
+              // Holding Space must not scroll the page, with or without
+              // activation; holding Enter activates nothing either, without
+              // claiming a browser default.
+              if (isSpace) {
+                event.preventDefault();
+              }
+              if (event.repeat) {
+                return;
+              }
+              store.getConfig().onActivate(item, key);
+            },
+          },
+          xstyle: [...props.xstyle, focusOutlineStyles.focusVisible],
+          ref: props.ref ? mergeRefs(props.ref, activationRef) : activationRef,
+        };
+      },
+    }),
+    [store],
+  );
+}
