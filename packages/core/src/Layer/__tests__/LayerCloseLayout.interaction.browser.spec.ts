@@ -25,7 +25,7 @@ import {
 
 const storybook = withStorybook(test);
 
-// A desktop page, as the overlay-churn perf scene measures: on a phone, a
+// A desktop page, as the overlay-churn-settled perf scene measures: on a phone, a
 // Popover plays its own close motion, which lays out on every frame.
 test.use({
   viewport: {width: 1280, height: 800},
