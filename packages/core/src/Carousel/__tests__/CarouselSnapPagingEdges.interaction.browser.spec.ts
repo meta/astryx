@@ -3,10 +3,12 @@
 /**
  * @file CarouselSnapPagingEdges.interaction.browser.spec.ts
  * @input The Core/Carousel three-up snap paging story in paging mode, real
- *   touch flicks from the interaction harness, and a per-frame page sampler
+ *   touch flicks and a press from the interaction harness, and a per-frame
+ *   page sampler
  * @output Proves the edge scroll buttons follow the row as shown while snap
  *   paging holds it. Each button comes back within two frames of the row
- *   leaving its edge, before the settle hands the row back.
+ *   leaving its edge, before the settle hands the row back. After a press on
+ *   the end button, the start button comes back the same way.
  * @position Interaction proofs for Carousel's edge buttons under snap paging,
  *   run in Chromium and WebKit
  */
@@ -174,5 +176,37 @@ test('the end button comes back within two frames of the held row leaving the en
   });
   expect(left, detail).toBeGreaterThanOrEqual(0);
   expect(back - left, detail).toBeLessThanOrEqual(2);
+  expect(samples[back]?.held, detail).toBe(true);
+});
+
+test('after a press on the end button, the start button comes back within two frames of the held row leaving the start', async ({
+  page,
+}) => {
+  const {scroller, start, end} = await open(page);
+  await expect(start).toBeDisabled();
+  await startSampling(scroller, start, end);
+  await end.click();
+  await settled(scroller);
+  await expect(start).toBeEnabled();
+  // The button can change after its frame's sample, so wait for a sample
+  // that shows it back.
+  await expect
+    .poll(async () =>
+      (await samplesOf(page)).some(sample => !sample.startDisabled),
+    )
+    .toBe(true);
+  const samples = await samplesOf(page);
+  const detail = JSON.stringify(samples.slice(0, 40));
+  const left = samples.findIndex(sample => sample.shown > 1);
+  const back = samples.findIndex(sample => !sample.startDisabled);
+  test.info().annotations.push({
+    type: 'frames from leaving the start to the start button, after a press',
+    description: String(back - left),
+  });
+  expect(left, detail).toBeGreaterThanOrEqual(0);
+  expect(back, detail).toBeGreaterThanOrEqual(left);
+  expect(back - left, detail).toBeLessThanOrEqual(2);
+  // The press moves the row through the paging, so the paging still holds
+  // the row when the button comes back.
   expect(samples[back]?.held, detail).toBe(true);
 });
