@@ -1549,7 +1549,13 @@ test(
     await control.tapSegment('grid');
     await advanceFrozenPage(page, 80);
     await control.tapSegment('list');
-    const retargetHeld = await holdAnimations(page, control.group);
+    const retargetHeld = await holdAnimations(page, control.group, {
+      judges: {
+        target: control.group,
+        property: 'translate',
+        pseudoElement: '::before',
+      },
+    });
     await thawPage(page);
     await freezeTimers(page);
     const {storyboard: retargetBoard} = await animationStoryboard(page, {
