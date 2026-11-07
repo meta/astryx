@@ -493,7 +493,8 @@ registered layer.
 
 Banner and FieldStatus are in-flow. `useAnnounce` is nonvisual. AlertDialog,
 imperative Dialog, Lightbox, and ordinary Popover-family surfaces are
-interaction-local. `useKeyboardHint`, Carousel's control overlay, and visual-only
+interaction-local. `useKeyboardHint` uses Layer rendering and joins Escape
+dismissal while its hint shows. Carousel's control overlay and visual-only
 layers use Layer rendering without joining Escape/platform dismissal.
 
 ## Boundaries and invariants

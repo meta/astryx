@@ -27,6 +27,7 @@ import {
 } from '../theme/tokens.stylex';
 import {Kbd} from '../Kbd';
 import {useLayer} from '../Layer/useLayer';
+import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -53,8 +54,11 @@ export interface UseKeyboardHintOptions {
   orientation?: KeyboardHintOrientation;
 
   /**
-   * Milliseconds before the hint auto-dismisses after appearing.
-   * @default 3000
+   * Milliseconds before the hint dismisses itself after appearing. Leave it
+   * unset: by default the hint stays until the person presses an arrow key or
+   * Escape, or moves focus out of the group. A time limit can remove the hint
+   * before someone has read it (WCAG 1.4.13).
+   * @default undefined (no time limit)
    */
   dismissAfterMs?: number;
 
@@ -89,7 +93,8 @@ export interface UseKeyboardHintReturn {
 
   /**
    * Attach to the composite container's `onKeyDown`. Dismisses the hint on the
-   * first arrow press (the user discovered the interaction).
+   * first arrow press (the user discovered the interaction). Escape dismisses
+   * it through the shared layer dismissal stack, without moving focus.
    */
   onKeyDown: (e: React.KeyboardEvent) => void;
 }
@@ -166,8 +171,8 @@ const styles = stylex.create({
  *
  * The hint renders in the top layer (popover="manual") and is CSS-anchor-
  * positioned to the currently focused element, so it is never clipped by
- * overflow containers. It auto-dismisses on first arrow press, timeout, or
- * blur, and does not re-show for that instance.
+ * overflow containers. It stays until the first arrow press, Escape, or blur,
+ * and does not re-show for that instance.
  *
  * @example
  * ```
@@ -183,7 +188,7 @@ export function useKeyboardHint(
 ): UseKeyboardHintReturn {
   const {
     orientation = 'horizontal',
-    dismissAfterMs = 3000,
+    dismissAfterMs,
     isEnabled = true,
   } = options;
 
@@ -191,6 +196,7 @@ export function useKeyboardHint(
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dismissedRef = useRef(false);
   const isVisibleRef = useRef(false);
+  const anchorRef = useRef<HTMLElement | null>(null);
   const layerAnchorRef = useRef<(el: HTMLElement | null) => void>(() => {});
 
   const clearDismissTimeout = useCallback(() => {
@@ -233,16 +239,30 @@ export function useKeyboardHint(
         return;
       }
 
+      anchorRef.current = anchor;
       layerAnchorRef.current(anchor);
       layer.show();
 
       clearDismissTimeout();
-      timeoutRef.current = setTimeout(() => {
-        dismiss();
-      }, dismissAfterMs);
+      if (dismissAfterMs != null) {
+        timeoutRef.current = setTimeout(() => {
+          dismiss();
+        }, dismissAfterMs);
+      }
     },
     [clearDismissTimeout, dismiss, dismissAfterMs, isEnabled, layer],
   );
+
+  // Registered for the hook's lifetime: the hint shows and hides through refs,
+  // so presence is read at press time. A hidden hint is skipped and the press
+  // goes to the layer below. The anchor sits inside the group, so a hint in a
+  // dialog ranks above that dialog.
+  useLayerDismissal({
+    isActive: true,
+    isPresent: () => isVisibleRef.current,
+    onDismiss: dismiss,
+    getContainer: () => anchorRef.current,
+  });
 
   // Releases the dismiss timer and the layer anchor on unmount.
   useEffect(

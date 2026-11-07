@@ -134,6 +134,8 @@ this record's current membership snapshot must be updated with it.
 - **Other component-owned popups:** BreadcrumbItem, SideNavHeading,
   SideNavItem, TabMenu, TopNavHeading, TopNavMenu, TopNavMegaMenu, Table filtering,
   Lab TourStep, and Lab ChatEmojiPicker.
+- **Hook-owned hints:** the `useKeyboardHint` hint, which Toolbar, TabList, and
+  SegmentedControl render.
 - **Collaborators:** `useLayerDismissal`, `layerStack`, `LayerDepthProvider`,
   and `useFocusTrap` own or adapt the shared protocol.
 - **Nonparticipating layers:** A layer that has no dismissal behavior is not a
