@@ -21,7 +21,7 @@ import {CheckboxListItem} from '../CheckboxList/CheckboxListItem';
 import {RadioList} from '../RadioList/RadioList';
 import {RadioListItem} from '../RadioList/RadioListItem';
 import {HIT_INSET_PROPERTIES, resetHitAreaForTests} from '../utils/hitArea';
-import {touchHitAreaStyles} from '../utils/touchHitArea.stylex';
+import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 
 interface Declared {
   media: string | null;

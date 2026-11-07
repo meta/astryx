@@ -155,6 +155,24 @@ async function edgeRide(
         ? (parseFloat(b) / 100) * box.height
         : parseFloat(b);
     };
+    // A block edge's reveal slides the element's parts under a still clip:
+    // the first part's slide, on its own clock, says how much is hidden.
+    const slideOf = (element: HTMLElement) =>
+      element.firstElementChild
+        ?.getAnimations()
+        .filter(a =>
+          (a.effect as KeyframeEffect)
+            .getKeyframes()
+            .some(k => k.translate != null),
+        )
+        .at(-1) ?? null;
+    const slidHidden = (slide: Animation) => {
+      const frames = (slide.effect as KeyframeEffect).getKeyframes();
+      const {i, f} = bracket(frames, at(slide));
+      const y0 = y(frames[i].translate);
+      const y1 = y(frames[i + 1].translate);
+      return Math.max(0, -(y0 + (y1 - y0) * f));
+    };
     const insetBottom = (element: HTMLElement) => {
       const box = element.getBoundingClientRect();
       const animation = element
@@ -166,7 +184,10 @@ async function edgeRide(
         )
         .at(-1);
       if (animation == null) {
-        return bottomOf(getComputedStyle(element).clipPath, box);
+        const slide = slideOf(element);
+        return slide == null
+          ? bottomOf(getComputedStyle(element).clipPath, box)
+          : slidHidden(slide);
       }
       const frames = (animation.effect as KeyframeEffect).getKeyframes();
       const {i, f} = bracket(frames, at(animation));
@@ -260,15 +281,22 @@ async function edgeRide(
       animation.currentTime = 120;
     }
     read('reversed');
-    const clipOf = () =>
-      content()
-        ?.getAnimations()
-        .filter(a =>
-          (a.effect as KeyframeEffect)
-            .getKeyframes()
-            .some(k => k.clipPath != null),
-        )
-        .at(-1) ?? null;
+    const clipOf = () => {
+      const element = content();
+      if (element == null) {
+        return null;
+      }
+      return (
+        element
+          .getAnimations()
+          .filter(a =>
+            (a.effect as KeyframeEffect)
+              .getKeyframes()
+              .some(k => k.clipPath != null),
+          )
+          .at(-1) ?? slideOf(element)
+      );
+    };
     const opening = clipOf();
     button.click();
     // Until the close commits (a component may commit its state in a later
@@ -285,7 +313,10 @@ async function edgeRide(
     const concealStart =
       start == null
         ? Number.NaN
-        : startBox.height - bottomOf(start.clipPath, startBox);
+        : startBox.height -
+          (start.clipPath == null
+            ? Math.max(0, -y(start.translate))
+            : bottomOf(start.clipPath, startBox));
     for (const animation of document.getAnimations()) {
       if (animation.playState === 'paused') {
         animation.play();
@@ -456,7 +487,18 @@ test.describe('component:Collapsible FR10 and component:TreeList FR9 (spec:AST-1
           )
           .at(-1);
         if (animation == null) {
-          return bottomOf(getComputedStyle(element).clipPath, height);
+          // A slide: the first part's translate on its own clock.
+          const slide = element.firstElementChild
+            ?.getAnimations()
+            .filter(a =>
+              (a.effect as KeyframeEffect)
+                .getKeyframes()
+                .some(k => k.translate != null),
+            )
+            .at(-1);
+          return slide == null
+            ? bottomOf(getComputedStyle(element).clipPath, height)
+            : Math.max(0, -glideY(element.firstElementChild as HTMLElement));
         }
         const effect = animation.effect as KeyframeEffect;
         const frames = effect.getKeyframes();
