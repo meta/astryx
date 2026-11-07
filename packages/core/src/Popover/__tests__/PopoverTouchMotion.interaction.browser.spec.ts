@@ -936,7 +936,7 @@ test('Reduce Motion: the popover cross-fades in at its size and out where it sta
 }) => {
   await page.emulateMedia({reducedMotion: 'reduce'});
   const story = await openDefault(page);
-  await openHeldWhileGrowing(page, story);
+  await openHeldWhileGrowing(page, story, 'opacity');
   const unit = {x: 0, y: 0, width: 100, height: 100};
   // design:reduced-motion DR2: opacity only, 200 ms or less, here on
   // UIKit's cross-fade curve.
@@ -968,7 +968,7 @@ test('Reduce Motion: the popover cross-fades in at its size and out where it sta
     expect(sample.opacity).toBeCloseTo(1, 3);
   }
   // The dismissal fades out where the popover stands, on the same curve.
-  const dismissal = await armExitCopyHold(story);
+  const dismissal = await armExitCopyHold(story, 'opacity');
   await page.keyboard.press('Escape');
   await dismissal.held();
   const copy = exitCopyOf(page);
@@ -1141,11 +1141,16 @@ async function holdsOn(target: Locator): Promise<boolean> {
  * Arms a hold for the exit copy before the action that closes the popover.
  * The copy does not exist yet, so the hold arms on the layer's parent. The
  * dismissal places it there for a popover in no other layer. Only motions
- * that start after arming count, and the held motion must be the copy's.
+ * that start after arming count, and the held motion must be the copy's:
+ * its `scale`, or its `opacity` under Reduce Motion.
  */
-async function armExitCopyHold(story: OpenStory) {
+async function armExitCopyHold(
+  story: OpenStory,
+  property: 'scale' | 'opacity' = 'scale',
+) {
   const page = story.layer.page();
   const armed = await armHold(page, story.layer.locator('xpath=..'), {
+    judges: {target: exitCopyOf(page), property},
     newOnly: true,
   });
   return {
@@ -1162,11 +1167,16 @@ async function armExitCopyHold(story: OpenStory) {
 /**
  * Opens the popover with a tap and holds its presentation where it starts, so
  * the next press lands while it grows. Under Reduce Motion it holds the
- * cross-fade. Returns the held motion; release it with `releaseAnimations`.
+ * cross-fade (`property: 'opacity'`). Returns the held motion; release it
+ * with `releaseAnimations`.
  */
-async function openHeldWhileGrowing(page: Page, story: OpenStory) {
+async function openHeldWhileGrowing(
+  page: Page,
+  story: OpenStory,
+  property: 'scale' | 'opacity' = 'scale',
+) {
   const armed = await armHold(page, story.layer, {
-    judges: {target: story.layer, property: 'scale'},
+    judges: {target: story.layer, property},
   });
   await openWithTap(story);
   const held = await armed.held();

@@ -382,15 +382,20 @@ async function playHeld(
         return outcome.held;
       }
       // Only a hold that ran out of time is armed again. A hold that took
-      // the wrong motion fails here.
-      if (!String(outcome.error).includes('no animation under the scope ran')) {
+      // the wrong motion fails with its own error.
+      const timedOut = (error: unknown) =>
+        String(error).includes('no animation under the scope ran');
+      if (!timedOut(outcome.error)) {
         throw outcome.error;
       }
       const again = await armHold(page, track, {
         judges,
         timeout: Math.max(0, inputEnd + 5_000 - Date.now()),
       });
-      return again.held().catch(() => {
+      return again.held().catch((error: unknown) => {
+        if (!timedOut(error)) {
+          throw error;
+        }
         throw new Error(
           'no motion under the track started within 5 s of the input ending',
         );
