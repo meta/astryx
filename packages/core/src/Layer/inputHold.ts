@@ -61,11 +61,11 @@ interface HeldLayer {
   /** The content a dismissal made inert, and whether each was already. */
   inertContent: Map<Element, boolean> | null;
   /**
-   * The finger and pen presses that were down when the full shield came up,
-   * by pointer id, each at its latest point. The shield leaves each point
-   * open until its press ends.
+   * The pointer ids of the finger and pen presses that were down when the
+   * full shield came up. The shield leaves each one open where the stream
+   * last heard it, until its press ends.
    */
-  pressOpenings: Map<number, MousePoint>;
+  pressOpenings: Set<number>;
 }
 
 /** A document while any of its layers is held. */
@@ -339,7 +339,16 @@ function openToMouse(state: HeldLayer, doc: Document): void {
   }
   const view = doc.defaultView;
   const mouse = view == null ? null : getLastMousePoint(view);
-  const presses = state.isShieldFull ? [...state.pressOpenings.values()] : [];
+  const downPresses = view == null ? null : getDownPresses(view);
+  const presses: MousePoint[] = [];
+  if (state.isShieldFull && downPresses != null) {
+    for (const pointerId of state.pressOpenings) {
+      const point = downPresses.get(pointerId);
+      if (point != null) {
+        presses.push(point);
+      }
+    }
+  }
   if (
     (mouse == null && presses.length === 0) ||
     state.layer > 0 ||
@@ -385,9 +394,9 @@ function openToEarlierPresses(state: HeldLayer, doc: Document): void {
     return;
   }
   const pressHold = pressHolds.get(doc);
-  for (const [pointerId, point] of getDownPresses(view)) {
+  for (const pointerId of getDownPresses(view).keys()) {
     if (pressHold?.holds(pointerId) !== true) {
-      state.pressOpenings.set(pointerId, point);
+      state.pressOpenings.add(pointerId);
     }
   }
 }
@@ -412,7 +421,7 @@ export function holdInput(
       shield: null,
       isShieldFull: false,
       inertContent: null,
-      pressOpenings: new Map(),
+      pressOpenings: new Set(),
     };
     held.set(layer, state);
   }
@@ -668,9 +677,12 @@ function createPressHold(doc: Document): PressHold | null {
     shield.setPointerCapture(event.pointerId);
   };
 
-  /** An earlier press's opening follows it, and closes when it ends. */
+  /**
+   * An earlier press's opening follows it, and closes when it ends. The
+   * stream has already recorded the event's point when the hold hears it.
+   */
   const followEarlierPress = (event: PointerEvent) => {
-    const {pointerId, type, clientX, clientY} = event;
+    const {pointerId, type} = event;
     for (const layer of liveLayers(doc)) {
       const state = held.get(layer);
       if (state == null || !state.pressOpenings.has(pointerId)) {
@@ -678,8 +690,6 @@ function createPressHold(doc: Document): PressHold | null {
       }
       if (type === 'pointerup' || type === 'pointercancel') {
         state.pressOpenings.delete(pointerId);
-      } else {
-        state.pressOpenings.set(pointerId, {x: clientX, y: clientY});
       }
       openToMouse(state, doc);
     }
