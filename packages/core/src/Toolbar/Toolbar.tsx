@@ -29,7 +29,7 @@ import {Section} from '../Section/Section';
 import {oneTabStopAmong, useInternalListFocus} from '../hooks/useListFocus';
 import {useKeyboardHint} from '../hooks/useKeyboardHint';
 import {SizeProvider} from '../SizeContext/SizeContext';
-import {EDGE_COMP_ATTR, edgeCompSlot} from '../Layout/edgeCompensation.stylex';
+import {edgeCompSlot} from '../Layout/edgeCompensation.stylex';
 import {themeProps} from '../utils/themeProps';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {useAttachment} from '../hooks/useAttachment';
@@ -134,6 +134,11 @@ const sizeStyles = stylex.create({
 });
 
 // Dynamic styles for configurable gap and tab indicator offset
+// Edge compensation's marker (edgeCompensation.stylex.ts), restated here:
+// StyleX resolves a style's keys within its own file.
+const FIRST_EDGE_COMP = ':has(> [data-astryx-edge-comp]:first-child)';
+const LAST_EDGE_COMP = ':has(> [data-astryx-edge-comp]:last-child)';
+
 const dynamicStyles = stylex.create({
   gap: (gapValue: string) => ({
     gap: gapValue,
@@ -144,9 +149,9 @@ const dynamicStyles = stylex.create({
   sideLaneBasis: (amount: string) => ({
     flexBasis: {
       default: '0px',
-      [`:has(> [${EDGE_COMP_ATTR}]:first-child)`]: amount,
-      [`:has(> [${EDGE_COMP_ATTR}]:last-child)`]: amount,
-      [`:has(> [${EDGE_COMP_ATTR}]:first-child):has(> [${EDGE_COMP_ATTR}]:last-child)`]: `calc(2 * ${amount})`,
+      [FIRST_EDGE_COMP]: amount,
+      [LAST_EDGE_COMP]: amount,
+      [`${FIRST_EDGE_COMP}${LAST_EDGE_COMP}`]: `calc(2 * ${amount})`,
     },
   }),
   tabIndicatorBottom: (offset: string) => ({
