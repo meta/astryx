@@ -273,8 +273,9 @@ describe('busyWindowProof against a control', () => {
       moving().map(f => ({...f, box: {...f.box!, y: 0}}) as TrackedFrame),
     );
     const proof = busyWindowProof(moving(), BLOCK, {control: still});
+    // It names how starved the cast was: here every frame came, 60 Hz.
     expect(proof.verdict.failures.join('\n')).toMatch(
-      /the control moved on 0 frames in the judged part/,
+      /the control moved on 0 frames in the judged part, under 4: the compositor presented too little in this window to judge \(the cast delivered \d+ frames in the \d+ ms block, none for 1[67] ms\)/,
     );
   });
 });
