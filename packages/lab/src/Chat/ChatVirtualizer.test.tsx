@@ -845,6 +845,31 @@ describe('ChatVirtualizer', () => {
     el.remove();
   });
 
+  it('marks a thread loaded into an empty list, or replacing the rows, as busy for the log', async () => {
+    const el = tallScroller();
+    const thread = (prefix: string, n: number): Row[] =>
+      Array.from({length: n}, (_, i) => ({
+        id: `${prefix}${i}`,
+        text: `${prefix} message ${i}`,
+      }));
+    const list = (data: Row[]) => <div role="log">{attachedTo(data, el)}</div>;
+    const {container, rerender} = render(list([]));
+    await settled();
+    const block = container.querySelector('[role="log"]')!
+      .firstElementChild as HTMLElement;
+    // A thread loads into the empty list: its rows are history, not news.
+    act(() => rerender(list(thread('a', 60))));
+    expect(block.getAttribute('aria-busy')).toBe('true');
+    await settled();
+    expect(block.hasAttribute('aria-busy')).toBe(false);
+    // Another thread replaces the rows: history again.
+    act(() => rerender(list(thread('b', 60))));
+    expect(block.getAttribute('aria-busy')).toBe('true');
+    await settled();
+    expect(block.hasAttribute('aria-busy')).toBe(false);
+    el.remove();
+  });
+
   it('marks the rows the window moves over as busy for the log, and new tail rows not', async () => {
     const el = tallScroller();
     const list = (n: number) => <div role="log">{attachedTo(rows(n), el)}</div>;

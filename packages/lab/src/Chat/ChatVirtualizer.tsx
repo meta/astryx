@@ -949,16 +949,22 @@ export function ChatVirtualizer<T>(
     prevData.current = data;
     geoChanged.current = true;
     // The rows past the last row the previous data had are this change's
-    // news. The geometry still indexes the previous data here.
+    // news, but only for a tail append: the walk must stop at a row the
+    // previous data held. A thread loaded into an empty list, or one that
+    // replaces the rows, is history, so the log does not read it out. The
+    // geometry still indexes the previous data here.
     const previous = geo.current.index;
-    newsKeysRef.current = new Set();
+    const appended = new Set<string>();
+    let isTailAppend = false;
     for (let i = data.length - 1; i >= 0; i--) {
       const key = String(getRowKey(data[i], i));
       if (previous.has(key)) {
+        isTailAppend = true;
         break;
       }
-      newsKeysRef.current.add(key);
+      appended.add(key);
     }
+    newsKeysRef.current = isTailAppend ? appended : new Set();
     // HEAD CHANGE (loading older history, or trimming it). Rows arrived above
     // everything placed, so the restore owes a correction the size of the whole
     // page, paid across several passes as those rows measure in. That is a
