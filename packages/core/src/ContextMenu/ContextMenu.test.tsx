@@ -761,6 +761,27 @@ const advance = (ms: number) =>
     vi.advanceTimersByTime(ms);
   });
 
+/** A finger's pointer event, stamped on the (faked) clock. */
+function dispatchPointer(
+  type: 'pointerdown' | 'pointermove' | 'pointerup',
+  target: EventTarget,
+  {pointerId, x, y}: {pointerId: number; x: number; y: number},
+): void {
+  const event = new PointerEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    composed: true,
+    pointerId,
+    pointerType: 'touch',
+    clientX: x,
+    clientY: y,
+    button: 0,
+    buttons: type === 'pointerup' ? 0 : 1,
+  });
+  Object.defineProperty(event, 'timeStamp', {value: performance.now()});
+  target.dispatchEvent(event);
+}
+
 /** The primary pointer answers `matches` to `(pointer: coarse)`. */
 function stubPointer(isCoarse: boolean) {
   vi.stubGlobal(
@@ -1234,6 +1255,111 @@ describe.each([
       advance(1000);
       expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
       press.up();
+    });
+    /** A menu with two rows, held open by a finger that is still down. */
+    function holdUntilTheMenuShows() {
+      const onCopy = vi.fn();
+      const onShare = vi.fn();
+      render(
+        <ContextMenu
+          items={[
+            {label: 'Copy', onClick: onCopy},
+            {label: 'Share', onClick: onShare},
+          ]}
+          data-testid="ctx">
+          <div>Long-press me</div>
+        </ContextMenu>,
+      );
+      const trigger = screen.getByTestId('ctx');
+      const contact = {id: 1, x: 20, y: 20};
+      // A finger's pointer comes first, then its touch, as browsers send them.
+      dispatchPointer('pointerdown', trigger, {pointerId: 7, x: 20, y: 20});
+      dispatchTouch('touchstart', trigger, [contact], [contact]);
+      advance(contextMenu.press.menuDisplayMs);
+      expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+      const row = (name: string) =>
+        screen.getByRole('menuitem', {hidden: true, name});
+      const slide = (target: EventTarget, x: number, y: number) => {
+        dispatchPointer('pointermove', target, {pointerId: 7, x, y});
+        dispatchTouch(
+          'touchmove',
+          trigger,
+          [{...contact, x, y}],
+          [{...contact, x, y}],
+        );
+      };
+      const lift = (target: EventTarget, x: number, y: number) => {
+        dispatchPointer('pointerup', target, {pointerId: 7, x, y});
+        dispatchTouch('touchend', trigger, [{...contact, x, y}], []);
+      };
+      return {onCopy, onShare, row, slide, lift};
+    }
+
+    it('lets the finger the menu opened under slide onto an item, and its lift selects it', () => {
+      const {onCopy, onShare, row, slide, lift} = holdUntilTheMenuShows();
+      // UIMenu's handoff counts from the first position the open menu sees.
+      slide(row('Share'), 20, 30);
+      slide(row('Share'), 20, 45);
+      expect(row('Share')).toHaveFocus();
+      act(() => {
+        lift(row('Share'), 20, 45);
+      });
+      expect(onShare).toHaveBeenCalledTimes(1);
+      expect(onCopy).not.toHaveBeenCalled();
+    });
+
+    it('selects nothing for a lift before UIMenu’s handoff, however long the finger rests on an item, and leaves the menu open', () => {
+      const {onCopy, onShare, row, slide, lift} = holdUntilTheMenuShows();
+      slide(row('Share'), 20, 26);
+      // Past the settle time a mouse would pick here; a finger needs the
+      // handoff.
+      advance(400);
+      act(() => {
+        lift(row('Share'), 20, 26);
+      });
+      expect(onShare).not.toHaveBeenCalled();
+      expect(onCopy).not.toHaveBeenCalled();
+      expect(HTMLElement.prototype.hidePopover).not.toHaveBeenCalled();
+    });
+
+    it('leaves the menu open for a lift over no item after the slide', () => {
+      const {onCopy, onShare, row, slide, lift} = holdUntilTheMenuShows();
+      slide(row('Share'), 20, 30);
+      slide(row('Share'), 20, 45);
+      const menu = screen.getByRole('menu', {hidden: true});
+      slide(menu, 20, 300);
+      act(() => {
+        lift(menu, 20, 300);
+      });
+      expect(onShare).not.toHaveBeenCalled();
+      expect(onCopy).not.toHaveBeenCalled();
+      expect(HTMLElement.prototype.hidePopover).not.toHaveBeenCalled();
+    });
+
+    it('hands nothing over when the menu opens at the lift: the finger is gone', () => {
+      const onShare = vi.fn();
+      render(
+        <ContextMenu
+          items={[{label: 'Share', onClick: onShare}]}
+          data-testid="ctx">
+          <div>Long-press me</div>
+        </ContextMenu>,
+      );
+      const trigger = screen.getByTestId('ctx');
+      const contact = {id: 1, x: 20, y: 20};
+      dispatchPointer('pointerdown', trigger, {pointerId: 7, x: 20, y: 20});
+      dispatchTouch('touchstart', trigger, [contact], [contact]);
+      advance(500);
+      act(() => {
+        dispatchPointer('pointerup', trigger, {pointerId: 7, x: 20, y: 20});
+        dispatchTouch('touchend', trigger, [contact], []);
+      });
+      expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+      // A later move of that pointer id is no press of this menu's.
+      const row = screen.getByRole('menuitem', {hidden: true, name: 'Share'});
+      dispatchPointer('pointermove', row, {pointerId: 7, x: 20, y: 60});
+      expect(row).not.toHaveFocus();
+      expect(onShare).not.toHaveBeenCalled();
     });
   },
 );

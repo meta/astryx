@@ -6,9 +6,9 @@
  *   the interaction harness, the context-menu constants and UIKit's frames
  * @output Interaction and animation proofs for a context menu that a held
  *   finger opens on UIKit's timeline. They cover the menu's moments, the
- *   press feedback against UIKit's frames and a blocked main thread. They
- *   also cover the page under the finger, a pan outside and a storyboard of
- *   the press
+ *   held finger's slide onto an item, the press feedback against UIKit's
+ *   frames and a blocked main thread. They also cover the page under the
+ *   finger, a pan outside and a storyboard of the press
  * @position Interaction specs of packages/core/src/ContextMenu; Chromium's
  *   finger stands for Android's engine, and WebKit's for iOS
  */
@@ -39,6 +39,7 @@ import {
   tap,
   thawTimers,
   timeline,
+  toTouchEvents,
   touchDriver,
   trackMarker,
   traceRendering,
@@ -483,6 +484,121 @@ test('the lift after the menu shows keeps it open and sends no click', async ({
   await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
   const log = await readInputLog(page);
   expect(log.filter(record => record.type === 'click')).toEqual([]);
+});
+
+/** The Share row's center: open the menu once with a held press, measure, close it. */
+async function shareRowCenter(
+  page: Page,
+  driver: TouchDriver,
+  at: {x: number; y: number},
+): Promise<{x: number; y: number}> {
+  const menu = page.getByRole('menu', {name: 'Photo actions'});
+  await driver.play(hold(at, menuDisplayMs + 100));
+  await expect(menu).toBeVisible();
+  const row = await page.getByRole('menuitem', {name: 'Share'}).boundingBox();
+  if (row == null) {
+    throw new Error('no Share row');
+  }
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeHidden();
+  // The trigger returns to its size before the next press.
+  await expect
+    .poll(async () => presentedScale(page.getByTestId('touch-context-menu')))
+    .toBe(1);
+  return {x: row.x + row.width / 2, y: row.y + row.height / 2};
+}
+
+/** The text of the focused row, or null when no row holds the focus. */
+const litRow = async (page: Page) =>
+  page.evaluate(() =>
+    document.activeElement?.getAttribute('role') === 'menuitem'
+      ? (document.activeElement.textContent ?? '')
+      : null,
+  );
+
+test('the finger the menu opened under slides onto an item, which lights under it, and its lift selects it', async ({
+  page,
+}) => {
+  const {driver, center} = await openTouchStory(page);
+  const share = await shareRowCenter(page, driver, center);
+  const script = drag(center, share, {
+    holdMs: menuDisplayMs + 100,
+    durationMs: 250,
+    restMs: 120,
+  });
+  const lastMove =
+    toTouchEvents(script).filter(e => e.type === 'touchMove').length - 1;
+  let moves = 0;
+  let lit: string | null = null;
+  await driver.play(script, {
+    onEvent: async step => {
+      if (step.type === 'touchMove' && moves++ === lastMove) {
+        lit = await litRow(page);
+      }
+    },
+  });
+  expect(lit).toContain('Share');
+  await expect(page.getByTestId('touch-context-menu-last')).toHaveText(
+    'Last action: Share',
+  );
+  await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeHidden();
+});
+
+test('a lift before UIMenu’s handoff selects nothing and leaves the menu open', async ({
+  page,
+}) => {
+  const {driver, center} = await openTouchStory(page);
+  // 6 px after the menu opens: short of UIMenu's 10 pt handoff.
+  await driver.play(
+    drag(
+      center,
+      {x: center.x, y: center.y + 6},
+      {holdMs: menuDisplayMs + 100, durationMs: 100, restMs: 120},
+    ),
+  );
+  await page.waitForTimeout(300);
+  await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
+  await expect(page.getByTestId('touch-context-menu-last')).toHaveText(
+    'No action yet',
+  );
+});
+
+test('a finger that slides on past the menu leaves it open with no row lit, selects nothing, and scrolls nothing', async ({
+  page,
+}) => {
+  const {driver, center, top} = await openScrollableStory(page);
+  const before = await top();
+  // Held until the menu opens under it, then down and a little inward through
+  // the rows, and on past the menu's bottom.
+  const script = drag(
+    center,
+    {x: center.x + 24, y: center.y + 260},
+    {holdMs: menuDisplayMs + 100, durationMs: 400, restMs: 120},
+  );
+  const lastMove =
+    toTouchEvents(script).filter(e => e.type === 'touchMove').length - 1;
+  let moves = 0;
+  let lit: string | null = null;
+  let isLitOnTheWay = false;
+  await driver.play(script, {
+    onEvent: async step => {
+      if (step.type !== 'touchMove') {
+        return;
+      }
+      const row = await litRow(page);
+      isLitOnTheWay ||= row != null;
+      if (moves++ === lastMove) {
+        lit = row;
+      }
+    },
+  });
+  expect(await top()).toBe(before);
+  expect(isLitOnTheWay).toBe(true);
+  expect(lit).toBeNull();
+  await expect(page.getByTestId('touch-context-menu-last')).toHaveText(
+    'No action yet',
+  );
+  await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
 });
 
 test('the menu’s anchor sits under the finger, on screen and as laid out, while the trigger is grown, and the menu stays put', async ({

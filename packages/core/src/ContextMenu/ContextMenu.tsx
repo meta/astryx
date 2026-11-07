@@ -84,12 +84,13 @@ import {useMenuDrillIn} from '../DropdownMenu/useMenuDrillIn';
 import {useInternalListFocus} from '../hooks/useListFocus';
 import {useLongPress} from '../hooks/useLongPress';
 import {pressableProps} from '../utils/pressFeedback';
-import {useMenuPress} from '../hooks/useMenuPress';
+import {useDropdownMenuPress} from '../hooks/useMenuPress';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {shadowHostOf} from '../utils/flatTree';
 import {usePresentation} from '../utils/presentation';
 import {
   ContextMenuTouchLayer,
+  type ContextMenuHeldPointer,
   type ContextMenuTouchHandle,
 } from './ContextMenuTouchLayer';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
@@ -786,18 +787,32 @@ export function ContextMenu({
     [isDisabled, openAtLocalPoint, getAnchorBaseRect],
   );
 
+  const menuPress = useDropdownMenuPress({
+    menuRef: listRef,
+    itemSelector: MENU_ITEM_SELECTOR,
+    onDismiss: closeMenu,
+    isEnabled: !usesBottomSheet,
+  });
+  const {continueGesture} = menuPress;
+
   // Touch invocation. Under the touch model, the touch layer runs UIKit's long
   // press and asks for the menu here, at the client point where the finger
   // landed.
   const openFromFinger = useCallback(
-    (point: {x: number; y: number}) => {
+    (point: {x: number; y: number}, held: ContextMenuHeldPointer | null) => {
       const local = toTriggerLocal(point);
       // The finger is still down: its lift belongs to the press that opened
       // the menu, so it does not close it.
       openingGestureRef.current = currentGesture();
       openAtLocalPoint(local.x, local.y, triggerRef.current, 'menu');
+      // A finger still down goes on into the menu as its opening press: it
+      // slides onto an item, and its lift selects it. A lift over no item
+      // leaves the menu open.
+      if (held != null) {
+        continueGesture({...held, time: Date.now()});
+      }
     },
-    [openAtLocalPoint, toTriggerLocal],
+    [continueGesture, openAtLocalPoint, toTriggerLocal],
   );
 
   // Today's long press for a finger outside the touch model: under a fine
@@ -895,16 +910,6 @@ export function ContextMenu({
     resolvedMenuContent,
     isOpen && !usesBottomSheet,
   );
-
-  // The press model: the row under a release acts, the highlight follows a
-  // held pointer, a mouse released outside dismisses and a finger leaves the
-  // menu open.
-  const menuPress = useMenuPress({
-    menuRef: listRef,
-    itemSelector: MENU_ITEM_SELECTOR,
-    onDismiss: closeMenu,
-    isEnabled: !usesBottomSheet,
-  });
 
   const renderedMenu = (
     <div
