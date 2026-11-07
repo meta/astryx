@@ -29,6 +29,11 @@ test.afterAll(async () => {
   await storybook?.close();
 });
 
+test.skip(
+  ({browserName}) => browserName !== 'chromium',
+  'Page.setFontSizes is a Chromium DevTools command',
+);
+
 /** Sets the browser's default font size, which rem-based text follows. */
 async function setDefaultFontSize(page: Page, px: number): Promise<void> {
   const session = await page.context().newCDPSession(page);
