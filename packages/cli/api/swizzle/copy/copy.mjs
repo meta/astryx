@@ -361,12 +361,25 @@ export async function swizzleCopy(component, options = {}) {
   );
   /** @type {Map<string, string>} */
   const rootDests = new Map();
+  // A module from another Astryx package goes under a folder named after that
+  // package, at its path in that package's source.
+  /** @param {string} file */
+  const otherPackageOf = file => {
+    for (const [root, name] of plan.otherPackages) {
+      if (file.startsWith(root + path.sep)) return {root, folder: name.split('/').pop() ?? name};
+    }
+    return null;
+  };
   for (const file of [...allFiles].sort()) {
     if (layoutDestOf(file) != null) continue;
-    const packagePath = path.relative(graphRoot, file);
-    let dest = path.join(outputBase, packagePath);
+    const other = otherPackageOf(file);
+    const base = other ? other.folder : path.basename(packageDir);
+    const packagePath = path.relative(other ? other.root : graphRoot, file);
+    let dest = other
+      ? path.join(outputBase, base, packagePath)
+      : path.join(outputBase, packagePath);
     for (let n = 1; takenDests.has(dest); n++) {
-      const folder = n === 1 ? path.basename(packageDir) : `${path.basename(packageDir)}-${n}`;
+      const folder = n === 1 && !other ? base : `${base}-${n}`;
       dest = path.join(outputBase, folder, packagePath);
     }
     takenDests.add(dest);

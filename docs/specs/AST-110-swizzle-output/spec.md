@@ -70,7 +70,9 @@ and the repository proves it before a change that could break it merges.
 - **FR2 — The helpers it needs come with it.** Every module the component
   reaches that is not reachable through a public export is copied into the
   output, keeping its folder layout relative to the component, and copied files
-  import each other by relative path. A symbol the owner package exports publicly
+  import each other by relative path. A module from another Astryx package goes
+  under a folder named after that package, at its path in that package's
+  source. A symbol the owner package exports publicly
   is imported from that public path. Nested folders the component imports are
   copied with it. The output holds only source the component runs: tests,
   stories, spec records, and component docs are not copied. When a helper the
