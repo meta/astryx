@@ -38,6 +38,7 @@ verified_by:
     packages/core/src/Layer/useLayerDismissal.test.tsx,
     packages/core/src/Layer/layerClickBoundary.test.tsx,
     packages/core/src/Layer/layerDismissalInvariants.test.tsx,
+    packages/core/src/Layer/inputHold.test.tsx,
     packages/core/src/Layer/layerExitCopy.test.ts,
     packages/core/src/Layer/__tests__/layerExitCopy.interaction.browser.spec.ts,
     packages/core/src/Popover/Popover.test.tsx,
@@ -459,8 +460,9 @@ do not slide out with it. A top-layer viewport renders into a host element
 it owns, moves that host into the latest open outlet, returns it to the
 viewport's tree position when no outlet is open, and enters the top layer again
 after each move. Toasts therefore paint above the modal and stay operable inside
-it. An input hold can make a leaving modal's content inert. The host stays
-live, and the hold announces its shield's entry, so toasts stay operable above
+it. An input hold can make a layer's content inert, or the page's. A host
+there stays live, as do the elements that hold it; their other children go
+inert. The hold announces its shield's entry, so toasts stay operable above
 the shield too.
 Moving the host does not remount the rows, so entries, timers, and focus
 handoff survive. The rule is one of order, not of modality, and it reaches
@@ -575,11 +577,12 @@ layers use Layer rendering without joining Escape/platform dismissal.
   container hides is followed again when an intersection observer reports it
   back in view.
 - **INV13 — One exit copy per closing layer.** A layer's close plays on at most
-  one exit copy, made by `placeLayerExitCopy`: drawn where the layer was drawn,
-  inert, hidden from assistive technology, without ids, form names, or form
-  owner, shown only in the top layer, and removed by its owner when the close
-  settles. Placing a second copy for the same layer removes the first; another
-  layer's copy stays.
+  one exit copy, made by `placeLayerExitCopy`, or taken by `takeLayerExitCopy`
+  and placed later: drawn where the layer was drawn, inert, hidden from
+  assistive technology, without ids, form names, or form owner, shown only in
+  the top layer, and removed by its owner when the close settles. Placing a
+  second copy for the same layer removes the first; another layer's copy
+  stays.
 - **INV14 — The runtime owns every layer's shared mechanism.** Internally, the layer runtime owns the shared
   mechanism layers use: top-layer mounting, close-request delivery, the
   presentation hold (keeping a layer's chosen presentation from the open until

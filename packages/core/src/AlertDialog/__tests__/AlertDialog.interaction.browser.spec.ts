@@ -171,6 +171,8 @@ test('reopened, the alert tracks again: a slide from Delete to Cancel runs Cance
   const {driver, dialog, centers} = await openAlert(page);
   await driver.play(tap(centers.cancel, {holdMs: 80}));
   await expect(dialog).toBeHidden();
+  // The page takes input again once the alert's copy has faded out.
+  await expect(page.locator('[data-astryx-alert-exit]')).toHaveCount(0);
   await driver.tap(
     await centerOf(page.getByRole('button', {name: 'Delete item'})),
   );

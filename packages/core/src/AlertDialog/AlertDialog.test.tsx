@@ -59,6 +59,23 @@ vi.mock('../gestures/pageHold', () => ({
   holdPageScroll: () => () => {},
 }));
 
+// jsdom has no top layer, so the alert's exit copy is never shown there and a
+// close is immediate. A test that sets `fade` gets a stand-in copy that plays
+// it.
+const exitCopy = vi.hoisted(() => ({fade: null as Animation[] | null}));
+vi.mock('../privateAttributes/alertExit.stylex', () => ({
+  takeAlertExitCopy: (element: HTMLElement) => {
+    const {fade} = exitCopy;
+    if (fade == null) {
+      return null;
+    }
+    const copy = element.ownerDocument.createElement('div');
+    copy.setAttribute('data-exit-copy', '');
+    copy.getAnimations = () => fade;
+    return {copy, place: () => element.after(copy)};
+  },
+}));
+
 /** Stubs the media queries AlertDialog reads. */
 function stubAlertDialogMedia({
   smallScreen,
@@ -631,6 +648,7 @@ describe('AlertDialog action tracking', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    exitCopy.fade = null;
   });
 
   it('marks both actions as tracked group items from the first render, keeping their pressable marker', () => {
@@ -762,27 +780,28 @@ describe('AlertDialog action tracking', () => {
     expect(widthOf()).toContain('--x-width: 400px');
   });
 
-  it('under a finger, while the alert fades out, holds its input: its content is inert, focus leaves it, and Escape does nothing', async () => {
+  it('under a finger, while the alert fades out, holds its input: the dialog closes at once, and the page is inert with focus out of it', async () => {
     const {onOpenChange, cancel, action, close} = renderOpen();
     await completePresentation();
     const dialog = screen.getByRole('alertdialog');
     cancel.focus();
-    // jsdom runs no animation: a 300 ms exit fade that never ends.
-    dialog.getAnimations = () => [
+    // A 300 ms fade that never ends.
+    exitCopy.fade = [
       {
+        ready: Promise.resolve(),
         finished: new Promise<Animation>(() => {}),
         effect: {getComputedTiming: () => ({endTime: 300})},
       } as unknown as Animation,
     ];
     close();
-    // Leaving: still open while it fades out.
-    expect(dialog).toHaveAttribute('open');
+    // Closed in the task that closed the alert, while the copy fades.
+    expect(dialog).not.toHaveAttribute('open');
+    expect(document.querySelector('[data-exit-copy]')).not.toBeNull();
     // jsdom still dispatches a click on inert content, so the browser specs
-    // prove that a tap or a click there runs nothing.
+    // prove that a tap, a click or a key there runs nothing.
     expect(action.closest('[inert]')).not.toBeNull();
     expect(cancel.closest('[inert]')).not.toBeNull();
-    expect(cancel).not.toHaveFocus();
-    fireEvent.keyDown(dialog, {key: 'Escape'});
+    expect(document.activeElement).toBe(document.body);
     expect(onOpenChange).not.toHaveBeenCalled();
   });
 

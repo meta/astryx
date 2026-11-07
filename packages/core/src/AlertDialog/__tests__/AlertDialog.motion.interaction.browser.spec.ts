@@ -235,8 +235,8 @@ async function release(page: Page): Promise<void> {
 interface NextAnimations {
   /** When the browser made them, ms on the page's clock. */
   madeAt: number;
-  /** When the dialog closed, ms on the page's clock; 0 while open. */
-  closedAt: number;
+  /** When the exit copy went, ms on the page's clock; 0 while it fades. */
+  endedAt: number;
   animations: {
     css: boolean;
     duration: number;
@@ -244,31 +244,54 @@ interface NextAnimations {
     opacities: number[];
   }[];
   easing: string;
+  /** How many of those animations had finished when the copy went. */
+  finishedAtEnd: number;
+}
+
+/** The alert's exit copy, which fades out after a touch close. */
+const exitCopyOf = (page: Page): Locator =>
+  page.locator('[data-astryx-alert-exit]');
+
+/** Waits for a touch close to end: the alert hidden and its copy gone. */
+async function waitForClose(dialog: Locator): Promise<void> {
+  await expect(dialog).toBeHidden();
+  await expect(exitCopyOf(dialog.page())).toHaveCount(0);
 }
 
 /**
- * Records the dialog's next CSS animations as the browser makes them,
- * without holding them, and when the dialog closes.
+ * Records the CSS animations of the alert's next exit copy, the alert's and
+ * its dimming's, as each one starts. It also records when the copy is placed
+ * and when it goes.
  */
-async function recordNextAnimations(dialog: Locator): Promise<void> {
-  await dialog.evaluate(element => {
+async function recordExitFade(page: Page): Promise<void> {
+  await page.evaluate(() => {
     const log: NextAnimations = {
       madeAt: 0,
-      closedAt: 0,
+      endedAt: 0,
       animations: [],
       easing: '',
+      finishedAtEnd: 0,
     };
+    const tracked = new Set<Animation>();
+    let finished = 0;
     (window as unknown as {__next: NextAnimations}).__next = log;
-    const observer = new MutationObserver(() => {
+    const isCopy = (node: Node): node is Element =>
+      node instanceof Element && node.hasAttribute('data-astryx-alert-exit');
+    const read = (node: Element) => {
       const made = document
         .getAnimations()
-        .filter(a => (a.effect as KeyframeEffect | null)?.target === element);
-      if (made.length === 0) {
-        return;
+        .filter(a => (a.effect as KeyframeEffect | null)?.target === node);
+      for (const animation of made) {
+        if (!tracked.has(animation)) {
+          tracked.add(animation);
+          animation.finished.then(
+            () => {
+              finished += 1;
+            },
+            () => {},
+          );
+        }
       }
-      observer.disconnect();
-      log.madeAt = performance.now();
-      log.easing = getComputedStyle(element).animationTimingFunction;
       log.animations = made.map(animation => {
         const frames = (animation.effect as KeyframeEffect).getKeyframes();
         const meta = new Set([
@@ -290,11 +313,30 @@ async function recordNextAnimations(dialog: Locator): Promise<void> {
           opacities: frames.map(frame => Number(frame.opacity)),
         };
       });
+    };
+    const observer = new MutationObserver(records => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (!isCopy(node) || log.madeAt !== 0) {
+            continue;
+          }
+          log.madeAt = performance.now();
+          log.easing = getComputedStyle(node).animationTimingFunction;
+          read(node);
+          // The fade starts a frame later: the dimming's animation begins
+          // only then.
+          node.addEventListener('animationstart', () => read(node));
+        }
+        for (const node of record.removedNodes) {
+          if (isCopy(node)) {
+            log.endedAt = performance.now();
+            log.finishedAtEnd = finished;
+            observer.disconnect();
+          }
+        }
+      }
     });
-    observer.observe(element, {attributes: true});
-    element.addEventListener('close', () => {
-      log.closedAt = performance.now();
-    });
+    observer.observe(document.body, {childList: true, subtree: true});
   });
 }
 
@@ -458,6 +500,26 @@ test.describe('under a finger', () => {
     expect(progress.dim).toBeCloseTo(progress.opacity, 2);
   });
 
+  test("a reopened alert enters with its dimming again: every open starts the alert's fade-in and the dimming's (component:AlertDialog FR6)", async ({
+    page,
+  }) => {
+    const {driver, trigger, dialog} = await openPage(page);
+    for (const open of [1, 2, 3]) {
+      await holdAtStart(page);
+      await driver.tap(await centerOf(trigger));
+      await whenHeld(page);
+      const {held} = await sampleDialog(page, []);
+      await release(page);
+      // The alert's own CSS animation and the dimming's, on every open.
+      expect(held.length, `open ${open}`).toBe(2);
+      await waitForRest(dialog);
+      await driver.tap(
+        await centerOf(dialog.getByRole('button', {name: 'Cancel'})),
+      );
+      await waitForClose(dialog);
+    }
+  });
+
   test("dismisses with a fade alone on the exit tokens, whatever the theme's dialog exit switch says, then closes and returns focus", async ({
     page,
   }) => {
@@ -472,16 +534,16 @@ test.describe('under a finger', () => {
       await driver.tap(await centerOf(trigger));
       await waitForRest(dialog);
       const exit = await tokenTiming(dialog, EXIT_TIMING);
-      await recordNextAnimations(dialog);
+      await recordExitFade(page);
       await driver.tap(
         await centerOf(dialog.getByRole('button', {name: 'Cancel'})),
       );
-      await expect(dialog).toBeHidden();
+      await waitForClose(dialog);
       await expect(trigger).toBeFocused();
       const log = await nextAnimations(page);
       const exitMs = msOf(exit.duration);
-      // The alert's own fade and the dimming's: opacity alone, from 1 to 0,
-      // on the exit tokens.
+      // The alert's own fade and the dimming's, on its copy: opacity alone,
+      // from 1 to 0, on the exit tokens.
       const fade = {
         css: true,
         duration: exitMs,
@@ -491,10 +553,12 @@ test.describe('under a finger', () => {
       expect(exitMs, dialogExit).toBeGreaterThan(0);
       expect(log.animations, dialogExit).toEqual([fade, fade]);
       expect(log.easing, dialogExit).toBe(exit.easing);
-      // It stays presented until the fade has run its length.
-      expect(log.closedAt - log.madeAt, dialogExit).toBeGreaterThanOrEqual(
+      // The copy stays until the fade has run its length, and goes once
+      // both the alert's fade and the dimming's have ended.
+      expect(log.endedAt - log.madeAt, dialogExit).toBeGreaterThanOrEqual(
         exitMs,
       );
+      expect(log.finishedAtEnd, dialogExit).toBe(2);
     }
   });
 
@@ -579,7 +643,6 @@ test.describe('under a finger', () => {
       dialog.getByRole('button', {name: 'Delete'}),
     );
     await page.evaluate(() => {
-      const dialogElement = document.querySelector('dialog[open]');
       const entrance = (window as unknown as {__entrance?: Animation})
         .__entrance;
       const touches = (window as unknown as {__touchTimes: number[]})
@@ -588,14 +651,26 @@ test.describe('under a finger', () => {
       const log = {
         start: Number(entrance?.startTime),
         end: Number(entrance?.effect?.getComputedTiming().endTime),
+        // When the fade ended.
         closedAt: 0,
         touches,
         clicks: [] as string[],
       };
       (window as unknown as {__tapLog: typeof log}).__tapLog = log;
-      dialogElement?.addEventListener('close', () => {
-        log.closedAt = performance.now();
-      });
+      // The fade ends when the alert's exit copy goes.
+      new MutationObserver((records, observer) => {
+        for (const record of records) {
+          for (const node of record.removedNodes) {
+            if (
+              node instanceof Element &&
+              node.hasAttribute('data-astryx-alert-exit')
+            ) {
+              log.closedAt = performance.now();
+              observer.disconnect();
+            }
+          }
+        }
+      }).observe(document.body, {childList: true, subtree: true});
       document.addEventListener(
         'click',
         event => {
@@ -634,9 +709,9 @@ test.describe('under a finger', () => {
     // nothing.
     await driver.tap(cancelPoint);
     await driver.tap(deletePoint);
-    await expect(dialog).toBeHidden();
+    await waitForClose(dialog);
     const after = await readTapLog();
-    // The Delete tap landed before the alert closed.
+    // The Delete tap landed before the fade ended.
     expect(after.touches[2]).toBeLessThan(after.closedAt);
     expect(after.clicks).toEqual(['Cancel']);
   });
@@ -668,20 +743,20 @@ test.describe('under a finger', () => {
             : dialog.getByRole('button', {name: 'Cancel'}),
         ),
       );
-      const [running] = await waitForAnimation(dialog, {minProgressMs: 16});
-      if (phase === 'present') {
-        // Above the alert, which opened after the control, and presented
-        // there before the block holds the main thread.
-        await control.raise();
-        await frames(page, 3);
-      }
-      const rest = await dialog.evaluate(element => {
+      // The dismissal plays on the alert's exit copy.
+      const moving = phase === 'present' ? dialog : exitCopyOf(page);
+      const [running] = await waitForAnimation(moving, {minProgressMs: 16});
+      // Above the alert or its copy, which entered the top layer after the
+      // control, and presented there before the block holds the main thread.
+      await control.raise();
+      await frames(page, 3);
+      const rest = await moving.evaluate(element => {
         const rect = element.getBoundingClientRect();
         return {x: rect.x, y: rect.y, width: rect.width, height: rect.height};
       });
       const block = await blockMainThread(page, 1000);
       const castFrames = await cast.stop();
-      expect(msOf((await timingOf(dialog)).duration)).toBe(BUSY_MS);
+      expect(msOf((await timingOf(moving)).duration)).toBe(BUSY_MS);
       // The middle of the alert, inside its smallest box.
       const region = {
         x: rest.x + rest.width * 0.3,
@@ -701,7 +776,7 @@ test.describe('under a finger', () => {
         await waitForRest(dialog);
         await frames(page, 6);
       } else {
-        await expect(dialog).toBeHidden();
+        await waitForClose(dialog);
       }
     }
     await control.remove();
@@ -743,21 +818,30 @@ test.describe('under a finger', () => {
     await expect(undo).toBeVisible();
     // The toast slides in first: the tap goes where it rests.
     await waitForRest(page.locator('[data-toast-id]'));
-    // Leaving: still shown while it fades out, with the toast inside it.
-    await expect(dialog).toBeVisible();
+    // Leaving: the alert's copy fades out over the inert page, and the toast
+    // stays live above it.
+    await expect(dialog).toBeHidden();
+    await expect(exitCopyOf(page)).toBeVisible();
     expect(await undo.evaluate(element => element.closest('[inert]'))).toBe(
       null,
     );
-    // Records the order of the toast's click and the alert's close.
+    // Records the order of the toast's click and the fade's end.
     await page.evaluate(() => {
-      (window as unknown as {__order: string[]}).__order = [];
-    });
-    await dialog.evaluate(element => {
-      element.addEventListener(
-        'close',
-        () => (window as unknown as {__order: string[]}).__order.push('close'),
-        {once: true},
-      );
+      const order: string[] = [];
+      (window as unknown as {__order: string[]}).__order = order;
+      new MutationObserver((records, observer) => {
+        for (const record of records) {
+          for (const node of record.removedNodes) {
+            if (
+              node instanceof Element &&
+              node.hasAttribute('data-astryx-alert-exit')
+            ) {
+              order.push('end');
+              observer.disconnect();
+            }
+          }
+        }
+      }).observe(document.body, {childList: true, subtree: true});
     });
     await undo.evaluate(element => {
       element.addEventListener('click', () =>
@@ -766,14 +850,13 @@ test.describe('under a finger', () => {
     });
     await driver.tap(await centerOf(undo));
     await expect(page.getByText('Undo taps: 1')).toBeVisible();
-    await expect(dialog).toBeHidden();
-    // The tap ran during the fade, before the alert closed. The dialog's
-    // close event comes in a later task than its hiding.
-    await expect
-      .poll(async () =>
-        page.evaluate(() => (window as unknown as {__order: string[]}).__order),
-      )
-      .toEqual(['undo', 'close']);
+    await waitForClose(dialog);
+    // The tap ran during the fade.
+    expect(
+      await page.evaluate(
+        () => (window as unknown as {__order: string[]}).__order,
+      ),
+    ).toEqual(['undo', 'end']);
   });
 
   test('a toast the alert raises enters once: repeated alerts move it in and out, and it starts no transition (component:Toast FR12)', async ({
@@ -823,7 +906,7 @@ test.describe('under a finger', () => {
       await driver.tap(
         await centerOf(dialog.getByRole('button', {name: 'Delete'})),
       );
-      await expect(dialog).toBeHidden();
+      await waitForClose(dialog);
       await waitForRest(row);
       const starts = await takeStarts();
       if (cycle === 1) {
@@ -892,18 +975,388 @@ test.describe('under a finger', () => {
       await driver.tap(
         await centerOf(dialog.getByRole('button', {name: 'Delete'})),
       );
-      // The alert closes when its exit ends, outside the tap.
-      await expect(dialog).toBeHidden();
+      // The alert closes in the tap's task, and its copy fades out.
+      await waitForClose(dialog);
       await waitForRest(row);
       const {inDialog, hidden} = await takePlace();
-      // The toast was in the alert, so a hidden count of 0 counts.
-      expect(inDialog).toBeGreaterThan(0);
+      // From the second cycle the toast moves into the open alert, so a
+      // hidden count of 0 counts. The first toast is raised as it closes.
+      if (cycle > 1) {
+        expect(inDialog).toBeGreaterThan(0);
+      }
       expect(hidden).toBe(0);
     }
     await expect(row).toHaveCount(1);
   });
 
-  test('while the alert fades out its content is inert: focus leaves the actions, Tab cannot reach them, and focus returns to the opener', async ({
+  test("a touch close closes the alert in the tap's task: by each close's first frame the dialog is closed, the toast is out of it, and a copy at the fade's start shows over an inert page; then the fade plays (component:AlertDialog FR7)", async ({
+    page,
+  }) => {
+    await openStory(page, storybook(), 'core-alertdialog--alert-over-a-toast');
+    const driver = await touchDriver(page);
+    const dialog = page.getByRole('alertdialog', {name: 'Delete item?'});
+    const opener = page.getByRole('button', {name: 'Delete item'});
+    await setToken(page, '--duration-exit', `${EXIT_MS}ms`);
+    for (const close of [1, 2, 3]) {
+      await driver.tap(await centerOf(opener));
+      await waitForRest(dialog);
+      // Reads the page in the first frame after the tap's task.
+      await page.evaluate(() => {
+        const scope = window as unknown as {__firstFrame: Promise<unknown>};
+        scope.__firstFrame = new Promise(resolve => {
+          document.addEventListener(
+            'click',
+            () => {
+              requestAnimationFrame(() => {
+                const live = document.querySelector(
+                  'dialog[role="alertdialog"]:not([data-astryx-alert-exit])',
+                );
+                const copy = document.querySelector('[data-astryx-alert-exit]');
+                const row = document.querySelector('[data-toast-id]');
+                const openerButton = [
+                  ...document.querySelectorAll('button'),
+                ].find(
+                  button =>
+                    button.textContent?.trim() === 'Delete item' &&
+                    button.closest('[data-astryx-alert-exit]') == null,
+                );
+                resolve({
+                  isOpen: live instanceof HTMLDialogElement && live.open,
+                  isToastInDialog: row?.closest('dialog') != null,
+                  isCopyShown: copy?.matches(':popover-open') === true,
+                  // The fade waits at its start for this frame, which shows
+                  // the copy whole.
+                  isCopyAtStart:
+                    copy != null &&
+                    getComputedStyle(copy).opacity === '1' &&
+                    copy
+                      .getAnimations({subtree: true})
+                      .every(animation => Number(animation.currentTime) === 0),
+                  isPageInert: openerButton?.closest('[inert]') != null,
+                  isToastLive: row != null && row.closest('[inert]') == null,
+                  isFocusOnBody: document.activeElement === document.body,
+                });
+              });
+            },
+            {capture: true, once: true},
+          );
+        });
+      });
+      await driver.tap(
+        await centerOf(dialog.getByRole('button', {name: 'Delete'})),
+      );
+      const first = await page.evaluate(
+        async () =>
+          (window as unknown as {__firstFrame: Promise<unknown>}).__firstFrame,
+      );
+      expect(first, `close ${close}`).toEqual({
+        isOpen: false,
+        isToastInDialog: false,
+        isCopyShown: true,
+        isCopyAtStart: true,
+        isPageInert: true,
+        isToastLive: true,
+        isFocusOnBody: true,
+      });
+      // Then the fade plays. When it ends the copy goes, the page comes back,
+      // and focus returns to the opener.
+      await waitForAnimation(exitCopyOf(page), {minProgressMs: 16});
+      await expect(page.locator('[data-astryx-alert-exit]')).toHaveCount(0);
+      await expect(opener).toBeFocused();
+      expect(
+        await opener.evaluate(element => element.closest('[inert]') == null),
+      ).toBe(true);
+      await expect(page.locator('[data-toast-id]')).toHaveCount(1);
+    }
+  });
+
+  test("the copy's fade counts from the frame that first shows it: that frame shows it whole, the next the fade one frame in, and the next a frame on (component:AlertDialog FR6)", async ({
+    page,
+  }) => {
+    const {driver, trigger, dialog} = await openPage(page);
+    // A 1 s linear exit: one frame moves the opacity by about 0.017.
+    const exitMs = 1000;
+    await setToken(page, '--duration-exit', `${exitMs}ms`);
+    await setToken(page, '--ease-exit', 'linear');
+    await driver.tap(await centerOf(trigger));
+    await waitForRest(dialog);
+    // Reads the copy's opacity after each of the first three frames after
+    // the tap's task, with each frame's time.
+    await page.evaluate(() => {
+      const scope = window as unknown as {
+        __frames: Promise<{time: number; opacity: number}[]>;
+      };
+      scope.__frames = new Promise(resolve => {
+        document.addEventListener(
+          'click',
+          () => {
+            const rows: {time: number; opacity: number}[] = [];
+            const onFrame = (time: number) => {
+              // After the frame's own callbacks, one of which starts the
+              // fade.
+              setTimeout(() => {
+                const copy = document.querySelector('[data-astryx-alert-exit]');
+                rows.push({
+                  time,
+                  opacity:
+                    copy == null ? -1 : Number(getComputedStyle(copy).opacity),
+                });
+                if (rows.length < 3) {
+                  requestAnimationFrame(onFrame);
+                } else {
+                  resolve(rows);
+                }
+              }, 0);
+            };
+            requestAnimationFrame(onFrame);
+          },
+          {capture: true, once: true},
+        );
+      });
+    });
+    await driver.tap(
+      await centerOf(dialog.getByRole('button', {name: 'Cancel'})),
+    );
+    const [first, second, third] = await page.evaluate(
+      async () =>
+        (
+          window as unknown as {
+            __frames: Promise<{time: number; opacity: number}[]>;
+          }
+        ).__frames,
+    );
+    const frame = 1000 / 60 / exitMs;
+    expect(first.opacity).toBe(1);
+    // One frame into the fade, give or take one frame.
+    expect(second.opacity).toBeLessThan(1);
+    expect(second.opacity).toBeGreaterThanOrEqual(1 - 2 * frame);
+    // Then a frame on, by the time between the two frames.
+    expect(
+      Math.abs(
+        third.opacity - (second.opacity - (third.time - second.time) / exitMs),
+      ),
+    ).toBeLessThanOrEqual(frame);
+    await waitForClose(dialog);
+  });
+
+  test("a main-thread task between the copy's first frame and its second holds the copy whole; the next frame shows the fade's first step, and a task past the start limit still leaves the fade to play (component:AlertDialog FR6)", async ({
+    page,
+  }) => {
+    const {driver, trigger, dialog} = await openPage(page);
+    // A 1 s linear exit: one frame moves the opacity by about 0.017.
+    const exitMs = 1000;
+    await setToken(page, '--duration-exit', `${exitMs}ms`);
+    await setToken(page, '--ease-exit', 'linear');
+    const frame = 1000 / 60 / exitMs;
+    interface Read {
+      at: number;
+      opacity: number;
+      isPlaced: boolean;
+    }
+    interface Blocked {
+      firstFrame: number;
+      reads: Read[];
+    }
+    for (const blockMs of [300, 1200]) {
+      await driver.tap(await centerOf(trigger));
+      await waitForRest(dialog);
+      // Reads the copy after its first frame, then blocks the main thread,
+      // then reads the copy after each of the next four frames.
+      await page.evaluate(ms => {
+        const opacityOfCopy = () => {
+          const copy = document.querySelector('[data-astryx-alert-exit]');
+          return copy == null ? -1 : Number(getComputedStyle(copy).opacity);
+        };
+        const scope = window as unknown as {__blocked: Promise<Blocked>};
+        scope.__blocked = new Promise(resolve => {
+          document.addEventListener(
+            'click',
+            () => {
+              requestAnimationFrame(() => {
+                setTimeout(() => {
+                  const firstFrame = opacityOfCopy();
+                  const until = performance.now() + ms;
+                  while (performance.now() < until) {
+                    // The block.
+                  }
+                  const reads: Read[] = [];
+                  const onFrame = () => {
+                    setTimeout(() => {
+                      const opacity = opacityOfCopy();
+                      reads.push({
+                        at: performance.now(),
+                        isPlaced: opacity !== -1,
+                        opacity,
+                      });
+                      if (reads.length < 4) {
+                        requestAnimationFrame(onFrame);
+                      } else {
+                        resolve({firstFrame, reads});
+                      }
+                    }, 0);
+                  };
+                  requestAnimationFrame(onFrame);
+                }, 0);
+              });
+            },
+            {capture: true, once: true},
+          );
+        });
+      }, blockMs);
+      await driver.tap(
+        await centerOf(dialog.getByRole('button', {name: 'Cancel'})),
+      );
+      const {firstFrame, reads} = await page.evaluate(
+        async () =>
+          (window as unknown as {__blocked: Promise<Blocked>}).__blocked,
+      );
+      const block = `around a ${blockMs} ms task: ${JSON.stringify(reads)}`;
+      // The first frame that shows the copy shows it whole.
+      expect(firstFrame, block).toBe(1);
+      for (const read of reads) {
+        expect(read.isPlaced, block).toBe(true);
+      }
+      // After the task, the copy stays whole until the fade's first step.
+      // That step is one frame in, within a frame; then the fade follows the
+      // time between frames.
+      const step = reads.findIndex(read => read.opacity < 1);
+      expect(step, block).toBeGreaterThanOrEqual(0);
+      for (const read of reads.slice(0, step)) {
+        expect(read.opacity, block).toBe(1);
+      }
+      expect(reads[step].opacity, block).toBeGreaterThanOrEqual(1 - 2 * frame);
+      for (let i = step + 1; i < reads.length; i += 1) {
+        const expected =
+          reads[i - 1].opacity - (reads[i].at - reads[i - 1].at) / exitMs;
+        expect(
+          Math.abs(reads[i].opacity - expected),
+          block,
+        ).toBeLessThanOrEqual(frame);
+      }
+      await waitForClose(dialog);
+    }
+  });
+
+  test("after the tap's task no task runs over 50 ms until 800 ms after the fade ends, at 6x CPU", async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'CPU throttling and long-task entries are Chromium-only (CDP)',
+    );
+    await openStory(page, storybook(), 'core-alertdialog--alert-over-a-toast');
+    const driver = await touchDriver(page);
+    const dialog = page.getByRole('alertdialog', {name: 'Delete item?'});
+    const cdp = await page.context().newCDPSession(page);
+    const runs: number[][] = [];
+    for (let cycle = 1; cycle <= 3; cycle += 1) {
+      await driver.tap(
+        await centerOf(page.getByRole('button', {name: 'Delete item'})),
+      );
+      await waitForRest(dialog);
+      await page.evaluate(() => {
+        const record = {
+          // The second frame after the tap: the first one carries the
+          // close's style and layout, before the fade's first frame.
+          fadeFrame: 0,
+          closedAt: 0,
+          copyGoneAt: 0,
+          tasks: [] as {start: number; duration: number}[],
+        };
+        (window as unknown as {__close: typeof record}).__close = record;
+        new PerformanceObserver(list => {
+          for (const entry of list.getEntries()) {
+            record.tasks.push({
+              start: entry.startTime,
+              duration: entry.duration,
+            });
+          }
+        }).observe({type: 'longtask'});
+        document.addEventListener(
+          'click',
+          () =>
+            requestAnimationFrame(() =>
+              requestAnimationFrame(() => {
+                record.fadeFrame = performance.now();
+              }),
+            ),
+          {capture: true, once: true},
+        );
+        document.addEventListener(
+          'close',
+          event => {
+            if (event.target instanceof HTMLDialogElement) {
+              record.closedAt = performance.now();
+            }
+          },
+          {capture: true, once: true},
+        );
+        new MutationObserver((records, observer) => {
+          for (const change of records) {
+            for (const node of change.removedNodes) {
+              if (
+                node instanceof Element &&
+                node.hasAttribute('data-astryx-alert-exit')
+              ) {
+                record.copyGoneAt = performance.now();
+                observer.disconnect();
+              }
+            }
+          }
+        }).observe(document.body, {childList: true, subtree: true});
+      });
+      await cdp.send('Emulation.setCPUThrottlingRate', {rate: 6});
+      await driver.tap(
+        await centerOf(dialog.getByRole('button', {name: 'Delete'})),
+      );
+      await page.waitForFunction(
+        () => {
+          const record = (
+            window as unknown as {
+              __close: {
+                fadeFrame: number;
+                closedAt: number;
+                copyGoneAt: number;
+              };
+            }
+          ).__close;
+          const end = Math.max(record.closedAt, record.copyGoneAt);
+          return (
+            record.fadeFrame > 0 && end > 0 && performance.now() > end + 800
+          );
+        },
+        null,
+        {timeout: 30_000},
+      );
+      await cdp.send('Emulation.setCPUThrottlingRate', {rate: 1});
+      runs.push(
+        await page.evaluate(() => {
+          const record = (
+            window as unknown as {
+              __close: {
+                fadeFrame: number;
+                closedAt: number;
+                copyGoneAt: number;
+                tasks: {start: number; duration: number}[];
+              };
+            }
+          ).__close;
+          const end = Math.max(record.closedAt, record.copyGoneAt) + 800;
+          return record.tasks
+            .filter(
+              task =>
+                task.start + task.duration > record.fadeFrame &&
+                task.start < end,
+            )
+            .map(task => Math.round(task.duration));
+        }),
+      );
+    }
+    expect(runs.flat(), JSON.stringify(runs)).toEqual([]);
+  });
+
+  test('while the alert fades out its content is inert, and the page too: focus leaves the actions, Tab reaches nothing, and focus returns to the opener when the fade ends', async ({
     page,
   }) => {
     const {driver, trigger, dialog} = await openPage(page);
@@ -915,21 +1368,24 @@ test.describe('under a finger', () => {
     await cancel.focus();
     await expect(cancel).toBeFocused();
     await driver.tap(await centerOf(cancel));
-    // Leaving: still shown while it fades out.
-    await expect(dialog).toBeVisible();
-    // WebKit's Tab can focus the dialog element itself, which holds no action.
-    const inContent = async () =>
+    // Leaving: the alert's copy fades out over the inert page.
+    await expect(exitCopyOf(page)).toBeVisible();
+    const isFocusOnPage = async () =>
       page.evaluate(() => {
-        const open = document.querySelector('dialog[open]');
         const focused = document.activeElement;
-        return open != null && focused !== open && open.contains(focused);
+        return (
+          focused != null &&
+          focused !== document.body &&
+          focused !== document.documentElement
+        );
       });
-    expect(await inContent()).toBe(false);
+    expect(await isFocusOnPage()).toBe(false);
     await page.keyboard.press('Tab');
-    expect(await inContent()).toBe(false);
+    expect(await isFocusOnPage()).toBe(false);
     await page.keyboard.press('Shift+Tab');
-    expect(await inContent()).toBe(false);
-    await expect(dialog).toBeHidden();
+    expect(await isFocusOnPage()).toBe(false);
+    await expect(exitCopyOf(page)).toBeVisible();
+    await waitForClose(dialog);
     await expect(trigger).toBeFocused();
   });
 
@@ -956,11 +1412,11 @@ test.describe('under a finger', () => {
     expect(looks[0]).toEqual({scale: 1, opacity: 0, dim: 0});
     await waitForRest(dialog);
     // The theme's 300 ms exit fades within the reduced 200 ms.
-    await recordNextAnimations(dialog);
+    await recordExitFade(page);
     await driver.tap(
       await centerOf(dialog.getByRole('button', {name: 'Cancel'})),
     );
-    await expect(dialog).toBeHidden();
+    await waitForClose(dialog);
     const exit = await nextAnimations(page);
     expect(exit.animations.map(animation => animation.duration)).toEqual([
       200, 200,

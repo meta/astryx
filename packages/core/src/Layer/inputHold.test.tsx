@@ -199,6 +199,32 @@ describe('holdInput', () => {
     unmark();
   });
 
+  it('leaves a global host deeper in a dismissing layer live with the elements around it, whose other children go inert', async () => {
+    const {layer, child} = mountLayer();
+    // The host sits two levels down, beside other content at each level.
+    const outer = document.createElement('div');
+    const outerSibling = document.createElement('button');
+    const inner = document.createElement('div');
+    const innerSibling = document.createElement('button');
+    const host = document.createElement('div');
+    inner.append(innerSibling, host);
+    outer.append(outerSibling, inner);
+    layer.append(outer);
+    const unmark = markModalOutletHost(host);
+    const end = deferred();
+    holdInput(layer, {until: end.promise, scope: 'layer'});
+    expect(child.hasAttribute('inert')).toBe(true);
+    expect(outerSibling.hasAttribute('inert')).toBe(true);
+    expect(innerSibling.hasAttribute('inert')).toBe(true);
+    for (const live of [outer, inner, host]) {
+      expect(live.closest('[inert]')).toBeNull();
+    }
+    end.resolve();
+    await flush();
+    expect(layer.querySelector('[inert]')).toBeNull();
+    unmark();
+  });
+
   it('names a live hold’s shield, and only it, so a hit test can skip it', () => {
     const {layer, child} = mountLayer();
     const popover = document.createElement('div');

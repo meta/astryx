@@ -8,7 +8,8 @@
  *   (motion/transientCopy.ts)
  * @output Exports `placeLayerExitCopy`, a static, inert copy of the layer in
  *   the top layer for a touch presentation's close to play on, and
- *   `LayerExitBox`
+ *   `LayerExitBox`. `takeLayerExitCopy` and `TakenLayerExitCopy` make the
+ *   same copy first and place it later
  * @position Layer runtime helper for a touch presentation that animates a
  *   popover out: the one exit copy a layer may have
  *
@@ -190,18 +191,74 @@ export function placeLayerExitCopy(
   element: HTMLElement,
   attribute: string,
 ): HTMLElement | null {
-  const view = element.ownerDocument.defaultView;
-  if (view == null || typeof element.showPopover !== 'function') {
+  if (!hasTopLayer(element)) {
     return null;
   }
   // One copy per layer: a close during a close replaces it.
   copies.get(element)?.remove();
+  const taken = takeCopy(element, attribute, {isBesideKnown: false});
+  taken?.place();
+  return taken?.copy ?? null;
+}
+
+/** A layer's exit copy, made but not yet in the document. */
+export interface TakenLayerExitCopy {
+  /** The copy, out of the document until `place` runs. */
+  readonly copy: HTMLElement;
+  /**
+   * Inserts the copy where `placeLayerExitCopy` would, after taking away the
+   * layer's previous copy, and shows it in the top layer.
+   */
+  readonly place: () => void;
+}
+
+/**
+ * Makes the copy `placeLayerExitCopy` places, but leaves it out of the
+ * document until its `place` runs. All of its reads come before then. So a
+ * caller can take the copy while the layer is still as it was drawn, and
+ * place it after the page's own writes. The copy then takes its style once.
+ * A copy that goes beside the layer reads no inherited values, which only a
+ * copy laid after an outer layer needs. Returns null where
+ * `placeLayerExitCopy` would.
+ */
+export function takeLayerExitCopy(
+  element: HTMLElement,
+  attribute: string,
+): TakenLayerExitCopy | null {
+  if (!hasTopLayer(element)) {
+    return null;
+  }
+  return takeCopy(element, attribute, {isBesideKnown: true});
+}
+
+/** Whether `element`'s document has a top layer to show a copy in. */
+function hasTopLayer(element: HTMLElement): boolean {
+  return (
+    element.ownerDocument.defaultView != null &&
+    typeof element.showPopover === 'function'
+  );
+}
+
+function takeCopy(
+  element: HTMLElement,
+  attribute: string,
+  {isBesideKnown}: {isBesideKnown: boolean},
+): TakenLayerExitCopy | null {
+  const view = element.ownerDocument.defaultView;
   // Past the copy cap there is no copy, so the close is immediate.
-  if (!isCopyable(element)) {
+  if (view == null || !isCopyable(element)) {
     return null;
   }
   const box = layoutBox(element);
-  const copy = inertCopy(element);
+  // A layer inside another layer that closes in the same step would leave its
+  // copy inside a hidden box. The copy goes after the outermost one, with
+  // what it inherited where it was.
+  const outer = outermostLayer(element);
+  const host = outer?.parentElement ?? null;
+  const copy = inertCopy(
+    element,
+    isBesideKnown ? {isBesideElement: host == null} : {},
+  );
   if (copy == null) {
     return null;
   }
@@ -257,49 +314,53 @@ export function placeLayerExitCopy(
   // clip. A popover's user-agent style scrolls as well.
   style.setProperty('overflow-x', layerStyle.getPropertyValue('overflow-x'));
   style.setProperty('overflow-y', layerStyle.getPropertyValue('overflow-y'));
-  // A layer inside another layer that closes in the same step would leave its
-  // copy inside a hidden box. The copy goes after the outermost one, with
-  // what it inherited where it was.
-  const outer = outermostLayer(element);
-  if (outer?.parentElement == null) {
-    element.after(copy);
-  } else {
+  if (host != null) {
     // keepInherited reads the host's style, so it runs before the insertion:
     // no style read follows that write.
-    keepInherited(copy, outer.parentElement);
-    outer.after(copy);
+    keepInherited(copy, host);
   }
-  copies.set(element, copy);
-  const show = (): boolean => {
-    try {
-      copy.showPopover();
-    } catch {
-      return false;
+  const place = () => {
+    const previous = copies.get(element);
+    if (previous !== copy) {
+      previous?.remove();
     }
-    // A hidden box keeps no scroll position, so scrolled content, the layer's
-    // own included, goes back where it was once the copy is shown.
-    restoreScrollOffsets(copy);
-    raiseInnerCopies(element);
-    return true;
-  };
-  const giveUp = () => {
-    copy.remove();
-    if (copies.get(element) === copy) {
-      copies.delete(element);
+    if (outer == null || host == null) {
+      element.after(copy);
+    } else {
+      outer.after(copy);
     }
-  };
-  if (!show()) {
-    // Refused during the closing popover's toggle: hidden until it is over.
-    view.queueMicrotask(() => {
-      if (!copy.isConnected || show()) {
-        return;
+    copies.set(element, copy);
+    const show = (): boolean => {
+      try {
+        copy.showPopover();
+      } catch {
+        return false;
       }
-      view.requestAnimationFrame(() => {
-        if (copy.isConnected && !show()) {
-          giveUp();
+      // A hidden box keeps no scroll position, so scrolled content, the
+      // layer's own included, goes back where it was once the copy is shown.
+      restoreScrollOffsets(copy);
+      raiseInnerCopies(element);
+      return true;
+    };
+    const giveUp = () => {
+      copy.remove();
+      if (copies.get(element) === copy) {
+        copies.delete(element);
+      }
+    };
+    if (!show()) {
+      // Refused during the closing popover's toggle: hidden until it is over.
+      view.queueMicrotask(() => {
+        if (!copy.isConnected || show()) {
+          return;
         }
+        view.requestAnimationFrame(() => {
+          if (copy.isConnected && !show()) {
+            giveUp();
+          }
+        });
       });
-    });
-  }
-  return copy;
+    }
+  };
+  return {copy, place};
 }

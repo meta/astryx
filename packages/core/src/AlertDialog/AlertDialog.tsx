@@ -46,7 +46,9 @@ import {useMergedRefs} from '../hooks/useMergedRefs';
 import {GROUP_PRESS_POINTERS} from '../hooks/useGroupPressTracking';
 import {alertController} from '../motion/uikit/alert';
 import {durationVars, easeVars} from '../theme/tokens.stylex';
+import {LayoutChangeSnapshot} from '../motion/LayoutChangeSnapshot';
 import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
+import {alertClosingStyle} from '../privateAttributes/alertClosing.stylex';
 import {useAlertMotion} from './useAlertMotion';
 
 registerEnglishFallback(english);
@@ -68,6 +70,17 @@ const fadeOut = stylex.keyframes({from: {opacity: 1}, to: {opacity: 0}});
 const EXIT_DURATION = `var(--duration-exit, ${durationVars['--duration-fast']})`;
 /** Under reduced motion the exit is at most the reduced cross-fade. */
 const REDUCED_EXIT_DURATION = `min(${EXIT_DURATION}, ${reducedMotionFadeConsts.duration})`;
+
+/**
+ * The exit copy's own style: the fade, on the timing the touch look resolves.
+ * Inline, so no rule of the look it was copied with wins over it.
+ */
+const EXIT_COPY_STYLE = {
+  'animation-name': fadeOut,
+  'animation-duration': 'var(--_alert-exit-duration)',
+  'animation-timing-function': 'var(--_alert-exit-easing)',
+  'animation-fill-mode': 'forwards',
+} as const;
 
 const styles = stylex.create({
   // The browser may pinch-zoom on the actions but never pans there. Chrome on
@@ -97,25 +110,19 @@ const styles = stylex.create({
   touchSettled: {
     animationName: 'none',
   },
-  // The touch look's exit: the alert and the dimming fade alone on the exit
-  // tokens, even while a theme leaves its dialog exit off. Under reduced
-  // motion the fade stays within the reduced cross-fade.
+  // The touch look's exit plays on its exit copy. The alert and the dimming
+  // fade alone on the exit tokens, even while a theme leaves its dialog exit
+  // off. Under reduced motion the fade stays within the reduced cross-fade.
+  // The copy's own style (EXIT_COPY_STYLE) plays these on it. Its dimming
+  // takes them under the closing mark (alertClosingStyle).
   touchExit: {
-    animationName: fadeOut,
-    animationDuration: {
+    '--_alert-exit-duration': {
       default: EXIT_DURATION,
       '@media (prefers-reduced-motion: reduce)': REDUCED_EXIT_DURATION,
     },
-    animationTimingFunction: {
+    '--_alert-exit-easing': {
       default: easeVars['--ease-exit'],
       '@media (prefers-reduced-motion: reduce)': reducedMotionFadeConsts.easing,
-    },
-    animationFillMode: 'forwards',
-    '::backdrop': {
-      animationName: fadeOut,
-      animationDuration: 'inherit',
-      animationTimingFunction: 'inherit',
-      animationFillMode: 'forwards',
     },
   },
   action: {
@@ -260,15 +267,15 @@ export function AlertDialog({
   const motion = useAlertMotion({
     isOpen,
     isEnabled: isTouch && isInline !== true,
+    exitCopyStyle: EXIT_COPY_STYLE,
   });
   // Through the group's context, each action's Button writes the press-group
   // marker from its first render. So the tracker is its only painter. Dialog
-  // holds a press during the entrance, and the exit's hold holds one while the
-  // alert leaves.
+  // holds a press during the entrance.
   const actionsRef = useRef<HTMLElement>(null);
   // Only under the touch presentation does a press slide across the
   // actions. A desktop press stays the native button's.
-  const isTracking = motion.isPresented && isInline !== true && isTouch;
+  const isTracking = isOpen && isInline !== true && isTouch;
   useActionGroupTracking(actionsRef, {
     // The actions row holds only the two buttons.
     itemSelector: 'button',
@@ -278,22 +285,9 @@ export function AlertDialog({
     pointerTypes: GROUP_PRESS_POINTERS,
     isEnabled: isTracking,
   });
-  // A leaving alert takes no input, as UIKit's does: the exit's hold makes its
-  // content inert. The dialog's own Escape, its cancel event, still reaches
-  // it, so Escape is dropped here until the alert is hidden. Dialog returns
-  // focus to the opener when the fade ends.
-  const {isLeaving} = motion;
   const handleCancel = useCallback(() => {
     onOpenChange(false);
   }, [onOpenChange]);
-  const handleOpenChange = useCallback(
-    (next: boolean) => {
-      if (!isLeaving) {
-        onOpenChange(next);
-      }
-    },
-    [isLeaving, onOpenChange],
-  );
   const mergedRef = useMergedRefs(ref, motion.ref);
 
   const buttonActionStyle = [
@@ -326,65 +320,81 @@ export function AlertDialog({
   );
 
   return (
-    <Dialog
-      {...rest}
-      ref={mergedRef}
-      isOpen={motion.isPresented}
-      isInline={isInline}
-      onOpenChange={handleOpenChange}
-      width={width}
-      purpose="form"
-      // `alertdialog` is a modal role: it promises an interruption the user
-      // has to deal with, a focus trap, and an inert page behind it. The
-      // inline path renders a plain always-present div with none of that, so
-      // the role would misdescribe it. `group` keeps the title and
-      // description associated with a container without claiming a dialog.
-      role={isInline ? 'group' : 'alertdialog'}
-      aria-labelledby={titleId}
-      aria-describedby={descriptionId}
-      {...mergeProps(themeProps('alert-dialog'), {className, style})}
-      xstyle={[
-        motion.look === 'entrance' && styles.touchEntrance,
-        motion.look === 'settled' && styles.touchSettled,
-        motion.look === 'exit' && styles.touchExit,
-        xstyle,
-      ]}
-      data-testid={testId}>
-      <Layout
-        content={
-          <LayoutContent>
-            <Heading level={2} id={titleId}>
-              {title}
-            </Heading>
-            <Text type="body" color="secondary" id={descriptionId}>
-              {description}
-            </Text>
-          </LayoutContent>
-        }
-        footer={
-          <LayoutFooter>
-            {/* Generic Dialog footers should wrap, but their consumers own
+    <>
+      {/* Takes the exit copy before the close commit changes the DOM. */}
+      <LayoutChangeSnapshot
+        value={isOpen}
+        onBeforeChange={motion.beforeOpenChange}
+      />
+      <Dialog
+        {...rest}
+        ref={mergedRef}
+        isOpen={isOpen}
+        isInline={isInline}
+        onOpenChange={onOpenChange}
+        width={width}
+        purpose="form"
+        // `alertdialog` is a modal role: it promises an interruption the user
+        // has to deal with, a focus trap, and an inert page behind it. The
+        // inline path renders a plain always-present div with none of that, so
+        // the role would misdescribe it. `group` keeps the title and
+        // description associated with a container without claiming a dialog.
+        role={isInline ? 'group' : 'alertdialog'}
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
+        {...mergeProps(
+          themeProps('alert-dialog'),
+          // Custom properties and conditions inside `::backdrop`, which
+          // Dialog's xstyle does not take.
+          stylex.props(
+            motion.look !== 'none' && styles.touchExit,
+            motion.look !== 'none' && alertClosingStyle,
+          ),
+          className,
+          style,
+        )}
+        xstyle={[
+          motion.look === 'entrance' && styles.touchEntrance,
+          motion.look === 'settled' && styles.touchSettled,
+          xstyle,
+        ]}
+        data-testid={testId}>
+        <Layout
+          content={
+            <LayoutContent>
+              <Heading level={2} id={titleId}>
+                {title}
+              </Heading>
+              <Text type="body" color="secondary" id={descriptionId}>
+                {description}
+              </Text>
+            </LayoutContent>
+          }
+          footer={
+            <LayoutFooter>
+              {/* Generic Dialog footers should wrap, but their consumers own
                 action semantics and order. AlertDialog keeps this
                 destructive-above-Cancel narrow order because confirmation
                 actions have component-specific meaning here. */}
-            <Stack
-              ref={actionsRef}
-              xstyle={isTracking && styles.trackingRow}
-              direction={isSmallScreen ? 'vertical' : 'horizontal'}
-              gap={2}
-              hAlign={isSmallScreen ? 'stretch' : 'end'}
-              wrap={isSmallScreen ? 'nowrap' : 'wrap'}>
-              <PressGroupContext
-                value={isTracking ? GROUP_PRESS_POINTERS : null}>
-                {isSmallScreen
-                  ? [actionButton, cancelButton]
-                  : [cancelButton, actionButton]}
-              </PressGroupContext>
-            </Stack>
-          </LayoutFooter>
-        }
-      />
-    </Dialog>
+              <Stack
+                ref={actionsRef}
+                xstyle={isTracking && styles.trackingRow}
+                direction={isSmallScreen ? 'vertical' : 'horizontal'}
+                gap={2}
+                hAlign={isSmallScreen ? 'stretch' : 'end'}
+                wrap={isSmallScreen ? 'nowrap' : 'wrap'}>
+                <PressGroupContext
+                  value={isTracking ? GROUP_PRESS_POINTERS : null}>
+                  {isSmallScreen
+                    ? [actionButton, cancelButton]
+                    : [cancelButton, actionButton]}
+                </PressGroupContext>
+              </Stack>
+            </LayoutFooter>
+          }
+        />
+      </Dialog>
+    </>
   );
 }
 
