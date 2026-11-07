@@ -346,9 +346,15 @@ test('under Reduce Motion the card does not grow, and the menu still opens at 73
   await playing;
   const start = await touchStartedAt(page);
   const shown = await menuShownAt(page);
+  const decided = await menuShownTimerAt(page);
   expect(scales).toEqual([1, 1, 1]);
   expect(await trigger.evaluate(el => el.getAnimations().length)).toBe(0);
   expect(shown, 'the menu never showed').not.toBeNull();
+  expect(
+    decided,
+    'the menu showed after the task that decided it',
+  ).not.toBeNull();
+  expect((decided as number) - start).toBeGreaterThanOrEqual(menuDisplayMs - 1);
   const after = (shown as number) - start;
   // The touch's stamp and the page clock are each coarsened (0.1 ms).
   expect(after).toBeGreaterThanOrEqual(menuDisplayMs - 0.5);
