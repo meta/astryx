@@ -40,13 +40,6 @@ export const docs = {
       default: '120',
     },
     {
-      name: 'measureMode',
-      type: "'ro' | 'sync'",
-      description:
-        "Where sizes come from. 'ro' reads the observed border box plus one sync read per row at mount, so steady-state commits force no layout; 'sync' re-measures the whole window in every commit's layout effect, buying zero-window corrections for a forced layout per commit.",
-      default: "'ro'",
-    },
-    {
       name: 'handleRef',
       type: 'Ref<ChatVirtualizerHandle>',
       description:
@@ -119,8 +112,6 @@ export const docsZh = {
       '渲染单行。行间距必须放在返回内容内部（padding）——容器的 gap 和 margin 测量不到，会让几何每行漂移一个间距。',
     estimatedItemSize:
       '未测量行的假定高度；传函数则以函数为准，不受运行时均值覆盖。要往小估：估小了内容向下生长、位置依然有效；估大了滚动范围收缩，浏览器会把位置钳进新范围，无法挽回。',
-    measureMode:
-      "尺寸来源。'ro' 取自观察到的 border box 加挂载时一次同步读取，稳态提交不触发布局；'sync' 在每次提交的 layout effect 里重测整个窗口，用每次提交一次强制布局换取零窗口修正。",
     handleRef:
       '暴露 scrollToDistanceFromBottomPx 与 anchorToKey 的命令式句柄。两者都是“声明参考系”而非执行一次滚动：行陆续测量进来时列表会持续恢复所声明的位置。',
     getItemType:
@@ -152,8 +143,6 @@ export const docsDense = {
       'renders one row; spacing MUST be padding inside the row, not container gap/margin',
     estimatedItemSize:
       'height for unmeasured rows (fn = authoritative); bias LOW — too large shrinks the range and the browser clamps you',
-    measureMode:
-      "'ro' = observed border box + one mount read, no layout in steady state; 'sync' = remeasure window every commit",
     handleRef:
       'scrollToDistanceFromBottomPx + anchorToKey; both DECLARE a frame, restored as rows measure in',
     getItemType:

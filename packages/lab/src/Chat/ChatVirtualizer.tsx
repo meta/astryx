@@ -27,8 +27,7 @@
  *      corrections keep the row being read visually frozen.
  *
  * Corrections are SYNCHRONOUS pre-paint: every commit's layout effect runs
- * the pass — measure ('sync' re-reads the whole window's offsetHeight;
- * 'ro', the default, forced-reads only never-seen rows and takes the rest
+ * the pass — measure (forced reads only for never-seen rows; the rest come
  * from ResizeObserver callbacks), recompute offsets, resize the spacers,
  * restore scrollTop from the mode — all before the browser paints. No
  * compensation deltas anywhere: position is always re-derived from the
@@ -91,8 +90,6 @@ const isBouncing = (el: HTMLElement): boolean =>
   el.scrollTop < 0 ||
   el.scrollTop > Math.max(0, el.scrollHeight - el.clientHeight) + 1;
 
-export type ChatVirtualizerMeasureMode = 'ro' | 'sync';
-
 /** Imperative surface — both methods are declarations, not scroll actions. */
 export interface ChatVirtualizerHandle {
   /** Declare "be N px above the bottom edge" (0 = follow-at-end). */
@@ -132,16 +129,6 @@ export interface ChatVirtualizerProps<T> {
    * can make a drag look broken.
    */
   estimatedItemSize?: number | ((item: T, index: number) => number);
-  /**
-   * 'ro' (default, the shipping gear) = sizes come from ResizeObserver
-   * callbacks plus a one-shot sync read at first mount; steady-state
-   * commits force no layout. 'sync' = forced-layout measurement in EVERY
-   * commit's layout effect — zero-window corrections, pays a sync layout
-   * per commit. Kept as the experimental control arm: same code, one
-   * switch, so any residual artifact bisects into "pipeline timing" vs
-   * "logic" instantly.
-   */
-  measureMode?: ChatVirtualizerMeasureMode;
   /** Imperative declarations (see ChatVirtualizerHandle). */
   handleRef?: React.Ref<ChatVirtualizerHandle>;
   /**
@@ -224,7 +211,6 @@ export function ChatVirtualizer<T>(
     getRowKey,
     renderItem,
     estimatedItemSize = 120,
-    measureMode = 'ro',
     handleRef,
     getItemType,
     scrollElement,
@@ -385,8 +371,6 @@ export function ChatVirtualizer<T>(
   winRef.current = win;
   const dataRef = React.useRef(data);
   dataRef.current = data;
-  const measureModeRef = React.useRef(measureMode);
-  measureModeRef.current = measureMode;
   const endThresholdRef = React.useRef(endThreshold);
   endThresholdRef.current = endThreshold;
 
@@ -755,17 +739,16 @@ export function ChatVirtualizer<T>(
     ) {
       mode.current = anchorAt(el.scrollTop);
     }
-    // 'sync' re-measures the whole window every commit. 'ro' only measures
-    // rows it has never seen — the first-mount backstop: an UNMEASURED row is
+    // Only rows never seen are measured here — the first-mount backstop: an
+    // UNMEASURED row is
     // about to paint at its real height while the geometry still carries its
     // estimate, and in document flow that displaces everything below it (the
     // whole viewport) by (real - est) for one frame, then snaps back when RO
     // delivers. Measuring ONCE at mount closes that; growth and reflow of
     // known rows stay on the RO pipeline, so steady-state commits force no
     // layout at all.
-    const remeasureAll = measureModeRef.current === 'sync';
     for (const [key, rowEl] of rowEls.current) {
-      if (!remeasureAll && sizes.current.has(key)) {
+      if (sizes.current.has(key)) {
         continue;
       }
       const px = rowEl.offsetHeight;
@@ -976,9 +959,8 @@ export function ChatVirtualizer<T>(
     });
   });
 
-  // In 'sync' mode the RO is only a backstop for out-of-commit size changes
-  // (images, fonts). In 'ro' mode it IS the measurement pipeline: sizes come
-  // from the observed border-box (no forced layout anywhere).
+  // The RO is the measurement pipeline: sizes come from the observed
+  // border-box (no forced layout anywhere).
   // Sizes come through Core's shared resize observer, one callback per entry;
   // the sync they trigger runs once per batch, after the last entry.
   const syncQueued = React.useRef(false);
@@ -1013,9 +995,6 @@ export function ChatVirtualizer<T>(
         // the geometry dirty here, a window resize or a growing composer
         // would leave the pinned bottom stranded.
         geoChanged.current = true;
-        return;
-      }
-      if (measureModeRef.current !== 'ro') {
         return;
       }
       // Border box, the same box the sync path reads with offsetHeight —

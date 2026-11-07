@@ -25,5 +25,4 @@ export {ChatVirtualizer} from './ChatVirtualizer';
 export type {
   ChatVirtualizerProps,
   ChatVirtualizerHandle,
-  ChatVirtualizerMeasureMode,
 } from './ChatVirtualizer';
