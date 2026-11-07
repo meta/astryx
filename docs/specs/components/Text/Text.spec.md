@@ -33,15 +33,15 @@ system_specs: [spec:AST-009]
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                                                                                                                                                                                   |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | A polymorphic text element with a semantic `type`, optional `size`, `color`, and `weight` overrides, an `as` element choice, and the text layout controls documented in `Text.doc.mjs`.                                                                                                                                                                    |
-| Behavior                | `type` sets size, weight, and default color from the theme; theme-added types and colors fall back to the body and primary baselines; truncated text offers its full content in a Tooltip.                                                                                                                                                                 |
-| End-user impact         | Readers get consistent type across the product; clamped text keeps its full content available on hover and in the DOM.                                                                                                                                                                                                                                     |
-| Builder impact          | A long unbroken token in non-truncated Text wraps. Inside a flex row, the flex child needs `min-width: 0` for the wrap to apply, and a caller's own container that sets `overflow-wrap: anywhere` does not reach Text's text; Core's `anywhere` containers pass their wrap to it. The truncation Tooltip mounts on the first pointer entry or focus (AR2). |
-| Compatibility/readiness | Released behavior recorded as current, with one styling output change: non-truncated Text sets `overflow-wrap` (`break-word`, or `anywhere` inside Core's `anywhere` containers). No API change. The truncation Tooltip mounts on the first pointer entry or focus (AR2). One implementation gap is listed under Current-state impact.                     |
-| Review checks           | Reject a theme-added type or color that renders unstyled, a native `title` beside the truncation Tooltip, or measurement when the tooltip is off.                                                                                                                                                                                                          |
-| Governing rules         | `architecture:component-theming-surface/INV6,INV14`; `architecture:public-component-api/INV5,INV6,INV8`.                                                                                                                                                                                                                                                   |
+| Area                    | Contract                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | A polymorphic text element with a semantic `type`, optional `size`, `color`, and `weight` overrides, an `as` element choice, and the text layout controls documented in `Text.doc.mjs`.                                                                                                                                                                                                                                                       |
+| Behavior                | `type` sets size, weight, and default color from the theme; theme-added types and colors fall back to the body and primary baselines; truncated text offers its full content in a Tooltip.                                                                                                                                                                                                                                                    |
+| End-user impact         | Readers get consistent type across the product; clamped text keeps its full content available on hover and in the DOM.                                                                                                                                                                                                                                                                                                                        |
+| Builder impact          | A long unbroken token in non-truncated Text wraps. Inside a flex row, the flex child needs `min-width: 0` for the wrap to apply, and a caller's own container that sets `overflow-wrap: anywhere` does not reach Text's text; Core's `anywhere` containers pass their wrap to it. The truncation Tooltip mounts on the first hover, completed tap or focus (AR2).                                                                             |
+| Compatibility/readiness | Released behavior recorded as current, with one styling output change and one DOM change: non-truncated Text sets `overflow-wrap` (`break-word`, or `anywhere` inside Core's `anywhere` containers). The truncation Tooltip mounts on the first hover, completed tap or focus, so until then a clamped Text has no tooltip layer and no `aria-describedby` (AR2). No API change. One implementation gap is listed under Current-state impact. |
+| Review checks           | Reject a theme-added type or color that renders unstyled, a native `title` beside the truncation Tooltip, or measurement when the tooltip is off.                                                                                                                                                                                                                                                                                             |
+| Governing rules         | `architecture:component-theming-surface/INV6,INV14`; `architecture:public-component-api/INV5,INV6,INV8`.                                                                                                                                                                                                                                                                                                                                      |
 
 This table is a review projection; the body below is authoritative.
 
@@ -55,11 +55,11 @@ the truncation behavior of that element. Heading is documented beside Text in
 ## Compatibility and migration
 
 - Released default preserved: `yes`
-- Compatibility class: one styling output change, with no public prop,
-  default, or DOM change: non-truncated Text sets `overflow-wrap`
+- Compatibility class: one styling output change and one DOM change, with
+  no public prop or default change: non-truncated Text sets `overflow-wrap`
   (`break-word`, or `anywhere` inside Core's `anywhere` containers), so a long
   unbroken token wraps (FR3). The truncation Tooltip mounts on the first
-  pointer entry or focus (AR2): before that, a clamped Text has no closed
+  hover, completed tap or focus (AR2): before that, a clamped Text has no closed
   tooltip layer and no tooltip description in the DOM
 - Controlled/uncontrolled behavior: not applicable
 - Migration decision: none
@@ -125,13 +125,13 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ### Representative states
 
-| State                   | Required invariant                                                                                   | Allowed variation |
-| ----------------------- | ---------------------------------------------------------------------------------------------------- | ----------------- |
-| Default                 | `span` with body type and primary color.                                                             | Content.          |
-| Supporting              | Supporting type with secondary color.                                                                | Color override.   |
-| Theme-added type        | Body baseline; `data-type` names the added type.                                                     | Theme paint.      |
-| Truncated with tooltip  | Clamped element anchors one Tooltip, mounted on the first pointer entry or focus; no native `title`. | Placement.        |
-| Truncation, tooltip off | Clamped element; no measurement; no Tooltip.                                                         | —                 |
+| State                   | Required invariant                                                                                          | Allowed variation |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------- | ----------------- |
+| Default                 | `span` with body type and primary color.                                                                    | Content.          |
+| Supporting              | Supporting type with secondary color.                                                                       | Color override.   |
+| Theme-added type        | Body baseline; `data-type` names the added type.                                                            | Theme paint.      |
+| Truncated with tooltip  | Clamped element anchors one Tooltip, mounted on the first hover, completed tap or focus; no native `title`. | Placement.        |
+| Truncation, tooltip off | Clamped element; no measurement; no Tooltip.                                                                | —                 |
 
 ### Transformation and precedence order
 
@@ -148,7 +148,7 @@ Consumer migration instructions belong in consumer docs and release notes.
   `maxLines` is positive and the tooltip is enabled; re-measuring follows size
   and content changes without a per-element observer; the Tooltip module loads
   only when the text is truncated, and the Tooltip itself mounts only on the
-  first pointer entry or focus, so until that first interaction a page of
+  first hover, completed tap or focus, so until that first interaction a page of
   clamped text mounts no closed tooltip layers.
 
 ## Accessibility contract
@@ -158,8 +158,8 @@ Consumer migration instructions belong in consumer docs and release notes.
   `component:Heading`.
 - **AR2 — Truncated text.** The full text stays in the element's DOM; the
   truncation Tooltip is the only tooltip, and any description it adds is
-  Tooltip's. The Tooltip mounts on the first pointer entry or focus on the
-  clamped element, and that pointer entry or focus opens it as it would once
+  Tooltip's. The Tooltip mounts on the first hover, completed tap or focus on the
+  clamped element, and that interaction opens it as it would once
   mounted, by Tooltip's own rules (Tooltip FR3–FR5); until then the element
   carries no tooltip description, since its full text is already in its DOM.
 

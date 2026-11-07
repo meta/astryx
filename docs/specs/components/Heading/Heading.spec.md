@@ -35,15 +35,15 @@ system_specs: [spec:AST-009, spec:AST-024]
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                                                                                                                                                                                         |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | A semantic heading with a required `level`, an optional theme-extensible visual `type`, `weight`, `accessibilityLevel`, and the shared text controls documented in `Heading.doc.mjs`.                                                                                                                                                                            |
-| Behavior                | `level` picks `h1`–`h6` and the default visual scale; `type` and `weight` change only appearance; `accessibilityLevel` sets `aria-level` when it differs.                                                                                                                                                                                                        |
-| End-user impact         | Screen-reader users navigate a document outline that matches the page's sections, whatever size each heading is drawn at.                                                                                                                                                                                                                                        |
-| Builder impact          | A long unbroken token in non-truncated Heading wraps. Inside a flex row, the flex child needs `min-width: 0` for the wrap to apply, and a caller's own container that sets `overflow-wrap: anywhere` does not reach Heading's text; Core's `anywhere` containers pass their wrap to it. The truncation Tooltip mounts on the first pointer entry or focus (AR3). |
-| Compatibility/readiness | Released behavior recorded as current, with one styling output change: non-truncated Heading sets `overflow-wrap` (`break-word`, or `anywhere` inside Core's `anywhere` containers). No API change. The truncation Tooltip mounts on the first pointer entry or focus (AR3). One implementation gap is listed under Current-state impact.                        |
-| Review checks           | Reject a visual `type` or `weight` that changes the element or level, a heading that renders without a level baseline, or a duplicate native tooltip for truncation.                                                                                                                                                                                             |
-| Governing rules         | `spec:AST-024` (custom visual types, weight precedence, unchanged accessibility); `architecture:component-theming-surface/INV6,INV14`; `architecture:public-component-api/INV5,INV6,INV8`.                                                                                                                                                                       |
+| Area                    | Contract                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | A semantic heading with a required `level`, an optional theme-extensible visual `type`, `weight`, `accessibilityLevel`, and the shared text controls documented in `Heading.doc.mjs`.                                                                                                                                                                                                                                                               |
+| Behavior                | `level` picks `h1`–`h6` and the default visual scale; `type` and `weight` change only appearance; `accessibilityLevel` sets `aria-level` when it differs.                                                                                                                                                                                                                                                                                           |
+| End-user impact         | Screen-reader users navigate a document outline that matches the page's sections, whatever size each heading is drawn at.                                                                                                                                                                                                                                                                                                                           |
+| Builder impact          | A long unbroken token in non-truncated Heading wraps. Inside a flex row, the flex child needs `min-width: 0` for the wrap to apply, and a caller's own container that sets `overflow-wrap: anywhere` does not reach Heading's text; Core's `anywhere` containers pass their wrap to it. The truncation Tooltip mounts on the first hover, completed tap or focus (AR3).                                                                             |
+| Compatibility/readiness | Released behavior recorded as current, with one styling output change and one DOM change: non-truncated Heading sets `overflow-wrap` (`break-word`, or `anywhere` inside Core's `anywhere` containers). The truncation Tooltip mounts on the first hover, completed tap or focus, so until then a clamped Heading has no tooltip layer and no `aria-describedby` (AR3). No API change. One implementation gap is listed under Current-state impact. |
+| Review checks           | Reject a visual `type` or `weight` that changes the element or level, a heading that renders without a level baseline, or a duplicate native tooltip for truncation.                                                                                                                                                                                                                                                                                |
+| Governing rules         | `spec:AST-024` (custom visual types, weight precedence, unchanged accessibility); `architecture:component-theming-surface/INV6,INV14`; `architecture:public-component-api/INV5,INV6,INV8`.                                                                                                                                                                                                                                                          |
 
 This table is a review projection; the body below is authoritative.
 
@@ -58,11 +58,11 @@ Heading's own contract.
 ## Compatibility and migration
 
 - Released default preserved: `yes`
-- Compatibility class: one styling output change, with no public prop,
-  default, or DOM change: non-truncated Heading sets `overflow-wrap`
+- Compatibility class: one styling output change and one DOM change, with
+  no public prop or default change: non-truncated Heading sets `overflow-wrap`
   (`break-word`, or `anywhere` inside Core's `anywhere` containers), so a long
   unbroken token wraps (FR3). The truncation Tooltip mounts on the first
-  pointer entry or focus (AR3): before that, a clamped Heading has no closed
+  hover, completed tap or focus (AR3): before that, a clamped Heading has no closed
   tooltip layer and no tooltip description in the DOM
 - Controlled/uncontrolled behavior: not applicable
 - Migration decision: none
@@ -123,14 +123,14 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ### Representative states
 
-| State                   | Required invariant                                                                                   | Allowed variation |
-| ----------------------- | ---------------------------------------------------------------------------------------------------- | ----------------- |
-| Level only              | `h{level}` at the level's scale.                                                                     | Level.            |
-| Display type            | Same element; display scale and weight; `data-type` reflected.                                       | Type.             |
-| Theme-added type        | Same element; level baseline; `data-type` reflected.                                                 | Theme paint.      |
-| Accessibility override  | `aria-level` differs from the element's level.                                                       | —                 |
-| Truncated with tooltip  | Clamped heading anchors one Tooltip with the full text, mounted on the first pointer entry or focus. | Placement.        |
-| Truncation, tooltip off | Clamped heading; no measurement; no Tooltip.                                                         | —                 |
+| State                   | Required invariant                                                                                          | Allowed variation |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------- | ----------------- |
+| Level only              | `h{level}` at the level's scale.                                                                            | Level.            |
+| Display type            | Same element; display scale and weight; `data-type` reflected.                                              | Type.             |
+| Theme-added type        | Same element; level baseline; `data-type` reflected.                                                        | Theme paint.      |
+| Accessibility override  | `aria-level` differs from the element's level.                                                              | —                 |
+| Truncated with tooltip  | Clamped heading anchors one Tooltip with the full text, mounted on the first hover, completed tap or focus. | Placement.        |
+| Truncation, tooltip off | Clamped heading; no measurement; no Tooltip.                                                                | —                 |
 
 ### Transformation and precedence order
 
@@ -147,7 +147,7 @@ Consumer migration instructions belong in consumer docs and release notes.
   `maxLines` is positive and the tooltip is enabled; re-measuring follows size
   and content changes without a per-heading observer; the Tooltip module loads
   only when the text is truncated, and the Tooltip itself mounts only on the
-  first pointer entry or focus, so until that first interaction a page of
+  first hover, completed tap or focus, so until that first interaction a page of
   clamped text mounts no closed tooltip layers.
 
 ## Accessibility contract
@@ -158,8 +158,8 @@ Consumer migration instructions belong in consumer docs and release notes.
   level through `aria-level` without changing the element.
 - **AR3 — Truncated text.** The full text stays in the heading's DOM; the
   truncation Tooltip is the only tooltip, and any description it adds is
-  Tooltip's. The Tooltip mounts on the first pointer entry or focus on the
-  clamped heading, and that pointer entry or focus opens it as it would once
+  Tooltip's. The Tooltip mounts on the first hover, completed tap or focus on the
+  clamped heading, and that interaction opens it as it would once
   mounted, by Tooltip's own rules (Tooltip FR3–FR5); until then the heading
   carries no tooltip description, since its full text is already in its DOM.
 
