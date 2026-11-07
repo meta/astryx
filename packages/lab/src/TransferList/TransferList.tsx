@@ -330,6 +330,39 @@ function matchesQuery<T extends string>(
   );
 }
 
+interface DisabledHandleTooltipProps {
+  rootRef: RefObject<HTMLElement | null>;
+  value: string;
+  content: string;
+}
+
+/**
+ * The tooltip and description of a disabled list's reorder handle, which say
+ * why the row does not move. Core List renders the handle. So the tooltip
+ * finds it in its row when it attaches. It takes the row's last toggle
+ * button: the handle comes after the row's own content.
+ */
+function DisabledHandleTooltip({
+  rootRef,
+  value,
+  content,
+}: DisabledHandleTooltipProps) {
+  const anchorRef = useMemo(
+    () => ({
+      get current() {
+        const toggles = rootRef.current?.querySelectorAll<HTMLElement>(
+          `[data-transfer-list-row="${CSS.escape(value)}"] button[aria-pressed]`,
+        );
+        return toggles == null || toggles.length === 0
+          ? null
+          : toggles[toggles.length - 1];
+      },
+    }),
+    [rootRef, value],
+  );
+  return <Tooltip anchorRef={anchorRef} content={content} />;
+}
+
 /**
  * A controlled dual-panel collection input for choosing and ordering values.
  * Selection, ordering, drafts, persistence, and saved views stay explicit in
@@ -346,37 +379,6 @@ function matchesQuery<T extends string>(
  * />
  * ```
  */
-interface DisabledHandleTooltipProps {
-  rootRef: RefObject<HTMLElement | null>;
-  value: string;
-  content: string;
-}
-
-/**
- * The tooltip and description of a disabled list's reorder handle, which say
- * why the row does not move. Core List renders the handle, so the tooltip
- * finds it in its row when it attaches: the row's one toggle button.
- */
-function DisabledHandleTooltip({
-  rootRef,
-  value,
-  content,
-}: DisabledHandleTooltipProps) {
-  const anchorRef = useMemo(
-    () => ({
-      get current() {
-        return (
-          rootRef.current?.querySelector<HTMLElement>(
-            `[data-transfer-list-row="${CSS.escape(value)}"] button[aria-pressed]`,
-          ) ?? null
-        );
-      },
-    }),
-    [rootRef, value],
-  );
-  return <Tooltip anchorRef={anchorRef} content={content} />;
-}
-
 export function TransferList<T extends string = string>({
   label,
   isLabelHidden = false,

@@ -872,6 +872,30 @@ describe('TransferList', () => {
       );
     });
 
+    it('describes the reorder handle, not a toggle that renderOption puts in the row, when the list is disabled', async () => {
+      render(
+        <ControlledTransferList
+          initialValue={['name', 'owner', 'status']}
+          isDisabled
+          renderOption={option => (
+            <span>
+              {option.label}
+              <button type="button" aria-pressed="false">
+                {`Pin ${option.label}`}
+              </button>
+            </span>
+          )}
+        />,
+      );
+      const handle = screen.getByRole('button', {name: /^Reorder Owner/});
+      await waitFor(() =>
+        expect(handle).toHaveAccessibleDescription(/Owner cannot be reordered/),
+      );
+      expect(
+        screen.getByRole('button', {name: 'Pin Owner'}),
+      ).not.toHaveAccessibleDescription(/cannot be reordered/);
+    });
+
     it('keeps values from passing a reorder-disabled value at an end, and lets them pass one in the middle', async () => {
       const user = userEvent.setup();
       const onValueChange = vi.fn();
