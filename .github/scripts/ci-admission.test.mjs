@@ -74,7 +74,9 @@ describe('where runs wait', () => {
     }
     expect(stepOf(room).with.phase).toBe('room');
     expect(stepOf(room).id).toBe('room');
-    expect(wait.with.phase).toBe('rest');
+    expect(wait.with.phase).toBe(
+      "${{ needs.room.outputs.attempt == github.run_attempt && 'rest' || 'whole' }}",
+    );
     expect(needsOf(admission)).toEqual(['room']);
     expect(room.permissions).toEqual({actions: 'read', contents: 'read'});
     // The rest of the wait carries on from where room left off.
@@ -208,7 +210,9 @@ describe('where runs wait', () => {
       guarded.push(id);
     }
     expect(guarded.sort()).toEqual([
+      'a11y-dependent-audits-plan',
       'docsite-build',
+      'pr-a11y-dependent-audits',
       'pr-component-a11y-contracts',
       'pr-interaction',
       'pr-interaction-webkit',
@@ -216,6 +220,23 @@ describe('where runs wait', () => {
       'pr-visual',
       'typecheck',
     ]);
+  });
+
+  it('makes a re-run of the failed jobs wait again after a stop for no room', () => {
+    const room = ci.jobs.room;
+    // A stop for no room fails room itself, so a re-run of the failed jobs
+    // repeats room's look instead of reusing its earlier result.
+    const stop = room.steps.at(-1);
+    expect(stop.name).toBe('Stop when CI is full');
+    expect(stop.if).toBe("steps.room.outputs.full == 'true'");
+    expect(stop.run).toContain('CI is full: re-run all jobs or push later.');
+    expect(stop.run.trim().endsWith('exit 1')).toBe(true);
+    // A re-run of admission alone carries on no earlier attempt's clock: it
+    // waits for the whole run from its own start.
+    expect(room.outputs.attempt).toBe('${{ github.run_attempt }}');
+    expect(wait.with.phase).toBe(
+      "${{ needs.room.outputs.attempt == github.run_attempt && 'rest' || 'whole' }}",
+    );
   });
 
   it('skips only with every other job, and never fails, so every job and required check decides as before', () => {
@@ -272,8 +293,11 @@ describe('where runs wait', () => {
         name: 'Stop when CI is full at the longest wait',
       }),
     ]);
+    // Room's only other steps: its checkout, and its stop when it found no
+    // room (above).
     expect(ci.jobs.room.steps.filter(step => step.name !== STEP)).toEqual([
       expect.objectContaining({uses: 'actions/checkout@v7'}),
+      expect.objectContaining({name: 'Stop when CI is full'}),
     ]);
   });
 

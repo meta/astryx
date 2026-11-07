@@ -11,17 +11,38 @@ const anatomy = [
   {
     name: 'Key badge',
     required: true,
-    description: 'Painted key badge rendered once for each key in the shortcut.',
+    description:
+      'Painted key badge rendered once for each key in the shortcut.',
   },
 ];
 
 /** @type {import('@astryxdesign/cli/authoring').ComponentBestPractice[]} */
 const bestPractices = [
-  { guidance: true, description: 'Place shortcuts near the action they trigger: in a tooltip, menu item, or inline instruction.' },
-  { guidance: true, description: 'Use mod instead of ctrl or cmd; it automatically adapts to the user\'s platform.' },
-  { guidance: true, description: 'Let Kbd name the shortcut: screen readers hear the keys as words, such as "Command + K". Kbd ignores an aria-label you pass; to name it from visible text, use aria-labelledby.' },
-  { guidance: false, description: 'Use Kbd as the only way to discover an action; shortcuts should supplement visible controls, not replace them.' },
-  { guidance: false, description: 'Expect Kbd to handle the key press. It only shows the keys; listen for the shortcut in your own code.' },
+  {
+    guidance: true,
+    description:
+      'Place shortcuts near the action they trigger: in a tooltip, menu item, or inline instruction.',
+  },
+  {
+    guidance: true,
+    description:
+      "Use mod instead of ctrl or cmd; it automatically adapts to the user's platform.",
+  },
+  {
+    guidance: true,
+    description:
+      'Let Kbd name the shortcut: screen readers hear the keys as words, such as "Command + K". Kbd ignores an aria-label you pass; to name it from visible text, use aria-labelledby.',
+  },
+  {
+    guidance: false,
+    description:
+      'Use Kbd as the only way to discover an action; shortcuts should supplement visible controls, not replace them.',
+  },
+  {
+    guidance: false,
+    description:
+      'Expect Kbd to handle the key press. It only shows the keys; listen for the shortcut in your own code.',
+  },
 ];
 
 /** @type {import('@astryxdesign/cli/authoring').ComponentDoc} */
@@ -30,13 +51,23 @@ export const docs = {
   name: 'Kbd',
   displayName: 'Kbd',
   category: 'Content',
-  keywords: ["kbd","keyboard","shortcut","hotkey","keybinding","keystroke","keycombo","modifier","accelerator"],
+  keywords: [
+    'kbd',
+    'keyboard',
+    'shortcut',
+    'hotkey',
+    'keybinding',
+    'keystroke',
+    'keycombo',
+    'modifier',
+    'accelerator',
+  ],
   props: [
     {
       name: 'keys',
       type: 'string',
       description:
-        'Keyboard shortcut string. Use "+" to separate keys. Special keys: mod (Cmd on Mac), ctrl, alt, shift, enter, backspace, escape, tab, up, down, left, right, plus. Aliases: esc for escape and return for enter.',
+        'Keyboard shortcut string. Use "+" to separate keys. Special keys: mod (⌘ on Apple platforms, Ctrl elsewhere), ctrl, alt and shift (Apple symbols on Apple platforms, Ctrl, Alt and Shift text elsewhere), meta (Win elsewhere and before hydration), enter, backspace, escape, tab, up, down, left, right, plus. Aliases: esc for escape and return for enter.',
       required: true,
     },
     {
@@ -68,7 +99,8 @@ export const docs = {
   },
   usage: {
     anatomy,
-    description: 'Renders a keyboard shortcut as styled key badges. Use Kbd in tooltips, menus, and help text to show key combinations.',
+    description:
+      'Renders a keyboard shortcut as styled key badges. Use Kbd in tooltips, menus, and help text to show key combinations.',
     bestPractices,
   },
 };
@@ -82,7 +114,7 @@ export const docsZh = {
       name: 'keys',
       type: 'string',
       description:
-        '键盘快捷键字符串。使用 "+" 分隔各按键。特殊按键：mod（Mac 上为 Cmd）、ctrl、alt、shift、enter、backspace、escape、tab、up、down、left、right、plus。别名：esc 等同于 escape，return 等同于 enter。',
+        '键盘快捷键字符串。使用 "+" 分隔各按键。特殊按键：mod（Apple 平台上为 ⌘，其他平台为 Ctrl）、ctrl、alt 和 shift（Apple 平台上为符号，其他平台为 Ctrl、Alt、Shift 文字）、meta（其他平台及水合前为 Win）、enter、backspace、escape、tab、up、down、left、right、plus。别名：esc 等同于 escape，return 等同于 enter。',
       required: true,
     },
     {
@@ -114,7 +146,8 @@ export const docsZh = {
   },
   usage: {
     anatomy,
-    description: 'Renders a keyboard shortcut as styled key badges. Use Kbd in tooltips, menus, and help text to show key combinations.',
+    description:
+      'Renders a keyboard shortcut as styled key badges. Use Kbd in tooltips, menus, and help text to show key combinations.',
     bestPractices,
   },
 };
@@ -125,14 +158,18 @@ export const docsDense = {
     'Renders keyboard shortcut as styled key badges. Use in tooltips, menus + help text to show key combinations.',
   usage: {
     anatomy,
-    description: 'Renders a keyboard shortcut as styled key badges. Use Kbd in tooltips, menus, and help text to show key combinations.',
+    description:
+      'Renders a keyboard shortcut as styled key badges. Use Kbd in tooltips, menus, and help text to show key combinations.',
     bestPractices,
   },
   propDescriptions: {
-    keys: 'Shortcut string. "+" separates keys. Special: mod (Cmd on Mac), ctrl, alt, shift, enter, backspace, escape, tab, up, down, left, right, plus. Aliases: esc for escape, return for enter.',
-    xstyle: 'StyleX styles for layout customization. Must be stylex.create() value.',
-    className: 'CSS class for root element. Prefer xstyle; className for non-StyleX integration.',
-    style: 'Inline styles for root element. Prefer xstyle; inline styles bypass StyleX optimization.',
+    keys: 'Shortcut string. "+" separates keys. Special: mod (⌘ on Apple, Ctrl elsewhere), ctrl, alt, shift (Apple symbols on Apple, text elsewhere), meta (Win elsewhere and before hydration), enter, backspace, escape, tab, up, down, left, right, plus. Aliases: esc for escape, return for enter.',
+    xstyle:
+      'StyleX styles for layout customization. Must be stylex.create() value.',
+    className:
+      'CSS class for root element. Prefer xstyle; className for non-StyleX integration.',
+    style:
+      'Inline styles for root element. Prefer xstyle; inline styles bypass StyleX optimization.',
     ref: 'Ref forwarded to shortcut group element.',
   },
 };
