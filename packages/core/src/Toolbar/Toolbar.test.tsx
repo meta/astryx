@@ -660,7 +660,7 @@ describe('Toolbar lanes with foldable content (FR2)', () => {
     ).toBe(true);
   });
 
-  it('marks its start and end lanes, and lets a lane with foldable content go below its content', () => {
+  it('marks its start and end lanes, and lets a lane with foldable content shrink', () => {
     render(
       <Toolbar
         label="Bulk actions"
@@ -685,7 +685,7 @@ describe('Toolbar lanes with foldable content (FR2)', () => {
       expect(lane.classList.contains(laneClass)).toBe(true);
       expect(
         rulesWithSelector(lane, ':has(').some(
-          rule => rule.includes(markerClass) && /min-width:\s*0/.test(rule),
+          rule => rule.includes(markerClass) && /flex-shrink:\s*1\b/.test(rule),
         ),
       ).toBe(true);
     }

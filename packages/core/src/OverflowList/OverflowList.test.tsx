@@ -1131,7 +1131,8 @@ describe('OverflowList in a Toolbar lane (component:Toolbar FR2)', () => {
         {items}
       </OverflowList>,
     );
-    expect(visibleContainer().getAttribute('style') ?? '').toContain('40px');
+    // The 40px trigger, plus a pixel for rounding.
+    expect(visibleContainer().getAttribute('style') ?? '').toContain('41px');
     rerender(
       <OverflowList
         gap={0}
@@ -1142,7 +1143,7 @@ describe('OverflowList in a Toolbar lane (component:Toolbar FR2)', () => {
         {items}
       </OverflowList>,
     );
-    expect(visibleContainer().getAttribute('style') ?? '').toContain('80px');
+    expect(visibleContainer().getAttribute('style') ?? '').toContain('82px');
   });
 
   it('asks for the width that shows every item, but only inside a Toolbar lane', () => {
@@ -1156,8 +1157,8 @@ describe('OverflowList in a Toolbar lane (component:Toolbar FR2)', () => {
       </OverflowList>,
     );
     const vis = visibleContainer();
-    // Three 40px items with no gap.
-    expect(vis.getAttribute('style') ?? '').toContain('120px');
+    // Three 40px items with no gap, plus a pixel each for rounding.
+    expect(vis.getAttribute('style') ?? '').toContain('123px');
     const laneClass = (stylex.props(foldingLaneMarker).className ?? '').split(
       ' ',
     )[0];
@@ -1165,13 +1166,13 @@ describe('OverflowList in a Toolbar lane (component:Toolbar FR2)', () => {
       rulesDeclaredFor(vis).some(
         rule =>
           rule.includes(laneClass) &&
-          /width:\s*var\(--_overflow-list-natural-width\)/.test(rule),
+          /max-width:\s*var\(--_overflow-list-natural-width\)/.test(rule),
       ),
     ).toBe(true);
-    // Inside the lane the list, not the controls beside it, gives up width.
+    // Its own items do not size it in the lane; the lane does.
     expect(
       rulesDeclaredFor(vis).some(
-        rule => rule.includes(laneClass) && /flex-shrink:\s*1000000/.test(rule),
+        rule => rule.includes(laneClass) && /contain:\s*inline-size/.test(rule),
       ),
     ).toBe(true);
   });
@@ -1194,6 +1195,31 @@ describe('OverflowList in a Toolbar lane (component:Toolbar FR2)', () => {
     await triggerResize(vis);
     expect(within(vis).queryByText('C')).not.toBeInTheDocument();
     expect(document.activeElement).toBe(within(vis).getByText('more:1,2'));
+  });
+
+  it('leaves focus alone when it was not on a folded item', async () => {
+    render(
+      <>
+        <button type="button">Outside</button>
+        <OverflowList
+          gap={0}
+          data-w="1000"
+          data-testid="ov"
+          overflowRenderer={trigger}>
+          {items}
+        </OverflowList>
+      </>,
+    );
+    const vis = visibleContainer();
+    // Focus visits the list, then leaves it for the page.
+    act(() => {
+      within(vis).getByText('C').focus();
+      within(vis).getByText('C').blur();
+    });
+    vis.setAttribute('data-w', '100');
+    await triggerResize(vis);
+    expect(within(vis).queryByText('C')).not.toBeInTheDocument();
+    expect(document.activeElement).toBe(document.body);
   });
 
   it("keeps its hidden measuring copies out of a Toolbar's arrow-key order", () => {

@@ -534,6 +534,19 @@ export const FoldingLanes: Story = {
             }
           />
         </div>
+        <div style={frame} data-case="wrapped">
+          <Toolbar
+            label="Wrapped actions"
+            size="sm"
+            startContent={
+              // A list inside the caller's own wrapper keeps its minimum.
+              <div>
+                <FoldingList labels={FOLD_ACTIONS} label="Actions" />
+              </div>
+            }
+            endContent={<Button label="New item" />}
+          />
+        </div>
         <div style={frame} data-case="two-lanes">
           <Toolbar
             label="Issues"

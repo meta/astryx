@@ -38,6 +38,11 @@ import {themeProps} from '../utils/themeProps';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {foldableMarker, foldingLaneMarker} from '../internal/foldable.stylex';
+import {useFoldingLaneWant} from '../internal/foldingLane';
+import {LayoutChangeSnapshot} from '../motion/LayoutChangeSnapshot';
+import {moveFocusLeftBehind, noteFocusWithin} from '../utils/focusReturn';
+import {useFocusLeavingChange} from '../utils/useFocusLeavingChange';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
 const styles = stylex.create({
   container: {
     display: 'flex',
@@ -78,26 +83,31 @@ const foldMin = stylex.create({
   minWidth: (px: number) => ({minWidth: `${px}px`}),
 });
 
-// In a Toolbar lane the list asks for the width that shows every item, so the
-// lane sizes to all of it and shrinks from there; elsewhere it keeps its
-// usual width. `--_overflow-list-natural-width` is set per list below.
-// Inside the lane the list takes the shrinking from the controls beside it:
-// their share stays under a layout pixel, so a Button's label never
-// truncates while the list can still fold.
-const LANE_SHRINK = 1000000;
-const foldNatural = stylex.create({
-  width: (px: number) => ({'--_overflow-list-natural-width': `${px}px`}),
-  inLane: {
-    width: {
+// Inside a Toolbar lane the list's own content does not size it: it starts at
+// its minimum ("+N" plus the items `minVisibleItems` keeps), takes the room
+// the lane has, and asks the lane for the rest through useFoldingLaneWant.
+// Elsewhere it sizes as before.
+const inLane = stylex.create({
+  list: {
+    contain: {
+      default: null,
+      [stylex.when.ancestor(':is(*)', foldingLaneMarker)]: 'inline-size',
+    },
+    flexGrow: {
+      default: null,
+      [stylex.when.ancestor(':is(*)', foldingLaneMarker)]: 1,
+    },
+    // It grows no wider than all of its items, so an end lane keeps them at
+    // its end. `--_overflow-list-natural-width` is set per list below.
+    maxWidth: {
       default: null,
       [stylex.when.ancestor(':is(*)', foldingLaneMarker)]:
         'var(--_overflow-list-natural-width)',
     },
-    flexShrink: {
-      default: null,
-      [stylex.when.ancestor(':is(*)', foldingLaneMarker)]: LANE_SHRINK,
-    },
   },
+  naturalWidth: (px: number) => ({
+    '--_overflow-list-natural-width': `${px}px`,
+  }),
 });
 
 /** What can take focus inside the "+N" trigger the caller renders. */
@@ -309,7 +319,6 @@ export function OverflowList({
   ref,
   ...props
 }: OverflowListProps) {
-  const {onFocus: _onFocus, onBlur: _onBlur, ...propsWithoutFocus} = props;
   const childArray = Children.toArray(children) as ReactElement[];
   const itemCount = childArray.length;
 
@@ -401,18 +410,13 @@ export function OverflowList({
   // to the page. Focus moves to the "+N" trigger instead, the control that
   // now reaches that item. Measurement drives the fold, so no handler sees it.
   const visibleRef = useRef<HTMLElement | null>(null);
-  const hadFocusRef = useRef(false);
-  useIsomorphicLayoutEffect(
-    function moveFocusToTriggerWhenItsItemFolds() {
+  const {ref: modalityRef} = useInteractionModalityTracking();
+  const noteFocusBeforeFold = useFocusLeavingChange(
+    visibleCount,
+    () => noteFocusWithin(visibleRef.current),
+    noted => {
       const container = visibleRef.current;
-      if (!hadFocusRef.current || container == null) {
-        return;
-      }
-      const active = container.ownerDocument.activeElement;
-      if (active != null && active !== container.ownerDocument.body) {
-        return;
-      }
-      if (!hasOverflow) {
+      if (container == null) {
         return;
       }
       const trigger =
@@ -425,9 +429,16 @@ export function OverflowList({
           : trigger.matches(FOCUSABLE)
             ? trigger
             : trigger.querySelector(FOCUSABLE);
-      (target as HTMLElement | null)?.focus();
+      moveFocusLeftBehind(noted, target as HTMLElement | null);
     },
-    [visibleCount],
+  );
+
+  // Inside a Toolbar lane, ask for the width that shows every item.
+  useFoldingLaneWant(
+    visibleRef,
+    !isMultiRow && minVisibleItems < itemCount
+      ? foldNaturalWidth - foldMinWidth
+      : 0,
   );
 
   // Reports the measured overflow to `onOverflowChange`. A ResizeObserver
@@ -446,6 +457,10 @@ export function OverflowList({
 
   return (
     <>
+      <LayoutChangeSnapshot
+        value={visibleCount}
+        onBeforeChange={noteFocusBeforeFold}
+      />
       {/* Hidden measurement container */}
       <div
         ref={reportMeasureRef}
@@ -462,18 +477,7 @@ export function OverflowList({
 
       {/* Visible container */}
       <div
-        ref={useMergedRefs(ref, containerRef, visibleRef)}
-        onFocus={event => {
-          hadFocusRef.current = true;
-          props.onFocus?.(event);
-        }}
-        onBlur={event => {
-          const next = event.relatedTarget as Node | null;
-          if (next != null && !event.currentTarget.contains(next)) {
-            hadFocusRef.current = false;
-          }
-          props.onBlur?.(event);
-        }}
+        ref={useMergedRefs(ref, containerRef, visibleRef, modalityRef)}
         {...mergeProps(
           themeProps('overflow-list'),
           stylex.props(
@@ -482,11 +486,10 @@ export function OverflowList({
             // whose floor keeps every item cannot.
             minVisibleItems < itemCount && foldableMarker,
             !isMultiRow && foldMinWidth > 0 && foldMin.minWidth(foldMinWidth),
+            !isMultiRow && inLane.list,
             !isMultiRow &&
-              foldNaturalWidth > 0 && [
-                foldNatural.width(foldNaturalWidth),
-                foldNatural.inLane,
-              ],
+              foldNaturalWidth > 0 &&
+              inLane.naturalWidth(foldNaturalWidth),
             gapStyles[gap],
             isMultiRow &&
               rowHeight > 0 &&
@@ -498,7 +501,7 @@ export function OverflowList({
           className,
           style,
         )}
-        {...propsWithoutFocus}>
+        {...props}>
         {collapseFrom === 'start' &&
           hasOverflow &&
           overflowRenderer?.(overflowItems)}

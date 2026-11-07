@@ -415,8 +415,10 @@ export function useOverflowInternal(
           floor < children.length && hasIndicator
             ? [...kept, indicatorWidth]
             : kept;
+        // offsetWidth rounds each width to a whole pixel, so allow one more
+        // per item: a "+N" that is 40.3px wide never gets a 40px floor.
         const sumWithGaps = (list: number[]) =>
-          list.reduce((sum, width) => sum + width, 0) +
+          list.reduce((sum, width) => sum + width + 1, 0) +
           gap * Math.max(0, list.length - 1);
         const next = {
           minWidth: sumWithGaps(parts),

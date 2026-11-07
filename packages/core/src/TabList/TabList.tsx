@@ -26,6 +26,7 @@ import React, {
   useEffect,
   useMemo,
   useRef,
+  useState,
   type AriaRole,
   type ReactNode,
 } from 'react';
@@ -53,7 +54,9 @@ import {isRtlElement} from '../hooks/isRtlElement';
 import {Icon} from '../Icon';
 import {EDGE_COMP_ATTR} from '../Layout/edgeCompensation.stylex';
 import {themeProps} from '../utils/themeProps';
-import {foldableMarker} from '../internal/foldable.stylex';
+import {foldableMarker, foldingLaneMarker} from '../internal/foldable.stylex';
+import {useFoldingLaneWant} from '../internal/foldingLane';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {devWarn} from '../utils/devWarning';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
@@ -232,6 +235,24 @@ const FADE_FROM_START = `linear-gradient(to right, transparent ${BLEED}, black $
 const FADE_FROM_END = `linear-gradient(to left, transparent ${BLEED}, black ${SCROLL_EDGE_INSET})`;
 
 const styles = stylex.create({
+  // In a Toolbar lane: sized by the lane, not by the tabs, and no wider than
+  // all of them (`--_tab-list-tabs-width`, set from the measured tabs).
+  inLane: {
+    contain: {
+      default: null,
+      [stylex.when.ancestor(':is(*)', foldingLaneMarker)]: 'inline-size',
+    },
+    flexGrow: {
+      default: null,
+      [stylex.when.ancestor(':is(*)', foldingLaneMarker)]: 1,
+    },
+    maxWidth: {
+      default: '100%',
+      [stylex.when.ancestor(':is(*)', foldingLaneMarker)]:
+        'var(--_tab-list-tabs-width, 100%)',
+    },
+  },
+  tabsWidth: (px: number) => ({'--_tab-list-tabs-width': `${px}px`}),
   nav: {
     display: 'flex',
     alignItems: 'stretch',
@@ -570,6 +591,35 @@ export function TabList({
     return observeResize(root, onResize);
   }, [hasScroll, listRef]);
 
+  // Inside a Toolbar lane, the tabs' own width does not size the list: it
+  // takes the room the lane has and asks the lane for the width of all its
+  // tabs. The tabs' extent is read after every render, so added or renamed
+  // tabs update the request; equal readings write nothing.
+  const [tabsWidth, setTabsWidth] = useState(0);
+  useIsomorphicLayoutEffect(() => {
+    const strip = stripRef.current;
+    if (!hasScroll || !strip) {
+      return;
+    }
+    const tabs = strip.querySelectorAll<HTMLElement>('[data-tab-value]');
+    if (tabs.length === 0) {
+      return;
+    }
+    const first = tabs[0].getBoundingClientRect();
+    const last = tabs[tabs.length - 1].getBoundingClientRect();
+    const padding = getComputedStyle(strip);
+    const width = Math.ceil(
+      Math.max(last.right, first.right) -
+        Math.min(first.left, last.left) +
+        (parseFloat(padding.paddingLeft) || 0) +
+        (parseFloat(padding.paddingRight) || 0),
+    );
+    if (width !== tabsWidth) {
+      setTabsWidth(width);
+    }
+  });
+  useFoldingLaneWant(listRef, hasScroll ? tabsWidth : 0);
+
   const scrollByPage = useCallback((direction: -1 | 1) => {
     const strip = stripRef.current;
     if (!strip) {
@@ -699,7 +749,11 @@ export function TabList({
           stylex.props(
             styles.nav,
             // Tabs that scroll can give up width.
-            hasScroll && foldableMarker,
+            hasScroll && [
+              foldableMarker,
+              styles.inLane,
+              tabsWidth > 0 && styles.tabsWidth(tabsWidth),
+            ],
             layout === 'fill' && styles.fill,
             hasDivider && styles.divider,
             isFullBleed && styles.fullBleed,
