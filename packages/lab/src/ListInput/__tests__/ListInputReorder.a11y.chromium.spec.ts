@@ -2,13 +2,15 @@
 
 /**
  * @file ListInputReorder.a11y.chromium.spec.ts
- * @input The checked-in Lab/ListInput › Tag Options story, a built Storybook,
- *   real Chromium touch input (CDP) and keys on a phone viewport
+ * @input The Lab/ListInput › Tag Options story and the A11y/ListInput ›
+ *   Fixed record fixture in a built Storybook. Real Chromium touch input
+ *   (CDP) and keys on a phone viewport
  * @output Browser evidence that on a touch screen a keyboard move slides the
  *   records it swaps rather than jumping them in one frame. UIKit's motion is
  *   the same on every touch screen. With a mouse, the records take their
  *   places without travel. Reorder mode marks the record with the list's
- *   insertion line, and stays on through each move
+ *   insertion line, and stays on through each move. The Add button, each
+ *   handle and a fixed record's Remove keep to the record columns
  * @position Chromium proof for ListInput's reorder, which runs on core List's
  *   reorder session (List/ListReorderScope.tsx)
  */
@@ -257,6 +259,47 @@ test.describe('the record columns', () => {
         overflow.handlePastList,
         JSON.stringify(overflow),
       ).toBeLessThanOrEqual(0.5);
+    });
+  }
+});
+
+const FIXED_STORY = 'a11y-listinput--fixed-record';
+
+test.describe('a record that stays put', () => {
+  for (const viewport of [
+    {width: 390, height: 844},
+    {width: 1024, height: 768},
+  ]) {
+    test(`at ${viewport.width} px, keeps its Remove in the column of every other record's Remove`, async ({
+      page,
+    }) => {
+      await page.setViewportSize(viewport);
+      await page.goto(
+        `${storybook.origin}/iframe.html?id=${FIXED_STORY}&viewMode=story`,
+      );
+      await page.locator(HANDLE).first().waitFor();
+      const records = await page.evaluate(() =>
+        Array.from(
+          document.querySelectorAll('[data-list-input-row]'),
+          record => ({
+            hasHandle:
+              record.querySelector('button[data-astryx-list-reorder]') != null,
+            removeLeft:
+              record
+                .querySelector('[data-list-input-remove]')
+                ?.getBoundingClientRect().left ?? Number.NaN,
+          }),
+        ),
+      );
+      const detail = JSON.stringify(records);
+      const fixed = records.filter(record => !record.hasHandle);
+      expect(fixed, detail).toHaveLength(1);
+      for (const record of records) {
+        expect(
+          Math.abs(record.removeLeft - fixed[0].removeLeft),
+          detail,
+        ).toBeLessThanOrEqual(0.5);
+      }
     });
   }
 });
