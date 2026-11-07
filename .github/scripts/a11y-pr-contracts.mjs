@@ -1159,7 +1159,9 @@ function main() {
   })();
   const notRun = budgeted.notRun;
   // The opt-in run splits into legs by recorded time. The count step plans
-  // them before the Storybook download and the Chromium install; each leg
+  // them after the Storybook download, whose story index a changed
+  // multi-component folder's components resolve through, and before the
+  // Chromium install; each leg
   // then runs only its share.
   const scopeKnown = changedPaths != null;
   // Every leg counts on its own runner. A leg that cannot tell this pull
