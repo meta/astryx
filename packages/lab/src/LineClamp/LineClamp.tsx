@@ -28,6 +28,7 @@ import * as stylex from '@stylexjs/stylex';
 
 import type {BaseProps} from '@astryxdesign/core';
 import {useTruncation} from '@astryxdesign/core/Text';
+import {truncationTooltipStyles} from '@astryxdesign/core/Text/text.stylex';
 import type {LayerPlacement} from '@astryxdesign/core/Layer';
 import {
   composeEventHandlers,
@@ -57,10 +58,6 @@ const styles = stylex.create({
     overflow: 'clip',
     wordBreak: 'break-word',
     overflowWrap: 'break-word',
-  },
-  tooltipContent: {
-    maxWidth: '300px',
-    wordBreak: 'break-word',
   },
 });
 
@@ -399,7 +396,7 @@ export function LineClamp({
         <TruncationTooltip
           anchorRef={elementRef}
           content={
-            <span {...stylex.props(styles.tooltipContent)}>
+            <span {...stylex.props(truncationTooltipStyles.content)}>
               {truncation.fullText}
             </span>
           }
