@@ -3715,6 +3715,10 @@ describe('contextRef anchor-name churn (#5398)', () => {
     const x = getByTestId('x');
     act(() => show());
     expect(anchorNamesOf(x)).toContain(anchorId);
+    // Records every write to the trigger's style: a removal and re-add of
+    // the name ends in the same state, so only the writes tell them apart.
+    const styleWrites = new MutationObserver(() => {});
+    styleWrites.observe(x, {attributes: true, attributeFilter: ['style']});
 
     // No await between these two: the churn (null, then the same element
     // again) happens within one synchronous stretch, before the pending
@@ -3723,6 +3727,8 @@ describe('contextRef anchor-name churn (#5398)', () => {
     rerender(<ChurnHarness refTarget="x" onReady={id => (anchorId = id)} />);
 
     expect(anchorNamesOf(x)).toContain(anchorId);
+    expect(styleWrites.takeRecords()).toEqual([]);
+    styleWrites.disconnect();
   });
 
   it('removes the old element and adds the new one when a different element takes over the ref', () => {

@@ -778,15 +778,7 @@ function observeAnchorClearance(
   };
 }
 
-/**
- * Whether `anchor` is a valid CSS anchor right now: it has a layout box, and
- * any `<dialog>` it sits in is showing, as a modal (`open`) or as a popover
- * (a non-modal `Drawer` is shown with `showPopover()` and never `open`).
- * `Dialog` displays its element during render but only calls `showModal()` in
- * a later Effect, so in that window the trigger already has a box while the
- * dialog is not yet in the top layer; opening a layer then paints it before
- * the dialog is modal.
- */
+/** Whether `element` is shown as a popover (`:popover-open`). */
 function isShownAsPopover(element: HTMLElement): boolean {
   try {
     return element.matches(':popover-open');
@@ -796,6 +788,15 @@ function isShownAsPopover(element: HTMLElement): boolean {
   }
 }
 
+/**
+ * Whether `anchor` is a valid CSS anchor right now: it has a layout box, and
+ * any `<dialog>` it sits in is showing, as a modal (`open`) or as a popover
+ * (a non-modal `Drawer` is shown with `showPopover()` and never `open`).
+ * `Dialog` displays its element during render but only calls `showModal()` in
+ * a later Effect, so in that window the trigger already has a box while the
+ * dialog is not yet in the top layer; opening a layer then paints it before
+ * the dialog is modal.
+ */
 function isAnchorReady(anchor: HTMLElement): boolean {
   // No layout box at all: `display: none`, or inside a closed `<dialog>`. An
   // element that renders but is empty (an inline `<span>` with no content, such
@@ -1556,8 +1557,8 @@ function useLayerImplementation(
     wasJustDismissed,
   ]);
 
-  // A wait for the anchor to have a layout box, started by a show() that
-  // found the anchor still at 0x0. Cancelled by the next show()/hide() or by
+  // A wait for the trigger to get a layout box, started by a show() that
+  // found none. Cancelled by the next show()/hide() or by
   // unmount, so a stale wait from a closed-then-reopened layer never fires
   // openNow() after the fact.
   const pendingAnchorWaitRef = useRef<(() => void) | null>(null);
@@ -1587,8 +1588,7 @@ function useLayerImplementation(
     pendingAnchorElementRef.current = null;
   }, []);
 
-  // A trigger with no box — 0x0, as every element not yet laid out reports —
-  // is not a valid CSS anchor. Opening against it now resolves the popover to
+  // A trigger with no layout box (no client rect) is not a valid CSS anchor. Opening against it now resolves the popover to
   // its fallback position (the viewport corner), and unlike a live layout
   // change, that resolution does not get revisited once the trigger later
   // gets a box: the popover is stuck there for the rest of this open.
@@ -1753,32 +1753,12 @@ function useLayerImplementation(
 
   // Stable ref for the trigger element (context mode only).
   //
-  // A caller's OWN ref to the trigger can churn identity for reasons that
-  // have nothing to do with the trigger itself changing (e.g. Tooltip
-  // imperatively re-invoking a combined ref callback whenever one of its
-  // interaction handlers changes identity) — React or the caller then calls
-  // this ref with `null` and immediately after with the very same element.
-  // Removing `anchor-name` on that `null` call and re-adding it on the
-  // reattach is a real DOM mutation each time, and an already-open layer's
-  // `position-try-fallbacks` resolution does not automatically get revisited
-  // once the anchor comes back: the layer is left stuck at the unanchored
-  // fallback position for the rest of that open, even though the
-  // trigger never actually left the document.
-  //
-  // `addAnchorName` is already idempotent (skips the DOM write if the name
-  // is already present), so a `null` call defers the removal instead of
-  // applying it immediately: `triggerRef.current` is left pointing at the
-  // stale element, and a microtask is queued to actually remove its anchor
-  // name — but only if nothing has reattached to that exact element by
-  // then. A transient null-then-same-element churn cancels the pending
-  // removal on the reattach, so the anchor name (and the layer's anchor
-  // resolution) is never disturbed. A `null` followed by a DIFFERENT real
-  // element still removes the old element's name immediately, in the same
-  // synchronous call that adds the new one — no need to wait, since that is
-  // a genuine reassignment, not churn. A `null` followed by nothing (a real
-  // unmount) lets the microtask's removal go through, so a detached trigger
-  // does not keep carrying a dead anchor name forever (the current Popover
-  // contract: detaching the trigger removes its anchor association).
+  // A combined ref can call this ref with `null` and then with the same
+  // element. Removing `anchor-name` in that gap strands an open layer at its
+  // fallback position. So a `null` call removes the name one microtask later,
+  // unless the same element attaches again first. A different element takes
+  // over at once, and a `null` with nothing after it (an unmount) removes the
+  // name.
   const contextRef = useCallback(
     (el: HTMLElement | null) => {
       if (!el) {
@@ -1909,7 +1889,7 @@ function useLayerImplementation(
   }, []);
 
   // Syncs the document's capture-phase gesture tracking with this mount.
-  // Unmount forgets the layer's dismissal.
+  // Unmount forgets the layer's dismissal and releases a pending anchor wait.
   useEffect(() => {
     // Install capture-phase gesture tracking before the first interaction.
     currentGesture();
