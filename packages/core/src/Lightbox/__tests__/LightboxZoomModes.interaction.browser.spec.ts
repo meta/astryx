@@ -25,6 +25,7 @@ import {
   flick,
   frames,
   freezePageOn,
+  freezePageWhen,
   holdAnimations,
   installPageFreeze,
   installTimerGate,
@@ -364,15 +365,34 @@ test('under Reduce Motion, + then - pressed mid-fade leave the photo at full opa
   page,
 }) => {
   await page.emulateMedia({reducedMotion: 'reduce'});
+  // The freeze has to be in the page before the story loads, and it needs
+  // the timer gate too.
+  await installPageFreeze(page);
   const {img} = await openPhone(page);
+  await installTimerGate(page);
   const dialog = page.getByRole('dialog', {name: 'Forest path'});
   const opacity = async () =>
     img.evaluate(el => parseFloat(getComputedStyle(el).opacity));
+  await img.evaluate(el => el.setAttribute('data-freeze-photo', ''));
   await dialog.getByRole('button', {name: 'Zoom'}).focus();
-  // The second key lands mid-dip of the first one's cross-fade.
+  // The scene stops in the first frame of the first key's cross-fade dip,
+  // however late this process reacts. The dip lasts 200 ms at most, so a
+  // poll from here can miss it. The second key then lands mid-dip.
+  const dipped = freezePageWhen(
+    page,
+    () => {
+      const photo = document.querySelector('[data-freeze-photo]');
+      return (
+        photo != null &&
+        Number.parseFloat(getComputedStyle(photo).opacity) < 0.9
+      );
+    },
+    undefined,
+  );
   await page.keyboard.press('+');
-  await expect.poll(opacity, {timeout: 2000}).toBeLessThan(0.9);
+  await dipped;
   await page.keyboard.press('-');
+  await thawPage(page);
   await waitForRest(img);
   expect(await opacity()).toBeCloseTo(1, 3);
   await page.keyboard.press('Escape');
