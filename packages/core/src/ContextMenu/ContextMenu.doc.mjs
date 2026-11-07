@@ -159,7 +159,7 @@ export const docs = {
   usage: {
     anatomy,
     description:
-      'A right-click context menu that appears at the cursor position. Use to provide contextual actions for specific elements or regions without cluttering the UI with visible buttons. Under a finger, where the primary pointer is coarse, a held finger opens it with iOS timing: a block trigger whose menu opens at the finger starts to grow at 150 ms, and the menu opens at 735 ms, or as soon as the finger lifts after 400 ms.',
+      'A right-click context menu that appears at the cursor position. Use to provide contextual actions for specific elements or regions without cluttering the UI with visible buttons. Under a finger, where the primary pointer is coarse, a held finger opens it with iOS timing: a block trigger whose menu opens at the finger starts to grow at 150 ms, and the menu opens at 735 ms, or as soon as the finger lifts after 400 ms. When the menu opens at the finger, the same finger can then slide onto an action and lift to pick it.',
     bestPractices: [
       {
         guidance: true,
@@ -269,7 +269,7 @@ export const docsDense = {
   usage: {
     anatomy,
     description:
-      'A right-click context menu that appears at the cursor position. Use to provide contextual actions for specific elements or regions. Under a finger (a coarse primary pointer): a held finger opens it at 735 ms, or on a lift after 400 ms; a block trigger whose menu opens at the finger grows from 150 ms.',
+      'A right-click context menu that appears at the cursor position. Use to provide contextual actions for specific elements or regions. Under a finger (a coarse primary pointer): a held finger opens it at 735 ms, or on a lift after 400 ms; a block trigger whose menu opens at the finger grows from 150 ms; when the menu opens at the finger, the same finger then slides onto an action and lifts to pick it.',
     bestPractices: [
       {guidance: true, description: 'Keep items concise and action-oriented.'},
       {
