@@ -138,7 +138,9 @@ export const dayCellStyles = stylex.create({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    height: sizeVars['--size-element-md'],
+    // A minimum, so a row grows with a larger text size and its days never
+    // reach into the next row.
+    minHeight: sizeVars['--size-element-md'],
     isolation: 'isolate',
   },
 
@@ -197,9 +199,12 @@ export const dayCellStyles = stylex.create({
   },
 
   // Day button - structural
+  // A minimum size that keeps the day round: under a larger text size the
+  // day grows with its number, so the number stays inside its own tap target.
   day: {
-    width: sizeVars['--size-element-sm'],
-    height: sizeVars['--size-element-sm'],
+    minWidth: sizeVars['--size-element-sm'],
+    minHeight: sizeVars['--size-element-sm'],
+    aspectRatio: '1 / 1',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
