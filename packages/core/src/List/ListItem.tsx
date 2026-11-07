@@ -42,6 +42,7 @@ import type {BaseProps} from '../BaseProps';
 import {ListContext, type ListMarker} from './ListContext';
 import {CheckboxInput} from '../CheckboxInput/CheckboxInput';
 import {mergeProps} from '../utils/mergeProps';
+import {rowPressLayerStyles} from '../privateAttributes/press.stylex';
 import {Item, servesSwipeActions} from '../Item/Item';
 import {ItemListRowContext} from '../Item/ItemListRowContext';
 import {ItemMarkerColumnsContext} from '../Item/ItemMarkerColumnsContext';
@@ -504,6 +505,7 @@ export function ListItem({
           hasMarkers && styles.withCounter,
           hasDividers && styles.withDivider,
           hasDividers && embeddedStyles.noRadius,
+          hasDividers && isTouchTarget && rowPressLayerStyles.overDividers,
           isTouchTarget && touchHitAreaStyles.layer,
           isTouchTarget && isInList && styles.bandRaised,
           isRaisedSwipeRow && styles.swipeRaised,

@@ -53,7 +53,7 @@ import {
   test,
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
-import type {CastFrame, TrackedFrame} from './frames';
+import type {CastFrame} from './frames';
 import {
   advanceFrozenPage,
   ANSWER_SLACK_MS,
@@ -108,6 +108,7 @@ import {
   thawTimers,
   timeline,
   touchDriver,
+  trackBrightness,
   TouchPageStallError,
   touchStoryboard,
   traceRendering,
@@ -158,73 +159,6 @@ const BUSY_FIXTURE = `<!doctype html><meta name=viewport content="width=device-w
   #box { position: absolute; left: 20px; top: 40px; width: 80px; height: 80px; background: #36c; }
 </style>
 <div id=box></div>`;
-
-/**
- * The red channel at a CSS-px point in each cast frame (a 16 px square's mean),
- * as a tracked value on x: what a backdrop's dim shows there. Decoded in a
- * scratch page, as `trackMarker` does.
- */
-async function brightnessAt(
-  page: Page,
-  castFrames: readonly CastFrame[],
-  {x, y}: {x: number; y: number},
-): Promise<TrackedFrame[]> {
-  const scratch = await page.context().newPage();
-  try {
-    const values: number[] = [];
-    for (let i = 0; i < castFrames.length; i += 12) {
-      const batch = castFrames.slice(i, i + 12);
-      values.push(
-        ...(await scratch.evaluate(
-          async ({items, px, py}) => {
-            const out: number[] = [];
-            for (const item of items) {
-              const blob = await (
-                await fetch(`data:image/${item.format};base64,${item.data}`)
-              ).blob();
-              const bitmap = await createImageBitmap(blob);
-              const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
-              const context = canvas.getContext('2d');
-              if (context == null) {
-                throw new Error('no 2d context');
-              }
-              context.drawImage(bitmap, 0, 0);
-              const scale = bitmap.width / item.viewportWidth;
-              const {data} = context.getImageData(
-                Math.round(px * scale),
-                Math.round(py * scale),
-                16,
-                16,
-              );
-              let sum = 0;
-              for (let o = 0; o < data.length; o += 4) {
-                sum += data[o];
-              }
-              out.push(sum / (data.length / 4));
-            }
-            return out;
-          },
-          {
-            items: batch.map(f => ({
-              data: f.data,
-              format: f.format,
-              viewportWidth: f.viewportWidth,
-            })),
-            px: x,
-            py: y,
-          },
-        )),
-      );
-    }
-    return castFrames.map((f, i) => ({
-      t: f.t,
-      box: {x: values[i], y: 0, width: 1, height: 1},
-      pixels: 1,
-    }));
-  } finally {
-    await scratch.close();
-  }
-}
 
 async function busyFixture(page: Page) {
   await page.route('http://busy.test/', route =>
@@ -1119,12 +1053,50 @@ test.describe('frame evidence', () => {
     const controlFrames = await trackMarker(page, castFrames, {
       rgb: CONTROL_RGB,
     });
-    const dim = await brightnessAt(page, castFrames, {x: 40, y: 600});
+    const dim = await trackBrightness(page, castFrames, {x: 40, y: 600});
     const proof = busyWindowProof(dim, window, {
       axis: 'x',
       control: controlFrames,
     });
     expect(proof.verdict.failures, proof.summary).toEqual([]);
+  });
+
+  test('trackBrightness reads the channel it is given, over a square of the size it is given', async ({
+    page,
+  }) => {
+    const lastFrame = async (html: string) => {
+      await page.setContent(html);
+      const cast = await startScreencast(page);
+      await page.waitForTimeout(200);
+      const castFrames = (await cast.stop()).slice(-1);
+      expect(castFrames).toHaveLength(1);
+      return castFrames;
+    };
+    const read = async (
+      castFrames: readonly CastFrame[],
+      at: {x: number; y: number; size: number; channel?: 'r' | 'g' | 'b'},
+    ) => (await trackBrightness(page, castFrames, at))[0].box?.x ?? Number.NaN;
+    // A flat colour: each channel reads its own value, to within the cast's
+    // compression.
+    const flat = await lastFrame(
+      '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;height:100%;background:rgb(10,200,30)}</style>',
+    );
+    for (const [channel, value] of [
+      ['r', 10],
+      ['g', 200],
+      ['b', 30],
+    ] as const) {
+      expect(
+        Math.abs((await read(flat, {x: 40, y: 40, size: 16, channel})) - value),
+      ).toBeLessThan(6);
+    }
+    // A 16 px red block on black. A small square inside it reads the block.
+    // A large one reads mostly the black around it, at any device scale.
+    const block = await lastFrame(
+      '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;height:100%;background:#000}#block{position:absolute;left:40px;top:40px;width:16px;height:16px;background:rgb(200,0,0)}</style><div id="block"></div>',
+    );
+    expect(await read(block, {x: 44, y: 44, size: 4})).toBeGreaterThan(150);
+    expect(await read(block, {x: 44, y: 44, size: 128})).toBeLessThan(60);
   });
 
   test("waitForAnimation and blockMainThread's during never count the control's own animation inside a dialog", async ({
@@ -1255,6 +1227,10 @@ test.describe('frame evidence', () => {
     const box = page.locator('#box');
     await markElement(box, {mode: 'outline'});
     const control = await startBusyControl(page);
+    const rest = await box.boundingBox();
+    if (rest == null) {
+      throw new Error('no box');
+    }
 
     // Six 70 ms blocks: each judged part (20 ms margins, 30 ms) holds at most
     // three frames even at WebKit's 14 ms cast, under the four one window
@@ -1307,8 +1283,18 @@ test.describe('frame evidence', () => {
         await page.waitForTimeout(150);
       }
       const frames = await cast.stop();
-      const tracked = await trackMarker(page, frames);
-      const controlFrames = await trackMarker(page, frames, {rgb: CONTROL_RGB});
+      // Each search reads only the strip its box crosses. On a loaded machine
+      // a search of every pixel, four drivers by two tracks, held most of the
+      // test's time. The box travels 560 px down from where it rests.
+      const tracked = await trackMarker(page, frames, {
+        region: {
+          x: rest.x - 20,
+          y: rest.y - 16,
+          width: rest.width + 40,
+          height: rest.height + 560 + 32,
+        },
+      });
+      const controlFrames = await trackControl(page, frames);
       return windows.map(window => ({tracked, control: controlFrames, window}));
     };
 
@@ -1328,6 +1314,34 @@ test.describe('frame evidence', () => {
     });
     expect(pooled.verdict.failures, pooled.summary).toEqual([]);
 
+    // The same runs with the control taken out of the last blocks. A starved
+    // run is named and left out. With too few judged runs, the pool fails.
+    const starve = (count: number) =>
+      pooledBusyProof(
+        compositor.map((run, i) =>
+          i < compositor.length - count
+            ? run
+            : {
+                ...run,
+                control: run.control.map(frame =>
+                  frame.t >= run.window.from && frame.t <= run.window.to
+                    ? {...frame, box: null}
+                    : frame,
+                ),
+              },
+        ),
+        {axis: 'y'},
+      );
+    const lastStarved = starve(1);
+    expect(lastStarved.judged[5], lastStarved.summary).toBe(false);
+    expect(lastStarved.summary).toMatch(
+      /; run 6: too little to judge, the control moved on 0 frames/,
+    );
+    const oneLeft = starve(5);
+    expect(oneLeft.verdict.failures.join('\n'), oneLeft.summary).toMatch(
+      /[01] of 6 runs judged, under 3/,
+    );
+
     // The mutant: a main-thread animation freezes in every block.
     const raf = pooledBusyProof(await runs('raf'), {axis: 'y'});
     testInfo.annotations.push({
@@ -1336,7 +1350,7 @@ test.describe('frame evidence', () => {
     });
     expect(raf.verdict.pass, raf.summary).toBe(false);
     expect(raf.verdict.failures.join('\n')).toMatch(
-      /moved on \d+ of the \d+ frames the control moved over 6 runs/,
+      /moved on \d+ of the \d+ frames the control moved over (6 runs|the \d judged runs of 6)/,
     );
 
     // A frame-counted loop stalls in every block too and then steps on, one
