@@ -548,6 +548,51 @@ describe('swizzle.copy — helpers an earlier swizzle wrote (spec:AST-110 FR2)',
   );
 });
 
+describe('swizzle.copy — the npm packages a copy imports (spec:AST-110 FR1)', () => {
+  /** @type {string} */
+  let project;
+  beforeEach(() => {
+    project = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-swizzle-deps-'));
+    fs.writeFileSync(path.join(project, 'package.json'), JSON.stringify({name: 'consumer', version: '1.0.0'}));
+    const core = path.join(project, 'node_modules/@astryxdesign/core');
+    fs.mkdirSync(path.join(core, 'src/Chart'), {recursive: true});
+    fs.writeFileSync(
+      path.join(core, 'package.json'),
+      JSON.stringify({
+        name: '@astryxdesign/core',
+        version: '1.0.0',
+        dependencies: {'d3-scale': '^4.0.2'},
+        peerDependencies: {react: '^19.0.0'},
+      }),
+    );
+    fs.writeFileSync(path.join(core, 'src/Chart/index.ts'), "export {Chart} from './Chart';\n");
+    fs.writeFileSync(
+      path.join(core, 'src/Chart/Chart.tsx'),
+      [
+        "import {scaleLinear} from 'd3-scale';",
+        "import type {ReactNode} from 'react';",
+        "import {readFileSync} from 'node:fs';",
+        "import {join} from 'path';",
+        "import {undeclared} from '@acme/undeclared/sub';",
+        'export const Chart = (): ReactNode => [scaleLinear, readFileSync, join, undeclared] && null;',
+        '',
+      ].join('\n'),
+    );
+  });
+  afterEach(() => {
+    fs.rmSync(project, {recursive: true, force: true});
+  });
+
+  it('reports each package with the range the owner declares, and never Node built-ins', async () => {
+    const r = await swizzle('Chart', {cwd: project});
+    expect(r.data.dependencies).toEqual({
+      '@acme/undeclared': '*',
+      'd3-scale': '^4.0.2',
+      react: '^19.0.0',
+    });
+  });
+});
+
 describe('swizzle.copy — a name the package exports only as a type (spec:AST-110 FR1)', () => {
   /** @type {string} */
   let project;
