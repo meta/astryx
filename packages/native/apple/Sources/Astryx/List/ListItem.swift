@@ -89,7 +89,7 @@ public struct ListItem<StartContent: View, EndContent: View>: View {
     return ItemListTreatment(
       markerOnFirstLine: list.marker != nil,
       inlineInset: list.isFlush ? 0 : nil,
-      squareCorners: list.hasDividers)
+      squareCorners: list.hasDividers || list.isBleed)
   }
 
   /// The list's marker for this row: a dot, a ring, or its number.
@@ -186,6 +186,9 @@ struct ListContext: Equatable {
   var hasDividers: Bool
   var isFlush: Bool
   var marker: Marker?
+  /// A `bleed` list: its rows reach the host's padding edge with square
+  /// corners. No Swift container publishes an inset yet, so the reach is zero.
+  var isBleed: Bool = false
 }
 
 private struct ListContextKey: EnvironmentKey {
