@@ -7,6 +7,7 @@
  */
 
 import * as fs from 'node:fs';
+import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {render, screen} from '@testing-library/react';
@@ -90,6 +91,68 @@ describe('contexts shared by a swizzled copy and the package', () => {
     );
     // Group state stops at the layer boundary, as it does with the package alone.
     expect(screen.getByTestId('probe').textContent).toBe('false');
+  });
+});
+
+describe('two Reacts in one process', () => {
+  /**
+   * A second instance of React, as a server that loads two React copies has.
+   * Node keeps one instance per resolved file, so drop React's files from
+   * the require cache, load it again, then put the first instance back.
+   */
+  function secondReact(): typeof import('react') {
+    const require = createRequire(import.meta.url);
+    const isReactFile = (file: string) =>
+      /[\\/]node_modules[\\/]react[\\/]/.test(file);
+    const saved = Object.keys(require.cache)
+      .filter(isReactFile)
+      .map(file => [file, require.cache[file]] as const);
+    for (const [file] of saved) {
+      Reflect.deleteProperty(require.cache, file);
+    }
+    try {
+      return require('react') as typeof import('react');
+    } finally {
+      for (const [file, module] of saved) {
+        require.cache[file] = module;
+      }
+    }
+  }
+
+  /** The shared-context module as it loads on `react`. */
+  async function sharedContextOn(react: typeof import('react')) {
+    vi.resetModules();
+    vi.doMock('react', () => ({...react, default: react}));
+    try {
+      return await import('../utils/sharedContext');
+    } finally {
+      vi.doUnmock('react');
+    }
+  }
+
+  it('gives each React its own context under a key, and one per React', async () => {
+    const otherReact = secondReact();
+    expect(otherReact.createContext).not.toBe(
+      (await import('react')).createContext,
+    );
+    const onThisReact = await freshInstance(
+      async () => import('../utils/sharedContext'),
+    );
+    const copyOnThisReact = await freshInstance(
+      async () => import('../utils/sharedContext'),
+    );
+    const onOtherReact = await sharedContextOn(otherReact);
+    const name = 'TwoReactsProbe';
+    const context = onThisReact.createSharedContext(name, 1, 'default');
+    // Two copies of Core on one React share the context.
+    expect(copyOnThisReact.createSharedContext(name, 1, 'default')).toBe(
+      context,
+    );
+    // A copy on another React gets its own, so a request it renders never
+    // reads a value a request on this React provided.
+    const other = onOtherReact.createSharedContext(name, 1, 'default');
+    expect(other).not.toBe(context);
+    expect(onOtherReact.createSharedContext(name, 1, 'default')).toBe(other);
   });
 });
 

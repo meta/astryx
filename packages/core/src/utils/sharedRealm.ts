@@ -10,9 +10,9 @@
  */
 
 /**
- * The registered key of a shared value. The version is the protocol of the
- * value's shape: change it when a copy built against the old shape can no
- * longer read the value, so the two keep values of their own.
+ * The registered key of a shared value. The version names the value's shape.
+ * Change it when a copy built against the old shape cannot read the value.
+ * Each copy then keeps its own value.
  */
 export function sharedKey(name: string, version: number): symbol {
   return Symbol.for(`@astryxdesign/core/${name}/v${version}`);
