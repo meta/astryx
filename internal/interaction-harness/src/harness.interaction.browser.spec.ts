@@ -1925,6 +1925,83 @@ test.describe('frame evidence', () => {
     expect(numbers.longestGapMs).toBeGreaterThan(FRAME_STARVATION_MS);
   });
 
+  test('waitForRest on a page starved of frames fails by name, and an element still in motion still says so', async ({
+    page,
+  }) => {
+    await page.setContent(
+      '<!doctype html><div id="box" style="width:40px;height:40px;background:#000"></div>',
+    );
+    const box = page.locator('#box');
+    await waitForRest(box, {timeout: 1000});
+    // Motion at the deadline, on pace.
+    await box.evaluate(el =>
+      el.animate(
+        [{transform: 'translateX(0)'}, {transform: 'translateX(100px)'}],
+        {duration: 3000},
+      ),
+    );
+    await expect(waitForRest(box, {timeout: 500})).rejects.toThrow(
+      /waitForRest: still moving \(/,
+    );
+    await box.evaluate(el => {
+      for (const animation of el.getAnimations()) {
+        animation.cancel();
+      }
+    });
+    // Script motion every third frame, with one 120 ms long task early in
+    // the wait. Still frames between the moves are no starvation, and nor is
+    // a gap long before the deadline.
+    await box.evaluate(el => {
+      let n = 0;
+      const step = () => {
+        n += 1;
+        if (n % 3 === 0) {
+          (el as HTMLElement).style.transform = `translateX(${n % 90}px)`;
+        }
+        if (el.isConnected && el.id === 'box') {
+          requestAnimationFrame(step);
+        }
+      };
+      requestAnimationFrame(step);
+      setTimeout(() => {
+        const end = performance.now() + 120;
+        while (performance.now() < end) {
+          // the page's main thread is busy
+        }
+      }, 100);
+    });
+    await expect(waitForRest(box, {timeout: 900})).rejects.toThrow(
+      /waitForRest: still moving \(/,
+    );
+    // Stops the script motion: the element rests again.
+    await box.evaluate(el => {
+      el.id = 'rested';
+      (el as HTMLElement).style.transform = '';
+    });
+    await waitForRest(page.locator('#rested'), {timeout: 1000});
+    await page.locator('#rested').evaluate(el => {
+      el.id = 'box';
+    });
+    // Each frame now comes 1,000 ms after the one before, as on a starved
+    // machine: the element rests, but too few frames come to tell.
+    await page.evaluate(() => {
+      const frame = window.requestAnimationFrame.bind(window);
+      window.requestAnimationFrame = callback => {
+        setTimeout(() => frame(callback), 1000);
+        return 0;
+      };
+    });
+    const outcome = await waitForRest(box, {timeout: 1500}).then(
+      () => 'resolved',
+      (error: unknown) => error,
+    );
+    expect(outcome).toBeInstanceOf(FrameStarvationError);
+    const {numbers} = outcome as FrameStarvationError;
+    expect(numbers.frames).toBeLessThan(3);
+    expect(numbers.longestGapMs).toBeGreaterThan(FRAME_STARVATION_MS);
+    expect((outcome as Error).message).toMatch(/^waitForRest: the page drew /);
+  });
+
   test('the trace counts no Layout for a transform animation and one per frame for `top`', async ({
     page,
     browserName,
