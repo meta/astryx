@@ -24,7 +24,9 @@ import {
 import {
   frames,
   openStory,
+  requireFrames,
   waitForRest,
+  webInputDriver,
   withStorybook,
 } from '@astryxdesign/interaction-harness';
 
@@ -44,6 +46,20 @@ function photoSvg(width: number, height: number): string {
 interface Point {
   x: number;
   y: number;
+}
+
+/** The gap from the photo's bottom edge to its stage's, read by the page. */
+interface EdgeSample {
+  /** After a scroll event, on a frame, or at the stream's end. */
+  kind: 'event' | 'frame' | 'end';
+  /** When the page read it, page ms. */
+  t: number;
+  gap: number;
+}
+
+interface EdgeRecord {
+  samples: EdgeSample[];
+  stop: () => void;
 }
 
 /** Opens a story's viewer in a desktop context: a mouse, no touch. */
@@ -193,7 +209,7 @@ test("a trackpad's scroll stops a zoomed photo at its edge, with no give, as a m
   browserName,
 }) => {
   test.skip(browserName !== 'webkit', WHEEL_DRIVERS);
-  const {wheel, context, page, dialog, img, centre} = await openDesktop(
+  const {context, page, dialog, img, centre} = await openDesktop(
     browser,
     'with-zoom',
   );
@@ -210,16 +226,67 @@ test("a trackpad's scroll stops a zoomed photo at its edge, with no give, as a m
     // Zoomed 2×, the photo reaches well past the stage's bottom edge.
     expect(await gap()).toBeLessThan(-100);
     await page.mouse.move(centre.x, centre.y);
-    // A trackpad's stream that runs far past the photo's bottom edge.
-    const gaps: number[] = [];
-    for (let i = 0; i < 60; i += 1) {
-      await wheel(0, 12);
-      gaps.push(await gap());
-    }
+    // The page records the gap after every scroll event it receives, once
+    // the stage's own listener has panned the photo, and on every frame.
+    await img.evaluate(el => {
+      const stage = el.parentElement as HTMLElement;
+      const samples: EdgeSample[] = [];
+      const read = (kind: EdgeSample['kind']) => {
+        samples.push({
+          kind,
+          t: performance.now(),
+          gap:
+            stage.getBoundingClientRect().bottom -
+            el.getBoundingClientRect().bottom,
+        });
+      };
+      const onWheel = () => read('event');
+      // On the window, the event's last stop: after the stage's listener.
+      window.addEventListener('wheel', onWheel, {passive: true});
+      let recording = true;
+      const look = () => {
+        if (recording) {
+          read('frame');
+          requestAnimationFrame(look);
+        }
+      };
+      requestAnimationFrame(look);
+      (window as unknown as {edgeRecord?: EdgeRecord}).edgeRecord = {
+        samples,
+        stop: () => {
+          recording = false;
+          window.removeEventListener('wheel', onWheel);
+          read('end');
+        },
+      };
+    });
+    // A trackpad's stream that runs far past the photo's bottom edge, sent on
+    // its own schedule rather than one awaited step at a time. Under a fine
+    // pointer each scroll event pans and stops at the edge by itself. So the
+    // stream need not reach the page as one gesture.
+    const driver = await webInputDriver(page);
+    await driver.wheelBurst({
+      ...centre,
+      steps: Array.from({length: 60}, () => ({dy: 12})),
+    });
+    const samples = await page.evaluate(() => {
+      const {edgeRecord} = window as unknown as {edgeRecord: EdgeRecord};
+      edgeRecord.stop();
+      return edgeRecord.samples;
+    });
+    const gaps = samples.map(sample => sample.gap);
     // The give past the edge belongs to the touch presentation. The photo's
     // edge stops at the stage's and stays there.
-    expect(Math.max(...gaps)).toBeLessThan(0.5);
+    expect(Math.max(...gaps), JSON.stringify(samples)).toBeLessThan(0.5);
     expect(gaps.at(-1)).toBeGreaterThan(-0.5);
+    // The stream went on pressing the photo against its edge: scroll events
+    // reached the page after the photo stopped there. WebKit merges the
+    // events it holds while the page is busy, so two are asked for.
+    requireFrames(samples, {
+      min: 2,
+      during: 'scroll events press the photo against its edge',
+      where: sample => sample.kind === 'event' && Math.abs(sample.gap) < 0.5,
+    });
     await waitForRest(img);
     expect(Math.abs(await gap())).toBeLessThan(0.5);
   } finally {

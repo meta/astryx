@@ -399,6 +399,7 @@ export function useTableSelection<T extends Record<string, unknown>>(
 
   return useMemo(
     (): TablePlugin<T> => ({
+      rowModel: 'flat',
       transformTableContext(children: ReactNode) {
         return (
           <SelectionStoreContext value={store}>
