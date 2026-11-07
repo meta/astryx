@@ -49,7 +49,7 @@ export const doc = {
       flag: '--default-variant <variant>',
       param: 'options.defaultVariant',
       description:
-        "With --variants: the variant each icon's own export draws. When omitted: in a library whose export names encode looks, the look the icons draw (the library's usual default for a new set), which --variants must list; otherwise the set's current default, which --variants must list when the set has icons, else the first variant. A set with icons changes it only with --from, and only in a library whose export names encode looks",
+        "With --variants: the variant each icon's own export draws. When omitted: in a library whose export names encode looks, the look the icons draw (the library's usual default for a new set), which --variants must list; otherwise the set's current default, which --variants must list when the set has icons, else, on a set without icons, the first variant. A set with icons changes it only with --from, and only in a library whose export names encode looks",
     },
     {
       flag: '--display-name <text>',

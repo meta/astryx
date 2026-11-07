@@ -294,7 +294,7 @@
  * @property {string} [from] - A module whose every icon component the set wraps: a package, a package subpath, or a ./ path in the package.
  * @property {string[] | string} [exclude] - With `from`: export names that are not icons; a string is split on commas.
  * @property {string[] | string} [variants] - The variants the set supplies, such as `outline,solid`; a string is split on commas.
- * @property {string} [defaultVariant] - With `variants`: the variant each icon's own export draws; when absent, the look the icons' exports draw in a library whose names encode looks; otherwise the set's current default, else the first variant. A set with icons changes it only with `from`, and only in a library whose names encode looks.
+ * @property {string} [defaultVariant] - With `variants`: the variant each icon's own export draws; when absent, the look the icons' exports draw in a library whose names encode looks; otherwise the set's current default, else, on a set without icons, the first variant. A set with icons changes it only with `from`, and only in a library whose names encode looks.
  * @property {string} [displayName] - The descriptor's display name; the set name in title case when absent.
  * @property {string} [description] - The descriptor's one-line description; `<Display name> icons.` when absent.
  */
