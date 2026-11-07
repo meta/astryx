@@ -1,5 +1,9 @@
 # @astryxdesign/richtext
 
+# 0.7.10
+
+---
+
 # 0.7.9
 
 #### Fixes

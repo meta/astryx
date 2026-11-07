@@ -877,6 +877,38 @@ describe('Timestamp', () => {
       expect(normalize(card.textContent ?? '')).toContain(normalize(expected));
     });
 
+    it('keeps the default hover-card row in the viewer zone with timezoneID set', async () => {
+      const user = userEvent.setup();
+      const originalTZ = process.env.TZ;
+      process.env.TZ = 'UTC';
+      try {
+        render(
+          <Timestamp
+            value={new Date('2026-03-25T10:00:00Z').getTime() / 1000}
+            format="relative"
+            timezoneID="Asia/Tokyo"
+            data-testid="ts"
+          />,
+        );
+        const el = screen.getByTestId('ts');
+        await user.tab();
+        expect(el).toHaveFocus();
+        await waitFor(() => {
+          expect(HTMLElement.prototype.showPopover).toHaveBeenCalled();
+        });
+        const card = screen.getByRole('dialog', {hidden: true});
+        // FR7: the default row reads the viewer's zone, not the pinned one.
+        expect(card.textContent).toContain('10:00:00');
+        expect(card.textContent).not.toContain('19:00:00');
+      } finally {
+        if (originalTZ === undefined) {
+          delete process.env.TZ;
+        } else {
+          process.env.TZ = originalTZ;
+        }
+      }
+    });
+
     it('does not add a tab stop when the hover card is disabled', () => {
       render(
         <Timestamp
@@ -1662,6 +1694,16 @@ describe('Timestamp server rendering', () => {
     vi.useRealTimers();
   });
 
+  const originalTZ = process.env.TZ;
+
+  afterEach(() => {
+    if (originalTZ === undefined) {
+      delete process.env.TZ;
+    } else {
+      process.env.TZ = originalTZ;
+    }
+  });
+
   it.each(['date', 'date_time', 'time', 'unix_seconds'] as const)(
     'never reads the current time for the absolute %s format',
     format => {
@@ -1716,16 +1758,6 @@ describe('Timestamp server rendering', () => {
   });
 
   describe('across time zones', () => {
-    const originalTZ = process.env.TZ;
-
-    afterEach(() => {
-      if (originalTZ === undefined) {
-        delete process.env.TZ;
-      } else {
-        process.env.TZ = originalTZ;
-      }
-    });
-
     it('writes the same server markup whatever the server time zone', () => {
       const element = (
         <Timestamp value="2026-03-25T10:00:00Z" format="relative" />
@@ -1789,6 +1821,145 @@ describe('Timestamp server rendering', () => {
       errors.mockRestore();
       act(() => root?.unmount());
       host.remove();
+    }
+  });
+
+  it('renders an explicit time zone identically whatever the host zone', () => {
+    // Oct 15 in UTC, Oct 14 in Los Angeles: without the prop the host zone
+    // decides which day renders.
+    const element = (
+      <Timestamp
+        value={1665792474000}
+        format="date"
+        timezoneID="UTC"
+        hasTooltip={false}
+      />
+    );
+    process.env.TZ = 'UTC';
+    const utc = renderToString(element);
+    expect(utc).toContain('Oct 15, 2022');
+    process.env.TZ = 'America/Los_Angeles';
+    expect(renderToString(element)).toBe(utc);
+    process.env.TZ = 'Asia/Tokyo';
+    expect(renderToString(element)).toBe(utc);
+  });
+
+  it('shifts the reading into the named zone', () => {
+    process.env.TZ = 'UTC';
+    const {rerender} = render(
+      <Timestamp
+        value={1665792474000}
+        format="date"
+        timezoneID="America/Los_Angeles"
+        hasTooltip={false}
+      />,
+    );
+    expect(screen.getByText('Oct 14, 2022')).toBeInTheDocument();
+    rerender(
+      <Timestamp
+        value={1665792474000}
+        format="date"
+        timezoneID="Asia/Tokyo"
+        hasTooltip={false}
+      />,
+    );
+    expect(screen.getByText('Oct 15, 2022')).toBeInTheDocument();
+  });
+
+  it('hydrates explicit-zone server markup from another host zone without a mismatch', () => {
+    const element = (
+      <Timestamp
+        value={1665792474000}
+        format="date_time"
+        timezoneID="UTC"
+        hasTooltip={false}
+      />
+    );
+    process.env.TZ = 'UTC';
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    host.innerHTML = renderToString(element);
+
+    process.env.TZ = 'America/Los_Angeles';
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let root: Root | undefined;
+    try {
+      act(() => {
+        root = hydrateRoot(host, element, {
+          onRecoverableError: error => {
+            throw error;
+          },
+        });
+      });
+      expect(host.textContent).toContain('Oct 15, 2022');
+      expect(errors).not.toHaveBeenCalled();
+    } finally {
+      errors.mockRestore();
+      act(() => root?.unmount());
+      host.remove();
+    }
+  });
+
+  it('keeps the UTC-labelled placeholder for a relative format with timezoneID', () => {
+    // FR3/ORD1: while the clock is pending the server placeholder is UTC
+    // with its label, whatever `timezoneID` pins.
+    const element = (
+      <Timestamp
+        value={new Date('2026-03-25T10:00:00Z').getTime() / 1000}
+        format="relative"
+        timezoneID="America/Los_Angeles"
+        hasTooltip={false}
+      />
+    );
+    process.env.TZ = 'America/Los_Angeles';
+    const html = renderToString(element);
+    expect(html).toContain('UTC');
+    expect(html).not.toContain('PDT');
+  });
+
+  it('ignores timezoneID in the relative accessible name', () => {
+    const value = Date.now() / 1000 - 3600;
+    const {rerender} = render(
+      <Timestamp
+        value={value}
+        format="relative"
+        hasTooltip={false}
+        data-testid="ts"
+      />,
+    );
+    const viewerLabel = screen.getByTestId('ts').getAttribute('aria-label');
+    rerender(
+      <Timestamp
+        value={value}
+        format="relative"
+        timezoneID="Asia/Tokyo"
+        hasTooltip={false}
+        data-testid="ts"
+      />,
+    );
+    expect(screen.getByTestId('ts').getAttribute('aria-label')).toBe(
+      viewerLabel,
+    );
+  });
+
+  it('falls back to the viewer zone on an unknown time zone', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      process.env.TZ = 'UTC';
+      render(
+        <Timestamp
+          value={1665792474000}
+          format="date"
+          timezoneID="Never/Whence"
+          hasTooltip={false}
+        />,
+      );
+      expect(screen.getByText('Oct 15, 2022')).toBeInTheDocument();
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('Never/Whence'),
+      );
+    } finally {
+      warn.mockRestore();
     }
   });
 });

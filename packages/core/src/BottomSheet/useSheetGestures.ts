@@ -64,8 +64,10 @@ import {
   type UIEvent as ReactUIEvent,
 } from 'react';
 
+import {resolveSnapPoint} from '../motion/resolveSnapPoint';
 import {rubberBand} from '../motion/rubberBand';
 import {scroll} from '../motion/uikit/scroll';
+import {sheet} from '../motion/uikit/sheet';
 import {
   computeDetentOffsets,
   peekOffsetFor,
@@ -1217,17 +1219,45 @@ export function useSheetGestures({
         setTouchDragDismissal({isTouch, pending: true, exit});
         onDismissRef.current();
       };
+      if (isTouch) {
+        // A touch release takes UIKit's sheet values, with closed counted as
+        // one position. A flick lands on the first position at or past its
+        // projection. A release that moves back toward where the drag began
+        // cancels to that detent.
+        const {
+          fastSpeed,
+          minProjectionSpeed,
+          projectionSeconds,
+          detentTolerance,
+        } = sheet.release;
+        const points = [...offsets, maxOffset + shortestDetentHeight];
+        const {index} = resolveSnapPoint({
+          points,
+          position: offset,
+          velocity: velocity * 1000,
+          flickThreshold: travel > DRAG_PROMOTION_SLOP ? fastSpeed : Infinity,
+          tolerance: detentTolerance,
+          flickPastProjection: true,
+          projection: {
+            seconds: projectionSeconds,
+            minSpeed: minProjectionSpeed,
+          },
+          start: baseOffset,
+        });
+        if (index === points.length - 1) {
+          closeSheet({
+            distance: Math.max(0, height - offset),
+            velocity: velocity * 1000,
+          });
+        } else {
+          settleAt(points[index]);
+        }
+        return;
+      }
       // A release that would coast past the dismiss line closes the sheet: a
       // throw from anywhere, or a slow drag that already crossed it.
       if (dir > 0 && projected > dismissOffset) {
-        closeSheet(
-          isTouch
-            ? {
-                distance: Math.max(0, height - offset),
-                velocity: velocity * 1000,
-              }
-            : null,
-        );
+        closeSheet(null);
         return;
       }
       // Settle to the detent nearest where the release would coast to, in the

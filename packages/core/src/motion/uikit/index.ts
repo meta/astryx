@@ -6,9 +6,9 @@
  * @output Re-exports `springs` and one constant per spring
  *   (`SHEET_PRESENT_SPRING`, …), and the `scroll`, `timing`, `navigation`,
  *   `picker`, `popover`, `progressBar`, `segmentedControl`, `datePicker`,
- *   `slider`, `switchControl` and `zoomMedia` domains. It also re-exports the
- *   gesture thresholds: one `UIKIT_*` group per recognizer, their union
- *   `UIKIT_GESTURES`, and the haptic tables
+ *   `sheet`, `slider`, `switchControl` and `zoomMedia` domains. It also
+ *   re-exports the gesture thresholds: one `UIKIT_*` group per recognizer,
+ *   their union `UIKIT_GESTURES`, and the haptic tables
  * @position Entry of the UIKit constants table (motion/uikit). Internal to
  *   core: not exported from the package entry point
  *
@@ -48,6 +48,7 @@ export {popover} from './popover';
 export {progressBar, registerProgressBarTable} from './progressBar';
 export {registerScrollTable, scroll} from './scroll';
 export {segmentedControl} from './segmented';
+export {sheet} from './sheet';
 export {slider} from './slider';
 export {
   ACTION_SHEET_DISMISS_SPRING,
