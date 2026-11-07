@@ -135,12 +135,17 @@ describe('WebKit interaction proof routing', () => {
     for (const [index, candidate] of webkit.steps.entries()) {
       if (index < 2 || guards.has(candidate.name)) continue;
       const gate = index <= counted ? applies : `${applies} && ${share}`;
-      // A leg whose plan holds no spec file runs no proofs.
-      expect(candidate.if, candidate.name ?? candidate.uses).toMatch(
-        new RegExp(
-          `^((always|failure)\\(\\) && )?${gate.replace(/[.()|]/g, '\\$&')}( && steps\\.plan\\.outputs\\.files != '0')?$`,
-        ),
-      );
+      // Only the hint and the evidence upload run after a failed step, and
+      // only the proofs and the hint wait for a plan with a spec file in it.
+      const planned = "steps.plan.outputs.files != '0'";
+      let expected = gate;
+      if (candidate.name === 'Run WebKit interaction proofs')
+        expected = `${gate} && ${planned}`;
+      if (candidate.name === 'Explain a failure on an older head')
+        expected = `failure() && ${gate} && steps.plan.outcome == 'success' && ${planned}`;
+      if (candidate.name === 'Upload WebKit interaction evidence')
+        expected = `always() && ${gate}`;
+      expect(candidate.if, candidate.name ?? candidate.uses).toBe(expected);
     }
     expect(step(webkit, 'Leave the proofs to the other legs').if).toBe(
       `${applies} && steps.legs.outputs.runs != 'true'`,

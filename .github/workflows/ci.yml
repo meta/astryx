@@ -2698,9 +2698,10 @@ jobs:
       # A proof that fails on a head older than main may fail for a reason
       # main already fixed. Name each newer main commit that changed a spec
       # this leg ran, or the harness, so the fix is to update the branch and
-      # not to retry or debug it.
+      # not to retry or debug it. It runs only after this leg's plan
+      # succeeded: a failed plan leaves no spec list to read.
       - name: Explain a failure on an older head
-        if: failure() && steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true' && steps.plan.outputs.files != '0'
+        if: failure() && steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true' && steps.plan.outcome == 'success' && steps.plan.outputs.files != '0'
         continue-on-error: true
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
@@ -2720,12 +2721,15 @@ jobs:
   # of every iOS browser, for the code where WebKit and Chromium differ on
   # touch: the gesture host and recognizers, the motion runtime, the touch and
   # press helpers, the menu press model and the pager, plus the harness and the
-  # shared setup that runs them (spec:AST-030 FR13). The run is limited to the specs
-  # whose bundles reach only that same code, so a WebKit break elsewhere never
-  # turns an unrelated pull request red; the motion adopters spec renders
-  # Storybook components and stays with the Chromium proofs. Out of scope every step after the scope step skips and
-  # the job reports success, so the `test` join reads it without a new
-  # required context. Specs that need Chromium-only evidence skip themselves
+  # shared setup that runs them (spec:AST-030 FR13). A pull request runs the
+  # specs whose bundles reach only that same code, the interaction specs it
+  # changes, and the specs in the folder of any component code it changes, so
+  # a WebKit break elsewhere never turns an unrelated pull request red; the
+  # motion adopters spec renders Storybook components and stays with the
+  # Chromium proofs. A release interaction check (an `interaction-check/`
+  # branch from the release tooling) runs every spec (spec:AST-030 FR28).
+  # Out of scope every step after the scope step skips and the job reports
+  # success, so the `test` join reads it without a new required context. Specs that need Chromium-only evidence skip themselves
   # in WebKit.
   pr-interaction-webkit:
     name: pr-interaction-webkit (${{ matrix.leg }}/${{ strategy.job-total }})
@@ -3005,9 +3009,10 @@ jobs:
       # A proof that fails on a head older than main may fail for a reason
       # main already fixed. Name each newer main commit that changed a spec
       # this leg ran, or the harness, so the fix is to update the branch and
-      # not to retry or debug it.
+      # not to retry or debug it. It runs only after this leg's plan
+      # succeeded: a failed plan leaves no spec list to read.
       - name: Explain a failure on an older head
-        if: failure() && steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true' && steps.plan.outputs.files != '0'
+        if: failure() && steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true' && steps.plan.outcome == 'success' && steps.plan.outputs.files != '0'
         continue-on-error: true
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
