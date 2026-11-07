@@ -92,6 +92,34 @@ describe('satisfiesRange', () => {
     expect(satisfiesRange('0.11.0', '^0.10')).toBe(false);
   });
 
+  it('widens a partial caret target to the parts given', () => {
+    expect(satisfiesRange('0.5.0', '^0')).toBe(true);
+    expect(satisfiesRange('0.0.3', '^0')).toBe(true);
+    expect(satisfiesRange('1.0.0', '^0')).toBe(false);
+    expect(satisfiesRange('0.0.3', '^0.0')).toBe(true);
+    expect(satisfiesRange('0.1.0', '^0.0')).toBe(false);
+    // A full 0.0.x target stays locked to that patch.
+    expect(satisfiesRange('0.0.4', '^0.0.3')).toBe(false);
+  });
+
+  it('handles hyphen ranges as inclusive bounds', () => {
+    expect(satisfiesRange('1.5.0', '1.0.0 - 2.0.0')).toBe(true);
+    expect(satisfiesRange('1.0.0', '1.0.0 - 2.0.0')).toBe(true);
+    expect(satisfiesRange('2.0.0', '1.0.0 - 2.0.0')).toBe(true);
+    expect(satisfiesRange('2.0.1', '1.0.0 - 2.0.0')).toBe(false);
+    expect(satisfiesRange('0.9.9', '1.0.0 - 2.0.0')).toBe(false);
+    expect(satisfiesRange('3.0.0', '1.0.0 - 2.0.0 || >=3')).toBe(true);
+  });
+
+  it('reads a partial upper bound in a hyphen range as its whole series', () => {
+    expect(satisfiesRange('2.9.9', '1.0.0 - 2')).toBe(true);
+    expect(satisfiesRange('3.0.0', '1.0.0 - 2')).toBe(false);
+    expect(satisfiesRange('2.3.9', '1.2.3 - 2.3')).toBe(true);
+    expect(satisfiesRange('2.4.0', '1.2.3 - 2.3')).toBe(false);
+    expect(satisfiesRange('0.8.3', '0.7.0 - 0.8')).toBe(true);
+    expect(satisfiesRange('22.14.0', '20 - 22')).toBe(true);
+  });
+
   it('handles exact, tilde, unions, and wildcards', () => {
     expect(satisfiesRange('1.2.3', '1.2.3')).toBe(true);
     expect(satisfiesRange('1.2.4', '1.2.3')).toBe(false);

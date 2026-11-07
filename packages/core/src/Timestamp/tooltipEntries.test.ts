@@ -21,7 +21,15 @@ import {formatTooltipLines as formatTooltipLinesForLocale} from './tooltipEntrie
 const formatTooltipLines = (
   date: Parameters<typeof formatTooltipLinesForLocale>[0],
   entries: Parameters<typeof formatTooltipLinesForLocale>[1],
-) => formatTooltipLinesForLocale(date, entries, 'en-US');
+  defaultTimezoneID?: Parameters<typeof formatTooltipLinesForLocale>[4],
+) =>
+  formatTooltipLinesForLocale(
+    date,
+    entries,
+    'en-US',
+    'gregory',
+    defaultTimezoneID,
+  );
 
 /** 2026-02-19T17:00:00Z — chosen so several zones land on different dates. */
 const INSTANT = new Date('2026-02-19T17:00:00Z');
@@ -75,6 +83,46 @@ describe('formatTooltipLines', () => {
     ]);
     expect(winter[0].value).toBe('2026-01-15 12:00:00');
     expect(summer[0].value).toBe('2026-07-15 13:00:00');
+  });
+
+  // A pinned default outside the host zone: on a UTC host (like CI) a 'UTC'
+  // default would pass even without inheritance, and on a Tokyo host Tokyo
+  // would. Sydney is daylight (+11) through February, so the instant below
+  // reads 04:00 on the 20th.
+  const PINNED =
+    LOCAL_ZONE === 'Asia/Tokyo' ? 'Australia/Sydney' : 'Asia/Tokyo';
+  const PINNED_SYSTEM_DATE_TIME =
+    PINNED === 'Asia/Tokyo' ? '2026-02-20 02:00:00' : '2026-02-20 04:00:00';
+
+  it('lets entries without a zone inherit the Timestamp timezoneID', () => {
+    const lines = formatTooltipLines(
+      INSTANT,
+      [{format: 'system_date_time'}],
+      PINNED,
+    );
+    expect(lines).toHaveLength(1);
+    expect(lines[0].value).toBe(PINNED_SYSTEM_DATE_TIME);
+  });
+
+  it('keeps an explicit local entry in the viewer zone under a default', () => {
+    const [local, named] = formatTooltipLines(
+      INSTANT,
+      [
+        {timezoneID: 'local', format: 'system_date_time'},
+        {timezoneID: LOCAL_ZONE, format: 'system_date_time'},
+      ],
+      PINNED,
+    );
+    expect(local.value).toBe(named.value);
+  });
+
+  it('counts the pinned zone when labelling a viewer-zone row', () => {
+    const entries = [{timezoneID: 'local', format: 'date_time'}] as const;
+    const [labelled] = formatTooltipLines(INSTANT, [...entries], PINNED);
+    const [unlabelled] = formatTooltipLines(INSTANT, [...entries]);
+    // Next to pinned text the viewer-zone row carries its abbreviation; alone
+    // it reads like the page and stays unmarked.
+    expect(labelled.value).not.toBe(unlabelled.value);
   });
 
   // --- The shared date vocabulary ---

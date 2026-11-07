@@ -8,8 +8,8 @@
  */
 
 import {describe, it, expect, vi, beforeAll} from 'vitest';
-import {useState} from 'react';
-import {render, screen, within, fireEvent} from '@testing-library/react';
+import {Suspense, startTransition, use, useState} from 'react';
+import {act, render, screen, within, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Table} from '../../Table';
 import {useTableColumnResize} from './useTableColumnResize';
@@ -952,5 +952,79 @@ describe('useTableColumnResize', () => {
       const headerRow = container.querySelector('thead tr') as HTMLElement;
       expect(headerRow.style.getPropertyValue('--resize-hint')).toBe('');
     });
+  });
+});
+
+// A render that reads this promise suspends for good.
+const pending = new Promise<never>(() => {});
+function Pending(): null {
+  use(pending);
+  return null;
+}
+
+interface ResizeState {
+  columnWidths: Record<string, number>;
+  onColumnResizeEnd: (updates: Record<string, number>) => void;
+}
+
+function PixelResizeTable({columnWidths, onColumnResizeEnd}: ResizeState) {
+  const resize = useTableColumnResize<TestItem>({
+    columnWidths,
+    onColumnResizeEnd,
+    columns: pixelColumns as TableColumn<Record<string, unknown>>[],
+  });
+  return (
+    <Table
+      data={testData}
+      columns={pixelColumns}
+      idKey="id"
+      plugins={{resize}}
+    />
+  );
+}
+
+function ControlledResizeTable({
+  isPending,
+  ...state
+}: ResizeState & {isPending: boolean}) {
+  return (
+    <Suspense fallback={null}>
+      <PixelResizeTable {...state} />
+      {isPending ? <Pending /> : null}
+    </Suspense>
+  );
+}
+
+describe('useTableColumnResize after a render React discards', () => {
+  it('a keyboard resize starts from the widths on screen and reports to the committed callback', async () => {
+    const committed: Record<string, number>[] = [];
+    const discarded: Record<string, number>[] = [];
+    const {rerender} = render(
+      <ControlledResizeTable
+        columnWidths={{name: 200}}
+        onColumnResizeEnd={updates => committed.push(updates)}
+        isPending={false}
+      />,
+    );
+    // The next props render in a transition, then suspend for good, so React
+    // keeps the committed tree and never commits that render.
+    await act(async () => {
+      startTransition(() => {
+        rerender(
+          <ControlledResizeTable
+            columnWidths={{name: 300}}
+            onColumnResizeEnd={updates => discarded.push(updates)}
+            isPending
+          />,
+        );
+      });
+    });
+    const handle = getResizeHandles()[0];
+    handle.focus();
+
+    fireEvent.keyDown(handle, {key: 'ArrowRight'});
+
+    expect(discarded).toEqual([]);
+    expect(committed).toEqual([{name: 210}]);
   });
 });

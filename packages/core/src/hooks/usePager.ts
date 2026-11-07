@@ -166,6 +166,12 @@ export interface PagerOptions {
    * @default 'viewport'
    */
   pages?: 'viewport' | 'children';
+  /**
+   * With `pages: 'children'`: the pages, measured by the owner in place of
+   * the children's rects. Snap paging moves the children themselves, so it
+   * reads their stops from layout.
+   */
+  measurePages?: () => ReadonlyArray<number>;
   /** Starting page. @default 0 */
   defaultIndex?: number;
   /**
@@ -202,6 +208,12 @@ export interface GoToOptions {
   animated?: boolean;
   /** @default 'goTo' */
   reason?: PagerChangeReason;
+  /**
+   * The content offset (px) the move ends at, in place of the page's own.
+   * The page stays the target: a finger that catches the move settles on the
+   * nearest page.
+   */
+  offset?: number;
 }
 
 export interface Pager {
@@ -290,15 +302,20 @@ function toTrackCurve(curve: MotionCurve, sign: number): MotionCurve {
   };
 }
 
+/** The animator calls a pager makes on its track. */
+export type PagerAnimator = Pick<
+  Animator,
+  'get' | 'getVelocity' | 'set' | 'play' | 'stop'
+>;
+
 /** What a pager runs on; tests pass their own clocked host and animator. */
 export interface PagerEnvironment {
   /** The gesture host; the document's shared host by default. */
   host?: GestureHost;
   /** The track's animator; `animatorFor(track)` by default. */
-  animator?: Animator;
-  /** Timers for the catch delay; the viewport's window's by default. */
+  animator?: PagerAnimator;
+  /** A task timer; the viewport's window's by default. */
   setTimeout?: (callback: () => void, ms: number) => unknown;
-  clearTimeout?: (handle: unknown) => void;
   /** The next animation frame; the viewport's window's by default. */
   requestFrame?: (callback: () => void) => void;
 }
@@ -377,6 +394,22 @@ class SettleCatcher extends LongPressGestureRecognizer {
 
   override get claimsTouches(): boolean {
     return false;
+  }
+
+  /**
+   * Calls `callback` `ms` after the touch, on the event clock, unless the
+   * touch ends first. The arena runs it before any input stamped later, so a
+   * busy page that delivers the touch and its lift together still runs it
+   * first. It takes the recognizer's one arena timer, which a press with no
+   * duration and no taps leaves free.
+   */
+  armCatch(ms: number, callback: () => void): void {
+    this.setTimer((this.beganAt ?? this.now()) + ms, callback);
+  }
+
+  /** Drops the catch that `armCatch` set, if it has not run. */
+  disarmCatch(): void {
+    this.clearTimer();
   }
 
   protected override touchesBegan(
@@ -467,10 +500,6 @@ export function createPager(
   const setTimer =
     environment.setTimeout ??
     ((callback: () => void, ms: number) => realm().setTimeout(callback, ms));
-  const clearTimer =
-    environment.clearTimeout ??
-    ((handle: unknown) =>
-      realm().clearTimeout(handle as ReturnType<typeof setTimeout>));
   const requestFrame =
     environment.requestFrame ??
     ((callback: () => void) => {
@@ -484,7 +513,7 @@ export function createPager(
   let options: PagerOptions = {...initial};
   let viewport: HTMLElement | null = null;
   let trackElement: HTMLElement | null = null;
-  let animator: Animator | null = null;
+  let animator: PagerAnimator | null = null;
   let pageWidth = 0;
   let isRtl = false;
   // With `pages: 'children'`, each page's offset (px, ascending), once
@@ -576,6 +605,10 @@ export function createPager(
    * scale: the rect's width over the track's used width.
    */
   function measureChildOffsets(): ReadonlyArray<number> {
+    if (options.measurePages != null) {
+      const measured = options.measurePages();
+      return measured.length > 0 ? measured : [0];
+    }
     const track = trackElement;
     if (viewport == null || track == null || track.children.length === 0) {
       return [0];
@@ -624,7 +657,7 @@ export function createPager(
   let dragStartIndex = 0;
   let dragPosition = 0;
   let suppressCancelSettle = false;
-  let catchTimer: unknown = null;
+  let isCatchTimerArmed = false;
   // Whether the finger now holding the track stopped a settle (not one that
   // ended on its own inside the catch window).
   let caughtSettle = false;
@@ -678,9 +711,9 @@ export function createPager(
   }
 
   function clearCatchTimer(): void {
-    if (catchTimer != null) {
-      clearTimer(catchTimer);
-      catchTimer = null;
+    if (isCatchTimerArmed) {
+      isCatchTimerArmed = false;
+      catcher.disarmCatch();
     }
   }
 
@@ -927,9 +960,11 @@ export function createPager(
     // flight ends there), as a paging scroll view does on rotation. A finger
     // that holds a caught track keeps it; its lift settles on the new offsets.
     if (!isDragging && !caughtSettle) {
+      // A settle cut short still ends, even on the page it left.
+      const wasSettling = settleHandle != null;
       stopSettle();
       animator?.set({x: positionToX(offsetOf(target))});
-      if (settled !== target) {
+      if (settled !== target || wasSettling) {
         rest();
       }
     }
@@ -1055,18 +1090,22 @@ export function createPager(
       holdSelection(true);
       clearCatchTimer();
       caughtSettle = false;
-      catchTimer = setTimer(() => {
-        catchTimer = null;
+      isCatchTimerArmed = true;
+      catcher.armCatch(paging.catchStopMs, () => {
+        if (!isCatchTimerArmed) {
+          return;
+        }
+        isCatchTimerArmed = false;
         if (settleHandle != null && !isDragging) {
           stopSettle();
           caughtSettle = true;
         }
-      }, paging.catchStopMs);
+      });
       return;
     }
     if (recognizer.state === 'ended' || recognizer.state === 'cancelled') {
       holdSelection(false);
-      if (catchTimer != null) {
+      if (isCatchTimerArmed) {
         // Lifted before the catch took hold: the settle runs on.
         clearCatchTimer();
         return;
@@ -1094,7 +1133,7 @@ export function createPager(
       deferringCallbacks(() => goTo(index, goToOptions));
       return;
     }
-    const {animated = true, reason = 'goTo'} = goToOptions;
+    const {animated = true, reason = 'goTo', offset} = goToOptions;
     let next = Math.round(index);
     if (isLooping()) {
       next = nearestLoopCopy(next, target, count());
@@ -1117,7 +1156,7 @@ export function createPager(
     }
     stopSettle();
     setTarget(next, reason);
-    const to = offsetOf(next);
+    const to = offset ?? offsetOf(next);
     if (!animated || animator == null || from === to) {
       animator?.set({x: positionToX(to)});
       rest();

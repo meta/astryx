@@ -32,9 +32,9 @@ import {useGestureRecognizer} from '../gestures/useGestureRecognizer';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {rubberBandInverse} from '../motion/rubberBand';
 import {resolveMotion} from '../motion/resolveMotion';
-import {picker, registerPickerTable} from '../motion/uikit/picker';
+import {picker} from '../motion/uikit/picker';
 import {registerScrollTable, scroll} from '../motion/uikit/scroll';
-import {registerTimingTable, timing} from '../motion/uikit/timing';
+import {registerSpringsTable, springs} from '../motion/uikit/springs';
 import {
   colorVars,
   fontWeightVars,
@@ -49,11 +49,11 @@ import {useOwnScrollGesture} from './useOwnScrollGesture';
 import {useWheelListbox} from './useWheelListbox';
 import {createWheelStrip, type PlayOptions} from './wheelStrip';
 import {
+  bounceCurve,
   dragOffset,
   nearestIndex,
   offsetBounds,
   planRelease,
-  spinCurve,
   type WheelCurve,
   type WheelLayout,
 } from './wheelPhysics';
@@ -158,20 +158,19 @@ const styles = stylex.create({
 });
 
 /**
- * The motion tables the wheel resolves internal roles from: the timing curve,
- * the scroll bounce and the picker's tap spin. Nothing registers on import
- * (motion/roles.ts) and each register is idempotent, so the wheel calls this
- * right before it resolves a role.
+ * The motion tables the wheel resolves its springs from: the scroll bounce
+ * and the shared springs. The spring rows register as their module loads,
+ * but the scroll table does not. Each register is idempotent, so the wheel
+ * calls this right before it resolves a role.
  */
 function registerWheelTables(): void {
-  registerTimingTable();
   registerScrollTable();
-  registerPickerTable();
+  registerSpringsTable();
 }
 
 /**
- * A turn onto `to` on the picker's tap spin: its duration and its curve, as
- * resolved under `column` when the turn starts.
+ * A turn onto `to` that a tap, a key or the program starts. The wheel's main
+ * interaction is a gesture, so every turn springs.
  */
 function turnCurve(
   column: Element | null,
@@ -179,11 +178,12 @@ function turnCurve(
   to: number,
 ): WheelCurve {
   registerWheelTables();
-  return spinCurve(
+  return bounceCurve(
     from,
+    0,
     to,
-    resolveMotion(column, picker.tapSpin, 'durationMs') / 1000,
-    resolveMotion(column, timing.curves.move),
+    UIKIT_SCALE,
+    resolveMotion(column, springs.settle),
   );
 }
 

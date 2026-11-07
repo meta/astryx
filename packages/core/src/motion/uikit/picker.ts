@@ -107,10 +107,13 @@ export const picker = {
 /**
  * Registers the tap spin's duration as an internal motion role,
  * `picker.tapSpin.durationMs`. Every other value stays an internal measured
- * constant. The tap spin's curve is the shared role `timing.curves.move`, and
- * the bounce at an end is `scroll.bounce`. Nothing registers on import, and
- * registering again does nothing.
+ * constant. The tap spin is the measured reference: the wheel's turns play
+ * `springs.settle`, and its bounce at an end is `scroll.bounce`. A page that
+ * plays no picker motion ships no picker registry. The module registers its
+ * own table at import (one idempotent in-memory write, no DOM).
  */
 export function registerPickerTable(): void {
   registerMotionTable('picker', picker, {roles: ['tapSpin.durationMs']});
 }
+
+registerPickerTable();

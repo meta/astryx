@@ -1499,6 +1499,44 @@ describe('useLayer', () => {
       expect(onTooltipShow).toHaveBeenCalledTimes(1);
     });
 
+    it('reports a close start as a hide starts, before its toggle: the browser\u2019s own hide and hide() alike', () => {
+      const {browserHide, runToggleTasks} = installBrowserHidePopoverApi();
+      const events: string[] = [];
+      function CloseStartHarness() {
+        const layer = useLayerInternal({
+          mode: 'context',
+          onCloseStart: () => events.push('close-start'),
+          onHide: () => events.push('hide'),
+        });
+        return (
+          <>
+            <button type="button" ref={layer.ref} onClick={layer.show}>
+              Trigger
+            </button>
+            <button type="button" onClick={layer.hide}>
+              Close
+            </button>
+            {layer.render(<span>Content</span>)}
+          </>
+        );
+      }
+      const {getByRole, getByText} = render(<CloseStartHarness />);
+      fireEvent.click(getByRole('button', {name: 'Trigger'}));
+      act(() => runToggleTasks());
+      expect(events).toEqual([]);
+      // The browser hides the popover itself, as a close watcher's Escape.
+      const popover = getByText('Content').closest<HTMLElement>('[popover]')!;
+      act(() => browserHide(popover));
+      expect(events).toEqual(['close-start']);
+      act(() => runToggleTasks());
+      expect(events).toEqual(['close-start', 'hide']);
+      // The hook's own hide() starts a close the same way, before its hide.
+      fireEvent.click(getByRole('button', {name: 'Trigger'}));
+      act(() => runToggleTasks());
+      fireEvent.click(getByRole('button', {name: 'Close'}));
+      expect(events).toEqual(['close-start', 'hide', 'close-start', 'hide']);
+    });
+
     it('opens a layer at once when the press that closed another one opens it after the hide has returned', () => {
       // A light dismiss runs at pointerup and the click that follows opens the
       // next layer in the same gesture: the browser accepts that show (its
@@ -1682,6 +1720,13 @@ describe('useLayer', () => {
         .map(name => name.trim())
         .filter(Boolean);
 
+    /** The close fade TopNavMegaMenu declares: the hidden layer stays shown. */
+    const declareCloseFade = (layer: HTMLElement) => {
+      layer.style.setProperty('transition-property', 'opacity, display');
+      layer.style.setProperty('transition-behavior', 'allow-discrete');
+      layer.style.setProperty('transition-duration', '0.2s');
+    };
+
     function SharedTriggerHarness({
       onReady,
     }: {
@@ -1772,6 +1817,329 @@ describe('useLayer', () => {
       expect(anchorNames(trigger)).toEqual([]);
     });
 
+    it('reads no animations when nothing keeps the hidden layer shown', () => {
+      let api = {show: () => {}, hide: () => {}};
+      const {getByRole, container} = render(
+        <SwappedTriggerHarness second={false} onReady={a => (api = a)} />,
+      );
+      const trigger = getByRole('button', {name: 'First'});
+      const layer = container.querySelector('[popover]') as HTMLElement;
+      // Without a discrete `display` transition the layer stops painting as
+      // it hides. Reading the animations would lay the page out once more.
+      layer.style.setProperty('transition-property', 'opacity, overlay');
+      layer.style.setProperty('transition-behavior', 'allow-discrete');
+      layer.style.setProperty('transition-duration', '0.2s');
+      const read = vi.fn((): Animation[] => []);
+      layer.getAnimations = read;
+      act(() => api.show());
+      act(() => api.hide());
+      expect(read).not.toHaveBeenCalled();
+      expect(anchorNames(trigger)).toEqual([]);
+
+      act(() => api.show());
+      act(() => {
+        layer.dispatchEvent(
+          Object.assign(new Event('toggle'), {
+            oldState: 'open',
+            newState: 'closed',
+          }),
+        );
+      });
+      expect(read).not.toHaveBeenCalled();
+      expect(anchorNames(trigger)).toEqual([]);
+    });
+
+    it('reads the animations of a layer whose closed state alone declares a keyframe animation', () => {
+      let api = {show: () => {}, hide: () => {}};
+      const {container} = render(
+        <SwappedTriggerHarness second={false} onReady={a => (api = a)} />,
+      );
+      const layer = container.querySelector('[popover]') as HTMLElement;
+      const read = vi.fn((): Animation[] => []);
+      layer.getAnimations = read;
+      // An entrance that both states declare: the hide stops it.
+      layer.style.setProperty('animation-name', 'layer-enter');
+      act(() => api.show());
+      act(() => api.hide());
+      expect(read).not.toHaveBeenCalled();
+
+      // An exit that only the closed state declares starts at the close, and
+      // it can animate `display`.
+      layer.style.setProperty('animation-name', 'layer-exit');
+      const show = vi.spyOn(layer, 'showPopover').mockImplementation(() => {
+        layer.style.setProperty('animation-name', 'layer-enter');
+      });
+      act(() => api.show());
+      act(() => api.hide());
+      expect(read).toHaveBeenCalledTimes(1);
+      show.mockRestore();
+    });
+
+    it('reads the close transition from the closed state\u2019s style', async () => {
+      let api = {show: () => {}, hide: () => {}};
+      const {getByRole, container} = render(
+        <SwappedTriggerHarness second={false} onReady={a => (api = a)} />,
+      );
+      const trigger = getByRole('button', {name: 'First'});
+      const layer = container.querySelector('[popover]') as HTMLElement;
+      // An instant open and a fading close: only the closed state declares
+      // the transition.
+      declareCloseFade(layer);
+      vi.spyOn(layer, 'showPopover').mockImplementation(() => {
+        layer.style.setProperty('transition-duration', '0s');
+      });
+      let end = () => {};
+      const finished = new Promise<void>(resolve => {
+        end = resolve;
+      });
+      layer.getAnimations = () =>
+        [
+          {
+            finished,
+            playState: 'running',
+            effect: {getComputedTiming: () => ({endTime: 200})},
+          },
+        ] as unknown as Animation[];
+      act(() => api.show());
+      act(() => api.hide());
+      expect(anchorNames(trigger)).toHaveLength(1);
+      await act(async () => {
+        end();
+        await finished;
+      });
+      expect(anchorNames(trigger)).toEqual([]);
+    });
+
+    const closing = () =>
+      Object.assign(new Event('beforetoggle'), {
+        oldState: 'open',
+        newState: 'closed',
+      });
+
+    // The layer's own transition, set on its style while it is closed.
+    function declareTransition(
+      layer: HTMLElement,
+      transition: {
+        property: string;
+        behavior: string;
+        duration: string;
+        delay: string;
+      },
+    ) {
+      layer.style.setProperty('transition-property', transition.property);
+      layer.style.setProperty('transition-behavior', transition.behavior);
+      layer.style.setProperty('transition-duration', transition.duration);
+      layer.style.setProperty('transition-delay', transition.delay);
+    }
+
+    // A running exit animation that ends when `end` is called.
+    function exitAnimation() {
+      let end = () => {};
+      const finished = new Promise<void>(resolve => {
+        end = resolve;
+      });
+      const animation = {
+        finished,
+        playState: 'running',
+        effect: {getComputedTiming: () => ({endTime: 200})},
+      } as unknown as Animation;
+      return {animation, finished, end: () => end()};
+    }
+
+    it('drops the name inside our hide, in the layer\u2019s beforetoggle, and reads no animations after the hide', () => {
+      let api = {show: () => {}, hide: () => {}};
+      const {getByRole, container} = render(
+        <SwappedTriggerHarness second={false} onReady={a => (api = a)} />,
+      );
+      const trigger = getByRole('button', {name: 'First'});
+      const layer = container.querySelector('[popover]') as HTMLElement;
+      const getAnimations = vi.fn(() => [] as Animation[]);
+      layer.getAnimations = getAnimations;
+      // A browser fires `beforetoggle` inside the hide, before the hide's own
+      // layout.
+      let namesInHide: string[] = [];
+      const hidePopover = vi
+        .spyOn(layer, 'hidePopover')
+        .mockImplementation(() => {
+          layer.dispatchEvent(closing());
+          namesInHide = anchorNames(trigger);
+        });
+      try {
+        act(() => api.show());
+        act(() => api.hide());
+        expect(namesInHide).toEqual([]);
+        expect(anchorNames(trigger)).toEqual([]);
+        // Nothing keeps the hidden layer shown, so the release reads nothing.
+        expect(getAnimations).not.toHaveBeenCalled();
+      } finally {
+        hidePopover.mockRestore();
+      }
+    });
+
+    it('keeps the name through the beforetoggle of a close the browser runs itself, and releases it from the toggle event', async () => {
+      let api = {show: () => {}, hide: () => {}};
+      const {getByRole, container} = render(
+        <SwappedTriggerHarness second={false} onReady={a => (api = a)} />,
+      );
+      const trigger = getByRole('button', {name: 'First'});
+      const layer = container.querySelector('[popover]') as HTMLElement;
+      const toggle = () =>
+        act(() => {
+          layer.dispatchEvent(
+            Object.assign(new Event('toggle'), {
+              oldState: 'open',
+              newState: 'closed',
+            }),
+          );
+        });
+      const exit = exitAnimation();
+      layer.getAnimations = () => [exit.animation];
+
+      // No exit: the toggle releases the name.
+      act(() => api.show());
+      act(() => {
+        layer.dispatchEvent(closing());
+      });
+      expect(anchorNames(trigger)).toHaveLength(1);
+      toggle();
+      expect(anchorNames(trigger)).toEqual([]);
+
+      // A close fade: the name stays until the fade ends.
+      declareCloseFade(layer);
+      act(() => api.show());
+      act(() => {
+        layer.dispatchEvent(closing());
+      });
+      toggle();
+      expect(anchorNames(trigger)).toHaveLength(1);
+      await act(async () => {
+        exit.end();
+        await exit.finished;
+      });
+      expect(anchorNames(trigger)).toEqual([]);
+    });
+
+    it('keeps the name through our hide for a layer whose closed state alone declares the fade, until the fade ends', async () => {
+      let api = {show: () => {}, hide: () => {}};
+      const {getByRole, container} = render(
+        <SwappedTriggerHarness second={false} onReady={a => (api = a)} />,
+      );
+      const trigger = getByRole('button', {name: 'First'});
+      const layer = container.querySelector('[popover]') as HTMLElement;
+      // An instant open and a fading close: only the closed state declares
+      // the transition.
+      declareCloseFade(layer);
+      vi.spyOn(layer, 'showPopover').mockImplementation(() => {
+        layer.style.setProperty('transition-duration', '0s');
+      });
+      const exit = exitAnimation();
+      layer.getAnimations = () => [exit.animation];
+      let namesInHide: string[] = [];
+      const hidePopover = vi
+        .spyOn(layer, 'hidePopover')
+        .mockImplementation(() => {
+          layer.dispatchEvent(closing());
+          namesInHide = anchorNames(trigger);
+        });
+      try {
+        act(() => api.show());
+        act(() => api.hide());
+        expect(namesInHide).toHaveLength(1);
+        // Still painting, so still placed against its trigger.
+        expect(anchorNames(trigger)).toHaveLength(1);
+        await act(async () => {
+          exit.end();
+          await exit.finished;
+        });
+        expect(anchorNames(trigger)).toEqual([]);
+      } finally {
+        hidePopover.mockRestore();
+      }
+    });
+
+    it.each([
+      {
+        transition: {
+          property: 'opacity, display, overlay',
+          behavior: 'normal, allow-discrete, allow-discrete',
+          duration: '0.2s',
+          delay: '0s',
+        },
+        keepsShown: true,
+      },
+      {
+        transition: {
+          property: 'all',
+          behavior: 'allow-discrete',
+          duration: '150ms',
+          delay: '0s',
+        },
+        keepsShown: true,
+      },
+      {
+        transition: {
+          property: 'display',
+          behavior: 'normal',
+          duration: '0.2s',
+          delay: '0s',
+        },
+        keepsShown: false,
+      },
+      {
+        transition: {
+          property: 'display',
+          behavior: 'allow-discrete',
+          duration: '0s',
+          delay: '0s',
+        },
+        keepsShown: false,
+      },
+      {
+        transition: {
+          property: 'opacity',
+          behavior: 'allow-discrete',
+          duration: '0.2s',
+          delay: '0s',
+        },
+        keepsShown: false,
+      },
+      {
+        transition: {
+          property: 'overlay',
+          behavior: 'allow-discrete',
+          duration: '0.2s',
+          delay: '0s',
+        },
+        keepsShown: false,
+      },
+    ])(
+      'in our hide\u2019s beforetoggle, keeps the name only for a layer its closed state keeps shown: $transition.property $transition.duration $transition.behavior',
+      ({transition, keepsShown}) => {
+        let api = {show: () => {}, hide: () => {}};
+        const {getByRole, container} = render(
+          <SwappedTriggerHarness second={false} onReady={a => (api = a)} />,
+        );
+        const trigger = getByRole('button', {name: 'First'});
+        const layer = container.querySelector('[popover]') as HTMLElement;
+        declareTransition(layer, transition);
+        layer.getAnimations = () => [];
+        let namesInHide: string[] = [];
+        const hidePopover = vi
+          .spyOn(layer, 'hidePopover')
+          .mockImplementation(() => {
+            layer.dispatchEvent(closing());
+            namesInHide = anchorNames(trigger);
+          });
+        try {
+          act(() => api.show());
+          act(() => api.hide());
+          expect(namesInHide).toHaveLength(keepsShown ? 1 : 0);
+        } finally {
+          hidePopover.mockRestore();
+        }
+      },
+    );
+
     it('keeps the name while the layer fades out, and for a show during the fade', async () => {
       let api = {show: () => {}, hide: () => {}};
       const {getByRole, container} = render(
@@ -1780,6 +2148,7 @@ describe('useLayer', () => {
       const trigger = getByRole('button', {name: 'First'});
       const layer = container.querySelector('[popover]') as HTMLElement;
       // A close fade the browser runs after the hide, as TopNavMegaMenu's.
+      declareCloseFade(layer);
       const fade = () => {
         let end = () => {};
         const finished = new Promise<void>(resolve => {
@@ -1824,6 +2193,7 @@ describe('useLayer', () => {
         <SwappedTriggerHarness second={false} onReady={a => (api = a)} />,
       );
       const layer = container.querySelector('[popover]') as HTMLElement;
+      declareCloseFade(layer);
       let end = () => {};
       const finished = new Promise<void>(resolve => {
         end = resolve;
@@ -1856,6 +2226,7 @@ describe('useLayer', () => {
       );
       const trigger = getByRole('button', {name: 'First'});
       const layer = container.querySelector('[popover]') as HTMLElement;
+      declareCloseFade(layer);
       let end = () => {};
       const finished = new Promise<void>(resolve => {
         end = resolve;
@@ -1904,6 +2275,7 @@ describe('useLayer', () => {
       const trigger = getByRole('button', {name: 'First'});
       const layer = container.querySelector('[popover]') as HTMLElement;
       // A paused animation never finishes, so it must not hold the name.
+      declareCloseFade(layer);
       layer.getAnimations = () =>
         [
           {
@@ -1924,6 +2296,7 @@ describe('useLayer', () => {
       );
       const trigger = getByRole('button', {name: 'First'});
       const layer = container.querySelector('[popover]') as HTMLElement;
+      declareCloseFade(layer);
       layer.getAnimations = () =>
         [
           {
@@ -2694,6 +3067,38 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
 
   const TRIGGER = rect(300, 400, 30, 100);
 
+  /**
+   * An intersection report as an engine makes it: the target's box, and the
+   * root's box, which is the viewport shrunk by the observer's root margin.
+   */
+  function report(
+    options: IntersectionObserverInit | undefined,
+    box: DOMRect,
+    intersectionRatio: number,
+    isIntersecting = intersectionRatio > 0,
+    viewport = {
+      width: document.documentElement.clientWidth,
+      height: document.documentElement.clientHeight,
+    },
+  ) {
+    const [top = 0, right = 0, bottom = 0, left = 0] = (
+      options?.rootMargin ?? '0px 0px 0px 0px'
+    )
+      .split(' ')
+      .map(value => -parseFloat(value));
+    return {
+      intersectionRatio,
+      isIntersecting,
+      boundingClientRect: box,
+      rootBounds: rect(
+        top,
+        left,
+        viewport.height - bottom - top,
+        viewport.width - right - left,
+      ),
+    } as unknown as IntersectionObserverEntry;
+  }
+
   /** Let the next animation frame run, as the browser does before it paints. */
   async function nextFrame() {
     await act(
@@ -2967,7 +3372,7 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
 
   it('re-reads its geometry when its trigger moves in layout without resizing', async () => {
     const observers: {
-      callback: (entries: {intersectionRatio: number}[]) => void;
+      callback: (entries: IntersectionObserverEntry[]) => void;
       options: IntersectionObserverInit;
       disconnected: boolean;
     }[] = [];
@@ -2976,7 +3381,7 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
       class {
         record: (typeof observers)[number];
         constructor(
-          callback: (entries: {intersectionRatio: number}[]) => void,
+          callback: (entries: IntersectionObserverEntry[]) => void,
           options: IntersectionObserverInit,
         ) {
           this.record = {callback, options, disconnected: false};
@@ -3003,19 +3408,87 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
     );
 
     // Its initial report: fully inside its own rect.
-    act(() => move?.callback([{intersectionRatio: 1}]));
+    act(() => move?.callback([report(move.options, TRIGGER, 1)]));
     expect(layerEl).not.toHaveAttribute('data-astryx-clears-anchor');
 
     // The trigger moves; the standard list now settles over it.
     spy.mockRestore();
     placeBoxes(TRIGGER, rect(16, 350, 688, 300));
     const before = observers.length;
-    act(() => move?.callback([{intersectionRatio: 0.4}]));
+    act(() => move?.callback([report(move.options, TRIGGER, 0.4)]));
     // Re-armed on the new rect at once; read in the next frame.
     expect(move?.disconnected).toBe(true);
     expect(observers.length).toBe(before + 1);
     await nextFrame();
     expect(layerEl).toHaveAttribute('data-astryx-clears-anchor');
+    vi.unstubAllGlobals();
+  });
+
+  it('follows a move from its report alone: no layout read, armed on the reported box', async () => {
+    type Record = {
+      callback: (entries: IntersectionObserverEntry[]) => void;
+      options: IntersectionObserverInit;
+    };
+    const observers: Record[] = [];
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        constructor(
+          callback: (entries: IntersectionObserverEntry[]) => void,
+          options: IntersectionObserverInit,
+        ) {
+          observers.push({callback, options});
+        }
+        observe() {}
+        disconnect() {}
+        unobserve() {}
+      },
+    );
+    const moves = () =>
+      observers.filter(
+        o => o.options?.root === document && o.options.rootMargin != null,
+      );
+    const latest = () => moves()[moves().length - 1];
+    vi.spyOn(document.documentElement, 'clientWidth', 'get').mockReturnValue(
+      1280,
+    );
+    viewport720();
+    const user = userEvent.setup();
+    const spy = placeBoxes(TRIGGER, rect(200, 350, 100, 200));
+    const {getByText} = render(<ClearHarness />);
+    await user.click(getByText('Trigger'));
+    expect(latest().options.rootMargin).toBe('-300px -780px -390px -400px');
+
+    // Every frame of a scroll reports a move. Following it reads no layout:
+    // the box and the viewport come from the report.
+    const width = vi.spyOn(document.documentElement, 'clientWidth', 'get');
+    const height = vi.spyOn(document.documentElement, 'clientHeight', 'get');
+    const triggerReads = () =>
+      spy.mock.contexts.filter(
+        el => !(el as HTMLElement).hasAttribute('popover'),
+      ).length;
+    const readsBefore = triggerReads();
+    width.mockClear();
+    height.mockClear();
+    const scrolled = rect(247.5, 400, 30, 100);
+    const screen = {width: 1280, height: 720};
+    act(() =>
+      latest().callback([
+        report(latest().options, scrolled, 0.4, true, screen),
+      ]),
+    );
+    // Armed on the reported box, as a fresh read of it would arm it.
+    expect(latest().options.rootMargin).toBe('-247px -780px -442px -400px');
+    // A move under a pixel leaves the ratio at 1; the reported box shows it.
+    const nudged = rect(247.25, 400, 30, 100);
+    act(() =>
+      latest().callback([report(latest().options, nudged, 1, true, screen)]),
+    );
+    expect(moves().length).toBe(3);
+    expect(latest().options.rootMargin).toBe('-247px -780px -442px -400px');
+    expect(triggerReads()).toBe(readsBefore);
+    expect(width).not.toHaveBeenCalled();
+    expect(height).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
   });
 
@@ -3026,14 +3499,14 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
     // clear from the second painted frame). The read waits for the next
     // frame, before it paints, and several reports in one frame share it.
     const observers: {
-      callback: (entries: {intersectionRatio: number}[]) => void;
+      callback: (entries: IntersectionObserverEntry[]) => void;
       options: IntersectionObserverInit;
     }[] = [];
     vi.stubGlobal(
       'IntersectionObserver',
       class {
         constructor(
-          callback: (entries: {intersectionRatio: number}[]) => void,
+          callback: (entries: IntersectionObserverEntry[]) => void,
           options: IntersectionObserverInit,
         ) {
           observers.push({callback, options});
@@ -3050,7 +3523,10 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
     const {container, getByText} = render(<ClearHarness />);
     await user.click(getByText('Trigger'));
     const layerEl = container.querySelector('[popover]') as HTMLElement;
-    act(() => latestMove()?.callback([{intersectionRatio: 1}]));
+    act(() => {
+      const move = latestMove();
+      move?.callback([report(move.options, TRIGGER, 1)]);
+    });
     await nextFrame();
     expect(layerEl).not.toHaveAttribute('data-astryx-clears-anchor');
 
@@ -3069,8 +3545,10 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
       },
     );
     act(() => {
-      latestMove()?.callback([{intersectionRatio: 0.4}]);
-      latestMove()?.callback([{intersectionRatio: 0.6}]);
+      const first = latestMove();
+      first?.callback([report(first.options, TRIGGER, 0.4)]);
+      const second = latestMove();
+      second?.callback([report(second.options, TRIGGER, 0.6)]);
     });
     expect(layerEl).not.toHaveAttribute('data-astryx-clears-anchor');
     expect(reads).not.toHaveBeenCalled();
@@ -3083,7 +3561,7 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
   });
 
   it('follows a move that spans several frames and never goes idle while a scrolled container clips its trigger', async () => {
-    type Entry = {intersectionRatio: number; isIntersecting?: boolean};
+    type Entry = IntersectionObserverEntry;
     const observers: {
       callback: (entries: Entry[]) => void;
       options: IntersectionObserverInit;
@@ -3129,7 +3607,7 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
     spy.mockRestore();
     spy = placeBoxes(TRIGGER, rect(16, 350, 688, 300));
     let armed = moves().length;
-    act(() => latest().callback([{intersectionRatio: 0.7}]));
+    act(() => latest().callback([report(latest().options, TRIGGER, 0.7)]));
     expect(moves().length).toBe(armed + 1);
     expect(latest().options.threshold).toBe(0.7);
     await nextFrame();
@@ -3138,9 +3616,10 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
     // A first report of 0 for a trigger that moved since the observer read
     // its rectangle re-arms at once on the new rectangle.
     spy.mockRestore();
-    spy = placeBoxes(rect(260, 400, 30, 100), rect(16, 350, 688, 300));
+    const moved = rect(260, 400, 30, 100);
+    spy = placeBoxes(moved, rect(16, 350, 688, 300));
     armed = moves().length;
-    act(() => latest().callback([{intersectionRatio: 0}]));
+    act(() => latest().callback([report(latest().options, moved, 0)]));
     expect(moves().length).toBe(armed + 1);
     expect(latest().options.threshold).toBe(1);
 
@@ -3149,18 +3628,18 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
     // viewport waits for it to come back into view, however long that takes.
     const timers = vi.spyOn(globalThis, 'setTimeout');
     armed = moves().length;
-    act(() => latest().callback([{intersectionRatio: 0}]));
+    act(() => latest().callback([report(latest().options, moved, 0)]));
     expect(moves().length).toBe(armed);
     expect(timers).not.toHaveBeenCalled();
     const visibility = visibilities()[visibilities().length - 1];
     expect(visibility?.options.threshold).toBe(0);
     act(() =>
-      visibility?.callback([{intersectionRatio: 0, isIntersecting: false}]),
+      visibility?.callback([report(visibility.options, moved, 0, false)]),
     );
     expect(moves().length).toBe(armed);
     // Back in view: it re-reads and re-arms, and the visibility observer goes.
     act(() =>
-      visibility?.callback([{intersectionRatio: 0.2, isIntersecting: true}]),
+      visibility?.callback([report(visibility.options, moved, 0.2, true)]),
     );
     expect(moves().length).toBe(armed + 1);
     expect(visibility?.disconnected).toBe(true);

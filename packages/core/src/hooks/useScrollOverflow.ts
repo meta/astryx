@@ -5,7 +5,9 @@
 /**
  * @file useScrollOverflow.ts
  * @input React refs, state and effects
- * @output useScrollOverflow, which tracks the overflow at the scroll edges
+ * @output useScrollOverflow, which tracks the overflow at the scroll edges,
+ *   and the internal useShownScrollOverflow, which can also measure from a
+ *   position its caller reports
  * @position Core hook; used by Carousel and TabList for fade-edge and button
  *   state
  *
@@ -15,6 +17,15 @@
 
 import {useState, useCallback, useEffect, useRef} from 'react';
 import {observeResize} from '../utils/sharedResizeObserver';
+
+/**
+ * Where the content is shown while something other than scrolling moves it:
+ * its offset toward the end, and how far it travels.
+ */
+export interface ShownPosition {
+  readonly offset: number;
+  readonly travel: number;
+}
 
 export interface ScrollOverflowState {
   /** Content overflows the start (left in LTR, right in RTL) */
@@ -97,8 +108,23 @@ function observeContent(el: HTMLElement, measure: () => void): () => void {
  * ```
  */
 export function useScrollOverflow() {
+  const {scrollRef, overflowStart, overflowEnd, hasOverflow} =
+    useShownScrollOverflow();
+  return {scrollRef, overflowStart, overflowEnd, hasOverflow};
+}
+
+/**
+ * `useScrollOverflow`, plus `followShown`: while snap paging holds a row, its
+ * scroll offset stays where the hold began and its items move. The caller
+ * reports where the row is shown, and the edges follow it. Null measures the
+ * scroll offset again from the next frame, when the handed-back offset is
+ * current. Internal: not exported from the hooks entry.
+ */
+export function useShownScrollOverflow() {
   const elRef = useRef<HTMLElement | null>(null);
   const unobserveRef = useRef<(() => void) | null>(null);
+  const shownRef = useRef<ShownPosition | null>(null);
+  const releaseFrameRef = useRef(0);
 
   const [state, setState] = useState<ScrollOverflowState>({
     overflowStart: false,
@@ -108,12 +134,13 @@ export function useScrollOverflow() {
 
   const measureNow = useCallback((el: HTMLElement) => {
     const tolerance = 1;
-    const {scrollLeft, scrollWidth, clientWidth} = el;
-    const maxScroll = scrollWidth - clientWidth;
+    const shown = shownRef.current;
+    const offset = shown?.offset ?? Math.abs(el.scrollLeft);
+    const maxScroll = shown?.travel ?? el.scrollWidth - el.clientWidth;
 
-    const overflowStart = Math.abs(scrollLeft) > tolerance;
-    const overflowEnd = Math.abs(scrollLeft) < maxScroll - tolerance;
-    const hasOverflow = scrollWidth > clientWidth + tolerance;
+    const overflowStart = offset > tolerance;
+    const overflowEnd = offset < maxScroll - tolerance;
+    const hasOverflow = maxScroll > tolerance;
 
     setState(prev => {
       if (
@@ -133,7 +160,9 @@ export function useScrollOverflow() {
   // again.
   const measure = useCallback(() => {
     const el = elRef.current;
-    if (el && isRendered(el)) {
+    // A held row's edges come from where it is shown, which reads no layout.
+    // So the paging's own style writes force no layout here.
+    if (el && (shownRef.current != null || isRendered(el))) {
       measureNow(el);
     }
   }, [measureNow]);
@@ -148,12 +177,39 @@ export function useScrollOverflow() {
     }
   }, [measureNow]);
 
+  const followShown = useCallback(
+    (shown: ShownPosition | null) => {
+      cancelAnimationFrame(releaseFrameRef.current);
+      const el = elRef.current;
+      if (shown != null) {
+        shownRef.current = shown;
+        if (el) {
+          measureNow(el);
+        }
+        return;
+      }
+      if (shownRef.current == null || el == null) {
+        shownRef.current = null;
+        return;
+      }
+      // Keep the reported edges until the next frame, when the scroll offset
+      // is current. Otherwise an edge flickers.
+      releaseFrameRef.current = requestAnimationFrame(() => {
+        shownRef.current = null;
+        measure();
+      });
+    },
+    [measure, measureNow],
+  );
+
   const scrollRef = useCallback(
     (el: HTMLElement | null) => {
       if (elRef.current) {
         unobserveRef.current?.();
         unobserveRef.current = null;
         elRef.current.removeEventListener('scroll', measureOnScroll);
+        cancelAnimationFrame(releaseFrameRef.current);
+        shownRef.current = null;
       }
 
       elRef.current = el;
@@ -168,6 +224,7 @@ export function useScrollOverflow() {
 
   useEffect(() => {
     return () => {
+      cancelAnimationFrame(releaseFrameRef.current);
       if (elRef.current) {
         unobserveRef.current?.();
         unobserveRef.current = null;
@@ -178,6 +235,7 @@ export function useScrollOverflow() {
 
   return {
     scrollRef,
+    followShown,
     ...state,
   };
 }

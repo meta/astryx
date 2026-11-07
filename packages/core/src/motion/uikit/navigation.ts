@@ -76,8 +76,12 @@ export const navigation = {
 /**
  * Registers this table with the motion registry (motion/roles.ts). It lists
  * no role: spec:AST-094 FR4 names none of its values, so each plays as
- * measured. Nothing registers on import, and a second call does nothing.
+ * measured. A page that plays no navigation motion ships no navigation
+ * registry. The module registers its own table at import (one idempotent
+ * in-memory write, no DOM).
  */
 export function registerNavigationTable(): void {
   registerMotionTable('navigation', navigation);
 }
+
+registerNavigationTable();

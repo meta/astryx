@@ -11,7 +11,7 @@
 
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {act, renderHook, waitFor} from '@testing-library/react';
-import {useClipboard} from './useClipboard';
+import {useClipboard, useClipboardCopy} from './useClipboard';
 import {__resetLiveRegionsForTest} from './useAnnounce';
 
 function politeRegion(): HTMLElement | null {
@@ -147,5 +147,60 @@ describe('useClipboard', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('useClipboardCopy (internal)', () => {
+  const error = new Error('denied');
+  beforeEach(() => {
+    Object.assign(navigator, {
+      clipboard: {writeText: vi.fn().mockRejectedValue(error)},
+    });
+  });
+  afterEach(() => {
+    __resetLiveRegionsForTest();
+    vi.useRealTimers();
+  });
+
+  it('reports a failed write once, for as long as a copy shows, and leaves isCopied alone', async () => {
+    vi.useFakeTimers();
+    const onError = vi.fn();
+    const {result} = renderHook(() =>
+      useClipboardCopy({announceFailure: 'Failed', onError}),
+    );
+    let ok: boolean | undefined;
+    await act(async () => {
+      ok = await result.current.copy('x');
+    });
+    expect(ok).toBe(false);
+    expect(result.current.isFailed).toBe(true);
+    expect(result.current.isCopied).toBe(false);
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledWith(error);
+    act(() => {
+      vi.advanceTimersByTime(2000);
+    });
+    expect(result.current.isFailed).toBe(false);
+  });
+
+  it('clears the failure when a later write succeeds', async () => {
+    const {result} = renderHook(() => useClipboardCopy());
+    await act(async () => {
+      await result.current.copy('x');
+    });
+    expect(result.current.isFailed).toBe(true);
+    Object.assign(navigator, {
+      clipboard: {writeText: vi.fn().mockResolvedValue(undefined)},
+    });
+    await act(async () => {
+      await result.current.copy('x');
+    });
+    expect(result.current.isFailed).toBe(false);
+    expect(result.current.isCopied).toBe(true);
+  });
+
+  it('keeps the public hook to copy and isCopied', () => {
+    const {result} = renderHook(() => useClipboard());
+    expect(Object.keys(result.current).sort()).toEqual(['copy', 'isCopied']);
   });
 });
