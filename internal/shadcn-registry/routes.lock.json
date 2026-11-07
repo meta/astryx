@@ -3712,6 +3712,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-calendar-constraints-hotel-booking-range",
+      "path": "examples/use-calendar-constraints/hotel-booking-range",
+      "aliases": []
+    },
+    {
       "name": "example-use-calendar-days-month-grid",
       "path": "examples/use-calendar-days/month-grid",
       "aliases": []
@@ -4024,6 +4029,11 @@
     {
       "name": "hook-use-app-shell-mobile",
       "path": "hooks/use-app-shell-mobile",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-calendar-constraints",
+      "path": "hooks/use-calendar-constraints",
       "aliases": []
     },
     {
