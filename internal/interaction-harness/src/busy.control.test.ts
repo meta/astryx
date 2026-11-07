@@ -268,6 +268,21 @@ describe('busyWindowProof against a control', () => {
     expect(proof.control?.belowStep).toBeGreaterThan(0);
   });
 
+  it('judges a component that enters from off screen from its first position inside the block, against the control', () => {
+    // A card pushed in from an edge first shows 20 ms into the block. The
+    // cast's frames before the block show the screen without it.
+    const entering = moving().map(f =>
+      f.t < 1020
+        ? ({...f, box: null} as TrackedFrame)
+        : ({...f, box: {...f.box!, y: f.box!.y - 60}} as TrackedFrame),
+    );
+    const proof = busyWindowProof(entering, BLOCK, {
+      control: asControl(moving()),
+    });
+    expect(proof.verdict.failures, proof.summary).toEqual([]);
+    expect(proof.onScreenFromMs).toBeGreaterThanOrEqual(20);
+  });
+
   it('fails a window in which the control itself presented too little to judge', () => {
     const still = asControl(
       moving().map(f => ({...f, box: {...f.box!, y: 0}}) as TrackedFrame),
