@@ -280,8 +280,7 @@ first.
   output.
 - The FR7 exception for a swizzled copy holds in the Babel, PostCSS, and Vite
   integrations. `withAstryx()` under Turbopack does not read the
-  `astryx-swizzle.json` marker, and `astryx swizzle` does not write it, so a
-  product adds the marker to the copy's folder (FR5, FR7). Under webpack,
+  `astryx-swizzle.json` marker that `astryx swizzle` writes (FR5, FR7). Under webpack,
   `withAstryx()` makes each app module depend on the marker paths above it, so
   a cached build recompiles a copy when its marker appears or disappears (FR7).
 - Under Turbopack no maintained StyleX compiler runs in the native pipeline, so

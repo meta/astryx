@@ -806,13 +806,18 @@ const framesDrawn = (count: number) =>
 
 /** A proof's frames when the page drew too few of them. */
 export interface FrameShortfall {
+  /** The harness function that needed the frames (default `requireFrames`). */
+  readonly by?: string;
   /** What the frames had to show. */
   readonly during: string;
   /** The frames the page drew during it. */
   readonly frames: number;
   /** The frames the proof needs. */
   readonly min: number;
-  /** The longest gap between frames around them, ms. */
+  /**
+   * The longest gap between frames around them, ms; Infinity when the page
+   * drew fewer than two frames.
+   */
   readonly longestGapMs: number;
 }
 
@@ -826,7 +831,7 @@ export class FrameStarvationError extends Error {
   readonly numbers: FrameShortfall;
   constructor(numbers: FrameShortfall) {
     super(
-      `requireFrames: the page drew ${framesDrawn(numbers.frames)} while ${numbers.during}, where the proof needs ${numbers.min}. No frame came for ${numbers.longestGapMs.toFixed(1)} ms: the page was starved of frames (a loaded machine, or a long task on the page), so the run proves nothing about the motion`,
+      `${numbers.by ?? 'requireFrames'}: the page drew ${framesDrawn(numbers.frames)} while ${numbers.during}, where the proof needs ${numbers.min}. ${Number.isFinite(numbers.longestGapMs) ? `No frame came for ${numbers.longestGapMs.toFixed(1)} ms` : 'No second frame came'}: the page was starved of frames (a loaded machine, or a long task on the page), so the run proves nothing about the motion`,
     );
     this.name = 'FrameStarvationError';
     this.numbers = numbers;
@@ -865,10 +870,12 @@ export function requireFrames<T extends {readonly t: number}>(
       ? samples.indexOf(selected[selected.length - 1])
       : samples.length - 1;
   const around = samples.slice(Math.max(0, first - 1), last + 2);
-  const longestGapMs = Math.max(
-    0,
-    ...around.slice(1).map((sample, i) => sample.t - around[i].t),
-  );
+  // With fewer than two frames there is no gap to measure. The page drew one
+  // frame at most in the whole sample, so it was starved.
+  const longestGapMs =
+    around.length < 2
+      ? Number.POSITIVE_INFINITY
+      : Math.max(...around.slice(1).map((sample, i) => sample.t - around[i].t));
   const numbers = {during, frames: selected.length, min, longestGapMs};
   if (longestGapMs > FRAME_STARVATION_MS) {
     throw new FrameStarvationError(numbers);

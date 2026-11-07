@@ -25,6 +25,7 @@
 
 import type {Locator, Page} from '@playwright/test';
 import {defineCurveEnd} from './curve-end';
+import {FRAME_STARVATION_MS, FrameStarvationError} from './frames';
 import {parseTransform, type TimedValue, type Transform2D} from './math';
 
 /** How far inside its end a seek past an animation's end lands, ms. */
@@ -2006,6 +2007,12 @@ export async function watchAnimations(
  * easing or direction, waitForRest waits the hold out, and a hold longer than
  * `timeout` rejects with "still moving".
  *
+ * It throws `FrameStarvationError` instead when the page drew too few frames
+ * to tell. Then, since the element last moved, no frame came for longer than
+ * `FRAME_STARVATION_MS`. It held still in its last frame, or no frame came
+ * after the deadline. So the still frames must come by `timeout` plus
+ * `FRAME_STARVATION_MS`.
+ *
  * While a rendering trace runs (`traceRendering`), it stands down as the
  * animation recorder does: a per-frame callback would make every frame a
  * main-thread frame, which the trace counts. It then waits on timers for the
@@ -2031,9 +2038,13 @@ export async function waitForRest(
     locator,
     Date.now() + timeout + 1_000,
     async evaluateTimeout => {
-      await locator.evaluate(
-        (element, {ms, need}) =>
-          new Promise<void>((resolve, reject) => {
+      const starved = await locator.evaluate(
+        (element, {ms, need, starvationMs}) =>
+          new Promise<{
+            frames: number;
+            spanMs: number;
+            longestGapMs: number;
+          } | null>((resolve, reject) => {
             // The deadline reads the real clock, which a page freeze does not
             // stop.
             const realNow =
@@ -2065,29 +2076,66 @@ export async function waitForRest(
                 __harnessTimerGate?: {
                   frame: typeof requestAnimationFrame;
                   timeout?: typeof setTimeout;
+                  clearTimeout?: typeof clearTimeout;
                 };
               }
             ).__harnessTimerGate;
             const frame = gate?.frame ?? requestAnimationFrame;
             const timeout = gate?.timeout ?? setTimeout;
+            const clearTimer = gate?.clearTimeout ?? clearTimeout;
             // Set by traceRendering while it traces (see the recorder above).
             const tracing = () =>
               (window as unknown as {__harnessRenderingTrace?: boolean})
                 .__harnessRenderingTrace === true;
+            // The deadline timer below holds this wait's scope, the element
+            // too, until it fires: every ending clears it.
+            const end = () => clearTimer(deadlineTimer);
             const settle = () => {
+              end();
               // Later waits count animations from here.
               (
                 window as unknown as {__harnessAnimations?: {arm: () => number}}
               ).__harnessAnimations?.arm();
-              resolve();
+              resolve(null);
             };
             let last = '';
             let still = 0;
+            // When each frame of the per-frame check came since the element
+            // last moved, on the real clock: only those can show it at rest.
+            let watchedFrom = realNow();
+            const drawn: number[] = [];
+            const shortfall = () => {
+              const times = [watchedFrom, ...drawn, realNow()];
+              let longestGapMs = 0;
+              for (let i = 1; i < times.length; i += 1) {
+                longestGapMs = Math.max(longestGapMs, times[i] - times[i - 1]);
+              }
+              return {
+                frames: drawn.length,
+                spanMs: realNow() - watchedFrom,
+                longestGapMs,
+              };
+            };
             const frames = () => {
               last = read();
               still = 0;
+              watchedFrom = realNow();
+              drawn.length = 0;
               frame(tick);
             };
+            // A frame that never comes cannot reach the deadline check in
+            // `tick`: a starved page is caught here.
+            let starvedOut = false;
+            const deadlineTimer = timeout(
+              () => {
+                const lastFrame = drawn[drawn.length - 1] ?? watchedFrom;
+                if (!tracing() && realNow() - lastFrame > starvationMs) {
+                  starvedOut = true;
+                  resolve(shortfall());
+                }
+              },
+              ms + starvationMs + 1,
+            );
             // While traced: one look at the animations, then a timer to the latest
             // scheduled curve end. One not started yet is looked at again a frame
             // later; a trace that has ended hands over to the per-frame check.
@@ -2134,6 +2182,7 @@ export async function waitForRest(
               timeout(
                 () => {
                   if (realNow() > deadline) {
+                    end();
                     reject(
                       new Error('waitForRest: still moving at the deadline'),
                     );
@@ -2147,6 +2196,9 @@ export async function waitForRest(
               );
             };
             const tick = () => {
+              if (starvedOut) {
+                return;
+              }
               const now = read();
               const moving = element.getAnimations({subtree: true}).some(
                 a =>
@@ -2159,12 +2211,25 @@ export async function waitForRest(
                         Number(a.effect?.getComputedTiming().delay ?? 0)
                       : Number(a.currentTime ?? 0) < curveEnd(a))),
               );
-              still = !moving && now === last ? still + 1 : 0;
+              const resting = !moving && now === last;
+              if (resting) {
+                drawn.push(realNow());
+              } else {
+                watchedFrom = realNow();
+                drawn.length = 0;
+              }
+              still = resting ? still + 1 : 0;
               last = now;
               if (still >= need) {
                 settle();
               } else if (realNow() > deadline) {
-                reject(new Error(`waitForRest: still moving (${now})`));
+                const short = shortfall();
+                end();
+                if (resting && short.longestGapMs > starvationMs) {
+                  resolve(short);
+                } else {
+                  reject(new Error(`waitForRest: still moving (${now})`));
+                }
               } else if (tracing()) {
                 scheduled();
               } else {
@@ -2177,9 +2242,18 @@ export async function waitForRest(
               frames();
             }
           }),
-        {ms: timeout, need: frames},
+        {ms: timeout, need: frames, starvationMs: FRAME_STARVATION_MS},
         {timeout: evaluateTimeout},
       );
+      if (starved != null) {
+        throw new FrameStarvationError({
+          by: 'waitForRest',
+          frames: starved.frames,
+          during: `it waited ${Math.round(starved.spanMs)} ms for the element to rest`,
+          min: frames,
+          longestGapMs: starved.longestGapMs,
+        });
+      }
       return true;
     },
   );
