@@ -110,6 +110,7 @@ import {
   formatTokenLabel,
   formatTokenText,
   formatTokenValueText,
+  tokenTextKeepsParts,
 } from './formatTokenValue';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
@@ -735,7 +736,11 @@ export function PowerSearch({
             timezoneID,
           )
         : null;
-      return {label, value, full: value != null ? `${label} ${value}` : label};
+      return {
+        label,
+        value,
+        full: value != null ? formatTokenText(t, label, value) : label,
+      };
     },
     [config, maxTokenLength, t, locale, timezoneID, calendar],
   );
@@ -1130,13 +1135,16 @@ export function PowerSearch({
               label: formatTokenLabel(t, fieldLabel, operatorLabel),
               value: null,
             };
-      const tokenLabel = text.label;
       const fullText =
         text.value != null
           ? formatTokenText(t, text.label, text.value)
           : text.label;
+      // The pill shows the text that names it. A locale that writes the full
+      // text in another shape than "label value" gets it as one text.
+      const showsParts = text.value == null || tokenTextKeepsParts(t);
+      const tokenLabel = showsParts ? text.label : fullText;
       const valueContent =
-        text.value != null ? (
+        showsParts && text.value != null ? (
           <PowerSearchTokenValue text={text.value} />
         ) : undefined;
 

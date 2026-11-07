@@ -7,7 +7,8 @@
  * calendar.
  * @output `formatTokenValueText` — one string, or null for an empty value;
  * `formatTokenLabel` and `formatTokenText` — the token's "field: operator"
- * label and its full text, each one catalog message.
+ * label and its full text, each one catalog message; `tokenTextKeepsParts` —
+ * whether the full text is the label, a space, then the value.
  * @position Shared by the token itself (`PowerSearch.tsx`) and the sheet
  * presentation's Filters rows and removal announcement
  * (`PowerSearchBottomSheet.tsx`), so every reading of a value on the field
@@ -52,6 +53,20 @@ export function formatTokenText(
   value: string,
 ): string {
   return t('@astryx.powersearch.token.labelValue', {label, value});
+}
+
+// Characters no message text uses, to find where the catalog puts each part.
+const LABEL_MARK = '\uE000';
+const VALUE_MARK = '\uE001';
+
+/**
+ * Whether the locale writes a token's full text as its label, a space, then
+ * its value. Only then can the pill show the label and the styled value as
+ * two parts and still read as the full text that names it.
+ */
+export function tokenTextKeepsParts(t: TranslatorFn): boolean {
+  const pattern = formatTokenText(t, LABEL_MARK, VALUE_MARK);
+  return new RegExp(`^${LABEL_MARK}\\s+${VALUE_MARK}$`).test(pattern);
 }
 
 function truncateString(value: string, limit: number): string {
