@@ -473,16 +473,51 @@ export async function swizzleCopy(component, options = {}) {
     );
   }
 
+  // The marker tells @astryxdesign/build that the output folder holds Astryx
+  // source, so the copy compiles below the theme as the package does.
+  const markerDest = confineWrite(path.join(outputBase, SWIZZLE_MARKER), cwd, {
+    allowAbsolute: true,
+    label: 'output file',
+  });
+  const markerExisting = readExisting(markerDest);
+  const markerContent = swizzleMarkerContent(
+    markerExisting,
+    owner.ownerPackage,
+    ownerVersion,
+  );
+  // Every module under the marker compiles as Astryx source, so swizzle marks
+  // only a folder it owns: one the copy creates, an empty one, or one it
+  // marked before. Any other folder is reported with what it holds.
+  const foundInOutputBase =
+    markerExisting == null &&
+    fs.existsSync(outputBase) &&
+    fs.statSync(outputBase).isDirectory()
+      ? fs.readdirSync(outputBase).sort()
+      : [];
+  const marksOutputBase = foundInOutputBase.length === 0;
+  const writes = marksOutputBase
+    ? [
+        ...outputs,
+        {
+          dest: markerDest,
+          content: markerContent,
+          marker: true,
+          unchanged: markerExisting === markerContent,
+        },
+      ]
+    : outputs;
+
   const outputDirExisted = fs.existsSync(outputDir);
   /** @type {string[]} folders this run created, outermost first */
   const createdDirs = [];
   /** @type {Array<{dest: string, original: Buffer|null}>} */
   const written = [];
   let copied = 0;
-  for (const output of outputs) {
+  for (const output of writes) {
+    const counts = !('marker' in output);
     // An identical file is already in place: it is part of this copy, unwritten.
     if (output.unchanged) {
-      copied++;
+      if (counts) copied++;
       continue;
     }
     try {
@@ -491,7 +526,7 @@ export async function swizzleCopy(component, options = {}) {
       if (firstCreated != null) createdDirs.push(firstCreated);
       written.push({dest: output.dest, original});
       fs.writeFileSync(output.dest, output.content);
-      copied++;
+      if (counts) copied++;
     } catch (err) {
       const unrestored = undoCopy(written);
       for (const dir of [...createdDirs].reverse()) {
@@ -516,8 +551,42 @@ export async function swizzleCopy(component, options = {}) {
     usesStyleX: outputs.some(o => o.content.includes('@stylexjs/stylex')),
     dependencies: plan.dependencies,
   };
+  data.marker = marksOutputBase
+    ? {path: toPosix(path.relative(cwd, markerDest)), written: true}
+    : {
+        path: toPosix(path.relative(cwd, markerDest)),
+        written: false,
+        found: foundInOutputBase.slice(0, 5),
+      };
   if (feedback) data.feedback = feedback;
   return {type: 'swizzle.copy', package: data.package, data};
+}
+
+/** The file that marks a swizzle output folder as Astryx source. */
+const SWIZZLE_MARKER = 'astryx-swizzle.json';
+
+/**
+ * The marker's content after a copy from `ownerPackage`: the packages the
+ * folder's copies came from, each with its version. Unreadable content is
+ * replaced.
+ * @param {string|null} existing
+ * @param {string} ownerPackage
+ * @param {string} version
+ * @returns {string}
+ */
+function swizzleMarkerContent(existing, ownerPackage, version) {
+  /** @type {Record<string, string>} */
+  let packages = {};
+  try {
+    const parsed = existing == null ? null : JSON.parse(existing);
+    if (parsed?.packages && typeof parsed.packages === 'object') {
+      packages = {...parsed.packages};
+    }
+  } catch {
+    // Unreadable content is rewritten below.
+  }
+  packages[ownerPackage] = version;
+  return `${JSON.stringify({packages}, null, 2)}\n`;
 }
 
 /**
