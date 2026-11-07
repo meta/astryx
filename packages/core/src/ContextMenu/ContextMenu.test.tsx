@@ -27,6 +27,7 @@ import {
   waitFor,
   cleanup,
   createEvent,
+  within,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {readFileSync} from 'node:fs';
@@ -2454,6 +2455,67 @@ describe('ContextMenu outside dismissal', () => {
       fireEvent.pointerMove(menu, {...finger(8), clientX: 0, clientY: 40});
       fireEvent.pointerUp(menu, finger(8));
       expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    });
+  });
+
+  describe('in a second document', () => {
+    // An app can render a ContextMenu into a same-origin iframe or a Document
+    // Picture-in-Picture window through a portal. Every press for it then
+    // happens in that document.
+    let frame: HTMLIFrameElement;
+    let secondDocument: Document;
+
+    beforeEach(() => {
+      frame = document.createElement('iframe');
+      document.body.appendChild(frame);
+      secondDocument = frame.contentDocument!;
+      // The Popover API stand-in above, on the second window's own prototype.
+      const {prototype} = secondDocument.defaultView!.HTMLElement;
+      prototype.showPopover = HTMLElement.prototype.showPopover;
+      prototype.hidePopover = HTMLElement.prototype.hidePopover;
+      prototype.matches = HTMLElement.prototype.matches;
+    });
+
+    afterEach(() => {
+      // Unmount before the frame goes, or React removes nodes from a
+      // document that no longer exists.
+      cleanup();
+      frame.remove();
+    });
+
+    it('a mouse press outside the menu closes it in the document it renders in; a press in the page does not', () => {
+      const onOpenChange = vi.fn<(isOpen: boolean) => void>();
+      render(
+        createPortal(
+          <>
+            <ContextMenu
+              items={[{label: 'Cut'}]}
+              data-testid="ctx"
+              onOpenChange={onOpenChange}>
+              <div>Right-click me</div>
+            </ContextMenu>
+            <button type="button">Outside</button>
+          </>,
+          secondDocument.body,
+        ),
+      );
+      const view = within(secondDocument.body);
+      fireEvent.contextMenu(view.getByTestId('ctx'), {
+        clientX: 50,
+        clientY: 15,
+        detail: 1,
+      });
+      expect(onOpenChange).toHaveBeenLastCalledWith(true);
+      fireEvent.pointerDown(document.body, {
+        pointerType: 'mouse',
+        pointerId: 1,
+      });
+      fireEvent.mouseDown(document.body);
+      expect(onOpenChange).not.toHaveBeenCalledWith(false);
+      const outside = view.getByRole('button', {name: 'Outside'});
+      fireEvent.pointerDown(outside, {pointerType: 'mouse', pointerId: 1});
+      fireEvent.mouseDown(outside);
+      expect(onOpenChange).toHaveBeenLastCalledWith(false);
     });
   });
 });
