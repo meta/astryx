@@ -98,7 +98,7 @@ import {
   releaseMotion,
 } from '../utils/rowMotion';
 import {edgeAutoscroll, type EdgeAutoscroll} from '../utils/edgeAutoscroll';
-import {isScrollCapableOverflow} from '../hooks/scrollGeometry';
+import {nearestScroller} from '../utils/scrollingAncestor';
 import {useTouchPresentation} from '../utils/touchPresentation';
 import {useTouchHitArea} from '../utils/touchHitArea';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
@@ -355,13 +355,6 @@ function layoutLeft(row: HTMLElement, list: HTMLElement): number {
   return row.offsetLeft - base;
 }
 
-function isScrollContainer(element: HTMLElement): boolean {
-  return (
-    isScrollCapableOverflow(getComputedStyle(element).overflowY) &&
-    element.scrollHeight > element.clientHeight
-  );
-}
-
 function isTransparent(color: string): boolean {
   return (
     color === '' ||
@@ -399,25 +392,19 @@ interface Scroller {
 }
 
 function scrollerOf(list: HTMLElement): Scroller {
-  for (
-    let node = list.parentElement;
-    node != null && node !== node.ownerDocument.body;
-    node = node.parentElement
-  ) {
-    if (isScrollContainer(node)) {
-      const rect = node.getBoundingClientRect();
-      const top = rect.top + node.clientTop;
-      return {
-        element: node,
-        top,
-        bottom: top + node.clientHeight,
-        max: node.scrollHeight - node.clientHeight,
-        position: node.scrollTop,
-      };
-    }
-  }
   const doc = list.ownerDocument;
-  const element = doc.scrollingElement ?? doc.documentElement;
+  const element = nearestScroller(list);
+  if (element !== (doc.scrollingElement ?? doc.documentElement)) {
+    const rect = element.getBoundingClientRect();
+    const top = rect.top + element.clientTop;
+    return {
+      element,
+      top,
+      bottom: top + element.clientHeight,
+      max: element.scrollHeight - element.clientHeight,
+      position: element.scrollTop,
+    };
+  }
   const view = doc.defaultView;
   const height = view?.innerHeight ?? element.clientHeight;
   return {

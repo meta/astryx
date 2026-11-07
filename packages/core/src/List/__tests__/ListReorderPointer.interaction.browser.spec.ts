@@ -8,7 +8,9 @@
  * @output Browser proofs of who drags a row without a hold. A mouse drags a
  *   row from its handle at once. So does a pen where the primary pointer is
  *   fine. A pen where the primary pointer is coarse keeps the hold, as a
- *   finger does. A quick stroke moves nothing, and a held one moves the row
+ *   finger does. A quick stroke moves nothing, and a held one moves the row.
+ *   A row held near a scroll edge scrolls the page, or the box the list
+ *   scrolls in, and stops at the end
  * @position Beside ListReorderTouch.interaction.browser.spec.ts, which proves
  *   the hold under a finger
  */
@@ -31,6 +33,8 @@ import {reorder} from '../../motion/uikit/reorder';
 const storybook = withStorybook(test);
 
 const STORY = 'core-list--reorderable';
+
+const LONG_STORY = 'core-list--reorder-long-list';
 
 /** Past the claim delay: the hold claims the drag. */
 const HOLD_MS = reorder.claim.delayMs + 150;
@@ -69,7 +73,7 @@ function movedTwoDown(order: ReadonlyArray<string>): string[] {
  * fine. Contexts made here inherit the project's phone options unless they
  * are named.
  */
-async function openFinePointerStory(browser: Browser) {
+async function openFinePointerStory(browser: Browser, story = STORY) {
   const context = await browser.newContext({
     viewport: {width: 800, height: 900},
     deviceScaleFactor: 1,
@@ -77,7 +81,7 @@ async function openFinePointerStory(browser: Browser) {
     hasTouch: false,
   });
   const page = await context.newPage();
-  await openStory(page, storybook(), STORY);
+  await openStory(page, storybook(), story);
   expect(
     await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
   ).toBe(false);
@@ -112,6 +116,124 @@ test('a mouse drags a row from its handle at once, where the primary pointer is 
     await page.mouse.move(at.x, at.y + rowHeight * 2.5, {steps: 12});
     await page.mouse.up();
     await expect.poll(async () => labels(page)).toEqual(movedTwoDown(before));
+  } finally {
+    await story.close();
+  }
+});
+
+test('a row held near the bottom of the page scrolls the page', async ({
+  browser,
+}) => {
+  const story = await openFinePointerStory(browser, LONG_STORY);
+  try {
+    const {page} = story;
+    const order = await labels(page);
+    // Item 4: an earlier one's name is a prefix of a later row's.
+    const {at} = await handleOf(page, order[3]);
+    const bottom = await page.evaluate(() => window.innerHeight);
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+    await page.mouse.move(at.x, at.y);
+    await page.mouse.down();
+    await page.mouse.move(at.x, bottom - 4, {steps: 12});
+    await expect
+      .poll(async () => page.evaluate(() => window.scrollY), {timeout: 3000})
+      .toBeGreaterThan(0);
+    await page.keyboard.press('Escape');
+    await page.mouse.up();
+  } finally {
+    await story.close();
+  }
+});
+
+test('a row held at the bottom of the page stops at its end, under the pointer', async ({
+  browser,
+}) => {
+  const story = await openFinePointerStory(browser, LONG_STORY);
+  try {
+    const {page} = story;
+    const order = await labels(page);
+    // Item 4: an earlier one's name is a prefix of a later row's.
+    const {at} = await handleOf(page, order[3]);
+    const viewport = page.viewportSize();
+    await page.mouse.move(at.x, at.y);
+    await page.mouse.down();
+    await page.mouse.move(at.x, (viewport?.height ?? 0) - 4, {steps: 12});
+    // The page scrolls until the list's end is in view, then stops.
+    let last = Number.NaN;
+    await expect
+      .poll(
+        async () => {
+          const y = await page.evaluate(() => window.scrollY);
+          const isStill = y > 0 && y === last;
+          last = y;
+          return isStill;
+        },
+        {intervals: [250], timeout: 8000},
+      )
+      .toBe(true);
+    const listBottom = await page.evaluate(
+      () =>
+        document.querySelector('#storybook-root ul')?.getBoundingClientRect()
+          .bottom ?? Number.NaN,
+    );
+    expect(listBottom).toBeLessThanOrEqual(viewport?.height ?? 0);
+    const previewTop = async () =>
+      page.evaluate(
+        () =>
+          document
+            .querySelector('[data-astryx-reorder-preview]')
+            ?.getBoundingClientRect().top ?? Number.NaN,
+      );
+    const atEnd = await previewTop();
+    await page.waitForTimeout(300);
+    // Held at the end, nothing moves: the page stays where it stopped, and
+    // the preview stays where the pointer holds it.
+    expect(await page.evaluate(() => window.scrollY)).toBe(last);
+    expect(Math.abs((await previewTop()) - atEnd)).toBeLessThan(1);
+    await page.keyboard.press('Escape');
+    await page.mouse.up();
+  } finally {
+    await story.close();
+  }
+});
+
+test('a row held near the bottom of a box the list scrolls in scrolls that box, not the page', async ({
+  browser,
+}) => {
+  const story = await openFinePointerStory(browser, LONG_STORY);
+  try {
+    const {page} = story;
+    // The list scrolls in a 400 px box instead of the page.
+    const boxBottom = await page.evaluate(() => {
+      const root = document.querySelector<HTMLElement>('#storybook-root');
+      if (root == null) {
+        return null;
+      }
+      root.style.blockSize = '400px';
+      root.style.overflowY = 'auto';
+      return (
+        root.getBoundingClientRect().top + root.clientTop + root.clientHeight
+      );
+    });
+    expect(boxBottom).not.toBeNull();
+    const order = await labels(page);
+    // Item 4: an earlier one's name is a prefix of a later row's.
+    const {at} = await handleOf(page, order[3]);
+    await page.mouse.move(at.x, at.y);
+    await page.mouse.down();
+    await page.mouse.move(at.x, (boxBottom ?? 0) - 4, {steps: 12});
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(
+            () => document.querySelector('#storybook-root')?.scrollTop ?? 0,
+          ),
+        {timeout: 3000},
+      )
+      .toBeGreaterThan(0);
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+    await page.keyboard.press('Escape');
+    await page.mouse.up();
   } finally {
     await story.close();
   }
