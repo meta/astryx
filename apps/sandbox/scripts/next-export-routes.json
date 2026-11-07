@@ -794,6 +794,7 @@
     "/templates/table/",
     "/templates/theme-showcase/",
     "/templates/useAnnounceHookUsage/",
+    "/templates/useCalendarConstraintsHookUsage/",
     "/templates/useCalendarDaysHookUsage/",
     "/templates/useCalendarNavigationHookUsage/",
     "/templates/useClickableContainerHookUsage/",
