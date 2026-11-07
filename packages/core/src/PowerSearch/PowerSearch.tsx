@@ -106,7 +106,11 @@ import type {
   PowerSearchBottomSheetProps,
   PowerSearchSheetEditors,
 } from './PowerSearchBottomSheet';
-import {formatTokenValueText} from './formatTokenValue';
+import {
+  formatTokenLabel,
+  formatTokenText,
+  formatTokenValueText,
+} from './formatTokenValue';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
@@ -715,7 +719,7 @@ export function PowerSearch({
       const operator = config.getOperator(filter.field, filter.operator);
       const fieldLabel = field?.label ?? '';
       const operatorLabel = operator ? resolveOperatorLabel(operator, t) : '';
-      const label = `${fieldLabel}: ${operatorLabel}`.trim();
+      const label = formatTokenLabel(t, fieldLabel, operatorLabel);
       const value = operator
         ? formatTokenValueText(
             operator.value,
@@ -874,7 +878,11 @@ export function PowerSearch({
       const field = config.getField(filter.field);
       const operator = config.getOperator(filter.field, filter.operator);
       const resolvedOp = operator ? resolveOperatorLabel(operator, t) : '';
-      const operatorLabel = resolvedOp ? `: ${resolvedOp}` : '';
+      const label = formatTokenLabel(
+        t,
+        field?.label ?? filter.field,
+        resolvedOp,
+      );
       const valueStr = operator
         ? formatFilterValue(
             config,
@@ -889,8 +897,8 @@ export function PowerSearch({
         : '';
 
       const displayLabel = valueStr
-        ? `${field?.label ?? filter.field}${operatorLabel} ${valueStr}`
-        : `${field?.label ?? filter.field}${operatorLabel}`;
+        ? formatTokenText(t, label, valueStr)
+        : label;
 
       return {
         id: `filter-${index}-${filter.field}-${filter.operator}`,
@@ -1118,10 +1126,15 @@ export function PowerSearch({
       const text =
         filter != null
           ? tokenText(filter)
-          : {label: `${fieldLabel}: ${operatorLabel}`.trim(), value: null};
+          : {
+              label: formatTokenLabel(t, fieldLabel, operatorLabel),
+              value: null,
+            };
       const tokenLabel = text.label;
       const fullText =
-        text.value != null ? `${text.label} ${text.value}` : text.label;
+        text.value != null
+          ? formatTokenText(t, text.label, text.value)
+          : text.label;
       const valueContent =
         text.value != null ? (
           <PowerSearchTokenValue text={text.value} />
