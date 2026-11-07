@@ -123,6 +123,10 @@ names the motion it judges, `{judges: {target, property}}` (a list for
 several; `pseudoElement` for a `::before` or `::after`), and `held()` rejects
 when the hold took no animation of it. `judges: 'count-only'` checks nothing:
 it marks a call site whose hold does not take its judged motion yet.
+A hold sent from the test (`holdAnimations`, and `animationStoryboard`
+without `held`) takes the same `judges` and rejects the same way: it takes
+what runs when it reaches the page, and on a busy runner the judged motion
+can still be to come or already over.
 Compare it with an
 oracle from `math.ts` through `compareCurve`; a tolerance states the error
 budget (for a spring baked into `linear()` stops of `h` ms, chords err by up to
@@ -199,7 +203,10 @@ only before its curve's held tail (keyframes that end in a run of identical
 values, read as `waitForRest` reads them): when the only animation running
 there started while the page waited, or the wait times out with only such
 animations, the page looked too late, and the wait rejects with
-`BusyWindowTooLateError`. The `verdict` judges the
+`BusyWindowTooLateError`. With `pseudoElement` (`'::before'` or
+`'::after'`), only that pseudo-element's animations on `during` itself count,
+as `sampleCurve` reads them: a child's animation, such as a switch thumb's
+press, does not start the block. The `verdict` judges the
 frames the screencast delivered, whatever its rate (a loaded machine's can
 deliver one frame in five or six), and tolerates nothing a frozen animation
 does: at least one frame in the judged part, no stall longer than three of the

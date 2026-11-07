@@ -494,7 +494,9 @@ async function holdPhase(
     const started = await watch.started({timeout: 10_000});
     expect(started.map(animation => animation.name)).toContain(property);
   }
-  await holdAnimations(page);
+  await holdAnimations(page, undefined, {
+    judges: movers.map(mover => ({target: mover, property})),
+  });
   await expect(page.locator('dialog[open]')).toHaveCount(2);
 }
 
