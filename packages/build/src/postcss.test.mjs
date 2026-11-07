@@ -168,36 +168,27 @@ describe('the PostCSS plugin and a swizzled copy', () => {
     }
   });
 
-  it('moves a copy to the library layer on its next change after its marker appears', async () => {
+  it('moves an unchanged copy between layers when its marker appears or goes during a dev session', async () => {
     const marker = path.join(
       appDir,
       'src/components/astryx/astryx-swizzle.json',
     );
-    const copy = path.join(appDir, SWIZZLED_FILE);
     const saved = fs.readFileSync(marker, 'utf-8');
     globalThis.appBabelConfigFiles = [];
     try {
       const compile = createCompile();
-      // The plugin's state lives for the process, so touch the copy to start
-      // from a compile without the marker.
+      const marked = await compileApp(compile);
+      expect(layer(marked, 'astryx-base')).toMatch(/color:\s*green/);
+
       fs.rmSync(marker);
-      const touched = new Date(Date.now() + 2000);
-      fs.utimesSync(copy, touched, touched);
-      const before = await compileApp(compile);
-      expect(layer(before, 'product')).toMatch(/color:\s*green/);
+      const unmarked = await compileApp(compile);
+      expect(layer(unmarked, 'product')).toMatch(/color:\s*green/);
+      expect(layer(unmarked, 'astryx-base')).not.toMatch(/color:\s*green/);
 
-      // The bundler still serves the unchanged copy's product classes, so its
-      // rules stay where they are until the copy itself changes.
       fs.writeFileSync(marker, saved);
-      const unchanged = await compileApp(compile);
-      expect(layer(unchanged, 'product')).toMatch(/color:\s*green/);
-      expect(layer(unchanged, 'astryx-base')).not.toMatch(/color:\s*green/);
-
-      const later = new Date(Date.now() + 6000);
-      fs.utimesSync(copy, later, later);
-      const changed = await compileApp(compile);
-      expect(layer(changed, 'astryx-base')).toMatch(/color:\s*green/);
-      expect(layer(changed, 'product')).not.toMatch(/color:\s*green/);
+      const remarked = await compileApp(compile);
+      expect(layer(remarked, 'astryx-base')).toMatch(/color:\s*green/);
+      expect(layer(remarked, 'product')).not.toMatch(/color:\s*green/);
     } finally {
       fs.writeFileSync(marker, saved);
       delete globalThis.appBabelConfigFiles;
