@@ -57,8 +57,9 @@ committed: a pull request links or attaches it.
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `scripts.ts`    | Touch scripts as data: `tap`, `drag` (hold, rest), `flick` (exact final-move speed, velocity profiles), `holdThenDrag`, `pinch`, `rotate`, `path`, `merge` (a second finger mid-gesture), `releaseVelocity`, `toTouchEvents`.                                                |
 | `touch.ts`      | `touchDriver(page).play(script)`: the script as real engine input. `installInputLog` / `readInputLog`: what the page received.                                                                                                                                               |
-| `frames.ts`     | `startScreencast` (timestamped composited frames), `markElement` (a marker chip or outline), `trackMarker` (marker box per frame), `sampleRects` (per-rAF rects), `frameStats`.                                                                                              |
+| `frames.ts`     | `startScreencast` (timestamped composited frames), `markElement` (a marker chip or outline), `trackMarker` (marker box per frame), `trackMarkers` (several colors from one decode of each frame), `sampleRects` (per-rAF rects), `frameStats`.                               |
 | `busy.ts`       | `blockMainThread(page, ms)`, which returns the window it held and the span its loop measured, and `busyWindowProof(tracked, window)`: frames presented, frames that moved, longest stall, a verdict; `presented` adds the compositor's own frames.                           |
+| `brightness.ts` | `trackBrightness(page, frames, {x, y})`: a colour channel's mean in a square per frame, as a scalar on `box.x`, for a busy-window proof of a fade or a dim.                                                                                                                  |
 | `webInput.ts`   | `webInputDriver(page)`: `wheel({x, y, dx, dy, ctrl})` and `pen(points)` as real engine input, for proofs across pointers (`spec:AST-100` FR4); `wheel` resolves once the page has the step; read back through the input log.                                                 |
 | `trace.ts`      | `traceRendering(page, body)`: main-thread counts of UpdateLayoutTree / Layout / PrePaint / Paint / Layerize / UpdateLayer / ScrollLayer / HitTest, `countBetween`, long tasks; `installLongTaskLog` / `readLongTasks`; `startCompositorTrace`: when the compositor presents. |
 | `curves.ts`     | `holdAnimations`, `armHold`, `seekAnimations`, `sampleCurve` (presented transform / opacity at any t), `waitForAnimation`, `watchAnimations`, `waitForRest`, `releaseAnimations`, `releaseAnimationLog` (frees what the recorder kept, before a heap or listener count).     |
@@ -104,13 +105,20 @@ animations, ones the page paused and ones on a scroll or view timeline are left
 alone; held animations keep their offsets from the first hold's earliest start, and release
 resumes only them. A hold sent from the test reaches the page after a round
 trip, and on a loaded runner a short animation can end first: for one that an
-action starts, `await armHold(page, scope)` before the action arms the page
+action starts, `await armHold(page, scope, {judges})` before the action arms the page
 itself: it looks on every frame and every 4 ms between frames (WebKit can go
 about 70 ms without a frame while it first composites a layer),
 holds everything running under the scope as soon as one of them runs (or
 `count` of them, for parts that start apart; with `newOnly`, only what starts
 after the arm, for a turn that starts mid-motion), and `held()` after the
-action returns that held set. Compare it with an
+action returns that held set. Other animations under the scope (a press, a
+colour change) can meet that count before the motion a test judges starts,
+and a hold that took only them proves nothing about it. So every armed hold
+names the motion it judges, `{judges: {target, property}}` (a list for
+several; `pseudoElement` for a `::before` or `::after`), and `held()` rejects
+when the hold took no animation of it. `judges: 'count-only'` checks nothing:
+it marks a call site whose hold does not take its judged motion yet.
+Compare it with an
 oracle from `math.ts` through `compareCurve`; a tolerance states the error
 budget (for a spring baked into `linear()` stops of `h` ms, chords err by up to
 `h² / 8 · |x''|`). A seek past an animation's end lands half a millisecond
@@ -244,7 +252,11 @@ a dialog they still wait for the backdrop's. Track a top-layer control from
 the same screencast with `trackControl(page, frames)` (`trackMarker` with
 `CONTROL_RGB`, searching only the top strip it crosses). A control mounted
 `within` a dialog moves with it, so track that one with `trackMarker(page,
-frames, {rgb: CONTROL_RGB})`. Pass either as `control`: the component passes when it moved on every frame the control
+frames, {rgb: CONTROL_RGB})`, or track the marker and the control together
+with `trackMarkers(page, frames, {colors: [MARKER_RGB, CONTROL_RGB]})`, which
+decodes each frame once. A proof reads frames up to
+`BUSY_PROOF_LOOKAROUND_MS` (250 ms) around its judged part, so a spec may
+decode only those. Pass either as `control`: the component passes when it moved on every frame the control
 moved and its longest stall is no longer than the control's. Both are read from
 the same screencast frames, so a compositor animation misses none. A window in
 which the control moved on fewer than four frames fails, since the machine
@@ -290,7 +302,12 @@ and judge the runs pooled (`pooledBusyProof(runs)`, each run with its own
 tracked frames, control and window): the control must move on at least four
 frames over all the runs, the component on every one of them, and in each run
 its longest stall may be no longer than that run's control's, since a stall
-belongs to its run.
+belongs to its run. A run whose control moved on fewer frames than
+`minRunFrames` (1 by default) is too little to judge: the summary names it,
+and the pool leaves it out, so it never counts as a pass. The pool fails with
+fewer than `minJudgedRuns` judged runs (half, rounded up). In each judged run,
+the component must move on every frame its control moved on, so a freeze fails
+its run.
 
 On a loaded machine Chromium's screencast can skip frames the compositor
 still presents. `startCompositorTrace(page)`, started with the screencast and
@@ -393,6 +410,8 @@ instead, and the proof acts at an instant of the scene's own time.
   predicate holds, and rejects after its timeout.
 - `advanceFrozenPage(page, ms)` moves the page's clock and every held
   animation on together by `ms`; timers and frame callbacks stay held.
+- `holdInputUntil(page, {afterResumeMs})` makes the page handle its next lift
+  late, after the thaw, while the scene runs (below).
 
 While frozen, every animation in the document is paused where it stands (Web
 Animations, CSS animations and transitions), and so is any the page starts
@@ -429,6 +448,31 @@ animations. Chromium's `Emulation.setVirtualTimePolicy` stops
 the headless shell (300 ms into a pause the timeline had advanced 300 ms and a
 compositor animation 45 px), and its `advance` policy cannot return to real
 time: it fast-forwards whenever the page is idle.
+
+### Input the page handles late
+
+A frozen page handles input at once. A proof that needs a late handling, with
+the compositor still moving, cannot freeze through the input. A held run resumes
+only at the first frame after the thaw, and a block before that frame holds the
+screen too. `holdInputUntil(page, {afterResumeMs})`, called before the thaw,
+holds the next lift instead (`pointerup` or `touchend`; `on` names others). The
+install's window capture listener runs first in the input's task and keeps the
+main thread busy until `afterResumeMs` after that first frame. Send the input
+once `resumed()` resolves. `landed()` then gives when the input arrived, when it
+was due, and when the page let it through. The event keeps its own `timeStamp`,
+earlier than its handling, as on a busy page. An input that arrives more than a
+frame late, before that first frame, or while the page is frozen again, rejects
+`landed()` with `LiftPlacementError` and the numbers. The page cannot hold back
+an input it has not received, and a hold before the frame would stop the screen.
+Choose `afterResumeMs` above the runner's time from `resumed()` to the input's
+arrival. Under load, that round trip is what makes a hold late. The page lets
+the input through at its time, or at its arrival if that came later within the
+frame. On a starved runner it can be later still, by as long as its main thread
+did not run: `landed()` gives that as `stalledMs`.
+
+`navigator.scheduling.isInputPending()` cannot gate a lift. In Playwright's
+Chromium 149 it reports a queued mouse press or key at once, but never a touch
+sent with `Input.dispatchTouchEvent`. WebKit has no `isInputPending`.
 
 ## Engine limits (measured with Playwright 1.61)
 

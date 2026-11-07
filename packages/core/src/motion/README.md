@@ -26,6 +26,7 @@ roles through `resolveMotion`.
 | `uikit/gestures.ts`                              | Gesture recognizer thresholds, the velocity filter and haptic stand-ins, as `{value, unit}` entries (sources in JSDoc).                                              |
 | `uikit/picker.ts`                                | UIPickerView: row pitch, height and rubber band, velocity floor, the coast's stop speed, snap at rest, tap spin, tick.                                               |
 | `uikit/segmented.ts`                             | UISegmentedControl: the selection indicator's spring; under Reduce Motion the animator's cross-fade replaces it.                                                     |
+| `uikit/sheet.ts`                                 | UISheetPresentationController: the flick speed, how near a detent counts as on it, how far ahead a release is projected, and the speed below which it is not.        |
 | `uikit/switch.ts`                                | UISwitch on iOS 26.2: geometry, the lift, settle, travel and tracking springs, the flip distance, the track colour.                                                  |
 | `uikit/datePicker.ts`                            | UIDatePicker: the rules it adds to its wheels.                                                                                                                       |
 | `android/keyboard.ts`                            | Android's software keyboard (Chrome with Gboard): its slides' durations and curves (no theme's) and when they start against Chrome's report and a blur.              |
