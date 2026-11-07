@@ -286,13 +286,15 @@ describe('WebKit interaction proof routing', () => {
     expect(run).not.toContain('CarouselPaging');
     // A component's own code runs that folder's interaction specs, and no
     // shared proof.
-    expect(proofs(['packages/core/src/Carousel/useCarouselPaging.ts'])).toEqual(
-      [
-        'packages/core/src/Carousel/__tests__/Carousel.interaction.browser.spec.ts',
-        'packages/core/src/Carousel/__tests__/CarouselSnapPagingButtons.interaction.browser.spec.ts',
-        'packages/core/src/Carousel/__tests__/CarouselSnapPagingEdges.interaction.browser.spec.ts',
-      ],
+    // The folder's specs come from the tree, not a list here, so a new
+    // Carousel spec needs no edit to this test.
+    const carousel = listedSpecs.filter(file =>
+      file.startsWith('packages/core/src/Carousel/'),
     );
+    expect(carousel.length).toBeGreaterThan(0);
+    expect(
+      proofs(['packages/core/src/Carousel/useCarouselPaging.ts']).sort(),
+    ).toEqual(carousel.sort());
     for (const component of ['DateInput', 'TabList', 'TreeList', 'SideNav']) {
       expect(run).not.toContain(component);
     }
