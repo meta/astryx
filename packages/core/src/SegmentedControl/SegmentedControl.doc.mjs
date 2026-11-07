@@ -120,7 +120,8 @@ function WorkspaceCard() {
     {
       name: 'size',
       type: "'sm' | 'md' | 'lg'",
-      description: 'Size variant for the control.',
+      description:
+        'Size variant for the control. On coarse pointers every size is floored to a 44px touch target (WCAG 2.2 AA "Target Size (Minimum)").',
       default: "'md'",
     },
     {
