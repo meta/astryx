@@ -5233,6 +5233,51 @@ test.describe('storyboards', {tag: '@storyboard'}, () => {
     expect(window.from).toBeGreaterThan(startedAt);
   });
 
+  test("blockMainThread with during and a pseudoElement starts on that pseudo-element's animation, not on a child's earlier one", async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    // A child, as a switch's thumb, and a fade on the box's ::after, as the
+    // switch track's.
+    await box.evaluate(el => {
+      const style = document.createElement('style');
+      style.textContent =
+        '#box::after{content:"";position:absolute;inset:0;background:#000;opacity:0}';
+      document.head.append(style);
+      const child = document.createElement('div');
+      child.style.cssText = 'width:20px;height:20px;background:#c33';
+      el.append(child);
+    });
+    const blocking = blockMainThread(page, 100, {
+      during: box,
+      pseudoElement: '::after',
+      minProgressMs: 50,
+      timeout: 3_000,
+    });
+    await page.waitForTimeout(100);
+    // The child's press starts first, and the fade 300 ms after it.
+    const fadeStartedAt = await box.evaluate(async el => {
+      (el.firstElementChild as HTMLElement).animate(
+        [{scale: '1'}, {scale: '0.9'}],
+        {duration: 1_000, fill: 'forwards'},
+      );
+      await new Promise(resolve => setTimeout(resolve, 300));
+      el.animate([{opacity: 0}, {opacity: 1}], {
+        duration: 1_000,
+        pseudoElement: '::after',
+      });
+      return performance.timeOrigin + performance.now();
+    });
+    const window = await blocking;
+    // The block began once the fade had run 50 ms, never on the child.
+    expect(window.from).toBeGreaterThanOrEqual(fadeStartedAt + 50);
+    // A pseudo-element names a part of `during`, so it needs one.
+    await expect(
+      blockMainThread(page, 100, {pseudoElement: '::after'}),
+    ).rejects.toThrow(/pass `during` too/);
+  });
+
   test('blockMainThread with during names a late block when the run it saw held ends before the wait times out', async ({
     page,
   }) => {
