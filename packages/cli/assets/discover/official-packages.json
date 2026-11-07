@@ -146,6 +146,18 @@
         },
         {
           "kind": "component",
+          "name": "NavigationScreen"
+        },
+        {
+          "kind": "component",
+          "name": "NavigationStack"
+        },
+        {
+          "kind": "component",
+          "name": "PageControl"
+        },
+        {
+          "kind": "component",
           "name": "RadialChart"
         },
         {
@@ -270,6 +282,18 @@
         {
           "kind": "component",
           "name": "RichTextEditor"
+        },
+        {
+          "kind": "component",
+          "name": "RichTextEditorAutoLinkPlugin"
+        },
+        {
+          "kind": "component",
+          "name": "RichTextEditorToolbar"
+        },
+        {
+          "kind": "component",
+          "name": "RichTextView"
         },
         {
           "kind": "template",

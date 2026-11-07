@@ -31,7 +31,8 @@ async function expectSearchKeyboard(input: Locator) {
 
 async function openSearchRow(page: Page, story: string, label: string) {
   await openStory(page, storybook(), story);
-  const trigger = page.getByRole('button', {name: label, exact: true});
+  // A searchable trigger's name is its label followed by its value text.
+  const trigger = page.getByRole('button', {name: new RegExp(`^${label}\\b`)});
   await expect(trigger).toBeVisible();
   await trigger.tap();
   return page.getByRole('combobox');

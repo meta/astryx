@@ -15,13 +15,21 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {
+import {requireNatively} from '../../../test-utils/native-require.mjs';
+
+const require = requireNatively(import.meta.url);
+/** @type {typeof import('../../../api/search/search.mjs')} */
+const {
   search,
   scoreCandidate,
   SEARCH_DOMAINS,
-} from '../../../api/search/search.mjs';
-import {runCli} from '../../../test-utils/run-cli.mjs';
-import {linkThisCliAsProjectCli} from '../../../test-utils/release-fixtures.mjs';
+} = require('../../../api/search/search.mjs');
+/** @type {typeof import('../../../test-utils/run-cli.mjs')} */
+const {runCli} = require('../../../test-utils/run-cli.mjs');
+/** @type {typeof import('../../../test-utils/release-fixtures.mjs')} */
+const {
+  linkThisCliAsProjectCli,
+} = require('../../../test-utils/release-fixtures.mjs');
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Run against the monorepo root so @astryxdesign/core is discoverable.

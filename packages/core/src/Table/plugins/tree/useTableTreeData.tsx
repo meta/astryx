@@ -30,7 +30,6 @@
  */
 
 import {
-  createContext,
   use,
   useCallback,
   useEffect,
@@ -64,6 +63,7 @@ import {
   useComponentTranslator,
 } from '../../../i18n/useComponentTranslator';
 import english from '../../../i18n/generated-english/Table/plugins/tree/useTableTreeData.generated';
+import {createSharedContext} from '../../../utils/sharedContext';
 
 registerEnglishFallback(english);
 import {TableContext} from '../../TableContext';
@@ -179,7 +179,11 @@ function createTreeStore<T extends Record<string, unknown>>(
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const TreeStoreContext = createContext<TreeStore<any> | null>(null);
+const TreeStoreContext = createSharedContext<TreeStore<any> | null>(
+  'TreeStoreContext',
+  1,
+  null,
+);
 TreeStoreContext.displayName = 'TreeStoreContext';
 
 /** Indent token -> index, for the primitive row snapshot. */

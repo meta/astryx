@@ -67,7 +67,7 @@ import {dispatchLayerEscapeKeyDown} from '../Layer/layerStack';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {composeEventHandlers} from '../utils';
 import {mergeRefs} from '../utils/mergeRefs';
-import {useModalOutlet} from '../Layer/modalOutlet';
+import {useModalOutletWithoutRef} from '../Layer/modalOutlet';
 import {BottomSheetHostContext} from './BottomSheetHostContext';
 import {
   BOTTOM_SHEET_STACK_DEFAULT_VIEW,
@@ -540,7 +540,10 @@ export function BottomSheetSwitcher({
   // `hostSheet` across a handoff, and the fading retained dialog is never the
   // outlet. A closing flow stops supplying at once. Passive: it runs after the
   // layout effects that present the step dialogs.
-  useModalOutlet(
+  // The flow has no element for the outlet's ref. Its wrapper's ref is the
+  // sheet stack's tree-order anchor, which the stack reads in the closing
+  // commit, and the element of its host step changes on a handoff.
+  useModalOutletWithoutRef(
     hostDialogRef,
     isModal && isFlowOpen,
     stackView.isTop || !stackView.isStacked,

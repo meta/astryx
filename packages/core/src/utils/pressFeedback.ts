@@ -3,10 +3,11 @@
 /**
  * @file pressFeedback.ts
  * @input The press state machine (pressGesture.ts), the menu-press and
- *   press-group markers, the scroll-view test (scrollView.ts) and the document's pointer, keyboard, scroll and
- *   visibility events
+ *   press-group markers and the scroll-view test (scrollView.ts). Also the
+ *   input clock (inputAge.ts) and the document's pointer, keyboard, scroll
+ *   and visibility events
  * @output PRESSABLE_ATTRIBUTE, PRESSED_ATTRIBUTE, pressableProps,
- *   pressFadeMs, installPressFeedback and cancelPress
+ *   pressFadeMs, installPressFeedback, cancelPress and installBoxHold
  * @position The DOM half of the touch press model. usePressFeedback installs
  *   it, and the CSS arms live in interactionOverlay.stylex.ts.
  *
@@ -28,8 +29,9 @@
 //
 // A finger waits only inside a scroller. Outside one, a surface highlights in
 // the frame the finger lands, as a UIControl does. Inside one, it waits the
-// content-touch delay, because the touch can become a scroll. Rows follow the
-// same rule.
+// content-touch delay, because the touch can become a scroll. The delay counts
+// from the touch's own timestamp, so a late listener does not add to it. Rows
+// follow the same rule.
 //
 // A surface's hold does nothing, so it keeps the browser's long-press text
 // selection (AST-094). Only an element whose hold does something suppresses
@@ -51,6 +53,7 @@ import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
 import {parseMotionRoleValue} from '../motion/roles';
 import {subscribeInput} from './inputStream';
 import {isInsideScrollView} from './scrollView';
+import {msSinceInput} from './inputAge';
 import {TOUCH_QUERY} from './touchPresentation';
 import {holdsPressThroughDrag} from '../privateAttributes/pressHoldsDrag.stylex';
 import {isTrackedByGroup} from '../privateAttributes/pressGroupItem.stylex';
@@ -132,6 +135,48 @@ interface Slot {
 }
 
 const finger: Slot = {live: null};
+
+/**
+ * A finger's or a pen's contact on a control's box (utils/boxHold.ts). It
+ * keeps its pointer, the press it started (none for a brake) and the box
+ * hold's end.
+ * A braking contact counts, and so does one that a scroll cancels. Each ends
+ * at its own lift or cancel. Only a press that is still live at the lift is a
+ * still lift.
+ */
+let contact: {
+  pointerId: number;
+  live: LiveGesture | null;
+  end: (isStillLift: boolean) => void;
+} | null = null;
+
+/** Ends the box contact and tells its box hold, once. */
+function endContact(isStillLift: boolean): void {
+  const ended = contact;
+  contact = null;
+  ended?.end(isStillLift);
+}
+
+/** The box hold that a box component installs (utils/boxHold.ts). */
+export interface BoxHold {
+  /** Starts the hold of a contact. Returns its end, or null off a box. */
+  readonly start: (
+    surface: HTMLElement,
+    target: EventTarget | null,
+  ) => ((isStillLift: boolean) => void) | null;
+  /** Ends every wait still running, as the controller goes away. */
+  readonly endWaits: () => void;
+}
+
+let boxHold: BoxHold | null = null;
+
+/**
+ * @internal Installs the box hold. Only a page with a box component loads
+ * it, so a page of buttons and links carries none of its code.
+ */
+export function installBoxHold(hold: BoxHold): void {
+  boxHold = hold;
+}
 const button: Slot = {live: null};
 /** How many callers hold the controller installed; listeners exist while > 0. */
 let holders = 0;
@@ -287,7 +332,7 @@ function clearTimer(slot: Slot): void {
  * - The same during the fade strands `fading` and the tracking slot, which
  *   holds an element that a virtualized list may have unmounted.
  */
-function apply(slot: Slot, step: PressStep): void {
+function apply(slot: Slot, step: PressStep, sinceEventMs = 0): void {
   const live = slot.live;
   if (live == null) {
     return;
@@ -326,8 +371,13 @@ function apply(slot: Slot, step: PressStep): void {
     } else {
       // A TIMER, never `requestAnimationFrame`: iOS throttles frame callbacks
       // while a scroll runs, so a frame-based delay would fire late, after the
-      // scroll, and paint a control nobody is pressing any more.
-      const timer = setTimeout(fire, TIMER_MS[kind]);
+      // scroll, and paint a control nobody is pressing any more. The onset
+      // counts from the touch, so the time the listener waited comes off it.
+      const delay =
+        kind === 'onset'
+          ? Math.max(0, TIMER_MS.onset - sinceEventMs)
+          : TIMER_MS[kind];
+      const timer = setTimeout(fire, delay);
       live.timer = () => clearTimeout(timer);
     }
   }
@@ -505,6 +555,9 @@ function onPointerDown(event: PointerEvent): void {
     return;
   }
   armTouchCancel();
+  // A second finger or a new press ends the last box contact; its lift is not
+  // a still lift.
+  endContact(false);
   if (finger.live != null) {
     const fingerIsUp =
       finger.live.gesture.phase === 'fading' ||
@@ -532,28 +585,36 @@ function onPointerDown(event: PointerEvent): void {
   // A group's tracker that follows this pointer paints its action, so two
   // writers would erase each other's paint. The touch still counts for the
   // brake above.
-  if (
-    element == null ||
-    braking ||
-    isTrackedByGroup(element, event.pointerType)
-  ) {
+  if (element == null || isTrackedByGroup(element, event.pointerType)) {
+    return;
+  }
+  // A braking finger presses nothing, but a box hold still follows it.
+  const end = boxHold?.start(element, event.target) ?? null;
+  const live: LiveGesture | null = braking
+    ? null
+    : {
+        element,
+        gesture: idlePressGesture(),
+        pointerId: event.pointerId,
+        timer: null,
+      };
+  if (end != null) {
+    contact = {pointerId: event.pointerId, live, end};
+  }
+  if (live == null) {
     return;
   }
   takeOver(button, element);
-  finger.live = {
-    element,
-    gesture: idlePressGesture(),
-    pointerId: event.pointerId,
-    timer: null,
-  };
+  finger.live = live;
   apply(
     finger,
-    pressGestureStep(finger.live.gesture, {
+    pressGestureStep(live.gesture, {
       kind: 'down',
       x: event.clientX,
       y: event.clientY,
       delayed: isInsideScrollView(element),
     }),
+    msSinceInput(event.timeStamp, event),
   );
 }
 
@@ -596,6 +657,16 @@ function onPointerUp(event: PointerEvent): void {
   if (event.target instanceof Node) {
     lastTouchTarget = event.target;
   }
+  if (contact?.pointerId === event.pointerId) {
+    // Read before the release step: a press that travelled or that a scroll
+    // took is dead or gone by now.
+    const pressed = contact.live;
+    endContact(
+      pressed != null &&
+        finger.live === pressed &&
+        pressed.gesture.phase !== 'dead',
+    );
+  }
   const live = finger.live;
   if (
     live == null ||
@@ -622,6 +693,11 @@ function onCancel(event?: Event): void {
       cancelButton();
     }
     return;
+  }
+  // Only the pointer's own cancel ends its contact. A scroll's cancel keeps it:
+  // the finger is still down.
+  if (pointer?.pointerId != null && contact?.pointerId === pointer.pointerId) {
+    endContact(false);
   }
   const live = finger.live;
   if (live == null) {
@@ -737,6 +813,7 @@ function onBlur(): void {
  */
 function onVisibilityChange(): void {
   if (document.visibilityState === 'hidden') {
+    endContact(false);
     finish(finger);
     finish(button);
   }
@@ -801,6 +878,8 @@ function addListeners(): void {
 }
 
 function removeListeners(): void {
+  endContact(false);
+  boxHold?.endWaits();
   for (const unsubscribe of unsubscribers.splice(0)) {
     unsubscribe();
   }

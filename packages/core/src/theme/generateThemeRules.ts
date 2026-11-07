@@ -1511,6 +1511,9 @@ function generateColorOverrides(
     disabled: 'var(--color-text-disabled)',
     placeholder: 'var(--color-text-secondary)',
     accent: 'var(--color-text-accent)',
+    // A label that follows its owner's color, such as a Link's, keeps doing
+    // so when a theme styles the target's base color.
+    inherit: 'inherit',
   };
 
   const touchesText = 'text' in components;

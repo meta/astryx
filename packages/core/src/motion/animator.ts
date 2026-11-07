@@ -153,9 +153,9 @@
  * release (`touchRelease`) and at once elsewhere (DR2, DR3).
  *
  * Roles: every spring and curve the animator plays passes through
- * resolveMotion.ts, which names the motion role it plays (`springs.settle`
- * once `registerSpringsTable()` has run, the Reduce Motion fade's curve,
- * which the animator registers alone). The per-role tables stay internal
+ * resolveMotion.ts, which names the motion role it plays. `springs.settle`
+ * registers as its module loads, and the animator registers the Reduce Motion
+ * fade's curve alone. The per-role tables stay internal
  * (`spec:AST-094` DEC-15), so a role plays its table value: nothing reads a
  * role's own CSS variable. Its time scales by the tempo of the element's
  * theme. A spring written inline at the call
@@ -184,7 +184,12 @@
 import {cubicBezier} from './bezier';
 import {LATE_START_MS} from './frameBlock';
 import {solveSpring, toSpring, type SpringDescription} from './spring';
-import {registerPresentedOffset, type PresentedSource} from './presentation';
+import {
+  clearPresentedResolve,
+  registerPresentedOffset,
+  type PresentedSource,
+  writePresentedResolve,
+} from './presentation';
 import {resolveMotion} from './resolveMotion';
 import {
   reducedMotionCrossFade,
@@ -216,6 +221,23 @@ export interface SpringTransition {
    * has on screen.
    */
   velocity?: MotionValues;
+}
+
+/** What `Animator.rebase` takes besides the amounts. */
+export interface RebaseOptions {
+  /** Time of the shift on the document timeline (ms). Defaults to now. */
+  at?: number;
+  /**
+   * Per property, the value its spring heads for after the shift. A spring
+   * whose target plus its amount lands there moves whole, before its first
+   * frame and once its start is known. Its curve and target move by the
+   * amount. It keeps its start time and velocity, as when the element's
+   * resting place moves under a curve that keeps going. If its first frame
+   * has run while its start is unread, only the model moves. The next call
+   * on the channel in the same task rebuilds its animation, or else the end
+   * of the task does.
+   */
+  towards?: MotionValues;
 }
 
 /**
@@ -447,9 +469,10 @@ export interface Animator {
    * moves the element under them: a property moving on a spring keeps its
    * spring, velocity and target (the curve restarts from the shifted value);
    * any other moving curve shifts whole, its end included; a resting
-   * property takes the offset and stays.
+   * property takes the offset and stays. `towards` moves some springs whole
+   * instead (RebaseOptions).
    */
-  rebase(deltas: MotionValues, options?: Pick<AnimateOptions, 'at'>): void;
+  rebase(deltas: MotionValues, options?: RebaseOptions): void;
   /** Freezes properties (all by default) at their presentation values. */
   stop(properties?: ReadonlyArray<MotionProperty | 'scale'>): void;
   /**
@@ -672,6 +695,13 @@ const REST_FRAMES_PER_SECOND = 60;
 const MAX_DURATION_MS = 30_000;
 
 /**
+ * How close a spring's target and a value must be to count as the same, in
+ * the property's own units. Only float rounding separates two ways of
+ * computing one value, far below anything the screen shows.
+ */
+const SAME_VALUE = 1e-6;
+
+/**
  * The task calls from rest are made in, shared by every call made in it
  * (every animator's), so one motion's parts that are separate calls start
  * together (startAfterBlock).
@@ -749,9 +779,6 @@ const END_RECHECK_MS = 1000 / 60;
 export const PROMOTION_LINGER_MS = 500;
 
 type Channel = 'translate' | 'rotate' | 'scale' | 'opacity';
-
-/** The custom property whose writes make WebKit resolve a moving element. */
-const RESOLVE_PROPERTY = '--astryx-presented';
 
 const CHANNELS: Record<Channel, ReadonlyArray<MotionProperty>> = {
   translate: ['x', 'y'],
@@ -1026,8 +1053,6 @@ export function createMotionEngine(
    * moves it: where the animation started, or where a `resolve` left it.
    */
   let hitTested = {x: 0, y: 0};
-  /** Counts the style writes that make WebKit resolve the element again. */
-  let resolutions = 0;
   let unpresent: (() => void) | null = null;
   /** Channels promoted to the element's compositing layer (will-change). */
   const promoted = new Set<Channel>();
@@ -1261,8 +1286,7 @@ export function createMotionEngine(
       // Any style write makes WebKit resolve the element's transform again,
       // to the value drawn now, where it then stays (iOS 26.2: in the same
       // task); a custom property changes nothing else.
-      resolutions += 1;
-      target.style.setProperty(RESOLVE_PROPERTY, String(resolutions));
+      writePresentedResolve(target);
       hitTested = {x: drawnTranslate('x', time), y: drawnTranslate('y', time)};
     },
   };
@@ -1276,7 +1300,7 @@ export function createMotionEngine(
     unpresent?.();
     unpresent = null;
     if (presented instanceof HTMLElement) {
-      presented.style.removeProperty(RESOLVE_PROPERTY);
+      clearPresentedResolve(presented);
     }
     presented = element;
     if (element != null) {
@@ -1372,7 +1396,43 @@ export function createMotionEngine(
     running.set(channel, animation);
   };
 
+  const replaceIn = (group: StartGroup, segment: Segment, next: Segment) => {
+    const index = group.segments.indexOf(segment);
+    if (index >= 0) {
+      group.segments[index] = next;
+    } else {
+      group.segments.push(next);
+    }
+  };
+
+  /**
+   * Channels whose model a rebase moved while their animation still shows
+   * the old curve. Any rebuild clears its channel; the end of the task
+   * rebuilds the rest, so a frame never shows the old curve at the new rest.
+   */
+  const stale = new Set<Channel>();
+  let healQueued = false;
+
+  const markStale = (channel: Channel) => {
+    stale.add(channel);
+    if (!healQueued) {
+      healQueued = true;
+      queueMicrotask(healStale);
+    }
+  };
+
+  const healStale = () => {
+    healQueued = false;
+    if (stale.size === 0) {
+      return;
+    }
+    const properties = [...stale].flatMap(channel => CHANNELS[channel]);
+    stale.clear();
+    commit(properties, now());
+  };
+
   const rebuild = (channel: Channel, time: number) => {
+    stale.delete(channel);
     const previous = running.get(channel);
     running.delete(channel);
     clearTimeout(retireTimers.get(channel));
@@ -2996,6 +3056,61 @@ export function createMotionEngine(
     landings.delete(landing);
   };
 
+  /**
+   * How long `landing` still waits for its fade, in ms. A sampler that pauses
+   * the fade holds it, so it checks again later. A resumed fade holds it until
+   * the fade starts again. A fade that runs past the landing's due time, as
+   * after a pause, holds it for the rest of the fade. Any other fade holds
+   * nothing.
+   */
+  const fadeHeldFor = (landing: Landing): number => {
+    const animation = running.get('opacity');
+    const owner = segments.get('opacity')?.owner;
+    if (
+      animation == null ||
+      owner == null ||
+      (owner !== landing.owner && !landing.carried.includes(owner))
+    ) {
+      return 0;
+    }
+    if (animation.playState === 'paused') {
+      return RETIRE_RECHECK_MS;
+    }
+    // The timeline reads the frame before a long task, so the fade's current
+    // time would date a fade that has ended as still running.
+    const start = animation.startTime;
+    const duration = Number(animation.effect?.getTiming?.().duration);
+    if (!Number.isFinite(duration)) {
+      return 0;
+    }
+    if (start == null) {
+      // A fade resumed with play() has no start until its next frame.
+      return animation.playState === 'running' ? END_RECHECK_MS : 0;
+    }
+    // A fade that ends by the landing's due time holds nothing. A timer runs
+    // in whole milliseconds, so it often fires a fraction early.
+    const end = Number(start) + duration - END_HOLD_MS;
+    if (landing.due != null && end <= landing.due) {
+      return 0;
+    }
+    const left = end - now();
+    return left > 0 ? left : 0;
+  };
+
+  /**
+   * The landing's timer: it lands once its fade lets it. A call that takes the
+   * landing over lands it directly, at once.
+   */
+  const landWhenFaded = (landing: Landing) => {
+    const held = fadeHeldFor(landing);
+    if (held > 0) {
+      landing.due = now() + held;
+      landing.timer = setTimeout(() => landWhenFaded(landing), held);
+      return;
+    }
+    land(landing);
+  };
+
   /** Arms a landing from the call's start (the browser's, for a call from rest). */
   const scheduleLanding = (
     owner: HandleState,
@@ -3027,7 +3142,7 @@ export function createMotionEngine(
       }
       landing.due = start + landing.at;
       landing.timer = setTimeout(
-        () => land(landing),
+        () => landWhenFaded(landing),
         Math.max(0, landing.due - now()),
       );
     });
@@ -3815,6 +3930,7 @@ export function createMotionEngine(
       syncPending();
       flushDeferred();
       const time = rebaseOptions.at ?? now();
+      const towards = expand(rebaseOptions.towards ?? {});
       const changed: MotionProperty[] = [];
       const owners = new Set<HandleState>();
       for (const [property, delta] of Object.entries(expand(deltas)) as [
@@ -3824,9 +3940,9 @@ export function createMotionEngine(
         if (delta === 0) {
           continue;
         }
-        changed.push(property);
         const segment = segmentAt(property, time);
         if (segment == null) {
+          changed.push(property);
           resting[property] = valueAt(property, time) + delta;
           segments.delete(property);
           continue;
@@ -3842,15 +3958,40 @@ export function createMotionEngine(
             : undefined;
         const replace = (next: Segment) => {
           if (group != null) {
-            const index = group.segments.indexOf(segment);
-            if (index >= 0) {
-              group.segments[index] = next;
-            } else {
-              group.segments.push(next);
-            }
+            replaceIn(group, segment, next);
           }
           segments.set(property, next);
         };
+        const heading = towards[property];
+        if (
+          segment.spring != null &&
+          heading != null &&
+          Math.abs(segment.target + delta - heading) <= SAME_VALUE
+        ) {
+          // The spring keeps its course to the shifted target from its own
+          // start.
+          const whole: Segment = {
+            ...segment,
+            target: heading,
+            at: t => segment.at(t) + delta,
+          };
+          if (latest == null) {
+            changed.push(property);
+            replace(whole);
+            continue;
+          }
+          // While the browser has not told the start, only the model moves.
+          // The call that follows rebuilds the channel from it, or else the
+          // end of the task does.
+          const waiting = segment.group;
+          if (waiting != null && !waiting.resolved) {
+            replaceIn(waiting, segment, whole);
+            segments.set(property, whole);
+            markStale(CHANNEL_OF[property]);
+            continue;
+          }
+        }
+        changed.push(property);
         if (segment.spring != null) {
           const from = valueAt(property, time) + delta;
           const velocity = velocityAt(property, time);
@@ -3969,6 +4110,7 @@ export function createMotionEngine(
         animation.cancel();
       }
       running.clear();
+      stale.clear();
       for (const timer of retireTimers.values()) {
         clearTimeout(timer);
       }
