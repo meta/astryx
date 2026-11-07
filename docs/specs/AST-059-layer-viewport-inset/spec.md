@@ -258,7 +258,8 @@ the app reaches every layer instead of the components that happen to read it.
   `overflow-y: auto` with no overscroll containment, and the runtime reads
   nothing to decide it: a wheel over a layer that fits still scrolls the page,
   and a tall layer's scroll chains to the page at its end, as native scrolling
-  does (FR3). The runtime authors both orders; a component passes no fallbacks
+  does (FR3). `component:Tooltip` records what that means for content inside
+  the layer: it is always a scroll container. The runtime authors both orders; a component passes no fallbacks
   of its own to an anchor-mode layer.
 - **FR5 — An off-screen anchor holds.** A layer whose anchor has left the
   viewport does not slide. It keeps the position the flips give it and its
