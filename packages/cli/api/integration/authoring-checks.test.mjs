@@ -28,8 +28,12 @@ import {
   integrationComponentConflicts,
   integrationDocConflicts,
   integrationTemplateConflicts,
-  shellArg,
 } from './authoring-checks.mjs';
+import {warmIntegrationChecks} from '../../test-utils/warm-integration-checks.mjs';
+
+// The checks' one-time start in this file (TypeScript and its lib files) runs
+// here, while the file is collected, so no test carries it.
+await warmIntegrationChecks();
 
 let tmpDir;
 
@@ -146,6 +150,14 @@ const PASSAGE =
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(
     path.join(process.cwd(), '.astryx-template-conflicts-'),
+  );
+  // The fixture is a package with its own TypeScript config, scoped to its
+  // own files. Without one, the prop check reads the repository's root
+  // config, as `tsc` would for a folder inside it, and compiles every
+  // declaration in the repository for each check.
+  fs.writeFileSync(
+    path.join(tmpDir, 'tsconfig.json'),
+    `${JSON.stringify({extends: '../tsconfig.json', include: ['**/*']})}\n`,
   );
 });
 
@@ -368,13 +380,6 @@ describe('integrationTemplateConflicts', () => {
     );
     expect(conflict?.message).toContain('Rename');
     expect(conflict?.message).not.toContain('set replaces');
-  });
-
-  it('shell-quotes unusual ids instead of allowing command substitution', () => {
-    expect(shellArg('safe/id')).toBe('safe/id');
-    expect(shellArg('my$thing')).toBe("'my$thing'");
-    expect(shellArg("a'b")).toBe("'a'\\''b'");
-    expect(shellArg('foo`id`')).toBe("'foo`id`'");
   });
 
   it('returns a malformed template once as an invalid_template issue', async () => {

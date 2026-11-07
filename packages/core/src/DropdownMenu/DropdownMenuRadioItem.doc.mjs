@@ -52,7 +52,7 @@ export const docs = {
       type: 'boolean',
       default: 'false',
       description:
-        'Whether this individual radio item is disabled. Disabled items expose aria-disabled, block selection, and are currently skipped by DropdownMenu arrow-key navigation.',
+        'Whether this individual radio item is disabled. A disabled item stays in the accessibility tree as disabled (aria-disabled) but takes no focus: the arrow keys, typeahead, and the pointer highlight skip it, and selection is blocked.',
     },
     {
       name: 'endContent',
@@ -97,7 +97,7 @@ export const docsDense = {
     description: 'secondary text below label',
     icon: 'icon before label',
     isDisabled:
-      'disabled; aria-disabled, blocks selection, skipped by arrow keys',
+      'disabled (aria-disabled); skipped by arrows/typeahead, not focusable',
     endContent: 'content after label+description',
     ref: 'forwarded to the row root (the role="menuitemradio" element)',
   },

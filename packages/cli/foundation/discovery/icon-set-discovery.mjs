@@ -44,6 +44,31 @@ const SET_NAME_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
 export const NOTICE_FILE_RE = /^(?:licen[cs]e|notice|copying)(?:[.-].*)?$/iu;
 
 /**
+ * What to add when a set wraps a library and has no license notice: a
+ * NOTICE file in the set directory, with the file names that count. The
+ * CLI never writes it, because the license text is the author's to state.
+ * @param {string} setDir the set directory, from the package root
+ * @param {string} library the library as `name@version`
+ */
+export function licenseNoticeFix(setDir, library) {
+  return `Add a NOTICE (or LICENSE) file to ${setDir} that names ${library} and its license: \`${setDir}/NOTICE\`. A file named LICENSE, LICENCE, NOTICE, or COPYING, in any case and with an optional suffix such as NOTICE.md or LICENSE-MIT, counts in the set directory or the package root.`;
+}
+
+/**
+ * Whether a directory has a license or notice file ({@link NOTICE_FILE_RE}).
+ * @param {string} dir
+ */
+export function hasLicenseNotice(dir) {
+  try {
+    return fs
+      .readdirSync(dir, {withFileTypes: true})
+      .some(file => file.isFile() && NOTICE_FILE_RE.test(file.name));
+  } catch {
+    return false;
+  }
+}
+
+/**
  * One installed icon set: its descriptor, its data, and where it came from.
  * @typedef {object} DiscoveredIconSet
  * @property {string} name set name, the directory name

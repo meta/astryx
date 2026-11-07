@@ -170,19 +170,23 @@ export function recordReads(seen, fn) {
  * read counts as read by the operation that asks for it.
  * @template T
  * @param {() => Promise<T>} load
+ * @param {(recorded: Map<string, string>) => boolean} [isUnchanged] - Whether
+ *   recorded paths are unchanged; `unchangedSince` unless a caller passes the
+ *   one it imports (so a test of that caller can hold the answer).
  * @returns {(options?: {fresh?: boolean}) => Promise<T>}
  */
-export function reusedWhileUnchanged(load) {
+export function reusedWhileUnchanged(load, isUnchanged = unchangedSince) {
   /** @type {{reads: Map<string, string>, value: Promise<T>} | undefined} */
   let last;
   return ({fresh = false} = {}) => {
-    if (!fresh && last && unchangedSince(last.reads)) {
+    if (!fresh && last && isUnchanged(last.reads)) {
       const {reads: recorded, value} = last;
       return value.then(result => {
         const runs = reads.getStore();
-        if (runs) for (const [file, state] of recorded) {
-          for (const seen of runs) if (!seen.has(file)) seen.set(file, state);
-        }
+        if (runs)
+          for (const [file, state] of recorded) {
+            for (const seen of runs) if (!seen.has(file)) seen.set(file, state);
+          }
         return result;
       });
     }

@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {describe, it, expect, afterEach, vi} from 'vitest';
+import {describe, it, expect, afterEach, beforeAll, vi} from 'vitest';
 import {spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -847,6 +847,19 @@ describe('commandInFolder', () => {
   );
 
   describe.runIf(PWSH)('in PowerShell, where it is installed', () => {
+    // The first `pwsh` a job starts pays PowerShell's cold start, which on a
+    // busy runner has outlasted a test's 30 s. `spawnSync` blocks, so that
+    // start landed on the first test's clock. Starting it once here, on the
+    // hook's own timeout, leaves each test's clock to its command.
+    beforeAll(() => {
+      const warm = spawnSync(
+        /** @type {string} */ (PWSH),
+        ['-NoProfile', '-NonInteractive', '-Command', 'exit 0'],
+        {encoding: 'utf8'},
+      );
+      expect(warm.status, warm.stderr).toBe(0);
+    }, 120_000);
+
     it('runs in the folder with every argument unchanged', () => {
       const root = makeTmpDir();
       const project = path.join(root, 'it\'s Macy’s ‘q’ $5 %x% !y `z` "q" [1]');

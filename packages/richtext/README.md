@@ -36,7 +36,7 @@ RichText supports one Lexical minor at a time, named by its `lexical` and
 `@lexical/*` peer ranges. Those are **optional** peer dependencies, so your
 package manager does not add them: install them at that minor alongside
 richtext. See the RFC:
-[facebook/astryx#3899](https://github.com/facebook/astryx/issues/3899).
+[meta/astryx#3899](https://github.com/meta/astryx/issues/3899).
 
 ## Install
 
@@ -68,6 +68,11 @@ import '@astryxdesign/richtext/richtext.css';
 so your theme's token overrides (`@layer astryx-theme`) win over it, as long
 as Core's `reset.css` (or a `@layer reset, astryx-base, astryx-theme;` line,
 if your app has its own reset) loads first.
+
+## Editing code blocks
+
+Backspace at the very start of a code block turns it into a paragraph of its
+lines, instead of merging the code into the block above.
 
 ## Examples
 

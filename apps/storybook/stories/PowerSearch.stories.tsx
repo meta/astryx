@@ -452,8 +452,10 @@ const meta: Meta<typeof PowerSearch> = {
   component: PowerSearch,
   tags: ['autodocs'],
   decorators: [
+    // A 600px column where there is room that shrinks with the viewport, so
+    // the stories, the touch presentations above all, fit a phone-sized canvas.
     Story => (
-      <div style={{width: 600}}>
+      <div style={{display: 'grid', gridTemplateColumns: 'minmax(0, 600px)'}}>
         <Story />
       </div>
     ),
@@ -614,24 +616,29 @@ export const NearFullTokenRow: Story = {
     const firstTokenRect = firstToken.getBoundingClientRect();
     const tokenRect = finalToken.getBoundingClientRect();
     const clearRect = clearButton.getBoundingClientRect();
-    let clearHitLeft = 0;
-    let clearHitRight = 0;
+    let clearHitRect = {left: clearRect.left, right: clearRect.right};
     if (isCoarsePointer) {
-      const clearHitStyle = getComputedStyle(clearButton, '::after');
-      clearHitLeft = Number.parseFloat(clearHitStyle.left);
-      clearHitRight = Number.parseFloat(clearHitStyle.right);
+      // Button draws its touch band as the `::after` of an element inside
+      // it, so find whichever element in the button carries the band.
+      const bandHost = [clearButton, ...clearButton.querySelectorAll('*')].find(
+        element => getComputedStyle(element, '::after').content !== 'none',
+      );
+      const bandStyle = bandHost && getComputedStyle(bandHost, '::after');
+      const bandLeft = Number.parseFloat(bandStyle?.left ?? '');
+      const bandRight = Number.parseFloat(bandStyle?.right ?? '');
       if (
-        clearHitStyle.content === 'none' ||
-        !Number.isFinite(clearHitLeft) ||
-        !Number.isFinite(clearHitRight)
+        !bandHost ||
+        !Number.isFinite(bandLeft) ||
+        !Number.isFinite(bandRight)
       ) {
         throw new Error('Clear all did not expose its coarse-pointer hit area');
       }
+      const bandHostRect = bandHost.getBoundingClientRect();
+      clearHitRect = {
+        left: bandHostRect.left + bandLeft,
+        right: bandHostRect.right - bandRight,
+      };
     }
-    const clearHitRect = {
-      left: clearRect.left + clearHitLeft,
-      right: clearRect.right - clearHitRight,
-    };
     if (Math.abs(firstTokenRect.top - tokenRect.top) > 0.5) {
       throw new Error(
         `Fixture tokens wrapped before the empty combobox check: first token top ${firstTokenRect.top.toFixed(2)}, final token top ${tokenRect.top.toFixed(2)}`,
@@ -1036,6 +1043,7 @@ export const IssueTracker: Story = {
     maxSearchResults: 2,
     maxOperatorMenuItems: 2,
     menuWidth: 700,
+    presentation: 'popover',
   },
   parameters: {
     docs: {
@@ -1814,6 +1822,7 @@ export const OverflowInline: Story = {
           filters={filters}
           onChange={newFilters => setFilters([...newFilters])}
           tokenOverflowBehavior="unfocusedInline"
+          presentation="popover"
         />
         <p style={{marginTop: 8}}>
           This text will shift down when the search bar expands on focus.
@@ -1839,6 +1848,7 @@ export const OverflowLayer: Story = {
           filters={filters}
           onChange={newFilters => setFilters([...newFilters])}
           tokenOverflowBehavior="unfocusedLayer"
+          presentation="popover"
         />
         <p style={{marginTop: 8}}>
           This text should not shift when the search bar expands on focus.
@@ -2053,4 +2063,210 @@ export const StatusVariantComparison: Story = {
       </div>
     );
   },
+};
+
+// =============================================================================
+// Bottom-sheet presentation
+// =============================================================================
+
+// The sheet flow is designed for a phone: view these stories at a compact
+// touch viewport (Storybook's mobile2 preset) to see the sheets as a person
+// would.
+function PhoneFrame({children}: {children: React.ReactNode}) {
+  return <div style={{width: 390, maxWidth: '100%'}}>{children}</div>;
+}
+
+function FilterDump({filters}: {filters: ReadonlyArray<PowerSearchFilter>}) {
+  if (filters.length === 0) {
+    return null;
+  }
+  return (
+    <pre
+      style={{
+        marginTop: 16,
+        padding: 12,
+        borderRadius: 8,
+        fontSize: 12,
+        overflow: 'auto',
+        maxWidth: 390,
+      }}>
+      {JSON.stringify(filters, null, 2)}
+    </pre>
+  );
+}
+
+const sheetPresetFilters: ReadonlyArray<PowerSearchFilter> = [
+  {
+    field: 'status',
+    operator: 'any_of',
+    value: {type: 'enum_list', value: ['open', 'in_progress']},
+  },
+  {field: 'priority', operator: 'is', value: {type: 'enum', value: 'p1'}},
+  {
+    field: 'created',
+    operator: 'after',
+    value: {type: 'date_absolute', unixSeconds: 1710039600},
+  },
+];
+
+/**
+ * `presentation="bottom-sheet"`: the field is one trigger
+ * with display-only tokens; a tap opens the Filters sheet, whose rows edit or
+ * remove a filter, Add filter opens above it with the fields, and the value
+ * step opens above that and stages operator → value. Dismissing a step
+ * reveals the one beneath. Clear all asks first. List values (Assignee, Tags)
+ * open the Tokenizer's own sheet above the step.
+ */
+export const SheetPresentation: Story = {
+  render: args => {
+    const [filters, setFilters] =
+      useState<ReadonlyArray<PowerSearchFilter>>(sheetPresetFilters);
+    return (
+      <PhoneFrame>
+        <PowerSearch
+          {...args}
+          config={fullConfig}
+          filters={filters}
+          onChange={next => setFilters(next)}
+          // A count that follows the filters, so a commit from the flow (and
+          // Clear all) changes it and the flow announces the change.
+          resultCount={Math.max(1, Math.round(240 / (filters.length + 1)))}
+          timezoneID="America/Los_Angeles"
+          presentation="bottom-sheet"
+        />
+        <FilterDump filters={filters} />
+      </PhoneFrame>
+    );
+  },
+  name: 'Bottom sheet (forced)',
+  parameters: {viewport: {defaultViewport: 'mobile2'}},
+};
+
+/**
+ * The default presentation, `adaptive`: the sheet flow on a compact
+ * coarse-pointer screen, the tokenizer field and editor popover otherwise.
+ * Resize the viewport or switch the pointer emulation to see it switch.
+ */
+export const AdaptivePresentation: Story = {
+  render: args => {
+    const [filters, setFilters] =
+      useState<ReadonlyArray<PowerSearchFilter>>(sheetPresetFilters);
+    return (
+      <PhoneFrame>
+        <PowerSearch
+          {...args}
+          config={fullConfig}
+          filters={filters}
+          onChange={next => setFilters(next)}
+          timezoneID="America/Los_Angeles"
+        />
+        <FilterDump filters={filters} />
+      </PhoneFrame>
+    );
+  },
+  name: 'Adaptive (default)',
+};
+
+/**
+ * With `contentSearchFieldKey`, Add filter carries the content search: the
+ * field typeahead's suggestions list inline under the search box, and a value
+ * suggestion commits a filter straight away.
+ */
+export const SheetPresentationContentSearch: Story = {
+  render: args => {
+    const [filters, setFilters] = useState<ReadonlyArray<PowerSearchFilter>>(
+      [],
+    );
+    return (
+      <PhoneFrame>
+        <PowerSearch
+          {...args}
+          config={contentSearchConfig}
+          filters={filters}
+          onChange={next => setFilters(next)}
+          placeholder="Search issues…"
+          presentation="bottom-sheet"
+        />
+        <FilterDump filters={filters} />
+      </PhoneFrame>
+    );
+  },
+  name: 'Bottom sheet with content search',
+  parameters: {viewport: {defaultViewport: 'mobile2'}},
+};
+
+/**
+ * A placeholder longer than the trigger ends in an ellipsis inside it and
+ * stays clear of the result count at every width. The grid column sizes the
+ * field, so a test can narrow it.
+ */
+export const SheetPresentationLongPlaceholder: Story = {
+  render: () => {
+    const [filters, setFilters] = useState<ReadonlyArray<PowerSearchFilter>>(
+      [],
+    );
+    return (
+      <div style={{display: 'grid', gridTemplateColumns: 'minmax(0, 360px)'}}>
+        <PowerSearch
+          config={fullConfig}
+          filters={filters}
+          onChange={next => setFilters(next)}
+          placeholder="Filter issues by title, assignee, status, label or date..."
+          resultCount={128}
+          presentation="bottom-sheet"
+        />
+      </div>
+    );
+  },
+  name: 'Bottom sheet with a long placeholder',
+};
+
+/**
+ * Read-only keeps the Filters sheet as plain rows with Done only; disabled
+ * keeps the trigger focusable (aria-disabled) and shows its reason; the result
+ * count renders at the end of the field in both presentations.
+ */
+export const SheetPresentationStates: Story = {
+  render: () => {
+    const [filters, setFilters] =
+      useState<ReadonlyArray<PowerSearchFilter>>(sheetPresetFilters);
+    return (
+      <PhoneFrame>
+        <div style={{display: 'flex', flexDirection: 'column', gap: 24}}>
+          <PowerSearch
+            config={fullConfig}
+            filters={filters}
+            onChange={next => setFilters(next)}
+            label="Read-only filters"
+            isLabelHidden={false}
+            isReadOnly
+            resultCount={42}
+            presentation="bottom-sheet"
+          />
+          <PowerSearch
+            config={fullConfig}
+            filters={filters}
+            onChange={next => setFilters(next)}
+            label="Disabled filters"
+            isLabelHidden={false}
+            isDisabled
+            disabledMessage="Pick a project first"
+            presentation="bottom-sheet"
+          />
+          <PowerSearch
+            config={fullConfig}
+            filters={filters}
+            onChange={next => setFilters(next)}
+            label="With a status"
+            isLabelHidden={false}
+            status={{type: 'error', message: 'Add at least one filter'}}
+            startIcon={MagnifyingGlassIcon}
+            presentation="bottom-sheet"
+          />
+        </div>
+      </PhoneFrame>
+    );
+  },
+  name: 'Bottom sheet states',
+  parameters: {viewport: {defaultViewport: 'mobile2'}},
 };

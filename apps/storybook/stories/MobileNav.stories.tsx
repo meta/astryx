@@ -10,6 +10,8 @@ import {
   SideNavSection,
 } from '@astryxdesign/core/SideNav';
 import {Button} from '@astryxdesign/core/Button';
+import {Text} from '@astryxdesign/core/Text';
+import {TextInput} from '@astryxdesign/core/TextInput';
 import {Icon} from '@astryxdesign/core/Icon';
 import {NavIcon} from '@astryxdesign/core/NavIcon';
 import {useMediaQuery} from '@astryxdesign/core/hooks';
@@ -331,6 +333,58 @@ export const WithoutTitle: Story = {
               icon={FolderIcon}
               href="/projects"
             />
+          </SideNavSection>
+        </MobileNav>
+      </>
+    );
+  },
+};
+
+// =============================================================================
+// Tall Header
+// =============================================================================
+
+/**
+ * Header content taller than one bar: a workspace name with a search field
+ * under it. The header row grows to fit it, above the first item.
+ */
+export const TallHeader: Story = {
+  name: 'Tall Header',
+  render: () => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [query, setQuery] = useState('');
+    return (
+      <>
+        <Button
+          label="Open Navigation"
+          icon={<Icon icon="menu" color="inherit" />}
+          variant="ghost"
+          onClick={() => setIsOpen(true)}
+          isIconOnly
+        />
+        <MobileNav
+          isOpen={isOpen}
+          onOpenChange={open => setIsOpen(open)}
+          label="Workspace navigation"
+          header={
+            <div>
+              <Text weight="bold">Workspace</Text>
+              <TextInput
+                label="Search"
+                isLabelHidden
+                value={query}
+                onChange={setQuery}
+              />
+            </div>
+          }>
+          <SideNavSection title="Main">
+            <SideNavItem
+              label="Dashboard"
+              icon={HomeIcon}
+              isSelected
+              href="/dashboard"
+            />
+            <SideNavItem label="Projects" icon={FolderIcon} href="/projects" />
           </SideNavSection>
         </MobileNav>
       </>

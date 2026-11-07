@@ -33,6 +33,7 @@
  * @property {string} [parent] - Command that opens the level above a doc result — its topic's section list for a section, the docs-tree namespace it sits in for a tree node — so a reader can see the siblings and open another.
  * @property {string} [displayName] - Friendly display name — present for template and theme results.
  * @property {'page' | 'block'} [kind] - Template kind (`page` | `block`) — present for template results.
+ * @property {import('@astryxdesign/cli/authoring').ComponentDeprecation} [deprecated] - The replacement and modernization route — present for a deprecated component, from its doc's `deprecated`.
  */
 
 /**

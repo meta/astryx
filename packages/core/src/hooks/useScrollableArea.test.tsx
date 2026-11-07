@@ -147,9 +147,12 @@ function mockOwnedComputedStyle(
 
 describe('useScrollableArea', () => {
   let frames: FrameRequestCallback[];
+  // A computed `direction` set by a stylesheet alone: no attribute changes.
+  let stylesheetDirection: string | null;
 
   beforeEach(() => {
     frames = [];
+    stylesheetDirection = null;
     vi.stubGlobal(
       'requestAnimationFrame',
       vi.fn((callback: FrameRequestCallback) => {
@@ -175,6 +178,9 @@ describe('useScrollableArea', () => {
           }
           if (element instanceof HTMLElement && property === 'overflowY') {
             return element.style.overflowY || 'auto';
+          }
+          if (property === 'direction' && stylesheetDirection != null) {
+            return stylesheetDirection;
           }
           return Reflect.get(target, property, target);
         },
@@ -411,7 +417,7 @@ describe('useScrollableArea', () => {
     expect(viewport).toHaveAttribute('tabindex', '0');
   });
 
-  it('requires scroll-capable computed overflow and more than 1px excess geometry', () => {
+  it('requires scroll-capable computed overflow and more than 1px excess geometry', async () => {
     render(<Fixture />);
     const viewport = screen.getByTestId('viewport');
     makeMeasurable(viewport);
@@ -427,8 +433,11 @@ describe('useScrollableArea', () => {
     flushFrame();
     expect(state().inline.isScrollable).toBe(false);
 
-    viewport.style.overflowX = 'auto';
-    void act(() => viewport.dispatchEvent(new Event('scroll')));
+    // A style change with no geometry change reaches the hook through its
+    // attribute observer; a scroll only ever moves the offset.
+    await act(async () => {
+      viewport.style.overflowX = 'auto';
+    });
     flushFrame();
     expect(state().inline).toEqual({
       isScrollable: true,
@@ -463,6 +472,179 @@ describe('useScrollableArea', () => {
 
     setGeometry(viewport, {scrollLeft: 200});
     void act(() => viewport.dispatchEvent(new Event('scroll')));
+    flushFrame();
+    expect(state().inline).toEqual({
+      isScrollable: true,
+      atStart: false,
+      atEnd: true,
+    });
+  });
+
+  it('derives edges as a scroll is dispatched, without reading computed style or requesting a frame', () => {
+    render(<Fixture />);
+    const viewport = screen.getByTestId('viewport');
+    makeMeasurable(viewport);
+    setGeometry(viewport, {scrollWidth: 300});
+    void act(() => viewport.dispatchEvent(new Event('scroll')));
+    flushFrame();
+    expect(state().inline.isScrollable).toBe(true);
+
+    const styleReads = vi.mocked(window.getComputedStyle).mock.calls.length;
+    const steps: [number, {atStart: boolean; atEnd: boolean}][] = [
+      [80, {atStart: false, atEnd: false}],
+      [200, {atStart: false, atEnd: true}],
+      [0, {atStart: true, atEnd: false}],
+    ];
+    for (const [scrollLeft, edges] of steps) {
+      setGeometry(viewport, {scrollLeft});
+      void act(() => viewport.dispatchEvent(new Event('scroll')));
+      expect(frames).toHaveLength(0);
+      expect(state().inline).toEqual({isScrollable: true, ...edges});
+    }
+    expect(vi.mocked(window.getComputedStyle).mock.calls).toHaveLength(
+      styleReads,
+    );
+  });
+
+  it('leaves a scroll to the full measurement already pending in its frame', () => {
+    render(<Fixture />);
+    const viewport = screen.getByTestId('viewport');
+    const content = screen.getByTestId('content');
+    makeMeasurable(viewport);
+    setGeometry(viewport, {scrollWidth: 300});
+    void act(() => viewport.dispatchEvent(new Event('scroll')));
+    flushFrame();
+
+    void act(() => content.dispatchEvent(new Event('transitionend')));
+    expect(frames).toHaveLength(1);
+    setGeometry(viewport, {scrollLeft: 80});
+    void act(() => viewport.dispatchEvent(new Event('scroll')));
+    expect(frames).toHaveLength(1);
+    expect(state().inline.atStart).toBe(true);
+
+    flushFrame();
+    expect(state().inline).toEqual({
+      isScrollable: true,
+      atStart: false,
+      atEnd: false,
+    });
+  });
+
+  it('measures fully when a scroll finds the requested overflow gone', () => {
+    render(<Fixture />);
+    const viewport = screen.getByTestId('viewport');
+    makeMeasurable(viewport);
+    setGeometry(viewport, {scrollWidth: 300, scrollLeft: 80});
+    void act(() => viewport.dispatchEvent(new Event('scroll')));
+    flushFrame();
+    expect(viewport).toHaveAttribute('tabindex', '0');
+
+    // Content shrinking clamps the offset, which the browser reports as a
+    // scroll: a change the offset cannot explain, measured in full.
+    setGeometry(viewport, {scrollWidth: 100, scrollLeft: 0});
+    void act(() => viewport.dispatchEvent(new Event('scroll')));
+    expect(frames).toHaveLength(1);
+    flushFrame();
+    expect(state().inline).toEqual({
+      isScrollable: false,
+      atStart: true,
+      atEnd: true,
+    });
+    expect(viewport).not.toHaveAttribute('tabindex');
+  });
+
+  it('keeps the last valid edges when a scroll arrives while the viewport has no box', () => {
+    render(<Fixture />);
+    const viewport = screen.getByTestId('viewport');
+    makeMeasurable(viewport);
+    setGeometry(viewport, {scrollWidth: 300, scrollLeft: 80});
+    void act(() => viewport.dispatchEvent(new Event('scroll')));
+    flushFrame();
+
+    // At offset 0 a zero-size box would report the start edge, so this step
+    // fails if the zero-size guard is removed.
+    setGeometry(viewport, {clientWidth: 0, clientHeight: 0, scrollLeft: 0});
+    void act(() => viewport.dispatchEvent(new Event('scroll')));
+    flushFrame();
+    expect(state().inline).toEqual({
+      isScrollable: true,
+      atStart: false,
+      atEnd: false,
+    });
+  });
+
+  it('applies the measured writing direction on the scroll path', () => {
+    render(<Fixture />);
+    const viewport = screen.getByTestId('viewport');
+    makeMeasurable(viewport);
+    viewport.dir = 'rtl';
+    setGeometry(viewport, {scrollWidth: 300});
+    void act(() => viewport.dispatchEvent(new Event('scroll')));
+    flushFrame();
+    expect(state().inline).toEqual({
+      isScrollable: true,
+      atStart: true,
+      atEnd: false,
+    });
+
+    const styleReads = vi.mocked(window.getComputedStyle).mock.calls.length;
+    setGeometry(viewport, {scrollLeft: -200});
+    void act(() => viewport.dispatchEvent(new Event('scroll')));
+    flushFrame();
+    expect(state().inline).toEqual({
+      isScrollable: true,
+      atStart: false,
+      atEnd: true,
+    });
+    expect(vi.mocked(window.getComputedStyle).mock.calls).toHaveLength(
+      styleReads,
+    );
+  });
+
+  it('derives vertical-rl block edges on the scroll path without requesting a frame', () => {
+    render(<Fixture axis="block" />);
+    const viewport = screen.getByTestId('viewport');
+    makeMeasurable(viewport);
+    viewport.style.writingMode = 'vertical-rl';
+    setGeometry(viewport, {scrollWidth: 220});
+    void act(() => viewport.dispatchEvent(new Event('transitionend')));
+    flushFrame();
+    expect(state().block).toEqual({
+      isScrollable: true,
+      atStart: true,
+      atEnd: false,
+    });
+
+    // The block axis runs right to left along x: its end is scrollLeft -120.
+    setGeometry(viewport, {scrollLeft: -120});
+    void act(() => viewport.dispatchEvent(new Event('scroll')));
+    expect(frames).toHaveLength(0);
+    expect(state().block).toEqual({
+      isScrollable: true,
+      atStart: false,
+      atEnd: true,
+    });
+  });
+
+  it('measures fully when a scroll offset contradicts the measured direction', () => {
+    render(<Fixture />);
+    const viewport = screen.getByTestId('viewport');
+    makeMeasurable(viewport);
+    setGeometry(viewport, {scrollWidth: 300});
+    void act(() => viewport.dispatchEvent(new Event('scroll')));
+    flushFrame();
+    expect(state().inline).toEqual({
+      isScrollable: true,
+      atStart: true,
+      atEnd: false,
+    });
+
+    // A stylesheet alone turns the area RTL, so nothing re-measured; the
+    // next scroll reports a negative offset the stored mapping rules out.
+    stylesheetDirection = 'rtl';
+    setGeometry(viewport, {scrollLeft: -200});
+    void act(() => viewport.dispatchEvent(new Event('scroll')));
+    expect(frames).toHaveLength(1);
     flushFrame();
     expect(state().inline).toEqual({
       isScrollable: true,

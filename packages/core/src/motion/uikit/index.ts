@@ -3,10 +3,12 @@
 /**
  * @file index.ts
  * @input The domain files of the UIKit constants table
- * @output Re-exports `springs` and one constant per spring (`SHEET_PRESENT_SPRING`,
- *   …), `scroll`, `timing`, `navigation` and the
- *   gesture thresholds (one `UIKIT_*` group per recognizer, their union
- *   `UIKIT_GESTURES`, and the haptic tables)
+ * @output Re-exports `springs` and one constant per spring
+ *   (`SHEET_PRESENT_SPRING`, …), and the `scroll`, `timing`, `navigation`,
+ *   `picker`, `popover`, `progressBar`, `segmentedControl`, `datePicker`,
+ *   `sheet`, `slider`, `switchControl` and `zoomMedia` domains. It also
+ *   re-exports the gesture thresholds: one `UIKIT_*` group per recognizer,
+ *   their union `UIKIT_GESTURES`, and the haptic tables
  * @position Entry of the UIKit constants table (motion/uikit). Internal to
  *   core: not exported from the package entry point
  *
@@ -26,6 +28,7 @@ export {
   UIKIT_CONTROL,
   UIKIT_GESTURES,
   UIKIT_LONG_PRESS,
+  UIKIT_MENU_PRESS,
   UIKIT_PAN,
   UIKIT_PINCH,
   UIKIT_PRESS,
@@ -38,8 +41,15 @@ export {
   type GestureConstantUnit,
   type HapticFeedbackKind,
 } from './gestures';
+export {datePicker} from './datePicker';
 export {navigation, registerNavigationTable} from './navigation';
+export {picker} from './picker';
+export {popover} from './popover';
+export {progressBar, registerProgressBarTable} from './progressBar';
 export {registerScrollTable, scroll} from './scroll';
+export {segmentedControl} from './segmented';
+export {sheet} from './sheet';
+export {slider} from './slider';
 export {
   ACTION_SHEET_DISMISS_SPRING,
   ACTION_SHEET_PRESENT_SPRING,
@@ -48,6 +58,7 @@ export {
   BANNER_SPRING,
   CONTEXT_MENU_DISMISS_SPRING,
   CONTEXT_MENU_LIFT_SPRING,
+  CONTEXT_MENU_MORPH_SPRING,
   DIRECT_CHANGE_SPRING,
   EMPHASIS_SPRING,
   FINGER_TRACKING_SPRING,
@@ -60,7 +71,6 @@ export {
   NAVIGATION_POP_SPRING,
   NAVIGATION_PUSH_SPRING,
   QUICK_CHANGE_SPRING,
-  SEGMENTED_THUMB_SPRING,
   SETTLE_SPRING,
   SHEET_DETENT_SPRING,
   SHEET_DISMISS_SPRING,
@@ -71,10 +81,11 @@ export {
   SUB_MENU_BACK_SPRING,
   SUB_MENU_OPEN_SPRING,
   SWITCH_THUMB_MOVE_SPRING,
-  SWITCH_THUMB_STRETCH_SPRING,
   TIMED_CHANGE_SPRING,
   VIEW_CHANGE_SPRING,
   registerSpringsTable,
   springs,
 } from './springs';
+export {switchControl} from './switch';
 export {registerTimingTable, timing} from './timing';
+export {zoomMedia} from './zoomMedia';
