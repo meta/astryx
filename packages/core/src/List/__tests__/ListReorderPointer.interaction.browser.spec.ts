@@ -10,9 +10,12 @@
  *   fine. A pen where the primary pointer is coarse keeps the hold, as a
  *   finger does. A quick stroke moves nothing, and a held one moves the row.
  *   A row held near a scroll edge scrolls the page, or the box the list
- *   scrolls in, and stops at the end. The preview and the insertion line
- *   run along a row set in from the list's start, in either direction. A
- *   checked radio in the dragged row stays checked through the drag
+ *   scrolls in, and stops at the end. A wheel during a drag scrolls the
+ *   page, and the preview and the drop stay under the pointer. Each scrolled
+ *   frame reads the scroll offset once at most and forces no layout. The
+ *   preview and the insertion line run along a row set in from the list's
+ *   start, in either direction. A checked radio in the dragged row stays
+ *   checked through the drag
  * @position Beside ListReorderTouch.interaction.browser.spec.ts, which proves
  *   the hold under a finger
  */
@@ -194,6 +197,240 @@ test('a row held at the bottom of the page stops at its end, under the pointer',
     expect(Math.abs((await previewTop()) - atEnd)).toBeLessThan(1);
     await page.keyboard.press('Escape');
     await page.mouse.up();
+  } finally {
+    await story.close();
+  }
+});
+
+test('a wheel during a drag scrolls the page, and the preview and the drop stay under the pointer', async ({
+  browser,
+}) => {
+  const story = await openFinePointerStory(browser, LONG_STORY);
+  try {
+    const {page} = story;
+    const order = await labels(page);
+    // Item 4: an earlier one's name is a prefix of a later row's.
+    const {at, rowHeight} = await handleOf(page, order[3]);
+    const pitch = await page.evaluate(() => {
+      const rows = document.querySelectorAll('#storybook-root ul > li');
+      return (
+        rows[1].getBoundingClientRect().top -
+        rows[0].getBoundingClientRect().top
+      );
+    });
+    // The preview's top and the insertion line's y, in the viewport.
+    const placed = async () =>
+      page.evaluate(() => {
+        const list = document.querySelector<HTMLElement>('#storybook-root ul');
+        const preview = document.querySelector('[data-astryx-reorder-preview]');
+        const line = parseFloat(
+          list == null
+            ? ''
+            : getComputedStyle(list).getPropertyValue(
+                '--astryx-reorder-line-y',
+              ),
+        );
+        return {
+          preview: preview?.getBoundingClientRect().top ?? Number.NaN,
+          line: (list?.getBoundingClientRect().top ?? Number.NaN) + line,
+        };
+      });
+    await page.mouse.move(at.x, at.y);
+    await page.mouse.down();
+    await page.mouse.move(at.x, at.y + rowHeight * 1.5, {steps: 8});
+    await expect(page.locator('[data-astryx-reorder-preview]')).toHaveCount(1);
+    const before = await placed();
+    // Counts rendered frames from the last scroll to the first frame that
+    // shows the preview and the line under the pointer again.
+    await page.evaluate(target => {
+      const state = {frame: 0, lastScroll: -1, settledAt: -1};
+      Object.assign(window, {c06Frames: state});
+      const check = () => {
+        if (state.lastScroll < 0 || state.settledAt >= 0) {
+          return;
+        }
+        const list = document.querySelector<HTMLElement>('#storybook-root ul');
+        const preview = document.querySelector('[data-astryx-reorder-preview]');
+        if (list == null || preview == null) {
+          return;
+        }
+        const line =
+          list.getBoundingClientRect().top +
+          parseFloat(
+            getComputedStyle(list).getPropertyValue('--astryx-reorder-line-y'),
+          );
+        const top = preview.getBoundingClientRect().top;
+        if (
+          Math.abs(top - target.preview) < 1 &&
+          Math.abs(line - target.line) < 1
+        ) {
+          state.settledAt = state.frame;
+        }
+      };
+      const tick = () => {
+        state.frame += 1;
+        // After the frame renders.
+        setTimeout(check, 0);
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+      document.addEventListener(
+        'scroll',
+        () => {
+          // The scroll steps come before the frame's callbacks.
+          state.lastScroll = state.frame + 1;
+          state.settledAt = -1;
+        },
+        {passive: true},
+      );
+    }, before);
+    await page.mouse.wheel(0, pitch * 3);
+    // The wheel's scroll animates: wait for it to rest.
+    let last = Number.NaN;
+    await expect
+      .poll(
+        async () => {
+          const y = await page.evaluate(() => window.scrollY);
+          const isStill = y > 0 && y === last;
+          last = y;
+          return isStill;
+        },
+        {intervals: [100], timeout: 5000},
+      )
+      .toBe(true);
+    const frames = async () =>
+      page.evaluate(
+        () =>
+          (
+            window as unknown as {
+              c06Frames: {lastScroll: number; settledAt: number};
+            }
+          ).c06Frames,
+      );
+    // The preview and the line come back under the pointer.
+    await expect
+      .poll(async () => (await frames()).settledAt >= 0, {timeout: 100})
+      .toBe(true);
+    const {lastScroll, settledAt} = await frames();
+    // Within two frames of the scroll, as a native drag follows it.
+    expect(settledAt - lastScroll).toBeLessThanOrEqual(2);
+    await page.mouse.up();
+    // The drop lands under the pointer, past the rows the wheel scrolled by.
+    await expect
+      .poll(async () => (await labels(page)).indexOf(order[3]), {
+        timeout: 600,
+      })
+      .toBe(4 + Math.round(last / pitch));
+  } finally {
+    await story.close();
+  }
+});
+
+test('a wheel during a drag forces no layout, and reads the scroll offset once a scrolled frame at most', async ({
+  browser,
+  browserName,
+}) => {
+  test.skip(browserName !== 'chromium', 'the layout trace is Chromium CDP');
+  const story = await openFinePointerStory(browser, LONG_STORY);
+  try {
+    const {page} = story;
+    const order = await labels(page);
+    // Item 4: an earlier one's name is a prefix of a later row's.
+    const {at, rowHeight} = await handleOf(page, order[3]);
+    await page.mouse.move(at.x, at.y);
+    await page.mouse.down();
+    await page.mouse.move(at.x, at.y + rowHeight * 1.5, {steps: 8});
+    await expect(page.locator('[data-astryx-reorder-preview]')).toHaveCount(1);
+    // Counts reads of the page scroller's offset, and the frames a scroll
+    // lands in.
+    await page.evaluate(() => {
+      const scroller = document.scrollingElement as Element;
+      const own = Object.getOwnPropertyDescriptor(
+        Element.prototype,
+        'scrollTop',
+      );
+      const counts = {reads: 0, frames: 0};
+      Object.assign(window, {c06Counts: counts});
+      Object.defineProperty(scroller, 'scrollTop', {
+        configurable: true,
+        get() {
+          counts.reads += 1;
+          return own?.get?.call(this) as number;
+        },
+        set(value: number) {
+          own?.set?.call(this, value);
+        },
+      });
+      let isCounted = false;
+      document.addEventListener(
+        'scroll',
+        () => {
+          if (!isCounted) {
+            isCounted = true;
+            counts.frames += 1;
+            requestAnimationFrame(() => {
+              isCounted = false;
+            });
+          }
+        },
+        {passive: true},
+      );
+    });
+    await browser.startTracing(page, {
+      categories: [
+        'devtools.timeline',
+        'disabled-by-default-devtools.timeline',
+        'disabled-by-default-devtools.timeline.stack',
+      ],
+    });
+    await page.mouse.wheel(0, rowHeight * 3);
+    // The pointer moves too, so moves and scrolls share frames.
+    for (let step = 1; step <= 16; step += 1) {
+      await page.mouse.move(at.x, at.y + rowHeight * 1.5 + step);
+      await page.waitForTimeout(16);
+    }
+    await page.waitForTimeout(400);
+    const trace = JSON.parse((await browser.stopTracing()).toString()) as {
+      traceEvents: {
+        name: string;
+        ph: string;
+        pid: number;
+        tid: number;
+        args?: {
+          name?: string;
+          beginData?: {stackTrace?: {functionName?: string}[]};
+        };
+      }[];
+    };
+    const counts = await page.evaluate(
+      () =>
+        (window as unknown as {c06Counts: {reads: number; frames: number}})
+          .c06Counts,
+    );
+    await page.mouse.up();
+    const mainThreads = new Set(
+      trace.traceEvents
+        .filter(e => e.ph === 'M' && e.name === 'thread_name')
+        .filter(e => e.args?.name === 'CrRendererMain')
+        .map(e => `${e.pid}:${e.tid}`),
+    );
+    // A style or layout pass with a script stack ran inside script: a read
+    // after a write forced it, instead of the frame's own pass.
+    const forced = trace.traceEvents.filter(
+      e =>
+        (e.name === 'Layout' || e.name === 'UpdateLayoutTree') &&
+        mainThreads.has(`${e.pid}:${e.tid}`) &&
+        (e.args?.beginData?.stackTrace ?? []).length > 0,
+    );
+    expect(
+      forced.map(
+        e =>
+          `${e.name} in ${e.args?.beginData?.stackTrace?.[0]?.functionName ?? '?'}`,
+      ),
+    ).toEqual([]);
+    expect(counts.frames).toBeGreaterThan(0);
+    expect(counts.reads).toBeGreaterThan(0);
+    expect(counts.reads).toBeLessThanOrEqual(counts.frames);
   } finally {
     await story.close();
   }
