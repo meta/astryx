@@ -11,8 +11,10 @@
  *   keeps the per-author limits
  */
 
+import {spawnSync} from 'node:child_process';
 import fs from 'node:fs';
 import {createRequire} from 'node:module';
+import os from 'node:os';
 import path from 'node:path';
 
 import {afterEach, describe, expect, it, vi} from 'vitest';
@@ -512,6 +514,26 @@ describe('peaks', () => {
   });
 });
 
+describe('the shared count', () => {
+  it("is loaded from the action's own folder, which its checkout holds", () => {
+    // A wrong path would start every run without waiting: each admission
+    // step continues on error.
+    expect(action.runs.steps[0].env.COUNT_MODULE).toBe(
+      '${{ github.action_path }}/count.mjs',
+    );
+    expect(script).toContain('pathToFileURL(process.env.COUNT_MODULE).href');
+    expect(fs.existsSync(COUNT_MODULE)).toBe(true);
+    for (const job of [ci.jobs.room, ci.jobs.admission]) {
+      const checkout = job.steps.find(step =>
+        String(step.uses ?? '').startsWith('actions/checkout'),
+      );
+      expect(checkout.with['sparse-checkout']).toBe(
+        '.github/actions/ci-admission',
+      );
+    }
+  });
+});
+
 describe('ci admission', () => {
   afterEach(() => vi.useRealTimers());
   afterEach(() => vi.restoreAllMocks());
@@ -682,6 +704,65 @@ describe('ci admission', () => {
     await done;
     return {...logs, looks, calls, lookTimes, outputs};
   }
+
+  it('agrees with a capacity tool on a full queue: the same count, and no room for either', async () => {
+    // Six pull-request runs at 12 live jobs, one waiting, and small
+    // workflows: 72 + 1 + 18 = 91 other jobs, no room for a run of 16.
+    const active = [...prs(6, 12), waitingRun(40), ...slims(3)];
+    // The tool's reading: the shared count as a command, through a stub `gh`
+    // that answers from the same runs.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ci-agree-'));
+    try {
+      const fixture = {
+        'repos/o/r/actions/runs?status=in_progress': {
+          workflow_runs: active.map(({jobs, ...run}) => run),
+        },
+        'repos/o/r/actions/runs?status=queued': {workflow_runs: []},
+        ...Object.fromEntries(
+          active.map(run => [
+            `repos/o/r/actions/runs/${run.id}/jobs`,
+            {jobs: run.jobs ?? []},
+          ]),
+        ),
+      };
+      fs.writeFileSync(path.join(dir, 'fixture.json'), JSON.stringify(fixture));
+      fs.writeFileSync(
+        path.join(dir, 'gh'),
+        [
+          `#!${process.execPath}`,
+          "const fixture = require(require('path').join(__dirname, 'fixture.json'));",
+          'const route = process.argv[3];',
+          'const key = Object.keys(fixture).sort((a, b) => b.length - a.length).find(prefix => route.startsWith(prefix));',
+          'if (key == null) process.exit(1);',
+          'process.stdout.write(JSON.stringify(fixture[key]));',
+          '',
+        ].join('\n'),
+        {mode: 0o755},
+      );
+      const tool = spawnSync(
+        process.execPath,
+        [COUNT_MODULE, '--repo', 'o/r', '--peak', '16'],
+        {
+          encoding: 'utf8',
+          env: {...process.env, PATH: `${dir}:${process.env.PATH}`},
+        },
+      );
+      expect(tool.status, tool.stderr).toBe(0);
+      const reading = JSON.parse(tool.stdout);
+      // Admission's first look on the same runs.
+      const result = await admit({active, peak: 16, maxWait: 12, maxLooks: 2});
+      const look = result.info.find(line =>
+        line.startsWith('Waiting for room: about '),
+      );
+      expect(look).toBeDefined();
+      const admissionOthers = Number(/about (\d+) other jobs/.exec(look)[1]);
+      expect(reading.others).toBe(admissionOthers);
+      expect(reading.fits).toBe(false);
+      expect(admissionOthers + 16).toBeGreaterThan(CEILING);
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
 
   it("admits at once at today's load: 56 live jobs and many pull-request runs waiting", async () => {
     // 2026-11-01 ~01:50Z: 56 jobs ran, a dozen of them the waiting jobs of

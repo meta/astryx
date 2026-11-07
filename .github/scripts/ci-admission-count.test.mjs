@@ -149,6 +149,28 @@ describe('the count command', () => {
     );
   });
 
+  it("leaves out the pull request's own run with --run, and runs through a symlinked path", () => {
+    // Its own waiting run is not counted twice.
+    const own = JSON.parse(
+      run(['--repo', 'o/r', '--peak', '16', '--run', '11']).stdout,
+    );
+    expect(own.others).toBe(SMALL_MOST);
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ci-count-link-'));
+    scratch.push(dir);
+    const link = path.join(dir, 'count.mjs');
+    fs.symlinkSync(COUNT, link);
+    const linked = spawnSync(
+      process.execPath,
+      [link, '--repo', 'o/r', '--peak', '16'],
+      {
+        encoding: 'utf8',
+        env: {...process.env, PATH: `${stubGh(fixture)}:${process.env.PATH}`},
+      },
+    );
+    expect(linked.status, linked.stderr).toBe(0);
+    expect(JSON.parse(linked.stdout).others).toBe(20 + SMALL_MOST);
+  });
+
   it('exits 2 when a lookup fails or the arguments are incomplete, which the tool reads as no room', () => {
     expect(run(['--repo', 'o/r', '--pr', '7'], {fail: true}).status).toBe(2);
     expect(run(['--repo', 'o/r']).status).toBe(2);

@@ -250,7 +250,7 @@ export function pullRequestPeak(workflow, labels) {
  * pull-request run sees CI. `--pr` takes the run's peak from that pull
  * request's labels and ci.yml; `--peak` sets it instead; `--main` looks as a
  * `main` check. `--reserved` adds jobs the tool has granted that do not show
- * yet. It prints one JSON line and exits 0, or 2 when a lookup fails, which
+ * yet, and `--run` leaves out the pull request's own run if it already waits. It prints one JSON line and exits 0, or 2 when a lookup fails, which
  * the tool reads as no room.
  */
 async function main() {
@@ -262,9 +262,12 @@ async function main() {
   const repo = value('--repo');
   const pr = value('--pr');
   const reserved = Number(value('--reserved') ?? 0);
+  // The pull request's own CI run, if it already waits: left out, as
+  // admission leaves itself out, so its jobs are not counted twice.
+  const runId = value('--run') == null ? null : Number(value('--run'));
   const usage = () => {
     console.error(
-      'usage: count.mjs --repo <owner/name> (--pr <number> | --peak <jobs>) [--reserved <jobs>] [--main]',
+      'usage: count.mjs --repo <owner/name> (--pr <number> | --peak <jobs>) [--reserved <jobs>] [--run <id>] [--main]',
     );
     process.exit(2);
   };
@@ -295,7 +298,7 @@ async function main() {
         ghJson(
           `repos/${repo}/actions/runs/${id}/jobs?filter=latest&per_page=100`,
         ).jobs,
-      selfId: null,
+      selfId: runId,
       main: isMainCheck,
       maxWaitMs: (isMainCheck ? 120 : 12) * 60_000,
     });
@@ -318,4 +321,10 @@ async function main() {
   }
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) await main();
+// Real paths on both sides: Node keeps a symlinked path as typed in argv but
+// resolves the module's own URL.
+if (
+  process.argv[1] &&
+  fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)
+)
+  await main();
