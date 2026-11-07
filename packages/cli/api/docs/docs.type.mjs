@@ -45,6 +45,15 @@
  * @property {string} topic its route, the argument that opens it
  * @property {string} description
  * @property {string} package the package that owns it
+ * @property {DocsListChild[]} [children] the docs below it, present only for
+ *   a read that passed `depth` and only where the namespace has children
+ */
+
+/**
+ * One doc below a namespace on the topic list, as `astryx docs --depth` names
+ * it: everything a namespace read gives a child, plus the two fields every
+ * list row carries, so one row reads the same way wherever it came from.
+ * @typedef {DocsNodeChild & {topic: string, description: string, children?: DocsListChild[]}} DocsListChild
  */
 
 /**
