@@ -36,7 +36,7 @@ import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useTouchHitArea} from '../utils/touchHitArea';
 import {pressBoxProps} from '../privateAttributes/pressBox.stylex';
 import {registerBoxHold} from '../utils/boxHold';
-import {touchHitAreaStyles} from '../utils/touchHitArea.stylex';
+import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {useIndicator} from '../Indicator/useIndicator';
 import {Item, type ItemAlign} from '../Item/Item';
 import {themeProps} from '../utils/themeProps';
