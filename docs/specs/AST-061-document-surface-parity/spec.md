@@ -77,17 +77,42 @@ reflows no line; only editing affordances appear or disappear.
   paragraph. Ordered and unordered lists nest by CommonMark indentation, show
   one marker per item with the marker style of its depth (DEC-6). Unordered
   lists retain the same themed inset at each nesting step. Within each list,
-  sibling item text shares one inline-start line. Lists nested beneath those
-  items use that line as their anchor; numbered-list insets follow FR11.
+  sibling items that read in the same direction share one inline-start line;
+  an item that reads against its siblings starts on the opposite edge, as
+  FR6 requires. Lists nested beneath those items use their own item's line as
+  their anchor; numbered-list insets follow FR11.
   Task-list items, fenced code, tables, and
   thematic breaks render as those structures, never as their literal source.
   Fenced code wraps long lines on every surface; a code line never scrolls or
   clips sideways (DEC-9).
-- **FR6 — Same direction.** Content blocks lay out in the direction of the
-  surrounding Internationalization provider on every surface. A surface does
-  not choose a block's direction from its text; text that runs against the
-  provider direction follows normal bidirectional ordering inside its
-  block.
+- **FR6 — Direction follows the text that carries it.** A prose block — a
+  paragraph, heading, quote, or list item — lays out in the direction of its
+  own text on every surface, `Markdown`, `RichTextEditor` and `RichTextView`,
+  at any nesting depth. A block whose text has no strongly directional
+  character takes the direction of the surrounding Internationalization
+  provider, which covers an empty block, digits, punctuation, and an image.
+
+  A prose block that holds several blocks — a quote, or a list item with
+  more than one paragraph — takes its direction from the first strongly
+  directional character of all the text under it, and each block inside it
+  takes its own the same way.
+
+  A container is not prose and takes its parent's direction whatever it
+  holds: the provider's at the top level, its wrapper item's when nested. A
+  list orders its markers and insets that way, a table reads its columns that
+  way, and a fenced code block frames its lines that way, giving each line
+  its own direction from that line's first strong character.
+
+  A table cell is a container and orders with its table, and the cell's text
+  reads in its own direction on every surface. Where a surface wraps that
+  text in a block the block carries the direction, and where it does not the
+  cell carries it, so the same cell reads the same way on all three.
+
+  Direction decides a block's alignment, its logical insets, and the
+  direction its caret moves. A surface that takes those from the provider
+  while a block's text runs the other way puts the caret of a right-to-left
+  paragraph on the wrong edge and moves it opposite to the arrow key.
+
 - **FR7 — Same semantics.** Strong, emphasis, strikethrough, inline code, and
   links expose the same element semantics on every surface. A link's
   destination never contains its title; a title is exposed as the link's
@@ -113,13 +138,14 @@ reflows no line; only editing affordances appear or disappear.
   the view after it, within the FR9 offset.
 - **FR11 — Numbered-list indentation is shared within the list.** A numbered
   list MAY widen its marker space from the ordinary themed list inset to
-  accommodate that list's widest rendered counter. Every sibling
-  item's text starts on the same inline-start line; an individual counter
-  MUST NOT shift its item's text or a list nested beneath it. Counters remain
+  accommodate that list's widest rendered counter. Sibling items that read in
+  the same direction start their text on the same inline-start line; an
+  individual counter MUST NOT shift its item's text or a list nested beneath
+  it. Counters remain
   whole on one line without clipping, truncation, or overlap with item text.
   Separate lists at the same depth MAY have different insets when their
   widest counters differ; each nested list resolves its own inset from its
-  parent item's shared text start. This permission changes neither source
+  parent item's text start. This permission changes neither source
   nesting nor DEC-6's numbering and marker styles. It does not exempt
   renderer parity: for the same list, theme, density, and available measure,
   Markdown and the RichText surfaces retain matching text starts and nested
@@ -137,10 +163,19 @@ reflows no line; only editing affordances appear or disappear.
 
 ## Current-state impact
 
-`Markdown` already renders FR2–FR6 for its own output except where FR7 names
+`Markdown` already renders FR2–FR4, and FR5 apart from its opposite-edge
+clause, for its own output, except where FR7 names
 a link title and FR7 names character references. `RichTextEditor` and
 `RichTextView` are governed by FR2–FR11 for the
 constructs they render; their default editor theme follows FR2 and FR3.
+Implementation gap: `Markdown` and RichText lay every block out in the
+provider's direction (FR6, and FR5's opposite-edge clause); RichText's `direction: inherit` override in
+`editorTheme.ts` is part of that gap.
+Fenced code lines take the frame's direction on both surfaces, so neither
+meets FR6's per-line rule yet. `component:CodeBlock` keeps a code block's
+direction unchanged (FR9) and leaves the ordering inside a line to the
+platform text engine, so closing this gap changes that record as well as the
+surfaces.
 `@astryxdesign/core/Markdown/parser` and `@astryxdesign/core/Markdown` export
 `decodeMarkdownCharacterReferences`, the DEC-5 decoder the RichText surfaces
 import with.
@@ -171,18 +206,18 @@ characters (`component:Markdown` FR29), while RichText keeps the whole first wor
 
 ## Verification
 
-| Contract   | Verification                                                                                                | Representative states                                                                                                                                                                                                | Mutation or failure expectation                                                                                                                                                                   |
-| ---------- | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR2–FR4    | Real-browser computed style and block geometry of the parity fixture on `Markdown` and RichText             | 390px and 1440px; light and dark; default density                                                                                                                                                                    | Restoring a hard-coded heading size or a different block margin moves a block past 2 px and fails                                                                                                 |
-| FR5        | Real-browser structure and line counts of the parity fixture                                                | Nested lists at 2- and 3-space indentation; soft breaks; blockquote continuation                                                                                                                                     | Flattening a nested list or turning a soft break into a line break fails                                                                                                                          |
-| FR6        | Real-browser computed direction per block                                                                   | Right-to-left provider with left-to-right text, and the reverse                                                                                                                                                      | Per-block automatic direction fails                                                                                                                                                               |
-| FR7        | Semantic DOM of inline marks, links, and character references on every surface                              | Titled link, bare link, strong, emphasis, strikethrough; `&amp;`, `&copy;`, `&#169;` in text and in code                                                                                                             | A title inside a destination, a styled span in place of a semantic element, or an undecoded reference in text fails                                                                               |
-| FR7, DEC-5 | Shared conformance cases through `Markdown` rendering and RichText import                                   | Named, decimal, and hexadecimal references; an unknown name; a missing semicolon; an invalid code point                                                                                                              | A second reference table, or a decoder that changes an unknown name or an unterminated reference, fails                                                                                           |
-| FR5, DEC-9 | Real-browser line boxes and horizontal overflow of a long-line code fixture on both surfaces, read and edit | 390px and 1440px; light and dark; left-to-right and right-to-left                                                                                                                                                    | A code block whose scroll width exceeds its client width, or a long line that is taller in one mode than the other, fails                                                                         |
-| FR5, DEC-6 | Real-browser marker style per depth on both surfaces                                                        | Bulleted and numbered lists nested 0–8 deep and of mixed types; starts of 0, −1, 26, 27, 3999, and 4000 at alpha and roman depths; right-to-left; light and dark                                                     | A level that draws another level's marker, or one surface differing from the other, fails                                                                                                         |
-| FR5, FR11  | Real-browser counter line boxes, sibling text starts, and nested-list insets on Markdown and RichText       | Short and wide-counter lists at the same depth; decimal 9–10 and 99–100; alpha z–aa; roman vi–viii; adjacent parents whose child lists have different widest counters; phone/desktop; LTR/RTL; light/dark; read/edit | A split, clipped, or overlapping counter, a per-item text shift, a nested-list anchor displaced from its parent list's shared text-start line, or a cross-renderer/read-edit inset mismatch fails |
-| FR8        | Real-browser code block header geometry in both modes                                                       | Fenced code with an info string; a one-line fence with a language; a long fence with no language                                                                                                                     | A header or corner cluster present in only one mode, a control over the code in either mode, or a line that wraps differently between modes fails                                                 |
-| FR9–FR10   | Real-browser read/edit switch of the parity fixture and a long document                                     | Short document at the top; long document halfway down                                                                                                                                                                | A per-block shift beyond the constant offset, or an anchor block leaving the top of the view, fails                                                                                               |
+| Contract   | Verification                                                                                                | Representative states                                                                                                                                                                                                                                                                      | Mutation or failure expectation                                                                                                                                                                                     |
+| ---------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR2–FR4    | Real-browser computed style and block geometry of the parity fixture on `Markdown` and RichText             | 390px and 1440px; light and dark; default density                                                                                                                                                                                                                                          | Restoring a hard-coded heading size or a different block margin moves a block past 2 px and fails                                                                                                                   |
+| FR5        | Real-browser structure and line counts of the parity fixture                                                | Nested lists at 2- and 3-space indentation; soft breaks; blockquote continuation                                                                                                                                                                                                           | Flattening a nested list or turning a soft break into a line break fails                                                                                                                                            |
+| FR6        | Real-browser computed direction, alignment, and caret movement per block                                    | Right-to-left provider with left-to-right text and the reverse; a mixed document; a block holding only digits, punctuation, or an image; a nested list whose items read both ways; a quote and a list item holding paragraphs that read different ways; a table whose cells read both ways | A prose block or table cell whose computed direction disagrees with its own text, a neutral block that does not follow the provider, or a list, table, or fence that takes a direction from its contents, fails     |
+| FR7        | Semantic DOM of inline marks, links, and character references on every surface                              | Titled link, bare link, strong, emphasis, strikethrough; `&amp;`, `&copy;`, `&#169;` in text and in code                                                                                                                                                                                   | A title inside a destination, a styled span in place of a semantic element, or an undecoded reference in text fails                                                                                                 |
+| FR7, DEC-5 | Shared conformance cases through `Markdown` rendering and RichText import                                   | Named, decimal, and hexadecimal references; an unknown name; a missing semicolon; an invalid code point                                                                                                                                                                                    | A second reference table, or a decoder that changes an unknown name or an unterminated reference, fails                                                                                                             |
+| FR5, DEC-9 | Real-browser line boxes and horizontal overflow of a long-line code fixture on both surfaces, read and edit | 390px and 1440px; light and dark; left-to-right and right-to-left                                                                                                                                                                                                                          | A code block whose scroll width exceeds its client width, or a long line that is taller in one mode than the other, fails                                                                                           |
+| FR5, DEC-6 | Real-browser marker style per depth on both surfaces                                                        | Bulleted and numbered lists nested 0–8 deep and of mixed types; starts of 0, −1, 26, 27, 3999, and 4000 at alpha and roman depths; right-to-left; light and dark                                                                                                                           | A level that draws another level's marker, or one surface differing from the other, fails                                                                                                                           |
+| FR5, FR11  | Real-browser counter line boxes, sibling text starts, and nested-list insets on Markdown and RichText       | Short and wide-counter lists at the same depth; decimal 9–10 and 99–100; alpha z–aa; roman vi–viii; adjacent parents whose child lists have different widest counters; phone/desktop; LTR/RTL; light/dark; read/edit                                                                       | A split, clipped, or overlapping counter, a text shift between items that read the same way, a nested-list anchor displaced from its own item's text-start line, or a cross-renderer/read-edit inset mismatch fails |
+| FR8        | Real-browser code block header geometry in both modes                                                       | Fenced code with an info string; a one-line fence with a language; a long fence with no language                                                                                                                                                                                           | A header or corner cluster present in only one mode, a control over the code in either mode, or a line that wraps differently between modes fails                                                                   |
+| FR9–FR10   | Real-browser read/edit switch of the parity fixture and a long document                                     | Short document at the top; long document halfway down                                                                                                                                                                                                                                      | A per-block shift beyond the constant offset, or an anchor block leaving the top of the view, fails                                                                                                                 |
 
 ## Decision log
 
