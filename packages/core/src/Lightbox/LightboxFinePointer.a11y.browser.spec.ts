@@ -246,7 +246,10 @@ async function expectSpringZoom(
   // The page holds the zoom itself as it starts: a hold sent from the test
   // would reach a busy page late. Runs that an earlier zoom left in their end
   // hold are not this zoom.
-  const hold = await armHold(page, img, {newOnly: true});
+  const hold = await armHold(page, img, {
+    judges: {target: img, property: 'scale'},
+    newOnly: true,
+  });
   await act();
   const held = await hold.held();
   expect(
@@ -261,12 +264,13 @@ async function expectSpringZoom(
     return ((await boxOf(img)).width - fitted.width) / (to - fitted.width);
   };
   // The spring's own course: about 0.36 at 100 ms, where a 200 ms ease-out
-  // is past 0.6, and 0.72 at 200 ms.
+  // is past 0.6, and 0.72 at 200 ms. A spring 5 % slower or faster reads
+  // more than 0.02 off at 100 and 200 ms.
   for (const ms of [100, 200, 300]) {
     expect(
       Math.abs((await progressAt(ms)) - settleProgress(ms)),
       `${ms} ms`,
-    ).toBeLessThan(0.08);
+    ).toBeLessThan(0.02);
   }
   // It comes within half a percent of the target near 0.59 s: not yet at
   // 450 ms, and by 800 ms.

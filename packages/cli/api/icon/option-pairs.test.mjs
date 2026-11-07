@@ -18,6 +18,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {writeIconSetProject} from '../../test-utils/icon-set-fixture.mjs';
+import {runFolder} from '../../test-utils/global-local-fixtures.mjs';
 import {icon} from './icon.mjs';
 import {iconAdd} from './add/add.mjs';
 import {iconMap} from './map/map.mjs';
@@ -40,10 +41,14 @@ import {doc as useFn} from './iconUse.doc.mjs';
 /** @type {string} */
 let tmp;
 beforeAll(() => {
-  tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-icon-pairs-'));
+  // In a run's folder, the node project's global teardown removes every
+  // package the pairs made with the run's other fixtures.
+  tmp = fs.mkdtempSync(
+    path.join(runFolder() ?? os.tmpdir(), 'astryx-icon-pairs-'),
+  );
 });
 afterAll(() => {
-  fs.rmSync(tmp, {recursive: true, force: true});
+  if (!runFolder()) fs.rmSync(tmp, {recursive: true, force: true});
 });
 
 const FROM = '@acme/glyph-library';
