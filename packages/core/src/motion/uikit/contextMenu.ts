@@ -4,12 +4,13 @@
  * @file contextMenu.ts
  * @input Measurements of UIContextMenuInteraction on iOS 26.2
  * @output `contextMenu`: UIContextMenuInteraction's touch timeline, drift
- *   tolerance and commit haptic
+ *   tolerance, held scale and commit haptic
  * @position The context-menu domain of the UIKit constants table. Only
  *   ContextMenu's own modules import it. The table's barrel does not
  *   re-export it.
  *
- * SYNC: When modified, update /packages/core/src/motion/MEASUREMENTS.md and
+ * SYNC: When modified, update /packages/core/src/motion/MEASUREMENTS.md,
+ * /packages/core/src/ContextMenu/contextMenuPressFeedback.ts and
  * /packages/core/src/ContextMenu/contextMenuPress.ts
  */
 
@@ -76,6 +77,18 @@ export const contextMenu = {
      *   0.5 s displayed at the lift (529 ms)
      */
     menuDisplayMs: 735,
+    /**
+     * The size the press copy reaches when the menu displays, as a fraction
+     * of the view. It is the second ramp at `menuDisplayMs`: 1 + 0.1 per
+     * second since the touch. The trigger grows toward it on
+     * `springs.contextMenuLift`, not on UIKit's ramp.
+     * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
+     *   iPhone 17 Pro, per-frame model frames of the press platter over a
+     *   200 × 120 pt view, Oct 23 2026: 0.1001 per second, linear over 19
+     *   frames, zero at the touch (−1.4 ms), at 735 ms
+     * @measure M-CM2
+     */
+    heldScale: 1.0735,
   },
   /**
    * The click haptic at the commit, as a vibration where that is the only
@@ -91,4 +104,14 @@ export const contextMenu = {
    * @measure M-CM5
    */
   commitHaptic: 'impactMedium',
+  /**
+   * Reduce Motion: whether the press feedback still grows the view. It does
+   * not; only the copy's shadow fades in, and the haptic and the menu stay.
+   * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
+   *   iPhone 17 Pro, per-frame platter frames with Reduce Motion on, Prefer
+   *   Cross-Fade off and on, Oct 23 2026: the platter stays at scale 1 and
+   *   opacity 1 through the hold while its shadow opacity rises 0 → 0.31 by
+   *   0.6 s; a press lifted at 0.25 s does not grow either
+   */
+  reducedMotionFeedback: false,
 } as const;

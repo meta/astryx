@@ -76,6 +76,11 @@ export class ContextMenuPressRecognizer extends LongPressGestureRecognizer {
    * moves freely from here.
    */
   isMenuDue = false;
+  /**
+   * Hears each press as the recognizer takes it: the touch, and the time it
+   * landed on the arena's clock.
+   */
+  onPressBegan: ((touch: GestureTouch, time: number) => void) | null = null;
   /** The finger the hold follows. */
   private pressTouchId: number | null = null;
   /** Where the finger landed, while its hold runs. The drift counts from here. */
@@ -121,6 +126,7 @@ export class ContextMenuPressRecognizer extends LongPressGestureRecognizer {
       this.holdFrom = {x: touch.x, y: touch.y};
       this.holdStart = event.time;
       this.setTimer(event.time + commitMs, () => this.commit());
+      this.onPressBegan?.(touch, event.time);
     }
   }
 
