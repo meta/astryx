@@ -23,7 +23,7 @@ import type {SectionVariant} from '../Section/Section';
 import type {SpacingStep} from '../utils/types';
 import type {ElementSize} from '../SizeContext/SizeContext';
 import * as stylex from '@stylexjs/stylex';
-import {spacingVars, sizeVars, typeScaleVars} from '../theme/tokens.stylex';
+import {spacingVars, sizeVars} from '../theme/tokens.stylex';
 import {mergeProps} from '../utils';
 import {Section} from '../Section/Section';
 import {oneTabStopAmong, useInternalListFocus} from '../hooks/useListFocus';
@@ -136,13 +136,6 @@ const dynamicStyles = stylex.create({
   gap: (gapValue: string) => ({
     gap: gapValue,
   }),
-  // Controls keep their element height while their labels grow with the text
-  // size, so a label can stand out of its control. Lines that the row wraps
-  // onto sit that far further apart, so a label never reaches into the line
-  // above or below and a tap lands on the control it shows.
-  wrapRowGap: (gapValue: string, elementSize: string) => ({
-    rowGap: `calc(${gapValue} + max(0px, ${typeScaleVars['--text-label-leading']} - ${elementSize}))`,
-  }),
   tabIndicatorBottom: (offset: string) => ({
     '--_tab-indicator-bottom': offset,
   }),
@@ -157,13 +150,6 @@ const defaultBlockPaddingForSize: Record<ElementSize, SpacingStep> = {
   sm: 2,
   md: 2,
   lg: 2,
-};
-
-/** The element height of the controls a toolbar of each size holds. */
-const elementSizeVar: Record<ElementSize, string> = {
-  sm: sizeVars['--size-element-sm'],
-  md: sizeVars['--size-element-md'],
-  lg: sizeVars['--size-element-lg'],
 };
 
 const blockPaddingVarForSize: Record<ElementSize, string> = {
@@ -375,8 +361,6 @@ export function Toolbar({
                 (hasCenterContent ? styles.verticalThreeLane : styles.vertical),
               sizeStyles.base,
               dynamicStyles.gap(gapVar),
-              hasCenterContent &&
-                dynamicStyles.wrapRowGap(gapVar, elementSizeVar[size]),
               // Only drop the tab indicator through the toolbar's block padding
               // onto the rail when a bottom divider is actually present.
               // Without a divider, leave `--_tab-indicator-bottom` unset so a
@@ -399,7 +383,6 @@ export function Toolbar({
                   edgeCompSlot.flexBasis(edgeCompInsetForSize[size]),
                   edgeCompSlot.inset(edgeCompInsetForSize[size]),
                   dynamicStyles.gap(gapVar),
-                  dynamicStyles.wrapRowGap(gapVar, elementSizeVar[size]),
                 )}>
                 {startContent}
               </div>
@@ -414,7 +397,6 @@ export function Toolbar({
                   edgeCompSlot.flexBasis(edgeCompInsetForSize[size]),
                   edgeCompSlot.inset(edgeCompInsetForSize[size]),
                   dynamicStyles.gap(gapVar),
-                  dynamicStyles.wrapRowGap(gapVar, elementSizeVar[size]),
                 )}>
                 {endContent}
               </div>
