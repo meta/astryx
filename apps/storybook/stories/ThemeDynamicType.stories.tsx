@@ -88,7 +88,7 @@ function DynamicTypeSamples({
 }
 
 /**
- * On iPhone and iPad, every theme follows the reader's text size (Settings ›
+ * In Safari on iPhone, every theme follows the reader's text size (Settings ›
  * Display & Text Size › Larger Text): every size grows or shrinks on the curve
  * of the iOS text style it plays. At the default size, and wherever the
  * browser does not expose the reader's text size (`font: -apple-system-body`),
