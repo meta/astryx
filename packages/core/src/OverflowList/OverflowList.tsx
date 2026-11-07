@@ -81,6 +81,10 @@ const foldMin = stylex.create({
 // In a Toolbar lane the list asks for the width that shows every item, so the
 // lane sizes to all of it and shrinks from there; elsewhere it keeps its
 // usual width. `--_overflow-list-natural-width` is set per list below.
+// Inside the lane the list takes the shrinking from the controls beside it:
+// their share stays under a layout pixel, so a Button's label never
+// truncates while the list can still fold.
+const LANE_SHRINK = 1000000;
 const foldNatural = stylex.create({
   width: (px: number) => ({'--_overflow-list-natural-width': `${px}px`}),
   inLane: {
@@ -88,6 +92,10 @@ const foldNatural = stylex.create({
       default: null,
       [stylex.when.ancestor(':is(*)', foldingLaneMarker)]:
         'var(--_overflow-list-natural-width)',
+    },
+    flexShrink: {
+      default: null,
+      [stylex.when.ancestor(':is(*)', foldingLaneMarker)]: LANE_SHRINK,
     },
   },
 });

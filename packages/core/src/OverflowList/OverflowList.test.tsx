@@ -1168,6 +1168,12 @@ describe('OverflowList in a Toolbar lane (component:Toolbar FR2)', () => {
           /width:\s*var\(--_overflow-list-natural-width\)/.test(rule),
       ),
     ).toBe(true);
+    // Inside the lane the list, not the controls beside it, gives up width.
+    expect(
+      rulesDeclaredFor(vis).some(
+        rule => rule.includes(laneClass) && /flex-shrink:\s*1000000/.test(rule),
+      ),
+    ).toBe(true);
   });
 
   it('moves focus to the trigger when the focused item folds away', async () => {
