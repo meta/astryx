@@ -272,6 +272,10 @@ test('a reorder: the row moved to the top glides up from its old place riding ab
   );
   expect(glides.Spam, JSON.stringify(glides)).toBeCloseTo(4 * gap, 0);
   expect(travelling).toBe(true);
+  // It rides on the list's surface, in this list with dividers too.
+  expect(await spam.evaluate(el => getComputedStyle(el).boxShadow)).toContain(
+    'inset',
+  );
   for (const label of ['Inbox', 'Sent', 'Drafts', 'Archive']) {
     expect(glides[label], `${label} ${JSON.stringify(glides)}`).toBeCloseTo(
       -gap,

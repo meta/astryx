@@ -57,6 +57,17 @@ export const travellingStyles = stylex.create({
       default: null,
       '[data-astryx-travelling]:not([aria-selected="true"],[aria-current="true"])': `inset 0 0 0 100vmax ${colorVars['--color-background-surface']}`,
     },
+    // A row of a List with dividers takes its shadow from the press layer's
+    // `overDividers`, composed later, which wins over the one above. So the
+    // surface is also a custom property, which `overDividers` adds to its own
+    // shadows. Every other row resets it, so a row inside a travelling row
+    // does not inherit it.
+    '--_travelling-surface': {
+      default: null,
+      '[data-astryx-travelling]:not([aria-selected="true"],[aria-current="true"])': `inset 0 0 0 100vmax ${colorVars['--color-background-surface']}`,
+      ':not([data-astryx-travelling]:not([aria-selected="true"],[aria-current="true"]))':
+        'initial',
+    },
   },
   // A swipeable row is a stacking context at rest, since Item translates its
   // swipe root. So its band's own z-index orders only inside it. Under a
