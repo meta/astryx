@@ -976,9 +976,10 @@ describe('Comments threads', () => {
     expect(
       screen.getByRole('button', {name: 'Failed to copy value to clipboard.'}),
     ).toBeTruthy();
+    // A failure is an error, so it goes to the assertive region.
     await waitFor(() =>
       expect(
-        document.querySelector('[data-astryx-live-region="polite"]'),
+        document.querySelector('[data-astryx-live-region="assertive"]'),
       ).toHaveTextContent('Failed to copy value to clipboard.'),
     );
   });

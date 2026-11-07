@@ -276,8 +276,6 @@ export function CommentActions({
   const reopenLabel = t('@astryx.comments.reopen');
   const replyLabel = t('@astryx.comments.reply');
   const addReactionLabel = t('@astryx.comments.addReaction');
-  // A check mark says the copy worked, and a cross that it failed, until the
-  // label resets.
   const linkIcon = isLinkCopyFailed ? (
     <Icon icon="close" color="secondary" />
   ) : isLinkCopied ? (

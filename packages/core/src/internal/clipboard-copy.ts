@@ -8,9 +8,8 @@
  * @position An internal entry reserved for Astryx's own packages:
  *   undocumented, outside the public API and its compatibility promise,
  *   versioned in lockstep with Core, and allowed only in Core and Lab by the
- *   `@astryx/no-core-internal-import` lint rule. Lab's Comments copies a
- *   comment link through it, so every copy button shares one failure state.
- *   Named re-exports only.
+ *   `@astryx/no-core-internal-import` lint rule. Lab's Comments reads its
+ *   copy-link failure state through it. Named re-exports only.
  *
  * SYNC: When modified, update clipboard-copy.test.ts and
  * scripts/sync-exports.js.
