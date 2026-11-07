@@ -181,9 +181,7 @@ function nodesOfType(node, type) {
  * @returns {readonly any[]}
  */
 function moduleDeclarations(program, type) {
-  return cachedNodes(program, `top\0${type}`, () =>
-    program.body.filter((/** @type {any} */ each) => each.type === type),
-  );
+  return cachedNodes(program, `top\0${type}`, () => topLevel(program, type));
 }
 
 /**

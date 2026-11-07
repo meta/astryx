@@ -950,9 +950,11 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   held. After a finger, the first press of a mouse that has not moved since
   passes the entering presentation's shield where the page last heard the
   mouse. The shield reads that point when it comes up, and again at each
-  press or move of a finger or a pen. A shield over the viewport opens only
-  at the point last read, and not at all if the page had heard no mouse by
-  then. A still mouse resting anywhere else presses the shield, and its press
+  press or move of a finger or a pen. A shield over the viewport opens for a
+  mouse only at the point last read, and not at all if the page had heard no
+  mouse by then. It also opens where each finger or pen that was already down
+  when it came up rests, and that opening follows the press until it lifts.
+  A still mouse resting anywhere else presses the shield, and its press
   does nothing. A non-modal Drawer shields only its panel, and that shield
   stops a mouse only if the page had heard none at the last read. A move of
   the mouse lowers the shield first.
