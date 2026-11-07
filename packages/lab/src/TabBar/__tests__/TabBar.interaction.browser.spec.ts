@@ -1690,6 +1690,120 @@ test.describe('with Reduce Motion (design:reduced-motion)', () => {
     expect(Math.abs((await lensCenterX(page)) - to.x)).toBeLessThan(0.5);
   });
 
+  test('on a touch screen a held lens shows the touched tab in its selected look, as UIKit’s does, through the lift to rest', async ({
+    page,
+  }) => {
+    await page.emulateMedia({reducedMotion: 'reduce'});
+    const {driver} = await openBar(page);
+    const to = await itemCenter(page, 'Profile');
+    // Every frame from here: whether Profile shows its selected look. Either
+    // the lens holds the opaque selected copy with Profile's at its centre, or
+    // the copy is gone and Profile's own item draws the look.
+    await page.evaluate(() => {
+      const w = window as unknown as {
+        __copyFrames: {t: number; selected: boolean; copy: boolean}[];
+        __copyDown: number;
+        __copyUp: number;
+      };
+      w.__copyFrames = [];
+      w.__copyDown = 0;
+      w.__copyUp = 0;
+      window.addEventListener(
+        'touchstart',
+        () => {
+          w.__copyDown = performance.now();
+        },
+        {capture: true, once: true},
+      );
+      window.addEventListener(
+        'touchend',
+        () => {
+          w.__copyUp = performance.now();
+        },
+        {capture: true, once: true},
+      );
+      const centre = (element: Element | null) => {
+        const box = element?.getBoundingClientRect();
+        return box == null ? NaN : box.left + box.width / 2;
+      };
+      const step = () => {
+        const copy = document.querySelector('[data-tab-bar-copy]');
+        const item = copy?.querySelector('[data-tab-bar-copy-item="profile"]');
+        const lens = document.querySelector('[data-tab-bar-lens-body]');
+        const label = Array.from(
+          document.querySelectorAll(
+            '[role="tab"][data-tab-bar-value="profile"] span',
+          ),
+        ).find(
+          span => span.children.length === 0 && span.textContent === 'Profile',
+        );
+        const inLens =
+          copy != null &&
+          Number(getComputedStyle(copy).opacity) >= 0.99 &&
+          Math.abs(centre(item ?? null) - centre(lens)) < 1;
+        // Its effective opacity: its own and its ancestors', multiplied.
+        let opacity = 1;
+        for (
+          let node = label ?? null;
+          node != null;
+          node = node.parentElement
+        ) {
+          opacity *= Number(getComputedStyle(node).opacity);
+        }
+        const own =
+          copy == null &&
+          label != null &&
+          Number(getComputedStyle(label).fontWeight) >= 600 &&
+          opacity >= 0.99;
+        w.__copyFrames.push({
+          t: performance.now(),
+          selected: inLens || own,
+          copy: copy != null,
+        });
+        if (w.__copyFrames.length < 600) {
+          requestAnimationFrame(step);
+        }
+      };
+      requestAnimationFrame(step);
+    });
+    await driver.play(tapScript(to, {holdMs: 300}));
+    await expect(tab(page, 'Profile')).toHaveAttribute('aria-selected', 'true');
+    await waitForRest(lensBody(page));
+    await expect(lensCopy(page)).toHaveCount(0);
+    const {frames, down, up} = await page.evaluate(() => {
+      const w = window as unknown as {
+        __copyFrames: {t: number; selected: boolean; copy: boolean}[];
+        __copyDown: number;
+        __copyUp: number;
+      };
+      return {frames: w.__copyFrames, down: w.__copyDown, up: w.__copyUp};
+    });
+    expect(down, 'no touch reached the page').toBeGreaterThan(0);
+    expect(up, 'no lift reached the page').toBeGreaterThan(down);
+    // The first frame drawn after the touch already holds the copy.
+    const first = frames.find(frame => frame.t > down);
+    expect(first?.copy, 'the first frame after the touch').toBe(true);
+    // Enough frames to judge the hold, once the touch's first frames are
+    // drawn (WebKit draws its first frame after a touch late), and the lift.
+    requireFrames(frames, {
+      min: 8,
+      during: 'the held press',
+      where: frame => frame.t >= down + 120 && frame.t <= down + 280,
+    });
+    requireFrames(frames, {
+      min: 10,
+      during: 'the lift and its settle',
+      where: frame => frame.t >= up && frame.t <= up + 250,
+    });
+    expect(
+      frames
+        .filter(frame => frame.t > down)
+        .filter(frame => !frame.selected)
+        .map(frame => Math.round(frame.t - down)),
+      'ms after the touch of each frame whose Profile shows no selected look',
+    ).toEqual([]);
+  });
+
   test('a press neither lifts nor flexes, and a drag’s release cross-fades the settle', async ({
     page,
     browserName,
