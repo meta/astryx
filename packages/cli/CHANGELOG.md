@@ -1,5 +1,44 @@
 # @xds/cli
 
+# 0.7.11
+
+#### New Features
+
+- `astryx build` ranks Core blocks of component families its picker was not fitted with somewhat better: the block picker's doc-side word weights are refitted from paraphrases of each block's own source. (#10355)
+
+#### Fixes
+
+- `astryx build` names its two alternative page templates in the same order it chooses the start from, so the three templates it shows for a whole page are its best three. The start, the number of alternatives, the blocks and the JSON shape are unchanged. (#10357)
+- A link to a topic that an integration replaces under the same name opens the replacement. In an app whose integration replaced `theme` or `getting-started`, `doctor` reported Core's links to them as naming no doc. (#10342)
+- `swizzle` no longer copies a component's browser test harnesses (`*.spec.ts`, `*.spec.tsx`, such as Item's `ItemMarkerColumns.a11y.chromium.spec.ts`) when the installed Core source holds them: `@astryxdesign/core` 0.7.5 and earlier, or Core's repository source. They import Playwright and an unpublished test package, so a project that swizzled such a component failed to type-check or build. Core 0.7.6 and later ship no harnesses, so swizzling from them is unchanged. (#10230)
+- `astryx theme build` no longer depends on the order it loads the core component docs. A parent doc that lists a sub-component by name only, such as `Avatar.doc.mjs` listing `AvatarStatusDot`, erased the values the sub-component's own doc declares when it loaded after that doc; when `Avatar.doc.mjs` loaded last, `avatar-status-dot` `variant:success` counted as a custom value. The build now merges every doc's entry for a component. (#10288)
+- `astryx integration verify` no longer reports `theme_module_stale` for a theme whose built module differs only in the command its comment says built it, such as a theme built with `yarn astryx` and verified where `pnpm exec astryx` runs. Any other difference still fails. (#10344)
+
+#### Performance
+
+- A compact or full hook list, and the suggestions for an unknown hook name, list each of Core's folders once. Before, they listed a folder again for each hook they looked up. (#10324)
+- A search, build or component read lists each folder once. A process that runs several reads, such as a docs site's search or an agent harness, reuses a folder's listing once the folder has stayed unchanged for two seconds. A later read lists the folder again after an entry is added, removed or renamed. (#10274)
+- Within one operation, component discovery reads each component doc once, and the component matcher looks for each component's doc once, not once for each name they resolve. Resolving 30 names that only the matcher finds, such as names in another case, makes 14,794 file-system calls instead of 305,108. Results are unchanged. (#10277)
+
+#### Documentation
+
+- The Authoring guides (Quick Start, Field reference, Building Blocks, Ship, Help, and Make your integration work globally) now carry the keyword "authoring", so `astryx search authoring` lists them right after the Authoring overview instead of after API function pages. (#10354)
+- `astryx build --help` lists every value `--type` accepts (component, hook, doc, template, theme), matching the invalid-type error and what build actually runs, and says that `doc` and `theme` give an empty kit, since the kit has no doc or theme group. A test keeps the help text, the choices, the API doc and the error message on build and search naming the same set, and checks what each value returns. (#10361)
+- Getting Started has an Upgrade section: upgrade every Astryx package your app lists in one command, to the same release, then run `astryx upgrade`. If your package manager holds new releases back, exempt the whole `@astryxdesign/*` scope, not only some of its packages. (#10241)
+- The custom theme guide names the files of a local theme, including the same-stem descriptor `theme add` reads. (#10347)
+- The CLI's bundled colour token docs say the status icon colours (`--color-icon-<status>`) paint status marks on the page or a card, such as a StatusDot. (#10204)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+- @josephfarina
+- @utsavo-afk
+- @vjeux
+
+---
+
 # 0.7.10
 
 #### New Features

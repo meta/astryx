@@ -1,5 +1,9 @@
 # @astryxdesign/richtext
 
+# 0.7.11
+
+---
+
 # 0.7.10
 
 ---
