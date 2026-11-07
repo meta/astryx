@@ -182,6 +182,10 @@ const styles = stylex.create({
     gridTemplateColumns: 'subgrid',
     gridColumn: '1 / -1',
   },
+  // A numbered row outside the shared columns still spans the List's grid.
+  spanNumberColumns: {
+    gridColumn: '1 / -1',
+  },
   withCounter: {
     counterIncrement: 'astryx-list',
   },
@@ -469,6 +473,8 @@ export function ListItem({
   const task = markerKind == null ? undefined : ctx?.task;
 
   const hasMarkerGutter = ctx?.hasMarkerGutter === true;
+  const usesNumberColumns =
+    listStyle === 'decimal' && ctx?.isOutsideNumberColumns !== true;
   const marker = useMemo(
     () =>
       task != null ? (
@@ -527,7 +533,10 @@ export function ListItem({
       density={density}
       xstyle={
         [
-          listStyle === 'decimal' && styles.numberColumns,
+          usesNumberColumns && styles.numberColumns,
+          listStyle === 'decimal' &&
+            !usesNumberColumns &&
+            styles.spanNumberColumns,
           hasMarkers && styles.withCounter,
           travellingStyles.row,
           hasDividers && styles.withDivider,
@@ -550,7 +559,7 @@ export function ListItem({
   const row = <ItemListRowContext value>{item}</ItemListRowContext>;
   // Only numbered rows contribute two cells to List's shared counter grid.
   // Passing the marker identity keeps this request off unrelated Items in slots.
-  return listStyle === 'decimal' ? (
+  return usesNumberColumns ? (
     <ItemMarkerColumnsContext value={marker}>{row}</ItemMarkerColumnsContext>
   ) : (
     row
