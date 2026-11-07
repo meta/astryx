@@ -265,11 +265,10 @@ function overlay(element: HTMLElement): HTMLElement {
  */
 function previewOf(
   row: HTMLElement,
-  list: HTMLElement,
   top: number,
+  span: LineSpan,
   background: string | null,
 ) {
-  const span = inlineSpanOf(row.offsetLeft, row.offsetWidth, list);
   const preview = row.cloneNode(true) as HTMLElement;
   preview.removeAttribute('id');
   for (const element of preview.querySelectorAll('[id]')) {
@@ -284,6 +283,9 @@ function previewOf(
     boxSizing: 'border-box',
     boxShadow: 'none',
     opacity: MOVING_OPACITY,
+    // It moves by translate from its first move. With its own will-change,
+    // its animator reads no stylesheet to keep one.
+    willChange: 'translate',
   });
   if (background != null) {
     preview.style.backgroundColor = background;
@@ -320,6 +322,15 @@ function inlineSpanOf(left: number, size: number, list: HTMLElement): LineSpan {
  */
 function lineSpanOf(row: HTMLElement, list: HTMLElement): LineSpan {
   return inlineSpanOf(layoutLeft(row, list), row.offsetWidth, list);
+}
+
+/**
+ * The preview's span: `row`'s, from the list's padding edge, where the
+ * preview sits once the list is positioned. Read before the drag writes.
+ */
+function previewSpanOf(row: HTMLElement, list: HTMLElement): LineSpan {
+  const border = row.offsetParent === list ? 0 : list.clientLeft;
+  return inlineSpanOf(layoutLeft(row, list) - border, row.offsetWidth, list);
 }
 
 /**
@@ -464,6 +475,8 @@ interface DragSession {
   readonly restore: RowRestore;
   /** The copy of the dragged row that follows the pointer. */
   readonly preview: HTMLElement;
+  /** The preview's offset from its row's place, as last written. */
+  previewOffset: number;
 }
 
 /** The inline values a drag overrides until its rows rest. */
@@ -1119,6 +1132,8 @@ export class ListReorderController implements ListReorderSession {
     const tops = rows.map(element => layoutTop(element, list));
     const heights = rows.map(element => element.offsetHeight);
     const lineSpan = lineSpanOf(row, list);
+    const previewSpan = previewSpanOf(row, list);
+    const isStatic = getComputedStyle(list).position === 'static';
     const bounds = boundsOf(movable);
     const geometry: ReorderGeometry = {
       rows: rows.map((element, index) => ({
@@ -1158,10 +1173,10 @@ export class ListReorderController implements ListReorderSession {
         element.style.translate = '0px 0px';
       }
     }
-    if (getComputedStyle(list).position === 'static') {
+    if (isStatic) {
       list.style.position = 'relative';
     }
-    const preview = previewOf(row, list, tops[dragged], background);
+    const preview = previewOf(row, tops[dragged], previewSpan, background);
     // Right before its source, the preview counts for it. So in a numbered
     // list it reads the source's number. Every other row keeps its place
     // among its siblings, and the last row keeps :last-child.
@@ -1199,6 +1214,7 @@ export class ListReorderController implements ListReorderSession {
       step: 0,
       restore,
       preview,
+      previewOffset: 0,
     };
     this.session = session;
     // Rows still sliding from an earlier drag go to their places.
@@ -1236,7 +1252,13 @@ export class ListReorderController implements ListReorderSession {
     const row = geometry.rows[dragged];
     const origin = session.origin - session.scrolled;
     const top = this.draggedTop(session, y);
-    animatorFor(session.preview).set({y: top - (origin + row.top)});
+    const offset = top - (origin + row.top);
+    // The preview starts at its row's place, with no offset. Only a new
+    // offset goes to its animator: writing none would read its style back.
+    if (offset !== session.previewOffset) {
+      session.previewOffset = offset;
+      animatorFor(session.preview).set({y: offset});
+    }
     const position = dropPosition(
       geometry,
       dragged,
