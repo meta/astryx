@@ -713,15 +713,21 @@ export function TouchDateField({
   // pane's scroll offset under the user mid-gesture.
   // Indexes belong to the calendar, so DateInput remounts this surface when
   // the calendar changes.
-  // Without a value it opens on today's month: derived on each render until
-  // today is known, then stable for the day.
-  const [anchoredMonthIndex] = useState<number | null>(() => {
-    const opening =
-      value != null && /^\d{4}-\d{2}-\d{2}$/.test(value)
-        ? plainDateFromISO(value)
-        : today;
-    return opening == null ? null : monthModel.indexOf(opening);
-  });
+  // Without a value it opens on today's month. After hydration that month is
+  // stored in the first render that knows today, as Calendar does, so a
+  // render after midnight at a month end does not move the open sheet.
+  const [anchoredMonthIndex, setAnchoredMonthIndex] = useState<number | null>(
+    () => {
+      const opening =
+        value != null && /^\d{4}-\d{2}-\d{2}$/.test(value)
+          ? plainDateFromISO(value)
+          : today;
+      return opening == null ? null : monthModel.indexOf(opening);
+    },
+  );
+  if (anchoredMonthIndex == null && today != null) {
+    setAnchoredMonthIndex(monthModel.indexOf(today));
+  }
   const anchorMonthIndex =
     anchoredMonthIndex ?? monthModel.indexOf(today ?? UNKNOWN_TODAY_STAND_IN);
   const minMonthIndex =
