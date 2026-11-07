@@ -22,14 +22,16 @@ export interface SnapPagingOptions {
   readonly pages?: 'view' | 'item';
 }
 
-declare const snapPagingBrand: unique symbol;
-
 /**
  * Configured snap paging. Make it with `useSnapPaging`, and pass it to
  * Carousel's `hasSnap`.
  */
 export interface SnapPaging {
-  readonly [snapPagingBrand]: true;
+  /**
+   * A brand that is never present, so the paging types of the package and a
+   * swizzled copy match.
+   */
+  readonly '@astryxdesign/core/snap-paging/v1'?: never;
 }
 
 /** The paging attached to one row. */
