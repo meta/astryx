@@ -5,9 +5,9 @@
  * @input Nothing: bundled by esbuild and injected into a blank page
  * @output A page with nothing attached. `window.__api` holds the document's
  *   gesture host and the host lookup for another document. It also holds
- *   the recognizers (pan, screen-edge pan, tap, long press), for a test to
- *   attach what it needs. `window.__pageTouch` is the count of touch
- *   listeners on the window and the document right now.
+ *   the recognizers (pan, screen-edge pan, tap, long press) and the press
+ *   tracker, for a test to attach what it needs. `window.__pageTouch` is
+ *   the count of touch listeners on the window and the document right now.
  * @position Browser fixture of gestures.interaction.browser.spec.ts for the
  *   checks that need a page with no other gesture on it (FR19, FR24);
  *   test-only
@@ -17,6 +17,7 @@ import {getGestureHost} from '../../GestureHost';
 import {LongPressGestureRecognizer} from '../../LongPressGestureRecognizer';
 import {PanGestureRecognizer} from '../../PanGestureRecognizer';
 import {PinchGestureRecognizer} from '../../PinchGestureRecognizer';
+import {createPressTracker} from '../../PressTracker';
 import {ScreenEdgePanGestureRecognizer} from '../../ScreenEdgePanGestureRecognizer';
 import {lockSelection} from '../../../utils/selectionLock';
 import {TapGestureRecognizer} from '../../TapGestureRecognizer';
@@ -33,6 +34,7 @@ declare global {
       PinchGestureRecognizer: typeof PinchGestureRecognizer;
       ScreenEdgePanGestureRecognizer: typeof ScreenEdgePanGestureRecognizer;
       TapGestureRecognizer: typeof TapGestureRecognizer;
+      createPressTracker: typeof createPressTracker;
       lockSelection: typeof lockSelection;
     };
   }
@@ -102,5 +104,6 @@ window.__api = {
   PinchGestureRecognizer,
   ScreenEdgePanGestureRecognizer,
   TapGestureRecognizer,
+  createPressTracker,
   lockSelection,
 };

@@ -35,6 +35,7 @@ import {
   type ReactElement,
 } from 'react';
 import {useIsHydrating} from '../hooks/useIsHydrating';
+import {createModuleLoader} from '../utils/moduleLoader';
 import type {MenuBottomSheet as EagerMenuBottomSheet} from './MenuBottomSheet';
 import type {MenuBottomSheetActionList as EagerMenuBottomSheetActionList} from './MenuBottomSheetActionList';
 import type * as ActionListModule from './MenuBottomSheetActionList';
@@ -49,23 +50,10 @@ const LazyMenuBottomSheet = lazy(async () =>
 // closed, so its first render is the first open. Once preloaded, it renders
 // directly instead of through lazy(): a suspended render on open would hold
 // the rows back (React delays revealing them for up to 300ms).
-let actionListModule: typeof ActionListModule | null = null;
-let actionListLoad: Promise<typeof ActionListModule> | null = null;
-async function loadActionList(): Promise<typeof ActionListModule> {
-  actionListLoad ??= import('./MenuBottomSheetActionList').then(
-    module => {
-      actionListModule = module;
-      return module;
-    },
-    (error: unknown) => {
-      // A failed load (a dropped connection) is not kept: the next caller
-      // asks the module loader again.
-      actionListLoad = null;
-      throw error;
-    },
-  );
-  return actionListLoad;
-}
+const actionList = createModuleLoader<typeof ActionListModule>(
+  async () => import('./MenuBottomSheetActionList'),
+);
+const loadActionList = actionList.load;
 
 /** What a preload of the action list came to: loaded, or failed with the loader's error. */
 export type ActionListPreload =
@@ -113,7 +101,7 @@ export function MenuBottomSheetActionList(
   // Chosen once per mount, so a module that arrives later never swaps the
   // rendered list (which would remount it and drop focus).
   const [LoadedActionList] = useState(
-    () => actionListModule?.MenuBottomSheetActionList ?? null,
+    () => actionList.loaded()?.MenuBottomSheetActionList ?? null,
   );
   if (useIsHydrating()) {
     return null;

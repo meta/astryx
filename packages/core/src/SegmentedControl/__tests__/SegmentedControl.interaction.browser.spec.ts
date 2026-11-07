@@ -50,10 +50,12 @@ import {
   touchStoryboard,
   toTouchEvents,
   waitForAnimation,
+  watchAnimations,
   webInputDriver,
   withStorybook,
   writeEvidence,
   PEN_SKIP,
+  type AnimationWatch,
   type TouchDriver,
 } from '@astryxdesign/interaction-harness';
 
@@ -224,10 +226,13 @@ async function waitForLens(
   {
     minProgressMs = 1,
     timeout = 5000,
-  }: {minProgressMs?: number; timeout?: number} = {},
+    watch,
+  }: {minProgressMs?: number; timeout?: number; watch?: AnimationWatch} = {},
 ): Promise<{from: number; to: number; durationMs: number; easing: string}[]> {
   // Installs the harness's curve-end reader and waits for the control to move.
-  await waitForAnimation(control.group, {minProgressMs, timeout});
+  await (watch == null
+    ? waitForAnimation(control.group, {minProgressMs, timeout})
+    : watch.started({minProgressMs, timeout}));
   const deadline = Date.now() + timeout;
   for (;;) {
     const found = await control.group.evaluate((group, minProgress) => {
@@ -506,8 +511,9 @@ test('the surface lands exactly where the segment paints it', async ({
   // Gate timers: the hand-back runs from the slide's completion timer, which
   // must wait while the landed frame is photographed.
   await installTimerGate(page);
+  const watch = await watchAnimations(control.group);
   await control.tapSegment('list');
-  await waitForLens(control);
+  await waitForLens(control, {watch});
   await freezeTimers(page);
   // The slide runs its course on the compositor. With the timers held, the
   // hand-back waits. So this is the slide's last frame: the lens carries the
@@ -581,8 +587,9 @@ test('the titles switch at once with the selection: no second copy of a title is
   const elements = await control.group.evaluate(
     group => group.querySelectorAll('*').length,
   );
+  const watch = await watchAnimations(control.group);
   await control.tapSegment('table');
-  await waitForLens(control);
+  await waitForLens(control, {watch});
   // Mid-slide, as many elements as at rest, and nothing animates Table's
   // title's weight or color: it already shows its selected rendering. (Its
   // opacity comes back from the press's dim.)
@@ -607,8 +614,9 @@ test('a second tap mid-flight retargets from what is on screen, keeping its velo
   page,
 }) => {
   const control = await openControl(page);
+  const watch = await watchAnimations(control.group);
   await control.tapSegment('table');
-  await waitForLens(control, {minProgressMs: 60});
+  await waitForLens(control, {minProgressMs: 60, watch});
   const describe = async () =>
     control.group.evaluate(async group => {
       const animations = group.getAnimations({subtree: true}).filter(a => {
@@ -1153,8 +1161,9 @@ test('the slide plays UISegmentedControl’s measured spring, an internal motion
     }
   });
   const from = boxOf(await control.boxes(), 'grid');
+  const watch = await watchAnimations(control.group);
   await control.tapSegment('table');
-  await waitForLens(control);
+  await waitForLens(control, {watch});
   await holdLens(control);
   const samples = await sampleLens(control.group, timeline(400));
   await releaseAnimations(page);
@@ -1187,8 +1196,9 @@ test('RTL: the surface slides toward the tapped segment', async ({page}) => {
     {direction: 'rtl'},
   );
   const grid = boxOf(await control.boxes(), 'grid');
+  const watch = await watchAnimations(control.group);
   await control.tapSegment('table');
-  await waitForLens(control);
+  await waitForLens(control, {watch});
   await holdLens(control);
   const [start, end] = await sampleLens(control.group, [0, 2000]);
   // Where Table is once its title has its new weight.
@@ -1315,9 +1325,10 @@ test('the slide keeps advancing every frame while the main thread is blocked', a
   );
   const control = await openControl(page);
   const cast = await startScreencast(page);
+  const watch = await watchAnimations(control.group);
   await control.tapSegment('table');
   // Running and composited before the block.
-  const [slide] = await waitForLens(control, {minProgressMs: 16});
+  const [slide] = await waitForLens(control, {minProgressMs: 16, watch});
   // The lens has no element to carry the harness's marker chip: paint the
   // lens itself in the marker colour for the frames to find it.
   await paintLensMarker(control);
@@ -1380,9 +1391,13 @@ test('the slide does no Layout or Paint per frame', async ({
   let start = 0;
   const started = Date.now();
   const trace = await traceRendering(page, async () => {
+    const watches = [
+      await watchAnimations(groups.nth(0)),
+      await watchAnimations(groups.nth(1)),
+    ];
     await next.evaluate(button => (button as HTMLButtonElement).click());
     const slides = await Promise.all(
-      [0, 1].map(async i => (await waitForAnimation(groups.nth(i)))[0]),
+      watches.map(async watch => (await watch.started())[0]),
     );
     start = Math.max(...slides.map(slide => slide.from));
     // Wait in the test runner, not in the page. Polling the page forces its
@@ -1442,8 +1457,9 @@ test(
       });
       return sample;
     };
+    const watch = await watchAnimations(control.group);
     await control.tapSegment('table');
-    await waitForLens(control);
+    await waitForLens(control, {watch});
     await freezeTimers(page);
     const {storyboard: slideBoard} = await animationStoryboard(page, {
       name: 'segmented-tap-slide',
