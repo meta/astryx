@@ -53,7 +53,7 @@ import {Button} from '../Button';
 import {Icon} from '../Icon';
 import {useLayer} from '../Layer';
 import {useAttachment} from '../hooks/useAttachment';
-import {useScrollOverflow} from '../hooks/useScrollOverflow';
+import {useShownScrollOverflow} from '../hooks/useScrollOverflow';
 import {isRtlElement} from '../hooks/isRtlElement';
 import type {BaseProps} from '../BaseProps';
 import {mergeProps, rtlStyles} from '../utils';
@@ -408,8 +408,8 @@ export function Carousel({
   // transition it is allowed to act on.
   const focusedNavRef = useRef<'start' | 'end' | null>(null);
   const prevCanScrollRef = useRef<{start: boolean; end: boolean} | null>(null);
-  const {scrollRef, overflowStart, overflowEnd, hasOverflow} =
-    useScrollOverflow();
+  const {scrollRef, followShown, overflowStart, overflowEnd, hasOverflow} =
+    useShownScrollOverflow();
 
   // Children.toArray drops null/undefined/boolean children and assigns
   // stable keys, so slide numbering ("Slide N of M") matches what actually
@@ -447,66 +447,59 @@ export function Carousel({
     setAttachedPaging(snapPaging);
   }
   // Attaches snap paging to the scroll area, and follows a replaced one.
+  // While the paging holds the row, the edges follow the row as shown.
   useAttachment(
     scrollElRef,
     scroller =>
       attachedPaging == null
         ? () => {}
-        : attachSnapPaging(attachedPaging, scroller),
+        : attachSnapPaging(attachedPaging, scroller, followShown),
     attachedPaging,
   );
-  // React's wheel listener is passive. While a flick holds the row, the paging
-  // takes a wheel the gesture host leaves to the stop nearest its travel.
+  // React's wheel listener is passive, so it can't stop the browser's own
+  // scroll; this native one can. While a flick holds the row, the paging takes
+  // a wheel the gesture host leaves to the stop nearest its travel.
+  //
+  // A mouse wheel gives only deltaY. Shift + wheel is the convention for a
+  // horizontal scroll. A trackpad gives deltaX, so the browser scrolls the row.
+  // A row that fits gets no listener, so a page scroll over it does not wait
+  // for script. The listener reads no style or layout unless a flick holds
+  // the row.
   useAttachment(
     scrollElRef,
     el => {
+      if (!hasOverflow) {
+        return () => {};
+      }
       const onWheel = (event: WheelEvent) => {
+        if (event.defaultPrevented) {
+          return;
+        }
         const delta = event.deltaX || (event.shiftKey ? event.deltaY : 0);
-        const travel = isRtlElement(el) ? -delta : delta;
         if (
-          !event.defaultPrevented &&
           delta !== 0 &&
           moveHeldSnapPaging(el, (at, end) =>
-            nearestStop(snapStops(el, at, end), at + travel),
+            nearestStop(
+              snapStops(el, at, end),
+              at + (isRtlElement(el) ? -delta : delta),
+            ),
           )
         ) {
           event.preventDefault();
           event.stopPropagation();
+          return;
         }
+        if (!event.shiftKey || event.deltaY === 0 || event.deltaX !== 0) {
+          return;
+        }
+        event.preventDefault();
+        el.scrollBy({left: event.deltaY, behavior: 'auto'});
       };
-      if (attachedPaging == null) {
-        return () => {};
-      }
       el.addEventListener('wheel', onWheel, {passive: false});
       return () => el.removeEventListener('wheel', onWheel);
     },
-    attachedPaging,
+    hasOverflow,
   );
-
-  // Map Shift + vertical wheel to horizontal scroll. Trackpads emit
-  // horizontal deltas natively, but a standard mouse only produces deltaY —
-  // so mouse users can't wheel-scroll a horizontal container. Shift + wheel
-  // is the long-established convention for horizontal scroll containers; we
-  // honor it by translating the vertical delta into a horizontal scroll.
-  //
-  // Only kicks in when Shift is held and the wheel is purely vertical
-  // (deltaX === 0), so native trackpad horizontal scrolling is untouched.
-  const handleWheel = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
-    if (!event.shiftKey || event.deltaY === 0 || event.deltaX !== 0) {
-      return;
-    }
-    const el = scrollElRef.current;
-    if (!el) {
-      return;
-    }
-    // Nothing to scroll horizontally — let the event fall through so the page
-    // can scroll as it normally would.
-    if (el.scrollWidth <= el.clientWidth) {
-      return;
-    }
-    event.preventDefault();
-    el.scrollBy({left: event.deltaY, behavior: 'auto'});
-  }, []);
 
   const scrollBy = useCallback(
     (direction: -1 | 1) => {
@@ -737,7 +730,6 @@ export function Carousel({
         role="group"
         aria-label={ariaLabel}
         tabIndex={hasOverflow ? 0 : -1}
-        onWheel={handleWheel}
         {...focusOwnerProps}
         {...mergeProps(
           themeProps('carousel-scroller', {

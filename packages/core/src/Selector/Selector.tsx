@@ -73,7 +73,7 @@ import {
 import type {SelectorOptionType, SelectorOptionData} from './types';
 import {isOptionData, isDivider, isSection, normalizeOption} from './utils';
 import {getSelectableOptionEntries} from './selectableOptionEntries';
-import {useCombobox, useSelectedItemOffset} from './hooks';
+import {useCombobox, useSelectedItemOverlayMargin} from './hooks';
 import {useMenuPress} from '../hooks/useMenuPress';
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {useTypeahead} from '../hooks/useTypeahead';
@@ -126,6 +126,9 @@ registerEnglishFallback(english);
  * taller bottom sheet) costs only the measure's correction.
  */
 const MOST_ROWS_THAT_FIT = 12;
+
+// Private runtime state. No app or theme sets it.
+const OVERLAY_MARGIN_PROPERTY = '--_selector-overlay-margin';
 
 const styles = stylex.create({
   // Trigger container — the enhanced click target wrapping the combobox button and clear button as siblings
@@ -1197,6 +1200,7 @@ export function Selector<T extends SelectorOptionType>(
   const inputLabelId = useId();
   const readOnlyDescriptionId = useId();
   const searchId = useId();
+  const valueTextId = useId();
   // Measure from the same outer control that usePopover anchors to; using the
   // shorter inner button makes every size's selected row land too low.
   const anchorRef = useRef<HTMLDivElement>(null);
@@ -1452,8 +1456,8 @@ export function Selector<T extends SelectorOptionType>(
   // placement opts out of the selector-specific overlay behavior and uses the
   // standard layer positioning API instead.
   const shouldOverlaySelectedItem = placement == null && !hasSearch;
-  const {offset: rawOffset, isPositioned: rawIsPositioned} =
-    useSelectedItemOffset({
+  const {marginBlockStart: rawMarginBlockStart, isPositioned: rawIsPositioned} =
+    useSelectedItemOverlayMargin({
       isOpen: popover.isOpen && shouldOverlaySelectedItem,
       selectedItemIndex,
       listboxId,
@@ -1461,13 +1465,21 @@ export function Selector<T extends SelectorOptionType>(
       anchorRef,
     });
 
-  const selectedItemOffset = shouldOverlaySelectedItem ? rawOffset : 0;
   const isPositioned = shouldOverlaySelectedItem ? rawIsPositioned : true;
   const popoverPlacement = placement ?? 'below';
+  const overlayMargin =
+    shouldOverlaySelectedItem && rawMarginBlockStart != null
+      ? rawMarginBlockStart
+      : null;
+  const overlayMarginProperty: Record<string, string> =
+    overlayMargin == null ? {} : {[OVERLAY_MARGIN_PROPERTY]: overlayMargin};
   const popoverOffsetStyle: React.CSSProperties | undefined =
-    selectedItemOffset > 0
-      ? {marginBlockStart: `-${selectedItemOffset}px`}
-      : undefined;
+    overlayMargin == null
+      ? undefined
+      : {
+          ...overlayMarginProperty,
+          marginBlockStart: `var(${OVERLAY_MARGIN_PROPERTY})`,
+        };
 
   // Clear the current value. Shared by the clear button and the keyboard
   // Delete/Backspace path so clearing is reachable without a mouse.
@@ -1983,6 +1995,7 @@ export function Selector<T extends SelectorOptionType>(
     selectedItem && renderValue ? (
       <SelectorRowLayoutContext value={rowLayout}>
         <span
+          id={valueTextId}
           {...stylex.props(
             styles.triggerValue,
             inputGroup && styles.triggerValueInGroup,
@@ -1995,11 +2008,27 @@ export function Selector<T extends SelectorOptionType>(
         {!startIcon &&
           selectedItem?.icon != null &&
           renderIconSlot(selectedItem.icon, {size: 'sm', color: 'secondary'})}
-        <span {...stylex.props(styles.triggerLabel)}>
+        <span id={valueTextId} {...stylex.props(styles.triggerLabel)}>
           {selectedItem?.label ?? placeholder}
         </span>
       </>
     );
+
+  // A screen reader announces no value for a button. So the searchable
+  // trigger's name holds the value text after the label. A standalone label
+  // needs an id for this reference. A caller aria-label stays the name's first
+  // part: the trigger refers to itself. A caller aria-labelledby outranks it,
+  // as it does on the combobox shape.
+  const callerAriaLabel = (rest as {'aria-label'?: string})['aria-label'];
+  const triggerNameLabelId =
+    callerAriaLabel != null && ariaLabelledByProp == null
+      ? triggerId
+      : (triggerLabelledBy ?? (inputGroup ? undefined : fieldLabelId));
+  const isValueInTriggerName =
+    hasSearch &&
+    !isEffectivelyReadOnly &&
+    triggerNameLabelId != null &&
+    (selectedItem != null || placeholder != null);
 
   const panelContent = hasSearch ? (
     <div {...stylex.props(styles.searchPanel)}>
@@ -2104,7 +2133,9 @@ export function Selector<T extends SelectorOptionType>(
     'aria-describedby':
       [ariaDescribedByProp, ariaDescribedBy].filter(Boolean).join(' ') ||
       undefined,
-    'aria-labelledby': triggerLabelledBy,
+    'aria-labelledby': isValueInTriggerName
+      ? joinAriaIDs(triggerNameLabelId, valueTextId)
+      : triggerLabelledBy,
     'aria-required': isEffectivelyRequired ? 'true' : undefined,
     'aria-invalid': status?.type === 'error' ? 'true' : undefined,
     'aria-busy': isBusy || undefined,
@@ -2325,7 +2356,11 @@ export function Selector<T extends SelectorOptionType>(
       isLabelHidden={isLabelHidden}
       description={description}
       inputID={triggerId}
-      labelID={ariaLabelledByProp != null ? fieldLabelId : undefined}
+      labelID={
+        ariaLabelledByProp != null || isValueInTriggerName
+          ? fieldLabelId
+          : undefined
+      }
       descriptionID={description ? descriptionId : undefined}
       isOptional={isOptional}
       isRequired={isRequired}

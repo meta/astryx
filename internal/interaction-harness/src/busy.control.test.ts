@@ -413,9 +413,89 @@ describe('pooledBusyProof', () => {
         window: short(from),
       })),
     );
-    expect(pooled.verdict.failures.join('\n')).toMatch(
-      /the control moved on 0 frames over 2 runs, under 4/,
+    expect(pooled.verdict.failures).toEqual([
+      '0 of 2 runs judged, under 1: the compositor presented too little in the others to judge',
+    ]);
+  });
+
+  /** `frames` held at the position they had at `from`, from `from` to `to`. */
+  const held = (frames: TrackedFrame[], from: number, to: number) =>
+    frames.map(f =>
+      f.t >= from && f.t <= to
+        ? ({...f, box: {...f.box!, y: 3 * at(from)}} as TrackedFrame)
+        : f,
     );
+
+  it('names a run whose control presented nothing as too little to judge and leaves it out: the other runs decide', () => {
+    // The control stands still through run 2's block only, as if the machine
+    // starved it there.
+    const pooled = pooledBusyProof(
+      [1000, 1300, 1600].map(from => ({
+        tracked: moving(),
+        control: asControl(held(moving(), 1300, 1390)),
+        window: short(from),
+      })),
+    );
+    expect(pooled.verdict.failures, pooled.summary).toEqual([]);
+    expect(pooled.judged).toEqual([true, false, true]);
+    expect(pooled.control).toEqual({moved: 6, movedWith: 6});
+    expect(pooled.summary).toMatch(
+      /^3 runs pooled, 2 judged: .*; run 2: too little to judge, the control moved on 0 frames, under 1: /,
+    );
+  });
+
+  it('fails a pool in which every run but one was too little to judge, even when that run holds enough frames', () => {
+    const windows = [1000, 1300, 1600].map(from => ({from, to: from + 200}));
+    const starved = held(held(moving(), 1300, 1500), 1600, 1800);
+    const pooled = pooledBusyProof(
+      windows.map(window => ({
+        tracked: moving(),
+        control: asControl(starved),
+        window,
+      })),
+    );
+    expect(pooled.judged).toEqual([true, false, false]);
+    expect(pooled.control.moved).toBeGreaterThanOrEqual(4);
+    expect(pooled.verdict.failures.join('\n'), pooled.summary).toMatch(
+      /1 of 3 runs judged, under 2: the compositor presented too little in the others to judge/,
+    );
+  });
+
+  it('judges a run in which the component froze while its control moved: it is never left out, and it fails on its own', () => {
+    const pooled = pooledBusyProof(
+      [1000, 1300, 1600].map(from => ({
+        tracked: held(moving(), 1300, 1390),
+        control: asControl(moving()),
+        window: short(from),
+      })),
+    );
+    expect(pooled.judged).toEqual([true, true, true]);
+    const failures = pooled.verdict.failures.join('\n');
+    expect(failures).toMatch(
+      /moved on 6 of the 9 frames the control moved over 3 runs/,
+    );
+    expect(failures).toMatch(
+      /run 2: moved on 0 of the 3 frames its control moved/,
+    );
+    expect(failures).not.toMatch(/run [13]: moved on/);
+    expect(failures).toMatch(
+      /run 2: longest stall .* longer than the control's/,
+    );
+  });
+
+  it('throws when it needs more judged runs than it has, or none', () => {
+    expect(() =>
+      pooledBusyProof(
+        [{tracked: moving(), control: asControl(moving()), window: BLOCK}],
+        {minJudgedRuns: 2},
+      ),
+    ).toThrow(/minJudgedRuns 2 is not between 1 and the 1 runs/);
+    expect(() =>
+      pooledBusyProof(
+        [{tracked: moving(), control: asControl(moving()), window: BLOCK}],
+        {minJudgedRuns: 0},
+      ),
+    ).toThrow(/minJudgedRuns 0 is not between 1 and the 1 runs/);
   });
 
   it('judges one long run as busyWindowProof judges it against the control', () => {

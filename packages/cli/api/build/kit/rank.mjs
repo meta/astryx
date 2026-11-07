@@ -41,7 +41,9 @@
  *   `settings`) is that family's default. A variant displaces it only with two
  *   matched terms of its own ("a small comparison note" does not make a
  *   dashboard the comparison dashboard), and a base too weak to start on its
- *   own displaces no variant ("a funnel for a dashboard" is the funnel).
+ *   own displaces no variant ("a funnel for a dashboard" is the funnel) —
+ *   unless the idea names its family in the head, which is start evidence on
+ *   its own ("saml login" stays the login page).
  */
 
 import {
@@ -219,7 +221,8 @@ export function rankPages(query, pages) {
         }
       }
       const familyNamed = namedFamilies.has(family);
-      if (headFamilies.has(family)) score += HEAD_FAMILY;
+      const headNamed = headFamilies.has(family);
+      if (headNamed) score += HEAD_FAMILY;
       else if (familyNamed) score += BODY_FAMILY;
       const base = normalized(page.name) === normalized(family);
       if (familyNamed && base) score += FAMILY_BASE;
@@ -228,6 +231,7 @@ export function rankPages(query, pages) {
         score,
         hits,
         familyNamed,
+        headNamed,
         containerMatched,
         family,
         base,
@@ -246,7 +250,14 @@ export function rankPages(query, pages) {
 /**
  * Put a named family's base template ahead of the variant that outranks it,
  * unless the variant matched START_TERMS terms the base did not, or the base
- * scores too little to start on its own.
+ * cannot start on its own: too little score, or too few matched terms. The
+ * head names the exception: a family word in the idea's head is start
+ * evidence on its own — the same evidence pickStart accepts in place of a
+ * second term — so a head-named one-term base can still take the lead ("saml
+ * login" is the login page, not the SSO flow). A base whose family the idea
+ * names only elsewhere still needs a second term: score alone drifts upward
+ * as the catalog grows (idf rises with page count) and would eventually let a
+ * one-term base displace its variant, while hits do not drift.
  * @param {RankedPage[]} ranked
  * @returns {RankedPage[]}
  */
@@ -254,7 +265,13 @@ function baseFirst(ranked) {
   const top = ranked[0];
   if (!top || top.base || !top.familyNamed) return ranked;
   const base = ranked.find(r => r.base && r.family === top.family);
-  if (!base || base.score < START_SCORE) return ranked;
+  if (
+    !base ||
+    base.score < START_SCORE ||
+    (base.hits < START_TERMS && !base.headNamed)
+  ) {
+    return ranked;
+  }
   const own = [...top.matched].filter(t => !base.matched.has(t)).length;
   return own >= START_TERMS
     ? ranked

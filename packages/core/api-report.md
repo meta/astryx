@@ -234,10 +234,12 @@ component BreadcrumbMenuRadioItem(props: DropdownMenuRadioItemProps)
 component BreadcrumbMenuSubMenu(props: DropdownMenuSubMenuProps)
   prop children: ReactNode
   prop data-testid?: string
+  prop delay?: number = 150
   prop description?: ReactNode
   prop footer?: ReactNode
   prop hasSpinner?: boolean = false
   prop header?: ReactNode
+  prop hideDelay?: number = 200
   prop icon?: ReactNode | IconType
   prop isDisabled?: boolean = false
   prop label: ReactNode
@@ -641,6 +643,7 @@ component CodeBlock(props: CodeBlockProps)
   prop language?: string | CodeLanguage = 'plaintext'
   prop maxHeight?: number | string
   prop onCopy?: () => void
+  prop onCopyError?: (error: unknown) => void
   prop ref?: React.Ref<HTMLPreElement>
   prop size?: 'sm' | 'md'
   prop startLineNumber?: number = 1
@@ -850,10 +853,12 @@ component ContextMenuRadioItem(props: DropdownMenuRadioItemProps)
 component ContextMenuSubMenu(props: DropdownMenuSubMenuProps)
   prop children: ReactNode
   prop data-testid?: string
+  prop delay?: number = 150
   prop description?: ReactNode
   prop footer?: ReactNode
   prop hasSpinner?: boolean = false
   prop header?: ReactNode
+  prop hideDelay?: number = 200
   prop icon?: ReactNode | IconType
   prop isDisabled?: boolean = false
   prop label: ReactNode
@@ -1113,10 +1118,12 @@ component DropdownMenuRadioItem(props: DropdownMenuRadioItemProps)
 component DropdownMenuSubMenu(props: DropdownMenuSubMenuProps)
   prop children: ReactNode
   prop data-testid?: string
+  prop delay?: number = 150
   prop description?: ReactNode
   prop footer?: ReactNode
   prop hasSpinner?: boolean = false
   prop header?: ReactNode
+  prop hideDelay?: number = 200
   prop icon?: ReactNode | IconType
   prop isDisabled?: boolean = false
   prop label: ReactNode
@@ -1504,6 +1511,7 @@ component LinkProvider(props: LinkProviderProps)
   prop children: ReactNode
   prop component: LinkComponentType
 component List(props: ListProps)
+  prop animatedLayout?: AnimatedLayout
   prop children: ReactNode
   prop data-testid?: string
   prop density?: ListDensity = 'balanced'
@@ -1524,6 +1532,7 @@ component ListItem(props: ListItemProps)
   prop interactiveRef?: React.RefObject<HTMLElement | null>
   prop isDisabled?: boolean = false
   prop isSelected?: boolean = false
+  prop itemKey?: string | number
   prop label: ReactNode
   prop onClick?: (e: React.MouseEvent) => void
   prop ref?: React.Ref<HTMLLIElement>
@@ -2558,6 +2567,7 @@ component Timestamp(props: TimestampProps)
   prop isTimezoneShown?: boolean = false
   prop ref?: React.Ref<HTMLTimeElement>
   prop size?: TextSize
+  prop timezoneID?: string
   prop tooltipEntries?: ReadonlyArray<TimestampTooltipEntry> = undefined — a single default row with the full absolute time in the viewer's own time zone
   prop type?: TextType = 'supporting'
   prop value: string | number
@@ -3727,10 +3737,12 @@ interface BreadcrumbMenuSection
 interface BreadcrumbMenuSubMenuProps extends DropdownMenuSubMenuBaseProps
   children: ReactNode
   data-testid?: string
+  delay?: number = 150
   description?: ReactNode
   footer?: ReactNode
   hasSpinner?: boolean = false
   header?: ReactNode
+  hideDelay?: number = 200
   icon?: ReactNode | IconType
   isDisabled?: boolean = false
   label: ReactNode
@@ -4071,10 +4083,12 @@ type ContextMenuSection = DropdownMenuSection
 interface ContextMenuSubMenuProps extends DropdownMenuSubMenuBaseProps
   children: ReactNode
   data-testid?: string
+  delay?: number = 150
   description?: ReactNode
   footer?: ReactNode
   hasSpinner?: boolean = false
   header?: ReactNode
+  hideDelay?: number = 200
   icon?: ReactNode | IconType
   isDisabled?: boolean = false
   label: ReactNode
