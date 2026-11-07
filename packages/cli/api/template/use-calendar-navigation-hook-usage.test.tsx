@@ -9,7 +9,7 @@
 
 import {act} from 'react';
 import {createRoot, type Root} from 'react-dom/client';
-import {afterEach, beforeEach, describe, expect, it} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import UseCalendarNavigationHookUsage from '../../assets/templates/blocks/components/Calendar/useCalendarNavigationHookUsage';
 
 (globalThis as {IS_REACT_ACT_ENVIRONMENT?: boolean}).IS_REACT_ACT_ENVIRONMENT =
@@ -97,6 +97,15 @@ describe('UseCalendarNavigationHookUsage', () => {
 
   it('reverses arrow direction in right-to-left layout (DR6, DR11)', () => {
     container.setAttribute('dir', 'rtl');
+    const getComputedStyleSpy = vi
+      .spyOn(window, 'getComputedStyle')
+      .mockImplementation((elt: Element) => {
+        const closestDir = elt.closest('[dir]')?.getAttribute('dir');
+        return {
+          direction: closestDir === 'rtl' ? 'rtl' : 'ltr',
+        } as CSSStyleDeclaration;
+      });
+
     expect(container.textContent).toContain('June 2026');
 
     const day30 = findDayButton(30);
@@ -116,5 +125,55 @@ describe('UseCalendarNavigationHookUsage', () => {
 
     expect(container.textContent).toContain('July 2026');
     expect(document.activeElement?.textContent?.trim()).toBe('1');
+    getComputedStyleSpy.mockRestore();
+  });
+
+  it('preserves standard arrow direction in nested LTR region inside RTL parent (DR11)', () => {
+    container.setAttribute('dir', 'rtl');
+    const nestedWrapper = document.createElement('div');
+    nestedWrapper.setAttribute('dir', 'ltr');
+    container.appendChild(nestedWrapper);
+
+    const nestedRoot = createRoot(nestedWrapper);
+    act(() => {
+      nestedRoot.render(<UseCalendarNavigationHookUsage />);
+    });
+
+    const getComputedStyleSpy = vi
+      .spyOn(window, 'getComputedStyle')
+      .mockImplementation((elt: Element) => {
+        const closestDir = elt.closest('[dir]')?.getAttribute('dir');
+        return {
+          direction: closestDir === 'rtl' ? 'rtl' : 'ltr',
+        } as CSSStyleDeclaration;
+      });
+
+    const nestedButtons = Array.from(
+      nestedWrapper.querySelectorAll('tbody button'),
+    ) as HTMLButtonElement[];
+    const day30 = nestedButtons.find(
+      btn => !btn.disabled && btn.textContent?.trim() === '30',
+    );
+    expect(day30).toBeDefined();
+
+    act(() => {
+      day30?.focus();
+      // In nested LTR, ArrowRight navigates forward to next day
+      day30?.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'ArrowRight',
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+
+    expect(nestedWrapper.textContent).toContain('July 2026');
+    expect(document.activeElement?.textContent?.trim()).toBe('1');
+
+    act(() => {
+      nestedRoot.unmount();
+    });
+    getComputedStyleSpy.mockRestore();
   });
 });

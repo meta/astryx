@@ -60,8 +60,7 @@ export default function UseCalendarNavigationHookUsage() {
 
     const isRtl =
       typeof window !== 'undefined' &&
-      (getComputedStyle(e.currentTarget).direction === 'rtl' ||
-        e.currentTarget.closest('[dir="rtl"]') != null);
+      getComputedStyle(e.currentTarget).direction === 'rtl';
 
     const isNext = isRtl ? e.key === 'ArrowLeft' : e.key === 'ArrowRight';
     const isPrev = isRtl ? e.key === 'ArrowRight' : e.key === 'ArrowLeft';
