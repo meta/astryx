@@ -126,6 +126,13 @@ export const docs = {
         'Additional Lexical plugins rendered inside the composer. Compose mentions, autolink, and other editor behavior on top of the base editor.',
     },
     {
+      name: 'hasHistory',
+      type: 'boolean',
+      description:
+        "Keep the editor's own undo and redo history. Turn it off when a plugin passed in plugins brings its own history, such as a collaboration plugin's, so that only one history records edits and answers undo and redo; the toolbar's Undo and Redo follow that history.",
+      default: 'true',
+    },
+    {
       name: 'hasMarkdownShortcuts',
       type: 'boolean',
       description:
