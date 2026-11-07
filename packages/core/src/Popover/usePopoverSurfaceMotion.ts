@@ -46,9 +46,14 @@ function boxOf(element: Element): PopoverSurfaceRect {
 export interface PopoverSurfaceMotionCalls {
   /**
    * Call as the popover opens, right after the browser shows it and before
-   * it paints.
+   * it paints. `entrance` is the surface that carries the pointer
+   * presentation's CSS entrance; the touch presentation turns it off there.
    */
-  present: (layer: HTMLElement | null, source: HTMLElement | null) => void;
+  present: (
+    layer: HTMLElement | null,
+    source: HTMLElement | null,
+    entrance?: HTMLElement | null,
+  ) => void;
   /** Call as the popover starts to close, while the browser still shows it. */
   closeStart: () => void;
 }
@@ -56,6 +61,7 @@ export interface PopoverSurfaceMotionCalls {
 export function usePopoverSurfaceMotion(): PopoverSurfaceMotionCalls {
   const motionRef = useRef<{
     element: HTMLElement;
+    entrance: HTMLElement | null;
     motion: PopoverSurfaceMotion;
   } | null>(null);
   const isTouchPresentationRef = useRef(false);
@@ -65,23 +71,30 @@ export function usePopoverSurfaceMotion(): PopoverSurfaceMotionCalls {
     motionRef.current = null;
   }, []);
 
-  const motionFor = useCallback((element: HTMLElement) => {
-    const current = motionRef.current;
-    if (current?.element === element) {
-      return current.motion;
-    }
-    current?.motion.dispose();
-    const motion = createPopoverSurfaceMotion(element);
-    motionRef.current = {element, motion};
-    return motion;
-  }, []);
+  const motionFor = useCallback(
+    (element: HTMLElement, entrance: HTMLElement | null) => {
+      const current = motionRef.current;
+      if (current?.element === element && current.entrance === entrance) {
+        return current.motion;
+      }
+      current?.motion.dispose();
+      const motion = createPopoverSurfaceMotion(element, {entrance});
+      motionRef.current = {element, entrance, motion};
+      return motion;
+    },
+    [],
+  );
 
   // Releases the motion's compositor animations, and any exit copy still on
   // screen, at unmount.
   useEffect(() => release, [release]);
 
   const present = useCallback(
-    (layer: HTMLElement | null, source: HTMLElement | null) => {
+    (
+      layer: HTMLElement | null,
+      source: HTMLElement | null,
+      entrance: HTMLElement | null = null,
+    ) => {
       if (layer == null) {
         return;
       }
@@ -96,7 +109,7 @@ export function usePopoverSurfaceMotion(): PopoverSurfaceMotionCalls {
         release();
         return;
       }
-      motionFor(layer).enter(() => ({
+      motionFor(layer, entrance).enter(() => ({
         surface: boxOf(layer),
         source: boxOf(source),
       }));
