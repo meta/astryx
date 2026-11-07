@@ -165,6 +165,11 @@ must be added here even when it delegates to an existing member or shared hook.
   contracts. An accepted link's existing download behavior is preserved. A member
   that handles both navigation and resources applies this family only to its
   navigation path.
+- **FR9 — Opening a new tab leaves the page as it is.** A Cmd/Ctrl-click,
+  Shift-click, or middle-click on a member's accepted link opens the
+  destination the browser's way (FR5). It does not run the item's `onClick`,
+  close a drawer or menu, or navigate the current page. A navigation item that
+  renders a link accepts `target` and `rel` (AV4) (DEC-1).
 
 ## Allowed component variation
 
@@ -216,19 +221,33 @@ router with an undefined rejected destination is an approved exception.
 
 ## Verification map
 
-| Contract           | Verification                                                                         | Representative members and states                                                                                                                                       | Mutation or failure expectation                                                                                                                                               |
-| ------------------ | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR4, FR5           | `safeUrl.test.ts`                                                                    | string and structured destinations; mixed case; controls; relative, fragment, protocol-relative, ordinary, safe custom schemes, and `data:image/*`; separate `protocol` | The shared rule accepts a blocked destination or rejects an ordinary one, including when a protocol is separate from its pathname.                                            |
-| FR1, FR2, FR6      | `useLinkComponent.test.tsx` and `apps/docsite/src/__tests__/link-navigation.test.ts` | native Link, Button, navigation members; provider and `as`; safe/rejected `href` and `to` in either combination; structured destinations and object identity            | A rejected destination invokes the router (including with `undefined` or fallback), an accepted object loses identity, or a real router throws while rendering inert content. |
-| FR1, FR3, FR4, FR5 | `useClickableContainer.test.tsx` and real Chromium navigation coverage               | ClickableCard and Token shapes; native Link; plain, `_blank`, Cmd/Ctrl-click, middle-click, delegated activation; accepted downloads                                    | A rejected destination remains activatable, a blocked native, imperative, or delegated navigation occurs, or an accepted destination loses an activation mode.                |
-| FR4, FR5           | `parser.test.ts`, `Markdown.test.tsx`, and `Markdown.renderBoundary.test.tsx`        | parsed, reference, autolink, and transformed built-in links; mixed case; controls; ordinary schemes; `data:image/*` links versus images                                 | Markdown accepts a blocked scheme, rejects an ordinary navigation destination, applies resource policy to a link, or renders a rejected node as navigation.                   |
-| FR1, IR3           | source/member audit required by `spec:AST-005`                                       | every caller-controlled Core navigation destination                                                                                                                     | A new sink or destination-bearing component ships outside this member snapshot                                                                                                |
-| FR7, FR8           | member-focused behavior and resource suites                                          | disabled link modes; Markdown links versus images; Citation link versus image                                                                                           | Destination rejection changes disabled semantics or navigation policy silently becomes resource policy                                                                        |
+| Contract           | Verification                                                                          | Representative members and states                                                                                                                                       | Mutation or failure expectation                                                                                                                                               |
+| ------------------ | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR4, FR5           | `safeUrl.test.ts`                                                                     | string and structured destinations; mixed case; controls; relative, fragment, protocol-relative, ordinary, safe custom schemes, and `data:image/*`; separate `protocol` | The shared rule accepts a blocked destination or rejects an ordinary one, including when a protocol is separate from its pathname.                                            |
+| FR1, FR2, FR6      | `useLinkComponent.test.tsx` and `apps/docsite/src/__tests__/link-navigation.test.ts`  | native Link, Button, navigation members; provider and `as`; safe/rejected `href` and `to` in either combination; structured destinations and object identity            | A rejected destination invokes the router (including with `undefined` or fallback), an accepted object loses identity, or a real router throws while rendering inert content. |
+| FR9                | `SideNav.test.tsx`, `TopNav.test.tsx`, and `TopNavMenu.test.tsx` modified-click cases | Cmd/Ctrl-, Shift-, and middle-click on a drawer link, a bar menu item, and a drawer menu item; `target="_blank"` on a menu item                                         | A modified click that closes the drawer or menu, runs `onClick`, or navigates the current page fails                                                                          |
+| FR1, FR3, FR4, FR5 | `useClickableContainer.test.tsx` and real Chromium navigation coverage                | ClickableCard and Token shapes; native Link; plain, `_blank`, Cmd/Ctrl-click, middle-click, delegated activation; accepted downloads                                    | A rejected destination remains activatable, a blocked native, imperative, or delegated navigation occurs, or an accepted destination loses an activation mode.                |
+| FR4, FR5           | `parser.test.ts`, `Markdown.test.tsx`, and `Markdown.renderBoundary.test.tsx`         | parsed, reference, autolink, and transformed built-in links; mixed case; controls; ordinary schemes; `data:image/*` links versus images                                 | Markdown accepts a blocked scheme, rejects an ordinary navigation destination, applies resource policy to a link, or renders a rejected node as navigation.                   |
+| FR1, IR3           | source/member audit required by `spec:AST-005`                                        | every caller-controlled Core navigation destination                                                                                                                     | A new sink or destination-bearing component ships outside this member snapshot                                                                                                |
+| FR7, FR8           | member-focused behavior and resource suites                                           | disabled link modes; Markdown links versus images; Citation link versus image                                                                                           | Destination rejection changes disabled semantics or navigation policy silently becomes resource policy                                                                        |
 
 ## Decision links
 
 - `spec:AST-005/DEC-1` — destination safety follows every navigation sink.
 - `spec:AST-005/DEC-2` — embedded resources remain a separate policy.
+
+### DEC-1 — A new-tab click does not change the current page
+
+**Decider:** pending
+
+A person who Cmd-clicks a link in the mobile navigation drawer to open it in a
+new tab comes back to find the drawer closed and their place lost. Opening a
+new tab is the browser's job (FR5), so the current page stays as it was. Menu
+items that link to other sites take `target` and `rel`, as Link already does.
+
+Rejected: closing the drawer on every click, which punishes the new-tab habit.
+Rejected: passing the click event to `onClick` so callers handle new tabs,
+which makes every caller rebuild browser behavior.
 
 ## Open questions
 
