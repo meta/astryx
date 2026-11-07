@@ -56,7 +56,7 @@ export const docs = {
       name: 'options.minRangeSpan',
       type: 'number',
       description:
-        'Minimum days a range must span, counting both endpoints. Note that the anchor itself remains enabled, so pickers forbidding single-day selections must refuse a second click on the anchor.',
+        'Minimum days a range must span, counting both endpoints. Disables any date whose absolute day difference from rangeAnchor is strictly less than minRangeSpan (except rangeAnchor itself, which remains enabled so pickers forbidding single-day selections must refuse a second click on the anchor).',
       required: false,
     },
     {
@@ -72,7 +72,7 @@ export const docs = {
       name: 'isDateDisabled',
       type: '(date: PlainDate) => boolean',
       description:
-        'Predicate returning true when a PlainDate falls outside min/max bounds, exceeds maxRangeSpan relative to rangeAnchor, or fails any dateConstraints predicate.',
+        'Predicate returning true when a PlainDate falls outside min/max bounds, is closer to rangeAnchor than minRangeSpan allows (except rangeAnchor itself), exceeds maxRangeSpan relative to rangeAnchor, or fails any dateConstraints predicate.',
     },
     {
       name: 'minDate',
