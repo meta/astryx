@@ -98,7 +98,11 @@ async function renderMixed(page: Page, direction: 'ltr' | 'rtl') {
     },
     {storyId: STORY, children: MIXED},
   );
-  await expect(page.locator('#storybook-root blockquote')).toBeVisible();
+  // The Default story's own sample also has a blockquote, so wait for the
+  // mixed document's last block, which only the mixed document has.
+  await expect(
+    page.locator('#storybook-root').getByText('משימה בעברית').first(),
+  ).toBeVisible();
 }
 
 /**
