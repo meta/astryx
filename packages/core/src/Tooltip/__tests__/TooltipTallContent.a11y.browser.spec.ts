@@ -361,13 +361,7 @@ test('desktop, with motion allowed: a tall tooltip opens beside its trigger, and
   await page.waitForTimeout(500);
   const s = await expectStillAndClear(page, trigger, viewport);
   expect(s.left >= trigger.right || s.right <= trigger.left).toBe(true);
-  expect(
-    await page.evaluate(
-      sel =>
-        document.querySelector(sel)?.hasAttribute('data-astryx-clears-anchor'),
-      TOOLTIP,
-    ),
-  ).toBe(true);
+  expect(await sitsBesideTrigger(page)).toBe(true);
 });
 
 test('phone: with no room beside, it opens below when below has more room', async ({
