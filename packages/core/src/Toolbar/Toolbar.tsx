@@ -18,12 +18,12 @@
  */
 
 import {useCallback, useMemo, useState, type ReactNode} from 'react';
-import type {StyleXStyles} from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
 import type {SectionVariant} from '../Section/Section';
 import type {SpacingStep} from '../utils/types';
 import type {ElementSize} from '../SizeContext/SizeContext';
 import * as stylex from '@stylexjs/stylex';
+import type {CompiledStyles, InlineStyles, StyleXArray} from '@stylexjs/stylex';
 import {spacingVars, sizeVars} from '../theme/tokens.stylex';
 import {mergeProps} from '../utils';
 import {Section} from '../Section/Section';
@@ -129,6 +129,11 @@ const sizeStyles = stylex.create({
 const dynamicStyles = stylex.create({
   gap: (gapValue: string) => ({
     gap: gapValue,
+  }),
+  // The lane's gap, for content in it that takes back the gap before an
+  // element it adds (`FoldingLaneSizer`).
+  laneGap: (gapValue: string) => ({
+    '--_toolbar-lane-gap': gapValue,
   }),
   tabIndicatorBottom: (offset: string) => ({
     '--_tab-indicator-bottom': offset,
@@ -238,7 +243,13 @@ function ToolbarLane({
   laneStyles,
   children,
 }: {
-  laneStyles: ReadonlyArray<StyleXStyles | false | null | undefined>;
+  laneStyles: ReadonlyArray<
+    StyleXArray<
+      | (null | undefined | CompiledStyles)
+      | boolean
+      | Readonly<[CompiledStyles, InlineStyles]>
+    >
+  >;
   children: ReactNode;
 }) {
   const [laneElement, setLaneElement] = useState<HTMLDivElement | null>(null);
@@ -427,6 +438,7 @@ export function Toolbar({
                   styles.startSlot,
                   edgeCompSlot.inset(edgeCompInsetForSize[size]),
                   dynamicStyles.gap(gapVar),
+                  dynamicStyles.laneGap(gapVar),
                 ]}>
                 {startContent}
               </ToolbarLane>
@@ -439,6 +451,7 @@ export function Toolbar({
                   styles.endSlot,
                   edgeCompSlot.inset(edgeCompInsetForSize[size]),
                   dynamicStyles.gap(gapVar),
+                  dynamicStyles.laneGap(gapVar),
                 ]}>
                 {endContent}
               </ToolbarLane>
@@ -453,6 +466,7 @@ export function Toolbar({
                     !hasEndContent && styles.startOnly,
                     edgeCompSlot.inset(edgeCompInsetForSize[size]),
                     dynamicStyles.gap(gapVar),
+                    dynamicStyles.laneGap(gapVar),
                   ]}>
                   {startContent}
                 </ToolbarLane>
@@ -464,6 +478,7 @@ export function Toolbar({
                     !hasStartContent && styles.endOnly,
                     edgeCompSlot.inset(edgeCompInsetForSize[size]),
                     dynamicStyles.gap(gapVar),
+                    dynamicStyles.laneGap(gapVar),
                   ]}>
                   {endContent}
                 </ToolbarLane>

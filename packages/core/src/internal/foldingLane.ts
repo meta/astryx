@@ -73,3 +73,8 @@ export function useFoldingLaneWant(
   }, [report, id]);
   return lane?.laneChildIds.has(id) ?? false;
 }
+
+/** Whether the caller renders inside a Toolbar start or end lane at all. */
+export function useIsInFoldingLane(): boolean {
+  return use(FoldingLaneContext) != null;
+}

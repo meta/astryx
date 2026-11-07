@@ -547,6 +547,16 @@ export const FoldingLanes: Story = {
             endContent={<Button label="New item" />}
           />
         </div>
+        <div
+          style={{...frame, width: 'fit-content', maxWidth: width}}
+          data-case="content-sized">
+          <Toolbar
+            label="Content-sized actions"
+            size="sm"
+            startContent={<FoldingList labels={FOLD_ACTIONS} label="Actions" />}
+            endContent={<Button label="New item" />}
+          />
+        </div>
         <div style={frame} data-case="two-lanes">
           <Toolbar
             label="Issues"

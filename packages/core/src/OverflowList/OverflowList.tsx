@@ -39,6 +39,7 @@ import {themeProps} from '../utils/themeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {foldableMarker} from '../internal/foldable.stylex';
 import {useFoldingLaneWant} from '../internal/foldingLane';
+import {FoldingLaneSizer} from '../internal/FoldingLaneSizer';
 import {LayoutChangeSnapshot} from '../motion/LayoutChangeSnapshot';
 import {moveFocusLeftBehind, noteFocusWithin} from '../utils/focusReturn';
 import {useFocusLeavingChange} from '../utils/useFocusLeavingChange';
@@ -86,8 +87,8 @@ const foldMin = stylex.create({
 // As a direct child of a Toolbar lane the list's own items do not size it: it
 // starts at its minimum ("+N" plus the items `minVisibleItems` keeps), takes
 // the room the lane gives it up to the width of all its items, and asks the
-// lane for that width through useFoldingLaneWant. Elsewhere, including inside
-// a caller's wrapper in a lane, it sizes as before.
+// lane for that width (useFoldingLaneWant, FoldingLaneSizer). Elsewhere,
+// including in a caller's wrapper, it sizes as before.
 const inLane = stylex.create({
   list: {
     contain: 'inline-size',
@@ -395,9 +396,10 @@ export function OverflowList({
   const overflowItemsRef = useRef(overflowItems);
   overflowItemsRef.current = overflowItems;
 
-  // An item that holds focus and folds away unmounts, which would drop focus
-  // to the page. Focus moves to the "+N" trigger instead, the control that
-  // now reaches that item. Measurement drives the fold, so no handler sees it.
+  // Measurement drives the fold, so no handler sees an item that holds focus
+  // unmount. Focus moves to the control at that end instead: the "+N" trigger
+  // when an item folds, or the item at that end when every item comes back
+  // and the trigger leaves.
   const visibleRef = useRef<HTMLElement | null>(null);
   const {ref: modalityRef} = useInteractionModalityTracking();
   const noteFocusBeforeFold = useFocusLeavingChange(
@@ -499,6 +501,9 @@ export function OverflowList({
           hasOverflow &&
           overflowRenderer?.(overflowItems)}
       </div>
+      {isLaneChild && (
+        <FoldingLaneSizer width={foldNaturalWidth - foldMinWidth} />
+      )}
     </>
   );
 }

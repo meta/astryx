@@ -55,7 +55,8 @@ import {Icon} from '../Icon';
 import {EDGE_COMP_ATTR} from '../Layout/edgeCompensation.stylex';
 import {themeProps} from '../utils/themeProps';
 import {foldableMarker} from '../internal/foldable.stylex';
-import {useFoldingLaneWant} from '../internal/foldingLane';
+import {useFoldingLaneWant, useIsInFoldingLane} from '../internal/foldingLane';
+import {FoldingLaneSizer} from '../internal/FoldingLaneSizer';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {devWarn} from '../utils/devWarning';
@@ -236,14 +237,17 @@ const FADE_FROM_END = `linear-gradient(to left, transparent ${BLEED}, black ${SC
 
 const styles = stylex.create({
   // As a direct child of a Toolbar lane: sized by the lane, not by the tabs,
-  // and no wider than all of them (`--_tab-list-tabs-width`, set from the
-  // measured tabs).
+  // between its widest tab and all of them (set from the measured tabs).
   inLane: {
     contain: 'inline-size',
     flexGrow: 1,
+    minWidth: 'var(--_tab-list-widest-tab, 0px)',
     maxWidth: 'var(--_tab-list-tabs-width, 100%)',
   },
-  tabsWidth: (px: number) => ({'--_tab-list-tabs-width': `${px}px`}),
+  tabWidths: (all: number, widest: number) => ({
+    '--_tab-list-tabs-width': `${all}px`,
+    '--_tab-list-widest-tab': `${widest}px`,
+  }),
   nav: {
     display: 'flex',
     alignItems: 'stretch',
@@ -582,34 +586,43 @@ export function TabList({
     return observeResize(root, onResize);
   }, [hasScroll, listRef]);
 
-  // As a direct child of a Toolbar lane, the tabs' own width does not size
-  // the list: it takes the room the lane has and asks the lane for the width
-  // of all its tabs. The tabs' extent is read after every render, so added or renamed
-  // tabs update the request; equal readings write nothing.
-  const [tabsWidth, setTabsWidth] = useState(0);
+  // In a Toolbar lane, the tabs' widths size the list instead of its content:
+  // the widest tab is its floor, all of them its preferred width. Read after
+  // each commit there, so added or renamed tabs update; equal readings write
+  // nothing. Outside a lane nothing is read.
+  const isInLane = useIsInFoldingLane();
+  const [tabWidths, setTabWidths] = useState({all: 0, widest: 0});
   useIsomorphicLayoutEffect(() => {
     const strip = stripRef.current;
-    if (!hasScroll || !strip) {
+    if (!isInLane || !hasScroll || !strip) {
       return;
     }
-    const tabs = strip.querySelectorAll<HTMLElement>('[data-tab-value]');
+    const tabs = Array.from(
+      strip.querySelectorAll<HTMLElement>('[data-tab-value]'),
+    );
     if (tabs.length === 0) {
       return;
     }
-    const first = tabs[0].getBoundingClientRect();
-    const last = tabs[tabs.length - 1].getBoundingClientRect();
+    const boxes = tabs.map(tab => tab.getBoundingClientRect());
     const padding = getComputedStyle(strip);
-    const width = Math.ceil(
-      Math.max(last.right, first.right) -
-        Math.min(first.left, last.left) +
-        (parseFloat(padding.paddingLeft) || 0) +
-        (parseFloat(padding.paddingRight) || 0),
+    const inset =
+      (parseFloat(padding.paddingLeft) || 0) +
+      (parseFloat(padding.paddingRight) || 0);
+    const all = Math.ceil(
+      Math.max(...boxes.map(box => box.right)) -
+        Math.min(...boxes.map(box => box.left)) +
+        inset,
     );
-    if (width !== tabsWidth) {
-      setTabsWidth(width);
+    const widest = Math.ceil(Math.max(...boxes.map(box => box.width)) + inset);
+    if (all !== tabWidths.all || widest !== tabWidths.widest) {
+      setTabWidths({all, widest});
     }
   });
-  const isLaneChild = useFoldingLaneWant(listRef, tabsWidth, hasScroll);
+  const isLaneChild = useFoldingLaneWant(
+    listRef,
+    tabWidths.all - tabWidths.widest,
+    hasScroll,
+  );
 
   const scrollByPage = useCallback((direction: -1 | 1) => {
     const strip = stripRef.current;
@@ -743,7 +756,8 @@ export function TabList({
             hasScroll && foldableMarker,
             isLaneChild && [
               styles.inLane,
-              tabsWidth > 0 && styles.tabsWidth(tabsWidth),
+              tabWidths.all > 0 &&
+                styles.tabWidths(tabWidths.all, tabWidths.widest),
             ],
             layout === 'fill' && styles.fill,
             hasDivider && styles.divider,
@@ -820,6 +834,9 @@ export function TabList({
         )}
         {hintElement}
       </Wrapper>
+      {isLaneChild && (
+        <FoldingLaneSizer width={tabWidths.all - tabWidths.widest} />
+      )}
     </TabListContext>
   );
 }

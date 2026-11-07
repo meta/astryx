@@ -1196,6 +1196,10 @@ describe('OverflowList in a Toolbar lane (component:Toolbar FR2)', () => {
     expect(contained(screen.getByTestId('alone'))).toBe(false);
     expect(contained(screen.getByTestId('wrapped'))).toBe(false);
     expect(contained(screen.getByTestId('parent'))).toBe(false);
+    // Only the direct child adds its extra width to the lane, through an
+    // empty sibling that assistive technology skips.
+    expect(direct.nextElementSibling).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.getByTestId('wrapped').nextElementSibling).toBeNull();
   });
 
   it('moves focus to the trigger when the focused item folds away', async () => {
@@ -1216,6 +1220,30 @@ describe('OverflowList in a Toolbar lane (component:Toolbar FR2)', () => {
     await triggerResize(vis);
     expect(within(vis).queryByText('C')).not.toBeInTheDocument();
     expect(document.activeElement).toBe(within(vis).getByText('more:1,2'));
+  });
+
+  it('moves focus from the trigger to the last item when every item comes back', async () => {
+    render(
+      <OverflowList
+        gap={0}
+        data-w="100"
+        data-testid="ov"
+        overflowRenderer={items => (
+          <button type="button">more:{items.length}</button>
+        )}>
+        {items}
+      </OverflowList>,
+    );
+    const vis = visibleContainer();
+    act(() => {
+      within(vis)
+        .getByRole('button', {name: /^more:/})
+        .focus();
+    });
+    vis.setAttribute('data-w', '1000');
+    await triggerResize(vis);
+    expect(within(vis).queryByRole('button', {name: /^more:/})).toBeNull();
+    expect(document.activeElement).toBe(within(vis).getByText('C'));
   });
 
   it('leaves focus alone when it was not on a folded item', async () => {
