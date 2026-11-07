@@ -387,6 +387,14 @@
     "defaultMessage": "{label} {value}",
     "description": "A Filters row's \"field operator\" text joined with its value, as the removal announcement reads it (for example \"Status is Open\"). Translators may reorder the two parts."
   },
+  "@astryx.powersearch.token.fieldOperator": {
+    "defaultMessage": "{field}: {operator}",
+    "description": "A filter token's field label joined with its operator label, before the token's value (for example \"Status: is\" in \"Status: is Open\"). Both parts are inserted text; translators may reorder them and change the punctuation."
+  },
+  "@astryx.powersearch.token.labelValue": {
+    "defaultMessage": "{label} {value}",
+    "description": "A filter token's \"field: operator\" text joined with its value, as the token's full text and the name of its controls read it (for example \"Status: is Open\"). Translators may reorder the two parts."
+  },
   "@astryx.alertDialog.cancel": {
     "defaultMessage": "Cancel",
     "description": "Button label on the secondary/dismiss button of an AlertDialog (modal confirmation). Imperative verb; consumers usually override with task-specific text."

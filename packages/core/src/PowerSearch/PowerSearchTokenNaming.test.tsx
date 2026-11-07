@@ -232,6 +232,27 @@ describe('a PowerSearch filter token', () => {
     expect(document.querySelector('[aria-haspopup]')).toBeNull();
   });
 
+  it("joins the field and operator in the locale's order", () => {
+    render(
+      <InternationalizationProvider
+        locale="ja"
+        messages={{
+          ja: {
+            '@astryx.powersearch.token.fieldOperator': {
+              defaultMessage: '{operator}（{field}）',
+            },
+          },
+        }}>
+        <PowerSearch
+          config={config}
+          filters={[openFilter]}
+          onChange={() => {}}
+        />
+      </InternationalizationProvider>,
+    );
+    expect(screen.getByText('is（Status）')).toBeInTheDocument();
+  });
+
   it('keeps a verb-last locale order in the remove button name', () => {
     render(
       <InternationalizationProvider

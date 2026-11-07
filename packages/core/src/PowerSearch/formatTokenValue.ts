@@ -5,7 +5,9 @@
  *
  * @input `OperatorValue`, `FilterValue`, a width budget, the locale, and the
  * calendar.
- * @output `formatTokenValueText` — one string, or null for an empty value.
+ * @output `formatTokenValueText` — one string, or null for an empty value;
+ * `formatTokenLabel` and `formatTokenText` — the token's "field: operator"
+ * label and its full text, each one catalog message.
  * @position Shared by the token itself (`PowerSearch.tsx`) and the sheet
  * presentation's Filters rows and removal announcement
  * (`PowerSearchBottomSheet.tsx`), so every reading of a value on the field
@@ -23,6 +25,34 @@ import english from '../i18n/generated-english/PowerSearch/formatTokenValue.gene
 registerEnglishFallback(english);
 
 type ListFormatFn = (items: ReadonlyArray<string>) => string;
+
+/**
+ * A filter token's label: its field and operator, joined by one catalog
+ * message so a locale can reorder them. A filter with no operator text shows
+ * its field alone.
+ */
+export function formatTokenLabel(
+  t: TranslatorFn,
+  fieldLabel: string,
+  operatorLabel: string,
+): string {
+  if (operatorLabel === '') {
+    return fieldLabel;
+  }
+  return t('@astryx.powersearch.token.fieldOperator', {
+    field: fieldLabel,
+    operator: operatorLabel,
+  });
+}
+
+/** A filter token's full text: its label and its value, in one message. */
+export function formatTokenText(
+  t: TranslatorFn,
+  label: string,
+  value: string,
+): string {
+  return t('@astryx.powersearch.token.labelValue', {label, value});
+}
 
 function truncateString(value: string, limit: number): string {
   // Same semantics as before — strings within limit + 3 pass through, longer
