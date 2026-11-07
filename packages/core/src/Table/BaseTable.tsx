@@ -20,6 +20,7 @@ import {
   useId,
   useMemo,
   useRef,
+  useSyncExternalStore,
   type ReactElement,
   type ReactNode,
   type Ref,
@@ -38,6 +39,7 @@ import type {
   BodyCellRenderProps,
   ScrollWrapperRenderProps,
   TableRenderContext,
+  TablePluginRenderState,
   TableRowContext,
   TableRowComponentProps,
   TableCellComponentProps,
@@ -533,6 +535,38 @@ function BaseTableInner<T extends Record<string, unknown>>({
     [mode, rowModel, logicalRowCount, headerRowCount],
   );
 
+  // A loading plugin publishes its request state through `renderState`. Table
+  // reads it before it builds the sections, and only where loading is
+  // admitted: data mode, a flat row model, and the default scroll wrapper.
+  const loadingSource = useMemo(() => {
+    const sources = plugins.flatMap(plugin =>
+      plugin.renderState ? [plugin.renderState] : [],
+    );
+    // The snapshot is a number, so the store compares it by value.
+    const readIsLoading = (
+      read: (source: TablePluginRenderState) => {isLoading: boolean},
+    ) => (sources.some(source => read(source).isLoading) ? 1 : 0);
+    return {
+      subscribe(onChange: () => void) {
+        const cleanups = sources.map(source => source.subscribe(onChange));
+        return () => cleanups.forEach(cleanup => cleanup());
+      },
+      getSnapshot: () => readIsLoading(source => source.getSnapshot()),
+      getServerSnapshot: () =>
+        readIsLoading(source => source.getServerSnapshot()),
+    };
+  }, [plugins]);
+  const loadingSnapshot = useSyncExternalStore(
+    loadingSource.subscribe,
+    loadingSource.getSnapshot,
+    loadingSource.getServerSnapshot,
+  );
+  const isLoading =
+    mode === 'data' &&
+    rowModel === 'flat' &&
+    ScrollWrapper != null &&
+    loadingSnapshot === 1;
+
   // Resolve all column widths in a single pass — produces per-column
   // inline styles and the aggregate table min-width.
   const resolvedWidths = resolveColumnWidths(resolvedColumns);
@@ -746,7 +780,10 @@ function BaseTableInner<T extends Record<string, unknown>>({
                   );
                 })
               : data != null &&
-                emptyState !== false && (
+                emptyState !== false &&
+                // While the first rows load, the default "no data" message
+                // would be wrong. Caller-owned empty content still shows.
+                !(isLoading && emptyState == null) && (
                   <tr>
                     <td colSpan={resolvedColumns.length}>
                       {emptyState ?? (

@@ -7,10 +7,11 @@
  * @output Whether focus would be lost if a surface hid now; a focus move whose
  *   ring follows the last input; the focus return of a closed overlay, which
  *   never scrolls the page; and the one path that moves focus out of content a
- *   change removed or hid (`noteFocusWithin`, `moveFocusLeftBehind`).
+ *   change removed or hid (`noteFocusWithin`, `moveFocusLeftBehind`); and a
+ *   focus move that lends a temporary tab stop (`focusForLastInputTemporarily`).
  * @position Utility; used by overlays (BottomSheet, Dialog, DropdownMenu) that
  *   move focus programmatically, and by disclosures that hide focused
- *   content. isFocusDetached lives in isFocusDetached.ts, so the utils entry,
+ *   content, and by the Table loading command. isFocusDetached lives in isFocusDetached.ts, so the utils entry,
  *   which exports only it, does not reach this module.
  */
 
@@ -128,6 +129,44 @@ export function focusForLastInput(
     element.blur();
   }
   element.focus({...options, focusVisible: false});
+}
+
+/**
+ * Focuses `element` like `focusForLastInput`, and gives an element that has
+ * no tab stop a temporary `tabindex="-1"` so that it can take focus. The
+ * attribute goes away when the element loses focus or when the caller calls
+ * the returned function. An element that is already focusable, or has its
+ * own `tabindex`, is focused as is, and the returned function does nothing.
+ * Internal.
+ */
+export function focusForLastInputTemporarily(
+  element: HTMLElement,
+  options?: FocusOptions,
+): () => void {
+  if (element.hasAttribute('tabindex') || element.tabIndex >= 0) {
+    focusForLastInput(element, options);
+    return () => {};
+  }
+  element.setAttribute('tabindex', '-1');
+  let isReleased = false;
+  const release = () => {
+    if (isReleased) {
+      return;
+    }
+    isReleased = true;
+    element.removeEventListener('blur', release);
+    if (element.getAttribute('tabindex') === '-1') {
+      element.removeAttribute('tabindex');
+    }
+  };
+  focusForLastInput(element, options);
+  // A pointer-modality focus can blur first; listen only once focus is here.
+  if (element.ownerDocument.activeElement === element) {
+    element.addEventListener('blur', release, {once: true});
+  } else {
+    release();
+  }
+  return release;
 }
 
 /**

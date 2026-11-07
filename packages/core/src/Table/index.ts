@@ -47,6 +47,7 @@ export {useTableColumnResize} from './plugins/columnResize';
 export {useTableStickyColumns} from './plugins/stickyColumns';
 export {useTableGroupedRows} from './plugins/groupedRows';
 export {useTableRowIndex} from './plugins/rowIndex';
+export {useTableInfiniteScroll} from './plugins/infiniteScroll';
 export {useTableRowStatus} from './plugins/rowStatus';
 export {useTableRowExpansion} from './plugins/rowExpansion';
 export {useTableTreeData, useTableTreeState} from './plugins/tree';
@@ -83,6 +84,7 @@ export type {
   BaseTableProps,
   TableRenderContext,
   TableRowContext,
+  TablePluginRenderState,
 } from './types';
 export type {
   TableProps,
@@ -127,6 +129,7 @@ export type {UseTableColumnResizeConfig} from './plugins/columnResize';
 export type {UseTableStickyColumnsConfig} from './plugins/stickyColumns';
 export type {UseTableRowExpansionConfig} from './plugins/rowExpansion';
 export type {UseTableRowIndexConfig} from './plugins/rowIndex';
+export type {UseTableInfiniteScrollConfig} from './plugins/infiniteScroll';
 export type {
   UseTableGroupedRowsConfig,
   UseTableGroupedRowsResult,
