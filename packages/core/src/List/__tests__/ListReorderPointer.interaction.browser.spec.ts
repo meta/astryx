@@ -10,7 +10,8 @@
  *   fine. A pen where the primary pointer is coarse keeps the hold, as a
  *   finger does. A quick stroke moves nothing, and a held one moves the row.
  *   A row held near a scroll edge scrolls the page, or the box the list
- *   scrolls in, and stops at the end
+ *   scrolls in, and stops at the end. The preview and the insertion line
+ *   run along a row set in from the list's start, in either direction
  * @position Beside ListReorderTouch.interaction.browser.spec.ts, which proves
  *   the hold under a finger
  */
@@ -238,6 +239,72 @@ test('a row held near the bottom of a box the list scrolls in scrolls that box, 
     await story.close();
   }
 });
+
+for (const dir of ['ltr', 'rtl'] as const) {
+  test(`${dir}: the preview and the insertion line run along a dragged row set in from the list's start`, async ({
+    browser,
+  }) => {
+    const story = await openFinePointerStory(browser);
+    try {
+      const {page} = story;
+      // Each row is set in 32 px from the list's inline start.
+      await page.evaluate(direction => {
+        const list = document.querySelector<HTMLElement>('#storybook-root ul');
+        if (list == null) {
+          return;
+        }
+        list.dir = direction;
+        for (const row of Array.from(list.children)) {
+          (row as HTMLElement).style.marginInlineStart = '32px';
+        }
+      }, dir);
+      const before = await labels(page);
+      const {at, rowHeight} = await handleOf(page, before[0]);
+      await page.mouse.move(at.x, at.y);
+      await page.mouse.down();
+      await page.mouse.move(at.x, at.y + rowHeight * 1.5, {steps: 8});
+      const edges = await page.evaluate(() => {
+        const list = document.querySelector<HTMLElement>('#storybook-root ul');
+        const row = document.querySelector<HTMLElement>(
+          '#storybook-root [data-astryx-reorder-source]',
+        );
+        const preview = document.querySelector<HTMLElement>(
+          '#storybook-root [data-astryx-reorder-preview]',
+        );
+        if (list == null || row == null || preview == null) {
+          return null;
+        }
+        const after = getComputedStyle(list, '::after');
+        const listBox = list.getBoundingClientRect();
+        const start = parseFloat(after.insetInlineStart);
+        const width = parseFloat(after.width);
+        // The line's own edges in the viewport, from its inline start.
+        const lineLeft =
+          list.dir === 'rtl'
+            ? listBox.right - list.clientLeft - start - width
+            : listBox.left + list.clientLeft + start;
+        const rowBox = row.getBoundingClientRect();
+        const previewBox = preview.getBoundingClientRect();
+        return {
+          row: [rowBox.left, rowBox.right],
+          preview: [previewBox.left, previewBox.right],
+          line: [lineLeft, lineLeft + width],
+        };
+      });
+      await page.keyboard.press('Escape');
+      await page.mouse.up();
+      expect(edges).not.toBeNull();
+      for (const part of ['preview', 'line'] as const) {
+        const [left, right] = edges?.[part] ?? [NaN, NaN];
+        const [rowLeft, rowRight] = edges?.row ?? [NaN, NaN];
+        expect(Math.abs(left - rowLeft), `${part} left`).toBeLessThan(1);
+        expect(Math.abs(right - rowRight), `${part} right`).toBeLessThan(1);
+      }
+    } finally {
+      await story.close();
+    }
+  });
+}
 
 for (const dir of ['ltr', 'rtl'] as const) {
   test(`${dir}: the insertion line runs along the dragged row in a list set in from its container`, async ({

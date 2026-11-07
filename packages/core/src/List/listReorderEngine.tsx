@@ -263,7 +263,13 @@ function overlay(element: HTMLElement): HTMLElement {
  * The preview: a copy of `row` at its place, with the same reduced emphasis
  * as the row and no elevation.
  */
-function previewOf(row: HTMLElement, top: number, background: string | null) {
+function previewOf(
+  row: HTMLElement,
+  list: HTMLElement,
+  top: number,
+  background: string | null,
+) {
+  const span = inlineSpanOf(row.offsetLeft, row.offsetWidth, list);
   const preview = row.cloneNode(true) as HTMLElement;
   preview.removeAttribute('id');
   for (const element of preview.querySelectorAll('[id]')) {
@@ -273,8 +279,8 @@ function previewOf(row: HTMLElement, top: number, background: string | null) {
   overlay(preview);
   Object.assign(preview.style, {
     top: `${top}px`,
-    insetInlineStart: `${row.offsetLeft}px`,
-    inlineSize: `${row.offsetWidth}px`,
+    insetInlineStart: `${span.start}px`,
+    inlineSize: `${span.size}px`,
     boxSizing: 'border-box',
     boxShadow: 'none',
     opacity: MOVING_OPACITY,
@@ -290,10 +296,22 @@ const LINE_Y = '--astryx-reorder-line-y';
 const LINE_START = '--astryx-reorder-line-start';
 const LINE_SIZE = '--astryx-reorder-line-size';
 
-/** Where the insertion line runs across a row, in list coordinates. */
+/**
+ * Where the insertion line runs across a row, in list coordinates: its
+ * inline start and its size.
+ */
 interface LineSpan {
   readonly start: number;
   readonly size: number;
+}
+
+/**
+ * An extent that starts `left` px from the list's left edge, as an inline
+ * start and size. In right-to-left, the start counts from the right edge.
+ */
+function inlineSpanOf(left: number, size: number, list: HTMLElement): LineSpan {
+  const isRtl = getComputedStyle(list).direction === 'rtl';
+  return {start: isRtl ? list.clientWidth - left - size : left, size};
 }
 
 /**
@@ -301,7 +319,7 @@ interface LineSpan {
  * frame writes a style. The list may not be the row's offset parent yet.
  */
 function lineSpanOf(row: HTMLElement, list: HTMLElement): LineSpan {
-  return {start: layoutLeft(row, list), size: row.offsetWidth};
+  return inlineSpanOf(layoutLeft(row, list), row.offsetWidth, list);
 }
 
 /**
@@ -1143,7 +1161,7 @@ export class ListReorderController implements ListReorderSession {
     if (getComputedStyle(list).position === 'static') {
       list.style.position = 'relative';
     }
-    const preview = previewOf(row, tops[dragged], background);
+    const preview = previewOf(row, list, tops[dragged], background);
     // Right before its source, the preview counts for it. So in a numbered
     // list it reads the source's number. Every other row keeps its place
     // among its siblings, and the last row keeps :last-child.
