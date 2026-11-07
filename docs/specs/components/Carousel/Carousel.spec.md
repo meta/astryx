@@ -88,8 +88,9 @@ Consumer migration instructions belong in consumer docs and release notes.
 - Scroll area keyboard access and naming — `spec:AST-025`.
 - Disabled control semantics in general — `spec:AST-085`.
 - Button naming, sizing, and activation — `family:buttons`.
-- Looping, mouse-drag paging, autoplay, dots, edge fades, and slide semantics —
+- Looping, mouse-drag paging, autoplay, dots, and slide semantics —
   uncontracted.
+- Edge fades — the fades' look is uncontracted; their state follows FR8.
 
 ## Public concepts
 
