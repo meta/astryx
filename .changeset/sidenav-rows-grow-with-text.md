@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] `SideNavItem` rows grow with a larger text size. An expanded row's size now sets a minimum height instead of a fixed one, so above 200% text a row's label no longer overlaps the next row, and its end content (such as a count `Badge`) stays inside the row. Collapsed rail rows and the default text size are unchanged.
+[fix] Navigation rows grow with a larger text size. The shared nav item styles (`navItemStyles`, used by `SideNavItem` and by `TopNavItem` and the mega menu in the mobile drawer) now take their size as a minimum height instead of a fixed one, so above 200% text a row's label no longer overlaps the next row, and its end content (such as a count `Badge`) stays inside the row. Collapsed rail rows keep their fixed square, and the default text size is unchanged. A caller `height` on these styles no longer brings a row below its size; override `minHeight` instead.
 
 @cixzhang

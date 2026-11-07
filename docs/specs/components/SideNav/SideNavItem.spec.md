@@ -109,8 +109,9 @@ Consumer migration instructions belong in consumer docs and release notes.
 - The rail's collapsed state — owned by SideNav and `component:SideNavCollapseButton`.
 - Each control placed in `actions` — owned by that control (name, keyboard,
   disabled state).
-- Row fill colors, radius, height, and padding per size — owned by the shared
-  nav item styles and the `side-nav-item` target.
+- Row fill colors, radius, minimum height, and padding per size — owned by the
+  shared nav item styles, which take the height as a minimum, and the
+  `side-nav-item` target.
 
 ## Public concepts
 

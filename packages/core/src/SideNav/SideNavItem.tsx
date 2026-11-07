@@ -99,13 +99,21 @@ const styles = stylex.create({
     flexDirection: 'column',
     width: '100%',
   },
+  // A collapsed rail row holds only its icon, so it keeps a fixed square.
   itemCollapsed: {
     justifyContent: 'center',
     width: sizeVars['--size-element-md'],
+    height: sizeVars['--size-element-md'],
     paddingInline: 0,
   },
-  itemCollapsedSm: {width: sizeVars['--size-element-sm']},
-  itemCollapsedLg: {width: sizeVars['--size-element-lg']},
+  itemCollapsedSm: {
+    width: sizeVars['--size-element-sm'],
+    height: sizeVars['--size-element-sm'],
+  },
+  itemCollapsedLg: {
+    width: sizeVars['--size-element-lg'],
+    height: sizeVars['--size-element-lg'],
+  },
   label: {
     flex: 1,
     minWidth: 0,
@@ -189,6 +197,11 @@ const styles = stylex.create({
     transitionTimingFunction: easeVars['--ease-standard'],
     flexShrink: 0,
   },
+  // Inside a whole-row toggle the chevron takes its 1em glyph's height, so
+  // the row's height comes from its label, not from the chevron's box.
+  expandChevronInRow: {
+    height: 'auto',
+  },
   expandChevronExpanded: {
     transform: 'rotate(180deg)',
   },
@@ -271,15 +284,6 @@ const styles = stylex.create({
     color: colorVars['--color-text-secondary'],
     lineHeight: typeScaleVars['--text-supporting-leading'],
   },
-});
-
-// An expanded row's size is a minimum, not a fixed height: the row grows with
-// a larger text size, so its label and end content stay inside it and never
-// overlap the next row. The collapsed rail keeps its square, icon-only rows.
-const rowSizeStyles = stylex.create({
-  sm: {height: 'auto', minHeight: sizeVars['--size-element-sm']},
-  md: {height: 'auto', minHeight: sizeVars['--size-element-md']},
-  lg: {height: 'auto', minHeight: sizeVars['--size-element-lg']},
 });
 
 // Nesting indent, drawn inside the row: one `--spacing-6` step per nesting
@@ -810,6 +814,7 @@ export function SideNavItem({
           color="inherit"
           xstyle={[
             styles.expandChevron,
+            styles.expandChevronInRow,
             !isItemCollapsed && styles.expandChevronExpanded,
           ]}
         />
@@ -827,7 +832,6 @@ export function SideNavItem({
     navItemStyles.item,
     interactionOverlayStyles.backgroundColor,
     navItemStyles[size],
-    rowSizeStyles[size],
     isSelected && navItemStyles.selected,
     isDisabled && navItemStyles.disabled,
   ] as const;
