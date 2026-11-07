@@ -2,7 +2,7 @@
 
 'use client';
 
-import {useState} from 'react';
+import {useRef, useState} from 'react';
 import {VStack, HStack} from '@astryxdesign/core/Layout';
 import {Center} from '@astryxdesign/core/Center';
 import {Section} from '@astryxdesign/core/Section';
@@ -89,17 +89,42 @@ export default function FormSimplePage() {
   const [isDecider, setIsDecider] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
-  const errors = submitted
-    ? {
-        fullName: !fullName.trim() ? 'Required' : undefined,
-        email: !email.trim() ? 'Required' : undefined,
-        company: !company.trim() ? 'Required' : undefined,
-        phone: !phone.trim() ? 'Required' : undefined,
-        goals: goals.length === 0 ? 'Pick at least one' : undefined,
-        timeline: !timeline ? 'Required' : undefined,
-        budget: !budget ? 'Required' : undefined,
-      }
-    : {};
+  // Each field's problem, in the order the fields appear. The form shows
+  // them once Submit has been pressed.
+  const fieldErrors = {
+    fullName: !fullName.trim() ? 'Required' : undefined,
+    email: !email.trim() ? 'Required' : undefined,
+    company: !company.trim() ? 'Required' : undefined,
+    phone: !phone.trim() ? 'Required' : undefined,
+    goals: goals.length === 0 ? 'Pick at least one' : undefined,
+    timeline: !timeline ? 'Required' : undefined,
+    budget: !budget ? 'Required' : undefined,
+  };
+  const errors: Partial<typeof fieldErrors> = submitted ? fieldErrors : {};
+
+  // A blocked Submit focuses the first field to fix. The goal tokens have no
+  // single focus handle, so `goals` is absent here and a blocked Submit
+  // falls through to the next problem.
+  const fieldRefs = {
+    fullName: useRef<HTMLInputElement>(null),
+    email: useRef<HTMLInputElement>(null),
+    company: useRef<HTMLInputElement>(null),
+    phone: useRef<HTMLInputElement>(null),
+    timeline: useRef<HTMLButtonElement>(null),
+    budget: useRef<HTMLButtonElement>(null),
+  };
+
+  const handleSubmit = () => {
+    setSubmitted(true);
+    // Focusing the field scrolls it into view and makes the error it renders
+    // its accessible description, so the answer to a blocked Submit arrives
+    // where the fix has to happen.
+    const target = Object.entries(fieldErrors)
+      .filter(([, error]) => error != null)
+      .map(([key]) => fieldRefs[key as keyof typeof fieldRefs]?.current)
+      .find(Boolean);
+    target?.focus();
+  };
 
   const toggleGoal = (goal: string) =>
     setGoals(prev =>
@@ -146,6 +171,7 @@ export default function FormSimplePage() {
             <VStack gap={5}>
               <Grid columns={{minWidth: 260}} gap={4}>
                 <TextInput
+                  ref={fieldRefs.fullName}
                   label="Full Name"
                   placeholder="Full Name"
                   value={fullName}
@@ -157,6 +183,7 @@ export default function FormSimplePage() {
                   }
                 />
                 <TextInput
+                  ref={fieldRefs.email}
                   label="Email"
                   placeholder="you@company.com"
                   value={email}
@@ -170,6 +197,7 @@ export default function FormSimplePage() {
               </Grid>
               <Grid columns={{minWidth: 260}} gap={4}>
                 <TextInput
+                  ref={fieldRefs.company}
                   label="Company"
                   placeholder="Company"
                   value={company}
@@ -181,6 +209,7 @@ export default function FormSimplePage() {
                   }
                 />
                 <TextInput
+                  ref={fieldRefs.phone}
                   label="Phone"
                   placeholder="Phone number"
                   value={phone}
@@ -216,6 +245,7 @@ export default function FormSimplePage() {
               </VStack>
 
               <Selector
+                ref={fieldRefs.timeline}
                 label="When are you thinking?"
                 placeholder="When are you thinking of launching?"
                 options={LAUNCH_OPTIONS}
@@ -229,6 +259,7 @@ export default function FormSimplePage() {
               />
 
               <Selector
+                ref={fieldRefs.budget}
                 label="Ballpark budget?"
                 placeholder="What's your rough monthly budget?"
                 options={BUDGET_OPTIONS}
@@ -272,7 +303,7 @@ export default function FormSimplePage() {
                 label="Submit"
                 variant="primary"
                 size="lg"
-                onClick={() => setSubmitted(true)}
+                onClick={handleSubmit}
               />
               <HStack gap={1} hAlign="center">
                 <Text type="supporting" color="secondary">
