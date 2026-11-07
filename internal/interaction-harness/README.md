@@ -199,7 +199,10 @@ only before its curve's held tail (keyframes that end in a run of identical
 values, read as `waitForRest` reads them): when the only animation running
 there started while the page waited, or the wait times out with only such
 animations, the page looked too late, and the wait rejects with
-`BusyWindowTooLateError`. The `verdict` judges the
+`BusyWindowTooLateError`. With `pseudoElement` (`'::before'` or
+`'::after'`), only that pseudo-element's animations on `during` itself count,
+as `sampleCurve` reads them: a child's animation, such as a switch thumb's
+press, does not start the block. The `verdict` judges the
 frames the screencast delivered, whatever its rate (a loaded machine's can
 deliver one frame in five or six), and tolerates nothing a frozen animation
 does: at least one frame in the judged part, no stall longer than three of the
