@@ -104,7 +104,8 @@ export default defineConfig({
     // Test projects (migrated from vitest.workspace.ts). Partitioning rule
     // (nothing can fall through):
     //   - `ui`   = packages/core + packages/lab + packages/charts + packages/richtext
-    //              + packages/vega — need jsdom, the StyleX babel
+    //              + packages/vega and the Theme Showcase DOM suite — need
+    //              jsdom, the StyleX babel
     //              transform, and the jest-dom setup; inherit all of that from
     //              the root config via `extends: true`.
     //   - `perf` = the helper-overhead benchmark, which `ui` excludes. It
@@ -140,6 +141,7 @@ export default defineConfig({
             'packages/charts/src/**/*.test.{ts,tsx,mjs}',
             'packages/richtext/src/**/*.test.{ts,tsx,mjs}',
             'packages/vega/src/**/*.test.{ts,tsx,mjs}',
+            'apps/docsite/src/__tests__/theme-showcase/**/*.test.{ts,tsx,mjs}',
           ],
           exclude: [...configDefaults.exclude, helperOverheadBenchmark],
         },

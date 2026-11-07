@@ -24,6 +24,7 @@ import {
 import {
   castStoryboard,
   animationStoryboard,
+  armHold,
   blockMainThread,
   busyWindowProof,
   compareCurve,
@@ -2171,14 +2172,23 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
   test('the travel and the track colour follow the UIKit springs, sampled frame by frame', async ({
     page,
   }, testInfo) => {
-    const {thumb} = await openSwitch(page);
+    await openSwitch(page);
     // The travel and the track color, from a programmatic change: the thumb
     // starts at rest, as UISwitch's `setOn(_:animated:)` does.
     await openStory(page, storybook(), 'core-switch--controlled-update');
-    const watch = await watchAnimations(thumb);
+    const hold = await armHold(
+      page,
+      page.locator('#storybook-root .astryx-switch'),
+      {
+        judges: {
+          target: page.locator('#storybook-root .astryx-switch-thumb'),
+          property: 'translate',
+        },
+        newOnly: true,
+      },
+    );
     await page.getByRole('button', {name: 'Turn on remotely'}).click();
-    await watch.started();
-    await holdAnimations(page, page.locator('#storybook-root .astryx-switch'));
+    await hold.held();
     const travelSamples = await sampleThumb(page, timeline(500));
     await releaseAnimations(page);
     const travelResult = compareCurve(
@@ -2636,14 +2646,21 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     'storyboard: tap — travel',
     {tag: '@storyboard'},
     async ({page}, testInfo) => {
-      const {driver, thumb, center} = await openSwitch(page);
+      const {driver, center, thumb} = await openSwitch(page);
       await installTimerGate(page);
       const clip = page.locator('#storybook-root .astryx-switch');
-      const watch = await watchAnimations(thumb);
+      // The press starts two animations. The release starts its travel with
+      // several others at once, so a count of 3 holds at the release.
+      const hold = await armHold(page, clip, {
+        judges: {target: thumb, property: 'translate'},
+        count: 3,
+        newOnly: true,
+      });
       await driver.play(tap(center, {holdMs: 50}));
-      await watch.started();
+      const held = await hold.held();
       await freezeTimers(page);
       const {storyboard} = await animationStoryboard(page, {
+        held,
         name: 'switch-tap',
         // The motion: the track colour settles last, about 1.2 s after the
         // release.
