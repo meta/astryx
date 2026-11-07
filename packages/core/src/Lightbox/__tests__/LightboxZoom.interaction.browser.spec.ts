@@ -1227,19 +1227,20 @@ test('the zoom settles and the pinch do no Layout or Paint per frame', async ({
   const before = await state();
   let zoom = {from: 0, to: 0};
   let pinchWindow = {from: 0, to: 0};
-  // The zoom is announced in the polite live region, which empties 2 s later
-  // and lays out then. The pinch is traced once that has happened.
-  await page.evaluate(() => {
+  // The zoom is announced in a polite live region, the page's or the
+  // viewer's own, which empties 2 s later and lays out then. The pinch is
+  // traced once that has happened.
+  const politeRegions =
+    '[data-astryx-live-region="polite"], [data-astryx-modal-live-region="polite"]';
+  await page.evaluate(selector => {
     const record = window as unknown as {zoomAnnounced?: boolean};
     new MutationObserver(() => {
-      const regions = document.querySelectorAll(
-        '[data-astryx-live-region="polite"]',
-      );
+      const regions = document.querySelectorAll(selector);
       if (Array.from(regions).some(region => region.textContent !== '')) {
         record.zoomAnnounced = true;
       }
     }).observe(document, {childList: true, characterData: true, subtree: true});
-  });
+  }, politeRegions);
   const zoomTrace = await traceRendering(page, async () => {
     await driver.play(
       doubleTap({x: 201, y: before.stage.y + before.stage.height / 2}),
@@ -1250,12 +1251,13 @@ test('the zoom settles and the pinch do no Layout or Paint per frame', async ({
   await expect
     .poll(async () =>
       page.evaluate(
-        () =>
+        selector =>
           (window as unknown as {zoomAnnounced?: boolean}).zoomAnnounced ===
             true &&
-          Array.from(
-            document.querySelectorAll('[data-astryx-live-region="polite"]'),
-          ).every(region => region.textContent === ''),
+          Array.from(document.querySelectorAll(selector)).every(
+            region => region.textContent === '',
+          ),
+        politeRegions,
       ),
     )
     .toBe(true);
