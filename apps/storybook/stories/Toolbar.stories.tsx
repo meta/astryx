@@ -486,3 +486,33 @@ export const WithCenterTabNavigation: Story = {
     );
   },
 };
+
+/** Center tab navigation with an end action and no start lane. */
+export const CenterTabNavigationEndOnly: Story = {
+  name: 'Composition: Center Tab Navigation, End Only',
+  render: () => {
+    const [tab, setTab] = useState('overview');
+    return (
+      <Card>
+        <Toolbar
+          label="Center tab navigation"
+          dividers={['bottom']}
+          centerContent={
+            <TabList
+              value={tab}
+              onChange={setTab}
+              aria-label="Center tab navigation">
+              <Tab value="overview" label="Overview" />
+              <Tab value="analytics" label="Analytics" />
+              <Tab value="settings" label="Settings" />
+            </TabList>
+          }
+          endContent={<Button label="New item" />}
+        />
+        <Section>
+          <Text type="body">Content for the center tab navigation</Text>
+        </Section>
+      </Card>
+    );
+  },
+};

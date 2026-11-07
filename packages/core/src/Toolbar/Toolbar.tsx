@@ -58,12 +58,10 @@ const styles = stylex.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  // Three-slot layout (with centerContent). While the lanes fit one row, the
-  // center lane takes its content width and the start and end lanes share the
-  // rest equally, so the center sits at the toolbar's middle. When the lanes
-  // do not fit at their minimum widths, as at a larger text size, the row
-  // wraps instead of letting the lanes overlap: the end lane moves to a second
-  // line.
+  // Three-lane layout. While the lanes fit one row, the side lanes share the
+  // free space equally, so the center stays at the middle. When the lanes do
+  // not fit, the row wraps: the end lane, and the center lane when it does not
+  // fit beside the start lane, move to a following line.
   baseThreeLane: {
     display: 'flex',
     flexWrap: 'wrap',
@@ -84,13 +82,10 @@ const styles = stylex.create({
     display: 'flex',
     alignItems: 'center',
   },
-  // The center lane claims its content's minimum width when the row decides
-  // where to wrap, so its text never spills over the lanes beside it, and
-  // then grows first, up to its content width. Only a center wider than the
-  // whole toolbar, alone on its line, narrows below that minimum, so content
-  // that scrolls (a TabList) still scrolls. The slot deliberately does not
-  // clip (`overflow`): clipping would cut off the box-shadow and focus ring
-  // of its outermost children, which paint outside their own box.
+  // The center basis is its minimum width, so the row wraps before its text
+  // overlaps a side lane. Alone on a line narrower than its content, the lane
+  // shrinks, so a TabList scrolls. The slot does not clip, because clipping
+  // cuts off the focus ring and shadow of its outer children.
   centerSlot: {
     display: 'flex',
     alignItems: 'center',
@@ -101,10 +96,9 @@ const styles = stylex.create({
     minWidth: 0,
     maxWidth: 'max-content',
   },
-  // A start or end lane beside a center lane: the two share the width the
-  // center leaves. A lane keeps its controls on one line, so the row wraps
-  // before the lane does; only a lane wider than the whole toolbar wraps its
-  // own controls.
+  // The side lanes share the width the center leaves. A lane keeps its
+  // controls on one line, so the row wraps first. Only a lane wider than the
+  // toolbar wraps its own controls.
   sideLane: {
     flexGrow: 1,
     flexShrink: 1,
@@ -175,11 +169,15 @@ const defaultBlockPaddingForSize: Record<ElementSize, SpacingStep> = {
  * vertical band.
  */
 function lanesHaveWrapped(row: Element): boolean {
-  const lanes = [...row.children].slice(0, 3);
-  const boxes = lanes.map(lane => lane.getBoundingClientRect());
+  // An empty lane is a box with no height, so it shares every line.
+  const boxes = [...row.children]
+    .slice(0, 3)
+    .map(lane => lane.getBoundingClientRect())
+    .filter(box => box.height > 0);
   return (
+    boxes.length > 1 &&
     Math.max(...boxes.map(box => box.top)) >=
-    Math.min(...boxes.map(box => box.bottom))
+      Math.min(...boxes.map(box => box.bottom))
   );
 }
 

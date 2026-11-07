@@ -45,7 +45,7 @@ system_specs: [spec:AST-020]
 | Behavior                | A Section-wrapped `role="toolbar"` row with start, optional center, and end lanes. The row is one tab stop; arrow keys, Home, and End move focus among its controls along its orientation.                                          |
 | End-user impact         | Keyboard users Tab into the toolbar once and move between its controls with arrows, without losing text-caret keys inside an input or arrow keys inside an open menu; screen-reader users hear a named toolbar and its orientation. |
 | Builder impact          | None.                                                                                                                                                                                                                               |
-| Compatibility/readiness | Records shipped behavior; no public change. Four implementation gaps (see Current-state impact).                                                                                                                                    |
+| Compatibility/readiness | Three-lane layout change: the row wraps when its lanes do not fit (FR2); no public API change. Five current-state items (see Current-state impact).                                                                                 |
 | Review checks           | Reject more than one tab stop, arrows that steal caret keys from a text input mid-line, caller props that replace `role`, `aria-label`, or `aria-orientation`, or moving outer chrome into Toolbar.                                 |
 | Governing rules         | `family:layout-regions`; `spec:AST-020` (toolbar pattern binding); `architecture:container-padding`.                                                                                                                                |
 
@@ -85,9 +85,8 @@ Consumer migration instructions belong in consumer docs and release notes.
   they fit the toolbar, so the row wraps and the end lane moves to a second
   line; the tabs scroll only when they are wider than the toolbar. With a
   bottom divider, the selected tab's indicator sits on the rail while the lanes
-  share one line and on its tab while the row is wrapped; the toolbar reads the
-  wrap after layout, so a wrapped first paint shows it on the rail for one
-  frame.
+  share one line and on its tab while the row is wrapped; after a resize that
+  wraps or unwraps the row, the indicator can lag by one frame.
 - **The tab stop does not follow a pointer click.** After a click on a control
   that does not hold the stop, the stop stays on the earlier control, so
   Shift+Tab from the clicked control lands on that earlier control inside the

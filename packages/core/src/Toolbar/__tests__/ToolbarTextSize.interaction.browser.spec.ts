@@ -180,3 +180,16 @@ test('with a bottom divider a wrapped row keeps the indicator on its tab', async
     })
     .toBe(true);
 });
+
+test('with a bottom divider and an empty start lane the indicator sits on the rail', async ({
+  page,
+}) => {
+  await page.setViewportSize({width: 1024, height: 768});
+  await setDefaultFontSize(page, 16);
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-toolbar--center-tab-navigation-end-only&viewMode=story`,
+  );
+  await page.locator('[role="toolbar"]').waitFor();
+  const {indicatorBottom, tabBottom} = await readIndicator(page);
+  expect(indicatorBottom).toBeGreaterThan(tabBottom + 2);
+});
