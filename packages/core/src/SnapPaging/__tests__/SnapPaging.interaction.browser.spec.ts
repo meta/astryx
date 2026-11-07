@@ -32,6 +32,7 @@ import {
   withStorybook,
 } from '@astryxdesign/interaction-harness';
 
+import {paging} from '../../motion/uikit/paging';
 import {nearestStop} from '../snapPagingValue';
 
 const storybook = withStorybook(test);
@@ -139,7 +140,13 @@ async function swipe(
   const from = {x: box.x + box.width / 2 + (rtl ? -half : half), y};
   const to = {x: from.x + (rtl ? px : -px), y};
   const driver = await touchDriver(page);
-  await driver.play(drag(from, to, {durationMs: ms, restMs}));
+  // The paging reads a scrolling surface's release and pages from
+  // `advanceSpeed`. A release the page reads on the other side of it from
+  // the script fails by name, never as the paging's verdict.
+  await driver.play(drag(from, to, {durationMs: ms, restMs}), {
+    release: 'scroll',
+    boundaries: {releasePxPerS: paging.release.advanceSpeed},
+  });
 }
 
 for (const mode of ['paging', 'item'] as const) {
@@ -449,13 +456,16 @@ for (const holdMs of [150, 40]) {
     }
     expect(await pressInSettle(page, scroller, stops[3] * 0.9)).toBe(true);
     const driver = await touchDriver(page);
+    // A hold the page reads on the other side of the catch time from the
+    // script fails by name.
     await driver.play(
       tap({x: box.x + box.width / 2, y: box.y + box.height / 2}, {holdMs}),
+      {boundaries: {holdMs: paging.catchStopMs}},
     );
     const at = await restingOffset(scroller);
     expect(Math.min(...stops.map(stop => Math.abs(stop - at)))).toBeLessThan(1);
-    // Past the pager's 85 ms catch time, the move stops short of its target.
-    expect(Math.abs(at - stops[5]) < 1).toBe(holdMs < 85);
+    // Past the pager's catch time, the move stops short of its target.
+    expect(Math.abs(at - stops[5]) < 1).toBe(holdMs < paging.catchStopMs);
   });
 }
 

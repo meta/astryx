@@ -536,6 +536,17 @@ gesture the same way, and the play fails with `TouchPacingError`. A play whose
 proof reads no release from the lift, such as a pinch's end, passes
 `releaseUnread`.
 
+A proof whose component decides on a threshold names it in `boundaries`:
+the release speed a pager pages from (`releasePxPerS`), or the hold after
+which it catches the content (`holdMs`). In WebKit the play then fails by
+name when the page read the release, or the first finger's hold from
+touch-down to lift, on the other side of the threshold from the script. A
+scrolling surface reads its release as Core's `scrollVelocity` does: pass
+`release: 'scroll'`. Each pacing error names the longest time the page drew no
+frame during the gesture. A page that drew nothing for 100 ms or more never
+received the gesture as scripted. To read a frame before the gesture, a judged
+play starts one frame later.
+
 A wheel gesture is a run of steps, and `wheel` waits for each step's round
 trip, so on a loaded runner awaited steps land as far apart as a round trip
 takes: 49 to 141 ms in WebKit, past the 100 ms a proof may allow between the
