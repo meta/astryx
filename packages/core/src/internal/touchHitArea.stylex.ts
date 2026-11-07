@@ -6,17 +6,21 @@
  * @output Exports `touchHitAreaStyles.layer`, a host's invisible hit band
  *   under a coarse pointer, and `touchHitAreaStyles.layerBelowChildren`, the
  *   same band drawn below the host's children
- * @position Internal styling utility for CheckboxInput, RadioListItem, List
- *   rows, InfoTip, SegmentedControl segments and the press-tracking groups.
- *   Each keeps its insets live with `useTouchHitArea` (utils/touchHitArea.ts).
+ * @position Internal styling utility for Button (and so the input clear
+ *   button), CheckboxInput, RadioListItem, List rows, InfoTip,
+ *   SegmentedControl segments and the press-tracking groups. Each keeps its
+ *   insets live with `useTouchHitArea` (utils/touchHitArea.ts).
  *
  * The band is the host's `::after`, grown past each edge by the measured
  * inset. A clip path cuts out the host's box, so its content keeps its taps.
- * A tap on the band lands on the host. A host whose children fill its box,
+ * A tap on the band lands on the host. Button draws the band on its content
+ * wrapper instead, which leaves its own `::after` to callers. The insets then
+ * reach the wrapper by inheritance, a tap on the band lands on that
+ * descendant, and the watch has `ownsDescendantTouches` off. A host whose children fill its box,
  * such as a press-tracking group, takes `layerBelowChildren`. That band is its
  * `::before`, so its positioned children paint over the clip path's edge, and
- * the pixels on their own edges stay theirs. SYNC: hitArea.ts
- * HIT_INSET_PROPERTIES, touchHitArea.ts and touchHitArea.test.tsx.
+ * the pixels on their own edges stay theirs. SYNC: utils/hitArea.ts
+ * HIT_INSET_PROPERTIES, utils/touchHitArea.ts and utils/touchHitArea.test.tsx.
  */
 
 import * as stylex from '@stylexjs/stylex';
