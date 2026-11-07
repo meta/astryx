@@ -270,6 +270,7 @@ const styles = stylex.create({
     height: '100dvh',
     maxWidth: '100dvw',
     maxHeight: '100dvh',
+    '--_dialog-radius': '0px',
     borderRadius: 0,
     // Nothing of the page shows around a full-screen dialog: no edge.
     borderWidth: 0,
@@ -304,6 +305,13 @@ const styles = stylex.create({
     minHeight: 0,
     overflow: 'hidden',
     borderRadius: 'inherit',
+  },
+  // The corner a full-bleed child takes where it reaches the dialog's edge.
+  innerCorners: {
+    '--container-corner-start-start': 'var(--_dialog-radius)',
+    '--container-corner-start-end': 'var(--_dialog-radius)',
+    '--container-corner-end-start': 'var(--_dialog-radius)',
+    '--container-corner-end-end': 'var(--_dialog-radius)',
   },
   // Inline wrapper mirrors the dialog's visual styles without <dialog> behavior
   inlineWrapper: {
@@ -833,6 +841,8 @@ export function Dialog({
           effectivePadding !== 4 &&
           containerPaddingBlockEndVarStyles[effectivePadding],
         isFullscreen && useThemeDefault && styles.fullscreenSafeArea,
+        // After the container's square default.
+        styles.innerCorners,
       )}>
       <DialogContext value={dialogContextValue}>{children}</DialogContext>
     </div>

@@ -140,6 +140,29 @@ const scrollWrapperStyles = stylex.create({
       default: null,
       ':last-child': 'calc(-1 * var(--container-padding-block-end, 0px))',
     },
+    // The corner of a rounded container the region reaches, less the block
+    // padding it keeps on that edge, so its ring and fills follow that corner.
+    // Outside a rounded container every corner is 0.
+    borderStartStartRadius: {
+      default:
+        'max(0px, var(--container-corner-start-start, 0px) - var(--container-padding-block-start, 0px))',
+      ':first-child': 'var(--container-corner-start-start, 0px)',
+    },
+    borderStartEndRadius: {
+      default:
+        'max(0px, var(--container-corner-start-end, 0px) - var(--container-padding-block-start, 0px))',
+      ':first-child': 'var(--container-corner-start-end, 0px)',
+    },
+    borderEndStartRadius: {
+      default:
+        'max(0px, var(--container-corner-end-start, 0px) - var(--container-padding-block-end, 0px))',
+      ':last-child': 'var(--container-corner-end-start, 0px)',
+    },
+    borderEndEndRadius: {
+      default:
+        'max(0px, var(--container-corner-end-end, 0px) - var(--container-padding-block-end, 0px))',
+      ':last-child': 'var(--container-corner-end-end, 0px)',
+    },
   },
   // The wrapper bleeds to its container's edges, under a Card's border, and
   // the Card clips there, so its keyboard ring sits inside its own box, clear

@@ -91,6 +91,14 @@ const styles = stylex.create({
     paddingBlockStart: `calc(var(--container-padding-block-start) - ${borderVars['--border-width']})`,
     paddingBlockEnd: `calc(var(--container-padding-block-end) - ${borderVars['--border-width']})`,
   },
+  // The corner a full-bleed child takes where it reaches the card's edge.
+  // The child reaches under the border, so this is the outer radius.
+  publishesCorners: {
+    '--container-corner-start-start': 'var(--_card-radius)',
+    '--container-corner-start-end': 'var(--_card-radius)',
+    '--container-corner-end-start': 'var(--_card-radius)',
+    '--container-corner-end-end': 'var(--_card-radius)',
+  },
   // Fixed-height cards scroll content; overflow: auto also clips to border-radius
   scrollable: {
     overflow: 'auto',
@@ -322,6 +330,8 @@ export function Card({
                   paddingOuterY: paddingToken,
                 },
           ),
+          // After the container's square default.
+          styles.publishesCorners,
           // Applied after the container padding so the border-inset calc wins;
           // it reads the --container-padding-* vars set above.
           variant === 'default' && styles.withBorder,

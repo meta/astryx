@@ -292,8 +292,9 @@ const styles = stylex.create({
     borderInlineEndWidth: borderVars['--border-width'],
     borderInlineEndStyle: 'solid',
     borderInlineEndColor: colorVars['--color-border'],
-    borderStartStartRadius: radiusVars['--radius-container'],
-    borderStartEndRadius: radiusVars['--radius-container'],
+    '--_sheet-radius': radiusVars['--radius-container'],
+    borderStartStartRadius: 'var(--_sheet-radius)',
+    borderStartEndRadius: 'var(--_sheet-radius)',
     boxShadow: shadowVars['--shadow-high'],
     outline: 'none',
     overflow: 'hidden',
@@ -451,6 +452,13 @@ const styles = stylex.create({
     // it then overflows the box, and its block-end padding leaves the scroll
     // range.
     minHeight: 'fit-content',
+  },
+  // The corners a full-bleed child takes at the sheet's top edge. The content
+  // starts inside the sheet's top border, so each is the sheet's radius less
+  // that border. The bottom edge is square.
+  contentCorners: {
+    '--container-corner-start-start': `calc(var(--_sheet-radius) - ${borderVars['--border-width']})`,
+    '--container-corner-start-end': `calc(var(--_sheet-radius) - ${borderVars['--border-width']})`,
   },
   tallKeyboardBody: {
     scrollPaddingBlockEnd: MOBILE_KEYBOARD_BOTTOM_CLEARANCE,
@@ -1259,6 +1267,8 @@ export function BottomSheetPanel({
                 !usesThemePadding &&
                   effectivePadding !== 4 &&
                   containerPaddingBlockEndVarStyles[effectivePadding],
+                // After the container's square default.
+                styles.contentCorners,
               ),
             ),
           )}>

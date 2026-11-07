@@ -616,6 +616,10 @@ const styles = stylex.create({
     '--container-padding-inline-end': '0px',
     '--container-padding-block-start': '0px',
     '--container-padding-block-end': '0px',
+    '--container-corner-start-start': '0px',
+    '--container-corner-start-end': '0px',
+    '--container-corner-end-start': '0px',
+    '--container-corner-end-end': '0px',
   },
   // Static Markdown lists never host swipe actions. Let outside counter ink
   // paint through both ordered and unordered ancestors; general List and
