@@ -27,6 +27,7 @@ import {
 } from '@astryxdesign/a11y-spec/playwright';
 import {
   animationStoryboard,
+  armHold,
   blockMainThread,
   castStoryboard,
   compareCurve,
@@ -749,17 +750,25 @@ test(
       width: box.width + 32,
       height: box.height + 32,
     };
-    await opened.driver.play(tap(opened.center, {holdMs: HOLD_MS}));
-    await freezeTimers(page);
-    const {storyboard} = await animationStoryboard(page, {
-      name: 'button-press-release',
-      clip,
-      scope: opened.surface,
+    // The page holds the release itself as soon as it runs. A hold the test
+    // sends after the lift reaches the page later on a busy machine, and the
+    // release can end first. The press runs one animation (the scale) and the
+    // release runs two (the scale back and the layer's fade), so the hold
+    // waits for two.
+    const hold = await armHold(page, opened.surface, {
+      count: 2,
       judges: {
         target: opened.surface,
         property: 'opacity',
         pseudoElement: '::before',
       },
+    });
+    await opened.driver.play(tap(opened.center, {holdMs: HOLD_MS}));
+    await freezeTimers(page);
+    const {storyboard} = await animationStoryboard(page, {
+      name: 'button-press-release',
+      clip,
+      held: await hold.held(),
       times: timeline(RELEASE_MS),
       measure: async () => ({
         opacity: await layerOpacity(opened.surface, '::before'),
