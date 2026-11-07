@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {afterEach, beforeEach, describe, it, expect, vi} from 'vitest';
-import {render, act, screen} from '@testing-library/react';
+import {render, act, screen, waitFor} from '@testing-library/react';
 import {createRef, useLayoutEffect} from 'react';
 import {TOUCH_QUERY} from '@astryxdesign/core/internal/touch';
 import {ChatVirtualizer, type ChatVirtualizerHandle} from './ChatVirtualizer';
@@ -464,6 +464,70 @@ describe('ChatVirtualizer', () => {
     }
   });
 
+  it('skips the correction pass for a commit that changes nothing it reads', async () => {
+    const trace = traceLayout();
+    const {el} = trace;
+    try {
+      // The same rows array: a re-render that changes nothing the list reads.
+      const data = rows(60);
+      const list = (label: string) => (
+        <div aria-label={label}>{attachedTo(data, el)}</div>
+      );
+      const {rerender} = render(list('a'));
+      await settled();
+      await settled();
+      trace.ops.length = 0;
+      // A parent re-render with the same rows: its commit runs no pass.
+      act(() => rerender(list('b')));
+      expect(trace.sizeReads()).toBe(0);
+      expect(trace.forcedLayouts()).toBe(0);
+    } finally {
+      trace.stop();
+      el.remove();
+    }
+  });
+
+  it('mounts no extra rows when another thread replaces the rows while the reader is in history', async () => {
+    const el = tallScroller();
+    const thread = (prefix: string, n: number): Row[] =>
+      Array.from({length: n}, (_, i) => ({
+        id: `${prefix}${i}`,
+        text: `${prefix} message ${i}`,
+      }));
+    // Every row rendered, to see the largest commit.
+    let rendered = new Set<string>();
+    const list = (data: Row[]) => (
+      <ChatVirtualizer<Row>
+        data={data}
+        getRowKey={m => String(m.id)}
+        renderItem={({item}) => {
+          rendered.add(String(item.id));
+          return <span>{item.text}</span>;
+        }}
+        estimatedItemSize={100}
+        scrollElement={el}
+      />
+    );
+    const {container, rerender} = render(list(thread('a', 3000)));
+    await settled();
+    await settled();
+    scrollEvent(el, 0);
+    await settled();
+    // The reader is in history: the thread's tail is not mounted.
+    expect(screen.queryByText('a message 2999')).toBeNull();
+    expect(screen.getByText('a message 0')).toBeInTheDocument();
+    const mountedInHistory = container.querySelectorAll('[data-pkey]').length;
+    // Another thread replaces the rows: none of it is a tail arrival, so no
+    // commit renders more than a window's worth of rows, not the whole thread.
+    rendered = new Set();
+    act(() => rerender(list(thread('b', 3000))));
+    await settled();
+    expect(rendered.size).toBeLessThanOrEqual(
+      2 * Math.max(mountedInHistory, 60),
+    );
+    el.remove();
+  });
+
   it('a clamp onto a new, smaller bottom is not displacement', async () => {
     // A row above shrank outside any commit (an image, a font); the browser
     // pinned the position to the new maximum. The reader did not move.
@@ -759,6 +823,8 @@ describe('ChatVirtualizer', () => {
     scrollEvent(el, 0);
     await settled();
     expect(screen.queryByText('message 59')).toBeNull();
+    // The history mount's busy mark has cleared.
+    await waitFor(() => expect(block.hasAttribute('aria-busy')).toBe(false));
     // A reply arrives at the tail: it mounts now, and the commit is not busy.
     act(() => rerender(list(withText(61))));
     expect(screen.getByText('message 60')).toBeInTheDocument();

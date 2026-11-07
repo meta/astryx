@@ -35,7 +35,6 @@
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/lab/src/Chat/index.ts (exports)
- * - /apps/storybook/stories/ChatVirtualization.stories.tsx (examples)
  */
 
 import * as React from 'react';
@@ -91,10 +90,9 @@ const isBouncing = (vp: ViewportRead): boolean =>
   vp.scrollTop > Math.max(0, vp.scrollHeight - vp.clientHeight) + 1;
 
 /**
- * The scroller's position and size, read together in one batch. Scrolling
- * moves the rows that should be mounted, so a scroll event and a correction
- * pass each read these once, before any write, so a pass forces at most two
- * layouts and a scroll event none.
+ * The scroller's position and size, read together in one batch. A scroll
+ * event reads these once and writes nothing. A correction pass reads them
+ * once, after its first spacer write, and forces at most two layouts.
  */
 type ViewportRead = {
   scrollTop: number;
@@ -301,12 +299,16 @@ export function ChatVirtualizer<T>(
   // The messages the last data change appended at the tail that have not
   // mounted yet: the only rows that mount as news.
   const newsKeysRef = React.useRef(new Set<string>());
-  // Messages that arrived at the tail while the reader was away from it. They
-  // mount on arrival, after a gap spacer below the window, so the log
-  // delivers them; they stay mounted until the window reaches them.
-  const arrivedKeysRef = React.useRef(new Set<string>());
-  // The first of those rows this render mounts, for the spacers.
+  // The first row of the arrived tail run this render mounts (see
+  // `arrival`), for the spacers.
   const tailKeyRef = React.useRef<string | null>(null);
+  // The commit the last correction pass ran for, so a commit that changes
+  // nothing the pass reads skips it.
+  const passedRenderRef = React.useRef<{
+    keys: string;
+    scroller: HTMLElement | null;
+  } | null>(null);
+  const pendingRenderKeysRef = React.useRef('');
   const gapTailRef = React.useRef<HTMLDivElement | null>(null);
   // This render's rows, and whether they mount history, for its commit.
   const pendingRenderedRef = React.useRef<ReadonlySet<string>>(new Set());
@@ -954,11 +956,6 @@ export function ChatVirtualizer<T>(
         break;
       }
       newsKeysRef.current.add(key);
-      // Away from the tail, the window will not reach a new message, so it
-      // mounts beside the window instead (see arrivedKeysRef).
-      if (!(mode.current.kind === 'end' && mode.current.distance === 0)) {
-        arrivedKeysRef.current.add(key);
-      }
     }
     // HEAD CHANGE (loading older history, or trimming it). Rows arrived above
     // everything placed, so the restore owes a correction the size of the whole
@@ -978,10 +975,24 @@ export function ChatVirtualizer<T>(
     }
   }
 
-  // Runs after EVERY commit — this is the pre-paint correction slot. (No
-  // separate initial-landing effect: this pass computes the window from the
-  // declared target on the same commits, attach arrival included.)
+  // The pre-paint correction slot. (No separate initial-landing effect: this
+  // pass computes the window from the declared target on the same commits,
+  // attach arrival included.) A commit that changes none of what the pass
+  // reads — the geometry, the rows mounted, the scroller — skips it: a parent
+  // re-render with the same data, a label change.
   React.useLayoutEffect(() => {
+    const scroller = getScroller();
+    const keys = pendingRenderKeysRef.current;
+    const passed = passedRenderRef.current;
+    if (
+      !geoChanged.current &&
+      passed !== null &&
+      passed.keys === keys &&
+      passed.scroller === scroller
+    ) {
+      return;
+    }
+    passedRenderRef.current = {keys, scroller};
     syncAndRestore();
   });
 
@@ -1372,6 +1383,57 @@ export function ChatVirtualizer<T>(
     return cb;
   };
 
+  // Tail messages the window has not reached. They mount on arrival, after a
+  // gap spacer below the window, so the log can deliver them while the reader
+  // is in history. State, not a ref: it decides what renders. Only a tail
+  // append adds to it, so a replaced thread mounts nothing extra. A row
+  // leaves once the window reaches it or it is gone from the data.
+  const [arrival, setArrival] = React.useState<{
+    data: readonly T[];
+    win: Win;
+    keys: ReadonlySet<string>;
+  }>(() => ({data, win, keys: new Set()}));
+  let arrivedKeys = arrival.keys;
+  if (arrival.data !== data || arrival.win !== win) {
+    const next = new Set<string>();
+    const indexOf = new Map<string, number>();
+    for (let i = 0; i < data.length; i++) {
+      indexOf.set(String(getRowKey(data[i], i)), i);
+    }
+    const reached = (key: string): boolean =>
+      win.end >= win.start && (indexOf.get(key) ?? -1) <= win.end;
+    for (const key of arrival.keys) {
+      if (indexOf.has(key) && !reached(key)) {
+        next.add(key);
+      }
+    }
+    if (arrival.data !== data) {
+      const previous = new Set<string>();
+      for (let i = 0; i < arrival.data.length; i++) {
+        previous.add(String(getRowKey(arrival.data[i], i)));
+      }
+      const run: string[] = [];
+      let isTailAppend = false;
+      for (let i = data.length - 1; i >= 0; i--) {
+        const key = String(getRowKey(data[i], i));
+        if (previous.has(key)) {
+          isTailAppend = true;
+          break;
+        }
+        run.push(key);
+      }
+      if (isTailAppend) {
+        for (const key of run) {
+          if (!reached(key)) {
+            next.add(key);
+          }
+        }
+      }
+    }
+    arrivedKeys = next;
+    setArrival({data, win, keys: next});
+  }
+
   // A focused row outside the window stays mounted beside it. It keeps its
   // place among its siblings as rows mount and unmount around it, so React
   // never moves its node (a moved node loses focus).
@@ -1385,26 +1447,12 @@ export function ChatVirtualizer<T>(
     }
   }
   // The arrived tail run starts at the first arrived row past the window and
-  // runs to the last row. A row the window reaches leaves the set.
+  // runs to the last row.
   let tailIndex = -1;
-  if (arrivedKeysRef.current.size > 0 && win.end >= win.start) {
-    const arrived = arrivedKeysRef.current;
-    const present = new Set<string>();
-    for (let i = data.length - 1; i >= 0; i--) {
-      const key = String(getRowKey(data[i], i));
-      if (!arrived.has(key)) {
-        continue;
-      }
-      present.add(key);
-      if (i <= win.end) {
-        arrived.delete(key);
-      } else {
+  if (arrivedKeys.size > 0 && win.end >= win.start) {
+    for (let i = data.length - 1; i > win.end; i--) {
+      if (arrivedKeys.has(String(getRowKey(data[i], i)))) {
         tailIndex = i;
-      }
-    }
-    for (const key of arrived) {
-      if (!present.has(key)) {
-        arrived.delete(key);
       }
     }
   }
@@ -1477,6 +1525,7 @@ export function ChatVirtualizer<T>(
     }
   }
   pendingRenderedRef.current = renderedKeys;
+  pendingRenderKeysRef.current = [...renderedKeys].join('\n');
   pendingBusyRef.current = mountsHistory;
 
   // Which row holds focus, for the pinning above.
