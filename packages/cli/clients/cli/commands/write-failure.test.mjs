@@ -99,6 +99,11 @@ describe.skipIf(asRoot)('a failed write reports ERR_WRITE_FAILED', () => {
   });
 });
 
+/** A path as the CLI reports it: relative to the project, with `/`. */
+function fromProject(file) {
+  return path.relative(dir, file).split(path.sep).join('/');
+}
+
 describe.skipIf(asRoot)('a swizzle that fails part-way undoes what it wrote', () => {
   it('restores replaced files, removes created ones, and says nothing was written', async () => {
     // Learn the component's files, in copy order, from a successful swizzle.
@@ -110,10 +115,13 @@ describe.skipIf(asRoot)('a swizzle that fails part-way undoes what it wrote', ()
 
     // The first file exists (replaceable), the middle ones do not, and the
     // last one is read-only, so --overwrite fails after writing the others.
+    // The last file can be a carried module beside the component folder
+    // (`../privateAttributes/…`), so its folder is made too.
     const first = files[0];
     const middle = files.slice(1, -1);
     const last = files[files.length - 1];
     fs.mkdirSync(outDir, {recursive: true});
+    fs.mkdirSync(path.dirname(path.join(outDir, last)), {recursive: true});
     fs.writeFileSync(path.join(outDir, first), 'before first\n');
     fs.writeFileSync(path.join(outDir, last), 'before last\n');
     fs.chmodSync(path.join(outDir, last), 0o444);
@@ -129,7 +137,7 @@ describe.skipIf(asRoot)('a swizzle that fails part-way undoes what it wrote', ()
 
     expect(status).toBe(1);
     expect(body.code).toBe('ERR_WRITE_FAILED');
-    expect(body.error).toContain(last);
+    expect(body.error).toContain(fromProject(path.join(outDir, last)));
     expect(body.error).toContain('Nothing was written.');
     expect(body.error).not.toContain(dir);
     expect(fs.readFileSync(path.join(outDir, first), 'utf8')).toBe('before first\n');
@@ -150,6 +158,7 @@ describe.skipIf(asRoot)('a swizzle that fails part-way undoes what it wrote', ()
     const first = files[0];
     const middle = files.slice(1, -1);
     const last = files[files.length - 1];
+    fs.mkdirSync(outDir, {recursive: true});
     fs.mkdirSync(path.join(outDir, last), {recursive: true});
     fs.writeFileSync(path.join(outDir, first), 'before first\n');
 
@@ -163,7 +172,7 @@ describe.skipIf(asRoot)('a swizzle that fails part-way undoes what it wrote', ()
 
     expect(status).toBe(1);
     expect(body.code).toBe('ERR_WRITE_FAILED');
-    expect(body.error).toContain(last);
+    expect(body.error).toContain(fromProject(path.join(outDir, last)));
     expect(body.error).toContain('Nothing was written.');
     expect(body.error).not.toContain(dir);
     expect(fs.readFileSync(path.join(outDir, first), 'utf8')).toBe('before first\n');

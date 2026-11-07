@@ -83,6 +83,12 @@ export const docs = {
       description: 'Callback after the code is copied.',
     },
     {
+      name: 'onCopyError',
+      type: '(error: unknown) => void',
+      description:
+        'Called once with the rejection when the clipboard write fails. The copy button shows a cross and is named and announced as "Failed to copy value to clipboard."; the error is not shown.',
+    },
+    {
       name: 'endContent',
       type: 'ReactNode',
       description:
@@ -223,13 +229,14 @@ export const docs = {
       {
         slot: 'code-block-copy',
         description: 'The copy button icon.',
-        fallback: '`copy`; `check` while copied',
+        fallback:
+          '`copy`; `check` while copied; `close` while a failed copy shows',
         state: [
           {
             name: 'copied',
             type: 'boolean',
             description:
-              'True while the copied feedback shows after a successful copy.',
+              'True while the copied feedback shows after a successful copy. False while a failed copy shows, so a theme that maps the slot draws its rest glyph then; the button is still named and announced as the failure.',
           },
         ],
         whenNull:

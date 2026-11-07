@@ -79,6 +79,7 @@ describe('the keyboard layout guide on Chrome', () => {
     Reflect.deleteProperty(window, 'visualViewport');
     Reflect.deleteProperty(window.navigator, 'virtualKeyboard');
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
     vi.useRealTimers();
   });
 
@@ -155,8 +156,49 @@ describe('the keyboard layout guide on Chrome', () => {
     expect(seen.at(-1)).toBe(hide);
   });
 
-  it('checks a prediction Chrome never confirms 150 ms after its slide ends', () => {
-    // One clock for event times and the guide's own reads, as in a browser.
+  it.each([
+    ['a frame', () => document.createElement('iframe')],
+    [
+      'a shadow host',
+      () => {
+        const host = document.createElement('x-editor');
+        host
+          .attachShadow({mode: 'open'})
+          .append(document.createElement('input'));
+        return host;
+      },
+    ],
+  ] as const)(
+    'checks a prediction Chrome never confirms 150 ms after its slide ends when focus moves into %s, whose own field the guide cannot see',
+    (_, make) => {
+      // One clock for event times and the guide's own reads, as in a browser.
+      vi.spyOn(window.performance, 'now').mockImplementation(() => Date.now());
+      const container = make();
+      document.body.append(container);
+      a.focus();
+      report(312);
+      vi.advanceTimersByTime(1000);
+      const inner = container.shadowRoot?.querySelector('input');
+      if (inner != null) {
+        inner.focus();
+      } else {
+        container.focus();
+      }
+      expect(document.activeElement).toBe(container);
+      const hide = seen.at(-1);
+      expect(hide).toMatchObject({kind: 'hide', to: 0, predicted: true});
+      // The keyboard stays up for the field inside: Chrome never reports the
+      // hide. Once the slide should have ended, and 150 ms more, the guide
+      // believes the viewport.
+      const due = (hide?.start ?? 0) + androidKeyboard.hideMs + 150;
+      vi.advanceTimersByTime(due - Date.now() - 1);
+      expect(seen.at(-1)).toBe(hide);
+      vi.advanceTimersByTime(2);
+      expect(seen.at(-1)).toMatchObject({kind: 'show', to: 312});
+    },
+  );
+
+  it('turns nothing back once a hide it predicted from a blur has started: Chrome’s late reports of the keyboard partway down or still up wait for its report of the keyboard gone', () => {
     vi.spyOn(window.performance, 'now').mockImplementation(() => Date.now());
     a.focus();
     report(312);
@@ -164,13 +206,21 @@ describe('the keyboard layout guide on Chrome', () => {
     a.blur();
     const hide = seen.at(-1);
     expect(hide).toMatchObject({kind: 'hide', to: 0, predicted: true});
-    // The keyboard stays up: Chrome never reports the hide. Once the slide
-    // should have ended, and 150 ms more, the guide believes the viewport.
-    const due = (hide?.start ?? 0) + androidKeyboard.hideMs + 150;
-    vi.advanceTimersByTime(due - Date.now() - 1);
+    // Chrome can report the keyboard partway down during the slide.
+    vi.advanceTimersByTime(60);
+    report(290);
     expect(seen.at(-1)).toBe(hide);
-    vi.advanceTimersByTime(2);
-    expect(seen.at(-1)).toMatchObject({kind: 'show', to: 312});
+    // A busy page reads Chrome's reports late, after the slide has ended.
+    vi.advanceTimersByTime(340);
+    report(268);
+    expect(seen.at(-1)).toBe(hide);
+    // The check after the slide reads that report, not a keyboard coming up.
+    vi.advanceTimersByTime(androidKeyboard.hideMs + 200);
+    expect(seen.at(-1)).toBe(hide);
+    // Chrome's report of the keyboard gone confirms the hide.
+    report(0);
+    expect(seen.at(-1)).toBe(hide);
+    expect(getKeyboardLayoutGuide(window).transition.predicted).toBe(false);
   });
 
   it('rides a hide nothing predicted (Back) down from its report, dated back to Gboard’s start', () => {
@@ -191,6 +241,39 @@ describe('the keyboard layout guide on Chrome', () => {
       reportAt - androidKeyboard.hideReportLagMs,
       6,
     );
+  });
+
+  it('waits for Chrome’s report of the keyboard gone when focus moves to a select, whose picker Chrome opens over the page', () => {
+    vi.spyOn(window.performance, 'now').mockImplementation(() => Date.now());
+    const select = document.createElement('select');
+    select.append(new Option('One'), new Option('Two'));
+    document.body.append(select);
+    a.focus();
+    report(312);
+    vi.advanceTimersByTime(1000);
+    select.focus();
+    const hide = seen.at(-1);
+    expect(hide).toMatchObject({kind: 'hide', to: 0, predicted: true});
+    // The picker brings no keyboard back. A busy page reads Chrome's report
+    // of the keyboard partway down after the slide and the check.
+    vi.advanceTimersByTime(400);
+    report(268);
+    expect(seen.at(-1)).toBe(hide);
+    report(0);
+    expect(seen.at(-1)).toBe(hide);
+    expect(getKeyboardLayoutGuide(window).transition.predicted).toBe(false);
+  });
+
+  it('rides a keyboard back up after a hide Chrome reported (Back), when the field that kept focus brings it back', () => {
+    a.focus();
+    report(312);
+    vi.advanceTimersByTime(1000);
+    report(0);
+    expect(seen.at(-1)).toMatchObject({kind: 'hide', to: 0, predicted: false});
+    vi.advanceTimersByTime(1000);
+    // A tap on the focused field brings the keyboard back with no focus event.
+    report(312);
+    expect(seen.at(-1)).toMatchObject({kind: 'show', to: 312, animated: true});
   });
 
   it.each([

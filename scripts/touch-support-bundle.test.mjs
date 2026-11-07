@@ -117,11 +117,15 @@ function exportsOf(entry) {
  * and its query, and an element's direction. Lab's NavigationStack reads the
  * screen-edge pan, the spring solver, the motion resolver, UIKit's
  * navigation table and its four navigation springs. It also reads the focus
- * helpers that follow the last input.
+ * helpers that follow the last input. Lab components that watch a finger's
+ * scroll read the finger-scroll watch. PageControl reads an element's shared
+ * animator, the Reduce Motion cross-fade, and the touch hit area's hook and
+ * layer.
  */
 const LAB_ONLY_NAMES = [
   'PanGestureRecognizer',
   'useGestureRecognizer',
+  'useFingerScroll',
   'createMotionEngine',
   'cubicBezier',
   'mapProgress',
@@ -147,6 +151,10 @@ const LAB_ONLY_NAMES = [
   'focusForLastInput',
   'isFocusLost',
   'useInteractionModalityTracking',
+  'animatorFor',
+  'reducedMotionFade',
+  'useTouchHitArea',
+  'touchHitAreaStyles',
 ];
 
 /** The inputs matching `pattern` that put bytes in `bytes`. */
@@ -231,8 +239,15 @@ const GESTURE_USERS = new Set([
   'SideNav',
   'TimeInput',
   'TopNav',
+  // Toast: its swipe's claim, a one-way pan whose first move decides.
+  'Toast',
   // The public pan, which the root's createPanGesture shares.
   'hooks: usePanGesture',
+  // The snap-point drag, which moves an element on that pan.
+  'hooks: useDragToSnapPoints',
+  // Snap paging: the pager, under a finger and on a trackpad swipe. Carousel
+  // imports none of it.
+  'SnapPaging',
 ]);
 
 /** Public imports that carry no gesture code, whatever the list above says. */
