@@ -375,6 +375,13 @@ export interface BlockedWindow extends BusyWindow {
    * it started and ended on. It is never less than the time asked for.
    */
   readonly spanMs: number;
+  /**
+   * With `during`: the animation the block caught, epoch ms on the page's
+   * clock. `from` is its start, and `to` is where its curve ends, its held
+   * tail excluded. It is absent when the animation's `playbackRate` is 0 or
+   * less, since its curve then has no forward end.
+   */
+  readonly animation?: {readonly from: number; readonly to: number};
 }
 
 /**
@@ -402,12 +409,22 @@ export interface BlockedWindow extends BusyWindow {
  * With `pseudoElement`, only that pseudo-element's animations on `during`
  * itself count, as `sampleCurve` reads them. A child's animation, such as a
  * switch thumb's press, then does not start the block.
+ * With `property`, only animations whose keyframes set that CSS property
+ * count, named in camelCase as `getKeyframes()` names it (`translate`,
+ * `backgroundColor`).
+ * A thumb's `translate` travel then starts the block, and its press `scale`
+ * does not.
  *
  * An animation counts once it is no longer pending and has run at least one
  * frame (`minProgressMs` below 16 ms is raised to 16). One created in the
  * frame the page looks is still pending, not yet on the compositor
  * (Chromium), and in WebKit its start time resolves before its layer is
  * flushed: a block that started on it froze it.
+ * It must also be the same animation the page saw at its frame before. A
+ * component can rebuild a running animation on its old clock. The page then
+ * sees it running and not pending, before the compositor shows a frame of it,
+ * so the block waits one frame more. An animation rebuilt at every frame never
+ * qualifies: at the timeout the wait rejects and names that.
  *
  * It counts only while it still moves: before its curve's held tail (where
  * its keyframes end in a run of identical values, read as `waitForRest`
@@ -415,6 +432,9 @@ export interface BlockedWindow extends BusyWindow {
  * When the only animation running there started while the page waited, or
  * the wait times out with only such animations, the page looked too late:
  * that rejects with `BusyWindowTooLateError`, with the numbers.
+ *
+ * The window it resolves with names the animation it caught (`animation`):
+ * when it started and where its curve ends.
  */
 /** One display frame, ms: the least progress `blockMainThread` waits for. */
 const ONE_FRAME_MS = 16;
@@ -446,11 +466,13 @@ export async function blockMainThread(
   {
     during,
     minProgressMs = 16,
+    property,
     pseudoElement,
     timeout = 5_000,
   }: {
     during?: Locator;
     minProgressMs?: number;
+    property?: string;
     pseudoElement?: '::before' | '::after';
     timeout?: number;
   } = {},
@@ -459,6 +481,11 @@ export async function blockMainThread(
   if (pseudoElement != null && during == null) {
     throw new TypeError(
       'blockMainThread: pseudoElement names a part of `during`; pass `during` too',
+    );
+  }
+  if (property != null && during == null) {
+    throw new TypeError(
+      'blockMainThread: property picks an animation of `during`; pass `during` too',
     );
   }
   if (during == null) {
@@ -495,7 +522,7 @@ export async function blockMainThread(
   // wait and not awaited, so the wait starts no later than it did.
   const defined = page.evaluate(defineCurveEnd);
   const waited = during.evaluate(
-    (element, {duration, minProgress, pseudo, wait}) =>
+    (element, {duration, minProgress, prop, pseudo, wait}) =>
       new Promise<BlockedWindow>((resolve, reject) => {
         // The harness's own waits run on the real timers: a frozen timer gate
         // (story.ts) holds only the page's.
@@ -521,16 +548,23 @@ export async function blockMainThread(
             target.closest('[data-harness-control]') != null
           );
         };
-        // With a pseudo-element, only its own animations on the element.
+        // With a pseudo-element, only its own animations on the element; with
+        // a property, only animations whose keyframes set it.
         const counts = (a: Animation) => {
           if (isControl(a)) {
             return false;
           }
           const effect = a.effect as KeyframeEffect | null;
+          if (
+            pseudo != null &&
+            (effect?.target !== element ||
+              (effect.pseudoElement ?? null) !== pseudo)
+          ) {
+            return false;
+          }
           return (
-            pseudo == null ||
-            (effect?.target === element &&
-              (effect.pseudoElement ?? null) === pseudo)
+            prop == null ||
+            (effect?.getKeyframes() ?? []).some(keyframe => prop in keyframe)
           );
         };
         // Where each animation's curve ends, its held tail excluded.
@@ -561,21 +595,25 @@ export async function blockMainThread(
         let heldSeen: ReturnType<typeof numbersOf> | null = null;
         const tooLate = (numbers: ReturnType<typeof numbersOf>) =>
           new Error(`BusyWindowTooLate ${JSON.stringify(numbers)}`);
+        // The animations that counted at the frame before, pending ones too.
+        let seen = new Set<Animation>();
         const tick = () => {
-          const ran = element
-            .getAnimations({subtree: true})
-            .filter(
-              a =>
-                counts(a) &&
-                a.playState === 'running' &&
-                !a.pending &&
-                Number(a.currentTime ?? 0) >= minProgress,
-            );
+          const present = element.getAnimations({subtree: true}).filter(counts);
+          const ran = present.filter(
+            a =>
+              a.playState === 'running' &&
+              !a.pending &&
+              Number(a.currentTime ?? 0) >= minProgress,
+          );
           // Still moving: before its curve's held tail. One running backward
           // ends at its start, so it moves while it runs.
-          const running = ran.some(
-            a => a.playbackRate < 0 || Number(a.currentTime ?? 0) < curveEnd(a),
-          );
+          const moves = (a: Animation) =>
+            a.playbackRate < 0 || Number(a.currentTime ?? 0) < curveEnd(a);
+          const running = ran.some(moves);
+          // One first seen this frame can be rebuilt on its old clock, and not
+          // on the compositor yet: the block waits for the next frame.
+          const caught = ran.find(a => moves(a) && seen.has(a));
+          seen = new Set(present);
           if (!running && ran.length > 0) {
             heldSeen ??= numbersOf(ran[0]);
           }
@@ -584,7 +622,13 @@ export async function blockMainThread(
           const late = ran.find(a => !before.has(a));
           const timedOut = realNow() > deadline;
           const leftover = ran.length > 0 ? numbersOf(ran[0]) : heldSeen;
-          if (running) {
+          if (caught != null) {
+            const startTime = caught.startTime;
+            const from = performance.timeOrigin + Number(startTime);
+            const animation =
+              startTime != null && caught.playbackRate > 0
+                ? {from, to: from + curveEnd(caught) / caught.playbackRate}
+                : undefined;
             // The same loop as above, from a task queued in the frame that saw
             // the animation: it runs once that frame's rendering update has
             // handed the animation to the compositor.
@@ -599,8 +643,19 @@ export async function blockMainThread(
                 from: performance.timeOrigin + start,
                 to: performance.timeOrigin + now,
                 spanMs: now - start,
+                ...(animation == null ? {} : {animation}),
               });
             }, 0);
+          } else if (running) {
+            if (timedOut) {
+              reject(
+                new Error(
+                  'blockMainThread: no animation of `during` ran on two frames in a row',
+                ),
+              );
+            } else {
+              frame(tick);
+            }
           } else if (late != null) {
             reject(tooLate(numbersOf(late)));
           } else if (timedOut && leftover != null) {
@@ -613,7 +668,13 @@ export async function blockMainThread(
         };
         frame(tick);
       }),
-    {duration: ms, minProgress, pseudo: pseudoElement ?? null, wait: timeout},
+    {
+      duration: ms,
+      minProgress,
+      prop: property ?? null,
+      pseudo: pseudoElement ?? null,
+      wait: timeout,
+    },
   );
   try {
     const [, held] = await Promise.all([defined, waited]);

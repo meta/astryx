@@ -5717,6 +5717,134 @@ test.describe('storyboards', {tag: '@storyboard'}, () => {
     ).rejects.toThrow(/pass `during` too/);
   });
 
+  test('blockMainThread with during waits a frame for an animation rebuilt on its old clock, and names the animation it caught', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    // When each of the page's frames ran, page ms.
+    await page.evaluate(() => {
+      const w = window as unknown as {frameTimes: number[]};
+      w.frameTimes = [];
+      const count = () => {
+        w.frameTimes.push(performance.now());
+        requestAnimationFrame(count);
+      };
+      requestAnimationFrame(count);
+    });
+    const blocking = blockMainThread(page, 100, {during: box, timeout: 3_000});
+    await page.waitForTimeout(100);
+    // A travel rebuilt 200 ms into its curve, between two frames: the page
+    // first sees it running and not pending.
+    const rebuilt = await box.evaluate(
+      el =>
+        new Promise<{framesBefore: number; startTime: number}>(resolve => {
+          setTimeout(() => {
+            const run = el.animate(
+              [{translate: '0 0'}, {translate: '200px 0'}],
+              {duration: 1_000, easing: 'linear'},
+            );
+            run.startTime = Number(document.timeline.currentTime) - 200;
+            resolve({
+              framesBefore: (window as unknown as {frameTimes: number[]})
+                .frameTimes.length,
+              startTime: Number(run.startTime),
+            });
+          }, 0);
+        }),
+    );
+    const held = await blocking;
+    // Frames that ran after the travel was built and up to the block. WebKit
+    // reads its clock to the millisecond, so a frame can share the block's
+    // start time. That frame still ran before the block, which no frame
+    // interrupts.
+    const framesBefore = await page.evaluate(
+      ([first, from]) =>
+        (window as unknown as {frameTimes: number[]}).frameTimes
+          .slice(first)
+          .filter(t => t <= from - performance.timeOrigin).length,
+      [rebuilt.framesBefore, held.from] as const,
+    );
+    // The frame that first saw it, and the frame after, ran before the block.
+    expect(framesBefore).toBeGreaterThanOrEqual(2);
+    // The window names that animation: its start, and its curve's end.
+    const timeOrigin = await page.evaluate(() => performance.timeOrigin);
+    const caught = held.animation;
+    expect(caught).toBeDefined();
+    expect(caught?.from).toBeCloseTo(timeOrigin + rebuilt.startTime, 3);
+    expect((caught?.to ?? 0) - (caught?.from ?? 0)).toBeCloseTo(1_000, 3);
+  });
+
+  test('blockMainThread with during and a property starts on an animation of that property, not on an earlier one of another', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    const blocking = blockMainThread(page, 100, {
+      during: box,
+      property: 'translate',
+      minProgressMs: 50,
+      timeout: 3_000,
+    });
+    await page.waitForTimeout(100);
+    // A press scale starts first, and the travel 300 ms after it.
+    const travelStartedAt = await box.evaluate(async el => {
+      el.animate([{scale: '1'}, {scale: '0.9'}], {
+        duration: 1_000,
+        fill: 'forwards',
+      });
+      await new Promise(resolve => setTimeout(resolve, 300));
+      el.animate([{translate: '0 0'}, {translate: '200px 0'}], {
+        duration: 1_000,
+      });
+      return performance.timeOrigin + performance.now();
+    });
+    const held = await blocking;
+    // The block began once the travel had run 50 ms, never on the scale.
+    expect(held.from).toBeGreaterThanOrEqual(travelStartedAt + 50);
+    // A property picks an animation of `during`, so it needs one.
+    await expect(
+      blockMainThread(page, 100, {property: 'translate'}),
+    ).rejects.toThrow(/pass `during` too/);
+  });
+
+  test('blockMainThread with during names an animation rebuilt at every frame, which it never holds, at its timeout', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    // Each frame replaces the travel with a new one on the same clock, as an
+    // animator that rebuilds its run while it follows.
+    await box.evaluate(el => {
+      const w = window as unknown as {stopRebuilding?: boolean};
+      let start: number | null = null;
+      const rebuild = () => {
+        if (w.stopRebuilding === true) {
+          return;
+        }
+        for (const animation of el.getAnimations()) {
+          animation.cancel();
+        }
+        const run = el.animate([{translate: '0 0'}, {translate: '200px 0'}], {
+          duration: 5_000,
+        });
+        start ??= Number(document.timeline.currentTime);
+        run.startTime = start;
+        requestAnimationFrame(rebuild);
+      };
+      requestAnimationFrame(rebuild);
+    });
+    await expect(
+      blockMainThread(page, 100, {during: box, timeout: 600}),
+    ).rejects.toThrow(/no animation of `during` ran on two frames in a row/);
+    await box.evaluate(el => {
+      (window as unknown as {stopRebuilding?: boolean}).stopRebuilding = true;
+      for (const animation of el.getAnimations()) {
+        animation.cancel();
+      }
+    });
+  });
+
   test('blockMainThread with during names a late block when the run it saw held ends before the wait times out', async ({
     page,
   }) => {
