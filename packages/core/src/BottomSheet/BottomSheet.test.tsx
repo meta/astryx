@@ -319,30 +319,32 @@ function getHandle(): HTMLElement {
 
 // Drive a pointer drag on the grab handle. jsdom PointerEvents don't carry
 // clientY, so dispatch plain events with the coords the handlers read.
+// One clock for the drags: each event comes 16 ms after the one before, so
+// a drag's release velocity follows its events' own timestamps.
+let dragTime = 0;
+
 function drag(
   handle: HTMLElement,
   points: {y: number}[],
   pointerType: 'mouse' | 'touch' | 'pen' = 'mouse',
 ) {
   const [down, ...rest] = points;
-  fireEvent.pointerDown(handle, {
-    pointerId: 1,
-    clientY: down.y,
-    button: 0,
-    isPrimary: true,
-    pointerType,
-  });
+  const at = (y: number) => {
+    dragTime += 16;
+    return {time: dragTime, y, pointerType};
+  };
+  fireTimedPointer(handle, 'pointerdown', at(down.y));
   for (const p of rest) {
-    fireEvent.pointerMove(handle, {pointerId: 1, clientY: p.y, pointerType});
+    fireTimedPointer(handle, 'pointermove', at(p.y));
   }
   const last = points[points.length - 1];
-  fireEvent.pointerUp(handle, {pointerId: 1, clientY: last.y, pointerType});
+  fireTimedPointer(handle, 'pointerup', at(last.y));
 }
 
 function fireTimedPointer(
   target: Element,
   type: 'pointerdown' | 'pointermove' | 'pointerup',
-  {time, y}: {time: number; y: number},
+  {time, y, pointerType}: {time: number; y: number; pointerType?: string},
 ) {
   const event = new Event(type, {bubbles: true, cancelable: true});
   Object.defineProperties(event, {
@@ -352,6 +354,9 @@ function fireTimedPointer(
     pointerId: {value: 1},
     timeStamp: {value: time},
   });
+  if (pointerType != null) {
+    Object.defineProperty(event, 'pointerType', {value: pointerType});
+  }
   return fireEvent(target, event);
 }
 
@@ -5024,5 +5029,66 @@ describe('BottomSheet focus region (Dialog DEC-2)', () => {
     const only = screen.getByRole('button', {name: 'Only'});
     only.focus();
     expect(fireEvent.keyDown(only, {key: 'Tab'})).toBe(true);
+  });
+});
+
+// A same-name native radio group is one Tab stop: its checked radio, or its
+// first when none is checked. Medium is checked and is neither first nor last.
+function SizeRadios({name}: {name: string}) {
+  return (
+    <fieldset>
+      <legend>Size</legend>
+      <input type="radio" name={name} value="s" aria-label="Small" />
+      <input
+        type="radio"
+        name={name}
+        value="m"
+        aria-label="Medium"
+        defaultChecked
+      />
+      <input type="radio" name={name} value="l" aria-label="Large" />
+    </fieldset>
+  );
+}
+
+function expectRadioGroupEndsTheCycle() {
+  const medium = screen.getByRole('radio', {name: 'Medium', hidden: true});
+  const first = screen.getByRole('button', {name: 'First', hidden: true});
+  medium.focus();
+  expect(fireEvent.keyDown(medium, {key: 'Tab'})).toBe(false);
+  expect(first).toHaveFocus();
+  expect(fireEvent.keyDown(first, {key: 'Tab', shiftKey: true})).toBe(false);
+  expect(medium).toHaveFocus();
+}
+
+function expectRadioGroupStartsTheCycle() {
+  const medium = screen.getByRole('radio', {name: 'Medium', hidden: true});
+  const last = screen.getByRole('button', {name: 'Last', hidden: true});
+  medium.focus();
+  expect(fireEvent.keyDown(medium, {key: 'Tab', shiftKey: true})).toBe(false);
+  expect(last).toHaveFocus();
+  expect(fireEvent.keyDown(last, {key: 'Tab'})).toBe(false);
+  expect(medium).toHaveFocus();
+}
+
+describe('BottomSheet focus region: a radio group is one Tab stop', () => {
+  it('wraps Tab from the checked radio of a group that ends the sheet', () => {
+    render(
+      <BottomSheet isOpen onOpenChange={() => {}} label="Filters">
+        <button type="button">First</button>
+        <SizeRadios name="size" />
+      </BottomSheet>,
+    );
+    expectRadioGroupEndsTheCycle();
+  });
+
+  it('wraps Shift+Tab from the checked radio of a group that starts the sheet', () => {
+    render(
+      <BottomSheet isOpen onOpenChange={() => {}} label="Filters">
+        <SizeRadios name="size" />
+        <button type="button">Last</button>
+      </BottomSheet>,
+    );
+    expectRadioGroupStartsTheCycle();
   });
 });

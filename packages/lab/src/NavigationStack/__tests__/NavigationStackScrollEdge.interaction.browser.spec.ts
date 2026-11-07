@@ -24,12 +24,12 @@ import {
 } from '@astryxdesign/a11y-spec/playwright';
 import {
   animationStoryboard,
+  armHold,
   drag,
   frames,
   openStory,
   releaseAnimations,
   touchDriver,
-  waitForAnimation,
   waitForRest,
   withStorybook,
 } from '@astryxdesign/interaction-harness';
@@ -311,12 +311,16 @@ test(
     const layer = veil(page, 'root');
     const viewport = page.viewportSize() ?? {width: 402, height: 714};
     const clip = {x: 0, y: 0, width: viewport.width, height: 120};
+    const hold = await armHold(page, layer, {
+      judges: {target: layer, property: 'opacity'},
+      newOnly: true,
+    });
     await fingerScrollTo(page, 'root', 120);
-    await waitForAnimation(layer);
+    const held = await hold.held();
     const {storyboard} = await animationStoryboard(page, {
+      held,
       name: 'navigation-stack-scroll-edge-appear',
       clip,
-      scope: layer,
       measure: async () => ({opacity: await presentedOpacity(layer)}),
       columns: 6,
       cellScale: 0.5,

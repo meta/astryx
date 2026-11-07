@@ -399,6 +399,9 @@ export interface BlockedWindow extends BusyWindow {
  * animation inside `during` counts but the busy-window control's own
  * (`startBusyControl`, mounted inside a dialog with `within`), so pick an
  * element that runs nothing else meanwhile.
+ * With `pseudoElement`, only that pseudo-element's animations on `during`
+ * itself count, as `sampleCurve` reads them. A child's animation, such as a
+ * switch thumb's press, then does not start the block.
  *
  * An animation counts once it is no longer pending and has run at least one
  * frame (`minProgressMs` below 16 ms is raised to 16). One created in the
@@ -443,10 +446,21 @@ export async function blockMainThread(
   {
     during,
     minProgressMs = 16,
+    pseudoElement,
     timeout = 5_000,
-  }: {during?: Locator; minProgressMs?: number; timeout?: number} = {},
+  }: {
+    during?: Locator;
+    minProgressMs?: number;
+    pseudoElement?: '::before' | '::after';
+    timeout?: number;
+  } = {},
 ): Promise<BlockedWindow> {
   const minProgress = Math.max(minProgressMs, ONE_FRAME_MS);
+  if (pseudoElement != null && during == null) {
+    throw new TypeError(
+      'blockMainThread: pseudoElement names a part of `during`; pass `during` too',
+    );
+  }
   if (during == null) {
     return page.evaluate(duration => {
       // The harness's own work: a trace sets it apart (trace.ts HARNESS_READ).
@@ -481,7 +495,7 @@ export async function blockMainThread(
   // wait and not awaited, so the wait starts no later than it did.
   const defined = page.evaluate(defineCurveEnd);
   const waited = during.evaluate(
-    (element, {duration, minProgress, wait}) =>
+    (element, {duration, minProgress, pseudo, wait}) =>
       new Promise<BlockedWindow>((resolve, reject) => {
         // The harness's own waits run on the real timers: a frozen timer gate
         // (story.ts) holds only the page's.
@@ -507,6 +521,18 @@ export async function blockMainThread(
             target.closest('[data-harness-control]') != null
           );
         };
+        // With a pseudo-element, only its own animations on the element.
+        const counts = (a: Animation) => {
+          if (isControl(a)) {
+            return false;
+          }
+          const effect = a.effect as KeyframeEffect | null;
+          return (
+            pseudo == null ||
+            (effect?.target === element &&
+              (effect.pseudoElement ?? null) === pseudo)
+          );
+        };
         // Where each animation's curve ends, its held tail excluded.
         const curveEnd =
           (
@@ -521,7 +547,9 @@ export async function blockMainThread(
             );
           });
         // What already ran when the wait began.
-        const before = new Set(element.getAnimations({subtree: true}));
+        const before = new Set(
+          element.getAnimations({subtree: true}).filter(counts),
+        );
         const numbersOf = (a: Animation) => ({
           currentTimeMs: Number(a.currentTime ?? 0),
           curveEndMs: curveEnd(a),
@@ -538,7 +566,7 @@ export async function blockMainThread(
             .getAnimations({subtree: true})
             .filter(
               a =>
-                !isControl(a) &&
+                counts(a) &&
                 a.playState === 'running' &&
                 !a.pending &&
                 Number(a.currentTime ?? 0) >= minProgress,
@@ -585,7 +613,7 @@ export async function blockMainThread(
         };
         frame(tick);
       }),
-    {duration: ms, minProgress, wait: timeout},
+    {duration: ms, minProgress, pseudo: pseudoElement ?? null, wait: timeout},
   );
   try {
     const [, held] = await Promise.all([defined, waited]);
@@ -634,6 +662,7 @@ export interface BusyProof extends FrameStats {
    * The cast's position step, CSS px: the largest of 0.5, 1 and 2 that every
    * change of the tracked value in the judged part is a multiple of, or 0.5
    * when it does not change there (WebKit's casts step 2: see the README).
+   * A sub-pixel read (`trackMarker` with `subpixel`) uses its own step.
    */
   readonly stepPx: number;
   /** The tracked value's mean motion per screencast interval in the judged part, px. */
@@ -965,6 +994,15 @@ export function busyWindowProof(
       'busyWindowProof: give settledWithin or settledWithinSteps, not both',
     );
   }
+  // A sub-pixel read (`trackMarker` with `subpixel`) shows changes far under
+  // a pixel. There a change counts from half its step; on a whole-pixel read,
+  // from 0.25 px.
+  const readStepPx = tracked.some(f => f.step != null)
+    ? castStep(tracked, axis)
+    : null;
+  const subpixelStepPx =
+    readStepPx != null && readStepPx < 0.5 ? readStepPx : null;
+  const epsilon = subpixelStepPx == null ? 0.25 : subpixelStepPx / 2;
   // The cast's own position step, for a proof that bounds its settle in it.
   const castStepPx =
     settledWithinSteps == null ? null : castStep(tracked, axis);
@@ -1042,7 +1080,7 @@ export function busyWindowProof(
     if (
       v.value != null &&
       previous != null &&
-      Math.abs(v.value - previous) > 0.25
+      Math.abs(v.value - previous) > epsilon
     ) {
       inWindow.push(v.t);
     }
@@ -1063,7 +1101,7 @@ export function busyWindowProof(
   });
   const lead = prior.flatMap(f => (f.box == null ? [] : [f.box[axis]]));
   const movedBefore = lead.some(
-    (value, i) => i > leadFrom && Math.abs(value - lead[i - 1]) > 0.25,
+    (value, i) => i > leadFrom && Math.abs(value - lead[i - 1]) > epsilon,
   );
   // Held from before the block to its first presented change inside it: in
   // WebKit a just-started compositor animation is presented late (a sheet's
@@ -1077,7 +1115,7 @@ export function busyWindowProof(
   let holdStart = lead.length - 1;
   while (
     holdStart > 0 &&
-    Math.abs(lead[holdStart - 1] - lead[lead.length - 1]) <= 0.25
+    Math.abs(lead[holdStart - 1] - lead[lead.length - 1]) <= epsilon
   ) {
     holdStart -= 1;
   }
@@ -1088,15 +1126,14 @@ export function busyWindowProof(
       v =>
         v.value != null &&
         v.t < (inWindow[0] ?? -Infinity) &&
-        Math.abs(v.value - lead[lead.length - 1]) <= 0.25,
+        Math.abs(v.value - lead[lead.length - 1]) <= epsilon,
     ).length;
   // A late hand-off holds the page's last position. An animation that froze
   // at the block's start holds a position of its own. Within one cast step:
   // WebKit's cast reads positions on a 2 px grid, so a held position can read
-  // up to a step off. A cast with no step is read within a pixel.
-  const matchPx = tracked.some(f => f.step != null)
-    ? castStep(tracked, axis)
-    : 1;
+  // up to a step off. A cast with no step is read within a pixel, and a
+  // sub-pixel read within half a pixel.
+  const matchPx = subpixelStepPx != null ? 0.5 : (readStepPx ?? 1);
   const heldFromBeforeBlock =
     setBeforeBlock != null &&
     lead.length > 0 &&
@@ -1127,6 +1164,7 @@ export function busyWindowProof(
   const stats = frameStats(
     tracked.map(f => ({t: f.t, value: f.box == null ? null : f.box[axis]})),
     judged,
+    epsilon,
   );
   const cadence =
     intervals.length >= 4
@@ -1225,14 +1263,16 @@ export function busyWindowProof(
         : deliveredFrames;
   const movedFraction = (moved + recorderSkipped) / Math.max(1, judgedFrames);
   // The cast's position step for the tracked value, read from the judged
-  // part.
-  const stepPx = motionStepPx(
-    tracked.flatMap(f =>
-      f.box != null && f.t >= judged.from && f.t <= judged.to
-        ? [f.box[axis]]
-        : [],
-    ),
-  );
+  // part. A sub-pixel read carries its own.
+  const stepPx =
+    subpixelStepPx ??
+    motionStepPx(
+      tracked.flatMap(f =>
+        f.box != null && f.t >= judged.from && f.t <= judged.to
+          ? [f.box[axis]]
+          : [],
+      ),
+    );
   const judgedValues = tracked.flatMap(f =>
     f.box != null && f.t >= judged.from && f.t <= judged.to
       ? [{t: f.t, value: f.box[axis]}]
@@ -1294,7 +1334,7 @@ export function busyWindowProof(
     );
     const seriesIndex = new Map(series.map((f, i) => [f.t, i]));
     const same = (a: number, b: number) =>
-      Math.abs(series[a].value - series[b].value) <= 0.25;
+      Math.abs(series[a].value - series[b].value) <= epsilon;
     // The first frame of the run of equal positions that holds frame i.
     const runStart = (i: number): number => {
       let s = i;
