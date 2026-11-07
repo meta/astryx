@@ -1,10 +1,14 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, it, expect, vi} from 'vitest';
-import {createRef} from 'react';
+import {createRef, useEffect, useRef} from 'react';
 import {act, render, screen, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Carousel, type CarouselHandle} from './Carousel';
+import {
+  makeSnapPaging,
+  type HeldRowListener,
+} from '../SnapPaging/snapPagingValue';
 
 // Mock ResizeObserver (not available in jsdom)
 class MockResizeObserver {
@@ -250,6 +254,75 @@ describe('Carousel', () => {
     );
     expect(screen.getByLabelText('Scroll left')).toBeInTheDocument();
     expect(screen.getByLabelText('Scroll right')).toBeInTheDocument();
+  });
+
+  it('unmounts while the paging holds the row, with no flushSync in the commit', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let report: HeldRowListener | undefined;
+    // A stand-in paging: it reports a held row, and hands the row back as it
+    // detaches, as the pager does.
+    const paging = makeSnapPaging((_element, onHeld) => {
+      report = onHeld;
+      return {
+        detach: () => {
+          onHeld?.({offset: 0, travel: 400});
+          onHeld?.(null);
+        },
+        move: () => {},
+        moveHeld: () => false,
+      };
+    });
+    const view = render(
+      <Carousel aria-label="Held" hasSnap={paging}>
+        <div>Item 1</div>
+        <div>Item 2</div>
+      </Carousel>,
+    );
+    act(() => report?.({offset: 150, travel: 400}));
+    expect(screen.getByLabelText('Scroll left')).not.toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    // The detach runs in an effect cleanup, inside React's commit.
+    view.unmount();
+    expect(error).not.toHaveBeenCalled();
+    error.mockRestore();
+  });
+
+  it('scrolls from an Effect after a slide is added, with no flushSync in the commit', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // A stand-in paging: a move takes the row over and reports it at once,
+    // as the pager does.
+    const paging = makeSnapPaging((_element, onHeld) => ({
+      detach: () => {},
+      move: () => {
+        onHeld?.({offset: 150, travel: 400});
+      },
+      moveHeld: () => false,
+    }));
+    function Grows({count}: {count: number}) {
+      const ref = useRef<CarouselHandle>(null);
+      useEffect(() => {
+        if (count > 2) {
+          ref.current?.scrollNext();
+        }
+      }, [count]);
+      return (
+        <Carousel handleRef={ref} aria-label="Grows" hasSnap={paging}>
+          {Array.from({length: count}, (_, i) => (
+            <div key={i}>Item {i + 1}</div>
+          ))}
+        </Carousel>
+      );
+    }
+    const view = render(<Grows count={2} />);
+    view.rerender(<Grows count={3} />);
+    expect(screen.getByLabelText('Scroll left')).not.toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    expect(error).not.toHaveBeenCalled();
+    error.mockRestore();
   });
 
   it('disables edge scroll buttons instead of removing them from the tab order', () => {
