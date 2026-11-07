@@ -14,6 +14,7 @@
  */
 
 import {useImperativeHandle, useRef, type Ref, type RefObject} from 'react';
+import {flushSync} from 'react-dom';
 import {playHaptic} from '../gestures/haptics';
 import {useGestureRecognizer} from '../gestures/useGestureRecognizer';
 import {contextMenu} from '../motion/uikit/contextMenu';
@@ -60,7 +61,12 @@ export function ContextMenuTouchLayer({
     press => {
       const open = () => {
         hasPressOpenedRef.current = true;
-        onOpenRef.current(press.press ?? press.location());
+        // The menu commits in the task that decides it, as UIKit shows it at
+        // its moment. From the hold's timer, a state update would wait for
+        // React's next scheduled task.
+        flushSync(() => {
+          onOpenRef.current(press.press ?? press.location());
+        });
       };
       switch (press.state) {
         case 'began':
