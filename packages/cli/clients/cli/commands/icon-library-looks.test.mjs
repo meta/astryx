@@ -289,7 +289,9 @@ describe('new-set --from a library of looks', () => {
       '--all',
     ]);
     expect(added.code, JSON.stringify(added.body)).toBe(0);
-    expect(added.body.data.missing).toEqual([]);
+    // Heart's own export is its only look, filled: no second export of it.
+    expect(added.body.data.missing).toEqual(['heart']);
+    expect(generatedOf('brand')).not.toContain('HeartFilledIcon');
     expect(generatedOf('brand')).toContain(
       "export {XFilled24WGHT400Icon as XFilledIcon} from '@acme/vector-icons';",
     );
@@ -514,7 +516,7 @@ describe('new-set without --from over an existing set', () => {
       'Icon set "brand" declares no variant "filled". Declare it first.',
     );
     expect(refused.body.suggestions[0].name).toBe(
-      'astryx experimental icon new-set brand --variants <default>,filled',
+      'astryx experimental icon new-set brand --variants outline,filled --default-variant outline',
     );
     const declared = await json([
       'experimental',
@@ -861,7 +863,7 @@ describe('the default variant over an existing set', () => {
     );
     const refresh = refused.body.suggestions[0].name;
     expect(refresh).toBe(
-      'astryx experimental icon new-set brand --from <module> --variants outline,filled --default-variant outline',
+      'astryx experimental icon new-set brand --from @acme/vector-icons --variants outline,filled --default-variant outline',
     );
     expect(
       fs.readFileSync(
@@ -872,9 +874,7 @@ describe('the default variant over an existing set', () => {
     expect(generatedOf('brand')).toContain(
       "export {XFilled24WGHT400Icon as XIcon} from '@acme/vector-icons';",
     );
-    const refreshed = await json(
-      refresh.replace('<module>', '@acme/vector-icons').split(' ').slice(1),
-    );
+    const refreshed = await json(refresh.split(' ').slice(1));
     expect(refreshed.code, JSON.stringify(refreshed.body)).toBe(0);
     expect(dataOf('brand').default).toEqual({variant: 'outline'});
     expect(generatedOf('brand')).toContain(
@@ -933,23 +933,23 @@ describe('the default variant over an existing set', () => {
     await json([
       ...NEW_SET,
       '--variants',
-      'outline,filled',
+      'filled',
       '--default-variant',
       'filled',
     ]);
     const declare =
-      'astryx experimental icon new-set brand --variants outline,filled,bold --default-variant filled';
+      'astryx experimental icon new-set brand --variants filled,outline --default-variant filled';
     const one = await json([
       'experimental',
       'icon',
       'add',
-      'StarOutline24WGHT300Icon',
+      'StarOutline24WGHT400Icon',
       '--from',
       '@acme/vector-icons',
       '--id',
       'star',
       '--variant',
-      'bold',
+      'outline',
     ]);
     expect(one.code).not.toBe(0);
     expect(one.body.suggestions[0].name).toBe(declare);
@@ -958,7 +958,7 @@ describe('the default variant over an existing set', () => {
       'icon',
       'add',
       '--variant',
-      'bold',
+      'outline',
       '--from',
       '@acme/vector-icons',
       '--all',
@@ -1213,7 +1213,7 @@ describe('--variants over a set with icons and no declared default', () => {
     ]);
     expect(refused.code).not.toBe(0);
     expect(refused.body.code).toBe('ERR_INVALID_ARGUMENT');
-    expect(refused.body.error).toContain('draw "outline"');
+    expect(refused.body.error).toContain('still draws "outline"');
     expect(
       fs.readFileSync(
         path.join(pkg, 'icon-sets', 'brand', 'brand.icons.json'),
@@ -1283,4 +1283,326 @@ describe('progress through the logger', () => {
       }),
     ).rejects.toThrow('Option "progress" does not apply');
   });
+});
+
+describe('the default variant on every path', () => {
+  const LIB = '@acme/vector-icons';
+  /** @param {string} source a library export, such as `XFilled24WGHT400Icon` */
+  const lookOf = source =>
+    /Filled/u.test(source)
+      ? 'filled'
+      : /Outline/u.test(source)
+        ? 'outline'
+        : null;
+  /** @param {string} look */
+  const glyphHas = (/** @type {string} */ glyph, look) =>
+    glyph !== 'heart' || look === 'filled';
+
+  /**
+   * Every file of the package but its libraries, for a byte-for-byte
+   * comparison.
+   * @param {string} dir
+   * @returns {Record<string, string>}
+   */
+  function snapshot(dir = pkg) {
+    /** @type {Record<string, string>} */
+    const files = {};
+    for (const entry of fs.readdirSync(dir, {withFileTypes: true})) {
+      if (entry.name === 'node_modules') continue;
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) Object.assign(files, snapshot(full));
+      else files[path.relative(pkg, full)] = fs.readFileSync(full, 'utf-8');
+    }
+    return files;
+  }
+
+  /**
+   * The set as written: each icon's own export draws the default variant
+   * (where the library draws the glyph in it), each variant draws its own
+   * look and never the icon's, and no library export is exported twice.
+   * @param {string | null} expected the default variant the set must record
+   */
+  function expectEveryIconDrawsDefault(expected) {
+    const data = dataOf('brand');
+    expect(data.default?.variant ?? null).toBe(expected);
+    /** @type {Map<string, string>} */
+    const sourceOf = new Map();
+    /** @type {string[]} */
+    const sources = [];
+    for (const [, source, name] of generatedOf('brand').matchAll(
+      /export \{(\w+) as (\w+)\} from '@acme\/vector-icons';/gu,
+    )) {
+      sourceOf.set(name, source);
+      sources.push(source);
+    }
+    expect(sources.length, 'no library export is exported twice').toBe(
+      new Set(sources).size,
+    );
+    for (const icon of data.icons) {
+      const own = lookOf(sourceOf.get(icon.export) ?? '');
+      if (expected != null && glyphHas(icon.id, expected)) {
+        expect(own, `${icon.id} draws the default`).toBe(expected);
+      }
+      for (const variant of icon.variants ?? []) {
+        const drawn = lookOf(sourceOf.get(variant.export) ?? '');
+        expect(drawn, `${icon.id} ${variant.variant}`).toBe(variant.variant);
+        expect(drawn, `${icon.id} ${variant.variant} is another look`).not.toBe(
+          own,
+        );
+      }
+    }
+  }
+
+  /** @param {string} command a printed command, `astryx …` */
+  async function runPrinted(command) {
+    const ran = await json(command.split(' ').slice(1));
+    expect(ran.code, `${command}: ${JSON.stringify(ran.body)}`).toBe(0);
+    return ran;
+  }
+
+  /**
+   * Run every command a receipt prints to declare or add a look, unless it
+   * names a placeholder for the author to fill.
+   * @param {any} body
+   * @param {() => void} check
+   */
+  async function runPrintedNotes(body, check) {
+    const commands = (body.data?.notes ?? [])
+      .flatMap((/** @type {string} */ note) =>
+        [...note.matchAll(/`(astryx [^`]+)`/gu)].map(match => match[1]),
+      )
+      .filter(
+        (/** @type {string} */ command) =>
+          /^astryx experimental icon (?:new-set|add) /u.test(command) &&
+          !command.includes('<'),
+      );
+    for (const command of commands) {
+      await runPrinted(command);
+      check();
+    }
+  }
+
+  /** @type {Record<string, {drawn: string, other: string, setup: () => Promise<void>}>} */
+  const STATES = {
+    'no set': {drawn: 'outline', other: 'filled', setup: async () => {}},
+    'wrapped with no variants': {
+      drawn: 'outline',
+      other: 'filled',
+      setup: async () => {
+        await json(NEW_SET);
+      },
+    },
+    'with variants, default declared': {
+      drawn: 'filled',
+      other: 'outline',
+      setup: async () => {
+        await json([
+          ...NEW_SET,
+          '--variants',
+          'filled,outline',
+          '--default-variant',
+          'filled',
+        ]);
+      },
+    },
+    'with variants, default undeclared': {
+      drawn: 'outline',
+      other: 'filled',
+      setup: async () => {
+        await json(NEW_SET);
+        const file = path.join(pkg, 'icon-sets', 'brand', 'brand.icons.json');
+        const data = JSON.parse(fs.readFileSync(file, 'utf-8'));
+        fs.writeFileSync(
+          file,
+          `${JSON.stringify({...data, variants: ['filled', 'outline']}, null, 2)}\n`,
+        );
+      },
+    },
+  };
+
+  const CHOICES = {
+    drawn: 'named default is the drawn look',
+    other: 'named default is another existing look',
+    unknown: 'named default is an unknown word',
+    none: 'no default named',
+  };
+
+  /**
+   * The command for a path, and what it must do: write the set with this
+   * default, or refuse naming the look words (`looks`), the refresh
+   * (`refresh`), the look already drawn (`drawn`), or the declaration to run
+   * first (`declare`).
+   * @param {string} route
+   * @param {{drawn: string, other: string}} state
+   * @param {keyof typeof CHOICES} choice
+   * @returns {{args: string[], expect: {write: string | null} | {refuse: 'looks' | 'refresh' | 'drawn' | 'declare'}}}
+   */
+  function plan(route, state, choice) {
+    const word = {drawn: state.drawn, other: state.other, unknown: 'solid'}[
+      /** @type {'drawn'} */ (choice)
+    ];
+    const declare = {
+      drawn: [
+        '--variants',
+        `${state.drawn},${state.other}`,
+        '--default-variant',
+        state.drawn,
+      ],
+      other: ['--variants', state.other, '--default-variant', state.other],
+      unknown: [
+        '--variants',
+        `solid,${state.drawn}`,
+        '--default-variant',
+        'solid',
+      ],
+      none: ['--variants', `${state.other},${state.drawn}`],
+    }[choice];
+    const newSet = ['experimental', 'icon', 'new-set', 'brand'];
+    if (route === 'create --from' || route === 'refresh') {
+      return {
+        args: [...newSet, '--from', LIB, ...declare],
+        expect:
+          choice === 'unknown'
+            ? {refuse: 'looks'}
+            : {write: choice === 'other' ? state.other : state.drawn},
+      };
+    }
+    if (route === 'in place') {
+      return {
+        args: [...newSet, ...declare],
+        expect:
+          choice === 'unknown'
+            ? {refuse: 'looks'}
+            : choice === 'other'
+              ? {refuse: 'refresh'}
+              : {write: state.drawn},
+      };
+    }
+    const look = choice === 'unknown' ? state.drawn : word;
+    const capital = look[0].toUpperCase() + look.slice(1);
+    const args =
+      route === 'add --variant'
+        ? [
+            'experimental',
+            'icon',
+            'add',
+            `Star${capital}24WGHT400Icon`,
+            '--from',
+            LIB,
+            '--id',
+            'star',
+            '--variant',
+            word,
+          ]
+        : [
+            'experimental',
+            'icon',
+            'add',
+            '--variant',
+            word,
+            '--from',
+            LIB,
+            '--all',
+          ];
+    const declared = dataOf('brand').variants ?? [];
+    const kept = dataOf('brand').default?.variant ?? null;
+    return {
+      args,
+      expect:
+        choice === 'unknown'
+          ? {refuse: 'looks'}
+          : choice === 'drawn'
+            ? {refuse: 'drawn'}
+            : declared.includes(word)
+              ? {write: kept}
+              : {refuse: 'declare'},
+    };
+  }
+
+  const CASES = [
+    ...Object.keys(CHOICES).map(choice => ({
+      route: 'create --from',
+      state: 'no set',
+      choice,
+    })),
+    ...['in place', 'refresh', 'add --variant', 'add --variant --all'].flatMap(
+      route =>
+        Object.keys(STATES)
+          .filter(state => state !== 'no set')
+          .flatMap(state =>
+            Object.keys(CHOICES)
+              .filter(choice => !route.startsWith('add') || choice !== 'none')
+              .map(choice => ({route, state, choice})),
+          ),
+    ),
+  ].map(each => ({
+    ...each,
+    title: `${each.route} · ${each.state} · ${
+      each.route.startsWith('add')
+        ? CHOICES[/** @type {keyof typeof CHOICES} */ (each.choice)].replace(
+            'named default',
+            'variant',
+          )
+        : CHOICES[/** @type {keyof typeof CHOICES} */ (each.choice)]
+    }`,
+  }));
+
+  it('covers every path, set and choice', () => {
+    expect(CASES).toHaveLength(46);
+  });
+
+  for (const {title, route, state: stateName, choice} of CASES)
+    it(title, async () => {
+      writeVectorLibrary(GLYPHS);
+      const state = STATES[stateName];
+      await state.setup();
+      const step = plan(
+        route,
+        state,
+        /** @type {keyof typeof CHOICES} */ (choice),
+      );
+      const before = snapshot();
+      const res = await json(step.args);
+      if ('write' in step.expect) {
+        const expected = step.expect.write;
+        expect(res.code, JSON.stringify(res.body)).toBe(0);
+        expectEveryIconDrawsDefault(expected);
+        await runPrintedNotes(res.body, () =>
+          expectEveryIconDrawsDefault(expected),
+        );
+        return;
+      }
+      expect(res.code, JSON.stringify(res.body)).not.toBe(0);
+      expect(snapshot()).toEqual(before);
+      const suggestions = (res.body.suggestions ?? []).map(
+        (/** @type {any} */ each) => each.name,
+      );
+      switch (step.expect.refuse) {
+        case 'looks':
+          expect(res.body.error).toContain('filled or outline');
+          break;
+        case 'drawn':
+          expect(res.body.error).toContain('already draws');
+          break;
+        case 'refresh': {
+          const refresh = `astryx experimental icon new-set brand --from ${LIB}`;
+          expect(suggestions[0]).toMatch(new RegExp(`^${refresh} `, 'u'));
+          await runPrinted(suggestions[0]);
+          expectEveryIconDrawsDefault(state.other);
+          break;
+        }
+        case 'declare': {
+          expect(suggestions[0]).toMatch(
+            /^astryx experimental icon new-set brand --variants /u,
+          );
+          await runPrinted(suggestions[0]);
+          const kept = dataOf('brand').default?.variant ?? null;
+          expect(kept).toBe(state.drawn);
+          const again = await json(step.args);
+          expect(again.code, JSON.stringify(again.body)).toBe(0);
+          expectEveryIconDrawsDefault(kept);
+          break;
+        }
+      }
+    });
 });

@@ -56,7 +56,7 @@ export const doc = {
       name: 'options.defaultVariant',
       type: 'string',
       description:
-        "With variants: the variant each icon's own export draws, written to the data file's default. When absent, an existing set keeps its default while variants declares it; otherwise the first variant. Without from, a set with icons refuses a different default.",
+        "With variants: the variant each icon's own export draws, written to the data file's default. In a library whose export names encode looks, it must be one of the library's look words, and when absent it is the look the icons' exports draw (with from and no icons yet, the library's usual default), which variants must list. Otherwise, when absent, an existing set keeps its default while variants declares it, else the first variant. Without from, a set with icons refuses a default other than the look they draw.",
     },
     {
       name: 'options.displayName',

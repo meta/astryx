@@ -52,6 +52,8 @@ import {
   splitLook,
   variantExportName,
   answeringMatches,
+  checkVariantLook,
+  drawnLooks,
   rankIcons,
   resolveIconSource,
   setModuleNote,
@@ -317,14 +319,15 @@ export async function iconAdd(exportName, options) {
     const icons = set.data.icons.map(each => ({...each}));
     const existing = icons.find(each => each.id === id);
     if (asVariant) {
-      const declared = set.data.variants ?? [];
-      if (!declared.includes(variant)) {
-        throw new AstryxError(
-          `Icon set "${set.name}" declares no variant "${variant}"${declared.length > 0 ? ` (it declares ${declared.join(', ')})` : ''}. Declare it first.`,
-          [declareVariantSuggestion(set, variant)],
-          ERROR_CODES.ERR_INVALID_ARGUMENT,
-        );
-      }
+      checkVariantLook({
+        set,
+        variant,
+        module: source.module,
+        positions: libraryNaming.positions,
+        drawn: drawnLooks(set, packageDir, each =>
+          sameIconModule(each, source.module) ? libraryNaming.positions : null,
+        ),
+      });
       if (!existing) {
         throw new AstryxError(
           `Icon set "${set.name}" has no icon "${id}" to add a variant to. Add the icon first, or pass --id.`,
@@ -336,6 +339,18 @@ export async function iconAdd(exportName, options) {
             reason: 'an icon in this set',
           })),
           ERROR_CODES.ERR_NOT_FOUND,
+        );
+      }
+      const own = generatedOrigins(packageDir, generated).get(existing.export);
+      if (
+        own != null &&
+        own.source === sourceExport &&
+        sameIconModule(own.module, source.module)
+      ) {
+        throw new AstryxError(
+          `"${sourceExport}" is icon "${id}"'s own export, which draws its default look, so it can't be its ${variant} variant too.`,
+          undefined,
+          ERROR_CODES.ERR_INVALID_ARGUMENT,
         );
       }
       const variants = [...(existing.variants ?? [])];
@@ -584,30 +599,29 @@ async function addVariantForAll({cwd, from, selector, variant}) {
   }
   const where = await findLocalIconSet(cwd, selector);
   const {packageDir, set} = where;
-  const declared = set.data.variants ?? [];
-  if (!declared.includes(variant)) {
-    throw new AstryxError(
-      `Icon set "${set.name}" declares no variant "${variant}"${declared.length > 0 ? ` (it declares ${declared.join(', ')})` : ''}. Declare it first.`,
-      [declareVariantSuggestion(set, variant)],
-      ERROR_CODES.ERR_INVALID_ARGUMENT,
-    );
-  }
-  if (set.data.default?.variant === variant) {
-    throw new AstryxError(
-      `"${variant}" is the set's default variant: each icon's own export already draws it.`,
-      undefined,
-      ERROR_CODES.ERR_INVALID_ARGUMENT,
-    );
-  }
   const source = resolveIconSource(from, where);
   // In a library that draws each icon in several looks, the variant is the
   // glyph's look the variant's name picks (`filled`), and an icon is known
   // by any look of its glyph.
+  /** @type {Array<Set<string>>} */
+  let positions = [];
   const found = libraryIcons(source.file, {
     adapter: Boolean(set.data.adapter),
     prefer: [variant],
     module: source.module,
     progress: line => logger.warn(line),
+    summary: each => {
+      positions = each.positions.map(words => new Set(words));
+    },
+  });
+  checkVariantLook({
+    set,
+    variant,
+    module: source.module,
+    positions,
+    drawn: drawnLooks(set, packageDir, each =>
+      sameIconModule(each, source.module) ? positions : null,
+    ),
   });
   const byId = new Map(found.map(each => [each.id, each]));
   const byLook = new Map(
@@ -656,8 +670,14 @@ async function addVariantForAll({cwd, from, selector, variant}) {
       missing.push(icon.id);
       return icon;
     }
-    // A glyph the library draws in no look of that name has no variant.
-    if (match.look && !match.look.includes(variant)) {
+    // A glyph the library draws in no look of that name has no variant,
+    // and neither has one whose own export is the one that look picks.
+    if (
+      (match.look && !match.look.includes(variant)) ||
+      (match.export === librarySource &&
+        origin != null &&
+        sameIconModule(origin.module, source.module))
+    ) {
       missing.push(icon.id);
       return icon;
     }
@@ -764,27 +784,4 @@ function lookVariantOf(id, wrappedId, positions, set) {
     word !== set.data.default?.variant
     ? word
     : null;
-}
-
-/**
- * The command that declares `variant` beside the set's variants. It names
- * the set's default variant, so running it as printed keeps the default
- * each icon's own export draws.
- * @param {import('../../../foundation/discovery/icon-set-discovery.mjs').DiscoveredIconSet} set
- * @param {string} variant
- * @returns {{name: string, reason: string}}
- */
-function declareVariantSuggestion(set, variant) {
-  const declared = set.data.variants ?? [];
-  const current = set.data.default?.variant;
-  const variants = [
-    ...new Set([...(declared.length > 0 ? declared : ['<default>']), variant]),
-  ];
-  return {
-    name: [
-      `astryx experimental icon new-set ${set.name} --variants ${variants.join(',')}`,
-      ...(current ? [`--default-variant ${current}`] : []),
-    ].join(' '),
-    reason: 'declare the variants',
-  };
 }

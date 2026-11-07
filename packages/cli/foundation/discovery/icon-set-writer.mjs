@@ -973,10 +973,11 @@ export function preferredLook(positions, prefer = []) {
  * and name without the look words (`XOutline24WGHT500Icon` is `x`,
  * `XIcon`), and its `looks`, every export that draws the glyph.
  * @param {string} file
- * @param {{adapter?: boolean, exclude?: string[], prefer?: string[], module?: string, progress?: (line: string) => void, summary?: (summary: LibraryLookSummary) => void}} [options]
+ * @param {{adapter?: boolean, exclude?: string[], prefer?: string[] | ((positions: Array<Set<string>>) => string[]), module?: string, progress?: (line: string) => void, summary?: (summary: LibraryLookSummary) => void}} [options]
  *   `adapter`: whether the set declares one; `exclude`: export names that
  *   are not icons; `prefer`: look words to prefer (the set's default
- *   variant); `module`: the module as the author named it, for progress;
+ *   variant), or a function that gives them from the library's look
+ *   positions before any glyph is picked; `module`: the module as the author named it, for progress;
  *   `progress`: hears the reading of a large module;
  *   `summary`: hears the looks found, when the library has any
  * @returns {LibraryIcon[]}
@@ -990,7 +991,11 @@ export function libraryIcons(file, options = {}) {
     {label, progress: options.progress},
     () => {
       all = collectLibraryIcons(file, options);
-      const grouped = libraryLooks(all, options.prefer);
+      const prefer =
+        typeof options.prefer === 'function'
+          ? options.prefer(lookPositions(all.map(icon => icon.id)))
+          : options.prefer;
+      const grouped = libraryLooks(all, prefer);
       if (grouped.positions.length > 0) {
         options.summary?.({
           positions: grouped.positions.map(position => [...position].sort()),

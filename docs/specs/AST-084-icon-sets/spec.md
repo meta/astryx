@@ -312,7 +312,8 @@ icon, and the CLI verifies it, writes the files, and checks the set.
     default variant (the refusal names the `--from` run that moves it), and
     the receipt carries `updated`. Over an existing set, `--variants` without
     `--default-variant` keeps the set's default variant while it stays
-    declared. Run again with `--from`, it
+    declared; in a library of looks, it takes the look the icons' exports
+    draw, which `--variants` must list. Run again with `--from`, it
     refreshes the icons that module supplies (those the generated
     module re-exports or adapts from it) and keeps `map` entries whose icon
     exists; every other icon (the author's `./` artwork, another library's)
@@ -355,7 +356,8 @@ icon, and the CLI verifies it, writes the files, and checks the set.
     icon from that module's package whose `id` an export of the module has
     (in a library of looks, the glyph's look of that name), in one write; an
     icon from another module is left alone and not listed as missing, and a
-    glyph drawn in no look of that name is listed as missing. For a `./`
+    glyph drawn in no look of that name, or whose own export is that look,
+    is listed as missing. For a `./`
     file outside package.json `files`, it names the `files` array that
     publishes it.
   - `experimental icon map <definition> <icon>` writes one `map` entry,
