@@ -141,7 +141,7 @@ export default defineConfig({
             'packages/charts/src/**/*.test.{ts,tsx,mjs}',
             'packages/richtext/src/**/*.test.{ts,tsx,mjs}',
             'packages/vega/src/**/*.test.{ts,tsx,mjs}',
-            'apps/docsite/src/__tests__/theme-showcase.test.tsx',
+            'apps/docsite/src/__tests__/theme-showcase/**/*.test.{ts,tsx,mjs}',
           ],
           exclude: [...configDefaults.exclude, helperOverheadBenchmark],
         },

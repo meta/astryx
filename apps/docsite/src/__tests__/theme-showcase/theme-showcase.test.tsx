@@ -23,12 +23,12 @@ import userEvent from '@testing-library/user-event';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import ThemeShowcase, {
   ThemeShowcaseStore,
-} from '../../../../packages/cli/assets/templates/pages/theme-showcase/page';
-import {doc} from '../../../../packages/cli/assets/templates/pages/theme-showcase/template.doc.mjs';
+} from '../../../../../packages/cli/assets/templates/pages/theme-showcase/page';
+import {doc} from '../../../../../packages/cli/assets/templates/pages/theme-showcase/template.doc.mjs';
 
 const rootDir = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
-  '../../../..',
+  '../../../../..',
 );
 const source = fs.readFileSync(
   path.join(
@@ -62,6 +62,8 @@ function nodesOfType(type: string): Array<Record<string, unknown>> {
   return nodes;
 }
 
+const resizeCallbacks = new Map<Element, () => void>();
+
 beforeEach(() => {
   vi.spyOn(HTMLElement.prototype, 'showPopover').mockImplementation(function (
     this: HTMLElement,
@@ -91,9 +93,18 @@ beforeEach(() => {
   vi.stubGlobal(
     'ResizeObserver',
     class {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
+      constructor(private readonly callback: ResizeObserverCallback) {}
+      observe(target: Element) {
+        resizeCallbacks.set(target, () =>
+          this.callback([{target} as ResizeObserverEntry], this),
+        );
+      }
+      unobserve(target: Element) {
+        resizeCallbacks.delete(target);
+      }
+      disconnect() {
+        resizeCallbacks.clear();
+      }
     },
   );
   vi.stubGlobal(
@@ -108,6 +119,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  resizeCallbacks.clear();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -118,9 +130,6 @@ describe('theme-showcase source contract', () => {
       .map(node => (node.name as {name?: string})?.name)
       .filter(Boolean) as string[];
     expect(tags.filter(tag => /^[a-z]/.test(tag))).toEqual(['img', 'img']);
-    expect(
-      tags.filter(tag => ['svg', 'path', 'circle', 'rect'].includes(tag)),
-    ).toEqual([]);
   });
 
   it('keeps only the justified body paint, wrapping and chat-height styles', () => {
@@ -142,6 +151,7 @@ describe('theme-showcase source contract', () => {
     ).toEqual(['backgroundColor', 'flex', 'flex', 'maxHeight']);
     expect(source).not.toContain('stylex.create');
     expect(source).not.toContain('className=');
+    expect(source).not.toContain('Track →');
   });
 
   it('describes the actual shell and keeps the preview hidden from the gallery', () => {
@@ -172,26 +182,18 @@ describe('theme-showcase source contract', () => {
 });
 
 describe('theme-showcase local interactions', () => {
-  it('uses one shell for the standalone page and none for the embedded preview', () => {
+  it('keeps the standalone shell separate from the embedded themed preview', () => {
     const view = render(<ThemeShowcase />);
     expect(view.container.querySelectorAll('.astryx-app-shell')).toHaveLength(
       1,
     );
-    view.rerender(<ThemeShowcaseStore />);
-    expect(view.container.querySelectorAll('.astryx-app-shell')).toHaveLength(
-      0,
-    );
-    const navigation = screen.getByRole('navigation', {
-      name: 'Theme preview navigation',
-    });
-    expect(navigation).toBeInTheDocument();
-  });
-
-  it('paints the embedded theme body and contains its navigation override without repainting the chat', () => {
-    const view = render(
+    view.rerender(
       <div data-themes-card-preview>
         <ThemeShowcaseStore />
       </div>,
+    );
+    expect(view.container.querySelectorAll('.astryx-app-shell')).toHaveLength(
+      0,
     );
     const navigation = screen.getByRole('navigation', {
       name: 'Theme preview navigation',
@@ -232,15 +234,14 @@ describe('theme-showcase local interactions', () => {
     const inventoryRow = screen
       .getByRole('table')
       .closest('.astryx-stack-item')?.parentElement;
-    expect(checkoutRow).not.toBeNull();
-    expect(inventoryRow).not.toBeNull();
     expect(checkoutRow).toHaveClass('astryx-stack');
     expect(inventoryRow).toHaveClass('astryx-stack');
     expect(inventoryRow).not.toHaveClass('astryx-layout');
     const activity = screen
       .getByRole('heading', {name: 'Revenue'})
-      .closest('.astryx-stack-item')!;
+      .closest<HTMLElement>('.astryx-stack-item')!;
     expect(activity.parentElement).toBe(inventoryRow);
+    expect(activity.style.height).toBe('');
     expect(getComputedStyle(activity).width).toBe('280px');
     expect(getComputedStyle(activity).flexShrink).toBe('0');
   });
@@ -438,6 +439,17 @@ describe('theme-showcase local interactions', () => {
     expect(composer).toHaveTextContent('');
     await waitFor(() => expect(viewport.scrollTop).toBe(700));
     expect(viewport).toHaveAttribute('data-astryx-chat-following');
+    const list = viewport.querySelector('.astryx-chat-message-list')!;
+    expect(resizeCallbacks.has(list)).toBe(true);
+    Object.defineProperty(viewport, 'scrollHeight', {value: 1200});
+    resizeCallbacks.get(list)!();
+    await waitFor(() => expect(viewport.scrollTop).toBe(1000), {timeout: 3000});
+    viewport.scrollTop = 200;
+    fireEvent.scroll(viewport);
+    expect(viewport).not.toHaveAttribute('data-astryx-chat-following');
+    Object.defineProperty(viewport, 'scrollHeight', {value: 1500});
+    resizeCallbacks.get(list)!();
+    expect(viewport.scrollTop).toBe(200);
   });
 
   it('fills the chat draft from a suggested question', async () => {

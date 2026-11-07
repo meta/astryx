@@ -15,6 +15,6 @@ export default defineConfig({
   test: {
     include: ['src/__tests__/**/*.test.{ts,tsx}'],
     // This DOM suite runs in the root UI project with shared StyleX setup.
-    exclude: ['src/__tests__/theme-showcase.test.tsx'],
+    exclude: ['src/__tests__/theme-showcase/**'],
   },
 });

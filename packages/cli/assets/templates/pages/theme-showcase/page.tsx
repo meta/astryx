@@ -9,7 +9,7 @@
  * @position Theme preview shared by the sandbox, docsite, and playground
  */
 
-import {type CSSProperties, useEffect, useRef, useState} from 'react';
+import {type CSSProperties, useRef, useState} from 'react';
 import {
   Plus,
   Search,
@@ -68,6 +68,7 @@ import {
   ChatMessageBubble,
   ChatMessageList,
   ChatSystemMessage,
+  useChatNewMessages,
   useChatStreamScroll,
 } from '@astryxdesign/core/Chat';
 
@@ -268,8 +269,7 @@ function CardShowcase({
         <VStack
           as={StackItem}
           width={isMobile ? '100%' : 280}
-          paddingInlineStart={isMobile ? 0 : 4}
-          height="100%">
+          paddingInlineStart={isMobile ? 0 : 4}>
           {activity}
         </VStack>
       </HStack>
@@ -562,15 +562,12 @@ const SUGGESTED_QUESTIONS = [
 
 function ChatCard() {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const {lock, scrollIfLocked} = useChatStreamScroll({scrollRef});
+  const {lock, isLocked, scrollIfLocked} = useChatStreamScroll({scrollRef});
+  const {contentRef} = useChatNewMessages({isLocked, onResize: scrollIfLocked});
   const [draft, setDraft] = useState('');
   const [messages, setMessages] = useState<Array<{id: number; text: string}>>(
     [],
   );
-  // Synchronize the message viewport after local replies change.
-  useEffect(() => {
-    scrollIfLocked();
-  }, [messages, scrollIfLocked]);
   function submitMessage() {
     const message = draft.trim();
     if (!message) {
@@ -660,7 +657,7 @@ function ChatCard() {
           ref={scrollRef}
           padding={0}
           label="Studio AI conversation">
-          <ChatMessageList>
+          <ChatMessageList ref={contentRef}>
             <ChatSystemMessage>Today</ChatSystemMessage>
             <ChatMessage sender="user">
               <ChatMessageBubble variant="filled">
@@ -719,7 +716,7 @@ function ChatCard() {
                     <Item
                       label="Tracking"
                       description="UPS 1Z 999 AA1 0123 4567 84"
-                      endContent={<Link href="#">Track →</Link>}
+                      endContent={<Link href="#">Track</Link>}
                     />
                   </VStack>
                 </Card>
