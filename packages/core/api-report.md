@@ -4999,6 +4999,7 @@ interface PowerSearchConfig
   contentSearchFieldKey?: string
   fields: ReadonlyArray<PowerSearchField>
   name: string
+  valueMatchBehavior?: 'field-prefix' | 'all-string-fields'
 interface PowerSearchEditorProps (props of PowerSearchFilterEditor)
 interface PowerSearchEntity
   id: string
