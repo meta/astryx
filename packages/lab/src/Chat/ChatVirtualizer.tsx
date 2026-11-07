@@ -86,9 +86,26 @@ const styles = stylex.create({
 
 // While a finger scroll ends in an elastic overscroll, a write would snap the
 // bounce onto the clamp; the flush waits a frame at a time until it is over.
-const isBouncing = (el: HTMLElement): boolean =>
-  el.scrollTop < 0 ||
-  el.scrollTop > Math.max(0, el.scrollHeight - el.clientHeight) + 1;
+const isBouncing = (vp: ViewportRead): boolean =>
+  vp.scrollTop < 0 ||
+  vp.scrollTop > Math.max(0, vp.scrollHeight - vp.clientHeight) + 1;
+
+/**
+ * The scroller's position and size, read together in one batch. Scrolling
+ * moves the rows that should be mounted, so a scroll event and a correction
+ * pass each read these once, before any write, so a pass forces at most two
+ * layouts and a scroll event none.
+ */
+type ViewportRead = {
+  scrollTop: number;
+  scrollHeight: number;
+  clientHeight: number;
+};
+const readViewport = (el: HTMLElement): ViewportRead => ({
+  scrollTop: el.scrollTop,
+  scrollHeight: el.scrollHeight,
+  clientHeight: el.clientHeight,
+});
 
 /** Imperative surface — both methods are declarations, not scroll actions. */
 export interface ChatVirtualizerHandle {
@@ -530,14 +547,14 @@ export function ChatVirtualizer<T>(
     return lo;
   };
 
-  const computeWindow = (el: HTMLElement, desiredTop?: number): Win => {
+  const computeWindow = (vp: ViewportRead, desiredTop?: number): Win => {
     const g = geo.current;
     if (g.keys.length === 0) {
       return {start: 0, end: -1};
     }
-    const top = (desiredTop ?? el.scrollTop) - paintOrigin();
+    const top = (desiredTop ?? vp.scrollTop) - paintOrigin();
     const start = indexAt(Math.max(0, top - overscanTopRef.current));
-    const bottomEdge = top + el.clientHeight + overscanBottomRef.current;
+    const bottomEdge = top + vp.clientHeight + overscanBottomRef.current;
     // When the query reaches past the content, include the last row by
     // construction instead of by binary search: a zero-height final row sits
     // AT total, which the search (offsets[i] <= total - 1) can never select.
@@ -641,10 +658,9 @@ export function ChatVirtualizer<T>(
   // there is nothing above to absorb into, leaving every derived position
   // wrong by the difference. Reading the row's real rect skips the broken map.
   // Same row anchorAt would pick; null when nothing is rendered.
-  const anchorFromPaint = (el: HTMLElement): AnchorMode | null => {
+  const anchorFromPaint = (el: HTMLElement, h: number): AnchorMode | null => {
     const g = geo.current;
     const box = el.getBoundingClientRect();
-    const h = el.clientHeight;
     let best: AnchorMode | null = null;
     for (const [key, rowEl] of rowEls.current) {
       if (!rowEl.isConnected || !g.index.has(key)) {
@@ -673,7 +689,7 @@ export function ChatVirtualizer<T>(
   // it, or the last message parks underneath the overlay (measured:
   // constant 174px).
   const belowRef = React.useRef(0);
-  const measureOrigin = (el: HTMLElement): number => {
+  const measureOrigin = (el: HTMLElement, vp: ViewportRead): number => {
     if (scrollElementRef.current == null) {
       // Own container: the content starts at the scroll box and nothing
       // follows it. Stated rather than skipped — a list switched back from
@@ -690,10 +706,10 @@ export function ChatVirtualizer<T>(
     originRef.current =
       top.getBoundingClientRect().top -
       el.getBoundingClientRect().top +
-      el.scrollTop;
+      vp.scrollTop;
     belowRef.current = Math.max(
       0,
-      el.scrollHeight - originRef.current - geo.current.total,
+      vp.scrollHeight - originRef.current - geo.current.total,
     );
     return originRef.current;
   };
@@ -707,13 +723,13 @@ export function ChatVirtualizer<T>(
 
   // Desired scrollTop for a reference frame, clamped to the scrollable range.
   // null when the anchored row no longer exists in the data.
-  const targetFor = (m: Mode, el: HTMLElement): number | null => {
+  const targetFor = (m: Mode, clientHeight: number): number | null => {
     const g = geo.current;
     const origin = paintOrigin();
     let raw;
     const below = belowRef.current;
     if (m.kind === 'end') {
-      raw = origin + g.total + below - el.clientHeight - m.distance;
+      raw = origin + g.total + below - clientHeight - m.distance;
     } else {
       const idx = g.index.get(m.key) ?? -1;
       if (idx < 0) {
@@ -721,10 +737,7 @@ export function ChatVirtualizer<T>(
       }
       raw = origin + g.offsets[idx] - m.viewportOffset;
     }
-    return Math.max(
-      0,
-      Math.min(raw, origin + g.total + below - el.clientHeight),
-    );
+    return Math.max(0, Math.min(raw, origin + g.total + below - clientHeight));
   };
 
   // The single correction pass: spacers(old geo) -> measure -> recompute ->
@@ -734,7 +747,6 @@ export function ChatVirtualizer<T>(
     if (!el) {
       return;
     }
-    const entryScrollTop = el.scrollTop;
     // Phase 0 — spacers FIRST, from the pre-measure geometry: a window-shift
     // commit swaps rows before the layout effect runs, so the first forced
     // layout below would otherwise place the new rows against stale spacers
@@ -743,7 +755,11 @@ export function ChatVirtualizer<T>(
     // block's floor holds it, see styles.content.) Style writes don't force
     // layout, so the spacers are consistent BEFORE the first read.
     writeSpacers(winRef.current);
-    measureOrigin(el);
+    // The pass's one batch of reads, before its next write: position, size,
+    // where the content starts, and rows not measured yet (below).
+    const vp = readViewport(el);
+    const entryScrollTop = vp.scrollTop;
+    measureOrigin(el, vp);
     // Refresh the anchor from the LIVE scrollTop against the pre-measure
     // geometry (= what's currently painted). scroll events lag rAF-driven
     // scrolls by a frame; scrollTop itself is ground truth, so deriving the
@@ -762,7 +778,7 @@ export function ChatVirtualizer<T>(
       !converging.current &&
       geo.current.keys.length > 0
     ) {
-      mode.current = anchorAt(el.scrollTop);
+      mode.current = anchorAt(entryScrollTop);
     }
     // Only rows never seen are measured here — the first-mount backstop: an
     // UNMEASURED row is
@@ -801,14 +817,14 @@ export function ChatVirtualizer<T>(
     // scrollTop write to cancel momentum or fight the finger.
     const heldAnchor =
       gestureHeld() && geo.current.keys.length > 0
-        ? anchorAt(el.scrollTop)
+        ? anchorAt(entryScrollTop)
         : null;
     repriceBuckets();
     recompute();
     if (heldAnchor !== null) {
-      const t = targetFor(heldAnchor, el);
+      const t = targetFor(heldAnchor, vp.clientHeight);
       if (t !== null) {
-        gestureAdj.current -= t - el.scrollTop;
+        gestureAdj.current -= t - entryScrollTop;
       }
     }
     writeSpacers(winRef.current);
@@ -817,7 +833,7 @@ export function ChatVirtualizer<T>(
     if (converging.current) {
       geoChanged.current = true;
     }
-    let target = targetFor(mode.current, el);
+    let target = targetFor(mode.current, vp.clientHeight);
     // Dead-anchor fallback: a null target means the anchored key is not in
     // the data — an anchorToKey to a missing key, or the anchored row left
     // with a thread switch / history replacement. Convergence could never
@@ -831,39 +847,46 @@ export function ChatVirtualizer<T>(
         mode.current = {kind: 'end', distance: 0};
         userAway.current = 0;
         geoChanged.current = true;
-        target = targetFor(mode.current, el);
+        target = targetFor(mode.current, vp.clientHeight);
       }
     }
+    let wroteTarget: number | null = null;
     if (target !== null && geoChanged.current && !gestureHeld()) {
       geoChanged.current = false;
-      if (Math.abs(el.scrollTop - target) > 0.5) {
+      if (Math.abs(entryScrollTop - target) > 0.5) {
         el.scrollTop = target;
-        // Read back: the browser may clamp the write if the spacer resize
-        // hasn't reached layout yet. The echo target must be the ACTUAL
-        // landing value (otherwise our own clamped write is misread as a
-        // user scroll and flips the mode), and a clamp marks the geometry
-        // dirty again with a next-frame retry until the write sticks.
-        const actual = el.scrollTop;
-        progTarget.current = actual;
-        if (Math.abs(actual - target) > 1) {
-          geoChanged.current = true;
-          // One retry slot: consecutive clamped writes coalesce, and unmount
-          // cancels it (a post-unmount pass would setWin on a dead tree).
-          if (rafRetry.current !== null) {
-            cancelAnimationFrame(rafRetry.current);
-          }
-          rafRetry.current = requestAnimationFrame(() => {
-            rafRetry.current = null;
-            syncRef.current();
-          });
+        wroteTarget = target;
+      }
+    }
+    // The pass's one read after its writes: where scrollTop actually is. The
+    // browser may clamp our write if the spacer resize hasn't reached layout
+    // yet, or clamp on its own when the spacers shrank; either move is ours to
+    // claim (below).
+    const actual = el.scrollTop;
+    if (wroteTarget !== null) {
+      // The echo target must be the ACTUAL landing value (otherwise our
+      // own clamped write is misread as a user scroll and flips the mode),
+      // and a clamp marks the geometry dirty again with a next-frame retry
+      // until the write sticks.
+      progTarget.current = actual;
+      if (Math.abs(actual - wroteTarget) > 1) {
+        geoChanged.current = true;
+        // One retry slot: consecutive clamped writes coalesce, and unmount
+        // cancels it (a post-unmount pass would setWin on a dead tree).
+        if (rafRetry.current !== null) {
+          cancelAnimationFrame(rafRetry.current);
         }
+        rafRetry.current = requestAnimationFrame(() => {
+          rafRetry.current = null;
+          syncRef.current();
+        });
       }
     }
     if (
       converging.current &&
       target !== null &&
       dataRef.current.length > 0 &&
-      Math.abs(el.scrollTop - target) <= CONVERGE_EPSILON_PX
+      Math.abs(actual - target) <= CONVERGE_EPSILON_PX
     ) {
       // Reaching the target does not end a HEAD-CHANGE convergence: the rows
       // that arrived above are still measuring in, so the prices and the
@@ -897,10 +920,7 @@ export function ChatVirtualizer<T>(
     // desired target is not going to be written, so the window tracks the
     // ACTUAL position (rows must keep mounting under the drag).
     setWindowIfChanged(
-      computeWindow(
-        el,
-        target === null || gestureHeld() ? el.scrollTop : target,
-      ),
+      computeWindow(vp, target === null || gestureHeld() ? actual : target),
     );
     // Entry/exit claim: if scrollTop moved during this pass — by our write OR
     // by a SILENT BROWSER CLAMP during a transient layout (spacers not yet
@@ -911,8 +931,8 @@ export function ChatVirtualizer<T>(
     // mode. User input cannot move scrollTop inside synchronous JS
     // (compositor scrolls land at frame boundaries), so this never swallows
     // a real gesture.
-    if (el.scrollTop !== entryScrollTop) {
-      progTarget.current = el.scrollTop;
+    if (actual !== entryScrollTop) {
+      progTarget.current = actual;
     }
   };
   // Latest-pass ref for once-created callers (see CLOSURE DISCIPLINE).
@@ -1110,7 +1130,9 @@ export function ChatVirtualizer<T>(
     }
     // Inside an elastic overscroll a write snaps the bounce onto the clamp
     // and discards where the user let go: wait until it is over.
-    if (isBouncing(el)) {
+    // One batch of reads for the gesture's end, before the pass it starts.
+    const vp = readViewport(el);
+    if (isBouncing(vp)) {
       flushRetry.current = requestAnimationFrame(flushGesture);
       return;
     }
@@ -1118,7 +1140,7 @@ export function ChatVirtualizer<T>(
     // Engines report scrollHeight as at least clientHeight, so this is
     // never negative in practice — clamped anyway to hold the same
     // invariant targetFor does.
-    const max = Math.max(0, el.scrollHeight - el.clientHeight);
+    const max = Math.max(0, vp.scrollHeight - vp.clientHeight);
     // Re-state the reference frame from the resting position. Whether the
     // gesture MOVED decides the semantics only: a real scroll re-judges
     // follow against the bottom edge, while a scroll that was only our own
@@ -1133,11 +1155,11 @@ export function ChatVirtualizer<T>(
     // being derived, so a clamped spacer cannot make the two disagree.
     if (!converging.current) {
       const atEnd = gestureMoved.current
-        ? max - el.scrollTop <= endThresholdRef.current
+        ? max - vp.scrollTop <= endThresholdRef.current
         : mode.current.kind === 'end';
       mode.current = atEnd
         ? {kind: 'end', distance: 0}
-        : (anchorFromPaint(el) ?? anchorAt(el.scrollTop));
+        : (anchorFromPaint(el, vp.clientHeight) ?? anchorAt(vp.scrollTop));
       userAway.current = 0;
       // The fold is a MACHINE repositioning: the adjustment now lives only
       // in the folded viewportOffset, and the live-anchor refresh — which
@@ -1164,6 +1186,8 @@ export function ChatVirtualizer<T>(
     if (!el) {
       return;
     }
+    // The handler's one batch of reads; it writes nothing to the DOM.
+    const vp = readViewport(el);
     // The position the machinery last WROTE, kept before the echo slot is
     // cleared below: the user's displacement is measured from there, not
     // from the last event seen. A wheel that lands between two of our
@@ -1172,7 +1196,7 @@ export function ChatVirtualizer<T>(
     // "moved down" — the user's own upward step erased by the re-pin.
     const lastWrite = progTarget.current;
     const isEcho =
-      lastWrite !== null && Math.abs(el.scrollTop - lastWrite) <= 1;
+      lastWrite !== null && Math.abs(vp.scrollTop - lastWrite) <= 1;
     // STICKY echo: k offset changes within one frame queue up to k scroll
     // events, dispatched across successive frames, EACH reading the same
     // final scrollTop. A consume-once slot matches the first and misreads
@@ -1184,7 +1208,7 @@ export function ChatVirtualizer<T>(
       lastUserEventT.current = performance.now();
     }
     const prevEventST = lastEventST.current;
-    lastEventST.current = el.scrollTop;
+    lastEventST.current = vp.scrollTop;
     if (isFingerScroll()) {
       if (!gestureActive.current) {
         // A finger's scroll begins: an INTENT signal, like a wheel, so it
@@ -1205,7 +1229,7 @@ export function ChatVirtualizer<T>(
     }
     if (!isEcho && !converging.current) {
       const g = geo.current;
-      const dist = el.scrollHeight - el.clientHeight - el.scrollTop;
+      const dist = vp.scrollHeight - vp.clientHeight - vp.scrollTop;
       // With native anchoring off, the one move the browser still makes on
       // its own is the clamp onto a new, smaller bottom (a row shrinking in
       // a way no commit announced — an image, a font). It lands exactly on
@@ -1213,7 +1237,7 @@ export function ChatVirtualizer<T>(
       // displacement.
       const landedAtBottom = dist < 1;
       const anchorHere = (): void => {
-        mode.current = anchorAt(el.scrollTop);
+        mode.current = anchorAt(vp.scrollTop);
         userAway.current = 0;
       };
       if (g.keys.length === 0) {
@@ -1231,7 +1255,7 @@ export function ChatVirtualizer<T>(
         if (from !== null && !landedAtBottom) {
           userAway.current = Math.max(
             0,
-            userAway.current + (from - el.scrollTop),
+            userAway.current + (from - vp.scrollTop),
           );
         }
         if (userAway.current > endThresholdRef.current) {
@@ -1247,7 +1271,7 @@ export function ChatVirtualizer<T>(
         anchorHere();
       }
     }
-    setWindowIfChanged(computeWindow(el));
+    setWindowIfChanged(computeWindow(vp));
   };
 
   // The listener is attached once per scroll element but the handler is read

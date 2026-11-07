@@ -288,6 +288,182 @@ describe('ChatVirtualizer', () => {
     el.remove();
   });
 
+  // ---- How often layout is read (FR4) ----------------------------------------
+  // jsdom has no layout, so the trace counts what forces one in a browser: a
+  // read of scroll geometry, a rect or a row size after a write to a spacer
+  // or to scrollTop. Each such write-then-read turn is one forced layout.
+  const traceLayout = () => {
+    const ops: Array<'W' | 'R' | 'C'> = [];
+    // A scroller like tallScroller whose size reads are traced.
+    const el = document.createElement('div');
+    Object.defineProperty(el, 'clientHeight', {
+      configurable: true,
+      get: () => {
+        ops.push('C');
+        return 400;
+      },
+    });
+    Object.defineProperty(el, 'scrollHeight', {
+      configurable: true,
+      get: () => {
+        ops.push('R');
+        return 1e6;
+      },
+    });
+    document.body.appendChild(el);
+    const restore: Array<() => void> = [];
+    const wrap = (
+      target: object,
+      prop: string,
+      onGet: 'R' | 'C' | null,
+      onSet: boolean,
+    ): void => {
+      let owner: object | null = target;
+      let desc: PropertyDescriptor | undefined;
+      while (owner !== null && desc === undefined) {
+        desc = Object.getOwnPropertyDescriptor(owner, prop);
+        owner = desc === undefined ? Object.getPrototypeOf(owner) : owner;
+      }
+      if (desc === undefined) {
+        throw new Error(`no ${prop}`);
+      }
+      const original = desc;
+      let stored = original.value;
+      Object.defineProperty(target, prop, {
+        configurable: true,
+        get(this: unknown) {
+          if (onGet !== null) {
+            ops.push(onGet);
+          }
+          return original.get ? original.get.call(this) : stored;
+        },
+        set(this: unknown, value: unknown) {
+          if (onSet) {
+            ops.push('W');
+          }
+          if (original.set) {
+            original.set.call(this, value);
+          } else {
+            stored = value;
+          }
+        },
+      });
+      restore.push(() => {
+        if (Object.getOwnPropertyDescriptor(target, prop) !== undefined) {
+          delete (target as Record<string, unknown>)[prop];
+        }
+        if (owner === target) {
+          Object.defineProperty(target, prop, original);
+        }
+      });
+    };
+    wrap(el, 'scrollTop', 'R', true);
+    wrap(HTMLElement.prototype, 'offsetHeight', 'R', false);
+    wrap(CSSStyleDeclaration.prototype, 'height', null, true);
+    wrap(CSSStyleDeclaration.prototype, 'minHeight', null, true);
+    const rect = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      ops.push('R');
+      return rect.call(this);
+    };
+    restore.push(() => {
+      Element.prototype.getBoundingClientRect = rect;
+    });
+    return {
+      el,
+      ops,
+      /** Write-then-read turns: the layouts a browser would be forced to run. */
+      forcedLayouts: (): number => {
+        let turns = 0;
+        let lastWasWrite = false;
+        for (const op of ops) {
+          if (op === 'W') {
+            lastWasWrite = true;
+          } else if (lastWasWrite) {
+            turns++;
+            lastWasWrite = false;
+          }
+        }
+        return turns;
+      },
+      // One read of the scroller's size per pass or scroll event.
+      sizeReads: (): number => ops.filter(op => op === 'C').length,
+      stop: (): void => {
+        for (const undo of restore.reverse()) {
+          undo();
+        }
+      },
+    };
+  };
+
+  it('forces at most two layouts per correction pass, and none in the scroll handler', async () => {
+    const trace = traceLayout();
+    const {el} = trace;
+    try {
+      const {rerender} = render(attachedTo(rows(60), el));
+      await settled();
+      trace.ops.length = 0;
+      // Each correction pass reads the size once, so the passes are the size
+      // reads, and each has exactly two turns: its first spacer write, then
+      // its batch of reads; its last writes, then its one read back.
+      const passesForceTwoLayoutsEach = (handlerSizeReads: number): void => {
+        const passes = trace.sizeReads() - handlerSizeReads;
+        expect(passes).toBeGreaterThan(0);
+        expect(trace.forcedLayouts()).toBe(2 * passes);
+        trace.ops.length = 0;
+      };
+      // An append while following.
+      act(() => rerender(attachedTo(rows(61), el)));
+      await settled();
+      passesForceTwoLayoutsEach(0);
+      // Scrolling up mounts other rows: one handler read, then the passes.
+      // (The test's own write stands for the browser's scroll; not traced.)
+      el.scrollTop = 0;
+      trace.ops.length = 0;
+      act(() => {
+        el.dispatchEvent(new Event('scroll'));
+      });
+      await settled();
+      passesForceTwoLayoutsEach(1);
+      // An append while the reader is in history.
+      act(() => rerender(attachedTo(rows(62), el)));
+      await settled();
+      passesForceTwoLayoutsEach(0);
+
+      // A fling: scroll events with no commit in between. The handler reads
+      // once per event and writes nothing, so it forces no layout.
+      trace.ops.length = 0;
+      const marks: number[] = [];
+      const before = (): void => {
+        marks.push(trace.ops.length);
+      };
+      const after = (): void => {
+        marks.push(trace.ops.length);
+      };
+      el.addEventListener('scroll', before, {capture: true});
+      el.addEventListener('scroll', after);
+      try {
+        for (const at of [1000, 1040, 1080, 1120]) {
+          el.scrollTop = at;
+          trace.ops.length = 0;
+          marks.length = 0;
+          act(() => {
+            el.dispatchEvent(new Event('scroll'));
+          });
+          const inHandler = trace.ops.slice(marks[0], marks[1]);
+          expect(inHandler).not.toContain('W');
+          expect(inHandler.filter(op => op === 'C')).toHaveLength(1);
+        }
+      } finally {
+        el.removeEventListener('scroll', before, {capture: true});
+        el.removeEventListener('scroll', after);
+      }
+    } finally {
+      trace.stop();
+      el.remove();
+    }
+  });
+
   it('a clamp onto a new, smaller bottom is not displacement', async () => {
     // A row above shrank outside any commit (an image, a font); the browser
     // pinned the position to the new maximum. The reader did not move.
