@@ -48,21 +48,30 @@ const styles = stylex.create({
     padding: spacingVars['--spacing-2'],
     boxSizing: 'border-box',
   },
-  // Flex layout (default, used when no centerContent)
+  // Both layouts wrap when their regions do not fit one row, as at a larger
+  // text size: the end region moves to a second line instead of covering the
+  // navigation items.
   baseFlex: {
     display: 'flex',
+    flexWrap: 'wrap',
   },
-  // Grid layout (used when centerContent is present)
-  baseGrid: {
-    display: 'grid',
-    gridTemplateColumns: '1fr auto 1fr',
+  // Three regions (used when centerContent is present). While they fit one
+  // row, the center takes its content width and the start and end regions
+  // share the rest equally, so the center sits at the bar's middle.
+  baseThreeRegion: {
+    display: 'flex',
+    flexWrap: 'wrap',
   },
+  // A region keeps its items on one line, so the bar wraps before the region
+  // does; only a region wider than the whole bar wraps its own items.
+  // `fit-content` is the region's full row, capped at the bar's width.
   leftSection: {
     display: 'flex',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: spacingVars['--spacing-4'],
     flex: '1 1 0%',
-    minWidth: 0,
+    minWidth: stylex.firstThatWorks('fit-content', '-webkit-fit-content'),
   },
   heading: {
     display: 'flex',
@@ -71,27 +80,43 @@ const styles = stylex.create({
   },
   startContent: {
     display: 'flex',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: spacingVars['--spacing-1'],
   },
+  // The center claims its content's minimum width when the bar decides where
+  // to wrap, then grows first, up to its content width. Only a center wider
+  // than the whole bar, alone on its line, narrows below that minimum.
   centerContent: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacingVars['--spacing-1'],
+    flexGrow: 1000,
+    flexShrink: 1,
+    flexBasis: 'min-content',
+    minWidth: 0,
+    maxWidth: 'max-content',
   },
   rightSection: {
     display: 'flex',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'flex-end',
     gap: spacingVars['--spacing-1'],
+    flex: '1 1 0%',
+    minWidth: stylex.firstThatWorks('fit-content', '-webkit-fit-content'),
   },
   endContent: {
     display: 'flex',
+    flexWrap: 'wrap',
     alignItems: 'center',
+    justifyContent: 'flex-end',
     gap: spacingVars['--spacing-1'],
     flexShrink: 0,
     marginInlineStart: 'auto',
+    minWidth: stylex.firstThatWorks('fit-content', '-webkit-fit-content'),
+    maxWidth: '100%',
   },
   // Mobile bar mode — simplified top bar with heading + toggle + endContent
   mobileBar: {
@@ -151,8 +176,8 @@ export interface TopNavProps extends BaseProps<HTMLElement> {
   /**
    * Center content slot - typically tabs, search bar, or primary navigation.
    * Positioned at the horizontal center of the nav bar.
-   * When provided, the layout switches to a three-column CSS grid to ensure
-   * true centering regardless of start/end content widths.
+   * When provided, the layout switches to three regions that keep the center
+   * at the bar's middle while they fit one row; the bar wraps when they do not.
    */
   centerContent?: ReactNode;
   /**
@@ -175,7 +200,7 @@ export interface TopNavProps extends BaseProps<HTMLElement> {
  * `endContent`. `children` are accepted as an alias for `startContent`
  * so navigation items do not silently disappear when using the common
  * React children pattern. When `centerContent` is provided, the layout switches
- * to a three-column CSS grid to keep center content horizontally centered.
+ * to three regions that keep center content horizontally centered.
  *
  * @example
  * ```
@@ -286,7 +311,7 @@ export function TopNav({
         themeProps('top-nav'),
         stylex.props(
           styles.base,
-          hasCenterContent ? styles.baseGrid : styles.baseFlex,
+          hasCenterContent ? styles.baseThreeRegion : styles.baseFlex,
           xstyle,
         ),
         className,
