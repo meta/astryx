@@ -26,7 +26,13 @@ import {
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
 import {
+  drag,
+  frames,
+  freezePageWhen,
+  installPageFreeze,
+  installTimerGate,
   openStory,
+  thawPage,
   touchDriver,
   waitForRest,
   withStorybook,
@@ -297,6 +303,59 @@ test('with the keyboard up, a tap on the scrolled-in Save note clicks it', async
       ),
     )
     .toBe(1);
+});
+
+test('a person who scrolls the capped popover before its field reveal keeps the content where they put it', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName !== 'chromium',
+    "WebKit's injected touches do not scroll (README: engine limits)",
+  );
+  await installPageFreeze(page);
+  const {surface} = await openPopover(
+    page,
+    'core-popover--keyboard-avoidance',
+    'Add note',
+  );
+  await installTimerGate(page);
+  await page.getByRole('textbox', {name: 'Title'}).focus();
+  // The scene stops in the first frame that shows the cap, before the layer
+  // keeps the focused field in view, however late this process reacts.
+  const capped = freezePageWhen(
+    page,
+    () => {
+      const layer = document.querySelector('[popover]:has([role="dialog"])');
+      return (
+        layer != null &&
+        getComputedStyle(layer)
+          .getPropertyValue('--_layer-keyboard-max-block-size')
+          .trim()
+          .endsWith('px')
+      );
+    },
+    null,
+  );
+  await keyboard(page, COVER);
+  await capped;
+  // The person pans the content up as far as it goes, then lifts at rest.
+  const box = await surface.boundingBox();
+  if (box == null) {
+    throw new Error('no popover surface');
+  }
+  const x = Math.round(box.x + box.width / 2);
+  const y = Math.round(box.y + box.height * 0.8);
+  const driver = await touchDriver(page);
+  await driver.play(
+    drag({x, y}, {x, y: y - 200}, {durationMs: 300, hz: 60, restMs: 100}),
+  );
+  const placed = await surface.evaluate(element => element.scrollTop);
+  expect(placed).toBeGreaterThan(0);
+  // The held frames run, the field reveal's among them.
+  await thawPage(page);
+  await frames(page, 4);
+  expect(await surface.evaluate(element => element.scrollTop)).toBe(placed);
 });
 
 test('opened while the keyboard is already up, it opens clear of the keyboard', async ({

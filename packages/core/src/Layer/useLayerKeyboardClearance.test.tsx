@@ -7,8 +7,9 @@
  * @output Checks the software keyboard's part of the viewport caps. The cap
  *   sits 10 px above the keyboard. It is written once a rising keyboard has
  *   arrived, and taken off as a falling one starts down. A keyboard already
- *   up at the open caps the layer before paint. The field stays in view. A
- *   layer clear of the keyboard, a bottom-held layer and a layer in another
+ *   up at the open caps the layer before paint. The field stays in view,
+ *   unless a person touched the layer after the cap; a component's own
+ *   scroll keeps the reveal. A layer clear of the keyboard, a bottom-held layer and a layer in another
  *   positioning are left as they are. The positioning is read from the last
  *   commit. An entering layer is read without its entrance transform. The
  *   cap is held through a press until its click. The window listeners are
@@ -263,10 +264,20 @@ function Harness({
             }
           }}
         />
+        <div data-testid="list" style={{overflowY: 'auto'}} />
       </div>
     </div>
   );
 }
+
+/** Runs the frame callbacks a test held, and the ones they ask for. */
+const runFrames = (frames: FrameRequestCallback[]) => {
+  act(() => {
+    while (frames.length > 0) {
+      frames.shift()?.(0);
+    }
+  });
+};
 
 /** Runs the timers a keyboard change scheduled, inside act: they re-render. */
 const advance = (ms: number) => {
@@ -556,6 +567,53 @@ describe('useLayerKeyboardClearance', () => {
       '[data-testid="scroller"]',
     )!;
     // The box ends at 714 - 337 - 10 = 367; the field's bottom is at 444.
+    expect(scroller.scrollTop).toBe(444 - 367);
+  });
+
+  it.each([
+    ['a press', (element: Element) => fireEvent.pointerDown(element)],
+    ['a touch', (element: Element) => fireEvent.touchStart(element)],
+    ['a wheel turn', (element: Element) => fireEvent.wheel(element)],
+  ])(
+    'leaves the content where a person scrolled it after %s in the layer, before the field reveal runs',
+    (_, touch) => {
+      const frames: FrameRequestCallback[] = [];
+      vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => {
+        frames.push(callback);
+        return frames.length;
+      });
+      const {container} = render(<Harness focusRow />);
+      guide.emit({kind: 'show', from: 0, to: COVER});
+      advance(timing.keyboardNotificationMs + 1);
+      const scroller = container.querySelector<HTMLElement>(
+        '[data-testid="scroller"]',
+      )!;
+      // The person's pan, between the cap and the reveal's frames. The
+      // browser takes the pan from the press.
+      touch(scroller);
+      fireEvent.pointerCancel(scroller);
+      scroller.scrollTop = 30;
+      runFrames(frames);
+      expect(scroller.scrollTop).toBe(30);
+    },
+  );
+
+  it('still reveals the field after a component scrolls its own list in the layer', () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => {
+      frames.push(callback);
+      return frames.length;
+    });
+    const {container} = render(<Harness focusRow />);
+    guide.emit({kind: 'show', from: 0, to: COVER});
+    advance(timing.keyboardNotificationMs + 1);
+    const list = container.querySelector<HTMLElement>('[data-testid="list"]')!;
+    list.scrollTop = 50;
+    fireEvent.scroll(list);
+    runFrames(frames);
+    const scroller = container.querySelector<HTMLElement>(
+      '[data-testid="scroller"]',
+    )!;
     expect(scroller.scrollTop).toBe(444 - 367);
   });
 
