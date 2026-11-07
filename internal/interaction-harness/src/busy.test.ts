@@ -12,7 +12,10 @@
  *   fails a 40 ms freeze more than two steps from rest in either cast. The
  *   proof reads a held frame at its run's own pace, whatever the settle
  *   bound. A slow spring late in a WebKit block passes, and its holds and a
- *   freeze still fail.
+ *   freeze still fail. A sub-pixel read judges every frame of a slow slide
+ *   that a whole-pixel read shows as stalls, and still fails a freeze. Against
+ *   a control, a frame delivered early on such a slide misses on a
+ *   whole-pixel read and moves on a sub-pixel one.
  * @position Unit test of ./busy and ./frames' ordering; the browser proof
  *   with a real compositor animation and a rAF control is in
  *   harness.interaction.browser.spec.ts.
@@ -25,7 +28,11 @@ import * as skip from './busy.skip.fixture';
 import * as slowTail from './busy.slowtail.fixture';
 import * as webkitDecel from './busy.webkitdecel.fixture';
 import * as webkitTail from './busy.webkittail.fixture';
-import {inPresentationOrder, type TrackedFrame} from './frames';
+import {
+  inPresentationOrder,
+  SUBPIXEL_STEP_PX,
+  type TrackedFrame,
+} from './frames';
 
 const FRAME = 1000 / 60;
 const BLOCK = {from: 1000, to: 1700};
@@ -1155,5 +1162,140 @@ describe('busyWindowProof settledWithinSteps', () => {
         settledWithinSteps: 2,
       }),
     ).toThrow(/no tracked frame carries the cast's step/);
+  });
+});
+
+describe('busyWindowProof on a sub-pixel read', () => {
+  /**
+   * A marker sliding `pxPerFrame` from t = 800 to 1900, read as `trackMarker`
+   * reads it: under a pixel with `subpixel`, else in whole pixels.
+   */
+  const slide = (pxPerFrame: number, subpixel: boolean): TrackedFrame[] =>
+    moving().map((f, i) => {
+      const y = pxPerFrame * i;
+      return {
+        ...f,
+        box: {...f.box!, y: subpixel ? y : Math.round(y)},
+        step: subpixel
+          ? {x: SUBPIXEL_STEP_PX, y: SUBPIXEL_STEP_PX}
+          : {x: 1, y: 1},
+      } as TrackedFrame;
+    });
+
+  it('judges every frame of a slide under a pixel a frame, which a whole-pixel read shows as stalls', () => {
+    // 0.2 px a frame: each change is under the 0.25 px a whole-pixel read
+    // counts from.
+    const fine = busyWindowProof(slide(0.2, true), BLOCK, {axis: 'y'});
+    expect(fine.verdict.failures, fine.summary).toEqual([]);
+    expect(fine.stepPx).toBe(SUBPIXEL_STEP_PX);
+    expect(fine.movedFraction).toBe(1);
+    const whole = busyWindowProof(slide(0.2, false), BLOCK, {axis: 'y'});
+    expect(whole.verdict.pass).toBe(false);
+    expect(whole.verdict.failures.join('\n')).toMatch(/expected frames moved/);
+  });
+
+  it('still fails a slide that freezes for the block, read under a pixel', () => {
+    const frozen = slide(0.2, true).map(f =>
+      f.t >= BLOCK.from
+        ? ({...f, box: {...f.box!, y: 0.2 * at(BLOCK.from)}} as TrackedFrame)
+        : f,
+    );
+    const proof = busyWindowProof(frozen, BLOCK, {axis: 'y'});
+    expect(proof.verdict.pass).toBe(false);
+    expect(proof.moved).toBe(0);
+  });
+
+  it('counts a change from half the read step, so jitter under it is no motion', () => {
+    // 0.02 px of jitter around a position that holds: no frame moves.
+    const jitter = slide(0, true).map(
+      (f, i) =>
+        ({...f, box: {...f.box!, y: i % 2 === 0 ? 0 : 0.02}}) as TrackedFrame,
+    );
+    const proof = busyWindowProof(jitter, BLOCK, {axis: 'y'});
+    expect(proof.moved).toBe(0);
+    expect(proof.verdict.pass).toBe(false);
+  });
+});
+
+describe('busyWindowProof against a control, on a sub-pixel read', () => {
+  /**
+   * A slide of 0.4 px a frame, with one frame delivered 3 ms after frame 20.
+   * It is read in whole pixels or under a pixel, beside the control's frames.
+   */
+  const earlyFrame = (
+    subpixel: boolean,
+    freeze?: {from: number; to: number},
+  ) => {
+    const times: number[] = [];
+    for (let i = 0; 800 + i * FRAME <= 1900; i += 1) {
+      times.push(800 + i * FRAME);
+      if (i === 20) {
+        times.push(800 + i * FRAME + 3);
+      }
+    }
+    const position = (t: number) => {
+      const held =
+        freeze != null && t >= freeze.from
+          ? Math.min(t, freeze.to) - freeze.from
+          : 0;
+      return (0.4 * (t - 800 - held)) / FRAME;
+    };
+    const tracked = times.map(
+      t =>
+        ({
+          t,
+          box: {
+            x: 0,
+            y: subpixel ? position(t) : Math.round(position(t)),
+            width: 10,
+            height: 10,
+          },
+          step: subpixel
+            ? {x: SUBPIXEL_STEP_PX, y: SUBPIXEL_STEP_PX}
+            : {x: 1, y: 1},
+        }) as TrackedFrame,
+    );
+    const control = times.map(
+      t =>
+        ({
+          t,
+          box: {
+            x: Math.round((3 * (t - 800)) / FRAME),
+            y: 0,
+            width: 12,
+            height: 12,
+          },
+        }) as TrackedFrame,
+    );
+    return {tracked, control};
+  };
+
+  it('reads a frame delivered early as moved, which a whole-pixel read misses', () => {
+    const whole = earlyFrame(false);
+    const wholeProof = busyWindowProof(whole.tracked, BLOCK, {
+      axis: 'y',
+      control: whole.control,
+    });
+    expect(wholeProof.verdict.failures).toContain(
+      'moved on 37 of the 40 frames the control moved (93%)',
+    );
+    const fine = earlyFrame(true);
+    const fineProof = busyWindowProof(fine.tracked, BLOCK, {
+      axis: 'y',
+      control: fine.control,
+    });
+    expect(fineProof.verdict.failures, fineProof.summary).toEqual([]);
+  });
+
+  it('still fails a slide that holds for five frames inside the block', () => {
+    const held = earlyFrame(true, {from: 1300, to: 1300 + 5 * FRAME});
+    const proof = busyWindowProof(held.tracked, BLOCK, {
+      axis: 'y',
+      control: held.control,
+    });
+    expect(proof.verdict.pass).toBe(false);
+    expect(proof.verdict.failures.join('\n')).toMatch(
+      /moved on \d+ of the \d+ frames the control moved/,
+    );
   });
 });

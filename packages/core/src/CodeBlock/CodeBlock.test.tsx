@@ -264,6 +264,104 @@ describe('CodeBlock', () => {
     expect(screen.getByRole('button', {name: 'Copié'})).toBeInTheDocument();
   });
 
+  describe('when the clipboard write fails', () => {
+    function rejectWrites() {
+      const error = new DOMException(
+        'Write permission denied.',
+        'NotAllowedError',
+      );
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: {writeText: vi.fn().mockRejectedValue(error)},
+      });
+      return error;
+    }
+
+    it('shows a cross, names the control and announces the failure, without the error', async () => {
+      rejectWrites();
+      render(<CodeBlock code="const x = 1;" language="javascript" />);
+      fireEvent.click(screen.getByRole('button', {name: 'Copy code'}));
+      const failed = await screen.findByRole('button', {
+        name: 'Failed to copy value to clipboard.',
+      });
+      // The tooltip says the same as the name, so Button does not repeat it
+      // as a description.
+      expect(failed).not.toHaveAttribute('aria-describedby');
+      await waitFor(() => {
+        expect(politeRegion()).toHaveTextContent(
+          'Failed to copy value to clipboard.',
+        );
+      });
+      expect(politeRegion()).not.toHaveTextContent('permission');
+    });
+
+    it('calls onCopyError once with the rejection and never onCopy', async () => {
+      const error = rejectWrites();
+      const onCopy = vi.fn();
+      const onCopyError = vi.fn();
+      render(
+        <CodeBlock
+          code="const x = 1;"
+          onCopy={onCopy}
+          onCopyError={onCopyError}
+        />,
+      );
+      fireEvent.click(screen.getByRole('button', {name: 'Copy code'}));
+      await screen.findByRole('button', {
+        name: 'Failed to copy value to clipboard.',
+      });
+      expect(onCopyError).toHaveBeenCalledTimes(1);
+      expect(onCopyError).toHaveBeenCalledWith(error);
+      expect(onCopy).not.toHaveBeenCalled();
+    });
+
+    it('returns to Copy code after the same 2s a copy shows its check', async () => {
+      rejectWrites();
+      vi.useFakeTimers();
+      try {
+        render(<CodeBlock code="const x = 1;" />);
+        fireEvent.click(screen.getByRole('button', {name: 'Copy code'}));
+        await act(async () => {});
+        expect(
+          screen.getByRole('button', {
+            name: 'Failed to copy value to clipboard.',
+          }),
+        ).toBeInTheDocument();
+        act(() => {
+          vi.advanceTimersByTime(1999);
+        });
+        expect(
+          screen.getByRole('button', {
+            name: 'Failed to copy value to clipboard.',
+          }),
+        ).toBeInTheDocument();
+        act(() => {
+          vi.advanceTimersByTime(1);
+        });
+        expect(
+          screen.getByRole('button', {name: 'Copy code'}),
+        ).toBeInTheDocument();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('clears the failure when a later copy succeeds', async () => {
+      rejectWrites();
+      render(<CodeBlock code="const x = 1;" />);
+      fireEvent.click(screen.getByRole('button', {name: 'Copy code'}));
+      const failed = await screen.findByRole('button', {
+        name: 'Failed to copy value to clipboard.',
+      });
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: {writeText: vi.fn().mockResolvedValue(undefined)},
+      });
+      fireEvent.click(failed);
+      await screen.findByRole('button', {name: 'Copied'});
+    });
+  });
+
   it('keeps the copied indicator a full 2s after a rapid re-copy', async () => {
     vi.useFakeTimers();
     try {
@@ -796,6 +894,7 @@ describe('CodeBlock copy icon slot', () => {
     check: <span data-icon="check" />,
     clock: <span data-icon="clock" />,
     checkDouble: <span data-icon="checkDouble" />,
+    close: <span data-icon="close" />,
   };
 
   beforeEach(() => {
@@ -837,6 +936,20 @@ describe('CodeBlock copy icon slot', () => {
     expect(glyphOf('Copy code')).toBe('copy');
     await copy();
     expect(glyphOf('Copied')).toBe('check');
+  });
+
+  it('draws a cross while a failed write shows, when the theme maps nothing', async () => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {writeText: vi.fn().mockRejectedValue(new Error('denied'))},
+    });
+    renderInTheme(defineTheme({name: 'copy-slot-failure', icons}));
+
+    fireEvent.click(screen.getByRole('button', {name: 'Copy code'}));
+    await screen.findByRole('button', {
+      name: 'Failed to copy value to clipboard.',
+    });
+    expect(glyphOf('Failed to copy value to clipboard.')).toBe('close');
   });
 
   it('passes `copied` to a slot function and draws the name it returns', async () => {

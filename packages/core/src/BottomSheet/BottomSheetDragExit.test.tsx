@@ -176,19 +176,41 @@ function getHandle(label = 'Sheet'): HTMLElement {
   return handle;
 }
 
+// Pointer events on one clock, 16 ms apart, so a drag's release velocity
+// follows its events' own timestamps.
+let pointerTime = 0;
+
+function firePointer(
+  target: Element,
+  type: 'pointerdown' | 'pointermove' | 'pointerup',
+  init: {pointerId: number; clientY: number; pointerType?: string},
+) {
+  pointerTime += 16;
+  const event = new Event(type, {bubbles: true, cancelable: true});
+  Object.defineProperties(event, {
+    button: {value: 0},
+    clientY: {value: init.clientY},
+    isPrimary: {value: true},
+    pointerId: {value: init.pointerId},
+    timeStamp: {value: pointerTime},
+  });
+  if (init.pointerType != null) {
+    Object.defineProperty(event, 'pointerType', {value: init.pointerType});
+  }
+  fireEvent(target, event);
+}
+
 /** A fast downward touch drag on the handle: a flick, which closes the sheet. */
 function flickDown(label = 'Sheet') {
   const handle = getHandle(label);
-  fireEvent.pointerDown(handle, {
+  firePointer(handle, 'pointerdown', {
     pointerId: 1,
     pointerType: 'touch',
     clientY: 0,
-    button: 0,
-    isPrimary: true,
   });
-  fireEvent.pointerMove(handle, {pointerId: 1, clientY: 40});
-  fireEvent.pointerMove(handle, {pointerId: 1, clientY: 120});
-  fireEvent.pointerUp(handle, {pointerId: 1, clientY: 120});
+  firePointer(handle, 'pointermove', {pointerId: 1, clientY: 40});
+  firePointer(handle, 'pointermove', {pointerId: 1, clientY: 120});
+  firePointer(handle, 'pointerup', {pointerId: 1, clientY: 120});
 }
 
 it('plays the close spring when a drag closes the sheet', () => {
@@ -336,16 +358,14 @@ it("leaves the scrim's fade alone when a mouse drag closes the sheet", () => {
   render(<Host />);
   layOutSheet();
   const handle = getHandle();
-  fireEvent.pointerDown(handle, {
+  firePointer(handle, 'pointerdown', {
     pointerId: 2,
     pointerType: 'mouse',
     clientY: 0,
-    button: 0,
-    isPrimary: true,
   });
-  fireEvent.pointerMove(handle, {pointerId: 2, clientY: 200});
-  fireEvent.pointerMove(handle, {pointerId: 2, clientY: 390});
-  fireEvent.pointerUp(handle, {pointerId: 2, clientY: 390});
+  firePointer(handle, 'pointermove', {pointerId: 2, clientY: 200});
+  firePointer(handle, 'pointermove', {pointerId: 2, clientY: 390});
+  firePointer(handle, 'pointerup', {pointerId: 2, clientY: 390});
   expect(exits).toHaveLength(0);
   expect(scrimFade()).toBe('');
 });

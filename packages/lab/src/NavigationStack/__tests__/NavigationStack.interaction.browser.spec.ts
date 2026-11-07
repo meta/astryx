@@ -21,7 +21,9 @@ import {
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
 import {
+  advanceFrozenPage,
   animationStoryboard,
+  armHold,
   blockMainThread,
   busyWindowProof,
   castStoryboard,
@@ -29,6 +31,7 @@ import {
   countBetween,
   drag,
   flick,
+  freezePageOn,
   freezePageWhen,
   holdAnimations,
   installPageFreeze,
@@ -36,6 +39,7 @@ import {
   markElement,
   openStory,
   releaseAnimations,
+  requireFrames,
   sampleCurve,
   sampleRects,
   startBusyControl,
@@ -45,8 +49,8 @@ import {
   touchStoryboard,
   traceRendering,
   trackMarker,
-  waitForAnimation,
   waitForRest,
+  watchAnimations,
   withStorybook,
   writeEvidence,
   type TouchDriver,
@@ -178,10 +182,10 @@ interface BarFrame {
  * stack and the back button's effective opacities. The returned function
  * stops and returns them. A layer's x is its computed `translate`: the cards
  * and bars sit at the stack's leading edge, checked when the trace starts. So
- * a frame reads no layout. Under load, in a frame that comes a few
- * milliseconds late, WebKit evaluates two layers that animate on one clock
- * about a millisecond apart. This holds for boxes and translates alike.
- * `animating` says which frames an animation drives.
+ * a frame reads no layout. Under load, WebKit can evaluate two layers that
+ * share one clock at two times in one frame, as far apart as their reads.
+ * This holds for boxes and translates alike. So each card is read right
+ * before its bar. `animating` says which frames an animation drives.
  */
 async function traceBars(page: Page): Promise<() => Promise<BarFrame[]>> {
   await page.evaluate(() => {
@@ -204,15 +208,32 @@ async function traceBars(page: Page): Promise<() => Promise<BarFrame[]>> {
       const value = getComputedStyle(element).translate;
       return value === 'none' ? 0 : parseFloat(value);
     };
-    const read = (selector: string, attribute: string) => {
-      const out: Record<string, number> = {};
-      for (const element of document.querySelectorAll<HTMLElement>(selector)) {
-        const key = element.getAttribute(attribute);
-        if (key != null) {
-          out[key] = translateX(element);
+    const readLayers = () => {
+      const cards: Record<string, number> = {};
+      const bars: Record<string, number> = {};
+      for (const card of document.querySelectorAll(
+        '[data-navigation-screen]',
+      )) {
+        const key = card.getAttribute('data-navigation-screen');
+        if (key == null) {
+          continue;
+        }
+        cards[key] = translateX(card);
+        const keyBars = document.querySelectorAll(
+          `[data-navigation-bar="${CSS.escape(key)}"]`,
+        );
+        const bar = keyBars.item(keyBars.length - 1);
+        if (bar != null) {
+          bars[key] = translateX(bar);
         }
       }
-      return out;
+      for (const bar of document.querySelectorAll('[data-navigation-bar]')) {
+        const key = bar.getAttribute('data-navigation-bar');
+        if (key != null && !(key in cards)) {
+          bars[key] = translateX(bar);
+        }
+      }
+      return {cards, bars};
     };
     // A layer at rest sits at the stack's edge: its box is its translate.
     const left = stack?.getBoundingClientRect().left ?? 0;
@@ -234,8 +255,7 @@ async function traceBars(page: Page): Promise<() => Promise<BarFrame[]>> {
       const chevron = button?.firstElementChild ?? null;
       w.__bars.push({
         t: performance.now() - t0,
-        cards: read('[data-navigation-screen]', 'data-navigation-screen'),
-        bars: read('[data-navigation-bar]', 'data-navigation-bar'),
+        ...readLayers(),
         back:
           button == null || chevron == null
             ? null
@@ -434,12 +454,21 @@ const rowCenter = async (page: Page, name: string) => {
 test('a push follows UIKit’s push spring, the card underneath at 0.3 of its speed', async ({
   page,
 }, testInfo) => {
-  const {driver, width} = await openStack(page, 'settings');
-  await driver.tap(await rowCenter(page, 'General'));
+  const {driver, stack, width} = await openStack(page, 'settings');
   const top = card(page, 'screen-General');
   const under = card(page, 'root');
-  await waitForAnimation(top);
-  await holdAnimations(page);
+  // The push moves both cards at once: with a count of 2, the row's own
+  // release fade cannot trigger the hold alone.
+  const hold = await armHold(page, stack, {
+    judges: [
+      {target: top, property: 'translate'},
+      {target: under, property: 'translate'},
+    ],
+    count: 2,
+    newOnly: true,
+  });
+  await driver.tap(await rowCenter(page, 'General'));
+  await hold.held();
 
   const times = Array.from({length: 31}, (_, i) => i * 16.667);
   const samples: {t: number; top: number; under: number; analytic: number}[] =
@@ -506,11 +535,13 @@ test('a push’s bar: the new bar slides in with its screen, the covered one rid
   await page.waitForTimeout(900);
   const frames = await stop();
   const start = firstMove(frames, 'screen-General');
-  expect(start).toBeDefined();
-  const during = frames.filter(
-    f => f.t >= (start?.t ?? 0) && f.cards['screen-General'] > 0.5,
-  );
-  expect(during.length).toBeGreaterThan(5);
+  expect(start, 'the push started').toBeDefined();
+  const during = requireFrames(frames, {
+    min: 6,
+    during: 'the pushed screen slides in',
+    where: f =>
+      start != null && f.t >= start.t && f.cards['screen-General'] > 0.5,
+  });
   for (const f of during) {
     // UIKit's bar copy is part of its screen: it moves with the card (one
     // clock and spring). It stays within 1 % of the width, as engines sample
@@ -776,7 +807,9 @@ test('brought back past its start, the screen follows with resistance, then spri
   frames.push({t: last.t + steps * 16.7 + 4, fingers: []});
   await driver.play(frames);
   // The return, held where it runs and read every 2 ms from its start.
-  const heldAnimations = await holdAnimations(page, top);
+  const heldAnimations = await holdAnimations(page, top, {
+    judges: {target: top, property: 'translate'},
+  });
   const returnIndex = await top.evaluate(element =>
     (
       (window as unknown as {__harnessHeld?: Animation[]}).__harnessHeld ?? []
@@ -956,10 +989,11 @@ test('a push keeps advancing every frame while the main thread is blocked', asyn
   // The compositor's own pace on this machine, from the same screencast.
   await startBusyControl(page);
   const cast = await startScreencast(page);
+  const watch = await watchAnimations(top);
   await driver.tap(await rowCenter(page, 'General'));
   // Below the bar, which overlays the screens.
   await markElement(top, {inset: 60});
-  const [push] = await waitForAnimation(top, {minProgressMs: 16});
+  const [push] = await watch.started({minProgressMs: 16});
   // The page blocks itself from inside the push, once it has run a frame. A
   // block from the test's own round trip can start before the marker paints.
   const block = await blockMainThread(page, 600, {
@@ -1035,8 +1069,9 @@ test('with a mouse, the incoming bar covers the old title while the main thread 
     });
     const cast = await startScreencast(page);
     const row = await rowCenter(page, 'General');
+    const watch = await watchAnimations(card(page, 'screen-General'));
     await page.mouse.click(row.x, row.y);
-    await waitForAnimation(card(page, 'screen-General'), {minProgressMs: 16});
+    await watch.started({minProgressMs: 16});
     const block = await blockMainThread(page, 900);
     await page.waitForTimeout(150);
     const frames = await cast.stop();
@@ -1320,13 +1355,14 @@ test.describe('the bars ride with their screens, as UIKit’s', () => {
     await page.locator('[data-navigation-back]').click();
     await page.waitForTimeout(900);
     const frames = await stop();
-    const moving = frames.filter(
-      f =>
+    const moving = requireFrames(frames, {
+      min: 6,
+      during: 'the popped screen and the revealed one move',
+      where: f =>
         f.cards['screen-General'] != null &&
         f.cards['screen-General'] > 0.5 &&
         f.cards.root < -0.5,
-    );
-    expect(moving.length).toBeGreaterThan(5);
+    });
     for (const f of moving) {
       expect(
         Math.abs(f.bars['screen-General'] - f.cards['screen-General']),
@@ -1886,8 +1922,9 @@ test('a push does no Layout or Paint per frame', async ({
         requestAnimationFrame(waitForStart);
       });
     });
+    const watch = await watchAnimations(top);
     await row.evaluate(element => (element as HTMLElement).click());
-    [push] = await waitForAnimation(top);
+    [push] = await watch.started();
     await waitForRest(top);
   });
   const motion = await page.evaluate(
@@ -1978,18 +2015,25 @@ test.describe('with Reduce Motion', () => {
 
   test('a push cross-fades in place instead of sliding', async ({page}) => {
     await page.emulateMedia({reducedMotion: 'reduce'});
+    await installPageFreeze(page);
     const {driver} = await openStack(page, 'settings');
-    await driver.tap(await rowCenter(page, 'General'));
+    await installTimerGate(page);
     const top = card(page, 'screen-General');
-    await waitForAnimation(top);
+    // Frozen in the tap's own task, the fade starts held at its start. The
+    // scene then moves halfway into the 200 ms fade on its own clock.
+    await freezePageOn(page, 'touchend');
+    await driver.tap(await rowCenter(page, 'General'));
+    await advanceFrozenPage(page, 100);
     const midway = await top.evaluate(element => ({
       x: getComputedStyle(element).translate,
       opacity: Number(getComputedStyle(element).opacity),
     }));
+    await thawPage(page);
     await waitForRest(top);
-    // No travel: the incoming screen is already where it lands, fading in.
+    // No travel: the incoming screen is already where it lands, halfway
+    // faded in.
     expect(midway.x === 'none' || parseFloat(midway.x) === 0).toBe(true);
-    expect(midway.opacity).toBeLessThan(1);
+    expect(midway.opacity).toBeCloseTo(0.5, 1);
     expect(await translateX(top)).toBe(0);
   });
 });
@@ -2037,9 +2081,10 @@ test('a large title scrolls under the bar, which then shows the title; scrolling
 
 test('a pushed large title rides in with its screen', async ({page}) => {
   const {driver} = await openStack(page, 'large-title');
-  await driver.tap(await rowCenter(page, 'General'));
   const top = card(page, 'screen-General');
-  await waitForAnimation(top);
+  const watch = await watchAnimations(top);
+  await driver.tap(await rowCenter(page, 'General'));
+  await watch.started();
   await waitForRest(top);
   // The pushed screen here is inline; the root's large title stays with the
   // root card, under it and to the left.
@@ -2109,9 +2154,10 @@ test('a back swipe carries the large titles: each rides its own screen', async (
   page,
 }) => {
   const {driver, width, left} = await openStack(page, 'large-title');
-  await driver.tap(await rowCenter(page, 'General'));
   const top = card(page, 'screen-General');
-  await waitForAnimation(top);
+  const watch = await watchAnimations(top);
+  await driver.tap(await rowCenter(page, 'General'));
+  await watch.started();
   await waitForRest(top);
   await expect(
     page.getByRole('heading', {level: 1, name: 'Settings'}),
@@ -2270,10 +2316,11 @@ test('the bar title’s handover keeps running while the main thread is blocked'
   expect(box).not.toBeNull();
   await startBusyControl(page);
   const cast = await startScreencast(page);
+  const watch = await watchAnimations(barText);
   await card(page, 'root').evaluate(element =>
     (element.firstElementChild as HTMLElement).scrollTo({top: 300}),
   );
-  const [fade] = await waitForAnimation(barText, {minProgressMs: 16});
+  const [fade] = await watch.started({minProgressMs: 16});
   const block = await blockMainThread(page, 600, {
     during: barText,
     minProgressMs: 16,
@@ -2316,12 +2363,23 @@ test('the bar title’s handover keeps running while the main thread is blocked'
 });
 
 test('storyboard: a push', {tag: '@storyboard'}, async ({page}, testInfo) => {
-  const {driver, width} = await openStack(page, 'settings');
-  await driver.tap(await rowCenter(page, 'General'));
+  const {driver, stack, width} = await openStack(page, 'settings');
   const top = card(page, 'screen-General');
-  await waitForAnimation(top);
+  // The push moves both cards at once: with a count of 2, the row's own
+  // release fade cannot trigger the hold alone.
+  const hold = await armHold(page, stack, {
+    judges: [
+      {target: top, property: 'translate'},
+      {target: card(page, 'root'), property: 'translate'},
+    ],
+    count: 2,
+    newOnly: true,
+  });
+  await driver.tap(await rowCenter(page, 'General'));
+  const held = await hold.held();
   const viewport = page.viewportSize() ?? {width: 402, height: 714};
   const {storyboard} = await animationStoryboard(page, {
+    held,
     name: 'navigationstack-push',
     clip: {x: 0, y: 0, width: viewport.width, height: viewport.height},
     // The spring is at rest by ~0.45 s; the animator holds end states after.
