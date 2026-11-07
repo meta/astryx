@@ -292,6 +292,8 @@ async function observe(page: Page) {
 }
 
 test.beforeAll(async () => {
+  // Receipts from an earlier run must not count toward this build's manifest.
+  fs.rmSync(OUTPUT, {recursive: true, force: true});
   fs.mkdirSync(OUTPUT, {recursive: true});
   checkoutSha = execFileSync('git', ['rev-parse', 'HEAD'], {
     encoding: 'utf8',
@@ -380,14 +382,14 @@ for (const item of cases) {
 
     observed.layouts.forEach((layout, index) => {
       const where = `layout ${index}`;
-      // AR1: Layout adds no role or name.
+      // Layout adds no role or name.
       check(
         layout.role == null &&
           layout.ariaLabel == null &&
           layout.ariaLabelledby == null,
         `${where} role ${layout.role} label ${layout.ariaLabel} labelledby ${layout.ariaLabelledby}`,
       );
-      // FR1: one `layout` target that reflects height; Layout paints nothing.
+      // One `layout` target that reflects height; Layout paints nothing.
       check(
         JSON.stringify(layout.targets) === '["astryx-layout"]',
         `${where} targets ${layout.targets.join(' ')}`,
@@ -404,7 +406,7 @@ for (const item of cases) {
         layout.direction === item.direction,
         `${where} direction ${layout.direction}`,
       );
-      // FR2: the root escapes the published container padding on all four
+      // The root escapes the published container padding on all four
       // edges, and the inner stack publishes zero.
       for (const [edge, value] of Object.entries(layout.parentPublished)) {
         const margin =
@@ -419,7 +421,7 @@ for (const item of cases) {
           Object.values(layout.innerPublished).every(value => value === 0),
         `${where} inner stack publishes ${JSON.stringify(layout.innerPublished)}`,
       );
-      // AR2: header, then the middle row, then footer, in DOM and on screen;
+      // Header, then the middle row, then footer, in DOM and on screen;
       // the start panel sits at the inline start of the content.
       const rank = {header: 0, panel: 1, content: 1, footer: 2} as const;
       const kinds = layout.regions.map(region => region.kind);
@@ -471,7 +473,7 @@ for (const item of cases) {
       });
     });
 
-    // FR1, FR3, FR6: a slot left `false` by `isOpen && <Region />` is
+    // A slot left `false` by `isOpen && <Region />` is
     // absent. The closed column matches the column that omits the slots,
     // and a closed end panel gives the no-panel content-width composition.
     if (item.story === 'closed-regions') {

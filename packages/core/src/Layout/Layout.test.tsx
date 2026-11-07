@@ -147,8 +147,8 @@ describe('Layout', () => {
       render(
         <Layout
           header={false}
-          footer={false}
-          start={false}
+          footer={true}
+          start=""
           end={false}
           content={<SlotsProbe />}
         />,
@@ -262,7 +262,11 @@ describe('Layout', () => {
         <Layout
           defaultHasDividers
           content={
-            <Dialog isOpen isInline onOpenChange={() => {}}>
+            <Dialog
+              isOpen
+              isInline
+              aria-label="Settings"
+              onOpenChange={() => {}}>
               <Layout
                 header={<LayoutHeader>In dialog</LayoutHeader>}
                 content={<div>c</div>}

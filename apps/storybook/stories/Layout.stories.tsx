@@ -792,16 +792,16 @@ export const ClosedRegions = {
               padding={6}
               content={
                 <LayoutContent>
-                  <p {...stylex.props(styles.bodyText)}>
-                    Content with no header, panel, or footer.
-                  </p>
+                  <p {...stylex.props(styles.bodyText)}>Content area.</p>
                 </LayoutContent>
               }
             />
           </Card>
         </VStack>
         <VStack gap={2}>
-          <p {...stylex.props(styles.subheading)}>Regions closed, padding=6</p>
+          <p {...stylex.props(styles.subheading)}>
+            {isOpen ? 'Regions open' : 'Regions closed'}, padding=6
+          </p>
           <Card width={300} height={220} data-closed-region="closed">
             <Layout
               padding={6}
@@ -821,9 +821,7 @@ export const ClosedRegions = {
               }
               content={
                 <LayoutContent>
-                  <p {...stylex.props(styles.bodyText)}>
-                    Content with no header, panel, or footer.
-                  </p>
+                  <p {...stylex.props(styles.bodyText)}>Content area.</p>
                 </LayoutContent>
               }
               footer={
