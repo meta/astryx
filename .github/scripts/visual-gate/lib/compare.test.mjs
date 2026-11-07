@@ -383,36 +383,35 @@ describe('buildVerdict', () => {
     expect(verdict.status).toBe('failed');
   });
 
-  it('dates the baseline by its oldest shot and its commit by its newest', () => {
-    const verdict = buildVerdict({
-      ...base,
-      baselineManifest: {
-        capturedAt: '2026-09-26T00:53:28.283Z',
-        context: {sha: 'newest'},
-        platform: 'linux-arm64',
-        shots: {
-          a: {capturedAt: '2026-09-26T00:53:28.283Z'},
-          b: {capturedAt: '2026-11-06T16:00:00.000Z'},
-          c: {},
-        },
-      },
-      comparison: {changes: [], added: [], removed: [], unchanged: ['a']},
-      failures: [],
-    });
-    expect(verdict.baseline).toEqual({
-      capturedAt: '2026-09-26T00:53:28.283Z',
-      latestCapturedAt: '2026-11-06T16:00:00.000Z',
-      sha: 'newest',
-      platform: 'linux-arm64',
-    });
-    // A baseline with no dated shot has no latest date.
-    expect(
+  it('dates the commit it names by that capture, not by the newest shot', () => {
+    const shots = {
+      a: {capturedAt: '2026-09-26T00:53:28.283Z', runId: '100'},
+      // A newer capture accepted before the older one that `sha` names.
+      b: {capturedAt: '2026-11-06T16:00:00.000Z', runId: '300'},
+      c: {capturedAt: '2026-10-20T00:00:00.000Z', runId: '200'},
+      d: {},
+    };
+    const baselineOf = context =>
       buildVerdict({
         ...base,
+        baselineManifest: {
+          capturedAt: '2026-09-26T00:53:28.283Z',
+          context,
+          platform: 'linux-arm64',
+          shots,
+        },
         comparison: {changes: [], added: [], removed: [], unchanged: ['a']},
         failures: [],
-      }).baseline.latestCapturedAt,
-    ).toBeNull();
+      }).baseline;
+    expect(baselineOf({sha: 'later', runId: '200'})).toEqual({
+      capturedAt: '2026-09-26T00:53:28.283Z',
+      shaCapturedAt: '2026-10-20T00:00:00.000Z',
+      sha: 'later',
+      platform: 'linux-arm64',
+    });
+    // No shot came from the named run, or the manifest names no run.
+    expect(baselineOf({sha: 'pruned', runId: '400'}).shaCapturedAt).toBeNull();
+    expect(baselineOf({sha: 'old'}).shaCapturedAt).toBeNull();
   });
 
   it('requires acceptance when stable shots are added or removed', () => {
