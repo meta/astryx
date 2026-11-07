@@ -101,7 +101,7 @@ import {edgeAutoscroll, type EdgeAutoscroll} from '../utils/edgeAutoscroll';
 import {isScrollCapableOverflow} from '../hooks/scrollGeometry';
 import {useTouchPresentation} from '../utils/touchPresentation';
 import {useTouchHitArea} from '../utils/touchHitArea';
-import {touchHitAreaStyles} from '../utils/touchHitArea.stylex';
+import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {devWarn} from '../utils/devWarning';
 import {isLeaving, markLeaving} from '../privateAttributes/leaving.stylex';
 import {
