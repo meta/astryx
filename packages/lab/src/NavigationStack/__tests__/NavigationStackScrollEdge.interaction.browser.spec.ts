@@ -318,6 +318,7 @@ test(
       name: 'navigation-stack-scroll-edge-appear',
       clip,
       scope: layer,
+      judges: {target: layer, property: 'opacity'},
       measure: async () => ({opacity: await presentedOpacity(layer)}),
       columns: 6,
       cellScale: 0.5,

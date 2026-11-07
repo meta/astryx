@@ -707,7 +707,12 @@ function exportOriginsOf(file, read) {
     for (const node of declarations) {
       for (const name of declaredNames(node.declaration, types)) {
         named.add(name);
-        if (!origins.has(name)) origins.set(name, {file, name});
+        if (!origins.has(name)) {
+          origins.set(
+            name,
+            declaredOrigin(ast, file, node.declaration, name, types),
+          );
+        }
       }
     }
     for (const [exportName, entries] of specifiers) {
@@ -1211,7 +1216,15 @@ function exportOrigin(file, exportName, seen, read, types = false) {
   const {declarations, specifiers} = namedExportIndex(ast.program, types, read);
   for (const node of declarations) {
     if (declarationExports(node.declaration, exportName, types)) {
-      return {file, name: exportName};
+      return declaredOrigin(
+        ast,
+        file,
+        node.declaration,
+        exportName,
+        types,
+        seen,
+        read,
+      );
     }
   }
   for (const {node, specifier} of specifiers.get(exportName) ?? []) {
@@ -1688,6 +1701,48 @@ export function elementPropOrigins(file, {sources, name, prop, unwrap}) {
     origins.push(binding ? aliasedOrigin(binding, new Set(), unwrap) : null);
   }
   return origins;
+}
+
+/**
+ * Where a declared export is defined. An `export const X = Y` whose value is
+ * another binding is that binding, so an alias of an imported value has the
+ * imported value's origin.
+ * @param {any} ast
+ * @param {string} file
+ * @param {any} declaration
+ * @param {string} name
+ * @param {boolean} types
+ * @param {Set<string>} [seen]
+ * @param {(node: any, type: string) => readonly any[]} [read]
+ * @returns {{file: string, name: string}}
+ */
+function declaredOrigin(
+  ast,
+  file,
+  declaration,
+  name,
+  types,
+  seen = new Set(),
+  read = nodesOfType,
+) {
+  if (
+    declaration?.type === 'VariableDeclaration' &&
+    declaration.kind === 'const'
+  ) {
+    for (const declarator of declaration.declarations) {
+      if (
+        declarator.id?.type === 'Identifier' &&
+        declarator.id.name === name &&
+        declarator.init?.type === 'Identifier'
+      ) {
+        const init = declarator.init.name;
+        return (
+          bindingOrigin(ast, file, init, seen, types, read) ?? {file, name}
+        );
+      }
+    }
+  }
+  return {file, name};
 }
 
 /**

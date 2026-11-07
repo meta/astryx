@@ -84,6 +84,17 @@ const valueNow = async (slider: Locator) =>
   Number(await slider.getAttribute('aria-valuenow'));
 
 /** Logs every page change with its time (performance.now()) from now on. */
+/**
+ * The time per page across a jog's held window, first step to last. A busy
+ * page can show one step late and the next at once. That skews a median of
+ * the gaps, not the rate.
+ */
+function msPerPage(window: ReadonlyArray<{t: number; page: number}>) {
+  const first = window[0];
+  const last = window[window.length - 1];
+  return (last.t - first.t) / Math.abs(last.page - first.page);
+}
+
 async function logPages(slider: Locator) {
   await slider.evaluate(el => {
     const log: Array<{t: number; page: number}> = [];
@@ -264,12 +275,9 @@ test('past the edge of a windowed control the page keeps stepping, faster the fu
   );
   const log = await pages();
   const held = log.filter(e => e.t >= log[0].t + 400);
-  const intervals = held.slice(1).map((e, i) => e.t - held[i].t);
-  const median = intervals.sort((a, b) => a - b)[
-    Math.floor(intervals.length / 2)
-  ];
-  expect(median).toBeGreaterThan(110);
-  expect(median).toBeLessThan(190);
+  const nearStep = msPerPage(held);
+  expect(nearStep).toBeGreaterThan(110);
+  expect(nearStep).toBeLessThan(190);
   expect(log[log.length - 1].page).toBeGreaterThan(30);
   // Far past (100 px): 15 pages a second.
   const far = await logPages(slider);
@@ -282,12 +290,9 @@ test('past the edge of a windowed control the page keeps stepping, faster the fu
     ),
   );
   const fast = (await far()).filter((e, i, all) => e.t >= all[0].t + 300);
-  const fastIntervals = fast.slice(1).map((e, i) => e.t - fast[i].t);
-  const fastMedian = fastIntervals.sort((a, b) => a - b)[
-    Math.floor(fastIntervals.length / 2)
-  ];
-  expect(fastMedian).toBeGreaterThan(50);
-  expect(fastMedian).toBeLessThan(85);
+  const farStep = msPerPage(fast);
+  expect(farStep).toBeGreaterThan(50);
+  expect(farStep).toBeLessThan(85);
 });
 
 test('a held finger shows the platter, the pressed overlay, and dims the other indicators after 155 ms; the touched indicator does not transform', async ({
