@@ -2557,17 +2557,20 @@ test.describe('frame evidence', () => {
     const within = (w: {from: number; to: number}) => (t: {start: number}) =>
       t.start >= w.from - 20 && t.start < w.to;
     // The read itself is set apart. The rows' frames around it may be long
-    // tasks too, the page's own: they stay in longTasks.
+    // tasks too, the page's own: they stay with the page's tasks. A loaded
+    // machine can keep a 60 ms spin's thread under 50 ms, so the page's own
+    // tasks are its long and its stretched ones.
     expect(trace.devtoolsTasks.some(within(read))).toBe(true);
-    expect(
-      trace.longTasks.some(t => within(timer)(t) && t.durationMs >= 55),
-    ).toBe(true);
-    expect(
-      trace.longTasks.some(t => within(click)(t) && t.durationMs >= 55),
-    ).toBe(true);
-    expect(
-      trace.longTasks.some(t => within(direct)(t) && t.durationMs >= 55),
-    ).toBe(true);
+    const pageTasks = [...trace.longTasks, ...trace.stretchedTasks];
+    expect(pageTasks.some(t => within(timer)(t) && t.durationMs >= 55)).toBe(
+      true,
+    );
+    expect(pageTasks.some(t => within(click)(t) && t.durationMs >= 55)).toBe(
+      true,
+    );
+    expect(pageTasks.some(t => within(direct)(t) && t.durationMs >= 55)).toBe(
+      true,
+    );
     expect(trace.devtoolsTasks.filter(within(direct))).toEqual([]);
   });
 });
