@@ -238,12 +238,48 @@ jobs:
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
         run: pnpm check:repo
 
+      # The probe theme is generated from the component docs, so the visual
+      # gate probes every documented theming target and state. A target or
+      # state added without regenerating is one the gate never sees.
+      - name: Check that the probe theme is current
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        run: |
+          if ! pnpm -s visual:probe-theme:check; then
+            echo '::error title=Probe theme out of date::The probe theme or its config is out of date. Run pnpm visual:probe-theme and commit the files it changes in packages/themes/probe/src/.'
+            exit 1
+          fi
+
       # The CLI README's generated tables (commands, error codes, response
       # types) ship to consumers. A merge from main can silently drop a
       # generated row, so the merged result is checked against its sources.
       - name: Check generated CLI README
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
         run: node packages/cli/scripts/generate-cli-readme.mjs --check
+
+      # The comment-provenance rule allows only the sites its baseline lists.
+      # A change that removes a cited site must also drop its entry, so the
+      # baseline never allows a site that no longer exists. A pull request
+      # runs the check when it changes a file the baseline lists, the
+      # baseline, the rule or its tooling, the ESLint config, or an ignore
+      # file; every push to main runs it. The check parses
+      # Core with the type-aware config, so it gets the same heap as ESLint.
+      - name: Check the comment-provenance baseline
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          MERGE_SHA: ${{ github.sha }}
+          NODE_OPTIONS: '--max-old-space-size=4096'
+        run: |
+          set -eu
+          # Skip only on the helper's explicit answer: an empty list, an
+          # error or a crash runs the check. Both paths of a rename count.
+          if [ "$EVENT_NAME" = pull_request ] &&
+            git diff --name-only --no-renames "$MERGE_SHA^1" "$MERGE_SHA" > "$RUNNER_TEMP/changed-files" &&
+            node .github/scripts/provenance-baseline-scope.mjs "$RUNNER_TEMP/changed-files"; then
+            echo 'This change touches no file the comment-provenance baseline lists, the baseline, the rule, the ESLint config or an ignore file.'
+            exit 0
+          fi
+          node internal/eslint-plugin-astryx/no-comment-provenance.baseline.mjs --check
 
       # The pre-commit hook formats staged files with Prettier, but a commit
       # made without it can land unformatted source. A later local merge of

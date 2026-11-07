@@ -3,15 +3,15 @@
 /**
  * @file zoomStage.ts
  * @input The stage's size, the photo's fitted box and pixel size, a
- *   transform (offset from the fitted box, and scale), and finger positions
+ *   transform (offset from the fitted box, and scale), and pointer positions
  * @output The zoom stage's pure geometry: zoom limits, resting places, a
  *   drag's rubber band and a pinch's overshoot. Also the transform that keeps
- *   a point in place
- * @position Pure math for Lightbox's touch zoom. No DOM and no React.
+ *   a point in place, and the keyboard's zoom
+ * @position Pure math under useZoomCore and useZoomStage; no DOM, no React.
  *
- * The model is a zooming UIScrollView in a photo viewer. Its constants come
- * from motion/uikit/zoomMedia.ts and motion/uikit/scroll.ts.
- * SYNC: When modified, update zoomStage.test.ts.
+ * The model is a zooming UIScrollView; its constants come from motion/uikit.
+ * SYNC: When modified, update zoomStage.test.ts, useZoomCore.ts and
+ * useZoomStage.ts.
  */
 
 import {rubberBandClamp, rubberBandUnclamp} from '../motion/rubberBand';
@@ -57,7 +57,10 @@ export const IDENTITY: ZoomTransform = {x: 0, y: 0, scale: 1};
 /** Within this of the fitted size the photo counts as not zoomed. */
 export const ZOOMED_EPSILON = 0.001;
 
-/** Lightbox's zoom step: a double tap zooms at least this many times. */
+/**
+ * Lightbox's zoom step. A double tap zooms at least this many times, and a
+ * double-click and the keyboard zoom this many times.
+ */
 export const ZOOM_STEP = 2;
 
 /**
@@ -157,8 +160,8 @@ export function restingTransform(
 }
 
 /**
- * The scale a pinch shows for its own scale `scale`: 1:1 inside the
- * limits, giving way past them (`zoomMedia.overshoot.limitFactor`).
+ * The scale a pinch shows for its own scale `scale`. It is 1:1 inside the
+ * limits and gives way past them (`zoomMedia.overshoot.limitFactor`).
  */
 export function overshootScale(geometry: ZoomGeometry, scale: number): number {
   const f = zoomMedia.overshoot.limitFactor;
@@ -216,7 +219,7 @@ export function transformKeepingPoint(
 }
 
 /**
- * Where a drag shows the photo: `raw` is where the finger's travel would put
+ * Where a drag shows the photo: `raw` is where the pointer's travel would put
  * it with no edges. Past an edge it gives way with UIScrollView's rubber band
  * over the stage's size on that axis. On an axis where the photo is smaller
  * than the stage, it stays centred, as a scroll view whose content fits does
@@ -240,7 +243,7 @@ export function draggedTransform(
   };
 }
 
-/** The finger-travel position behind a shown one: `draggedTransform` undone. */
+/** The pointer-travel position behind a shown one: `draggedTransform` undone. */
 export function rawForDragged(
   geometry: ZoomGeometry,
   shown: ZoomTransform,
@@ -305,6 +308,33 @@ export function releaseTarget(
     geometry,
     transformKeepingPoint(geometry, shown, centroid, centroid, limit),
   );
+}
+
+/**
+ * Where a zoom key goes from `from`. Enter, Space or `+` zooms `ZOOM_STEP`
+ * times about the stage's centre, or back to the fitted size when zoomed.
+ */
+export function releasedZoomTarget(
+  geometry: ZoomGeometry,
+  from: ZoomTransform,
+): ZoomTransform {
+  return doubleClickTarget(geometry, from, {
+    x: geometry.width / 2,
+    y: geometry.height / 2,
+  });
+}
+
+/**
+ * Where a double-click at `point` goes from `from`. It zooms `ZOOM_STEP`
+ * times about the clicked point, kept inside the stage, or goes back to the
+ * fitted size when zoomed.
+ */
+export function doubleClickTarget(
+  geometry: ZoomGeometry,
+  from: ZoomTransform,
+  point: StagePoint,
+): ZoomTransform {
+  return doubleTapTarget({...geometry, doubleTapScale: ZOOM_STEP}, from, point);
 }
 
 /** The resting transform after panning by (dx, dy): a keyboard step. */

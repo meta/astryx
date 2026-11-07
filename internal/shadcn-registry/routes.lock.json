@@ -633,6 +633,11 @@
       "aliases": []
     },
     {
+      "name": "component-lab-page-control",
+      "path": "components/lab/page-control",
+      "aliases": []
+    },
+    {
       "name": "component-lab-radial-chart",
       "path": "components/lab/radial-chart",
       "aliases": []
@@ -3884,6 +3889,11 @@
     {
       "name": "example-use-table-row-status-semantic-and-custom-markers",
       "path": "examples/use-table-row-status/semantic-and-custom-markers",
+      "aliases": []
+    },
+    {
+      "name": "example-use-table-selection-state-table-selection-in-the-leading-mark",
+      "path": "examples/use-table-selection-state/table-selection-in-the-leading-mark",
       "aliases": []
     },
     {

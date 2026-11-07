@@ -514,6 +514,79 @@ describe("holdInput decides by each event's pointer (spec:AST-094 FR35)", () => 
     expect(shield.style.pointerEvents).toBe('auto');
   });
 
+  /** A mouse comes to rest at (x, y), heard as press feedback hears it. */
+  function mouseRestsAt(x: number, y: number) {
+    const stop = subscribeInput(window, 'pointermove', () => {});
+    document.body.dispatchEvent(
+      new PointerEvent('pointermove', {
+        ...INIT,
+        pointerType: 'mouse',
+        clientX: x,
+        clientY: y,
+      }),
+    );
+    stop();
+  }
+
+  /** The clip-path that leaves a 4 px square open around (x, y). */
+  const openingAt = (x: number, y: number) =>
+    `polygon(0 0, 100% 0, 100% 100%, 0 100%, 0 ${y - 2}px, ${x - 2}px ${y - 2}px, ${x - 2}px ${y + 2}px, ${x + 2}px ${y + 2}px, ${x + 2}px ${y - 2}px, 0 ${y - 2}px)`;
+
+  it("leaves the point where the mouse rests open on a presentation's shield that a finger raised: a still mouse's press reaches what is under it, a finger's press is still held, and a dismissal's shield stays whole (spec:AST-094 FR35)", () => {
+    const {layer} = mountLayer();
+    const {button, reached} = recorder(layer);
+    mouseRestsAt(120, 80);
+    // A finger opened the layer: it is the stream's last pointer.
+    lastPointerWas('touch');
+    hold(layer);
+    const shield = layer.lastElementChild as HTMLElement;
+    expect(shield.style.pointerEvents).toBe('auto');
+    expect(shield.style.getPropertyValue('clip-path')).toBe(openingAt(120, 80));
+    // A finger's or a pen's press is held wherever it lands, there too.
+    pointer(button, 'pointerdown', 'touch', 2);
+    pointer(button, 'pointerup', 'touch', 2);
+    click(button, 'touch');
+    pointer(button, 'pointerdown', 'pen', 4);
+    pointer(button, 'pointerup', 'pen', 4);
+    click(button, 'pen');
+    expect(reached).toEqual([]);
+    expect(shield.style.getPropertyValue('clip-path')).toBe(openingAt(120, 80));
+    // The still mouse's press, which the browser hit-tests through the opening.
+    pointer(button, 'pointerdown', 'mouse', 1, 1);
+    pointer(button, 'pointerup', 'mouse');
+    click(button, 'mouse');
+    expect(reached).toEqual(['pointerdown', 'pointerup', 'click']);
+    // A moving mouse lowers the shield, and the opening goes with it.
+    mouseRestsAt(130, 90);
+    expect(shield.style.pointerEvents).toBe('none');
+    expect(shield.style.getPropertyValue('clip-path')).toBe('');
+    // A finger raises it again, open where the mouse now rests.
+    pointer(button, 'pointerdown', 'touch', 3);
+    expect(shield.style.pointerEvents).toBe('auto');
+    expect(shield.style.getPropertyValue('clip-path')).toBe(openingAt(130, 90));
+    pointer(button, 'pointerup', 'touch', 3);
+    // A dismissal's shield takes every hit, a mouse's included.
+    hold(layer, 'layer');
+    expect(shield.style.pointerEvents).toBe('auto');
+    expect(shield.style.getPropertyValue('clip-path')).toBe('');
+  });
+
+  it("stops a shield over the layer's box alone from taking hits once the stream heard a mouse, while a finger's press on the layer is still held (spec:AST-094 FR35)", () => {
+    const {layer} = mountLayer();
+    const {button, reached} = recorder(layer);
+    mouseRestsAt(40, 40);
+    lastPointerWas('touch');
+    hold(layer, 'surface');
+    const shield = layer.lastElementChild as HTMLElement;
+    expect(isInputShield(shield)).toBe(true);
+    expect(shield.style.pointerEvents).toBe('none');
+    pointer(button, 'pointerdown', 'touch', 2);
+    pointer(button, 'pointerup', 'touch', 2);
+    click(button, 'touch');
+    expect(reached).toEqual([]);
+    expect(shield.style.pointerEvents).toBe('none');
+  });
+
   it("starts a presentation's shield up when the stream last heard a finger, or no pointer at all", () => {
     const {layer, child} = mountLayer();
     lastPointerWas('touch');

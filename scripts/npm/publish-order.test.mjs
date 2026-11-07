@@ -45,7 +45,7 @@ describe('publishOrder', () => {
     ).toThrow('dependency cycle among: a, b');
   });
 
-  it("orders this repository's packages so the CLI comes after Core and its theme", () => {
+  it("orders this repository's packages so the CLI and the theme come after Core", () => {
     const result = spawnSync(
       process.execPath,
       [
@@ -57,10 +57,12 @@ describe('publishOrder', () => {
       {cwd: ROOT, encoding: 'utf8'},
     );
     expect(result.status).toBe(0);
-    expect(result.stdout.trim().split('\n')).toEqual([
-      'packages/core',
-      'packages/themes/neutral',
+    const order = result.stdout.trim().split('\n');
+    expect(order).toHaveLength(3);
+    expect(order[0]).toBe('packages/core');
+    expect(order.slice(1).sort()).toEqual([
       'packages/cli',
+      'packages/themes/neutral',
     ]);
   });
 });

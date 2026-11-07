@@ -70,6 +70,20 @@ export const docs = {
       default: "'adaptive'",
     },
     {
+      name: 'delay',
+      type: 'number',
+      description:
+        'How long a hovering pointer waits before the flyout opens, in milliseconds. Keyboard focus and touch never wait.',
+      default: '150',
+    },
+    {
+      name: 'hideDelay',
+      type: 'number',
+      description:
+        'How long the flyout stays open after the pointer leaves, in milliseconds.',
+      default: '200',
+    },
+    {
       name: 'header',
       type: 'ReactNode',
       description:
@@ -120,6 +134,8 @@ export const docsDense = {
     onOpenChange: 'called when flyout opens/closes',
     presentation:
       "'flyout' beside the row | 'drill-in' replaces the rows + Back row | 'adaptive' (default) drills in on a coarse pointer",
+    delay: 'hover wait before the flyout opens, ms (default 150)',
+    hideDelay: 'how long the flyout stays after the pointer leaves, ms (default 200)',
     header:
       'content above the rows, outside the menu; surface becomes a modal dialog named by the row (Tab wraps, Escape returns to the row)',
     footer: 'content below the rows, outside the menu; same rules as header',
