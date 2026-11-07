@@ -209,6 +209,9 @@ export const RADIO_GROUP_STATE_RENDERS: Record<
 
   'segmented-group-selected-ltr': () => <SegmentedFixture />,
   'segmented-group-selected-rtl': () => <SegmentedFixture direction="rtl" />,
+  'segmented-group-selected-rtl-vertical': () => (
+    <SegmentedFixture direction="rtl" />
+  ),
   'segmented-group-none-selected': () => (
     <SegmentedFixture initial="not-an-option" />
   ),

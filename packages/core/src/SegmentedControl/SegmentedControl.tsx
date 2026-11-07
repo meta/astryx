@@ -363,7 +363,9 @@ export function SegmentedControl({
       // not disabled by its own isDisabled, else the first.
       tabStopOrder: orderTabStop,
       wrap: true,
-      orientation: 'horizontal',
+      // A radio group also moves on ArrowUp and ArrowDown. Those keys keep
+      // logical order, so right-to-left layouts do not flip them.
+      orientation: 'both',
     });
 
   const hint = useKeyboardHint({

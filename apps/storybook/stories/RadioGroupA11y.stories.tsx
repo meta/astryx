@@ -75,6 +75,9 @@ export const SegmentedGroupSelectedLtr = storyFor(
 export const SegmentedGroupSelectedRtl = storyFor(
   'segmented-group-selected-rtl',
 );
+export const SegmentedGroupSelectedRtlVertical = storyFor(
+  'segmented-group-selected-rtl-vertical',
+);
 export const SegmentedGroupNoneSelected = storyFor(
   'segmented-group-none-selected',
 );
