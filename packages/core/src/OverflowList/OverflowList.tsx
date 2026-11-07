@@ -39,7 +39,6 @@ import {themeProps} from '../utils/themeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {foldableMarker} from '../internal/foldable.stylex';
 import {useFoldingLaneWant} from '../internal/foldingLane';
-import {FoldingLaneSizer} from '../internal/FoldingLaneSizer';
 import {LayoutChangeSnapshot} from '../motion/LayoutChangeSnapshot';
 import {moveFocusLeftBehind, noteFocusWithin} from '../utils/focusReturn';
 import {useFocusLeavingChange} from '../utils/useFocusLeavingChange';
@@ -87,8 +86,8 @@ const foldMin = stylex.create({
 // As a direct child of a Toolbar lane the list's own items do not size it: it
 // starts at its minimum ("+N" plus the items `minVisibleItems` keeps), takes
 // the room the lane gives it up to the width of all its items, and asks the
-// lane for that width (useFoldingLaneWant, FoldingLaneSizer). Elsewhere,
-// including in a caller's wrapper, it sizes as before.
+// lane for that width (useFoldingLaneWant). Elsewhere, including in a
+// caller's wrapper, it sizes as before.
 const inLane = stylex.create({
   list: {
     contain: 'inline-size',
@@ -501,9 +500,6 @@ export function OverflowList({
           hasOverflow &&
           overflowRenderer?.(overflowItems)}
       </div>
-      {isLaneChild && (
-        <FoldingLaneSizer width={foldNaturalWidth - foldMinWidth} />
-      )}
     </>
   );
 }

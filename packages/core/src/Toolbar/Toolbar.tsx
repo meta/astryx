@@ -130,8 +130,7 @@ const dynamicStyles = stylex.create({
   gap: (gapValue: string) => ({
     gap: gapValue,
   }),
-  // The lane's gap, for content in it that takes back the gap before an
-  // element it adds (`FoldingLaneSizer`).
+  // The lane's gap, which the lane's width reserve takes back.
   laneGap: (gapValue: string) => ({
     '--_toolbar-lane-gap': gapValue,
   }),
@@ -231,6 +230,29 @@ export interface ToolbarProps extends BaseProps<HTMLDivElement> {
 
 const laneGrowStyles = stylex.create({
   grow: (factor: number) => ({flexGrow: factor}),
+  // The width foldable children ask for beyond their minimum.
+  extra: (px: number) => ({'--_toolbar-lane-extra': `${px}px`}),
+  // Foldable children size from the lane, not from their own content, so the
+  // lane reserves their extra width itself: a grid track sized
+  // `minmax(0, extra)` asks for it at the lane's widest and for nothing at its
+  // narrowest. A Toolbar sized by its content then still shows every item,
+  // while a narrow one folds. The pseudo-element grows by a negligible share
+  // (one that cannot grow gives its width up to its zero basis) and takes
+  // back the gap before it, so the lane's spacing is unchanged.
+  reserve: {
+    '::after': {
+      content: '""',
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0, var(--_toolbar-lane-extra))',
+      flexGrow: 0.0001,
+      flexShrink: 1,
+      flexBasis: 0,
+      minWidth: 0,
+      height: 0,
+      overflow: 'hidden',
+      marginInlineStart: 'calc(-1 * var(--_toolbar-lane-gap, 0px))',
+    },
+  },
 });
 
 /**
@@ -290,7 +312,11 @@ function ToolbarLane({
       {...stylex.props(
         ...laneStyles,
         styles.foldableLane,
-        grow > 0 && laneGrowStyles.grow(grow),
+        grow > 0 && [
+          laneGrowStyles.grow(grow),
+          laneGrowStyles.extra(grow),
+          laneGrowStyles.reserve,
+        ],
       )}>
       <FoldingLaneContext value={lane}>{children}</FoldingLaneContext>
     </div>

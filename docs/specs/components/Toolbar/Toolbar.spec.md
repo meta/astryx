@@ -120,9 +120,10 @@ Consumer migration instructions belong in consumer docs and release notes.
   root with Core's internal foldable marker while they fold
   (`internal/foldable.stylex.ts`). As direct children of a start or end lane
   they ask it for width through an internal context the lanes provide
-  (`internal/foldingLane.ts`) and an empty sizer element after their root
-  (`internal/FoldingLaneSizer.tsx`). None is public API: none is exported, a
-  prop, or a theme target, and the marker's class name must not be relied on.
+  (`internal/foldingLane.ts`); the lane reserves that width with its own
+  `::after`, so no element is added. Neither is public API: neither is
+  exported, a prop, or a theme target, and the marker's class name must not be
+  relied on.
 
 ## Public concepts
 

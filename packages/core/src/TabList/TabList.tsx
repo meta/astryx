@@ -56,7 +56,6 @@ import {EDGE_COMP_ATTR} from '../Layout/edgeCompensation.stylex';
 import {themeProps} from '../utils/themeProps';
 import {foldableMarker} from '../internal/foldable.stylex';
 import {useFoldingLaneWant, useIsInFoldingLane} from '../internal/foldingLane';
-import {FoldingLaneSizer} from '../internal/FoldingLaneSizer';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {devWarn} from '../utils/devWarning';
@@ -834,9 +833,6 @@ export function TabList({
         )}
         {hintElement}
       </Wrapper>
-      {isLaneChild && (
-        <FoldingLaneSizer width={tabWidths.all - tabWidths.widest} />
-      )}
     </TabListContext>
   );
 }

@@ -1196,10 +1196,18 @@ describe('OverflowList in a Toolbar lane (component:Toolbar FR2)', () => {
     expect(contained(screen.getByTestId('alone'))).toBe(false);
     expect(contained(screen.getByTestId('wrapped'))).toBe(false);
     expect(contained(screen.getByTestId('parent'))).toBe(false);
-    // Only the direct child adds its extra width to the lane, through an
-    // empty sibling that assistive technology skips.
-    expect(direct.nextElementSibling).toHaveAttribute('aria-hidden', 'true');
-    expect(screen.getByTestId('wrapped').nextElementSibling).toBeNull();
+    // Only the direct child's lane reserves its extra width, on the lane
+    // itself, with no added element.
+    expect(direct.nextElementSibling).toBeNull();
+    expect(direct.parentElement?.getAttribute('style') ?? '').toContain(
+      '--_toolbar-lane-extra',
+    );
+    expect(
+      // The wrapped list's lane: its parent's parent.
+      screen
+        .getByTestId('wrapped')
+        .parentElement?.parentElement?.getAttribute('style') ?? '',
+    ).not.toContain('--_toolbar-lane-extra');
   });
 
   it('moves focus to the trigger when the focused item folds away', async () => {
