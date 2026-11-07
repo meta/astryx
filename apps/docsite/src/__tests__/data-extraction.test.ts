@@ -344,7 +344,10 @@ describe('componentRegistry', () => {
       ([packageName, entries]) =>
         packageName === '@astryxdesign/core'
           ? []
-          : entries.map(component => component.name),
+          : entries
+              // Hook entries carry `params` and have no preview.
+              .filter(component => component.params == null)
+              .map(component => component.name),
     );
     expect(Object.keys(externalComponentPreviews).sort()).toEqual(
       externalNames.sort(),

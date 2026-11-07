@@ -1306,10 +1306,13 @@ function generateComponentPreviewRegistry(allComponents) {
   );
   const entries = packageNames
     .flatMap(packageName =>
-      allComponents[packageName].map(
-        component =>
-          `  ${JSON.stringify(component.name)}: namedLazy(${JSON.stringify(component.name)}, () => import(${JSON.stringify(packageName)}).then(module => module.${component.moduleName} as PreviewComponent)),`,
-      ),
+      allComponents[packageName]
+        // A hook entry carries `params`; a hook renders nothing to preview.
+        .filter(component => component.params == null)
+        .map(
+          component =>
+            `  ${JSON.stringify(component.name)}: namedLazy(${JSON.stringify(component.name)}, () => import(${JSON.stringify(packageName)}).then(module => module.${component.moduleName} as PreviewComponent)),`,
+        ),
     )
     .join('\n');
 
