@@ -17,12 +17,13 @@
  * - /packages/cli/assets/templates/blocks/components/Toolbar/ (showcase blocks)
  */
 
-import {useCallback, type ReactNode} from 'react';
+import {useCallback, useMemo, useState, type ReactNode} from 'react';
 import type {BaseProps} from '../BaseProps';
 import type {SectionVariant} from '../Section/Section';
 import type {SpacingStep} from '../utils/types';
 import type {ElementSize} from '../SizeContext/SizeContext';
 import * as stylex from '@stylexjs/stylex';
+import type {CompiledStyles, InlineStyles, StyleXArray} from '@stylexjs/stylex';
 import {spacingVars, sizeVars} from '../theme/tokens.stylex';
 import {mergeProps} from '../utils';
 import {Section} from '../Section/Section';
@@ -31,6 +32,8 @@ import {useKeyboardHint} from '../hooks/useKeyboardHint';
 import {SizeProvider} from '../SizeContext/SizeContext';
 import {edgeCompSlot} from '../Layout/edgeCompensation.stylex';
 import {themeProps} from '../utils/themeProps';
+import {foldableMarker} from '../internal/foldable.stylex';
+import {FoldingLaneContext} from '../internal/foldingLane';
 
 /**
  * Map SpacingStep values to spacingVars keys.
@@ -55,6 +58,13 @@ const styles = stylex.create({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
+    // While a lane holds foldable content, the other lanes do not shrink at
+    // all, so their text never wraps to make room; the foldable lane gives up
+    // the width instead. Set on every toolbar, so a nested one starts over.
+    '--_toolbar-lane-shrink': {
+      default: '1',
+      [stylex.when.descendant(':is(*)', foldableMarker)]: '0',
+    },
   },
   // Three-slot layout (with centerContent): CSS grid 1fr auto 1fr
   baseGrid: {
@@ -87,6 +97,18 @@ const styles = stylex.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
   },
+  // A start or end lane holding content that folds (an OverflowList, or a
+  // TabList that handles overflow) takes the shrinking, so the lanes beside it
+  // keep their width. Its content's minimum stops it, and the row overflows
+  // past that, as before.
+  foldableLane: {
+    // Every start and end lane carries this style, so its default is the
+    // toolbar's lane shrink: 0 beside a foldable lane, 1 otherwise.
+    flexShrink: {
+      default: 'var(--_toolbar-lane-shrink)',
+      [stylex.when.descendant(':is(*)', foldableMarker)]: 1,
+    },
+  },
   // When only startContent is present, let it fill
   startOnly: {
     flex: '1 1 0%',
@@ -107,6 +129,10 @@ const sizeStyles = stylex.create({
 const dynamicStyles = stylex.create({
   gap: (gapValue: string) => ({
     gap: gapValue,
+  }),
+  // The lane's gap, which the lane's width reserve takes back.
+  laneGap: (gapValue: string) => ({
+    '--_toolbar-lane-gap': gapValue,
   }),
   tabIndicatorBottom: (offset: string) => ({
     '--_tab-indicator-bottom': offset,
@@ -200,6 +226,101 @@ export interface ToolbarProps extends BaseProps<HTMLDivElement> {
    * ```
    */
   dividers?: ('top' | 'bottom' | 'start' | 'end')[];
+}
+
+const laneGrowStyles = stylex.create({
+  grow: (factor: number) => ({flexGrow: factor}),
+  // The width foldable children ask for beyond their minimum.
+  extra: (px: number) => ({'--_toolbar-lane-extra': `${px}px`}),
+  // Foldable children size from the lane, not from their own content, so the
+  // lane reserves their extra width itself: a grid track sized
+  // `minmax(0, extra)` asks for it at the lane's widest and for nothing at its
+  // narrowest. A Toolbar sized by its content then still shows every item,
+  // while a narrow one folds. The pseudo-element grows by a negligible share
+  // (one that cannot grow gives its width up to its zero basis) and takes
+  // back the gap before it, so the lane's spacing is unchanged.
+  reserve: {
+    '::after': {
+      content: '""',
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0, var(--_toolbar-lane-extra))',
+      flexGrow: 0.0001,
+      flexShrink: 1,
+      flexBasis: 0,
+      minWidth: 0,
+      height: 0,
+      overflow: 'hidden',
+      marginInlineStart: 'calc(-1 * var(--_toolbar-lane-gap, 0px))',
+    },
+  },
+});
+
+/**
+ * A start or end lane. Foldable content inside asks, through
+ * FoldingLaneContext, for the extra width that shows all of it; the lane grows
+ * by those requests, so folding lanes share the room in proportion to what
+ * they hold, and shrinks back to their minimum when the Toolbar narrows.
+ */
+function ToolbarLane({
+  laneStyles,
+  children,
+}: {
+  laneStyles: ReadonlyArray<
+    StyleXArray<
+      | (null | undefined | CompiledStyles)
+      | boolean
+      | Readonly<[CompiledStyles, InlineStyles]>
+    >
+  >;
+  children: ReactNode;
+}) {
+  const [laneElement, setLaneElement] = useState<HTMLDivElement | null>(null);
+  // What each foldable child last reported: its extra width, if it is a
+  // direct child of this lane.
+  const [reports, setReports] = useState<
+    Readonly<Record<string, {want: number; isLaneChild: boolean}>>
+  >({});
+  const report = useCallback(
+    (id: string, want: number, isLaneChild: boolean) => {
+      setReports(previous => {
+        const last = previous[id];
+        if (
+          last != null
+            ? last.want === want && last.isLaneChild === isLaneChild
+            : !isLaneChild && want === 0
+        ) {
+          return previous;
+        }
+        return {...previous, [id]: {want, isLaneChild}};
+      });
+    },
+    [],
+  );
+  const lane = useMemo(() => {
+    const laneChildIds = new Set(
+      Object.keys(reports).filter(id => reports[id].isLaneChild),
+    );
+    return {laneElement, report, laneChildIds};
+  }, [laneElement, reports, report]);
+  const grow = Object.values(reports).reduce(
+    (sum, entry) => sum + (entry.isLaneChild ? entry.want : 0),
+    0,
+  );
+  return (
+    <div
+      ref={setLaneElement}
+      {...stylex.props(
+        ...laneStyles,
+        styles.foldableLane,
+        grow > 0 && [
+          laneGrowStyles.grow(grow),
+          laneGrowStyles.extra(grow),
+          laneGrowStyles.reserve,
+        ],
+      )}>
+      <FoldingLaneContext value={lane}>{children}</FoldingLaneContext>
+    </div>
+  );
 }
 
 /**
@@ -338,51 +459,55 @@ export function Toolbar({
           {hasCenterContent ? (
             // Three-slot grid layout
             <>
-              <div
-                {...stylex.props(
+              <ToolbarLane
+                laneStyles={[
                   styles.startSlot,
                   edgeCompSlot.inset(edgeCompInsetForSize[size]),
                   dynamicStyles.gap(gapVar),
-                )}>
+                  dynamicStyles.laneGap(gapVar),
+                ]}>
                 {startContent}
-              </div>
+              </ToolbarLane>
               <div
                 {...stylex.props(styles.centerSlot, dynamicStyles.gap(gapVar))}>
                 {centerContent}
               </div>
-              <div
-                {...stylex.props(
+              <ToolbarLane
+                laneStyles={[
                   styles.endSlot,
                   edgeCompSlot.inset(edgeCompInsetForSize[size]),
                   dynamicStyles.gap(gapVar),
-                )}>
+                  dynamicStyles.laneGap(gapVar),
+                ]}>
                 {endContent}
-              </div>
+              </ToolbarLane>
             </>
           ) : (
             // Two-slot flex layout
             <>
               {hasStartContent && (
-                <div
-                  {...stylex.props(
+                <ToolbarLane
+                  laneStyles={[
                     styles.startSlot,
                     !hasEndContent && styles.startOnly,
                     edgeCompSlot.inset(edgeCompInsetForSize[size]),
                     dynamicStyles.gap(gapVar),
-                  )}>
+                    dynamicStyles.laneGap(gapVar),
+                  ]}>
                   {startContent}
-                </div>
+                </ToolbarLane>
               )}
               {hasEndContent && (
-                <div
-                  {...stylex.props(
+                <ToolbarLane
+                  laneStyles={[
                     styles.endSlot,
                     !hasStartContent && styles.endOnly,
                     edgeCompSlot.inset(edgeCompInsetForSize[size]),
                     dynamicStyles.gap(gapVar),
-                  )}>
+                    dynamicStyles.laneGap(gapVar),
+                  ]}>
                   {endContent}
-                </div>
+                </ToolbarLane>
               )}
             </>
           )}

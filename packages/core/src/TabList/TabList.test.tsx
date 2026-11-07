@@ -24,6 +24,10 @@ import type {TabListProps} from './TabList';
 import {Tab} from './Tab';
 import {TabMenu} from './TabMenu';
 import {LinkProvider} from '../Link/LinkProvider';
+import * as stylex from '@stylexjs/stylex';
+import {foldableMarker} from '../internal/foldable.stylex';
+import {Toolbar} from '../Toolbar';
+import {rulesDeclaredFor} from '../__tests__/pressState';
 
 function CustomLink({
   children,
@@ -1879,5 +1883,63 @@ describe('pressed state', () => {
     expect(hasReleaseFade(tab)).toBe(true);
     expect(readsPressStrength(surface, '[data-astryx-press="on"]')).toBe(true);
     expect(readsPressStrength(surface)).toBe(true);
+  });
+});
+
+function carriesFoldableMarker(el: Element): boolean {
+  const classes = (stylex.props(foldableMarker).className ?? '')
+    .split(' ')
+    .filter(Boolean);
+  return classes.length > 0 && classes.every(cls => el.classList.contains(cls));
+}
+
+describe('TabList in a Toolbar lane (component:Toolbar FR2)', () => {
+  it('is sized by the lane only as its direct child', () => {
+    const contained = (el: Element) =>
+      rulesDeclaredFor(el).some(rule => /contain:\s*inline-size/.test(rule));
+    const tabs = (label: string) => (
+      <TabList value="a" onChange={() => {}} aria-label={label}>
+        <Tab value="a" label="A" />
+        <Tab value="b" label="B" />
+      </TabList>
+    );
+    render(
+      <>
+        <Toolbar label="Direct" startContent={tabs('Direct tabs')} />
+        <Toolbar
+          label="Wrapped"
+          startContent={<div>{tabs('Wrapped tabs')}</div>}
+        />
+      </>,
+    );
+    // Without `role="tablist"` the label names the root.
+    const rootOf = (name: string) => screen.getByLabelText(name);
+    expect(contained(rootOf('Direct tabs'))).toBe(true);
+    // In a caller's wrapper the tabs keep their own width.
+    expect(contained(rootOf('Wrapped tabs'))).toBe(false);
+  });
+
+  it('marks its root foldable while it handles overflow, and not with overflow="visible"', () => {
+    const {container, rerender} = render(
+      <TabList value="a" onChange={() => {}} aria-label="Sections">
+        <Tab value="a" label="A" />
+        <Tab value="b" label="B" />
+      </TabList>,
+    );
+    const root = container.firstElementChild as HTMLElement;
+    expect(carriesFoldableMarker(root)).toBe(true);
+    rerender(
+      <TabList
+        value="a"
+        onChange={() => {}}
+        aria-label="Sections"
+        overflow="visible">
+        <Tab value="a" label="A" />
+        <Tab value="b" label="B" />
+      </TabList>,
+    );
+    expect(
+      carriesFoldableMarker(container.firstElementChild as HTMLElement),
+    ).toBe(false);
   });
 });

@@ -21,6 +21,10 @@ import {render, screen, within, act, waitFor} from '@testing-library/react';
 import {useState} from 'react';
 import {OverflowList} from './OverflowList';
 import type {OverflowItem} from './OverflowList';
+import * as stylex from '@stylexjs/stylex';
+import {foldableMarker} from '../internal/foldable.stylex';
+import {Toolbar} from '../Toolbar';
+import {rulesDeclaredFor} from '../__tests__/pressState';
 
 const originalOffsetWidth = Object.getOwnPropertyDescriptor(
   HTMLElement.prototype,
@@ -1072,5 +1076,243 @@ describe('OverflowList', () => {
       expect(indicesOf(onOverflowChange)).toEqual([1, 2]);
       expect(visibleContainer().textContent).toBe('Amore:1,2');
     });
+  });
+});
+
+function carriesFoldableMarker(el: Element): boolean {
+  const classes = (stylex.props(foldableMarker).className ?? '')
+    .split(' ')
+    .filter(Boolean);
+  return classes.length > 0 && classes.every(cls => el.classList.contains(cls));
+}
+
+describe('OverflowList in a Toolbar lane (component:Toolbar FR2)', () => {
+  const items = ['A', 'B', 'C'].map(name => (
+    <button key={name} type="button" data-w="40">
+      {name}
+    </button>
+  ));
+  const trigger = (overflow: {index: number}[]) => (
+    <button type="button" data-w="40">
+      more:{overflow.map(item => item.index).join(',')}
+    </button>
+  );
+
+  it('marks itself foldable only while it can fold', () => {
+    const {rerender} = render(
+      <OverflowList
+        gap={0}
+        data-w="1000"
+        data-testid="ov"
+        overflowRenderer={trigger}>
+        {items}
+      </OverflowList>,
+    );
+    expect(carriesFoldableMarker(visibleContainer())).toBe(true);
+    rerender(
+      <OverflowList
+        gap={0}
+        data-w="1000"
+        data-testid="ov"
+        minVisibleItems={3}
+        overflowRenderer={trigger}>
+        {items}
+      </OverflowList>,
+    );
+    expect(carriesFoldableMarker(visibleContainer())).toBe(false);
+  });
+
+  it('never gets narrower than its trigger plus the items minVisibleItems keeps', () => {
+    const {rerender} = render(
+      <OverflowList
+        gap={0}
+        data-w="1000"
+        data-testid="ov"
+        overflowRenderer={trigger}>
+        {items}
+      </OverflowList>,
+    );
+    // The 40px trigger, plus a pixel for rounding.
+    expect(visibleContainer().getAttribute('style') ?? '').toContain('41px');
+    rerender(
+      <OverflowList
+        gap={0}
+        data-w="1000"
+        data-testid="ov"
+        minVisibleItems={1}
+        overflowRenderer={trigger}>
+        {items}
+      </OverflowList>,
+    );
+    expect(visibleContainer().getAttribute('style') ?? '').toContain('82px');
+    // A list that keeps every item cannot fold, so it gets no minimum: it
+    // sizes as before and may overflow a narrow container.
+    rerender(
+      <OverflowList
+        gap={0}
+        data-w="1000"
+        data-testid="ov"
+        minVisibleItems={items.length}
+        overflowRenderer={trigger}>
+        {items}
+      </OverflowList>,
+    );
+    expect(visibleContainer().getAttribute('style') ?? '').not.toMatch(/\d+px/);
+  });
+
+  it('is sized by a Toolbar lane only as its direct child', () => {
+    const contained = (el: Element) =>
+      rulesDeclaredFor(el).some(rule => /contain:\s*inline-size/.test(rule));
+    const list = (testId: string, observeParent = false) => (
+      <OverflowList
+        gap={0}
+        data-w="1000"
+        data-testid={testId}
+        behavior={observeParent ? 'observeParent' : 'observeSelf'}
+        overflowRenderer={trigger}>
+        {items}
+      </OverflowList>
+    );
+    render(
+      <>
+        {list('alone')}
+        <Toolbar label="Direct" startContent={list('direct')} />
+        <Toolbar label="Wrapped" startContent={<div>{list('wrapped')}</div>} />
+        <Toolbar label="Parent" startContent={list('parent', true)} />
+      </>,
+    );
+    const direct = screen.getByTestId('direct');
+    expect(contained(direct)).toBe(true);
+    // Three 40px items with no gap, plus a pixel each for rounding: the
+    // widest it grows in the lane.
+    expect(direct.getAttribute('style') ?? '').toContain('123px');
+    expect(
+      rulesDeclaredFor(direct).some(rule =>
+        /max-width:\s*var\(--_overflow-list-natural-width\)/.test(rule),
+      ),
+    ).toBe(true);
+    // Outside a lane, in a caller's wrapper, or sized by its parent, it keeps
+    // its own sizing.
+    expect(contained(screen.getByTestId('alone'))).toBe(false);
+    expect(contained(screen.getByTestId('wrapped'))).toBe(false);
+    expect(contained(screen.getByTestId('parent'))).toBe(false);
+    // Only the direct child's lane reserves its extra width, on the lane
+    // itself, with no added element.
+    expect(direct.nextElementSibling).toBeNull();
+    expect(direct.parentElement?.getAttribute('style') ?? '').toContain(
+      '--_toolbar-lane-extra',
+    );
+    expect(
+      // The wrapped list's lane: its parent's parent.
+      screen
+        .getByTestId('wrapped')
+        .parentElement?.parentElement?.getAttribute('style') ?? '',
+    ).not.toContain('--_toolbar-lane-extra');
+  });
+
+  it('moves focus to the trigger when the focused item folds away', async () => {
+    render(
+      <OverflowList
+        gap={0}
+        data-w="1000"
+        data-testid="ov"
+        overflowRenderer={trigger}>
+        {items}
+      </OverflowList>,
+    );
+    const vis = visibleContainer();
+    act(() => {
+      within(vis).getByText('C').focus();
+    });
+    vis.setAttribute('data-w', '100');
+    await triggerResize(vis);
+    expect(within(vis).queryByText('C')).not.toBeInTheDocument();
+    expect(document.activeElement).toBe(within(vis).getByText('more:1,2'));
+  });
+
+  it('asks a lane only for the width its maxVisibleItems cap lets show', () => {
+    render(
+      <Toolbar
+        label="Capped"
+        startContent={
+          <OverflowList
+            gap={0}
+            data-w="1000"
+            data-testid="ov"
+            maxVisibleItems={1}
+            overflowRenderer={trigger}>
+            {items}
+          </OverflowList>
+        }
+      />,
+    );
+    // One 40px item and the 40px trigger, plus a pixel each for rounding,
+    // not all three items.
+    expect(visibleContainer().getAttribute('style') ?? '').toMatch(
+      /--_overflow-list-natural-width:\s*82px/,
+    );
+  });
+
+  it('moves focus from the trigger to the last item when every item comes back', async () => {
+    render(
+      <OverflowList
+        gap={0}
+        data-w="100"
+        data-testid="ov"
+        overflowRenderer={items => (
+          <button type="button">more:{items.length}</button>
+        )}>
+        {items}
+      </OverflowList>,
+    );
+    const vis = visibleContainer();
+    act(() => {
+      within(vis)
+        .getByRole('button', {name: /^more:/})
+        .focus();
+    });
+    vis.setAttribute('data-w', '1000');
+    await triggerResize(vis);
+    expect(within(vis).queryByRole('button', {name: /^more:/})).toBeNull();
+    expect(document.activeElement).toBe(within(vis).getByText('C'));
+  });
+
+  it('leaves focus alone when it was not on a folded item', async () => {
+    render(
+      <>
+        <button type="button">Outside</button>
+        <OverflowList
+          gap={0}
+          data-w="1000"
+          data-testid="ov"
+          overflowRenderer={trigger}>
+          {items}
+        </OverflowList>
+      </>,
+    );
+    const vis = visibleContainer();
+    // Focus visits the list, then leaves it for the page.
+    act(() => {
+      within(vis).getByText('C').focus();
+      within(vis).getByText('C').blur();
+    });
+    vis.setAttribute('data-w', '100');
+    await triggerResize(vis);
+    expect(within(vis).queryByText('C')).not.toBeInTheDocument();
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it("keeps its hidden measuring copies out of a Toolbar's arrow-key order", () => {
+    // The copies sit in an inert container, which the roving order skips.
+    render(
+      <OverflowList
+        gap={0}
+        data-w="1000"
+        data-testid="ov"
+        overflowRenderer={trigger}>
+        {items}
+      </OverflowList>,
+    );
+    expect(measureContainer().hasAttribute('inert')).toBe(true);
   });
 });

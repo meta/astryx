@@ -37,6 +37,13 @@ import {spacingVars} from '../theme/tokens.stylex';
 import {themeProps} from '../utils/themeProps';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {foldableMarker} from '../internal/foldable.stylex';
+import {useFoldingLaneWant} from '../internal/foldingLane';
+import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
+import {LayoutChangeSnapshot} from '../motion/LayoutChangeSnapshot';
+import {moveFocusLeftBehind, noteFocusWithin} from '../utils/focusReturn';
+import {useFocusLeavingChange} from '../utils/useFocusLeavingChange';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
 const styles = stylex.create({
   container: {
     display: 'flex',
@@ -69,6 +76,28 @@ const styles = stylex.create({
   measureIndicator: {
     display: 'inline-flex',
   },
+});
+
+// The list never gets narrower than the narrowest row it can fold to, so a
+// lane that shrinks around it keeps its "+N" trigger.
+const foldMin = stylex.create({
+  minWidth: (px: number) => ({minWidth: `${px}px`}),
+});
+
+// As a direct child of a Toolbar lane the list's own items do not size it: it
+// starts at its minimum ("+N" plus the items `minVisibleItems` keeps), takes
+// the room the lane gives it up to the width of all its items, and asks the
+// lane for that width (useFoldingLaneWant). Elsewhere, including in a
+// caller's wrapper, it sizes as before.
+const inLane = stylex.create({
+  list: {
+    contain: 'inline-size',
+    flexGrow: 1,
+    maxWidth: 'var(--_overflow-list-natural-width)',
+  },
+  naturalWidth: (px: number) => ({
+    '--_overflow-list-natural-width': `${px}px`,
+  }),
 });
 
 const multiRowHeight = stylex.create({
@@ -286,19 +315,26 @@ export function OverflowList({
 
   // Only the multi-row path renders from `rowHeight` (it caps the
   // container's height), so only that path tracks it.
-  const {containerRef, measureRef, visibleCount, hasOverflow, rowHeight} =
-    useOverflowInternal(
-      itemCount,
-      {
-        gap: gapPx,
-        minVisibleItems,
-        maxVisibleItems,
-        maxRows,
-        collapseFrom,
-        behavior,
-      },
-      {tracksRows: isMultiRow},
-    );
+  const {
+    containerRef,
+    measureRef,
+    visibleCount,
+    hasOverflow,
+    rowHeight,
+    foldMinWidth,
+    foldNaturalWidth,
+  } = useOverflowInternal(
+    itemCount,
+    {
+      gap: gapPx,
+      minVisibleItems,
+      maxVisibleItems,
+      maxRows,
+      collapseFrom,
+      behavior,
+    },
+    {tracksRows: isMultiRow, tracksFoldMin: !isMultiRow},
+  );
 
   const allItems: OverflowItem[] = childArray.map((child, index) => ({
     child,
@@ -356,6 +392,42 @@ export function OverflowList({
   const overflowItemsRef = useRef(overflowItems);
   overflowItemsRef.current = overflowItems;
 
+  // Measurement drives the fold, so no handler sees an item that holds focus
+  // unmount. Focus moves to the control at that end instead: the "+N" trigger
+  // when an item folds, or the item at that end when every item comes back
+  // and the trigger leaves.
+  const visibleRef = useRef<HTMLElement | null>(null);
+  const {ref: modalityRef} = useInteractionModalityTracking();
+  const noteFocusBeforeFold = useFocusLeavingChange(
+    visibleCount,
+    () => noteFocusWithin(visibleRef.current),
+    noted => {
+      const container = visibleRef.current;
+      if (container == null) {
+        return;
+      }
+      const trigger =
+        collapseFrom === 'end'
+          ? container.lastElementChild
+          : container.firstElementChild;
+      const target =
+        trigger == null
+          ? null
+          : trigger.matches(FOCUSABLE_SELECTOR)
+            ? trigger
+            : trigger.querySelector(FOCUSABLE_SELECTOR);
+      moveFocusLeftBehind(noted, target as HTMLElement | null);
+    },
+  );
+
+  // As a direct child of a Toolbar lane, ask for the width that shows every
+  // item. A list that sizes to its parent (`observeParent`) does not.
+  const isLaneChild = useFoldingLaneWant(
+    visibleRef,
+    foldNaturalWidth - foldMinWidth,
+    !isMultiRow && !observeParent && minVisibleItems < itemCount,
+  );
+
   // Reports the measured overflow to `onOverflowChange`. A ResizeObserver
   // drives the measurement, so no event handler can report it.
   useIsomorphicLayoutEffect(() => {
@@ -372,6 +444,10 @@ export function OverflowList({
 
   return (
     <>
+      <LayoutChangeSnapshot
+        value={visibleCount}
+        onBeforeChange={noteFocusBeforeFold}
+      />
       {/* Hidden measurement container */}
       <div
         ref={reportMeasureRef}
@@ -388,11 +464,19 @@ export function OverflowList({
 
       {/* Visible container */}
       <div
-        ref={useMergedRefs(ref, containerRef)}
+        ref={useMergedRefs(ref, containerRef, visibleRef, modalityRef)}
         {...mergeProps(
           themeProps('overflow-list'),
           stylex.props(
             isMultiRow ? styles.containerMultiRow : styles.container,
+            // A list that can fold gives up width in a Toolbar lane; one
+            // whose floor keeps every item cannot.
+            minVisibleItems < itemCount && foldableMarker,
+            !isMultiRow &&
+              minVisibleItems < itemCount &&
+              foldMinWidth > 0 &&
+              foldMin.minWidth(foldMinWidth),
+            isLaneChild && [inLane.list, inLane.naturalWidth(foldNaturalWidth)],
             gapStyles[gap],
             isMultiRow &&
               rowHeight > 0 &&
