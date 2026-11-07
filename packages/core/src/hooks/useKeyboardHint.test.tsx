@@ -135,3 +135,90 @@ describe('useKeyboardHint focus inside portaled children', () => {
     expect(showPopover).toHaveBeenCalledTimes(1);
   });
 });
+
+// WCAG 1.4.13: content shown on focus stays until the person dismisses it,
+// moves focus away, or no longer needs it, and Escape dismisses it.
+describe('useKeyboardHint dismissal', () => {
+  const originalShowPopover = HTMLElement.prototype.showPopover;
+  const originalHidePopover = HTMLElement.prototype.hidePopover;
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    HTMLElement.prototype.showPopover = originalShowPopover;
+    HTMLElement.prototype.hidePopover = originalHidePopover;
+  });
+
+  function Row() {
+    const {hintElement, onFocus, onBlur, onKeyDown} = useKeyboardHint({});
+    return (
+      <div onFocus={onFocus} onBlur={onBlur} onKeyDown={onKeyDown}>
+        <button type="button">First</button>
+        <button type="button">Second</button>
+        {hintElement}
+      </div>
+    );
+  }
+
+  function renderWithKeyboardFocus() {
+    // jsdom has neither :focus-visible for synthetic focus nor the Popover API.
+    const matches = HTMLElement.prototype.matches;
+    vi.spyOn(HTMLElement.prototype, 'matches').mockImplementation(function (
+      this: HTMLElement,
+      selector: string,
+    ) {
+      return selector === ':focus-visible'
+        ? true
+        : matches.call(this, selector);
+    });
+    const showPopover = vi.fn();
+    const hidePopover = vi.fn();
+    HTMLElement.prototype.showPopover = showPopover;
+    HTMLElement.prototype.hidePopover = hidePopover;
+    render(<Row />);
+    const first = screen.getByRole('button', {name: 'First'});
+    first.focus();
+    fireEvent.focus(first);
+    expect(showPopover).toHaveBeenCalledTimes(1);
+    return {first, hidePopover};
+  }
+
+  it('stays shown while focus stays in the group, with no time limit', () => {
+    vi.useFakeTimers();
+    const {hidePopover} = renderWithKeyboardFocus();
+
+    vi.advanceTimersByTime(60_000);
+
+    expect(hidePopover).not.toHaveBeenCalled();
+  });
+
+  it('closes on Escape without moving focus', () => {
+    const {first, hidePopover} = renderWithKeyboardFocus();
+
+    const escape = new KeyboardEvent('keydown', {
+      key: 'Escape',
+      bubbles: true,
+      cancelable: true,
+    });
+    first.dispatchEvent(escape);
+
+    expect(hidePopover).toHaveBeenCalledTimes(1);
+    expect(escape.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(first);
+  });
+
+  it('leaves Escape alone once the hint is gone', () => {
+    const {first, hidePopover} = renderWithKeyboardFocus();
+    fireEvent.keyDown(first, {key: 'ArrowRight'});
+    expect(hidePopover).toHaveBeenCalledTimes(1);
+
+    const escape = new KeyboardEvent('keydown', {
+      key: 'Escape',
+      bubbles: true,
+      cancelable: true,
+    });
+    first.dispatchEvent(escape);
+
+    expect(escape.defaultPrevented).toBe(false);
+  });
+});
