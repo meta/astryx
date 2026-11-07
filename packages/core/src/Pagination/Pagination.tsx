@@ -183,16 +183,21 @@ export interface PaginationProps extends Omit<
 const PAGE_SIZE_SELECTOR_WIDTH = 80;
 
 const styles = stylex.create({
+  // Both rows wrap when their controls do not fit, as at a larger text size,
+  // so no control leaves the screen. When they fit, nothing changes.
   root: {
     display: 'flex',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: spacingVars['--spacing-4'],
   },
   controls: {
     display: 'flex',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: spacingVars['--spacing-1'],
+    minWidth: 0,
   },
   compactFirst: {
     marginInlineEnd: `calc(-1 * ${spacingVars['--spacing-1']})`,
