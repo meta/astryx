@@ -684,7 +684,7 @@ export const NumericSizes: Story = {
 // A theme can re-scope the fallback initials' typography without forking the
 // component: weight, text color, the wash background, and the per-size
 // font-size scale are all set on the `avatar-fallback` child target (font size
-// through its size tiers). The default row is unchanged (size × 0.4, medium
+// through its size tiers). The default row uses the type-scale step for each size (medium
 // weight, neutral fill); only the themed row opts in.
 //
 // The themed colors deliberately use a hued token pair (blue) rather than
@@ -713,7 +713,9 @@ export const ThemedFallbackScale: Story = {
   name: 'Themed Fallback Type Scale',
   render: () => (
     <div {...stylex.props(styles.storyWrapper)}>
-      <h4 {...stylex.props(styles.heading)}>Default fallback (size × 0.4)</h4>
+      <h4 {...stylex.props(styles.heading)}>
+        Default fallback (type-scale step per size)
+      </h4>
       <div {...stylex.props(styles.row)}>
         <Avatar name="TY" size="xsm" />
         <Avatar name="XS" size="sm" />
