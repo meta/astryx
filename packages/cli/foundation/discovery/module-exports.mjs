@@ -639,11 +639,12 @@ export function moduleExportNames(file) {
 
 /**
  * Every export of a module with where it is declared, in one pass: the same
- * answers as {@link moduleExportOrigin} for each name, read once per module.
+ * answers as the whole-tree {@link exportOrigin} for each name, read once per
+ * module.
  * Pass one `memo` to calls that read the same package, so a module behind
  * many barrels is read once; a memo keeps value and type reads apart, and
  * nothing is kept between memos. One difference follows ESM where
- * {@link moduleExportOrigin} does not: a name re-exported by name from a
+ * {@link exportOrigin} does not: a name re-exported by name from a
  * module that cannot be followed is absent, never filled from `export *`.
  * @param {string} file
  * @param {{types?: boolean, memo?: Map<string, Map<string, {file: string, name: string}>>}} [options]

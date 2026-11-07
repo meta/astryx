@@ -312,6 +312,52 @@ describe('an export declared inside a namespace', () => {
     expect(moduleExportOrigin(file, 'Inner')).toBeNull();
     expect(followedExportNames(file)).not.toContain('Inner');
   });
+
+  it('counts for the one-pass reader, in value and type reads, after the icon-set reader reads the module', () => {
+    const file = write('button.ts', NAMESPACE);
+    expect(
+      moduleExportOrigin(file, 'Inner', undefined, {types: true}),
+    ).toBeNull();
+    for (const types of [false, true]) {
+      expect(moduleExportOrigins(file, {types}).get('Inner')).toEqual({
+        file,
+        name: 'Inner',
+      });
+    }
+  });
+});
+
+describe('the one-pass reader beside the icon-set reader', () => {
+  it('reads namespace and type exports as the whole-tree reader does, while the icon-set reader skips nested declarations', () => {
+    const file = write(
+      'mixed.ts',
+      [
+        'export namespace Shapes {',
+        '  export const circle = 1;',
+        '  export interface Corner {}',
+        '}',
+        'export interface Size {}',
+        'export const top = 2;',
+        '',
+      ].join('\n'),
+    );
+    expect(moduleExportOrigin(file, 'circle')).toBeNull();
+    expect(
+      moduleExportOrigin(file, 'Corner', undefined, {types: true}),
+    ).toBeNull();
+    expect(moduleExportOrigin(file, 'Size', undefined, {types: true})).toEqual({
+      file,
+      name: 'Size',
+    });
+    const names = types =>
+      [...moduleExportOrigins(file, {types}).keys()].sort();
+    expect(names(false)).toEqual(['circle', 'top']);
+    expect(names(true)).toEqual(['Corner', 'Shapes', 'Size', 'circle', 'top']);
+    expect(moduleExportOrigins(file, {types: true}).get('Corner')).toEqual({
+      file,
+      name: 'Corner',
+    });
+  });
 });
 
 describe('moduleExportOrigins', () => {
