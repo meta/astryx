@@ -62,8 +62,7 @@ export type Engine = 'chromium' | 'webkit';
  * `'spacing'` an event also waits for its interval, less ANSWER_SLACK_MS,
  * after the engine answered the event before. WebKit stamps a touch no later
  * than its answer, so a stall stretches the gesture instead of bunching it.
- * A WebKit `'schedule'` play waits for the answer too, unless it watches each
- * step (`onEvent`).
+ * A WebKit `'schedule'` play waits for the answer too.
  */
 export type TouchPacing = 'schedule' | 'spacing';
 
@@ -640,9 +639,10 @@ async function playSteps(
   // timestamps carry it. Every real-time play is judged there, unless its
   // proof reads no release.
   const judges = probe != null && realtime && !releaseUnread;
-  // A driver gives a probe only where the page stamps touches on arrival. A
-  // play that watches each step keeps its scripted times.
-  const keepsGaps = probe != null && onEvent == null;
+  // A driver gives a probe only where the page stamps touches on arrival.
+  // There, a play behind its schedule never shrinks a scripted gap, so page
+  // work in `onEvent` cannot eat the rest before a lift.
+  const keepsGaps = probe != null;
   if (judges) {
     await probe.arm();
   }

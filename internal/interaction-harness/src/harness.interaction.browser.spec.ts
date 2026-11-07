@@ -489,6 +489,49 @@ test.describe('touch input', () => {
     expect(String(outcome)).toMatch(/the page read a resting finger/);
   });
 
+  test('a play behind its schedule never shrinks a scripted gap, so page work in onEvent cannot eat the rest before its lift, where the page stamps touches on arrival', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'webkit',
+      'only WebKit stamps a touch when it arrives; Chromium carries the scripted times',
+    );
+    const {driver} = await liftStallPage(page);
+    // A slow drag that rests 150 ms before the lift. Page work on every move
+    // puts the play behind its schedule by more than that rest.
+    const script = drag(
+      {x: 200, y: 600},
+      {x: 200, y: 300},
+      {durationMs: 300, restMs: 150},
+    );
+    const steps = toTouchEvents(script);
+    await driver.play(script, {
+      onEvent: async step => {
+        if (step.type === 'touchMove') {
+          await page.evaluate(
+            () => new Promise(resolve => setTimeout(resolve, 30)),
+          );
+        }
+      },
+    });
+    const stamps = await page.evaluate(() =>
+      (window as unknown as {touches: [string, number][]}).touches.map(
+        ([, t]) => t,
+      ),
+    );
+    // The page stamps every move and the lift. No gap is more than the
+    // answer's slack short of the script's, the rest before the lift too.
+    expect(stamps).toHaveLength(steps.length - 1);
+    for (let index = 1; index < stamps.length; index++) {
+      const scripted = steps[index + 1].t - steps[index].t;
+      expect(
+        stamps[index] - stamps[index - 1],
+        `gap ${index} of ${stamps.length - 1}`,
+      ).toBeGreaterThanOrEqual(scripted - ANSWER_SLACK_MS - 1);
+    }
+  });
+
   test('a Chromium play carries the scripted times, so a slow onEvent before its lift does not fail it', async ({
     page,
     browserName,
