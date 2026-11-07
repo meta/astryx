@@ -40,7 +40,7 @@ system_specs: [spec:AST-082, spec:AST-093]
 | Builder impact          | An app passes a shared name (`.search`) or a name it maps in its theme (`"acme:rocket"`). An SVG component, which the web also accepts, has no Swift form.                                                                                                                                          |
 | Compatibility/readiness | Additive: a new view and a new generated `IconName` type. Draft; built and tested on macOS and the iOS Simulator; device captures are attached to the change.                                                                                                                                       |
 | Review checks           | Reject a substitute symbol for an unknown name, an image or attributed-text form of the icon slot, a visual parameter beyond the contract, an unlabeled icon that VoiceOver reads, or an owner's size winning over an explicit `size`.                                                              |
-| Governing rules         | `spec:AST-082` FR4, FR7, FR17; `spec:AST-093` FR1–FR5; the Swift component API, styles, slots, theme environment, and accessibility records under `packages/native/specs/swift/library/`.                                                                                                           |
+| Governing rules         | `spec:AST-082` FR4, FR7, FR17; `spec:AST-093` FR1–FR5; the Swift component API, styles, slots, theme environment, and accessibility records under `packages/native/specs/swift/` (`architecture:native-swift-*`).                                                                                   |
 
 This table is a review projection; the body below is authoritative.
 

@@ -1,12 +1,24 @@
-# Theme environment (Swift)
+---
+schema_version: 1
+template_version: 3
+kind: architecture
+id: architecture:native-swift-theme-environment
+authority: current
+archive_reason: null
+superseded_by: null
+approved_by: cixzhang
+approved_at: 2026-10-26
+owners: [cixzhang]
+applies_to: [packages/native/]
+verified_by: [.github/scripts/native-swift.sh]
+deciding_specs: [spec:AST-093/FR4, spec:AST-082/FR10, spec:AST-082/FR11]
+---
 
-- Status: draft
-- Relation: extends AST-093 FR4 and AST-082 FR10, FR11; builds on
-  `packages/native/specs/swift/library/theme-generator.md` (the `Theme` and
-  `Tokens` it generates, and its font family reader) and
-  `packages/native/specs/swift/library/component-api.md` (names).
+# Theme environment architecture (Swift)
 
-## Summary
+<!-- Describe the system, not the project: present tense, what it does. No proposals, history, pull requests, or research in the record; see docs/contributing/spec-writing.md and report its rubric results in the pull request. -->
+
+## Purpose
 
 In an app built with Astryx, the system's own controls and Astryx components
 match, and the person's system settings are honored everywhere: dark mode,
@@ -16,7 +28,14 @@ theme, stock SwiftUI controls take the theme's accent as their tint wherever
 it stays readable, and otherwise keep their own colors. Astryx adds no second
 settings system for an app to keep in step.
 
-## Requirements
+## System model
+
+This record extends AST-093 FR4 and AST-082 FR10, FR11; builds on
+`architecture:native-swift-theme-generator` (the `Theme` and `Tokens` it
+generates, and its font family reader) and
+`architecture:native-swift-component-api` (names).
+
+## Boundaries and invariants
 
 - **E1 — Settings are read from SwiftUI, never duplicated.** Components and the
   theme read these environment values and Astryx offers no API of its own for
@@ -70,7 +89,23 @@ settings system for an app to keep in step.
   environment value declared with `@Entry`; components read it with
   `@Environment` and never through a singleton.
 
-## Acceptance checks
+## Change coupling
+
+A change to the Swift code or build step this record governs is reviewed against
+its requirements, and a change to a record it builds on is reviewed for its
+effect here. The checks under Verification prove the record stays current.
+
+## Owning code
+
+- `packages/native/apple/Sources/Astryx/` — the theme environment value and the modifiers that set and read it.
+
+## Deciding specs
+
+- `spec:AST-093/FR4`
+- `spec:AST-082/FR10`
+- `spec:AST-082/FR11`
+
+## Verification
 
 | Requirement | Check                                                                                                                                                                                                                                                                                                                                                                              |
 | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

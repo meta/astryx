@@ -32,7 +32,7 @@ system_specs: [spec:AST-082, spec:AST-093]
 | Builder impact          | An app passes core's Button props; `href` makes the same view open a destination through the system. A Button in a bar needs no extra code; `.astryxFloating()` on a floating container opts its Buttons into glass. A `variant` the callsite sets is always obeyed.                                                                                                                                                                                                         |
 | Compatibility/readiness | Breaking for canary callers: `action:`, `fillsWidth:`, `icon:`, and the hand-written `AstryxButtonVariant` and `AstryxButtonSize` give way to the generated `ButtonProps` (`onClick:`, `width:`, `ButtonVariant`, `ButtonSize`). Draft; built and tested on macOS and the iOS Simulator.                                                                                                                                                                                     |
 | Review checks           | Reject a loading link that swaps to a button, a loading Button that runs `onClick` or opens its link while not interruptible, a size change while loading, or a disabled Button with `href` that opens. Reject an Astryx fill drawn inside a bar's glass, a set `variant` that glass overrides or drops, glass drawn under Reduce Transparency or Increase Contrast, or a glass change merged without the simulator capture gate.                                            |
-| Governing rules         | `component:Button` FR7–FR11; `spec:AST-082` FR3; `spec:AST-093` FR1–FR5; the Swift component API record (A2–A5) under `packages/native/specs/swift/library/`; DEC-1 below.                                                                                                                                                                                                                                                                                                   |
+| Governing rules         | `component:Button` FR7–FR11; `spec:AST-082` FR3; `spec:AST-093` FR1–FR5; the Swift component API record (`architecture:native-swift-component-api` A2–A5); DEC-1 below.                                                                                                                                                                                                                                                                                                      |
 
 This table is a review projection; the body below is authoritative.
 
@@ -176,7 +176,7 @@ The component implements design requirements without copying their rationale.
 
 Platform control: SwiftUI `Button` and `Link` with `ProgressView`; they are the
 platform's own controls and satisfy the contract (`spec:AST-093` FR2). A
-`tooltip` shows through the shared Astryx tooltip (`library/tooltip.spec.md`).
+`tooltip` shows through the shared Astryx tooltip (`architecture:native-swift-tooltip`).
 Guideline pages: Buttons, Progress indicators, Materials (Liquid Glass),
 Toolbars, and Accessibility (Reduce Transparency, Increase Contrast) in the
 Apple Human Interface Guidelines (`spec:AST-093` FR3).
