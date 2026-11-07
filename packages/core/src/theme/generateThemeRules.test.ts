@@ -6,6 +6,7 @@
  * correct, consistently ordered CSS for both runtime and build paths.
  */
 
+import {PRESS_BELIEVED_SELECTOR} from '../privateAttributes/press';
 import {describe, it, expect, vi} from 'vitest';
 import {
   defineTheme,
@@ -206,9 +207,7 @@ describe('generateThemeRules', () => {
     const coarse = css.match(
       /@media \(pointer: coarse\) \{\s*([^{]+)\{([^}]*)\}/,
     );
-    expect(coarse?.[1]).toContain(
-      '.astryx-button:is([data-astryx-press="on"], [data-astryx-press="on"] *, :has([data-astryx-press="on"]))',
-    );
+    expect(coarse?.[1]).toContain(`.astryx-button${PRESS_BELIEVED_SELECTOR}`);
     expect(coarse?.[1]).not.toContain(':active');
     expect(coarse?.[2]).toContain('background-color: rebeccapurple');
     // No bare :active rule a finger would match on the touch.
@@ -232,9 +231,7 @@ describe('generateThemeRules', () => {
     const coarse = css.match(
       /@media \(pointer: coarse\) \{\s*([^{]+)\{([^}]*)\}/,
     );
-    expect(coarse?.[1]).toContain(
-      '.astryx-switch:is([data-astryx-press="on"], [data-astryx-press="on"] *, :has([data-astryx-press="on"]))',
-    );
+    expect(coarse?.[1]).toContain(`.astryx-switch${PRESS_BELIEVED_SELECTOR}`);
   });
 
   it('keeps the rest of a selector around a themed :active in both arms', () => {
@@ -250,9 +247,7 @@ describe('generateThemeRules', () => {
     });
     const css = generateThemeRules(pressTheme).join('\n');
     expect(css).toContain(':active:not(:focus-visible)');
-    expect(css).toContain(
-      ':has([data-astryx-press="on"])):not(:focus-visible)',
-    );
+    expect(css).toContain(`${PRESS_BELIEVED_SELECTOR}:not(:focus-visible)`);
   });
 
   it('applies pseudo-class suffixes to the canonical selector', () => {

@@ -12,10 +12,20 @@
  */
 
 const PRESS_ON = '[data-astryx-press="on"]';
+// The public pressable marker (`utils/pressFeedback.ts` PRESSABLE_ATTRIBUTE).
+// The theme engine cannot import that runtime module.
+const PRESSABLE = '[data-astryx-pressable]';
 
 /**
- * The controller marks the pressable element only, which can be a wrapper of
- * the themed element or sit inside it. Each argument has the specificity of
- * one attribute, as `:active` has one pseudo-class.
+ * The controller marks the innermost pressable element only. That element can
+ * wrap the themed element (Switch's row) or sit inside it. The selector
+ * matches the marked element, its descendants up to a nested pressable, and a
+ * non-pressable element around it. A pressable row therefore does not paint
+ * the controls inside it, and a pressed control does not paint the pressable
+ * row around it. Each argument has the specificity of one attribute, as
+ * `:active` has one pseudo-class.
  */
-export const PRESS_BELIEVED_SELECTOR = `:is(${PRESS_ON}, ${PRESS_ON} *, :has(${PRESS_ON}))`;
+export const PRESS_BELIEVED_SELECTOR =
+  `:is(${PRESS_ON}, ` +
+  `${PRESS_ON} :where(:not(${PRESSABLE}, ${PRESS_ON} ${PRESSABLE} *)), ` +
+  `:where(:not(${PRESSABLE})):has(${PRESS_ON}))`;
