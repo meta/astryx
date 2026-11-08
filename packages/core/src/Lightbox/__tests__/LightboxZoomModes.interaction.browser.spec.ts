@@ -169,18 +169,28 @@ test('with a fine pointer (a desktop) the stage fills the viewer, as under a coa
     const img = dialog.getByRole('img', {name: 'Forest path'});
     await decoded(img);
     await frames(page, 2);
-    // The stage and its group stretch to fill the viewer for every pointer. A
-    // click or a drag beside the photo is the stage's, as a finger's is.
+    // The stage and its group stretch to fill the viewer for every pointer.
+    // The zoom button is the stage's one page, the photo's box, and with no
+    // caption it fills the stage. A click or a drag beside the photo is the
+    // stage's, as a finger's is.
     const layout = await stage.evaluate(el => {
-      const own = getComputedStyle(el);
-      const group = getComputedStyle(el.parentElement as HTMLElement);
+      const viewport = el.closest('[data-lightbox-viewport]') as HTMLElement;
+      const own = getComputedStyle(viewport);
+      const group = getComputedStyle(viewport.parentElement as HTMLElement);
+      const v = viewport.getBoundingClientRect();
+      const b = el.getBoundingClientRect();
       return {
         stage: [own.alignSelf, own.flexGrow],
         group: [group.alignSelf, group.flexGrow],
+        button: [
+          Math.round(b.width - v.width),
+          Math.round(b.height - v.height),
+        ],
       };
     });
     expect(layout.stage).toEqual(['stretch', '1']);
     expect(layout.group).toEqual(['stretch', '1']);
+    expect(layout.button).toEqual([0, 0]);
     // The photo fits inside the viewer, as before.
     const imgBox = await img.boundingBox();
     if (imgBox == null) {
