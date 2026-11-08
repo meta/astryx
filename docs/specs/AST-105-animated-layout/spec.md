@@ -69,12 +69,13 @@ const animatedLayout = useAnimatedLayout({containerRef: scrollRef});
   `animatedLayout` prop or option.
 - **FR2 — Without a handle, nothing changes.** A component without a handle
   keeps its behavior: the changed element shows its change as its own record
-  says, and content after it takes its place at once. AppShell's content area and
-  the SideNav rail animate their own change during a side nav collapse or
+  says, and content after it takes its place at once. AppShell's content area
+  and the SideNav rail animate their own change during a side nav collapse or
   expand, and a resizable pane a LayoutPanel renders animates its own collapse
   and open, as their records state (`component:AppShell` FR17,
   `component:SideNav` FR6, `component:Resizable` FR8, `component:LayoutPanel`
-  FR7).
+  FR7). Under a coarse pointer, a TreeList with no handle from the app animates
+  its own expand and collapse inside the tree (`component:TreeList` FR8).
 - **FR3 — The content after a change glides within the area.** For any change
   a component holding the handle reports, such as a disclosure opening,
   content loading in, a message appearing, or an item inserted or removed,
@@ -95,8 +96,10 @@ const animatedLayout = useAnimatedLayout({containerRef: scrollRef});
   `--ease-move`, over `--duration-medium`, which follow the theme's
   `character` and `tempo` (`spec:AST-108` FR1, FR2). The glide is curve
   tokens, never a spring, and no character or option plays a
-  platform-measured curve for it (`spec:AST-094` FR45). Both start on the same
-  frame, and Reduce Motion reaches both, as `design:reduced-motion` DR1–DR3
+  platform-measured curve for it (`spec:AST-094` FR45). A gesture's release
+  settles on `spec:AST-094`'s spring from its release velocity; curve tokens
+  govern glides that no gesture releases. Both start on the same frame, and
+  Reduce Motion reaches both, as `design:reduced-motion` DR1–DR3
   require: a cross-fade under a coarse primary pointer, an immediate change
   otherwise.
 - **FR5 — Every pointer.** The glide applies under every pointer, a mouse
@@ -157,11 +160,12 @@ const animatedLayout = useAnimatedLayout({containerRef: scrollRef});
   - A resizable pane that a LayoutPanel renders conceals and reveals by the edge
     facing its ResizeHandle each time it collapses or opens, and LayoutContent
     beside it moves on the same motion (`component:Resizable` FR8,
-    `component:LayoutPanel` FR7). A drag that crosses the collapse threshold plays
-    the conceal; a drag that reopens a collapsed pane plays nothing, because the
-    pointer drives the edge. A pane the caller renders at `useResizable`'s size
-    alone shows no reveal, because Core never holds that element, and so does
-    a LayoutPanel given the configuration-object form, a hand-built
+    `component:LayoutPanel` FR7). Only a lift closes the pane, and its conceal
+    settles from the lift's release velocity (FR4); a drag that reopens a
+    collapsed pane plays nothing, because the pointer drives the edge. A pane
+    the caller renders at `useResizable`'s size alone shows no reveal,
+    because Core never holds that element, and so does a LayoutPanel given
+    the configuration-object form, a hand-built
     `ResizableProps` object that `useResizable` did not return; the hook's own
     `props` passed through `resizable` slide.
 
@@ -242,10 +246,10 @@ Out of coverage, each taking its final place at once:
 | ------------- | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | FR1, FR2      | Unit and browser tests with and without a handle                                                           | a handle on TreeList; no handle; a ScrollableArea ref                                                                                                                                                                                                                                               | a handle with public members, behavior that changes without a handle, or ScrollableArea registering itself fails                                                                                                                                                    |
 | FR3, Coverage | Real-browser tests, one per Coverage row                                                                   | each Coverage row; mixed Astryx and plain content; two changes in one frame; an area scrolled mid-list                                                                                                                                                                                              | an element that behaves other than its row says, an element moved twice for one frame, content past the area that moves, or the area scrolling fails                                                                                                                |
-| FR4           | Real-browser frame capture under a coarse and a fine pointer, with and without Reduce Motion               | a changed element and its visible followers at each `character`, and at `tempo` 0.75 and 1.5                                                                                                                                                                                                        | starting on different frames or reading different motion, a component-specific timing, a glide that ignores the theme's `character` or `tempo`, a spring or a platform-measured curve played for the glide, or Reduce Motion applied to one and not the other fails |
+| FR4           | Real-browser frame capture under a coarse and a fine pointer, with and without Reduce Motion               | a changed element and its visible followers at each `character`, and at `tempo` 0.75 and 1.5; a lift that closes a LayoutPanel, from its release velocity                                                                                                                                           | starting on different frames or reading different motion, a component's own timing, a glide that ignores the theme's `character` or `tempo`, a spring or a measured curve for a glide no gesture releases, or Reduce Motion applied to one and not the other, fails |
 | FR5           | Fine-pointer before-and-after evidence on each adopting pull request, from the component's Storybook story | a mouse on each adopting component                                                                                                                                                                                                                                                                  | a glide missing under a mouse, or an adopting pull request without that evidence, fails                                                                                                                                                                             |
 | FR8           | Unit tests of the swap and real-browser proofs of its adopters                                             | a fast load, a slow load, a forward and a back page change, Reduce Motion                                                                                                                                                                                                                           | an empty area during a swap, a placeholder flashed for a fast load, travel under Reduce Motion, a layer exit played by it, or a public export fails                                                                                                                 |
-| FR9           | Unit tests of the reveal's measurement and real-browser frame capture of each adopter                      | Collapsible opening; the SideNav rail collapsing and expanding; a start and an end LayoutPanel collapsing and opening by toggle, Enter, the grow arrow, a controlled change and a drag past the threshold; a drag reopening a pane; a hook-only pane; focus inside a collapsing pane; Reduce Motion | a gap opening beside a moving edge, two motions for one rail collapse, a reveal during a drag that reopens a pane, a reveal on a hook-only pane, focus left inside a concealed pane, a concealed pane reachable by Tab, or a public export fails                    |
+| FR9           | Unit tests of the reveal's measurement and real-browser frame capture of each adopter                      | Collapsible opening; the SideNav rail collapsing and expanding; a start and an end LayoutPanel collapsing and opening by toggle, Enter, the grow arrow, a controlled change and a lift past the threshold; a drag reopening a pane; a hook-only pane; focus inside a collapsing pane; Reduce Motion | a gap opening beside a moving edge, two motions for one rail collapse, a reveal during a drag that reopens a pane, a reveal on a hook-only pane, focus left inside a concealed pane, a concealed pane reachable by Tab, or a public export fails                    |
 
 ## Decision log
 
@@ -274,7 +278,9 @@ A glide is a move like any other, so it takes the theme's move curve and
 duration, and a theme that sets `character` or `tempo` sees its glides change
 with the rest of its motion, under every pointer. A tap that expands or
 collapses content carries no velocity, so the glide that follows plays curve
-tokens, never a spring (`spec:AST-094` FR45).
+tokens, never a spring (`spec:AST-094` FR45). A gesture's release settles on
+`spec:AST-094`'s spring from its release velocity; curve tokens govern glides
+that no gesture releases.
 
 Rejected: the measured spring as the glide; a platform-measured opt-in, such as a separate character.
 
