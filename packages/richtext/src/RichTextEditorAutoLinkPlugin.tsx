@@ -28,8 +28,7 @@
  * uses the stock matcher shape (`createLinkMatcherWithRegExp` + `attributes`)
  * and new-tab defaults, so a consumer supplies a richer matcher set — an
  * application-specific identifier or ticket syntax, say — through the
- * `matchers` prop without changing the contract. Code blocks are excluded
- * through the upstream plugin's `excludeParents`. An application needing a
+ * `matchers` prop without changing the contract. An application needing a
  * hardened transform (expanded separators, say) substitutes its own plugin in
  * the same slot; astryx stays on the upstream `AutoLinkPlugin`.
  */
@@ -75,6 +74,10 @@ export const DEFAULT_LINK_MATCHERS: LinkMatcher[] = [
   },
 ];
 
+// Text in a code block is never linked. The upstream plugin registers again
+// when this array changes. Keep it a module constant.
+const EXCLUDE_PARENTS: ((parent: ElementNode) => boolean)[] = [$isCodeNode];
+
 export interface RichTextEditorAutoLinkPluginProps {
   /**
    * Link matchers to use. Defaults to {@link DEFAULT_LINK_MATCHERS} (URLs +
@@ -107,11 +110,6 @@ export interface RichTextEditorAutoLinkPluginProps {
  * />
  * ```
  */
-// A code block holds only code, so text in one is never linked: neither a
-// typed or pasted URL nor one in an imported fence. A module constant keeps
-// the plugin from registering again on each render.
-const EXCLUDE_PARENTS: ((parent: ElementNode) => boolean)[] = [$isCodeNode];
-
 export function RichTextEditorAutoLinkPlugin({
   matchers = DEFAULT_LINK_MATCHERS,
   onChange,

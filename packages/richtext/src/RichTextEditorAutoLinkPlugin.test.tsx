@@ -16,7 +16,9 @@ import {$isCodeNode, type CodeNode} from '@lexical/code';
 import {$isAutoLinkNode} from '@lexical/link';
 import {
   $getRoot,
+  $getSelection,
   $isElementNode,
+  $isRangeSelection,
   PASTE_COMMAND,
   type LexicalEditor,
   type LexicalNode,
@@ -122,6 +124,26 @@ describe('RichTextEditorAutoLinkPlugin and code blocks', () => {
     });
     expect(editor.read(() => $codeBlock().getTextContent())).toBe(
       'const x = 1;\nSee https://example.com',
+    );
+    expect(editor.read(() => $autoLinks($codeBlock()))).toBe(0);
+  });
+
+  it('leaves a URL typed into a code block as code', async () => {
+    const editor = await renderEditor('```ts\nconst x = 1;\n\n```\n');
+    act(() => {
+      editor.update(
+        () => {
+          $codeBlock().selectEnd();
+          const selection = $getSelection();
+          if ($isRangeSelection(selection)) {
+            selection.insertText('// see https://example.com ');
+          }
+        },
+        {discrete: true},
+      );
+    });
+    expect(editor.read(() => $codeBlock().getTextContent())).toBe(
+      'const x = 1;\n// see https://example.com ',
     );
     expect(editor.read(() => $autoLinks($codeBlock()))).toBe(0);
   });
