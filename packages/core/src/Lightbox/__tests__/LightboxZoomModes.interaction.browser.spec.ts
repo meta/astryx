@@ -20,13 +20,13 @@ import {
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
 import {
+  advanceFrozenPage,
   armHold,
   curveOf,
   drag,
   flick,
   frames,
   freezePageOn,
-  freezePageWhen,
   installPageFreeze,
   installTimerGate,
   openStory,
@@ -36,9 +36,9 @@ import {
   thawPage,
   timeline,
   touchDriver,
+  type TouchScript,
   waitForRest,
   withStorybook,
-  type TouchScript,
 } from '@astryxdesign/interaction-harness';
 import {recordLiftOffset} from './liftOffset';
 
@@ -376,24 +376,21 @@ test('under Reduce Motion, + then - pressed mid-fade leave the photo at full opa
   const dialog = page.getByRole('dialog', {name: 'Forest path'});
   const opacity = async () =>
     img.evaluate(el => parseFloat(getComputedStyle(el).opacity));
-  await img.evaluate(el => el.setAttribute('data-freeze-photo', ''));
   await dialog.getByRole('button', {name: 'Zoom'}).focus();
-  // The scene stops in the first frame of the first key's cross-fade dip,
-  // however late this process reacts. The dip lasts 200 ms at most, so a
-  // poll from here can miss it. The second key then lands mid-dip.
-  const dipped = freezePageWhen(
-    page,
-    () => {
-      const photo = document.querySelector('[data-freeze-photo]');
-      return (
-        photo != null &&
-        Number.parseFloat(getComputedStyle(photo).opacity) < 0.9
-      );
-    },
-    undefined,
-  );
+  // The scene freezes in the first key's own task, before the page handles
+  // it. So the cross-fade the key starts is held at its start, however late
+  // this process reacts and however few frames a loaded runner draws.
+  await freezePageOn(page, 'keydown');
   await page.keyboard.press('+');
-  await dipped;
+  // Moved on by its own clock, the frozen scene stands in the dip.
+  await advanceFrozenPage(page, MID_DIP_MS);
+  const dip = await opacity();
+  if (!(dip < 0.9)) {
+    throw new Error(
+      `The first key started no cross-fade: ${MID_DIP_MS} ms on, the photo stands at opacity ${dip}`,
+    );
+  }
+  // The second key lands mid-dip.
   await page.keyboard.press('-');
   await thawPage(page);
   await waitForRest(img);
@@ -406,6 +403,12 @@ test('under Reduce Motion, + then - pressed mid-fade leave the photo at full opa
   await frames(page, 2);
   expect(await opacity()).toBeCloseTo(1, 3);
 });
+
+/**
+ * Where the Reduce Motion plus-then-minus case stops the first key's
+ * cross-fade, ms: halfway through its fade out, which lasts 100 ms.
+ */
+const MID_DIP_MS = 50;
 
 test('with zoom off, a tap on the dark area around the photo closes the viewer on a touch screen', async ({
   page,

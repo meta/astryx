@@ -517,6 +517,7 @@ describe('ci.yml RTL package sharding', () => {
     );
     expect(readers.map(([name]) => name).sort()).toEqual(
       [
+        'a11y-dependent-audits-plan',
         'pr-a11y-guards',
         'pr-a11y-specs',
         'pr-component-a11y-contracts',
@@ -761,8 +762,10 @@ describe('full component typechecks', () => {
     name => {
       const {typecheck, 'typecheck:docs': docs} = scriptsOf(`packages/${name}`);
       expect(docs).toBe('tsc --project tsconfig.docs.json');
+      // Core's project runs in several programs (scripts/typecheck-sharded.mjs);
+      // each covers its whole tsconfig.json.
       expect(typecheck).toMatch(
-        /^tsc (--project tsconfig\.json )?--noEmit && pnpm typecheck:docs$/,
+        /^(tsc (--project tsconfig\.json )?--noEmit|node \.\.\/\.\.\/scripts\/typecheck-sharded\.mjs --project tsconfig\.json --shards \d+) && pnpm typecheck:docs$/,
       );
     },
   );

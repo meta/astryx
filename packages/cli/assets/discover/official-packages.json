@@ -182,6 +182,14 @@
         },
         {
           "kind": "component",
+          "name": "TabBar"
+        },
+        {
+          "kind": "component",
+          "name": "TabBarItem"
+        },
+        {
+          "kind": "component",
           "name": "ThreeDBar"
         },
         {

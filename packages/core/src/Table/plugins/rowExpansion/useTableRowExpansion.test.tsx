@@ -527,21 +527,24 @@ describe('useTableRowExpansion (detail panel)', () => {
   describe('panel variant', () => {
     const panelRow = () =>
       screen.getByTestId('panel').closest('tr') as HTMLTableRowElement;
+    const panelCell = () =>
+      screen.getByTestId('panel').closest('td') as HTMLTableCellElement;
+    const wash = {backgroundColor: 'var(--color-background-muted)'};
 
     it('leaves the panel on the surface behind the table by default', () => {
       // The panel is the row's continuation, not a surface of its own: it
       // takes whatever the table sits on, the way the row does.
       render(<Harness initialExpanded={new Set(['a'])} />);
-      expect(panelRow()).not.toHaveStyle({
-        backgroundColor: 'var(--color-background-muted)',
-      });
+      expect(panelRow()).not.toHaveStyle(wash);
+      expect(panelCell()).not.toHaveStyle(wash);
     });
 
-    it('washes the panel when muted is asked for', () => {
+    it('washes the panel cell, not its row, when muted is asked for', () => {
+      // A row that paints its own box keeps a moving clip as the panel plays
+      // in. The cell slides in with the content instead.
       render(<Harness initialExpanded={new Set(['a'])} panelVariant="muted" />);
-      expect(panelRow()).toHaveStyle({
-        backgroundColor: 'var(--color-background-muted)',
-      });
+      expect(panelCell()).toHaveStyle(wash);
+      expect(panelRow()).not.toHaveStyle(wash);
     });
   });
 
