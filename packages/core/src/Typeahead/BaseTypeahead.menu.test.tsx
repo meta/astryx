@@ -2,7 +2,7 @@
 
 /**
  * @file BaseTypeahead.menu.test.tsx
- * @input BaseTypeahead, Typeahead and Tokenizer with a `menu` config and a handle
+ * @input BaseTypeahead and Typeahead with a `menu` config and a handle
  * @output The menu's listbox and dialog roles, the handle, focus return, and role switches
  * @position Colocated verification for the BaseTypeahead menu
  */
@@ -17,7 +17,6 @@ import {
   type BaseTypeaheadMenu,
 } from './BaseTypeahead';
 import {Typeahead} from './Typeahead';
-import {Tokenizer, type TokenizerHandle} from '../Tokenizer';
 import type {SearchSource, SearchableItem} from './types';
 
 const popoverOpenState = new WeakMap<HTMLElement, boolean>();
@@ -428,7 +427,7 @@ describe('BaseTypeahead menu', () => {
   });
 
   describe('closing a dialog that a pick opened, in a field with focus entries', () => {
-    function FilterField() {
+    function FilterField({isSaveDeferred = false}: {isSaveDeferred?: boolean}) {
       const handleRef = useRef<BaseTypeaheadHandle>(null);
       const [field, setField] = useState<string | null>(null);
       return (
@@ -462,9 +461,23 @@ describe('BaseTypeahead menu', () => {
                     role: 'dialog',
                     label: field,
                     render: ({close}) => (
-                      <button type="button" onClick={close}>
-                        Cancel
-                      </button>
+                      <>
+                        <button type="button" onClick={close}>
+                          Cancel
+                        </button>
+                        {isSaveDeferred ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              // An editor that saves before it closes.
+                              void new Promise(resolve =>
+                                setTimeout(resolve, 30),
+                              ).then(close);
+                            }}>
+                            Save
+                          </button>
+                        ) : null}
+                      </>
                     ),
                   }
             }
@@ -474,9 +487,9 @@ describe('BaseTypeahead menu', () => {
       );
     }
 
-    async function openDialogFromPick() {
+    async function openDialogFromPick(isSaveDeferred = false) {
       const user = userEvent.setup();
-      render(<FilterField />);
+      render(<FilterField isSaveDeferred={isSaveDeferred} />);
       const input = screen.getByRole('combobox');
       await user.click(input);
       await screen.findByRole('option', {name: 'Apple', hidden: true});
@@ -508,6 +521,17 @@ describe('BaseTypeahead menu', () => {
       await waitFor(() => expect(input).toHaveFocus());
       await new Promise(resolve => setTimeout(resolve, 50));
       expect(input).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('close() after an await does not reopen the list', async () => {
+      const {user, input} = await openDialogFromPick(true);
+      await user.click(
+        screen.getByRole('button', {name: 'Save', hidden: true}),
+      );
+      await waitFor(() => expect(input).toHaveFocus());
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+      expect(screen.queryByRole('listbox')).toBeNull();
     });
 
     it('a press outside closes it and leaves the list closed', async () => {
@@ -592,33 +616,6 @@ describe('BaseTypeahead menu', () => {
         hidden: true,
       });
       expect(isLayerOpen(dialog)).toBe(true);
-    });
-
-    it('Tokenizer forwards the menu, the handle and onOpenChange', async () => {
-      const handle = createRef<TokenizerHandle>();
-      const onOpenChange = vi.fn();
-      render(
-        <Tokenizer
-          label="Filters"
-          presentation="popover"
-          searchSource={fruits}
-          value={[]}
-          onChange={() => {}}
-          handleRef={handle}
-          onOpenChange={onOpenChange}
-          menu={{role: 'dialog', label: 'Status', render: () => <p>Panel</p>}}
-        />,
-      );
-      act(() => handle.current?.open());
-      const dialog = await screen.findByRole('dialog', {
-        name: 'Status',
-        hidden: true,
-      });
-      expect(isLayerOpen(dialog)).toBe(true);
-      expect(onOpenChange).toHaveBeenLastCalledWith(true);
-      act(() => handle.current?.close());
-      expect(isLayerOpen(dialog)).toBe(false);
-      expect(onOpenChange).toHaveBeenLastCalledWith(false);
     });
   });
 });

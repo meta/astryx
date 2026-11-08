@@ -566,16 +566,30 @@ interface InternalFocusTrapOptions extends UseFocusTrapOptions {
    * the browser puts it.
    */
   getRestoreFallback?: () => HTMLElement | null;
+  /**
+   * Moves focus to the element the trap restores to on deactivation, in
+   * place of `element.focus()`, so the caller knows which focus is the
+   * return.
+   */
+  restoreFocusTo?: (element: HTMLElement) => void;
 }
 
 export function useFocusTrapInternal<T extends HTMLElement = HTMLElement>(
   options: InternalFocusTrapOptions,
 ): UseFocusTrapReturn<T> {
-  const {isActive, onEscape, getRestoreTarget, getRestoreFallback} = options;
+  const {
+    isActive,
+    onEscape,
+    getRestoreTarget,
+    getRestoreFallback,
+    restoreFocusTo,
+  } = options;
   const getRestoreTargetRef = useRef(getRestoreTarget);
   getRestoreTargetRef.current = getRestoreTarget;
   const getRestoreFallbackRef = useRef(getRestoreFallback);
   getRestoreFallbackRef.current = getRestoreFallback;
+  const restoreFocusToRef = useRef(restoreFocusTo);
+  restoreFocusToRef.current = restoreFocusTo;
 
   const containerRef = useRef<T | null>(null);
 
@@ -667,6 +681,15 @@ export function useFocusTrapInternal<T extends HTMLElement = HTMLElement>(
     };
     doc.addEventListener('focusin', markFocusInside, true);
 
+    const restoreFocus = (element: HTMLElement) => {
+      const restoreTo = restoreFocusToRef.current;
+      if (restoreTo == null) {
+        element.focus();
+      } else {
+        restoreTo(element);
+      }
+    };
+
     return () => {
       doc.removeEventListener('focusin', markFocusInside, true);
 
@@ -689,12 +712,12 @@ export function useFocusTrapInternal<T extends HTMLElement = HTMLElement>(
         typeof previouslyFocused.focus === 'function' &&
         !(isPage && getRestoreFallbackRef.current != null)
       ) {
-        previouslyFocused.focus();
+        restoreFocus(previouslyFocused);
         return;
       }
       const fallback = getRestoreFallbackRef.current?.();
       if (fallback != null && fallback.isConnected) {
-        fallback.focus();
+        restoreFocus(fallback);
       }
     };
   }, [isActive]);

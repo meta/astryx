@@ -513,6 +513,22 @@ const itemSizeStyles = stylex.create({
 /** The result popup's maximum height in CSS pixels (`styles.dropdown`). */
 const DROPDOWN_MAX_HEIGHT = 300;
 
+/**
+ * The menu's popover element. The element the input controls (the list, or
+ * the dialog's layer) sits inside it, or is it.
+ */
+function findMenuLayer(input: HTMLInputElement | null): HTMLElement | null {
+  const controlsId = input?.getAttribute('aria-controls');
+  if (input == null || controlsId == null) {
+    return null;
+  }
+  // The field may sit in a shadow root, so look the id up there.
+  const root = input.getRootNode() as Document | ShadowRoot;
+  return (
+    root.getElementById(controlsId)?.closest<HTMLElement>('[popover]') ?? null
+  );
+}
+
 // Bundlers replace this value at build time. The declaration lets a product
 // without Node's types type-check this file, as in `utils/devWarning.ts`.
 declare const process: {readonly env: {readonly NODE_ENV?: string}};
@@ -920,9 +936,9 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // the same event that opened the list still reload it.
   const isShowingRef = useRef(false);
 
-  // Set by the handle's `open()`. A pick reads it to keep the menu open, and
-  // the open itself runs after the commit, so it uses the menu the caller
-  // rendered in the same event (a token press that switches to a dialog).
+  // Set by the handle's `open()`. A pick reads it to keep the menu open. The
+  // open runs after the commit, so it uses the menu the caller rendered in
+  // the same event.
   const openRequestedRef = useRef(false);
   const [openRequest, setOpenRequest] = useState(0);
   // Set when a pick kept the menu open; the open after the commit then
@@ -946,9 +962,26 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   useIsomorphicLayoutEffect(() => {
     isDialogMenuRef.current = isDialogMenu;
   }, [isDialogMenu]);
-  // Set when a dialog-role menu closes. Its focus return to the input does
-  // not open the list, as a pick's own focus return does not.
+  // True while the dialog's close moves focus back to the input. That focus
+  // does not open the list, as a pick's own focus return does not.
   const isDialogFocusReturnRef = useRef(false);
+  const restoreFocusTo = useCallback((element: HTMLElement) => {
+    isDialogFocusReturnRef.current = element === inputRef.current;
+    try {
+      element.focus();
+    } finally {
+      isDialogFocusReturnRef.current = false;
+    }
+  }, []);
+  // The element focused when the handle's `open()` ran. The open runs after
+  // the commit, and a click's own handlers can move focus before it (a token
+  // button inside the field), so the menu returns focus here. It holds until
+  // the menu closes, so every show in that open reads it.
+  const openerAtRequestRef = useRef<HTMLElement | null>(null);
+  const getOpener = useCallback(() => {
+    const opener = openerAtRequestRef.current;
+    return opener?.isConnected === true ? opener : null;
+  }, []);
   const handleLayerShow = useCallback(() => {
     isShowingRef.current = true;
     onOpenChange?.(true);
@@ -957,21 +990,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       outsidePress.stop();
       return;
     }
-    // The element the input controls (the list, or the dialog's layer) sits
-    // inside the popover element, or is it.
-    const findLayer = () => {
-      const input = inputRef.current;
-      const controlsId = input?.getAttribute('aria-controls');
-      if (input == null || controlsId == null) {
-        return null;
-      }
-      // The field may sit in a shadow root, so look the id up there.
-      const root = input.getRootNode() as Document | ShadowRoot;
-      return (
-        root.getElementById(controlsId)?.closest<HTMLElement>('[popover]') ??
-        null
-      );
-    };
+    const findLayer = () => findMenuLayer(inputRef.current);
     outsidePress.start(
       anchorEl,
       path =>
@@ -986,14 +1005,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
 
   const handleLayerHide = useCallback(() => {
     isShowingRef.current = false;
-    if (isDialogMenuRef.current) {
-      // The focus return runs in this close's commit; a later focus is the
-      // person's own.
-      isDialogFocusReturnRef.current = true;
-      setTimeout(() => {
-        isDialogFocusReturnRef.current = false;
-      }, 0);
-    }
+    openerAtRequestRef.current = null;
     outsidePress.stop();
     onOpenChange?.(false);
     setHighlightedIndex(-1);
@@ -1020,6 +1032,8 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     role: isDialogMenu ? 'dialog' : 'none',
     dialogLabel: menu?.role === 'dialog' ? menu.label : undefined,
     getRestoreFallback: () => inputRef.current,
+    restoreFocusTo,
+    getOpener,
   });
 
   const hideList = useCallback(() => {
@@ -1582,7 +1596,6 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // Handle focus
   const handleFocus = useCallback(() => {
     if (isDialogFocusReturnRef.current) {
-      isDialogFocusReturnRef.current = false;
       return;
     }
     openIfEligible();
@@ -1823,6 +1836,12 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     () => ({
       open() {
         openRequestedRef.current = true;
+        const active = inputRef.current?.ownerDocument.activeElement;
+        openerAtRequestRef.current =
+          active instanceof HTMLElement &&
+          findMenuLayer(inputRef.current)?.contains(active) !== true
+            ? active
+            : null;
         setOpenRequest(request => request + 1);
       },
       close() {
@@ -1841,6 +1860,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     const isAfterPick = pickKeptOpenRef.current;
     pickKeptOpenRef.current = false;
     if (isDisabled) {
+      openerAtRequestRef.current = null;
       return;
     }
     if (isAfterPick && !isDialogMenu) {

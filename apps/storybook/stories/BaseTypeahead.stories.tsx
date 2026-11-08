@@ -329,8 +329,8 @@ export const NarrowLongResult: Story = {
   },
 };
 
-// The `BaseTypeaheadMenu` CLI block: a listbox menu with information around
-// the list, and a dialog menu that a pick or a filter button opens.
+// A listbox menu with information around the list, and a dialog menu that a
+// pick or a filter button opens.
 type MenuField = SearchableItem & {values: string[]};
 
 const fields: MenuField[] = [

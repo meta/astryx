@@ -60,11 +60,7 @@ import {useIsHydrating} from '../hooks/useIsHydrating';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {warnOnce} from '../utils/devWarning';
 import type {SizeValue} from '../utils/types';
-import {
-  BaseTypeahead,
-  type BaseTypeaheadHandle,
-  type BaseTypeaheadMenu,
-} from '../Typeahead/BaseTypeahead';
+import {BaseTypeahead} from '../Typeahead/BaseTypeahead';
 import {useSize} from '../SizeContext/SizeContext';
 import {
   Field,
@@ -150,13 +146,6 @@ export interface TokenizerHandle {
   focus(): void;
   /** Blur the typeahead input. */
   blur(): void;
-  /**
-   * Open the menu (see `BaseTypeaheadHandle.open`). The sheet presentation
-   * ignores it.
-   */
-  open(): void;
-  /** Close the menu. The sheet presentation ignores it. */
-  close(): void;
 }
 
 export interface TokenizerProps<T extends SearchableItem> extends Omit<
@@ -349,20 +338,8 @@ export interface TokenizerProps<T extends SearchableItem> extends Omit<
    * sheet can present.
    */
   ref?: React.Ref<HTMLInputElement>;
-  /** Imperative handle ref for focus, blur, and opening the menu. */
+  /** Imperative handle ref for focus/blur control. */
   handleRef?: React.Ref<TokenizerHandle>;
-  /**
-   * What the menu shows: the result list, optionally with information around
-   * it, or content that takes focus. Forwarded to BaseTypeahead; see
-   * `BaseTypeaheadMenu`. The sheet presentation keeps its own sheet and
-   * ignores it.
-   */
-  menu?: BaseTypeaheadMenu;
-  /**
-   * Called when the menu opens or closes. It reports changes only; drive the
-   * menu with `handleRef`. Not called by the sheet presentation.
-   */
-  onOpenChange?: (isOpen: boolean) => void;
 }
 
 /** How Tokenizer presents its choices; see `TokenizerProps.presentation`. */
@@ -840,8 +817,6 @@ export function Tokenizer<T extends SearchableItem>({
   controlStyle,
   ref,
   handleRef,
-  menu,
-  onOpenChange,
   onKeyDown,
   presentation = 'adaptive',
   id: idProp,
@@ -975,8 +950,6 @@ export function Tokenizer<T extends SearchableItem>({
           ['hasClear', hasClear || undefined],
           ['hasEntriesOnFocus', hasEntriesOnFocus || undefined],
           ['menuWidth', menuWidth],
-          ['menu', menu],
-          ['onOpenChange', onOpenChange],
           ['tokenOverflowBehavior', tokenOverflowBehavior],
           ['hasAutoFocus', hasAutoFocus || undefined],
         ] as const
@@ -1084,19 +1057,12 @@ export function Tokenizer<T extends SearchableItem>({
     handOffFocusRef,
   );
 
-  const baseHandleRef = useRef<BaseTypeaheadHandle>(null);
   useImperativeHandle(handleRef, () => ({
     focus() {
       (isSheetPresentation ? triggerRef : inputRef).current?.focus();
     },
     blur() {
       (isSheetPresentation ? triggerRef : inputRef).current?.blur();
-    },
-    open() {
-      baseHandleRef.current?.open();
-    },
-    close() {
-      baseHandleRef.current?.close();
     },
   }));
 
@@ -1611,9 +1577,6 @@ export function Tokenizer<T extends SearchableItem>({
               debounceMs={debounceMs}
               onKeyDown={handleKeyDown}
               anchorRef={wrapperRef}
-              menu={menu}
-              onOpenChange={onOpenChange}
-              handleRef={baseHandleRef}
               size={size}
               inputXStyle={[
                 isAtMax || isTruncated
