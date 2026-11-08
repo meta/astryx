@@ -33,8 +33,8 @@
  * ```
  *
  * Internal variables (`--layout-padding-inner-x`, `--container-padding-*`,
- * `--_section-padding-propagated`) are implementation details and must not be
- * referenced by themes. They also do not cross an overlay boundary — see
+ * `--container-corner-*`, `--_section-padding-propagated`) are implementation
+ * details and must not be referenced by themes. They also do not cross an overlay boundary — see
  * `overlayPaddingReset` in padding.stylex.ts.
  *
  * SYNC: When modified, update /packages/core/src/Layout/Layout.doc.mjs
@@ -75,6 +75,48 @@ const baseStyles = stylex.create({
     // its regions would otherwise read first.
     '--layout-padding-own-outer-x': 'initial',
     '--layout-padding-own-outer-y': 'initial',
+  },
+});
+
+/**
+ * Corner publication for a rounded padding publisher (Card, Dialog,
+ * BottomSheet). The host sets `--_container-corner-block-start` and
+ * `--_container-corner-block-end` to the radius at each block edge.
+ *
+ * A corner goes only to the host's first or last child when that child reads
+ * corners (it carries `data-container-corner`). A reader deeper inside could
+ * take a corner it does not reach, so then no corner goes out.
+ */
+export const containerCornerStyles = stylex.create({
+  publish: {
+    '--container-corner-start-start': {
+      default: '0px',
+      ':has(> [data-container-corner]:first-child)': {
+        default: 'var(--_container-corner-block-start, 0px)',
+        ':has(> * [data-container-corner])': '0px',
+      },
+    },
+    '--container-corner-start-end': {
+      default: '0px',
+      ':has(> [data-container-corner]:first-child)': {
+        default: 'var(--_container-corner-block-start, 0px)',
+        ':has(> * [data-container-corner])': '0px',
+      },
+    },
+    '--container-corner-end-start': {
+      default: '0px',
+      ':has(> [data-container-corner]:last-child)': {
+        default: 'var(--_container-corner-block-end, 0px)',
+        ':has(> * [data-container-corner])': '0px',
+      },
+    },
+    '--container-corner-end-end': {
+      default: '0px',
+      ':has(> [data-container-corner]:last-child)': {
+        default: 'var(--_container-corner-block-end, 0px)',
+        ':has(> * [data-container-corner])': '0px',
+      },
+    },
   },
 });
 

@@ -22,7 +22,7 @@ import {
   radiusVars,
   shadowVars,
 } from '../theme/tokens.stylex';
-import {container} from '../Layout/container.stylex';
+import {container, containerCornerStyles} from '../Layout/container.stylex';
 import type {SpacingToken} from '../Layout/container.stylex';
 import {spacingStepToToken} from '../Layout/padding.stylex';
 import type {Elevation, SizeValue, SpacingStep} from '../utils/types';
@@ -91,40 +91,10 @@ const styles = stylex.create({
     paddingBlockStart: `calc(var(--container-padding-block-start) - ${borderVars['--border-width']})`,
     paddingBlockEnd: `calc(var(--container-padding-block-end) - ${borderVars['--border-width']})`,
   },
-  // The corners a full-bleed child takes where it reaches the card's edge.
-  // A corner goes only to a reader that is the card's first or last child,
-  // and to no reader when one sits deeper, where it could take a corner it
-  // does not reach. The child reaches under the border, so this is the outer
-  // radius.
-  publishesCorners: {
-    '--container-corner-start-start': {
-      default: '0px',
-      ':has(> [data-container-corner]:first-child)': {
-        default: 'var(--_card-radius)',
-        ':has(> * [data-container-corner])': '0px',
-      },
-    },
-    '--container-corner-start-end': {
-      default: '0px',
-      ':has(> [data-container-corner]:first-child)': {
-        default: 'var(--_card-radius)',
-        ':has(> * [data-container-corner])': '0px',
-      },
-    },
-    '--container-corner-end-start': {
-      default: '0px',
-      ':has(> [data-container-corner]:last-child)': {
-        default: 'var(--_card-radius)',
-        ':has(> * [data-container-corner])': '0px',
-      },
-    },
-    '--container-corner-end-end': {
-      default: '0px',
-      ':has(> [data-container-corner]:last-child)': {
-        default: 'var(--_card-radius)',
-        ':has(> * [data-container-corner])': '0px',
-      },
-    },
+  // A full-bleed child reaches under the border, so it takes the outer radius.
+  corners: {
+    '--_container-corner-block-start': 'var(--_card-radius)',
+    '--_container-corner-block-end': 'var(--_card-radius)',
   },
   // Fixed-height cards scroll content; overflow: auto also clips to border-radius
   scrollable: {
@@ -357,7 +327,8 @@ export function Card({
                   paddingOuterY: paddingToken,
                 },
           ),
-          styles.publishesCorners,
+          styles.corners,
+          containerCornerStyles.publish,
           // Applied after the container padding so the border-inset calc wins;
           // it reads the --container-padding-* vars set above.
           variant === 'default' && styles.withBorder,

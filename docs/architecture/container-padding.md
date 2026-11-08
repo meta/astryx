@@ -107,7 +107,7 @@ The protocol has four layers:
    resulting edge exactly (see the conformance gap below).
 4. **Boundary reset.** An overlay leaves its ancestor's visual box while
    remaining a DOM descendant. `overlayPaddingReset` zeroes values descendants
-   subtract and invalidates values descendants add, so readers fall through to
+   subtract or take as a corner and invalidates values descendants add, so readers fall through to
    their own defaults. It does not clear public theme properties. A layout
    root ends the same inheritance where its own layout starts: AppShell applies
    Layout's `layoutReset` at its root (`component:AppShell` FR18), which extends
@@ -312,7 +312,7 @@ without dropping the active theme's Section default.
   does not replace the public theme property and does not cross an overlay
   boundary or a layout root.
 - **INV6 — Overlay and layout-root boundaries terminate stale geometry.** The outermost styled
-  overlay root zeroes `--container-padding-*`, invalidates
+  overlay root zeroes `--container-padding-*` and `--container-corner-*`, invalidates
   `--layout-padding-*` and `--_section-padding-propagated`, and leaves public
   theme properties intact. AppShell's root is a layout root: it applies
   Layout's `layoutReset`, which does the same and also resets the remaining
@@ -412,7 +412,8 @@ evidence, not part of this documentation stack.
 ## Owning code
 
 - `packages/core/src/Layout/container.stylex.ts` — lowers container theme and
-  explicit padding into internal geometry.
+  explicit padding into internal geometry, and holds the one corner
+  publication rounded hosts share.
 - `packages/core/src/Layout/padding.stylex.ts` — owns public spacing-step maps,
   logical-edge setters, Section propagation, and the overlay reset.
 - `packages/core/src/Layout/edgeCompensation.stylex.ts` — owns the container-side
@@ -424,7 +425,8 @@ evidence, not part of this documentation stack.
 - TabList currently lowers its component-owned projection; List lowers its
   `edge` projection. `component:TabList` and `component:List` define their local
   padding, row/strip geometry, and private propagation.
-- Card, Dialog, and BottomSheet implementations — publish their corners.
+- Card, Dialog, and BottomSheet implementations — set the radius at each block
+  edge for the shared corner publication.
 - Table and List implementations — mark themselves as readers and take the
   corners they reach.
 - Overlay roots — apply the reset at the visual boundary.

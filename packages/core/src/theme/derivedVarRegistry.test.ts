@@ -315,6 +315,11 @@ const PRIVATE_SYSTEM_VARS = new Set([
   '--_list-corner-start-end',
   '--_list-corner-end-start',
   '--_list-corner-end-end',
+  // The container-padding record's corner geometry: a rounded Card, Dialog,
+  // or BottomSheet hands its block-edge radius to the shared corner
+  // publication beside container().
+  '--_container-corner-block-start',
+  '--_container-corner-block-end',
 ]);
 
 const CROSS_COMPONENT_VARS: Record<string, string[]> = {

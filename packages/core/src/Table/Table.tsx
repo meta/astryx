@@ -140,9 +140,9 @@ const scrollWrapperStyles = stylex.create({
       default: null,
       ':last-child': 'calc(-1 * var(--container-padding-block-end, 0px))',
     },
-    // As its container's first or last child the region reaches that block
-    // edge, and takes the corner a rounded container publishes there, so its
-    // ring and fills follow the corner. Every other corner is square.
+    // As its container's first or last child, the region reaches that block
+    // edge. There it takes the published corner, so its ring and fills follow
+    // the curve. Every other corner is square.
     borderStartStartRadius: {
       default: '0px',
       ':first-child': 'var(--container-corner-start-start, 0px)',

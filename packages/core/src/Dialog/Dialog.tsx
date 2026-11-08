@@ -67,7 +67,7 @@ import {
   shadowVars,
   spacingVars,
 } from '../theme/tokens.stylex';
-import {container} from '../Layout/container.stylex';
+import {container, containerCornerStyles} from '../Layout/container.stylex';
 import type {SpacingToken} from '../Layout/container.stylex';
 import {
   paddingStyles,
@@ -306,37 +306,9 @@ const styles = stylex.create({
     overflow: 'hidden',
     borderRadius: 'inherit',
   },
-  // The corners a full-bleed child takes where it reaches the dialog's edge,
-  // published as Card publishes them.
   innerCorners: {
-    '--container-corner-start-start': {
-      default: '0px',
-      ':has(> [data-container-corner]:first-child)': {
-        default: 'var(--_dialog-radius)',
-        ':has(> * [data-container-corner])': '0px',
-      },
-    },
-    '--container-corner-start-end': {
-      default: '0px',
-      ':has(> [data-container-corner]:first-child)': {
-        default: 'var(--_dialog-radius)',
-        ':has(> * [data-container-corner])': '0px',
-      },
-    },
-    '--container-corner-end-start': {
-      default: '0px',
-      ':has(> [data-container-corner]:last-child)': {
-        default: 'var(--_dialog-radius)',
-        ':has(> * [data-container-corner])': '0px',
-      },
-    },
-    '--container-corner-end-end': {
-      default: '0px',
-      ':has(> [data-container-corner]:last-child)': {
-        default: 'var(--_dialog-radius)',
-        ':has(> * [data-container-corner])': '0px',
-      },
-    },
+    '--_container-corner-block-start': 'var(--_dialog-radius)',
+    '--_container-corner-block-end': 'var(--_dialog-radius)',
   },
   // Inline wrapper mirrors the dialog's visual styles without <dialog> behavior
   inlineWrapper: {
@@ -867,6 +839,7 @@ export function Dialog({
           containerPaddingBlockEndVarStyles[effectivePadding],
         isFullscreen && useThemeDefault && styles.fullscreenSafeArea,
         styles.innerCorners,
+        containerCornerStyles.publish,
       )}>
       <DialogContext value={dialogContextValue}>{children}</DialogContext>
     </div>
