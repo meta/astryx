@@ -232,8 +232,8 @@ function childTrack(element: HTMLElement, onHeld?: HeldRowListener) {
     });
   }
 
-  // A child the settle left out moves to the lead's translate before the
-  // row is measured, so its box reads as every other child's does.
+  // A child the settle left out takes the lead's translate before a
+  // measure. Its box then reads as the other children's do.
   function alignLeftOut(): void {
     const first = children()[0];
     if (leftOut.length === 0 || first == null) {
