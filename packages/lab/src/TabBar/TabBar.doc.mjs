@@ -110,6 +110,12 @@ export const docs = {
           description:
             "Id of the panel this tab controls, wired up as aria-controls. Put the same id on the section's panel element.",
         },
+        {
+          name: 'aria-disabled',
+          type: "boolean | 'true' | 'false'",
+          description:
+            "Disables the tab, as on Core's Tab: it stays focusable but dimmed and is never chosen. A tap, a click or a key on it, or a lift over it, selects nothing, and the arrow keys skip it. A finger that lands on it lifts no lens until it drags or reaches an enabled tab, which the lift then chooses. This differs from iOS on purpose. iOS ignores a touch that starts on a disabled tab, but TabBar follows the action-group rule: the tab you lift on acts.",
+        },
       ],
     },
   ],
@@ -131,6 +137,11 @@ export const docs = {
         guidance: true,
         description:
           "Give each tab a panelId naming its section's panel, so assistive technology can associate the two.",
+      },
+      {
+        guidance: true,
+        description:
+          'Disable a tab only while its section cannot open, and keep it in place, so the other tabs do not move.',
       },
       {
         guidance: false,

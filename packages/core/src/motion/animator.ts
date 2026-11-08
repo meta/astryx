@@ -368,10 +368,11 @@ export interface AnimatorOptions {
   /** Clock in ms on the document timeline's time base. */
   now?: () => number;
   /**
-   * Runs a callback in the next animation frame; `requestAnimationFrame` by
-   * default. A call from rest reads the start the browser gave it there.
+   * Runs a callback in the next animation frame, with the frame's timestamp;
+   * `requestAnimationFrame` by default. A call from rest reads the start the
+   * browser gave it there.
    */
-  requestFrame?: (callback: () => void) => void;
+  requestFrame?: (callback: (frame?: number) => void) => void;
 }
 
 /**
@@ -753,6 +754,36 @@ function markTask(time: number, clock: () => number): TaskMark {
   return openTask;
 }
 
+/** The first read of the time an animation frame runs, by its timestamp. */
+let frameRead: {readonly frame: number; readonly time: number} | null = null;
+
+/**
+ * The time the animation frame with timestamp `frame` runs, read once in
+ * that frame. Every animator's callback in the frame takes that read, so the
+ * calls from rest that one frame commits start together. A long callback
+ * before them does not move their start. A call on a moving element keeps
+ * its own clock. The read ends with the frame's task, so a frame
+ * source that repeats a timestamp still reads each frame anew. A frame
+ * source with no timestamp reads the clock.
+ */
+function frameTime(frame: number | undefined, clock: () => number): number {
+  if (frame == null) {
+    return clock();
+  }
+  if (frameRead?.frame === frame) {
+    return frameRead.time;
+  }
+  const read = {frame, time: clock()};
+  frameRead = read;
+  // A browser runs every callback of a frame before its next task.
+  setTimeout(() => {
+    if (frameRead === read) {
+      frameRead = null;
+    }
+  }, 0);
+  return read.time;
+}
+
 /** Above this many keyframes the tolerance is relaxed. */
 const MAX_KEYFRAMES = 1200;
 /**
@@ -1016,8 +1047,8 @@ export function createMotionEngine(
   const frameSource =
     options.requestFrame ??
     (typeof requestAnimationFrame === 'function'
-      ? (callback: () => void) => {
-          requestAnimationFrame(() => callback());
+      ? (callback: (frame?: number) => void) => {
+          requestAnimationFrame(frame => callback(frame));
         }
       : null);
   // Every frame callback of an animator's counts itself, so a call made in
@@ -1025,11 +1056,11 @@ export function createMotionEngine(
   const requestFrame =
     frameSource == null
       ? null
-      : (callback: () => void) => {
-          frameSource(() => {
+      : (callback: (frame?: number) => void) => {
+          frameSource(frame => {
             frameDepth += 1;
             try {
-              callback();
+              callback(frame);
             } finally {
               frameDepth -= 1;
             }
@@ -1743,14 +1774,14 @@ export function createMotionEngine(
       if (rebuiltAfterFirstFrame) {
         // The frame that commits it dates this channel's start again. The
         // call's other channels keep their own.
-        requestFrame?.(() => {
+        requestFrame?.(frame => {
           if (
             !waiting.resolved &&
             running.get(channel) === animation &&
             animation.startTime == null &&
             animation.playState === 'running'
           ) {
-            (waiting.latest ??= new Map()).set(channel, now());
+            (waiting.latest ??= new Map()).set(channel, frameTime(frame, now));
           }
         });
       }
@@ -2438,7 +2469,7 @@ export function createMotionEngine(
     // or when its compositor starts them (Chromium). Read it in that first
     // frame, ahead of anything that might pause or seek the animations, and
     // when `ready` settles.
-    requestFrame?.(() => {
+    requestFrame?.(frame => {
       syncGroup(group);
       group.framed = true;
       // Chromium's compositor starts a composited animation when the frame
@@ -2446,24 +2477,28 @@ export function createMotionEngine(
       // more later (longer under load). Until then the call would read as
       // not started while the screen moves it, and a retarget or a rebase
       // would replay its curve from the start. A call made in a task, still
-      // waiting in the first frame after it, starts now, which the compositor
-      // then takes as its start: the time this frame runs, not its timestamp,
+      // waiting in the first frame after it, starts when this frame runs. The
+      // compositor takes that time as its start. All calls the frame commits
+      // take one read of it (frameTime). That read is not the frame timestamp,
       // which after a block is the frame time from before the block. Only
       // when this frame is the one that commits it: not for a call made in a
       // frame callback, whose frame committed it already, nor when a block
       // ran between the call and this frame (more than LATE_START_MS), after
       // which this frame cannot tell a call made in a task from one a page's
       // own frame callback made; those keep the browser's start.
+      if (group.resolved) {
+        return;
+      }
+      const at = frameTime(frame, now);
       if (
-        !group.resolved &&
         group.madeInFrame !== true &&
-        now() - (group.task?.first ?? group.provisional) <= LATE_START_MS &&
+        at - (group.task?.first ?? group.provisional) <= LATE_START_MS &&
         group.animations.some(
           animation =>
             animation.startTime == null && animation.playState === 'running',
         )
       ) {
-        resolveGroup(group, now());
+        resolveGroup(group, at);
       }
       // The browser's start is still unread. The compositor starts the call
       // near this frame, so each moving channel's reads take the curve from
@@ -2477,7 +2512,7 @@ export function createMotionEngine(
             animation.startTime == null &&
             animation.playState === 'running'
           ) {
-            (group.latest ??= new Map()).set(channel, now());
+            (group.latest ??= new Map()).set(channel, at);
           }
         }
       }
