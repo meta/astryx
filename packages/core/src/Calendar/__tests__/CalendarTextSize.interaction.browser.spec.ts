@@ -98,6 +98,9 @@ for (const [size, fontSize, lineHeight] of [
     const misses = await page.evaluate(() =>
       [...document.querySelectorAll<HTMLElement>('[role="grid"] button')]
         .filter(day => {
+          // At AX5 the month is wider than the screen, so bring each day
+          // into view before the hit test.
+          day.scrollIntoView({block: 'nearest', inline: 'nearest'});
           const box = day.getBoundingClientRect();
           const middleX = box.left + box.width / 2;
           const middleY = box.top + box.height / 2;
