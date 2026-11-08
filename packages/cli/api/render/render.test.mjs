@@ -832,6 +832,40 @@ describe('render(): every write stays inside the current folder', () => {
     expect(html).toContain('later-target-util');
   }, 60_000);
 
+  it('gives the page and a sibling package one copy of a package the aliases place, even when a built copy is linked', async () => {
+    const paths = {compilerOptions: {baseUrl: '.', paths: {'@scope/ui': ['../ui/src/index.tsx'], '@scope/tokens': ['../tokens/src/index.ts']}}};
+    put('mono/app/tsconfig.json', JSON.stringify(paths));
+    put('mono/app/package.json', '{"name":"mono-app","private":true}');
+    put('mono/tokens/package.json', '{"name":"@scope/tokens","main":"dist/index.js"}');
+    put('mono/tokens/src/index.ts', "import {createContext} from 'react';\nexport const Theme = createContext('default-theme');\n");
+    put('mono/tokens/dist/index.js', "const {createContext} = require('react');\nexports.Theme = createContext('built-copy');\n");
+    // The built package, linked into the sibling's node_modules as a workspace would.
+    fs.mkdirSync(path.join(dir, 'mono/ui/node_modules/@scope'), {recursive: true});
+    fs.symlinkSync(path.join(dir, 'mono/tokens'), path.join(dir, 'mono/ui/node_modules/@scope/tokens'), 'dir');
+    put('mono/ui/src/index.tsx', "import {useContext} from 'react';\nimport {Theme} from '@scope/tokens';\nexport const Badge = () => <b>{useContext(Theme)}</b>;\n");
+    put(
+      'mono/app/page.tsx',
+      "import {Theme} from '@scope/tokens';\nimport {Badge} from '@scope/ui';\nexport default function Page() { return <Theme.Provider value=\"page-theme\"><Badge /></Theme.Provider>; }\n",
+    );
+    await render('mono/app/page.tsx', {cwd: dir});
+    const html = fs.readFileSync(path.join(dir, 'mono/app/page.html'), 'utf8');
+    expect(html).toContain('page-theme');
+  }, 60_000);
+
+  it('places an aliased subpath that a linked package does not export', async () => {
+    put('expo/app/tsconfig.json', JSON.stringify({compilerOptions: {baseUrl: '.', paths: {'@scope/ui': ['../ui/src/index.tsx'], '@scope/tokens/*': ['../tokens/src/*']}}}));
+    put('expo/app/package.json', '{"name":"expo-app","private":true}');
+    put('expo/tokens/package.json', '{"name":"@scope/tokens","exports":{".":"./dist/index.js"}}');
+    put('expo/tokens/dist/index.js', "exports.red = 'built-red';\n");
+    put('expo/tokens/src/colors.ts', "export const red = 'source-red';\n");
+    fs.mkdirSync(path.join(dir, 'expo/ui/node_modules/@scope'), {recursive: true});
+    fs.symlinkSync(path.join(dir, 'expo/tokens'), path.join(dir, 'expo/ui/node_modules/@scope/tokens'), 'dir');
+    put('expo/ui/src/index.tsx', "import {red} from '@scope/tokens/colors';\nexport const Swatch = () => <i>{red}</i>;\n");
+    put('expo/app/page.tsx', "import {Swatch} from '@scope/ui';\nexport default function Page() { return <p><Swatch /></p>; }\n");
+    await render('expo/app/page.tsx', {cwd: dir});
+    expect(fs.readFileSync(path.join(dir, 'expo/app/page.html'), 'utf8')).toContain('source-red');
+  }, 60_000);
+
   it('loads an installed package a prefix key names when the key places no file', async () => {
     put('pkgpre/tsconfig.json', JSON.stringify({compilerOptions: {baseUrl: '.', paths: {'@scope/*': ['./src/*']}}}));
     put('pkgpre/package.json', '{"name":"pkgpre","private":true}');

@@ -138,6 +138,38 @@ const isLocal = file =>
   !file.includes(NODE_MODULES) && (file === entry || file.startsWith(ROOT_PREFIX));
 
 /**
+ * Babel plugin for a module the page loads from outside its own files and
+ * outside `node_modules` (a sibling package's source, say): a bare import
+ * that a path alias places loads from that file, as in the page's own files
+ * and in TypeScript, before any installed copy. An import the aliases do not
+ * place is left alone, so an installed package loads.
+ */
+function aliasPlugin() {
+  return () => {
+    /** @param {any} node a string literal to point at the file an alias places */
+    const point = node => {
+      if (node?.type !== 'StringLiteral') return;
+      const file = resolvePath(PATHS, node.value);
+      if (file) node.value = file;
+    };
+    return {
+      visitor: {
+        'ImportDeclaration|ExportNamedDeclaration|ExportAllDeclaration'(/** @type {any} */ p) {
+          point(p.node.source);
+        },
+        CallExpression(/** @type {any} */ p) {
+          const callee = p.node.callee;
+          if (callee?.type === 'Import' || (callee?.type === 'Identifier' && callee.name === 'require')) point(p.node.arguments?.[0]);
+        },
+        ImportExpression(/** @type {any} */ p) {
+          point(p.node.source);
+        },
+      },
+    };
+  };
+}
+
+/**
  * Babel plugin: replace asset imports with data: URIs and stylesheet imports
  * with nothing (their CSS is inlined into the page), and record static text
  * children of capitalized JSX elements.
@@ -394,27 +426,6 @@ function packageDirOf(file, name) {
 
 const moduleApi = /** @type {any} */ (Module);
 
-/**
- * A module the page loads from outside its own files (a sibling package's
- * source, say) resolves a bare import the usual way first, then through the
- * project's path aliases, from the first target that exists, as the page's
- * own files do. So an installed package always loads, and an alias leads
- * only to a file it places.
- */
-function resolveThroughPaths() {
-  if (PATHS.length === 0) return;
-  const resolveFilename = moduleApi._resolveFilename;
-  moduleApi._resolveFilename = function (/** @type {string} */ request, /** @type {any[]} */ ...rest) {
-    try {
-      return resolveFilename.call(this, request, ...rest);
-    } catch (e) {
-      const file = /** @type {any} */ (e)?.code === 'MODULE_NOT_FOUND' ? resolvePath(PATHS, request) : null;
-      if (!file) throw e;
-      return file;
-    }
-  };
-}
-resolveThroughPaths();
 
 /** A module at the served Core's folder: what resolves as the Core would. */
 const servedParent = served ? new moduleApi(path.join(served.dir, 'package.json')) : null;
@@ -529,6 +540,24 @@ const jiti = createJiti(entry, {
       });
       const rules = /** @type {any} */ (result?.metadata)?.stylex;
       if (Array.isArray(rules)) stylexRules.push(...rules);
+      source = result?.code ?? source;
+    } else if (
+      PATHS.length > 0 &&
+      filename &&
+      !filename.includes(NODE_MODULES) &&
+      /\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(filename)
+    ) {
+      const ts = /\.(tsx?|mts|cts)$/.test(filename);
+      const result = transformSync(source, {
+        filename,
+        babelrc: false,
+        configFile: false,
+        sourceType: 'unambiguous',
+        parserOpts: {plugins: ts ? ['jsx', 'typescript'] : ['jsx']},
+        generatorOpts: {retainLines: true},
+        compact: false,
+        plugins: [aliasPlugin()],
+      });
       source = result?.code ?? source;
     }
     return {code: plain.transform({...opts, source, babel: {...opts.babel, compact: false}})};
