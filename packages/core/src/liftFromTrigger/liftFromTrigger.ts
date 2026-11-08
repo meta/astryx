@@ -20,7 +20,11 @@ import {placeLayerExitCopy} from '../Layer/layerExitCopy';
 import {layerInsetProperties} from '../Layer/layerInset';
 import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
 import {holdInput} from '../Layer/inputHold';
-import type {MotionHandle} from '../motion/animator';
+import {
+  createMotionEngine,
+  type Animator,
+  type MotionHandle,
+} from '../motion/animator';
 import {progressCurve} from '../motion/progress';
 import {
   createRectMorph,
@@ -31,12 +35,7 @@ import {
 } from '../motion/rectMorph';
 import {reducedMotionFade} from '../motion/reducedMotion';
 import {resolveMotion} from '../motion/resolveMotion';
-import {
-  SETTLING_EPSILON,
-  solveSpring,
-  toSpring,
-  type SpringDescription,
-} from '../motion/spring';
+import type {SpringDescription} from '../motion/spring';
 import {
   liftFromTriggerRect,
   type LiftFromTriggerScaleRule,
@@ -226,7 +225,13 @@ interface LiftState {
   /** The layer's own waits and listeners, released with it. */
   readonly waits: AbortController;
   untilPointersLift: () => Promise<void>;
-  tint: Animation | null;
+  /**
+   * The tint's animator: the opacity of the layer's `::backdrop`. The
+   * stylesheet shows the backdrop opaque, so a risen tint holds nothing.
+   */
+  readonly tints: Animator;
+  /** The tint's fade on `tints`. */
+  tint: MotionHandle | null;
   surface: LiftedSurface | null;
   releaseGrowHold: (() => void) | null;
   releaseHold: (() => void) | null;
@@ -263,29 +268,6 @@ function restore(element: HTMLElement, saved: SavedStyle): void {
       element.style.setProperty(property, value, priority);
     }
   }
-}
-
-/** Web Animation keyframes along `spring` from 0 to 1, sampled at 60 Hz. */
-function springKeyframes(
-  element: Element,
-  spring: SpringDescription,
-  frame: (progress: number) => Keyframe,
-): {keyframes: Keyframe[]; duration: number} {
-  const curve = solveSpring(toSpring(resolveMotion(element, spring)), {
-    from: 0,
-    to: 1,
-  });
-  const seconds = Math.max(curve.settleTime(SETTLING_EPSILON), 1 / 60);
-  const steps = Math.max(2, Math.ceil(seconds * 60));
-  const keyframes: Keyframe[] = [];
-  for (let i = 0; i <= steps; i++) {
-    const t = (i / steps) * seconds;
-    keyframes.push({
-      ...frame(i === steps ? 1 : curve.value(t)),
-      offset: i / steps,
-    });
-  }
-  return {keyframes, duration: seconds * 1000};
 }
 
 /**
@@ -429,64 +411,23 @@ function resolvedMotion(
   };
 }
 
-/** Plays `keyframes` on `element`'s `::backdrop`, holding the end. */
-function animateBackdrop(
+/** Holds `color` as the background of `element`'s `::backdrop`. */
+function holdBackdropColor(
   element: HTMLElement,
-  keyframes: Keyframe[],
-  options: KeyframeAnimationOptions,
+  color: string,
 ): Animation | null {
   if (typeof element.animate !== 'function') {
     return null;
   }
   try {
-    return element.animate(keyframes, {
-      fill: 'forwards',
-      ...options,
-      pseudoElement: '::backdrop',
-    });
+    return element.animate(
+      [{backgroundColor: color}, {backgroundColor: color}],
+      {duration: 0, fill: 'forwards', pseudoElement: '::backdrop'},
+    );
   } catch {
-    // No `::backdrop` animations: the lift shows without its decoration.
+    // No `::backdrop` animations: the lift shows without its tint.
     return null;
   }
-}
-
-/** The `::backdrop` opacity `element` shows now, or `fallback`. */
-function backdropOpacity(element: HTMLElement, fallback: number): number {
-  try {
-    const shown = Number.parseFloat(
-      getComputedStyle(element, '::backdrop').opacity,
-    );
-    return Number.isFinite(shown) ? shown : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-/**
- * Fades `element`'s `::backdrop` to `to` on `spring`, from `from` or what it
- * shows; `reduced` is the Reduce Motion fade when read already. Opacity
- * alone, so the compositor plays it.
- */
-function fadeBackdrop(
-  element: HTMLElement,
-  to: number,
-  spring: SpringDescription,
-  {
-    from = backdropOpacity(element, to === 1 ? 0 : 1),
-    reduced = reducedMotionFade(element),
-  }: {from?: number; reduced?: ReturnType<typeof reducedMotionFade>} = {},
-): Animation | null {
-  if (reduced != null) {
-    return animateBackdrop(
-      element,
-      [{opacity: String(from)}, {opacity: String(to)}],
-      {duration: reduced.duration, easing: reduced.easing},
-    );
-  }
-  const {keyframes, duration} = springKeyframes(element, spring, p => ({
-    opacity: String(from + (to - from) * p),
-  }));
-  return animateBackdrop(element, keyframes, {duration});
 }
 
 /**
@@ -656,7 +597,7 @@ export function createLiftFromTrigger(): LiftFromTrigger {
     current.releaseHold?.();
     current.releaseHold = null;
     current.waits.abort();
-    current.tint?.cancel();
+    current.tints.dispose();
     current.tint = null;
     current.layerFill?.cancel();
     const {layer} = current;
@@ -917,8 +858,14 @@ export function createLiftFromTrigger(): LiftFromTrigger {
     const morph = createRectMorph(source, {
       now: () => heldAt ?? performance.now(),
     });
-    // The layer first: the source shows above its tint.
+    // The layer first: the source shows above its tint. The popover makes
+    // its `::backdrop` new, so the tint starts clear in the same task.
+    const tints = createMotionEngine(layer, {
+      pseudoElement: '::backdrop',
+      base: {opacity: 1},
+    });
     layer.showPopover();
+    tints.set({opacity: 0});
     source.showPopover();
     holdClock(performance.now());
     const growing = morph.present(
@@ -928,14 +875,7 @@ export function createLiftFromTrigger(): LiftFromTrigger {
     );
     holdClock(null);
     // The tint: the layer's `::backdrop`, its color held there.
-    const layerFill = animateBackdrop(
-      layer,
-      [
-        {backgroundColor: tint, opacity: '0'},
-        {backgroundColor: tint, opacity: '0'},
-      ],
-      {duration: 0},
-    );
+    const layerFill = holdBackdropColor(layer, tint);
     // The shadow rises with the source. It follows the source's path on the
     // lift's spring and fades in on its own spring, from the source's first
     // frame. It is one compositor animation: an animated `::backdrop` of the
@@ -987,7 +927,8 @@ export function createLiftFromTrigger(): LiftFromTrigger {
       holdClock,
       waits,
       untilPointersLift: async () => {},
-      tint: fadeBackdrop(layer, 1, motion.lift, {from: 0, reduced}),
+      tints,
+      tint: tints.animate({opacity: 1}, {spring: motion.lift}),
       surface: null,
       releaseGrowHold: null,
       releaseHold: null,
@@ -1194,10 +1135,8 @@ export function createLiftFromTrigger(): LiftFromTrigger {
     }
     releaseGrowHold(current);
     const {layer, motion, source, sourceRect, lifted} = current;
-    // The tint clears from what it shows now, read before its rise stops.
-    const tintFrom = backdropOpacity(layer, 1);
-    current.tint?.cancel();
-    current.tint = fadeBackdrop(layer, 0, motion.clear, {from: tintFrom});
+    // The tint clears from what it shows now, with its velocity.
+    current.tint = current.tints.animate({opacity: 0}, {spring: motion.clear});
     // The source returns to its place from wherever it is now, with its
     // velocity. Its shadow follows it back frame for frame, with the same
     // start and velocity, and fades on its own spring. Under Reduce Motion

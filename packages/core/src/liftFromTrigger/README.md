@@ -56,7 +56,8 @@ up the page has one element more.
 Every motion is `translate`, `scale` or `opacity` on the compositor
 (`spec:AST-094` FR5): the trigger, its shadow and the surface on the rect morph,
 which continues an interrupted motion with the velocity on screen (FR6); the
-tint as a spring-sampled Web Animation of the layer's `::backdrop`. A
+tint on the animator, as the opacity of the layer's `::backdrop`, so a drop
+while it rises turns it with its velocity too. A
 tap or a drag that lands while the lift and the surface grow reaches nothing
 (FR35). The close holds the layer until the trigger is back, the surface's
 exit is done and every press on the layer has lifted. Its timers and

@@ -306,7 +306,11 @@ test('the tint clears from what it shows when the row drops, with no jump to cle
             .getKeyframes()
             .map(frame => Number(frame.opacity)),
         );
-    const shown = fades().at(-1)?.at(-1) ?? -1;
+    // A risen tint holds no animation: the stylesheet shows it.
+    const shown =
+      layer == null
+        ? -1
+        : Number(getComputedStyle(layer, '::backdrop').opacity);
     window.__lift.drop();
     const clear = fades().at(-1) ?? [];
     return {shown, from: clear[0] ?? -1, to: clear.at(-1) ?? -1};
