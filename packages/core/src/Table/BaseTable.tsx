@@ -35,7 +35,9 @@ import {TableContext} from './TableContext';
 import {use} from 'react';
 import {
   isFixedHeightColumn,
+  getLogicalPositionExtraVar,
   getLogicalPositionRenderer,
+  withLogicalPositionWidths,
 } from './tableColumnAdmission';
 import {isRenderable} from '../utils/isRenderable';
 import * as stylex from '@stylexjs/stylex';
@@ -59,6 +61,7 @@ import type {
 import {
   generateColumns,
   defaultCellRenderer,
+  resolveColumnFloorWidths,
   resolveColumnWidths,
   resolveTableMinWidth,
 } from './columnUtils';
@@ -700,7 +703,27 @@ function BaseTableInner<T extends Record<string, unknown>>({
 
   // Resolve all column widths in a single pass — produces per-column
   // inline styles and the aggregate table min-width.
-  const resolvedWidths = resolveColumnWidths(resolvedColumns);
+  // A windowed table widens its row-number columns to the width measured for
+  // the last logical row, before that row mounts, so a number never clips.
+  // Fixed layout sizes columns from the header, so rows keep their columns;
+  // pinned offsets read the extra width from a table variable.
+  const sizedColumns = withLogicalPositionWidths(
+    resolvedColumns,
+    windowPlan.logicalPositionWidths,
+  );
+  const resolvedWidths = resolveColumnWidths(sizedColumns);
+  const logicalExtraStyle: Record<string, string> = {};
+  if (sizedColumns !== resolvedColumns) {
+    const floors = resolveColumnFloorWidths(resolvedColumns);
+    const sizedFloors = resolveColumnFloorWidths(sizedColumns);
+    sizedColumns.forEach((column, index) => {
+      const extra =
+        (sizedFloors.get(column.key) ?? 0) - (floors.get(column.key) ?? 0);
+      if (extra > 0) {
+        logicalExtraStyle[getLogicalPositionExtraVar(index)] = `${extra}px`;
+      }
+    });
+  }
 
   // --- Plugin pipeline: table ---
   const tableRenderProps = applyPlugins(plugins, p => p.transformTable, {
@@ -842,8 +865,8 @@ function BaseTableInner<T extends Record<string, unknown>>({
     ...tableRenderProps.htmlProps.style,
     ...style,
   };
-  const tableStyle: React.CSSProperties =
-    resolvedWidths.tableMinWidth > 0
+  const tableStyle: React.CSSProperties = {
+    ...(resolvedWidths.tableMinWidth > 0
       ? {
           ...mergedStyle,
           minWidth: resolveTableMinWidth(
@@ -851,7 +874,9 @@ function BaseTableInner<T extends Record<string, unknown>>({
             resolvedWidths.tableMinWidth,
           ),
         }
-      : mergedStyle;
+      : mergedStyle),
+    ...logicalExtraStyle,
+  };
 
   let tableElement: ReactNode = (
     <table
