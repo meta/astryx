@@ -198,6 +198,86 @@ describe('swizzle — the npm packages a copy imports', () => {
   });
 });
 
+describe('swizzle — the astryx-swizzle.json marker', () => {
+  it('marks the output folder with each package the copies came from and its version', async () => {
+    buildFakeCore(project);
+    writeProjectPackageJson(project);
+    buildIntegration(project, {issuesUrl: 'https://example.com/meta/issues'});
+    const marker = path.join(project, 'components', 'astryx', 'astryx-swizzle.json');
+
+    const core = await runCli(['--json', 'swizzle', 'Button', '-f'], project);
+    expect(core.code).toBe(0);
+    expect(JSON.parse(fs.readFileSync(marker, 'utf-8'))).toEqual({
+      packages: {'@astryxdesign/core': '0.0.13'},
+    });
+    // The marker is not one of the copy's files.
+    const coreEnv = JSON.parse(core.stdout);
+    expect(coreEnv.data.files.some(f => f.includes('astryx-swizzle'))).toBe(false);
+    expect(coreEnv.data.marker).toEqual({path: 'components/astryx/astryx-swizzle.json', written: true});
+
+    const integration = await runCli(['--json', 'swizzle', 'MetaAppShell', '-f'], project);
+    expect(integration.code).toBe(0);
+    expect(JSON.parse(fs.readFileSync(marker, 'utf-8'))).toEqual({
+      packages: {'@astryxdesign/core': '0.0.13', '@test/meta': '1.2.3'},
+    });
+  });
+
+  it('does not mark a folder that holds files swizzle did not write, and says how to add the marker', async () => {
+    buildFakeCore(project);
+    writeProjectPackageJson(project);
+    // The product's own components live in src/components.
+    fs.mkdirSync(path.join(project, 'src', 'components'), {recursive: true});
+    fs.writeFileSync(path.join(project, 'src', 'components', 'Header.tsx'), `export const Header = 1;\n`);
+
+    const json = await runCli(['--json', 'swizzle', 'Button', '--output', 'src/components', '-f'], project);
+    expect(json.code).toBe(0);
+    expect(JSON.parse(json.stdout).data.marker).toEqual({
+      path: 'src/components/astryx-swizzle.json',
+      written: false,
+      found: ['Header.tsx'],
+    });
+    expect(fs.existsSync(path.join(project, 'src', 'components', 'astryx-swizzle.json'))).toBe(false);
+
+    const text = await runCli(['swizzle', 'Button', '--output', 'src/components', '-f'], project);
+    expect(text.stdout).toContain(
+      'Did not mark src/components/ with astryx-swizzle.json: it already holds Button, Header.tsx and no astryx-swizzle.json',
+    );
+    expect(text.stdout).toContain('add src/components/astryx-swizzle.json to mark it');
+  });
+
+  it('leaves a folder of earlier copies unmarked on re-swizzle, and names what it holds', async () => {
+    buildFakeCore(project);
+    writeProjectPackageJson(project);
+    // Copies from a swizzle that wrote no marker.
+    fs.mkdirSync(path.join(project, 'components', 'astryx', 'Button'), {recursive: true});
+    fs.writeFileSync(path.join(project, 'components', 'astryx', 'Button', 'Button.tsx'), `export const Button = 1;\n`);
+
+    const result = await runCli(['swizzle', 'Button', '-f'], project);
+    expect(result.code).toBe(0);
+    expect(fs.existsSync(path.join(project, 'components', 'astryx', 'astryx-swizzle.json'))).toBe(false);
+    expect(result.stdout).toContain('it already holds Button and no astryx-swizzle.json');
+    expect(result.stdout).toContain('add components/astryx/astryx-swizzle.json to mark it');
+  });
+
+  it('reports a write failure when the output path is a file', async () => {
+    buildFakeCore(project);
+    writeProjectPackageJson(project);
+    fs.writeFileSync(path.join(project, 'notes.txt'), 'notes\n');
+    const result = await runCli(['--json', 'swizzle', 'Button', '--output', 'notes.txt'], project);
+    expect(result.code).not.toBe(0);
+    expect(JSON.parse(result.stdout).code).toBe('ERR_WRITE_FAILED');
+  });
+
+  it('marks a folder the copy creates, and says what the marker does', async () => {
+    buildFakeCore(project);
+    writeProjectPackageJson(project);
+    const result = await runCli(['swizzle', 'Button', '--output', 'src/astryx', '-f'], project);
+    expect(result.code).toBe(0);
+    expect(fs.existsSync(path.join(project, 'src', 'astryx', 'astryx-swizzle.json'))).toBe(true);
+    expect(result.stdout).toContain('Marked src/astryx/ with astryx-swizzle.json');
+  });
+});
+
 describe('swizzle — integration-owned components', () => {
   it('copies the component and the unexported helper it imports, without its test or doc, and routes feedback to the integration issuesUrl', async () => {
     buildFakeCore(project);

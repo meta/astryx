@@ -248,6 +248,11 @@ set before the block is excused. Pass that position as `setBeforeBlock`, such
 as the drag's last position at the release. An animation frozen at the block's
 start holds a position of its own, and is judged as a stall. Every frame after
 its first change is judged, so a freeze later in the block still fails.
+An element off screen before the block, such as a card that enters from an
+edge, is judged from its first position inside the block. The cast's frames
+before the block must show the screen without it. A main-thread entrance
+shows no frame during the block, so it still fails. With no frame before the
+block at all, nothing is known, and the block is judged from its start.
 Any other element already moving is judged from the block's start. WebKit's
 casts are 2 px quantized: their JPEG frames hold the
 marker's color in 2 by 2 pixel chroma blocks (4:2:0, which the frame header

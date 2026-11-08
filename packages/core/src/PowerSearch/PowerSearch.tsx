@@ -783,6 +783,9 @@ export function PowerSearch({
       editedBuiltInFilter != null
         ? tokenText(editedBuiltInFilter).full
         : undefined,
+    // The entrance runs on the surface: an anchored layer lays out again on
+    // each frame its own style animates.
+    xstyle: layerAnimations.below,
   });
 
   // A presentation swap removes the focused control, so the other
@@ -1656,7 +1659,7 @@ export function PowerSearch({
         placement: 'below',
         alignment: 'start',
         offset: spacingVars['--spacing-1'],
-        xstyle: [popoverLayerStyles.layer, layerAnimations.below],
+        xstyle: popoverLayerStyles.layer,
       })}
     </>
   );

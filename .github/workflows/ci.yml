@@ -59,7 +59,8 @@ permissions: {}
 # nothing in its scope changed; anything undecidable runs everything.
 #
 # Visual, accessibility and RTL owners (pr-a11y*, visual-scout, pr-visual,
-# pr-rtl*) do not run on pull request updates: they run for release-check,
+# pr-rtl*) do not run on pull request updates (a shared primitive's dependent
+# audits are the one exception, below): they run for release-check,
 # which the Main heavy lanes workflow (main-heavy-lanes.yml) dispatches for
 # main's tip every three hours and before each weekday cut, and the release
 # gate dispatches before a cut. A pull request
@@ -1330,6 +1331,7 @@ jobs:
         pr-interaction,
         pr-interaction-webkit,
         pr-component-a11y-contracts,
+        pr-a11y-dependent-audits,
       ]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' && always() && !cancelled()) }}
     runs-on: ubuntu-slim
@@ -1412,6 +1414,7 @@ jobs:
           PR_INTERACTION_RESULT: ${{ needs.pr-interaction.result }}
           PR_INTERACTION_WEBKIT_RESULT: ${{ needs.pr-interaction-webkit.result }}
           PR_COMPONENT_A11Y_CONTRACTS_RESULT: ${{ needs.pr-component-a11y-contracts.result }}
+          PR_A11Y_DEPENDENT_AUDITS_RESULT: ${{ needs.pr-a11y-dependent-audits.result }}
         run: node .github/scripts/ci-test-join.mjs
 
   # Build the packages and Storybook, and analyze components (parallel with
@@ -4428,6 +4431,197 @@ jobs:
           path: |
             pr-a11y-evidence/
             pr-a11y-output/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # Dependent audits (spec:AST-030 FR12): a change to a shared primitive that
+  # .github/a11y-shared-primitives.json lists runs the `audit` specs of the
+  # components that use it, which otherwise run only in their own
+  # component-audit pull request and in the release check. The plan job reads
+  # the changed files and the import graph at the merge commit and splits the
+  # audits into at most three legs of about ten minutes each by recorded time.
+  # It waits for the Storybook build, which the legs need anyway.
+  a11y-dependent-audits-plan:
+    needs: [room, admission, heavy-ci, build-storybook]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true')) }}
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      count: ${{ steps.plan.outputs.count || '0' }}
+      shares: ${{ steps.plan.outputs.shares || '[]' }}
+    steps:
+      - name: Check out the scope action
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/actions/test-scope
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Decide this job's scope
+        id: scope
+        uses: ./.test-scope/.github/actions/test-scope
+        with:
+          paths: '^packages/[^/]+/src/'
+          outside-pull-request: skip
+          component-audit: 'true'
+
+      - name: Skip the dependent audits outside their scope
+        if: steps.scope.outputs.applies != 'true'
+        run: echo "No package source changed; no dependent audit to run."
+
+      # The planner, the primitive list, the import graph and the recorded
+      # times all come from the merge commit.
+      - name: Check out the planner
+        if: steps.scope.outputs.applies == 'true'
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Without the list a changed primitive would go unseen and its
+      # dependents' audits would not run.
+      - name: Require the changed-file list
+        if: steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == ''
+        run: |
+          echo "::error::The scope step could not list the changed files, so the dependent audits to run are unknown. Re-run the job."
+          exit 1
+
+      - name: Plan the dependent audits
+        id: plan
+        if: steps.scope.outputs.applies == 'true'
+        env:
+          CHANGED_FILES: ${{ steps.scope.outputs.changed_files_path }}
+        run: node .github/scripts/a11y-dependent-audits.mjs --changed "$CHANGED_FILES" --out "$RUNNER_TEMP/dependent-audits.json"
+
+  # Each leg runs its share of the plan at the head that built the Storybook.
+  # A leg without a share runs on a slim runner and only says so. The `test`
+  # join reads the legs' result, so a failing audit blocks the merge.
+  pr-a11y-dependent-audits:
+    name: Dependent audits (${{ matrix.leg }}/${{ strategy.job-total }})
+    needs:
+      [room, admission, heavy-ci, a11y-dependent-audits-plan, build-storybook]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true')) }}
+    # An empty count (the plan skipped) compares as 0.
+    runs-on: ${{ needs.a11y-dependent-audits-plan.outputs.count >= matrix.leg && 'ubuntu-latest' || 'ubuntu-slim' }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        leg: [1, 2, 3]
+    permissions:
+      contents: read
+    steps:
+      - name: Require the dependent-audit plan
+        if: needs.a11y-dependent-audits-plan.result != 'success'
+        run: |
+          echo "The dependent-audit plan did not succeed (${{ needs.a11y-dependent-audits-plan.result }}), so the audits to run are unknown."
+          exit 1
+
+      - name: Decide this leg
+        id: leg
+        env:
+          COUNT: ${{ needs.a11y-dependent-audits-plan.outputs.count || '0' }}
+          LEG: ${{ matrix.leg }}
+        run: |
+          if [ "$LEG" -le "$COUNT" ]; then
+            echo 'runs=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'runs=false' >> "$GITHUB_OUTPUT"
+            echo "This leg runs no dependent audit ($COUNT leg(s) planned)."
+          fi
+
+      - name: Require this pull request's Storybook build
+        if: steps.leg.outputs.runs == 'true' && needs.build-storybook.result != 'success'
+        run: |
+          echo "The audits read this pull request's Storybook build, which did not succeed."
+          exit 1
+
+      # The workflow's own commit: this lane's environment marker and its check
+      # (in .github, a parent of the scripts, so the checkout's cone holds the
+      # marker). The head checkout below replaces the workspace, so they move
+      # out first.
+      - name: Check out the scope action
+        if: steps.leg.outputs.runs == 'true'
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            .github/actions/test-scope
+            .github/scripts
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Keep this lane's environment marker from the workflow's commit
+        if: steps.leg.outputs.runs == 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/lane-environment/.github/scripts"
+          cp .test-scope/.github/scripts/lane-environment.mjs "$RUNNER_TEMP/lane-environment/.github/scripts/"
+          cp .test-scope/.github/lane-environments.json "$RUNNER_TEMP/lane-environment/.github/"
+
+      - name: Check out the head that built the Storybook
+        if: steps.leg.outputs.runs == 'true'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      # The audits run the same specs and config as the contract job, in its
+      # environment. A head older than that environment stops here.
+      - name: Require this lane's environment in the branch
+        if: steps.leg.outputs.runs == 'true'
+        run: >-
+          node "$RUNNER_TEMP/lane-environment/.github/scripts/lane-environment.mjs" check --lane a11y-contracts
+          --workflow "$RUNNER_TEMP/lane-environment/.github/lane-environments.json"
+          --head .github/lane-environments.json
+
+      - name: Setup Node and pnpm
+        if: steps.leg.outputs.runs == 'true'
+        uses: ./.github/actions/setup
+        with:
+          install: 'false'
+
+      - name: Download Storybook artifact
+        if: steps.leg.outputs.runs == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: storybook-${{ needs.build-storybook.outputs.short_hash }}
+          path: apps/storybook/dist
+
+      - name: Install Playwright
+        if: steps.leg.outputs.runs == 'true'
+        run: pnpm install --frozen-lockfile && npx playwright install chromium
+
+      # One worker per leg: the recorded times assume one browser per core. A
+      # planned spec file that the head does not have is left out.
+      - name: Run this leg's dependent audits
+        id: audits
+        if: steps.leg.outputs.runs == 'true'
+        env:
+          SHARES: ${{ needs.a11y-dependent-audits-plan.outputs.shares }}
+          LEG: ${{ matrix.leg }}
+        run: |
+          node -e 'for (const f of JSON.parse(process.env.SHARES)[Number(process.env.LEG) - 1] ?? []) console.log(f)' > "$RUNNER_TEMP/dependent-audits.txt"
+          FILES=()
+          while IFS= read -r file; do
+            [ -f "$file" ] && FILES+=("$file")
+          done < "$RUNNER_TEMP/dependent-audits.txt"
+          if [ "${#FILES[@]}" -eq 0 ]; then
+            echo "The head has none of this leg's audit spec files."
+            exit 0
+          fi
+          printf 'Dependent audits in this leg:\n'; printf '  %s\n' "${FILES[@]}"
+          pnpm exec playwright test "${FILES[@]}" --config playwright.config.ts --project chromium --reporter list,github --output pr-a11y-dependent-output
+
+      - name: Upload dependent-audit evidence
+        if: always() && (steps.audits.outcome == 'success' || steps.audits.outcome == 'failure')
+        uses: actions/upload-artifact@v7
+        with:
+          name: a11y-dependent-audits-${{ matrix.leg }}
+          path: |
+            pr-a11y-dependent-output/
+            test-results/
+            *-audit-evidence/
           if-no-files-found: ignore
           retention-days: 7
 

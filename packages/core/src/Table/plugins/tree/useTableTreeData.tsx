@@ -19,10 +19,9 @@
  *
  * Expansion state flows through an external store (TreeStore) so each
  * row's expander subscribes independently — a toggle re-renders only the
- * affected cells, not the whole body. Row ARIA (aria-level,
- * aria-expanded) is applied imperatively via a ref callback on each
- * <tr>, exactly like selection's row styling; each subscription
- * self-cleans when the row disconnects.
+ * affected cells, not the whole body. A ref callback on each <tr> sets its
+ * aria-level, as selection's row styling does. Each subscription ends when
+ * its row disconnects.
  *
  * When `hasExpandableRows` is false (flat data), every transform is a
  * pass-through: adopting the plugin ahead of hierarchical data is a
@@ -232,21 +231,18 @@ function useRowSnapshot<T extends Record<string, unknown>>(
 // Row ARIA (imperative, mirrors selection's row styling)
 // =============================================================================
 
+// aria-expanded is valid on a row only in a treegrid, so it stays on the
+// expander button. aria-level is also treegrid-only, but Chromium exposes it
+// as the row's depth, so rows keep it.
 function applyRowTreeAria(
   el: HTMLTableRowElement,
   meta: TableTreeRowMeta | undefined,
 ): void {
   if (!meta) {
     el.removeAttribute('aria-level');
-    el.removeAttribute('aria-expanded');
     return;
   }
   el.setAttribute('aria-level', String(meta.level + 1));
-  if (meta.hasChildren) {
-    el.setAttribute('aria-expanded', String(meta.isExpanded));
-  } else {
-    el.removeAttribute('aria-expanded');
-  }
 }
 
 // =============================================================================
