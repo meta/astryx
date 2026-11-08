@@ -13,6 +13,7 @@ review_triggers: [public-api, behavior, layout, theming, accessibility]
 verified_by:
   [
     packages/core/src/DateTimeInput/DateTimeInput.test.tsx,
+    packages/core/src/DateInput/TouchDateToday.ssr.test.tsx,
     packages/core/src/DateTimeInput/DateTimeInputTouch.test.tsx,
     packages/core/src/DateTimeInput/NativePickerSegments.test.tsx,
     packages/core/src/DateTimeInput/Presentation.test.tsx,
@@ -37,6 +38,7 @@ architecture:
 contributing: []
 system_specs:
   [
+    spec:AST-013/FR9,
     spec:AST-013/FR12,
     spec:AST-043,
     spec:AST-085,

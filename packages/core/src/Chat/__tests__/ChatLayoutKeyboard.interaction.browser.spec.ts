@@ -510,15 +510,18 @@ test.describe('under a mouse', () => {
 test('the dock comes down when the composer text loses focus', async ({
   page,
 }) => {
-  const {dock, editable} = await openChat(page);
+  const {dock, editable, lift} = await openChat(page);
   await editable.focus();
   await showKeyboard(page);
   await waitForRest(dock);
   await editable.evaluate(el => (el as HTMLElement).blur());
-  // The hide starts from the blur; Mobile Safari reports it once the
-  // keyboard is down.
-  await waitForAnimation(dock);
+  // Mobile Safari reports the keyboard gone once it is down, 0.47 to 0.5 s
+  // after a blur on an iOS 26.2 simulator. The ride follows Chrome's slide
+  // only, so until that report the dock stays above the keyboard. The wait
+  // stands for most of that delay. Nothing moves the dock before the report
+  // the test scripts, so a slow runner cannot fail this check.
   await page.waitForTimeout(440);
+  expect(await dockY(dock)).toBeCloseTo(-lift, 0);
   await showKeyboard(page, 0);
   await waitForRest(dock);
   await page.waitForTimeout(100);
