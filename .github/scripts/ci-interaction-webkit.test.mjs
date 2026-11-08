@@ -95,6 +95,7 @@ describe('WebKit interaction proof routing', () => {
       'admission',
       'heavy-ci',
       'build-storybook',
+      'interaction-legs',
     ]);
   });
 
@@ -126,6 +127,7 @@ describe('WebKit interaction proof routing', () => {
       "Require this pull request's Storybook build",
       'Skip the WebKit proofs outside their scope',
       'Leave the proofs to the other legs',
+      'Require a leg for every share',
     ]);
     // Every step after the leg count also waits for this leg to have a share.
     const counted = webkit.steps.indexOf(
@@ -149,6 +151,10 @@ describe('WebKit interaction proof routing', () => {
     }
     expect(step(webkit, 'Leave the proofs to the other legs').if).toBe(
       `${applies} && steps.legs.outputs.runs != 'true'`,
+    );
+    // A leg whose own count needs more legs than started fails.
+    expect(step(webkit, 'Require a leg for every share').if).toBe(
+      "steps.scope.outputs.applies == 'true' && fromJSON(steps.legs.outputs.count || '0') > strategy.job-total",
     );
   });
 
