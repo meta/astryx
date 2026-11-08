@@ -211,6 +211,23 @@ describe('overlappingSpecs', () => {
       overlappingSpecs([added], ['packages/core/src/Table/Table.tsx'], GRAPH),
     ).toMatchObject([{path: corners, reason: 'added-on-main'}]);
     expect(renders('packages/core/src/Table/Table.tsx')).toBe(true);
+    // A shared fixture under __tests__/ that stories import still counts.
+    const tableSpec =
+      'packages/core/src/Table/__tests__/Table.a11y.chromium.spec.ts';
+    expect(
+      overlappingSpecs(
+        [
+          {
+            path: tableSpec,
+            status: 'changed',
+            mainSource: '// @pr-a11y scope ^packages/core/src/Table/\n',
+            headSource: 'older\n',
+          },
+        ],
+        ['packages/core/src/Table/__tests__/Table.a11y.renders.tsx'],
+        GRAPH,
+      ),
+    ).toMatchObject([{path: tableSpec, reason: 'changed-on-main'}]);
     expect(renders('apps/storybook/stories/Table.stories.tsx')).toBe(true);
   });
 

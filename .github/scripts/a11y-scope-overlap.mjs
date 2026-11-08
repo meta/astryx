@@ -35,12 +35,13 @@ export const VERSION = 1;
 
 /**
  * Whether a changed path can change what a browser spec sees: a unit test
- * (`*.test.*`) or a file under `__tests__/` renders nothing in the Storybook
- * build the specs read.
+ * (`*.test.*`) or a spec file (`*.spec.*`) renders nothing in the Storybook
+ * build the specs read. Shared fixtures under `__tests__/` that stories import
+ * still count.
  * @param {string} file
  */
 export function renders(file) {
-  return !/\.test\.[^/]+$/.test(file) && !file.split('/').includes('__tests__');
+  return !/\.(?:test|spec)\.[^/]+$/.test(file);
 }
 
 /**
