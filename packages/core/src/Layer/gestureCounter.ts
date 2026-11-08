@@ -111,9 +111,9 @@ export function claimContextMenuPress(layer: HTMLElement): void {
     }
   };
   holdCapture(true);
-  // The layer's box, and the box of each layer open inside it (a sub-menu),
-  // are read once and again only after a scroll, a resize or a toggle inside
-  // the layer, so a move of the pointer reads no layout.
+  // A move of the pointer reads no layout. The claim reads the layer's box,
+  // and the box of each popover open in it (a sub-menu), once. It reads them
+  // again only after a scroll, a resize or a toggle in the layer.
   let boxes: DOMRect[] | null = null;
   const readBoxes = (): DOMRect[] => {
     let nested: HTMLElement[] = [];
@@ -164,14 +164,12 @@ export function claimContextMenuPress(layer: HTMLElement): void {
     invalidate();
   };
   layer.addEventListener('toggle', onToggle, true);
-  view.addEventListener('scroll', invalidate, true);
-  view.addEventListener('resize', invalidate);
   unsubscribes.push(
     subscribeInput(view, 'pointermove', followPointer),
     subscribeInput(view, 'pointerup', endClaim),
     subscribeInput(view, 'pointercancel', endClaim),
+    subscribeInput(view, 'scroll', invalidate),
+    subscribeInput(view, 'resize', invalidate),
     () => layer.removeEventListener('toggle', onToggle, true),
-    () => view.removeEventListener('scroll', invalidate, true),
-    () => view.removeEventListener('resize', invalidate),
   );
 }

@@ -106,6 +106,20 @@ describe('claimContextMenuPress', () => {
     expect(box).toHaveBeenCalledTimes(1);
   });
 
+  it('reads the layer box again after a scroll', () => {
+    const zone = document.createElement('div');
+    const layer = document.createElement('div');
+    document.body.append(zone, layer);
+    const box = stubLayerBox(layer);
+
+    openFromRightClick(zone, layer);
+    layer.dispatchEvent(pointerEvent('pointermove', 7, {x: 150, y: 150}));
+    expect(box).toHaveBeenCalledTimes(1);
+    document.dispatchEvent(new Event('scroll'));
+    layer.dispatchEvent(pointerEvent('pointermove', 7, {x: 150, y: 150}));
+    expect(box).toHaveBeenCalledTimes(2);
+  });
+
   it('works for a layer inside an open shadow root', () => {
     const host = document.createElement('div');
     document.body.append(host);
