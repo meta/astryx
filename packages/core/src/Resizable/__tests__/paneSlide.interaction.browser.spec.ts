@@ -1111,6 +1111,36 @@ test('a re-grab while the panel slides shut holds it where it shows, and the fin
   await page.mouse.up();
 });
 
+for (const side of ['start', 'end'] as const) {
+  test(`a closing lift slides the ${side} panel's handle shut from where it shows, never back toward open`, async ({
+    page,
+  }) => {
+    await openFixture(page, STORY[side]);
+    await expectPresent(page);
+    // Toward closed is left for a start panel and right for an end one.
+    const towardOpen = side === 'start' ? 1 : -1;
+    const at = await pressHandle(page);
+    // 190 px toward closed: past the minimum, where the handle bands, and
+    // under the 40 px collapse threshold.
+    await page.mouse.move(at.x - towardOpen * 190, at.y, {steps: 4});
+    // Still before the lift, so it releases with no velocity.
+    await page.waitForTimeout(250);
+    await recordEdgeFrames(page);
+    await page.waitForTimeout(50);
+    await page.mouse.up();
+    await waitForSettledMotion(page);
+    const frames = await page.evaluate(
+      () => (window as unknown as {edgeFrames: EdgeFrame[]}).edgeFrames,
+    );
+    expect(frames.length).toBeGreaterThan(10);
+    for (let index = 1; index < frames.length; index++) {
+      expect(
+        towardOpen * (frames[index].handle - frames[index - 1].handle),
+      ).toBeLessThan(0.5);
+    }
+  });
+}
+
 test('a lift while a re-grab holds the closing panel shuts it under the collapse threshold', async ({
   page,
 }) => {
