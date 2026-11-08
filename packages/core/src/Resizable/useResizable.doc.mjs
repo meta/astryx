@@ -179,7 +179,7 @@ export const docsDense = {
     containerRef: 'the element a percentage is a share of.',
     direction: 'which axis to resize along.',
     collapsible:
-      'whether a drag lifted below collapsed threshold collapses region to zero.',
+      'whether a lift or key step below collapsed threshold collapses region to zero.',
     snaps: 'px values to snap to during drag.',
     autoSaveId:
       'key for localStorage persistence of size + collapse state across sessions.',
