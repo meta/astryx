@@ -687,6 +687,7 @@ export function Typeahead<T extends SearchableItem>({
           themeProps('typeahead', {size, status: status?.type}),
           stylex.props(
             inputWrapperStyles.base,
+            inputWrapperStyles.textField,
             styles.wrapper,
             sizeStyle,
             status && inputStatusBorderStyles[status.type],

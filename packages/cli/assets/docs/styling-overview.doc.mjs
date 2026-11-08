@@ -160,6 +160,10 @@ export const docs = {
           type: 'prose',
           text: 'If a swizzled component fails at runtime with a `stylex.create` error, the app is missing a StyleX compiler: see the StyleX Build Setup section of {@link generic:tokens-and-setup}.',
         },
+        {
+          type: 'prose',
+          text: '`{@command swizzle <Component>}` writes an `astryx-swizzle.json` marker into an output folder it owns (one the copy creates, an empty one, or one it marked before); every module under that folder then compiles as Astryx source, so keep copies in a folder of their own, such as the default `components/astryx`. For a folder that already holds other files it writes no marker and says how to add one by hand. With `@astryxdesign/build`\'s Babel, PostCSS and Vite integrations, or `withAstryx()` under webpack, a copy under that folder compiles into `astryx-base`, below `astryx-theme`, so theme component overrides reach it as they reach the package component. Under Turbopack, and with the stock StyleX plugins above, a copy\'s rules land in your own styles, above `astryx-theme`, and theme component overrides do not reach it.',
+        },
       ],
     },
     {

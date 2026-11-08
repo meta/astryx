@@ -146,6 +146,8 @@ describe.skipIf(asRoot)('a swizzle that fails part-way undoes what it wrote', ()
     for (const file of middle) {
       expect(fs.existsSync(path.join(outDir, file))).toBe(false);
     }
+    // The marker is written last, so a failed copy leaves none.
+    expect(fs.existsSync(path.join(dir, 'out', 'astryx-swizzle.json'))).toBe(false);
   });
 
   it('undoes the copy when a destination cannot be read back', async () => {

@@ -44,6 +44,7 @@ import {
   solvePaging,
 } from '../motion/paging';
 import {resolveMotion} from '../motion/resolveMotion';
+import {themeTempo} from '../motion/themeTempo';
 import {resolveSnapPoint} from '../motion/resolveSnapPoint';
 import {rubberBandClamp, rubberBandUnclamp} from '../motion/rubberBand';
 import {paging, registerPagingTable} from '../motion/uikit/paging';
@@ -454,11 +455,12 @@ function isScrollContact(recognizer: PanGestureRecognizer): boolean {
  *   move, no layout read and no React render. Past the first or last page,
  *   the track follows UIKit's rubber band, with d = the page width.
  * - At the lift, `pageForRelease` picks the page with UIKit's measured rule.
- *   The track then settles on UIKit's paging integrator (`solvePaging`),
- *   baked into keyframes.
+ *   The track then settles on UIKit's paging integrator (`solvePaging`), at
+ *   the tempo of the theme the track is in, baked into keyframes.
  * - A finger that lands on a settling pager catches it `paging.catchStopMs`
- *   after the touch, as in UIKit. A drag catches it at once, from the value
- *   on screen. While the pan is off, a touch does not stop the motion.
+ *   after the touch, as in UIKit. A finger stops a `goTo` move at once. A
+ *   drag catches it at once, from the value on screen. While the pan is off,
+ *   a touch does not stop the motion.
  * - `goTo` runs the curve of `setContentOffset(_:animated:)` and cancels a
  *   drag in progress. It reads that duration and curve through
  *   `resolveMotion`.
@@ -935,8 +937,15 @@ export function createPager(
     touchRelease: boolean,
   ): void {
     const to = offsetOf(target);
-    // UIKit's integrator, as a playable curve (touch motion stays internal).
-    const curve = solvePaging({from: position, velocity, to});
+    // UIKit's integrator, as a playable curve (touch motion stays internal),
+    // at the theme's tempo. No motion role names it, so it reads the tempo
+    // itself.
+    const curve = solvePaging({
+      from: position,
+      velocity,
+      to,
+      tempo: themeTempo(trackElement),
+    });
     if (curve.steps === 0) {
       animator?.set({x: positionToX(to)});
       rest();
@@ -958,7 +967,13 @@ export function createPager(
     if (isChildPages()) {
       const offsets = measureChildOffsets();
       if (!sameOffsets(offsets, childOffsets)) {
+        // A drag's release moves at most one page from where the drag began.
+        // New pages renumber, so the drag keeps the page nearest that offset.
+        const dragFrom = isDragging ? offsetOf(dragStartIndex) : null;
         childOffsets = offsets;
+        if (dragFrom != null) {
+          dragStartIndex = nearestPage(dragFrom);
+        }
         changed = true;
         const pageCount = offsets.length;
         deliver(() => options.onPagesChange?.(pageCount));
@@ -1105,22 +1120,26 @@ export function createPager(
   function onCatch(recognizer: LongPressGestureRecognizer): void {
     if (recognizer.state === 'began') {
       holdSelection(true);
+      const isMouse = catcher.pointerType === 'mouse';
       // A mouse keeps its click. A finger or a pen loses it.
-      if (isReleaseSettle && catcher.pointerType !== 'mouse') {
+      if (isReleaseSettle && !isMouse) {
         catcher.takeFromContent();
       }
       clearCatchTimer();
       caughtSettle = false;
+      if (!isReleaseSettle && !isMouse) {
+        // UIKit stops an animated `setContentOffset` at the touch itself. A
+        // mouse keeps the catch delay.
+        catchSettle();
+        return;
+      }
       isCatchTimerArmed = true;
       catcher.armCatch(paging.catchStopMs, () => {
         if (!isCatchTimerArmed) {
           return;
         }
         isCatchTimerArmed = false;
-        if (settleHandle != null && !isDragging) {
-          stopSettle();
-          caughtSettle = true;
-        }
+        catchSettle();
       });
       return;
     }
@@ -1145,6 +1164,13 @@ export function createPager(
         setTarget(next, 'drag', true);
         settleFrom(position, 0, catcher.pointerType === 'touch');
       }
+    }
+  }
+
+  function catchSettle(): void {
+    if (settleHandle != null && !isDragging) {
+      stopSettle();
+      caughtSettle = true;
     }
   }
 
@@ -1415,6 +1441,12 @@ export interface UsePagerOptions extends PagerOptions {
   index?: number;
   /** Live toggle for the pan; turning it off mid-drag cancels the drag. */
   isPanEnabled?: boolean;
+  /**
+   * Whether a change of the controlled `index` animates. Off, the pager moves
+   * there at once. A page the pager reported and the owner refused returns
+   * animated either way, as a released drag springs back. Default true.
+   */
+  isControlledChangeAnimated?: boolean;
 }
 
 /**
@@ -1435,6 +1467,7 @@ export function usePager({
   trackRef,
   index,
   isPanEnabled = true,
+  isControlledChangeAnimated = true,
   ...options
 }: UsePagerOptions): Pager {
   const latestRef = useRef(options);
@@ -1495,12 +1528,20 @@ export function usePager({
   // reported and the owner did not take, such as a refused swipe. A
   // controlled input returns to its value the same way. The move is the
   // owner's own, so it is not reported back. It moves only while the two
-  // differ.
-  useEffect(() => {
+  // differ, and before the browser paints the new `index`. The same `index`
+  // after a report is a refused page, which springs back whatever
+  // `isControlledChangeAnimated` says.
+  const syncedIndexRef = useRef(index);
+  useIsomorphicLayoutEffect(() => {
     if (index != null && index !== pager.index) {
-      pager.goTo(index, {reason: 'controlled'});
+      pager.goTo(index, {
+        reason: 'controlled',
+        animated:
+          isControlledChangeAnimated || index === syncedIndexRef.current,
+      });
     }
-  }, [pager, index, reported]);
+    syncedIndexRef.current = index;
+  }, [pager, index, reported, isControlledChangeAnimated]);
 
   return pager;
 }

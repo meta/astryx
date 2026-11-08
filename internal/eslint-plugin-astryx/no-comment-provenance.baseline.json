@@ -126,10 +126,6 @@
     "FR5",
     "FR6",
     "INV10",
-    "INV11",
-    "INV11",
-    "architecture:theme-tokens",
-    "architecture:theme-tokens",
     "spec:AST-086"
   ],
   "packages/core/src/Chat/ChatComposerDrawer.tsx": ["#1182", "#2072"],
@@ -543,7 +539,6 @@
     "FR1",
     "FR1",
     "FR3",
-    "FR3",
     "FR4",
     "FR4",
     "FR4",
@@ -735,10 +730,8 @@
     "family:action-groups"
   ],
   "packages/core/src/NavMenu/NavHeadingMenuItem.tsx": [
-    "FR1",
     "FR2",
     "FR4",
-    "spec:AST-085",
     "spec:AST-085",
     "spec:AST-085"
   ],
@@ -1889,7 +1882,6 @@
     "DR3",
     "DR3",
     "DR3",
-    "FR1",
     "FR2",
     "FR4",
     "FR4",
@@ -1934,7 +1926,6 @@
     "spec quote",
     "spec quote",
     "spec quote",
-    "spec:AST-105",
     "spec:AST-105",
     "spec:AST-105",
     "spec:AST-105",

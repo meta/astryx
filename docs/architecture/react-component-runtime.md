@@ -253,7 +253,9 @@ those contracts.
   side nav collapse or expand (`component:AppShell` FR17, `component:SideNav`
   FR6), each making its copy through the swap. A resize controller also holds
   its own handle for a LayoutPanel's collapse and open, with no copy
-  (`component:Resizable` FR8). The module may also play
+  (`component:Resizable` FR8). Under a coarse pointer, a TreeList with no handle
+  from the app holds its own for its own expand and collapse, with no copy
+  (`component:TreeList` FR8). The module may also play
   caller-supplied frames on elements the page already renders, on the one
   shared motion, with no copy, releasing them when the motion ends; AppShell's
   content surface uses this to cover an expand's gap when its old wrap is not
@@ -325,8 +327,8 @@ those contracts.
   packages: undocumented, outside the compatibility promise, versioned in
   lockstep with Core, and limited by lint to Core and Lab (`spec:AST-017`
   FR21). The finger-scroll watch's hook, `useFingerScroll`, is on that
-  subpath: it reports whether a scroller's scroll is a finger's and, through
-  `onEnd`, when that scroll ends.
+  subpath: it reports whether a scroller's scroll is a finger's, now or at a
+  past time, and, through `onEnd`, when that scroll ends.
 - **INV15 — The animator animates a number.** The animator has a value mode:
   it plays a number, such as a count or a chart value, on the same timing as its property channels: theme motion tokens for a program-started change, and measured springs only where `spec:AST-094` FR45 keeps them, and hands the value to an `onUpdate`
   callback each frame for the component to format and write. The component owns
