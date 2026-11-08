@@ -107,7 +107,7 @@ import {nearestScroller} from '../utils/scrollingAncestor';
 import {useTouchPresentation} from '../utils/touchPresentation';
 import {useTouchHitArea} from '../utils/touchHitArea';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
-import {devWarn} from '../utils/devWarning';
+import {createDevWarnings, devWarn} from '../utils/devWarning';
 import {isLeaving, markLeaving} from '../privateAttributes/leaving.stylex';
 import {
   closestReorderHandle,
@@ -701,8 +701,8 @@ export class ListReorderController implements ListReorderSession {
   private announcementFallback: ReturnType<typeof setTimeout> | null = null;
   /** Ends the mouse press in progress, if any, without reporting it. */
   private endMouse: (() => void) | null = null;
-  /** Whether a list whose rows have no item key has been warned about. */
-  private warnedUnkeyed = false;
+  /** This session's development warnings, each given once. */
+  private readonly warn = createDevWarnings();
 
   constructor(
     private readonly getList: () => HTMLElement | null,
@@ -1663,14 +1663,12 @@ export class ListReorderController implements ListReorderSession {
       return;
     }
     if (
-      !this.warnedUnkeyed &&
       this.keys.size === 0 &&
       this.options != null &&
       this.options.isReorderable == null &&
       list.children.length > 0
     ) {
-      this.warnedUnkeyed = true;
-      devWarn(
+      this.warn(
         'List',
         '`reorderable` is set, but no ListItem has an `itemKey`: give each ' +
           'row the key its moves report.',
