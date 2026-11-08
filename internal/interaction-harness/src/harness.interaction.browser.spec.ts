@@ -86,6 +86,7 @@ import {
   holdInputUntil,
   installInputLog,
   type InputRecord,
+  type PlayOptions,
   installLongTaskLog,
   installPageFreeze,
   installTimerGate,
@@ -399,12 +400,16 @@ test.describe('touch input', () => {
     );
   });
 
-  /** A flick up a page that takes every touch, its lift right after its last move. */
+  /**
+   * A flick up a page that takes every touch, its lift right after its last
+   * move. The page logs each move at its pointer event and the lift at its
+   * touch event, where Core's gesture host reads them.
+   */
   async function liftStallPage(page: Page) {
     await page.route('http://lift-stall.test/', route =>
       route.fulfill({
         contentType: 'text/html',
-        body: '<!doctype html><body style="margin:0;height:3000px;touch-action:none"><script>window.touches=[];for(const type of ["touchmove","touchend"])addEventListener(type,e=>touches.push([type,e.timeStamp]),{passive:true})</script>',
+        body: '<!doctype html><body style="margin:0;height:3000px;touch-action:none"><script>window.touches=[];for(const type of ["pointermove","touchend"])addEventListener(type,e=>touches.push([type,e.timeStamp]),{passive:true})</script>',
       }),
     );
     await page.goto('http://lift-stall.test/');
@@ -459,6 +464,55 @@ test.describe('touch input', () => {
     await driver.play(script, {onEvent: () => {}});
     // A proof that reads no release from the lift opts out.
     await driver.play(script, {onEvent: slowRead, releaseUnread: true});
+  });
+
+  test("a lift stall is named before the page's stall that stretched the lift gap further; with a quick onEvent the page's stall is named", async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'webkit',
+      'only WebKit stamps a touch when it arrives; Chromium carries the scripted times',
+    );
+    const {driver, script} = await liftStallPage(page);
+    const moves = toTouchEvents(script).filter(
+      step => step.type === 'touchMove',
+    ).length;
+    const lastMove = toTouchEvents(script).length - 2;
+    // The page's own listener holds the last move 100 ms, so WebKit hands
+    // the page the lift only after that.
+    await page.evaluate(count => {
+      let seen = 0;
+      addEventListener(
+        'touchmove',
+        () => {
+          seen += 1;
+          if (seen % count === 0) {
+            const end = performance.now() + 100;
+            while (performance.now() < end) {
+              // the page is busy
+            }
+          }
+        },
+        {passive: true},
+      );
+    }, moves);
+    // onEvent waits 60 ms on the runner's own timer at the last move: alone,
+    // it carries the lift past the stillness interval.
+    const runnerWait = async (_: unknown, index: number) => {
+      if (index === lastMove) {
+        await new Promise(resolve => setTimeout(resolve, 60));
+      }
+    };
+    const outcome = (onEvent: PlayOptions['onEvent']) =>
+      driver.play(script, {onEvent}).then(
+        () => 'resolved',
+        (error: unknown) => error,
+      );
+    const stalled = await outcome(runnerWait);
+    expect(stalled, String(stalled)).toBeInstanceOf(TouchLiftStallError);
+    const held = await outcome(() => {});
+    expect(held, String(held)).toBeInstanceOf(TouchPageStallError);
   });
 
   test('a default-paced play whose page holds its last move fails by name: TouchPageStallError, where the page stamps touches on arrival', async ({
