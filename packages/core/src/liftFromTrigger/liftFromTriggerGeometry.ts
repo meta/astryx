@@ -48,14 +48,18 @@ export interface LiftFromTriggerScaleRule {
 
 /** Where a surface sits against the lifted source. */
 export interface SurfacePlacement {
-  readonly side: 'above' | 'below';
+  /**
+   * `none` when the surface fits on neither side: the caller then leaves it to
+   * the layer runtime's own fallback.
+   */
+  readonly side: 'above' | 'below' | 'none';
   readonly alignment: 'start' | 'center' | 'end';
 }
 
 /**
  * The factor a `width` × `height` source grows by: up to `rule.maxScale`, by
- * `rule.scaleUpPoints` on its larger side. It is never wider than the viewport
- * less its gutter, which can make the factor less than 1.
+ * `rule.scaleUpPoints` on its larger side. It is never wider or taller than
+ * the viewport less its gutters, which can make the factor less than 1.
  */
 export function liftFromTriggerScale(
   width: number,
@@ -67,11 +71,19 @@ export function liftFromTriggerScale(
   if (side <= 0) {
     return 1;
   }
+  const {gutter} = viewport;
   const fitsWidth =
-    width > 0
-      ? (viewport.width - 2 * viewport.gutter.inline) / width
+    width > 0 ? (viewport.width - 2 * gutter.inline) / width : Infinity;
+  const fitsHeight =
+    height > 0
+      ? (viewport.height - gutter.top - gutter.bottom) / height
       : Infinity;
-  return Math.min(rule.maxScale, (side + rule.scaleUpPoints) / side, fitsWidth);
+  return Math.min(
+    rule.maxScale,
+    (side + rule.scaleUpPoints) / side,
+    fitsWidth,
+    fitsHeight,
+  );
 }
 
 /**
@@ -110,9 +122,10 @@ export function liftFromTriggerRect(
 
 /**
  * A surface's place: below the lifted source when `surfaceHeight` fits
- * between it, `gap` and the bottom gutter, else above. It centers on the
- * source, or sits flush with the source's edge when the source is held against
- * a side of the viewport.
+ * between it, `gap` and the bottom gutter. Else it goes above, when it fits
+ * under the top gutter. With room on neither side it answers `none`. It
+ * centers on the source, or sits flush with the source's edge when the source
+ * is held against a side of the viewport.
  */
 export function surfacePlacement(
   lifted: MorphRect,
@@ -122,10 +135,9 @@ export function surfacePlacement(
 ): SurfacePlacement {
   const {gutter} = viewport;
   const bottom = viewport.height - gutter.bottom;
-  const side =
-    lifted.y + lifted.height + gap + surfaceHeight <= bottom
-      ? 'below'
-      : 'above';
+  const fitsBelow = lifted.y + lifted.height + gap + surfaceHeight <= bottom;
+  const fitsAbove = lifted.y - gap - surfaceHeight >= gutter.top;
+  const side = fitsBelow ? 'below' : fitsAbove ? 'above' : 'none';
   const epsilon = 0.5;
   const atLeft = lifted.x <= gutter.inline + epsilon;
   const atRight =
