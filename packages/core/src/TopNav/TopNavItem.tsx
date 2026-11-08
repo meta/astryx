@@ -208,13 +208,12 @@ export function TopNavItem({
     renderMode === 'drawer',
   );
 
-  // A disabled item renders as an <a> with no href, so Enter, AT activation
-  // commands, and middle-click cannot navigate or fire the consumer onClick.
-  // It keeps its Tab stop and the link role so keyboard and screen-reader
-  // users still find it (spec:AST-085 FR1, FR5). The router LinkComponent is
-  // deliberately skipped — a disabled item performs no navigation, and custom
-  // router links may require a live href. target is omitted with the href.
-  // (Mirrors the disabled paths of Link and Token.)
+  // A disabled item renders as an <a> with no href. Enter, assistive
+  // technology commands and a middle click cannot navigate or run the caller's
+  // onClick. The item keeps its Tab stop and the link role, so keyboard and
+  // screen-reader users still find it. It does not navigate, so it skips the
+  // router LinkComponent, which can require a live href. The target goes with
+  // the href.
   const Root = isDisabled ? 'a' : LinkComponent;
 
   // A disabled item runs no caller handler except `onFocus` and `onBlur`, as a
