@@ -252,12 +252,6 @@ export default function AIChatTemplate() {
   const activeMode = MODE_OPTIONS.find(m => m.key === mode) ?? MODE_OPTIONS[0];
   const suggestions = category ? CATEGORY_SUGGESTIONS[category] : null;
 
-  // The composer's imperative insert methods mutate the DOM without emitting a
-  // change, so dispatch an input event to sync its value and clear the placeholder.
-  const syncComposerValue = () => {
-    document.activeElement?.dispatchEvent(new Event('input', {bubbles: true}));
-  };
-
   const applySuggestion = (prompt: string) => {
     const input = composerInputRef.current;
     if (!input) {
@@ -268,7 +262,6 @@ export default function AIChatTemplate() {
       window.getSelection()?.selectAllChildren(document.activeElement);
     }
     input.insertText(prompt);
-    syncComposerValue();
   };
 
   const insertMention = (item: (typeof MENTION_ITEMS)[number]) => {
@@ -287,7 +280,6 @@ export default function AIChatTemplate() {
       label: item.label,
       variant: 'blue',
     });
-    syncComposerValue();
   };
 
   const insertModeToken = (label: string) => {
@@ -297,7 +289,6 @@ export default function AIChatTemplate() {
       label,
       variant: 'orange',
     });
-    syncComposerValue();
   };
 
   return (

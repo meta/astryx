@@ -16,6 +16,7 @@ import path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
   clampedHitInsets,
+  groupGrowth,
   HIT_INSET_PROPERTIES,
   type HitInsets,
   type HitRect,
@@ -29,6 +30,47 @@ import {
 function rect(left: number, top: number, width: number, height: number) {
   return {left, top, right: left + width, bottom: top + height};
 }
+
+describe('groupGrowth', () => {
+  it('grows each side of a row as far as the member on that edge would, and a wide group by its narrow end members', () => {
+    // Three 32 px toggles in a 104 × 32 row, 4 px apart.
+    const row = rect(0, 100, 104, 32);
+    const members = [
+      rect(0, 100, 32, 32),
+      rect(36, 100, 32, 32),
+      rect(72, 100, 32, 32),
+    ];
+    expect(groupGrowth(row, members)).toEqual({
+      top: 6,
+      right: 6,
+      bottom: 6,
+      left: 6,
+    });
+    // A column of wide members grows only at its top and bottom.
+    const column = rect(0, 0, 120, 64);
+    expect(
+      groupGrowth(column, [rect(0, 0, 120, 32), rect(0, 32, 120, 32)]),
+    ).toEqual({top: 6, right: 0, bottom: 6, left: 0});
+    // A row wider than its members shrinks past its last member, so it
+    // covers only their targets: 32 px buttons ending 160 px short.
+    expect(groupGrowth(rect(0, 100, 264, 32), members)).toEqual({
+      top: 6,
+      right: -154,
+      bottom: 6,
+      left: 6,
+    });
+    expect(groupGrowth(row, [])).toEqual(NO_HIT_INSETS);
+    // The full growth it gives stops at a neighbour, as a control's does.
+    expect(
+      clampedHitInsets(
+        row,
+        [rect(-8, 100, 4, 32)],
+        44,
+        groupGrowth(row, members),
+      ).left,
+    ).toBe(2);
+  });
+});
 
 describe('clampedHitInsets', () => {
   it('grows a lone 24 px target to 44 px, centered', () => {
@@ -323,6 +365,126 @@ describe('watchHitArea', () => {
     stops.forEach(stop => stop());
   });
 
+  it("reads a group's growth from its members in its layout px, so a group in an opening layer keeps its insets", () => {
+    // As above, the layer opens from half size about the page origin.
+    const half = ({left, top, right, bottom}: HitRect) => ({
+      left: left / 2,
+      top: top / 2,
+      right: right / 2,
+      bottom: bottom / 2,
+    });
+    const group = byId('other');
+    Object.assign(group.style, {
+      width: '68px',
+      height: '32px',
+      boxSizing: 'border-box',
+    });
+    layOut(group, 68, 32);
+    place(group, half(rect(200, 300, 68, 32)));
+    place(byId('switch'), half(rect(100, 100, 24, 24)));
+    place(byId('link'), half(rect(132, 100, 60, 24)));
+    // Two 32 px members, each 6 px short of 44 on each axis.
+    const members = [
+      half(rect(200, 300, 32, 32)),
+      half(rect(236, 300, 32, 32)),
+    ];
+    const heard: HitInsets[] = [];
+    const stop = watchHitArea(group, insets => heard.push(insets), {
+      growth: (box, toLayout) => groupGrowth(box, members.map(toLayout)),
+    });
+    show(group);
+    flush();
+    // At half size the members would read 16 px and grow 14 px.
+    expect(heard).toEqual([{top: 6, right: 6, bottom: 6, left: 6}]);
+    stop();
+  });
+
+  it('matches the page against its selector once, and again only after a mutation can change what it matches', () => {
+    const control = byId('switch');
+    place(control, rect(100, 100, 24, 24));
+    place(byId('link'), rect(132, 100, 60, 24));
+    place(byId('other'), rect(400, 400, 24, 24));
+    const queries = vi.spyOn(document, 'querySelectorAll');
+    const heard: HitInsets[] = [];
+    const stop = watchHitArea(control, insets => heard.push(insets));
+    show(control);
+    flush();
+    expect(queries).toHaveBeenCalledTimes(1);
+    expect(heard).toEqual([{top: 10, right: 4, bottom: 10, left: 10}]);
+
+    // A later pass reads every rect again, but finds the elements kept.
+    place(byId('link'), rect(140, 100, 60, 24));
+    log.length = 0;
+    window.dispatchEvent(new Event('resize'));
+    flush();
+    expect(queries).toHaveBeenCalledTimes(1);
+    expect(log).toContain('read link');
+    expect(heard.at(-1)).toEqual({top: 10, right: 8, bottom: 10, left: 10});
+
+    // A neighbour added in the same task as the pass counts in it.
+    const above = document.createElement('button');
+    above.id = 'above';
+    document.body.append(above);
+    place(above, rect(100, 80, 24, 12));
+    window.dispatchEvent(new Event('resize'));
+    flush();
+    expect(queries).toHaveBeenCalledTimes(2);
+    expect(heard.at(-1)).toEqual({top: 4, right: 8, bottom: 10, left: 10});
+
+    // An attribute the selector reads makes an element a neighbour.
+    const below = document.createElement('span');
+    below.id = 'below';
+    document.body.append(below);
+    place(below, rect(100, 130, 24, 12));
+    window.dispatchEvent(new Event('resize'));
+    flush();
+    expect(heard.at(-1)).toEqual({top: 4, right: 8, bottom: 10, left: 10});
+    below.setAttribute('role', 'button');
+    window.dispatchEvent(new Event('resize'));
+    flush();
+    expect(heard.at(-1)).toEqual({top: 4, right: 8, bottom: 3, left: 10});
+
+    // A neighbour removed stops counting.
+    above.remove();
+    window.dispatchEvent(new Event('resize'));
+    flush();
+    expect(heard.at(-1)).toEqual({top: 10, right: 8, bottom: 3, left: 10});
+    stop();
+  });
+
+  it('counts a control watched after the last pass by its own box, not by a part inside it', () => {
+    // A group whose box reaches nearer the control than the input inside it.
+    const group = document.createElement('div');
+    const input = document.createElement('input');
+    group.append(input);
+    document.body.append(group);
+    place(group, rect(100, 60, 24, 30));
+    place(input, rect(100, 20, 24, 10));
+    const control = byId('switch');
+    place(control, rect(100, 100, 24, 24));
+    place(byId('link'), rect(132, 100, 60, 24));
+    place(byId('other'), rect(400, 400, 24, 24));
+    const heard: HitInsets[] = [];
+    const stop = watchHitArea(control, insets => heard.push(insets));
+    show(control);
+    flush();
+    // The input is too far away to stop the control's growth.
+    expect(heard.at(-1)).toEqual({top: 10, right: 4, bottom: 10, left: 10});
+    // The group starts a watch. No element changes, but its box, not its
+    // input, is now the neighbour.
+    const stopGroup = watchHitArea(group, () => {});
+    window.dispatchEvent(new Event('resize'));
+    flush();
+    expect(heard.at(-1)).toEqual({top: 5, right: 4, bottom: 10, left: 10});
+    // The group stops its watch: its input, too far away, is the neighbour
+    // again.
+    stopGroup();
+    window.dispatchEvent(new Event('resize'));
+    flush();
+    expect(heard.at(-1)).toEqual({top: 10, right: 4, bottom: 10, left: 10});
+    stop();
+  });
+
   it('measures nothing off screen', () => {
     const control = byId('switch');
     place(control, rect(100, 100, 24, 24));
@@ -502,6 +664,31 @@ describe('watchHitArea', () => {
     touch(130);
     link.dispatchEvent(new Event('pointerdown', {bubbles: true}));
     expect(click()).toBe(false);
+    stop();
+  });
+
+  it('reads nothing on the page at a finger’s press, and swallows no click, for a watch whose owner reads its own targets (checkAtPress off)', () => {
+    const control = byId('switch');
+    const link = byId('link');
+    place(control, rect(100, 100, 24, 24));
+    place(link, rect(400, 100, 60, 24));
+    const stop = watchHitArea(control, () => {}, {checkAtPress: false});
+    show(control);
+    flush();
+    // The link moved to 8 px away with nothing re-measuring yet.
+    place(link, rect(132, 100, 60, 24));
+    const read = vi.spyOn(link, 'getBoundingClientRect');
+    const press = new Event('pointerdown', {bubbles: true});
+    Object.assign(press, {pointerType: 'touch', clientX: 130, clientY: 112});
+    control.dispatchEvent(press);
+    expect(read).not.toHaveBeenCalled();
+    const click = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      detail: 1,
+    });
+    control.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(false);
     stop();
   });
 
@@ -694,6 +881,64 @@ describe('watchHitArea', () => {
       onDocument.mock.calls.filter(([type]) => type === 'pointerdown'),
     ).toHaveLength(1);
     stops.forEach(stop => stop());
+  });
+
+  it('observes the page for its interactive elements only while the pointer is coarse and a watch is live (spec:AST-094 FR24)', () => {
+    const Native = globalThis.MutationObserver;
+    let pageObservers = 0;
+    vi.stubGlobal(
+      'MutationObserver',
+      class extends Native {
+        private isOnPage = false;
+        override observe(target: Node, options?: MutationObserverInit) {
+          if (target === document && !this.isOnPage) {
+            this.isOnPage = true;
+            pageObservers += 1;
+          }
+          super.observe(target, options);
+        }
+        override disconnect() {
+          if (this.isOnPage) {
+            this.isOnPage = false;
+            pageObservers -= 1;
+          }
+          super.disconnect();
+        }
+      },
+    );
+    const control = byId('switch');
+    const other = byId('other');
+    place(control, rect(100, 100, 24, 24));
+    place(other, rect(400, 400, 24, 24));
+    place(byId('link'), rect(132, 100, 60, 24));
+    // Under a fine pointer: none.
+    coarse = false;
+    const stops = [control, other].map(element =>
+      watchHitArea(element, () => {}),
+    );
+    show(control, other);
+    flush();
+    expect(pageObservers).toBe(0);
+    // Coarse, with two watches: one.
+    coarse = true;
+    pointerListeners.forEach(listener => listener());
+    show(control, other);
+    flush();
+    expect(pageObservers).toBe(1);
+    // The pointer turns fine: released.
+    coarse = false;
+    pointerListeners.forEach(listener => listener());
+    expect(pageObservers).toBe(0);
+    // Coarse again, then the last watch stops: released.
+    coarse = true;
+    pointerListeners.forEach(listener => listener());
+    show(control, other);
+    flush();
+    expect(pageObservers).toBe(1);
+    stops[0]();
+    expect(pageObservers).toBe(1);
+    stops[1]();
+    expect(pageObservers).toBe(0);
   });
 
   it('removes its document listener when the last watch stops (spec:AST-094 FR24)', () => {

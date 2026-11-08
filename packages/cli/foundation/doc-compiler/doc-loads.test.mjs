@@ -71,8 +71,8 @@ const RUNNERS = {
     ],
   },
   'api/theme/build/core-interception.mjs': {
-    runs: "@astryxdesign/core as a theme's CommonJS dependencies require it, to wrap defineTheme",
-    sites: ['require(<computed>)'],
+    runs: "@astryxdesign/core/theme beside a theme whose CommonJS dependencies may require Core, to wrap defineTheme; Module._load is watched during the load so the root is wrapped only as the load requires it; require.resolve for Core's entries",
+    sites: ['module', 'require(<computed>)'],
   },
   'api/upgrade/_adapter.mjs': {
     runs: 'the commands a codemod declares as its post-codemod hooks',
@@ -355,8 +355,14 @@ const RUNNERS = {
     sites: ['importDocModule', 'importNativeModule ×3', 'importTemplateModule'],
   },
   'foundation/render/page-worker.mjs': {
-    runs: 'the page `astryx experimental render` renders, its local modules, React, and the StyleX compiler, in a worker',
-    sites: ['.import() ×3', 'createJiti ×2', 'require(@stylexjs/babel-plugin)'],
+    runs: 'the page `astryx experimental render` renders, its local modules, React, and the StyleX compiler, in a worker, then React DOM and the recharts settings to draw its charts; outside a project, Node resolves the packages its folder lacks, and React and StyleX for every module (resolve hooks for ES modules), from the package set the CLI runs from',
+    sites: [
+      '.import() ×6',
+      'createJiti ×2',
+      'module',
+      'module.register',
+      'require(@stylexjs/babel-plugin)',
+    ],
   },
   'foundation/render/render-page.mjs': {
     runs: 'the render worker, so a page that never finishes can be stopped',

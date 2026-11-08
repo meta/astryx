@@ -255,10 +255,12 @@ describe('docs() dispatcher routing', () => {
   }, SLOW);
 
   it('an unknown route keeps every child of its namespace, closest first', async () => {
-    const error = await docs('tokens/usage').catch(e => e);
+    // `tokens/usage` names the one child whose name repeats the namespace, so
+    // it opens it now; a route no child answers to still lists them all.
+    const error = await docs('tokens/colour').catch(e => e);
     expect(error.code).toBe('ERR_UNKNOWN_TOPIC');
     const names = error.suggestions.map(s => s.name);
-    expect(names[0]).toBe('tokens/tokens-usage');
+    expect(names[0]).toBe('tokens/tokens-color');
     const none = await docs('tokens/zzzz-nope').catch(e => e);
     expect([...names].sort()).toEqual(none.suggestions.map(s => s.name).sort());
   }, SLOW);

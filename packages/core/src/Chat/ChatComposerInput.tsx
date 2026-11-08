@@ -28,6 +28,7 @@
  */
 
 import {
+  use,
   useRef,
   useState,
   useCallback,
@@ -67,6 +68,10 @@ import {
 } from './useChatPasteAsToken';
 import {Badge, type BadgeProps} from '../Badge';
 import {useChatComposerContext} from './ChatContext';
+import {
+  KeyboardSurfaceContext,
+  focusInKeyboardSurface,
+} from './keyboardSurface';
 import {themeProps} from '../utils/themeProps';
 import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import type {EnterKeyHint} from '../Field/textEntryTraits';
@@ -437,6 +442,10 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
   const insertTextRef = useRef<(text: string) => void>(() => {});
   const expandTokenRef = useRef<(id: string) => void>(() => {});
 
+  // Inside ChatLayout's keyboard surface, every touch route into the text
+  // skips the browser's reveal. Elsewhere the browser's own focus applies.
+  const isKeyboardSurface = use(KeyboardSurfaceContext);
+
   // A single handle object shared between the forwarded ref (via
   // `useImperativeHandle`) and `selfRef` (used by internal consumers
   // like paste-as-token). We can't rely on `useImperativeHandle`'s
@@ -474,13 +483,13 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
     // Read before focusing: `focus()` itself creates the offset-0 caret, so
     // asking afterwards cannot tell the user's own caret from the engine's.
     const existing = getSelectionRangeInside(editable);
-    editable.focus();
+    focusInKeyboardSurface(editable, isKeyboardSurface);
     if (existing) {
       restoreSelectionRange(existing);
       return;
     }
     placeCaretAtEnd(editable);
-  }, []);
+  }, [isKeyboardSurface]);
 
   /**
    * Focus the editable and put the caret after the draft, whatever the
@@ -495,9 +504,9 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
     if (!editable) {
       return;
     }
-    editable.focus();
+    focusInKeyboardSurface(editable, isKeyboardSurface);
     placeCaretAtEnd(editable);
-  }, []);
+  }, [isKeyboardSurface]);
 
   const handle: ChatComposerInputHandle = {
     insertToken: (token: ChatComposerToken) => insertTokenRef.current(token),
@@ -620,9 +629,21 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
     [emitChange, insertTextWithoutEmit],
   );
 
+  const insertTokenWithoutEmit = tokens.insertToken;
+  const insertToken = useCallback(
+    (token: ChatComposerToken) => {
+      const id = insertTokenWithoutEmit(token);
+      if (id != null) {
+        emitChange();
+      }
+      return id;
+    },
+    [emitChange, insertTokenWithoutEmit],
+  );
+
   // A caller may retain a handle across renders. Resolve mutation permission
   // through the latest callbacks rather than the render that created it.
-  insertTokenRef.current = isDisabled ? () => undefined : tokens.insertToken;
+  insertTokenRef.current = isDisabled ? () => undefined : insertToken;
   insertTextRef.current = isDisabled ? () => {} : insertText;
   expandTokenRef.current = isDisabled ? () => {} : tokens.expandToken;
 
@@ -888,9 +909,13 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
         return;
       }
 
-      // Paste-as-token: convert long pastes to token chips.
+      // Paste-as-token: convert long pastes to token chips. The default
+      // converter inserts through the handle, which publishes the change.
+      const versionBeforeToken = emitChangeVersionRef.current;
       if (pasteAsToken?.onPaste(e, text)) {
-        emitChange();
+        if (emitChangeVersionRef.current === versionBeforeToken) {
+          emitChange();
+        }
         return;
       }
 

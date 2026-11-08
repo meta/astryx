@@ -177,6 +177,8 @@ export async function frames(page: Page, count = 2): Promise<void> {
 // does not stop. The gate's freeze() and thaw() are its one way in:
 // freezeTimers and thawTimers call them, and so does a page freeze
 // (freeze.ts), which stops the page's clock too.
+// `clearTimeout` is the real clearTimeout, so a harness wait that ends early
+// cancels its own timer.
 const TIMER_GATE = `(() => {
   if (window.__harnessTimerGate) return;
   const realTimeout = window.setTimeout.bind(window);
@@ -202,6 +204,7 @@ const TIMER_GATE = `(() => {
     frame: realFrame,
     now: realNow,
     timeout: realTimeout,
+    clearTimeout: realClearTimeout,
     // Holds every callback that comes due. With the page's clock stopped as
     // well, the timeouts not yet due stop counting.
     freeze(isClockStopped = false) {
