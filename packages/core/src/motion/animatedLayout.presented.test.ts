@@ -446,26 +446,35 @@ describe('a glide in the presented hit-test registry (motion/presentation.ts)', 
   }
 
   it('resolves once more in the first frame its glide is drawn within half a pixel of its place, so WebKit draws its last frame there', async () => {
-    const {frames, glide, timing, settles, written} = await settlingGlide();
+    const {a, frames, glide, timing, settles, written} = await settlingGlide();
+    const now = window.performance.now();
+    const clock = vi.spyOn(window.performance, 'now').mockReturnValue(now);
     try {
       expect(settles).toBeGreaterThan(0);
       expect(settles).toBeLessThan(Number(glide.options.duration));
+      // Drawn at its settle point, far from where the glide started, which
+      // is where the engine hit-tests it until a resolve.
+      (glide.animation as {startTime: number}).startTime = now - settles;
+      expect(Math.abs(presentedOffsetOf(a).y)).toBeGreaterThan(10);
       // Short of that keyframe: no write, and the frame loop keeps reading.
       timing.currentTime = settles - 1;
       frames.run();
       expect(written()).toBe('');
       expect(frames.pending()).toBeGreaterThan(0);
-      // The frame that reaches it writes once, and the loop stops.
+      // The frame that reaches it writes once, the engine hit-tests it where
+      // it is drawn, and the loop stops.
       timing.currentTime = settles;
       frames.run();
       const write = written();
       expect(write).not.toBe('');
+      expect(presentedOffsetOf(a).y).toBeCloseTo(0, 6);
       timing.currentTime = settles + 50;
       frames.run();
       frames.run();
       expect(written()).toBe(write);
       expect(frames.pending()).toBe(0);
     } finally {
+      clock.mockRestore();
       frames.restore();
     }
   });

@@ -241,16 +241,17 @@ Out of coverage, each taking its final place at once:
   duration).
 - Each motion of a change also makes the engine resolve its element once
   more, in the first frame the motion is drawn near its end: within half a
-  pixel or half a degree, or 0.005 of an opacity. WebKit can draw a compositor
-  animation's last frame, and every frame of a long task over its end, with
-  the values it last resolved; that frame shows the motion's end. It covers
-  the glides, an exit and its parts, a reveal's parts and an indicator's
-  transition. Implementation gap: a long task that starts before that frame
-  still shows the values from the last resolve, and a motion near its end
-  only at its last keyframe (a linear curve, or a long move on a steep curve)
-  gets no such resolve. Review condition: re-measure on each WebKit release,
-  and remove these resolves once WebKit draws an ended compositor animation
-  at its final values.
+  pixel or half a percent, or 0.005 of an opacity or of an indicator's turn.
+  WebKit can draw a compositor animation's last frame, and every frame of a
+  long task over its end, with the values it last resolved; that frame shows
+  the motion's end. It covers the glides, an exit and its parts, a reveal's
+  parts and an indicator's transition. A Reduce Motion fade gets none: WebKit
+  draws its end values at its end. Implementation gap: a long task that starts
+  before that frame still shows the values from the last resolve, and a
+  motion near its end only at its last keyframe (a linear curve, or a long
+  move on a steep curve) gets no such resolve. Review condition: re-measure on
+  each WebKit release, and remove these resolves once WebKit draws an ended
+  compositor animation at its final values.
 
 ## Verification
 

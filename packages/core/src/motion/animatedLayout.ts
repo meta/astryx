@@ -339,7 +339,7 @@ function translatesOf(
   return points.length > 0 ? points : null;
 }
 
-/** How near its end, px or degrees, an animated value counts as there. */
+/** How near its end, px or percent, an animated value counts as there. */
 const SETTLED_PX = 0.5;
 
 /** How near its end an animated value with no unit, an opacity, counts. */
@@ -365,7 +365,7 @@ function isNearEnd(value: KeyframeValue, end: KeyframeValue): boolean {
   return (
     ats.length === ends.length &&
     ats.every(([, at, unit], index) => {
-      const tolerance = ['px', 'deg', '%'].includes(unit.toLowerCase())
+      const tolerance = ['px', '%'].includes(unit.toLowerCase())
         ? SETTLED_PX
         : SETTLED_RATIO;
       return Math.abs(Number(at) - Number(ends[index][1])) <= tolerance;
@@ -395,37 +395,17 @@ function settledOffset(keyframes: ReadonlyArray<Keyframe>): number | null {
 }
 
 /**
- * The progress from which a `linear()` easing of evenly spaced stops, as
- * linearEasing writes, stays near 1, or null. It serves the fades, the only
- * eased two-keyframe animations: a move needs its distance in pixels.
+ * When an animation's sampled linear frames come within reach of their end,
+ * ms, or null. An eased two-keyframe fade, the Reduce Motion one, has none:
+ * WebKit draws its end values at its end.
  */
-function settledProgress(easing: string | undefined): number | null {
-  const stops = /^linear\((.*)\)$/
-    .exec(easing ?? '')?.[1]
-    .split(',')
-    .map(stop => stop.trim());
-  if (stops == null || stops.some(stop => /\s/.test(stop))) {
-    return null;
-  }
-  let from: number | null = null;
-  for (let index = stops.length - 2; index >= 0; index -= 1) {
-    if (Math.abs(1 - Number(stops[index])) > SETTLED_RATIO) {
-      break;
-    }
-    from = index / (stops.length - 1);
-  }
-  return from;
-}
-
-/** When an animation's frames come within reach of their end, ms, or null. */
 function settleTime(
   keyframes: ReadonlyArray<Keyframe>,
   timing: KeyframeAnimationOptions,
 ): number | null {
   const duration = Number(timing.duration);
-  const easing = timing.easing ?? 'linear';
   const fraction =
-    easing === 'linear' ? settledOffset(keyframes) : settledProgress(easing);
+    (timing.easing ?? 'linear') === 'linear' ? settledOffset(keyframes) : null;
   return fraction == null || !(duration > 0)
     ? null
     : (timing.delay ?? 0) + fraction * duration;
