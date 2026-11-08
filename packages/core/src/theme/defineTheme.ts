@@ -184,6 +184,10 @@ export type TokenValue = string | [light: string, dark: string];
  * `:hover` would otherwise still match. Style the disabled state through
  * `:disabled` instead.
  *
+ * An `:active` override follows the touch press model: it applies to a mouse
+ * press, and under a coarse primary pointer it applies while Astryx believes
+ * the press, not on the touch or through a scroll.
+ *
  * @example
  * ```ts
  * {

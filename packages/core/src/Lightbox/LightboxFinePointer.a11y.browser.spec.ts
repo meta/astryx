@@ -5,9 +5,10 @@
  * @input The built Lightbox "with zoom" story, a desktop browser (a fine
  *   primary pointer) and real mouse input; in Chromium, pen input
  * @output Evidence that the gestures take every pointer where the primary
- *   pointer is fine too. It covers the zoom's touches as on a phone, the
- *   double-click's 2× zoom and the keyboard's spring. It also covers pen and
- *   mouse drags, and a gallery's Next, arrow keys and dark-area click
+ *   pointer is fine too. It covers the zoom's touches as on a phone, and a
+ *   photo without zoom that leaves touches to the page. It also covers the
+ *   double-click's 2× zoom, the keyboard's spring, pen and mouse drags, and a
+ *   gallery's Next, arrow keys, dark-area click and counter
  * @position Cross-browser proof for Lightbox under a fine primary pointer
  */
 
@@ -251,6 +252,33 @@ test('the zoom target takes its touches as on a phone where the primary pointer 
   ]);
 });
 
+test('a photo without zoom leaves its touches to the page where the primary pointer is fine, as on main', async ({
+  page,
+}) => {
+  // The drag to close belongs to the touch presentation, which a coarse
+  // primary pointer brings. A touchscreen laptop's finger scrolls and zooms
+  // the page around a photo without zoom, as on main.
+  await page.route('https://picsum.photos/**', async route =>
+    route.fulfill({
+      contentType: 'image/svg+xml',
+      body: photoSvg(PHOTO.width, PHOTO.height),
+    }),
+  );
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-lightbox--default&viewMode=story`,
+  );
+  await page.getByRole('button', {name: 'Open lightbox'}).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  const photo = dialog.getByRole('img').first();
+  expect(await touchActionsAbove(photo)).toEqual([
+    'auto',
+    'auto',
+    'auto',
+    'auto',
+  ]);
+});
+
 test('a gallery leaves its sideways touches to the page where the primary pointer is fine', async ({
   page,
 }) => {
@@ -352,6 +380,23 @@ test('in a gallery, a mouse click beside a large photo, level with it, leaves th
   expect(shown.x).toBeGreaterThan(40);
   const level = shown.y + shown.height * 0.15;
   await page.mouse.click(shown.x / 2, level);
+  await page.waitForTimeout(400);
+  await expect(dialog).toBeVisible();
+});
+
+test('a mouse click on the gallery counter leaves the viewer open, as on main', async ({
+  page,
+}) => {
+  // A window taller than the photo's fitted height leaves the dark area
+  // above it, where the counter sits and a click beside the photo closes.
+  await page.setViewportSize({width: 1280, height: 1000});
+  const {dialog, current} = await openGallery(page);
+  const counter = dialog.getByText('1 / 4', {exact: true});
+  await expect(counter).toBeVisible();
+  const box = await boxOf(counter);
+  expect(box.width).toBeGreaterThan(0);
+  expect(box.y + box.height).toBeLessThan((await boxOf(current)).y);
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
   await page.waitForTimeout(400);
   await expect(dialog).toBeVisible();
 });
