@@ -29,7 +29,7 @@ Examples:
 
 ## Current Ideals
 
-55 prompt IDs covered (62 images total). See [issue #733](https://github.com/facebook/astryx/issues/733) for context.
+55 prompt IDs covered (62 images total). See [issue #733](https://github.com/meta/astryx/issues/733) for context.
 
 Multi-image prompts use `__` suffixes for different states/views:
 

@@ -17,9 +17,10 @@
  * - /packages/cli/assets/templates/blocks/components/Table/ (showcase blocks)
  */
 
-import {useMemo, type ReactElement, type Ref} from 'react';
+import {use, useMemo, type ReactElement, type Ref} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {colorVars} from '../theme/tokens.stylex';
+import {borderVars, colorVars, focusVars} from '../theme/tokens.stylex';
+import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {BaseTable} from './BaseTable';
 import {TableContext} from './TableContext';
 import {useBaseTablePlugins} from './useBaseTablePlugins';
@@ -33,7 +34,14 @@ import type {
   TableRenderProps,
 } from './types';
 import type {StyleXStyles} from '../theme/types';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Table/Table.generated';
+import {createSharedContext} from '../utils/sharedContext';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Table Types
@@ -133,7 +141,27 @@ const scrollWrapperStyles = stylex.create({
       ':last-child': 'calc(-1 * var(--container-padding-block-end, 0px))',
     },
   },
+  // The wrapper bleeds to its container's edges, under a Card's border, and
+  // the Card clips there, so its keyboard ring sits inside its own box, clear
+  // of that border too.
+  focusRingInset: {
+    outlineOffset: {
+      default: null,
+      ':focus-visible': `calc(-1 * (${focusVars['--focus-outline-width']} + ${borderVars['--border-width']}))`,
+    },
+  },
 });
+
+/**
+ * The Table's own name, for the scroll region that names itself after it.
+ * Internal to Table: the scroll wrapper is not given it as a prop, so it adds
+ * nothing to the public table types.
+ */
+const TableNameContext = createSharedContext<{
+  label?: string;
+  labelledBy?: string;
+} | null>('TableNameContext', 1, null);
+TableNameContext.displayName = 'TableNameContext';
 
 function TableScrollWrapper({
   children,
@@ -150,8 +178,18 @@ function TableScrollWrapper({
   beforeTable?: React.ReactNode;
   afterTable?: React.ReactNode;
 }) {
-  const t = useTranslator();
-  const label = t('@astryx.table.label');
+  const t = useComponentTranslator();
+  const tableName = use(TableNameContext);
+  // The focusable scroll region takes the table's own name (spec:AST-025
+  // FR12), so two tables are not two groups both named "Table". It is named
+  // the way the table is: `aria-labelledby` wins over `aria-label`, as it does
+  // in accessible-name computation; the generic name is the fallback for an
+  // unnamed table.
+  const labelledBy = tableName?.labelledBy;
+  const label =
+    labelledBy != null
+      ? undefined
+      : (tableName?.label ?? t('@astryx.table.label'));
   const {getViewportProps, getContentProps, state} = useScrollableArea({
     axis: 'inline',
     keyboardAccess: {owner: 'content'},
@@ -161,6 +199,9 @@ function TableScrollWrapper({
   const viewportProps = getViewportProps<HTMLDivElement>({
     role: 'group',
     'aria-label': label,
+    // A plugin's explicit name stays authoritative (Table FR1).
+    'aria-labelledby':
+      restHtmlProps['aria-label'] == null ? labelledBy : undefined,
     ...(state.inline.isScrollable ? {tabIndex: 0} : {}),
     ...restHtmlProps,
     ref,
@@ -169,6 +210,10 @@ function TableScrollWrapper({
       stylex.props(
         scrollWrapperStyles.base,
         scrollWrapperStyles.containerBleed,
+        // A tab stop once the table scrolls inline: the shared ring, which a
+        // theme restyles through the focus-outline tokens.
+        focusOutlineStyles.focusVisible,
+        scrollWrapperStyles.focusRingInset,
         ...(pluginStyles ?? []),
       ),
     ),
@@ -240,18 +285,26 @@ function TableInner<T extends Record<string, unknown>>({
     }),
     [density, dividers, isStriped, hasHover, verticalAlign, textOverflow],
   );
+  const tableLabel = rest['aria-label'];
+  const tableLabelledBy = rest['aria-labelledby'];
+  const tableName = useMemo(
+    () => ({label: tableLabel, labelledBy: tableLabelledBy}),
+    [tableLabel, tableLabelledBy],
+  );
 
   return (
     <TableContext value={contextValue}>
-      <BaseTable<T>
-        ref={ref}
-        data={data}
-        columns={columns}
-        plugins={mergedPlugins}
-        textOverflow={textOverflow}
-        scrollWrapper={TableScrollWrapper}
-        {...rest}
-      />
+      <TableNameContext value={tableName}>
+        <BaseTable<T>
+          ref={ref}
+          data={data}
+          columns={columns}
+          plugins={mergedPlugins}
+          textOverflow={textOverflow}
+          scrollWrapper={TableScrollWrapper}
+          {...rest}
+        />
+      </TableNameContext>
     </TableContext>
   );
 }

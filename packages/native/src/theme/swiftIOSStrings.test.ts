@@ -30,6 +30,24 @@ describe('swift-ios localized strings', () => {
     );
   });
 
+  it('carries the field messages TextInput speaks, falling back to English where a catalog lacks one', () => {
+    const files = renderSwiftIOSStrings();
+    const english = files['en.lproj/Localizable.strings'] ?? '';
+    for (const line of [
+      '"@astryx.field.optional" = "Optional";',
+      '"@astryx.field.required" = "Required";',
+      '"@astryx.textInput.clearLabel" = "Clear {label}";',
+      '"@astryx.spinner.loading" = "Loading";',
+      '"@astryx.input.statusButton.error" = "Error details";',
+    ]) {
+      expect(english).toContain(line);
+    }
+    // af-ZA has no clear tip yet; the app reads the English value in code.
+    expect(files['af.lproj/Localizable.strings']).not.toContain(
+      '@astryx.inputClearButton.tooltip',
+    );
+  });
+
   it("keeps the committed files in sync with core's catalogs", () => {
     const files = renderSwiftIOSStrings();
     const committed = fs

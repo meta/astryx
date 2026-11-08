@@ -26,6 +26,16 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {fileStamp, recordContentRead} from '../fs/read-record.mjs';
+
+/**
+ * What `isAmbient` found for each file, per TypeScript, kept while the
+ * file's stamp (`fileStamp`) is the same. A process that compares a package
+ * more than once reads the same config each time, and reading a file the way
+ * TypeScript does costs far more than a stat.
+ * @type {WeakMap<object, Map<string, {stamp: string, ambient: boolean}>>}
+ */
+const ambientByFile = new WeakMap();
 
 /**
  * Whether a file the config includes declares types every file sees: a
@@ -36,6 +46,30 @@ import * as path from 'node:path';
  */
 function isAmbient(ts, file) {
   if (/\.d\.[cm]?ts$/.test(file)) return true;
+  // A kept answer still counts as reading the file, so an operation that
+  // keeps its own result while what it read is unchanged sees a change to it.
+  recordContentRead(file);
+  const stamp = fileStamp(file);
+  if (stamp === '-') return false;
+  let known = ambientByFile.get(ts);
+  if (known == null) {
+    known = new Map();
+    ambientByFile.set(ts, known);
+  }
+  const key = path.resolve(file);
+  const seen = known.get(key);
+  if (seen && seen.stamp === stamp) return seen.ambient;
+  const ambient = readAmbient(ts, file);
+  known.set(key, {stamp, ambient});
+  return ambient;
+}
+
+/**
+ * `isAmbient` for a file that is not a declaration file, read afresh.
+ * @param {any} ts
+ * @param {string} file
+ */
+function readAmbient(ts, file) {
   let text;
   try {
     text = fs.readFileSync(file, 'utf8');

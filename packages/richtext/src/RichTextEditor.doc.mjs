@@ -241,6 +241,21 @@ export const docs = {
       {
         guidance: true,
         description:
+          'Backspace at the very start of a code block turns it into a paragraph holding its lines, each on its own line, with the caret at its start. The code never merges into the block above, so a heading above keeps its own text. Backspace anywhere else in a code block deletes as usual.',
+      },
+      {
+        guidance: true,
+        description:
+          'Pasting into a code block inserts plain code. Rich content, such as a web page, a word processor document, or blocks copied from another editor, goes in as the plain text on the clipboard; when the clipboard has no plain text, each pasted block goes in as one line of its text. Headings, lists, tables, and formatting never land inside a code block.',
+      },
+      {
+        guidance: true,
+        description:
+          'Cmd+A (Ctrl+A on other platforms) in a code block or a table cell selects the code or the cell text first; pressing it again selects the whole document. Anywhere else it selects the whole document at once.',
+      },
+      {
+        guidance: true,
+        description:
           'Thematic breaks (---, ***, ___, with or without spaces between) import as horizontal rules and export as ---. A dash line directly under a paragraph line stays with that paragraph, as in Markdown. Click a rule or arrow onto it to select it; Backspace removes it. RichTextView draws the same rules. Install @lexical/extension with the other lexical peers.',
       },
       {

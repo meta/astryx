@@ -24,7 +24,7 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import AxeBuilder from '@axe-core/playwright';
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {holdMotionStill} from '@astryxdesign/a11y-spec/chromium';
 import {
   DEFAULT_STORYBOOK_DIR,
@@ -447,6 +447,71 @@ test('side by side: a list of task and plain items keeps each task checkbox and 
       ).toBeLessThanOrEqual(1);
     }
   });
+  expect(errors).toEqual([]);
+});
+
+// spec:AST-061 FR11: however wide a numbered list's counters grow, from `99.`
+// to `100.` or from `i.` to `viii.` two lists down, each item's text, and each
+// nested list's, starts in the same place on both surfaces.
+test('side by side: wide counters start the text where RichText starts it', async ({
+  page,
+}) => {
+  const errors = await openStory(page, STORY.sideBySide, DESKTOP);
+  await waitForDocument(page, MARKDOWN);
+  await waitForDocument(page, RICH_TEXT);
+  const textStarts = (surface: string) =>
+    page.evaluate(selector => {
+      const block = document.querySelector(
+        `${selector} [data-parity-block="list-ordered-wide"]`,
+      );
+      const origin = block?.getBoundingClientRect().left ?? 0;
+      const starts: Array<[string, number]> = [];
+      for (const item of block?.querySelectorAll('li') ?? []) {
+        // The item's own first text; RichText holds a nested list in an item
+        // of its own, which has none.
+        const walker = document.createTreeWalker(item, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          if (!node.textContent?.trim()) {
+            continue;
+          }
+          if (node.parentElement?.closest('li') === item) {
+            const range = document.createRange();
+            range.selectNodeContents(node);
+            starts.push([
+              node.textContent.trim(),
+              range.getBoundingClientRect().left - origin,
+            ]);
+          }
+          break;
+        }
+      }
+      return starts;
+    }, surface);
+  const markdown = await textStarts(MARKDOWN);
+  const richText = new Map(await textStarts(RICH_TEXT));
+  expect(markdown.map(([text]) => text)).toEqual([
+    'Wide step ninety-eight',
+    'Wide step ninety-nine',
+    'Lettered step a',
+    'Roman step i',
+    'Roman step ii',
+    'Roman step iii',
+    'Roman step iv',
+    'Roman step v',
+    'Roman step vi',
+    'Roman step vii',
+    'Roman step viii',
+    'Wide step one hundred',
+  ]);
+  expect([...richText.keys()].sort()).toEqual(
+    markdown.map(([text]) => text).sort(),
+  );
+  for (const [text, start] of markdown) {
+    expect(
+      Math.abs((richText.get(text) ?? Number.NaN) - start),
+      `text of ${text}`,
+    ).toBeLessThanOrEqual(1);
+  }
   expect(errors).toEqual([]);
 });
 
@@ -1866,10 +1931,13 @@ for (const [viewport, colorMode] of [
   });
 }
 
-// spec:AST-061 FR6: every block takes the direction of the surface around
-// it, whatever its first strong character, on both surfaces.
+// RichText blocks take the direction of the surface around them, whatever
+// their first strong character. Markdown blocks take the direction of their
+// own text, and the provider's when their text has no strong character.
 for (const direction of ['ltr', 'rtl'] as const) {
-  test(`blocks take the provider direction (${direction})`, async ({page}) => {
+  test(`blocks take their surface's direction rule (${direction})`, async ({
+    page,
+  }) => {
     const errors = await openStory(
       page,
       STORY.sideBySide,
@@ -1879,24 +1947,43 @@ for (const direction of ['ltr', 'rtl'] as const) {
     await waitForDocument(page, MARKDOWN);
     await waitForDocument(page, RICH_TEXT);
     for (const surface of [MARKDOWN, RICH_TEXT]) {
-      const geometry = await surfaceGeometry(page, surface);
-      const otherDirection = geometry.blocks
-        .filter(block => block.direction !== direction)
-        .map(block => block.key);
-      expect(otherDirection, surface).toEqual([]);
-      // Inside blocks too: table rows and cells, list items, and paragraphs.
-      const nested = await page.evaluate(
-        ({selector, expected}) =>
-          [
+      const ownText = surface === MARKDOWN;
+      // RichText: every block, and inside blocks too: table rows and cells,
+      // list items, and paragraphs. Markdown: every prose block and table
+      // cell, read against its own text; a container or wrapper is not
+      // checked, because it takes its parent's direction.
+      const mismatched = await page.evaluate(
+        ({selector, provider, isOwnText}) => {
+          const strong =
+            /[A-Za-z\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF\u3040-\u9FFF\uAC00-\uD7AF]|([\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF])/u;
+          const expectedFor = (element: Element): string => {
+            if (!isOwnText) {
+              return provider;
+            }
+            const match = strong.exec(element.textContent ?? '');
+            return match == null ? provider : match[1] != null ? 'rtl' : 'ltr';
+          };
+          const targets = isOwnText
+            ? ':is([role="paragraph"], p, h1, h2, h3, h4, h5, h6, blockquote, li, th, td)'
+            : ':is([data-parity-block], tr, th, td, li, p)';
+          return [
             ...document.querySelectorAll(
-              `${selector} [data-parity-body] :is(tr, th, td, li, p)`,
+              `${selector} [data-parity-body] ${targets}`,
             ),
           ]
-            .filter(element => getComputedStyle(element).direction !== expected)
-            .map(element => element.tagName),
-        {selector: surface, expected: direction},
+            .filter(
+              element =>
+                getComputedStyle(element).direction !== expectedFor(element),
+            )
+            .map(
+              element =>
+                (element as HTMLElement).dataset.parityBlock ??
+                `${element.tagName} ${(element.textContent ?? '').slice(0, 24)}`,
+            );
+        },
+        {selector: surface, provider: direction, isOwnText: ownText},
       );
-      expect(nested, `${surface} nested`).toEqual([]);
+      expect(mismatched, surface).toEqual([]);
     }
     expect(errors).toEqual([]);
   });

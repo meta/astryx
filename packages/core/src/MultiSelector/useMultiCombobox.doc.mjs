@@ -158,7 +158,7 @@ export const docs = {
       name: 'onKeyDown',
       type: '(e: React.KeyboardEvent) => void',
       description:
-        'Key handler for the control that keeps focus. ArrowDown and ArrowUp open the list or move the active row; Enter (and Space without search) toggles the active option and keeps the list open; Escape and Tab close it; Home, End, PageUp and PageDown jump to the first or last option; without search, typed characters move to the first option whose label starts with them.',
+        'Key handler for the control that keeps focus. ArrowDown and ArrowUp open the list or move the active row; Enter (and Space without search) toggles the active option and keeps the list open; Escape and Tab close it; Home, End, PageUp and PageDown jump to the first or last option; without search, typed characters move to the next option whose label starts with them, as in Selector (a repeated letter cycles, and a single letter searches from the option after the active one), and Space still toggles.',
     },
     {
       name: 'onItemMouseEnter',
@@ -236,7 +236,7 @@ export const docsDense = {
     getActionCellId: 'grid: id for action cell of row index.',
     onTriggerClick: 'toggle list from a press on control.',
     onKeyDown:
-      'control keydown: ArrowDown/Up open or move; Enter (Space w/o search) toggles, stays open; Escape / Tab close; Home / End / PageUp / PageDown jump; typed chars jump by label prefix (w/o search).',
+      'control keydown: ArrowDown/Up open or move; Enter (Space w/o search) toggles, stays open; Escape / Tab close; Home / End / PageUp / PageDown jump; typed chars jump to the next option by label prefix, as in Selector (w/o search); Space still toggles.',
     onItemMouseEnter:
       'hover makes option / action cell active; no scroll, no focus move.',
   },

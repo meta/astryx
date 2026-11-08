@@ -4,7 +4,11 @@
 
 /**
  * @file Markdown.tsx
- * @input Markdown string, canonical AST, optional plugins and custom renderers
+ * @input Markdown string, canonical AST, optional plugins and custom renderers;
+ *   static document lists permit outside counter paint through ordered and
+ *   unordered ancestors. Flow-task
+ *   bodies use per-item first-line markers; paragraph-only task lists retain
+ *   their CheckboxList representation.
  * @output Exports Markdown component, MarkdownProps, and renderer contracts
  * @position Core implementation; renders markdown as Astryx components
  */
@@ -61,11 +65,17 @@ import {
 } from './parser';
 import type {IncrementalState, MathParseOptions, ParseOptions} from './parser';
 import {getMarkdownAstLegacyCodeLanguage, markdownAstText} from './ast';
+import {
+  blockDirection,
+  innerDirectionScope,
+  type BlockDirectionScope,
+} from './blockDirection';
 import type {
   MarkdownAstBlockContent,
   MarkdownAstPhrasingContent,
   MarkdownAstPosition,
   MarkdownAstTable,
+  MarkdownAstTableAlignment,
 } from './ast';
 import {
   applyMarkdownTransforms,
@@ -94,7 +104,15 @@ import {
   headingLinksHeadingStyle,
 } from './plugins/HeadingLinksRenderer';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator, type TranslatorFn} from '../i18n';
+import type {TranslatorFn} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import {useDirection} from '../i18n/useDirection';
+import english from '../i18n/generated-english/Markdown/Markdown.generated';
+
+registerEnglishFallback(english);
 
 type SyncReactNode = Exclude<React.ReactNode, Promise<unknown>>;
 type RenderExtensionNode = MarkdownExtensionNode;
@@ -365,6 +383,7 @@ const dynamicStyles = stylex.create({
 });
 
 const cellAlignStyles = stylex.create({
+  start: {textAlign: 'start'},
   center: {textAlign: 'center'},
   end: {textAlign: 'end'},
 });
@@ -416,6 +435,17 @@ const markdownTableCellStyles = stylex.create({
   // and lets the column carry the width instead.
   code: {
     wordBreak: 'normal',
+  },
+  // A cell that reads against its table draws the column rule on the table's
+  // inline-end side, which is the cell's own inline-start.
+  ruleOnTableEnd: {
+    borderInlineEndWidth: 0,
+    borderInlineStartWidth: {
+      default: borderVars['--border-width'],
+      ':last-child': '0',
+    },
+    borderInlineStartStyle: 'solid',
+    borderInlineStartColor: colorVars['--color-border'],
   },
   // The grid's outer edge. `dividers="grid"` draws the lines *between* cells
   // and stops at the table's rim, so without this the top, bottom, and sides
@@ -587,8 +617,20 @@ const styles = stylex.create({
     '--container-padding-block-start': '0px',
     '--container-padding-block-end': '0px',
   },
+  // Static Markdown lists never host swipe actions. Let outside counter ink
+  // paint through both ordered and unordered ancestors; general List and
+  // swipe-capable rows retain their own inline clip (component:List FR9).
   blockIndent: {
     marginInline: `calc(-1 * ${spacingVars['--spacing-2']})`,
+    overflowInline: 'visible',
+  },
+  // Numbered document lists keep their ordinary text inset regardless of
+  // counter width, matching RichText's native outside markers (AST-061 FR11).
+  // These rows have no swipe actions: unlike general List, their outside ink
+  // may paint past the gutter instead of being clipped at a finite threshold.
+  markerGutter: {
+    marginInlineStart: `calc(-1 * (${spacingVars['--spacing-2']} + ${spacingVars['--spacing-4']}))`,
+    paddingInlineStart: spacingVars['--spacing-4'],
   },
   // HR
   hr: {
@@ -1321,6 +1363,24 @@ function computeTableColumnMinWidths(node: RenderTable): number[] {
   });
 }
 
+/**
+ * The alignment and column-rule styles for a Markdown table cell. For a cell
+ * that reads against its table, the table's start is the cell's end, so an
+ * explicit alignment and the rule swap logical sides.
+ */
+function tableCellSideStyles(
+  align: MarkdownAstTableAlignment | undefined,
+  isAgainstTable: boolean,
+): ReadonlyArray<StyleXStyles | false> {
+  return [
+    align === 'center' && cellAlignStyles.center,
+    align === 'right' &&
+      (isAgainstTable ? cellAlignStyles.start : cellAlignStyles.end),
+    align === 'left' && isAgainstTable && cellAlignStyles.end,
+    isAgainstTable && markdownTableCellStyles.ruleOnTableEnd,
+  ];
+}
+
 function renderBlock(
   node: RenderBlockNode,
   index: number,
@@ -1342,6 +1402,7 @@ function renderBlock(
   headingProjection?: MarkdownHeadingProjection,
   // How many lists enclose this block (spec:AST-061 DEC-6).
   listDepth = 0,
+  directionScope?: BlockDirectionScope,
 ): SyncReactNode {
   const blockAlignMargin = BLOCK_ALIGN_MARGIN[contentAlign];
   const blockAlignStyle =
@@ -1392,6 +1453,7 @@ function renderBlock(
           <Tag
             key={index}
             id={headingId}
+            dir={blockDirection(node, directionScope)}
             {...mergeProps(
               themeProps('markdown-heading', {density, level}),
               stylex.props(
@@ -1416,6 +1478,7 @@ function renderBlock(
       return (
         <HeadingLinksRenderer
           key={index}
+          dir={blockDirection(node, directionScope)}
           headingId={headingId}
           headingLabel={headingLabel}
           permalinkUrl={permalinkUrl}
@@ -1478,6 +1541,7 @@ function renderBlock(
         <div
           key={index}
           role="paragraph"
+          dir={blockDirection(node, directionScope)}
           {...mergeProps(
             themeProps('markdown-paragraph', {density}),
             stylex.props(
@@ -1576,6 +1640,7 @@ function renderBlock(
       }
       try {
         const rendered = renderer.render({node: proposal.node});
+        // eslint-disable-next-line @astryx/no-nullish-jsx-guard -- a plugin renderer's '' is its output; only null, undefined or a boolean asks for the readable fallback
         if (rendered == null || typeof rendered === 'boolean') {
           return fallback;
         }
@@ -1636,6 +1701,7 @@ function renderBlock(
             codeLanguages,
             headingProjection,
             listDepth,
+            directionScope,
           ),
         );
         return (
@@ -1647,6 +1713,7 @@ function renderBlock(
       return (
         <Blockquote
           key={index}
+          dir={blockDirection(node, directionScope)}
           {...themeProps('markdown-blockquote', {density})}
           {...lineStamps}
           xstyle={[
@@ -1680,16 +1747,23 @@ function renderBlock(
               codeLanguages,
               headingProjection,
               listDepth,
+              innerDirectionScope(node, directionScope),
             ),
           )}
         </Blockquote>
       );
     }
     case 'list': {
-      // Detect task lists: all items have a checked state
+      // Preserve the released CheckboxList representation for paragraph-only
+      // pure task lists. Flow/nested task bodies use the shared per-item marker
+      // path below, which owns first-line placement and static outside paint.
       const isTaskList =
         node.children.length > 0 &&
-        node.children.every(item => item.checked != null);
+        node.children.every(
+          item =>
+            item.checked != null &&
+            item.children.every(block => block.type === 'paragraph'),
+        );
 
       if (isTaskList) {
         // Extract labels from task items — render as rich inline content
@@ -1705,6 +1779,12 @@ function renderBlock(
               themeProps('markdown-list', {density}),
               stylex.props(
                 spacing,
+                contentWidthValue != null
+                  ? dynamicStyles.proseWidth(contentWidthValue)
+                  : null,
+                contentAlign !== 'start'
+                  ? dynamicStyles.proseAlign(ALIGN_MARGIN[contentAlign])
+                  : null,
                 isFirst && styles.noMarginBlockStart,
                 isLast && styles.noMarginBlockEnd,
               ),
@@ -1760,6 +1840,7 @@ function renderBlock(
                         codeLanguages,
                         headingProjection,
                         listDepth + 1,
+                        innerDirectionScope(item, directionScope),
                       ),
                     )}
                   </>
@@ -1771,6 +1852,7 @@ function renderBlock(
                     key={i}
                     value={`task-${i}`}
                     label={label}
+                    dir={blockDirection(item, directionScope)}
                     {...(recordsSourceLines
                       ? sourceLineAttributes(blockSourceLines(item))
                       : undefined)}
@@ -1803,7 +1885,7 @@ function renderBlock(
             listStyle={node.ordered ? 'decimal' : 'disc'}
             density="compact"
             start={node.ordered ? node.start : undefined}
-            xstyle={styles.blockIndent}>
+            xstyle={[styles.blockIndent, node.ordered && styles.markerGutter]}>
             {node.children.map((item, i) => {
               const firstChild = item.children[0];
               const isInline =
@@ -1850,12 +1932,13 @@ function renderBlock(
                       codeLanguages,
                       headingProjection,
                       listDepth + 1,
+                      innerDirectionScope(item, directionScope),
                     ),
                   )}
                 </>
               );
 
-              // A task item beside plain items keeps its own checked state
+              // Each task item on this shared list path keeps its checked state
               // (FR23): it shows a read-only checkbox where its marker
               // would be, named by its text.
               const firstParagraph = item.children.find(
@@ -1879,6 +1962,16 @@ function renderBlock(
                           : t('@astryx.markdown.taskList'),
                     };
 
+              const itemDirection = blockDirection(item, directionScope);
+              // A numbered item that reads against its list keeps its counter
+              // beside its own text, so its text never widens the counter
+              // column that the other rows share.
+              const readsAgainstList =
+                node.ordered &&
+                itemDirection != null &&
+                directionScope != null &&
+                itemDirection !== directionScope.around;
+
               return (
                 <ListMarkerScope
                   // eslint-disable-next-line @eslint-react/no-array-index-key -- markdown list items are rendered from positional AST nodes
@@ -1888,9 +1981,12 @@ function renderBlock(
                       listDepth % 3
                     ]
                   }
-                  task={task}>
+                  task={task}
+                  hasMarkerGutter={node.ordered}
+                  isOutsideNumberColumns={readsAgainstList}>
                   <ListItem
                     label={label}
+                    dir={itemDirection}
                     {...(recordsSourceLines
                       ? sourceLineAttributes(blockSourceLines(item))
                       : undefined)}
@@ -1904,6 +2000,19 @@ function renderBlock(
     }
     case 'table': {
       const colMinWidths = computeTableColumnMinWidths(node);
+      // A cell whose text reads against its table keeps the table's sides: the
+      // column rule and an explicit alignment resolve in the table's
+      // direction, not the cell's.
+      const readsAgainstTable = (
+        cell: Parameters<typeof blockDirection>[0],
+      ): boolean => {
+        const cellDirection = blockDirection(cell, directionScope);
+        return (
+          cellDirection != null &&
+          directionScope != null &&
+          cellDirection !== directionScope.around
+        );
+      };
       const [header, ...rows] = node.children;
       // Inline code inside a cell keeps its token whole, through the same
       // `components` seam consumers use. A supplied renderer owns its own
@@ -1946,11 +2055,14 @@ function renderBlock(
                   <TableHeaderCell
                     // eslint-disable-next-line @eslint-react/no-array-index-key -- markdown table columns are positional by definition
                     key={i}
+                    dir={blockDirection(h, directionScope)}
                     xstyle={[
                       markdownTableCellStyles.headerCell,
                       dynamicStyles.cellMinWidth(`${colMinWidths[i]}ch`),
-                      node.align[i] === 'center' && cellAlignStyles.center,
-                      node.align[i] === 'right' && cellAlignStyles.end,
+                      ...tableCellSideStyles(
+                        node.align[i],
+                        readsAgainstTable(h),
+                      ),
                     ]}>
                     {h.children.map((c, j) =>
                       renderInline(
@@ -1975,10 +2087,13 @@ function renderBlock(
                   <TableCell
                     // eslint-disable-next-line @eslint-react/no-array-index-key -- markdown table cells are positional by row and column
                     key={j}
+                    dir={blockDirection(cell, directionScope)}
                     xstyle={[
                       markdownTableCellStyles.cell,
-                      node.align[j] === 'center' && cellAlignStyles.center,
-                      node.align[j] === 'right' && cellAlignStyles.end,
+                      ...tableCellSideStyles(
+                        node.align[j],
+                        readsAgainstTable(cell),
+                      ),
                     ]}>
                     {cell.children.map((c, k) =>
                       renderInline(
@@ -2142,7 +2257,8 @@ export function Markdown<
   'data-testid': testId,
   ...props
 }: MarkdownProps<Plugins>): React.ReactElement {
-  const t = useTranslator();
+  const t = useComponentTranslator();
+  const direction = useDirection();
   // Keep one list while it names the same values, so an inline
   // `codeLanguages={[…]}` does not re-render every block on each parent
   // render (adjusting state during render, not in an Effect).
@@ -2414,6 +2530,8 @@ export function Markdown<
         t,
         codeLanguages,
         headingProjection,
+        undefined,
+        {provider: direction, around: direction},
       ),
     );
   }, [
@@ -2435,6 +2553,7 @@ export function Markdown<
     t,
     headingProjection,
     codeLanguages,
+    direction,
   ]);
 
   if (display === 'inline') {

@@ -3,8 +3,10 @@
 
 /**
  * @file Markdown scorecard for one package's RTL audit report.
- * @input --report <rtl-audit-report.json> --scope <audited components label>
- * @output The job-summary section, on stdout.
+ * @input --report <rtl-audit-report.json> --scope <audited components label>,
+ *   including any declared D1 exclusions and D5 physical regions.
+ * @output The job-summary section on stdout, with review-facing exclusion
+ *   disclosure.
  * @position Shared by the pr-rtl package legs and the sharded-package merge
  *   job, so a joined report reads exactly like a single run's.
  */
@@ -18,11 +20,16 @@ const arg = name => {
 };
 const reportPath = arg('report') ?? 'rtl-audit-report.json';
 const scope = arg('scope') ?? '';
+const markdownCell = value =>
+  String(value ?? '')
+    .replaceAll('|', '\\|')
+    .replace(/\s+/g, ' ')
+    .trim();
 
 const lines = [
   '## RTL semantic audit',
   '',
-  `Audit scope: **${scope}**. The scheduled unfiltered sweep also runs weekly — see \`rtl-weekly.yml\`.`,
+  `Audit scope: **${scope}**. The unfiltered sweep runs for release-check on main every three hours and before each release cut.`,
   '',
   'Relationship-based (LTR vs RTL in the same run) — no golden screenshots. **Soft-gated** pending a stability window.',
   '',
@@ -62,6 +69,38 @@ if (!fs.existsSync(reportPath)) {
     .filter(x => x.verdict === 'pass')
     .map(x => x.component);
   out.push(`RTL-ready (D1 pass): ${passes.join(', ') || '—'}.`);
+  out.push('');
+  const declaredD1Exclusions = r.declaredD1Exclusions ?? [];
+  out.push('### Declared D1 exclusions (human review required)');
+  out.push('');
+  if (declaredD1Exclusions.length > 0) {
+    out.push('| Component | Story | Dimension | Rationale |');
+    out.push('|-----------|-------|-----------|-----------|');
+    for (const exclusion of declaredD1Exclusions) {
+      out.push(
+        `| ${markdownCell(exclusion.component)} | ${markdownCell(exclusion.storyId)} | ${markdownCell(exclusion.dimension)} | ${markdownCell(exclusion.reason)} |`,
+      );
+    }
+  } else {
+    out.push('_No declared D1 exclusions in this audit scope._');
+  }
+  out.push('');
+  // Story-declared plots whose overlays D5 grades as physical (DR5) get the
+  // same review-facing disclosure as D1 exclusions (INV16).
+  const declaredD5PhysicalRegions = r.declaredD5PhysicalRegions ?? [];
+  out.push('### Declared D5 physical regions (human review required)');
+  out.push('');
+  if (declaredD5PhysicalRegions.length > 0) {
+    out.push('| Component | Story | Kind | Plot selector |');
+    out.push('|-----------|-------|------|---------------|');
+    for (const region of declaredD5PhysicalRegions) {
+      out.push(
+        `| ${markdownCell(region.component)} | ${markdownCell(region.storyId)} | ${markdownCell(region.physical)} | ${markdownCell(region.within)} |`,
+      );
+    }
+  } else {
+    out.push('_No declared D5 physical regions in this audit scope._');
+  }
   out.push('');
   const pm = r.positionalMirror;
   if (pm) {

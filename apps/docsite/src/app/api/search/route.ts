@@ -3,17 +3,23 @@
 /**
  * @file GET /api/search?q=<query>: `astryx search <query>`, run by the site.
  * @input The query, as `astryx search` takes it.
- * @output The CLI's search response, each result with the site path it opens.
+ * @output The CLI's search response, each result with the site destination and
+ *   its destination page's title and registry category when available.
  * @position Called by the search panel (lib/cliSearchSource.ts).
  *
  * The site's search is the CLI's: this calls `search()` from
  * `@astryxdesign/cli/api`, the function behind `astryx search --json`, in this
  * site's project, so the panel gives the CLI's results in the CLI's order and
  * every change to the CLI's search reaches the site. Nothing here ranks.
+ *
+ * GET /api/search?warm=1 answers 204 after loading the CLI's search in this
+ * server, so a reader's first query does not wait for a cold start
+ * (lib/searchWarmup.ts sends it before the first keystroke).
  */
 
 import {search} from '@astryxdesign/cli/api';
 import {
+  searchResultCategory,
   searchResultHref,
   searchResultTitle,
 } from '../../../lib/searchLinks.mjs';
@@ -41,8 +47,21 @@ const LIMIT = 20;
 /** Longest query the API accepts. */
 const MAX_QUERY = 200;
 
+/** The query a warm-up runs: any query loads the CLI and gathers its catalog. */
+const WARMUP_QUERY = 'button';
+
 export async function GET(request: Request): Promise<Response> {
-  const query = new URL(request.url).searchParams.get('q')?.trim() ?? '';
+  const params = new URL(request.url).searchParams;
+  if (params.has('warm')) {
+    // Gather now, in this server, so the reader's first query only ranks.
+    // Never cached: a cached answer would not reach, and so not warm, a server.
+    await search(WARMUP_QUERY, {cwd: process.cwd(), limit: 1});
+    return new Response(null, {
+      status: 204,
+      headers: {'Cache-Control': 'no-store'},
+    });
+  }
+  const query = params.get('q')?.trim() ?? '';
   if (query === '' || query.length > MAX_QUERY) {
     return Response.json(
       {error: `q must be 1 to ${MAX_QUERY} characters`},
@@ -69,7 +88,17 @@ export async function GET(request: Request): Promise<Response> {
       href,
       links as SearchLinkTables,
     );
-    return {...result, href, ...(siteTitle ? {siteTitle} : {})};
+    const siteCategory = searchResultCategory(
+      result,
+      href,
+      links as SearchLinkTables,
+    );
+    return {
+      ...result,
+      href,
+      ...(siteTitle ? {siteTitle} : {}),
+      ...(siteCategory ? {siteCategory} : {}),
+    };
   });
   return Response.json(
     {...response, data: {...response.data, matchCount, results}},

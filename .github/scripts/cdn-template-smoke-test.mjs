@@ -18,7 +18,8 @@
  * Usage:
  *   node .github/scripts/cdn-template-smoke-test.mjs
  *
- * Exit code 0 = the page rendered clean
+ * Exit code 0 = the page rendered clean, or the only failure was a CDN's own
+ *               server error on every attempt (reported as a soft failure)
  * Exit code 1 = it did not
  */
 
@@ -30,6 +31,12 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {pageAssetUrls, primeCdnAssets} from './lib/cdn-asset-priming.mjs';
+import {
+  cdnOutageUrlsAcross,
+  renderPage,
+  renderUntilClean,
+  uncleanFindings,
+} from './lib/cdn-page-render.mjs';
 import {resolvePublishedCdnVersion} from './lib/cdn-version.mjs';
 
 const ROOT = path.resolve(
@@ -147,57 +154,48 @@ const server = http.createServer((req, res) => {
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const url = `http://127.0.0.1:${server.address().port}/`;
 
-/** Load the page once and report everything that went wrong. */
-async function render() {
-  const consoleErrors = [];
-  const pageErrors = [];
-  const failedRequests = [];
-
-  const browser = await chromium.launch();
-  try {
-    const page = await browser.newPage();
-    page.on('console', m => {
-      if (m.type() === 'error') consoleErrors.push(m.text().slice(0, 300));
-    });
-    page.on('pageerror', e => pageErrors.push(String(e).slice(0, 300)));
-    page.on('requestfailed', r =>
-      failedRequests.push(`${r.url()} :: ${r.failure()?.errorText}`),
-    );
-    page.on('response', r => {
-      if (r.status() >= 400) failedRequests.push(`${r.status()} ${r.url()}`);
-    });
-
-    await page.goto(url, {waitUntil: 'networkidle', timeout: 90_000});
-    // A page that throws during render still reaches networkidle with an empty
-    // root, so the render itself has to be asserted, not just the error streams.
-    const button = await page
-      .getByRole('button')
-      .first()
-      .textContent({timeout: 15_000})
-      .catch(() => null);
-
-    return {consoleErrors, pageErrors, failedRequests, button};
-  } finally {
-    await browser.close();
-  }
-}
-
 // ── 5. Render, retrying once so a blip at a CDN is not a red build ───────────
-let result;
-for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
-  result = await render();
-  const clean =
-    result.consoleErrors.length === 0 &&
-    result.pageErrors.length === 0 &&
-    result.failedRequests.length === 0 &&
-    result.button;
-  if (clean) break;
-  if (attempt < ATTEMPTS) console.log(`  retry ${attempt} of ${ATTEMPTS - 1}`);
-}
+// Every attempt shares the one 90 s wait this step has always had, so the retry
+// adds no time to it: this step can start with under two minutes of the
+// smoke-test job's 15-minute limit left, and a page that hangs on both
+// attempts still prints the report naming what hung before the job is stopped.
+const RENDER_BUDGET_MS = 90_000;
+/** Each unclean attempt a retry replaced, for the outage check below. */
+const discardedAttempts = [];
+const result = await renderUntilClean(
+  ({budgetMs}) =>
+    renderPage(url, {launch: async () => chromium.launch(), budgetMs}),
+  {
+    attempts: ATTEMPTS,
+    deadline: Date.now() + RENDER_BUDGET_MS,
+    // The attempt a retry replaces is printed in full: a CDN blip that clears
+    // on the retry still shows in the log, rather than vanishing behind a
+    // green run.
+    onRetry: (attempt, leftMs, discarded) => {
+      discardedAttempts.push(discarded);
+      console.log(
+        `  retry ${attempt} of ${ATTEMPTS - 1}, ${Math.round(leftMs / 1000)} s left, after:`,
+      );
+      for (const finding of uncleanFindings(discarded)) {
+        console.log(`        ${finding}`);
+      }
+    },
+  },
+);
 server.close();
 
 // ── 6. Report ────────────────────────────────────────────────────────────────
 console.log(`\n${PAGE} @ ${rendered}`);
+if (result.timedOut) {
+  fail(
+    'the page never went idle, so its navigation timed out',
+    result.pendingRequests.length === 0
+      ? '        no request was in flight when the wait gave up'
+      : result.pendingRequests
+          .map(entry => `        still in flight: ${entry}`)
+          .join('\n'),
+  );
+}
 for (const [label, entries] of [
   ['console error', result.consoleErrors],
   ['page error', result.pageErrors],
@@ -214,12 +212,29 @@ for (const [label, entries] of [
 }
 if (result.button) {
   console.log(`  ok    rendered a button: "${result.button.trim()}"`);
-} else {
+} else if (!result.timedOut) {
   fail('the page loaded but rendered no button');
 }
 
 fs.rmSync(tmpDir, {recursive: true, force: true});
-if (process.exitCode) {
+// A CDN failing on its own side (a 5xx or 408 on both attempts) breaks every
+// page that loads from it, but no change in this repository caused it or can
+// fix it. Report it loudly as a soft failure instead of a red build; a 404, a
+// page error or anything at another host still fails.
+const outageUrls = process.exitCode
+  ? cdnOutageUrlsAcross([...discardedAttempts, result])
+  : [];
+if (outageUrls.length > 0) {
+  console.log(
+    `\nSOFT FAILURE: external CDN outage, not a regression in this change.\n${outageUrls
+      .map(entry => `        ${entry}`)
+      .join('\n')}`,
+  );
+  console.log(
+    `::warning title=CDN outage (soft failure)::The CDN starter page could not load ${outageUrls.join(', ')} (server error on every attempt). The page is broken for users until the CDN recovers; this run does not fail for it.`,
+  );
+  process.exitCode = 0;
+} else if (process.exitCode) {
   console.log('\nCDN starter page is broken.');
 } else {
   console.log('\nCDN starter page renders clean.');

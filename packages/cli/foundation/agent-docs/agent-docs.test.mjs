@@ -552,6 +552,11 @@ describe('detectStylingSystem', () => {
     expect(detectStylingSystem(tmpDir)).toBe('stylex');
   });
 
+  it('detects the official unplugin (the standard Vite path)', () => {
+    writePkg({'@stylexjs/unplugin': '0.10.0'});
+    expect(detectStylingSystem(tmpDir)).toBe('stylex');
+  });
+
   it('detects tailwind when tailwindcss is present', () => {
     writePkg({tailwindcss: '4.0.0'});
     expect(detectStylingSystem(tmpDir)).toBe('tailwind');
@@ -1761,7 +1766,7 @@ describe('agent docs never go into the home folder', () => {
     try {
       expect(() => installAgentDocs(link)).toThrow(AgentDocsHomeError);
     } finally {
-      fs.rmSync(link);
+      fs.unlinkSync(link);
     }
   });
 
