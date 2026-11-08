@@ -822,8 +822,7 @@ export function createResizableAs(
     pendingFlip = null;
     expectedFlip = null;
     drawing?.clear();
-    drawing =
-      next == null ? null : createOvershootDrawing(next, () => derived.size);
+    drawing = next == null ? null : createOvershootDrawing(next);
     pane = handOverPane(pane, next, paneListener, derived.isCollapsed, handle);
   }
 
