@@ -170,7 +170,9 @@ guidance owns the process used to propose and test APIs.
   calls it internal. Privacy requires removing the export or moving the capability
   behind a non-exported boundary. Core's `./internal/*` subpaths are the one
   exception: reachable, but reserved for Core and Lab, undocumented, versioned
-  in lockstep with Core, limited by lint to those two packages, and outside
+  in lockstep with Core, limited by lint to those two packages, and imported
+  by a swizzled copy only for an exported StyleX module whose identity is its
+  path (`spec:AST-110` FR1), and outside
   the compatibility promise (`spec:AST-017` FR21).
 - **INV13 — Public deltas route to their authority owner.** Every public API update
   and every public behavior change follows the result and disposition defined by
