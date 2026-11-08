@@ -4,7 +4,7 @@
  * @file scope.test.mjs
  * @input A change as the proof reads it: the changed paths (or none when git
  *   cannot read them), whether a toolchain path changed, the component
- *   source that changed, and the run's event
+ *   source that changed, and whether the checkout has a parent commit
  * @output Proves which targets the swizzle proof checks for each kind of run
  *   (spec:AST-110 FR7)
  * @position Node test of proof.mjs's scope choice; reads no files
@@ -23,7 +23,7 @@ describe('which targets the swizzle proof checks', () => {
         changed: ['docs/README.md'],
         toolchain: undefined,
         relevant: [],
-        event: 'pull_request',
+        hasParent: true,
       }).mode,
     ).toBe('none');
   });
@@ -34,7 +34,7 @@ describe('which targets the swizzle proof checks', () => {
         changed: component,
         toolchain: undefined,
         relevant: component,
-        event: 'pull_request',
+        hasParent: true,
       }).mode,
     ).toBe('affected');
   });
@@ -45,7 +45,7 @@ describe('which targets the swizzle proof checks', () => {
         changed: component,
         toolchain: undefined,
         relevant: component,
-        event: 'workflow_dispatch',
+        hasParent: true,
       }).mode,
     ).toBe('affected');
   });
@@ -55,7 +55,7 @@ describe('which targets the swizzle proof checks', () => {
       changed: ['packages/build/src/babel.js'],
       toolchain: 'packages/build/src/babel.js',
       relevant: [],
-      event: 'push',
+      hasParent: true,
     });
     expect(scope.mode).toBe('all');
     expect(scope.reason).toContain('packages/build/src/babel.js');
@@ -66,7 +66,7 @@ describe('which targets the swizzle proof checks', () => {
       changed: null,
       toolchain: undefined,
       relevant: [],
-      event: 'pull_request',
+      hasParent: true,
     });
     expect(scope.mode).toBe('all');
     expect(scope.reason).toMatch(/could not be read/);
@@ -78,20 +78,31 @@ describe('which targets the swizzle proof checks', () => {
         changed: null,
         toolchain: undefined,
         relevant: [],
-        event: undefined,
+        hasParent: true,
       }).mode,
     ).toBe('all');
   });
 
-  it("checks nothing in main's run when its parent cannot be read, and says the release check proves every target", () => {
+  it('checks nothing in a checkout without a parent commit, and says why', () => {
     const scope = proofScope({
       changed: null,
       toolchain: undefined,
       relevant: [],
-      event: 'workflow_dispatch',
+      hasParent: false,
     });
     expect(scope.mode).toBe('none');
-    expect(scope.reason).toMatch(/release check/);
+    expect(scope.reason).toMatch(/no parent commit/);
+  });
+
+  it('checks every target when git fails in a checkout that has a parent, such as a merge-queue run', () => {
+    expect(
+      proofScope({
+        changed: null,
+        toolchain: undefined,
+        relevant: [],
+        hasParent: true,
+      }).mode,
+    ).toBe('all');
   });
 
   it('checks every target when asked for all of them', () => {
@@ -100,7 +111,7 @@ describe('which targets the swizzle proof checks', () => {
         changed: null,
         toolchain: undefined,
         relevant: [],
-        event: 'push',
+        hasParent: true,
         all: true,
       }).mode,
     ).toBe('all');
