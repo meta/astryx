@@ -158,9 +158,9 @@ export function dynamicTypeScaleRule(
 }
 
 /**
- * The rule for one table column; none at Large or for -1. Besides the scales,
- * it gives the core default steps their scaled form in the base layer, below
- * every theme, so a page or a theme that sets no type scale follows too.
+ * The rule for one table column. Large and -1 get none. It also scales Core's
+ * default steps in the base layer, below every theme. So a page or theme with
+ * no type scale follows too.
  */
 function scaleRuleForColumn(column: number): string {
   if (column < 0 || column === LARGE) {
@@ -258,9 +258,9 @@ const TEXT_SIZE_STEPS = Object.entries(typeScaleDefaults).flatMap(
 );
 
 /**
- * Whether a size stays where the theme put it: a length (`12px`, `0.75rem`, a
- * `clamp()` of them) that reads no variable and no parent size (`em`, `%` and
- * the like already follow it).
+ * Whether a size stays where the theme put it. That is a length, such as
+ * `12px`, `0.75rem` or a `clamp()` of them, that reads no variable. Sizes in
+ * `em` or `%` follow the parent.
  */
 function isFixedSize(value: string): boolean {
   return (
@@ -310,9 +310,9 @@ export function readerTextSizeEntries(
 }
 
 /**
- * A value and its trailing `!important`, apart: the scale wraps only the
- * value, since `!important` inside `calc()` makes it invalid where it is used,
- * and the importance goes back after the whole expression.
+ * A value and its trailing `!important`, apart. `!important` inside `calc()`
+ * makes the value invalid. So the scale wraps only the value, and
+ * `!important` goes after the expression.
  */
 function splitImportant(value: string): [string, string] {
   const match = /\s*!\s*important\s*$/i.exec(value);

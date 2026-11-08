@@ -100,10 +100,10 @@ export const DynamicType: StoryObj = {
 };
 
 /**
- * Y2K fixes supporting text at 12px instead of reading a step of its type
- * scale. A size a theme fixes at a length scales on the curve of the step it
- * reads by default, so here supporting text follows the reader like Footnote
- * rather than staying 12px while the rest grows.
+ * Y2K fixes supporting text at a length (0.75rem) instead of reading a step
+ * of its type scale. A size a theme fixes at a length scales on the curve of
+ * the step it reads by default, so here supporting text follows the reader
+ * like Footnote rather than staying fixed while the rest grows.
  */
 export const FixedSupportingSize: StoryObj = {
   render: () => <DynamicTypeSamples theme={y2kTheme} headings={false} />,

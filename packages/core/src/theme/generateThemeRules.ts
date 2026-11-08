@@ -1016,9 +1016,8 @@ function tokenBlock(
   tokenEntries: [string, string][] = Object.entries(source.tokens),
 ): string | null {
   const declarations = [
-    // Every font size follows the reader's text size where the root Theme
-    // gives the page its scales (see dynamicType.ts); elsewhere each scale is
-    // 1, so the values are the theme's own.
+    // Font sizes follow the reader's text size where the root Theme sets the
+    // scales. Elsewhere each scale is 1.
     joinDeclarations(
       readerTextSizeEntries(tokenEntries),
       `${location}tokens`,
