@@ -3717,8 +3717,18 @@
       "aliases": []
     },
     {
+      "name": "example-use-calendar-constraints-hotel-booking-range",
+      "path": "examples/use-calendar-constraints/hotel-booking-range",
+      "aliases": []
+    },
+    {
       "name": "example-use-calendar-days-month-grid",
       "path": "examples/use-calendar-days/month-grid",
+      "aliases": []
+    },
+    {
+      "name": "example-use-calendar-navigation-month-pager",
+      "path": "examples/use-calendar-navigation/month-pager",
       "aliases": []
     },
     {
@@ -4032,8 +4042,18 @@
       "aliases": []
     },
     {
+      "name": "hook-use-calendar-constraints",
+      "path": "hooks/use-calendar-constraints",
+      "aliases": []
+    },
+    {
       "name": "hook-use-calendar-days",
       "path": "hooks/use-calendar-days",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-calendar-navigation",
+      "path": "hooks/use-calendar-navigation",
       "aliases": []
     },
     {

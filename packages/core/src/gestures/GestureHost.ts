@@ -792,6 +792,16 @@ export class GestureHost {
   /** Finger pointerdowns still waiting for their touchstart. */
   private readonly pendingPointers = new Map<number, PlacedContact>();
   /**
+   * A paired finger's lift, at its `pointerup`: the place and clock its moves
+   * came on. Linux WebKit stamps the `touchend` that follows only after the
+   * page's pointerup listeners finish. A busy listener would then make a flick
+   * read as a resting finger. Read at the touchend, dropped with the finger.
+   */
+  private readonly liftStamps = new Map<
+    number,
+    {x: number; y: number; time: number}
+  >();
+  /**
    * Where fingers come from their pointer events, where claimed fingers
    * lifted and when: the `touchend` that follows each `pointerup` is
    * cancelled (FR21). A record no `touchend` consumed expires
@@ -3314,19 +3324,31 @@ export class GestureHost {
       }
       const tracked = this.touchIds.get(touch.identifier);
       const landed = tracked == null ? undefined : this.retargeted.get(tracked);
+      const lift = tracked == null ? undefined : this.liftStamps.get(tracked);
       const id = this.forgetFinger(touch.identifier);
       if (id == null) {
         continue;
       }
-      inputs.push({id, x: touch.clientX, y: touch.clientY, time});
+      inputs.push({
+        id,
+        x: lift?.x ?? touch.clientX,
+        y: lift?.y ?? touch.clientY,
+        time: lift?.time ?? time,
+      });
       if (landed != null) {
         retargetedEnds.push({id, landed, x: touch.clientX, y: touch.clientY});
       }
     }
+    // The arena takes the lifts in time order, so it never raises an earlier
+    // lift to a later one.
+    inputs.sort((a, b) => a.time - b.time);
     // The lift is when momentum starts: the clock the brake wants most.
     const landed = landedOn(event);
     if (isNode(landed)) {
-      this.lastTouch = {target: landed, time};
+      this.lastTouch = {
+        target: landed,
+        time: inputs.length > 0 ? Math.max(...inputs.map(i => i.time)) : time,
+      };
     }
     const dispositions =
       inputs.length > 0
@@ -3668,6 +3690,7 @@ export class GestureHost {
     this.retargeted.delete(id);
     this.lastFed.delete(id);
     this.pointerFed.delete(id);
+    this.liftStamps.delete(id);
     this.judgedUncancelable.delete(id);
     this.unpairedTouches.delete(id);
     for (const [pointerId, paired] of this.fingerPointers) {
@@ -3805,7 +3828,16 @@ export class GestureHost {
   private readonly onPointerUp = (event: PointerEvent): void => {
     this.releaseArmedPress();
     if (event.pointerType === 'touch' && this.usesTouchEvents) {
-      // The lift itself is the touchend's: it alone can cancel the click.
+      // The lift itself is the touchend's: it alone can cancel the click. Its
+      // place and time are this event's, where the finger's moves were read.
+      const id = this.fingerPointers.get(event.pointerId);
+      if (id != null && this.pointerFed.has(id)) {
+        this.liftStamps.set(id, {
+          x: event.clientX,
+          y: event.clientY,
+          time: eventTime(event),
+        });
+      }
       this.fingerPointers.delete(event.pointerId);
       this.pendingPointers.delete(event.pointerId);
       return;
@@ -4219,6 +4251,7 @@ export class GestureHost {
     this.unpairedTouches.clear();
     this.lastFed.clear();
     this.pointerFed.clear();
+    this.liftStamps.clear();
     // A trackpad pan a recognizer still drives is cancelled with them.
     ids.push(...this.dropDrivenWheel());
     if (ids.length > 0) {
