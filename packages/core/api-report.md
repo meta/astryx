@@ -3527,7 +3527,7 @@ const typographyVars: stylex.VarGroup<Readonly<{ readonly '--font-family-body': 
 ```text
 interface AlertDialogProps extends BaseProps<HTMLDialogElement> (props of AlertDialog)
 interface AnimatedLayout
-  [AREA]: () => Element | null
+  @astryxdesign/core/animated-layout/v1?: never
 interface Animator extends AnimatorHandle
   animate: (target: AnimatorValues, options?: AnimatorAnimateOptions) => Promise<void>
   decay: (velocity: AnimatorDecayVelocity) => Promise<void>
@@ -3898,7 +3898,7 @@ interface ClickableContainerResult
 interface CodeBlockProps extends BaseProps<HTMLPreElement> (props of CodeBlock)
 type CodeColor = 'primary' | 'secondary' | 'inherit'
 type CodeLanguage
-  [LANGUAGE]: true
+  @astryxdesign/core/code-language/v1?: never
   fileExtensions: ReadonlyArray<string>
   fileNames: ReadonlyArray<string>
   identifiers: ReadonlyArray<string>
@@ -5318,7 +5318,7 @@ interface SliderSingleProps extends SliderBaseProps
   width?: SizeValue
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 interface SnapPaging
-  [snapPagingBrand]: true
+  @astryxdesign/core/snap-paging/v1?: never
 interface SnapPagingOptions
   pages?: 'view' | 'item' = 'view'
 type SourceRange
@@ -7811,7 +7811,7 @@ interface MarkdownPluginCapabilities
 type MarkdownPluginData = MarkdownAstDataValue
 type MarkdownPluginDefinition<Name extends string, Node extends MarkdownExtensionNode<Name> = never> = MarkdownSyntaxPluginDefinition<Name, Node> | MarkdownTransformPluginDefinition<Name, Node>
 interface MarkdownPluginEntry<Node extends MarkdownExtensionNode = MarkdownExtensionNode>
-  [markdownPluginNode]: Node
+  @astryxdesign/core/markdown-plugin-node/v1: Node
   apiVersion: 1
   name: string
 interface MarkdownSourceDecoration
@@ -7855,7 +7855,7 @@ interface MarkdownTokenizerInput
   offset: number
   source: string
 interface MarkdownTransform<Node extends MarkdownExtensionNode = never>
-  [markdownTransformNode]?: Node
+  @astryxdesign/core/markdown-transform-node/v1?: Node
 interface MarkdownTransformContext
   display: 'inline' | 'block'
   isFinal: boolean

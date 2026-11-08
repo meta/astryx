@@ -64,6 +64,41 @@ export function planLegs(files, durations, legs) {
 }
 
 /**
+ * Why a suite's proofs do not fit its matrix, or null when they do: the leg
+ * count the planner takes for `seconds` must be no more than `maxLegs`, and
+ * every leg it plans, with its setup, within `maxSeconds` plus `slackSeconds`
+ * (one spec cannot be split across legs). The message names the heaviest
+ * specs, which are where the time goes.
+ */
+export function legsFitMessage({
+  seconds,
+  files,
+  costs,
+  setupSeconds,
+  maxSeconds,
+  maxLegs,
+  slackSeconds = 60,
+}) {
+  const needed = Math.ceil(seconds / (maxSeconds - setupSeconds));
+  const legs = legCount({seconds, setupSeconds, maxSeconds, maxLegs});
+  const planned = planLegs(files, costs, legs);
+  const longest = Math.max(0, ...planned.map(leg => leg.seconds));
+  if (needed <= maxLegs && longest + setupSeconds <= maxSeconds + slackSeconds)
+    return null;
+  const heaviest = [...new Set(files)]
+    .map(file => [file, costs[file] ?? 0])
+    .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))
+    .slice(0, 5)
+    .map(([file, cost]) => `${file} (${Math.round(cost)} s)`)
+    .join(', ');
+  return (
+    `${Math.round(seconds)} s of proofs need ${needed} legs of ${Math.round(maxSeconds - setupSeconds)} s; ` +
+    `the matrix has ${maxLegs}, and its longest leg takes ${Math.round(longest + setupSeconds)} s with setup. ` +
+    `Heaviest specs: ${heaviest}`
+  );
+}
+
+/**
  * The seconds a suite's proofs take: each listed spec file a filter selects
  * (every listed spec with no filter), and each changed spec, at its recorded
  * time. A spec with no time of its own counts its time in `fallback`
