@@ -19,7 +19,7 @@ import path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
   animatorFor,
-  createAnimator,
+  createMotionEngine,
   END_HOLD_MS,
   PROMOTION_LINGER_MS,
   type AnimatorOptions,
@@ -52,6 +52,8 @@ interface Recorded {
   /** Finished from outside (a sampler's `finish()`), keeping its start. */
   finished: boolean;
   readonly playState: 'idle' | 'paused' | 'running' | 'finished';
+  /** Its timing, as the browser reports it: the duration it was given. */
+  readonly effect: {getTiming(): {duration: number}};
   ready: Promise<Recorded>;
   commit(at: number): void;
   finish(): void;
@@ -61,8 +63,10 @@ interface Recorded {
 let clock = 1000;
 let recorded: Recorded[] = [];
 /** Callbacks waiting for the next animation frame (`requestFrame`). */
-let frameQueue: (() => void)[] = [];
-const requestFrame = (callback: () => void) => {
+let frameQueue: ((frame?: number) => void)[] = [];
+/** The last frame's timestamp: one of its own per frame, never reused. */
+let frameStamp = 0;
+const requestFrame = (callback: (frame?: number) => void) => {
   frameQueue.push(callback);
 };
 /**
@@ -136,6 +140,11 @@ beforeEach(() => {
       cancelled: false,
       paused: false,
       finished: false,
+      effect: {
+        getTiming: () => ({
+          duration: Number((options as KeyframeAnimationOptions)?.duration),
+        }),
+      },
       get playState() {
         return this.cancelled
           ? 'idle'
@@ -205,7 +214,7 @@ function setup({
 }: AnimatorOptions & {reduced?: boolean; coarse?: boolean} = {}) {
   stubMedia(reduced, coarse);
   const element = document.createElement('div');
-  const animator = createAnimator(element, {
+  const animator = createMotionEngine(element, {
     now: () => clock,
     requestFrame,
     ...options,
@@ -233,8 +242,11 @@ async function commitFrame(
   }
   const frames = frameQueue;
   frameQueue = [];
+  // A browser gives every callback of one frame the same timestamp, and no
+  // other frame that timestamp.
+  frameStamp += 1;
   for (const callback of frames) {
-    callback();
+    callback(frameStamp);
   }
   await Promise.resolve();
   await Promise.resolve();
@@ -584,10 +596,16 @@ describe('animate: keyframes on the compositor', () => {
     clock += firstCurve - 10;
     await vi.advanceTimersByTimeAsync(firstCurve - 10);
     expect(frameQueue.length).toBeGreaterThan(0);
-    // Retargeted before that frame comes; the page then draws no frame until
-    // the new curve is inside its own last frame.
+    // Retargeted before that frame comes. The first curve shows as at rest
+    // by now, so the call waits for the browser's start, as one from rest
+    // does. The frame the old look waits for starts it, and that look leaves
+    // it running. The page then draws no frame until the new curve is inside
+    // its own last frame.
     animator.animate({x: 200}, {spring: springs.settle});
     const second = live('translate').at(-1) as Recorded;
+    expect(second.startTime).toBeNull();
+    await commitFrame(clock);
+    expect(second.cancelled).toBe(false);
     datedPerFrame(second);
     const secondCurve = Number(second.options.duration) - END_HOLD_MS;
     const secondEnd = (second.startTime as number) + secondCurve;
@@ -665,6 +683,48 @@ describe('a call from rest starts at the commit, as Core Animation does', () => 
       curve.value(0.1),
       1,
     );
+  });
+
+  it('a call on a settle tail starts at the commit too, so a late first frame skips none of its curve', async () => {
+    const {animator} = setup();
+    animator.animate({x: 300}, {spring: springs.settle});
+    const [first] = live('translate');
+    await commitFrame(1000);
+    // A time inside the first curve's tail: within half a pixel of its
+    // target and slower than a quarter pixel a frame, before its end.
+    let t = 0;
+    while (
+      (Math.abs(curve.value(t) - 300) > 0.5 ||
+        Math.abs(curve.velocity(t)) > 15) &&
+      t < 5
+    ) {
+      t += 0.001;
+    }
+    expect(t).toBeLessThan(5);
+    const at = 1000 + Math.ceil(t * 1000);
+    expect(at - 1000).toBeLessThan(
+      Number(first.options.duration) - END_HOLD_MS,
+    );
+    clock = at;
+    const from = animator.get('x');
+    const handle = animator.animate({x: 0}, {spring: springs.settle});
+    const second = live('translate').at(-1) as Recorded;
+    expect(second.startTime).toBeNull();
+    // The main thread is blocked for 80 ms; the first frame shows the new
+    // curve's first value, not 80 ms into it.
+    clock = at + 80;
+    await commitFrame(clock);
+    await expect(handle.started).resolves.toBe(clock);
+    expect(animator.get('x', clock)).toBeCloseTo(from, 6);
+  });
+
+  it('a call while the curve still moves starts at the call, from the value and velocity on screen', async () => {
+    const {animator} = setup();
+    animator.animate({x: 300}, {spring: springs.settle});
+    await commitFrame(1000);
+    clock = 1100;
+    animator.animate({x: 0}, {spring: springs.settle});
+    expect((live('translate').at(-1) as Recorded).startTime).toBe(1100);
   });
 
   it('a start the browser dates before the block (WebKit) moves to after it', async () => {
@@ -890,6 +950,85 @@ describe('a call from rest starts at the commit, as Core Animation does', () => 
       expect(started).toBe(false);
     });
 
+    it('the calls from rest that one frame commits start at one time, however long the frame callbacks between them run', async () => {
+      const first = setup();
+      const second = setup();
+      first.animator.animate({x: 300}, {spring: springs.settle});
+      // A page's own frame callback runs 3 ms between the two animators'.
+      frameQueue.push(() => {
+        clock += 3;
+      });
+      second.animator.animate({x: 300}, {spring: springs.settle});
+      const [a, b] = live('translate');
+      clock = 1016;
+      await commitFrame(1016, {startUnread: true});
+      expect(a.startTime).toBe(1016);
+      expect(b.startTime).toBe(1016);
+    });
+
+    it('calls made in two tasks before one frame start together at that frame', async () => {
+      const first = setup();
+      const second = setup();
+      first.animator.animate({x: 300}, {spring: springs.settle});
+      frameQueue.push(() => {
+        clock += 3;
+      });
+      // The first task ends; the second call comes in a later task.
+      await Promise.resolve();
+      clock = 1005;
+      second.animator.animate({x: 300}, {spring: springs.settle});
+      const [a, b] = live('translate');
+      clock = 1016;
+      await commitFrame(1016, {startUnread: true});
+      expect(a.startTime).toBe(1016);
+      expect(b.startTime).toBe(1016);
+    });
+
+    it('a frame source that repeats a timestamp still reads each frame anew', async () => {
+      // Each frame gives its callbacks timestamp 0, as some test doubles do.
+      let queue: ((frame?: number) => void)[] = [];
+      const repeating = {
+        requestFrame: (callback: (frame?: number) => void) => {
+          queue.push(callback);
+        },
+      };
+      const runFrame = () => {
+        const frames = queue;
+        queue = [];
+        for (const callback of frames) {
+          callback(0);
+        }
+      };
+      const first = setup(repeating);
+      const second = setup(repeating);
+      first.animator.animate({x: 300}, {spring: springs.settle});
+      clock = 1016;
+      runFrame();
+      await vi.advanceTimersByTimeAsync(0);
+      clock = 1020;
+      second.animator.animate({x: 300}, {spring: springs.settle});
+      clock = 1033;
+      runFrame();
+      const [a, b] = live('translate');
+      expect(a.startTime).toBe(1016);
+      expect(b.startTime).toBe(1033);
+    });
+
+    it('a call first framed in a later frame takes the time that frame runs', async () => {
+      const first = setup();
+      const second = setup();
+      first.animator.animate({x: 300}, {spring: springs.settle});
+      clock = 1016;
+      await commitFrame(1016, {startUnread: true});
+      clock = 1020;
+      second.animator.animate({x: 300}, {spring: springs.settle});
+      const [a, b] = live('translate');
+      clock = 1033;
+      await commitFrame(1033, {startUnread: true});
+      expect(a.startTime).toBe(1016);
+      expect(b.startTime).toBe(1033);
+    });
+
     it('a call whose first frame comes after a block keeps the start the browser gives it', async () => {
       // A block between the call and its first frame: that frame cannot tell
       // a call made in a task from one a page's own frame callback made, so
@@ -942,67 +1081,85 @@ describe('a call from rest starts at the commit, as Core Animation does', () => 
       expect(animator.get('x')).toBeCloseTo(curve.value(0.11), 9);
     });
 
-    it('a rebase after a late first frame reads what the rebuilt animation shows, from the first value it starts at the frame that commits it', async () => {
+    it('a rebase after a late first frame carries the channel on from that frame, with a start of its own', async () => {
       const {element, animator} = setup();
       animator.animate({x: 300}, {spring: springs.settle});
       clock = 1070;
       await commitFrame(1070, {startUnread: true});
       clock = 1170;
+      const shown = animator.get('x');
+      expect(shown).toBeCloseTo(curve.value(0.1), 1);
       animator.rebase({x: -16});
       const rebuilt = live('translate').at(-1) as Recorded;
-      expect(rebuilt.startTime).toBeNull();
-      // Until the frame that commits it, the screen shows its first keyframe.
-      // The inline value and the hit-test origin show it too.
+      // The compositor has x moving since that frame, so the rebuilt animation
+      // starts now, from the value on screen in the new coordinates.
+      expect(rebuilt.startTime).toBe(1170);
       const first = parse(rebuilt.keyframes[0].translate)[0];
+      expect(first).toBeCloseTo(shown - 16, 1);
       expect(animator.get('x')).toBeCloseTo(first, 1);
       expect(inlineX(element)).toBeCloseTo(first, 1);
       expect(presentedOffsetOf(element).x).toBeCloseTo(0, 1);
-      // It starts at that frame, which bounds its start again.
       clock = 1186;
       await commitFrame(1186, {startUnread: true});
       clock = 1202;
-      const shown = sampleAt(rebuilt, 'translate', rebuilt.createdAt + 16)[0];
-      expect(animator.get('x')).toBeCloseTo(shown, 1);
+      const later = sampleAt(rebuilt, 'translate', 1202)[0];
+      expect(animator.get('x')).toBeCloseTo(later, 1);
       animator.animate({x: 400}, {spring: springs.settle});
       const retarget = live('translate').at(-1) as Recorded;
-      expect(sampleAt(retarget, 'translate', 1202)[0]).toBeCloseTo(shown, 1);
+      expect(sampleAt(retarget, 'translate', 1202)[0]).toBeCloseTo(later, 1);
     });
 
-    it('a set of the other axis after a late first frame reads what the rebuilt animation shows, from the first value it starts at the frame that commits it', async () => {
+    it('a set of the other axis after a late first frame carries x on from that frame', async () => {
       const {element, animator} = setup();
       animator.animate({x: 300}, {spring: springs.settle});
       clock = 1070;
       await commitFrame(1070, {startUnread: true});
       clock = 1170;
+      const shown = animator.get('x');
+      const speed = animator.getVelocity('x');
       animator.set({y: 10});
       const rebuilt = live('translate').at(-1) as Recorded;
-      expect(rebuilt.startTime).toBeNull();
-      const first = parse(rebuilt.keyframes[0].translate)[0];
-      expect(animator.get('x')).toBeCloseTo(first, 1);
-      expect(inlineX(element)).toBeCloseTo(first, 1);
+      expect(rebuilt.startTime).toBe(1170);
+      const [x, y] = parse(rebuilt.keyframes[0].translate);
+      expect(x).toBeCloseTo(shown, 1);
+      expect(y).toBeCloseTo(10, 1);
+      expect(animator.get('x')).toBeCloseTo(shown, 1);
+      expect(animator.getVelocity('x')).toBeCloseTo(speed, 0);
+      expect(inlineX(element)).toBeCloseTo(shown, 1);
       expect(presentedOffsetOf(element).x).toBeCloseTo(0, 1);
       clock = 1186;
       await commitFrame(1186, {startUnread: true});
       clock = 1202;
-      const shown = sampleAt(rebuilt, 'translate', rebuilt.createdAt + 16)[0];
-      expect(animator.get('x')).toBeCloseTo(shown, 1);
+      expect(animator.get('x')).toBeCloseTo(
+        sampleAt(rebuilt, 'translate', 1202)[0],
+        1,
+      );
     });
 
-    it('a retarget of the other axis without a clock after a late first frame reads the first value the adopted curve starts from', async () => {
+    it('a retarget of the other axis without a clock after a late first frame carries x on from that frame', async () => {
       const {element, animator} = setup();
       animator.animate({x: 300}, {spring: springs.settle});
       clock = 1070;
       await commitFrame(1070, {startUnread: true});
       clock = 1170;
+      const shown = animator.get('x');
       animator.animate({y: 50}, {spring: springs.settle});
       const rebuilt = live('translate').at(-1) as Recorded;
-      expect(rebuilt.startTime).toBeNull();
-      // The new call takes the x curve and starts it again from its first
-      // keyframe. The reads, the inline value and the hit-test origin show it.
-      const first = parse(rebuilt.keyframes[0].translate)[0];
-      expect(animator.get('x')).toBeCloseTo(first, 1);
-      expect(inlineX(element)).toBeCloseTo(first, 1);
+      // The element is moving on screen, so the call starts now: x carries
+      // on from the screen and y starts from rest.
+      expect(rebuilt.startTime).toBe(1170);
+      const [x, y] = parse(rebuilt.keyframes[0].translate);
+      expect(x).toBeCloseTo(shown, 1);
+      expect(y).toBeCloseTo(0, 1);
+      expect(animator.get('x')).toBeCloseTo(shown, 1);
+      expect(inlineX(element)).toBeCloseTo(shown, 1);
       expect(presentedOffsetOf(element).x).toBeCloseTo(0, 1);
+      clock = 1186;
+      await commitFrame(1186, {startUnread: true});
+      clock = 1202;
+      const [laterX, laterY] = sampleAt(rebuilt, 'translate', 1202);
+      expect(animator.get('x')).toBeCloseTo(laterX, 1);
+      expect(animator.get('y')).toBeCloseTo(laterY, 1);
     });
 
     it('a retarget that joins a call by its clock after a late first frame reads the first value the rebuilt animation starts from', async () => {
@@ -1042,6 +1199,54 @@ describe('a call from rest starts at the commit, as Core Animation does', () => 
       const shown = sampleAt(joined, 'translate', joined.createdAt + 100);
       expect(animator.get('x')).toBeCloseTo(shown[0], 1);
       expect(animator.get('y')).toBeCloseTo(shown[1], 1);
+    });
+
+    it('a call whose only channel carries on after a late first frame reports that frame as its start', async () => {
+      const {animator} = setup();
+      const handle = animator.animate({x: 300}, {spring: springs.settle});
+      clock = 1070;
+      await commitFrame(1070, {startUnread: true});
+      clock = 1170;
+      animator.rebase({x: -16});
+      await expect(handle.started).resolves.toBe(1070);
+    });
+
+    it('a rebase of a coast after a late first frame keeps its course from that frame', async () => {
+      const {animator} = setup();
+      animator.decay(coast(animator, {x: 1000}));
+      clock = 1070;
+      await commitFrame(1070, {startUnread: true});
+      clock = 1170;
+      const shown = animator.get('x');
+      animator.rebase({x: -16});
+      const rebuilt = live('translate').at(-1) as Recorded;
+      expect(rebuilt.startTime).toBe(1170);
+      expect(parse(rebuilt.keyframes[0].translate)[0]).toBeCloseTo(
+        shown - 16,
+        1,
+      );
+      clock = 1202;
+      expect(animator.get('x')).toBeCloseTo(
+        sampleAt(rebuilt, 'translate', 1202)[0],
+        1,
+      );
+    });
+
+    it('a channel whose call waits past its undated end after a late first frame still carries on from the screen', async () => {
+      const {animator} = setup();
+      animator.animate({x: 300}, {spring: springs.settle});
+      clock = 1070;
+      await commitFrame(1070, {startUnread: true});
+      // Past the curve's end counted from the call's own time, and short of
+      // its end counted from that frame.
+      const duration =
+        Number(live('translate')[0].options.duration) - END_HOLD_MS;
+      clock = 1000 + duration + 30;
+      const shown = animator.get('x');
+      expect(shown).toBeLessThan(300);
+      animator.set({y: 10});
+      const rebuilt = live('translate').at(-1) as Recorded;
+      expect(parse(rebuilt.keyframes[0].translate)[0]).toBeCloseTo(shown, 1);
     });
 
     it('a late first frame that leaves the start unread: a read of a later time takes the curve from that frame, as the velocity does', async () => {
@@ -1957,11 +2162,11 @@ describe('promotion: a compositing layer while it moves', () => {
         .mock.calls.filter(([read]) => read === node).length;
     const removed = document.createElement('div');
     document.body.append(removed);
-    createAnimator(removed, {now: () => clock, requestFrame});
+    createMotionEngine(removed, {now: () => clock, requestFrame});
     removed.remove();
     const kept = document.createElement('div');
     document.body.append(kept);
-    createAnimator(kept, {now: () => clock, requestFrame});
+    createMotionEngine(kept, {now: () => clock, requestFrame});
     await vi.advanceTimersByTimeAsync(0);
     expect(readsOf(removed)).toBe(0);
     // A node still in the document is read, once, in that task.
@@ -1975,7 +2180,7 @@ describe('promotion: a compositing layer while it moves', () => {
     stylesheet['will-change'] = 'transform, opacity';
     stubMedia(false, false);
     const element = document.createElement('div');
-    const animator = createAnimator(element, {
+    const animator = createMotionEngine(element, {
       now: () => clock,
       requestFrame,
     });
@@ -2720,7 +2925,7 @@ describe('Reduced Motion (design:reduced-motion)', () => {
 
   it('a running dip survives any re-attach, so the move never passes in view', async () => {
     const halfway = async (
-      animator: ReturnType<typeof createAnimator>,
+      animator: ReturnType<typeof createMotionEngine>,
       start: number,
     ): Promise<number> => {
       // The plan lands by timer: step the clock to the landing.
@@ -2933,6 +3138,94 @@ describe('Reduced Motion (design:reduced-motion)', () => {
       expect(animator.get('opacity')).toBe(1);
       await expect(handle.finished).resolves.toBe(true);
     }
+  });
+
+  it('a landing waits while a sampler pauses its fade after the browser started it, and lands once the fade resumes', async () => {
+    const {animator} = reduced();
+    const handle = animator.animate({x: 100}, {spring: springs.navigationPush});
+    let settled: boolean | undefined;
+    void handle.finished.then(value => {
+      settled = value;
+    });
+    await commitFrame(clock);
+    await advance(fade / 4);
+    // A harness holds the fade mid-way, after the browser started it.
+    const [fadeOut] = live('opacity');
+    fadeOut.paused = true;
+    await advance(5000);
+    // The travel waits for the fade, which still shows the element.
+    expect(animator.get('x')).toBe(0);
+    expect(settled).toBeUndefined();
+    fadeOut.paused = false;
+    for (let step = 0; step < 16; step++) {
+      await advance(fade / 4);
+    }
+    expect(animator.get('x')).toBe(100);
+    expect(animator.get('opacity')).toBe(1);
+    expect(settled).toBe(true);
+  });
+
+  it('a landing waits while a resumed fade has no start yet, and lands once the fade plays to its end', async () => {
+    const {animator} = reduced();
+    const handle = animator.animate({x: 100}, {spring: springs.navigationPush});
+    let settled: boolean | undefined;
+    void handle.finished.then(value => {
+      settled = value;
+    });
+    await commitFrame(clock);
+    await advance(fade / 4);
+    const [fadeOut] = live('opacity');
+    fadeOut.paused = true;
+    // The fade shows the frame it was paused at, a quarter of the way in.
+    Object.defineProperty(fadeOut, 'currentTime', {
+      configurable: true,
+      get: () => fade / 4,
+    });
+    for (let step = 0; step < 300; step++) {
+      await advance(1);
+    }
+    // play(): the fade waits for the browser's next frame, with no start.
+    fadeOut.paused = false;
+    fadeOut.startTime = null;
+    fadeOut.startDelayFrames = 1_000;
+    for (let step = 0; step < 300; step++) {
+      await advance(1);
+    }
+    expect(animator.get('x')).toBe(0);
+    expect(settled).toBeUndefined();
+    // The browser starts it, and it plays to its end.
+    fadeOut.startDelayFrames = 0;
+    Reflect.deleteProperty(fadeOut, 'currentTime');
+    for (let step = 0; step < 16; step++) {
+      await advance(fade / 4);
+    }
+    expect(animator.get('x')).toBe(100);
+    expect(settled).toBe(true);
+  });
+
+  it('an exit whose fade a sampler pauses after its start settles only once the fade resumes', async () => {
+    const {animator} = reduced();
+    const handle = animator.animate(
+      {x: 100, opacity: 0},
+      {spring: springs.navigationPush},
+    );
+    let settled: boolean | undefined;
+    void handle.finished.then(value => {
+      settled = value;
+    });
+    await commitFrame(clock);
+    await advance(fade / 4);
+    const [fadeOut] = live('opacity');
+    fadeOut.paused = true;
+    await advance(5000);
+    // A component that removes the element when the call settles keeps it
+    // while the fade is held on screen.
+    expect(settled).toBeUndefined();
+    fadeOut.paused = false;
+    for (let step = 0; step < 16; step++) {
+      await advance(fade / 4);
+    }
+    expect(settled).toBe(true);
   });
 
   it('a landing later than the whole fade back in shows the element at once and settles then', async () => {
@@ -3783,6 +4076,97 @@ describe('play: any closed-form curve', () => {
     }
   });
 
+  it('calls in one task that play the same curve share one bake', async () => {
+    stubMedia(false, false);
+    let reads = 0;
+    const curve = {
+      duration: 0.4,
+      at: (t: number) => {
+        reads += 1;
+        return 300 * t * t;
+      },
+      velocity: (t: number) => 600 * t,
+    };
+    const animators = [0, 1, 2].map(() =>
+      createMotionEngine(document.createElement('div'), {
+        now: () => clock,
+        requestFrame,
+      }),
+    );
+    animators[0].play({x: curve});
+    const firstReads = reads;
+    animators[1].play({x: curve});
+    animators[2].play({x: curve});
+    const [first, second, third] = live('translate');
+    // The later calls play the first call's keyframes: the curve is sampled
+    // once. Each later call reads it only for its own start and end.
+    expect(second.keyframes).toBe(first.keyframes);
+    expect(third.keyframes).toBe(first.keyframes);
+    expect(firstReads).toBeGreaterThan(40);
+    expect((reads - firstReads) / 2).toBeLessThanOrEqual(4);
+    // A call in a later task bakes again.
+    await Promise.resolve();
+    const later = createMotionEngine(document.createElement('div'), {
+      now: () => clock,
+      requestFrame,
+    });
+    later.play({x: curve});
+    expect(live('translate').at(-1)?.keyframes).not.toBe(first.keyframes);
+  });
+
+  it('a call whose other values differ keeps its own keyframes, at the shared times', () => {
+    stubMedia(false, false);
+    let reads = 0;
+    const curve = {
+      duration: 0.4,
+      at: (t: number) => {
+        reads += 1;
+        return 300 * t * t;
+      },
+      velocity: (t: number) => 600 * t,
+    };
+    const plain = createMotionEngine(document.createElement('div'), {
+      now: () => clock,
+      requestFrame,
+    });
+    const lifted = createMotionEngine(document.createElement('div'), {
+      now: () => clock,
+      requestFrame,
+    });
+    lifted.set({y: 5});
+    plain.play({x: curve});
+    const firstReads = reads;
+    lifted.play({x: curve});
+    const [own, other] = live('translate');
+    expect(other.keyframes).not.toBe(own.keyframes);
+    expect(other.keyframes.map(frame => frame.offset)).toEqual(
+      own.keyframes.map(frame => frame.offset),
+    );
+    for (const [i, frame] of other.keyframes.entries()) {
+      const [x, y] = parse(frame.translate);
+      expect(x).toBe(parse(own.keyframes[i].translate)[0]);
+      expect(y).toBe(5);
+    }
+    // Its values are read once each, at the times the first call sampled.
+    expect(reads - firstReads).toBeLessThan(firstReads);
+  });
+
+  it('a curve played and rebased in one task bakes the shifted keyframes', () => {
+    const {animator} = setup();
+    const curve = {
+      duration: 0.4,
+      at: (t: number) => 120 * t,
+      velocity: () => 120,
+    };
+    animator.play({x: curve});
+    animator.rebase({x: -16});
+    // The curve plays 0 to 48. Shifted by -16, it plays -16 to 32.
+    const [animation] = live('translate');
+    const xs = animation.keyframes.map(frame => parse(frame.translate)[0]);
+    expect(xs[0]).toBeCloseTo(-16, 6);
+    expect(xs.at(-1)).toBeCloseTo(32, 6);
+  });
+
   it('finishes true at its end, false when interrupted', async () => {
     const {animator} = setup();
     const done = animator.play({
@@ -4055,9 +4439,115 @@ describe('pseudoElement: a dialog\u2019s ::backdrop', () => {
   });
 });
 
+describe('base: what a pseudo-element\u2019s stylesheet shows at rest', () => {
+  const clear = {
+    pseudoElement: '::after',
+    initial: {opacity: 0},
+    base: {opacity: 0},
+  } as const;
+
+  it('a value at its base leaves no holding animation, and any other value still holds', async () => {
+    const {animator} = setup(clear);
+    animator.set({opacity: 0});
+    expect(live('opacity')).toHaveLength(0);
+    animator.set({opacity: 0.5});
+    const [held] = live('opacity');
+    expect(held.keyframes.map(k => k.opacity)).toEqual(['0.5', '0.5']);
+
+    animator.animate({opacity: 0}, {spring: springs.alertDismiss});
+    expect(held.cancelled).toBe(true);
+    const [fade] = live('opacity');
+    await advance(Number(fade.options.duration) + 1000);
+    // Past the curve's end the stylesheet shows the base: nothing holds it.
+    expect(fade.cancelled).toBe(true);
+    expect(live('opacity')).toHaveLength(0);
+    expect(animator.get('opacity')).toBe(0);
+
+    animator.animate({opacity: 1}, {spring: springs.alertPresent});
+    const [rise] = live('opacity');
+    await advance(Number(rise.options.duration) + 1000);
+    // An end other than the base is held, as with no base.
+    const [rest] = live('opacity');
+    expect(rest.keyframes.map(k => k.opacity)).toEqual(['1', '1']);
+  });
+
+  it('a curve that settles to within the sampling tolerance of its base leaves no hold', async () => {
+    const {animator} = setup(clear);
+    // Seconds, as a curve's time is.
+    const settlingTo = (end: number) => ({
+      duration: 0.3,
+      at: (t: number) => 1 + (end - 1) * Math.min(1, t / 0.3),
+      velocity: () => 0,
+    });
+    animator.play({opacity: settlingTo(0.001)});
+    await advance(1300);
+    expect(live('opacity')).toHaveLength(0);
+    animator.play({opacity: settlingTo(0.01)});
+    await advance(1300);
+    const [held] = live('opacity');
+    expect(held.keyframes.map(k => k.opacity)).toEqual(['0.01', '0.01']);
+  });
+
+  it('a node replaced at rest holds nothing at its base', () => {
+    const {animator} = setup(clear);
+    animator.set({opacity: 0});
+    animator.attach(document.createElement('div'));
+    expect(live('opacity')).toHaveLength(0);
+    animator.set({opacity: 0.5});
+    animator.attach(document.createElement('div'));
+    const held = live('opacity');
+    expect(held).toHaveLength(1);
+    expect(held[0].keyframes.map(k => k.opacity)).toEqual(['0.5', '0.5']);
+  });
+
+  it('a Reduce Motion dip that lands on its base leaves no opacity animation', async () => {
+    const {animator} = setup({
+      reduced: true,
+      coarse: true,
+      pseudoElement: '::after',
+      base: {opacity: 1},
+    });
+    animator.set({opacity: 1});
+    expect(live('opacity')).toHaveLength(0);
+    animator.animate({x: 100}, {spring: springs.navigationPush});
+    await commitFrame(clock);
+    expect(live('opacity').length).toBeGreaterThan(0);
+    await advance(END_HOLD_MS + 5000);
+    expect(animator.get('x')).toBe(100);
+    expect(live('opacity')).toHaveLength(0);
+  });
+
+  it('in development, the first hold it drops warns once when the stylesheet shows another value', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    pseudoStylesheet = {opacity: '1'};
+    const {animator} = setup(clear);
+    animator.set({opacity: 0});
+    // The read waits for a later task.
+    expect(warn).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0][0])).toMatch(
+      /::after stylesheet shows opacity 1, not its declared base 0/,
+    );
+    animator.set({opacity: 0.5});
+    animator.set({opacity: 0});
+    await vi.advanceTimersByTimeAsync(1);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('a stylesheet that shows its base raises no warning', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    pseudoStylesheet = {opacity: '0'};
+    const {animator} = setup(clear);
+    animator.set({opacity: 0});
+    await vi.advanceTimersByTimeAsync(1);
+    expect(warn).not.toHaveBeenCalled();
+  });
+});
+
 describe('attach', () => {
   it('keeps state without an element and resumes the curve on attach', () => {
-    const animator = createAnimator(null, {
+    const animator = createMotionEngine(null, {
       now: () => clock,
     });
     animator.animate({x: 300}, {spring: springs.settle});
@@ -4148,7 +4638,7 @@ describe('attach', () => {
 
   it('writes nothing for channels at identity', () => {
     const element = document.createElement('div');
-    createAnimator(element);
+    createMotionEngine(element);
     expect(element.getAttribute('style')).toBeNull();
   });
 });
@@ -4238,5 +4728,143 @@ describe('the presented offset iOS hit testing reads', () => {
     animator.animate({y: 0}, {spring: springs.sheetPresent});
     expect(presentedOffsetOf(element).y).toBeCloseTo(0, 6);
     animator.dispose();
+  });
+});
+
+describe("a theme's reduced-motion mark", () => {
+  // The person's setting is off and the pointer is fine: only the mark can
+  // reduce the motion.
+  function underMark(marked: boolean) {
+    stubMedia(false, false);
+    const theme = document.createElement('div');
+    if (marked) {
+      theme.setAttribute('data-astryx-reduced-motion', '');
+    }
+    const element = document.createElement('div');
+    theme.append(element);
+    document.body.append(theme);
+    const animator = createMotionEngine(element, {
+      now: () => clock,
+      requestFrame,
+    });
+    return {theme, animator};
+  }
+
+  it('counts as the Reduce Motion setting: a move lands at once on a fine pointer', () => {
+    const {theme, animator} = underMark(true);
+    animator.animate({x: 100}, {spring: springs.navigationPush});
+    expect(recorded).toHaveLength(0);
+    expect(animator.get('x')).toBe(100);
+    theme.remove();
+  });
+
+  it('without the mark, the same move springs', () => {
+    const {theme, animator} = underMark(false);
+    animator.animate({x: 100}, {spring: springs.navigationPush});
+    expect(recorded.length).toBeGreaterThan(0);
+    theme.remove();
+  });
+});
+
+describe('rebase towards a new rest', () => {
+  const curve = solveSpring(toSpring(springs.settle), {from: 0, to: 300});
+
+  /** A spring to 300 whose first frame came late, its start still unread. */
+  async function lateStart() {
+    const ready = setup();
+    const handle = ready.animator.animate({x: 300}, {spring: springs.settle});
+    const [animation] = live('translate');
+    clock = 1070;
+    await commitFrame(1070, {startUnread: true});
+    clock = 1170;
+    return {...ready, handle, animation};
+  }
+
+  it('before its first frame, a spring heading for the new rest keeps its own velocity', () => {
+    const {animator} = setup();
+    animator.animate({x: 300}, {spring: springs.settle});
+    clock = 1033;
+    animator.rebase({x: -300}, {towards: {x: 0}});
+    // The curve has not started, so it keeps its own course. 33 ms in, it has
+    // its own velocity, not that of a new spring dated from the call.
+    expect(animator.get('x')).toBeCloseTo(-300, 6);
+    expect(animator.getVelocity('x')).toBeCloseTo(curve.velocity(0.033), 3);
+  });
+
+  it('while its start is unread, a spring heading for the new rest moves whole in the model only', async () => {
+    const {element, animator, animation} = await lateStart();
+    const keyframes = animation.keyframes;
+    const under = inlineX(element);
+    const shown = animator.get('x');
+    animator.rebase({x: -300}, {towards: {x: 0}});
+    // Within the task, the animation on screen keeps its keyframes, its
+    // inline value and the compositor's start; the model reads the shift.
+    expect(live('translate')).toEqual([animation]);
+    expect(animation.keyframes).toBe(keyframes);
+    expect(animation.startTime).toBeNull();
+    expect(inlineX(element)).toBe(under);
+    expect(animator.get('x')).toBeCloseTo(shown - 300, 6);
+  });
+
+  it('a call in the same task rebuilds the channel from the shifted curve, and nothing rebuilds it again', async () => {
+    const {animator, animation} = await lateStart();
+    animator.rebase({x: -300}, {towards: {x: 0}});
+    const shown = animator.get('x');
+    animator.animate({x: 0}, {spring: springs.settle});
+    const rebuilt = live('translate').at(-1) as Recorded;
+    expect(rebuilt).not.toBe(animation);
+    expect(parse(rebuilt.keyframes[0].translate)[0]).toBeCloseTo(shown, 1);
+    expect(parse(rebuilt.keyframes.at(-1)?.translate)[0]).toBeCloseTo(0, 1);
+    await Promise.resolve();
+    expect(live('translate')).toEqual([rebuilt]);
+  });
+
+  it('with no call after it, the end of the task rebuilds the channel from the shifted curve', async () => {
+    const {animator, animation} = await lateStart();
+    animator.rebase({x: -300}, {towards: {x: 0}});
+    const shown = animator.get('x');
+    await Promise.resolve();
+    const [healed] = live('translate');
+    expect(healed).not.toBe(animation);
+    expect(animation.cancelled).toBe(true);
+    expect(parse(healed.keyframes[0].translate)[0]).toBeCloseTo(shown, 1);
+    expect(parse(healed.keyframes.at(-1)?.translate)[0]).toBeCloseTo(0, 1);
+  });
+
+  it('a dispose in the same task leaves nothing for the end of the task to rebuild', async () => {
+    const {animator, animation} = await lateStart();
+    animator.rebase({x: -300}, {towards: {x: 0}});
+    animator.dispose();
+    await Promise.resolve();
+    expect(animation.cancelled).toBe(true);
+    expect(live('translate')).toEqual([]);
+  });
+
+  it('a spring with a known start moves whole on its own course', async () => {
+    const {animator} = setup();
+    animator.animate({x: 300}, {spring: springs.settle});
+    clock = 1016;
+    await commitFrame(1016);
+    clock = 1116;
+    animator.rebase({x: -300}, {towards: {x: 0}});
+    const rebuilt = live('translate').at(-1) as Recorded;
+    clock = 1216;
+    expect(animator.get('x')).toBeCloseTo(curve.value(0.2) - 300, 6);
+    expect(sampleAt(rebuilt, 'translate', 1216)[0]).toBeCloseTo(
+      curve.value(0.2) - 300,
+      0,
+    );
+  });
+
+  it('a target the shift does not bring to `towards` rebases as without it', async () => {
+    const plain = await lateStart();
+    plain.animator.rebase({x: -16});
+    const plainX = plain.animator.get('x');
+    recorded = [];
+    clock = 1000;
+    const toward = await lateStart();
+    toward.animator.rebase({x: -16}, {towards: {x: 0}});
+    expect(toward.animator.get('x')).toBe(plainX);
+    expect(live('translate')).not.toContain(toward.animation);
   });
 });

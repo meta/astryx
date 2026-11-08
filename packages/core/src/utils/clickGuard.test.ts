@@ -9,7 +9,8 @@
  *   pointerdown and the window disarm it; it hears pointerdown only while
  *   armed; the menu press model's click listener stays, one per document,
  *   ahead of later ones, while the gesture host's lasts only while armed;
- *   the menu press model and the gesture host arm this one guard
+ *   the menu press model and the gesture host arm this one guard; an arm at
+ *   a claimed touch's lift also takes that touch's late mousedown and mouseup
  * @position Unit tests of packages/core/src/utils/clickGuard.ts
  */
 
@@ -42,6 +43,36 @@ function click(target: EventTarget, detail = 1): MouseEvent {
     cancelable: true,
     detail,
   });
+  target.dispatchEvent(event);
+  return event;
+}
+
+function mouse(
+  type: 'mousedown' | 'mouseup',
+  target: EventTarget,
+  detail = 1,
+): MouseEvent {
+  const event = new MouseEvent(type, {bubbles: true, cancelable: true, detail});
+  target.dispatchEvent(event);
+  return event;
+}
+
+/** A tap that a recognizer on `target` claims, by touch events. */
+function claimedTap(target: HTMLElement) {
+  const contact = {identifier: 1, clientX: 5, clientY: 5, target};
+  for (const type of ['touchstart', 'touchend'] as const) {
+    const event = new Event(type, {bubbles: true, cancelable: true});
+    Object.defineProperty(event, 'changedTouches', {value: [contact]});
+    Object.defineProperty(event, 'touches', {
+      value: type === 'touchend' ? [] : [contact],
+    });
+    target.dispatchEvent(event);
+  }
+}
+
+/** A `touchend` at `target`, as a browser fires it after the touch's `pointerup`. */
+function touchEnd(target: EventTarget, cancelable = true): Event {
+  const event = new Event('touchend', {bubbles: true, cancelable});
   target.dispatchEvent(event);
   return event;
 }
@@ -105,6 +136,67 @@ describe('clickGuard', () => {
     expect(clicks(add)).toBe(3);
   });
 
+  it("armed at a claimed touch's lift, also takes that touch's late mousedown and mouseup, until its click (spec:AST-094 FR21)", () => {
+    const target = button();
+    const heard = vi.fn();
+    const types = ['mousedown', 'mouseup', 'click'] as const;
+    for (const type of types) {
+      document.addEventListener(type, heard, {capture: true});
+    }
+    try {
+      armClickGuard(document, {takesLateMouse: true});
+      expect(mouse('mousedown', target).defaultPrevented).toBe(true);
+      expect(mouse('mouseup', target).defaultPrevented).toBe(true);
+      expect(click(target).defaultPrevented).toBe(true);
+      expect(heard).not.toHaveBeenCalled();
+      // Spent at the click: the next press is the page's.
+      expect(mouse('mousedown', target).defaultPrevented).toBe(false);
+      expect(heard).toHaveBeenCalledTimes(1);
+    } finally {
+      for (const type of types) {
+        document.removeEventListener(type, heard, {capture: true});
+      }
+    }
+  });
+
+  it("leaves mousedown and mouseup to the page on any other arm, and always lets a keyboard's or the caller's through", () => {
+    const target = button();
+    armClickGuard(document);
+    expect(mouse('mousedown', target).defaultPrevented).toBe(false);
+    expect(mouse('mouseup', target).defaultPrevented).toBe(false);
+    armClickGuard(document, {takesLateMouse: true});
+    expect(mouse('mousedown', target, 0).defaultPrevented).toBe(false);
+    expect(
+      withoutClickGuard(() => mouse('mouseup', target)).defaultPrevented,
+    ).toBe(false);
+    expect(isClickGuardArmed(document)).toBe(true);
+  });
+
+  it('hears mousedown and mouseup only while armed at a claimed touch, and drops them when it disarms (spec:AST-094 FR24)', () => {
+    vi.useFakeTimers();
+    const target = button();
+    const add = vi.spyOn(window, 'addEventListener');
+    const remove = vi.spyOn(window, 'removeEventListener');
+    const late = (spy: typeof add) =>
+      spy.mock.calls
+        .map(call => call[0])
+        .filter(type => type === 'mousedown' || type === 'mouseup');
+    armClickGuard(document);
+    expect(late(add)).toEqual([]);
+    armClickGuard(document, {takesLateMouse: true});
+    expect(late(add)).toEqual(['mousedown', 'mouseup']);
+    target.dispatchEvent(new Event('pointerdown', {bubbles: true}));
+    expect(late(remove)).toEqual(['mousedown', 'mouseup']);
+    armClickGuard(document, {takesLateMouse: true});
+    vi.advanceTimersByTime(CLICK_GUARD_WINDOW_MS);
+    expect(late(remove)).toEqual([
+      'mousedown',
+      'mouseup',
+      'mousedown',
+      'mouseup',
+    ]);
+  });
+
   it("lets through a keyboard's or a screen reader's click, a click the caller dispatches, and the haptic switch's", () => {
     const target = button();
     armClickGuard(document);
@@ -157,20 +249,80 @@ describe('clickGuard', () => {
       const target = button();
       const tap = new TapGestureRecognizer({name: 'tap'});
       const detach = host.attach(target, tap);
-      const contact = {identifier: 1, clientX: 5, clientY: 5, target};
-      for (const type of ['touchstart', 'touchend'] as const) {
-        const event = new Event(type, {bubbles: true, cancelable: true});
-        Object.defineProperty(event, 'changedTouches', {value: [contact]});
-        Object.defineProperty(event, 'touches', {
-          value: type === 'touchend' ? [] : [contact],
-        });
-        target.dispatchEvent(event);
-      }
+      claimedTap(target);
       expect(isClickGuardArmed(document)).toBe(true);
       expect(click(target).defaultPrevented).toBe(true);
       detach();
     } finally {
       restorePointer();
     }
+  });
+
+  it("takes a claimed tap's late mousedown and mouseup with its click: WebKit sends them after the cancelled touchend of a held tap (spec:AST-094 FR21)", () => {
+    const restorePointer = coarsePrimaryPointer();
+    try {
+      const host = new GestureHost(document);
+      const target = button();
+      const tap = new TapGestureRecognizer({name: 'tap'});
+      const detach = host.attach(target, tap);
+      claimedTap(target);
+      expect(mouse('mousedown', target).defaultPrevented).toBe(true);
+      expect(mouse('mouseup', target).defaultPrevented).toBe(true);
+      expect(click(target).defaultPrevented).toBe(true);
+      // The next press is the page's.
+      expect(mouse('mousedown', target).defaultPrevented).toBe(false);
+      detach();
+    } finally {
+      restorePointer();
+    }
+  });
+
+  it("armed at a finger's release, cancels that touch's touchend and disarms: no click follows it", () => {
+    const target = button();
+    armClickGuard(document, {staysInstalled: true, cancelsTouchEnd: true});
+    expect(touchEnd(target).defaultPrevented).toBe(true);
+    expect(isClickGuardArmed(document)).toBe(false);
+    // The next touch's touchend, and a click with no press behind it, are the page's.
+    expect(touchEnd(target).defaultPrevented).toBe(false);
+    expect(click(target).defaultPrevented).toBe(false);
+  });
+
+  it('leaves an uncancelable touchend alone, and stays armed for a click that may follow it', () => {
+    const target = button();
+    armClickGuard(document, {cancelsTouchEnd: true});
+    expect(touchEnd(target, false).defaultPrevented).toBe(false);
+    expect(isClickGuardArmed(document)).toBe(true);
+    // Only that touch's touchend is its: a later one is the page's.
+    expect(touchEnd(target).defaultPrevented).toBe(false);
+    expect(click(target).defaultPrevented).toBe(true);
+  });
+
+  it('cancels no touchend on any other arm', () => {
+    const target = button();
+    armClickGuard(document, {staysInstalled: true});
+    expect(touchEnd(target).defaultPrevented).toBe(false);
+    armClickGuard(document, {takesLateMouse: true});
+    expect(touchEnd(target).defaultPrevented).toBe(false);
+    expect(isClickGuardArmed(document)).toBe(true);
+  });
+
+  it('hears touchend only while armed with it, and drops it at the next pointerdown and after its window', () => {
+    vi.useFakeTimers();
+    const target = button();
+    const add = vi.spyOn(window, 'addEventListener');
+    const remove = vi.spyOn(window, 'removeEventListener');
+    const touchEnds = (spy: typeof add) =>
+      spy.mock.calls.map(call => call[0]).filter(type => type === 'touchend');
+    armClickGuard(document);
+    expect(touchEnds(add)).toEqual([]);
+    armClickGuard(document, {cancelsTouchEnd: true});
+    expect(touchEnds(add)).toEqual(['touchend']);
+    target.dispatchEvent(new Event('pointerdown', {bubbles: true}));
+    expect(touchEnds(remove)).toEqual(['touchend']);
+    expect(touchEnd(target).defaultPrevented).toBe(false);
+    armClickGuard(document, {cancelsTouchEnd: true});
+    vi.advanceTimersByTime(CLICK_GUARD_WINDOW_MS);
+    expect(isClickGuardArmed(document)).toBe(false);
+    expect(touchEnds(remove)).toEqual(['touchend', 'touchend']);
   });
 });

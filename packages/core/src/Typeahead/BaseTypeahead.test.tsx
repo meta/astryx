@@ -88,6 +88,106 @@ const testStyles = stylex.create({
 });
 
 describe('BaseTypeahead', () => {
+  describe('picking a result', () => {
+    const source: SearchSource<SearchableItem> = {
+      search: () => [
+        {id: 'a', label: 'Apple'},
+        {id: 'b', label: 'Apricot'},
+      ],
+      bootstrap: () => [],
+    };
+
+    it('reports the emptied query to onChangeQuery in a Typeahead', async () => {
+      const user = userEvent.setup();
+      const onChangeQuery = vi.fn();
+      render(
+        <Typeahead
+          label="Fruit"
+          searchSource={source}
+          value={null}
+          onChange={() => {}}
+          onChangeQuery={onChangeQuery}
+        />,
+      );
+
+      await user.type(screen.getByRole('combobox'), 'Ap');
+      expect(onChangeQuery).toHaveBeenLastCalledWith('Ap');
+      await user.click(
+        await screen.findByRole('option', {name: 'Apple', hidden: true}),
+      );
+
+      expect(screen.getByRole('combobox')).toHaveValue('');
+      expect(onChangeQuery).toHaveBeenLastCalledWith('');
+    });
+
+    it('reports the emptied query to onChangeQuery in a Tokenizer', async () => {
+      const user = userEvent.setup();
+      const onChangeQuery = vi.fn();
+      render(
+        <Tokenizer
+          label="Fruits"
+          searchSource={source}
+          value={[]}
+          onChange={() => {}}
+          onChangeQuery={onChangeQuery}
+        />,
+      );
+
+      await user.type(screen.getByRole('combobox'), 'Ap');
+      expect(onChangeQuery).toHaveBeenLastCalledWith('Ap');
+      await user.click(
+        await screen.findByRole('option', {name: 'Apple', hidden: true}),
+      );
+
+      expect(screen.getByRole('combobox')).toHaveValue('');
+      expect(onChangeQuery).toHaveBeenLastCalledWith('');
+    });
+
+    it('does not report a change when the query was already empty', async () => {
+      const user = userEvent.setup();
+      const onChangeQuery = vi.fn();
+      render(
+        <Typeahead
+          label="Fruit"
+          hasEntriesOnFocus
+          searchSource={{
+            search: () => [],
+            bootstrap: () => [{id: 'a', label: 'Apple'}],
+          }}
+          value={null}
+          onChange={() => {}}
+          onChangeQuery={onChangeQuery}
+        />,
+      );
+
+      await user.click(screen.getByRole('combobox'));
+      await user.click(
+        await screen.findByRole('option', {name: 'Apple', hidden: true}),
+      );
+
+      expect(onChangeQuery).not.toHaveBeenCalled();
+    });
+  });
+
+  it('asks a touch keyboard for its Search key and no autocorrection', () => {
+    render(
+      <BaseTypeahead
+        searchSource={emptySource}
+        value={null}
+        onChange={() => {}}
+        aria-label="Find a framework"
+      />,
+    );
+
+    expect(
+      screen.getByRole('combobox', {name: 'Find a framework'}),
+    ).toHaveAttribute('enterkeyhint', 'search');
+
+    expect(
+      screen.getByRole('combobox', {name: 'Find a framework'}),
+    ).toHaveAttribute('autocorrect', 'off');
+  });
+
   it('forwards supported DOM, styling, and event props to the combobox input', () => {
     const onBlur = vi.fn();
     const onFocus = vi.fn();

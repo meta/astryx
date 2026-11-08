@@ -94,6 +94,12 @@ export const categories: SandboxCategory[] = [
           'Interactive mobile interaction prototypes (bottom sheets, action sheets, drawers) for the component migration table',
       },
       {
+        name: 'Chat Layout',
+        href: '/pages/chat-layout/',
+        description:
+          'A full page ChatLayout for phone checks. ?case= long (the default), composer or streaming scroll the document; docked scrolls a fixed-height panel',
+      },
+      {
         name: 'TextArea Counter',
         href: '/pages/textarea-counter/',
         description:
@@ -151,6 +157,12 @@ export const categories: SandboxCategory[] = [
         href: '/pages/tap-targets/',
         description:
           'WCAG 2.5.8 AA touch-target sizes visualized on real components',
+      },
+      {
+        name: 'Text Types',
+        href: '/pages/text-types/',
+        description:
+          'Every built-in Text type at the default size, on a bare page that scrolls',
       },
     ],
   },

@@ -4,19 +4,26 @@
 
 /**
  * @file useIcon.ts
- * @input Semantic icon name
+ * @input Semantic icon name, or a component icon slot with its state and
+ *   fallback
  * @output Exports useIcon hook for theme-aware icon lookup (node-valued; a
- *   function entry is read at `{size: 'md'}`)
- * @position Client hook for components that render registry icons directly
+ *   function entry is read at `{size: 'md'}`) and the internal
+ *   useComponentIcon hook that resolves a slot from the nearest Theme
+ * @position Client hooks for components that render registry icons directly
  */
 
 import type {ReactNode} from 'react';
 import {useThemeName} from '../theme/useTheme';
 import {
   getIcon,
+  resolveComponentIcon,
+  type ComponentIconFallback,
+  type ComponentIconSlotState,
   type IconName,
   type NamespacedIconName,
+  type ResolvedComponentIcon,
 } from './globalIconRegistry';
+import type {ComponentIconSlotName} from './index';
 
 /**
  * Resolve a semantic icon name from the nearest Theme, falling back through
@@ -31,4 +38,18 @@ import {
 export function useIcon(name: IconName | NamespacedIconName): ReactNode {
   const themeName = useThemeName();
   return getIcon(name, themeName);
+}
+
+/**
+ * Resolve a component icon slot from the nearest Theme: the theme's
+ * `componentIcons[slot]` applied to the component's own fallback.
+ * @internal
+ */
+export function useComponentIcon<Slot extends ComponentIconSlotName>(
+  slot: Slot,
+  state: ComponentIconSlotState<Slot>,
+  fallback: ComponentIconFallback,
+): ResolvedComponentIcon {
+  const themeName = useThemeName();
+  return resolveComponentIcon(slot, state, fallback, themeName);
 }

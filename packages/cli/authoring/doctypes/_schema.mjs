@@ -306,6 +306,17 @@ const BaseDocFields = {
   isHiddenFromOverview: z.boolean().optional(),
 };
 
+/**
+ * A deprecated component's replacement (`ComponentBaseDoc.deprecated`). Strict:
+ * the docsite and search read both fields, so a misspelled one fails to load.
+ */
+const ComponentDeprecationSchema = z
+  .object({
+    replacement: nonEmptyString,
+    description: nonEmptyString,
+  })
+  .strict();
+
 const ComponentBaseSchema = z
   .object({
     ...BaseDocFields,
@@ -314,6 +325,7 @@ const ComponentBaseSchema = z
     playground: z.unknown().optional(),
     examples: z.array(z.unknown()).optional(),
     replaces: z.string().min(1).optional(),
+    deprecated: ComponentDeprecationSchema.optional(),
   })
   .passthrough();
 
@@ -776,10 +788,12 @@ const LegacyReferenceDocSchema = LegacyBaseDocSchema.extend({
 
 const LegacySingleComponentDocSchema = LegacyBaseDocSchema.extend({
   props: z.array(PropSchema),
+  deprecated: ComponentDeprecationSchema.optional(),
 }).passthrough();
 
 const LegacyMultiComponentDocSchema = LegacyBaseDocSchema.extend({
   components: z.array(z.unknown()),
+  deprecated: ComponentDeprecationSchema.optional(),
 }).passthrough();
 
 const LegacyHookDocSchema = LegacyBaseDocSchema.extend({
@@ -791,6 +805,7 @@ const LegacySubComponentDocSchema = LegacyBaseDocSchema.extend({
   subComponentOf: z.string().min(1, 'subComponentOf is required'),
   description: z.string(),
   props: z.array(PropSchema),
+  deprecated: ComponentDeprecationSchema.optional(),
 }).passthrough();
 
 /** The permissive legacy union (sub-component, hook, multi, single, then reference). */

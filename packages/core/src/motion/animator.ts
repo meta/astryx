@@ -4,11 +4,12 @@
  * @file animator.ts
  * @input An element, target values, and a spring, momentum curves (coast.ts)
  *   or any closed-form curve
- * @output Exports `createAnimator`: a compositor animator for translate,
- *   rotate, scale and opacity, with presentation values and velocities read
- *   from the analytic curves, velocity-preserving retargeting, freeze-in-place
- *   `stop`, completion promises, a shared clock, and UIKit's Reduced Motion
- *   substitution; plus its option, handle and transition types
+ * @output Exports `createMotionEngine`, a compositor animator for
+ *   translate, rotate, scale and opacity, and its option, handle and
+ *   transition types. It reads presentation values and velocities from the
+ *   analytic curves. It retargets with the velocity kept, freezes in place on
+ *   `stop`, and gives completion promises, a shared clock, and UIKit's
+ *   Reduced Motion substitution.
  * @position Motion foundation (DOM). Internal to core: components use it for
  *   every touch-presentation animation; not exported from the package entry
  *
@@ -152,21 +153,26 @@
  * release (`touchRelease`) and at once elsewhere (DR2, DR3).
  *
  * Roles: every spring and curve the animator plays passes through
- * resolveMotion.ts, which names the motion role it plays (`springs.settle`
- * once `registerSpringsTable()` has run, the Reduce Motion fade's curve,
- * which the animator registers alone). The per-role tables stay internal
+ * resolveMotion.ts, which names the motion role it plays. `springs.settle`
+ * registers as its module loads, and the animator registers the Reduce Motion
+ * fade's curve alone. The per-role tables stay internal
  * (`spec:AST-094` DEC-15), so a role plays its table value: nothing reads a
- * CSS variable or the element's style for it. A spring written inline at the call
+ * role's own CSS variable. Its time scales by the tempo of the element's
+ * theme. A spring written inline at the call
  * site, and a table never registered, play as given; the fade's length is not
  * a role.
  *
  * A pseudo-element (`options.pseudoElement`, a dialog's `::backdrop`) has no
- * inline style: its end value is held by a static filling animation (after a
- * curve ends, and after `set`) until the next animation replaces it, and for
- * as long as the pseudo-element exists. The browser makes a `::backdrop`
- * again each time its dialog opens, without the hold, so a presentation
- * calls `set` with its starting value right after `showModal()`, in the same
- * task: a `set` before it lands on the backdrop the open replaces.
+ * inline style. A static filling animation holds its end value, after a
+ * curve ends and after `set`, until the next animation replaces it. The hold
+ * lasts as long as the pseudo-element exists. A value equal to its `base`,
+ * the values its own stylesheet shows at rest, is not held. The stylesheet
+ * shows it, so the pseudo-element keeps no compositing layer at rest. In
+ * development, the first hold dropped this way checks that the stylesheet
+ * shows it. The browser makes a `::backdrop` again, without the hold, each
+ * time its dialog opens. So a presentation calls `set` with its starting
+ * value right after `showModal()`, in the same task. A `set` before it lands
+ * on the backdrop the open replaces.
  *
  * SSR-safe: nothing touches `window` or `document` at module scope, and an
  * animator created without an element only keeps state until one is attached.
@@ -180,14 +186,24 @@
  */
 
 import {cubicBezier} from './bezier';
+import {LATE_START_MS} from './frameBlock';
 import {solveSpring, toSpring, type SpringDescription} from './spring';
-import {registerPresentedOffset, type PresentedSource} from './presentation';
+import {
+  clearPresentedResolve,
+  registerPresentedOffset,
+  type PresentedSource,
+  writePresentedResolve,
+} from './presentation';
 import {resolveMotion} from './resolveMotion';
 import {
   reducedMotionCrossFade,
   registerReducedMotionCrossFade,
 } from './uikit/timing';
 import {planReducedMotion, type ReducedMotionView} from './reducedMotionPlan';
+import {themeReducesMotion} from '../privateAttributes/reducedMotion.stylex';
+import {devWarn} from '../utils/devWarning';
+
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
 
 /**
  * A value the animator can drive.
@@ -212,6 +228,23 @@ export interface SpringTransition {
    * has on screen.
    */
   velocity?: MotionValues;
+}
+
+/** What `Animator.rebase` takes besides the amounts. */
+export interface RebaseOptions {
+  /** Time of the shift on the document timeline (ms). Defaults to now. */
+  at?: number;
+  /**
+   * Per property, the value its spring heads for after the shift. A spring
+   * whose target plus its amount lands there moves whole, before its first
+   * frame and once its start is known. Its curve and target move by the
+   * amount. It keeps its start time and velocity, as when the element's
+   * resting place moves under a curve that keeps going. If its first frame
+   * has run while its start is unread, only the model moves. The next call
+   * on the channel in the same task rebuilds its animation, or else the end
+   * of the task does.
+   */
+  towards?: MotionValues;
 }
 
 /**
@@ -244,18 +277,18 @@ export interface AnimateOptions {
   crossfadeAs?: 'entrance' | 'exit';
   /**
    * When the call's animations start. By default a call from rest starts
-   * when the browser commits it, and a call that continues motion on screen
-   * (a retarget) starts now, from the value on screen. Ignored with `at`.
+   * when the browser commits it. A call that continues motion on screen (a
+   * retarget) starts now, from the value on screen. A curve whose tail
+   * already shows as at rest counts as rest. Ignored with `at`.
    * - `'commit'`: a call that continues motion also starts when the browser
-   *   commits it, dated by the browser rather than by the main thread, as a
-   *   call from rest is.
-   * - `'presented'`: a call from rest leaves its element at rest and creates
-   *   its animations two frames later, once the frame that carries the
-   *   element at rest has been presented; they then start at their commit. A
-   *   busy UI process delays the motion instead of skipping into it, for two
-   *   frames more before an idle start. Any other change to the animator
-   *   before then creates the animations first, in call order. A call that
-   *   continues motion on screen (a retarget) starts now, as by default.
+   *   commits it. The browser dates it, as it dates a call from rest.
+   * - `'presented'`: a call from rest leaves its element at rest. Its
+   *   animations are created two frames later, once the frame with the
+   *   element at rest has been presented. They then start at their commit,
+   *   so a busy UI process delays the motion instead of skipping into it.
+   *   Any other change to the animator before then creates the animations
+   *   first, in call order. A call that continues motion on screen starts
+   *   now, as by default.
    */
   start?: 'commit' | 'presented';
   /**
@@ -296,9 +329,6 @@ export interface MotionCurve {
   readonly isTransition?: boolean;
 }
 
-/**
- * Options of `createAnimator`.
- */
 /** How `set` puts values in place. */
 export interface SetOptions {
   /**
@@ -314,22 +344,35 @@ export interface SetOptions {
   promote?: boolean;
 }
 
+/**
+ * Options of `createMotionEngine`.
+ */
 export interface AnimatorOptions {
   /**
    * Animates a pseudo-element of the element instead (`'::backdrop'` of a
-   * native dialog). A pseudo-element has no inline style, so a static filling
-   * animation holds its value after a curve ends and after `set`.
+   * native dialog). A pseudo-element has no inline style. So a static filling
+   * animation holds its value after a curve ends and after `set`, unless the
+   * value is its `base`.
    */
   pseudoElement?: string;
   /** Starting values; identity by default. Never read from the DOM. */
   initial?: MotionValues;
+  /**
+   * For a pseudo-element: the values its own stylesheet shows at rest. A
+   * value equal to its base needs no holding animation, so the
+   * pseudo-element keeps no compositing layer there. Declare only what the
+   * stylesheet shows: in development, the first hold dropped warns when the
+   * computed style differs.
+   */
+  base?: MotionValues;
   /** Clock in ms on the document timeline's time base. */
   now?: () => number;
   /**
-   * Runs a callback in the next animation frame; `requestAnimationFrame` by
-   * default. A call from rest reads the start the browser gave it there.
+   * Runs a callback in the next animation frame, with the frame's timestamp;
+   * `requestAnimationFrame` by default. A call from rest reads the start the
+   * browser gave it there.
    */
-  requestFrame?: (callback: () => void) => void;
+  requestFrame?: (callback: (frame?: number) => void) => void;
 }
 
 /**
@@ -443,9 +486,10 @@ export interface Animator {
    * moves the element under them: a property moving on a spring keeps its
    * spring, velocity and target (the curve restarts from the shifted value);
    * any other moving curve shifts whole, its end included; a resting
-   * property takes the offset and stays.
+   * property takes the offset and stays. `towards` moves some springs whole
+   * instead (RebaseOptions).
    */
-  rebase(deltas: MotionValues, options?: Pick<AnimateOptions, 'at'>): void;
+  rebase(deltas: MotionValues, options?: RebaseOptions): void;
   /** Freezes properties (all by default) at their presentation values. */
   stop(properties?: ReadonlyArray<MotionProperty | 'scale'>): void;
   /**
@@ -477,6 +521,11 @@ interface Segment {
   speed(t: number): number;
   /** Times (ms after the start) where the value jumps; `at` is right-continuous. */
   readonly jumps: ReadonlyArray<number>;
+  /**
+   * The curve a `play` call gave, which other calls in its task can share. A
+   * segment whose values move from that curve's has none.
+   */
+  readonly source?: MotionCurve;
   /** A Reduce Motion fade: an interruption finishes it instead of freezing it. */
   readonly isFade?: true;
   readonly owner: HandleState;
@@ -652,15 +701,27 @@ const SAMPLE_TOLERANCE: Record<MotionProperty, number> = {
 /** Keyframes start on this grid (ms) and are split where the curve needs it. */
 const SAMPLE_GRID_MS = 1000 / 30;
 
+/**
+ * A curve within this many sample tolerances of its target can show as at
+ * rest. A call on it then starts as one from rest does, at the browser's start.
+ */
+const REST_DISTANCE_TOLERANCES = 2;
+
+/**
+ * A curve shows as at rest only while it moves at most one `SAMPLE_TOLERANCE`
+ * a frame at this rate.
+ */
+const REST_FRAMES_PER_SECOND = 60;
+
 /** A curve that has not settled by then (an undamped spring) snaps. */
 const MAX_DURATION_MS = 30_000;
 
 /**
- * How long a task must run on past its first call from rest before that
- * counts as a block (WebKit; startAfterBlock): two frames at 60 Hz.
+ * How close a spring's target and a value must be to count as the same, in
+ * the property's own units. Only float rounding separates two ways of
+ * computing one value, far below anything the screen shows.
  */
-// Browser start times are frame times and a task's end a live clock, so only a block longer than a frame plus the task's own length can be told apart from that quantization.
-const LATE_START_MS = 34;
+const SAME_VALUE = 1e-6;
 
 /**
  * The task calls from rest are made in, shared by every call made in it
@@ -696,6 +757,92 @@ function markTask(time: number, clock: () => number): TaskMark {
     });
   }
   return openTask;
+}
+
+/** The first read of the time an animation frame runs, by its timestamp. */
+let frameRead: {readonly frame: number; readonly time: number} | null = null;
+
+/**
+ * The time the animation frame with timestamp `frame` runs, read once in
+ * that frame. Every animator's callback in the frame takes that read, so the
+ * calls from rest that one frame commits start together. A long callback
+ * before them does not move their start. A call on a moving element keeps
+ * its own clock. The read ends with the frame's task, so a frame
+ * source that repeats a timestamp still reads each frame anew. A frame
+ * source with no timestamp reads the clock.
+ */
+function frameTime(frame: number | undefined, clock: () => number): number {
+  if (frame == null) {
+    return clock();
+  }
+  if (frameRead?.frame === frame) {
+    return frameRead.time;
+  }
+  const read = {frame, time: clock()};
+  frameRead = read;
+  // A browser runs every callback of a frame before its next task.
+  setTimeout(() => {
+    if (frameRead === read) {
+      frameRead = null;
+    }
+  }, 0);
+  return read.time;
+}
+
+/**
+ * What the calls of the running task have baked. A call that plays the same
+ * curve objects reuses them: a row of items that one curve moves samples it
+ * once. Cleared at the next microtask checkpoint.
+ */
+interface TaskBakes {
+  /** Sample times, from the bake's start, by curve, offset and tolerance. */
+  readonly times: {readonly key: unknown[]; readonly times: number[]}[];
+  /** Keyframes, by curves, offsets and the channel's rest values. */
+  readonly keyframes: {
+    readonly key: unknown[];
+    readonly keyframes: Keyframe[];
+    effect: AnimationEffect | null;
+  }[];
+}
+
+let taskBakes: TaskBakes | null = null;
+
+function bakesOfTask(): TaskBakes {
+  if (taskBakes == null) {
+    const bakes: TaskBakes = {times: [], keyframes: []};
+    taskBakes = bakes;
+    queueMicrotask(() => {
+      if (taskBakes === bakes) {
+        taskBakes = null;
+      }
+    });
+  }
+  return taskBakes;
+}
+
+function isSameKey(a: unknown[], b: unknown[]): boolean {
+  return a.length === b.length && a.every((value, i) => Object.is(value, b[i]));
+}
+
+/** Whether the engine can copy an effect with its parsed keyframes. */
+function isCopyable(effect: AnimationEffect | null): effect is KeyframeEffect {
+  return (
+    typeof KeyframeEffect === 'function' &&
+    typeof Animation === 'function' &&
+    effect instanceof KeyframeEffect
+  );
+}
+
+/**
+ * Plays a copy of `effect` on `element`, as `element.animate` would play the
+ * same keyframes and timing, without parsing them again.
+ */
+function copyAnimation(effect: KeyframeEffect, element: Element): Animation {
+  const copy = new KeyframeEffect(effect);
+  copy.target = element;
+  const animation = new Animation(copy, element.ownerDocument.timeline);
+  animation.play();
+  return animation;
 }
 
 /** Above this many keyframes the tolerance is relaxed. */
@@ -741,9 +888,6 @@ export const PROMOTION_LINGER_MS = 500;
 
 type Channel = 'translate' | 'rotate' | 'scale' | 'opacity';
 
-/** The custom property whose writes make WebKit resolve a moving element. */
-const RESOLVE_PROPERTY = '--astryx-presented';
-
 const CHANNELS: Record<Channel, ReadonlyArray<MotionProperty>> = {
   translate: ['x', 'y'],
   rotate: ['rotate'],
@@ -780,6 +924,33 @@ function format(
   }
 }
 
+/**
+ * Whether a computed value shows `expected` (`format`'s text). An unset or
+ * `none` value is the channel's identity. One value of a two-value channel
+ * stands for both (scale), or for x with y at 0 (translate).
+ */
+function sameShown(channel: Channel, shown: string, expected: string): boolean {
+  const numbers = (text: string): number[] => {
+    const values = (
+      text === '' || text === 'none' ? IDENTITY_TEXT[channel] : text
+    ).match(/-?\d*\.?\d+(?:e-?\d+)?/g);
+    const list = (values ?? []).map(Number);
+    if (channel === 'translate') {
+      return [list[0] ?? 0, list[1] ?? 0];
+    }
+    if (channel === 'scale') {
+      return [list[0] ?? 1, list[1] ?? list[0] ?? 1];
+    }
+    return list.length > 0 ? list : [channel === 'opacity' ? 1 : 0];
+  };
+  const a = numbers(shown);
+  const b = numbers(expected);
+  return (
+    a.length === b.length &&
+    a.every((value, i) => Math.abs(value - b[i]) < 1e-3)
+  );
+}
+
 const shared = new WeakMap<HTMLElement, Map<string, Animator>>();
 
 /**
@@ -803,7 +974,7 @@ export function animatorFor(
   const key = options.pseudoElement ?? '';
   let animator = byPseudo.get(key);
   if (animator == null) {
-    animator = createAnimator(element, options);
+    animator = createMotionEngine(element, options);
     byPseudo.set(key, animator);
   }
   return animator;
@@ -920,7 +1091,7 @@ const REDUCED_TRANSITION: SpringTransition = {
  *
  * @example
  * ```
- * const animator = createAnimator(sheet);
+ * const animator = createMotionEngine(sheet);
  * // finger lifts at 1200 px/s heading for the detent at 0 (a component
  * // passes the spring of its motion role):
  * animator.animate({y: 0}, {spring: {response: 0.45, dampingRatio: 0.9}, velocity: {y: 1200}});
@@ -929,7 +1100,7 @@ const REDUCED_TRANSITION: SpringTransition = {
  * animator.stop(['y']);
  * ```
  */
-export function createAnimator(
+export function createMotionEngine(
   element: HTMLElement | null,
   options: AnimatorOptions = {},
 ): Animator {
@@ -937,8 +1108,8 @@ export function createAnimator(
   const frameSource =
     options.requestFrame ??
     (typeof requestAnimationFrame === 'function'
-      ? (callback: () => void) => {
-          requestAnimationFrame(() => callback());
+      ? (callback: (frame?: number) => void) => {
+          requestAnimationFrame(frame => callback(frame));
         }
       : null);
   // Every frame callback of an animator's counts itself, so a call made in
@@ -946,11 +1117,11 @@ export function createAnimator(
   const requestFrame =
     frameSource == null
       ? null
-      : (callback: () => void) => {
-          frameSource(() => {
+      : (callback: (frame?: number) => void) => {
+          frameSource(frame => {
             frameDepth += 1;
             try {
-              callback();
+              callback(frame);
             } finally {
               frameDepth -= 1;
             }
@@ -958,13 +1129,16 @@ export function createAnimator(
         };
   const pseudoElement = options.pseudoElement;
   // Reduced Motion reads the person's settings and nothing else: no option
-  // overrides them (design:reduced-motion DR4).
-  const prefersReducedMotion = defaultPrefersReducedMotion;
+  // overrides them (design:reduced-motion DR4). A theme that reduces motion
+  // for everyone counts as the setting.
+  const prefersReducedMotion = () =>
+    defaultPrefersReducedMotion() || themeReducesMotion(target);
   const isCoarsePointer = defaultIsCoarsePointer;
   const resting: Record<MotionProperty, number> = {
     ...IDENTITY,
     ...expand(options.initial ?? {}),
   };
+  const base = expand(options.base ?? {});
   const segments = new Map<MotionProperty, Segment>();
   const running = new Map<Channel, Animation>();
   /** Drops a finished, still-filling animation once the main thread runs. */
@@ -1015,8 +1189,6 @@ export function createAnimator(
    * moves it: where the animation started, or where a `resolve` left it.
    */
   let hitTested = {x: 0, y: 0};
-  /** Counts the style writes that make WebKit resolve the element again. */
-  let resolutions = 0;
   let unpresent: (() => void) | null = null;
   /** Channels promoted to the element's compositing layer (will-change). */
   const promoted = new Set<Channel>();
@@ -1052,7 +1224,7 @@ export function createAnimator(
     if (segment == null) {
       return null;
     }
-    if (time >= segment.start + segment.duration) {
+    if (time >= endOf(property, segment)) {
       return null;
     }
     return segment;
@@ -1090,6 +1262,53 @@ export function createAnimator(
       : {latest, start: segment.start + latest - segment.group.provisional};
 
   /**
+   * When a waiting curve's call had its first frame, which put the curve on
+   * screen. Undefined for a curve that does not wait, or whose call has had
+   * no first frame.
+   */
+  const shownSince = (
+    property: MotionProperty,
+    segment: Segment,
+  ): number | undefined =>
+    segment.group?.resolved === false
+      ? segment.group.latest?.get(CHANNEL_OF[property])
+      : undefined;
+
+  /** A curve's end, dated from its call's first frame while it waits. */
+  const endOf = (property: MotionProperty, segment: Segment): number =>
+    (datedFromLatest(segment, shownSince(property, segment))?.start ??
+      segment.start) + segment.duration;
+
+  /**
+   * Takes a curve on screen out of the call that still waits for the
+   * browser's start. The curve keeps its course, dated from the call's first
+   * frame. A call that has no channel left starts at that frame.
+   */
+  const leaveWaitingCall = (
+    segment: Segment,
+    channel: Channel,
+    latest: number,
+  ) => {
+    const group = segment.group;
+    if (group == null) {
+      return;
+    }
+    const index = group.segments.indexOf(segment);
+    if (index >= 0) {
+      group.segments.splice(index, 1);
+    }
+    segment.start += latest - group.provisional;
+    segment.group = undefined;
+    if (!CHANNELS[channel].some(p => segments.get(p)?.group === group)) {
+      group.latest?.delete(channel);
+      group.channels.delete(channel);
+    }
+    if (group.channels.size === 0 && group.segments.length === 0) {
+      resolveGroup(group, latest);
+    }
+  };
+
+  /**
    * The value on screen at `time`. Until the browser reports its start, a
    * held curve shows its first value. A frame that ran without that start
    * dates the curve. Without that frame, a later time reads from the
@@ -1117,6 +1336,22 @@ export function createAnimator(
     }
     return curveAt(property, time);
   };
+
+  /**
+   * Whether a curve's tail already shows as at rest at `time`. Under a
+   * starved main thread the browser commits a call late. A call that starts
+   * at its own time then skips that far into its curve. One that starts at
+   * the commit holds an element that hardly moves.
+   */
+  const showsAtRest = (
+    property: MotionProperty,
+    segment: Segment,
+    time: number,
+  ): boolean =>
+    Math.abs(valueAt(property, time) - segment.target) <=
+      REST_DISTANCE_TOLERANCES * SAMPLE_TOLERANCE[property] &&
+    Math.abs(velocityAt(property, time)) <=
+      SAMPLE_TOLERANCE[property] * REST_FRAMES_PER_SECOND;
 
   const velocityAt = (property: MotionProperty, time: number): number => {
     const held = segments.get(property);
@@ -1187,8 +1422,7 @@ export function createAnimator(
       // Any style write makes WebKit resolve the element's transform again,
       // to the value drawn now, where it then stays (iOS 26.2: in the same
       // task); a custom property changes nothing else.
-      resolutions += 1;
-      target.style.setProperty(RESOLVE_PROPERTY, String(resolutions));
+      writePresentedResolve(target);
       hitTested = {x: drawnTranslate('x', time), y: drawnTranslate('y', time)};
     },
   };
@@ -1202,7 +1436,7 @@ export function createAnimator(
     unpresent?.();
     unpresent = null;
     if (presented instanceof HTMLElement) {
-      presented.style.removeProperty(RESOLVE_PROPERTY);
+      clearPresentedResolve(presented);
     }
     presented = element;
     if (element != null) {
@@ -1230,6 +1464,62 @@ export function createAnimator(
       // Identity leaves the element when nothing else would move it.
       releaseIdentity(channel);
     }
+  };
+
+  /**
+   * What identifies a channel's keyframes across calls of one task: each
+   * moving property's curve object, offset and length, and each other
+   * property's rest value. Null when a moving property has no shared curve
+   * (a spring, a rebase, a jump).
+   */
+  const taskBakeKey = (
+    channel: Channel,
+    moving: MotionProperty[],
+    from: number,
+    end: number,
+    devicePixel: number,
+  ): unknown[] | null => {
+    const key: unknown[] = [channel, end - from, devicePixel];
+    for (const property of CHANNELS[channel]) {
+      const segment = segments.get(property);
+      if (!moving.includes(property)) {
+        key.push(property, resting[property]);
+      } else if (segment?.source != null && segment.jumps.length === 0) {
+        key.push(property, segment.source, segment.start - from);
+        key.push(segment.duration);
+      } else {
+        return null;
+      }
+    }
+    return key;
+  };
+
+  /** `sampleTimes`, shared by the calls of a task that play one curve. */
+  const sharedSampleTimes = (
+    property: MotionProperty,
+    from: number,
+    end: number,
+    tolerance: number,
+  ): number[] => {
+    const segment = segments.get(property);
+    if (segment?.source == null || segment.jumps.length > 0) {
+      return sampleTimes(property, from, end, tolerance);
+    }
+    const key: unknown[] = [
+      segment.source,
+      segment.start - from,
+      segment.duration,
+      end - from,
+      tolerance,
+    ];
+    const {times} = bakesOfTask();
+    const known = times.find(entry => isSameKey(entry.key, key));
+    if (known != null) {
+      return known.times.map(t => t + from);
+    }
+    const sampled = sampleTimes(property, from, end, tolerance);
+    times.push({key, times: sampled.map(t => t - from)});
+    return sampled;
   };
 
   const sampleTimes = (
@@ -1283,9 +1573,61 @@ export function createAnimator(
     return times;
   };
 
-  /** A pseudo-element's resting value, held by a static filling animation. */
+  /**
+   * Whether the pseudo-element's stylesheet shows the channel's resting
+   * value: its base, to within the sampling tolerance, which no frame shows.
+   * A curve that settles to a threshold ends that close to its target.
+   */
+  const atBase = (channel: Channel) =>
+    CHANNELS[channel].every(property => {
+      const value = base[property];
+      return (
+        value != null &&
+        Math.abs(finalValue(property) - value) <= SAMPLE_TOLERANCE[property]
+      );
+    });
+
+  let baseChecked = false;
+  /**
+   * The first hold dropped at `base` checks, in development, that the
+   * stylesheet shows it. It reads after the cancel and off the motion's task,
+   * so it adds no style read to a frame that starts a motion.
+   */
+  const checkBase = (channel: Channel) => {
+    if (process.env.NODE_ENV === 'production' || baseChecked) {
+      return;
+    }
+    baseChecked = true;
+    setTimeout(() => {
+      if (target == null) {
+        return;
+      }
+      const shown = getComputedStyle(target, pseudoElement).getPropertyValue(
+        channel,
+      );
+      const expected = format(channel, p => base[p] ?? IDENTITY[p]);
+      if (!sameShown(channel, shown, expected)) {
+        devWarn(
+          'Astryx motion',
+          `the ${pseudoElement} stylesheet shows ${channel} ` +
+            `${shown || '(unset)'}, not its declared base ${expected}, so ` +
+            'it shows the wrong value at rest. Make `base` match the ' +
+            'stylesheet.',
+        );
+      }
+    }, 0);
+  };
+
+  /**
+   * A pseudo-element's resting value, held by a static filling animation,
+   * unless its stylesheet shows it (`base`).
+   */
   const hold = (channel: Channel, time: number) => {
     if (target == null) {
+      return;
+    }
+    if (atBase(channel)) {
+      checkBase(channel);
       return;
     }
     const value = format(channel, finalValue);
@@ -1298,7 +1640,43 @@ export function createAnimator(
     running.set(channel, animation);
   };
 
+  const replaceIn = (group: StartGroup, segment: Segment, next: Segment) => {
+    const index = group.segments.indexOf(segment);
+    if (index >= 0) {
+      group.segments[index] = next;
+    } else {
+      group.segments.push(next);
+    }
+  };
+
+  /**
+   * Channels whose model a rebase moved while their animation still shows
+   * the old curve. Any rebuild clears its channel; the end of the task
+   * rebuilds the rest, so a frame never shows the old curve at the new rest.
+   */
+  const stale = new Set<Channel>();
+  let healQueued = false;
+
+  const markStale = (channel: Channel) => {
+    stale.add(channel);
+    if (!healQueued) {
+      healQueued = true;
+      queueMicrotask(healStale);
+    }
+  };
+
+  const healStale = () => {
+    healQueued = false;
+    if (stale.size === 0) {
+      return;
+    }
+    const properties = [...stale].flatMap(channel => CHANNELS[channel]);
+    stale.clear();
+    commit(properties, now());
+  };
+
   const rebuild = (channel: Channel, time: number) => {
+    stale.delete(channel);
     const previous = running.get(channel);
     running.delete(channel);
     clearTimeout(retireTimers.get(channel));
@@ -1316,12 +1694,25 @@ export function createAnimator(
     // Settled curves become resting values.
     for (const property of properties) {
       const segment = segments.get(property);
-      if (segment != null && time >= segment.start + segment.duration) {
+      if (segment != null && time >= endOf(property, segment)) {
         resting[property] = segment.target;
         segments.delete(property);
       }
     }
     const moving = properties.filter(p => segments.has(p));
+    if (callGroup == null) {
+      // A call that starts now rebuilds a channel the compositor has moving
+      // since a first frame without a known start. The channel carries on
+      // from that frame, with a start of its own, instead of starting its
+      // curve again.
+      for (const property of moving) {
+        const segment = segments.get(property) as Segment;
+        const latest = shownSince(property, segment);
+        if (latest != null) {
+          leaveWaitingCall(segment, channel, latest);
+        }
+      }
+    }
     // An explicit call can rebuild a channel while one of its curves still
     // waits for the browser's start. The animation then joins the current
     // call, or else that waiting call, with no start of its own.
@@ -1427,6 +1818,16 @@ export function createAnimator(
     // Read where the keyframes are baked: a page moved to another screen
     // bakes its next motion for that screen.
     const devicePixel = 1 / Math.max(1, globalThis.devicePixelRatio || 1);
+    // An earlier call of this task that played the same curves from the same
+    // offset, over the same rest values, baked these keyframes already.
+    const bakeKey =
+      pseudoElement == null
+        ? taskBakeKey(channel, moving, from, end, devicePixel)
+        : null;
+    const baked =
+      bakeKey == null
+        ? undefined
+        : bakesOfTask().keyframes.find(bake => isSameKey(bake.key, bakeKey));
     const collect = (scale: number) => {
       const times = new Set<number>([from, end]);
       for (const property of moving) {
@@ -1434,61 +1835,76 @@ export function createAnimator(
           SAMPLE_TOLERANCE[property] *
           scale *
           (property === 'x' || property === 'y' ? devicePixel : 1);
-        for (const t of sampleTimes(property, from, end, tolerance)) {
+        for (const t of sharedSampleTimes(property, from, end, tolerance)) {
           times.add(t);
         }
       }
       return times;
     };
-    let scale = 1;
-    let all = collect(scale);
-    while (all.size > MAX_KEYFRAMES && scale < 64) {
-      scale *= 2;
-      all = collect(scale);
-    }
-    // Jumps become two keyframes at one offset: the value just before, then
-    // the value after. A jump on the last frame (fade out, then move) too.
-    const jumpTimes = new Set<number>();
-    for (const property of moving) {
-      const segment = segments.get(property) as Segment;
-      for (const j of segment.jumps) {
-        const t = segment.start + j;
-        if (t > from && t <= end) {
-          jumpTimes.add(t);
-          all.add(t);
+    const span = end - from + END_HOLD_MS;
+    const bakeKeyframes = (): Keyframe[] => {
+      let scale = 1;
+      let all = collect(scale);
+      while (all.size > MAX_KEYFRAMES && scale < 64) {
+        scale *= 2;
+        all = collect(scale);
+      }
+      // Jumps become two keyframes at one offset: the value just before,
+      // then the value after. A jump on the last frame (fade out, then move)
+      // too.
+      const jumpTimes = new Set<number>();
+      for (const property of moving) {
+        const segment = segments.get(property) as Segment;
+        for (const j of segment.jumps) {
+          const t = segment.start + j;
+          if (t > from && t <= end) {
+            jumpTimes.add(t);
+            all.add(t);
+          }
         }
       }
-    }
-    const times = [...all].sort((a, b) => a - b);
-    const span = end - from + END_HOLD_MS;
-    const keyframes: Keyframe[] = [];
-    for (const t of times) {
-      const offset = (t - from) / span;
-      if (jumpTimes.has(t)) {
-        keyframes.push({
+      const times = [...all].sort((a, b) => a - b);
+      const frames: Keyframe[] = [];
+      for (const t of times) {
+        const offset = (t - from) / span;
+        if (jumpTimes.has(t)) {
+          frames.push({
+            offset,
+            [channel]: format(channel, p => valueBefore(p, t)),
+          });
+        }
+        frames.push({
           offset,
-          [channel]: format(channel, p => valueBefore(p, t)),
+          [channel]: format(channel, p =>
+            t >= end ? finalValue(p) : curveAt(p, t),
+          ),
         });
       }
-      keyframes.push({
-        offset,
-        [channel]: format(channel, p =>
-          t >= end ? finalValue(p) : curveAt(p, t),
-        ),
+      frames.push({offset: 1, [channel]: format(channel, finalValue)});
+      return frames;
+    };
+    const keyframes = baked?.keyframes ?? bakeKeyframes();
+    promote(channel);
+    const animation =
+      baked != null && isCopyable(baked.effect)
+        ? copyAnimation(baked.effect, target)
+        : target.animate(keyframes, {
+            duration: span,
+            // The last keyframes hold the end state (END_HOLD_MS); filling both
+            // ways also keeps it where an engine honors the fill on its compositor.
+            // The main thread retires the animation once it runs after the end,
+            // writing the end inline in that task, so that changes no pixel.
+            fill: 'both',
+            easing: 'linear',
+            ...(pseudoElement != null ? {pseudoElement} : {}),
+          });
+    if (bakeKey != null && baked == null) {
+      bakesOfTask().keyframes.push({
+        key: bakeKey,
+        keyframes,
+        effect: animation.effect,
       });
     }
-    keyframes.push({offset: 1, [channel]: format(channel, finalValue)});
-    promote(channel);
-    const animation = target.animate(keyframes, {
-      duration: span,
-      // The last keyframes hold the end state (END_HOLD_MS); filling both
-      // ways also keeps it where an engine honors the fill on its compositor.
-      // The main thread retires the animation once it runs after the end,
-      // writing the end inline in that task, so that changes no pixel.
-      fill: 'both',
-      easing: 'linear',
-      ...(pseudoElement != null ? {pseudoElement} : {}),
-    });
     if (waiting != null) {
       // From rest: no start time, so the browser starts the animation when
       // it commits it (StartGroup); the keyframes are sampled from `from`,
@@ -1500,14 +1916,14 @@ export function createAnimator(
       if (rebuiltAfterFirstFrame) {
         // The frame that commits it dates this channel's start again. The
         // call's other channels keep their own.
-        requestFrame?.(() => {
+        requestFrame?.(frame => {
           if (
             !waiting.resolved &&
             running.get(channel) === animation &&
             animation.startTime == null &&
             animation.playState === 'running'
           ) {
-            (waiting.latest ??= new Map()).set(channel, now());
+            (waiting.latest ??= new Map()).set(channel, frameTime(frame, now));
           }
         });
       }
@@ -1973,10 +2389,10 @@ export function createAnimator(
   // -- starting from rest ---------------------------------------------------
 
   /**
-   * A call starts from rest when nothing on the channels it drives is moving
-   * (a curve still waiting for its first frame counts as rest) and nothing
-   * pins its clock (`at`). Returns its start group, or null for an explicit
-   * start.
+   * A call starts from rest when nothing on the channels it drives moves on
+   * screen and nothing pins its clock (`at`). A curve still waiting for its
+   * first frame counts as rest, as does one whose tail already shows as at
+   * rest. Returns its start group, or null for an explicit start.
    */
   const beginGroup = (
     time: number,
@@ -2010,17 +2426,24 @@ export function createAnimator(
       }
       return null;
     }
-    // A call that continues motion starts now unless it asks for the
-    // browser's start (`commit`). `presented` asks only for a call from rest:
-    // an element still moving is not at rest, so a retarget starts now, from
-    // the value and velocity on screen (spec:AST-094 FR6).
+    // A call that continues motion starts now, unless it asks for the
+    // browser's start (`commit`). `presented` asks only for a call from rest.
+    // A curve that still moves is not at rest, so a call on it starts now,
+    // from the value and velocity on screen. A tail that shows as at rest
+    // counts as rest, so a call on it waits, under `presented` for its two
+    // frames.
     for (const channel of start === 'commit' ? [] : channels) {
       for (const property of CHANNELS[channel]) {
         const segment = segments.get(property);
+        // A call's first frame puts its channels on screen, even before the
+        // browser reports the start. So such a channel is not at rest either.
         if (
           segment != null &&
-          time < segment.start + segment.duration &&
-          (segment.group == null || segment.group.resolved)
+          time < endOf(property, segment) &&
+          (segment.group == null ||
+            segment.group.resolved ||
+            shownSince(property, segment) != null) &&
+          !showsAtRest(property, segment, time)
         ) {
           return null;
         }
@@ -2188,7 +2611,7 @@ export function createAnimator(
     // or when its compositor starts them (Chromium). Read it in that first
     // frame, ahead of anything that might pause or seek the animations, and
     // when `ready` settles.
-    requestFrame?.(() => {
+    requestFrame?.(frame => {
       syncGroup(group);
       group.framed = true;
       // Chromium's compositor starts a composited animation when the frame
@@ -2196,24 +2619,28 @@ export function createAnimator(
       // more later (longer under load). Until then the call would read as
       // not started while the screen moves it, and a retarget or a rebase
       // would replay its curve from the start. A call made in a task, still
-      // waiting in the first frame after it, starts now, which the compositor
-      // then takes as its start: the time this frame runs, not its timestamp,
+      // waiting in the first frame after it, starts when this frame runs. The
+      // compositor takes that time as its start. All calls the frame commits
+      // take one read of it (frameTime). That read is not the frame timestamp,
       // which after a block is the frame time from before the block. Only
       // when this frame is the one that commits it: not for a call made in a
       // frame callback, whose frame committed it already, nor when a block
       // ran between the call and this frame (more than LATE_START_MS), after
       // which this frame cannot tell a call made in a task from one a page's
       // own frame callback made; those keep the browser's start.
+      if (group.resolved) {
+        return;
+      }
+      const at = frameTime(frame, now);
       if (
-        !group.resolved &&
         group.madeInFrame !== true &&
-        now() - (group.task?.first ?? group.provisional) <= LATE_START_MS &&
+        at - (group.task?.first ?? group.provisional) <= LATE_START_MS &&
         group.animations.some(
           animation =>
             animation.startTime == null && animation.playState === 'running',
         )
       ) {
-        resolveGroup(group, now());
+        resolveGroup(group, at);
       }
       // The browser's start is still unread. The compositor starts the call
       // near this frame, so each moving channel's reads take the curve from
@@ -2227,7 +2654,7 @@ export function createAnimator(
             animation.startTime == null &&
             animation.playState === 'running'
           ) {
-            (group.latest ??= new Map()).set(channel, now());
+            (group.latest ??= new Map()).set(channel, at);
           }
         }
       }
@@ -2636,7 +3063,7 @@ export function createAnimator(
     if (from === to && velocity === 0) {
       return null;
     }
-    // The motion role it plays: its table value (DEC-15).
+    // The motion role it plays, at the tempo of the theme it is in.
     const resolved = resolveMotion(target, spring);
     const curve = solveSpring(toSpring(resolved), {from, to, velocity});
     const duration = Math.min(
@@ -2902,6 +3329,61 @@ export function createAnimator(
     landings.delete(landing);
   };
 
+  /**
+   * How long `landing` still waits for its fade, in ms. A sampler that pauses
+   * the fade holds it, so it checks again later. A resumed fade holds it until
+   * the fade starts again. A fade that runs past the landing's due time, as
+   * after a pause, holds it for the rest of the fade. Any other fade holds
+   * nothing.
+   */
+  const fadeHeldFor = (landing: Landing): number => {
+    const animation = running.get('opacity');
+    const owner = segments.get('opacity')?.owner;
+    if (
+      animation == null ||
+      owner == null ||
+      (owner !== landing.owner && !landing.carried.includes(owner))
+    ) {
+      return 0;
+    }
+    if (animation.playState === 'paused') {
+      return RETIRE_RECHECK_MS;
+    }
+    // The timeline reads the frame before a long task, so the fade's current
+    // time would date a fade that has ended as still running.
+    const start = animation.startTime;
+    const duration = Number(animation.effect?.getTiming?.().duration);
+    if (!Number.isFinite(duration)) {
+      return 0;
+    }
+    if (start == null) {
+      // A fade resumed with play() has no start until its next frame.
+      return animation.playState === 'running' ? END_RECHECK_MS : 0;
+    }
+    // A fade that ends by the landing's due time holds nothing. A timer runs
+    // in whole milliseconds, so it often fires a fraction early.
+    const end = Number(start) + duration - END_HOLD_MS;
+    if (landing.due != null && end <= landing.due) {
+      return 0;
+    }
+    const left = end - now();
+    return left > 0 ? left : 0;
+  };
+
+  /**
+   * The landing's timer: it lands once its fade lets it. A call that takes the
+   * landing over lands it directly, at once.
+   */
+  const landWhenFaded = (landing: Landing) => {
+    const held = fadeHeldFor(landing);
+    if (held > 0) {
+      landing.due = now() + held;
+      landing.timer = setTimeout(() => landWhenFaded(landing), held);
+      return;
+    }
+    land(landing);
+  };
+
   /** Arms a landing from the call's start (the browser's, for a call from rest). */
   const scheduleLanding = (
     owner: HandleState,
@@ -2933,7 +3415,7 @@ export function createAnimator(
       }
       landing.due = start + landing.at;
       landing.timer = setTimeout(
-        () => land(landing),
+        () => landWhenFaded(landing),
         Math.max(0, landing.due - now()),
       );
     });
@@ -3544,6 +4026,7 @@ export function createAnimator(
                 speed: t => curve.velocity(t / 1000),
                 jumps: [],
                 owner,
+                source: curve,
               };
       }
       const group = beginGroup(
@@ -3721,6 +4204,7 @@ export function createAnimator(
       syncPending();
       flushDeferred();
       const time = rebaseOptions.at ?? now();
+      const towards = expand(rebaseOptions.towards ?? {});
       const changed: MotionProperty[] = [];
       const owners = new Set<HandleState>();
       for (const [property, delta] of Object.entries(expand(deltas)) as [
@@ -3730,34 +4214,64 @@ export function createAnimator(
         if (delta === 0) {
           continue;
         }
-        changed.push(property);
         const segment = segmentAt(property, time);
         if (segment == null) {
+          changed.push(property);
           resting[property] = valueAt(property, time) + delta;
           segments.delete(property);
           continue;
         }
         owners.add(segment.owner);
         // A curve still waiting for the browser's start stays in its call:
-        // it starts with that call's commit.
+        // it starts with that call's commit. A curve whose call had its first
+        // frame is on screen already, so it leaves the call (leaveWaitingCall).
+        const latest = shownSince(property, segment);
         const group =
-          segment.group != null && !segment.group.resolved
+          latest == null && segment.group != null && !segment.group.resolved
             ? segment.group
             : undefined;
         const replace = (next: Segment) => {
           if (group != null) {
-            const index = group.segments.indexOf(segment);
-            if (index >= 0) {
-              group.segments[index] = next;
-            } else {
-              group.segments.push(next);
-            }
+            replaceIn(group, segment, next);
           }
           segments.set(property, next);
         };
+        const heading = towards[property];
+        if (
+          segment.spring != null &&
+          heading != null &&
+          Math.abs(segment.target + delta - heading) <= SAME_VALUE
+        ) {
+          // The spring keeps its course to the shifted target from its own
+          // start.
+          const whole: Segment = {
+            ...segment,
+            target: heading,
+            at: t => segment.at(t) + delta,
+          };
+          if (latest == null) {
+            changed.push(property);
+            replace(whole);
+            continue;
+          }
+          // While the browser has not told the start, only the model moves.
+          // The call that follows rebuilds the channel from it, or else the
+          // end of the task does.
+          const waiting = segment.group;
+          if (waiting != null && !waiting.resolved) {
+            replaceIn(waiting, segment, whole);
+            segments.set(property, whole);
+            markStale(CHANNEL_OF[property]);
+            continue;
+          }
+        }
+        changed.push(property);
         if (segment.spring != null) {
           const from = valueAt(property, time) + delta;
           const velocity = velocityAt(property, time);
+          if (latest != null) {
+            leaveWaitingCall(segment, CHANNEL_OF[property], latest);
+          }
           const curve = solveSpring(toSpring(segment.spring), {
             from,
             to: segment.target,
@@ -3778,8 +4292,12 @@ export function createAnimator(
             spring: segment.spring,
           });
         } else {
+          if (latest != null) {
+            leaveWaitingCall(segment, CHANNEL_OF[property], latest);
+          }
           replace({
             ...segment,
+            source: undefined,
             target: segment.target + delta,
             at: t => segment.at(t) + delta,
           });
@@ -3867,6 +4385,7 @@ export function createAnimator(
         animation.cancel();
       }
       running.clear();
+      stale.clear();
       for (const timer of retireTimers.values()) {
         clearTimeout(timer);
       }

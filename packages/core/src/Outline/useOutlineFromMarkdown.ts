@@ -10,6 +10,7 @@
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Outline/Outline.doc.mjs
+ * - /packages/core/src/Outline/useOutlineFromMarkdown.doc.mjs
  * - /packages/core/src/Outline/index.ts
  */
 

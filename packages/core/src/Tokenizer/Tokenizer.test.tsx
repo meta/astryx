@@ -23,6 +23,7 @@ import {render, screen, fireEvent, act, waitFor} from '@testing-library/react';
 import {createRef, Profiler, useState} from 'react';
 import userEvent from '@testing-library/user-event';
 import {Tokenizer} from './Tokenizer';
+import {TokenizerItemRemovableContext} from './TokenizerItemRemovableContext';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import type {SearchSource, SearchableItem} from '../Typeahead/types';
 import {TestIcon} from '../__tests__/TestIcon';
@@ -200,6 +201,32 @@ describe('Tokenizer press inside and outside', () => {
 });
 
 describe('Tokenizer', () => {
+  it('asks a touch keyboard for its Search key and no autocorrection, and Enter still adds the highlighted result', async () => {
+    const onChange = vi.fn();
+    render(
+      <Tokenizer
+        label="Members"
+        searchSource={userSource}
+        value={[users[0]]}
+        onChange={onChange}
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    expect(input).toHaveAttribute('enterkeyhint', 'search');
+    expect(input).toHaveAttribute('autocorrect', 'off');
+
+    fireEvent.change(input, {target: {value: 'Bob'}});
+    await waitFor(() => {
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+    });
+    fireEvent.keyDown(input, {key: 'Enter'});
+    expect(onChange).toHaveBeenCalledWith(
+      [users[0], expect.objectContaining({label: 'Bob'})],
+      expect.objectContaining({type: 'add'}),
+    );
+  });
+
   it('forwards DOM props and ref to the combobox input while preserving focus callbacks', () => {
     const ref = createRef<HTMLInputElement>();
     const onClick = vi.fn();
@@ -1960,6 +1987,190 @@ describe('Tokenizer', () => {
   });
 });
 
+describe('Tokenizer search cancellation', () => {
+  // A source that records each call and answers only when the test says so.
+  function pendingSource() {
+    const events: string[] = [];
+    const answers = new Map<string, (items: SearchableItem[]) => void>();
+    const source: SearchSource = {
+      search: async query => {
+        events.push(`search:${query}`);
+        return new Promise(resolve => answers.set(query, resolve));
+      },
+      bootstrap: () => [],
+      cancel: () => {
+        events.push('cancel');
+      },
+    };
+    return {events, answers, source};
+  }
+
+  async function type(input: HTMLElement, value: string) {
+    fireEvent.change(input, {target: {value}});
+    await act(async () => {
+      await new Promise(r => setTimeout(r, 0));
+    });
+  }
+
+  it('cancels the previous search on the consumer source when a newer one starts', async () => {
+    const {events, source} = pendingSource();
+    render(
+      <Tokenizer
+        label="Members"
+        searchSource={source}
+        value={[]}
+        onChange={vi.fn()}
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    await type(input, 'a');
+    await type(input, 'al');
+    const first = events.indexOf('search:a');
+    const second = events.indexOf('search:al');
+    expect(first).toBeGreaterThanOrEqual(0);
+    expect(events.slice(first + 1, second)).toContain('cancel');
+  });
+
+  it('cancels a running search on the consumer source when the menu closes with Escape', async () => {
+    const {events, answers, source} = pendingSource();
+    render(
+      <Tokenizer
+        label="Members"
+        searchSource={source}
+        value={[]}
+        onChange={vi.fn()}
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    await type(input, 'a');
+    await act(async () => {
+      answers.get('a')?.([users[0]]);
+    });
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+    await type(input, 'al');
+    const before = events.filter(e => e === 'cancel').length;
+    fireEvent.keyDown(input, {key: 'Escape'});
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+    expect(events.filter(e => e === 'cancel').length).toBeGreaterThan(before);
+  });
+
+  it('cancels a running search on the consumer source when focus leaves the field', async () => {
+    const {events, answers, source} = pendingSource();
+    render(
+      <>
+        <Tokenizer
+          label="Members"
+          searchSource={source}
+          value={[]}
+          onChange={vi.fn()}
+          debounceMs={0}
+        />
+        <button type="button">Elsewhere</button>
+      </>,
+    );
+    const input = screen.getByRole('combobox');
+    await type(input, 'a');
+    await act(async () => {
+      answers.get('a')?.([users[0]]);
+    });
+    await type(input, 'al');
+    const before = events.filter(e => e === 'cancel').length;
+    fireEvent.blur(input, {
+      relatedTarget: screen.getByRole('button', {name: 'Elsewhere'}),
+    });
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+    expect(events.filter(e => e === 'cancel').length).toBeGreaterThan(before);
+  });
+
+  it('cancels a running search on the consumer source on unmount', async () => {
+    const {events, source} = pendingSource();
+    const {unmount} = render(
+      <Tokenizer
+        label="Members"
+        searchSource={source}
+        value={[]}
+        onChange={vi.fn()}
+        debounceMs={0}
+      />,
+    );
+    await type(screen.getByRole('combobox'), 'a');
+    const before = events.filter(e => e === 'cancel').length;
+    unmount();
+    expect(events.filter(e => e === 'cancel').length).toBeGreaterThan(before);
+  });
+
+  it('calls cancel with the consumer source as its receiver', async () => {
+    const aborted: string[] = [];
+    const source = {
+      current: 'none',
+      async search(query: string) {
+        this.current = query;
+        return new Promise<SearchableItem[]>(() => {});
+      },
+      bootstrap: () => [] as SearchableItem[],
+      cancel() {
+        aborted.push(this.current);
+      },
+    };
+    const {unmount} = render(
+      <Tokenizer
+        label="Members"
+        searchSource={source}
+        value={[]}
+        onChange={vi.fn()}
+        debounceMs={0}
+      />,
+    );
+    await type(screen.getByRole('combobox'), 'a');
+    unmount();
+    expect(aborted).toContain('a');
+  });
+
+  it("ignores a cancelled search's late answer when the source can't abort it", async () => {
+    const {answers, source} = pendingSource();
+    render(
+      <Tokenizer
+        label="Members"
+        searchSource={source}
+        value={[]}
+        onChange={vi.fn()}
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    await type(input, 'a');
+    await type(input, 'b');
+    await act(async () => {
+      answers.get('b')?.([users[1]]);
+    });
+    await act(async () => {
+      answers.get('a')?.([users[0]]);
+    });
+    expect(screen.getByText('Bob')).toBeInTheDocument();
+    expect(screen.queryByText('Alice')).not.toBeInTheDocument();
+  });
+
+  it('works with a source that has no cancel', async () => {
+    const {unmount} = render(
+      <Tokenizer
+        label="Members"
+        searchSource={userSource}
+        value={[]}
+        onChange={vi.fn()}
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    await type(input, 'a');
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.keyDown(input, {key: 'Escape'});
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+    unmount();
+  });
+});
+
 describe('Tokenizer required state (FormLayout FR5, AR2)', () => {
   it('exposes the resolved required state on the combobox', () => {
     const field = (props: {
@@ -2759,5 +2970,69 @@ describe('Tokenizer incremental results (spec:AST-092)', () => {
       settle([people, teams]);
     });
     expect(optionLabels()).toEqual(['Ben', 'Bento', 'Create "ben x"']);
+  });
+});
+
+describe('Tokenizer locked tokens (internal removable context)', () => {
+  it('Clear all keeps a locked token and reports the last removed one', () => {
+    const onChange = vi.fn();
+    render(
+      <TokenizerItemRemovableContext value={item => item.id !== '1'}>
+        <Tokenizer
+          label="Members"
+          searchSource={userSource}
+          value={[users[0], users[1], users[2]]}
+          onChange={onChange}
+          hasClear
+        />
+      </TokenizerItemRemovableContext>,
+    );
+    expect(
+      screen.queryByRole('button', {name: 'Remove Alice'}),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', {name: 'Remove Bob'}),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', {name: /clear/i}));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith([users[0]], {
+      item: users[2],
+      type: 'remove',
+    });
+  });
+
+  it('has no Clear all when every token is locked', () => {
+    render(
+      <TokenizerItemRemovableContext value={() => false}>
+        <Tokenizer
+          label="Members"
+          searchSource={userSource}
+          value={[users[0]]}
+          onChange={() => {}}
+          hasClear
+        />
+      </TokenizerItemRemovableContext>,
+    );
+    expect(
+      screen.queryByRole('button', {name: /clear/i}),
+    ).not.toBeInTheDocument();
+  });
+
+  it('Backspace on an empty input removes nothing while the last token is locked', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <TokenizerItemRemovableContext value={item => item.id !== '2'}>
+        <Tokenizer
+          label="Members"
+          searchSource={userSource}
+          value={[users[0], users[1]]}
+          onChange={onChange}
+        />
+      </TokenizerItemRemovableContext>,
+    );
+    await user.click(screen.getByRole('combobox'));
+    await user.keyboard('{Backspace}');
+    expect(onChange).not.toHaveBeenCalled();
   });
 });
