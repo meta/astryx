@@ -18,10 +18,12 @@ import {expect, test, type Frame, type Page} from '@playwright/test';
 
 const POST = '/blog/live-example-sample';
 
-// The post shows its authors' GitHub avatars. A slow or failing GitHub must not
-// hold these tests: they answer GitHub's hosts with a local image, and open the
-// post without waiting for every image to load.
+// The post shows its authors' GitHub avatars, and the root layout links the
+// Google Fonts stylesheet. A slow or failing outside host must not hold these
+// tests: they answer GitHub's hosts with a local image and Google Fonts with an
+// empty stylesheet, and open the post without waiting for every image to load.
 const GITHUB = /^https:\/\/(github\.com|avatars\.githubusercontent\.com)\//;
+const GOOGLE_FONTS = /^https:\/\/fonts\.(googleapis|gstatic)\.com\//;
 const PIXEL = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
   'base64',
@@ -30,6 +32,9 @@ const PIXEL = Buffer.from(
 test.beforeEach(async ({page}) => {
   await page.route(GITHUB, route =>
     route.fulfill({status: 200, contentType: 'image/png', body: PIXEL}),
+  );
+  await page.route(GOOGLE_FONTS, route =>
+    route.fulfill({status: 200, contentType: 'text/css', body: ''}),
   );
 });
 

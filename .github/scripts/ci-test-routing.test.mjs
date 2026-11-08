@@ -884,6 +884,7 @@ describe('ci.yml interaction proofs', () => {
       'admission',
       'heavy-ci',
       'build-storybook',
+      'interaction-legs',
     ]);
     const checkout = job.steps.find(
       candidate =>

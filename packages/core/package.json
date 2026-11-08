@@ -868,6 +868,11 @@
       "source": "./src/internal/scroll-anchoring.ts",
       "types": "./dist/internal/scroll-anchoring.d.ts",
       "default": "./dist/internal/scroll-anchoring.js"
+    },
+    "./internal/line-clamp": {
+      "source": "./src/internal/line-clamp.ts",
+      "types": "./dist/internal/line-clamp.d.ts",
+      "default": "./dist/internal/line-clamp.js"
     }
   },
   "files": [
