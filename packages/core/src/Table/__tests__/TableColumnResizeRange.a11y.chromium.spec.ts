@@ -87,14 +87,29 @@ test("a handle announces its column's rendered width before any resize", async (
     );
 
   const cdp = await page.context().newCDPSession(page);
-  await expect
-    .poll(async () => {
-      const {nodes} = (await cdp.send('Accessibility.getFullAXTree')) as {
-        nodes: AXNode[];
-      };
-      return nodes
-        .filter(node => node.role?.value === 'separator')
-        .map(node => Number(node.value?.value));
-    })
-    .toEqual(widths);
+  const announced = async () => {
+    const {nodes} = (await cdp.send('Accessibility.getFullAXTree')) as {
+      nodes: AXNode[];
+    };
+    return nodes
+      .filter(node => node.role?.value === 'separator')
+      .map(node => Number(node.value?.value));
+  };
+  const rendered = async () =>
+    page
+      .getByRole('separator')
+      .evaluateAll(handles =>
+        handles.map(handle =>
+          Math.round(handle.closest('th')?.getBoundingClientRect().width ?? 0),
+        ),
+      );
+  await expect.poll(announced).toEqual(widths);
+
+  // After a keyboard resize the value follows the column.
+  await page.getByRole('separator').first().focus();
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  const resized = await rendered();
+  expect(resized).not.toEqual(widths);
+  await expect.poll(announced).toEqual(resized);
 });

@@ -424,12 +424,12 @@ function ResizeHandle({
   const t = useComponentTranslator();
   // The column's rendered width, which the handle announces. The shared
   // resize observer reports it after layout, so render never reads layout.
-  const handleRef = useRef<HTMLDivElement>(null);
+  // The handle's ref observes its header cell while the handle is attached.
   const [renderedWidth, setRenderedWidth] = useState<number | null>(null);
-  useEffect(() => {
-    const th = handleRef.current?.closest('th');
+  const observeColumn = useCallback((handle: HTMLDivElement | null) => {
+    const th = handle?.closest('th');
     if (th == null) {
-      return;
+      return undefined;
     }
     return observeResize(th, entry => {
       const width =
@@ -815,20 +815,23 @@ function ResizeHandle({
   // value in words.
   const isUnbounded = !Number.isFinite(maxWidth);
   const windowExtent = useWindowInlineExtent();
+  // The layout can render a column past its limits (a stretched table), so
+  // the announced range widens to hold the value it reports.
   const announcedMax = isUnbounded
     ? standInMaximum(windowExtent, valueNow, minWidth)
-    : maxWidth;
+    : Math.max(maxWidth, valueNow);
+  const announcedMin = Math.min(minWidth, valueNow);
   const valueText = isUnbounded
     ? t('@astryx.table.columnResize.widthValue', {width: valueNow})
     : undefined;
 
   return (
     <div
-      ref={handleRef}
+      ref={observeColumn}
       role="separator"
       aria-orientation="vertical"
       aria-valuenow={valueNow}
-      aria-valuemin={minWidth}
+      aria-valuemin={announcedMin}
       aria-valuemax={announcedMax}
       aria-valuetext={valueText}
       aria-label={ariaLabel}
