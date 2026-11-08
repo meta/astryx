@@ -3,11 +3,15 @@
 /**
  * @file BottomSheetPanel.test.tsx
  * @input Uses vitest, Testing Library, BottomSheetPanel
- * @output Tests the shared sheet surface motion and keyboard scroll contracts
+ * @output Tests the shared sheet surface motion, keyboard scroll, and container
+ *   padding contracts
  * @position Internal presentation tests shared by standalone and switcher modes
  */
 
+import * as stylex from '@stylexjs/stylex';
 import {act, fireEvent, render, screen} from '@testing-library/react';
+import {Suspense, use, useLayoutEffect} from 'react';
+import {renderToString} from 'react-dom/server';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
   BottomSheetPanel,
@@ -41,6 +45,23 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+// A device with a touch pointer: only `(any-pointer: coarse)` matches.
+function stubTouchPointer() {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn((query: string) => ({
+      matches: query === '(any-pointer: coarse)',
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  );
+}
+
 function renderPanel(
   state: BottomSheetPanelState,
   callbacks: {
@@ -63,6 +84,98 @@ function renderPanel(
   );
 }
 
+function renderNamedPanel(name: string) {
+  return render(
+    <BottomSheetPanel
+      label={name}
+      state={{kind: 'open', entering: false}}
+      height="hug"
+      style={panelTransitionStyle}
+      onDismiss={() => {}}
+      onScrimOpacity={() => {}}>
+      {name} content
+    </BottomSheetPanel>,
+  );
+}
+
+function getNamedPanel(name: string): HTMLElement {
+  const panel = screen
+    .getByText(`${name} content`)
+    .closest<HTMLElement>('.astryx-bottom-sheet');
+  if (panel == null) {
+    throw new Error(`${name} surface not found`);
+  }
+  return panel;
+}
+
+// Counts reads of `window.innerHeight` until `restore`. A read after a
+// commit's DOM writes forces a style recalculation and a layout.
+function countViewportHeightReads() {
+  const descriptor = Object.getOwnPropertyDescriptor(window, 'innerHeight');
+  let value = window.innerHeight;
+  const reads = {
+    count: 0,
+    restore: () => {
+      if (descriptor != null) {
+        Object.defineProperty(window, 'innerHeight', descriptor);
+      }
+      window.innerHeight = value;
+    },
+  };
+  Object.defineProperty(window, 'innerHeight', {
+    configurable: true,
+    get: () => {
+      reads.count += 1;
+      return value;
+    },
+    set: next => {
+      value = next;
+    },
+  });
+  return reads;
+}
+
+// Tracks the `resize` listeners on `window` until `restore`. `attached` is
+// the number added and not yet removed.
+function trackResizeListeners() {
+  const add = vi.spyOn(window, 'addEventListener');
+  const remove = vi.spyOn(window, 'removeEventListener');
+  return {
+    attached: () => {
+      const events = [
+        ...add.mock.calls.map((call, index) => ({
+          type: call[0],
+          listener: call[1],
+          order: add.mock.invocationCallOrder[index] ?? 0,
+          isAdd: true,
+        })),
+        ...remove.mock.calls.map((call, index) => ({
+          type: call[0],
+          listener: call[1],
+          order: remove.mock.invocationCallOrder[index] ?? 0,
+          isAdd: false,
+        })),
+      ].sort((a, b) => a.order - b.order);
+      const live = new Set<unknown>();
+      for (const event of events) {
+        if (event.type !== 'resize') {
+          continue;
+        }
+        if (event.isAdd) {
+          live.add(event.listener);
+        } else {
+          live.delete(event.listener);
+        }
+      }
+      return live.size;
+    },
+    restore: () => {
+      add.mockRestore();
+      remove.mockRestore();
+    },
+  };
+}
+
 function getPanel(): HTMLElement {
   const panel = screen
     .getByText('Panel content')
@@ -73,7 +186,332 @@ function getPanel(): HTMLElement {
   return panel;
 }
 
+const callerSizeStyles = stylex.create({
+  height: {height: 500},
+  maxHeight: {maxHeight: 500},
+  color: {color: 'rebeccapurple'},
+});
+
 describe('BottomSheetPanel', () => {
+  it('keeps 40% of the viewport of its surface below the screen, for the whole stretch past the top', () => {
+    stubTouchPointer();
+    renderPanel({kind: 'open', entering: false});
+    // A finger's rubber band over a sheet as tall as the viewport shows at
+    // most 35.5% of the viewport.
+    expect(getPanel().style.getPropertyValue('--_sheet-reserve')).toBe(
+      `${Math.ceil(window.innerHeight * 0.4)}px`,
+    );
+  });
+
+  it('keeps the smallest reserve, 48 px, under a height the caller sets, on a device with a touch pointer', () => {
+    // Nothing extends a caller's height by the reserve, so a deeper one would
+    // hide that much more of the sheet below the screen.
+    stubTouchPointer();
+    render(
+      <BottomSheetPanel
+        label="Sheet details"
+        state={{kind: 'open', entering: false}}
+        height="hug"
+        style={{...panelTransitionStyle, height: 500}}
+        onDismiss={() => {}}
+        onScrimOpacity={() => {}}>
+        Panel content
+      </BottomSheetPanel>,
+    );
+    expect(getPanel().style.getPropertyValue('--_sheet-reserve')).toBe('48px');
+  });
+
+  it('keeps the smallest reserve, 48 px, under a size the caller sets through xstyle, on a device with a touch pointer', () => {
+    stubTouchPointer();
+    render(
+      <BottomSheetPanel
+        label="Sheet details"
+        state={{kind: 'open', entering: false}}
+        height="hug"
+        style={panelTransitionStyle}
+        xstyle={callerSizeStyles.height}
+        onDismiss={() => {}}
+        onScrimOpacity={() => {}}>
+        Panel content
+      </BottomSheetPanel>,
+    );
+    expect(getPanel().style.getPropertyValue('--_sheet-reserve')).toBe('48px');
+  });
+
+  it('keeps the smallest reserve, 48 px, under a maximum size in an xstyle array, on a device with a touch pointer', () => {
+    stubTouchPointer();
+    render(
+      <BottomSheetPanel
+        label="Sheet details"
+        state={{kind: 'open', entering: false}}
+        height="hug"
+        style={panelTransitionStyle}
+        xstyle={[callerSizeStyles.color, callerSizeStyles.maxHeight]}
+        onDismiss={() => {}}
+        onScrimOpacity={() => {}}>
+        Panel content
+      </BottomSheetPanel>,
+    );
+    expect(getPanel().style.getPropertyValue('--_sheet-reserve')).toBe('48px');
+  });
+
+  it('keeps the smallest reserve, 48 px, under a class name the caller passes, on a device with a touch pointer', () => {
+    // A class name's rules can size the sheet, and nothing can read them.
+    stubTouchPointer();
+    render(
+      <BottomSheetPanel
+        label="Sheet details"
+        state={{kind: 'open', entering: false}}
+        height="hug"
+        className="caller-sheet"
+        style={panelTransitionStyle}
+        onDismiss={() => {}}
+        onScrimOpacity={() => {}}>
+        Panel content
+      </BottomSheetPanel>,
+    );
+    expect(getPanel().style.getPropertyValue('--_sheet-reserve')).toBe('48px');
+  });
+
+  it('keeps the smallest reserve, 48 px, under any xstyle, whose rules nothing can read, on a device with a touch pointer', () => {
+    stubTouchPointer();
+    render(
+      <BottomSheetPanel
+        label="Sheet details"
+        state={{kind: 'open', entering: false}}
+        height="hug"
+        style={panelTransitionStyle}
+        xstyle={callerSizeStyles.color}
+        onDismiss={() => {}}
+        onScrimOpacity={() => {}}>
+        Panel content
+      </BottomSheetPanel>,
+    );
+    expect(getPanel().style.getPropertyValue('--_sheet-reserve')).toBe('48px');
+  });
+
+  it('keeps the viewport reserve under an empty xstyle and a style that does not size the sheet, on a device with a touch pointer', () => {
+    stubTouchPointer();
+    render(
+      <BottomSheetPanel
+        label="Sheet details"
+        state={{kind: 'open', entering: false}}
+        height="hug"
+        style={{...panelTransitionStyle, color: 'rebeccapurple'}}
+        xstyle={[false, undefined]}
+        onDismiss={() => {}}
+        onScrimOpacity={() => {}}>
+        Panel content
+      </BottomSheetPanel>,
+    );
+    expect(getPanel().style.getPropertyValue('--_sheet-reserve')).not.toBe(
+      '48px',
+    );
+  });
+
+  it('keeps the smallest reserve, 48 px, on a device with no touch pointer', () => {
+    renderPanel({kind: 'open', entering: false});
+    expect(getPanel().style.getPropertyValue('--_sheet-reserve')).toBe('48px');
+  });
+
+  it('follows the viewport with its reserve while it is presented', () => {
+    const viewportHeight = window.innerHeight;
+    stubTouchPointer();
+    renderPanel({kind: 'open', entering: false});
+    try {
+      act(() => {
+        window.innerHeight = 1000;
+        window.dispatchEvent(new Event('resize'));
+      });
+      expect(getPanel().style.getPropertyValue('--_sheet-reserve')).toBe(
+        '400px',
+      );
+    } finally {
+      window.innerHeight = viewportHeight;
+    }
+  });
+
+  it('reads the viewport height from its resize listener, not from layout, when it renders again', () => {
+    stubTouchPointer();
+    const {rerender} = renderPanel({kind: 'open', entering: false});
+    const reads = countViewportHeightReads();
+    try {
+      rerender(
+        <BottomSheetPanel
+          label="Sheet details"
+          state={{kind: 'open', entering: false}}
+          height="hug"
+          style={panelTransitionStyle}
+          onDismiss={() => {}}
+          onScrimOpacity={() => {}}>
+          Panel content, changed
+        </BottomSheetPanel>,
+      );
+      expect(screen.getByText('Panel content, changed')).toBeTruthy();
+      expect(reads.count).toBe(0);
+    } finally {
+      reads.restore();
+    }
+  });
+
+  it('shares one viewport height among open sheets, and forgets it when the last one closes', () => {
+    const viewportHeight = window.innerHeight;
+    const listeners = trackResizeListeners();
+    stubTouchPointer();
+    try {
+      const first = renderNamedPanel('First sheet');
+      const second = renderNamedPanel('Second sheet');
+      act(() => {
+        window.innerHeight = 1000;
+        window.dispatchEvent(new Event('resize'));
+      });
+      expect(
+        getNamedPanel('First sheet').style.getPropertyValue('--_sheet-reserve'),
+      ).toBe('400px');
+      expect(
+        getNamedPanel('Second sheet').style.getPropertyValue(
+          '--_sheet-reserve',
+        ),
+      ).toBe('400px');
+
+      first.unmount();
+      act(() => {
+        window.innerHeight = 900;
+        window.dispatchEvent(new Event('resize'));
+      });
+      expect(
+        getNamedPanel('Second sheet').style.getPropertyValue(
+          '--_sheet-reserve',
+        ),
+      ).toBe('360px');
+
+      second.unmount();
+      expect(listeners.attached()).toBe(0);
+      // With no sheet open, a resize reads nothing.
+      const reads = countViewportHeightReads();
+      try {
+        act(() => {
+          window.innerHeight = 700;
+          window.dispatchEvent(new Event('resize'));
+        });
+        expect(reads.count).toBe(0);
+      } finally {
+        reads.restore();
+      }
+      // Nothing kept the height meanwhile, so the next sheet reads the
+      // viewport in its first commit.
+      let firstReserve = '';
+      function FirstCommit() {
+        useLayoutEffect(() => {
+          firstReserve =
+            getNamedPanel('Third sheet').style.getPropertyValue(
+              '--_sheet-reserve',
+            );
+        }, []);
+        return null;
+      }
+      render(
+        <>
+          <BottomSheetPanel
+            label="Third sheet"
+            state={{kind: 'open', entering: false}}
+            height="hug"
+            style={panelTransitionStyle}
+            onDismiss={() => {}}
+            onScrimOpacity={() => {}}>
+            Third sheet content
+          </BottomSheetPanel>
+          <FirstCommit />
+        </>,
+      );
+      expect(firstReserve).toBe('280px');
+    } finally {
+      listeners.restore();
+      window.innerHeight = viewportHeight;
+    }
+  });
+
+  it('reads the viewport again after a render that never commits', async () => {
+    const viewportHeight = window.innerHeight;
+    stubTouchPointer();
+    const never = new Promise<never>(() => {});
+    function Suspend(): null {
+      use(never);
+      return null;
+    }
+    try {
+      window.innerHeight = 900;
+      const suspended = await act(async () =>
+        render(
+          <Suspense fallback={null}>
+            <BottomSheetPanel
+              label="Hidden sheet"
+              state={{kind: 'open', entering: false}}
+              height="hug"
+              style={panelTransitionStyle}
+              onDismiss={() => {}}
+              onScrimOpacity={() => {}}>
+              Hidden sheet content
+            </BottomSheetPanel>
+            <Suspend />
+          </Suspense>,
+        ),
+      );
+      expect(screen.queryByText('Hidden sheet content')).toBeNull();
+      suspended.unmount();
+      // No listener watched the viewport since that render.
+      window.innerHeight = 650;
+      let firstReserve = '';
+      function FirstCommit() {
+        useLayoutEffect(() => {
+          firstReserve =
+            getNamedPanel('Next sheet').style.getPropertyValue(
+              '--_sheet-reserve',
+            );
+        }, []);
+        return null;
+      }
+      render(
+        <>
+          <BottomSheetPanel
+            label="Next sheet"
+            state={{kind: 'open', entering: false}}
+            height="hug"
+            style={panelTransitionStyle}
+            onDismiss={() => {}}
+            onScrimOpacity={() => {}}>
+            Next sheet content
+          </BottomSheetPanel>
+          <FirstCommit />
+        </>,
+      );
+      expect(firstReserve).toBe('260px');
+    } finally {
+      window.innerHeight = viewportHeight;
+    }
+  });
+
+  it('renders on the server without reading the viewport', () => {
+    stubTouchPointer();
+    const reads = countViewportHeightReads();
+    try {
+      const html = renderToString(
+        <BottomSheetPanel
+          label="Sheet details"
+          state={{kind: 'open', entering: false}}
+          height="hug"
+          onDismiss={() => {}}
+          onScrimOpacity={() => {}}>
+          Panel content
+        </BottomSheetPanel>,
+      );
+      expect(html).toContain('Panel content');
+      expect(reads.count).toBe(0);
+    } finally {
+      reads.restore();
+    }
+  });
+
   it('reports entrance completion only for the surface transform', () => {
     const onMotionStart = vi.fn();
     const onMotionComplete = vi.fn();
@@ -156,17 +594,52 @@ describe('BottomSheetPanel', () => {
     expect(onMotionComplete).toHaveBeenLastCalledWith('exiting');
   });
 
+  it('keeps exiting when the engine replaces the exit transition mid-flight', () => {
+    const onMotionComplete = vi.fn();
+    renderPanel({kind: 'exiting'}, {onMotionComplete});
+    const panel = getPanel();
+    // Chromium cancels a running transition whose end value changes, and
+    // starts one from where it was. The exit's percentage transform changes
+    // when the closing frame moves the sheet's height by a fraction of a pixel.
+    panel.getAnimations = () =>
+      [{transitionProperty: 'transform', playState: 'running'}] as never;
+    fireEvent.transitionCancel(panel, {propertyName: 'transform'});
+    expect(onMotionComplete).not.toHaveBeenCalled();
+    panel.getAnimations = () => [];
+    fireEvent.transitionEnd(panel, {propertyName: 'transform'});
+    expect(onMotionComplete).toHaveBeenCalledWith('exiting');
+  });
+
+  it('ends the exit when its transition is cancelled with nothing running on', () => {
+    const onMotionComplete = vi.fn();
+    renderPanel({kind: 'exiting'}, {onMotionComplete});
+    const panel = getPanel();
+    panel.getAnimations = () => [];
+    fireEvent.transitionCancel(panel, {propertyName: 'transform'});
+    expect(onMotionComplete).toHaveBeenCalledWith('exiting');
+  });
+
   it('completes immediately when the rendered transition is disabled', () => {
-    vi.mocked(matchMedia).mockReturnValue({
-      matches: true,
-      media: '(prefers-reduced-motion: reduce)',
-      onchange: null,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      dispatchEvent: vi.fn(),
-    });
+    // The stylesheet decides reduced motion (its transform transition
+    // collapses under the preference); the gesture hook no longer pins an
+    // inline `none` for it, so this models a rendered `transition: none`
+    // directly, as a mid-drag reconcile writes.
+    const nativeGetComputedStyle = window.getComputedStyle;
+    const spy = vi
+      .spyOn(window, 'getComputedStyle')
+      .mockImplementation((element, pseudo) => {
+        const declaration = nativeGetComputedStyle(element, pseudo);
+        if (
+          element instanceof HTMLElement &&
+          element.classList.contains('astryx-bottom-sheet')
+        ) {
+          Object.defineProperty(declaration, 'transition', {
+            value: 'none',
+            configurable: true,
+          });
+        }
+        return declaration;
+      });
     const onMotionComplete = vi.fn();
     render(
       <BottomSheetPanel
@@ -181,6 +654,7 @@ describe('BottomSheetPanel', () => {
     );
 
     expect(onMotionComplete).toHaveBeenCalledWith('entering');
+    spy.mockRestore();
   });
 
   it('derives its transition backstop from the rendered timing', () => {
@@ -287,6 +761,22 @@ describe('BottomSheetPanel', () => {
     expect(handleBar![1]).toContain("colorVars['--color-background-surface']");
   });
 
+  // While the sheet's transform animates between detents, WebKit can draw the
+  // bar under the scrolling body. The pill then vanishes until the sheet rests.
+  // This is asserted on the style definition, as the test above is.
+  it('gives the floating handle bar a compositing layer of its own', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const source = fs.readFileSync(
+      path.resolve(__dirname, './BottomSheetPanel.tsx'),
+      'utf-8',
+    );
+
+    const handleBar = source.match(/handleBar: \{([\s\S]*?)\n {2}\},/);
+    expect(handleBar).not.toBeNull();
+    expect(handleBar![1]).toContain("willChange: 'transform'");
+  });
+
   // In dark mode the surface fill and the scrim sit a few RGB steps apart and
   // the drop shadow is black on near-black, so the fill alone leaves the
   // sheet's left and right edges invisible against the scrim. A hairline on
@@ -342,10 +832,13 @@ describe('BottomSheetPanel', () => {
    *
    * `--ease-standard` is a decelerate curve: on it the sheet was half gone in
    * 59ms of a 410ms transition and 90% gone in 163ms, so the close was over
-   * before it could be seen. The closing state therefore carries its own
-   * accelerating curve, and only the closing state does.
+   * before it could be seen. The closing state therefore reads the
+   * accelerating `--ease-exit` curve (its default is pinned in
+   * theme/tokens.test.ts), and only the closing state does. A touch
+   * presentation keeps its own curve, which the exit tokens do not change
+   * (spec:AST-090 FR12).
    */
-  it('closes on an accelerating curve of its own, not the entrance timing', () => {
+  it('closes on the exit curve, not the entrance timing', () => {
     const declarationsFor = (element: HTMLElement) => {
       const classes = new Set(element.className.split(/\s+/));
       const out: string[] = [];
@@ -366,6 +859,35 @@ describe('BottomSheetPanel', () => {
       }
       return out.join('\n');
     };
+    // The rules inside an `@media` block with the given condition.
+    const mediaDeclarationsFor = (element: HTMLElement, condition: string) => {
+      const classes = new Set(element.className.split(/\s+/));
+      const out: string[] = [];
+      for (const styleSheet of Array.from(document.styleSheets)) {
+        let rules: CSSRuleList;
+        try {
+          rules = styleSheet.cssRules;
+        } catch {
+          continue;
+        }
+        for (const rule of Array.from(rules)) {
+          if (
+            !(rule instanceof CSSMediaRule) ||
+            rule.media.mediaText.replace(/\s/g, '') !== condition
+          ) {
+            continue;
+          }
+          for (const inner of Array.from(rule.cssRules)) {
+            const selector = (inner as CSSStyleRule).selectorText;
+            const owner = selector?.match(/^\.([\w-]+)/)?.[1];
+            if (owner != null && classes.has(owner)) {
+              out.push(inner.cssText);
+            }
+          }
+        }
+      }
+      return out.join('\n');
+    };
 
     const {container: closing} = render(
       <BottomSheetPanel
@@ -377,14 +899,25 @@ describe('BottomSheetPanel', () => {
         Panel content
       </BottomSheetPanel>,
     );
-    const closingRules = declarationsFor(
-      closing.querySelector('.astryx-bottom-sheet') as HTMLElement,
-    );
-    // An accelerating curve: no vertical rise at the start (y1 = 0), so the
-    // travel lands inside the duration instead of ahead of it.
+    const closingSheet = closing.querySelector(
+      '.astryx-bottom-sheet',
+    ) as HTMLElement;
+    const closingRules = declarationsFor(closingSheet);
+    // The theme's exit curve, not a curve restated locally.
     expect(closingRules).toContain(
+      'transition-timing-function: var(--ease-exit)',
+    );
+    expect(closingRules).not.toContain('cubic-bezier(.3,0,.6,.6)');
+    // Under a coarse pointer the close keeps its own curve, so a theme's
+    // `--ease-exit` does not reach a touch presentation.
+    const coarseClosingRules = mediaDeclarationsFor(
+      closingSheet,
+      '(pointer:coarse)',
+    );
+    expect(coarseClosingRules).toContain(
       'transition-timing-function: cubic-bezier(.3,0,.6,.6)',
     );
+    expect(coarseClosingRules).not.toContain('--ease-exit');
 
     const {container: resting} = render(
       <BottomSheetPanel
@@ -402,6 +935,93 @@ describe('BottomSheetPanel', () => {
     expect(restingRules).toContain(
       'transition-timing-function: var(--ease-standard)',
     );
-    expect(restingRules).not.toContain('cubic-bezier(.3,0,.6,.6)');
+    expect(restingRules).not.toContain('--ease-exit');
+  });
+
+  describe('container padding', () => {
+    // StyleX lowers the block edges to their physical properties.
+    const EDGES = [
+      ['inline-start', 'padding-inline-start'],
+      ['inline-end', 'padding-inline-end'],
+      ['block-start', 'padding-top'],
+      ['block-end', 'padding-bottom'],
+    ] as const;
+
+    function renderWithPadding(padding?: 0 | 2) {
+      render(
+        <BottomSheetPanel
+          label="Sheet details"
+          state={{kind: 'open', entering: false}}
+          height="hug"
+          padding={padding}
+          onDismiss={() => {}}
+          onScrimOpacity={() => {}}>
+          <span data-testid="sheet-child">Panel content</span>
+        </BottomSheetPanel>,
+      );
+      // The content box is the child's parent: the observed box inside the
+      // scrolling body, not the body itself.
+      return getComputedStyle(screen.getByTestId('sheet-child').parentElement!);
+    }
+
+    it("pads by Dialog's default chain and publishes the inset it applies", () => {
+      const computed = renderWithPadding();
+      for (const [edge, property] of EDGES) {
+        const published = computed
+          .getPropertyValue(`--container-padding-${edge}`)
+          .replace(/\s+/g, '');
+        expect(published, edge).toContain(
+          `var(--astryx-bottom-sheet-padding-${edge}`,
+        );
+        expect(published, edge).toContain(
+          'var(--astryx-bottom-sheet-padding,var(--spacing-4))',
+        );
+        // Applied padding reads the published value, so bleed children
+        // subtract exactly the inset they sit in.
+        expect(computed.getPropertyValue(property), edge).toBe(
+          `var(--container-padding-${edge})`,
+        );
+      }
+      for (const name of [
+        '--layout-padding-outer-x',
+        '--layout-padding-outer-y',
+        '--layout-padding-inner-x',
+        '--layout-padding-inner-y',
+      ]) {
+        expect(
+          computed.getPropertyValue(name).replace(/\s+/g, ''),
+          name,
+        ).toContain('var(--astryx-bottom-sheet-padding,var(--spacing-4))');
+      }
+    });
+
+    it.each([0, 2] as const)(
+      'applies and publishes an explicit padding step (%s)',
+      padding => {
+        const computed = renderWithPadding(padding);
+        const expected = `var(--spacing-${padding})`;
+        for (const [edge, property] of EDGES) {
+          expect(
+            computed.getPropertyValue(`--container-padding-${edge}`),
+            edge,
+          ).toBe(expected);
+          expect(computed.getPropertyValue(property), edge).toBe(expected);
+        }
+        expect(computed.getPropertyValue('--layout-padding-inner-x')).toBe(
+          expected,
+        );
+      },
+    );
+
+    it('keeps the panel itself unpadded and free of a padding attribute', () => {
+      renderWithPadding(2);
+      const panel = getPanel();
+      expect(panel.hasAttribute('padding')).toBe(false);
+      expect(
+        getComputedStyle(panel).getPropertyValue(
+          '--container-padding-inline-start',
+        ),
+      ).toBe('0px');
+    });
   });
 });

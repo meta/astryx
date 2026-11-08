@@ -21,8 +21,7 @@ export const doc = {
     'JSON is also supported. Existing author-owned files are left untouched unless --overwrite is explicit. ' +
     'When used in a theme integration, keep the palette request under the theme slug, ' +
     'write the candidate and receipt under that same slug, import the candidate from the theme source, ' +
-    'and keep all three inside the theme directory: `astryx theme add` copies that whole ' +
-    'directory into the consumer project, so nothing else has to list them.',
+    'and keep all three inside the theme directory. The package ships that directory as one source unit for discovery and explicit eject, while apps use its built exports.',
   fn: 'themePaletteGenerate',
   args: [{name: 'config', param: 'configPath', required: true}],
   options: [
@@ -35,12 +34,13 @@ export const doc = {
     {
       flag: '--preview <path>',
       param: 'options.preview',
-      description: 'Write a standardized self-contained HTML preview',
+      description: 'Write a self-contained HTML preview page; the path must end in .html',
     },
     {
       flag: '-f, --overwrite',
       param: 'options.overwrite',
-      description: 'Replace existing candidate and receipt files',
+      description:
+        'Replace existing candidate, receipt, and preview files. Without it, if any of them exists, nothing is written',
     },
   ],
   examples: [
@@ -57,6 +57,7 @@ export const doc = {
       cli: 'astryx theme palette generate themes/ocean/palette.config.json --out themes/ocean/tokens/ocean.palette.ts --preview themes/ocean/tokens/ocean.palette.html',
     },
   ],
+  outsideProject: 'same',
   exitCodes: [
     {
       code: 0,

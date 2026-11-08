@@ -13,7 +13,7 @@ export const doc = {
   displayName: 'themeList()',
   summary: 'List themes bundled with this CLI build.',
   description:
-    'Projects the bundled typed theme descriptors into a synchronous theme.list envelope. This preserves the original programmatic API contract. The CLI command uses themeListAvailable() so installed integrations also appear.',
+    'Synchronous list of the themes bundled with the CLI. It does not include themes from installed integrations; use themeListAvailable() for the list `{@command theme list}` shows.',
   importPath: '@astryxdesign/cli/api',
   signature: 'themeList(): ThemeListResponse',
   keywords: ['theme', 'list', 'themes', 'bundled', 'available'],

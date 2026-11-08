@@ -4,15 +4,20 @@
 
 /**
  * @file IconDefaultSizeContext.ts
- * @input Uses React context and an optional Icon size prop
+ * @input Uses layer-scoped React context and an optional Icon size prop
  * @output Supplies a component-owned default size to descendant Icon instances
  * @position Internal Icon sizing context; consumed by Icon and icon-slot owners
  */
 
-import {createContext, use} from 'react';
+import {use} from 'react';
+import {createLayerScopedContext} from '../Layer/layerScopedContext';
 import type {IconSize} from './IconSize.stylex';
 
-const IconDefaultSizeContext = createContext<IconSize | null>(null);
+const IconDefaultSizeContext = createLayerScopedContext<IconSize | null>(
+  'IconDefaultSizeContext',
+  1,
+  null,
+);
 IconDefaultSizeContext.displayName = 'IconDefaultSizeContext';
 
 export const IconDefaultSizeProvider = IconDefaultSizeContext.Provider;

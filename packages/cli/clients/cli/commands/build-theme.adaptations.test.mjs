@@ -3,7 +3,8 @@
 /**
  * @file Ensures `astryx theme build` preserves AST-012 adaptation semantics.
  * Runtime and static output share core's compiler; this suite guards the CLI
- * loading, diagnostics, serialization, and extension boundaries around it.
+ * loading, diagnostics, serialization, and extension boundaries around it,
+ * including root component overrides underneath adapted typography scales.
  */
 
 import {afterEach, beforeAll, beforeEach, describe, expect, it} from 'vitest';
@@ -93,6 +94,214 @@ describe('theme build adaptations', () => {
       css.indexOf('--spacing-4: 20px'),
     );
   });
+
+  it('emits scoped status aliases in built CSS and preserves child extension parity', async () => {
+    const {defineTheme, generateThemeCSS} =
+      await import('@astryxdesign/core/theme');
+    const project = path.join(tmpDir, 'project');
+    const themesDir = path.join(project, 'themes');
+    const input = {
+      name: 'status-aliases',
+      tokens: {
+        '--color-info': '#225bff',
+        '--color-text-blue': '#203a6c',
+      },
+      adaptations: {
+        rules: [
+          {
+            when: {contrast: 'more'},
+            value: {
+              tokens: {'--color-text-success': '#123456'},
+            },
+          },
+          {
+            when: {pointer: 'coarse'},
+            value: {tokens: {'--color-text-green': '#abcdef'}},
+          },
+        ],
+      },
+      onDark: {
+        tokens: {'--color-text-blue': '#fefefe'},
+      },
+    };
+    const themeFile = writeTheme(themesDir, input.name, JSON.stringify(input));
+
+    const result = await build(project, themeFile);
+    expect(result.code, result.stderr).toBe(0);
+
+    const css = fs.readFileSync(
+      path.join(themesDir, 'status-aliases.css'),
+      'utf8',
+    );
+    const mediaAlias = '--color-text-info: var(--color-text-blue);';
+    const adaptationAlias = '--color-text-success: var(--color-text-green);';
+    const authoredRole = '--color-text-success: #123456;';
+    // The authored Info fill is a concrete hue, so theme generation derives
+    // its content, text, and pale-fill content (theme-compilation INV17).
+    for (const role of ['on-info', 'text-info', 'on-info-muted']) {
+      expect(css).toMatch(
+        new RegExp(
+          `--color-${role}: light-dark\\(#[0-9A-F]{6}, #[0-9A-F]{6}\\);`,
+        ),
+      );
+    }
+    // The dark media surface that sets the hue rebinds the text alias.
+    expect(css).toContain(mediaAlias);
+    expect(css).toContain(adaptationAlias);
+    expect(css.split(authoredRole).length - 1).toBeGreaterThanOrEqual(2);
+    expect(css.lastIndexOf(authoredRole)).toBeGreaterThan(
+      css.lastIndexOf(adaptationAlias),
+    );
+
+    const {statusAliasesTheme: builtTheme} = await import(
+      pathToFileURL(path.join(themesDir, 'status-aliases.js')).href
+    );
+    const source = defineTheme(input);
+    const childInput = {
+      name: 'status-alias-child',
+      tokens: {'--color-text-blue': '#345678'},
+    };
+    const fromSource = defineTheme({...childInput, extends: source});
+    const fromBuilt = defineTheme({...childInput, extends: builtTheme});
+    expect(generateThemeCSS(fromBuilt)).toEqual(generateThemeCSS(fromSource));
+  });
+
+  it('derives a complete status set for a minimal theme in built CSS (INV17)', async () => {
+    const {defineTheme, generateThemeCSS} =
+      await import('@astryxdesign/core/theme');
+    const project = path.join(tmpDir, 'project');
+    const themesDir = path.join(project, 'themes');
+    const input = {
+      name: 'status-minimal',
+      tokens: {
+        '--color-success': '#3FB950',
+        '--color-warning': '#D29922',
+        '--color-error': '#F85149',
+        '--color-info': '#6E40C9',
+      },
+    };
+    const themeFile = writeTheme(themesDir, input.name, JSON.stringify(input));
+    const result = await build(project, themeFile);
+    expect(result.code, result.stderr).toBe(0);
+
+    const css = fs.readFileSync(
+      path.join(themesDir, 'status-minimal.css'),
+      'utf8',
+    );
+    for (const status of ['success', 'warning', 'error', 'info']) {
+      expect(css).toMatch(
+        new RegExp(
+          `--color-text-${status}: light-dark\\(#[0-9A-F]{6}, #[0-9A-F]{6}\\);`,
+        ),
+      );
+      expect(css).toContain(
+        `--color-icon-${status}: var(--color-text-${status});`,
+      );
+    }
+    // Built and runtime output derive the same values.
+    const runtime = generateThemeCSS(defineTheme(input));
+    const derived = css.match(/--color-text-warning: [^;]+;/)?.[0];
+    expect(derived).toBeDefined();
+    expect(JSON.stringify(runtime)).toContain(derived);
+  });
+
+  it.each([
+    ['defined', writeTheme],
+    ['plain', writePlainTheme],
+  ])(
+    'preserves component pins in %s themes and built extensions',
+    async (_kind, write) => {
+      const {defineTheme, generateAdaptationCSS, generateThemeCSS} =
+        await import('@astryxdesign/core/theme');
+      const project = path.join(tmpDir, 'project');
+      const themesDir = path.join(project, 'themes');
+      const displayFamily =
+        'Sarina, "Brush Script MT", "Snell Roundhand", cursive';
+      const input = {
+        name: 'adaptive-display',
+        typography: {
+          scale: {base: 16, ratio: 1.25},
+          body: {family: 'Outfit', fallbacks: 'sans-serif'},
+        },
+        components: {
+          text: Object.fromEntries(
+            ['display-1', 'display-2', 'display-3'].map(type => [
+              `type:${type}`,
+              {fontFamily: displayFamily},
+            ]),
+          ),
+          button: {base: {borderRadius: '12px'}},
+        },
+        adaptations: {
+          rules: [
+            {
+              when: {width: {below: 'md'}, pointer: 'coarse'},
+              value: {typography: {scale: {base: 14, ratio: 1.2}}},
+            },
+            {
+              when: {contrast: 'more'},
+              value: {
+                typography: {scale: {base: 15}},
+                components: {
+                  text: {'type:display-1': {fontFamily: 'monospace'}},
+                },
+              },
+            },
+          ],
+        },
+      };
+      const themeFile = write(themesDir, input.name, JSON.stringify(input));
+      const result = await build(project, themeFile);
+      expect(result.code, result.stderr).toBe(0);
+      const css = fs.readFileSync(
+        path.join(themesDir, 'adaptive-display.css'),
+        'utf8',
+      );
+      const compact = value => value.replace(/\s+/g, ' ').trim();
+      const source = defineTheme(input);
+      const runtime = generateThemeCSS(source);
+      // The CLI wraps root, adaptation, and surface CSS in separate @layer
+      // blocks; their contents and order must still match runtime output.
+      const adaptationCSS = generateAdaptationCSS(source).component;
+      const [rootCSS, surfaceCSS] = runtime.component.split(adaptationCSS);
+      const blocks = [rootCSS, adaptationCSS, surfaceCSS].map(compact);
+      let previousIndex = -1;
+      for (const block of blocks) {
+        expect(compact(css)).toContain(block);
+        const index = compact(css).indexOf(block);
+        expect(index).toBeGreaterThan(previousIndex);
+        previousIndex = index;
+      }
+      expect(compact(css)).toContain(compact(runtime.prose));
+      const scaleBlock = css.slice(
+        css.indexOf('@media (width < 768px) and (pointer: coarse)'),
+        css.indexOf('@media (prefers-contrast: more)'),
+      );
+      expect(scaleBlock).toContain('--font-size-base: 0.875rem');
+      expect(scaleBlock).not.toContain('.astryx-text');
+      expect(scaleBlock).not.toContain('.astryx-heading');
+      expect(scaleBlock).not.toContain('.astryx-button');
+      expect(css).toContain(`font-family: ${displayFamily};`);
+      expect(css).toContain('font-family: monospace;');
+
+      const {adaptiveDisplayTheme: builtTheme} = await import(
+        pathToFileURL(path.join(themesDir, 'adaptive-display.js')).href
+      );
+      expect(builtTheme.__adaptationRules).toBeUndefined();
+      expect(generateThemeCSS(builtTheme)).toEqual(runtime);
+      const childInput = {
+        name: 'display-child',
+        components: {text: {'type:display-2': {fontFamily: 'serif'}}},
+      };
+      const fromSource = defineTheme({...childInput, extends: source});
+      const fromBuilt = defineTheme({...childInput, extends: builtTheme});
+      expect(generateThemeCSS(fromBuilt)).toEqual(generateThemeCSS(fromSource));
+      expect(fromBuilt.__adaptationRules[0].components).toBeUndefined();
+      expect(fromBuilt.components.text['type:display-2'].fontFamily).toBe(
+        'serif',
+      );
+    },
+  );
 
   it('resolves a plain object whose only input-only field is adaptations', async () => {
     const project = path.join(tmpDir, 'project');
@@ -254,7 +463,7 @@ describe('theme build adaptations', () => {
     expect(rebuiltCss).toContain('light-dark(#111111, #eeeeee)');
     expect(rebuiltCss).toContain(':root { color-scheme: light dark; }');
     expect(`${rebuilt.stdout}${rebuilt.stderr}`).toContain(
-      'Font "Revision Webfont" is named by this theme but not loaded',
+      '[note] Fonts named but not loaded: "Revision Webfont".',
     );
   });
 
@@ -420,7 +629,11 @@ describe('theme build adaptations', () => {
     );
 
     const result = await build(project, themeFile);
+    expect(result.code).toBe(1);
     expect(`${result.stdout}${result.stderr}`).toContain('private var');
+    expect(fs.existsSync(path.join(themesDir, 'rule-private.css'))).toBe(true);
+    expect(fs.existsSync(path.join(themesDir, 'rule-private.js'))).toBe(true);
+    expect(fs.existsSync(path.join(themesDir, 'rule-private.d.ts'))).toBe(true);
   });
 
   it('rejects cycles across co-matching rules before writing output', async () => {

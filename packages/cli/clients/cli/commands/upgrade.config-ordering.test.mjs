@@ -30,6 +30,7 @@ import {Command} from 'commander';
 import {registerUpgrade} from './upgrade.mjs';
 import {Project} from '../../../foundation/config/project.mjs';
 import {generateCompressedIndex} from '../../../foundation/agent-docs/agent-docs.mjs';
+import {CLI_VERSION} from '../../../test-utils/release-fixtures.mjs';
 
 let tmpDir;
 let originalCwd;
@@ -187,8 +188,9 @@ describe('upgrade — core codemods run before config load', () => {
 
     const out = await runHuman(['upgrade', '--from', '0.1.2', '--path', 'src']);
     expect(out).toMatch(/fails strict validation/i);
+    // The fixture has no `astryx` bin installed, so the command names the scoped package.
     expect(out).toContain(
-      'astryx upgrade --from 0.1.2 --codemod migrate-layout-components-to-experimental --apply',
+      `@astryxdesign/cli@${CLI_VERSION} upgrade --from 0.1.2 --codemod migrate-layout-components-to-experimental --apply`,
     );
     expect(exitCode).not.toBe(1);
   });

@@ -1,27 +1,18 @@
 #!/usr/bin/env node
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 /**
- * Post-`changeset version` internal-dependency sync — `node scripts/sync-internal-deps.mjs`.
+ * Declared-version internal-dependency sync — `node scripts/sync-internal-deps.mjs`.
  *
- * All published packages ship in lockstep at the same version (the `fixed`
- * group in .changeset/config.json). Internal `@astryxdesign/*` packages
- * reference each other with exact version specifiers (e.g. a theme's
- * `@astryxdesign/core` peer, or a theme's `@astryxdesign/cli` devDependency).
+ * All stable packages already carry the fixed-group version declared by main and
+ * frozen at the cut. Internal `@astryxdesign/*` packages reference each other
+ * with exact version specifiers (for example, a theme's `@astryxdesign/core`
+ * peer or `@astryxdesign/cli` devDependency).
  *
- * We set `bumpVersionsWithWorkspaceProtocolOnly: true` so a breaking 0.x
- * release stays on the minor `0.(x+1).0` instead of cascading the whole fixed
- * group to `1.0.0` (an out-of-range peer would otherwise force every
- * dependent to a major bump). The trade-off is that Changesets then only
- * rewrites `workspace:`-protocol specifiers on version — it leaves our exact
- * `@astryxdesign/*` specifiers pointing at the previous version.
- *
- * This script closes that gap: after the bump, every exact-version internal
- * `@astryxdesign/*` specifier (in dependencies, devDependencies, and
- * peerDependencies of every workspace package) is repinned to the freshly
- * bumped version of the referenced package. Non-exact specifiers (`*`,
- * ranges, `workspace:*`, etc.) are left untouched — only literal exact
- * versions are managed, which is exactly the set Changesets used to keep in
- * sync before the workspace-protocol-only setting.
+ * The custom release-branch versioner keeps stable package versions at that
+ * declaration while writing affected changelogs. This script repins every exact
+ * internal specifier in dependencies, devDependencies, and peerDependencies to
+ * the referenced package's declared version. Non-exact specifiers (`*`, ranges,
+ * `workspace:*`, and similar) remain untouched.
  */
 
 import fs from 'node:fs';
@@ -52,7 +43,7 @@ for (const dir of PKG_DIRS) {
   }
 }
 
-// Map each internal package name -> its current (post-bump) version.
+// Map each internal package name -> its current declared version.
 const versionByName = new Map();
 for (const pkgPath of pkgPaths) {
   const pkg = read(pkgPath);

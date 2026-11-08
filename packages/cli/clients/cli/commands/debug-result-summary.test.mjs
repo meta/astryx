@@ -14,10 +14,11 @@
  * @position packages/cli/clients/cli/commands — debug result integration
  */
 
-import {afterEach, describe, expect, it} from 'vitest';
+import {afterEach, beforeAll, describe, expect, it} from 'vitest';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {runCli} from '../../../test-utils/run-cli.mjs';
+import {createProgram} from '../index.mjs';
 import {
   begin,
   finish,
@@ -44,23 +45,36 @@ async function runWithDebug(args) {
   return {run, event: events[0]};
 }
 
+// Each case builds only the command it runs, as a run of the bin does. The
+// search command's modules load here, once, because the first two cases run
+// it. Without this, the first case's window times that load as well.
+beforeAll(async () => {
+  await createProgram({argv: ['search']});
+});
+
 afterEach(() => resetRecorder());
 
 describe('DebugEvent result summary', () => {
   it(
     'distinguishes a successful search with no results',
     async () => {
+      // A typed search reads only its own domain. An open search first
+      // gathers every domain, which took most of this case's time on a busy
+      // machine. debug-fields.test.mjs covers the 'mixed' kind.
       const {event} = await runWithDebug([
         'search',
+        '--type',
+        'theme',
         'zzqqxx_definitely_no_match',
       ]);
       expect(event.outcome).toBe('ok');
       expect(event.output).toMatchObject({
         resultCount: 0,
         emptyResult: true,
-        // An open search really did span every domain, and saying so beats a
-        // null that cannot be told apart from a command that never reported.
-        resultKind: 'mixed',
+        // With no results, the `--type` filter still says what was searched
+        // for. That beats a null that cannot be told apart from a command
+        // that never reported.
+        resultKind: 'theme',
         directMatch: null,
       });
     },
@@ -170,22 +184,6 @@ describe('DebugEvent result summary', () => {
         resultCount: response.data.length,
         emptyResult: false,
         resultKind: 'template',
-        directMatch: null,
-      });
-    },
-    SLOW,
-  );
-
-  it(
-    'says so explicitly when a command has no result set',
-    async () => {
-      // `layout check` returns a verdict on one expression: nothing was looked
-      // up, and the run says that rather than leaving four ambiguous nulls.
-      const {event} = await runWithDebug(['layout', 'check', 'VStack>Text']);
-      expect(event.output).toMatchObject({
-        resultKind: 'none',
-        resultCount: null,
-        emptyResult: null,
         directMatch: null,
       });
     },

@@ -1,5 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import type * as React from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {Badge} from '@astryxdesign/core/Badge';
 
@@ -155,4 +156,77 @@ export const LongLabels: Story = {
       },
     },
   },
+};
+
+// A badge with a label is at least one line of that label tall. When the text
+// grows, the pill grows with the label instead of letting it spill out. Here
+// the supporting text size is raised on a wrapper, and the rows wrap, as a
+// layout has to at larger text sizes, so every badge keeps its whole label on a
+// phone. Each row ends with a color-only badge, which has no text
+// and keeps its size. The last two rows leave a count less room than one line
+// of its text is tall (52px at 2.5rem): beside a title that cannot shrink, and
+// in a cell. The count fits there at its own width; a minimum width of one
+// line would push it out of the row or the cell (component:Badge FR3).
+type LargerTextRow = React.CSSProperties & {'--text-supporting-size'?: string};
+const CROWDED_ROW: LargerTextRow = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  width: 260,
+  '--text-supporting-size': '2.5rem',
+};
+const NARROW_CELLS: LargerTextRow = {
+  display: 'flex',
+  gap: 8,
+  '--text-supporting-size': '2.5rem',
+};
+
+export const LargerText: Story = {
+  name: 'Larger text',
+  render: () => (
+    <div style={{display: 'flex', flexDirection: 'column', gap: 16}}>
+      {['default', '1.25rem', '2.5rem'].map(size => {
+        const row: LargerTextRow = {
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 8,
+          alignItems: 'center',
+          ...(size === 'default' ? null : {'--text-supporting-size': size}),
+        };
+        return (
+          <div key={size} data-testid={`badge-row-${size}`} style={row}>
+            <Badge variant="info" label={3} />
+            <Badge label="Ready" />
+            <Badge variant="success" label="Shipped" />
+            <Badge
+              variant="warning"
+              icon={<span aria-hidden="true">⚠</span>}
+              label="Review"
+            />
+            <Badge variant="success" label="" />
+          </div>
+        );
+      })}
+      <div data-testid="badge-row-crowded" style={CROWDED_ROW}>
+        <span
+          style={{
+            flex: 'none',
+            width: 200,
+            overflow: 'hidden',
+            whiteSpace: 'nowrap',
+            textOverflow: 'ellipsis',
+          }}>
+          Messages waiting in the shared inbox
+        </span>
+        <Badge variant="info" label={3} />
+      </div>
+      <div data-testid="badge-row-narrow" style={NARROW_CELLS}>
+        <div
+          data-testid="narrow-cell"
+          style={{width: 52, outline: '1px dashed var(--color-border)'}}>
+          <Badge variant="info" label={3} />
+        </div>
+      </div>
+    </div>
+  ),
 };

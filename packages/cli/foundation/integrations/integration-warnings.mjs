@@ -10,8 +10,9 @@
  * contributions or spamming per-contribution diagnostics.
  *
  * Design constraints (all enforced here):
- *   - Reuses the Doctor integration validators (validateLoadedIntegration);
- *     no validation logic is duplicated.
+ *   - Reuses Project.issues() when a Project is available, so cross-package
+ *     replacement warnings are visible; accepts loaded integrations for legacy
+ *     internal callers and tests.
  *   - Writes to STDERR only, so it never corrupts a --json stdout envelope.
  *   - Suppressed entirely in --json mode.
  *   - Best-effort: never throws, never changes the exit code. Broken
@@ -20,6 +21,7 @@
  */
 
 import {validateLoadedIntegration} from './validate-contributions.mjs';
+import {formatCliCommand} from '../env/package-manager.mjs';
 
 /**
  * For each configured (already-loaded) integration, compute its issues using
@@ -28,38 +30,62 @@ import {validateLoadedIntegration} from './validate-contributions.mjs';
  *
  *   Warning: <pkg> has N integration issue(s). Run: astryx doctor integration validate <pkg>
  *
- * @param {Array<import('./integrations.mjs').LoadedIntegration>} loadedIntegrations the Project's loaded integrations
+ * @param {Array<import('./integrations.mjs').LoadedIntegration> | {issues: () => Promise<Array<{package: string, code: string, severity: string, message: string}>>}} source loaded integrations or their Project owner
  * @param {{json?: boolean}} [options]
  * @returns {Promise<void>}
  */
-export async function warnOnIntegrationIssues(loadedIntegrations, {json = false} = {}) {
+export async function warnOnIntegrationIssues(source, {json = false} = {}) {
   try {
-    // Cheap guard: only do work when integrations are actually configured.
     if (json) return;
-    if (!Array.isArray(loadedIntegrations) || loadedIntegrations.length === 0) {
-      return;
+
+    /** @type {Map<string, number>} */
+    const issueCounts = new Map();
+    const fromProject =
+      source != null &&
+      !Array.isArray(source) &&
+      typeof source.issues === 'function';
+
+    if (fromProject) {
+      const issues = await source.issues();
+      for (const issue of issues) {
+        // A provider-conflict issue carries the specific message that
+        // `doctor integration validate` would not explain. Print it directly.
+        if (issue.code === 'duplicate_provider') {
+          console.error(`Warning: ${issue.message}`);
+          continue;
+        }
+        issueCounts.set(
+          issue.package,
+          (issueCounts.get(issue.package) ?? 0) + 1,
+        );
+      }
+    } else if (Array.isArray(source)) {
+      for (const integration of source) {
+        if (!integration || typeof integration !== 'object') continue;
+        // A package set aside for a provider-ID conflict is fine in isolation,
+        // so `doctor integration validate` would not explain it. Say it here.
+        if (integration.__providerConflict) {
+          console.error(`Warning: ${integration.__providerConflict.message}`);
+          continue;
+        }
+        let issues;
+        try {
+          issues = await validateLoadedIntegration(integration);
+        } catch {
+          continue;
+        }
+        if (!Array.isArray(issues) || issues.length === 0) continue;
+        const pkg = integration.name ?? integration.__spec ?? '(integration)';
+        issueCounts.set(pkg, issues.length);
+      }
     }
-    for (const integration of loadedIntegrations) {
-      if (!integration || typeof integration !== 'object') continue;
-      // A package set aside for a provider-ID conflict is fine in isolation,
-      // so `doctor integration validate` would not explain it. Say it here.
-      if (integration.__providerConflict) {
-        console.error(`Warning: ${integration.__providerConflict.message}`);
-        continue;
-      }
-      let issues;
-      try {
-        issues = await validateLoadedIntegration(integration);
-      } catch {
-        // Best-effort: a validator throwing must not break the host command.
-        continue;
-      }
-      if (!Array.isArray(issues) || issues.length === 0) continue;
-      const pkg = integration.name ?? integration.__spec ?? '(integration)';
-      // Stderr only — keeps stdout (and any --json envelope) clean.
+
+    for (const [pkg, count] of issueCounts) {
+      const command = fromProject
+        ? formatCliCommand('doctor')
+        : formatCliCommand(`doctor integration validate ${pkg}`);
       console.error(
-        `Warning: ${pkg} has ${issues.length} integration issue(s). ` +
-          `Run: astryx doctor integration validate ${pkg}`,
+        `Warning: ${pkg} has ${count} integration issue(s). Run: ${command}`,
       );
     }
   } catch {

@@ -28,12 +28,43 @@ const TOPICS = [
   'motion',
 ];
 
+/**
+ * A topic split into a docs-tree namespace, read whole: its title and summary,
+ * and every guide's sections below it in tree order, as
+ * `astryx docs <topic> --depth all --detail full` returns them. The same shape
+ * as the flat topic's read, so the preview keeps rendering it.
+ * @param {string} topic
+ */
+async function namespaceTopic(topic) {
+  const res = await docsApi(topic, undefined, {depth: 'all', detail: 'full'});
+  const sections = [];
+  const walk = slots => {
+    for (const slot of slots ?? []) {
+      for (const child of slot.children) {
+        if (child.kind === 'generic') sections.push(...(child.sections ?? []));
+        else walk(child.slots);
+      }
+    }
+  };
+  walk(res.data.slots);
+  return {
+    name: topic,
+    title: res.data.title,
+    description: res.data.summary,
+    sections,
+  };
+}
+
 async function main() {
   const result = {};
   for (const topic of TOPICS) {
     const res = await docsApi(topic);
     if (res.type === 'docs.detail') {
       result[topic] = res.data;
+    } else if (res.type === 'docs.node' && res.data.kind === 'namespace') {
+      result[topic] = await namespaceTopic(topic);
+    } else {
+      throw new Error(`astryx docs ${topic} returned ${res.type}, not a topic.`);
     }
   }
   writeFileSync(OUTPUT, JSON.stringify(result, null, 2));

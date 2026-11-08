@@ -1,0 +1,28 @@
+diff --git a/packages/core/src/Dialog/Dialog.tsx b/packages/core/src/Dialog/Dialog.tsx
+index 2f1e5806bddb0..475465ec16837 100644
+--- a/packages/core/src/Dialog/Dialog.tsx
++++ b/packages/core/src/Dialog/Dialog.tsx
+@@ -537,0 +545,7 @@ export function Dialog({
++  // Picture-in-Picture window) never reaches the page's listeners, so the
++  // dialog's own document keeps its own last input for the focus return while
++  // this Dialog is mounted, from before it opens until it unmounts.
++  useEffect(() => {
++    const ownerDocument = dialogRef.current?.ownerDocument;
++    if (ownerDocument == null || ownerDocument === document) {
++      return undefined;
+diff --git a/packages/core/src/utils/interactionModality.ts b/packages/core/src/utils/interactionModality.ts
+index e17c6b09d9aaf..abfd8829aa9a3 100644
+--- a/packages/core/src/utils/interactionModality.ts
++++ b/packages/core/src/utils/interactionModality.ts
+@@ -112,0 +133,11 @@ export function useInteractionModalityTracking(): void {
++  store.consumers = (store.consumers ?? 0) + 1;
++  if (store.consumers === 1) {
++    store.isListening = true;
++    targetDocument.addEventListener('pointerdown', store.onPointerDown, {
++      capture: true,
++      passive: true,
++    });
++    targetDocument.addEventListener('keydown', store.onKeyDown, {
++      capture: true,
++      passive: true,
++    });

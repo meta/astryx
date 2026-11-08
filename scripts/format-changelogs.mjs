@@ -1,16 +1,17 @@
 #!/usr/bin/env node
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 /**
- * Post-`changeset version` changelog formatter — `node scripts/format-changelogs.mjs`.
+ * Release-branch changelog formatter — `node scripts/format-changelogs.mjs`.
  *
- * `changeset version` (with our custom .changeset/changelog.cjs) writes raw
- * entries per package in the form:
+ * The custom `pnpm version-packages` step uses the pinned Changesets libraries
+ * to write raw entries under the version already declared at the cut. Those
+ * entries have the form:
  *
  *   ## 0.0.16
  *
  *   ### Patch Changes
  *
- *   - [fix] XDSButton: spinner contrast (#2717) — thanks @cindyxz
+ *   - [fix] XDSButton: spinner contrast (#2717) — thanks @cixzhang
  *   - [breaking] Stack element -> as (#2441) — thanks @ejhammond
  *
  * This rewrites the just-added version block of every package CHANGELOG into
@@ -21,6 +22,9 @@
  *   #### Breaking Changes          (h4 category sections, canonical order)
  *   - Stack element -> as (#2441)
  *
+ *   #### Experimental APIs
+ *   - Rename an experimental callback (#2442)
+ *
  *   #### Fixes
  *   - XDSButton: spinner contrast (#2717)
  *
@@ -28,7 +32,7 @@
  *
  *   Thanks to everyone who contributed to this release:
  *
- *   - @cindyxz
+ *   - @cixzhang
  *   - @ejhammond
  *
  *   ---                            (divider before the previous version)

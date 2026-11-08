@@ -231,7 +231,7 @@ export default function ToolbarTableFilter() {
       hasClear
       options={field.options}
       value={clauses[field.key] ?? null}
-      xstyle={clauses[field.key] != null ? styles.filterFill : undefined}
+      controlXstyle={clauses[field.key] != null ? styles.filterFill : undefined}
       onChange={value => setClauses(prev => ({...prev, [field.key]: value}))}
       renderValue={option =>
         `${field.label} is ${option.label ?? option.value}`

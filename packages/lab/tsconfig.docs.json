@@ -6,5 +6,5 @@
     "checkJs": true,
     "noEmit": true
   },
-  "include": ["src/**/*.doc.mjs"]
+  "include": ["src/**/*.doc.mjs", "blocks/**/*"]
 }

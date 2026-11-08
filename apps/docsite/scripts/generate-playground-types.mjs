@@ -2,8 +2,9 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * Generates a JSON bundle of @astryxdesign/core, React, StyleX, icon, and
- * Recharts declarations for the playground's Monaco editor.
+ * Generates a JSON bundle of @astryxdesign/core, React, StyleX, icon,
+ * Recharts, and integration-package declarations for the playground's
+ * Monaco editor.
  * Output: public/playground-types.json
  *
  * Structure: { "@astryxdesign/core": { "Button/index.d.ts": "...", ... } }
@@ -23,6 +24,8 @@ import {
 import {createRequire} from 'node:module';
 import {join, dirname, relative} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {getTarget} from './resolve-content-root.mjs';
+import {readAdmittedIntegrationPackages} from '../src/lib/integrationTargets.mjs';
 
 // Resolves from this script, so docsite's own dependencies are found wherever
 // the installer put them. Throws if one is missing, rather than emitting a
@@ -220,8 +223,140 @@ function buildRechartsTypes() {
   };
 }
 
+// Lucide ambient module. The installed package's single .d.ts is ~26k lines
+// with an SVG preview per icon; bundling it whole would dwarf the rest of the
+// payload. Synthesize one declaration from its export list instead, so every
+// icon (and every `*Icon` alias) is a named export the editor can resolve —
+// an index-signature stub does not give TypeScript any named members, which
+// is how `import {Smartphone} from 'lucide-react'` came to be flagged.
+function buildLucideTypes() {
+  const pkgPath = resolveFromDocsite('lucide-react/package.json');
+  const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+  const source = readFileSync(
+    join(dirname(pkgPath), pkg.types ?? pkg.typings),
+    'utf-8',
+  );
+
+  const icons = new Set(
+    [
+      ...source.matchAll(
+        /^declare const (\w+): react\.ForwardRefExoticComponent/gm,
+      ),
+    ].map(m => m[1]),
+  );
+  const types = new Set(
+    [...source.matchAll(/^(?:type|interface) (\w+)\b/gm)].map(m => m[1]),
+  );
+  const exportList = source.match(/^export \{([^}]+)\}/m);
+  if (!exportList) throw new Error('lucide-react: export list not found');
+
+  const lines = [
+    "declare module 'lucide-react' {",
+    '  export interface LucideProps {',
+    '    size?: string | number;',
+    '    color?: string;',
+    '    strokeWidth?: string | number;',
+    '    absoluteStrokeWidth?: boolean;',
+    '    className?: string;',
+    '    style?: Record<string, string | number>;',
+    '    [attribute: string]: unknown;',
+    '  }',
+    '  export type LucideIcon = (props: LucideProps) => any;',
+  ];
+  for (const binding of exportList[1].split(',')) {
+    const [local, exported = local] = binding.trim().split(/\s+as\s+/);
+    if (!exported || exported === 'LucideProps' || exported === 'LucideIcon') {
+      continue;
+    }
+    if (icons.has(local)) {
+      lines.push(`  export const ${exported}: LucideIcon;`);
+    } else if (types.has(local)) {
+      lines.push(`  export type ${exported} = any;`);
+    } else {
+      lines.push(`  export const ${exported}: any;`);
+    }
+  }
+  lines.push('}');
+  return {'index.d.ts': lines.join('\n')};
+}
+
+// Theme packages the preview scope exposes (mirrors SCOPE_THEMES in
+// generate-scope.mjs). `astryx theme build` always emits exactly two exports
+// from `/built`, typed against @astryxdesign/core, which the editor already
+// has. Synthesize the declaration from the table rather than reading the
+// package's dist: CI's docsite-test job builds core but not the theme
+// packages, so their dist does not exist when this script runs there.
+const SCOPE_THEMES = [
+  {pkg: '@astryxdesign/theme-neutral', name: 'neutralTheme'},
+  {pkg: '@astryxdesign/theme-matcha', name: 'matchaTheme'},
+];
+
+function buildThemeTypes() {
+  const files = {};
+  for (const {pkg, name} of SCOPE_THEMES) {
+    const registry = name.replace(/Theme$/, 'IconRegistry');
+    files[pkg] = {
+      'index.d.ts':
+        `declare module '${pkg}/built' {\n` +
+        `  import type {DefinedTheme} from '@astryxdesign/core/theme';\n` +
+        `  import type {IconRegistry} from '@astryxdesign/core/Icon';\n` +
+        `  export const ${name}: DefinedTheme;\n` +
+        `  export const ${registry}: IconRegistry;\n` +
+        `}\n` +
+        `declare module '${pkg}' {\n  export * from '${pkg}/built';\n}`,
+    };
+  }
+  return files;
+}
+
+// Integration packages the preview scope exposes: the list generate-data.mjs
+// admitted for this target (every configured integration on canary; on latest
+// the ones that are stable releases), the same list generate-scope.mjs maps.
+// Declared as shorthand ambient modules: imports resolve, typed as `any`, so
+// the editor shows no unresolved-module error on code that renders. Like the
+// theme packages, their dist is not built in CI's docsite-test job, so real
+// declarations are left for a follow-up.
+function buildIntegrationTypes() {
+  const files = {};
+  for (const pkg of readAdmittedIntegrationPackages(
+    join(root, 'src/generated'),
+    getTarget(),
+  )) {
+    files[pkg] = {'index.d.ts': `declare module '${pkg}';\n`};
+  }
+  return files;
+}
+
+// Runtime-only aliases the scope also serves: `next/image` renders a plain
+// <img>, and bare `stylex` is the same object as `@stylexjs/stylex`.
+const nextImageTypes = `
+declare module 'next/image' {
+  const Image: (props: Record<string, unknown>) => any;
+  export default Image;
+}
+`;
+
+const stylexAliasTypes = `
+declare module 'stylex' {
+  export * from '@stylexjs/stylex';
+  export {default} from '@stylexjs/stylex';
+}
+`;
+
 const heroiconTypes = buildHeroiconTypes();
 const rechartsTypes = buildRechartsTypes();
+const lucideTypes = buildLucideTypes();
+const themeTypes = buildThemeTypes();
+const integrationTypes = buildIntegrationTypes();
+console.log(
+  `Generated Lucide types: ${(lucideTypes['index.d.ts'].match(/: LucideIcon;/g) ?? []).length} icon exports`,
+);
+console.log(
+  `Generated theme types: ${Object.keys(themeTypes).length} packages`,
+);
+console.log(
+  `Generated integration types: ${Object.keys(integrationTypes).length} packages`,
+);
 console.log(
   `Generated heroicon types: ${Object.keys(heroiconTypes).length} variants`,
 );
@@ -233,8 +368,13 @@ const output = {
   '@astryxdesign/core': astryxTypes,
   react: {'index.d.ts': reactTypes, 'jsx-runtime.d.ts': reactJsxRuntimeTypes},
   '@stylexjs/stylex': {'index.d.ts': stylexTypes},
+  stylex: {'index.d.ts': stylexAliasTypes},
   '@heroicons/react': heroiconTypes,
   recharts: rechartsTypes,
+  'lucide-react': lucideTypes,
+  'next/image': {'index.d.ts': nextImageTypes},
+  ...themeTypes,
+  ...integrationTypes,
 };
 
 const json = JSON.stringify(output);

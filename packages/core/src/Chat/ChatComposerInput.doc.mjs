@@ -98,7 +98,7 @@ export const docs = {
       name: 'triggers',
       type: 'ChatComposerTrigger[]',
       description:
-        'Trigger definitions for typeahead menus. Each trigger specifies a character (@ or /), a search source, and an onSelect handler that returns the token to insert.',
+        'Trigger definitions for typeahead menus. Each trigger specifies a character (@ or /), a search source, and an onSelect handler that returns the token to insert. Set hasMultiWordQuery: true when suggestions contain spaces (people, topics): the query then runs to a line break or about 64 characters instead of ending at the first space. Per-trigger emptySearchText (ReactNode) is the message when the query matched nothing.',
     },
     {
       name: 'debounceMs',
@@ -157,6 +157,13 @@ export const docs = {
       description:
         'Key-down handler invoked before the built-in Enter/history behavior (after any open trigger menu). The seam for platform-specific keys: call event.preventDefault() to suppress the default submit (e.g. newline on a touch keyboard), or act on the event yourself to add behavior (e.g. submit on Cmd/Ctrl+Enter). IME composition is always respected; Enter never submits mid-composition.',
     },
+    {
+      name: 'enterKeyHint',
+      type: "'enter' | 'done' | 'go' | 'next' | 'previous' | 'search' | 'send'",
+      description:
+        'What the Return key of a touch keyboard says (the native enterkeyhint). Enter sends the message, so it defaults to send and iOS shows its Send key. When onKeyDown makes Enter insert a line break on touch keyboards, pass enter so the key shows Return again.',
+      default: "'send'",
+    },
   ],
 };
 
@@ -174,7 +181,7 @@ export const docsZh = {
     placeholder: '输入为空时显示的占位文本。',
     maxRows: '滚动前的最大可见行数。紧凑布局中使用较小值。',
     triggers:
-      '菜单的触发定义。每个触发器指定字符（@ 或 /）、搜索源和返回要插入标记的 onSelect 处理器。',
+      '菜单的触发定义。每个触发器指定字符（@ 或 /）、搜索源和返回要插入标记的 onSelect 处理器。每个触发器的 emptySearchText（ReactNode）用于查询无匹配结果时的提示。',
     debounceMs: '异步搜索源的去抖动延迟，避免过多网络请求。',
     hasHistory: '启用 ArrowUp/Down 回溯之前提交的消息。',
     label: '屏幕阅读器播报的无障碍标签。',
@@ -187,6 +194,8 @@ export const docsZh = {
     onSubmit: '用户不按 Shift 按 Enter 时调用。序列化值包含标记占位符。',
     onKeyDown:
       '在内置 Enter/历史处理之前（在打开的触发菜单之后）调用的按键处理器。平台特定按键的接缝：调用 event.preventDefault() 可抑制默认提交（例如触控键盘上插入换行），或自行处理事件以添加行为（例如 Cmd/Ctrl+Enter 提交）。始终尊重输入法组字状态——组字过程中 Enter 永不提交。',
+    enterKeyHint:
+      '触屏键盘回车键上显示的内容（原生 enterkeyhint）。Enter 会发送消息，因此默认为 send，iOS 显示“发送”键。当 onKeyDown 让触屏键盘上的 Enter 插入换行时，传入 enter 让按键恢复为回车。',
   },
 };
 
@@ -205,7 +214,7 @@ export const docsDense = {
     placeholder: 'placeholder when empty',
     maxRows: 'max visible rows before scroll; lower for compact layouts',
     triggers:
-      'typeahead trigger defs; character(@/)+searchSource+onSelect returning token',
+      'typeahead trigger defs; character(@/)+searchSource+onSelect returning token; emptySearchText (ReactNode) for no matches',
     debounceMs: 'debounce for async search to avoid excess requests',
     hasHistory: 'ArrowUp/Down to recall previous submissions',
     label: 'a11y label for screen readers',
@@ -219,5 +228,7 @@ export const docsDense = {
       'Enter w/o Shift handler; serialized value includes token placeholders',
     onKeyDown:
       'keydown handler before built-in Enter/history (after trigger menu); preventDefault() to suppress default submit (touch newline) or act on event to add behavior (Cmd/Ctrl+Enter). IME composition always respected',
+    enterKeyHint:
+      'touch keyboard Return key label (enterkeyhint); default send since Enter sends; pass enter when onKeyDown makes Enter a newline on touch',
   },
 };

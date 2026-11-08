@@ -127,10 +127,7 @@ describe('integration authoring CLI', () => {
     );
     expect(added.status).toBe(0);
 
-    const checked = await runCli(
-      ['integration', 'pack', '--check', '--json'],
-      tmpDir,
-    );
+    const checked = await runCli(['integration', 'verify', '--json'], tmpDir);
     // Without an exports map, the extensionless import cannot resolve —
     // pack-check must fail, not false-green.
     expect(checked.status).not.toBe(0);
@@ -150,13 +147,123 @@ describe('integration authoring CLI', () => {
     );
   });
 
-  it('requires the explicit --check gate on pack', async () => {
-    const result = await runCli(['integration', 'pack', '--json'], tmpDir);
-    expect(result.status).not.toBe(0);
-    expect(parseEnvelope(result.stdout)).toMatchObject({
+  it("verify carries each issue's fix, file, and line in JSON and prints them in text", async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      `${JSON.stringify({
+        name: '@acme/widgets',
+        version: '1.0.0',
+        files: ['astryx.integration.mjs', 'docs'],
+      })}\n`,
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'astryx.integration.mjs'),
+      "export default {docs: './docs'};\n",
+    );
+    fs.mkdirSync(path.join(tmpDir, 'docs'));
+    fs.writeFileSync(
+      path.join(tmpDir, 'docs', 'deploying.doc.mjs'),
+      "export const docs = {type: 'generic', name: 'deploying', title: 'Deploying', description: 'How to deploy.', sections: [{title: 'Overview', content: [{type: 'prose', text: 'Ship it.'}]}]};\n",
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'docs', 'ghost.doc.zh.mjs'),
+      "export default {title: 'ghost'};\n",
+    );
+
+    const json = parseEnvelope(
+      (await runCli(['integration', 'verify', '--json'], tmpDir)).stdout,
+    );
+    const orphans = json.data.issues.filter(issue =>
+      issue.code.endsWith('orphan_doc_overlay'),
+    );
+    expect(orphans.map(issue => issue.code).sort()).toEqual([
+      'orphan_doc_overlay',
+      'packed_orphan_doc_overlay',
+    ]);
+    for (const issue of orphans) {
+      expect(issue).toMatchObject({
+        file: 'docs/ghost.doc.zh.mjs',
+        line: 1,
+        fix: expect.stringContaining('Delete docs/ghost.doc.zh.mjs'),
+      });
+    }
+
+    const text = (await runCli(['integration', 'verify'], tmpDir)).stdout;
+    expect(text).toContain('file: docs/ghost.doc.zh.mjs:1');
+    expect(text).toContain(`fix: ${orphans[0].fix}`);
+  });
+
+  it('keeps `integration pack --check` as a deprecated alias of `integration verify`', async () => {
+    // The old spelling runs the same check: the same JSON, the same exit code.
+    const verify = await runCli(['integration', 'verify', '--json'], tmpDir);
+    const old = await runCli(
+      ['integration', 'pack', '--check', '--json'],
+      tmpDir,
+    );
+    expect(old.status).toBe(verify.status);
+    const verifyEnvelope = parseEnvelope(verify.stdout);
+    const oldEnvelope = parseEnvelope(old.stdout);
+    expect(oldEnvelope.type).toBe('integration.pack-check');
+    expect(oldEnvelope.type).toBe(verifyEnvelope.type);
+    expect(oldEnvelope.data.packable).toBe(verifyEnvelope.data.packable);
+    expect(oldEnvelope.data.issues).toEqual(verifyEnvelope.data.issues);
+    // The global flag may come first, as agents usually write it.
+    const lead = await runCli(
+      ['--json', 'integration', 'pack', '--check'],
+      tmpDir,
+    );
+    expect(parseEnvelope(lead.stdout).type).toBe('integration.pack-check');
+    // In text, it says to use the new name, on stderr, so stdout is the same.
+    const text = await runCli(['integration', 'pack', '--check'], tmpDir);
+    const verifyText = await runCli(['integration', 'verify'], tmpDir);
+    expect(text.status).toBe(verifyText.status);
+    expect(text.stdout).toBe(verifyText.stdout);
+    expect(text.stderr).toContain('`integration pack --check` is deprecated');
+    expect(text.stderr).toContain(' integration verify`');
+    // Without --check it fails, as it did, and points only at the new name:
+    // suggesting `--check` would send people to the deprecated spelling.
+    const bare = await runCli(['integration', 'pack'], tmpDir);
+    expect(bare.status).not.toBe(0);
+    expect(bare.stderr).toContain(
+      '`integration pack` is now `integration verify`',
+    );
+    expect(bare.stderr).toContain(' integration verify`');
+    expect(bare.stderr).toContain('npm pack');
+    expect(bare.stderr).not.toContain('--check');
+    const bareJson = await runCli(['--json', 'integration', 'pack'], tmpDir);
+    expect(parseEnvelope(bareJson.stdout)).toMatchObject({
       code: 'ERR_INVALID_ARGUMENT',
-      error: 'Pass --check to verify the integration tarball.',
+      error: expect.stringContaining(' integration verify`'),
     });
+    // Help lists it, marked deprecated: nothing is hidden.
+    const help = await runCli(['integration', '--help'], tmpDir);
+    expect(help.stdout).toMatch(
+      /pack .*Deprecated: the old name of `integration verify`/,
+    );
+    // `verify` itself takes no --check.
+    const flag = await runCli(['integration', 'verify', '--check'], tmpDir);
+    expect(flag.status).not.toBe(0);
+    expect(flag.stderr).toContain("unknown option '--check'");
+    // An unknown subcommand with a flag names the subcommand, in text and JSON.
+    const unknown = await runCli(['integration', 'bogus', '--check'], tmpDir);
+    expect(unknown.status).not.toBe(0);
+    expect(unknown.stderr).toContain("unknown subcommand 'integration bogus'");
+    expect(unknown.stderr).toMatch(/verify\s+\(available subcommand\)/);
+    const unknownJson = await runCli(
+      ['integration', 'bogus', '--check', '--json'],
+      tmpDir,
+    );
+    expect(parseEnvelope(unknownJson.stdout)).toMatchObject({
+      code: 'ERR_UNKNOWN_SUBCOMMAND',
+      error: "unknown subcommand 'integration bogus'",
+      suggestions: expect.arrayContaining([
+        expect.objectContaining({name: 'verify'}),
+      ]),
+    });
+    // A flag alone is an unknown option, not an unknown subcommand.
+    const flagOnly = await runCli(['integration', '--bogus'], tmpDir);
+    expect(flagOnly.status).not.toBe(0);
+    expect(flagOnly.stderr).toContain("unknown option '--bogus'");
   });
 
   it('refuses kind-specific options on another kind', async () => {

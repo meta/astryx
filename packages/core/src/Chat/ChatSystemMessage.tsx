@@ -6,7 +6,7 @@
  * @file ChatSystemMessage.tsx
  * @input Uses React, StyleX, theme tokens
  * @output Exports ChatSystemMessage component and ChatSystemMessageProps
- * @position Centered system/notice message in a chat thread
+ * @position Centered, wrapping system/notice message in a chat thread
  *
  * Renders centered, muted system messages like "conversation started",
  * date separators, or status updates. Not a sender message — no avatar,
@@ -29,6 +29,7 @@ import {
   typographyVars,
 } from '../theme/tokens.stylex';
 import {mergeProps} from '../utils';
+import {isRenderable} from '../utils/isRenderable';
 import {Divider} from '../Divider';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
@@ -53,8 +54,8 @@ export interface ChatSystemMessageProps extends BaseProps<HTMLDivElement> {
   variant?: ChatSystemMessageVariant;
 
   /**
-   * Optional icon rendered before the text.
-   * Accepts any ReactNode — typically an Icon.
+   * Optional caller-provided icon content associated with the message.
+   * Accepts any ReactNode, typically an Icon.
    */
   icon?: ReactNode;
 }
@@ -85,13 +86,11 @@ const styles = stylex.create({
     alignItems: 'center',
     flexShrink: 0,
   },
-  // Content wrapper (to keep text + icon together)
+  // Content wrapper
   content: {
     display: 'inline-flex',
     alignItems: 'center',
     gap: spacingVars['--spacing-1-5'],
-    flexShrink: 0,
-    whiteSpace: 'nowrap',
   },
 });
 
@@ -105,6 +104,10 @@ const styles = stylex.create({
  * Use for non-sender content: date separators, "conversation started",
  * "user joined", status changes. Supports a divider variant with horizontal
  * lines on each side of the text.
+ *
+ * It carries no live role: a notice added to a `ChatMessageList` is announced
+ * by the list's log, which owns content added inside it (`spec:AST-086` FR4),
+ * and a date or divider row is ordinary transcript content.
  *
  * @example
  * ```
@@ -133,8 +136,7 @@ export function ChatSystemMessage({
           className,
           styleProp,
         )}
-        {...rest}
-        role="status">
+        {...rest}>
         <Divider label={children} />
       </div>
     );
@@ -149,10 +151,11 @@ export function ChatSystemMessage({
         className,
         styleProp,
       )}
-      {...rest}
-      role="status">
+      {...rest}>
       <span {...stylex.props(styles.content)}>
-        {icon != null && <span {...stylex.props(styles.icon)}>{icon}</span>}
+        {isRenderable(icon) && (
+          <span {...stylex.props(styles.icon)}>{icon}</span>
+        )}
         {children}
       </span>
     </div>

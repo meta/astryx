@@ -4,7 +4,7 @@
 
 /**
  * @file Timestamp.tsx
- * @input Uses React, Text, provider locale, and Timestamp formatters
+ * @input Uses React, Text, provider locale and calendar, and Timestamp formatters
  * @output Exports Timestamp component and related types
  * @position Core implementation; renders formatted timestamps
  *
@@ -17,25 +17,39 @@
  * - /packages/cli/assets/templates/blocks/components/Timestamp/ (showcase blocks)
  */
 
-import {lazy, Suspense, useEffect, useRef, useState} from 'react';
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Text} from '../Text';
 import type {TextType, TextSize, TextColor, TextWeight} from '../theme/types';
 import {mergeProps} from '../utils';
 import {useDevWarning} from '../hooks/useDevWarning';
-import {useTranslator} from '../i18n';
 import {useLocale} from '../i18n/useLocale';
+import {useCalendarSystem} from '../i18n/useCalendarSystem';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
-import {formatInstant} from './formatInstant';
+import {formatInstant, formatZoneName} from './formatInstant';
 import {formatRelativeTime} from './formatRelativeTime';
-import {formatTooltipLines} from './tooltipEntries';
+import {formatTooltipLines, resolveTimezoneID} from './tooltipEntries';
 import type {
   TimestampTooltipEntry,
   TimestampTooltipLine,
 } from './tooltipEntries';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Timestamp/Timestamp.generated';
+
+registerEnglishFallback(english);
 // Load the overlay lazily so a card-less Timestamp — the default — never
 // bundles HoverCard or the copy affordance's Icon/IconButton. Mirrors the code
 // split the read-only Tooltip path used before it.
@@ -85,6 +99,17 @@ export interface TimestampProps extends BaseProps<HTMLTimeElement> {
    */
   format?: TimestampFormat;
   /**
+   * IANA time zone the absolute formats render in, such as `'UTC'` or
+   * `'America/Los_Angeles'`. Omit (or pass `'local'`) for the viewer's own
+   * zone. An explicit zone renders identically on the server and the client,
+   * so it is the way to show an absolute time without a hydration mismatch;
+   * without it the server markup depends on the server's zone. Relative
+   * formats name no instant, so their visible text ignores it. Configured
+   * `tooltipEntries` rows still follow it. An unknown identifier warns once
+   * in development and falls back to the viewer's zone.
+   */
+  timezoneID?: string;
+  /**
    * Threshold in seconds for 'auto' format to switch from relative to date_time.
    * @default 604800 (7 days)
    */
@@ -106,6 +131,10 @@ export interface TimestampProps extends BaseProps<HTMLTimeElement> {
    * the buttons align across rows; that column is only present when some row
    * is copyable. With no entries the card shows a single default row with the
    * full absolute time in the viewer's own zone, which is copyable.
+   *
+   * An entry without its own `timezoneID` follows the Timestamp's
+   * `timezoneID` when set, else the viewer's zone; `'local'` always means
+   * the viewer's zone.
    *
    * Configuring entries also attaches the surface to absolute formats, which
    * otherwise have no hover card at all. `hasTooltip={false}` still suppresses
@@ -215,6 +244,13 @@ function getLiveInterval(diffSeconds: number): number {
   return 300_000; // every 5 minutes
 }
 
+// Whether this render may read the current time. Server renders (including
+// static prerenders) and the hydration pass read `false`, so the markup never
+// depends on when it was rendered; client renders read `true`.
+const subscribeToNothing = () => () => {};
+const canReadClockOnClient = () => true;
+const canReadClockOnServer = () => false;
+
 /** Whether a format is non-relative (i.e. shows a fixed date/time). */
 function isAbsoluteFormat(
   format: TimestampFormat,
@@ -259,6 +295,7 @@ function isRelativeFormat(
 export function Timestamp({
   value,
   format = 'auto',
+  timezoneID: timezoneIDProp,
   autoThreshold = DEFAULT_AUTO_THRESHOLD,
   hasTooltip = true,
   tooltipEntries,
@@ -275,11 +312,34 @@ export function Timestamp({
   'data-testid': testId,
   ...rest
 }: TimestampProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const locale = useLocale();
+  const calendar = useCalendarSystem(undefined, 'Timestamp');
   const timeRef = useRef<HTMLTimeElement>(null);
   const mergedTimeRef = useMergedRefs(ref, timeRef);
-  const [now, setNow] = useState(() => new Date());
+  // Only relative and auto formats depend on the current time. Absolute
+  // formats never read the clock, so they render identically on the server,
+  // in a static prerender, and on the client. A clock-dependent format reads
+  // it on the client only: server renders and the hydration pass show the
+  // full date and time in UTC, and the client switches to the relative phrase
+  // right after hydration.
+  const needsClock = !isAbsoluteFormat(format);
+  const canReadClock = useSyncExternalStore(
+    subscribeToNothing,
+    canReadClockOnClient,
+    canReadClockOnServer,
+  );
+  const [now, setNow] = useState<Date | null>(() =>
+    needsClock && canReadClock ? new Date() : null,
+  );
+  // Read the clock during render once it may be read: after hydration (the
+  // store re-renders with its client value) and when `format` switches from
+  // an absolute value to a clock-dependent one, so the placeholder never
+  // commits on the client.
+  if (needsClock && canReadClock && now === null) {
+    // eslint-disable-next-line @eslint-react/purity -- seeds clock state once, like the initializer; never runs on the server or while hydrating
+    setNow(new Date());
+  }
 
   const date = parseValue(value);
   // An unparseable value (a malformed date string, or a NaN timestamp from
@@ -289,39 +349,60 @@ export function Timestamp({
   const isValidDate = !Number.isNaN(date.getTime());
   const isoString = isValidDate ? date.toISOString() : '';
 
-  // Determine effective format
-  const diffSeconds = Math.round((now.getTime() - date.getTime()) / 1000);
-  const effectiveFormat: TimestampFormat =
-    format === 'auto'
+  // Determine effective format. Until the clock is read, a clock-dependent
+  // format renders as the full date and time.
+  const isClockPending = needsClock && now === null;
+  const diffSeconds =
+    now === null ? 0 : Math.round((now.getTime() - date.getTime()) / 1000);
+  const effectiveFormat: TimestampFormat = isClockPending
+    ? 'date_time'
+    : format === 'auto'
       ? Math.abs(diffSeconds) <= autoThreshold
         ? 'relative'
         : 'date_time'
       : format;
 
-  // Format the display text. No time zone is passed: the visible text always
-  // reads in the viewer's own zone, and only the tooltip names others.
+  // Absolute text uses `timezoneID`, else the viewer's zone. A named zone makes
+  // the text the same on the server and the client. It does not reach the UTC
+  // placeholder, the default card row or the relative name.
+  const timezoneID = resolveTimezoneID(timezoneIDProp, 'timezoneID');
   const displayText = !isValidDate
     ? ''
     : effectiveFormat === 'relative'
-      ? formatRelativeTime(date, now, locale, 'long')
+      ? formatRelativeTime(date, now ?? date, locale, 'long')
       : effectiveFormat === 'relative_short'
-        ? formatRelativeTime(date, now, locale, 'narrow')
+        ? formatRelativeTime(date, now ?? date, locale, 'narrow')
         : isAbsoluteFormat(effectiveFormat)
-          ? formatInstant(date, effectiveFormat, locale, {isTimezoneShown})
+          ? formatInstant(
+              date,
+              effectiveFormat,
+              locale,
+              // The pre-hydration placeholder is Gregorian and in UTC, with its zone,
+              // whatever `timezoneID` pins. The server and the client then write the
+              // same text, with or without Temporal.
+              isClockPending
+                ? {timeZone: 'UTC', isTimezoneShown: true}
+                : {timeZone: timezoneID, isTimezoneShown, calendar},
+            )
           : '';
 
   // Full absolute text for the tooltip (visible — keeps the compact timezone
   // abbreviation) and for the AT-facing aria-label, which spells the timezone
   // out in full: abbreviations like "PST" or "GMT+2" are unexpanded
-  // abbreviations to a screen-reader user (WCAG 3.1.4).
+  // abbreviations to a screen-reader user (WCAG 3.1.4). Both stay in the
+  // viewer's zone: the default hover-card row and the relative accessible name.
   const fullAbsoluteText = isValidDate
-    ? formatInstant(date, 'full', locale)
+    ? formatInstant(date, 'full', locale, {timeZone: undefined, calendar})
     : '';
   const ariaLabelText = isValidDate
-    ? formatInstant(date, 'full', locale, {timeZoneNameStyle: 'long'})
+    ? formatInstant(date, 'full', locale, {
+        timeZone: undefined,
+        timeZoneNameStyle: 'long',
+        calendar,
+      })
     : '';
 
-  // Live updates
+  // Syncs the relative time with an interval timer while the timestamp is live.
   useEffect(() => {
     if (!isLive || !isValidDate || !isRelativeFormat(effectiveFormat)) {
       return;
@@ -366,8 +447,14 @@ export function Timestamp({
   // full absolute time, itself copyable, just like a configured entry.
   const lines: ReadonlyArray<TimestampTooltipLine> =
     entries === undefined
-      ? [{value: fullAbsoluteText, isCopyable: true}]
-      : formatTooltipLines(date, entries, locale);
+      ? [
+          {
+            value: fullAbsoluteText,
+            zoneName: isValidDate ? formatZoneName(date, locale) : '',
+            isCopyable: true,
+          },
+        ]
+      : formatTooltipLines(date, entries, locale, calendar, timezoneID);
 
   const timestampProps = mergeProps(
     themeProps('timestamp', {format: effectiveFormat}),
@@ -392,7 +479,10 @@ export function Timestamp({
         // before rendering — but keep the guard local: an empty aria-label
         // must be omitted entirely (not rendered as aria-label="") so AT
         // falls back to reading the visible <time> content.
-        {...(isRelativeFormat(effectiveFormat) && ariaLabelText !== ''
+        // A caller's own name wins (`component:Timestamp` FR5).
+        {...(isRelativeFormat(effectiveFormat) &&
+        ariaLabelText !== '' &&
+        rest['aria-label'] == null
           ? {'aria-label': ariaLabelText}
           : {})}
         // The hover card is anchored here with focusTrigger="always", which
@@ -403,7 +493,8 @@ export function Timestamp({
         // gratuitous tab stops otherwise. The card carries its own
         // dashed-underline hover indication as the affordance, so the anchor
         // needs no separate focus outline.
-        {...(showTooltip ? {tabIndex: 0} : {})}>
+        // A caller's own tabIndex wins (`component:Timestamp` FR9).
+        {...(showTooltip && rest.tabIndex == null ? {tabIndex: 0} : {})}>
         {displayText}
       </time>
     </Text>

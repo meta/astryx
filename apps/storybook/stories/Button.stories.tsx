@@ -1,9 +1,18 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import * as stylex from '@stylexjs/stylex';
 import {Button} from '@astryxdesign/core/Button';
 import {Badge} from '@astryxdesign/core/Badge';
+import {Card} from '@astryxdesign/core/Card';
+import {Heading} from '@astryxdesign/core/Heading';
+import {HStack} from '@astryxdesign/core/HStack';
+import {Icon} from '@astryxdesign/core/Icon';
+import {IconButton} from '@astryxdesign/core/IconButton';
+import {StackItem} from '@astryxdesign/core/Stack';
+import {TextInput} from '@astryxdesign/core/TextInput';
+import {VStack} from '@astryxdesign/core/VStack';
 import {Cog6ToothIcon, TrashIcon} from '@heroicons/react/24/outline';
 
 const buttonStoryStyles = stylex.create({
@@ -380,6 +389,78 @@ export const Truncation: Story = {
   ),
 };
 
+function ReviewersCard() {
+  const [emails, setEmails] = useState('');
+  return (
+    <Card maxWidth={560}>
+      <VStack gap={4}>
+        <HStack gap={2} vAlign="center">
+          <StackItem size="fill">
+            <Heading level={3} maxLines={1}>
+              Design review
+            </Heading>
+          </StackItem>
+          <Button label="Request review from the design team" size="sm" />
+          <IconButton
+            label="More review options"
+            icon={<Icon icon="moreHorizontal" />}
+            variant="ghost"
+            size="sm"
+          />
+        </HStack>
+        <TextInput
+          label="Reviewer emails"
+          placeholder="name@example.com"
+          value={emails}
+          onChange={setEmails}
+        />
+        <HStack gap={2} hAlign="end">
+          <StackItem size="static">
+            <Button label="Cancel" variant="secondary" />
+          </StackItem>
+          <Button
+            label="Send invitations to all 12 reviewers"
+            variant="primary"
+          />
+        </HStack>
+      </VStack>
+    </Card>
+  );
+}
+
+/**
+ * The Button.doc.mjs "Actions in narrow rows" example at a 320px form width,
+ * a 390px phone width, and a roomy 600px width. In the narrow frames the long
+ * labels truncate with an ellipsis inside the card instead of overflowing or
+ * being clipped; the icon-only button stays square; the roomy frame renders
+ * every button at its natural width.
+ */
+export const NarrowRows: Story = {
+  render: () => (
+    <div
+      style={{
+        display: 'flex',
+        gap: 24,
+        flexWrap: 'wrap',
+        alignItems: 'flex-start',
+      }}>
+      {[320, 390, 600].map(width => (
+        <div key={width} style={{width}}>
+          <p
+            style={{
+              fontSize: 12,
+              color: 'var(--color-text-secondary)',
+              marginBottom: 8,
+            }}>
+            {width}px
+          </p>
+          <ReviewersCard />
+        </div>
+      ))}
+    </div>
+  ),
+};
+
 export const Elevations: Story = {
   render: () => (
     <div style={{display: 'flex', gap: 24, alignItems: 'center'}}>
@@ -398,4 +479,85 @@ export const Elevations: Story = {
       ))}
     </div>
   ),
+};
+
+export const TouchTargets: Story = {
+  name: 'Touch targets',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'A dense toolbar, 4 px apart, a pair offset 4 px on both axes, and a field with a clear button. Under a coarse pointer each button’s invisible hit area grows toward 44 px, but stops halfway to a neighbor, so a tap lands on the button nearest to it and no box changes size.',
+      },
+    },
+  },
+  render: () => {
+    const [taps, setTaps] = useState({
+      bold: 0,
+      italic: 0,
+      underline: 0,
+      undo: 0,
+      redo: 0,
+    });
+    const [query, setQuery] = useState('quarterly report');
+    const count = (key: keyof typeof taps) => () =>
+      setTaps(current => ({...current, [key]: current[key] + 1}));
+    return (
+      <VStack gap={3} hAlign="start">
+        <HStack gap={1}>
+          <IconButton
+            label="Bold"
+            size="sm"
+            variant="ghost"
+            icon={<Icon icon={Cog6ToothIcon} />}
+            onClick={count('bold')}
+          />
+          <IconButton
+            label="Italic"
+            size="sm"
+            variant="ghost"
+            icon={<Icon icon={TrashIcon} />}
+            onClick={count('italic')}
+          />
+          <IconButton
+            label="Underline"
+            size="sm"
+            variant="ghost"
+            icon={<Icon icon={Cog6ToothIcon} />}
+            onClick={count('underline')}
+          />
+        </HStack>
+        <output aria-label="Taps">
+          Bold {taps.bold}, Italic {taps.italic}, Underline {taps.underline}
+        </output>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'auto auto',
+            gap: 4,
+          }}>
+          <IconButton
+            label="Undo"
+            size="sm"
+            variant="ghost"
+            icon={<Icon icon={Cog6ToothIcon} />}
+            onClick={count('undo')}
+          />
+          <span />
+          <span />
+          <IconButton
+            label="Redo"
+            size="sm"
+            variant="ghost"
+            icon={<Icon icon={TrashIcon} />}
+            onClick={count('redo')}
+          />
+        </div>
+        <output aria-label="Offset taps">
+          Undo {taps.undo}, Redo {taps.redo}
+        </output>
+        <TextInput label="Search" value={query} onChange={setQuery} hasClear />
+      </VStack>
+    );
+  },
 };

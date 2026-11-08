@@ -1,15 +1,16 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Tests for the CLI docs reader. Every command, API function, schema, and
- * enum doc this package ships is readable in the topic its namespace names.
- * Each way one can fail to be is reported: no namespace, a namespace no topic
- * reads, a clash with the authoring topic's list, a doc that does not load, and
- * two `cli` sections with one key.
+ * @file Tests for the CLI's own typed docs. Every command, API function,
+ * schema, and enum doc this package ships declares the group that reads it,
+ * and each way one can fail to be read is reported: no namespace, a namespace
+ * nothing reads, a clash with the authoring topic's list, a doc that does not
+ * load, and a leaf too large for one read. What `astryx docs <route>` prints
+ * for one doc is pinned here; where the tree puts it is tree.test.mjs's job.
  *
  * @input This package's own docs, and fixture doc trees written under the
  *   working directory.
- * @output Assertions on the audit, the `cli` topic, and reads through `docs()`.
+ * @output Assertions on the audit and on each doc's rendered content.
  * @position packages/cli/foundation/discovery — tests for cli-self-docs.mjs.
  */
 
@@ -19,14 +20,12 @@ import {afterAll, describe, expect, it} from 'vitest';
 import {
   CLI_DOC_NAMESPACES,
   auditCliSelfDocs,
-  buildCliReferenceDoc,
-  buildCliTopic,
-  cliSectionKey,
+  cliDocIndex,
+  cliDocSection,
   discoverCliSelfDocSources,
-  keySegment,
-  loadCliSelfDocs,
 } from './cli-self-docs.mjs';
-import * as api from '../../api/index.mjs';
+import {routeSegment} from './docs-section-key.mjs';
+import {formatCliCommand} from '../env/package-manager.mjs';
 
 const SLOW = 60_000;
 
@@ -99,7 +98,7 @@ const audit = (/** @type {string} */ root, authoringSources = []) =>
 
 describe('the CLI docs this package ships', () => {
   it(
-    'each declare a namespace a topic reads, and none fails, clashes, or overflows',
+    'each declare a namespace something reads, and none fails, clashes, or overflows',
     async () => {
       const result = await auditCliSelfDocs();
       expect({
@@ -107,83 +106,23 @@ describe('the CLI docs this package ships', () => {
         unknown: result.unknown,
         misfiled: result.misfiled,
         failed: result.failed,
-        keyProblems: result.keyProblems,
         oversized: result.oversized,
       }).toEqual({
         missing: [],
         unknown: [],
         misfiled: [],
         failed: [],
-        keyProblems: [],
         oversized: [],
       });
       expect(result.docs).toBeGreaterThan(0);
-      expect(result.sections + result.authoring).toBe(result.docs);
-    },
-    SLOW,
-  );
-
-  it(
-    'give every function @astryxdesign/cli/api exports a section of astryx docs cli',
-    async () => {
-      const topic = await buildCliTopic();
-      const keys = new Set(topic.sections.map(section => section.id));
-      const exported = Object.entries(api)
-        .filter(
-          ([, value]) =>
-            typeof value === 'function' &&
-            Object.getOwnPropertyDescriptor(value, 'prototype')?.writable !==
-              false,
-        )
-        .map(([name]) => `api-${keySegment(name)}`);
-      expect(exported.length).toBeGreaterThan(0);
-      expect(exported.filter(key => !keys.has(key))).toEqual([]);
-    },
-    SLOW,
-  );
-
-  it(
-    'give every command doc a section, keyed commands-<name>',
-    async () => {
-      const {loaded} = await loadCliSelfDocs();
-      const commands = loaded.filter(({doc}) => doc.type === 'command');
-      expect(commands.length).toBeGreaterThan(0);
-      const keys = new Set(
-        (await buildCliTopic()).sections.map(section => section.id),
-      );
-      expect(
-        commands
-          .map(({doc}) => `commands-${keySegment(doc.name)}`)
-          .filter(key => !keys.has(key)),
-      ).toEqual([]);
-    },
-    SLOW,
-  );
-
-  it(
-    'are read one section at a time through docs()',
-    async () => {
-      const search = await api.docs('cli', 'api-search');
-      expect(search).toMatchObject({type: 'docs.detail.section'});
-      expect(JSON.stringify(search.data)).toContain('search()');
-      const command = await api.docs('cli', 'commands-integration-add');
-      expect(JSON.stringify(command.data)).toContain(
-        'astryx integration add <kind> <name>',
-      );
-      const codes = await api.docs('cli', 'api-error-codes');
-      expect(JSON.stringify(codes.data)).toContain('ERR_UNKNOWN_SECTION');
-      const index = await api.docs('cli', undefined, {index: true});
-      expect(index.type).toBe('docs.index');
-      expect(index.data.sections.length).toBe(
-        (await buildCliTopic()).sections.length,
-      );
+      expect(result.tree + result.authoring).toBe(result.docs);
     },
     SLOW,
   );
 });
 
 describe('auditCliSelfDocs', () => {
-  it('reports a doc with no namespace, and one no topic reads', async () => {
+  it('reports a doc with no namespace, and one nothing reads', async () => {
     const root = writeTree({
       'api/alpha/alpha.doc.mjs': docModule(fn('alpha', {namespace: undefined})),
       'clients/cli/commands/beta.doc.mjs': docModule(
@@ -196,7 +135,7 @@ describe('auditCliSelfDocs', () => {
     expect(result.unknown).toEqual([
       {source: 'clients/cli/commands/beta.doc.mjs', namespace: 'cli'},
     ]);
-    expect(result.sections).toBe(1);
+    expect(result.tree).toBe(1);
   });
 
   it('holds the authoring namespace to the authoring topic list', async () => {
@@ -207,10 +146,11 @@ describe('auditCliSelfDocs', () => {
     });
     const result = await audit(root, ['y/y.doc.mjs', 'z/z.doc.mjs']);
     expect(result.misfiled.map(entry => entry.message)).toEqual([
-      'authoring/x/x.doc.mjs has namespace "authoring", but `astryx docs authoring` does not list it',
-      'authoring/y/y.doc.mjs is read in `astryx docs authoring`, but its namespace is "cli/api"',
+      `authoring/x/x.doc.mjs has namespace "authoring", but \`${formatCliCommand('docs authoring/field-reference')}\` does not list it`,
+      `authoring/y/y.doc.mjs is read in \`${formatCliCommand('docs authoring/field-reference')}\`, but its namespace is "cli/api"`,
     ]);
     expect(result.authoring).toBe(1);
+    expect(result.tree).toBe(0);
   });
 
   it('reports a doc that fails to load, and skips fixture directories', async () => {
@@ -231,40 +171,71 @@ describe('auditCliSelfDocs', () => {
         error: expect.stringContaining('boom'),
       }),
     ]);
-    expect(result.sections).toBe(1);
+    expect(result.tree).toBe(1);
   });
 
-  it('reports two cli sections that share a key', async () => {
+  it('reports a tree doc too large for one read', async () => {
     const root = writeTree({
-      'api/a/fooBar.doc.mjs': docModule(fn('fooBar')),
-      'api/b/foo_bar.doc.mjs': docModule(fn('foo_bar')),
+      'api/big/big.doc.mjs': docModule(
+        fn('big', {description: 'x'.repeat(2_000)}),
+      ),
+      'api/small/small.doc.mjs': docModule(fn('small')),
     });
-    const result = await audit(root);
-    expect(result.keyProblems).toHaveLength(1);
-    expect(result.keyProblems[0]).toContain('api-foo-bar');
+    const result = await auditCliSelfDocs({root, authoringSources: [], budget: 1_000});
+    expect(result.oversized.map(entry => entry.key)).toEqual(['big']);
+  });
+
+  it('names every namespace a CLI doc may declare, and what reads it', () => {
+    expect(CLI_DOC_NAMESPACES).toEqual({
+      'cli/commands': {reader: 'tree'},
+      'cli/api': {reader: 'tree'},
+      authoring: {reader: 'authoring'},
+    });
   });
 });
 
-describe('buildCliReferenceDoc', () => {
-  it('keeps a command and the function it runs apart, and links them', () => {
-    const topic = buildCliReferenceDoc([
-      fn('docs', {command: 'docs'}),
-      command('docs', {fn: 'docs'}),
-    ]);
-    expect(topic.sections.map(s => s.id)).toEqual([
-      'commands-docs',
-      'api-docs',
-    ]);
-    expect(JSON.stringify(topic.sections[0].content)).toContain(
-      'It runs `docs()` from `@astryxdesign/cli/api`. Read it with `astryx docs cli api-docs`.',
+/**
+ * An index whose routes are the ones the docs tree gives the CLI's own docs.
+ * @param {any[]} docs
+ */
+const indexOf = docs =>
+  cliDocIndex(docs, (kind, name) =>
+    kind === 'command'
+      ? `cli/commands/${routeSegment(name)}`
+      : kind === 'function'
+        ? `cli/api/functions/${routeSegment(name)}`
+        : null,
+  );
+
+describe('cliDocSection', () => {
+  it('links a command and the function it runs by identity, never by route', () => {
+    const docs = [fn('docs', {command: 'docs'}), command('docs', {fn: 'docs'})];
+    const index = indexOf(docs);
+    expect(JSON.stringify(cliDocSection(docs[1], index).content)).toContain(
+      'It runs `docs()` from `@astryxdesign/cli/api`. Read it with {@link function:docs}.',
     );
-    expect(JSON.stringify(topic.sections[1].content)).toContain(
-      '`astryx docs` runs it. Read it with `astryx docs cli commands-docs`.',
+    expect(JSON.stringify(cliDocSection(docs[0], index).content)).toContain(
+      '`astryx docs` runs it. Read it with {@link command:docs}.',
+    );
+  });
+
+  it("links a function to the command its command line starts with, or to none", () => {
+    const docs = [
+      fn('integrationAddTheme', {command: 'integration add theme'}),
+      command('integration add'),
+      fn('gone', {command: 'gone away'}),
+    ];
+    const index = cliDocIndex(docs);
+    expect(JSON.stringify(cliDocSection(docs[0], index).content)).toContain(
+      '`astryx integration add theme` runs it. Read it with {@link command:integration add}.',
+    );
+    expect(JSON.stringify(cliDocSection(docs[2], index).content)).not.toContain(
+      'runs it',
     );
   });
 
   it('renders a command: usage, arguments, options, examples, exit codes, subcommands', () => {
-    const topic = buildCliReferenceDoc([
+    const docs = [
       command('grp', {subcommands: ['sub', 'gone']}),
       command('grp sub', {
         description: 'The long form.',
@@ -292,14 +263,23 @@ describe('buildCliReferenceDoc', () => {
       fn('grpSub', {
         params: [{name: 'options.limit', type: 'number', description: 'Max.'}],
       }),
-    ]);
-    const [group, sub] = topic.sections;
+    ];
+    // `grp gone` has no doc, so it gets no line.
+    const index = cliDocIndex(docs, (kind, name) =>
+      kind === 'command' && name === 'grp gone'
+        ? null
+        : kind === 'command'
+          ? `cli/commands/${routeSegment(name)}`
+          : `cli/api/functions/${routeSegment(name)}`,
+    );
+    const group = cliDocSection(docs[0], index);
+    const sub = cliDocSection(docs[1], index);
     expect(group.content).toContainEqual({
       type: 'list',
       style: 'unordered',
-      items: ['`astryx grp sub`: `astryx docs cli commands-grp-sub`'],
+      items: ['`astryx grp sub`: {@link command:grp sub}'],
     });
-    expect(sub).toMatchObject({id: 'commands-grp-sub', title: 'astryx grp sub'});
+    expect(sub).toMatchObject({id: 'grp-sub', title: 'astryx grp sub'});
     expect(sub.content).toEqual([
       {type: 'prose', text: 'Do grp sub'},
       {type: 'prose', text: 'The long form.'},
@@ -331,28 +311,48 @@ describe('buildCliReferenceDoc', () => {
       },
       {
         type: 'prose',
-        text: 'It runs `grpSub()` from `@astryxdesign/cli/api`. Read it with `astryx docs cli api-grp-sub`.',
+        text: 'It runs `grpSub()` from `@astryxdesign/cli/api`. Read it with {@link function:grpSub}.',
       },
     ]);
   });
 
-  it('renders an API function and an enum', () => {
-    const topic = buildCliReferenceDoc([
-      fn('alpha', {
-        description: 'Longer.',
-        signature: 'alpha(x: string): Promise<Alpha>',
-        params: [{name: 'x', type: 'string', description: 'The x.'}],
-        throws: [{code: 'ERR_X', when: 'x is bad'}],
-        examples: [{label: 'Call it', code: "await alpha('x');"}],
-      }),
-      enumDoc('codes', {
-        members: [
-          {value: 'A', description: 'The a.'},
-          {value: 'B', description: 'The b.', deprecated: 'Use A.'},
-        ],
-      }),
-    ]);
-    expect(topic.sections[0].content).toEqual([
+  it('marks required parameters and adds a Default column when a parameter has a default', () => {
+    const beta = fn('beta', {
+      params: [
+        {name: 'slug', type: 'string', description: 'The slug.', required: true},
+        {name: 'options.limit', type: 'number', description: 'How many.', default: '20'},
+      ],
+    });
+    const table = cliDocSection(beta, indexOf([beta])).content.find(
+      (/** @type {any} */ block) => block.type === 'table',
+    );
+    expect(table).toEqual({
+      type: 'table',
+      headers: ['Parameter', 'Type', 'Default', 'Description'],
+      rows: [
+        ['`slug` (required)', '`string`', '', 'The slug.'],
+        ['`options.limit`', '`number`', '20', 'How many.'],
+      ],
+    });
+  });
+
+  it('renders an API function, an enum, and a schema', () => {
+    const alpha = fn('alpha', {
+      description: 'Longer.',
+      signature: 'alpha(x: string): Promise<Alpha>',
+      params: [{name: 'x', type: 'string', description: 'The x.'}],
+      throws: [{code: 'ERR_X', when: 'x is bad'}],
+      examples: [{label: 'Call it', code: "await alpha('x');"}],
+    });
+    const codes = enumDoc('codes', {
+      members: [
+        {value: 'A', description: 'The a.'},
+        {value: 'B', description: 'The b.', deprecated: 'Use A.'},
+      ],
+    });
+    const output = schema('output', {namespace: 'cli/api'});
+    const index = indexOf([alpha, codes, output]);
+    expect(cliDocSection(alpha, index).content).toEqual([
       {type: 'prose', text: 'The alpha function.'},
       {type: 'prose', text: 'Longer.'},
       {type: 'code', lang: 'ts', code: 'alpha(x: string): Promise<Alpha>'},
@@ -374,8 +374,8 @@ describe('buildCliReferenceDoc', () => {
       },
       {type: 'code', lang: 'ts', label: 'Call it', code: "await alpha('x');"},
     ]);
-    expect(topic.sections[1]).toEqual({
-      id: 'api-codes',
+    expect(cliDocSection(codes, index)).toEqual({
+      id: 'codes',
       title: 'codes',
       content: [
         {type: 'prose', text: 'The codes.'},
@@ -389,49 +389,8 @@ describe('buildCliReferenceDoc', () => {
         },
       ],
     });
-  });
-
-  it('orders commands, then functions, schemas, and enums, and leaves other namespaces out', () => {
-    const topic = buildCliReferenceDoc([
-      enumDoc('codes'),
-      schema('output', {namespace: 'cli/api'}),
-      fn('beta'),
-      schema('config'),
-      command('zed'),
-      fn('alpha'),
-      command('abc'),
-      fn('gone', {namespace: 'somewhere'}),
-    ]);
-    expect(topic.sections.map(s => s.id)).toEqual([
-      'commands-abc',
-      'commands-zed',
-      'api-alpha',
-      'api-beta',
-      'api-output',
-      'api-codes',
-    ]);
-  });
-});
-
-describe('section keys', () => {
-  it('join lowercase words with hyphens, whatever the name looks like', () => {
-    expect(keySegment('integrationPackCheck')).toBe('integration-pack-check');
-    expect(keySegment('doctor integration validate')).toBe(
-      'doctor-integration-validate',
-    );
-    expect(keySegment('error-codes')).toBe('error-codes');
-    expect(keySegment('isError')).toBe('is-error');
-  });
-
-  it('come from the namespace a doc declares, and only a cli one', () => {
-    expect(cliSectionKey(fn('search'))).toBe('api-search');
-    expect(cliSectionKey(command('theme add'))).toBe('commands-theme-add');
-    expect(cliSectionKey(schema('config'))).toBeNull();
-    expect(cliSectionKey(fn('x', {namespace: 'cli'}))).toBeNull();
-    expect(Object.keys(CLI_DOC_NAMESPACES)).toEqual([
-      'cli/commands',
-      'cli/api',
-      'authoring',
-    ]);
+    const rendered = cliDocSection(output, index);
+    expect(rendered.id).toBe('output');
+    expect(JSON.stringify(rendered.content)).toContain('The output file.');
   });
 });

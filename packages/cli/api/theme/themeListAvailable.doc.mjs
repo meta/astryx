@@ -11,9 +11,9 @@ export const doc = {
   name: 'themeListAvailable',
   namespace: 'cli/api',
   displayName: 'themeListAvailable()',
-  summary: 'List bundled and installed integration themes.',
+  summary: 'List bundled, package, and local themes.',
   description:
-    'Loads Project for the requested directory, combines the CLI bundle with source themes from installed integrations, and projects each entry with its owner package. An unreadable project configuration degrades to the bundled descriptors.',
+    'Lists every available theme with its owner, source, added state, and default state. Descriptor-less copies left by the released theme add are not themes yet; response meta names them and the upgrade command that adds their descriptors.',
   importPath: '@astryxdesign/cli/api',
   signature:
     'themeListAvailable(options?: {cwd?: string, package?: string}): Promise<ThemeListResponse>',
@@ -24,18 +24,19 @@ export const doc = {
       type: 'string',
       description:
         'Project directory whose installed integrations contribute themes.',
+      default: 'process.cwd()',
     },
     {
       name: 'options.package',
       type: 'string',
-      description: 'Optional exact owner-package filter.',
+      description: 'Optional exact source-selector package filter.',
     },
   ],
   returns: [
     {
       type: 'theme.list',
       description:
-        'Every available theme as ThemeListEntry[]: slug, displayName, description, maintained flag, and owner package.',
+        'Every available theme as ThemeListEntry[], plus optional meta.unmigratedCopies entries with the source path, missing descriptor, and upgrade command. Unmigrated copies are not included in data.',
     },
   ],
   throws: [

@@ -18,8 +18,9 @@ export const docs = {
     {
       name: 'label',
       type: 'ReactNode',
+      required: true,
       description:
-        'Badge text content. A badge is one line, so a label wider than the space available is cut with an ellipsis rather than escaping its container; a string or number label is also set as the badge\'s title so the full text stays reachable on hover.',
+        'Badge text content. A badge is one line and at least as tall as that line of its label, so it grows with its text (a larger text size); a label wider than the space available is cut with an ellipsis rather than escaping its container; a string or number label is also set as the badge\'s title so the full text stays reachable on hover.',
     },
     {
       name: 'icon',
@@ -93,7 +94,7 @@ export const docsZh = {
       description: '视觉样式变体。语义变体使用实色背景，非语义颜色变体使用浅色背景配彩色文字。',
       default: "'neutral'",
     },
-    {name: 'label', type: 'ReactNode', description: '徽章文本内容。'},
+    {name: 'label', type: 'ReactNode', required: true, description: '徽章文本内容。'},
     {name: 'icon', type: 'ReactNode', description: '可选的前置图标。'},
   ],
   theming: {

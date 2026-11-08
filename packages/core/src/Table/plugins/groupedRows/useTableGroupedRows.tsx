@@ -5,7 +5,7 @@
 /**
  * @file useTableGroupedRows.tsx
  * @input React, StyleX, Icon, Table types + the flat data array
- * @output Exports useTableGroupedRows hook + config/result types
+ * @output Exports useTableGroupedRows hook + config/result types with layout-safe group headers
  * @position Grouped-rows plugin; consumed by Table via plugins prop
  *
  * SYNC: When modified, update these files to stay in sync:
@@ -21,7 +21,13 @@ import {
 } from '../../../theme/tokens.stylex';
 import {Icon} from '../../../Icon';
 import type {TablePlugin} from '../../types';
-import {useTranslator} from '../../../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../../../i18n/useComponentTranslator';
+import english from '../../../i18n/generated-english/Table/plugins/groupedRows/useTableGroupedRows.generated';
+
+registerEnglishFallback(english);
 
 // A synthetic group-header row injected into the flattened data. Real rows
 // never carry this marker.
@@ -132,25 +138,28 @@ const styles = stylex.create({
     paddingInlineStart: 0,
     paddingInlineEnd: spacingVars['--spacing-3'],
   },
-  // The cell spans every column, so on a table scrolled sideways the heading
-  // would slide out of view while the columns it names stay pinned. Sticking
-  // the inner span to the start edge keeps the chevron and the label together
-  // and on screen.
+  // Shared row layout. Custom renderers keep this full-width so their layout
+  // continues to use the full spanning cell.
   headerInner: {
     display: 'flex',
     alignItems: 'center',
     gap: spacingVars['--spacing-1'],
-    insetInlineStart: 0,
-    position: 'sticky',
     // No inline start padding on the cell, so the chevron aligns with the
     // table's leading edge (Ernest review #1).
     paddingInlineStart: spacingVars['--spacing-1'],
   },
-  // Applied alongside headerInner when using the built-in default heading.
-  // A custom `renderGroupHeader` may need the full column width, so the
-  // shrink-wrap is opt-in rather than unconditional.
-  headerInnerFitContent: {
+  // The built-in heading moves with its chevron and can safely shrink-wrap.
+  headerInnerPinned: {
+    insetInlineStart: 0,
+    position: 'sticky',
     width: 'fit-content',
+  },
+  // A custom header may rely on the full row width. Pin only the plugin-owned
+  // control so custom content keeps its original containing block.
+  customHeaderChevronPinned: {
+    insetInlineStart: spacingVars['--spacing-1'],
+    position: 'sticky',
+    zIndex: 1,
   },
   // Standalone chevron button with no heavy chrome (transparent, borderless,
   // zero padding) so the icon sits flush with the start of the table
@@ -162,8 +171,9 @@ const styles = stylex.create({
     flexShrink: '0',
     padding: 0,
     margin: 0,
-    background: 'transparent',
-    border: 'none',
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    borderStyle: 'none',
     cursor: {
       default: 'pointer',
       ':is(:disabled,[aria-disabled="true"])': 'default',
@@ -268,7 +278,7 @@ const styles = stylex.create({
 export function useTableGroupedRows<T extends Record<string, unknown>>(
   config: UseTableGroupedRowsConfig<T>,
 ): UseTableGroupedRowsResult<T> {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const {
     data,
     groupBy,
@@ -373,10 +383,9 @@ export function useTableGroupedRows<T extends Record<string, unknown>>(
           htmlProps: {
             ...props.htmlProps,
             // Convenience: clicking anywhere on the row toggles it. The chevron
-            // button below is the accessible, keyboard-operable control, so the
-            // row keeps its implicit `row` role (no role override here).
+            // button below owns the disclosure state and keyboard interaction;
+            // the native row keeps only its implicit row semantics.
             onClick: toggle,
-            'aria-expanded': !collapsed,
           },
           xstyle: [...props.xstyle, styles.headerRow],
           children: (
@@ -387,13 +396,16 @@ export function useTableGroupedRows<T extends Record<string, unknown>>(
               <span
                 {...stylex.props(
                   styles.headerInner,
-                  !renderGroupHeader && styles.headerInnerFitContent,
+                  !renderGroupHeader && styles.headerInnerPinned,
                 )}>
                 {/* Standalone chevron button, flush with the table's start
                     edge (no heavy button chrome) — the keyboard control. */}
                 <button
                   type="button"
-                  {...stylex.props(styles.chevron)}
+                  {...stylex.props(
+                    styles.chevron,
+                    renderGroupHeader && styles.customHeaderChevronPinned,
+                  )}
                   onClick={e => {
                     e.stopPropagation();
                     toggle();
@@ -410,7 +422,12 @@ export function useTableGroupedRows<T extends Record<string, unknown>>(
                   aria-expanded={!collapsed}>
                   <Icon
                     icon="chevronRight"
-                    size="xsm"
+                    // 16px, not the 12px this started at. The chevron is the
+                    // control for the whole section and sits beside a heading,
+                    // so at 12 it read as decoration on the label rather than
+                    // the thing you press, and it was the smallest hit target
+                    // in the table.
+                    size="sm"
                     // The rotation rides on the glyph rather than a wrapper
                     // span so the theme target below reaches both the mark and
                     // its open/closed transform.

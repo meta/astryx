@@ -1060,7 +1060,8 @@ function PresentationChoice({presentation}: PresentationChoiceProps) {
           onOpenChange={setIsOpen}
           label={title}
           purpose="info"
-          height="hug">
+          height="hug"
+          padding={0}>
           <VStack gap={4} style={{padding: 'var(--spacing-4)'}}>
             <Heading level={3}>{title}</Heading>
             <Text type="supporting" color="secondary">

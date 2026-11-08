@@ -4,8 +4,7 @@
  * @file The other five theme axes, and the shape a probe needs for each.
  *
  * @input  the theme contract (`defineTheme`) and the registries it accepts
- * @output the non-`components` half of the probe theme, plus what each axis
- *         needs a story to render before it can be verified
+ * @output the non-`components` half of the probe theme
  *
  * `defineTheme` takes six things. The generated component overrides cover one
  * of them, and until this file the other five had no coverage at all: a theme
@@ -96,69 +95,3 @@ export const PROBE_INDICATORS = {
   radio: 'singleSelection',
   checkbox: 'multiSelection',
 };
-
-/**
- * What each axis needs before it can be checked, and how it is proven.
- *
- * The gate reads this to report an axis as unverifiable-for-a-reason rather
- * than as passing — an axis with no story to render it is not a green axis.
- */
-export const AXES = {
-  components: {
-    proof: 'computed colour equals the selector-specific probe colour',
-    needs: 'any story rendering the target',
-  },
-  tokens: {
-    proof: 'custom property on the themed element equals the probe value',
-    needs: 'any themed story',
-  },
-  icons: {
-    proof: `an element carrying ${PROBE_SWAP_ATTR}="icon" is in the DOM`,
-    needs: 'a story rendering a themeable icon',
-  },
-  indicators: {
-    proof: `an element carrying ${PROBE_SWAP_ATTR}="indicator" is in the DOM`,
-    needs: 'a story rendering a checkbox, radio, or selected option',
-  },
-  fonts: {
-    proof: 'computed font-family names the probe face',
-    needs: 'any themed story',
-  },
-  syntax: {
-    proof: 'a highlighted code token equals the probe syntax colour',
-    needs: 'a story rendering a CodeBlock',
-  },
-};
-
-/**
- * Read the non-component axes off a themed page. Runs in the browser.
- *
- * Reads from the element the theme actually scopes to (`[data-astryx-theme]`),
- * not `:root` — the runtime path sets custom properties on that subtree, so
- * reading the document element would report every token as missing.
- */
-export const READ_AXES = `(() => {
-  const scope = document.querySelector('[data-astryx-theme]') ?? document.documentElement;
-  const style = getComputedStyle(scope);
-  const tokens = {};
-  for (const name of ${JSON.stringify(Object.keys(PROBE_TOKENS))}) {
-    tokens[name] = style.getPropertyValue(name).trim();
-  }
-  const swaps = {};
-  for (const el of document.querySelectorAll('[${PROBE_SWAP_ATTR}]')) {
-    swaps[el.getAttribute('${PROBE_SWAP_ATTR}')] = true;
-  }
-  return {
-    tokens,
-    swaps,
-    // The token, not the scope element's computed font-family: the themed
-    // wrapper sets no font of its own, so reading its computed value reports
-    // the browser default and calls a working theme broken. The token is what
-    // the theme sets and what every themed element inherits.
-    fontFamily: style.getPropertyValue('--font-family-body').trim(),
-    // Syntax colours only exist where a CodeBlock rendered.
-    syntax: [...document.querySelectorAll('.astryx-code-block [class*="token"], .astryx-code-block span')]
-      .slice(0, 60)
-      .map((el) => getComputedStyle(el).color),
-  };
-})()`;

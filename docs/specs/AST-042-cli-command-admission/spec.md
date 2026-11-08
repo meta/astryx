@@ -18,6 +18,14 @@ affects_consumer_docs: []
 
 # CLI command admission and programmatic parity system spec
 
+<!-- path-applicability:v1 -->
+
+```json
+{
+  "paths": ["packages/cli/clients/cli/**", "packages/cli/api/**"]
+}
+```
+
 ## Intent
 
 Agents learn the Astryx CLI from its help, its manifest, and their own notes, and
@@ -38,8 +46,8 @@ function, and the vocabulary that human-readable output may use.
   structure.
 - Discoverability, environment variables, global options, and configuration.
   `spec:AST-017` FR14–FR20 own those rules.
-- Classifying a removal, rename, or behavior change. `spec:AST-017` FR1–FR8 own
-  compatibility.
+- Classifying a removal, rename, behavior change, deprecation, or incompatible fix.
+  [`spec:AST-017`](../AST-017/spec.md) owns compatibility and release lifecycle.
 - The JSON envelope, error codes, and generated help. `architecture:cli-surface`
   INV2, INV3, and INV7 own them.
 - Equivalent internal implementations remain valid when they satisfy this contract.
@@ -113,7 +121,19 @@ function, and the vocabulary that human-readable output may use.
 - **FR6 — Moving surface is an admission.** Renaming a command, moving behavior
   into a new command, or promoting a subcommand to a top-level command is an
   admission at the new tier and MUST pass that tier's test. Removal and renaming
-  also follow `spec:AST-017` FR1–FR8.
+  also follow `spec:AST-017` FR1–FR8 and FR31: a removal lands in a declared minor
+  with its `[breaking]` Changeset, and when the next release is a patch the command is
+  deprecated first (FR28).
+- **FR7 — Exact-lookup admission classifies batching first.** Before code is written,
+  every new command or subcommand with an exact selector position MUST classify that
+  position against `spec:AST-053` FR11 E1-E5. An eligible surface MUST use AST-053's
+  batch contract in its first public release. An ineligible top-level command MUST cite
+  a current command-owning record that names the failed condition; a draft does not
+  admit the exclusion. An ineligible subcommand MUST name the condition in its
+  admitting pull request and still follows FR4's code-owner approval bar. After typed
+  admission metadata lands, its CommandDoc MUST retain the same classification.
+  Existing eligible commands follow AST-053's incremental migration rule. A hidden
+  option MUST NOT make batching opt-in or bypass this classification.
 
 ### Platform support
 
@@ -126,14 +146,14 @@ function, and the vocabulary that human-readable output may use.
 `architecture:cli-surface` INV20–INV23 carry FR1–FR3 into the code: the layout of
 an API subject, the adapter as a subject's only access to the environment, thin
 command handlers, and the closed formatter kit. `contributing:cli-conventions`
-restates FR4 and FR5 for contributors.
+restates FR4 and FR5 for contributors. It does not yet restate FR7, and CommandDoc
+has no typed AST-053 eligibility field; projecting the rule there and adding the
+repository check are known enforcement gaps that land separately.
 
 The CLI has 17 top-level commands. The command docs of 28 commands and
 subcommands name the function they call. Known gaps, for which this record does
 not assign migrations:
 
-- `theme template` calls a function that `@astryxdesign/cli/api` does not
-  export (FR1);
 - the component, discover, layout, search, template, and theme handlers read
   project state or files themselves (FR1);
 - the theme handler draws its target table from characters, and the docs
@@ -150,9 +170,9 @@ not assign migrations:
   covered (FR2).
 
 No mechanical check enforces FR1, the per-function part of FR2, FR3, FR4, FR5,
-`architecture:cli-surface` INV21, or most of INV22 and INV23 yet. Review applies
-them to every new change; until mechanical checks land, a new violation fails
-only in review. The checks and the closure of the gaps above land as separate
+FR7, `architecture:cli-surface` INV21, or most of INV22 and INV23 yet. Review
+applies them to every new change; until mechanical checks land, a new violation
+fails only in review. The checks and the closure of the gaps above land as separate
 changes.
 
 This specification change alters no runtime behavior or published package and
@@ -167,6 +187,7 @@ needs no Changeset.
 | FR3      | Text-output snapshots per command; the help snapshot                                                                  | each block kind; a list of items; a result shaped like a table                               | A command prints a layout outside the documented blocks, or a new block kind is missing from help                                |
 | FR4, FR6 | The admitting pull request and the authority it cites                                                                 | top-level command, subcommand, option, rename, promotion                                     | A top-level command lands without a current specification, or a subcommand lands without its stated case and code-owner approval |
 | FR5      | Option composition tests per command                                                                                  | each option pair; a boolean default; a shared option name                                    | A pair has no decided result, a boolean defaults to on, or one name has two meanings                                             |
+| FR7      | Admission review against AST-053 E1-E5 and the evidence for its tier                                                  | eligible new lookup; top-level and subcommand exclusions; draft                              | An eligible surface is single-only, or an exclusion lacks the evidence its tier requires                                         |
 
 ## Decision log
 
@@ -209,6 +230,53 @@ Rejected: one bar for every addition, which either blocks small options or lets
 top-level commands in too easily; and adding a top-level command to make behavior
 easier to find, because help and docs make behavior discoverable under
 `spec:AST-017` FR14.
+
+### DEC-4 — Exact lookups classify batching during admission
+
+**Reference:** `spec:AST-042/DEC-4`
+**Decider:** `josephfarina`, `2026-10-01`
+
+Batch shape is part of a lookup's public surface, so admission applies AST-053 E1-E5
+before implementation. The evidence still follows DEC-3's permanence tiers: a
+current record for a top-level command, and the pull request plus code-owner approval
+for a subcommand; CommandDoc retains the result after typed metadata lands.
+
+Rejected: letting each eligible command remain single-only or hide batching behind an
+option, which gives equivalent read-only lookups different automation contracts; and
+requiring a new system record for every subcommand exclusion, which defeats the tiered
+bar.
+
+## Deprecation and cleanup descriptions
+
+These tables describe deprecations and removals for readers; the gate for a removal
+is the declared minor and its `[breaking]` Changeset (`spec:AST-017` FR31).
+
+### DEP-0006 — Deprecate the `astryx layout` command group
+
+| Field            | Value                                                                                                                                                                                                                                                          |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| id               | `DEP-0006`                                                                                                                                                                                                                                                     |
+| cleanup          | `CLN-0006`                                                                                                                                                                                                                                                     |
+| package          | `@astryxdesign/cli`                                                                                                                                                                                                                                            |
+| surface          | CLI command group: `astryx layout` (`expand`, `check`, `grammar`), its three JSON response types (`layout.expand`, `layout.check`, `layout.grammar`), and the programmatic API exports `layoutExpand`, `layoutCheck`, `layoutGrammar` from `@astryxdesign/cli` |
+| old contract     | Compressed XLE/XLO expressions parsed, validated, and expanded into XDS TSX; expression validation with canonical-surface echo; grammar cheatsheet with alias table                                                                                            |
+| replacement      | `astryx build` chooses the closest template to start from. `astryx template <name> <path>` scaffolds it. `astryx docs layout` teaches the layout principles (scaffold, structure, spacing, breakpoints).                                                       |
+| warning          | Human mode: one stderr line per invocation naming DEP-0006 and the replacement commands. JSON mode: `meta.deprecations` array in the response envelope, each entry `{id, replacements}`, matching the documented envelope schema.                              |
+| migration        | Non-mechanical. The XLE/XLO expression language has no source-level equivalent in the replacement commands. Use `astryx build` to find the right template, `astryx template <name>` to scaffold it, and edit the scaffolded code directly.                     |
+| codemod          | None — vacuous: expressions are ad-hoc input, not persisted source that a codemod can rewrite.                                                                                                                                                                 |
+| downstream       | Maintained agent-docs teach `build` as the front door. The layout guide (`astryx docs layout`) is unaffected.                                                                                                                                                  |
+| direct authority | `spec:AST-042` (CLI command admission and programmatic parity)                                                                                                                                                                                                 |
+| state            | `deprecated`                                                                                                                                                                                                                                                   |
+
+### CLN-0006 — Remove the `astryx layout` command group
+
+| Field     | Value                                                                                                                                                            |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| id        | `CLN-0006`                                                                                                                                                       |
+| lifecycle | `DEP-0006`                                                                                                                                                       |
+| delta     | Remove command registration, API exports (`layoutExpand`, `layoutCheck`, `layoutGrammar`), CLI bindings, command docs, tests, and the `layout.*` response types. |
+| rollback  | Re-register the command group with the same API, response types, and tests from the final-patch baseline.                                                        |
+| state     | `pending` — lands in the declared minor with its `[breaking]` Changeset                                                                                          |
 
 ## Open questions
 

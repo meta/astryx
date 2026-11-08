@@ -22,7 +22,7 @@ export default function SelectorOptionBasic() {
 
   return (
     <Selector
-      style={{width: 300}}
+      controlStyle={{width: 300}}
       label="Role"
       options={roles}
       value={value}

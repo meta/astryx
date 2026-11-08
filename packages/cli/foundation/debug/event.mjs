@@ -123,56 +123,12 @@ function nonEmptyString(value) {
 }
 
 /**
- * ASTRYX_AGENT_METADATA accepts both JSON and comma-separated key=value
- * forms. Unknown or malformed entries are ignored so a producer cannot break
- * command recording.
- *
- * @param {unknown} value
- * @returns {Record<string, string>}
+ * Agent identity: the generic AGENT variable, else the first positive
+ * coding-agent signal. ASTRYX_AGENT_ID and ASTRYX_AGENT_METADATA are not read
+ * (spec:AST-017 FR14), and no replacement metadata variable is introduced.
+ * @returns {string | null}
  */
-function parseCodingAgentMetadata(value) {
-  const raw = nonEmptyString(value);
-  if (!raw) return {};
-
-  try {
-    const decoded = JSON.parse(raw);
-    if (decoded && typeof decoded === 'object' && !Array.isArray(decoded)) {
-      /** @type {Record<string, string>} */
-      const metadata = Object.create(null);
-      for (const [key, entry] of Object.entries(decoded)) {
-        if (
-          typeof entry !== 'string' &&
-          typeof entry !== 'number' &&
-          typeof entry !== 'boolean'
-        ) {
-          continue;
-        }
-        const item = nonEmptyString(entry);
-        if (item) metadata[key] = item;
-      }
-      return metadata;
-    }
-  } catch {
-    // The compact form is comma-separated key=value, not JSON.
-  }
-
-  /** @type {Record<string, string>} */
-  const metadata = Object.create(null);
-  for (const entry of raw.split(',')) {
-    const separator = entry.indexOf('=');
-    if (separator <= 0) continue;
-    const key = entry.slice(0, separator).trim();
-    const item = nonEmptyString(entry.slice(separator + 1));
-    if (key && item) metadata[key] = item;
-  }
-  return metadata;
-}
-
-/** @param {Record<string, string>} metadata @returns {string | null} */
-function detectAgentIdentity(metadata) {
-  const astryxAgent = nonEmptyString(process.env.ASTRYX_AGENT_ID);
-  if (astryxAgent) return astryxAgent.toLowerCase();
-
+function detectAgentIdentity() {
   const genericAgent = nonEmptyString(process.env.AGENT);
   if (genericAgent) return genericAgent.toLowerCase();
 
@@ -182,9 +138,7 @@ function detectAgentIdentity(metadata) {
   )) {
     if (process.env[key]) return name;
   }
-
-  const metadataId = nonEmptyString(metadata.id);
-  return metadataId ? metadataId.toLowerCase() : null;
+  return null;
 }
 
 /** @param {string | null} identity @returns {string | null} */
@@ -199,29 +153,13 @@ function detectAgent(identity) {
 }
 
 /**
- * @param {Record<string, string>} metadata
+ * Agent session: the generic AGENT_SESSION_ID variable. ASTRYX_AGENT_SESSION_ID
+ * and ASTRYX_AGENT_METADATA are not read (spec:AST-017 FR14).
  * @returns {{id: string | null, source: string | null}}
  */
-function detectAgentSession(metadata) {
-  /** @type {Array<[unknown, string]>} */
-  const candidates = [
-    [process.env.ASTRYX_AGENT_SESSION_ID, 'ASTRYX_AGENT_SESSION_ID'],
-    [process.env.AGENT_SESSION_ID, 'AGENT_SESSION_ID'],
-    [
-      metadata.session_id ?? metadata.sessionId,
-      'ASTRYX_AGENT_METADATA.session_id',
-    ],
-    [
-      metadata.invocation_id ?? metadata.invocationId,
-      'ASTRYX_AGENT_METADATA.invocation_id',
-    ],
-  ];
-
-  for (const [value, source] of candidates) {
-    const id = nonEmptyString(value);
-    if (id) return {id, source};
-  }
-  return {id: null, source: null};
+function detectAgentSession() {
+  const id = nonEmptyString(process.env.AGENT_SESSION_ID);
+  return id ? {id, source: 'AGENT_SESSION_ID'} : {id: null, source: null};
 }
 
 /** @param {string | null} id @returns {string | null} */
@@ -254,11 +192,8 @@ function detectInvocationSource({agentIdentity, agentSessionId, ci}) {
  */
 export function captureEnv({cliVersion} = {}) {
   const {ci, ciName} = detectCi();
-  const agentMetadata = parseCodingAgentMetadata(
-    process.env.ASTRYX_AGENT_METADATA,
-  );
-  const agentIdentity = detectAgentIdentity(agentMetadata);
-  const agentSession = detectAgentSession(agentMetadata);
+  const agentIdentity = detectAgentIdentity();
+  const agentSession = detectAgentSession();
   return {
     cliVersion: cliVersion ?? null,
     nodeVersion: process.versions.node,

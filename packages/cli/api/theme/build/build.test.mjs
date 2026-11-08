@@ -8,7 +8,8 @@
  * end-to-end; these assert the API contract you get calling `themeBuild()` in
  * code: the typed `theme.build` receipt (with files actually written to disk),
  * that it honors the `cwd` option, stays SILENT under the default noopLogger,
- * and returns `null` when there is nothing to build.
+ * returns `null` when there is nothing to build, and rejects unsupported icon
+ * registries without creating or changing outputs in build and check modes.
  *
  * `themeBuild` compiles via @astryxdesign/core's generator, so it needs a built
  * core — the `node` project's globalSetup (vitest.global-setup.node.mjs) builds
@@ -20,12 +21,17 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import {
+  makeLinkedFixture,
+  removeLinkedFixture,
+} from '../../../test-utils/linked-fixture.mjs';
+import {
   generateThemeRulesSplit as mockGenerateThemeRulesSplit,
   generateOnMediaCSS as mockGenerateOnMediaCSS,
 } from '@astryxdesign/core/theme';
 import {
   themeBuild,
   validateComponentOverridesAgainstRegistry,
+  validateThemePrivateInputs,
 } from './build.mjs';
 
 // `themeBuild` captures core's generator once at module load. Wrap the two
@@ -73,11 +79,13 @@ describe('themeBuild() — receipt', () => {
 
     // Output paths are cwd-relative and derive from the theme name…
     expect(result?.data.outputs.css).toBe('apitheme.css');
+    expect(result?.data.outputs.cssDts).toBe('apitheme.css.d.ts');
     expect(result?.data.outputs.js).toBe('apitheme.js');
     expect(result?.data.outputs.dts).toBe('apitheme.d.ts');
     // …and every declared output actually exists on disk.
     for (const rel of [
       result?.data.outputs.css,
+      result?.data.outputs.cssDts,
       result?.data.outputs.js,
       result?.data.outputs.dts,
     ]) {
@@ -85,6 +93,9 @@ describe('themeBuild() — receipt', () => {
         fs.existsSync(path.join(tmpDir, /** @type {string} */ (rel))),
       ).toBe(true);
     }
+    expect(
+      fs.readFileSync(path.join(tmpDir, 'apitheme.css.d.ts'), 'utf8'),
+    ).toContain('export {};');
   });
 
   it('emits local tokens and preserves enrollment metadata in the built module', async () => {
@@ -203,6 +214,55 @@ describe('themeBuild() — receipt', () => {
       errSpy.mockRestore();
       outSpy.mockRestore();
     }
+  });
+});
+
+describe.each(['mjs', 'ts'])('a .%s theme module with no theme export', ext => {
+  beforeEach(() => {
+    fs.writeFileSync(
+      path.join(tmpDir, `none.${ext}`),
+      'export const notATheme = 42;\n',
+    );
+  });
+
+  it('fails the build as a module that does not load a theme', async () => {
+    const build = themeBuild(`none.${ext}`, {}, {cwd: tmpDir});
+    await expect(build).rejects.toThrow(
+      /Could not find a defineTheme\(\) result/,
+    );
+    await expect(build).rejects.toMatchObject({code: 'ERR_THEME_LOAD'});
+  });
+
+  it("fails doctor's private-input check the same way, rather than read its exports as a theme", async () => {
+    await expect(
+      validateThemePrivateInputs(`none.${ext}`, {cwd: tmpDir}),
+    ).rejects.toThrow(/Could not find a defineTheme\(\) result/);
+  });
+});
+
+describe('themeBuild() — a theme module that does not load', () => {
+  it('fails with the import error, rather than build the theme from the file text', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'unresolved.mjs'),
+      "import './missing-helper.mjs';\nexport default {name: 'unresolved', tokens: {'--color-bg': '#000'}};\n",
+    );
+    await expect(
+      themeBuild('unresolved.mjs', {}, {cwd: tmpDir}),
+    ).rejects.toThrow(
+      /Failed to load theme from .*unresolved\.mjs: .*missing-helper\.mjs/s,
+    );
+    expect(fs.existsSync(path.join(tmpDir, 'unresolved.css'))).toBe(false);
+  });
+
+  it('fails with the error the module throws, rather than build the theme from the file text', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'throws.mjs'),
+      "throw new Error('the theme module failed');\nexport default {name: 'throws', tokens: {'--color-bg': '#000'}};\n",
+    );
+    await expect(themeBuild('throws.mjs', {}, {cwd: tmpDir})).rejects.toThrow(
+      /the theme module failed/,
+    );
+    expect(fs.existsSync(path.join(tmpDir, 'throws.css'))).toBe(false);
   });
 });
 
@@ -376,6 +436,31 @@ describe('themeBuild() — check mode', () => {
     expect(fs.readFileSync(path.join(tmpDir, 'chk.css'), 'utf8')).toBe(before);
   });
 
+  it('accepts released outputs that do not have a CSS type stub', async () => {
+    const themeFile = path.join(tmpDir, 'released.mjs');
+    fs.writeFileSync(
+      themeFile,
+      `export default { name: 'released', tokens: { '--color-bg': '#0a0a0a' } };\n`,
+    );
+    await themeBuild('released.mjs', {}, {cwd: tmpDir});
+    fs.rmSync(path.join(tmpDir, 'released.css.d.ts'));
+
+    const result = await themeBuild(
+      'released.mjs',
+      {check: true},
+      {cwd: tmpDir},
+    );
+
+    expect(result?.data.upToDate).toBe(true);
+    expect(result?.data.stale).toEqual([]);
+    expect(result?.data.checked).toEqual([
+      'released.css',
+      'released.js',
+      'released.d.ts',
+    ]);
+    expect(fs.existsSync(path.join(tmpDir, 'released.css.d.ts'))).toBe(false);
+  });
+
   it('flags a stale output when the committed CSS content drifts from the source', async () => {
     const themeFile = path.join(tmpDir, 'drift.mjs');
     fs.writeFileSync(
@@ -516,26 +601,17 @@ describe('themeBuild() — component override validation', () => {
     ]);
   });
 
-  it('warns with the exact replacement for deprecated root and media targets', () => {
+  it('deduplicates removed aliases as unknown across root and conditional layers', () => {
     const registry = {
-      propsByKey: {
-        'old-target': ['variant'],
-        'new-target': ['variant'],
-      },
-      deprecatedByKey: {'old-target': 'new-target'},
+      propsByKey: {'new-target': ['variant']},
     };
 
     expect(
       validateComponentOverridesAgainstRegistry(
         {
-          components: {
-            'old-target': {base: {color: 'red'}},
-            'new-target': {base: {color: 'blue'}},
-          },
+          components: {'old-target': {base: {color: 'red'}}},
           onDark: {
-            components: {
-              'old-target': {'variant:quiet': {color: 'pink'}},
-            },
+            components: {'old-target': {'variant:quiet': {color: 'pink'}}},
           },
           adaptations: {
             rules: [
@@ -552,32 +628,55 @@ describe('themeBuild() — component override validation', () => {
         },
         registry,
       ),
-    ).toEqual([
-      'Deprecated component target "old-target". Use "new-target" instead.',
-      'Deprecated component target "old-target" in onDark. Use "new-target" instead.',
-      'Deprecated component target "old-target" in adaptation rule 1. Use "new-target" instead.',
-    ]);
+    ).toEqual(['Unknown component "old-target".']);
   });
 
-  it('warns with the exact replacement for a supported deprecated target', async () => {
-    const themeFile = path.join(tmpDir, 'deprecated-target.mjs');
+  it('reports a removed target alias as an unknown component key', async () => {
+    const themeFile = path.join(tmpDir, 'removed-target.mjs');
     fs.writeFileSync(
       themeFile,
       `export default {
-        name: 'deprecated-target',
+        name: 'removed-target',
         tokens: {},
         components: {progressbar: {base: {color: 'red'}}},
       };\n`,
     );
 
-    const result = await themeBuild('deprecated-target.mjs', {}, {cwd: tmpDir});
+    const result = await themeBuild('removed-target.mjs', {}, {cwd: tmpDir});
 
     expect(result?.data.warnings).toContain(
-      'Deprecated component target "progressbar". Use "progress-bar" instead.',
+      'Unknown component "progressbar". Did you mean: progress-bar?',
     );
     expect(
-      fs.readFileSync(path.join(tmpDir, 'deprecated-target.css'), 'utf8'),
+      fs.readFileSync(path.join(tmpDir, 'removed-target.css'), 'utf8'),
     ).toContain('.astryx-progressbar');
+  });
+});
+
+describe('themeBuild() — Icon size dimensions', () => {
+  it('writes width and height on an icon size into the vars the glyph reads, with no warnings', async () => {
+    // spec:AST-087 FR10: a built theme sets an Icon size's glyph dimension the
+    // way the runtime provider does, through the shared compiler's derived
+    // vars. Raw width/height would lose to a consumer's unlayered StyleX.
+    const themeFile = path.join(tmpDir, 'iconsizes.mjs');
+    fs.writeFileSync(
+      themeFile,
+      `export default {
+        name: 'iconsizes',
+        tokens: {'--color-bg': '#0a0a0a'},
+        components: {icon: {'size:sm': {width: '18px', height: '22px'}}},
+      };\n`,
+    );
+
+    const result = await themeBuild('iconsizes.mjs', {}, {cwd: tmpDir});
+
+    expect(result?.data.warnings).toEqual([]);
+    const css = fs.readFileSync(path.join(tmpDir, 'iconsizes.css'), 'utf8');
+    const rule =
+      css.match(/\.astryx-icon\[data-size="sm"\]\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(rule).toMatch(/--_icon-width:\s*18px/);
+    expect(rule).toMatch(/--_icon-height:\s*22px/);
+    expect(rule).not.toMatch(/(^|[\s;])(width|height)\s*:/);
   });
 });
 
@@ -611,18 +710,203 @@ describe('themeBuild() — the shipped theme template', () => {
   });
 });
 
+describe('themeBuild() — icon registry detection', () => {
+  /**
+   * The emitted icon import statement, or null. Reads the statement rather
+   * than the whole file: the `@generated` header quotes a usage example, so a
+   * substring search over the file would match comment text too.
+   */
+  function iconImportLine(generated) {
+    const match = generated.match(/^import .*$/m);
+    return match ? match[0] : null;
+  }
+
+  it('emits the import, icons key and re-export for a registry that arrives via an import', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'icons.mjs'),
+      'export const liveIcons = {};\n',
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'live.mjs'),
+      `import {liveIcons} from './icons';\n` +
+        `export default {name: 'live', icons: liveIcons, tokens: {'--color-bg': '#fff'}};\n`,
+    );
+
+    const result = await themeBuild('live.mjs', {}, {cwd: tmpDir});
+
+    const generated = fs.readFileSync(path.join(tmpDir, 'live.js'), 'utf8');
+    expect(iconImportLine(generated)).toBe(
+      "import { liveIcons } from './icons';",
+    );
+    expect(generated).toContain('icons: liveIcons,');
+    expect(generated).toContain('export { liveIcons };');
+    expect(result?.data.warnings).toEqual([]);
+  });
+
+  it('does not re-emit an import that only appears inside a comment (#5058)', async () => {
+    // The reported repro: the registry was inlined into the theme source, and
+    // a doc comment kept the old import line for context. The comment's
+    // specifier was scraped and emitted as live code in the built module,
+    // pointing at a file that no longer exists.
+    fs.writeFileSync(
+      path.join(tmpDir, 'commented.mjs'),
+      `/**\n` +
+        ` * The scaffold put this in a sibling icons file, so the built module\n` +
+        ` * carried \`import { ghostIcons } from './icons'\` — which Node\n` +
+        ` * cannot resolve.\n` +
+        ` */\n` +
+        `const ghostIcons = {close: 'inline'};\n` +
+        `export default {name: 'commented', icons: ghostIcons, tokens: {'--color-bg': '#fff'}};\n`,
+    );
+
+    await expect(
+      themeBuild('commented.mjs', {}, {cwd: tmpDir}),
+    ).rejects.toMatchObject({
+      code: 'ERR_THEME_INVALID',
+      message: expect.stringContaining('icons: ghostIcons'),
+    });
+    expect(fs.readdirSync(tmpDir)).toEqual(['commented.mjs']);
+  });
+
+  it('scrapes the live import even when a comment quotes a stale one', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'icons.mjs'),
+      'export const realIcons = {};\n',
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'both.mjs'),
+      `// was: import { realIcons } from './old-icons';\n` +
+        `import {realIcons} from './icons';\n` +
+        `export default {name: 'both', icons: realIcons, tokens: {'--color-bg': '#fff'}};\n`,
+    );
+
+    const result = await themeBuild('both.mjs', {}, {cwd: tmpDir});
+
+    // The comment comes first in the source, so the old scan matched it first
+    // and emitted `./old-icons` — the live import must win.
+    const generated = fs.readFileSync(path.join(tmpDir, 'both.js'), 'utf8');
+    expect(iconImportLine(generated)).toBe(
+      "import { realIcons } from './icons';",
+    );
+    expect(generated).not.toContain('old-icons');
+    expect(result?.data.warnings).toEqual([]);
+  });
+
+  it('ignores a commented-out icons: field entirely', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'nofield.mjs'),
+      `// icons: retiredIcons,\n` +
+        `export default {name: 'nofield', tokens: {'--color-bg': '#fff'}};\n`,
+    );
+
+    const result = await themeBuild('nofield.mjs', {}, {cwd: tmpDir});
+
+    const generated = fs.readFileSync(path.join(tmpDir, 'nofield.js'), 'utf8');
+    expect(iconImportLine(generated)).toBeNull();
+    expect(generated).not.toContain('icons:');
+    // No icons field means nothing was dropped — no warning either.
+    expect(result?.data.warnings).toEqual([]);
+  });
+
+  describe.each([false, true])('unsupported registries (check: %s)', check => {
+    it('rejects before the generator can return no CSS', async () => {
+      fs.writeFileSync(
+        path.join(tmpDir, 'inline.mjs'),
+        `const inlineIcons = {chevron: 'stub'};\n` +
+          `export default {name: 'inline', icons: inlineIcons, tokens: {}};\n`,
+      );
+
+      await mockGenerateThemeRulesSplit.withImplementation(
+        () => ({component: [], prose: []}),
+        async () => {
+          await mockGenerateOnMediaCSS.withImplementation(
+            () => '',
+            async () => {
+              await expect(
+                themeBuild('inline.mjs', {check}, {cwd: tmpDir}),
+              ).rejects.toMatchObject({code: 'ERR_THEME_INVALID'});
+            },
+          );
+        },
+      );
+      expect(mockGenerateThemeRulesSplit).not.toHaveBeenCalled();
+      expect(fs.readdirSync(tmpDir)).toEqual(['inline.mjs']);
+    });
+
+    it.each([
+      ['local binding', 'icons: inlineIcons'],
+      ['object literal', "icons: {chevron: 'stub'}"],
+      ['shorthand', 'icons'],
+    ])('rejects a %s without creating output files', async (_label, field) => {
+      fs.writeFileSync(
+        path.join(tmpDir, 'inline.mjs'),
+        `const inlineIcons = {chevron: 'stub'};\n` +
+          `const icons = inlineIcons;\n` +
+          `export default {name: 'inline', ${field}, tokens: {'--color-bg': '#fff'}};\n`,
+      );
+
+      await expect(
+        themeBuild(
+          'inline.mjs',
+          {check, out: 'dist/inline.css'},
+          {cwd: tmpDir},
+        ),
+      ).rejects.toMatchObject({
+        code: 'ERR_THEME_INVALID',
+        message: expect.stringContaining(
+          'Move the registry to its own module and import it',
+        ),
+      });
+      expect(fs.readdirSync(tmpDir)).toEqual(['inline.mjs']);
+    });
+
+    it('rejects even when committed output already matches the missing-icons result', async () => {
+      const themeFile = path.join(tmpDir, 'inline.mjs');
+      const withoutIcons =
+        `export default {name: 'inline', tokens: {'--color-bg': '#fff'}, ` +
+        `components: {button: {'variant:custom': {color: 'red'}}}};\n`;
+      fs.writeFileSync(themeFile, withoutIcons);
+      const built = await themeBuild('inline.mjs', {}, {cwd: tmpDir});
+      expect(built?.data.outputs.variantsDts).toBe('inline.variants.d.ts');
+      const outputs = Object.values(built.data.outputs);
+      const before = outputs.map(file =>
+        fs.readFileSync(path.join(tmpDir, file), 'utf8'),
+      );
+      // This source used to emit exactly the same output as the icon-free
+      // theme, so --check passed after the incomplete artifacts were committed.
+      fs.writeFileSync(
+        themeFile,
+        `const inlineIcons = {chevron: 'stub'};\n` +
+          withoutIcons.replace(
+            "name: 'inline',",
+            "name: 'inline', icons: inlineIcons,",
+          ),
+      );
+      const filesBefore = fs.readdirSync(tmpDir).sort();
+
+      await expect(
+        themeBuild('inline.mjs', {check}, {cwd: tmpDir}),
+      ).rejects.toMatchObject({
+        code: 'ERR_THEME_INVALID',
+        message: expect.stringContaining('icons: inlineIcons'),
+      });
+      expect(
+        outputs.map(file => fs.readFileSync(path.join(tmpDir, file), 'utf8')),
+      ).toEqual(before);
+      expect(fs.readdirSync(tmpDir).sort()).toEqual(filesBefore);
+    });
+  });
+});
+
 describe('themeBuild() — extends', () => {
   // These fixtures `import {defineTheme} from '@astryxdesign/core/theme'` the
-  // way a real theme file does, so they have to sit somewhere that specifier
-  // resolves — an OS temp dir has no node_modules above it.
+  // way a real theme file does, so each links the CLI's packages.
   let extDir;
   beforeEach(() => {
-    extDir = fs.mkdtempSync(
-      path.join(path.resolve(import.meta.dirname, '../../..'), '.tmp-extends-'),
-    );
+    extDir = makeLinkedFixture('astryx-extends-', ['@astryxdesign']);
   });
   afterEach(() => {
-    fs.rmSync(extDir, {recursive: true, force: true});
+    removeLinkedFixture(extDir);
   });
 
   /**

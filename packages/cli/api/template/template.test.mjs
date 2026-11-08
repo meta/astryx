@@ -1,7 +1,14 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import {describe, it, expect} from 'vitest';
-import {stripTemplateAssetRefs, template} from './template.mjs';
+import {
+  stripTemplateAssetRefs,
+  template,
+  extractComponents,
+} from './template.mjs';
 
 describe('stripTemplateAssetRefs', () => {
   it('replaces a /template-assets image path with an inline data URI', () => {
@@ -31,8 +38,7 @@ describe('stripTemplateAssetRefs', () => {
   });
 
   it('preserves surrounding source structure', () => {
-    const src =
-      "const data = [{src: '/template-assets/x.png', alt: 'X'}];";
+    const src = "const data = [{src: '/template-assets/x.png', alt: 'X'}];";
     const out = stripTemplateAssetRefs(src);
     expect(out).toContain("alt: 'X'");
     expect(out).toContain('const data = [{src:');
@@ -101,5 +107,116 @@ describe('template --skeleton component extraction (prefix-agnostic)', () => {
     expect(result.data.skeleton).not.toContain('<XDS');
 
     expect(result.data.skeleton).toContain('columns={{minWidth: 200}}');
+  });
+
+  it('filters out local helper components declared in the same file', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-test-'));
+    const pagePath = path.join(tmpDir, 'page.tsx');
+    fs.writeFileSync(
+      pagePath,
+      `
+import {Card} from '@astryxdesign/core/Layout';
+
+function TimelineSection() {
+  return <div />;
+}
+
+export default function Page() {
+  return (
+    <Card>
+      <TimelineSection />
+    </Card>
+  );
+}
+      `,
+    );
+
+    try {
+      const components = extractComponents(pagePath);
+      expect(components).toContain('Card');
+      expect(components).not.toContain('Timeline');
+    } finally {
+      fs.rmSync(tmpDir, {recursive: true, force: true});
+    }
+  });
+
+  it('filters out a type-annotated local helper', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-test-'));
+    const pagePath = path.join(tmpDir, 'page.tsx');
+    fs.writeFileSync(
+      pagePath,
+      `
+import type {FC} from 'react';
+import {Card} from '@astryxdesign/core/Layout';
+
+const TimelineSection: FC = () => <div />;
+
+export default function Page() {
+  return (
+    <Card>
+      <TimelineSection />
+    </Card>
+  );
+}
+`,
+    );
+    try {
+      const components = extractComponents(pagePath);
+      expect(components).toContain('Card');
+      expect(components).not.toContain('Timeline');
+    } finally {
+      fs.rmSync(tmpDir, {recursive: true, force: true});
+    }
+  });
+
+  it('keeps an imported component when declaration-like text appears in a comment or string', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-test-'));
+    const pagePath = path.join(tmpDir, 'page.tsx');
+    fs.writeFileSync(
+      pagePath,
+      `
+import {Card} from '@astryxdesign/core/Layout';
+
+// const Card = () => null;
+const note = 'function Card() {}';
+
+export default function Page() {
+  return <Card>{note}</Card>;
+}
+`,
+    );
+    try {
+      expect(extractComponents(pagePath)).toContain('Card');
+    } finally {
+      fs.rmSync(tmpDir, {recursive: true, force: true});
+    }
+  });
+
+  it('keeps a bare imported component whose name is itself a stripped suffix', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-test-'));
+    const pagePath = path.join(tmpDir, 'page.tsx');
+    fs.writeFileSync(
+      pagePath,
+      `
+import {Section} from '@astryxdesign/core/Section';
+
+function SectionHeading() {
+  return <div />;
+}
+
+export default function Page() {
+  return (
+    <Section>
+      <SectionHeading />
+    </Section>
+  );
+}
+`,
+    );
+    try {
+      expect(extractComponents(pagePath)).toContain('Section');
+    } finally {
+      fs.rmSync(tmpDir, {recursive: true, force: true});
+    }
   });
 });

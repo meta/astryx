@@ -70,6 +70,19 @@ describe('ChatLayoutScrollButton', () => {
     ).toHaveFocus();
   });
 
+  it('makes the pill inert whenever the visible state turns off', () => {
+    const {container, rerender} = render(
+      <ChatLayoutScrollButton isVisible onClick={() => {}} />,
+    );
+    const pill = container.querySelector('.astryx-chat-layout-scroll-button');
+
+    expect(pill).not.toHaveAttribute('inert');
+
+    rerender(<ChatLayoutScrollButton isVisible={false} onClick={() => {}} />);
+
+    expect(pill).toHaveAttribute('inert');
+  });
+
   it('is not keyboard reachable while hidden', async () => {
     const user = userEvent.setup();
     render(

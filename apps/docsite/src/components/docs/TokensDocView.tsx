@@ -53,7 +53,7 @@ const TOPIC_SECTION_OVERRIDES: Record<
     'Type Scale Tokens': TypographyTokenTable,
   },
   color: {
-    'Surface Colors': ColorTokenTable,
+    'Color Tokens': ColorTokenTable,
   },
   elevation: {
     'Elevation Scale': ElevationTokenTable,

@@ -34,6 +34,7 @@ import {
 import {ColorSwatch} from './ColorSwatch';
 import {TokenRow} from './TokenRow';
 import {COLOR_CATEGORIES, TYPOGRAPHY_CATEGORIES} from './constants';
+import {spacingToPx} from './helpers';
 
 const s = stylex.create({
   scrollX: {
@@ -117,7 +118,7 @@ interface EditorProps {
 }
 
 function SpacingEditor({tokenName, value, onChange}: EditorProps) {
-  const numValue = parseInt(value, 10);
+  const numValue = spacingToPx(value);
   return (
     <TokenRow
       tokenName={tokenName}
@@ -136,7 +137,7 @@ function SpacingEditor({tokenName, value, onChange}: EditorProps) {
           value={value}
           onChange={val => onChange(tokenName, val)}
           size="sm"
-          xstyle={s.inputSm}
+          controlXstyle={s.inputSm}
         />
       }
     />
@@ -157,7 +158,7 @@ function RadiusEditor({tokenName, value, onChange}: EditorProps) {
           value={value}
           onChange={val => onChange(tokenName, val)}
           size="sm"
-          xstyle={s.inputSm}
+          controlXstyle={s.inputSm}
         />
       }
     />
@@ -192,7 +193,7 @@ function TypographyEditor({tokenName, value, onChange}: EditorProps) {
           value={value}
           onChange={val => onChange(tokenName, val)}
           size="sm"
-          xstyle={s.inputLg}
+          controlXstyle={s.inputLg}
         />
       }
     />
@@ -210,7 +211,7 @@ function GenericEditor({tokenName, value, onChange}: EditorProps) {
           value={value}
           onChange={val => onChange(tokenName, val)}
           size="sm"
-          xstyle={s.inputLg}
+          controlXstyle={s.inputLg}
         />
       }
     />

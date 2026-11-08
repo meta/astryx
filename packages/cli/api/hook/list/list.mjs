@@ -9,7 +9,7 @@
  * identical to the flat command's list branch.
  *
  * @input  { cwd, category?, detail, zh, lang }
- * @output HookListResponse ({ type: 'hook.list', data: { detail, components } })
+ * @output HookListResponse ({ type: 'hook.list', package: CORE_PACKAGE, data: { detail, components } })
  * @position api/hook/list/list.mjs — dispatched from ../hook.mjs
  */
 
@@ -20,7 +20,7 @@ import {
 import {loadDocs} from '../../../foundation/discovery/component-loader.mjs';
 import {AstryxError} from '../../error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
-import {resolveCoreDir} from '../_adapter.mjs';
+import {CORE_PACKAGE, resolveCoreDir} from '../_adapter.mjs';
 
 /**
  * @param {object} [options]
@@ -82,7 +82,7 @@ export async function list({
         }
       }
       return {
-        type: 'hook.list',
+        type: 'hook.list', package: CORE_PACKAGE,
         data: {detail: 'compact', components: {[match[0]]: entries}},
       };
     }
@@ -111,14 +111,14 @@ export async function list({
         }
       }
       return {
-        type: 'hook.list',
+        type: 'hook.list', package: CORE_PACKAGE,
         data: {detail: 'full', components: {[match[0]]: entries}},
       };
     }
 
     // Default: names only
     return {
-      type: 'hook.list',
+      type: 'hook.list', package: CORE_PACKAGE,
       data: {detail: 'names', components: {[match[0]]: match[1]}},
     };
   }
@@ -155,7 +155,7 @@ export async function list({
         }
       }
     }
-    return {type: 'hook.list', data: {detail: 'compact', components: result}};
+    return {type: 'hook.list', package: CORE_PACKAGE, data: {detail: 'compact', components: result}};
   }
 
   if (detail === 'full') {
@@ -186,9 +186,9 @@ export async function list({
         }
       }
     }
-    return {type: 'hook.list', data: {detail: 'full', components: result}};
+    return {type: 'hook.list', package: CORE_PACKAGE, data: {detail: 'full', components: result}};
   }
 
   // Default: names only
-  return {type: 'hook.list', data: {detail: 'names', components: hooks}};
+  return {type: 'hook.list', package: CORE_PACKAGE, data: {detail: 'names', components: hooks}};
 }

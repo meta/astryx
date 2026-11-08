@@ -80,7 +80,7 @@ export const docs = {
       // the description instead (#1645).
       type: 'LightboxMedia | LightboxMedia[]',
       description:
-        "Media to display. Pass a single object for one item, or an array for gallery mode with prev/next navigation. Each item is {src: string, alt: string, caption?: ReactNode, type?: 'image' | 'video'}; type defaults to 'image', and zoom/pan is disabled for 'video'.",
+        "Media to display. Pass a single object for one item, or an array for gallery mode with prev/next navigation (on a phone or tablet, a swipe moves between items too). Each item is {src: string, alt: string, caption?: ReactNode, type?: 'image' | 'video'}; type defaults to 'image', and zoom/pan is disabled for 'video'.",
       required: true,
     },
     {
@@ -92,13 +92,13 @@ export const docs = {
       name: 'onIndexChange',
       type: '(index: number) => void',
       description:
-        'Callback when the gallery index changes via prev/next navigation.',
+        'Callback when the gallery index changes: prev/next, the arrow keys, or a swipe.',
     },
     {
       name: 'hasZoom',
       type: 'boolean',
       description:
-        'Enable zoom on double-click, or Enter/Space/+/- via keyboard (images only). When zoomed, drag or use arrow keys to pan.',
+        'Enable zoom (images only): pinch (or ctrl-wheel), or double-tap or double-click to zoom in at that point and back; Enter/Space/+/- zoom 2× about the centre and back. When zoomed, drag or scroll a trackpad to pan, or use arrow keys; on a phone or a tablet, the pan has momentum.',
       default: 'false',
     },
     {
@@ -128,7 +128,7 @@ export const docs = {
   usage: {
     anatomy,
     description:
-      'A fullscreen overlay for viewing images and videos at full resolution. Supports single-item and gallery modes with prev/next navigation, optional zoom and pan for images, and native video controls.',
+      'A fullscreen overlay for viewing images and videos at full resolution. Supports single-item and gallery modes with prev/next navigation and swiping, optional zoom and pan for images, and native video controls.',
     bestPractices: [
       {
         guidance: true,
@@ -195,7 +195,7 @@ export const docsZh = {
       name: 'media',
       type: 'LightboxMedia | LightboxMedia[]',
       description:
-        "要显示的媒体。传入单个对象或数组（用于画廊模式的上一张/下一张导航）。每项为 {src, alt, caption?, type?: 'image' | 'video'}；type 默认为 'image'，'video' 禁用缩放/平移。",
+        "要显示的媒体。传入单个对象或数组（用于画廊模式的上一张/下一张导航；在手机或平板上，滑动也可在各项之间切换）。每项为 {src, alt, caption?, type?: 'image' | 'video'}；type 默认为 'image'，'video' 禁用缩放/平移。",
       required: true,
     },
     {
@@ -211,7 +211,8 @@ export const docsZh = {
     {
       name: 'hasZoom',
       type: 'boolean',
-      description: '启用双击缩放（仅图片）。缩放后可拖动平移。',
+      description:
+        '启用缩放（仅图片）：双指捏合（或按住 Ctrl 滚动滚轮），或双点按、双击在该处放大并还原；Enter/Space/+/- 键以中心放大 2 倍并还原。缩放后可拖动或在触控板上滚动平移，或用方向键平移；在手机或平板上，平移带惯性。',
       default: 'false',
     },
     {
@@ -227,7 +228,7 @@ export const docsZh = {
   usage: {
     anatomy,
     description:
-      'A fullscreen overlay for viewing images and videos at full resolution. Supports single-item and gallery modes with prev/next navigation, optional zoom and pan for images, and native video controls.',
+      'A fullscreen overlay for viewing images and videos at full resolution. Supports single-item and gallery modes with prev/next navigation and swiping, optional zoom and pan for images, and native video controls.',
     bestPractices: [
       {
         guidance: true,
@@ -265,7 +266,7 @@ export const docsDense = {
   usage: {
     anatomy,
     description:
-      'A fullscreen overlay for viewing images and videos at full resolution. Supports single-item and gallery modes with prev/next navigation, optional zoom and pan for images, and native video controls.',
+      'A fullscreen overlay for viewing images and videos at full resolution. Supports single-item and gallery modes with prev/next navigation and swiping, optional zoom and pan for images, and native video controls.',
     bestPractices: [
       {guidance: true, description: 'Always provide alt text for every image.'},
       {
@@ -294,9 +295,10 @@ export const docsDense = {
     onOpenChange: 'Callback when open state changes.',
     media: 'Single media object or array for gallery mode.',
     index: 'Current index in gallery mode.',
-    onIndexChange: 'Callback when gallery index changes.',
+    onIndexChange:
+      'Callback when gallery index changes (buttons, keys or a swipe).',
     hasZoom:
-      'Enable zoom (double-click, Enter/Space, or +/-) and pan (drag or arrow keys) for images.',
+      'Enable zoom (pinch or ctrl-wheel, double-tap or double-click, Enter/Space, or +/-) and pan (drag, trackpad scroll, or arrow keys) for images.',
     xstyle: 'StyleX styles for layout customization.',
   },
 };

@@ -29,7 +29,7 @@ export const doc = {
       name: 'input',
       type: 'TonalPaletteGenerationInput',
       description:
-        'Families and seeds plus optional modes, shared stops, anchors, vibrancy from 0 to 100 (default 50), and neutral profile. Only generate an accent family when one is explicitly requested; clarify whether an ambiguous accent means one theme value or a tonal family.',
+        'Families and seeds plus optional modes, shared stops, anchors, vibrancy from 0 to 100 (default 50), and neutral profile.',
       required: true,
     },
   ],
@@ -72,6 +72,5 @@ export const doc = {
       code: "generateTonalPalette({stops: [12.5, 50], families: [{id: 'blue', seed: '#0074e2'}]});",
     },
   ],
-  command: 'theme palette generate',
   related: ['themePaletteGenerate'],
 };

@@ -2,7 +2,7 @@
 
 import {describe, it, expect, vi, beforeEach} from 'vitest';
 import {renderHook, act} from '@testing-library/react';
-import {useOverflow} from './useOverflow';
+import {useOverflow, useOverflowInternal} from './useOverflow';
 
 // Builds a mock container element with a given offsetWidth
 function mockContainer(width: number): HTMLElement {
@@ -15,6 +15,7 @@ function mockMeasure(
   itemWidths: number[],
   indicatorWidth?: number,
   itemHeight = 0,
+  indicatorHeight = itemHeight,
 ): HTMLElement {
   const children: {offsetWidth: number; offsetHeight: number}[] =
     itemWidths.map(w => ({
@@ -22,16 +23,21 @@ function mockMeasure(
       offsetHeight: itemHeight,
     }));
   if (indicatorWidth != null) {
-    children.push({offsetWidth: indicatorWidth, offsetHeight: itemHeight});
+    children.push({offsetWidth: indicatorWidth, offsetHeight: indicatorHeight});
   }
   return {children} as unknown as HTMLElement;
 }
+
+// The callback of the most recently created observer. The shared observer
+// outlives a test while any element stays observed, so a delivery goes to it.
+let latestObserverCallback: ResizeObserverCallback | null = null;
 
 // Stubs ResizeObserver — fires callback immediately on observe, like the real one
 class FakeResizeObserver {
   callback: ResizeObserverCallback;
   constructor(cb: ResizeObserverCallback) {
     this.callback = cb;
+    latestObserverCallback = cb;
   }
   observe = vi.fn(() => {
     this.callback([], this);
@@ -380,6 +386,72 @@ describe('useOverflow with maxVisibleItems (cap)', () => {
   });
 });
 
+describe('useOverflowInternal without row tracking', () => {
+  it('renders the host once per measurement that changes nothing it shows: rows and rowHeight are not tracked', () => {
+    let renders = 0;
+    const {result} = renderHook(() => {
+      renders += 1;
+      return useOverflowInternal(3, {gap: 10}, {tracksRows: false});
+    });
+
+    act(() => {
+      // 3 items of 50px, 24px tall, gap 10 → 170 fits in 200: the count stays.
+      result.current.measureRef(mockMeasure([50, 50, 50], 40, 24));
+      result.current.containerRef(mockContainer(200));
+    });
+
+    // The measurement found the same count the hook started with; the item
+    // height it also read is nobody's to render here, so nothing renders.
+    expect(renders).toBe(1);
+    expect(result.current.visibleCount).toBe(3);
+    expect(result.current.rows).toBe(1);
+    expect(result.current.rowHeight).toBe(0);
+  });
+
+  it('reports rows 1 and rowHeight 0 once a multi-row host stops tracking', () => {
+    const initialProps: {maxRows: number | undefined} = {maxRows: 2};
+    const {result, rerender} = renderHook(
+      ({maxRows}: {maxRows: number | undefined}) =>
+        useOverflowInternal(
+          6,
+          {gap: 10, maxRows},
+          {tracksRows: maxRows != null && maxRows > 1},
+        ),
+      {initialProps},
+    );
+
+    act(() => {
+      result.current.measureRef(mockMeasure([50, 50, 50, 50, 50, 50], 40, 24));
+      result.current.containerRef(mockContainer(170));
+    });
+    expect(result.current.visibleCount).toBe(6);
+    expect(result.current.rows).toBe(2);
+    expect(result.current.rowHeight).toBe(24);
+
+    rerender({maxRows: undefined});
+    // The untracked values, not the state the multi-row measurements left
+    // behind; the count is re-measured for one row.
+    expect(result.current.rows).toBe(1);
+    expect(result.current.rowHeight).toBe(0);
+    expect(result.current.visibleCount).toBeLessThan(6);
+  });
+});
+
+describe('useOverflow on the single-line path', () => {
+  it('still measures rowHeight, as its return type documents', () => {
+    const {result} = renderHook(() => useOverflow(3, {gap: 10}));
+
+    act(() => {
+      result.current.measureRef(mockMeasure([50, 50, 50], 40, 24));
+      result.current.containerRef(mockContainer(200));
+    });
+
+    expect(result.current.visibleCount).toBe(3);
+    expect(result.current.rows).toBe(1);
+    expect(result.current.rowHeight).toBe(24);
+  });
+});
+
 describe('useOverflow with maxRows (multi-row)', () => {
   it('exposes rows and rowHeight', () => {
     const {result} = renderHook(() => useOverflow(6, {gap: 10, maxRows: 2}));
@@ -500,5 +572,399 @@ describe('useOverflow with behavior=observeParent', () => {
 
     expect(result.current.visibleCount).toBe(2);
     expect(result.current.hasOverflow).toBe(true);
+  });
+});
+
+describe('useOverflow when the observer reports a resize (component:OverflowList PR1)', () => {
+  // A box whose width a test changes, as a resize would.
+  function resizableBox(width: number): {offsetWidth: number} & Element {
+    return {offsetWidth: width} as unknown as {offsetWidth: number} & Element;
+  }
+
+  // Reports resizes the way the browser does: after layout, outside act(). A
+  // microtask still runs before the frame paints; a render scheduled as a
+  // task runs after it. So the test checks state once microtasks have run.
+  async function deliverBeforePaint(...targets: Element[]): Promise<void> {
+    const actGlobal = globalThis as {IS_REACT_ACT_ENVIRONMENT?: boolean};
+    const wasActEnvironment = actGlobal.IS_REACT_ACT_ENVIRONMENT;
+    actGlobal.IS_REACT_ACT_ENVIRONMENT = false;
+    try {
+      for (const target of targets) {
+        latestObserverCallback?.(
+          [{target} as unknown as ResizeObserverEntry],
+          {} as ResizeObserver,
+        );
+      }
+      await Promise.resolve();
+      await Promise.resolve();
+    } finally {
+      actGlobal.IS_REACT_ACT_ENVIRONMENT = wasActEnvironment;
+    }
+  }
+
+  it.each([
+    ['shrinks', 200, 100, 3, 1],
+    ['grows', 100, 200, 1, 3],
+  ])(
+    'renders the new visible count before the frame paints when the box %s',
+    async (_label, fromWidth, toWidth, before, after) => {
+      const {result} = renderHook(() => useOverflow(3, {gap: 10}));
+      const box = resizableBox(fromWidth);
+
+      act(() => {
+        result.current.measureRef(mockMeasure([50, 50, 50], 30));
+        result.current.containerRef(box as unknown as HTMLElement);
+      });
+      expect(result.current.visibleCount).toBe(before);
+
+      box.offsetWidth = toWidth;
+      await deliverBeforePaint(box);
+
+      expect(result.current.visibleCount).toBe(after);
+    },
+  );
+
+  it.each([0, 20])(
+    'renders nothing for a resize that changes no measured value (items %ipx tall)',
+    async itemHeight => {
+      let renders = 0;
+      const {result} = renderHook(() => {
+        renders++;
+        return useOverflow(3, {gap: 10, maxRows: 2});
+      });
+      const box = resizableBox(200);
+
+      act(() => {
+        result.current.measureRef(mockMeasure([50, 50, 50], 30, itemHeight));
+        result.current.containerRef(box as unknown as HTMLElement);
+      });
+      const settled = renders;
+
+      box.offsetWidth = 220;
+      await deliverBeforePaint(box);
+
+      expect(renders).toBe(settled);
+    },
+  );
+
+  it('renders after paint when a multi-row fold changes the rows the list fills', async () => {
+    const {result} = renderHook(() => useOverflow(6, {gap: 10, maxRows: 2}));
+    const box = resizableBox(120);
+    act(() => {
+      result.current.measureRef(mockMeasure([50, 50, 50, 50, 50, 50], 30, 20));
+      result.current.containerRef(box as unknown as HTMLElement);
+    });
+    expect(result.current.visibleCount).toBe(3);
+    expect(result.current.rows).toBe(2);
+
+    // At 260px the three shown items and the indicator fit on one row, so
+    // the list is one row tall; the new set fills two rows.
+    box.offsetWidth = 260;
+    await deliverBeforePaint(box);
+    expect(result.current.visibleCount).toBe(3);
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    expect(result.current.visibleCount).toBe(6);
+    expect(result.current.rows).toBe(2);
+  });
+
+  it('renders after paint when the new set fits one row but its indicator wraps', async () => {
+    const {result} = renderHook(() => useOverflow(5, {gap: 0, maxRows: 2}));
+    // At 100px one item shows, and the indicator wraps onto the second row.
+    const box = resizableBox(100);
+    act(() => {
+      result.current.measureRef(mockMeasure([60, 60, 60, 150, 60], 60, 20));
+      result.current.containerRef(box as unknown as HTMLElement);
+    });
+    expect(result.current.visibleCount).toBe(1);
+
+    // At 200px the shown item and the indicator fit on one row. The new set,
+    // three items, fills one row, and its indicator wraps onto a second.
+    box.offsetWidth = 200;
+    await deliverBeforePaint(box);
+    expect(result.current.visibleCount).toBe(1);
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    expect(result.current.visibleCount).toBe(3);
+  });
+
+  it('renders after paint when a single-row fold shows an indicator taller than the items', async () => {
+    const {result} = renderHook(() => useOverflow(3, {gap: 10}));
+    const box = resizableBox(200);
+    act(() => {
+      result.current.measureRef(mockMeasure([50, 50, 50], 30, 20, 40));
+      result.current.containerRef(box as unknown as HTMLElement);
+    });
+    expect(result.current.visibleCount).toBe(3);
+
+    // At 100px one item and the 40px indicator show, so the list grows taller.
+    box.offsetWidth = 100;
+    await deliverBeforePaint(box);
+    expect(result.current.visibleCount).toBe(3);
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    expect(result.current.visibleCount).toBe(1);
+  });
+
+  it('renders after paint when a fold hides a plain-text indicator taller than the items', async () => {
+    const {result} = renderHook(() => useOverflow(3, {gap: 10}));
+    // The indicator renders as a text node, which the list's element
+    // children do not include; the measure copy wraps it in an element.
+    const box = resizableBox(100);
+    act(() => {
+      result.current.measureRef(mockMeasure([50, 50, 50], 30, 16, 24));
+      result.current.containerRef(box as unknown as HTMLElement);
+    });
+    expect(result.current.visibleCount).toBe(1);
+
+    // At 200px all three items fit, so the 24px indicator line goes away.
+    box.offsetWidth = 200;
+    await deliverBeforePaint(box);
+    expect(result.current.visibleCount).toBe(1);
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    expect(result.current.visibleCount).toBe(3);
+  });
+
+  it('renders after paint when the shown indicator can be narrower than the measured one', async () => {
+    const {result} = renderHook(() => useOverflow(5, {gap: 0, maxRows: 2}));
+    const box = resizableBox(400);
+    act(() => {
+      // The measured indicator holds all five items; one for two is narrower.
+      result.current.measureRef(mockMeasure([50, 50, 50, 180, 50], 44, 20));
+      result.current.containerRef(box as unknown as HTMLElement);
+    });
+    expect(result.current.visibleCount).toBe(5);
+
+    // At 170px the five shown items fill two clipped rows. Three items with
+    // the measured indicator need two rows, without it one, so the rows the
+    // new set fills are not known.
+    box.offsetWidth = 170;
+    await deliverBeforePaint(box);
+    expect(result.current.visibleCount).toBe(5);
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    expect(result.current.visibleCount).toBe(3);
+  });
+
+  it('renders before paint when a multi-row fold keeps the rows the list fills', async () => {
+    const {result} = renderHook(() => useOverflow(6, {gap: 10, maxRows: 2}));
+    const box = resizableBox(260);
+    act(() => {
+      result.current.measureRef(mockMeasure([50, 50, 50, 50, 50, 50], 30, 20));
+      result.current.containerRef(box as unknown as HTMLElement);
+    });
+    expect(result.current.visibleCount).toBe(6);
+
+    // At 120px the six shown items wrap past two rows; the list clips at two.
+    box.offsetWidth = 120;
+    await deliverBeforePaint(box);
+
+    expect(result.current.visibleCount).toBe(3);
+  });
+
+  // Under observeParent, OverflowList fills its parent's width only while
+  // items are collapsed (component:OverflowList FR4). A fold that shows or
+  // hides the indicator changes the list's width inside the observed parent,
+  // which can change the parent's height when a sibling wraps.
+  function boxWithParent(parentWidth: number): {
+    container: HTMLElement;
+    parent: {clientWidth: number} & Element;
+  } {
+    vi.stubGlobal('getComputedStyle', () => ({
+      paddingLeft: '0px',
+      paddingRight: '0px',
+    }));
+    const parent = {clientWidth: parentWidth} as unknown as {
+      clientWidth: number;
+    } & Element;
+    const container = {offsetWidth: 0} as unknown as HTMLElement;
+    Object.defineProperty(container, 'parentElement', {
+      value: parent,
+      configurable: true,
+    });
+    return {container, parent};
+  }
+
+  it.each([
+    ['shows', 200, 100, 3, 1],
+    ['hides', 100, 200, 1, 3],
+  ])(
+    'renders after paint when an observeParent fold %s the indicator',
+    async (_label, fromWidth, toWidth, before, after) => {
+      const {result} = renderHook(() =>
+        useOverflow(3, {gap: 10, behavior: 'observeParent'}),
+      );
+      const {container, parent} = boxWithParent(fromWidth);
+      act(() => {
+        result.current.measureRef(mockMeasure([50, 50, 50], 30));
+        result.current.containerRef(container);
+      });
+      expect(result.current.visibleCount).toBe(before);
+
+      parent.clientWidth = toWidth;
+      await deliverBeforePaint(parent);
+      expect(result.current.visibleCount).toBe(before);
+
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      });
+      expect(result.current.visibleCount).toBe(after);
+    },
+  );
+
+  it('renders before paint when an observeParent fold keeps the indicator', async () => {
+    const {result} = renderHook(() =>
+      useOverflow(4, {gap: 10, behavior: 'observeParent'}),
+    );
+    const {container, parent} = boxWithParent(160);
+    act(() => {
+      result.current.measureRef(mockMeasure([50, 50, 50, 50], 30));
+      result.current.containerRef(container);
+    });
+    expect(result.current.visibleCount).toBe(2);
+
+    parent.clientWidth = 100;
+    await deliverBeforePaint(parent);
+    expect(result.current.visibleCount).toBe(1);
+    expect(result.current.hasOverflow).toBe(true);
+  });
+
+  it('renders after paint when a multi-row list measures a new row height', async () => {
+    const {result} = renderHook(() => useOverflow(6, {gap: 10, maxRows: 2}));
+    const box = resizableBox(120);
+    const measure = mockMeasure([50, 50, 50, 50, 50, 50], 30, 20);
+    act(() => {
+      result.current.measureRef(measure);
+      result.current.containerRef(box as unknown as HTMLElement);
+    });
+    expect(result.current.rowHeight).toBe(20);
+
+    // The items grow taller at the same width (a late web font, a theme or
+    // density change). The list's max height follows the row height.
+    for (const child of Array.from(measure.children)) {
+      (child as unknown as {offsetHeight: number}).offsetHeight = 32;
+    }
+    await deliverBeforePaint(box);
+    expect(result.current.rowHeight).toBe(20);
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    expect(result.current.rowHeight).toBe(32);
+  });
+
+  // A box with a real style declaration. `followsItems` makes its width drop
+  // under size containment, as a list sized from its content does.
+  function styledBox(
+    width: number,
+    followsItems: boolean,
+  ): {
+    offsetWidth: number;
+    offsetHeight: number;
+    style: CSSStyleDeclaration;
+  } & Element {
+    const style = document.createElement('div').style;
+    const box = {
+      style,
+      offsetHeight: 28,
+      hasAttribute: (name: string) => name === 'style' && style.length > 0,
+      getAttribute: (name: string) =>
+        name === 'style' && style.length > 0 ? style.cssText : null,
+      removeAttribute: (name: string) => {
+        if (name === 'style') {
+          style.cssText = '';
+        }
+      },
+      get offsetWidth() {
+        return followsItems && style.getPropertyValue('contain') !== ''
+          ? 0
+          : width;
+      },
+      set offsetWidth(next: number) {
+        width = next;
+      },
+    };
+    return box as unknown as typeof box & Element;
+  }
+
+  it.each([
+    ['follows its items: after paint', true, 3],
+    ['does not follow its items: before paint', false, 1],
+  ])(
+    'renders a fold whose list width %s',
+    async (_label, followsItems, beforePaint) => {
+      const {result} = renderHook(() => useOverflow(3, {gap: 10}));
+      const box = styledBox(200, followsItems);
+      act(() => {
+        result.current.measureRef(mockMeasure([50, 50, 50], 30));
+        result.current.containerRef(box as unknown as HTMLElement);
+      });
+      expect(result.current.visibleCount).toBe(3);
+
+      box.offsetWidth = 100;
+      await deliverBeforePaint(box);
+      expect(result.current.visibleCount).toBe(beforePaint);
+      // The probe leaves no inline style behind.
+      expect(box.style.getPropertyValue('contain')).toBe('');
+
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      });
+      expect(result.current.visibleCount).toBe(1);
+    },
+  );
+
+  it('leaves no style attribute on a list that had none after the probe', async () => {
+    const {result} = renderHook(() => useOverflow(3, {gap: 10}));
+    let width = 200;
+    const list = document.createElement('div');
+    Object.defineProperty(list, 'offsetWidth', {get: () => width});
+    act(() => {
+      result.current.measureRef(mockMeasure([50, 50, 50], 30));
+      result.current.containerRef(list);
+    });
+    expect(result.current.visibleCount).toBe(3);
+
+    width = 100;
+    await deliverBeforePaint(list);
+    expect(result.current.visibleCount).toBe(1);
+    expect(list.hasAttribute('style')).toBe(false);
+  });
+
+  it('measures every list that one delivery reports, then renders once', async () => {
+    let renders = 0;
+    const {result} = renderHook(() => {
+      renders++;
+      return [useOverflow(3, {gap: 10}), useOverflow(3, {gap: 10})] as const;
+    });
+    const first = resizableBox(200);
+    const second = resizableBox(200);
+
+    act(() => {
+      result.current[0].measureRef(mockMeasure([50, 50, 50], 30));
+      result.current[0].containerRef(first as unknown as HTMLElement);
+      result.current[1].measureRef(mockMeasure([50, 50, 50], 30));
+      result.current[1].containerRef(second as unknown as HTMLElement);
+    });
+    const settled = renders;
+
+    first.offsetWidth = 100;
+    second.offsetWidth = 100;
+    await deliverBeforePaint(first, second);
+
+    expect(result.current[0].visibleCount).toBe(1);
+    expect(result.current[1].visibleCount).toBe(1);
+    expect(renders).toBe(settled + 1);
   });
 });

@@ -10,9 +10,10 @@
  * SYNC: When useMenuHover changes, update tests to match new behavior
  */
 import {describe, it, expect, vi, afterEach} from 'vitest';
-import {render, screen, act} from '@testing-library/react';
+import {render, screen, act, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {TopNavMenu} from '../TopNav/TopNavMenu';
+import {isPointInSafeTriangle, useMenuHover} from './useMenuHover';
 
 const items = [
   {title: 'Analytics', description: 'Track user behavior', href: '/analytics'},
@@ -360,5 +361,176 @@ describe('useMenuHover — native invoker wiring', () => {
       'popovertarget',
       trigger.getAttribute('aria-controls'),
     );
+  });
+});
+
+describe('isPointInSafeTriangle', () => {
+  const flyout = {top: 0, bottom: 200, left: 300, right: 500};
+
+  it('accepts a point between the apex and the near (left) edge of a flyout to the right', () => {
+    const apex = {x: 250, y: 100};
+    expect(isPointInSafeTriangle({x: 275, y: 100}, apex, flyout)).toBe(true);
+    expect(isPointInSafeTriangle({x: 290, y: 30}, apex, flyout)).toBe(true);
+    expect(isPointInSafeTriangle({x: 290, y: 180}, apex, flyout)).toBe(true);
+  });
+
+  it('rejects a point that leaves the triangle', () => {
+    const apex = {x: 250, y: 100};
+    expect(isPointInSafeTriangle({x: 250, y: 400}, apex, flyout)).toBe(false);
+    expect(isPointInSafeTriangle({x: 200, y: 100}, apex, flyout)).toBe(false);
+    expect(isPointInSafeTriangle({x: 260, y: 300}, apex, flyout)).toBe(false);
+  });
+
+  it('uses the right edge when the flyout flipped to the left of the pointer', () => {
+    const apex = {x: 550, y: 100};
+    expect(isPointInSafeTriangle({x: 525, y: 100}, apex, flyout)).toBe(true);
+    expect(isPointInSafeTriangle({x: 600, y: 100}, apex, flyout)).toBe(false);
+  });
+
+  it('uses the top or bottom edge when the pointer left above or below the flyout', () => {
+    expect(
+      isPointInSafeTriangle({x: 400, y: -20}, {x: 400, y: -40}, flyout),
+    ).toBe(true);
+    expect(
+      isPointInSafeTriangle({x: 400, y: 220}, {x: 400, y: 240}, flyout),
+    ).toBe(true);
+  });
+
+  it('has no triangle when the pointer left from over the flyout itself', () => {
+    expect(
+      isPointInSafeTriangle({x: 400, y: 100}, {x: 400, y: 100}, flyout),
+    ).toBe(false);
+  });
+});
+
+describe('useMenuHover — the click guard and its consumers', () => {
+  it('closes immediately on a second click when the menu was opened BY click', async () => {
+    // The guard window keys off the hover-open timestamp, so a menu that was
+    // never hover-opened has no window at all: the next click is a second,
+    // deliberate press on something visibly open, and closes it.
+    const user = userEvent.setup();
+    const trigger = renderMenu();
+
+    await user.click(trigger);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    await user.click(trigger);
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('confirms a hover-open on the click inside the guard window, and closes after it', async () => {
+    vi.useFakeTimers({shouldAdvanceTime: true});
+    const user = userEvent.setup({advanceTimers: vi.advanceTimersByTime});
+    const trigger = renderMenu();
+
+    await user.hover(trigger);
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+    // Inside the window the click confirms: you were reaching for the row
+    // you already meant to open, so it must not slam shut under you.
+    await user.click(trigger);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+    // Past the window it is a deliberate press on something visibly open.
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    await user.click(trigger);
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    vi.useRealTimers();
+  });
+
+  it('leaves no document pointermove listener behind after a close', async () => {
+    // Every consumer of this hook now gets triangle tracking, which attaches
+    // a document-level listener on leave. One surviving a close would run
+    // for the life of the page.
+    vi.useFakeTimers({shouldAdvanceTime: true});
+    const user = userEvent.setup({advanceTimers: vi.advanceTimersByTime});
+    const add = vi.spyOn(document, 'addEventListener');
+    const remove = vi.spyOn(document, 'removeEventListener');
+    const trigger = renderMenu();
+
+    await user.hover(trigger);
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+    fireEvent.mouseLeave(trigger, {clientX: 10, clientY: 10});
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+
+    const attached = add.mock.calls.filter(([type]) => type === 'pointermove');
+    const detached = remove.mock.calls.filter(
+      ([type]) => type === 'pointermove',
+    );
+    expect(detached.length).toBeGreaterThanOrEqual(attached.length);
+    vi.useRealTimers();
+  });
+});
+
+// =============================================================================
+// Disabling a trigger with a hover already in flight
+// =============================================================================
+
+describe('useMenuHover — disabled during the hover delay', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  /**
+   * The hook directly: a consumer that can flip `isEnabled` without also
+   * changing what it renders. Through a real consumer the two move together —
+   * `SideNavItem` only enables the flyout while the rail is collapsed — so
+   * the disable cannot be observed apart from the re-render it causes.
+   */
+  function Harness({isEnabled, show}: {isEnabled: boolean; show: () => void}) {
+    const {triggerProps} = useMenuHover<HTMLDivElement>({
+      show,
+      hide: () => {},
+      isOpen: false,
+      isEnabled,
+    });
+    return (
+      <button type="button" {...triggerProps}>
+        Products
+      </button>
+    );
+  }
+
+  it('does not open a surface the hover scheduled before it was disabled', () => {
+    vi.spyOn(window, 'matchMedia').mockImplementation(
+      (query: string) =>
+        ({
+          matches: query.includes('hover: hover'),
+          media: query,
+          onchange: null,
+          addListener: () => {},
+          removeListener: () => {},
+          addEventListener: () => {},
+          removeEventListener: () => {},
+          dispatchEvent: () => false,
+        }) as MediaQueryList,
+    );
+    vi.useFakeTimers();
+    const show = vi.fn();
+    const {rerender} = render(<Harness isEnabled show={show} />);
+
+    fireEvent.mouseEnter(screen.getByRole('button', {name: 'Products'}));
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+    expect(show).not.toHaveBeenCalled();
+
+    // Disabled with the open still pending. Inert handlers alone do not
+    // settle it: the scheduled open would land on a surface whose handlers
+    // can no longer dismiss it.
+    rerender(<Harness isEnabled={false} show={show} />);
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(show).not.toHaveBeenCalled();
   });
 });

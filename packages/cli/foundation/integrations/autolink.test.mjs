@@ -87,7 +87,7 @@ function installPackage(
     fs.mkdirSync(componentsDir, {recursive: true});
     fs.writeFileSync(
       path.join(componentsDir, `${componentName}.doc.mjs`),
-      `export const docs = {name: '${componentName}', usage: {description: 'A widget'}};\n`,
+      `export default {type: 'component', name: '${componentName}', usage: {description: 'A widget'}, props: []};\n`,
     );
     fs.writeFileSync(
       path.join(componentsDir, `${componentName}.tsx`),

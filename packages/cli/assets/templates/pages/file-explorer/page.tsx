@@ -6,7 +6,9 @@ import {useState, useMemo, type CSSProperties} from 'react';
 import {Layout, LayoutContent} from '@astryxdesign/core/Layout';
 import {Toolbar} from '@astryxdesign/core/Toolbar';
 import {List, ListItem} from '@astryxdesign/core/List';
-import {HStack, StackItem, VStack} from '@astryxdesign/core/Layout';
+import {HStack, VStack} from '@astryxdesign/core/Layout';
+import {StackItem} from '@astryxdesign/core/Stack';
+import {rtlStyles} from '@astryxdesign/core/utils';
 import {Text} from '@astryxdesign/core/Text';
 import {Icon} from '@astryxdesign/core/Icon';
 import {IconButton} from '@astryxdesign/core/IconButton';
@@ -259,9 +261,10 @@ const FILESYSTEM: FileSystemItem[] = [
   },
 ];
 
-// Fill the viewport: the host page's <html>/<body> are not height:100%, so
-// Layout height="fill" has nothing to fill. Tracked separately from #2623.
 const page: CSSProperties = {height: '100dvh'};
+// The detail column fills the rest of the row but never narrows below 320px;
+// past that, the row scrolls sideways.
+const detailFloor: CSSProperties = {flexShrink: 0, flexBasis: 320};
 
 function findItem(items: FileSystemItem[], id: string): FileSystemItem | null {
   for (const item of items) {
@@ -355,7 +358,13 @@ export default function FileExplorerPage() {
               <IconButton
                 variant="ghost"
                 size="sm"
-                icon={<Icon icon={ChevronLeftIcon} size="sm" />}
+                icon={
+                  <Icon
+                    icon={ChevronLeftIcon}
+                    size="sm"
+                    xstyle={rtlStyles.mirror}
+                  />
+                }
                 onClick={() => {
                   if (selectedPath.length > 0) {
                     setSelectedPath(selectedPath.slice(0, -1));
@@ -367,7 +376,13 @@ export default function FileExplorerPage() {
               <IconButton
                 variant="ghost"
                 size="sm"
-                icon={<Icon icon={ChevronRightIcon} size="sm" />}
+                icon={
+                  <Icon
+                    icon={ChevronRightIcon}
+                    size="sm"
+                    xstyle={rtlStyles.mirror}
+                  />
+                }
                 isDisabled
                 label="Go forward"
               />
@@ -443,20 +458,26 @@ export default function FileExplorerPage() {
       }
       content={
         <LayoutContent padding={0} isScrollable={false}>
-          {/* The column strip scrolls horizontally; each column scrolls itself. */}
           <HStack height="100%" isScrollable>
             {columns.map((col, colIndex) => {
               const showDivider =
                 colIndex < columns.length - 1 || selectedFile != null;
               return (
-                <StackItem key={colIndex} size="static">
+                <StackItem
+                  key={colIndex}
+                  size="static"
+                  isScrollable
+                  aria-label={
+                    colIndex === 0
+                      ? 'Home'
+                      : findItem(FILESYSTEM, selectedPath[colIndex - 1])?.name
+                  }>
                   <Section
                     width={240}
                     height="100%"
                     padding={2}
                     variant="transparent"
-                    dividers={showDivider ? ['end'] : undefined}
-                    isScrollable>
+                    dividers={showDivider ? ['end'] : undefined}>
                     <List density="compact" hasDividers={false}>
                       {col.items.map(item => {
                         const isSelected = col.selectedId === item.id;
@@ -489,6 +510,7 @@ export default function FileExplorerPage() {
                                   icon={ChevronRightIcon}
                                   size="xsm"
                                   color="secondary"
+                                  xstyle={rtlStyles.mirror}
                                 />
                               ) : undefined
                             }
@@ -503,12 +525,12 @@ export default function FileExplorerPage() {
               );
             })}
             {selectedFile && (
-              <StackItem size="fill" minWidth={320}>
-                <Section
-                  height="100%"
-                  padding={6}
-                  variant="transparent"
-                  isScrollable>
+              <StackItem
+                size="fill"
+                isScrollable
+                aria-label={selectedFile.name}
+                style={detailFloor}>
+                <Section padding={6} variant="transparent">
                   <VStack gap={4} hAlign="center">
                     <Avatar name={selectedFile.name} size={96} />
                     <VStack gap={1} hAlign="center">

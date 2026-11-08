@@ -15,6 +15,7 @@
 import path from 'node:path';
 import postcss from 'postcss';
 import selectorParser from 'postcss-selector-parser';
+import {parseCss, processSelector} from '../../parse.mjs';
 import {
   V054_THEME_SELECTOR_DYNAMIC_AXES,
   V054_THEME_SELECTOR_TARGETS,
@@ -30,10 +31,16 @@ export const meta = {
 /** @typedef {[string, string]} AttributeCandidate */
 /** @typedef {AttributeCandidate | AttributeCandidate[]} CandidateEntry */
 
+/** @typedef {Record<string, Array<{axis: string, token: 'class-value' | 'prefixed', prefix?: string}>>} DynamicAxes */
+/** @typedef {{targets: Record<string, Record<string, CandidateEntry>>, dynamicAxes: DynamicAxes}} SelectorData */
+
+// The selector tables in effect for the current synchronous migration. They
+// default to the 0.5.4 snapshot this codemod shipped with; a later release can
+// pass a newer frozen snapshot to migrateAstryxThemeSelectors().
 /** @type {Record<string, Record<string, CandidateEntry>>} */
-const TARGETS = V054_THEME_SELECTOR_TARGETS;
-/** @type {Record<string, Array<{axis: string, token: 'class-value' | 'prefixed', prefix?: string}>>} */
-const DYNAMIC_AXES = V054_THEME_SELECTOR_DYNAMIC_AXES;
+let TARGETS = V054_THEME_SELECTOR_TARGETS;
+/** @type {DynamicAxes} */
+let DYNAMIC_AXES = V054_THEME_SELECTOR_DYNAMIC_AXES;
 const SAME_ELEMENT_FUNCTIONAL_PSEUDOS = new Set([':is', ':where', ':not']);
 
 /** @param {string} axis */
@@ -108,7 +115,10 @@ function candidatesFor(target, token) {
 function dedupeCandidates(candidates) {
   return [
     ...new Map(
-      candidates.map(candidate => [`${candidate[0]}\0${candidate[1]}`, candidate]),
+      candidates.map(candidate => [
+        `${candidate[0]}\0${candidate[1]}`,
+        candidate,
+      ]),
     ).values(),
   ];
 }
@@ -410,10 +420,7 @@ function migrateCompound(
     const selectorArms = node.nodes.filter(
       (/** @type {any} */ selector) => selector.type === 'selector',
     );
-    if (
-      completedArms.size > 0 &&
-      completedArms.size === selectorArms.length
-    ) {
+    if (completedArms.size > 0 && completedArms.size === selectorArms.length) {
       continue;
     }
     if (node.value === ':nth-child' || node.value === ':nth-last-child') {
@@ -427,11 +434,7 @@ function migrateCompound(
       : [];
     for (const selector of selectorArms) {
       if (completedArms.has(selector)) continue;
-      migrateSelectorNode(
-        selector,
-        nestedTargets,
-        nestedConditionalTargets,
-      );
+      migrateSelectorNode(selector, nestedTargets, nestedConditionalTargets);
     }
   }
 
@@ -490,9 +493,7 @@ function combineSelectorListContexts(contexts) {
   );
   return {
     guaranteed,
-    possible: [
-      ...new Set(contexts.flatMap(context => context.possible)),
-    ],
+    possible: [...new Set(contexts.flatMap(context => context.possible))],
   };
 }
 
@@ -555,7 +556,7 @@ function migrateSelectorTextWithContext(
 ) {
   /** @type {TargetContext} */
   let context = {guaranteed: [], possible: []};
-  const text = selectorParser(selectors => {
+  const text = processSelector(selector, selectors => {
     /** @type {TargetContext[]} */
     const branchContexts = [];
     selectors.each(selectorNode => {
@@ -593,7 +594,7 @@ function migrateSelectorTextWithContext(
       });
     });
     context = combineSelectorListContexts(branchContexts);
-  }).processSync(selector, {lossless: true});
+  });
   return {text, context};
 }
 
@@ -655,9 +656,29 @@ function migrateScopeParams(params) {
   return result + params.slice(last);
 }
 
+/**
+ * @param {string} source
+ * @param {string} [from]
+ * @param {SelectorData} [data] frozen selector tables; defaults to 0.5.4
+ * @returns {string}
+ */
+export function migrateAstryxThemeSelectors(source, from = 'styles.css', data) {
+  if (data == null) return migrateWithActiveTables(source, from);
+  const previousTargets = TARGETS;
+  const previousAxes = DYNAMIC_AXES;
+  TARGETS = data.targets;
+  DYNAMIC_AXES = data.dynamicAxes;
+  try {
+    return migrateWithActiveTables(source, from);
+  } finally {
+    TARGETS = previousTargets;
+    DYNAMIC_AXES = previousAxes;
+  }
+}
+
 /** @param {string} source @param {string} from @returns {string} */
-export function migrateAstryxThemeSelectors(source, from = 'styles.css') {
-  const root = postcss.parse(source, {from});
+function migrateWithActiveTables(source, from) {
+  const root = parseCss(source, {from});
   const existingComments = new Set();
   root.walkComments(comment => {
     existingComments.add(comment.text.trim());
@@ -683,7 +704,7 @@ export function migrateAstryxThemeSelectors(source, from = 'styles.css') {
     }
     const parentContext =
       parent?.type === 'rule'
-        ? ruleContexts.get(parent) ?? {guaranteed: [], possible: []}
+        ? (ruleContexts.get(parent) ?? {guaranteed: [], possible: []})
         : {guaranteed: [], possible: []};
     try {
       const migrated = migrateSelectorTextWithContext(

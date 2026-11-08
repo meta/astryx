@@ -69,6 +69,38 @@ export const docs = {
       description: 'StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value: not an inline style object like style={{}}.',
     },
   ],
+  usage: {
+    description: 'Use ChatSendButton as ChatComposer’s send control when the action should switch between sending and stopping. Inside ChatComposer it reads readiness, streaming state, and action callbacks from context; standalone usage supplies those values explicitly.',
+    bestPractices: [
+      {
+        guidance: true,
+        description: 'Place ChatSendButton inside ChatComposer when its readiness and send or stop lifecycle should follow composer context.',
+      },
+      {
+        guidance: true,
+        description: 'For standalone use, provide the state and matching onSend or onStop callback explicitly.',
+      },
+      {
+        guidance: true,
+        description: 'Keep the translated Send or Stop accessible name intact when supplying custom icon artwork; the icon is decorative and must not be the only name source.',
+      },
+      {
+        guidance: false,
+        description: 'Do not render the stop state without a working onStop callback from props or ChatComposer context.',
+      },
+      {
+        guidance: false,
+        description: 'Do not expect isDisabled to disable the stop action; it applies only to the send state.',
+      },
+    ],
+    anatomy: [
+      {
+        name: 'Action button',
+        required: true,
+        description: 'Circular icon-only Button that exposes the translated Send or Stop name and carries the chat-send-button theme target.',
+      },
+    ],
+  },
 };
 
 export const docsZh = {

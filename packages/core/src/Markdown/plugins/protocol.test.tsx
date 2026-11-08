@@ -19,7 +19,11 @@ import {
   parseMarkdownIncremental,
 } from '../parser';
 import type {InlineNode} from '../parser';
-import {createMarkdownPlugin, isMarkdownExtensionNode} from './protocol';
+import {
+  createMarkdownPlugin,
+  getMarkdownPluginCapabilities,
+  isMarkdownExtensionNode,
+} from './protocol';
 import {visitMarkdownNodes} from '../ast';
 import type {
   MarkdownExtensionNode,
@@ -45,6 +49,13 @@ type BrokenMentionNode = MarkdownExtensionNode<
 function ThrowingRendererChild(): never {
   throw new Error('broken renderer child');
 }
+
+type CapabilityNode = MarkdownExtensionNode<
+  'capability-both',
+  'mark',
+  {readonly label: string},
+  'inline'
+>;
 
 type InvalidSyntaxNode = MarkdownExtensionNode<
   'invalid-syntax',
@@ -210,6 +221,56 @@ function replaceText(value: string, replacement: string) {
     },
   });
 }
+
+describe('getMarkdownPluginCapabilities (spec:AST-064 FR4)', () => {
+  it('reports only whether a plugin declares syntax and a transform', () => {
+    const transformOnly = createMarkdownPlugin({
+      name: 'capability-transform',
+      apiVersion: 1,
+      transform: root => root,
+    });
+    const both = createMarkdownPlugin<'capability-both', CapabilityNode>({
+      name: 'capability-both',
+      apiVersion: 1,
+      parseKey: 'v1',
+      syntax: {
+        inline: [
+          {
+            startsWith: ['%%'],
+            maxSpan: 8,
+            tokenize: () => ({status: 'no-match'}),
+          },
+        ],
+      },
+      transform: root => root,
+      renderers: {mark: {render: () => null, toText: () => ''}},
+    });
+    expect(getMarkdownPluginCapabilities(mentionPlugin)).toEqual({
+      syntax: true,
+      transform: false,
+    });
+    expect(getMarkdownPluginCapabilities(transformOnly)).toEqual({
+      syntax: false,
+      transform: true,
+    });
+    expect(getMarkdownPluginCapabilities(both)).toEqual({
+      syntax: true,
+      transform: true,
+    });
+    const report = getMarkdownPluginCapabilities(mentionPlugin);
+    expect(Object.keys(report)).toEqual(['syntax', 'transform']);
+    expect(Object.isFrozen(report)).toBe(true);
+  });
+
+  it('refuses an entry that did not come from createMarkdownPlugin', () => {
+    expect(() =>
+      getMarkdownPluginCapabilities({
+        name: 'forged',
+        apiVersion: 1,
+      } as unknown as typeof mentionPlugin),
+    ).toThrow('entries must come from a compatible createMarkdownPlugin()');
+  });
+});
 
 describe('Markdown plugin protocol', () => {
   it('keeps omitted and explicit empty pipelines identical', () => {

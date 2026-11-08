@@ -3,17 +3,48 @@
 /** @type {import('@astryxdesign/cli/authoring').ReferenceTranslationDoc} */
 
 export const docsZh = {
-  description: 'Theme 提供者、自定义主题、亮/暗模式和组件样式覆盖。',
+  description: '如何使用和创建主题：请参阅"使用主题"了解如何应用主题，参阅"创作主题"了解如何创建和自定义主题。',
   sections: [
-    { section: 'Quick Start', title: '快速开始', content: [null, null, null, null, { type: 'prose', text: '默认导入使用运行时样式注入。/built 导入使用预编译 CSS（需配合 theme.css）。' }] },
-    { section: 'Available Themes', title: '可用主题', content: [null, null, { type: 'prose', text: '已发布主题：neutral（推荐起点）、butter、chocolate、gothic（仅暗色）、matcha、stone、y2k。@astryxdesign/theme-{name} = 源码版（运行时注入）。@astryxdesign/theme-{name}/built = 优化版（配合 theme.css）。' }] },
-    { section: 'Theme Props', title: 'Theme 属性', content: [null] },
-    { section: 'Creating a Custom Theme', title: '创建自定义主题', content: [{ type: 'prose', text: '用 `theme list` + `theme add <slug>` 从内置主题或已安装集成提供的主题开始；重名时传 `--package`。也可以用 defineTheme 从零编写。只覆盖与默认值不同的令牌。' }, null, { type: 'prose', text: '`astryx theme template` 会写入 theme.template.ts：带注释的完整参考，涵盖每个 defineTheme 字段、令牌族和覆盖语法，并标明打印各自参考的 CLI 命令。' }] },
-    { section: 'defineTheme', title: 'defineTheme', content: [{ type: 'prose', text: '支持比例配置（color、typography、radius、motion）+ 显式令牌覆盖 + 组件覆盖。color 通过 HCT 从 accent 派生完整调色板；accent 接受单个十六进制值或 [light, dark] 元组（每个模式使用各自的种子色）。tokens 覆盖按令牌逐个生效；--color-on-accent 始终由 color.accent 计算得出，因此优先使用元组 accent 而不是覆盖 --color-accent。' }, null, null] },
-    { section: 'Building Themes for Production', title: '生产构建', content: [{ type: 'prose', text: 'astryx theme build 将 defineTheme 编译为静态 CSS。输出 .css + .js（__built:true）+ .d.ts。' }, null, null, null, { type: 'prose', text: '当前 theme build 仅在检测到 icons: 字段使用的具名导入时，才在生成的模块中导入图标注册表；它不会编译注册表模块。defineTheme 在运行时接受的内联注册表（包括本地常量）目前会在构建产物中被省略。使用此构建流程时，请把注册表移到独立模块并使用具名导入。以下示例适用于使用 React 和 lucide-react 的注册表。' }, null, { type: 'prose', text: '上例中生成的主题从 dist 导入 ./icons.mjs。如果跳过第二条命令，theme build 仍可能成功，但加载或打包生成的模块都会因缺少 dist/icons.mjs 而失败。--icons-specifier 只更改生成的导入，不会创建或验证目标文件。路径应相对于生成的 JS 文件可解析。将 react 和图标库标记为 external，避免在注册表中重复打包这些依赖。' }, { type: 'prose', text: '不传 --icons-specifier 时，会原样保留检测到的源码导入路径。默认不传 --out 时，打包器可以把无扩展名的 ./icons 解析为旁边的 icons.tsx；Node ESM 不执行这种查找，会报 ERR_MODULE_NOT_FOUND。用 --out 移动输出位置也会改变相对导入的解析位置；使用打包器并不意味着它能自动找到原来的源码。' }, null, null, null] },
-    { section: 'Runtime vs Built Themes', title: '运行时 vs 构建', content: [{ type: 'prose', text: '运行时：useInsertionEffect 在客户端注入样式。构建：静态 CSS 在首次渲染时就存在。SSR 应用请使用 /built + theme.css。' }, null, null, null] },
-    { section: 'Light/Dark Mode', title: '亮/暗模式', content: [{ type: 'prose', text: "令牌值使用 [light, dark] 元组实现自动模式切换。Theme 上 mode='system'（默认）跟随系统偏好。" }, null, null] },
-    { section: 'Nesting Themes', title: '嵌套主题', content: [{ type: 'prose', text: '将不同部分包裹在独立的 <Theme> 提供者中。' }, null] },
-    { section: 'useTheme Hook', title: 'useTheme 钩子', content: [null, { type: 'prose', text: '这是只读的。要更改主题/模式，在应用层管理状态并传递给 <Theme>。' }] },
+    {
+      section: 'Wrap your app in a theme',
+      title: '为应用添加主题',
+      content: [
+        {
+          type: 'prose',
+          text: "安装主题包，用 `<Theme>`（`import {Theme} from '@astryxdesign/core/theme'`）包裹应用，选择浅色或深色模式。完整指南——可用主题、集成主题、深色模式、嵌套主题和生产构建——请参阅 {@link generic:use-a-theme}。",
+        },
+      ],
+    },
+    {
+      section: 'Create a custom theme',
+      title: '创建自定义主题',
+      content: [
+        {
+          type: 'prose',
+          text: '使用 `defineTheme` 进行令牌覆盖、比例配置和组件样式覆盖。新建完整调色板时，请运行 `astryx theme palette generate palette.config.json --out palette.generated.ts`，审核并提交生成的模块和收据，再使用 `import {palette} from \'./palette.generated\';` 导入调色板，让语义令牌引用稳定的色阶，例如 `palette.neutral.light[100]` 和 `palette.neutral.dark[15]`。重新生成已接受的调色板时，所有保留这些引用的映射令牌会一并更新；生成操作不会自动修改主题。完整指南请参阅 {@link generic:author-a-theme}。',
+        },
+      ],
+    },
+    {
+      section: 'Icon sizes',
+      title: '图标尺寸',
+      content: [
+        {
+          type: 'prose',
+          text: "主题在样式表中设置每个 Icon 尺寸的大小：在 `components.icon['size:sm']`（或 `xsm`、`md`、`lg`）上设置 `width` 和 `height`，即可调整该尺寸的图标，语义图标名称和直接传给 `Icon` 的 SVG 组件都适用。请使用 `px` 或 `rem` 设置尺寸：语义图标会据此设置自身的字号，因此 `em` 值也会放大它的外框。主题未设置的尺寸在 16px 根字号下保持 12、16、20 或 24px（`xsm`、`sm`、`md`、`lg`），并随根字号缩放；`rem` 可保留这种缩放。四个尺寸名称是固定的。",
+        },
+        null,
+      ],
+    },
+    {
+      section: 'Dark mode',
+      title: '深色模式',
+      content: [
+        {
+          type: 'prose',
+          text: '在令牌值中使用 [浅色, 深色] 元组来自动切换模式。在 Theme 上使用 mode=\'system\'（默认）来跟随操作系统偏好。完整指南：{@link generic:use-a-theme}。',
+        },
+      ],
+    },
   ],
 };

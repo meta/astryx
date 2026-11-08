@@ -1,0 +1,573 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+'use client';
+
+/**
+ * @file TouchTimeField.tsx
+ * @input Uses React, Field, BottomSheet, the wheels (TimeWheels under a finger,
+ *   Wheel with a mouse), DateInput touch geometry tokens and time utilities
+ * @output Exports TouchTimeField — the bottom-sheet surface behind TimeInput
+ * @position Internal component; consumed by TimeInput.tsx for `presentation`
+ *   sheet surfaces
+ *
+ * SYNC: When modified, update these files to stay in sync:
+ * - /packages/core/src/TimeInput/TimeInput.tsx
+ * - /packages/core/src/TimeInput/TimeInput.doc.mjs
+ * - /packages/core/src/DateTimeInput/TouchDateTimeField.tsx (wheel behavior)
+ */
+
+import {
+  useCallback,
+  useId,
+  useMemo,
+  useOptimistic,
+  useRef,
+  useState,
+  useTransition,
+  type KeyboardEvent,
+} from 'react';
+import * as stylex from '@stylexjs/stylex';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
+import {BottomSheet} from '../BottomSheet';
+import {Button} from '../Button';
+import {
+  Field,
+  InputClearButton,
+  inputWrapperStyles,
+  inputStatusBorderStyles,
+  inputStatusHoverShadowStyles,
+  inputStatusFocusWithinStyles,
+} from '../Field';
+import {useInputGroup} from '../InputGroup/InputGroupContext';
+import {useFieldInputStyling} from '../Field/fieldParts';
+import {joinAriaIDs} from '../utils/inputAria';
+import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
+import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
+import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
+import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useResolvedRequired} from '../hooks/useResolvedRequired';
+import {Icon} from '../Icon';
+import {useLocale} from '../i18n';
+import {formatLocaleTime} from '../utils/timeFormat';
+import {sizeVars, spacingVars} from '../theme/tokens.stylex';
+import {useSize} from '../SizeContext/SizeContext';
+import {Spinner} from '../Spinner';
+import {useTooltip} from '../Tooltip';
+import {Wheel, type WheelOption} from '../DateInput/Wheel';
+import {useTouchPresentation} from '../utils/touchPresentation';
+import {dateInputTouchGeometry} from '../DateInput/tokens.stylex';
+import {focusOutlineStyles} from '../utils/focusOutline.stylex';
+import {themeProps} from '../utils/themeProps';
+import {
+  clampTime,
+  formatISOTime,
+  getInputARIA,
+  isTimeInRange,
+  mergeProps,
+  parseISOTime,
+  type ISOTimeString,
+} from '../utils';
+import {chainEventHandlers} from '../utils/chainEventHandlers';
+import type {TimeInputProps} from './TimeInput';
+import {TimeWheels} from '../DateInput/datePickerTouch';
+import {
+  hour12From24,
+  hour24From12,
+  hourRowsInHalf,
+  meridiemRows,
+  minuteRows,
+  secondRows,
+  wheelBounds,
+} from './timeWheelRules';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/TimeInput/TouchTimeField.generated';
+
+registerEnglishFallback(english);
+
+const sizeStyles = stylex.create({
+  sm: {height: sizeVars['--size-element-sm'], minWidth: 120},
+  md: {height: sizeVars['--size-element-md'], minWidth: 120},
+  lg: {height: sizeVars['--size-element-lg'], minWidth: 120},
+});
+
+const styles = stylex.create({
+  iconButton: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 0,
+    margin: 0,
+    borderWidth: 0,
+    borderStyle: 'none',
+    backgroundColor: 'transparent',
+    cursor: {
+      default: 'pointer',
+      ':is(:disabled,[aria-disabled="true"])': 'default',
+    },
+    flexShrink: 0,
+  },
+  input: {
+    display: 'block',
+    flex: 1,
+    minWidth: 0,
+    borderWidth: 0,
+    borderStyle: 'none',
+    padding: 0,
+    backgroundColor: 'transparent',
+    outline: 'none',
+    cursor: {
+      default: 'pointer',
+      ':is(:disabled,[aria-disabled="true"])': 'default',
+    },
+  },
+  // Sheet chrome mirrors TouchDateTimeField: `touchSheetBody` insets (the
+  // BottomSheet handle floats over the panel, so the wrapper supplies the top
+  // clearance and the side/bottom insets) flattened with `touchPanel`'s column
+  // layout, which is the wheels' direct parent there and spaces the footer.
+  sheetBody: {
+    boxSizing: 'border-box',
+    display: 'flex',
+    flexDirection: 'column',
+    inlineSize: '100%',
+    minInlineSize: 0,
+    gap: spacingVars['--spacing-2'],
+    paddingInline: spacingVars['--spacing-4'],
+    paddingBlockStart: spacingVars['--spacing-6'],
+    paddingBlockEnd: spacingVars['--spacing-4'],
+  },
+  wheels: {
+    display: 'flex',
+    inlineSize: '100%',
+    minInlineSize: 0,
+    blockSize: dateInputTouchGeometry.paneBlockSize,
+    gap: spacingVars['--spacing-2'],
+  },
+  footer: {
+    display: 'flex',
+    marginBlockStart: 'auto',
+    paddingBlockStart: spacingVars['--spacing-1'],
+  },
+});
+
+/**
+ * The Astryx bottom-sheet time surface: a read-only closed field that opens
+ * hour/minute(/second/meridiem) wheels in a BottomSheet. Wheels commit live,
+ * clamped to `min`/`max`; the footer Save button only closes the sheet.
+ */
+export function TouchTimeField({
+  label,
+  isLabelHidden = false,
+  description,
+  isOptional = false,
+  isRequired = false,
+  isDisabled = false,
+  disabledMessage,
+  value,
+  onChange,
+  changeAction,
+  isLoading = false,
+  min,
+  max,
+  hasSeconds = false,
+  hasClear = false,
+  hourFormat = '12h',
+  // Typed-field only: the wheels step by their own options and the sheet
+  // opens on tap, so neither reaches this surface.
+  increment: _increment,
+  hasAutoFocus: _hasAutoFocus,
+  placeholder: placeholderFromProps,
+  size: sizeProp,
+  status,
+  statusVariant = 'attached',
+  labelTooltip,
+  width,
+  containerXstyle,
+  containerClassName,
+  containerStyle,
+  controlXstyle,
+  controlClassName,
+  controlStyle,
+  ref,
+  ...restProps
+}: TimeInputProps) {
+  const {rest, container} = useFieldInputStyling('TimeInput', restProps, {
+    containerXstyle,
+    containerClassName,
+    containerStyle,
+  });
+  const {
+    id: idProp,
+    'aria-describedby': ariaDescribedByProp,
+    'aria-labelledby': ariaLabelledByProp,
+    onClick: onClickProp,
+    ...controlProps
+  } = rest;
+  const t = useComponentTranslator();
+  const locale = useLocale();
+  const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
+  const placeholder =
+    placeholderFromProps ?? t('@astryx.timeInput.placeholder');
+  const size = useSize(sizeProp, 'md');
+  const generatedID = useId();
+  const id = idProp ?? generatedID;
+  const fieldLabelID = useId();
+  const inputLabelID = useId();
+  const descriptionID = useId();
+  const statusMessageID = useId();
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const mergedInputRef = useMergedRefs(ref, inputRef);
+  const inputGroup = useInputGroup();
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const {isTouch} = useTouchPresentation();
+  const [, startTransition] = useTransition();
+  const [optimisticValue, setOptimisticValue] = useOptimistic(value);
+  const isBusy = isLoading || optimisticValue !== value;
+  const sheetBodyRef = useRef<HTMLDivElement | null>(null);
+  // The busy Spinner is decorative; this control announces its busy start
+  // (spec:AST-086 FR8). A change made in the open modal sheet starts it while
+  // the sheet is open, so it is announced from inside the sheet.
+  useBusyAnnouncement(
+    isBusy,
+    t('@astryx.spinner.loading'),
+    isSheetOpen ? sheetBodyRef : inputRef,
+  );
+  const isEffectivelyDisabled = isDisabled || isLoading;
+
+  const showsDisabledMessage = isDisabled && !!disabledMessage;
+  const disabledMessageTooltip = useTooltip({
+    placement: 'above',
+    focusTrigger: 'always',
+    isEnabled: showsDisabledMessage,
+  });
+  const {statusIcon, describedBy: statusTooltipDescribedBy} =
+    useInputStatusIcon({status, statusVariant, isInGroup: !!inputGroup});
+  const {ariaLabelledBy, ariaDescribedBy} = getInputARIA(
+    inputLabelID,
+    [
+      description ? descriptionID : null,
+      statusVariant !== 'tooltip' && status?.message ? statusMessageID : null,
+      statusTooltipDescribedBy,
+      showsDisabledMessage ? disabledMessageTooltip.describedBy : null,
+      ariaDescribedByProp,
+    ],
+    inputGroup,
+  );
+
+  const fireChange = useCallback(
+    (newValue: ISOTimeString | undefined) => {
+      if (isEffectivelyDisabled) {
+        return;
+      }
+      onChange?.(newValue);
+      if (changeAction) {
+        startTransition(async () => {
+          setOptimisticValue(newValue);
+          await changeAction(newValue);
+        });
+      }
+    },
+    [changeAction, isEffectivelyDisabled, onChange, setOptimisticValue],
+  );
+
+  const displayValue = optimisticValue
+    ? formatLocaleTime(optimisticValue, locale, hourFormat, hasSeconds)
+    : '';
+
+  const fallbackTime = useMemo(() => {
+    const now = new Date();
+    return formatISOTime(
+      {
+        hour: now.getHours(),
+        minute: now.getMinutes(),
+        second: now.getSeconds(),
+      },
+      hasSeconds,
+    );
+  }, [hasSeconds]);
+  const parsedWheelTime = useMemo(
+    () =>
+      parseISOTime(optimisticValue ?? fallbackTime) ?? {
+        hour: 0,
+        minute: 0,
+        second: 0,
+      },
+    [fallbackTime, optimisticValue],
+  );
+
+  const composeWheelTime = useCallback(
+    (patch: {
+      hour24?: number;
+      hour12?: number;
+      minute?: number;
+      second?: number;
+      meridiem?: number;
+    }): ISOTimeString => {
+      const meridiem = patch.meridiem ?? (parsedWheelTime.hour < 12 ? 0 : 1);
+      let hour = parsedWheelTime.hour;
+      if (patch.hour24 !== undefined) {
+        hour = patch.hour24;
+      } else if (patch.hour12 !== undefined) {
+        hour = hour24From12(patch.hour12, meridiem);
+      } else if (patch.meridiem !== undefined) {
+        hour = hour24From12(hour12From24(hour), patch.meridiem);
+      }
+      return formatISOTime(
+        {
+          hour,
+          minute: patch.minute ?? parsedWheelTime.minute,
+          second: hasSeconds ? (patch.second ?? parsedWheelTime.second) : 0,
+        },
+        hasSeconds,
+      );
+    },
+    [hasSeconds, parsedWheelTime],
+  );
+
+  const commitWheelTime = useCallback(
+    (rawTime: ISOTimeString) => {
+      const next = clampTime(rawTime, min, max, hasSeconds);
+      if (next !== optimisticValue && isTimeInRange(next, min, max)) {
+        fireChange(next);
+      }
+    },
+    [fireChange, hasSeconds, max, min, optimisticValue],
+  );
+
+  const bounds = useMemo(() => wheelBounds(min, max), [min, max]);
+  const hourOptions: WheelOption[] = useMemo(
+    () => hourRowsInHalf(parsedWheelTime.hour, hourFormat, bounds),
+    [bounds, hourFormat, parsedWheelTime.hour],
+  );
+  const minuteOptions: WheelOption[] = useMemo(
+    () => minuteRows(parsedWheelTime.hour, hasSeconds, bounds),
+    [bounds, hasSeconds, parsedWheelTime.hour],
+  );
+  const secondOptions: WheelOption[] = useMemo(
+    () => secondRows(parsedWheelTime.hour, parsedWheelTime.minute, bounds),
+    [bounds, parsedWheelTime.hour, parsedWheelTime.minute],
+  );
+  const meridiemOptions: WheelOption[] = useMemo(
+    () =>
+      meridiemRows(
+        {
+          am: t('@astryx.dateTimeInput.meridiemAM'),
+          pm: t('@astryx.dateTimeInput.meridiemPM'),
+        },
+        bounds,
+      ),
+    [bounds, t],
+  );
+
+  const openSheet = useCallback(() => {
+    if (!isEffectivelyDisabled) {
+      setIsSheetOpen(true);
+    }
+  }, [isEffectivelyDisabled]);
+
+  const inputWrapper = (
+    <div
+      ref={el => {
+        disabledMessageTooltip.ref(el);
+      }}
+      {...(inputGroup ? inputGroupItemProps : undefined)}
+      {...mergeProps(
+        themeProps('time-input', {
+          size,
+          status: status?.type ?? null,
+          disabled: isDisabled ? 'disabled' : null,
+        }),
+        stylex.props(
+          inputWrapperStyles.base,
+          sizeStyles[size],
+          isDisabled && inputWrapperStyles.disabled,
+          isDisabled && inputDisabledFocusStyles.withinRing,
+          status && inputStatusBorderStyles[status.type],
+          status && !isDisabled && inputStatusHoverShadowStyles[status.type],
+          status && inputStatusFocusWithinStyles[status.type],
+          inputGroup && groupStyles.inGroup,
+          controlXstyle,
+        ),
+        controlClassName,
+        controlStyle,
+      )}>
+      <button
+        type="button"
+        onClick={openSheet}
+        aria-disabled={isEffectivelyDisabled || undefined}
+        aria-label={t('@astryx.timeInput.openPicker', {label})}
+        tabIndex={-1}
+        {...stylex.props(focusOutlineStyles.focusVisible, styles.iconButton)}>
+        <Icon icon="clock" size="sm" color="secondary" />
+      </button>
+      <input
+        {...controlProps}
+        ref={mergedInputRef}
+        id={id}
+        type="text"
+        role="combobox"
+        value={displayValue}
+        readOnly
+        inputMode="none"
+        onChange={() => {}}
+        onClick={
+          isEffectivelyDisabled
+            ? undefined
+            : chainEventHandlers(openSheet, onClickProp)
+        }
+        // Enter would submit a surrounding form while disabled (FR2).
+        onKeyDown={chainEventHandlers((e: KeyboardEvent<HTMLInputElement>) => {
+          if (isEffectivelyDisabled && e.key === 'Enter') {
+            e.preventDefault();
+          }
+        }, controlProps.onKeyDown)}
+        placeholder={placeholder}
+        aria-disabled={isEffectivelyDisabled ? 'true' : undefined}
+        aria-describedby={ariaDescribedBy}
+        aria-required={isEffectivelyRequired ? 'true' : undefined}
+        aria-invalid={status?.type === 'error' ? 'true' : undefined}
+        aria-busy={isBusy || undefined}
+        aria-expanded={isSheetOpen}
+        aria-haspopup="dialog"
+        aria-autocomplete="none"
+        autoComplete="off"
+        aria-labelledby={
+          ariaLabelledByProp != null
+            ? joinAriaIDs(ariaLabelledBy ?? fieldLabelID, ariaLabelledByProp)
+            : ariaLabelledBy
+        }
+        {...stylex.props(styles.input)}
+      />
+      {isBusy && <Spinner size="sm" aria-hidden="true" />}
+      {hasClear && optimisticValue && !isEffectivelyDisabled && (
+        <InputClearButton
+          label={t('@astryx.timeInput.clearLabel', {label})}
+          onClick={() => fireChange(undefined)}
+        />
+      )}
+      {statusIcon}
+      <BottomSheet
+        isOpen={isSheetOpen}
+        onOpenChange={setIsSheetOpen}
+        label={label}
+        height="hug"
+        // sheetBody owns the inset, including the band under the grab handle.
+        padding={0}>
+        <div ref={sheetBodyRef} {...stylex.props(styles.sheetBody)}>
+          <div {...stylex.props(styles.wheels)}>
+            {isTouch ? (
+              <TimeWheels
+                time={parsedWheelTime}
+                hourFormat={hourFormat}
+                hasSeconds={hasSeconds}
+                min={min}
+                max={max}
+                isActive={isSheetOpen}
+                onCommit={time =>
+                  commitWheelTime(formatISOTime(time, hasSeconds))
+                }
+              />
+            ) : (
+              <>
+                <Wheel
+                  label={t('@astryx.dateTimeInput.hourWheel')}
+                  options={hourOptions}
+                  value={
+                    hourFormat === '24h'
+                      ? parsedWheelTime.hour
+                      : hour12From24(parsedWheelTime.hour)
+                  }
+                  isActive={isSheetOpen}
+                  onChange={hour =>
+                    commitWheelTime(
+                      hourFormat === '24h'
+                        ? composeWheelTime({hour24: hour})
+                        : composeWheelTime({hour12: hour}),
+                    )
+                  }
+                />
+                <Wheel
+                  label={t('@astryx.dateTimeInput.minuteWheel')}
+                  options={minuteOptions}
+                  value={parsedWheelTime.minute}
+                  isActive={isSheetOpen}
+                  onChange={minute =>
+                    commitWheelTime(composeWheelTime({minute}))
+                  }
+                />
+                {hasSeconds && (
+                  <Wheel
+                    label={t('@astryx.dateTimeInput.secondWheel')}
+                    options={secondOptions}
+                    value={parsedWheelTime.second}
+                    isActive={isSheetOpen}
+                    onChange={second =>
+                      commitWheelTime(composeWheelTime({second}))
+                    }
+                  />
+                )}
+                {hourFormat === '12h' && (
+                  <Wheel
+                    label={t('@astryx.dateTimeInput.meridiemWheel')}
+                    options={meridiemOptions}
+                    value={parsedWheelTime.hour < 12 ? 0 : 1}
+                    isActive={isSheetOpen}
+                    onChange={meridiem =>
+                      commitWheelTime(composeWheelTime({meridiem}))
+                    }
+                  />
+                )}
+              </>
+            )}
+          </div>
+          <div {...stylex.props(styles.footer)}>
+            <Button
+              variant="primary"
+              size="md"
+              width="100%"
+              label={t('@astryx.dateInput.savePicking')}
+              onClick={() => setIsSheetOpen(false)}
+            />
+          </div>
+        </div>
+      </BottomSheet>
+      {showsDisabledMessage &&
+        disabledMessageTooltip.renderTooltip(disabledMessage)}
+    </div>
+  );
+
+  if (inputGroup) {
+    return inputWrapper;
+  }
+  return (
+    <Field
+      {...container}
+      label={label}
+      isLabelHidden={isLabelHidden}
+      description={description}
+      inputID={id}
+      labelID={ariaLabelledByProp != null ? fieldLabelID : undefined}
+      descriptionID={description ? descriptionID : undefined}
+      isOptional={isOptional}
+      isRequired={isRequired}
+      isDisabled={isDisabled}
+      status={
+        status
+          ? {
+              type: status.type,
+              message: status.message,
+              messageID: status.message ? statusMessageID : undefined,
+            }
+          : undefined
+      }
+      statusVariant={statusVariant}
+      labelTooltip={labelTooltip}
+      width={width}>
+      {inputWrapper}
+    </Field>
+  );
+}
+
+TouchTimeField.displayName = 'TouchTimeField';

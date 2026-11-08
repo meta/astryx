@@ -1,6 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import type {Meta, StoryObj} from '@storybook/react';
+import {expect, userEvent} from 'storybook/test';
 import {ChatToolCalls, type ChatToolCallItem} from '@astryxdesign/core/Chat';
 import {useState, useCallback} from 'react';
 import {CodeBlock} from '@astryxdesign/core/CodeBlock';
@@ -72,6 +73,89 @@ export const MultipleCalls: Story = {
       ]}
     />
   ),
+};
+
+/** Custom group label — replaces the translated count while expanded */
+export const CustomLabel: Story = {
+  render: () => (
+    <ChatToolCalls
+      label="Repository updates"
+      defaultIsExpanded
+      calls={[
+        {name: 'read', target: 'package.json', status: 'complete'},
+        {name: 'edit', target: 'package.json', status: 'complete'},
+      ]}
+    />
+  ),
+};
+
+/** Focused grouped detail — proves the inset ring survives the animated clip boundary */
+export const FocusedGroupedDetail: Story = {
+  tags: ['no-visual'],
+  render: () => (
+    <ChatToolCalls
+      defaultIsExpanded
+      calls={[
+        {
+          name: 'read',
+          target: 'package.json',
+          status: 'complete',
+          resultDetail: <CodeBlock code='{"name":"astryx"}' language="json" />,
+        },
+        {name: 'edit', target: 'package.json', status: 'complete'},
+      ]}
+    />
+  ),
+  play: async ({canvasElement}) => {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    await userEvent.tab();
+    await userEvent.tab();
+    const focused = canvasElement.querySelector<HTMLElement>(':focus');
+    await expect(focused).not.toBeNull();
+    await expect(focused).toHaveTextContent('read');
+    const style = getComputedStyle(focused as HTMLElement);
+    await expect(Number.parseFloat(style.outlineWidth)).toBeGreaterThanOrEqual(
+      2,
+    );
+    await expect(Number.parseFloat(style.outlineOffset)).toBeLessThanOrEqual(
+      -2,
+    );
+  },
+};
+
+/** Narrow container — long metadata truncates without horizontal overflow */
+export const Narrow: Story = {
+  tags: ['no-visual'],
+  render: () => (
+    <div
+      data-chat-tool-calls-narrow
+      style={{boxSizing: 'border-box', width: 320, padding: 16}}>
+      <ChatToolCalls
+        calls={[
+          {
+            name: 'long_running_tool_name',
+            target: 'packages/core/src/Chat/ChatToolCalls.tsx',
+            status: 'running',
+            node: 'workspace',
+          },
+        ]}
+      />
+    </div>
+  ),
+  play: async ({canvasElement}) => {
+    const container = canvasElement.querySelector<HTMLElement>(
+      '[data-chat-tool-calls-narrow]',
+    );
+    await expect(container).not.toBeNull();
+    if (container == null) {
+      throw new Error('Expected the narrow ChatToolCalls fixture');
+    }
+    await expect(container.scrollWidth).toBeLessThanOrEqual(
+      container.clientWidth,
+    );
+  },
 };
 
 /** With node badges — shows which sandbox ran each tool */
@@ -431,11 +515,7 @@ Time:        6.1s`;
             duration: '6.1s',
             node: 'cli:remote-server',
             resultDetail: (
-              <CodeBlock
-                code={testOutput}
-                language="bash"
-                maxHeight="50vh"
-              />
+              <CodeBlock code={testOutput} language="bash" maxHeight="50vh" />
             ),
           },
           {
@@ -490,11 +570,7 @@ Time:        6.84s`;
             node: 'cli:remote-server',
             errorMessage: '4 tests failed',
             resultDetail: (
-              <CodeBlock
-                code={errorOutput}
-                language="bash"
-                maxHeight="50vh"
-              />
+              <CodeBlock code={errorOutput} language="bash" maxHeight="50vh" />
             ),
           },
         ]}

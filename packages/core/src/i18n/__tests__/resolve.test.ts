@@ -10,7 +10,13 @@
 
 import {describe, expect, test, beforeEach, vi} from 'vitest';
 import {__resetForTests, getResolve, resolveLocaleChain} from '../resolve';
-import type {Catalog, MessagesByLocale, Overrides} from '../types';
+import {registerFullEnglishFallback} from '../fullEnglishFallback';
+import type {
+  Catalog,
+  MessagesByLocale,
+  Overrides,
+  ProviderMessagesByLocale,
+} from '../types';
 
 const resolve = (
   ...[key, values, locale, messages, overrides]: [
@@ -18,6 +24,11 @@ const resolve = (
     ...Parameters<typeof getResolve>,
   ]
 ) => getResolve(locale, messages, overrides)(key, values);
+
+// The resolver falls back to the English registered by loaded modules. These
+// tests cover lookup over every shipped key, as the public paths register it;
+// englishFallback.test.ts covers a component's own English.
+registerFullEnglishFallback();
 
 // Reset caches between tests so warn-once and formatter cache don't bleed.
 beforeEach(() => {
@@ -57,8 +68,8 @@ describe('resolveLocaleChain', () => {
 
 describe('resolve — basic lookup', () => {
   test('falls back to shipped en catalog when locale is en and no messages passed', () => {
-    // The shipped en.json is imported at module load; Pagination keys should
-    // resolve. This asserts the module wiring works end-to-end.
+    // The compact shipped English catalog is loaded at module initialization;
+    // Pagination keys should resolve. This asserts the module wiring end-to-end.
     const out = resolve(
       '@astryx.pagination.next',
       undefined,
@@ -99,6 +110,20 @@ describe('resolve — provider messages', () => {
       undefined,
     );
     expect(out).toBe('Suivant');
+  });
+
+  test('uses a generated runtime string map for the current locale', () => {
+    const runtimeMessages: ProviderMessagesByLocale = {
+      fr: {'@astryx.pagination.next': 'Suivant compact'},
+    };
+    const out = resolve(
+      '@astryx.pagination.next',
+      undefined,
+      'fr',
+      runtimeMessages,
+      undefined,
+    );
+    expect(out).toBe('Suivant compact');
   });
 
   test('falls back to en for keys not in the provider catalog, silently', () => {

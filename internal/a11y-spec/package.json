@@ -8,6 +8,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./chromium": "./src/harness/chromium.ts",
+    "./evidence": "./src/evidence.ts",
+    "./playwright": "./src/playwright.ts",
     "./storybook": "./src/storybook.ts"
   },
   "scripts": {
@@ -16,6 +18,6 @@
   "devDependencies": {
     "@playwright/test": "^1.61.1",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.11"
   }
 }

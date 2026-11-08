@@ -304,6 +304,25 @@ describe('compareIdentities', () => {
     expect(issues[0].message).toContain('dash');
   });
 
+  it('errors when a packed template replaces a different target', () => {
+    const template = {id: 'acme-shell', type: 'page', name: 'Acme shell'};
+    const local = {
+      ...base(),
+      templates: [{...template, replaces: 'shell-side-nav'}],
+    };
+    const packed = {
+      ...base(),
+      templates: [{...template, replaces: 'shell-top-nav'}],
+    };
+
+    expect(compareIdentities(local, packed)).toEqual([
+      expect.objectContaining({
+        code: 'identity_mismatch',
+        message: expect.stringContaining('acme-shell'),
+      }),
+    ]);
+  });
+
   it('errors when a codemod is missing from packed', () => {
     const local = {
       ...base(),

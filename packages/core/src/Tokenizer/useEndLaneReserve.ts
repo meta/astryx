@@ -48,9 +48,8 @@ const LANE_RESERVE_VAR = '--_tokenizer-end-lane-reserve';
 // The variable carries the WHOLE reserve, not just the width, so its absence
 // means "no lane" rather than "a lane of zero width": with no lane up, the
 // fallback resolves the padding to 0 and the input keeps its full content box.
-// That is what lets the caller apply this style unconditionally, which in turn
-// is what keeps the field from having to know whether a search is running.
-// The rule stays static either way — one class, generated once, never
+// That is what lets every input state read the property without knowing whether
+// a search is running. The rule stays static either way — it is never
 // regenerated as the lane changes.
 const reserveStyles = stylex.create({
   reserve: {
@@ -82,9 +81,11 @@ const reserveStyles = stylex.create({
  *
  * Takes the lane's inset from the field's inline-end border, as the CSS
  * expression that positions it. Returns a ref callback for the lane, and the
- * style for the input — which the caller applies unconditionally: with no lane
- * mounted the variable is absent and the padding resolves to zero, so the
- * caller never has to know whether a search is running.
+ * ordinary input reserve style. With tokens, Tokenizer's field wrapper reads the
+ * same custom property directly so every token row, and the input after the
+ * last token, stops before the lane.
+ * With no lane mounted the variable is absent and either rule resolves to its
+ * no-lane fallback, so neither path needs to know whether a search is running.
  */
 export function useEndLaneReserve(
   laneInset: string,

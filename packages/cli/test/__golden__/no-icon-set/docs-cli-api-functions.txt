@@ -1,0 +1,49 @@
+<text>
+
+package: @astryxdesign/cli
+
+assert-response                  <text>
+blog                             <text>
+build                            <text>
+component                        <text>
+discover                         <text>
+docs                             <text>
+doctor                           <text>
+gap-report                       <text>
+generate-tonal-palette           <text>
+hook                             <text>
+init                             <text>
+integration-add                  <text>
+integration-add-agent-doc        <text>
+integration-add-codemod          <text>
+integration-add-component        <text>
+integration-add-doc              <text>
+integration-add-template         <text>
+integration-add-theme            <text>
+integration-check                <text>
+integration-component-conflicts  <text>
+integration-doc-conflicts        <text>
+integration-pack-check           <text>
+integration-template-conflicts   <text>
+is-error                         <text>
+list-themes                      <text>
+parse-response                   <text>
+search                           <text>
+summarize-issues                 <text>
+swizzle                          <text>
+template                         <text>
+theme-add                        <text>
+theme-build                      <text>
+theme-eject                      <text>
+theme-list                       <text>
+theme-list-available             <text>
+theme-list-copy-sources          <text>
+theme-palette-generate           <text>
+theme-remove                     <text>
+theme-targets                    <text>
+theme-template                   <text>
+theme-use                        <text>
+upgrade                          <text>
+validate-integration             <text>
+
+<text>

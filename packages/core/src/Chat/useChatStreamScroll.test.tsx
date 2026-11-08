@@ -16,7 +16,8 @@ import {
 // scroll paths (instant positioning, lock state, rAF scheduling decisions).
 // The spring physics itself (frame-by-frame integration, scrollend re-lock,
 // user-scroll detection) is layout/browser-dependent and is verified
-// manually via Storybook — mocking it here would only test the mock.
+// by useChatStreamScroll.a11y.chromium.spec.ts — mocking it here would only
+// test the mock.
 // ---------------------------------------------------------------------------
 
 let rafQueue: {id: number; cb: FrameRequestCallback}[] = [];
@@ -296,22 +297,22 @@ describe('useChatStreamScroll — reader intent while content arrives', () => {
     // inline style.
     const {api, el, unmount} = renderHook();
     settleAtBottom(el);
-    expect(el.hasAttribute('data-astryx-chat-following')).toBe(true);
+    expect(el.getAttribute('data-astryx-scroll-anchoring')).toBe('off');
     const rule = document.head.querySelector(
-      '[data-astryx-chat-following-style]',
+      '[data-astryx-scroll-anchoring="rule"]',
     );
     expect(rule?.textContent).toContain('overflow-anchor:none !important');
     expect(el.style.overflowAnchor).toBe('');
 
     scrollUpDuringGrowth(el);
     expect(api.current!.isLocked).toBe(false);
-    expect(el.hasAttribute('data-astryx-chat-following')).toBe(false);
+    expect(el.hasAttribute('data-astryx-scroll-anchoring')).toBe(false);
 
     act(() => api.current!.scrollToBottom({behavior: 'instant'}));
-    expect(el.hasAttribute('data-astryx-chat-following')).toBe(true);
+    expect(el.getAttribute('data-astryx-scroll-anchoring')).toBe('off');
 
     unmount();
-    expect(el.hasAttribute('data-astryx-chat-following')).toBe(false);
+    expect(el.hasAttribute('data-astryx-scroll-anchoring')).toBe(false);
   });
 
   it("never touches the element's own overflow-anchor, whatever it becomes", () => {

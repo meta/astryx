@@ -5,7 +5,7 @@
 /**
  * Incident Console — an on-call incident response tool.
  *
- * Frame-first layout (see `npx astryx docs layout`), distilled from
+ * Frame-first layout (see `npx @astryxdesign/cli docs layout`), distilled from
  * product-scale apps built with the design system:
  *
  *   Frame: header | grouped incident rows (fill) | inspector 380 (resizable)

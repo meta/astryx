@@ -454,6 +454,28 @@ export function representativeStories(stories) {
 }
 
 /**
+ * The components a scoped pull request's visual gate audits (spec:AST-030
+ * FR13): every touched component, which must have a stable representative,
+ * plus each reverse-dependent folder that has one. A dependent folder with no
+ * stable story is reported, not audited.
+ *
+ * @param {ReturnType<typeof readStoryIndex>} stories
+ * @param {string[]} touched
+ * @param {string[]} dependents
+ * @returns {{components: string[], dropped: string[]}}
+ */
+export function visualComponentScope(stories, touched, dependents) {
+  const representatives = representativeStories(stories);
+  const kept = [];
+  const dropped = [];
+  for (const dependent of new Set(dependents)) {
+    if (touched.includes(dependent)) continue;
+    (representatives.has(dependent) ? kept : dropped).push(dependent);
+  }
+  return {components: [...new Set([...touched, ...kept])], dropped};
+}
+
+/**
  * Select the focused PR stories for touched components and fail closed when a
  * requested component has no stable representative in the built Storybook.
  *
@@ -519,6 +541,21 @@ export function acceptedVisualThemes(manifest, themes, defaultTheme) {
   );
   if (themes[defaultTheme]?.stableVisual === true) accepted.add(defaultTheme);
   return [...accepted].sort();
+}
+
+/**
+ * Ids of the stories the accepted baseline holds probe-theme shots for. The
+ * probe cover keeps them when another story would cover as many targets.
+ * @param {{shots?: Record<string, {storyId?: string, theme?: string}>}} manifest
+ * @param {string} probeTheme
+ * @returns {Set<string>}
+ */
+export function probeBaselineStories(manifest, probeTheme) {
+  return new Set(
+    Object.values(manifest?.shots ?? {})
+      .filter(shot => shot.theme === probeTheme && typeof shot.storyId === 'string')
+      .map(shot => shot.storyId),
+  );
 }
 
 /** Current stable stories that own at least one accepted baseline contract. */
@@ -604,6 +641,7 @@ function rank(name) {
  * @param {string[]} [options.matrixThemes] - restrict theme-matrix to changed shipped themes
  * @param {ReturnType<typeof readStoryIndex>} [options.themeStories] - accepted stories to render for changed themes
  * @param {string} [options.probeTheme] - name of the generated coverage theme
+ * @param {Set<string>} [options.baselineStories] - ids of stories the accepted baseline already holds probe shots for
  * @returns {Shot[]}
  */
 export function buildPlan({
@@ -618,6 +656,7 @@ export function buildPlan({
   matrixThemes = [],
   themeStories = [],
   probeTheme = 'probe',
+  baselineStories = new Set(),
 }) {
   /** @type {Map<string, Shot>} */
   const shots = new Map();
@@ -711,6 +750,7 @@ export function buildPlan({
       targets,
       observations,
       probeTheme,
+      baselineStories,
     })) {
       add(shot, reason);
     }
@@ -734,13 +774,19 @@ export function buildPlan({
  * verifies all of them at once. Without observations there is nothing to aim
  * at — the probe tier needs the scout.
  *
+ * Between stories that would cover the same number of targets, the cover keeps
+ * a story the accepted baseline already holds, then takes the smallest story
+ * id. So the choice does not move when an unrelated story is added or the
+ * story index changes order, and a baseline sync does not chase it.
+ *
  * @param {object} options
  * @param {ReturnType<typeof readStoryIndex>} options.stories
  * @param {Array<{key: string, component: string}>} options.targets
  * @param {Record<string, Record<string, string[]>>} [options.observations]
  * @param {string} options.probeTheme
+ * @param {Set<string>} options.baselineStories
  */
-function probeShots({stories, targets, observations, probeTheme}) {
+function probeShots({stories, targets, observations, probeTheme, baselineStories}) {
   if (!observations) return [];
 
   const wanted = new Set(targets.map(target => target.key));
@@ -758,7 +804,7 @@ function probeShots({stories, targets, observations, probeTheme}) {
     let bestCount = 0;
     for (const [story, rendered] of byStory) {
       const count = [...rendered].filter(key => uncovered.has(key)).length;
-      if (count > bestCount) {
+      if (count > bestCount || (count > 0 && count === bestCount && keepsTie(story, best, baselineStories))) {
         best = story;
         bestCount = count;
       }
@@ -771,6 +817,20 @@ function probeShots({stories, targets, observations, probeTheme}) {
     byStory.delete(best);
   }
   return planned;
+}
+
+/**
+ * Whether `story` wins a tie in the probe cover over `current`: a story the
+ * baseline already holds first, then the smaller story id.
+ * @param {{id: string}} story
+ * @param {{id: string}} current
+ * @param {Set<string>} baselineStories
+ * @returns {boolean}
+ */
+function keepsTie(story, current, baselineStories) {
+  const held = baselineStories.has(story.id);
+  if (held !== baselineStories.has(current.id)) return held;
+  return story.id < current.id;
 }
 
 /**

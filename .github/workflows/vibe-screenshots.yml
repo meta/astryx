@@ -12,18 +12,6 @@ on:
         description: 'Comma-separated prompt IDs (optional, defaults to all)'
         required: false
         default: ''
-      deploy_to_gh_pages:
-        description: 'Deploy screenshots to gh-pages (default: true)'
-        required: false
-        default: 'true'
-        type: choice
-        options:
-          - 'true'
-          - 'false'
-      report_iteration:
-        description: 'Primary iteration ID for report path (default: first in iterations list)'
-        required: false
-        default: ''
 
 concurrency:
   group: vibe-screenshots-${{ github.run_id }}
@@ -34,7 +22,7 @@ permissions: {}
 jobs:
   build-previews:
     name: Build Previews
-    runs-on: 2-core-ubuntu-arm
+    runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
     steps:
@@ -68,7 +56,7 @@ jobs:
   screenshot:
     name: Capture Screenshots
     needs: build-previews
-    runs-on: 2-core-ubuntu-arm
+    runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
     steps:
@@ -106,48 +94,3 @@ jobs:
           name: screenshot-manifest
           path: internal/vibe-tests/results/*/screenshots/manifest.json
           retention-days: 90
-
-  deploy-screenshots:
-    name: Deploy Screenshots to gh-pages
-    needs: screenshot
-    if: ${{ github.event.inputs.deploy_to_gh_pages != 'false' }}
-    runs-on: ubuntu-slim
-    permissions:
-      actions: read
-      contents: write
-    steps:
-      - name: Checkout publisher
-        uses: actions/checkout@v7
-
-      - name: Determine report iteration
-        id: report-id
-        run: |
-          # Use explicit report_iteration input, or fall back to first in the list
-          REPORT_ID="${{ github.event.inputs.report_iteration }}"
-          if [ -z "$REPORT_ID" ]; then
-            REPORT_ID=$(echo "${{ github.event.inputs.iterations }}" | cut -d',' -f1)
-          fi
-          echo "id=$REPORT_ID" >> "$GITHUB_OUTPUT"
-          echo "Report iteration: $REPORT_ID"
-
-      - name: Download screenshots
-        uses: actions/download-artifact@v8
-        with:
-          name: vibe-test-screenshots
-          path: /tmp/screenshots
-
-      - name: Download screenshot manifest
-        uses: actions/download-artifact@v8
-        with:
-          name: screenshot-manifest
-          path: /tmp/manifests
-
-      - name: Deploy screenshots to report directory
-        env:
-          REPORT_ID: ${{ steps.report-id.outputs.id }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: >
-          node .github/scripts/gh-pages-publisher.mjs vibe-screenshots
-          --report-id "$REPORT_ID"
-          --screenshots /tmp/screenshots
-          --manifests /tmp/manifests

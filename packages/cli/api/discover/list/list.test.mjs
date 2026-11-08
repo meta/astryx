@@ -32,6 +32,7 @@ describe('discover.list leaf', () => {
     expect(res.data).toEqual([
       {
         name: '@acme/widgets',
+        package: '@acme/widgets',
         category: '@acme/widgets',
         components: ['Alpha', 'Beta'],
         version: '1.2.3',
@@ -55,5 +56,52 @@ describe('discover.list leaf', () => {
       data: [],
       meta: {configured: false},
     });
+  });
+});
+
+describe('discover.list leaf with discover sources', () => {
+  const installed = [
+    pkg('@acme/widgets', ['Alpha'], {
+      version: '1.2.3',
+      latest: '1.3.0',
+      templates: ['pages/Home'],
+    }),
+  ];
+  const available = [
+    {name: '@acme/charts', version: '2.0.0', components: ['Chart'], source: 'Acme'},
+    {name: '@acme/themes', version: '1.0.0', components: [], themes: ['ocean'], source: 'Acme'},
+  ];
+  const sources = [{name: 'Acme', from: 'astryx.config', status: 'fresh'}];
+
+  it('lists what is installed in data and what could be added in meta', () => {
+    const res = list(installed, {configured: true, available, sources});
+    expect(res.data).toEqual([
+      {
+        name: '@acme/widgets',
+        package: '@acme/widgets',
+        category: '@acme/widgets',
+        components: ['Alpha'],
+        version: '1.2.3',
+        templates: ['pages/Home'],
+        latest: '1.3.0',
+      },
+    ]);
+    expect(res.meta).toEqual({available, sources});
+  });
+
+  it('keeps one side with only', () => {
+    expect(
+      list(installed, {configured: true, available, sources, only: 'installed'})
+        .meta?.available,
+    ).toEqual([]);
+    const res = list(installed, {configured: true, available, sources, only: 'available'});
+    expect(res.data).toEqual([]);
+    expect(res.meta).toEqual({configured: true, available, sources});
+  });
+
+  it('keeps only packages that add a kind with type', () => {
+    const res = list(installed, {configured: true, available, sources, type: 'theme'});
+    expect(res.data).toEqual([]);
+    expect(res.meta?.available?.map(e => e.name)).toEqual(['@acme/themes']);
   });
 });

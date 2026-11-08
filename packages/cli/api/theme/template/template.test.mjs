@@ -13,6 +13,7 @@ import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import {themeTemplate as publicThemeTemplate} from '../../index.mjs';
 import {themeTemplate, THEME_TEMPLATE_DEFAULT_PATH} from './template.mjs';
 import {isErrorCode} from '../../../foundation/response/error-codes.mjs';
 
@@ -25,6 +26,10 @@ afterEach(() => {
 });
 
 describe('themeTemplate()', () => {
+  it('is available through the public API entry point', () => {
+    expect(publicThemeTemplate).toBe(themeTemplate);
+  });
+
   it('writes the template and returns a theme.template receipt', () => {
     const res = themeTemplate({cwd: tmpDir});
 

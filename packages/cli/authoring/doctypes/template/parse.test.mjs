@@ -22,6 +22,45 @@ function reason(value, label = 'template') {
 }
 
 describe('parseTemplate (load boundary)', () => {
+  it('accepts replaces on page and block templates', () => {
+    for (const type of ['page', 'block']) {
+      const parsed = parseTemplate({
+        type,
+        name: 'Acme shell',
+        description: 'Replaces a Core template.',
+        replaces: 'shell-side-nav',
+      });
+      expect(parsed.replaces).toBe('shell-side-nav');
+    }
+  });
+
+  it('accepts keywords on page and block templates', () => {
+    for (const type of ['page', 'block']) {
+      const parsed = parseTemplate({
+        type,
+        name: 'Acme health',
+        description: 'Status tiles over time charts.',
+        keywords: ['uptime', 'on-call'],
+      });
+      expect(parsed.keywords).toEqual(['uptime', 'on-call']);
+    }
+  });
+
+  it('rejects keywords that are not a list of words', () => {
+    expect(
+      reason({type: 'page', name: 'Acme health', keywords: 'uptime'}),
+    ).toMatch(/keywords/);
+    expect(reason({type: 'page', name: 'Acme health', keywords: ['']})).toMatch(
+      /keywords/,
+    );
+  });
+
+  it('rejects an empty replaces', () => {
+    expect(reason({type: 'page', name: 'Acme shell', replaces: ''})).toMatch(
+      /replaces must name a Core template id/,
+    );
+  });
+
   it('accepts a stamped page template', () => {
     const parsed = parseTemplate({
       type: 'page',
