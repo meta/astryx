@@ -3,7 +3,8 @@
 'use client';
 /**
  * @file CodeBlock.tsx
- * @input Uses React, StyleX, theme tokens, CSS Custom Highlight API, SyntaxTheme provider
+ * @input Uses React, StyleX, theme tokens, CSS Custom Highlight API, SyntaxTheme
+ *   provider, and the theme's `code-block-copy` icon slot
  * @output Exports CodeBlock component and CodeBlockProps
  * @position Core implementation; read-only syntax-highlighted code display
  */
@@ -31,11 +32,13 @@ import {
   borderVars,
   durationVars,
   easeVars,
+  focusVars,
 } from '../theme/tokens.stylex';
 import {isRenderable, mergeProps, rtlStyles} from '../utils';
-import {useClipboard} from '../hooks/useClipboard';
+import {useClipboardCopy} from '../hooks/useClipboard';
 import {useScrollableArea} from '../hooks/useScrollableArea';
 import {Icon} from '../Icon';
+import {ComponentIcon} from '../Icon/ComponentIcon';
 import {IconButton} from '../IconButton';
 import type {DiffLineKind} from './tokenizer';
 import {
@@ -139,6 +142,14 @@ const styles = stylex.create({
   // shrink and scroll; 0 lets the root's bound reach it.
   viewport: {
     minHeight: 0,
+  },
+  // The root clips (overflow: hidden, for its corners), so the viewport's
+  // keyboard ring sits inside its own box instead of around it.
+  viewportFocusRingInset: {
+    outlineOffset: {
+      default: null,
+      ':focus-visible': `calc(-1 * ${focusVars['--focus-outline-width']})`,
+    },
   },
   // With no header, Copy sits in its own inline-end column beside the code
   // viewport rather than over it, so no line, scrolled or wrapped, runs under
@@ -595,6 +606,12 @@ export interface CodeBlockProps extends BaseProps<HTMLPreElement> {
   hasCopyButton?: boolean;
   onCopy?: () => void;
   /**
+   * Called once with the rejection when the clipboard write fails. The copy
+   * control then shows a cross and is named and announced as the localized
+   * "Failed to copy value to clipboard."; the error itself is not shown.
+   */
+  onCopyError?: (error: unknown) => void;
+  /**
    * Your own controls, shown just before Copy: in the header when the block
    * has one, otherwise beside the code in the top inline-end corner, never
    * over it. It never creates a header, and activating it never collapses the
@@ -994,6 +1011,7 @@ export function CodeBlock({
   isDiff = false,
   hasCopyButton = true,
   onCopy,
+  onCopyError,
   endContent,
   isWrapped = false,
   maxHeight,
@@ -1015,8 +1033,17 @@ export function CodeBlock({
   // Owns the clipboard write, the transient copied flag, its reset timer, and
   // the polite copy announcement (a swapped aria-label alone is not reliably
   // announced) — shared with Timestamp via the same hook.
-  const {copy, isCopied: copied} = useClipboard({
+  // A failed write shows a cross for as long as a copy shows the check, and
+  // is named and announced as the localized failure (Owner decision, Nov 6
+  // 2026). The error itself goes only to `onCopyError`.
+  const {
+    copy,
+    isCopied: copied,
+    isFailed: copyFailed,
+  } = useClipboardCopy({
     announce: t('@astryx.codeBlock.copied'),
+    announceFailure: t('@astryx.codeBlock.copyFailed'),
+    onError: onCopyError,
   });
 
   const useSpans =
@@ -1137,14 +1164,33 @@ export function CodeBlock({
     <IconButton
       variant="ghost"
       size="sm"
-      icon={<Icon icon={copied ? 'check' : 'copy'} size="sm" color="inherit" />}
+      icon={
+        <ComponentIcon
+          slot="code-block-copy"
+          state={{copied: copied && !copyFailed}}
+          fallback={{
+            icon: copyFailed ? 'close' : copied ? 'check' : 'copy',
+            size: 'sm',
+          }}
+          color="inherit"
+        />
+      }
       // A visible "Copy" hover/focus hint via Button's built-in tooltip. It
       // stays "Copy" after copying — the copy → check icon flip is the
-      // confirmation, not a tooltip change. The aria-label still swaps to the
-      // localized "Copied" for assistive tech, backed by the announcement.
-      tooltip={t('@astryx.codeBlock.copyCode')}
+      // confirmation — and says the failure while a failed copy shows. The
+      // aria-label swaps to the localized "Copied" or failure text, backed by
+      // the announcement.
+      tooltip={
+        copyFailed
+          ? t('@astryx.codeBlock.copyFailed')
+          : t('@astryx.codeBlock.copyCode')
+      }
       label={
-        copied ? t('@astryx.codeBlock.copied') : t('@astryx.codeBlock.copyCode')
+        copyFailed
+          ? t('@astryx.codeBlock.copyFailed')
+          : copied
+            ? t('@astryx.codeBlock.copied')
+            : t('@astryx.codeBlock.copyCode')
       }
       onClick={e => {
         // Stop propagation so copying does not toggle the collapsible header.
@@ -1233,7 +1279,12 @@ export function CodeBlock({
   const codeBody = (
     <div
       {...getViewportProps<HTMLDivElement>({
-        ...stylex.props(styles.viewport),
+        // A tab stop while the code overflows: the shared ring, which a theme
+        // restyles through the focus-outline tokens.
+        ...focusOutlineProps.focusVisible(
+          styles.viewport,
+          styles.viewportFocusRingInset,
+        ),
         style: scrollStyle,
       })}>
       <div

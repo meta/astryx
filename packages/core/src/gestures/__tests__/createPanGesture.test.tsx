@@ -11,7 +11,14 @@
  */
 
 import {act, render} from '@testing-library/react';
-import {StrictMode, useRef, useState} from 'react';
+import {
+  StrictMode,
+  Suspense,
+  startTransition,
+  use,
+  useRef,
+  useState,
+} from 'react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
   createPanGesture,
@@ -399,6 +406,43 @@ describe('usePanGesture (spec:AST-107 FR1, FR6)', () => {
     expect(first).not.toHaveBeenCalled();
     expect(phases(events)).toEqual(['began', 'changed', 'ended']);
     expect(events.at(-1)?.translation).toEqual({x: 30, y: 0});
+  });
+
+  it('keeps the committed onPan when React discards a render, as a suspended transition does', async () => {
+    const committed: PanGestureEvent[] = [];
+    const discarded: PanGestureEvent[] = [];
+    const pending = new Promise<never>(() => {});
+    function Pending(): null {
+      use(pending);
+      return null;
+    }
+    function Screen({
+      onPan,
+      isPending,
+    }: {
+      onPan: (event: PanGestureEvent) => void;
+      isPending: boolean;
+    }) {
+      return (
+        <Suspense fallback={null}>
+          <Draggable axis="x" onPan={onPan} />
+          {isPending ? <Pending /> : null}
+        </Suspense>
+      );
+    }
+    const {getByTestId, rerender} = render(
+      <Screen onPan={event => committed.push(event)} isPending={false} />,
+    );
+    // The transition renders the new onPan, then suspends for good, so
+    // React keeps the committed tree and never commits that render.
+    await act(async () => {
+      startTransition(() => {
+        rerender(<Screen onPan={event => discarded.push(event)} isPending />);
+      });
+    });
+    drag(getByTestId('surface'), 40, 0);
+    expect(discarded).toEqual([]);
+    expect(phases(committed)).toEqual(['began', 'changed', 'ended']);
   });
 
   it('calls onPan from no effect: a drag in progress at unmount ends without a cancelled event (architecture:react-component-runtime INV2)', () => {

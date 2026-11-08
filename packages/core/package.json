@@ -1,6 +1,6 @@
 {
   "name": "@astryxdesign/core",
-  "version": "0.7.9",
+  "version": "0.7.12",
   "displayName": "Astryx Core",
   "description": "The component library. Accessible, themeable React components with built-in spacing, dark mode, and StyleX styling.",
   "author": "Meta Open Source",
@@ -579,6 +579,11 @@
       "types": "./dist/Slider/index.d.ts",
       "default": "./dist/Slider/index.js"
     },
+    "./SnapPaging": {
+      "source": "./src/SnapPaging/index.ts",
+      "types": "./dist/SnapPaging/index.d.ts",
+      "default": "./dist/SnapPaging/index.js"
+    },
     "./Spinner": {
       "source": "./src/Spinner/index.ts",
       "types": "./dist/Spinner/index.d.ts",
@@ -829,6 +834,11 @@
       "types": "./dist/internal/indicatorPress.stylex.d.ts",
       "default": "./dist/internal/indicatorPress.stylex.js"
     },
+    "./internal/touchHitArea.stylex": {
+      "source": "./src/internal/touchHitArea.stylex.ts",
+      "types": "./dist/internal/touchHitArea.stylex.d.ts",
+      "default": "./dist/internal/touchHitArea.stylex.js"
+    },
     "./internal/touch": {
       "source": "./src/internal/touch.ts",
       "types": "./dist/internal/touch.d.ts",
@@ -848,6 +858,16 @@
       "source": "./src/internal/calendar-system.ts",
       "types": "./dist/internal/calendar-system.d.ts",
       "default": "./dist/internal/calendar-system.js"
+    },
+    "./internal/dialog-context": {
+      "source": "./src/internal/dialog-context.ts",
+      "types": "./dist/internal/dialog-context.d.ts",
+      "default": "./dist/internal/dialog-context.js"
+    },
+    "./internal/scroll-anchoring": {
+      "source": "./src/internal/scroll-anchoring.ts",
+      "types": "./dist/internal/scroll-anchoring.d.ts",
+      "default": "./dist/internal/scroll-anchoring.js"
     }
   },
   "files": [
@@ -888,7 +908,7 @@
     "test:watch": "vitest --root ../..",
     "lint": "eslint src",
     "typecheck:docs": "tsc --project tsconfig.docs.json",
-    "typecheck": "tsc --project tsconfig.json --noEmit && pnpm typecheck:docs"
+    "typecheck": "node ../../scripts/typecheck-sharded.mjs --project tsconfig.json --shards 3 && pnpm typecheck:docs"
   },
   "peerDependencies": {
     "@stylexjs/stylex": "^0.19.0",

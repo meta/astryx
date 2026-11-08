@@ -550,6 +550,47 @@ export interface ComponentThemingVar {
 }
 
 /**
+ * A component icon slot: a themeable icon role the component owns, which a
+ * theme maps to a shared icon name through `defineTheme({componentIcons})`.
+ * Each entry corresponds to a slot in `ComponentIconSlotMap`.
+ *
+ * @example
+ * ```
+ * {
+ *   slot: 'code-block-copy',
+ *   description: 'The copy button icon.',
+ *   fallback: '`copy`; `check` while copied',
+ *   state: [{name: 'copied', type: 'boolean', description: 'True while the copied feedback shows.'}],
+ *   whenNull: 'Hides the glyph. The button keeps its size, name, and tooltip.',
+ * }
+ * ```
+ */
+// SYNC: When adding a field here, add it to the docsite's generated-registry
+// copy too — apps/docsite/scripts/generate-data.mjs (interface ComponentIconSlot).
+export interface ComponentIconSlotDoc {
+  /** The slot name, `<component-kebab>-<semantic-role>`. */
+  slot: string;
+  /** The icon's role in the component. */
+  description: string;
+  /** The icon the component renders when the theme maps nothing, per state. */
+  fallback: string;
+  /** The state a slot function receives. Omit for a stateless slot. */
+  state?: ComponentIconSlotStateDoc[];
+  /** What a slot value of `null` does for this component. */
+  whenNull: string;
+}
+
+/** One field of the state a component passes to a slot function. */
+export interface ComponentIconSlotStateDoc {
+  /** The field name. */
+  name: string;
+  /** The field's TypeScript type. */
+  type: string;
+  /** When the field has each value. */
+  description: string;
+}
+
+/**
  * Documents a hook parameter/option. Similar to ComponentPropDoc but for hook
  * arguments and options object fields.
  */

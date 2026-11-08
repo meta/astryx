@@ -1366,7 +1366,7 @@ describe('ContextMenu keyboard access for menuitemradio/menuitemcheckbox (#3829)
     ).toHaveFocus();
   });
 
-  it('typeahead skips an aria-disabled item and matches the next enabled label', () => {
+  it('typeahead reaches an aria-disabled item, which stays discoverable', () => {
     render(
       <ContextMenu
         menuContent={
@@ -1387,21 +1387,14 @@ describe('ContextMenu keyboard access for menuitemradio/menuitemcheckbox (#3829)
     fireEvent.contextMenu(screen.getByText('Right-click me'));
     // Anchor the search on 'Cut' so typeahead scans forward and meets the
     // disabled 'Newest' (also an 'n' match) before the enabled 'Nightly'.
-    // This pins the `:not([aria-disabled="true"])` in MENU_ITEM_SELECTOR: the
-    // menus never pass useTypeahead's `isDisabled` option, so that clause is
-    // the only thing keeping disabled rows out of the typeahead list. An
-    // arrow-key test cannot cover it — useListFocus re-filters disabled items
-    // independently, so arrow navigation is guarded twice over.
-    // The disabled row keeps tabIndex={-1} on purpose: it stays focusable, so
-    // the selector clause is the sole reason focus skips it.
     screen.getByRole('menuitem', {name: 'Cut', hidden: true}).focus();
     fireEvent.keyDown(screen.getByRole('menu', {hidden: true}), {key: 'n'});
     expect(
-      screen.getByRole('menuitemcheckbox', {name: 'Nightly', hidden: true}),
+      screen.getByRole('menuitemradio', {name: 'Newest', hidden: true}),
     ).toHaveFocus();
   });
 
-  it('skips aria-disabled menuitemradio and menuitemcheckbox items during arrow navigation', () => {
+  it('reaches aria-disabled menuitemradio and menuitemcheckbox items during arrow navigation', () => {
     render(
       <ContextMenu
         menuContent={
@@ -1428,7 +1421,11 @@ describe('ContextMenu keyboard access for menuitemradio/menuitemcheckbox (#3829)
 
     fireEvent.keyDown(menu, {key: 'ArrowDown'});
     expect(
-      screen.getByRole('menuitemradio', {name: 'Oldest', hidden: true}),
+      screen.getByRole('menuitemradio', {name: 'Newest', hidden: true}),
+    ).toHaveFocus();
+    fireEvent.keyDown(menu, {key: 'ArrowDown'});
+    expect(
+      screen.getByRole('menuitemcheckbox', {name: 'Archived', hidden: true}),
     ).toHaveFocus();
   });
 
@@ -1768,5 +1765,49 @@ describe('ContextMenu outside dismissal', () => {
     fireEvent.pointerCancel(outside, finger(6));
     expect(onOpenChange).toHaveBeenLastCalledWith(true);
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
+  });
+});
+
+describe('ContextMenu: Tab from a flyout leaves the whole menu (APG menu button)', () => {
+  it('Tab on a sub-menu row closes every level, once', async () => {
+    const onOpenChange = vi.fn();
+    render(
+      <ContextMenu
+        onOpenChange={onOpenChange}
+        items={[
+          {label: 'Cut', onClick: () => {}},
+          {
+            label: 'Move to',
+            items: [
+              {label: 'Folder A', onClick: () => {}},
+              {label: 'Folder B', onClick: () => {}},
+            ],
+          },
+        ]}>
+        <div>Right-click me</div>
+      </ContextMenu>,
+    );
+    fireEvent.contextMenu(screen.getByText('Right-click me'));
+    const menu = screen.getAllByRole('menu', {hidden: true})[0];
+    const moveTo = screen.getByRole('menuitem', {
+      name: /Move to/,
+      hidden: true,
+    });
+    fireEvent.click(moveTo, {detail: 1});
+    await waitFor(() =>
+      expect(moveTo).toHaveAttribute('aria-expanded', 'true'),
+    );
+    const folder = screen.getByRole('menuitem', {
+      name: 'Folder A',
+      hidden: true,
+    });
+    act(() => folder.focus());
+    onOpenChange.mockClear();
+    const tab = fireEvent.keyDown(folder, {key: 'Tab'});
+    expect(tab).toBe(true);
+    expect(moveTo).toHaveAttribute('aria-expanded', 'false');
+    expect(menu.closest('[popover]')).not.toHaveAttribute('popover-open');
+    expect(onOpenChange).toHaveBeenCalledTimes(1);
+    expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 });

@@ -12,12 +12,24 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {pathToFileURL} from 'node:url';
-import {Project} from '../config/project.mjs';
-import {CLI_ROOT} from '../fs/paths.mjs';
-import {loadComponentDoc, loadDocs} from '../discovery/component-loader.mjs';
-import {compileDocFile, readDocView} from './read.mjs';
-import {importDocModule, importNativeModule} from './import.mjs';
-import {collectDocInputs} from './inputs.mjs';
+import {requireNatively} from '../../test-utils/native-require.mjs';
+
+const require = requireNatively(import.meta.url);
+/** @type {typeof import('../config/project.mjs')} */
+const {Project} = require('../config/project.mjs');
+/** @type {typeof import('../fs/paths.mjs')} */
+const {CLI_ROOT} = require('../fs/paths.mjs');
+/** @type {typeof import('../discovery/component-loader.mjs')} */
+const {
+  loadComponentDoc,
+  loadDocs,
+} = require('../discovery/component-loader.mjs');
+/** @type {typeof import('./read.mjs')} */
+const {compileDocFile, readDocView} = require('./read.mjs');
+/** @type {typeof import('./import.mjs')} */
+const {importDocModule, importNativeModule} = require('./import.mjs');
+/** @type {typeof import('./inputs.mjs')} */
+const {collectDocInputs} = require('./inputs.mjs');
 
 const REPO_ROOT = path.resolve(CLI_ROOT, '..', '..');
 

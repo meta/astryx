@@ -50,6 +50,7 @@ import {Divider} from '../Divider';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
 import {useKeepLayerOpenProps, type LayerPlacement} from '../Layer/useLayer';
+import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
 import {InternalInputClearButton} from '../Field/InputClearButton';
 import {Spinner} from '../Spinner';
 import {PanelSearchInput} from '../Field/PanelSearchInput';
@@ -72,7 +73,7 @@ import {
 import type {SelectorOptionType, SelectorOptionData} from './types';
 import {isOptionData, isDivider, isSection, normalizeOption} from './utils';
 import {getSelectableOptionEntries} from './selectableOptionEntries';
-import {useCombobox, useSelectedItemOffset} from './hooks';
+import {useCombobox, useSelectedItemOverlayMargin} from './hooks';
 import {useMenuPress} from '../hooks/useMenuPress';
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {useTypeahead} from '../hooks/useTypeahead';
@@ -95,6 +96,10 @@ import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
+import {
+  focusOwnerProps,
+  focusWithinOwner,
+} from '../privateAttributes/focusOwner.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
@@ -121,6 +126,9 @@ registerEnglishFallback(english);
  * taller bottom sheet) costs only the measure's correction.
  */
 const MOST_ROWS_THAT_FIT = 12;
+
+// Private runtime state. No app or theme sets it.
+const OVERLAY_MARGIN_PROPERTY = '--_selector-overlay-margin';
 
 const styles = stylex.create({
   // Trigger container — the enhanced click target wrapping the combobox button and clear button as siblings
@@ -350,10 +358,31 @@ const styles = stylex.create({
     borderRadius: radiusVars['--radius-element'],
   },
 
+  // A panel with a search field, capped as a whole.
+  searchPanel: {
+    display: 'flex',
+    flexDirection: 'column',
+    // No taller than its layer's block-size cap, which folds in the software
+    // keyboard's. The search field's row keeps its height, and the list takes
+    // what is left.
+    maxHeight: stylex.firstThatWorks(
+      `calc(${layerViewportInset.maxBlockSize})`,
+      `calc(${layerViewportInset.maxBlockSizeFallback})`,
+    ),
+  },
+
   // Dropdown container
   dropdown: {
     boxSizing: 'border-box',
-    maxHeight: '300px',
+    // In a search panel, the list shrinks below its content to fit the cap.
+    minHeight: 0,
+    // 300 px, and no taller than its layer's block-size cap, which folds in
+    // the software keyboard's: the list ends above the keyboard with the
+    // layer.
+    maxHeight: stylex.firstThatWorks(
+      `min(300px, ${layerViewportInset.maxBlockSize})`,
+      `min(300px, ${layerViewportInset.maxBlockSizeFallback})`,
+    ),
     overflowY: 'auto',
     outline: 'none',
     paddingBlock: spacingVars['--spacing-1'],
@@ -1171,6 +1200,7 @@ export function Selector<T extends SelectorOptionType>(
   const inputLabelId = useId();
   const readOnlyDescriptionId = useId();
   const searchId = useId();
+  const valueTextId = useId();
   // Measure from the same outer control that usePopover anchors to; using the
   // shorter inner button makes every size's selected row land too low.
   const anchorRef = useRef<HTMLDivElement>(null);
@@ -1340,6 +1370,9 @@ export function Selector<T extends SelectorOptionType>(
       // The theme target belongs on the SURFACE that paints the popup, which
       // `usePopover` owns — not on the scrolling list inside it.
       surfaceTarget: 'selector-popup',
+      // The entrance runs on the surface: an anchored layer lays out again on
+      // each frame its own style animates.
+      xstyle: layerAnimations[placement ?? 'below'],
     },
   });
   const {popover} = surface;
@@ -1426,8 +1459,8 @@ export function Selector<T extends SelectorOptionType>(
   // placement opts out of the selector-specific overlay behavior and uses the
   // standard layer positioning API instead.
   const shouldOverlaySelectedItem = placement == null && !hasSearch;
-  const {offset: rawOffset, isPositioned: rawIsPositioned} =
-    useSelectedItemOffset({
+  const {marginBlockStart: rawMarginBlockStart, isPositioned: rawIsPositioned} =
+    useSelectedItemOverlayMargin({
       isOpen: popover.isOpen && shouldOverlaySelectedItem,
       selectedItemIndex,
       listboxId,
@@ -1435,13 +1468,21 @@ export function Selector<T extends SelectorOptionType>(
       anchorRef,
     });
 
-  const selectedItemOffset = shouldOverlaySelectedItem ? rawOffset : 0;
   const isPositioned = shouldOverlaySelectedItem ? rawIsPositioned : true;
   const popoverPlacement = placement ?? 'below';
+  const overlayMargin =
+    shouldOverlaySelectedItem && rawMarginBlockStart != null
+      ? rawMarginBlockStart
+      : null;
+  const overlayMarginProperty: Record<string, string> =
+    overlayMargin == null ? {} : {[OVERLAY_MARGIN_PROPERTY]: overlayMargin};
   const popoverOffsetStyle: React.CSSProperties | undefined =
-    selectedItemOffset > 0
-      ? {marginBlockStart: `-${selectedItemOffset}px`}
-      : undefined;
+    overlayMargin == null
+      ? undefined
+      : {
+          ...overlayMarginProperty,
+          marginBlockStart: `var(${OVERLAY_MARGIN_PROPERTY})`,
+        };
 
   // Clear the current value. Shared by the clear button and the keyboard
   // Delete/Backspace path so clearing is reachable without a mouse.
@@ -1957,6 +1998,7 @@ export function Selector<T extends SelectorOptionType>(
     selectedItem && renderValue ? (
       <SelectorRowLayoutContext value={rowLayout}>
         <span
+          id={valueTextId}
           {...stylex.props(
             styles.triggerValue,
             inputGroup && styles.triggerValueInGroup,
@@ -1969,14 +2011,30 @@ export function Selector<T extends SelectorOptionType>(
         {!startIcon &&
           selectedItem?.icon != null &&
           renderIconSlot(selectedItem.icon, {size: 'sm', color: 'secondary'})}
-        <span {...stylex.props(styles.triggerLabel)}>
+        <span id={valueTextId} {...stylex.props(styles.triggerLabel)}>
           {selectedItem?.label ?? placeholder}
         </span>
       </>
     );
 
+  // A screen reader announces no value for a button. So the searchable
+  // trigger's name holds the value text after the label. A standalone label
+  // needs an id for this reference. A caller aria-label stays the name's first
+  // part: the trigger refers to itself. A caller aria-labelledby outranks it,
+  // as it does on the combobox shape.
+  const callerAriaLabel = (rest as {'aria-label'?: string})['aria-label'];
+  const triggerNameLabelId =
+    callerAriaLabel != null && ariaLabelledByProp == null
+      ? triggerId
+      : (triggerLabelledBy ?? (inputGroup ? undefined : fieldLabelId));
+  const isValueInTriggerName =
+    hasSearch &&
+    !isEffectivelyReadOnly &&
+    triggerNameLabelId != null &&
+    (selectedItem != null || placeholder != null);
+
   const panelContent = hasSearch ? (
-    <div>
+    <div {...stylex.props(styles.searchPanel)}>
       {renderSearch()}
       <Divider />
       <div
@@ -2056,7 +2114,7 @@ export function Selector<T extends SelectorOptionType>(
       offset: shouldOverlaySelectedItem
         ? undefined
         : spacingVars['--spacing-1'],
-      xstyle: [styles.popover, layerAnimations[popoverPlacement]],
+      xstyle: styles.popover,
       style: popoverOffsetStyle,
     });
   }
@@ -2078,7 +2136,9 @@ export function Selector<T extends SelectorOptionType>(
     'aria-describedby':
       [ariaDescribedByProp, ariaDescribedBy].filter(Boolean).join(' ') ||
       undefined,
-    'aria-labelledby': triggerLabelledBy,
+    'aria-labelledby': isValueInTriggerName
+      ? joinAriaIDs(triggerNameLabelId, valueTextId)
+      : triggerLabelledBy,
     'aria-required': isEffectivelyRequired ? 'true' : undefined,
     'aria-invalid': status?.type === 'error' ? 'true' : undefined,
     'aria-busy': isBusy || undefined,
@@ -2130,7 +2190,11 @@ export function Selector<T extends SelectorOptionType>(
             variant === 'ghost' && styles.triggerGhost,
             variant === 'secondary' && styles.triggerSecondary,
             variant !== 'input' && interactionOverlayStyles.backgroundImage,
-            variant !== 'input' && focusOutlineStyles.focusWithin,
+            // Rings for the trigger button only. The clear and status
+            // buttons ring themselves.
+            variant !== 'input' &&
+              !surface.isTriggerFocusRingSuppressed &&
+              focusWithinOwner,
             surface.isTriggerFocusRingSuppressed &&
               selectorPresentationStyles.pointerRestoredFocus,
             isDisabled && inputWrapperStyles.disabled,
@@ -2173,6 +2237,7 @@ export function Selector<T extends SelectorOptionType>(
         <button
           {...triggerSharedProps}
           ref={triggerButtonRef}
+          {...focusOwnerProps}
           type="button"
           // The read-only trigger stays a combobox even when hasSearch is set:
           // no search input is rendered in that state, and preserving the role
@@ -2294,7 +2359,11 @@ export function Selector<T extends SelectorOptionType>(
       isLabelHidden={isLabelHidden}
       description={description}
       inputID={triggerId}
-      labelID={ariaLabelledByProp != null ? fieldLabelId : undefined}
+      labelID={
+        ariaLabelledByProp != null || isValueInTriggerName
+          ? fieldLabelId
+          : undefined
+      }
       descriptionID={description ? descriptionId : undefined}
       isOptional={isOptional}
       isRequired={isRequired}

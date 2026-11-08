@@ -4,18 +4,31 @@
 
 /**
  * @file pressGroupContext.ts
- * @input Nothing
- * @output PressGroupContext: true inside a group whose own tracker paints
- *   its actions' press
- * @position Internal; not exported from the hooks entry. AlertDialog
- *   provides it around its tracked actions, and Button reads it.
+ * @input The layer-scoped context factory (Layer/layerScopedContext) and
+ *   the press-group marker (privateAttributes/pressGroupItem.stylex)
+ * @output PressGroupContext: the pointer types a group's own tracker follows
+ *   on its actions, or null outside one; pressGroupItemProps, the marker
+ *   Button writes
+ * @position Internal; not exported from the hooks entry. Groups that track
+ *   presses provide it, and Button reads it. A layer resets it, so a Button
+ *   in a member's layer is not tracked.
  */
 
-import {createContext} from 'react';
+import {createLayerScopedContext} from '../Layer/layerScopedContext';
+
+// Button reads the marker here, not from its private StyleX module: a
+// swizzled Button imports each StyleX module by its public path.
+export {pressGroupItemProps} from '../privateAttributes/pressGroupItem.stylex';
 
 /**
- * True inside a group whose tracker paints a pointer's press on its actions.
- * Those actions take no `:active` paint, so one press never lights two.
+ * The pointer types a group's tracker follows on its actions, such as
+ * `['touch', 'pen']`, or null outside a tracking group. Those actions take no
+ * `:active` paint, so one press never lights two.
  */
-export const PressGroupContext = createContext(false);
+export const PressGroupContext =
+  createLayerScopedContext<ReadonlyArray<string> | null>(
+    'PressGroupContext',
+    1,
+    null,
+  );
 PressGroupContext.displayName = 'PressGroupContext';
