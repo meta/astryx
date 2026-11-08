@@ -53,6 +53,7 @@ import {
 import type {ISODateTimeString} from '../DateTimeInput/DateTimeInput';
 import {HStack} from '../HStack/HStack';
 import {DateRangeInput, type DateRange} from '../DateRangeInput';
+import {Calendar} from '../Calendar/Calendar';
 import {resolveDateTimeRangePart} from './resolveDateTimeRangePart';
 import {TimeInput} from '../TimeInput';
 import {Selector} from '../Selector';
@@ -806,6 +807,23 @@ function DateRangeEditor({
     }
   }, []);
 
+  // A sheet opens no popover over itself, so the range is picked on an
+  // inline calendar on the sheet's surface, one month wide.
+  if (presentation === 'bottom-sheet') {
+    return (
+      // A disabled editor takes no input: the calendar has no disabled state.
+      <div inert={isDisabled === true}>
+        <Calendar
+          mode="range"
+          aria-label={t('@astryx.powersearch.valueEditor.dateRange')}
+          value={currentValue}
+          onChange={handleChange}
+          focusDate={currentValue?.start}
+        />
+      </div>
+    );
+  }
+
   return (
     <div onKeyDown={handleKeyDown}>
       <DateRangeInput
@@ -815,9 +833,6 @@ function DateRangeEditor({
         value={currentValue}
         onChange={handleChange}
         hasClear={false}
-        // A phone-wide sheet fits one month; the popover keeps the default.
-        numberOfMonths={presentation === 'bottom-sheet' ? 1 : undefined}
-        width={presentation === 'bottom-sheet' ? '100%' : undefined}
       />
     </div>
   );
