@@ -56,8 +56,14 @@ test('a link in a disabled editor shows no link cursor, does not navigate, and i
   expect(hit.isLink, 'the pointer does not reach the link').toBe(false);
   expect(hit.cursor).not.toBe('pointer');
 
+  // Storybook rewrites the address while the story loads, so compare with
+  // the address the page settled on.
+  const before = page.url();
   await link.click({force: true});
-  await expect(page).toHaveURL(url);
+  await expect(page).toHaveURL(before);
+  await link.focus();
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(before);
 
   const tabStops: string[] = [];
   for (let step = 0; step < 6; step++) {

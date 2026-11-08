@@ -37,7 +37,7 @@ function createLinkGuard(root: HTMLElement) {
       if (!guarded.has(link)) {
         guarded.add(link);
         link.setAttribute('tabindex', '-1');
-        // The link theme gives a disabled link the default cursor. Only the
+        // Assistive technology announces each link as disabled. Only the
         // link ignores the pointer, so a wide table still scrolls.
         link.setAttribute('aria-disabled', 'true');
         if (link instanceof HTMLElement) {
