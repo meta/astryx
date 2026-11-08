@@ -129,3 +129,27 @@ test('at 312% text size every page number stays inside its button', async ({
     expect(fit.below, fit.name).toBeLessThanOrEqual(1);
   }
 });
+
+test('at 312% text size the ellipsis stays inside its box', async ({page}) => {
+  await setDefaultFontSize(page, 50);
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-pagination--many-pages&viewMode=story`,
+  );
+  await page.locator('nav button').first().waitFor();
+  const fits = await page.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>('#storybook-root nav span')]
+      .filter(span => (span.textContent ?? '').trim() === '\u2026')
+      .map(span => {
+        const range = document.createRange();
+        range.selectNodeContents(span);
+        const text = range.getBoundingClientRect();
+        const box = span.getBoundingClientRect();
+        return {above: box.top - text.top, below: text.bottom - box.bottom};
+      }),
+  );
+  expect(fits.length).toBeGreaterThan(0);
+  for (const fit of fits) {
+    expect(fit.above).toBeLessThanOrEqual(1);
+    expect(fit.below).toBeLessThanOrEqual(1);
+  }
+});
