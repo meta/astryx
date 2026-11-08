@@ -539,6 +539,26 @@ describe('Lightbox', () => {
       ).toBeTruthy();
     });
 
+    it('shows the first item as the current one for an index below 0', () => {
+      for (const props of [{index: -1}, {defaultIndex: -3}]) {
+        const {unmount} = render(
+          <Lightbox
+            isOpen={true}
+            onOpenChange={() => {}}
+            media={media}
+            {...props}
+          />,
+        );
+        const photo = screen.getByAltText('Image A');
+        expect(photo).not.toHaveAttribute('aria-hidden');
+        const page = photo.closest('[data-lightbox-page]')!;
+        expect(page).toHaveAttribute('data-current');
+        expect(page).not.toHaveAttribute('inert');
+        expect(screen.getByText(`1 / ${media.length}`)).toBeTruthy();
+        unmount();
+      }
+    });
+
     it('pauses a playing video once the viewer moves to another item', () => {
       const items = [
         {src: '/clip.mp4', alt: 'A clip', type: 'video' as const},
@@ -571,6 +591,41 @@ describe('Lightbox', () => {
       // Still mounted as the pager's neighbour, and stopped.
       expect(document.querySelector('video')).toBe(video);
       expect(pause).toHaveBeenCalledTimes(1);
+    });
+
+    it('resumes a paged-away video where it stopped once the viewer pages back', () => {
+      const items = [
+        {src: '/clip.mp4', alt: 'A clip', type: 'video' as const},
+        {src: '/b.jpg', alt: 'Image B'},
+      ];
+      const view = (index: number) => (
+        <Lightbox
+          isOpen={true}
+          onOpenChange={() => {}}
+          media={items}
+          index={index}
+        />
+      );
+      const {rerender} = render(view(0));
+      const video = document.querySelector('video')!;
+      // Played for 12 s, then paged away from.
+      let time = 12;
+      Object.defineProperty(video, 'currentTime', {
+        configurable: true,
+        get: () => time,
+        set: (value: number) => {
+          time = value;
+        },
+      });
+      const load = vi.fn();
+      video.load = load;
+      video.pause = vi.fn();
+      rerender(view(1));
+      rerender(view(0));
+      // The same element, at the same time: nothing reloads or rewinds it.
+      expect(document.querySelector('video')).toBe(video);
+      expect(time).toBe(12);
+      expect(load).not.toHaveBeenCalled();
     });
 
     it('stays open on a click on the photo, with zoom off', () => {
