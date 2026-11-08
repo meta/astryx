@@ -13,7 +13,7 @@
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {createWheelStrip} from './wheelStrip';
-import {spinCurve, type WheelCurve, type WheelLayout} from './wheelPhysics';
+import type {WheelCurve, WheelLayout} from './wheelPhysics';
 
 const haptics = vi.hoisted(() => ({
   canVibrate: vi.fn(() => true),
@@ -146,7 +146,7 @@ describe('createWheelStrip', () => {
     expect(ticks).toBeGreaterThan(5);
     expect(ticks).toBeLessThanOrEqual(13);
     haptics.playHaptic.mockClear();
-    strip.play(spinCurve(20 * ROW, 23 * ROW, 0.3, [0.42, 0, 0.58, 1]));
+    strip.play(line(20 * ROW, 23 * ROW, 0.3));
     vi.advanceTimersByTime(400);
     expect(haptics.playHaptic).not.toHaveBeenCalled();
   });

@@ -13,6 +13,7 @@ review_triggers: [public-api, behavior, layout, theming]
 verified_by:
   [
     packages/core/src/List/List.test.tsx,
+    packages/core/src/List/listLayoutUpdates.test.tsx,
     packages/core/src/theme/themingTargets.test.ts,
     scripts/check-knowledge.mjs,
     apps/storybook/rtl-audit/targets.json,
@@ -36,11 +37,11 @@ system_specs: [spec:AST-057, spec:AST-103]
 
 | Area                    | Contract                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | `ListItem` with `label`, `description`, `startContent`, `endContent`, `onClick`, `interactiveRef`, `href`, `target`, `rel`, `align`, `isDisabled`, `isSelected`, `swipe`, `xstyle`, `className`, `style`, and `ref`, with the deprecated `swipeActions` and `swipeBehavior` until `spec:AST-057` CLN-0025; the row carries `component:List`'s `list-item` target. `itemKey` (`spec:AST-103` DEC-4) is specified but not shipped. |
+| Public contract         | `ListItem` with `label`, `description`, `startContent`, `endContent`, `onClick`, `interactiveRef`, `href`, `target`, `rel`, `align`, `isDisabled`, `isSelected`, `itemKey`, `swipe`, `xstyle`, `className`, `style`, and `ref`, with the deprecated `swipeActions` and `swipeBehavior` until `spec:AST-057` CLN-0025; the row carries `component:List`'s `list-item` target. `itemKey` is the item's key (`spec:AST-103` DEC-4). |
 | Behavior                | One `<li>` row rendered by `component:Item`, which receives every row prop. Inside a List the row takes the list's density, dividers, edge treatment, and marker; outside a List it uses Item's defaults and draws no marker.                                                                                                                                                                                                    |
 | End-user impact         | Each list entry reads as one list item, with the list's bullet, number, or task checkbox before it and the same interaction Item gives any row.                                                                                                                                                                                                                                                                                  |
 | Builder impact          | The deprecated `swipeActions` and `swipeBehavior` move to `swipe={createSwipe(…)}` under `spec:AST-057` DEP-0017; its `astryx upgrade` codemod is an opt-in early migration from the deprecating release and runs again in 0.8.0's upgrade with CLN-0025's removal.                                                                                                                                                              |
-| Compatibility/readiness | Records shipped behavior; no public change. Three implementation gaps, listed under Current-state impact.                                                                                                                                                                                                                                                                                                                        |
+| Compatibility/readiness | Records shipped behavior; `itemKey` is additive. Two implementation gaps, listed under Current-state impact.                                                                                                                                                                                                                                                                                                                     |
 | Review checks           | Reject a row that is not an `<li>`, a ListItem-level edge, density, or divider prop, a marker drawn outside a marked List, or a dropped Item prop.                                                                                                                                                                                                                                                                               |
 | Governing rules         | `component:Item` (`align` for start and end content); `component:List`; `family:navigation-destinations`; `spec:AST-057`; `spec:AST-103`; `architecture:component-theming-surface`; `architecture:component-style-authoring` INV7.                                                                                                                                                                                               |
 
@@ -73,9 +74,6 @@ Consumer migration instructions belong in consumer docs and release notes.
   pseudo-element, beside the row's content. `architecture:component-style-authoring`
   INV7 carries decoration with no semantic role on a pseudo-element rather than
   an added element.
-- **ListItem has no `itemKey` yet.** `spec:AST-103` DEC-4 and `component:List`
-  FR12 have each reorderable row name its item through an `itemKey` prop;
-  ListItem does not accept one yet.
 - **ListItem has no `swipe` yet.** `spec:AST-057` FR1 has ListItem pass
   `swipe` through to `Item`, which replaces the deprecated `swipeActions`
   and `swipeBehavior` (`spec:AST-057` DEP-0017); `swipe` is not built, so

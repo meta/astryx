@@ -52,6 +52,7 @@ import {useTooltip} from '../Tooltip';
 import {renderIconSlot, type IconType} from '../Icon';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {Spinner} from '../Spinner';
+import {SpinnerOwnerContext} from '../Spinner/SpinnerOwnerContext';
 import {spacingVars, sizeVars} from '../theme/tokens.stylex';
 import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
@@ -385,7 +386,12 @@ function EndLane({
   }
   return (
     <div {...stylex.props(styles.endLane)}>
-      {isBusy && <Spinner size="sm" aria-label={loadingLabel} role="img" />}
+      {isBusy && (
+        // Named, never live: the typeahead announces its search.
+        <SpinnerOwnerContext value={true}>
+          <Spinner size="sm" aria-label={loadingLabel} role="img" />
+        </SpinnerOwnerContext>
+      )}
       {clear}
     </div>
   );
@@ -667,6 +673,7 @@ export function Typeahead<T extends SearchableItem>({
           themeProps('typeahead', {size, status: status?.type}),
           stylex.props(
             inputWrapperStyles.base,
+            inputWrapperStyles.textField,
             styles.wrapper,
             sizeStyle,
             status && inputStatusBorderStyles[status.type],

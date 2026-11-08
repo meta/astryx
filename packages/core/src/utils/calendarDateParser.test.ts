@@ -43,6 +43,10 @@ afterAll(() => {
 
 const TODAY = {year: 2026, month: 11, day: 2};
 
+// Some names differ between CLDR 47 and CLDR 48. Any other version expects
+// the CLDR 48 names, so new locale data fails here first.
+const isCldr47 = process.versions.cldr?.startsWith('47.') ?? false;
+
 function parse(
   locale: string,
   calendar: CalendarSystem,
@@ -122,7 +126,18 @@ describe('reading dates written in the calendar (FR9)', () => {
     // A weekday word that is also a month name.
     expect(iso('fr-FR', 'gregory', 'mar. 3 nov. 2026')).toBe('2026-11-03');
     expect(iso('it-IT', 'gregory', 'mar 3 mar 2026')).toBe('2026-03-03');
-    expect(iso('vi-VN', 'gregory', 'Thứ 3, 3 thg 11, 2026')).toBe('2026-11-03');
+    // Vietnamese writes Tuesday as "Th 3" in CLDR 47 and as "Thứ 3" in CLDR
+    // 48. Both carry a digit that is not the day.
+    const tuesday = `${isCldr47 ? 'Th 3' : 'Thứ 3'}, 3 thg 11, 2026`;
+    expect(
+      formatCalendarDateText(
+        {year: 2026, month: 11, day: 3},
+        'date_weekday',
+        'vi-VN',
+        'gregory',
+      ),
+    ).toBe(tuesday);
+    expect(iso('vi-VN', 'gregory', tuesday)).toBe('2026-11-03');
   });
 
   it('ignores case and Latin diacritics', () => {
@@ -213,7 +228,20 @@ describe('years of the calendar (FR10)', () => {
 
   it('reads Ethiopic years in the AM era unless AA is typed', () => {
     expect(iso('am-ET', 'ethiopic', '23/2/2019')).toBe('2026-11-02');
-    expect(iso('am-ET', 'ethiopic', '1/1/7519 AA')).toBe('2026-09-11');
+    // English names the Amete Alem era "ERA0" in CLDR 47, which has no name
+    // for it, and "AA" in CLDR 48. A date before the AM era shows its era.
+    const ameteAlem = isCldr47 ? 'ERA0' : 'AA';
+    expect(
+      formatCalendarDateText(
+        {year: 1, month: 1, day: 1},
+        'date',
+        'en',
+        'ethiopic',
+      ),
+    ).toBe(`Ter 8, 5493 ${ameteAlem}`);
+    expect(iso('am-ET', 'ethiopic', `1/1/7519 ${ameteAlem}`)).toBe(
+      '2026-09-11',
+    );
   });
 
   it('resolves a two-digit year within 80 years before and 19 after', () => {

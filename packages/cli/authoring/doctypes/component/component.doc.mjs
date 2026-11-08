@@ -102,7 +102,7 @@ export const doc = {
     },
     {
       name: 'theming',
-      type: '{ container?: boolean; targets: ComponentThemingTarget[]; vars?: ComponentThemingVar[]; derived?: ComponentThemingDerivedVar[] }',
+      type: '{ container?: boolean; targets: ComponentThemingTarget[]; vars?: ComponentThemingVar[]; derived?: ComponentThemingDerivedVar[]; componentIcons?: ComponentIconSlotDoc[] }',
       description:
         'Theming configuration: the stable selector surface (astryx-* classes + data-attribute reflections) that themes target via @scope selectors in defineTheme.',
       fields: [
@@ -129,6 +129,12 @@ export const doc = {
           type: 'ComponentThemingDerivedVar[]',
           description:
             "Maps standard CSS properties to internal vars for theme-pipeline expansion. Ordered by priority: earlier entries emit first. The pipeline reads only Core components' entries, so an integration's have no effect.",
+        },
+        {
+          name: 'theming.componentIcons',
+          type: 'ComponentIconSlotDoc[]',
+          description:
+            "The component's icon slots, which a theme maps through `defineTheme({componentIcons})`: each slot's name, role, fallback per state, the state a slot function receives, and what `null` does. Each entry corresponds to a slot in `ComponentIconSlotMap`.",
         },
       ],
     },
