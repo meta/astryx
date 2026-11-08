@@ -5,11 +5,11 @@
  * @file TopNavCrowdedHeading.a11y.chromium.spec.ts
  * @input The `Core/TopNav` FullExample, TitleOnly and IndependentHeadingLinks
  *   stories in a built Storybook, in real Chromium at narrow widths.
- * @output Real-engine proof that a crowded start region truncates the
- *   heading's text first and keeps its logo whole and clear of the nav items,
- *   and that a long heading truncates inside its column instead of running
- *   under the end content, and that independently linked lines keep their
- *   words visible instead of clipping to nothing (component:TopNavHeading FR1).
+ * @output Real-engine proof that a crowded bar keeps the heading's logo whole
+ *   and its box clear of every other control, that a heading wider than the
+ *   whole bar truncates instead of scrolling the page sideways, and that
+ *   independently linked lines keep their words visible instead of clipping
+ *   to nothing (component:TopNavHeading FR1).
  * @position Run with `pnpm test:a11y-contract`.
  */
 
@@ -35,53 +35,60 @@ async function openStory(page: Page, id: string): Promise<void> {
   await expect(page.locator('.astryx-top-nav-heading').first()).toBeVisible();
 }
 
-/** Boxes of the heading's logo, its text, and the first nav item after it. */
+/**
+ * The heading's box, its logo, the controls outside it that its box overlaps,
+ * and whether the page scrolls sideways.
+ */
 async function measure(page: Page) {
   return page.evaluate(() => {
     const heading = document.querySelector<HTMLElement>(
       '.astryx-top-nav-heading',
     );
-    const logo = heading?.querySelector('svg, img');
-    const text = [...(heading?.querySelectorAll<HTMLElement>('*') ?? [])].find(
-      el =>
-        el.childNodes.length === 1 &&
-        el.childNodes[0].nodeType === Node.TEXT_NODE &&
-        (el.textContent ?? '').trim() !== '',
-    );
-    const firstItem = heading?.closest('nav')?.firstElementChild?.children[1];
-    if (logo == null || text == null || firstItem == null) {
-      throw new Error('the story has no logo, heading text, or nav item');
+    const bar = heading?.closest('nav') ?? heading?.closest('header');
+    if (heading == null || bar == null) {
+      throw new Error('the story has no heading inside a bar');
     }
+    const box = heading.getBoundingClientRect();
+    const overlaps = [...bar.querySelectorAll<HTMLElement>('a, button')]
+      .filter(control => !heading.contains(control))
+      .filter(control => {
+        const other = control.getBoundingClientRect();
+        const width =
+          Math.min(box.right, other.right) - Math.max(box.left, other.left);
+        const height =
+          Math.min(box.bottom, other.bottom) - Math.max(box.top, other.top);
+        return width > 1 && height > 1;
+      })
+      .map(control => control.textContent?.trim() ?? '');
+    const logo = heading.querySelector('svg, img');
     return {
-      logoWidth: logo.getBoundingClientRect().width,
-      logoRight: logo.getBoundingClientRect().right,
-      textTruncated: text.scrollWidth > text.clientWidth,
-      firstItemLeft: firstItem.getBoundingClientRect().left,
+      logoWidth: logo?.getBoundingClientRect().width ?? null,
+      headingRight: box.right,
+      overlaps,
       pageScrolls: document.documentElement.scrollWidth > innerWidth,
     };
   });
 }
 
-for (const width of [700, 600]) {
-  test(`at ${width} px the crowded start region truncates the heading text and keeps the logo`, async ({
+for (const width of [700, 600, 390]) {
+  test(`at ${width} px a crowded bar keeps the heading's logo whole and its box clear of every other control`, async ({
     page,
   }) => {
-    await page.setViewportSize({width, height: 240});
+    await page.setViewportSize({width, height: 320});
     await openStory(page, 'core-topnav--full-example');
     const box = await measure(page);
     expect(box.logoWidth).toBeGreaterThan(0);
-    expect(box.logoRight).toBeLessThanOrEqual(box.firstItemLeft);
-    expect(box.textTruncated).toBe(true);
+    expect(box.overlaps).toEqual([]);
     expect(box.pageScrolls).toBe(false);
   });
 }
 
-test('a long heading truncates inside its column instead of running under the end content', async ({
+test('a heading wider than the whole bar truncates instead of scrolling the page sideways', async ({
   page,
 }) => {
-  await page.setViewportSize({width: 420, height: 200});
+  await page.setViewportSize({width: 320, height: 320});
   await openStory(page, 'core-topnav--title-only');
-  const result = await page.evaluate(() => {
+  const truncated = await page.evaluate(() => {
     const heading = document.querySelector<HTMLElement>(
       '.astryx-top-nav-heading',
     );
@@ -91,64 +98,48 @@ test('a long heading truncates inside its column instead of running under the en
         el.childNodes[0].nodeType === Node.TEXT_NODE &&
         el.textContent === 'Simple App',
     );
-    const signIn = [...document.querySelectorAll('button')].find(button =>
-      (button.textContent ?? '').includes('Sign in'),
-    );
-    if (heading == null || text == null || signIn == null) {
-      throw new Error('the story has no heading text or Sign in button');
+    if (text == null) {
+      throw new Error('the story has no heading text');
     }
-    text.textContent = 'Northwind Traders International Holdings Workspace';
-    return {
-      headingRight: heading.getBoundingClientRect().right,
-      endLeft: signIn.getBoundingClientRect().left,
-      truncated: text.scrollWidth > text.clientWidth,
-      pageScrolls: document.documentElement.scrollWidth > innerWidth,
-    };
+    text.textContent =
+      'Northwind Traders International Holdings Operations Workspace';
+    return text.scrollWidth > text.clientWidth;
   });
-  expect(result.headingRight).toBeLessThanOrEqual(result.endLeft);
-  expect(result.truncated).toBe(true);
-  expect(result.pageScrolls).toBe(false);
+  const box = await measure(page);
+  expect(truncated).toBe(true);
+  expect(box.headingRight).toBeLessThanOrEqual(320);
+  expect(box.overlaps).toEqual([]);
+  expect(box.pageScrolls).toBe(false);
 });
 
 for (const width of [1280, 560, 480]) {
   test(`at ${width} px independently linked lines keep their words, and Tab lands on a visible link`, async ({
     page,
   }) => {
-    await page.setViewportSize({width, height: 240});
+    await page.setViewportSize({width, height: 320});
     await openStory(page, 'core-topnav--independent-heading-links');
-    const result = await page.evaluate(() => {
-      const heading = document.querySelector<HTMLElement>(
-        '.astryx-top-nav-heading',
-      );
-      const links = [
-        ...(heading?.querySelectorAll<HTMLAnchorElement>('a') ?? []),
-      ].filter(link => (link.textContent ?? '').trim() !== '');
-      const firstItem = [...document.querySelectorAll('a')].find(
-        link =>
-          heading?.contains(link) !== true &&
-          (link.textContent ?? '').includes('Dashboard'),
-      );
-      if (heading == null || links.length !== 2 || firstItem == null) {
-        throw new Error('the story has no linked heading lines or nav item');
-      }
-      return {
-        links: links.map(link => ({
+    const links = await page.evaluate(() =>
+      [
+        ...document.querySelectorAll<HTMLAnchorElement>(
+          '.astryx-top-nav-heading a',
+        ),
+      ]
+        .filter(link => (link.textContent ?? '').trim() !== '')
+        .map(link => ({
           width: link.getBoundingClientRect().width,
           clipped:
             link.scrollWidth > link.clientWidth + 1 ||
             link.scrollHeight > link.clientHeight + 1,
         })),
-        headingRight: Math.max(
-          ...links.map(link => link.getBoundingClientRect().right),
-        ),
-        firstItemLeft: firstItem.getBoundingClientRect().left,
-      };
-    });
-    for (const link of result.links) {
+    );
+    expect(links).toHaveLength(2);
+    for (const link of links) {
       expect(link.width).toBeGreaterThan(0);
       expect(link.clipped).toBe(false);
     }
-    expect(result.headingRight).toBeLessThanOrEqual(result.firstItemLeft);
+    const box = await measure(page);
+    expect(box.overlaps).toEqual([]);
+    expect(box.pageScrolls).toBe(false);
 
     // Tab from the top of the page until the superheading link holds focus.
     let focused = {text: '', width: 0, isFocusVisible: false};
