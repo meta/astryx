@@ -3,7 +3,7 @@
   "type": "search",
   "data": {
     "query": "close",
-    "matchCount": 48,
+    "matchCount": 49,
     "results": [
       {
         "domain": "component",
@@ -121,6 +121,17 @@
       },
       {
         "domain": "hook",
+        "name": "useKeyboardHint",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/hooks",
+        "command": "astryx hook useKeyboardHint",
+        "mentions": []
+      },
+      {
+        "domain": "hook",
         "name": "useListFocus",
         "package": "@astryxdesign/core",
         "score": "<text>",
@@ -231,19 +242,6 @@
         "title": "<text>",
         "command": "astryx docs migration/component-migration move-the-app-frame-first",
         "parent": "astryx docs migration/component-migration --index",
-        "mentions": []
-      },
-      {
-        "domain": "doc",
-        "name": "styling/styling-advanced",
-        "package": "@astryxdesign/cli",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "section": "<text>",
-        "title": "<text>",
-        "command": "astryx docs styling/styling-advanced compound-components",
-        "parent": "astryx docs styling/styling-advanced --index",
         "mentions": []
       }
     ]
