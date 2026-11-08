@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] A controlled `Tooltip` held closed (`isOpen={false}`) now reports hover and focus intent as one `onOpenChange(true)` and shows nothing, so the caller decides, the same way Escape on a held-open tooltip reports `onOpenChange(false)` without hiding. A held-open tooltip now also reports a pointer or focus leave as `onOpenChange(false)` without hiding, so a tooltip wired to state (`isOpen={open} onOpenChange={setOpen}`) closes when the pointer leaves. Before, hover reported nothing, and focus opened the tooltip even though the caller held it closed.
+[fix] A controlled `Tooltip` held closed (`isOpen={false}`) no longer opens on keyboard focus or a click into a text-field trigger. It reports that focus as `onOpenChange(true)` and shows nothing, so the caller decides, the same way Escape on a held-open tooltip reports `onOpenChange(false)` without hiding. Before, focus opened a held-closed tooltip anyway, and Escape could not close it. `useTooltip` reports the same focus through `onShow` under `isOpen={false}`.
 
 @cixzhang
