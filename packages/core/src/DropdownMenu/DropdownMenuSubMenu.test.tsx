@@ -412,6 +412,67 @@ describe('DropdownMenuSubMenu', () => {
   });
 });
 
+describe('DropdownMenuSubMenu disabled rows', () => {
+  it('the arrow keys reach a disabled sub-menu row and move past it', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu button={{label: 'Actions'}}>
+        <DropdownMenuItem label="Edit" onClick={() => {}} />
+        <DropdownMenuSubMenu label="Move to" isDisabled>
+          <DropdownMenuItem label="Projects" onClick={() => {}} />
+        </DropdownMenuSubMenu>
+        <DropdownMenuItem label="Print" onClick={() => {}} />
+      </DropdownMenu>,
+    );
+    screen.getByRole('button', {name: /Actions/}).focus();
+    await user.keyboard('{Enter}');
+    const edit = screen.getByRole('menuitem', {name: 'Edit', hidden: true});
+    await waitFor(() => expect(edit).toHaveFocus());
+    const moveTo = screen.getByRole('menuitem', {
+      name: /Move to/,
+      hidden: true,
+    });
+    expect(moveTo).toHaveAttribute('tabindex', '-1');
+    await user.keyboard('{ArrowDown}');
+    expect(moveTo).toHaveFocus();
+    await user.keyboard('{ArrowDown}');
+    expect(
+      screen.getByRole('menuitem', {name: 'Print', hidden: true}),
+    ).toHaveFocus();
+  });
+
+  it('a keyboard open lands on the first enabled row, and ArrowUp then reaches the disabled one', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu button={{label: 'Actions'}}>
+        <DropdownMenuSubMenu label="Move to">
+          <DropdownMenuItem label="Projects" isDisabled onClick={() => {}} />
+          <DropdownMenuItem label="Archive" onClick={() => {}} />
+        </DropdownMenuSubMenu>
+      </DropdownMenu>,
+    );
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+    await waitFor(() => {
+      expect(
+        screen.getByRole('menu', {name: 'Actions', hidden: true}),
+      ).toHaveFocus();
+    });
+    screen.getByRole('menuitem', {name: /Move to/, hidden: true}).focus();
+    await user.keyboard('{ArrowRight}');
+    await waitFor(() => {
+      expect(
+        screen.getByRole('menuitem', {name: 'Archive', hidden: true}),
+      ).toHaveFocus();
+    });
+    await user.keyboard('{ArrowUp}');
+    await waitFor(() => {
+      expect(
+        screen.getByRole('menuitem', {name: 'Projects', hidden: true}),
+      ).toHaveFocus();
+    });
+  });
+});
+
 describe('DropdownMenuSubMenu host attributes', () => {
   async function openRoot(user: ReturnType<typeof userEvent.setup>) {
     await user.click(screen.getByRole('button', {name: /Actions/}));
@@ -1559,6 +1620,28 @@ describe('DropdownMenuSubMenu drill-in on a phone', () => {
     fireEvent.keyDown(document.activeElement!, {key: 'Home'});
     expect(shownRow('Back to Actions')).toHaveFocus();
     expect(drilled).toBeInTheDocument();
+  });
+
+  it('a keyboard drill-in lands on the first enabled row after Back, and ArrowUp reaches the disabled one', async () => {
+    stubCompactTouch(true);
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu button={{label: 'Actions'}}>
+        <DropdownMenuSubMenu label="Move to">
+          <DropdownMenuItem label="Projects" isDisabled onClick={() => {}} />
+          <DropdownMenuItem label="Archive" onClick={() => {}} />
+        </DropdownMenuSubMenu>
+      </DropdownMenu>,
+    );
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+    fireEvent.keyDown(await waitFor(() => shownRow('Move to')), {
+      key: 'Enter',
+    });
+    await waitFor(() => shownMenu('Move to'));
+    await waitFor(() => expect(shownRow('Archive')).toHaveFocus());
+    fireEvent.keyDown(document.activeElement!, {key: 'ArrowUp'});
+    expect(shownRow('Projects')).toHaveFocus();
+    expect(shownRow('Projects')).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('presentation="flyout" keeps the flyout on a phone and "drill-in" drills on a laptop', async () => {

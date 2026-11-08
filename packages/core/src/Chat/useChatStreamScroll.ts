@@ -129,6 +129,29 @@ export interface UseChatStreamScrollReturn {
 
 const SIXTY_FPS_MS = 1000 / 60;
 
+// The scrollers whose hook follows the newest message now, kept in step with
+// each hook's lock.
+const following = new WeakSet<Element>();
+
+/**
+ * Whether the stream scroll on `scroller` follows its newest message now, as
+ * its lock says. Internal to Chat.
+ */
+export function isFollowingNewest(scroller: Element): boolean {
+  return following.has(scroller);
+}
+
+// The lock's marks on the scroller: anchoring off while the hook follows, and
+// the state `isFollowingNewest` reads.
+function markFollowing(el: Element, locked: boolean): void {
+  setScrollAnchoringOff(el, locked);
+  if (locked) {
+    following.add(el);
+  } else {
+    following.delete(el);
+  }
+}
+
 export function useChatStreamScroll({
   scrollRef,
   enabled = true,
@@ -168,7 +191,7 @@ export function useChatStreamScroll({
       setIsLocked(locked);
       const el = scrollRef.current;
       if (el != null) {
-        setScrollAnchoringOff(el, locked);
+        markFollowing(el, locked);
       }
     },
     [scrollRef],
@@ -349,7 +372,7 @@ export function useChatStreamScroll({
     }
 
     lastScrollTopRef.current = el.scrollTop;
-    setScrollAnchoringOff(el, lockedRef.current);
+    markFollowing(el, lockedRef.current);
 
     const onScroll = () => {
       const {scrollTop, scrollHeight, offsetHeight} = el;
@@ -395,7 +418,7 @@ export function useChatStreamScroll({
     return () => {
       el.removeEventListener('scroll', onScroll);
       el.removeEventListener('scrollend', onScrollEnd);
-      setScrollAnchoringOff(el, false);
+      markFollowing(el, false);
     };
   }, [scrollRef, enabled, lockThreshold, buttonThreshold, setLocked]);
 

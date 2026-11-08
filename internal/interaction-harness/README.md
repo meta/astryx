@@ -62,7 +62,7 @@ committed: a pull request links or attaches it.
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `scripts.ts`    | Touch scripts as data: `tap`, `drag` (hold, rest), `flick` (exact final-move speed, velocity profiles), `holdThenDrag`, `pinch`, `rotate`, `path`, `merge` (a second finger mid-gesture), `releaseVelocity`, `toTouchEvents`.                                                |
 | `touch.ts`      | `touchDriver(page).play(script)`: the script as real engine input. `installInputLog` / `readInputLog`: what the page received.                                                                                                                                               |
-| `frames.ts`     | `startScreencast` (timestamped composited frames), `markElement` (a marker chip or outline), `trackMarker` (marker box per frame), `trackMarkers` (several colors from one decode of each frame), `sampleRects` (per-rAF rects), `frameStats`.                               |
+| `frames.ts`     | `startScreencast` (timestamped composited frames), `markElement` (a marker chip or outline), `trackMarker` (marker box per frame), `trackMarkers` (several colors from one decode of each frame), `sampleRects` (per-rAF rects), `frameStats`, `requireFrames`.              |
 | `busy.ts`       | `blockMainThread(page, ms)`, which returns the window it held and the span its loop measured, and `busyWindowProof(tracked, window)`: frames presented, frames that moved, longest stall, a verdict; `presented` adds the compositor's own frames.                           |
 | `brightness.ts` | `trackBrightness(page, frames, {x, y})`: a colour channel's mean in a square per frame, as a scalar on `box.x`, for a busy-window proof of a fade or a dim.                                                                                                                  |
 | `webInput.ts`   | `webInputDriver(page)`: `wheel({x, y, dx, dy, ctrl})` and `pen(points)` as real engine input, for proofs across pointers (`spec:AST-100` FR4); `wheel` resolves once the page has the step; read back through the input log.                                                 |
@@ -248,6 +248,11 @@ set before the block is excused. Pass that position as `setBeforeBlock`, such
 as the drag's last position at the release. An animation frozen at the block's
 start holds a position of its own, and is judged as a stall. Every frame after
 its first change is judged, so a freeze later in the block still fails.
+An element off screen before the block, such as a card that enters from an
+edge, is judged from its first position inside the block. The cast's frames
+before the block must show the screen without it. A main-thread entrance
+shows no frame during the block, so it still fails. With no frame before the
+block at all, nothing is known, and the block is judged from its start.
 Any other element already moving is judged from the block's start. WebKit's
 casts are 2 px quantized: their JPEG frames hold the
 marker's color in 2 by 2 pixel chroma blocks (4:2:0, which the frame header
@@ -284,7 +289,8 @@ decode only those. Pass either as `control`: the component passes when it moved 
 moved and its longest stall is no longer than the control's. Both are read from
 the same screencast frames, so a compositor animation misses none. A window in
 which the control moved on fewer than four frames fails, since the machine
-presented too little to judge. A run of frames with no new position counts as
+presented too little to judge; the failure names the cast's frames in the
+window and its longest gap. A run of frames with no new position counts as
 moved when the change that ends it is a single cast step: the component moves
 under one step a frame there, as on an easing tail, which the cast cannot show
 on every frame. Where it moved under two steps a frame over the frames just
@@ -328,8 +334,10 @@ frames over all the runs, the component on every one of them, and in each run
 its longest stall may be no longer than that run's control's, since a stall
 belongs to its run. A run whose control moved on fewer frames than
 `minRunFrames` (1 by default) is too little to judge: the summary names it,
-and the pool leaves it out, so it never counts as a pass. The pool fails with
-fewer than `minJudgedRuns` judged runs (half, rounded up). In each judged run,
+and the pool leaves it out, so it never counts as a pass. A run whose block
+began after its motion had settled is left out the same way: its `runs` entry
+is null, and `late` holds its `BusyWindowTooLateError`. The pool fails with
+fewer than `minJudgedRuns` judged runs (half of all the runs, rounded up). In each judged run,
 the component must move on every frame its control moved on, so a freeze fails
 its run.
 
@@ -350,10 +358,26 @@ compositor's frames from the first to the last moved frame; the gaps before and
 after are the stall check's. WebKit has no such trace:
 `stop()` resolves to `[]` and the screencast is judged alone.
 
+**Too few frames.** A proof that samples the page every frame (`sampleRects`,
+or a rAF trace of its own) takes its frames through `requireFrames(samples,
+{min, during, where})`. It returns the samples that `where` selects when there
+are at least `min` of them. A loaded machine, or a long task on the page, can
+starve the page of frames. When no frame came for longer than
+`FRAME_STARVATION_MS` (50 ms) around the selected samples, the proof fails
+with `FrameStarvationError`, which names the frames drawn and the longest gap.
+So a run that cannot prove anything still fails, and says why. With too few frames on pace, the motion did not last that
+long, and the error says that instead.
+`waitForRest` fails the same way when it cannot tell. The element held still
+in its last frame, or no frame came after the deadline, and no frame came for
+longer than `FRAME_STARVATION_MS`: it throws `FrameStarvationError`, not
+"still moving".
+
 **No Layout / Paint.** `traceRendering` records a Chromium trace around the
 interaction; `countBetween` counts the steady middle of an animation (its
 first and last frames may commit). A transform/opacity animation does no
-Layout or Paint there; a layout-property animation does one per frame. The
+Layout or Paint there; a layout-property animation does one per frame. Each
+counted `Paint` names the node it painted (`node`), and each `UpdateLayoutTree`
+counts the elements it restyled (`elements`). The
 harness's own animation recorder stands down while the trace runs, since its
 frame loop would make every frame a main-thread one, restyling each running
 animation's target and laying out an anchored one: it reads only the element a
@@ -382,13 +406,15 @@ out an anchored one), so a proof takes its traced watch before the window it
 counts. The trace's `longTasks` are the page's own: only a task the harness marked as its own read
 (`waitForAnimation` describing keyframes, `blockMainThread` without `during`)
 is in `devtoolsTasks` instead, and only when no page script ran inside it. A
-test's own `page.evaluate` stays a long task, whether it calls page code
-directly or sets it off. Each long task carries its wall time (`durationMs`)
+test's own `page.evaluate` stays the page's own task, long or stretched,
+whether it calls page code directly or sets it off. Each long task carries its wall time (`durationMs`)
 and the main thread's own run time (`threadMs`, from the trace's thread
-clock). A busy machine stretches the first but not the second, so a claim
-about the page's own work judges `threadMs`. A thread that waits (a
-synchronous request, `Atomics.wait`) gains wall time but no thread time, so a
-claim about a blocking wait judges `durationMs`.
+clock). A busy machine stretches the first but not the second, so a task is
+long only when its thread ran longer than 50 ms: the page's own work. A task
+only the wall clock stretched past 50 ms is in `stretchedTasks`, with both
+times. A thread that waits (a synchronous request, `Atomics.wait`) gains wall
+time but no thread time, so a claim about a blocking wait judges
+`stretchedTasks` too.
 
 **Storyboards.** Deterministic: frames come from seeking held animations or
 from stepping scripted input, never from wall-clock capture. The JSON trace
@@ -529,12 +555,24 @@ arrives. So a lift that reaches the page past the 40 ms stillness interval
 after its finger's last move reads as a resting finger. The page releases it
 at 0. Every WebKit play reads its release from the page's own stamps, however
 it is paced, and fails by name when the page's release is not the script's.
-The error is `TouchLiftStallError` when `onEvent` ran for the lift gap's
-excess. Record what the page did in a listener of its own, or let the script
-rest before the lift. A runner too loaded to dispatch in time stretches a
+The error is `TouchLiftStallError` when `onEvent` alone carries the scripted
+gap past the stillness interval, however much a loaded runner stretched it.
+Record what the page did in a listener of its own, or let the script rest
+before the lift. A runner too loaded to dispatch in time stretches a
 gesture the same way, and the play fails with `TouchPacingError`. A play whose
 proof reads no release from the lift, such as a pinch's end, passes
 `releaseUnread`.
+
+A proof whose component decides on a threshold names it in `boundaries`:
+the release speed a pager pages from (`releasePxPerS`), or the hold after
+which it catches the content (`holdMs`). In WebKit the play then fails by
+name when the page read the release, or the first finger's hold from
+touch-down to lift, on the other side of the threshold from the script. A
+scrolling surface reads its release as Core's `scrollVelocity` does: pass
+`release: 'scroll'`. Each pacing error names the longest time the page drew no
+frame during the gesture. A page that drew nothing for 100 ms or more never
+received the gesture as scripted. To read a frame before the gesture, a judged
+play starts one frame later.
 
 A wheel gesture is a run of steps, and `wheel` waits for each step's round
 trip, so on a loaded runner awaited steps land as far apart as a round trip

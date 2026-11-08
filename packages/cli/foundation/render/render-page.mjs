@@ -25,6 +25,7 @@ import {classesIn, cutCss, layerOrderOf} from './css-cut.mjs';
 import {sourceBlock} from './source-block.mjs';
 import {embeddedPathProblem} from './embedded-files.mjs';
 import {resolveServed} from './served-packages.mjs';
+import {CHART_CSS} from './charts.mjs';
 
 /** How long one page may take to render before it is stopped. */
 export const RENDER_TIMEOUT_MS = 60_000;
@@ -522,15 +523,30 @@ export async function renderPage(entry, options = {}) {
       message: `<${t.component}> on line ${t.line} did not render the text "${t.text.length > 60 ? `${t.text.slice(0, 57)}...` : t.text}" it was given; it takes that text through a prop (often label=), so check its props.`,
     });
   }
-  for (const f of /** @type {string[]} */ (message.files ?? [])) {
-    const src = fs.readFileSync(f, 'utf8');
-    if (/\bResponsiveContainer\b/.test(src)) {
-      warnings.push({
-        code: 'chart-size',
-        message: `${path.basename(f)} sizes a chart with ResponsiveContainer, which has no size until a browser measures it, so the chart is empty here; give the chart a fixed width and height.`,
-      });
-      break;
-    }
+  // A chart the render did not draw is an empty box: a ResponsiveContainer
+  // holds only its sizing box, and a chart of fixed size an empty wrapper.
+  const blankCharts =
+    (markup.match(/<div class="recharts-responsive-container[" ][^>]*><div[^>]*><\/div><\/div>/g) ?? []).length +
+    (markup.match(/<div\b[^>]*\bclass="recharts-wrapper"[^>]*><\/div>/g) ?? []).length +
+    (message.chartsFailed ?? 0);
+  if (blankCharts > 0) {
+    warnings.push({
+      code: 'chart-size',
+      message: `${blankCharts === 1 ? 'A chart' : `${blankCharts} charts`} could not be drawn without a browser, so ${blankCharts === 1 ? 'it is' : 'they are'} empty here: the render draws a chart only when a module of the page (not an installed package) imports the chart, and its ResponsiveContainer, from recharts by name (\`import {LineChart} from 'recharts'\`).`,
+    });
+  }
+  if (message.chartsAlone) {
+    /** @type {Record<string, string>} */
+    const causes = {
+      changed: 'The page changed its charts once its effects ran (their data or props, or which charts it shows)',
+      rerendered: 'A component that makes a chart rendered again once the page\'s effects ran',
+      error: 'The page could not be drawn again without a browser',
+    };
+    const why = causes[message.chartsAlone] ?? causes.error;
+    warnings.push({
+      code: 'chart-size',
+      message: `${why}, so each chart was drawn by itself, as the first render gave it: a custom tick, label or shape in a chart sees React context defaults, not the values the page provides.`,
+    });
   }
   for (const sheet of /** @type {string[]} */ (message.skippedCss ?? [])) {
     warnings.push({
@@ -600,7 +616,7 @@ export async function renderPage(entry, options = {}) {
     '<meta name="color-scheme" content="light dark">' +
     `<meta name="generator" content="Astryx${options.version ? ` ${escapeHtml(options.version)}` : ''}">` +
     `<title>${escapeHtml(title)}</title>` +
-    `<style>${SCHEME_CSS}${css}</style></head><body>${markup}` +
+    `<style>${SCHEME_CSS}${markup.includes('class="recharts-responsive-container"') ? CHART_CSS : ''}${css}</style></head><body>${markup}` +
     `${sourceBlock(path.basename(entry), embedded)}</body></html>\n`;
   return {
     html,

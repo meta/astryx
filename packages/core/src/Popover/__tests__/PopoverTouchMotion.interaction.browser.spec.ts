@@ -35,7 +35,6 @@ import {
   countBetween,
   drag,
   freezeTimers,
-  holdAnimations,
   installLongTaskLog,
   installTimerGate,
   markElement,
@@ -211,17 +210,6 @@ function expectedBox(final: Box, trigger: Box, p: number): Box {
     width: final.width * frame.scaleX,
     height: final.height * frame.scaleY,
   };
-}
-
-/** The layer's own scale animation among those running in it. */
-async function scaleAnimationOf(locator: Locator) {
-  for (;;) {
-    const found = await waitForAnimation(locator);
-    const scale = found.find(a => a.keyframes.some(k => 'scale' in k));
-    if (scale != null) {
-      return scale;
-    }
-  }
 }
 
 /** A scale animation's `animate()` call and its own start, epoch ms. */
@@ -412,23 +400,26 @@ test.describe('with a mouse (a fine primary pointer)', () => {
     await trigger.click();
     await expect(trigger).toHaveAttribute('aria-expanded', 'true');
     const layer = page.locator('[popover]:has(.astryx-popover)').first();
-    // The layer's own CSS entrance runs; no UIKit scale is set or played.
-    const entrance = await layer.evaluate(element => ({
-      inlineScale: (element as HTMLElement).style.getPropertyValue('scale'),
-      inlineAnimation: (element as HTMLElement).style.getPropertyValue(
-        'animation-name',
-      ),
-      animationName: getComputedStyle(element).animationName,
-      played: element
-        .getAnimations()
-        .some(
-          animation =>
-            !(animation instanceof CSSAnimation) &&
-            (animation.effect as KeyframeEffect | null)
-              ?.getKeyframes()
-              .some(frame => 'scale' in frame) === true,
-        ),
-    }));
+    // The surface's CSS entrance runs; no UIKit scale is set or played.
+    const entrance = await layer.evaluate(element => {
+      const surface = element.querySelector<HTMLElement>('.astryx-popover');
+      return {
+        inlineScale: (element as HTMLElement).style.getPropertyValue('scale'),
+        inlineAnimation:
+          surface?.style.getPropertyValue('animation-name') ?? 'no surface',
+        animationName:
+          surface == null ? 'none' : getComputedStyle(surface).animationName,
+        played: element
+          .getAnimations({subtree: true})
+          .some(
+            animation =>
+              !(animation instanceof CSSAnimation) &&
+              (animation.effect as KeyframeEffect | null)
+                ?.getKeyframes()
+                .some(frame => 'scale' in frame) === true,
+          ),
+      };
+    });
     expect(entrance.inlineScale).toBe('');
     expect(entrance.inlineAnimation).toBe('');
     expect(entrance.animationName).not.toBe('none');
@@ -458,11 +449,7 @@ test('the presentation grows out of the trigger on the theme\u2019s entrance tok
   await expect(story.trigger).toHaveAttribute('aria-expanded', 'false');
   // Presenting during the dismissal would turn back from the closing frame.
   await expect(exitCopyOf(page)).toHaveCount(0);
-  await openWithTap(story);
-  await scaleAnimationOf(story.layer);
-  const held = await holdAnimations(page, story.layer, {
-    judges: {target: story.layer, property: 'scale'},
-  });
+  const held = await openHeldWhileGrowing(page, story);
   const samples = await sampleBoxes(
     story.layer,
     final,
@@ -908,7 +895,7 @@ test('a style read after the opening tap finds no CSS entrance running on the la
         }
         resolve(
           layer
-            .getAnimations()
+            .getAnimations({subtree: true})
             .filter(
               animation =>
                 animation instanceof CSSAnimation &&
@@ -1167,10 +1154,11 @@ async function armExitCopyHold(
 }
 
 /**
- * Opens the popover with a tap and holds its presentation where it starts, so
- * the next press lands while it grows. Under Reduce Motion it holds the
- * cross-fade (`property: 'opacity'`). Returns the held motion; release it
- * with `releaseAnimations`.
+ * Opens the popover with a tap and holds its presentation where it starts.
+ * The page takes the hold itself, so a busy runner cannot miss the motion. A
+ * test then samples the growth, or presses while it grows. Under Reduce
+ * Motion it holds the cross-fade (`property: 'opacity'`). Returns the held
+ * motion; release it with `releaseAnimations`.
  */
 async function openHeldWhileGrowing(
   page: Page,

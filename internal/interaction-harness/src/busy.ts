@@ -841,6 +841,10 @@ function motionStepPx(values: readonly number[]): number {
  * at `setBeforeBlock`, the value the page itself last set before the block,
  * is excused. Every frame after that first change is judged, so a freeze
  * later in the block fails.
+ * An element off screen before the judged part is judged from its first
+ * position inside the part, as a card that enters from an edge. The cast's
+ * frames before the part must show the screen without it. A main-thread
+ * entrance shows no frame during the block, so it still fails.
  * The judged part still ends with the block and the `minJudgedFrames` floor
  * applies to it, so a start the block itself delays fails; any other
  * animation that was already moving is judged from the block's start, and a
@@ -1141,12 +1145,28 @@ export function busyWindowProof(
     prior[holdStart].t < window.from &&
     heldFrames >= 2 &&
     Math.abs(lead[lead.length - 1] - setBeforeBlock) <= matchPx;
+  // Off screen before the judged part, as a card that enters from an edge:
+  // the cast's frames there show the screen without it. Its first position
+  // inside the part is then its on-screen start, and judging starts there.
+  // With no frame before at all, nothing is known. A main-thread entrance
+  // shows no frame during the block, so it has no such position.
+  const shownWithout = tracked.some(
+    f =>
+      f.box == null &&
+      f.t < inner.from &&
+      f.t >= inner.from - BUSY_PROOF_LOOKAROUND_MS,
+  );
+  const firstShown = values.find(v => v.value != null);
+  const entersAt =
+    prior.length === 0 && shownWithout && firstShown != null
+      ? firstShown.t
+      : null;
   const onScreenFrom =
     prior.length > 0 &&
     (!movedBefore || heldFromBeforeBlock) &&
     inWindow.length > 0
       ? inWindow[0]
-      : null;
+      : entersAt;
   const judged = {from: onScreenFrom ?? inner.from, to: inner.to};
   const changes = inWindow.filter(t => t > judged.from || onScreenFrom == null);
   const edges = [judged.from, ...changes, judged.to];
@@ -1480,8 +1500,17 @@ export function busyWindowProof(
   }
   if (controlRead != null) {
     if (controlRead.moved < minJudgedFrames) {
+      // How starved the cast was over the whole block, as the pacing and
+      // frame errors say it.
+      const blockFrames = tracked
+        .filter(f => f.box != null && f.t > window.from && f.t < window.to)
+        .map(f => f.t);
+      const castEdges = [window.from, ...blockFrames, window.to];
+      const castGapMs = Math.max(
+        ...castEdges.slice(1).map((t, k) => t - castEdges[k]),
+      );
       failures.push(
-        `the control moved on ${controlRead.moved} frames in the judged part, under ${minJudgedFrames}: the compositor presented too little in this window to judge`,
+        `the control moved on ${controlRead.moved} frames in the judged part, under ${minJudgedFrames}: the compositor presented too little in this window to judge (the cast delivered ${blockFrames.length} frame${blockFrames.length === 1 ? '' : 's'} in the ${Math.round(window.to - window.from)} ms block, none for ${Math.round(castGapMs)} ms)`,
       );
     }
     const visible = controlRead.movedWith - controlRead.belowStep;
@@ -1536,7 +1565,7 @@ export function busyWindowProof(
       : `, compositor presenting every ${compositorFrameMs.toFixed(1)} ms`) +
     (onScreenFromMs == null
       ? ''
-      : `, on screen from +${onScreenFromMs.toFixed(0)} ms (nothing moved before the block)`) +
+      : `, on screen from +${onScreenFromMs.toFixed(0)} ms (${entersAt == null ? 'nothing moved before the block' : 'off screen before the block'})`) +
     (controlRead == null
       ? ''
       : `; against the control: moved on ${controlRead.movedWith} of its ${controlRead.moved} frames${controlRead.belowStep > 0 ? ` (${controlRead.belowStep} where the cast could not show the step)` : ''}, its longest stall ${controlRead.longestStallMs.toFixed(1)} ms`) +
@@ -1580,10 +1609,17 @@ export interface PooledBusyProof {
    * Each run judged on its own against its control: read its numbers, not its
    * verdict (one short run can hold too few frames to judge).
    */
-  readonly runs: readonly BusyProof[];
+  readonly runs: readonly (BusyProof | null)[];
+  /**
+   * For each run, the `BusyWindowTooLateError` its window threw, or null. Such
+   * a run's block began after its motion had settled, so its `runs` entry is
+   * null: the run holds nothing to judge.
+   */
+  readonly late: readonly (BusyWindowTooLateError | null)[];
   /**
    * Whether each run was judged. A run whose control moved on fewer than
-   * `minRunFrames` frames is too little to judge, and the pool leaves it out.
+   * `minRunFrames` frames is too little to judge, and so is a run that began
+   * too late (`late`). The pool leaves both out.
    */
   readonly judged: readonly boolean[];
   /**
@@ -1604,7 +1640,9 @@ export interface PooledBusyProof {
  * present fewer than `minJudgedFrames` in one run, and one run cannot decide.
  * A run whose control moved on fewer than `minRunFrames` frames (1 by
  * default) is too little to judge: the machine starved it. The summary names
- * it, and the pool leaves it out, so it never counts as a pass.
+ * it, and the pool leaves it out, so it never counts as a pass. A run whose
+ * window throws `BusyWindowTooLateError` is left out the same way: its block
+ * began after its motion had settled.
  * The judged runs are judged as one long window is:
  * - at least `minJudgedRuns` runs are judged (by default, half the runs,
  *   rounded up);
@@ -1644,15 +1682,31 @@ export function pooledBusyProof(
       `pooledBusyProof: minJudgedRuns ${minJudgedRuns} is not between 1 and the ${runs.length} runs`,
     );
   }
-  const proofs = runs.map(run =>
-    busyWindowProof(run.tracked, run.window, {
-      ...windowOptions,
-      control: run.control,
-    }),
+  const late: (BusyWindowTooLateError | null)[] = [];
+  const proofs = runs.map(run => {
+    try {
+      const proof = busyWindowProof(run.tracked, run.window, {
+        ...windowOptions,
+        control: run.control,
+      });
+      late.push(null);
+      return proof;
+    } catch (error) {
+      if (!(error instanceof BusyWindowTooLateError)) {
+        throw error;
+      }
+      late.push(error);
+      return null;
+    }
+  });
+  const reads = proofs.map(proof =>
+    proof == null ? null : (proof.control as BusyControlRead),
   );
-  const reads = proofs.map(proof => proof.control as BusyControlRead);
-  const judged = reads.map(read => read.moved >= minRunFrames);
-  const judgedReads = reads.filter((_, i) => judged[i]);
+  const judged = reads.map(read => read != null && read.moved >= minRunFrames);
+  const judgedReads = reads.filter(
+    (read, i): read is BusyControlRead => judged[i] && read != null,
+  );
+  const lateRuns = late.filter(error => error != null).length;
   const total = (key: 'moved' | 'movedWith' | 'belowStep') =>
     judgedReads.reduce((sum, read) => sum + read[key], 0);
   const moved = total('moved');
@@ -1664,7 +1718,9 @@ export function pooledBusyProof(
   const failures: string[] = [];
   if (judgedReads.length < minJudgedRuns) {
     failures.push(
-      `${judgedReads.length} of ${runs.length} runs judged, under ${minJudgedRuns}: the compositor presented too little in the others to judge`,
+      lateRuns === 0
+        ? `${judgedReads.length} of ${runs.length} runs judged, under ${minJudgedRuns}: the compositor presented too little in the others to judge`
+        : `${judgedReads.length} of ${runs.length} runs judged, under ${minJudgedRuns}: ${lateRuns} began after the motion had settled, and the compositor presented too little in any other to judge`,
     );
   }
   if (judgedReads.length > 0 && moved < minJudgedFrames) {
@@ -1684,15 +1740,18 @@ export function pooledBusyProof(
     );
   }
   proofs.forEach((proof, i) => {
+    if (proof == null) {
+      return;
+    }
     if (proof.frames > 0 && proof.medianFrameMs > maxMedianFrameMs) {
       failures.push(
         `run ${i + 1}: median frame interval ${proof.medianFrameMs.toFixed(1)} ms > ${maxMedianFrameMs} ms`,
       );
     }
-    if (!judged[i]) {
+    const read = reads[i];
+    if (!judged[i] || read == null) {
       return;
     }
-    const read = reads[i];
     if (read.movedWith < read.moved) {
       failures.push(
         `run ${i + 1}: moved on ${read.movedWith} of the ${read.moved} frames its control moved`,
@@ -1712,13 +1771,16 @@ export function pooledBusyProof(
     `: moved on ${movedWith} of the control's ${moved} frames` +
     proofs
       .map((proof, i) =>
-        judged[i]
-          ? `; run ${i + 1}: ${proof.summary}`
-          : `; run ${i + 1}: too little to judge, the control moved on ${reads[i].moved} frames, under ${minRunFrames}: ${proof.summary}`,
+        proof == null
+          ? `; run ${i + 1}: too late to judge: ${late[i]?.message ?? ''}`
+          : judged[i]
+            ? `; run ${i + 1}: ${proof.summary}`
+            : `; run ${i + 1}: too little to judge, the control moved on ${reads[i]?.moved ?? 0} frames, under ${minRunFrames}: ${proof.summary}`,
       )
       .join('');
   return {
     runs: proofs,
+    late,
     judged,
     control: {moved, movedWith},
     verdict: {pass: failures.length === 0, failures},

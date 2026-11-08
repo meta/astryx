@@ -10,6 +10,8 @@
  *   marker box and the cast's position step). `trackMarkers` tracks several
  *   colors from one decode of each frame. Also `colorBlockPx` (a frame's color
  *   resolution), `sampleRects` (per-rAF rect sampling) and `frameStats`.
+ *   `requireFrames` gives a proof its frames, or fails it by name when the
+ *   page drew too few.
  * @position Frame evidence for motion proofs. The screencast is captured off
  *   the page's main thread, from what the compositor presents, so it keeps
  *   delivering frames while a script blocks the main thread: that is what makes
@@ -791,4 +793,94 @@ export function frameStats(
     first: inside[0]?.value ?? null,
     last: inside[inside.length - 1]?.value ?? null,
   };
+}
+
+/**
+ * A gap between two frames the page drew, ms, past which the page counts as
+ * starved: about three frames at 60 Hz.
+ */
+export const FRAME_STARVATION_MS = 50;
+
+const framesDrawn = (count: number) =>
+  `${count} ${count === 1 ? 'frame' : 'frames'}`;
+
+/** A proof's frames when the page drew too few of them. */
+export interface FrameShortfall {
+  /** The harness function that needed the frames (default `requireFrames`). */
+  readonly by?: string;
+  /** What the frames had to show. */
+  readonly during: string;
+  /** The frames the page drew during it. */
+  readonly frames: number;
+  /** The frames the proof needs. */
+  readonly min: number;
+  /**
+   * The longest gap between frames around them, ms; Infinity when the page
+   * drew fewer than two frames.
+   */
+  readonly longestGapMs: number;
+}
+
+/**
+ * The page drew too few frames for a proof, because it was starved of
+ * frames: no frame came for longer than `FRAME_STARVATION_MS`. A loaded
+ * machine does that, and so does a long task on the page. Such a run proves
+ * nothing about the motion, so it fails, and the error says why.
+ */
+export class FrameStarvationError extends Error {
+  readonly numbers: FrameShortfall;
+  constructor(numbers: FrameShortfall) {
+    super(
+      `${numbers.by ?? 'requireFrames'}: the page drew ${framesDrawn(numbers.frames)} while ${numbers.during}, where the proof needs ${numbers.min}. ${Number.isFinite(numbers.longestGapMs) ? `No frame came for ${numbers.longestGapMs.toFixed(1)} ms` : 'No second frame came'}: the page was starved of frames (a loaded machine, or a long task on the page), so the run proves nothing about the motion`,
+    );
+    this.name = 'FrameStarvationError';
+    this.numbers = numbers;
+  }
+}
+
+/**
+ * The samples that `where` selects from the page's own per-frame `samples`
+ * (an rAF trace), when there are at least `min` of them. Else the proof
+ * fails. The error is `FrameStarvationError` when no frame came for longer
+ * than `FRAME_STARVATION_MS` around the selected samples. Otherwise the
+ * motion did not last that long, and the error says so. `during` names what
+ * the frames had to show.
+ */
+export function requireFrames<T extends {readonly t: number}>(
+  samples: readonly T[],
+  {
+    min,
+    during,
+    where = () => true,
+  }: {
+    readonly min: number;
+    readonly during: string;
+    readonly where?: (sample: T) => boolean;
+  },
+): T[] {
+  const selected = samples.filter(where);
+  if (selected.length >= min) {
+    return selected;
+  }
+  // The gaps from the frame before the first selected sample to the frame
+  // after the last one. With none selected, every gap counts.
+  const first = selected.length > 0 ? samples.indexOf(selected[0]) : 0;
+  const last =
+    selected.length > 0
+      ? samples.indexOf(selected[selected.length - 1])
+      : samples.length - 1;
+  const around = samples.slice(Math.max(0, first - 1), last + 2);
+  // With fewer than two frames there is no gap to measure. The page drew one
+  // frame at most in the whole sample, so it was starved.
+  const longestGapMs =
+    around.length < 2
+      ? Number.POSITIVE_INFINITY
+      : Math.max(...around.slice(1).map((sample, i) => sample.t - around[i].t));
+  const numbers = {during, frames: selected.length, min, longestGapMs};
+  if (longestGapMs > FRAME_STARVATION_MS) {
+    throw new FrameStarvationError(numbers);
+  }
+  throw new Error(
+    `requireFrames: the page drew ${framesDrawn(selected.length)} while ${during}, where the proof needs ${min}. No frame came more than ${FRAME_STARVATION_MS} ms after the one before: the motion did not last that long`,
+  );
 }

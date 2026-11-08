@@ -1357,6 +1357,107 @@ function spread(at: Point, from: number, by: number, drift = 0): Step[] {
   return steps;
 }
 
+/**
+ * A page pointerup listener that runs `ms`, as a busy app's can. WebKit
+ * stamps the touchend that follows only once it is done.
+ */
+async function holdEveryLift(page: Page, ms: number): Promise<void> {
+  await page.evaluate(spin => {
+    addEventListener('pointerup', () => {
+      const end = performance.now() + spin;
+      while (performance.now() < end) {
+        // The listener's own work.
+      }
+    });
+  }, ms);
+}
+
+test('a flick keeps its release speed when a page pointerup listener holds its touchend: the lift is read where the moves were', async ({
+  page,
+  browserName,
+}) => {
+  const driver = await open(page, browserName);
+  const start = await center(page, 'hpan');
+  const flickOnPan = () => drag(start, {x: start.x + 120, y: start.y}, 6);
+  await driver.play(flickOnPan());
+  const releases = async () =>
+    page.evaluate(() => ({
+      drag: window.__releases.hpan ?? 0,
+      scroll: window.__releases.hpanScroll ?? 0,
+    }));
+  const free = await releases();
+  await holdEveryLift(page, 50);
+  await driver.play(flickOnPan());
+  const held = await releases();
+  expect(free.drag).toBeGreaterThan(0);
+  expect(free.scroll).toBeGreaterThan(0);
+  // On the touchend's clock, the held lift read as a resting finger: 0. That
+  // holds for a dragged surface (a sheet, a pop) and a scrolling one (a pager).
+  expect(held.drag).toBeGreaterThan(free.drag / 2);
+  expect(held.scroll).toBeGreaterThan(free.scroll / 2);
+});
+
+test('a pinch keeps its release speed when a page pointerup listener holds its touchend', async ({
+  page,
+  browserName,
+}) => {
+  const driver = await open(page, browserName);
+  const at = await center(page, 'pinchable');
+  await driver.play(spread(at, 20, 40));
+  const free = await page.evaluate(() => window.__releases.pinch ?? 0);
+  await holdEveryLift(page, 50);
+  await driver.play(spread(at, 20, 40));
+  const held = await page.evaluate(() => window.__releases.pinch ?? 0);
+  expect(free).toBeGreaterThan(0);
+  expect(held).toBeGreaterThan(free / 2);
+});
+
+test('a tap lifted before the long press’s time stays a tap when a page pointerup listener holds its touchend past that time', async ({
+  page,
+  browserName,
+}) => {
+  const driver = await openBare(page, browserName);
+  await page.evaluate(() => {
+    const target = document.createElement('div');
+    target.id = 'tapOrHold';
+    target.style.height = '80px';
+    document.body.prepend(target);
+    const {host, LongPressGestureRecognizer, TapGestureRecognizer} =
+      window.__api;
+    const seen: string[] = [];
+    Object.assign(window, {__tapOrHold: seen});
+    const tap = new TapGestureRecognizer({name: 'tap'});
+    tap.addListener(r => {
+      if (r.state === 'ended') {
+        seen.push('tap');
+      }
+    });
+    const hold = new LongPressGestureRecognizer({name: 'hold'});
+    hold.addListener(r => {
+      if (r.state === 'began') {
+        seen.push('hold');
+      }
+    });
+    host.attach(target, tap);
+    host.attach(target, hold);
+  });
+  const at = await center(page, 'tapOrHold');
+  await holdEveryLift(page, 160);
+  await driver.play([
+    {t: 0, down: [{...at, id: 1}]},
+    {t: 380, down: []},
+  ]);
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(
+          () => (window as unknown as {__tapOrHold: string[]}).__tapOrHold,
+        ),
+      {message: 'the tap stays a tap'},
+    )
+    .toEqual(['tap']);
+});
+
 test('pinch-zoom stays the browser’s on an element without a pinch recognizer', async ({
   page,
   browserName,
@@ -3226,7 +3327,10 @@ test("a press in a same-origin iframe's scroll view waits the content-touch dela
     const row = doc.getElementById('row') as HTMLElement;
     const times: {touch?: number; handled?: number; highlight?: number} = {};
     (window as unknown as {__frameTimes: typeof times}).__frameTimes = times;
-    doc.addEventListener(
+    // On the window's capture phase, added before the host's listener there,
+    // so this reads its clocks first. The host reads its own after, never
+    // before, however long a busy machine holds the page between them.
+    view.addEventListener(
       'touchstart',
       event => {
         times.touch = event.timeStamp;
