@@ -190,9 +190,8 @@ export function DialogHeader({
   // avoid stealing scroll position from the surrounding page.
   // The parent Dialog detects this title (by `titleId`) via a callback ref to
   // set its default aria-labelledby — no registration handshake needed here.
-  // A header that mounts while its native dialog is still closed (in the
-  // commit that opens it) leaves focus to the Dialog, which focuses the title
-  // through its `data-autofocus` marker once the dialog is modal.
+  // The native dialog is not modal yet when the header mounts in its opening
+  // render. Dialog focuses the title after showModal().
   useEffect(() => {
     const title = titleRef.current;
     if (!shouldAutoFocus || title == null) {

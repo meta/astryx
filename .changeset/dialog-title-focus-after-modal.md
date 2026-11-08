@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] `Dialog`: when a `DialogHeader` mounts in the same render that opens the dialog, its title now takes focus only after the dialog is modal, so focus never reaches the dialog's content before the page behind it is blocked. The title is still the default focus target when no other control asks for focus.
+[fix] `Dialog`: a `DialogHeader` title now takes focus only after the dialog is modal, also when the header mounts in the render that opens the dialog. When no other control asks for focus, initial focus now starts on the title in every browser. Before, a header with a start control, and any header in Firefox, started on the first control.
 
 @cixzhang
