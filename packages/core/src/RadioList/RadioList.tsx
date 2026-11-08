@@ -79,8 +79,7 @@ RadioListContext.displayName = 'RadioListContext';
 export interface RadioListFormContextValue {
   /**
    * Every radio leaves the form: the whole group is disabled, so nothing
-   * submits and a required group does not block the submit (spec:AST-085
-   * FR3). Detaching all of them, never one, keeps the radios one native group
+   * submits and a required group does not block the submit. Detaching all of them, never one, keeps the radios one native group
    * with one Tab stop.
    */
   detachesFromForm: boolean;
@@ -397,7 +396,7 @@ export function RadioList({
       }
       // The entry lands on an option that can be chosen. Only a wholly
       // disabled group enters on a disabled radio, keeping its enabled focus
-      // order (spec:AST-085 FR1).
+      // order.
       const available = radios.filter(radio => !isUnavailable(radio));
       const stops = available.length > 0 ? available : radios;
 

@@ -292,7 +292,7 @@ export function RadioListItem({
   // selected, individually disabled radio stays in the form, so the group
   // keeps one form owner, one Tab stop, and a satisfied `required`, but its
   // value leaves the entry list, as a natively disabled radio's would
-  // (spec:AST-085 FR3).
+  //.
   const excludesValue = isItemDisabled && isChecked && !context.isDisabled;
   useEffect(() => {
     const form = radioRef.current?.form;
@@ -326,7 +326,7 @@ export function RadioListItem({
   // See CheckboxInput: the ring goes on the indicator's own element, because
   // the native input is visually hidden and only the indicator knows its shape.
   const indicatorRef = useRef<HTMLSpanElement>(null);
-  // A focused disabled radio still shows the ring (spec:AST-085 FR6).
+  // A focused disabled radio still shows the ring.
   const {focusProps} = useIndicatorFocusRing(indicatorRef);
 
   // The radio is the row's single keyboard control and action. The row is an
@@ -363,15 +363,15 @@ export function RadioListItem({
         name={radioName}
         value={value}
         checked={isChecked}
-        // A disabled radio stays focusable (spec:AST-085 FR1), in server
+        // A disabled radio stays focusable, in server
         // markup too, so it never takes native `disabled`. A wholly disabled
         // group leaves the form together, so it submits nothing and blocks
-        // no submit (FR3), before hydration too.
+        // no submit before hydration too.
         aria-disabled={isDisabled ? 'true' : undefined}
         form={formContext?.detachesFromForm ? '' : undefined}
         // A disabled radio is not required: a group whose options are all
         // disabled blocks no submit, while one enabled option keeps the choice
-        // required (FR3).
+        // required.
         required={context.isRequired && !isDisabled}
         // Chromium reports an unanswered native-required radio invalid before
         // any interaction; the invalid state follows the group's status
@@ -388,7 +388,7 @@ export function RadioListItem({
         // A consumer onClick rides on the radio input itself, so it fires for
         // both direct control clicks and row-surface clicks the row delegates
         // to the input — the same routing CheckboxListItem uses.
-        // A disabled radio runs no caller onClick (spec:AST-085 FR2).
+        // A disabled radio runs no caller onClick.
         onClick={isDisabled ? undefined : onClick}
         // The radio names itself from the visible label element, which works
         // for a rich label as well as a plain string. `aria-label` replaces
