@@ -26,6 +26,7 @@ import {
 } from '../theme/tokens.stylex';
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
+import {isRenderable} from '../utils/isRenderable';
 import type {BadgeVariantMap} from './index';
 
 /**
@@ -46,6 +47,34 @@ const styles = stylex.create({
     lineHeight: typeScaleVars['--text-supporting-leading'],
     fontWeight: fontWeightVars['--font-weight-medium'],
     whiteSpace: 'nowrap',
+    // A badge is one line by construction — one line tall, `nowrap` — so a
+    // label wider than the space available has to go somewhere. Without these
+    // it went *outside* its container: `nowrap` with nothing to clip it
+    // neither wraps nor truncates, it just escapes, and lands on whatever sits
+    // beside it. `minWidth: 0` matters as much as the max: as a flex item the
+    // automatic minimum size would otherwise hold the badge at its full text
+    // width and push the clamp back out again.
+    maxWidth: '100%',
+    minWidth: 0,
+  },
+  // Never shorter than one line of its label: when the text grows (a larger
+  // text size), the pill grows with the label instead of the label spilling
+  // out of it. A minimum rather than a new height, so
+  // the theme's height (`--spacing-5`, or a theme's own, such as Butter's
+  // 30px) holds at the default size, where the line fits. Only with a label:
+  // a color-only badge has no text to hold and keeps the component:Badge FR1
+  // geometry at every text size.
+  grows: {
+    minHeight: '1lh',
+  },
+  // The ellipsis goes on the label rather than the badge itself, because
+  // `text-overflow` needs a block container and taking the root off
+  // `inline-flex` to get one would cost the icon its centring. The label is a
+  // flex item, so it needs its own `minWidth: 0` for the same reason as above.
+  label: {
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    minWidth: 0,
   },
 });
 
@@ -60,20 +89,56 @@ const variants = stylex.create({
     color: colorVars['--color-text-primary'],
   },
   info: {
-    backgroundColor: colorVars['--color-accent'],
-    color: colorVars['--color-on-accent'],
+    backgroundColor: colorVars['--color-info'],
+    color: colorVars['--color-on-info'],
+    // Forced colors replace status fills with Canvas; this boundary keeps the
+    // fill's shape visible (architecture:theme-tokens INV11).
+    outlineWidth: {default: null, '@media (forced-colors: active)': '1px'},
+    outlineStyle: {default: null, '@media (forced-colors: active)': 'solid'},
+    outlineColor: {
+      default: null,
+      '@media (forced-colors: active)': 'CanvasText',
+    },
+    outlineOffset: {default: null, '@media (forced-colors: active)': '-1px'},
   },
   success: {
     backgroundColor: colorVars['--color-success'],
     color: colorVars['--color-on-success'],
+    // Forced colors replace status fills with Canvas; this boundary keeps the
+    // fill's shape visible (architecture:theme-tokens INV11).
+    outlineWidth: {default: null, '@media (forced-colors: active)': '1px'},
+    outlineStyle: {default: null, '@media (forced-colors: active)': 'solid'},
+    outlineColor: {
+      default: null,
+      '@media (forced-colors: active)': 'CanvasText',
+    },
+    outlineOffset: {default: null, '@media (forced-colors: active)': '-1px'},
   },
   warning: {
     backgroundColor: colorVars['--color-warning'],
     color: colorVars['--color-on-warning'],
+    // Forced colors replace status fills with Canvas; this boundary keeps the
+    // fill's shape visible (architecture:theme-tokens INV11).
+    outlineWidth: {default: null, '@media (forced-colors: active)': '1px'},
+    outlineStyle: {default: null, '@media (forced-colors: active)': 'solid'},
+    outlineColor: {
+      default: null,
+      '@media (forced-colors: active)': 'CanvasText',
+    },
+    outlineOffset: {default: null, '@media (forced-colors: active)': '-1px'},
   },
   error: {
     backgroundColor: colorVars['--color-error'],
     color: colorVars['--color-on-error'],
+    // Forced colors replace status fills with Canvas; this boundary keeps the
+    // fill's shape visible (architecture:theme-tokens INV11).
+    outlineWidth: {default: null, '@media (forced-colors: active)': '1px'},
+    outlineStyle: {default: null, '@media (forced-colors: active)': 'solid'},
+    outlineColor: {
+      default: null,
+      '@media (forced-colors: active)': 'CanvasText',
+    },
+    outlineOffset: {default: null, '@media (forced-colors: active)': '-1px'},
   },
   // Non-semantic color variants — tinted backgrounds with colored text
   blue: {
@@ -163,18 +228,48 @@ export function Badge({
   ref,
   ...props
 }: BadgeProps) {
+  // Clipping a label makes its tail unrecoverable, so the full text has to
+  // stay reachable somewhere. `title` is the half of that answer which costs
+  // nothing: no measurement, no hook, so `Badge` renders the same on the
+  // server and stays usable in a server component. It follows the shape
+  // `BaseTable` already uses for a truncated header cell (BaseTable.tsx) —
+  // string content only, and only when there is something to show.
+  //
+  // A rich label is left alone: it is a subtree whose text would have to be
+  // flattened to a string, and flattening renders a guess — an icon, a
+  // `<strong>`, a nested element all read differently.
+  //
+  // It is set whether or not the label actually fits, because knowing that
+  // requires measuring. The refinement — a tooltip only when the text is
+  // really cut, reachable by hover and by focus — needs that measurement and
+  // a client component, so it is tracked in #5585.
+  const labelTitle =
+    typeof label === 'number'
+      ? String(label)
+      : typeof label === 'string' && label.length > 0
+        ? label
+        : undefined;
+  // Whether the label renders anything, which is when the badge grows with it.
+  const hasLabel = isRenderable(label);
+
   return (
     <span
       ref={ref}
       {...mergeProps(
         themeProps('badge', {variant}),
-        stylex.props(styles.base, variants[variant], xstyle),
+        stylex.props(
+          styles.base,
+          hasLabel && styles.grows,
+          variants[variant],
+          xstyle,
+        ),
         className,
         style,
       )}
+      title={labelTitle}
       {...props}>
       {icon}
-      {label}
+      <span {...stylex.props(styles.label)}>{label}</span>
     </span>
   );
 }

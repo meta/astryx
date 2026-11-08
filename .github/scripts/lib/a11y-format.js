@@ -5,6 +5,9 @@
  * Used by generate-pr-comment.js and test-pr-enrichment.js.
  */
 
+const {inline, num, safeUrl} = require('./report-text');
+const {notRunSentence} = require('../run-labels.cjs');
+
 // Impact emoji badges
 const impactEmoji = {
   critical: '🔴',
@@ -42,6 +45,11 @@ function formatWcagTags(tags) {
  */
 function buildA11ySection(a11yReport, storiesAuditedByComponent) {
   let a11ySection = '### Accessibility Audit\n\n';
+  // No report: the audit did not run (pull requests run it only with the
+  // `ci:run-a11y` label, spec:AST-030 FR12). Never claim a clean result.
+  if (!a11yReport) {
+    return `${a11ySection}**Status:** ${notRunSentence('a11y')} It runs after merges to \`main\` and before each release.\n\n`;
+  }
   const totalViolations = Object.values(a11yReport.components || {})
     .reduce((sum, comp) => sum + (comp.violations?.length || 0), 0);
 
@@ -69,24 +77,31 @@ function buildA11ySection(a11yReport, storiesAuditedByComponent) {
 
   for (const [compName, compReport] of Object.entries(a11yReport.components || {})) {
     if (compReport.violations?.length > 0) {
-      a11ySection += `<details>\n<summary><strong>${compName}</strong> - ${compReport.violations.length} issue(s)</summary>\n\n`;
+      // Report fields are display data — render them as literal inline text
+      // (rule ids down to their own alphabet, counts as numbers, the help URL
+      // only when it is a plain https URL). See report-text.js.
+      a11ySection += `<details>\n<summary><strong>${inline(compName)}</strong> - ${compReport.violations.length} issue(s)</summary>\n\n`;
       for (const violation of compReport.violations) {
         const emoji = impactEmoji[violation.impact] || '';
         const prefix = emoji ? `${emoji} ` : '';
-        a11ySection += `- ${prefix}**${violation.impact}**: ${violation.description}\n`;
+        a11ySection += `- ${prefix}**${inline(violation.impact)}**: ${inline(violation.description)}\n`;
 
-        // Build detail line: Rule · story count · learn more
-        const detailParts = [`Rule: \`${violation.id}\``];
+        // Build detail line: Rule · story count · learn more. Axe rule ids
+        // are lowercase-alphanumeric-with-dashes; anything else has no
+        // business inside the code span.
+        const ruleId = String(violation.id ?? '').replace(/[^\w-]/g, '');
+        const detailParts = [`Rule: \`${ruleId}\``];
 
         if (violation.storyCount != null && compReport.storiesAudited) {
           detailParts.push(
-            `Affects ${violation.storyCount}/${compReport.storiesAudited} stories`
+            `Affects ${num(violation.storyCount)}/${num(compReport.storiesAudited)} stories`
           );
         }
 
-        if (violation.helpUrl) {
+        const helpUrl = safeUrl(violation.helpUrl);
+        if (helpUrl) {
           detailParts.push(
-            `[Learn more](${violation.helpUrl})`
+            `[Learn more](${helpUrl})`
           );
         }
 

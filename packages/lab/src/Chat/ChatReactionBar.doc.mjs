@@ -5,6 +5,8 @@
 export const docs = {
   name: 'ChatReactionBar',
   subComponentOf: 'Chat',
+  group: 'Chat',
+  category: 'Chat',
   displayName: 'Chat Reaction Bar',
   description: 'Row of emoji reaction pills under a chat message. Each pill shows an emoji and count; the current user\'s own reactions get an accent tint and aria-pressed. Provide onAdd to render a trailing add-reaction button that opens a ChatEmojiPicker popover.',
   props: [

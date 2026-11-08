@@ -4,7 +4,7 @@
 
 /**
  * @file TransferList.tsx
- * @input Controlled option data, React DOM portals, local action glyphs, and shared Lab reorder styles
+ * @input Controlled option data, React DOM portals, local action glyphs, shared Lab reorder styles, and the core i18n catalog
  * @output Exports TransferList with immediate transfers, vertical reordering, and responsive scroll ownership
  * @position Lab collection input; consumed by index.ts, TransferListSelector, docs, and tests
  *
@@ -26,6 +26,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
+  type SVGProps,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {flushSync} from 'react-dom';
@@ -40,9 +41,11 @@ import {Text} from '@astryxdesign/core/Text';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 import {useAnnounce} from '@astryxdesign/core/hooks';
+import {useTranslator} from '@astryxdesign/core/i18n';
 import {
   borderVars,
   colorVars,
+  sizeVars,
   spacingVars,
   typeScaleVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
@@ -55,57 +58,36 @@ import {
 import {reorderStyles} from '../reorderStyles';
 import {transferListVars} from './tokens.stylex';
 
-function PlusIcon() {
+// Lucide glyphs the shared icon registry does not carry (there is no `add` or
+// `grip` semantic name). Typed as icon components and rendered through `Icon`
+// so sizing, colour and a11y come from the icon pipeline rather than a raw
+// inline `<svg>`. Removal reuses the registry `close` glyph instead.
+function PlusIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg
-      className="lucide lucide-plus"
-      width={16}
-      height={16}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
       strokeWidth={1.5}
       strokeLinecap="round"
       strokeLinejoin="round"
-      aria-hidden>
+      {...props}>
       <path d="M5 12h14" />
       <path d="M12 5v14" />
     </svg>
   );
 }
 
-function RemoveIcon() {
+function GripVerticalIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg
-      className="lucide lucide-x"
-      width={16}
-      height={16}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
       strokeWidth={1.5}
       strokeLinecap="round"
       strokeLinejoin="round"
-      aria-hidden>
-      <path d="M18 6 6 18" />
-      <path d="m6 6 12 12" />
-    </svg>
-  );
-}
-
-function GripVerticalIcon() {
-  return (
-    <svg
-      className="lucide lucide-grip-vertical"
-      width={16}
-      height={16}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.5}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden>
+      {...props}>
       <circle cx="9" cy="5" r="1" />
       <circle cx="9" cy="12" r="1" />
       <circle cx="9" cy="19" r="1" />
@@ -147,6 +129,11 @@ export interface TransferListProps<T extends string = string> extends Omit<
   description?: string;
   /** Complete option catalog. Option values must be unique. */
   options: readonly TransferListOption<T>[];
+  /**
+   * Disables every transfer, reorder, Clear, Add all and search control. The
+   * row controls and the search field stay focusable. @default false
+   */
+  isDisabled?: boolean;
   /** Ordered selected values. This array is the single source of truth. */
   value: readonly T[];
   /** Called with the next ordered selection after a committed change. */
@@ -275,7 +262,13 @@ const styles = stylex.create({
     borderBlockEndColor: colorVars['--color-border'],
   },
   headerAction: {
+    // A text-link treatment, but the hit target still has to clear the WCAG
+    // 2.5.8 24px floor. The link keeps `height: auto` so its baseline aligns
+    // with the panel heading; `minBlockSize` gives the button a >=24px target
+    // (the sm element height) without changing where the text sits, and the
+    // width already exceeds 24px.
     height: 'auto',
+    minBlockSize: sizeVars['--size-element-sm'],
     paddingBlock: 0,
     paddingInline: 0,
     borderRadius: 0,
@@ -364,6 +357,9 @@ function moveItem<T>(
   return nextValue;
 }
 
+// Case folding is locale-independent here, matching Selector, MultiSelector,
+// and CommandPalette. Locale-sensitive folding would mean raw Intl access,
+// which the shipped packages route through the provider instead.
 function matchesQuery<T extends string>(
   option: TransferListOption<T>,
   query: string,
@@ -374,12 +370,8 @@ function matchesQuery<T extends string>(
   const description =
     typeof option.description === 'string' ? option.description : '';
   return [option.label, description, option.group ?? ''].some(part =>
-    part.toLocaleLowerCase().includes(query),
+    part.toLowerCase().includes(query),
   );
-}
-
-function itemCount(count: number): string {
-  return `${count} ${count === 1 ? 'item' : 'items'}`;
 }
 
 /**
@@ -402,21 +394,22 @@ export function TransferList<T extends string = string>({
   label,
   isLabelHidden = false,
   description,
-  options,
+  options: optionsFromProps,
+  isDisabled = false,
   value,
   onChange,
-  selectedLabel = 'Selected',
-  availableLabel = 'Available',
+  selectedLabel: selectedLabelFromProps,
+  availableLabel: availableLabelFromProps,
   hasSearch = false,
   searchLabel,
-  searchPlaceholder = 'Search…',
+  searchPlaceholder: searchPlaceholderFromProps,
   isReorderable = true,
   hasSelectAll = false,
   hasClear = false,
   renderOption,
-  selectedEmptyText = 'No selected options',
-  availableEmptyText = 'No available options',
-  noResultsText = 'No results',
+  selectedEmptyText: selectedEmptyTextFromProps,
+  availableEmptyText: availableEmptyTextFromProps,
+  noResultsText: noResultsTextFromProps,
   xstyle,
   className,
   style,
@@ -426,6 +419,19 @@ export function TransferList<T extends string = string>({
   'aria-describedby': ariaDescribedBy,
   ...restProps
 }: TransferListProps<T>): ReactNode {
+  const t = useTranslator();
+  const selectedLabel =
+    selectedLabelFromProps ?? t('@astryx.transferList.selectedLabel');
+  const availableLabel =
+    availableLabelFromProps ?? t('@astryx.transferList.availableLabel');
+  const searchPlaceholder =
+    searchPlaceholderFromProps ?? t('@astryx.transferList.searchPlaceholder');
+  const selectedEmptyText =
+    selectedEmptyTextFromProps ?? t('@astryx.transferList.selectedEmpty');
+  const availableEmptyText =
+    availableEmptyTextFromProps ?? t('@astryx.transferList.availableEmpty');
+  const noResultsText =
+    noResultsTextFromProps ?? t('@astryx.transferList.noResults');
   const labelId = useId();
   const descriptionId = useId();
   const selectedHeadingId = useId();
@@ -460,13 +466,28 @@ export function TransferList<T extends string = string>({
     [],
   );
 
+  // An option's own message names its own constraint.
+  // It does not apply to a disabled list.
+  const options = useMemo(
+    () =>
+      isDisabled
+        ? optionsFromProps.map(option => ({
+            ...option,
+            isTransferDisabled: true,
+            isReorderDisabled: true,
+            disabledMessage: undefined,
+          }))
+        : optionsFromProps,
+    [isDisabled, optionsFromProps],
+  );
+
   const optionByValue = useMemo(() => {
     const map = new Map<T, TransferListOption<T>>();
     options.forEach(option => map.set(option.value, option));
     return map;
   }, [options]);
   const selectedValues = useMemo(() => new Set(value), [value]);
-  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const normalizedQuery = query.trim().toLowerCase();
   const selectedOptions = useMemo(
     () =>
       value
@@ -603,11 +624,14 @@ export function TransferList<T extends string = string>({
       const nextValue = [...currentValueRef.current, option.value];
       commit(nextValue);
       announce(
-        `${option.label} added. ${itemCount(nextValue.length)} selected.`,
+        t('@astryx.transferList.announceAdded', {
+          label: option.label,
+          count: nextValue.length,
+        }),
       );
       focusAfterTransfer('available', index);
     },
-    [announce, commit, focusAfterTransfer],
+    [announce, commit, focusAfterTransfer, t],
   );
 
   const removeOption = useCallback(
@@ -620,11 +644,14 @@ export function TransferList<T extends string = string>({
       );
       commit(nextValue);
       announce(
-        `${option.label} removed. ${itemCount(nextValue.length)} selected.`,
+        t('@astryx.transferList.announceRemoved', {
+          label: option.label,
+          count: nextValue.length,
+        }),
       );
       focusAfterTransfer('selected', index);
     },
-    [announce, commit, focusAfterTransfer],
+    [announce, commit, focusAfterTransfer, t],
   );
 
   const addAll = useCallback(() => {
@@ -637,9 +664,13 @@ export function TransferList<T extends string = string>({
       .map(option => option.value);
     if (additions.length > 0) {
       commit([...currentValueRef.current, ...additions]);
-      announce(`${itemCount(additions.length)} added.`);
+      announce(
+        t('@astryx.transferList.announceBulkAdded', {
+          count: additions.length,
+        }),
+      );
     }
-  }, [announce, commit, options]);
+  }, [announce, commit, options, t]);
 
   const clearSelected = useCallback(() => {
     const nextValue = currentValueRef.current.filter(optionValue => {
@@ -649,9 +680,9 @@ export function TransferList<T extends string = string>({
     const removed = currentValueRef.current.length - nextValue.length;
     if (removed > 0) {
       commit(nextValue);
-      announce(`${itemCount(removed)} removed.`);
+      announce(t('@astryx.transferList.announceBulkRemoved', {count: removed}));
     }
-  }, [announce, commit, optionByValue]);
+  }, [announce, commit, optionByValue, t]);
 
   const movableRange = useCallback(
     (optionValue: T, orderedValue: readonly T[]) => {
@@ -721,11 +752,15 @@ export function TransferList<T extends string = string>({
       });
       if (mode === 'keyboard') {
         announce(
-          `${option.label} picked up, position ${index + 1} of ${currentValueRef.current.length}. Use arrow keys to move, Space or Enter to drop, or Escape to cancel.`,
+          t('@astryx.transferList.announceGrabbed', {
+            label: option.label,
+            position: index + 1,
+            total: currentValueRef.current.length,
+          }),
         );
       }
     },
-    [announce, isReorderable, setReorderSession],
+    [announce, isReorderable, setReorderSession, t],
   );
 
   const finishReorder = useCallback(
@@ -734,11 +769,21 @@ export function TransferList<T extends string = string>({
       if (!session) {
         return;
       }
+      // A list disabled mid-reorder takes no change from it, not even the
+      // cancel that restores the order from before the grab.
+      if (isDisabled) {
+        setReorderSession(null);
+        return;
+      }
       if (session.mode === 'pointer') {
         if (cancelled || !session.hasPointerMoved) {
           setReorderSession(null);
           if (cancelled) {
-            announce(`${session.label} move cancelled.`);
+            announce(
+              t('@astryx.transferList.announceMoveCancelled', {
+                label: session.label,
+              }),
+            );
           }
           return;
         }
@@ -752,27 +797,42 @@ export function TransferList<T extends string = string>({
         if (hasChanged) {
           commit(nextValue);
           announce(
-            `${session.label} dropped at position ${session.toIndex + 1} of ${session.originalValue.length}.`,
+            t('@astryx.transferList.announceDropped', {
+              label: session.label,
+              position: session.toIndex + 1,
+              total: session.originalValue.length,
+            }),
           );
         } else {
           announce(
-            `${session.label} returned to position ${session.fromIndex + 1}.`,
+            t('@astryx.transferList.announceReturned', {
+              label: session.label,
+              position: session.fromIndex + 1,
+            }),
           );
         }
         return;
       }
       if (cancelled) {
         commit(session.originalValue);
-        announce(`${session.label} move cancelled.`);
+        announce(
+          t('@astryx.transferList.announceMoveCancelled', {
+            label: session.label,
+          }),
+        );
       } else {
         const index = currentValueRef.current.indexOf(session.value);
         announce(
-          `${session.label} dropped at position ${index + 1} of ${currentValueRef.current.length}.`,
+          t('@astryx.transferList.announceDropped', {
+            label: session.label,
+            position: index + 1,
+            total: currentValueRef.current.length,
+          }),
         );
       }
       setReorderSession(null);
     },
-    [announce, commit, setReorderSession],
+    [announce, commit, isDisabled, setReorderSession, t],
   );
 
   const handleReorderClick = useCallback(
@@ -827,11 +887,15 @@ export function TransferList<T extends string = string>({
       if (moveOption(option.value, target)) {
         const nextIndex = currentValueRef.current.indexOf(option.value);
         announce(
-          `${option.label}, position ${nextIndex + 1} of ${currentValueRef.current.length}.`,
+          t('@astryx.transferList.announceMovedToPosition', {
+            label: option.label,
+            position: nextIndex + 1,
+            total: currentValueRef.current.length,
+          }),
         );
       }
     },
-    [announce, finishReorder, movableRange, moveOption],
+    [announce, finishReorder, movableRange, moveOption, t],
   );
 
   const handlePointerDown = useCallback(
@@ -922,11 +986,15 @@ export function TransferList<T extends string = string>({
       setReorderSession(nextSession);
       if (hasCrossedThreshold && session.toIndex !== targetIndex) {
         announce(
-          `${option.label}, position ${targetIndex + 1} of ${session.originalValue.length}.`,
+          t('@astryx.transferList.announceMovedToPosition', {
+            label: option.label,
+            position: targetIndex + 1,
+            total: session.originalValue.length,
+          }),
         );
       }
     },
-    [announce, movableRange, setReorderSession],
+    [announce, movableRange, setReorderSession, t],
   );
 
   const handlePointerEnd = useCallback(
@@ -953,20 +1021,44 @@ export function TransferList<T extends string = string>({
     [finishReorder],
   );
 
+  // A second pointer that lands anywhere during a pointer reorder (the second
+  // finger of a pinch) cancels the reorder. A pinch whose first finger slid
+  // first zooms without a pointercancel, so the drag would otherwise commit on
+  // release and drop the row at the end of the list.
+  const isPointerReorderActive = previewCloneValue != null;
+  useEffect(() => {
+    if (!isPointerReorderActive) {
+      return;
+    }
+    const onPointerDown = (event: PointerEvent) => {
+      const session = reorderSessionRef.current;
+      if (
+        session?.mode === 'pointer' &&
+        session.pointerId !== event.pointerId
+      ) {
+        suppressClickRef.current = false;
+        finishReorder(true);
+      }
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    return () =>
+      document.removeEventListener('pointerdown', onPointerDown, true);
+  }, [isPointerReorderActive, finishReorder]);
+
   const handleSearch = useCallback(
     (nextQuery: string) => {
       setQuery(nextQuery);
-      const normalized = nextQuery.trim().toLocaleLowerCase();
+      const normalized = nextQuery.trim().toLowerCase();
       if (normalized === '') {
         announce('');
       } else {
         const count = options.filter(option =>
           matchesQuery(option, normalized),
         ).length;
-        announce(`${itemCount(count)} found.`);
+        announce(t('@astryx.transferList.announceSearchResults', {count}));
       }
     },
-    [announce, options],
+    [announce, options, t],
   );
 
   const optionActions = (
@@ -976,12 +1068,13 @@ export function TransferList<T extends string = string>({
   ) => {
     const isTransferDisabled = option.isTransferDisabled === true;
     const disabledReason =
-      option.disabledMessage ?? `${option.label} cannot be moved`;
+      option.disabledMessage ??
+      t('@astryx.transferList.transferDisabled', {label: option.label});
     if (side === 'available') {
       return (
         <IconButton
-          label={`Add ${option.label}`}
-          icon={<PlusIcon />}
+          label={t('@astryx.transferList.addOption', {label: option.label})}
+          icon={<Icon icon={PlusIcon} size="sm" />}
           size="sm"
           variant="ghost"
           isDisabled={isTransferDisabled}
@@ -993,8 +1086,8 @@ export function TransferList<T extends string = string>({
     }
     return (
       <IconButton
-        label={`Remove ${option.label}`}
-        icon={<RemoveIcon />}
+        label={t('@astryx.transferList.removeOption', {label: option.label})}
+        icon={<Icon icon="close" size="sm" />}
         size="sm"
         variant="ghost"
         isDisabled={isTransferDisabled}
@@ -1034,13 +1127,14 @@ export function TransferList<T extends string = string>({
     const active = reorderSession?.value === option.value;
     const isReorderDisabled = option.isReorderDisabled === true;
     const disabledReason =
-      option.disabledMessage ?? `${option.label} cannot be reordered`;
+      option.disabledMessage ??
+      t('@astryx.transferList.reorderDisabled', {label: option.label});
     return (
       <IconButton
-        label={`Reorder ${option.label}`}
+        label={t('@astryx.transferList.reorderOption', {label: option.label})}
         aria-describedby={reorderInstructionsId}
-        aria-pressed={active}
-        icon={<GripVerticalIcon />}
+        aria-pressed={active && !isDisabled}
+        icon={<Icon icon={GripVerticalIcon} size="sm" />}
         size="sm"
         variant="ghost"
         isDisabled={isReorderDisabled}
@@ -1164,22 +1258,24 @@ export function TransferList<T extends string = string>({
           <TextInput
             ref={searchRef}
             role="searchbox"
-            label={searchLabel ?? `Search ${label}`}
+            label={
+              searchLabel ?? t('@astryx.transferList.searchLabel', {label})
+            }
             isLabelHidden
             value={query}
             placeholder={searchPlaceholder}
             startIcon={<Icon icon="search" size="sm" color="secondary" />}
             hasClear
             width="100%"
-            xstyle={styles.search}
+            controlXstyle={styles.search}
+            isDisabled={isDisabled}
             onChange={handleSearch}
           />
         </div>
       )}
 
       <VisuallyHidden id={reorderInstructionsId}>
-        Press Space or Enter to pick up an item. Use Arrow Up, Arrow Down, Home,
-        or End to move it. Press Space or Enter to drop, or Escape to cancel.
+        {t('@astryx.transferList.reorderInstructions')}
       </VisuallyHidden>
 
       <div
@@ -1202,7 +1298,7 @@ export function TransferList<T extends string = string>({
             </Text>
             {hasClear && (
               <Button
-                label="Clear"
+                label={t('@astryx.transferList.clear')}
                 size="sm"
                 variant="ghost"
                 xstyle={styles.headerAction}
@@ -1259,7 +1355,7 @@ export function TransferList<T extends string = string>({
             </Text>
             {hasSelectAll && (
               <Button
-                label="Add all"
+                label={t('@astryx.transferList.addAll')}
                 size="sm"
                 variant="ghost"
                 xstyle={styles.headerAction}
@@ -1289,7 +1385,7 @@ export function TransferList<T extends string = string>({
                         role="presentation"
                         {...stylex.props(styles.groupHeading)}>
                         <Text type="body" weight="bold" color="primary">
-                          {group || 'Other'}
+                          {group || t('@astryx.transferList.ungroupedLabel')}
                         </Text>
                       </li>
                     )}

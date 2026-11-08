@@ -21,8 +21,8 @@ const teams = [
 export default function GridResponsiveAutoFit() {
   const gridPanel = useResizable({
     defaultSize: 480,
-    minSizePx: 100,
-    maxSizePx: 480,
+    minSize: 100,
+    maxSize: 480,
   });
 
   return (

@@ -7,26 +7,108 @@ export const docs = {
   displayName: 'App Shell',
   group: 'AppShell',
   category: 'Layout',
-  keywords: ["appshell","layout","scaffold","sidebar","sidenav","topnav","header","navigation","dashboard","shell","page","frame"],
+  keywords: [
+    'appshell',
+    'layout',
+    'scaffold',
+    'sidebar',
+    'sidenav',
+    'topnav',
+    'header',
+    'navigation',
+    'dashboard',
+    'shell',
+    'page',
+    'frame',
+  ],
   usage: {
     description:
-      'The outermost layout for an application. Provides slots for top navigation, side navigation, banners, and main content. Use it as the root wrapper for every page. It handles responsive mobile navigation and skip-to-content automatically. Configure side nav collapse on SideNav with its collapsible prop.',
+      'AppShell is the page shell for an application. It provides slots for top navigation, side navigation, banners, and main content. Use it as the root wrapper for every page. It handles responsive mobile navigation and skip-to-content automatically. Configure side nav collapse on SideNav with its collapsible prop.',
     bestPractices: [
-      {guidance: true, description: 'Choose the right height: use "fill" for dashboards with internal scrolling and "auto" for pages that grow with content.'},
-      {guidance: true, description: 'Set `contentPadding` based on content type: 4 for forms and settings, 0 for tables and dashboards.'},
-      {guidance: true, description: 'Give every nav slot an accessible name. AppShell renders TopNav and SideNav as separate navigation landmarks, and a screen reader lists them by name, so pass `label` to each one.'},
-      {guidance: true, description: 'Start the page heading inside `children`. AppShell owns the skip link, the banner landmark and the main landmark, but it renders no heading, so the first heading in the content area is the page h1.'},
-      {guidance: false, description: "Nest one AppShell inside another; it's the outermost layout frame."},
-      {guidance: false, description: 'Use for sub-page layouts; use Layout for content areas within AppShell.'},
-      {guidance: false, description: 'Add your own skip link or <main> element. AppShell already renders both, and a second main landmark makes the first ambiguous.'},
+      {
+        guidance: true,
+        description:
+          'Choose the right height: use "fill" for dashboards with internal scrolling and "auto" for pages that grow with content.',
+      },
+      {
+        guidance: true,
+        description:
+          'Set `contentPadding` based on content type: 4 for forms and settings, 0 for tables and dashboards.',
+      },
+      {
+        guidance: true,
+        description:
+          'Give every nav slot an accessible name. AppShell renders TopNav and SideNav as separate navigation landmarks, and a screen reader lists them by name, so pass `label` to each one.',
+      },
+      {
+        guidance: true,
+        description:
+          'Start the page heading inside `children`. AppShell owns the skip link, the banner landmark and the main landmark, but it renders no heading, so the first heading in the content area is the page h1.',
+      },
+      {
+        guidance: true,
+        description:
+          'On phones, opt the page into the full screen with `viewport-fit=cover` in the viewport meta tag (`width=device-width, initial-scale=1, viewport-fit=cover`). AppShell then extends its header under the status bar and out to the screen sides, and keeps the header\'s items and the end of the content inside the device\'s safe area. An installed web app can also draw under the status bar with `<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">`. In landscape only the header is inset: an inline SideNav and the content\'s sides still reach under a notch, so keep content padding there. A shell with no header region or phone top bar keeps no top inset; keep top padding there.',
+      },
+      {
+        guidance: false,
+        description:
+          "Nest one AppShell inside another; it's the outermost layout frame.",
+      },
+      {
+        guidance: false,
+        description:
+          'Use for sub-page layouts; use Layout for content areas within AppShell.',
+      },
+      {
+        guidance: false,
+        description:
+          'Add your own skip link or <main> element. AppShell already renders both, and a second main landmark makes the first ambiguous.',
+      },
     ],
     anatomy: [
-      {name: 'Skip link', required: true, description: 'First focusable element on the page. Visually hidden until focused, then moves focus to the main content area.'},
-      {name: 'Banner', required: false, description: 'The banner slot, for system-wide announcements. Renders above the top nav, inside the banner landmark.'},
-      {name: 'Top navigation', required: false, description: 'The topNav slot, typically TopNav. Below the mobile breakpoint it becomes a compact bar carrying the nav toggle.'},
-      {name: 'Side navigation', required: false, description: 'The sideNav slot, typically SideNav. Inline above the breakpoint, moved into the mobile drawer below it.'},
-      {name: 'Main content', required: true, description: 'children, rendered in the main landmark. Scrolls internally when height is fill, and with the page when it is auto.'},
-      {name: 'Mobile nav drawer', required: false, description: 'Generated below the breakpoint from the nav slots unless mobileNav disables or replaces it. A modal dialog: it traps focus and returns focus to the toggle on close.'},
+      {
+        name: 'Page shell',
+        required: true,
+        description:
+          'Outermost application frame that owns page-level navigation, responsive shell behavior, and the main content landmark.',
+      },
+      {
+        name: 'Skip link',
+        required: true,
+        description:
+          'First focusable element on the page. Visually hidden until focused, then moves focus to the main content area.',
+      },
+      {
+        name: 'Banner',
+        required: false,
+        description:
+          'The banner slot, for system-wide announcements. Renders above the top nav, inside the banner landmark.',
+      },
+      {
+        name: 'Top navigation',
+        required: false,
+        description:
+          'The topNav slot, typically TopNav. Below the mobile breakpoint it becomes a compact bar carrying the nav toggle.',
+      },
+      {
+        name: 'Side navigation',
+        required: false,
+        description:
+          'The sideNav slot, typically SideNav. Inline above the breakpoint, moved into the mobile drawer below it.',
+      },
+      {
+        name: 'Main content',
+        required: true,
+        description:
+          'children, rendered in the main landmark. Scrolls internally when height is fill, and with the page when it is auto. While it scrolls content that overflows, it is a stop in the tab order; Tab entry moves on when its first focusable element is a plain link or button, and otherwise main is one stop before it.',
+      },
+      {
+        name: 'Mobile nav drawer',
+        required: false,
+        description:
+          'Generated below the breakpoint from the nav slots unless mobileNav disables or replaces it. A modal dialog: it traps focus and returns focus to the toggle on close.',
+      },
     ],
   },
   props: [
@@ -64,7 +146,7 @@ export const docs = {
       // coincidence. The legal values live in the description instead (#1645).
       type: 'ReactNode',
       description:
-        "Mobile navigation configuration. Accepts false (disable), a config object (tune auto behavior), or ReactNode (full custom drawer). The config object is {hasToggle?: boolean, isOpen?: boolean, onOpenChange?: (isOpen: boolean) => void, content?: ReactNode, breakpoint?: 'sm' | 'md' | 'lg' | 'none', defaultIsMobile?: boolean}; breakpoint defaults to 'md'.",
+        "Mobile navigation configuration. Accepts false (disable), a config object (tune auto behavior), or ReactNode (full custom drawer). The config object is {hasToggle?: boolean, isOpen?: boolean, onOpenChange?: (isOpen: boolean) => void, content?: ReactNode, breakpoint?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'none', defaultIsMobile?: boolean}; breakpoint defaults to 'md', resolves through the nearest Theme's widthBreakpoints, and switches to the wider layout at equality. 'none' is always non-mobile and ignores defaultIsMobile.",
       slotElements: [{__element: 'MobileNav', props: {}}],
     },
     {
@@ -72,7 +154,12 @@ export const docs = {
       type: 'ReactNode',
       description:
         'Banner slot for system-wide announcements, placed above the topNav.',
-      slotElements: [{__element: 'Banner', props: {title: 'Info', status: 'info', container: 'section'}}],
+      slotElements: [
+        {
+          __element: 'Banner',
+          props: {title: 'Info', status: 'info', container: 'section'},
+        },
+      ],
     },
     {
       name: 'height',
@@ -101,13 +188,19 @@ export const docs = {
       contentPadding: 4,
       topNav: {
         __element: 'TopNav',
-        props: {label: 'Navigation', heading: {__element: 'TopNavHeading', props: {heading: 'My App'}}},
+        props: {
+          label: 'Navigation',
+          heading: {__element: 'TopNavHeading', props: {heading: 'My App'}},
+        },
       },
       sideNav: {
         __element: 'SideNav',
         props: {},
         children: [
-          {__element: 'SideNavItem', props: {label: 'Dashboard', isSelected: true}},
+          {
+            __element: 'SideNavItem',
+            props: {label: 'Dashboard', isSelected: true},
+          },
           {__element: 'SideNavItem', props: {label: 'Settings'}},
           {__element: 'SideNavItem', props: {label: 'Help'}},
         ],
@@ -117,7 +210,11 @@ export const docs = {
         props: {gap: 3},
         children: [
           {__element: 'Heading', props: {level: 2}, children: 'Dashboard'},
-          {__element: 'Text', props: {type: 'body', color: 'secondary'}, children: 'Welcome back. Here is an overview of your workspace.'},
+          {
+            __element: 'Text',
+            props: {type: 'body', color: 'secondary'},
+            children: 'Welcome back. Here is an overview of your workspace.',
+          },
         ],
       },
     },
@@ -137,16 +234,36 @@ export const docsZh = {
   displayName: 'App Shell',
   usage: {
     description:
-      'The outermost layout for an application. Provides slots for top navigation, side navigation, banners, and main content. Use it as the root wrapper for every page. It handles responsive mobile navigation and skip-to-content automatically. Configure side nav collapse on SideNav with its collapsible prop.',
+      'AppShell is the page shell for an application. It provides slots for top navigation, side navigation, banners, and main content. Use it as the root wrapper for every page. It handles responsive mobile navigation and skip-to-content automatically. Configure side nav collapse on SideNav with its collapsible prop.',
     bestPractices: [
-      {guidance: true, description: 'Choose the right height: use "fill" for dashboards with internal scrolling and "auto" for pages that grow with content.'},
-      {guidance: true, description: 'Set `contentPadding` based on content type: 4 for forms and settings, 0 for tables and dashboards.'},
-      {guidance: false, description: "Nest one AppShell inside another; it's the outermost layout frame."},
-      {guidance: false, description: 'Use for sub-page layouts; use Layout for content areas within AppShell.'},
+      {
+        guidance: true,
+        description:
+          'Choose the right height: use "fill" for dashboards with internal scrolling and "auto" for pages that grow with content.',
+      },
+      {
+        guidance: true,
+        description:
+          'Set `contentPadding` based on content type: 4 for forms and settings, 0 for tables and dashboards.',
+      },
+      {
+        guidance: false,
+        description:
+          "Nest one AppShell inside another; it's the outermost layout frame.",
+      },
+      {
+        guidance: false,
+        description:
+          'Use for sub-page layouts; use Layout for content areas within AppShell.',
+      },
     ],
   },
   props: [
-    {name: 'children', type: 'ReactNode', description: '主内容区域，渲染在 <main> 元素内部。'},
+    {
+      name: 'children',
+      type: 'ReactNode',
+      description: '主内容区域，渲染在 <main> 元素内部。',
+    },
     {
       name: 'contentPadding',
       type: '0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10',
@@ -154,10 +271,27 @@ export const docsZh = {
         '主内容区域的内边距。根据页面主要内容模式设置：4（16px）适用于表单/设置/文本页面，0 适用于仪表盘/地图/表格。可通过 Section 覆盖个别区域。',
       default: '0',
     },
-    {name: 'topNav', type: 'ReactNode', description: '顶部导航插槽，通常为 TopNav。'},
-    {name: 'sideNav', type: 'ReactNode', description: '侧边导航插槽，通常为 SideNav。'},
-    {name: 'mobileNav', type: 'ReactNode', description: "移动端导航配置。接受 false（禁用）、配置对象（调整自动行为）或 ReactNode（完全自定义抽屉）。配置对象为 {hasToggle?, isOpen?, onOpenChange?, content?, breakpoint?: 'sm' | 'md' | 'lg' | 'none', defaultIsMobile?}；breakpoint 默认为 'md'。"},
-    {name: 'banner', type: 'ReactNode', description: '横幅插槽，用于全局公告，放置在 topNav 上方。'},
+    {
+      name: 'topNav',
+      type: 'ReactNode',
+      description: '顶部导航插槽，通常为 TopNav。',
+    },
+    {
+      name: 'sideNav',
+      type: 'ReactNode',
+      description: '侧边导航插槽，通常为 SideNav。',
+    },
+    {
+      name: 'mobileNav',
+      type: 'ReactNode',
+      description:
+        "移动端导航配置。接受 false（禁用）、配置对象（调整自动行为）或 ReactNode（完全自定义抽屉）。配置对象为 {hasToggle?, isOpen?, onOpenChange?, content?, breakpoint?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'none', defaultIsMobile?}；breakpoint 默认为 'md'，从最近 Theme 的 widthBreakpoints 解析，并在等于断点时切换到较宽布局；'none' 始终使用非移动端布局并忽略 defaultIsMobile。",
+    },
+    {
+      name: 'banner',
+      type: 'ReactNode',
+      description: '横幅插槽，用于全局公告，放置在 topNav 上方。',
+    },
     {
       name: 'height',
       type: "'fill' | 'auto'",
@@ -183,9 +317,7 @@ export const docsZh = {
     targets: [
       {
         className: 'astryx-app-shell',
-        visualProps: [
-          'variant',
-        ],
+        visualProps: ['variant'],
       },
       {className: 'astryx-app-shell-header', visualProps: ['variant']},
       {className: 'astryx-app-shell-sidenav', visualProps: ['variant']},
@@ -199,22 +331,56 @@ export const docsDense = {
     'app-level layout shell w/ header, side nav, main content; composes Layout internally, replaces Page+PageLayout',
   usage: {
     description:
-      'The outermost layout for an application. Provides slots for top navigation, side navigation, banners, and main content. Use it as the root wrapper for every page. It handles responsive mobile navigation and skip-to-content automatically. Configure side nav collapse on SideNav with its collapsible prop.',
+      'AppShell is the page shell for an application. It provides slots for top navigation, side navigation, banners, and main content. Use it as the root wrapper for every page. It handles responsive mobile navigation and skip-to-content automatically. Configure side nav collapse on SideNav with its collapsible prop.',
     bestPractices: [
-      {guidance: true, description: 'Choose the right height: use "fill" for dashboards with internal scrolling and "auto" for pages that grow with content.'},
-      {guidance: true, description: 'Set `contentPadding` based on content type: 4 for forms and settings, 0 for tables and dashboards.'},
-      {guidance: true, description: 'Give every nav slot an accessible name: TopNav and SideNav are separate navigation landmarks, so pass `label` to each.'},
-      {guidance: true, description: 'Start the page heading inside `children`: AppShell owns the skip link, banner, and main landmarks but renders no heading, so the first content heading is the page h1.'},
-      {guidance: false, description: "Nest one AppShell inside another; it's the outermost layout frame."},
-      {guidance: false, description: 'Use for sub-page layouts; use Layout for content areas within AppShell.'},
-      {guidance: false, description: 'Add your own skip link or <main>; AppShell renders both, and a second main landmark makes the first ambiguous.'},
+      {
+        guidance: true,
+        description:
+          'Choose the right height: use "fill" for dashboards with internal scrolling and "auto" for pages that grow with content.',
+      },
+      {
+        guidance: true,
+        description:
+          'Set `contentPadding` based on content type: 4 for forms and settings, 0 for tables and dashboards.',
+      },
+      {
+        guidance: true,
+        description:
+          'Give every nav slot an accessible name: TopNav and SideNav are separate navigation landmarks, so pass `label` to each.',
+      },
+      {
+        guidance: true,
+        description:
+          'Phones: add `viewport-fit=cover` to the viewport meta; the header then reaches under the status bar while its items and the content end stay in the safe area. Landscape: only the header is inset (not an inline SideNav or the content sides). No header region or phone top bar: no top inset, so keep top padding. Installed web apps: `apple-mobile-web-app-status-bar-style` `black-translucent`.',
+      },
+      {
+        guidance: true,
+        description:
+          'Start the page heading inside `children`: AppShell owns the skip link, banner, and main landmarks but renders no heading, so the first content heading is the page h1.',
+      },
+      {
+        guidance: false,
+        description:
+          "Nest one AppShell inside another; it's the outermost layout frame.",
+      },
+      {
+        guidance: false,
+        description:
+          'Use for sub-page layouts; use Layout for content areas within AppShell.',
+      },
+      {
+        guidance: false,
+        description:
+          'Add your own skip link or <main>; AppShell renders both, and a second main landmark makes the first ambiguous.',
+      },
     ],
   },
   propDescriptions: {
     children: 'main content area, rendered inside <main>',
     topNav: 'top nav slot, typically TopNav',
     sideNav: 'side nav slot, typically SideNav',
-    mobileNav: 'mobile nav config: false | MobileNavConfig | ReactNode',
+    mobileNav:
+      'mobile nav config: false | ReactNode | config with theme-resolved sm|md|lg|xl|2xl|none breakpoint (exclusive upper edge); none is always non-mobile and ignores defaultIsMobile',
     banner: 'slot for system-wide announcements above topNav',
     height:
       'fill=viewport 100dvh w/ independent scroll; auto=content-driven w/ sticky nav',

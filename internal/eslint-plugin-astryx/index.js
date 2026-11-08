@@ -11,13 +11,23 @@
  * - no-raw-paragraph: Disallows components from rendering a <p> by default (render <div> so any content composes)
  * - no-style-only-wrapper: Disallows div/span wrappers that only style a single Astryx component (use xstyle)
  * - no-nullish-jsx-guard: Flags `!= null` JSX render guards for rendered values (use isRenderable so false/''/true slots don't leak an empty element)
- * - no-raw-intl-locale: Forbids raw Intl formatting/comparison outside the approved i18n infrastructure boundary, and navigator.language(s) as a locale source
+ * - no-truthy-jsx-guard: Flags a truthiness guard on a ReactNode value in front of JSX (a 0 slot renders a stray "0" or is dropped; use isRenderable). Reads types, so it is not in the presets
+ * - no-raw-intl-locale: Forbids raw Intl formatting/comparison outside the approved i18n infrastructure boundary, navigator.language(s) as a locale source, and date-helper calls without provider locale
  * - no-unguarded-ime-keydown: Flags an onKeyDown on an editable surface that branches on command keys without an IME composition guard (isImeKeyEvent/isComposing)
+ * - no-physical-properties: Flags physical left/right CSS properties and unsafe logical-centering transform pairs
+ * - prefer-center-inline: Nudges correct hand-rolled fixed centering toward rtlStyles.centerInline()
  * - no-classname-clobber: Flags two className sources on one JSX element — a literal className/style beside {...stylex.props()}, or two spreads that each carry a className (the later one silently wins)
  * - no-hover-on-disabled: Flags a :hover condition that can still match a disabled element (browsers suppress a disabled control's events, not its hover styling)
  * - require-table-section: Requires TableRow/tr to sit inside TableHeader/TableBody/TableFooter (a row directly inside a table emits <table><tr>, which browsers repair on parse and React does not)
  * - disabled-cursor: Flags a cursor that promises an interaction without giving way to not-allowed on a disabled element
  * - no-unstable-merged-refs: Flags render-time mergeRefs callbacks and unstable callback inputs to useMergedRefs
+ * - no-light-dark-outside-theme: Flags CSS light-dark() in component source (a light/dark decision belongs to the theme layer, where a token pair reaches both schemes in every theme)
+ * - no-core-internal-import: Keeps Core's internal subpaths (@astryxdesign/core/internal/*) inside Core and Lab
+ * - no-internal-barrel-import: Flags a package-internal relative import that resolves to a folder's index (a barrel) instead of the defining module
+ * - no-prevent-default-in-passive-react-handler: Flags preventDefault() on the event in a React onWheel/onTouchStart/onTouchMove handler (React attaches those listeners as passive, so the call is ignored)
+ * - no-raw-private-attribute: Flags a private data-astryx-* attribute written by hand outside its owner module in packages/<package>/src/privateAttributes (INV23 lists the public ones)
+ * - no-comment-provenance: Flags record and claim ids, pull request and issue references, date stamps, and quoted MUST/SHALL text in source comments (the record links the code; `pnpm specs:for <path>` finds it)
+ * - no-raw-color: Flags a raw colour value (hex, rgb(), hsl(), oklch(), …) anywhere in component source, including inside light-dark()/color-mix(), behind a const, in a template literal, or as a var() fallback — the shapes no-hardcoded-styles cannot see
  *
  * Philosophy: Strict for agents (CI), lenient for humans (local dev)
  * - "strict" config: All rules as errors - use in CI/agent environments
@@ -35,10 +45,13 @@ import noClassnameClobberRule from './no-classname-clobber.js';
 import noHardcodedAnchorRule from './no-hardcoded-anchor.js';
 import noRawParagraphRule from './no-raw-paragraph.js';
 import noNullishJsxGuardRule from './no-nullish-jsx-guard.js';
+import noTruthyJsxGuardRule from './no-truthy-jsx-guard.js';
+import noCommentProvenanceRule from './no-comment-provenance.js';
 import noRawIntlLocaleRule from './no-raw-intl-locale.js';
 import noUnguardedImeKeydownRule from './no-unguarded-ime-keydown.js';
 import noBorderShorthandRule from './no-border-shorthand.js';
 import noPhysicalPropertiesRule from './no-physical-properties.js';
+import preferCenterInlineRule from './prefer-center-inline.js';
 import focusOutlineKeyboardOnlyRule from './focus-outline-keyboard-only.js';
 import focusOutlineSharedRule from './focus-outline-shared.js';
 import noHoverOnDisabledRule from './no-hover-on-disabled.js';
@@ -47,11 +60,18 @@ import noReactNamespaceHooksRule from './no-react-namespace-hooks.js';
 import noUnstableMergedRefsRule from './no-unstable-merged-refs.js';
 import copyrightHeaderRule from './copyright-header.js';
 import noRawConsoleCliRule from './no-raw-console-cli.js';
+import noCoreInternalImportRule from './no-core-internal-import.js';
+import noInternalBarrelImportRule from './no-internal-barrel-import.js';
 import requireBasePropsRule from './require-base-props.js';
 import requireRefPropRule from './require-ref-prop.js';
+import requireBasePropsPassthroughRule from './require-baseprops-passthrough.js';
 import noHardcodedI18nStringRule from './no-hardcoded-i18n-string.js';
 import i18nKeyFormatRule from './i18n-key-format.js';
 import requireTableSectionRule from './require-table-section.js';
+import noLightDarkOutsideThemeRule from './no-light-dark-outside-theme.js';
+import noRawColorRule from './no-raw-color.js';
+import noRawPrivateAttributeRule from './no-raw-private-attribute.js';
+import noPreventDefaultInPassiveReactHandlerRule from './no-prevent-default-in-passive-react-handler.js';
 
 // =============================================================================
 // Rule: no-hardcoded-styles
@@ -333,10 +353,12 @@ const plugin = {
     'no-hardcoded-anchor': noHardcodedAnchorRule,
     'no-raw-paragraph': noRawParagraphRule,
     'no-nullish-jsx-guard': noNullishJsxGuardRule,
+    'no-truthy-jsx-guard': noTruthyJsxGuardRule,
     'no-raw-intl-locale': noRawIntlLocaleRule,
     'no-unguarded-ime-keydown': noUnguardedImeKeydownRule,
     'no-border-shorthand': noBorderShorthandRule,
     'no-physical-properties': noPhysicalPropertiesRule,
+    'prefer-center-inline': preferCenterInlineRule,
     'focus-outline-keyboard-only': focusOutlineKeyboardOnlyRule,
     'focus-outline-shared': focusOutlineSharedRule,
     'no-hover-on-disabled': noHoverOnDisabledRule,
@@ -345,11 +367,20 @@ const plugin = {
     'no-unstable-merged-refs': noUnstableMergedRefsRule,
     'require-base-props': requireBasePropsRule,
     'require-ref-prop': requireRefPropRule,
+    'require-baseprops-passthrough': requireBasePropsPassthroughRule,
     'copyright-header': copyrightHeaderRule,
     'no-raw-console-cli': noRawConsoleCliRule,
+    'no-core-internal-import': noCoreInternalImportRule,
+    'no-internal-barrel-import': noInternalBarrelImportRule,
     'no-hardcoded-i18n-string': noHardcodedI18nStringRule,
     'i18n-key-format': i18nKeyFormatRule,
     'require-table-section': requireTableSectionRule,
+    'no-light-dark-outside-theme': noLightDarkOutsideThemeRule,
+    'no-raw-color': noRawColorRule,
+    'no-raw-private-attribute': noRawPrivateAttributeRule,
+    'no-prevent-default-in-passive-react-handler':
+      noPreventDefaultInPassiveReactHandlerRule,
+    'no-comment-provenance': noCommentProvenanceRule,
   },
   configs: {},
 };
@@ -395,6 +426,8 @@ plugin.configs.strict = {
     '@astryx/no-border-shorthand': 'error',
     // RTL physical→logical migration complete; errors to prevent regressions.
     '@astryx/no-physical-properties': 'error',
+    // Correct hand-rolled fixed centering still duplicates shared geometry.
+    '@astryx/prefer-center-inline': 'warn',
     // A focus outline drawn for pointer users is an accessibility defect, and
     // core is clean — error in both tiers so it stays that way.
     '@astryx/focus-outline-keyboard-only': 'error',
@@ -414,12 +447,29 @@ plugin.configs.strict = {
     '@astryx/no-unstable-merged-refs': 'error',
     '@astryx/require-base-props': 'error',
     '@astryx/require-ref-prop': 'error',
+    // Warn, not error, in strict too: known violations remain on main, so
+    // erroring here would land main red. Promote deliberately once the
+    // repository is clean.
+    '@astryx/require-baseprops-passthrough': 'warn',
     '@astryx/copyright-header': 'error',
     '@astryx/no-hardcoded-i18n-string': 'error',
     '@astryx/i18n-key-format': 'error',
     // A row directly inside a table is invalid DOM and hydration-unsafe, and
     // the repo is clean — error in both tiers so it stays that way (#5277).
     '@astryx/require-table-section': 'error',
+    // A component-level light-dark() is a light/dark decision no theme can
+    // override; the pair belongs in the theme layer. Core is clean after the
+    // sticky-column fix in this commit, so it errors in both tiers. (Lab
+    // warns — see the lab block in eslint.config.js.)
+    '@astryx/no-light-dark-outside-theme': 'error',
+    // A colour a theme cannot reach is the colour every theme gets. This is
+    // the whole of T1 where `no-hardcoded-styles` only reaches literals sitting
+    // directly on `color`/`backgroundColor`/`borderColor` inside
+    // `stylex.create()`. Warn in both tiers while the 23 existing violations
+    // are cleaned up (2 in core, 1 in charts, 20 in lab — see the plugin
+    // README); promote to 'error' per package as each one reaches zero, the
+    // same path no-physical-properties took.
+    '@astryx/no-raw-color': 'warn',
   },
 };
 
@@ -453,6 +503,8 @@ plugin.configs.recommended = {
     '@astryx/no-border-shorthand': 'warn',
     // RTL physical→logical migration complete; errors to prevent regressions.
     '@astryx/no-physical-properties': 'error',
+    // Correct hand-rolled fixed centering still duplicates shared geometry.
+    '@astryx/prefer-center-inline': 'warn',
     // A focus outline drawn for pointer users is an accessibility defect, and
     // core is clean — error in both tiers so it stays that way.
     '@astryx/focus-outline-keyboard-only': 'error',
@@ -472,12 +524,26 @@ plugin.configs.recommended = {
     '@astryx/no-unstable-merged-refs': 'error',
     '@astryx/require-base-props': 'warn',
     '@astryx/require-ref-prop': 'warn',
+    '@astryx/require-baseprops-passthrough': 'warn',
     '@astryx/copyright-header': 'error',
     '@astryx/no-hardcoded-i18n-string': 'warn',
     '@astryx/i18n-key-format': 'warn',
     // A row directly inside a table is invalid DOM and hydration-unsafe, and
     // the repo is clean — error in both tiers so it stays that way (#5277).
     '@astryx/require-table-section': 'error',
+    // A component-level light-dark() is a light/dark decision no theme can
+    // override; the pair belongs in the theme layer. Core is clean after the
+    // sticky-column fix in this commit, so it errors in both tiers. (Lab
+    // warns — see the lab block in eslint.config.js.)
+    '@astryx/no-light-dark-outside-theme': 'error',
+    // A colour a theme cannot reach is the colour every theme gets. This is
+    // the whole of T1 where `no-hardcoded-styles` only reaches literals sitting
+    // directly on `color`/`backgroundColor`/`borderColor` inside
+    // `stylex.create()`. Warn in both tiers while the 23 existing violations
+    // are cleaned up (2 in core, 1 in charts, 20 in lab — see the plugin
+    // README); promote to 'error' per package as each one reaches zero, the
+    // same path no-physical-properties took.
+    '@astryx/no-raw-color': 'warn',
   },
 };
 

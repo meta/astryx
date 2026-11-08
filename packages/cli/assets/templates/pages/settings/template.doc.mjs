@@ -5,7 +5,10 @@ export const doc = {
   type: 'page',
   name: 'Settings Form',
   displayName: 'Settings Form',
-  description: 'Account settings as a single scrolling form with profile, password, and advanced configuration sections',
+  description:
+    'Preferences as one continuously scrolling form, sections stacked in order with no navigation between them. The simplest settings shape: everything reachable by scrolling.',
+  keywords: ['settings', 'preferences', 'configuration', 'options', 'account'],
   isReady: true,
   category: 'Settings - Form',
+  icons: {MagnifyingGlassIcon: 'search'},
 };

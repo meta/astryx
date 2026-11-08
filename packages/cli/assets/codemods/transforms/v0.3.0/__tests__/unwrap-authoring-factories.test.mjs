@@ -3,7 +3,8 @@
 import {describe, it, expect} from 'vitest';
 
 async function applyTransform(source, path = 'test.ts') {
-  const {default: transform} = await import('../unwrap-authoring-factories.mjs');
+  const {default: transform} =
+    await import('../unwrap-authoring-factories.mjs');
   const jscodeshift = (await import('jscodeshift')).default;
   const j = jscodeshift.withParser('tsx');
   const api = {jscodeshift: j, stats: () => {}, report: () => {}};
@@ -18,7 +19,7 @@ export default createConfig({integrations: ['@acme/widgets']});
 `;
     const output = await applyTransform(input);
     expect(output).not.toContain('createConfig');
-    expect(output).toContain("export default {");
+    expect(output).toContain('export default {');
     expect(output).toContain("integrations: ['@acme/widgets']");
     expect(output).not.toContain('type:');
   });
@@ -132,13 +133,34 @@ export default createComponentDoc();
     expect(output).toContain("type: 'component'");
   });
 
+  it('leaves same-named factories from unrelated packages unchanged', async () => {
+    const input = `import {createConfig} from '@acme/eslint';
+export default createConfig({strict: true});
+`;
+    expect(await applyTransform(input)).toBe(input);
+  });
+
+  it('keeps an unrelated same-named import when another factory is migrated', async () => {
+    const input = `import {createConfig as createLintConfig} from '@acme/eslint';
+import {createDoc} from '@astryxdesign/cli/doc';
+export const lintConfig = createLintConfig({strict: true});
+export const doc = createDoc({name: 'Theming', description: 'How theming works.'});
+`;
+    const output = await applyTransform(input);
+    expect(output).toContain(
+      "import {createConfig as createLintConfig} from '@acme/eslint'",
+    );
+    expect(output).toContain('createLintConfig({strict: true})');
+    expect(output).not.toContain('createDoc');
+    expect(output).toContain("type: 'generic'");
+  });
+
   it('is a no-op when no authoring factory is imported', async () => {
     const input = `import {Button} from '@astryxdesign/core';
 export default Button;
 `;
-    const {default: transform} = await import(
-      '../unwrap-authoring-factories.mjs'
-    );
+    const {default: transform} =
+      await import('../unwrap-authoring-factories.mjs');
     const jscodeshift = (await import('jscodeshift')).default;
     const j = jscodeshift.withParser('tsx');
     const api = {jscodeshift: j, stats: () => {}, report: () => {}};

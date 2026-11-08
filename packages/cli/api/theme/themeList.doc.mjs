@@ -1,10 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file FunctionDoc for `themeList()` / `astryx theme list`. Colocated with the
- * API function it documents; the response-shape source of truth stays in
- * `theme.type.mjs`.
- * @position packages/cli/api/theme — function documentation
+ * @file FunctionDoc for the synchronous bundled-theme compatibility API.
  */
 
 /** @type {import('@astryxdesign/cli/authoring').FunctionDoc} */
@@ -12,12 +9,11 @@ export const doc = {
   type: 'function',
   kind: 'api',
   name: 'themeList',
+  namespace: 'cli/api',
   displayName: 'themeList()',
-  summary: 'List the themes bundled with this CLI build.',
+  summary: 'List themes bundled with this CLI build.',
   description:
-    'Projects the bundled-theme manifest into the theme.list envelope: the themes that themeAdd ' +
-    'can scaffold. A pure projection of the manifest read by listThemes(); no I/O beyond that read, ' +
-    'and it returns synchronously.',
+    'Synchronous list of the themes bundled with the CLI. It does not include themes from installed integrations; use themeListAvailable() for the list `{@command theme list}` shows.',
   importPath: '@astryxdesign/cli/api',
   signature: 'themeList(): ThemeListResponse',
   keywords: ['theme', 'list', 'themes', 'bundled', 'available'],
@@ -26,18 +22,17 @@ export const doc = {
     {
       type: 'theme.list',
       description:
-        'Every bundled theme as a ThemeListEntry[]: each entry has slug, displayName, description, and a maintained flag.',
+        'Every bundled theme as ThemeListEntry[]: slug, displayName, description, and maintained flag.',
     },
   ],
   throws: [
     {
       code: 'ERR_NO_SOURCE',
-      when: 'the bundled-theme manifest exists but cannot be read or parsed',
+      when: 'the bundled theme descriptors cannot be read or parsed',
     },
   ],
   examples: [
     {label: 'List bundled themes', code: 'const {data} = themeList();'},
   ],
-  command: 'theme list',
-  related: ['themeAdd', 'listThemes', 'themeBuild'],
+  related: ['themeListAvailable', 'themeAdd', 'listThemes'],
 };

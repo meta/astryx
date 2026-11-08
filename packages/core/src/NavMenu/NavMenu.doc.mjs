@@ -1,5 +1,40 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/** @type {import('@astryxdesign/cli/authoring').ComponentAnatomyElement[]} */
+const anatomy = [
+  {
+    name: 'Menu',
+    required: true,
+    description:
+      'Menu container for nav-heading actions, with menu semantics and keyboard navigation.',
+  },
+  {
+    name: 'Item',
+    required: true,
+    description: 'Selectable action or navigation link inside the Menu.',
+  },
+  {
+    name: 'Icon',
+    required: false,
+    description: 'Optional Icon-rendered artwork shown before an Item label.',
+  },
+  {
+    name: 'Text-rendered item label',
+    required: false,
+    description: 'String Item label rendered through Text.',
+  },
+  {
+    name: 'Caller-rendered item label',
+    required: false,
+    description: 'Non-string Item label content rendered directly by the caller.',
+  },
+  {
+    name: 'Item description',
+    required: false,
+    description: 'Optional supporting description rendered through Text.',
+  },
+];
+
 /** @type {import('@astryxdesign/cli/authoring').ComponentDoc} */
 
 export const docs = {
@@ -11,6 +46,7 @@ export const docs = {
   hidden: false,
   keywords: ['nav', 'menu', 'navigation', 'heading', 'menu-item', 'popover'],
   usage: {
+    anatomy,
     description:
       'Accessible menu container and items for nav heading popovers. ' +
       'NavHeadingMenu provides role="menu" with keyboard navigation; ' +
@@ -44,6 +80,7 @@ export const docs = {
 export const docsDense = {
   description: 'Accessible menu container + items for nav heading popovers. NavHeadingMenu = role="menu" w/ keyboard nav; NavHeadingMenuItem renders selectable items.',
   usage: {
+    anatomy,
     description:
       'Accessible menu container + items for nav heading popovers. NavHeadingMenu provides role="menu" w/ keyboard navigation; NavHeadingMenuItem renders individual selectable items. Pass as menu prop of SideNavHeading or TopNavHeading.',
   },

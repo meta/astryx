@@ -8,21 +8,24 @@
  * fallback typeface on every machine whose app never loads it, and no step
  * says so. These helpers close that gap at build time.
  *
- * `collectUnloadedFonts` inspects a RESOLVED theme (raw typography configs
- * are already collapsed into `--font-family-*` tokens by the time the build
- * sees the theme, so tokens + component-override `fontFamily` values are the
- * complete font surface on both load paths) and returns the families that
+ * `collectUnloadedFonts` inspects a resolved theme or serialized adaptation
+ * value. Resolved values use `--font-family-*` tokens and component
+ * `fontFamily` properties; serialized adaptation values may also retain their
+ * typography role configs. It returns the families that
  * are neither CSS generics nor known preinstalled system fonts. Unrecognized
  * names are assumed to be webfonts on purpose: a missed warning hides the
  * bug, a spurious one costs a glance.
  *
- * @input A resolved theme object ({tokens, components}) from build.mjs.
+ * @input A resolved theme or serialized adaptation value ({tokens, components,
+ *   typography}).
  * @output Ordered, case-insensitively deduped family names, and the human
  *   help snippet (<link> pair + @font-face) printed after the install
  *   instructions.
- * @position Sits beside build.mjs (api/theme/build/). Pure functions, no IO,
- *   so the `--json` receipt and the human output share one source of truth.
+ * @position Sits beside build.mjs (api/theme/build/). Pure functions, no IO
+ *   beyond the CLI invocation the human help names (formatCliCommand), so the
+ *   `--json` receipt and the human output share one source of truth.
  */
+import {formatCliCommand} from '../../../foundation/env/package-manager.mjs';
 
 // font-family values that never need loading: CSS generic families, the ui-*
 // system keywords, and CSS-wide keywords that can appear in a token value.
@@ -132,7 +135,7 @@ function splitFamilies(value) {
  * minus generics, CSS-wide keywords, `var()` references, and known system
  * families. Source order, first-seen casing, deduped case-insensitively.
  *
- * @param {{tokens?: Record<string, string>, components?: object}} resolvedTheme
+ * @param {{tokens?: Record<string, string>, components?: object, typography?: {body?: {family?: string, fallbacks?: string}, heading?: {family?: string, fallbacks?: string}, code?: {family?: string, fallbacks?: string}}}} resolvedTheme
  * @returns {string[]}
  */
 export function collectUnloadedFonts(resolvedTheme) {
@@ -154,6 +157,25 @@ export function collectUnloadedFonts(resolvedTheme) {
 
   for (const [token, value] of Object.entries(resolvedTheme?.tokens ?? {})) {
     if (token.startsWith('--font-family-')) consider(value);
+  }
+
+  // Built modules retain normalized adaptation intent instead of resolved rule
+  // layers. Those rule values still carry authored role families here. A
+  // fallback without a family is inert in core's buildFontFamily().
+  const body = resolvedTheme?.typography?.body;
+  if (body?.family) {
+    consider(body.family);
+    consider(body.fallbacks);
+  }
+  const heading = resolvedTheme?.typography?.heading;
+  if (heading?.family) {
+    consider(heading.family);
+    consider(heading.fallbacks);
+  }
+  const code = resolvedTheme?.typography?.code;
+  if (code?.family) {
+    consider(code.family);
+    consider(code.fallbacks);
   }
 
   // Component overrides are plain CSS maps of unknown depth (style keys,
@@ -182,6 +204,33 @@ export function collectUnloadedFonts(resolvedTheme) {
  */
 export function formatFontLoadingHelp(themeName, families) {
   const named = families.map(f => `"${f}"`).join(', ');
+  return `
+[note] Theme "${themeName}" names fonts it does not load: ${named}
+${fontLoadingRecipe(families)}`;
+}
+
+/**
+ * The same fix once for a batch build: each family the built themes name but
+ * do not load, with the themes that name it, then one recipe for all of them.
+ *
+ * @param {Array<{family: string, themes: string[]}>} entries
+ * @returns {string}
+ */
+export function formatBatchFontLoadingHelp(entries) {
+  const named = entries
+    .map(({family, themes}) => `  "${family}" (${themes.join(', ')})`)
+    .join('\n');
+  return `
+[note] The built themes name fonts they do not load:
+${named}
+${fontLoadingRecipe(entries.map(entry => entry.family))}`;
+}
+
+/**
+ * @param {string[]} families
+ * @returns {string}
+ */
+function fontLoadingRecipe(families) {
   const cssHref =
     'https://fonts.googleapis.com/css2?' +
     families
@@ -190,12 +239,10 @@ export function formatFontLoadingHelp(themeName, families) {
     '&display=swap';
   const first = families[0];
   const slug = first.toLowerCase().replace(/ /g, '-');
-  return `
-⚠ Theme "${themeName}" names fonts it does not load: ${named}
-  The built CSS only sets font-family — load these in your app, or every
+  return `  The built CSS only sets font-family; load these in your app, or every
   browser quietly falls back.
 
-  Google Fonts (add :wght@… axes as your theme's weights require):
+  Google Fonts (add :wght@... axes as your theme's weights require):
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -209,6 +256,6 @@ export function formatFontLoadingHelp(themeName, families) {
       font-display: swap;
     }
 
-  Recipe and fallback-stack guidance: astryx docs typography
+  Recipe and fallback-stack guidance: ${formatCliCommand('docs typography')}
 `;
 }

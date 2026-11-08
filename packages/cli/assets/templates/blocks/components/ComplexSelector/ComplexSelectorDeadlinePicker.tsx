@@ -47,7 +47,7 @@ export default function ComplexSelectorDeadlinePicker() {
       value={value}
       onChange={setValue}
       triggerLabel={formatDeadline(value)}
-      style={{width: 320}}>
+      controlStyle={{width: 320}}>
       {(selectedValue, onChange, close) => {
         const set = (patch: Partial<Deadline>) =>
           onChange({...selectedValue, ...patch});

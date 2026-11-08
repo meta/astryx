@@ -3,6 +3,7 @@
 import {describe, it, expect} from 'vitest';
 import {component} from '../../../api/component/component.mjs';
 import {findShowcase, findRelatedBlocks} from '../../../api/template/template.mjs';
+import {runCli} from '../../../test-utils/run-cli.mjs';
 
 const CWD = {cwd: '.'};
 
@@ -73,6 +74,26 @@ describe('component() sub-component scoping', () => {
   it('component("SideNav") still returns full SideNav doc', async () => {
     const result = await component('SideNav', CWD);
     expect(result.data.name).toBe('SideNav');
+  });
+
+  // `parentDoc` is part of the component.detail schema: the text view
+  // projects it under the same key.
+  it('component("HStack") names its parent doc in JSON and text', async () => {
+    const result = await component('HStack', CWD);
+    expect(result.data.parentDoc).toBe('Stack');
+
+    const text = await runCli(['component', 'HStack'], process.cwd());
+    expect(text.code).toBe(0);
+    expect(text.stdout).toMatch(/^parentDoc: +Stack$/m);
+  });
+
+  it('component("Stack") carries no parentDoc in JSON or text', async () => {
+    const result = await component('Stack', CWD);
+    expect(result.data).not.toHaveProperty('parentDoc');
+
+    const text = await runCli(['component', 'Stack'], process.cwd());
+    expect(text.code).toBe(0);
+    expect(text.stdout).not.toMatch(/^parentDoc:/m);
   });
 }, SCAN_TIMEOUT);
 

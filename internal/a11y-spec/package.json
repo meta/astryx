@@ -1,0 +1,23 @@
+{
+  "name": "@astryxdesign/a11y-spec",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Internal: reusable accessibility spec-test contracts and their evidence harnesses. Never published.",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./chromium": "./src/harness/chromium.ts",
+    "./evidence": "./src/evidence.ts",
+    "./playwright": "./src/playwright.ts",
+    "./storybook": "./src/storybook.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --project tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.11"
+  }
+}

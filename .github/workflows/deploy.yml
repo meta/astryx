@@ -1,414 +1,305 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 
-# Deploy Storybook + Sandbox to GitHub Pages.
-# This workflow is WEBSITE-ONLY — it does not publish to npm. ALL npm publishing
-# (both stable `latest` and `canary` prereleases) lives in release.yml, so a
-# single npm trusted-publisher config (release.yml) covers everything.
-# Only runs on push to main.
-#
-# Shape: sync-exports, test, and build run in PARALLEL; deploy waits for test
-# and build, then only assembles the built artifacts and pushes — it builds
-# nothing itself. (The old shape was sequential — test, then a deploy job that
-# rebuilt everything from scratch — which put ~13min between a merge and the
-# site going live. Building once, in parallel with test, cuts that roughly in
-# half while test still gates the actual push.)
-#
-# Deployment layout on gh-pages:
-#   /storybook/    — stable Storybook (always latest main)
-#   /sandbox/      — stable Sandbox (always latest main)
-#   /pr/<number>/  — PR preview dirs (managed by ci.yml, preserved here)
-#   /reports/      — vibe test reports (preserved)
-#   /assets/       — landing page CSS
-#   /index.html    — landing page
-#   /latest        — short hash of latest deploy
-#
-# Publish model — cheap clean-slate via git plumbing (see "Publish" step):
-# Every deploy replaces ONLY the regenerated stable paths (storybook/, sandbox/,
-# assets/, index.html, latest, .nojekyll) and carries /pr/ and /reports/ forward
-# untouched, then pushes the result as a single ORPHAN commit (no history). This
-# keeps three properties at once:
-#   A. Deploy time is O(1) in preview count. Earlier this job did
-#      `git clone` of all of gh-pages + `cp -r` the whole /pr/ tree forward on
-#      every push; once previews grew to ~1GB / tens of thousands of files that
-#      copy blew the 15-min job timeout and EVERY main deploy was cancelled
-#      (see #4716). We now fetch NO preview blobs — a --filter=blob:none +
-#      sparse checkout materializes only the stable paths; /pr/ stays in the
-#      index and is reused by SHA.
-#   B. No stale-asset accumulation. The stable paths are removed and rewritten
-#      each deploy, so superseded content-hashed assets don't pile up (the bug
-#      that `keep_files:false` originally fixed in #916).
-#   C. No gh-pages history bloat. The single-orphan-commit push is exactly what
-#      `force_orphan:true` gave us (#2239 / #2238) — it just no longer requires
-#      a full local copy of the tree to produce it. compact-gh-pages.yml remains
-#      the weekly backstop.
-name: Deploy
+# Validate every push to main. Stable docs, Storybook, and Sandbox deploy through
+# the Vercel project; this workflow preserves the post-merge test gates only.
+name: Main
+# A run that validates an older commit is named for it, so it never reads as a
+# check of main's tip; every other run keeps its default name.
+run-name: "${{ github.event_name == 'workflow_dispatch' && inputs.sha != '' && format('Main validation of {0}', inputs.sha) || '' }}"
 
 on:
   push:
-    branches: ["main"]
+    branches: ['main']
   workflow_dispatch:
+    inputs:
+      sha:
+        description: "Full SHA of a commit in main's history from #9164 on to validate; empty validates main's tip"
+        type: string
+        required: false
+      recheck:
+        description: "Release re-check of main's tip, sent by the release re-check workflow: takes the validation group at once"
+        type: boolean
+        default: false
 
 permissions: {}
 
+# Push runs (the fast checks) share one group, and a newer push replaces an
+# older waiting one. Full unit runs have a group of their own that no push
+# cancels: the scheduler's (main-heavy-lanes.yml, which names the commit) and a
+# person's run of main's tip queue there, one at a time (spec:AST-030 FR21).
+# A person's dispatch that names an older `sha` validates it in a group of its
+# own, so it never replaces or cancels another run. Only a release re-check,
+# which the release re-check workflow sends with the workflow token, naming
+# main's tip, cancels the running unit run: it is itself a full validation of
+# that commit, so the cancelled run's commits stay covered (spec:AST-030 FR22).
 concurrency:
-  group: "pages-deploy"
-  cancel-in-progress: false
+  group: "${{ github.event_name == 'push' && 'main-validation' || (inputs.sha != '' && github.triggering_actor != 'github-actions[bot]' && format('main-validation-sha-{0}', github.run_id)) || 'main-unit-tests' }}"
+  cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' && inputs.recheck && github.triggering_actor == 'github-actions[bot]' }}
 
 jobs:
+  # The one commit every lane and leg of this run tests. A push validates the
+  # pushed commit; a dispatch, its `sha` input when given (it must be in main's
+  # history), else main's tip when it starts. Each leg resolving
+  # `main` itself could straddle a merge, shard different file lists, and skip
+  # a file in every leg.
+  main-commit:
+    # Its admission wait may outlast a slim job's fifteen-minute cap, so it
+    # runs on a standard runner (spec:AST-030 DEC-16).
+    runs-on: ubuntu-latest
+    timeout-minutes: 130
+    permissions:
+      # actions: read lets the admission step count CI's live jobs.
+      actions: read
+      contents: read
+    outputs:
+      sha: ${{ steps.resolve.outputs.sha }}
+    steps:
+      - name: Resolve the commit under test
+        id: resolve
+        uses: actions/github-script@v9
+        with:
+          script: |
+            let sha = context.sha;
+            if (context.eventName !== 'push') {
+              const {data} = await github.rest.repos.getBranch({...context.repo, branch: 'main'});
+              sha = data.commit.sha;
+              // Not trimmed: the concurrency group reads the raw input, so a
+              // value of only spaces must fail here, not validate the tip.
+              const requested = context.payload.inputs?.sha ?? '';
+              if (requested !== '') {
+                if (!/^[0-9a-f]{40}$/.test(requested)) {
+                  throw new Error(`sha must be a full 40-character commit SHA, got "${requested}".`);
+                }
+                const {data: comparison} = await github.rest.repos.compareCommitsWithBasehead({
+                  ...context.repo,
+                  basehead: `${requested}...${sha}`,
+                });
+                if (!['identical', 'ahead'].includes(comparison.status)) {
+                  throw new Error(`${requested} is not in main's history.`);
+                }
+                // The typecheck lane keeps this commit's size records, which
+                // needs main's size-record scripts (the commit of #9164 and
+                // later); an older commit cannot run that lane.
+                const FLOOR = 'f0039ff70521b4f51a2a64ea15f2b687e6374482';
+                const {data: since} = await github.rest.repos.compareCommitsWithBasehead({
+                  ...context.repo,
+                  basehead: `${FLOOR}...${requested}`,
+                });
+                if (!['identical', 'ahead'].includes(since.status)) {
+                  throw new Error(`${requested} predates the size records this run's typecheck lane keeps; validate a later commit.`);
+                }
+                sha = requested;
+              }
+            }
+            core.setOutput('sha', sha);
+
+      # Marks a release re-check, so the re-check workflow can tell its runs
+      # from main's hourly check of the same commit.
+      - name: Mark a release re-check
+        if: github.event_name == 'workflow_dispatch' && inputs.recheck
+        run: echo 'Release re-check'
+
+      # A `main` full check waits for room under CI's ceiling before its legs
+      # start (spec:AST-030 FR16, DEC-16); every other job here needs this one.
+      # `peak` is the most jobs this run holds at once (ci-admission.test.mjs).
+      - name: Check out the admission action
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/actions/ci-admission
+          path: .ci-admission
+          persist-credentials: false
+
+      - name: Wait for room under the CI ceiling
+        uses: ./.ci-admission/.github/actions/ci-admission
+        continue-on-error: true
+        timeout-minutes: 125
+        with:
+          # A push runs only the fast checks (main-commit, sync-exports,
+          # typecheck, test); a dispatched unit run holds every leg.
+          peak: ${{ github.event_name == 'push' && 4 || 14 }}
+          main: true
+          # It waits for room, up to its own job's limit, looking about every
+          # four minutes, and never yields to a pull-request run.
+          max-wait-minutes: 120
+          max-looks: 30
+
   # Verify package.json exports match the source tree.
   # Fails if exports are stale — run `node scripts/sync-exports.js` locally to fix.
   sync-exports:
+    needs: [main-commit]
     runs-on: ubuntu-slim
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.main-commit.outputs.sha }}
 
       - name: Check package.json exports are in sync
         run: node scripts/sync-exports.js --check
 
-
-  test:
-    runs-on: 2-core-ubuntu-arm
+  # The push gate, as three parallel lanes joined by `test` below.
+  #
+  # This was one job running both Vitest projects, a full `pnpm build`, and
+  # every package typecheck on a 2-core runner — strictly more than ci.yml's
+  # `test`, which was already being terminated around 20 minutes with no
+  # summary. Same defect, later surface: main's post-merge gate was over the
+  # same budget.
+  #
+  # Nothing is dropped and nothing runs twice. The two Vitest projects are
+  # independent by construction (vitest.config.ts), so they split cleanly; the
+  # typecheck needs the `pnpm build` it follows, so they stay together in
+  # their own lane and take the build with them.
+  #
+  # Both Vitest lanes split into legs that all run at once, with no
+  # max-parallel hold: a validation of main may cost more runner-minutes to
+  # finish sooner, so the release train can re-check a fix within minutes
+  # (spec:AST-030 FR22, DEC-17). At four legs each, test-node's slowest leg took ~8 minutes
+  # and test-ui's ~6. Six legs each bring every leg near the typecheck lane
+  # (~5 minutes); the leg that holds the longest Node test file (~6 minutes on
+  # its own) sets the floor, and more legs would not move it. `test` joins the
+  # legs.
+  # The unit lanes run the full suites only in a dispatched run (about hourly,
+  # from main-heavy-lanes.yml; spec:AST-030 FR21), never on a push.
+  test-ui:
+    needs: [main-commit]
+    if: github.event_name != 'push'
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
+    runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: main
+          ref: ${{ needs.main-commit.outputs.sha }}
 
       - uses: ./.github/actions/setup
 
-      - run: pnpm test
+      - name: Run this shard of the UI tests
+        run: pnpm test:ui --shard=${{ matrix.shard }}/${{ strategy.job-total }}
 
-      - run: pnpm build
+      # Match the PR gate: FR23 needs an idle test runner, not just a new
+      # process, so one leg runs it after its own share has exited.
+      - name: Run the isolated Markdown benchmark
+        if: matrix.shard == 1
+        run: pnpm test:ui:isolated
 
-      # Typecheck gates mirroring the PR `build` job in ci.yml. ci.yml only runs
-      # on pull_request/merge_group, so a typecheck error can land on main (its
-      # push only runs `pnpm test`) undetected — then break the `build` check on
-      # every open PR, which typechecks the PR merged with main (see #3197).
-      # Running them here closes that gap and blocks a broken deploy.
-      - name: Verify package exports
-        run: node scripts/verify-exports.mjs
-
-      - name: Typecheck component docs
-        run: pnpm -F @astryxdesign/core typecheck:docs
-
-      - name: Typecheck lab docs
-        run: pnpm -F @astryxdesign/lab typecheck:docs
-
-      - name: Typecheck charts docs
-        run: pnpm -F @astryxdesign/charts typecheck:docs
-
-      - name: Typecheck template docs
-        run: pnpm -F @astryxdesign/cli typecheck:template-docs
-
-      # Full-package strict checkJs over the CLI (src, bin, scripts, docs, and
-      # the emitted templates). Requires the `pnpm build` above so the template
-      # .tsx sources can resolve the built @astryxdesign/{core,charts,lab} types.
-      - name: Typecheck CLI (strict)
-        run: pnpm -F @astryxdesign/cli typecheck:strict
-
-      - name: Typecheck storybook
-        run: pnpm -F @astryxdesign/storybook typecheck
-
-      - name: Typecheck core (including tests)
-        run: pnpm -F @astryxdesign/core typecheck
-
-  # Build everything the site needs, in parallel with `test`. The results are
-  # handed to `deploy` as artifacts, so a broken test run never publishes —
-  # test still gates the push, it just no longer serializes the build.
-  build:
-    runs-on: 2-core-ubuntu-arm
+  test-node:
+    needs: [main-commit]
+    if: github.event_name != 'push'
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
+    # Vitest runs one test file per CPU beyond the first, so the 2-core runner
+    # ran this suite one file at a time (~23 min). Four cores give it three.
+    runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
+      - uses: actions/checkout@v7
         with:
-          ref: main
+          ref: ${{ needs.main-commit.outputs.sha }}
 
-      - name: Setup Node and pnpm
-        uses: ./.github/actions/setup
+      - uses: ./.github/actions/setup
 
-      - name: Build core package
-        run: pnpm build
+      - run: pnpm test:node --shard=${{ matrix.shard }}/${{ strategy.job-total }}
 
-      - name: Build Storybook
-        run: pnpm -F @astryxdesign/storybook build
-
-      - name: Cache Next.js build
-        uses: actions/cache@v6
-        with:
-          path: apps/sandbox/.next/cache
-          # IMPORTANT: no restore-keys fallback. The key is pinned to the
-          # @astryxdesign/core dist hash because the Next.js module cache bakes in the
-          # resolved export graph of @astryxdesign/core. A loose restore-keys fallback
-          # (e.g. "nextjs-sandbox-<lock>-") would let a build restore a cache
-          # produced against a DIFFERENT export shape. That is exactly what
-          # broke the post-merge deploy of the XDS un-prefix migration (#2941):
-          # the migration changed core's exports (bare names, new subpaths), the
-          # exact key missed, and restore-keys fell back to a pre-migration
-          # cache whose compiled modules still expected XDS*-prefixed exports —
-          # producing "'Text' is not exported from '@astryxdesign/core/Text'" and
-          # "Element type is invalid ... undefined" prerender failures.
-          # A changed key now yields a COLD cache (safe rebuild) instead of a
-          # poisoned warm one.
-          #
-          # PR builds (ci.yml) deliberately use a different, PR-scoped key:
-          # they build with a per-PR basePath (/<repo>/pr/<n>/sandbox), and a
-          # basePath change makes Next.js invalidate the webpack cache — so a
-          # cache shared with this main build would never actually warm a PR.
-          key: nextjs-sandbox-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('packages/core/dist/**') }}
-
-      - name: Build Sandbox
-        run: pnpm -F @astryxdesign/sandbox build
-        env:
-          # GitHub Pages serves this project at <owner>.github.io/<repo>/, so the
-          # sandbox must be built with the repo name as a base path prefix —
-          # otherwise its root-absolute asset URLs (/sandbox/_next/...) drop the
-          # /<repo> segment and 404. Derived from the repo name so it survives renames.
-          SANDBOX_BASE_PATH: /${{ github.event.repository.name }}/sandbox
-          NODE_OPTIONS: '--max-old-space-size=4096'
-
-      # The landing page (assembled in `deploy`) links these straight out of
-      # the built tree, which deploy no longer has — stage them as an artifact.
-      - name: Stage landing page assets
-        run: |
-          mkdir -p site-assets
-          cp packages/core/dist/astryx.css site-assets/astryx.css
-          cp packages/core/src/reset.css site-assets/reset.css
-          cp packages/themes/neutral/dist/theme.css site-assets/theme.css
-
-      - name: Upload Storybook artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: deploy-storybook
-          path: apps/storybook/dist/
-          retention-days: 1
-
-      - name: Upload Sandbox artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: deploy-sandbox
-          path: apps/sandbox/out/
-          retention-days: 1
-
-      - name: Upload landing assets artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: deploy-assets
-          path: site-assets/
-          retention-days: 1
-
-  deploy:
-    needs: [test, build]
-    if: always() && !cancelled() && needs.test.result == 'success' && needs.build.result == 'success'
-    runs-on: ubuntu-slim
+  # The typecheck mirroring the PR `build` job in ci.yml. ci.yml only runs
+  # on pull_request/merge_group, so a typecheck error can land on main (its
+  # push only runs the suite) undetected — then break the `build` check on
+  # every open PR, which typechecks the PR merged with main (see #3197).
+  # Running them here closes that gap and blocks a broken deploy.
+  typecheck:
+    needs: [main-commit]
+    runs-on: ubuntu-24.04-arm
     permissions:
-      contents: write
+      contents: read
     steps:
-      - name: Download Storybook artifact
-        uses: actions/download-artifact@v8
+      - uses: actions/checkout@v7
         with:
-          name: deploy-storybook
-          path: storybook-dist
+          ref: ${{ needs.main-commit.outputs.sha }}
 
-      - name: Download Sandbox artifact
-        uses: actions/download-artifact@v8
+      - uses: ./.github/actions/setup
+
+      - run: pnpm build
+
+      # A pull request reads its merge base's component sizes from this record
+      # instead of building the base (ci.yml build-storybook).
+      - name: Record component sizes
+        run: node .github/scripts/analyze-pr.js --main-record --output component-size.json
+
+      - name: Keep this commit's component sizes for PR size reports
+        uses: actions/upload-artifact@v7
         with:
-          name: deploy-sandbox
-          path: sandbox-dist
+          name: component-size-main-${{ needs.main-commit.outputs.sha }}
+          path: component-size.json
+          retention-days: 14
 
-      - name: Download landing assets artifact
-        uses: actions/download-artifact@v8
+      # A pull request compares its published package sizes with its merge
+      # base's from this measurement (ci.yml build-storybook).
+      - name: Measure published package size
+        run: node .github/scripts/package-size.mjs measure --output package-size.json
+
+      - name: Keep this commit's package size for PR size reports
+        uses: actions/upload-artifact@v7
         with:
-          name: deploy-assets
-          path: site-assets
+          name: package-size-main-${{ needs.main-commit.outputs.sha }}
+          path: package-size.json
+          retention-days: 14
 
-      - name: Prepare stable site content
-        run: |
-          SHORT_HASH="${GITHUB_SHA:0:7}"
+      # A pull request's API changes compare its head's build with this
+      # surface of its merge base (ci.yml build-storybook), so a committed
+      # report main forgot to regenerate never shows as a pull request's rows
+      # (architecture:public-component-api INV24). Evidence only: it never
+      # fails this job.
+      - name: Record the published API surface
+        continue-on-error: true
+        run: node scripts/api-report/cli.mjs --surface api-surface
 
-          # Assemble the regenerated stable paths into ./staged — everything the
-          # deploy owns EXCEPT /pr/ and /reports/, which live on gh-pages and are
-          # carried forward untouched by the Publish step below.
-          rm -rf staged
-          mkdir -p staged/storybook staged/sandbox staged/assets
-          cp -r storybook-dist/* staged/storybook/
-          if [ -d "sandbox-dist" ]; then
-            cp -r sandbox-dist/* staged/sandbox/
-          fi
+      - name: Keep this commit's API surface for PR API changes
+        if: hashFiles('api-surface/surface.json') != ''
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: api-surface-main-${{ needs.main-commit.outputs.sha }}
+          path: api-surface/
+          retention-days: 14
 
-          # Astryx CSS for the landing page, staged by the build job
-          cp site-assets/astryx.css staged/assets/astryx.css
-          cp site-assets/reset.css staged/assets/reset.css
-          cp site-assets/theme.css staged/assets/theme.css
+      - name: Verify package exports
+        run: node scripts/verify-exports.mjs
 
-          cat > staged/index.html << 'LANDING_EOF'
-          <!DOCTYPE html>
-          <html lang="en" data-astryx-theme="neutral">
-          <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Astryx Design System</title>
-            <link rel="stylesheet" href="assets/reset.css">
-            <link rel="stylesheet" href="assets/astryx.css">
-            <link rel="stylesheet" href="assets/theme.css">
-            <style>
-              body {
-                min-height: 100vh;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                background: var(--color-background-body);
-                font-family: var(--font-family-body);
-                color: var(--color-text-primary);
-              }
-              .container {
-                max-width: 480px;
-                width: 100%;
-                padding: var(--spacing-6);
-              }
-              h1 { font-size: var(--text-heading-1-size); font-weight: var(--font-weight-semibold); margin-bottom: var(--spacing-2); }
-              p { color: var(--color-text-secondary); margin-bottom: var(--spacing-6); font-size: var(--text-body-size); line-height: 1.5; }
-              .links { display: flex; flex-direction: column; gap: var(--spacing-3); }
-              a.card {
-                display: flex; align-items: center; justify-content: space-between;
-                padding: var(--spacing-4);
-                background: var(--color-background-card);
-                border-radius: var(--radius-element);
-                box-shadow: var(--shadow-low);
-                text-decoration: none;
-                color: var(--color-text-primary);
-                transition: box-shadow 0.15s ease;
-              }
-              a.card:hover { box-shadow: var(--shadow-med); }
-              .card-title { font-weight: var(--font-weight-semibold); }
-              .card-desc { font-size: var(--text-supporting-size); color: var(--color-text-secondary); margin-top: 2px; }
-              .arrow { color: var(--color-text-secondary); font-size: 1.25rem; }
-              .hash { font-family: var(--font-family-code); font-size: var(--text-supporting-size); color: var(--color-text-secondary); margin-top: var(--spacing-4); text-align: center; }
-            </style>
-          </head>
-          <body>
-            <div class="container">
-              <h1>Astryx Design System</h1>
-              <p>Component library for building internal tools. Select an environment below.</p>
-              <div class="links">
-                <a class="card" href="storybook/index.html">
-                  <div>
-                    <div class="card-title">📖 Storybook</div>
-                    <div class="card-desc">Component docs, props, and interactive examples</div>
-                  </div>
-                  <span class="arrow">→</span>
-                </a>
-                <a class="card" href="sandbox/index.html">
-                  <div>
-                    <div class="card-title">🏗️ Sandbox</div>
-                    <div class="card-desc">Full app demo with theme editor</div>
-                  </div>
-                  <span class="arrow">→</span>
-                </a>
-                <a class="card" href="https://github.com/facebook/astryx">
-                  <div>
-                    <div class="card-title">💻 GitHub</div>
-                    <div class="card-desc">Source code, issues, and wiki</div>
-                  </div>
-                  <span class="arrow">→</span>
-                </a>
-              </div>
-              <div class="hash">Build: DEPLOY_HASH_PLACEHOLDER</div>
-            </div>
-          </body>
-          </html>
-          LANDING_EOF
+      # Every workspace package's own `typecheck` script, as in ci.yml.
+      - name: Typecheck every package
+        run: pnpm typecheck
 
-          # Inject the short hash into the landing page
-          sed -i "s|DEPLOY_HASH_PLACEHOLDER|${SHORT_HASH}|" staged/index.html
-
-          # Write the latest deployed hash (used by PR comment links, etc.)
-          echo -n "${SHORT_HASH}" > staged/latest
-
-      - name: Publish to gh-pages
+  # Stable join for the three post-merge validation lanes.
+  test:
+    needs: [test-ui, test-node, typecheck]
+    if: ${{ always() && !cancelled() }}
+    runs-on: ubuntu-slim
+    permissions: {}
+    steps:
+      # A push runs only the fast checks; a dispatched run is the full unit
+      # run, and passes only when every unit leg passed.
+      - name: Assert every push gate succeeded
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT: ${{ github.event_name }}
+          TEST_UI: ${{ needs.test-ui.result }}
+          TEST_NODE: ${{ needs.test-node.result }}
+          TYPECHECK: ${{ needs.typecheck.result }}
         run: |
-          # Carry /pr/ and /reports/ forward WITHOUT downloading or copying them
-          # (>1GB / tens of thousands of files). See the header comment for the
-          # full rationale:
-          #   --filter=blob:none  → clone fetches trees but NO file contents
-          #   sparse-checkout     → only the stable paths are materialized;
-          #                         every other path (/pr/, /reports/,
-          #                         /visual-gate/) stays in the index as a
-          #                         skip-worktree entry (never written out)
-          #   git write-tree      → rebuilds the full tree from the index, so
-          #                         those paths are reused by SHA
-          #
-          # This is an allow-BY-DEFAULT mechanism: anything outside the cone
-          # below survives automatically. Adding a path to the sparse-checkout
-          # set makes it a MANAGED path, wiped and republished each deploy — so
-          # never add a path that another workflow owns. /visual-gate/ holds the
-          # visual-regression baseline (owned by visual-baseline.yml); wiping it
-          # would silently disarm the release gate.
-          #   commit-tree (no -p) → one ORPHAN commit == force_orphan, produced
-          #                         without a full local copy of gh-pages
-          REPO_URL="https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
-          WORK_DIR="$PWD"
-          MAX_ATTEMPTS=5
-
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-
-          for attempt in $(seq 1 $MAX_ATTEMPTS); do
-            echo "::group::Publish attempt $attempt of $MAX_ATTEMPTS"
-            cd "$WORK_DIR"
-            rm -rf /tmp/ghp
-
-            # Partial + no-checkout clone: fetches commits and trees, but no blobs.
-            git clone --filter=blob:none --no-checkout --depth=1 \
-              --single-branch --branch gh-pages "$REPO_URL" /tmp/ghp
-            cd /tmp/ghp
-            OLD_HEAD="$(git rev-parse HEAD)"
-
-            # Materialize ONLY the stable paths (cone mode also keeps root files
-            # like index.html/latest/.nojekyll). /pr/ & /reports/ are left as
-            # skip-worktree index entries — never fetched, never written.
-            git sparse-checkout init --cone
-            git sparse-checkout set storybook sandbox assets
-            git checkout gh-pages
-
-            # Clean-replace the stable paths so superseded content-hashed assets
-            # don't accumulate (the bug keep_files:false originally fixed).
-            rm -rf storybook sandbox assets index.html latest
-            cp -r "$WORK_DIR"/staged/. ./
-            touch .nojekyll
-
-            # git add -A respects skip-worktree, so /pr/, /reports/ and
-            # /visual-gate/ are NOT staged for deletion — they stay in the
-            # index and are carried forward by write-tree.
-            git add -A
-            if git diff --cached --quiet; then
-              echo "Nothing to publish"; echo "::endgroup::"; exit 0
-            fi
-
-            TREE="$(git write-tree)"
-            COMMIT="$(git commit-tree "$TREE" -m "Deploy ${GITHUB_SHA:0:7} to GitHub Pages")"
-
-            # force-with-lease guards against a concurrent gh-pages writer
-            # (another main deploy or a PR-preview push); on a lost race we
-            # re-clone the fresh tip and replay, so no update is clobbered.
-            if git push origin \
-                 "--force-with-lease=refs/heads/gh-pages:${OLD_HEAD}" \
-                 "${COMMIT}:refs/heads/gh-pages"; then
-              echo "Published on attempt $attempt (orphan ${COMMIT:0:7})"
-              echo "::endgroup::"
-              exit 0
-            fi
-
-            echo "Push rejected (concurrent gh-pages update) — retrying in $((attempt * 2))s"
-            echo "::endgroup::"
-            sleep $((attempt * 2))
-          done
-
-          echo "::error::Failed to publish to gh-pages after ${MAX_ATTEMPTS} attempts"
-          exit 1
+          echo "test-ui:    $TEST_UI"
+          echo "test-node:  $TEST_NODE"
+          echo "typecheck:  $TYPECHECK"
+          [ "$TYPECHECK" = success ] || exit 1
+          if [ "$EVENT" = push ]; then
+            [ "$TEST_UI" = skipped ] && [ "$TEST_NODE" = skipped ] || exit 1
+          else
+            [ "$TEST_UI" = success ] && [ "$TEST_NODE" = success ] || exit 1
+          fi

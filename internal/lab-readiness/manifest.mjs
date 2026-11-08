@@ -23,11 +23,15 @@
 
 const issue = n => ({
   label: `Issue #${n}`,
-  url: `https://github.com/facebook/astryx/issues/${n}`,
+  url: `https://github.com/meta/astryx/issues/${n}`,
 });
 const pr = n => ({
   label: `PR #${n}`,
-  url: `https://github.com/facebook/astryx/pull/${n}`,
+  url: `https://github.com/meta/astryx/pull/${n}`,
+});
+const issueComment = (n, id, label) => ({
+  label,
+  url: `https://github.com/meta/astryx/issues/${n}#issuecomment-${id}`,
 });
 
 /**
@@ -49,8 +53,7 @@ export const CANDIDATES = [
     storybookStoryId: 'lab-listinput--tag-options',
     publicExports: ['ListInput'],
     stateProps: ['isDisabled', 'isLoading', 'status'],
-    summary:
-      'Compact editor for short collections of simple records.',
+    summary: 'Compact editor for short collections of simple records.',
     declared: {
       triage: {
         state: 'passed',
@@ -125,8 +128,7 @@ export const CANDIDATES = [
     storybookStoryId: 'lab-transferlist--basic',
     publicExports: ['TransferList', 'TransferListSelector', 'transferListVars'],
     stateProps: ['isReorderable', 'hasSearch', 'hasSelectAll', 'hasClear'],
-    summary:
-      'Controlled dual-panel input for moving options between lists.',
+    summary: 'Controlled dual-panel input for moving options between lists.',
     declared: {
       triage: {
         state: 'passed',
@@ -155,13 +157,27 @@ export const CANDIDATES = [
       },
       surfaceAudit: {
         state: 'in_progress',
-        note: 'The RFC labels its surface audit preliminary and leaves naming and composition questions open. TransferListSelector shipped after it was written and is not covered.',
-        evidence: [issue(3281), pr(4773)],
+        note: 'Design review closed the naming and composition questions: the listbox semantics are withdrawn and the unbuilt Listbox primitive is split into its own RFC. TransferListSelector shipped after the audit was written and its prop surface is still not covered.',
+        evidence: [
+          issue(3281),
+          pr(4773),
+          issueComment(
+            3281,
+            5403206870,
+            'Design review: ARIA semantics resolved',
+          ),
+        ],
       },
       specReview: {
-        state: 'not_started',
-        note: 'No design or engineering review resolving blocking RFC feedback has been recorded.',
-        evidence: [issue(3281)],
+        state: 'passed',
+        note: 'Design review resolved the blocking RFC feedback, ruling that role=group plus semantic lists is correct because role=option forbids the interactive row descendants this component ships.',
+        evidence: [
+          issueComment(
+            3281,
+            5403206870,
+            'Design review: ARIA semantics resolved',
+          ),
+        ],
       },
       apiArbitration: {
         state: 'passed',
@@ -169,9 +185,15 @@ export const CANDIDATES = [
         evidence: [issue(3281)],
       },
       finalizedSpec: {
-        state: 'not_started',
-        note: 'RFC #3281 is still open, and its proposed listbox semantics contradict the shipped tests, which require semantic lists without listbox roles.',
-        evidence: [issue(3281)],
+        state: 'passed',
+        note: 'The listbox-versus-lists contradiction is settled: the RFC accessibility section is amended to the shipped semantics. RFC #3281 stays open only for the Listbox primitive, which is out of scope for this component.',
+        evidence: [
+          issueComment(
+            3281,
+            5403206870,
+            'Design review: ARIA semantics resolved',
+          ),
+        ],
       },
       reviewAndCI: {
         state: 'in_progress',

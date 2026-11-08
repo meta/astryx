@@ -3,10 +3,11 @@
 /**
  * @file generate-score-ledger.mjs
  * @description Generates apps/sandbox/src/generated/componentScores.ts — the
- *   ROSTER of components (read from the ledger packages — core, lab and
- *   richtext — by the canonical predicate in scripts/score-ledger.mjs) plus a
- *   build-time SNAPSHOT of the audit ledger fetched from the wiki.
- * @input packages/{core,lab,richtext}/src, and the wiki ledger over the network.
+ *   ROSTER of public components (read from every component-bearing package in
+ *   scripts/component-packages.cjs by the canonical predicate in
+ *   scripts/score-ledger.mjs) plus a build-time SNAPSHOT of the wiki ledger.
+ * @input Registered component-package source roots and the wiki ledger over the
+ *   network.
  * @output src/generated/componentScores.ts
  * @position Sandbox build step, run by `pnpm generate`.
  *
@@ -212,8 +213,9 @@ const banner = `// Copyright (c) Meta Platforms, Inc. and affiliates.
  * GENERATED FILE — do not edit.
  * Regenerate: node apps/sandbox/scripts/generate-score-ledger.mjs
  *
- * \`roster\` is read from packages/{core,lab,richtext}/src by the canonical component
- * predicate. \`snapshot\` is a build-time copy of the wiki ledger, used only
+ * \`roster\` is read from every component-bearing package registered in
+ * scripts/component-packages.cjs. \`snapshot\` is a build-time copy of the wiki
+ * ledger, used only
  * until the page's runtime fetch of LEDGER_URL resolves.
  */
 `;
@@ -312,7 +314,7 @@ export const SECTION_TITLES: Record<string, string> = ${JSON.stringify(SECTION_T
 
 export const SECTION_WEIGHTS: Record<string, number> = ${JSON.stringify(SECTION_WEIGHTS, null, 2)};
 
-/** Every component in packages/{core,lab,richtext}/src, by the canonical predicate. */
+/** Every component in the registered component-package source roots. */
 export const roster: RosterEntry[] = ${JSON.stringify(roster, null, 2)};
 
 /**

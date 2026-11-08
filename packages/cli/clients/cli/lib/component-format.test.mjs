@@ -1,7 +1,54 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, it, expect} from 'vitest';
-import {formatBrief, formatFull} from './component-format.mjs';
+import {formatBrief, formatCompact, formatFull} from './component-format.mjs';
+
+describe('component accessibility guidance', () => {
+  const docs = {
+    name: 'Button',
+    description: 'An action.',
+    usage: {
+      accessibility: [
+        {
+          name: 'Loading',
+          description: 'Expose aria-busy and block duplicate activation.',
+        },
+      ],
+    },
+    props: [],
+  };
+
+  it('renders a dedicated section in full output', () => {
+    const out = formatFull(docs);
+    expect(out).toContain('## Accessibility');
+    expect(out).toContain(
+      '- **Loading:** Expose aria-busy and block duplicate activation.',
+    );
+  });
+
+  it('keeps accessibility guidance in compact agent output', () => {
+    const out = formatCompact(docs, 'Button');
+    expect(out).toContain('## Accessibility');
+    expect(out).toContain('Expose aria-busy and block duplicate activation.');
+  });
+
+  it('omits the section when a component has no authored requirements', () => {
+    expect(formatFull({...docs, usage: {}})).not.toContain('## Accessibility');
+  });
+
+  it('ignores legacy non-array accessibility content', () => {
+    const legacyDocs = {
+      ...docs,
+      usage: {accessibility: 'Follow WCAG guidance.'},
+    };
+
+    expect(() => formatFull(legacyDocs)).not.toThrow();
+    expect(formatFull(legacyDocs)).not.toContain('## Accessibility');
+    expect(formatCompact(legacyDocs, 'Button')).not.toContain(
+      '## Accessibility',
+    );
+  });
+});
 
 describe('formatFull sub-component rendering', () => {
   // Regression guard: sub-components are sometimes declared as a bare
@@ -19,7 +66,9 @@ describe('formatFull sub-component rendering', () => {
     expect(out).toContain('### XDSRadioListItem');
     expect(out).not.toContain('undefined');
     // Points the reader at the sub-component's own docs instead of a blank.
-    expect(out).toContain('astryx component XDSRadioListItem');
+    expect(out).toMatch(
+      /(?:astryx|@astryxdesign\/cli(?:@\S+)?) component XDSRadioListItem/,
+    );
   });
 
   it('renders a full props table for a sub-component that has inline props', () => {
@@ -63,7 +112,9 @@ describe('formatFull theming override keys', () => {
     const docs = {
       name: 'Button',
       description: 'A button.',
-      theming: {targets: [{className: 'astryx-button', visualProps: ['variant']}]},
+      theming: {
+        targets: [{className: 'astryx-button', visualProps: ['variant']}],
+      },
     };
     const out = formatFull(docs);
 
@@ -78,7 +129,7 @@ describe('formatFull theming override keys', () => {
       description: 'A table.',
       theming: {
         targets: [
-          {className: 'astryx-base-table'},
+          {className: 'astryx-table-header'},
           {className: 'astryx-table-cell'},
         ],
       },
@@ -86,10 +137,10 @@ describe('formatFull theming override keys', () => {
     const out = formatFull(docs);
 
     // Correct keys: class name minus the astryx- prefix.
-    expect(out).toContain("'base-table': {");
+    expect(out).toContain("'table-header': {");
     expect(out).toContain("'table-cell': {");
     // The verbatim DOM class names must not be advertised as override keys.
-    expect(out).not.toContain("'astryx-base-table': {");
+    expect(out).not.toContain("'astryx-table-header': {");
     expect(out).not.toContain("'astryx-table-cell': {");
   });
 });
@@ -168,7 +219,11 @@ describe('formatBrief signature stays terse', () => {
           type: '0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10',
           description: 'Gap.',
         },
-        {name: 'wrap', type: "'nowrap' | 'wrap' | 'wrap-reverse'", description: 'Wrap.'},
+        {
+          name: 'wrap',
+          type: "'nowrap' | 'wrap' | 'wrap-reverse'",
+          description: 'Wrap.',
+        },
         {
           name: 'hAlign',
           type: "'start' | 'center' | 'end' | 'between' | 'around' | 'evenly'",
@@ -180,10 +235,71 @@ describe('formatBrief signature stays terse', () => {
 
     // Short enums still earn their place in the signature.
     expect(signature).toContain('wrap: nowrap|wrap|wrap-reverse');
-    expect(signature).toContain('hAlign: start|center|end|between|around|evenly');
+    expect(signature).toContain(
+      'hAlign: start|center|end|between|around|evenly',
+    );
     // The long scale does not.
     expect(signature).not.toContain('0|0.5|1|1.5|2|3|4|5|6|8|10');
     // But the prop is still named, so it is not lost.
     expect(formatBrief(docs, 'HStack', '')).toContain('gap');
+  });
+});
+
+describe('component icon slots', () => {
+  const docs = {
+    name: 'CodeBlock',
+    description: 'Code.',
+    props: [],
+    theming: {
+      targets: [{className: 'astryx-code-block'}],
+      componentIcons: [
+        {
+          slot: 'code-block-copy',
+          description: 'The copy button icon.',
+          fallback: '`copy`; `check` while copied',
+          state: [
+            {
+              name: 'copied',
+              type: 'boolean',
+              description: 'True while copied.',
+            },
+          ],
+          whenNull: 'Hides the glyph.',
+        },
+        {
+          slot: 'code-block-example',
+          description: 'A stateless slot.',
+          fallback: '`info`',
+          whenNull: 'Hides the icon.',
+        },
+      ],
+    },
+  };
+
+  it('lists each slot with its state, fallback, role, and null behavior in full output', () => {
+    const out = formatFull(docs);
+    expect(out).toContain('**Component icon slots**');
+    expect(out).toContain(
+      '| `code-block-copy` | `copied: boolean` True while copied. | `copy`; `check` while copied | The copy button icon. | Hides the glyph. |',
+    );
+    expect(out).toContain(
+      '| `code-block-example` | none | `info` | A stateless slot. | Hides the icon. |',
+    );
+  });
+
+  it('keeps the slots in compact and brief output', () => {
+    expect(formatCompact(docs, 'CodeBlock')).toContain(
+      '## Component Icon Slots',
+    );
+    expect(formatBrief(docs, 'CodeBlock')).toContain(
+      'Icon slots: code-block-copy {copied: boolean}; code-block-example',
+    );
+  });
+
+  it('prints no slot section for a component without slots', () => {
+    const {componentIcons: _omitted, ...theming} = docs.theming;
+    expect(formatFull({...docs, theming})).not.toContain(
+      'Component icon slots',
+    );
   });
 });

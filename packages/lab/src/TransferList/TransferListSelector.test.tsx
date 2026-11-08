@@ -9,7 +9,7 @@
  * SYNC: When TransferListSelector.tsx behavior changes, update this test.
  */
 
-import {useState} from 'react';
+import {Profiler, useState} from 'react';
 import {afterAll, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
   fireEvent,
@@ -106,7 +106,7 @@ function Harness({
 async function openSelector(
   name = 'Visible fields',
 ): Promise<HTMLButtonElement> {
-  const trigger = screen.getByRole('button', {
+  const trigger = screen.getByRole('combobox', {
     name,
   }) as HTMLButtonElement;
   fireEvent.keyDown(trigger, {key: 'ArrowDown'});
@@ -416,18 +416,20 @@ describe('TransferListSelector', () => {
     );
 
     expect(
-      screen.getByRole('button', {name: 'Visible fields'}),
+      screen.getByRole('combobox', {name: 'Visible fields'}),
     ).toHaveTextContent('3 selected');
   });
 
-  it('disables list controls and Apply while keeping Cancel operable', async () => {
+  it('marks list controls disabled without the native attribute, keeping focus, but never when merely busy', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
     const view = render(
       <TransferListSelector
         label="Visible fields"
         options={OPTIONS}
         value={['name']}
-        onChange={() => {}}
-        commitBehavior="staged"
+        onChange={onChange}
+        hasSearch
       />,
     );
     await openSelector();
@@ -435,7 +437,35 @@ describe('TransferListSelector', () => {
       name: 'Visible fields',
       ...hidden,
     });
+    const addStatus = within(dialog).getByRole('button', {
+      name: 'Add Status',
+      hidden: true,
+    });
+    addStatus.focus();
 
+    view.rerender(
+      <TransferListSelector
+        label="Visible fields"
+        options={OPTIONS}
+        value={['name']}
+        onChange={onChange}
+        isDisabled
+        hasSearch
+      />,
+    );
+    const fieldset = dialog.querySelector('fieldset');
+    expect(fieldset).not.toBeNull();
+    // A focusable disabled group: no native `disabled`, which would blur the
+    // focused control; aria-disabled marks every control in it.
+    expect(fieldset).not.toHaveAttribute('disabled');
+    expect(fieldset).toHaveAttribute('aria-disabled', 'true');
+    expect(addStatus).toHaveFocus();
+    await user.click(addStatus);
+    expect(onChange).not.toHaveBeenCalled();
+    // The search field is disabled but focusable.
+    expect(
+      within(dialog).getByRole('searchbox', {hidden: true}),
+    ).toHaveAttribute('aria-disabled', 'true');
     view.rerender(
       <TransferListSelector
         label="Visible fields"
@@ -446,9 +476,6 @@ describe('TransferListSelector', () => {
         isDisabled
       />,
     );
-    const fieldset = dialog.querySelector('fieldset');
-    expect(fieldset).not.toBeNull();
-    expect(fieldset).toBeDisabled();
 
     const cancel = within(dialog).getByRole('button', {
       name: 'Cancel',
@@ -460,8 +487,10 @@ describe('TransferListSelector', () => {
     });
     expect(cancel).toBeEnabled();
     expect(fieldset).not.toContainElement(cancel);
-    expect(apply).toBeDisabled();
-    expect(screen.getByRole('button', {name: 'Visible fields'})).toBeDisabled();
+    expect(apply).toHaveAttribute('aria-disabled', 'true');
+    expect(
+      screen.getByRole('combobox', {name: 'Visible fields'}),
+    ).toHaveAttribute('aria-disabled', 'true');
 
     view.rerender(
       <TransferListSelector
@@ -477,13 +506,56 @@ describe('TransferListSelector', () => {
     await waitFor(() => {
       expect(dialog.querySelector('[aria-busy="true"]')).not.toBeNull();
     });
-    expect(dialog.querySelector('fieldset')).toBeDisabled();
+    // A pending change is announced with aria-busy, never by disabling the
+    // fieldset: `disabled` here would blur the row button the user just
+    // activated and drop focus to <body>.
+    expect(dialog.querySelector('fieldset')).toBeEnabled();
     expect(
       within(dialog).getByRole('button', {name: 'Cancel', hidden: true}),
     ).toBeEnabled();
     expect(
       within(dialog).getByRole('button', {name: 'Apply', hidden: true}),
-    ).toBeDisabled();
+    ).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('keeps focus on the activated row control while a change is pending', async () => {
+    const user = userEvent.setup();
+    const view = render(
+      <TransferListSelector
+        label="Visible fields"
+        options={OPTIONS}
+        value={['name']}
+        onChange={() => {}}
+      />,
+    );
+    await openSelector();
+    const dialog = screen.getByRole('dialog', {
+      name: 'Visible fields',
+      ...hidden,
+    });
+
+    const addStatus = within(dialog).getByRole('button', {
+      name: 'Add Status',
+      hidden: true,
+    });
+    await user.click(addStatus);
+    expect(addStatus).toHaveFocus();
+
+    view.rerender(
+      <TransferListSelector
+        label="Visible fields"
+        options={OPTIONS}
+        value={['name']}
+        onChange={() => {}}
+        isLoading
+      />,
+    );
+
+    await waitFor(() => {
+      expect(dialog.querySelector('[aria-busy="true"]')).not.toBeNull();
+    });
+    expect(addStatus).toHaveFocus();
+    expect(document.body).not.toHaveFocus();
   });
 
   it('forwards intentional selector shell and transfer-list content props', async () => {
@@ -514,12 +586,12 @@ describe('TransferListSelector', () => {
     expect(
       screen.getByText('Choose the columns shown in the table.'),
     ).toBeVisible();
-    expect(screen.getByTestId('column-selector')).toHaveAttribute(
-      'data-size',
-      'sm',
-    );
+    // data-testid lands on the trigger button inside the control box.
     expect(
-      screen.getByRole('button', {name: 'Table columns'}),
+      screen.getByTestId('column-selector').closest('.astryx-complex-selector'),
+    ).toHaveAttribute('data-size', 'sm');
+    expect(
+      screen.getByRole('combobox', {name: 'Table columns'}),
     ).toHaveTextContent('Customize columns');
     expect(
       screen.getByTestId('column-selector').closest('.astryx-field'),
@@ -558,5 +630,44 @@ describe('TransferListSelector', () => {
     expect(popover?.getAttribute('style')).toContain(
       'position-area: self-block-end span-self-inline-end',
     );
+  });
+});
+
+describe('TransferListSelector draft reset timing', () => {
+  it('replaces a staged draft in the same commit as an external value change', async () => {
+    const user = userEvent.setup();
+    const frames: boolean[] = [];
+    const onRender = () =>
+      frames.push(
+        screen.queryByRole('button', {name: 'Remove Owner', ...hidden}) != null,
+      );
+    const ui = (value: string[]) => (
+      <Profiler id="selector" onRender={onRender}>
+        <TransferListSelector
+          label="Visible fields"
+          options={OPTIONS}
+          value={value}
+          onChange={() => {}}
+          commitBehavior="staged"
+        />
+      </Profiler>
+    );
+    const view = render(ui(['name', 'status']));
+    await openSelector();
+    await user.click(
+      screen.getByRole('button', {name: 'Add Owner', ...hidden}),
+    );
+    expect(
+      screen.getByRole('button', {name: 'Remove Owner', ...hidden}),
+    ).toBeInTheDocument();
+
+    frames.length = 0;
+    view.rerender(ui(['name']));
+
+    expect(frames.length).toBeGreaterThan(0);
+    expect(frames).not.toContain(true);
+    expect(
+      screen.getByRole('button', {name: 'Add Owner', ...hidden}),
+    ).toBeInTheDocument();
   });
 });

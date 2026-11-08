@@ -1,16 +1,21 @@
 # Default reviewers for the Astryx repository
 # See: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+#
+# Matching is LAST-RULE-WINS, not cumulative: a file matched by a later, more
+# specific rule takes ONLY that rule's owners. Repository-wide stewards must
+# therefore appear on every line, not just on `*`; specialized owners stay on
+# their scoped rules alongside the stewards.
 
-* @cixzhang @imdreamrunner
+* @cixzhang @imdreamrunner @josephfarina
 
-/packages/cli/ @josephfarina
+/packages/cli/ @cixzhang @imdreamrunner @josephfarina
 
-/packages/richtext/ @potatowagon
+/packages/richtext/ @cixzhang @imdreamrunner @josephfarina @potatowagon
 
-/packages/core/src/Table/ @humbertovirtudes
+/packages/core/src/Table/ @cixzhang @imdreamrunner @josephfarina @humbertovirtudes
 
-# The core README is the front door for component/CLI discovery — often the
+# The core README is the front door for component/CLI discovery, often the
 # first (and only) doc a consumer or agent reads. Scope it to a small set of
 # discovery owners so changes get focused review rather than a silent
 # "it's just docs" merge.
-/packages/core/README.md @cixzhang @josephfarina
+/packages/core/README.md @cixzhang @imdreamrunner @josephfarina

@@ -5,7 +5,7 @@
 export const docs = {
   name: 'ChartDot',
   displayName: 'Chart Dot',
-  group: 'Chart',
+  group: 'Charts',
   category: 'Data Visualization',
 
   usage: {

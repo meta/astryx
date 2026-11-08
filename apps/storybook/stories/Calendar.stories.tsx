@@ -133,6 +133,28 @@ export const TwoMonthsRangeSelection: Story = {
   },
 };
 
+/**
+ * The two-month layout inside a container narrower than the two months need.
+ * The second month wraps below the first instead of overflowing, so a 320px
+ * viewport does not scroll sideways and the next-month button stays on screen.
+ */
+export const TwoMonthsNarrowContainer: Story = {
+  render: () => {
+    const [value, setValue] = useState<ISODateString | undefined>(undefined);
+    return (
+      <div style={{width: 320}}>
+        <Calendar
+          mode="single"
+          numberOfMonths={2}
+          value={value}
+          onChange={val => setValue(val)}
+          focusDate="2026-01-01"
+        />
+      </div>
+    );
+  },
+};
+
 export const MinMaxBoundary: Story = {
   render: () => {
     const [value, setValue] = useState<ISODateString | undefined>(undefined);
@@ -320,7 +342,12 @@ export const AllVariations: Story = {
             onChange={val => setSingleValue(val)}
             focusDate="2026-01-01"
           />
-          <p style={{marginTop: '8px', fontSize: '14px', color: '#666'}}>
+          <p
+            style={{
+              marginTop: '8px',
+              fontSize: '14px',
+              color: 'var(--color-text-secondary)',
+            }}>
             Selected: {singleValue ?? 'None'}
           </p>
         </div>
@@ -334,7 +361,12 @@ export const AllVariations: Story = {
             onChange={range => setRangeValue(range)}
             focusDate="2026-01-01"
           />
-          <p style={{marginTop: '8px', fontSize: '14px', color: '#666'}}>
+          <p
+            style={{
+              marginTop: '8px',
+              fontSize: '14px',
+              color: 'var(--color-text-secondary)',
+            }}>
             Range:{' '}
             {rangeValue
               ? `${rangeValue.start} to ${rangeValue.end}`
@@ -352,7 +384,12 @@ export const AllVariations: Story = {
             onChange={val => setConstrainedValue(val)}
             focusDate="2026-01-01"
           />
-          <p style={{marginTop: '8px', fontSize: '14px', color: '#666'}}>
+          <p
+            style={{
+              marginTop: '8px',
+              fontSize: '14px',
+              color: 'var(--color-text-secondary)',
+            }}>
             Selected: {constrainedValue ?? 'None'}
           </p>
         </div>

@@ -16,8 +16,8 @@ import {Text} from '@astryxdesign/core/Text';
 export default function ResizableSidebar() {
   const sidebar = useResizable({
     defaultSize: 240,
-    minSizePx: 160,
-    maxSizePx: 360,
+    minSize: 160,
+    maxSize: 360,
     collapsible: true,
     snaps: [200, 280],
   });

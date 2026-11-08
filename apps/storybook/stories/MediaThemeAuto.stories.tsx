@@ -15,7 +15,7 @@ import {Text} from '@astryxdesign/core/Text';
 import {Stack} from '@astryxdesign/core/Stack';
 
 const meta: Meta = {
-  title: 'Core/MediaTheme Auto',
+  title: 'Core/Themes/MediaTheme Auto',
   parameters: {
     docs: {
       description: {

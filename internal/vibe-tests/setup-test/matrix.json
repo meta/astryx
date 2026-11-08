@@ -1,0 +1,286 @@
+{
+  "schemaVersion": 1,
+  "fixtures": [
+    "tailwind-v4-control",
+    "shadcn-tailwind-v4-established",
+    "enterprise-scoped-synthetic"
+  ],
+  "promptFixtures": {
+    "s0": [
+      "tailwind-v4-control",
+      "shadcn-tailwind-v4-established",
+      "enterprise-scoped-synthetic"
+    ],
+    "s1": [
+      "tailwind-v4-control",
+      "shadcn-tailwind-v4-established",
+      "enterprise-scoped-synthetic"
+    ],
+    "s2": [
+      "tailwind-v4-control",
+      "shadcn-tailwind-v4-established",
+      "enterprise-scoped-synthetic"
+    ],
+    "s3": [
+      "tailwind-v4-control",
+      "shadcn-tailwind-v4-established",
+      "enterprise-scoped-synthetic"
+    ],
+    "s4": ["shadcn-tailwind-v4-established"],
+    "s5": ["enterprise-scoped-synthetic"]
+  },
+  "bundles": [
+    {
+      "id": "native-claude",
+      "harness": "native",
+      "model": "claude-family",
+      "effort": "high"
+    },
+    {
+      "id": "claude-code-claude",
+      "harness": "claude-code",
+      "model": "claude-family",
+      "effort": "high"
+    },
+    {
+      "id": "native-gpt",
+      "harness": "native",
+      "model": "gpt-family",
+      "effort": "high"
+    },
+    {
+      "id": "codex-gpt",
+      "harness": "codex",
+      "model": "gpt-family",
+      "effort": "high",
+      "blocked": true,
+      "blocker": "Upstream executor can return an empty successful turn."
+    }
+  ],
+  "infraRetryPolicy": {
+    "maxRetriesPerCell": 2,
+    "retryableStatuses": [
+      "infrastructure-failure",
+      "executor-unavailable",
+      "rate-limited"
+    ],
+    "agentFailureStatus": "agent-failure",
+    "rule": "Retry only a classified infrastructure failure. A real agent failure is a completed failing run and is never discarded or retried into a pass."
+  },
+  "stages": [
+    {
+      "id": "separation",
+      "description": "Confirm that the floor and direct controls separate before expanding the iteration loop.",
+      "fixtures": [
+        "tailwind-v4-control",
+        "shadcn-tailwind-v4-established",
+        "enterprise-scoped-synthetic"
+      ],
+      "conditions": ["floor", "direct"],
+      "prompts": ["s1"],
+      "bundles": [
+        "native-claude",
+        "claude-code-claude",
+        "native-gpt",
+        "codex-gpt"
+      ],
+      "reps": 2
+    },
+    {
+      "id": "guidance",
+      "description": "Iterate on all guidance conditions. Failures and explicit per-dimension tradeoffs guide instruction refinement; this stage does not rank candidates or authorize shipping.",
+      "fixtures": [
+        "tailwind-v4-control",
+        "shadcn-tailwind-v4-established",
+        "enterprise-scoped-synthetic"
+      ],
+      "conditions": ["floor", "current", "candidate", "direct"],
+      "reuseFromStages": ["separation"],
+      "prompts": ["s0", "s1", "s2", "s3", "s4", "s5"],
+      "bundles": [
+        "native-claude",
+        "claude-code-claude",
+        "native-gpt",
+        "codex-gpt"
+      ],
+      "reps": 2
+    },
+    {
+      "id": "confirmation",
+      "description": "Final candidate-only confirmation. Every supported fixture and prompt combination, bundle, and repetition must be present and clean.",
+      "fixtures": [
+        "tailwind-v4-control",
+        "shadcn-tailwind-v4-established",
+        "enterprise-scoped-synthetic"
+      ],
+      "conditions": ["candidate"],
+      "prompts": ["s0", "s1", "s2", "s3", "s4", "s5"],
+      "bundles": [
+        "native-claude",
+        "claude-code-claude",
+        "native-gpt",
+        "codex-gpt"
+      ],
+      "reps": 2,
+      "acceptance": {
+        "requiredVerdict": "clean",
+        "requireTaskSuccess": true,
+        "requireDiffAttestation": true,
+        "requiredRate": 1,
+        "requireCompleteMatrix": true
+      }
+    },
+    {
+      "id": "strategy-pilot",
+      "description": "Opt-in pilot of two established-app adoption strategies. Additive and exploratory: it does not replace any control, does not rank the two strategies against each other, and authorizes no default or core change. Coverage is chosen to characterize downstream implications rather than install-time only \u2014 the basic insertion task on all three fixtures, plus one cross-system composition task on each established fixture.",
+      "fixtures": [
+        "tailwind-v4-control",
+        "shadcn-tailwind-v4-established",
+        "enterprise-scoped-synthetic"
+      ],
+      "conditions": ["host-aligned", "guest-contained"],
+      "prompts": ["s1", "s4", "s5"],
+      "bundles": [
+        "native-claude",
+        "claude-code-claude",
+        "native-gpt",
+        "codex-gpt"
+      ],
+      "reps": 2,
+      "acceptance": {
+        "requiredVerdict": "clean",
+        "requireTaskSuccess": true,
+        "requireDiffAttestation": true,
+        "requiredRate": 1,
+        "requireCompleteMatrix": true
+      }
+    },
+    {
+      "id": "strategy-iteration",
+      "description": "Reruns the four strategy-pilot cells that did not pass, under new condition ids, after the faults those cells exposed were corrected. Additive and exploratory on the same terms as the pilot: it replaces no control, ranks no strategy against another, and authorizes no default or core change. It does not restate the pilot's result \u2014 the pilot's ten cells keep their ids, measurements, and verdicts exactly as recorded, and this stage is read beside them, never over them.",
+      "fixtures": [
+        "shadcn-tailwind-v4-established",
+        "enterprise-scoped-synthetic"
+      ],
+      "conditions": ["guest-contained-r2", "host-aligned-r2"],
+      "prompts": ["s1", "s4", "s5"],
+      "bundles": ["claude-code-claude"],
+      "cells": [
+        {
+          "condition": "guest-contained-r2",
+          "fixture": "enterprise-scoped-synthetic",
+          "prompt": "s1"
+        },
+        {
+          "condition": "guest-contained-r2",
+          "fixture": "shadcn-tailwind-v4-established",
+          "prompt": "s4"
+        },
+        {
+          "condition": "host-aligned-r2",
+          "fixture": "shadcn-tailwind-v4-established",
+          "prompt": "s1"
+        },
+        {
+          "condition": "host-aligned-r2",
+          "fixture": "enterprise-scoped-synthetic",
+          "prompt": "s5"
+        }
+      ],
+      "reps": 1,
+      "comparisonMapping": {
+        "$comment": "Each rerun cell against the pilot cell it reruns, and what was changed for it. A rerun that passes retires the finding named here; a rerun that fails leaves the pilot's failure standing and says the correction was wrong, not that the cell is flaky.",
+        "pairs": [
+          {
+            "iteration": "strategy-iteration__guest-contained-r2__enterprise-scoped-synthetic__s1__claude-code-claude__r1",
+            "pilot": "strategy-pilot__guest-contained__enterprise-scoped-synthetic__s1__claude-code-claude__r1",
+            "pilotFinding": "2 host-text regressions on guest-boundary, both schemes",
+            "changed": "measurement",
+            "expectation": "The mandated button's own closed tooltip no longer counts as host container text, because the browser does not render it. Host copy that is removed or rewritten still counts."
+          },
+          {
+            "iteration": "strategy-iteration__guest-contained-r2__shadcn-tailwind-v4-established__s4__claude-code-claude__r1",
+            "pilot": "strategy-pilot__guest-contained__shadcn-tailwind-v4-established__s4__claude-code-claude__r1",
+            "pilotFinding": "1 host colour regression on primary-action, dark scheme only",
+            "changed": "measurement",
+            "expectation": "Probes are read after running CSS transitions settle, so an unchanged colour is no longer sampled mid-interpolation and reported in the interpolation colour space."
+          },
+          {
+            "iteration": "strategy-iteration__host-aligned-r2__shadcn-tailwind-v4-established__s1__claude-code-claude__r1",
+            "pilot": "strategy-pilot__host-aligned__shadcn-tailwind-v4-established__s1__claude-code-claude__r1",
+            "pilotFinding": "integrity: gitignore-modified, with no measured host damage and a completed task",
+            "changed": "guidance delivery",
+            "expectation": "The rule against ignoring generated theme output is present in the sandbox this time, and stated before the reasoning. The prior revision never delivered it, so this is its first test rather than a second attempt."
+          },
+          {
+            "iteration": "strategy-iteration__host-aligned-r2__enterprise-scoped-synthetic__s5__claude-code-claude__r1",
+            "pilot": "strategy-pilot__host-aligned__enterprise-scoped-synthetic__s5__claude-code-claude__r1",
+            "pilotFinding": "integrity: gitignore-modified, plus host-menu-surface:host-style in both schemes",
+            "changed": "guidance",
+            "expectation": "Both the tracking rule and the rule that relocated host markup carries the host's own token-scoping hook are delivered. The style finding is genuine and is reproducibly avoidable: the guest-contained cell on the same fixture, prompt, and contract matched the host surface exactly by carrying that hook."
+          }
+        ]
+      },
+      "acceptance": {
+        "requiredVerdict": "clean",
+        "requireTaskSuccess": true,
+        "requireDiffAttestation": true,
+        "requiredRate": 1,
+        "requireCompleteMatrix": true
+      }
+    },
+    {
+      "id": "strategy-iteration-2",
+      "description": "Reruns the two strategy-iteration cells that did not pass, under new condition ids, after the faults those cells exposed were corrected. Additive on the same terms as every stage before it: it replaces no control, ranks no strategy against another, and authorizes no default or core change. The strategy-pilot and strategy-iteration cells keep their ids, measurements, and verdicts, and this stage is read beside them.",
+      "fixtures": ["enterprise-scoped-synthetic"],
+      "conditions": ["guest-contained-r3", "host-aligned-r3"],
+      "prompts": ["s1", "s5"],
+      "bundles": ["claude-code-claude"],
+      "cells": [
+        {
+          "condition": "guest-contained-r3",
+          "fixture": "enterprise-scoped-synthetic",
+          "prompt": "s1"
+        },
+        {
+          "condition": "host-aligned-r3",
+          "fixture": "enterprise-scoped-synthetic",
+          "prompt": "s5"
+        }
+      ],
+      "reps": 1,
+      "comparisonMapping": {
+        "$comment": "Each rerun cell against the cell it reruns, and what was changed for it. A rerun that passes retires the finding named here; a rerun that fails leaves the earlier failure standing and says the correction was wrong, not that the cell is flaky.",
+        "pairs": [
+          {
+            "iteration": "strategy-iteration-2__guest-contained-r3__enterprise-scoped-synthetic__s1__claude-code-claude__r1",
+            "predecessor": "strategy-iteration__guest-contained-r2__enterprise-scoped-synthetic__s1__claude-code-claude__r1",
+            "priorFinding": "build-failed: ERR_PNPM_IGNORED_BUILDS. The executor wrote the build approval into package.json, which pnpm 11 does not read, so the install aborted and nothing about the host was measured.",
+            "changed": "guidance",
+            "expectation": "The guest-contained document now names the mechanism pnpm 11 actually reads -- pnpm approve-builds, writing an allowBuilds map into pnpm-workspace.yaml -- and says plainly that the same key in package.json is ignored. The install and build succeed, and the cell is measured on the strategy for the first time."
+          },
+          {
+            "iteration": "strategy-iteration-2__host-aligned-r3__enterprise-scoped-synthetic__s5__claude-code-claude__r1",
+            "predecessor": "strategy-iteration__host-aligned-r2__enterprise-scoped-synthetic__s5__claude-code-claude__r1",
+            "priorFinding": "host-menu-surface:host-style in both modes. The executor carried the host's fixture-shell and data-mode hooks onto the relocated menu but not the attribute scoping its palette, so the menu left the host token region and fell back to global values.",
+            "changed": "guidance and measurement",
+            "expectation": "The relocation rule is now a stated non-negotiable carrying a procedure for finding the boundary, and the measurement records which host token scopes a surface is inside, so a lost boundary reports as host-boundary rather than only as changed colours. The relocated menu stays inside the host's token region and matches its reference exactly."
+          }
+        ]
+      },
+      "acceptance": {
+        "requiredVerdict": "clean",
+        "requireTaskSuccess": true,
+        "requireDiffAttestation": true,
+        "requiredRate": 1,
+        "requireCompleteMatrix": true
+      }
+    }
+  ],
+  "deferred": [
+    {
+      "fixtureFamily": "tailwind-v3",
+      "reason": "Explicitly deferred until the Tailwind v4 experiment establishes that the controls and measures separate."
+    }
+  ]
+}

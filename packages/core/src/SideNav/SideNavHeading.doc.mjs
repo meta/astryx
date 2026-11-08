@@ -8,6 +8,9 @@ export const docs = {
   displayName: 'Side Nav Heading',
   isHiddenFromOverview: true,
   description: 'Product/suite/account heading with smart interaction boundary logic for links and a menu popover.',
+  playground: {
+    defaults: {heading: 'Acme Console', subheading: 'Production'},
+  },
   props: [
     {
       name: 'heading',

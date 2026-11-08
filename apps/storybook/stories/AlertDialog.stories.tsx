@@ -86,30 +86,46 @@ export const Async: Story = {
 };
 
 /**
- * Non-destructive confirmation with a primary action button.
+ * Wide reference state. In a wide viewport, Dialog preserves AlertDialog's
+ * preferred 400px surface and AlertDialog renders a horizontal action row.
  */
-export const Informational: Story = {
-  render: () => {
-    const [isOpen, setIsOpen] = useState(false);
-    return (
-      <>
-        <Button
-          label="Show notice"
-          variant="secondary"
-          onClick={() => setIsOpen(true)}
-        />
-        <AlertDialog
-          isOpen={isOpen}
-          onOpenChange={setIsOpen}
-          title="Session expired"
-          description="Your session has expired. You will be redirected to the login page."
-          actionLabel="Sign in"
-          actionVariant="primary"
-          onAction={() => setIsOpen(false)}
-        />
-      </>
-    );
+export const DesktopFinePointer: Story = {
+  args: {
+    isOpen: true,
+    isInline: true,
+    title: 'Delete item?',
+    description:
+      'This action cannot be undone. The item and all its data will be permanently removed.',
+    actionLabel: 'Delete',
+    onOpenChange: () => {},
+    onAction: () => {},
   },
+};
+
+/**
+ * Narrow reference state. Use a <=640px viewport to see Dialog's width clamp
+ * with AlertDialog's destructive-above-Cancel stacked action order.
+ */
+export const NarrowFinePointer: Story = {
+  args: {
+    isOpen: true,
+    isInline: true,
+    title: 'Permanently delete this workspace?',
+    description:
+      'Everyone will lose access to its dashboards, saved queries, and sharing links. This cannot be undone.',
+    cancelLabel: 'Keep this workspace',
+    actionLabel: 'Permanently delete workspace',
+    onOpenChange: () => {},
+    onAction: () => {},
+  },
+};
+
+/**
+ * Mobile reference state. Use a <=640px mobile viewport to verify the same
+ * stacked action order; this story does not emulate pointer or hover capability.
+ */
+export const MobileTouch: Story = {
+  args: NarrowFinePointer.args,
 };
 
 /**

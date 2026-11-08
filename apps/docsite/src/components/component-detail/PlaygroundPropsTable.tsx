@@ -34,6 +34,7 @@ import type {
   TypeDefinition,
 } from '../../generated/componentRegistry';
 import {MarkdownText} from '../MarkdownText';
+import {useLiveNumberInput} from '@/lib/useLiveNumberInput';
 
 function formatType(type: string, defaultValue?: string): React.ReactNode {
   const parts = type.split(/\s*\|\s*/);
@@ -378,6 +379,31 @@ function SlotListControl({
   );
 }
 
+function NumberControl({
+  value,
+  isRequired,
+  onChange,
+}: {
+  value: number | null;
+  isRequired: boolean;
+  onChange: (value: number | null) => void;
+}) {
+  const liveNumber = useLiveNumberInput(value, onChange);
+  return (
+    <NumberInput
+      label=""
+      value={liveNumber.value}
+      placeholder={isRequired ? undefined : 'unset'}
+      hasClear={!isRequired}
+      onChange={liveNumber.handleChange}
+      onFocus={liveNumber.handleFocus}
+      onInput={liveNumber.handleInput}
+      onBlur={liveNumber.handleBlur}
+      onKeyDown={liveNumber.handleKeyDown}
+    />
+  );
+}
+
 function InlineControl({
   control,
   value,
@@ -466,12 +492,10 @@ function InlineControl({
       // lets the user return to the original unset render. Required numbers
       // keep their generated fallback and stay non-clearable.
       return (
-        <NumberInput
-          label=""
+        <NumberControl
           value={typeof value === 'number' ? value : null}
-          placeholder={prop.required ? undefined : 'unset'}
-          hasClear={!prop.required}
-          onChange={(next: number | null) => onChange(next ?? undefined)}
+          isRequired={!!prop.required}
+          onChange={next => onChange(next ?? undefined)}
         />
       );
     case 'element':

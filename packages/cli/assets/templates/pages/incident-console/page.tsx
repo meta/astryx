@@ -5,7 +5,7 @@
 /**
  * Incident Console — an on-call incident response tool.
  *
- * Frame-first layout (see `npx astryx docs layout`), distilled from
+ * Frame-first layout (see `npx @astryxdesign/cli docs layout`), distilled from
  * product-scale apps built with the design system:
  *
  *   Frame: header | grouped incident rows (fill) | inspector 380 (resizable)
@@ -471,8 +471,8 @@ export default function IncidentConsolePage() {
 
   const inspectorPanel = useResizable({
     defaultSize: 380,
-    minSizePx: 320,
-    maxSizePx: 480,
+    minSize: 320,
+    maxSize: 480,
   });
 
   const visible = useMemo(() => {

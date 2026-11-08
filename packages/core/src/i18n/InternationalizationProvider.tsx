@@ -4,9 +4,9 @@
 
 /**
  * @file InternationalizationProvider.tsx
- * @input React, InternationalizationContext, i18n types
+ * @input React, InternationalizationContext, i18n types, calendar resolution
  * @output Exports InternationalizationProvider component and props type
- * @position Provider component for astryx i18n locale + messages
+ * @position Provider component for astryx i18n locale, messages, and calendar
  *
  * Wraps a subtree with a locale and (optional) additional message catalogs +
  * overrides. Astryx components inside the subtree resolve their strings via
@@ -22,7 +22,40 @@
 import {useMemo, type ReactNode} from 'react';
 import {InternationalizationContext} from './InternationalizationContext';
 import {getLocaleDirection} from './getLocaleDirection';
-import type {Locale, MessagesByLocale, Overrides} from './types';
+import {resolveCalendarSystem} from './useCalendarSystem';
+import type {CalendarSystem} from '../utils/calendarSystem';
+import type {
+  Locale,
+  MessagesByLocale,
+  Overrides,
+  ProviderMessagesByLocale,
+} from './types';
+import {getResolve} from './resolve';
+
+const PROVIDER_NAME = 'InternationalizationProvider';
+
+function normalizeMessages(
+  messages: ProviderMessagesByLocale,
+): MessagesByLocale {
+  const hasRuntimeCatalog = Object.values(messages).some(catalog =>
+    Object.values(catalog).some(entry => typeof entry === 'string'),
+  );
+  if (!hasRuntimeCatalog) {
+    return messages as MessagesByLocale;
+  }
+
+  return Object.fromEntries(
+    Object.entries(messages).map(([locale, catalog]) => [
+      locale,
+      Object.fromEntries(
+        Object.entries(catalog).map(([key, entry]) => [
+          key,
+          typeof entry === 'string' ? {defaultMessage: entry} : entry,
+        ]),
+      ),
+    ]),
+  );
+}
 
 export interface InternationalizationProviderProps {
   /**
@@ -39,11 +72,13 @@ export interface InternationalizationProviderProps {
    *
    * @example
    * ```
-   * import {fr} from '@astryxdesign/core/locales/fr.json';
-   * <InternationalizationProvider locale="fr" messages={{fr}}>
+   * import frFR from '@astryxdesign/core/locales/fr-FR.generated.js';
+   * <InternationalizationProvider
+   *   locale="fr-FR"
+   *   messages={{'fr-FR': frFR}}>
    * ```
    */
-  messages?: MessagesByLocale;
+  messages?: ProviderMessagesByLocale;
   /**
    * Sparse per-locale overrides applied on top of shipped defaults.
    * Only the keys you want to override need to be listed.
@@ -69,6 +104,25 @@ export interface InternationalizationProviderProps {
    * in sync (e.g. `dir={getLocaleDirection(locale)}` on both).
    */
   dir?: 'ltr' | 'rtl';
+  /**
+   * The calendar system of this subtree, such as `'persian'` or `'hebrew'`.
+   * `Calendar` shows it, and Timestamp, PowerSearch, and Lab's Schedule write
+   * their dates in it. `DateInput`, `DateRangeInput`, and `DateTimeInput`
+   * show it too. Values stay
+   * Gregorian ISO dates. When omitted, the calendar is Gregorian: a locale
+   * never selects it, neither by its default calendar nor by a `-u-ca-`
+   * keyword. A component's own `calendar` prop takes precedence. Calendars
+   * other than `gregory`, `iso8601`, `buddhist`, `roc`, and `japanese` need
+   * `Temporal`. The context keeps the requested calendar; where `Temporal` is
+   * missing, these components show Gregorian dates and warn once in
+   * development.
+   *
+   * @example
+   * ```
+   * <InternationalizationProvider locale="fa-IR" calendar="persian">
+   * ```
+   */
+  calendar?: CalendarSystem;
   children: ReactNode;
 }
 
@@ -81,13 +135,28 @@ export function InternationalizationProvider({
   messages,
   overrides,
   dir,
+  calendar: calendarProp,
   children,
 }: InternationalizationProviderProps) {
   const direction = dir ?? getLocaleDirection(locale);
-  const value = useMemo(
-    () => ({locale, direction, messages: messages ?? {}, overrides}),
-    [locale, direction, messages, overrides],
+  const calendar = useMemo(
+    () =>
+      calendarProp != null
+        ? resolveCalendarSystem(calendarProp, PROVIDER_NAME)
+        : 'gregory',
+    [calendarProp],
   );
+  const value = useMemo(() => {
+    const providedMessages = messages ?? {};
+    return {
+      locale,
+      direction,
+      calendar,
+      messages: normalizeMessages(providedMessages),
+      overrides,
+      translate: getResolve(locale, providedMessages, overrides),
+    };
+  }, [locale, direction, calendar, messages, overrides]);
   return (
     <InternationalizationContext value={value}>
       {children}

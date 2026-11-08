@@ -14,14 +14,20 @@
  * to translate inside an event handler or effect, capture a translator during
  * render via useTranslator() and call it later.
  *
+ * This is the public hook: application code may translate any Astryx key, so
+ * loading it registers the whole English catalog. Core components use
+ * useComponentTranslator.ts and register only the English they name.
+ *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/i18n/index.ts
- * - /packages/core/src/i18n/t.client.ts
+ * - /packages/core/src/i18n/useComponentTranslator.ts
  */
 
-import {use, useCallback} from 'react';
+import {use} from 'react';
 import {InternationalizationContext} from './InternationalizationContext';
-import {resolve} from './resolve';
+import {registerFullEnglishFallback} from './fullEnglishFallback';
+
+registerFullEnglishFallback();
 
 export type TranslatorFn = (
   key: string,
@@ -42,9 +48,5 @@ export type TranslatorFn = (
  */
 export function useTranslator(): TranslatorFn {
   const ctx = use(InternationalizationContext);
-  return useCallback(
-    (key: string, values?: Record<string, unknown>) =>
-      resolve(key, values, ctx.locale, ctx.messages, ctx.overrides),
-    [ctx.locale, ctx.messages, ctx.overrides],
-  );
+  return ctx.translate;
 }

@@ -9,10 +9,11 @@
  * SYNC: When TopNavMegaMenu changes, update tests to match new behavior
  */
 
+import {createRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {describe, it, expect, vi, beforeAll, afterAll, afterEach} from 'vitest';
-import {render, screen, act, fireEvent} from '@testing-library/react';
+import {render, screen, act, fireEvent, within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {TopNavMegaMenu} from './TopNavMegaMenu';
 import {TopNavMegaMenuItem} from './TopNavMegaMenuItem';
@@ -769,6 +770,53 @@ describe('TopNavMegaMenu — drawer mode', () => {
     expect(handleClick).toHaveBeenCalledTimes(1);
   });
 
+  it('makes collapsed items inert and hidden from assistive technology', async () => {
+    const user = userEvent.setup();
+    render(
+      <TopNavRenderContext value="drawer">
+        <TopNavMegaMenu
+          label="Products"
+          items={<TopNavMegaMenuItem title="Analytics" href="/analytics" />}
+        />
+      </TopNavRenderContext>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Products'});
+    const region = document.getElementById(
+      trigger.getAttribute('aria-controls') ?? '',
+    );
+
+    expect(region).toHaveAttribute('inert');
+    expect(region).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.queryByRole('link', {name: 'Analytics'})).toBeNull();
+
+    await user.click(trigger);
+    expect(region).not.toHaveAttribute('inert');
+    expect(region).toHaveAttribute('aria-hidden', 'false');
+    expect(screen.getByRole('link', {name: 'Analytics'})).toBeInTheDocument();
+  });
+
+  it('clips the drawer section only while it is collapsed', async () => {
+    // The ring paints outside the item, so a permanent clip would cut it off.
+    const user = userEvent.setup();
+    render(
+      <TopNavRenderContext value="drawer">
+        <TopNavMegaMenu
+          label="Products"
+          items={<TopNavMegaMenuItem title="Analytics" href="/analytics" />}
+        />
+      </TopNavRenderContext>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Products'});
+    const section = document.getElementById(
+      trigger.getAttribute('aria-controls') ?? '',
+    )!;
+    expect(getComputedStyle(section).overflow).toBe('hidden');
+    expect(getComputedStyle(section.firstElementChild!).overflow).toBe('');
+
+    await user.click(trigger);
+    expect(getComputedStyle(section).overflow).toBe('visible');
+  });
+
   it('renders featured content when expanded', async () => {
     const user = userEvent.setup();
 
@@ -858,5 +906,295 @@ describe('TopNavMegaMenu — drawer focus ring', () => {
       </TopNavRenderContext>,
     );
     expectSharedFocusRing(screen.getByRole('link', {name: /Analytics/}));
+  });
+});
+
+describe('TopNavMegaMenu pass-through props', () => {
+  it('forwards pass-through props to the trigger button', () => {
+    render(
+      <TopNavMegaMenu
+        label="Products"
+        aria-label="Products mega menu"
+        id="mega-trigger"
+        data-source="nav"
+      />,
+    );
+    const trigger = screen.getByRole('button', {name: 'Products mega menu'});
+    expect(trigger).toHaveAttribute('id', 'mega-trigger');
+    expect(trigger).toHaveAttribute('data-source', 'nav');
+  });
+
+  it('forwards pass-through props to the drawer trigger', () => {
+    render(
+      <TopNavRenderContext value="drawer">
+        <TopNavMegaMenu label="Products" id="mega-drawer" data-source="nav" />
+      </TopNavRenderContext>,
+    );
+    const trigger = screen.getByRole('button', {name: /Products/});
+    expect(trigger).toHaveAttribute('id', 'mega-drawer');
+    expect(trigger).toHaveAttribute('data-source', 'nav');
+  });
+});
+
+describe('TopNavMegaMenu — owned handlers on the trigger', () => {
+  beforeAll(installPopoverApiMock);
+  afterAll(restorePopoverApiMock);
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("composes a caller's onClick with the trigger's own open behavior", async () => {
+    const user = userEvent.setup();
+    const handleClick = vi.fn();
+    render(
+      <TopNavMegaMenu
+        label="Products"
+        items={<TopNavMegaMenuItem title="Analytics" href="/analytics" />}
+        onClick={handleClick}
+      />,
+    );
+
+    const trigger = screen.getByRole('button', {name: 'Products'});
+    await user.click(trigger);
+
+    expect(handleClick).toHaveBeenCalledOnce();
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it("composes a caller's hover handlers with the trigger's hover-open behavior", async () => {
+    vi.useFakeTimers({shouldAdvanceTime: true});
+    const user = userEvent.setup({advanceTimers: vi.advanceTimersByTime});
+    const handleMouseEnter = vi.fn();
+    const handleMouseLeave = vi.fn();
+    render(
+      <TopNavMegaMenu
+        label="Products"
+        items={<TopNavMegaMenuItem title="Analytics" href="/analytics" />}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+      />,
+    );
+
+    const trigger = screen.getByRole('button', {name: 'Products'});
+    await user.hover(trigger);
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    expect(handleMouseEnter).toHaveBeenCalledOnce();
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+    await user.unhover(trigger);
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
+    expect(handleMouseLeave).toHaveBeenCalledOnce();
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it("composes a caller's onClick with the drawer section toggle", async () => {
+    const user = userEvent.setup();
+    const handleClick = vi.fn();
+    render(
+      <TopNavRenderContext value="drawer">
+        <TopNavMegaMenu
+          label="Products"
+          items={<TopNavMegaMenuItem title="Analytics" href="/analytics" />}
+          onClick={handleClick}
+        />
+      </TopNavRenderContext>,
+    );
+
+    const trigger = screen.getByRole('button', {name: /Products/});
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+    await user.click(trigger);
+    expect(handleClick).toHaveBeenCalledOnce();
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  });
+});
+
+describe('TopNavMegaMenuItem pass-through props', () => {
+  it('forwards pass-through props in default mode', () => {
+    render(
+      <TopNavMegaMenuItem
+        title="Analytics"
+        aria-label="Open analytics"
+        id="mega-analytics"
+        data-tracking="mega-item"
+        data-testid="item"
+      />,
+    );
+    const item = screen.getByTestId('item');
+    expect(item).toHaveAttribute('aria-label', 'Open analytics');
+    expect(item).toHaveAttribute('id', 'mega-analytics');
+    expect(item).toHaveAttribute('data-tracking', 'mega-item');
+  });
+
+  it('forwards event handlers in default mode', () => {
+    const handleMouseEnter = vi.fn();
+    render(
+      <TopNavMegaMenuItem
+        title="Analytics"
+        onMouseEnter={handleMouseEnter}
+        data-testid="item"
+      />,
+    );
+    fireEvent.mouseEnter(screen.getByTestId('item'));
+    expect(handleMouseEnter).toHaveBeenCalledOnce();
+  });
+
+  it('forwards pass-through props in drawer mode', () => {
+    render(
+      <TopNavRenderContext value="drawer">
+        <TopNavMegaMenuItem
+          title="Analytics"
+          data-tracking="mega-item"
+          data-testid="item"
+        />
+      </TopNavRenderContext>,
+    );
+    expect(screen.getByTestId('item')).toHaveAttribute(
+      'data-tracking',
+      'mega-item',
+    );
+  });
+
+  it('composes consumer styling and forwards tabIndex in drawer mode', () => {
+    render(
+      <TopNavRenderContext value="drawer">
+        <TopNavMegaMenuItem
+          title="Analytics"
+          className="consumer-item"
+          style={{outlineColor: 'red'}}
+          tabIndex={-1}
+          data-testid="item"
+        />
+      </TopNavRenderContext>,
+    );
+    const item = screen.getByTestId('item');
+    expect(item).toHaveClass('consumer-item');
+    expect(item.style.outlineColor).toBe('red');
+    expect(item).toHaveAttribute('tabindex', '-1');
+  });
+
+  it('composes consumer styling in default mode', () => {
+    render(
+      <TopNavMegaMenuItem
+        title="Analytics"
+        className="consumer-item"
+        style={{outlineColor: 'red'}}
+        data-testid="item"
+      />,
+    );
+    const item = screen.getByTestId('item');
+    expect(item).toHaveClass('consumer-item');
+    // The internal classes are still applied alongside the consumer's.
+    expect(item.className.split(' ').length).toBeGreaterThan(1);
+    expect(item.style.outlineColor).toBe('red');
+  });
+
+  it('applies xstyle as extra classes in both modes', () => {
+    const xstyleTestStyles = stylex.create({
+      custom: {marginInlineEnd: '7px'},
+    });
+    const renderBoth = (xstyle?: (typeof xstyleTestStyles)['custom']) => (
+      <>
+        <TopNavMegaMenuItem
+          title="Analytics"
+          xstyle={xstyle}
+          data-testid="default-item"
+        />
+        <TopNavRenderContext value="drawer">
+          <TopNavMegaMenuItem
+            title="Analytics"
+            xstyle={xstyle}
+            data-testid="drawer-item"
+          />
+        </TopNavRenderContext>
+      </>
+    );
+    const {rerender} = render(renderBoth());
+    const defaultWithout = screen
+      .getByTestId('default-item')
+      .getAttribute('class');
+    const drawerWithout = screen
+      .getByTestId('drawer-item')
+      .getAttribute('class');
+
+    // xstyle values are compiled StyleX styles; passing one adds classes.
+    rerender(renderBoth(xstyleTestStyles.custom));
+    expect(
+      screen.getByTestId('default-item').getAttribute('class'),
+    ).not.toEqual(defaultWithout);
+    expect(screen.getByTestId('drawer-item').getAttribute('class')).not.toEqual(
+      drawerWithout,
+    );
+  });
+});
+
+describe('TopNavMegaMenu ref', () => {
+  const items = <TopNavMegaMenuItem title="Analytics" href="/analytics" />;
+
+  it('forwards its ref to the trigger button', () => {
+    const ref = createRef<HTMLButtonElement>();
+    render(<TopNavMegaMenu ref={ref} label="Products" items={items} />);
+    expect(ref.current).toBe(screen.getByRole('button', {name: 'Products'}));
+  });
+
+  it('forwards its ref to the drawer trigger', () => {
+    const ref = createRef<HTMLButtonElement>();
+    render(
+      <TopNavRenderContext value="drawer">
+        <TopNavMegaMenu ref={ref} label="Products" items={items} />
+      </TopNavRenderContext>,
+    );
+    expect(ref.current).toBe(screen.getByRole('button', {name: /Products/}));
+  });
+});
+
+// A slot is empty for exactly the values React renders as nothing.
+describe('TopNavMegaMenu empty slots', () => {
+  it.each([
+    ['an empty string', ''],
+    ['false', false],
+    ['true', true],
+    ['null', null],
+  ])('renders no featured wrapper in the drawer for %s', (_name, featured) => {
+    const section = (element: HTMLElement) => {
+      const trigger = within(element).getByRole('button', {name: 'Products'});
+      // Both renders share an id, so look the group up inside this render.
+      return element
+        .querySelector(`[id="${trigger.getAttribute('aria-controls')}"]`)!
+        .innerHTML.replace(/(id|aria-[a-z]+)="[^"]*"/g, '$1');
+    };
+    const {container: withFeatured} = render(
+      <TopNavRenderContext value="drawer">
+        <TopNavMegaMenu
+          label="Products"
+          items={<TopNavMegaMenuItem title="Analytics" href="/analytics" />}
+          featured={featured as ReactNode}
+        />
+      </TopNavRenderContext>,
+    );
+    const {container: without} = render(
+      <TopNavRenderContext value="drawer">
+        <TopNavMegaMenu
+          label="Products"
+          items={<TopNavMegaMenuItem title="Analytics" href="/analytics" />}
+        />
+      </TopNavRenderContext>,
+    );
+    expect(section(withFeatured)).toBe(section(without));
+  });
+
+  it('renders 0 as featured content, as React does', async () => {
+    const user = userEvent.setup();
+    render(
+      <TopNavRenderContext value="drawer">
+        <TopNavMegaMenu label="Products" featured={0} />
+      </TopNavRenderContext>,
+    );
+    await user.click(screen.getByRole('button', {name: 'Products'}));
+    expect(screen.getByText('0')).toBeInTheDocument();
   });
 });

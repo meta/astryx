@@ -6,7 +6,7 @@
  */
 
 import {redirect} from 'next/navigation';
-import {templates} from '../../../../generated/templateRegistry';
+import {templateMetadata as templates} from '../../../../generated/templateMetadataRegistry';
 
 export function generateStaticParams() {
   return templates.map(t => ({slug: t.slug}));

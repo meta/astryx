@@ -24,12 +24,14 @@
  */
 
 import React, {
+  use,
   useState,
   useCallback,
   useRef,
   useMemo,
   type ReactNode,
   type MouseEvent,
+  type FocusEvent,
 } from 'react';
 import type {BaseProps} from '../BaseProps';
 import * as stylex from '@stylexjs/stylex';
@@ -38,20 +40,34 @@ import {
   spacingVars,
   radiusVars,
   shadowVars,
-  durationVars,
   easeVars,
   borderVars,
   typeScaleVars,
   typographyVars,
 } from '../theme/tokens.stylex';
+import {inputWrapperStyles} from '../Field/inputStyles.stylex';
 import {mergeProps} from '../utils';
 import {Icon} from '../Icon';
 import {ChatComposerInput} from './ChatComposerInput';
 import {ChatComposerContext} from './ChatContext';
 import type {ChatComposerInputControl} from './ChatContext';
 import {ChatSendButton} from './ChatSendButton';
+import {
+  KeyboardSurfaceContext,
+  focusInKeyboardSurface,
+} from './keyboardSurface';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
+import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
+import {useMergedRefs} from '../hooks/useMergedRefs';
+import {focusOutlineStyles} from '../utils/focusOutline.stylex';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Chat/ChatComposer.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Types
@@ -88,8 +104,8 @@ export interface ChatComposerProps extends Omit<
   /**
    * Resting elevation of the composer body. `low` (the default) keeps today's
    * raised look — low at rest, bumping to med on hover / focus. `none` flattens
-   * it and draws a border with the same rest / hover / focus treatment as a
-   * text input (emphasized border → accent on focus, with matching inset rings).
+   * it and draws a border. Keyboard focus in the editor adds the shared focus
+   * ring in either presentation; pointer focus does not add that ring.
    * @default 'low'
    */
   elevation?: 'none' | 'low';
@@ -156,7 +172,8 @@ const styles = stylex.create({
       default: 'text',
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
-    transition: `box-shadow ${durationVars['--duration-fast']} ${easeVars['--ease-standard']}, border-color ${durationVars['--duration-fast']} ${easeVars['--ease-standard']}`,
+    transitionProperty: 'box-shadow, border-color',
+    transitionTimingFunction: easeVars['--ease-standard'],
   },
   header: {
     display: 'flex',
@@ -184,7 +201,6 @@ const styles = stylex.create({
     flexDirection: 'column',
   },
   textarea: {
-    all: 'unset',
     width: '100%',
     resize: 'none' as const,
     fontSize: typeScaleVars['--text-body-size'],
@@ -217,6 +233,11 @@ const styles = stylex.create({
     alignItems: 'center',
     gap: spacingVars['--spacing-1'],
   },
+  interruptibleFooter: {
+    // The composer may disable editing while a response is streaming. Restore
+    // pointer hit-testing for the footer so its Stop action stays reachable.
+    pointerEvents: 'auto',
+  },
   statusBar: {
     position: 'relative',
     zIndex: 0,
@@ -246,11 +267,29 @@ const styles = stylex.create({
   },
   statusError: {
     backgroundColor: colorVars['--color-error-muted'],
-    color: colorVars['--color-text-red'],
+    color: colorVars['--color-on-error-muted'],
+    // Forced colors replace status fills with Canvas; this boundary keeps the
+    // fill's shape visible.
+    outlineWidth: {default: null, '@media (forced-colors: active)': '1px'},
+    outlineStyle: {default: null, '@media (forced-colors: active)': 'solid'},
+    outlineColor: {
+      default: null,
+      '@media (forced-colors: active)': 'CanvasText',
+    },
+    outlineOffset: {default: null, '@media (forced-colors: active)': '-1px'},
   },
   statusWarning: {
     backgroundColor: colorVars['--color-warning-muted'],
-    color: colorVars['--color-text-yellow'],
+    color: colorVars['--color-on-warning-muted'],
+    // Forced colors replace status fills with Canvas; this boundary keeps the
+    // fill's shape visible.
+    outlineWidth: {default: null, '@media (forced-colors: active)': '1px'},
+    outlineStyle: {default: null, '@media (forced-colors: active)': 'solid'},
+    outlineColor: {
+      default: null,
+      '@media (forced-colors: active)': 'CanvasText',
+    },
+    outlineOffset: {default: null, '@media (forced-colors: active)': '-1px'},
   },
   compact: {
     // Override the padding var (not the `padding` property) so both the base
@@ -264,7 +303,8 @@ const styles = stylex.create({
 
 // Resting elevation for the composer body, narrowed to two steps.
 // - `low` (default) preserves today's look: low at rest, bumping to med on
-//   hover / focus-within (a CSS-only interaction state the component owns).
+//   hover / focus-within. The WCAG focus indicator is a separate shared ring,
+//   gated to keyboard focus in the editor; the shadow change remains depth.
 // - `none` is flat; depth comes from a border + inset rings instead. The
 //   border is drawn *inside* the padding — its width is subtracted from every
 //   side (like Card) so total inset (border + padding) equals the elevated
@@ -306,6 +346,15 @@ const elevationStyles = stylex.create({
   },
 });
 
+function isComposerEditor(target: EventTarget | null): target is HTMLElement {
+  return (
+    target instanceof HTMLElement &&
+    target.matches(
+      'textarea, [contenteditable="true"], [role="textbox"], [role="combobox"][contenteditable], input:not([type]), input[type="text"], input[type="search"], input[type="email"], input[type="url"], input[type="tel"], input[type="password"]',
+    )
+  );
+}
+
 // =============================================================================
 // Component
 // =============================================================================
@@ -323,7 +372,7 @@ const elevationStyles = stylex.create({
  * ```
  */
 export function ChatComposer(props: ChatComposerProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const {
     ref,
     onSubmit,
@@ -353,6 +402,7 @@ export function ChatComposer(props: ChatComposerProps) {
     placeholderFromProps ?? t('@astryx.chat.composer.placeholder');
 
   const [internalValue, setInternalValue] = useState('');
+  const [hasKeyboardEditorFocus, setHasKeyboardEditorFocus] = useState(false);
 
   const isControlled = controlledValue !== undefined;
   const currentValue = isControlled ? controlledValue : internalValue;
@@ -367,52 +417,100 @@ export function ChatComposer(props: ChatComposerProps) {
     [isControlled, onChange],
   );
 
-  const handleSubmit = useCallback(() => {
-    const trimmed = currentValue.trim();
-    if (!trimmed || isDisabled) {
-      return;
-    }
-    onSubmit(trimmed);
-    updateValue('');
-  }, [currentValue, isDisabled, onSubmit, updateValue]);
+  const handleSubmit = useCallback(
+    (value: string) => {
+      const trimmed = value.trim();
+      if (!trimmed || isDisabled) {
+        return;
+      }
+      onSubmit(trimmed);
+      updateValue('');
+    },
+    [isDisabled, onSubmit, updateValue],
+  );
 
   const canSend = currentValue.trim().length > 0 && !isDisabled;
 
   const bodyRef = useRef<HTMLDivElement>(null);
+  const {ref: modalityRef, readModality} = useInteractionModalityTracking();
+  const bodyComposedRef = useMergedRefs(bodyRef, modalityRef);
 
   // Input slot registers its focus (and future) control here so the shell can
   // drive it without knowing its DOM shape. Stable ref — safe in the memoized
   // context value.
   const inputControlRef = useRef<ChatComposerInputControl | null>(null);
+  // Inside ChatLayout's keyboard surface, a touch focus skips the browser's
+  // reveal. Elsewhere the browser's own focus applies.
+  const isKeyboardSurface = use(KeyboardSurfaceContext);
 
-  const handleBodyClick = useCallback((e: MouseEvent<HTMLDivElement>) => {
-    // Focus the input when clicking empty space in the body.
-    // Skip if the click target is a button, link, or interactive element.
-    const target = e.target as HTMLElement;
-    if (
-      target.closest(
-        'button, a, [role="button"], [contenteditable="true"], [data-astryx-token]',
-      )
-    ) {
-      return;
-    }
-    // Prefer the input's registered control (works for any input shape,
-    // including editors whose focusable node isn't a bare
-    // contenteditable/textarea). Fall back to a DOM query so uninstrumented
-    // custom inputs still get click-to-focus.
-    if (inputControlRef.current) {
-      inputControlRef.current.focus();
-      return;
-    }
-    const editable = bodyRef.current?.querySelector<HTMLElement>(
-      '[contenteditable="true"], textarea',
-    );
-    editable?.focus();
-  }, []);
+  const handleBodyClick = useCallback(
+    (e: MouseEvent<HTMLDivElement>) => {
+      // Focus the input when clicking empty space in the body.
+      // Skip if the click target is a button, link, or interactive element.
+      const target = e.target as HTMLElement;
+      if (
+        target.closest(
+          'button, a, [role="button"], [contenteditable="true"], [data-astryx-token]',
+        )
+      ) {
+        return;
+      }
+      // Prefer the input's registered control (works for any input shape,
+      // including editors whose focusable node isn't a bare
+      // contenteditable/textarea). Fall back to a DOM query so uninstrumented
+      // custom inputs still get click-to-focus.
+      if (inputControlRef.current) {
+        inputControlRef.current.focus();
+        return;
+      }
+      const editable = bodyRef.current?.querySelector<HTMLElement>(
+        '[contenteditable="true"], textarea',
+      );
+      if (editable) {
+        focusInKeyboardSurface(editable, isKeyboardSurface);
+      }
+    },
+    [isKeyboardSurface],
+  );
+
+  const handleBodyFocusCapture = useCallback(
+    (event: FocusEvent<HTMLDivElement>) => {
+      setHasKeyboardEditorFocus(
+        isComposerEditor(event.target) && readModality() === 'keyboard',
+      );
+    },
+    [readModality],
+  );
+
+  const handleBodyBlurCapture = useCallback(
+    (event: FocusEvent<HTMLDivElement>) => {
+      if (!event.currentTarget.contains(event.relatedTarget)) {
+        setHasKeyboardEditorFocus(false);
+      }
+    },
+    [],
+  );
+
+  // The status bar mounts together with its message, and a live region born
+  // holding its text is not reliably announced, so the shared own-content
+  // module announces what the bar renders: errors assertively, warnings
+  // politely, once per occasion, silent for a status already shown when the
+  // page loads (spec:AST-086 FR2, FR5, FR6, FR11; react-component-runtime
+  // INV10). Changing the status type is a new occasion; clearing it re-arms.
+  const statusRef = useRef<HTMLDivElement>(null);
+  useAnnounceRenderedText(
+    statusRef,
+    Boolean(status?.message),
+    status?.type ?? '',
+    {
+      skipFirstRender: true,
+      politeness: status?.type === 'error' ? 'assertive' : 'polite',
+    },
+  );
 
   const statusEl = status ? (
     <div
-      role={status.type === 'error' ? 'alert' : 'status'}
+      ref={statusRef}
       {...stylex.props(
         styles.statusBar,
         statusPosition === 'top' ? styles.statusTop : styles.statusBottom,
@@ -422,7 +520,9 @@ export function ChatComposer(props: ChatComposerProps) {
       <Icon
         icon={status.type === 'error' ? 'error' : 'warning'}
         size="md"
-        color={status.type === 'error' ? 'error' : 'warning'}
+        // The glyph sits on the pale status fill, so it takes the bar's
+        // on-muted content colour, as Banner and FieldStatus glyphs do.
+        color="inherit"
       />
       {status.message}
     </div>
@@ -467,11 +567,16 @@ export function ChatComposer(props: ChatComposerProps) {
         {drawer}
 
         <div
-          ref={bodyRef}
+          ref={bodyComposedRef}
           onClick={handleBodyClick}
+          onPointerDownCapture={() => setHasKeyboardEditorFocus(false)}
+          onFocusCapture={handleBodyFocusCapture}
+          onBlurCapture={handleBodyBlurCapture}
           {...stylex.props(
             styles.body,
+            inputWrapperStyles.textField,
             elevationStyles[elevation],
+            hasKeyboardEditorFocus && focusOutlineStyles.focusWithin,
             density === 'compact' && styles.compact,
             xstyle,
           )}>
@@ -488,7 +593,11 @@ export function ChatComposer(props: ChatComposerProps) {
 
           <div {...stylex.props(styles.footer)}>
             <div {...stylex.props(styles.footerLeft)}>{footerActions}</div>
-            <div {...stylex.props(styles.footerRight)}>
+            <div
+              {...stylex.props(
+                styles.footerRight,
+                isDisabled && isStopShown && styles.interruptibleFooter,
+              )}>
               {sendActions}
               {sendButton ?? <ChatSendButton />}
             </div>

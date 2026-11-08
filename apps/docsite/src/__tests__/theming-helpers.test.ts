@@ -35,7 +35,7 @@ describe('theming helpers — data attributes', () => {
   it('reflects both visual props and states', () => {
     expect(
       targetDataAttributes({
-        className: 'astryx-checkbox',
+        className: 'astryx-checkbox-indicator',
         visualProps: ['size'],
         states: ['checked', 'disabled'],
       }),

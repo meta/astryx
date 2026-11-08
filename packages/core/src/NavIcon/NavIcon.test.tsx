@@ -30,3 +30,12 @@ describe('NavIcon', () => {
     expect(screen.getByTestId('nav-icon')).toBeInTheDocument();
   });
 });
+
+describe('NavIcon theme target names', () => {
+  it('renders only the canonical target class', () => {
+    render(<NavIcon icon={<span>Icon</span>} data-testid="nav-icon" />);
+    const root = screen.getByTestId('nav-icon');
+    expect(root).toHaveClass('astryx-nav-icon');
+    expect(root).not.toHaveClass('astryx-navicon');
+  });
+});

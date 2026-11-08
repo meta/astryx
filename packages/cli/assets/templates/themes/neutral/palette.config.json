@@ -1,0 +1,122 @@
+{
+  "recipe": "astryx-oklch-v1",
+  "vibrancy": 50,
+  "neutralProfile": "neutral-v1",
+  "modeStrategy": "light-and-dark",
+  "darkChromaTaper": {
+    "edgeMultiplier": 0.5,
+    "throughStop": 25,
+    "recoverAtStop": 60,
+    "familyMultipliers": {
+      "yellow": 0.65
+    }
+  },
+  "stops": [
+    0,
+    5,
+    10,
+    15,
+    20,
+    25,
+    30,
+    35,
+    40,
+    45,
+    50,
+    55,
+    60,
+    65,
+    70,
+    75,
+    80,
+    85,
+    90,
+    95,
+    100
+  ],
+  "families": [
+    {
+      "id": "neutral",
+      "name": "Neutral",
+      "seed": "#777777",
+      "kind": "neutral"
+    },
+    {
+      "id": "red",
+      "name": "Red",
+      "seed": "#d62830"
+    },
+    {
+      "id": "orange",
+      "name": "Orange",
+      "seed": "#d57113"
+    },
+    {
+      "id": "yellow",
+      "name": "Yellow",
+      "seed": "#f8c723",
+      "anchors": [
+        {
+          "mode": "light",
+          "stop": 80,
+          "color": "#f8c723",
+          "policy": "flexible"
+        }
+      ]
+    },
+    {
+      "id": "green",
+      "name": "Green",
+      "seed": "#358a3a",
+      "anchors": [
+        {
+          "mode": "light",
+          "stop": 50,
+          "color": "#358a3a",
+          "policy": "flexible"
+        }
+      ]
+    },
+    {
+      "id": "teal",
+      "name": "Teal",
+      "seed": "#0c7365"
+    },
+    {
+      "id": "cyan",
+      "name": "Cyan",
+      "seed": "#0c6f82"
+    },
+    {
+      "id": "blue",
+      "name": "Blue",
+      "seed": "#0074e2",
+      "anchors": [
+        {
+          "mode": "light",
+          "stop": 50,
+          "color": "#0074e2",
+          "policy": "exact"
+        }
+      ]
+    },
+    {
+      "id": "purple",
+      "name": "Purple",
+      "seed": "#980fb2",
+      "anchors": [
+        {
+          "mode": "light",
+          "stop": 50,
+          "color": "#980fb2",
+          "policy": "flexible"
+        }
+      ]
+    },
+    {
+      "id": "pink",
+      "name": "Pink",
+      "seed": "#b10e69"
+    }
+  ]
+}

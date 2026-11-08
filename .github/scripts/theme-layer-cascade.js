@@ -2,7 +2,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @description Asserts a production build puts Astryx, theme and product styles in the right cascade order
+ * @description Asserts production source and prebuilt CSS put Astryx, theme and product styles in the right cascade order
  * @input [--port <n>]
  * @output One line per case; exit 1 if any layer loses to the wrong one
  *
@@ -26,6 +26,7 @@
  */
 
 const {chromium} = require('playwright');
+const {execFileSync} = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 const http = require('node:http');
@@ -46,6 +47,13 @@ const CORE_SRC = path.join(REPO_ROOT, 'packages/core/src');
 /** Kept in step with the fixture; a mismatch here reads as a cascade failure. */
 const THEME_COLOR = 'rgb(0, 120, 255)';
 const PRODUCT_COLOR = 'rgb(255, 140, 0)';
+
+/** The fixture theme's `--color-data-categorical-blue`, light and dark side. */
+const DATA_OVERRIDE_LIGHT = 'rgb(1, 2, 3)';
+const DATA_OVERRIDE_DARK = 'rgb(4, 5, 6)';
+/** Untouched defaults: --color-data-categorical-orange, --color-data-neutral. */
+const DATA_DEFAULT = 'rgb(235, 110, 0)';
+const DATA_DEFAULT_DARK_SIDE = 'rgb(140, 147, 155)';
 
 const CONTENT_TYPES = {
   '.html': 'text/html',
@@ -132,14 +140,25 @@ async function run() {
       timeout: 60000,
     });
     await page.waitForSelector('#library-only', {timeout: 20000});
+    await page.waitForSelector('#data-dark-default', {timeout: 20000});
 
-    const seen = await page.evaluate(() => ({
-      themed: getComputedStyle(document.getElementById('library-only'))
-        .backgroundColor,
-      product: getComputedStyle(document.getElementById('product-wins'))
-        .backgroundColor,
-      padding: getComputedStyle(document.getElementById('product-box')).padding,
-    }));
+    const seen = await page.evaluate(() => {
+      const color = id => getComputedStyle(document.getElementById(id)).color;
+      return {
+        themed: getComputedStyle(document.getElementById('library-only'))
+          .backgroundColor,
+        product: getComputedStyle(document.getElementById('product-wins'))
+          .backgroundColor,
+        padding: getComputedStyle(document.getElementById('product-box'))
+          .padding,
+        dataDefault: color('data-default'),
+        dataOverride: color('data-override'),
+        dataNested: color('data-nested'),
+        dataNestedDefault: color('data-nested-default'),
+        dataDark: color('data-dark'),
+        dataDarkDefault: color('data-dark-default'),
+      };
+    });
 
     const check = (label, actual, expected, why) => {
       if (actual === expected) {
@@ -170,6 +189,44 @@ async function run() {
       '11px',
       'the product layer is not reaching the page',
     );
+    check(
+      'a data token default reaches an element',
+      seen.dataDefault,
+      DATA_DEFAULT,
+      'nothing declares --color-data-*, so var() resolves to nothing',
+    );
+    check(
+      "a theme's data token override beats the default",
+      seen.dataOverride,
+      DATA_OVERRIDE_LIGHT,
+      'the :root defaults are outranking @layer astryx-theme — they are ' +
+        'unlayered, or in a layer that sorts above it',
+    );
+    check(
+      "a nested theme inherits the parent's data token override",
+      seen.dataNested,
+      DATA_OVERRIDE_LIGHT,
+      'the nested theme re-declares the default in its own scope block and ' +
+        'shadows the parent override — no other token family does that',
+    );
+    check(
+      'a nested theme still gets the untouched defaults',
+      seen.dataNestedDefault,
+      DATA_DEFAULT,
+      'the defaults do not reach inside a nested theme',
+    );
+    check(
+      "a nested dark theme inherits the parent's override, dark side",
+      seen.dataDark,
+      DATA_OVERRIDE_DARK,
+      'light-dark() is not resolving against the nested theme color-scheme',
+    );
+    check(
+      'a data token default resolves on the dark side',
+      seen.dataDarkDefault,
+      DATA_DEFAULT_DARK_SIDE,
+      'the :root defaults resolve to their light side inside a dark theme',
+    );
   } finally {
     if (browser) await browser.close();
     if (server) server.close();
@@ -183,7 +240,30 @@ async function run() {
     );
     return 1;
   }
-  console.log('\nAstryx < theme < product holds in a production build.');
+  // This existing CI owner already installs Chromium. Also prove the prebuilt
+  // public entry's defaults and both load orders without consumer compilation.
+  // Keep the opt-in suite out of the ordinary Node lane, which has no browser.
+  execFileSync(
+    process.execPath,
+    [
+      path.join(REPO_ROOT, 'node_modules/vitest/vitest.mjs'),
+      'run',
+      '--project',
+      'node',
+      'scripts/build-css.data-tokens.browser.test.mjs',
+      '--maxWorkers=1',
+    ],
+    {
+      cwd: REPO_ROOT,
+      env: {...process.env, ASTRYX_PREBUILT_DATA_BROWSER: '1'},
+      stdio: 'inherit',
+      timeout: 240_000,
+    },
+  );
+  console.log(
+    '\nAstryx < theme < product holds in production source and prebuilt CSS, ' +
+      'and the data token defaults sit under a theme override.',
+  );
   return 0;
 }
 

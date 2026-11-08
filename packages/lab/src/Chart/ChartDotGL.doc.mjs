@@ -5,7 +5,7 @@
 export const docs = {
   name: 'ChartDotGL',
   displayName: 'Chart Dot GL',
-  group: 'Chart',
+  group: 'Charts',
   category: 'Data Visualization',
 
   usage: {

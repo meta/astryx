@@ -50,7 +50,7 @@ function Metric({label, value}: {label: string; value: string | number}) {
         fontSize: 12,
         fontFamily: 'monospace',
       }}>
-      <span style={{color: '#666'}}>{label}:</span>
+      <span style={{color: 'var(--color-text-secondary)'}}>{label}:</span>
       <strong>{value}</strong>
     </div>
   );
@@ -201,7 +201,7 @@ function TypingLatencyImpl() {
         <Metric label="Avg" value={`${avgLatency.toFixed(1)}ms`} />
         <Metric label="Max" value={`${maxLatency.toFixed(1)}ms`} />
         <Metric label="Samples" value={latencies.length} />
-        <span style={{fontSize: 11, color: '#888'}}>
+        <span style={{fontSize: 11, color: 'var(--color-text-secondary)'}}>
           Type in the editor to measure input latency
         </span>
       </div>

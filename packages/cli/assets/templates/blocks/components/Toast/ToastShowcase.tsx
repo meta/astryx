@@ -1,7 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-// In production, use useToast() hook for proper positioning, stacking, and lifecycle.
 'use client';
+
+// In production, use useToast() hook for proper positioning, stacking, and lifecycle.
 
 import {Toast} from '@astryxdesign/core/Toast';
 import {useToast} from '@astryxdesign/core/Toast';

@@ -10,7 +10,7 @@ import {
   spacingVars,
   typographyVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
-import {CheckIcon} from '@heroicons/react/24/solid';
+import {CheckIcon, ClockIcon, XMarkIcon} from '@heroicons/react/24/solid';
 
 const styles = stylex.create({
   storyWrapper: {
@@ -643,7 +643,7 @@ export const StatusWithIcon: Story = {
             <AvatarStatusDot
               variant="neutral"
               label="Pending"
-              icon={<CheckIcon />}
+              icon={<ClockIcon />}
             />
           }
         />
@@ -655,7 +655,7 @@ export const StatusWithIcon: Story = {
             <AvatarStatusDot
               variant="error"
               label="Rejected"
-              icon={<CheckIcon />}
+              icon={<XMarkIcon />}
             />
           }
         />

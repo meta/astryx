@@ -17,7 +17,7 @@ export const docs = {
   theming: {
     targets: [
       {className: 'astryx-toggle-button-group'},
-      {className: 'astryx-toggle-button', states: ['isPressed']},
+      {className: 'astryx-toggle-button', states: ['isPressed'], visualProps: ['elevation']},
     ],
   },
   description: 'A button that toggles between pressed and unpressed states. Thin wrapper over Button with controlled toggle pattern, icon swap, and font weight emphasis.',
@@ -31,23 +31,30 @@ export const docs = {
     {
       name: 'isPressed',
       type: 'boolean',
-      description: 'Whether the button is currently pressed. Ignored when inside a group.',
+      description: 'Whether the button is currently pressed. Ignored for a ToggleButtonGroup member with a value.',
     },
     {
       name: 'onPressedChange',
       type: '(isPressed: boolean, event: MouseEvent) => void',
-      description: 'Called when pressed state should change. Receives the next state and the click event; call event.preventDefault() to skip pressedChangeAction. Ignored when inside a group.',
+      description: 'Called synchronously when pressed state should change. Receives the next state and the click event; call event.preventDefault() to skip pressedChangeAction. Without an Action, the callback produces no Action-pending feedback. Ignored for a ToggleButtonGroup member with a value.',
     },
     {
       name: 'pressedChangeAction',
       type: '(isPressed: boolean) => void | Promise<void>',
-      description: 'Action handler for API- or navigation-backed toggles, run in a transition. Shows an optimistic pressed state immediately and a spinner while pending; the button stays interruptible by re-clicks.',
+      description: 'Action handler for API- or navigation-backed toggles, run in a transition after the synchronous onPressedChange callback unless that callback calls event.preventDefault(). Works without onPressedChange. Shows an optimistic pressed state and a spinner while pending, and remains interruptible by re-clicks. Omit it for callback-only toggles with no Action-pending feedback. Ignored for a ToggleButtonGroup member with a value.',
     },
     {
       name: 'size',
       type: "'sm' | 'md' | 'lg'",
       description: 'Button size. Defaults to group size when inside a group.',
       default: "'md'",
+    },
+    {
+      name: 'elevation',
+      type: "'none' | 'low' | 'med' | 'high'",
+      description:
+        'Resting shadow depth for floating (FAB-style) toggle buttons, mirroring Button. `none` is the default flat button; `low`/`med`/`high` map to the shadow token scale. Applies inside a ToggleButtonGroup as well — grouped children retain their own elevation.',
+      default: "'none'",
     },
     {
       name: 'isDisabled',
@@ -122,6 +129,62 @@ export const docs = {
   usage: {
     description:
       'ToggleButton switches between selected and unselected states to represent a persistent on/off choice. Use it standalone for binary actions like bold, mute, or favorite, or inside a ToggleButtonGroup for single-select or multi-select toolbar controls.',
+    accessibility: [
+      {
+        name: 'Text label',
+        category: 'Color contrast',
+        criterion: '1.4.3 Contrast (Minimum)',
+        requirement: '4.5:1',
+        states: ['Unselected', 'Selected', 'Hover', 'Pointer down'],
+        description:
+          'The label must have at least 4.5:1 contrast with the button background when selected and unselected. For Hover and Pointer down, measure the final background after the overlay is applied.',
+      },
+      {
+        name: 'Essential icon or spinner arc',
+        category: 'Color contrast',
+        criterion: '1.4.11 Non-text Contrast',
+        requirement: '3:1',
+        states: ['Icon only', 'Loading'],
+        description:
+          'An icon-only ToggleButton must have at least 3:1 contrast between its icon and button background. The moving spinner arc must also meet 3:1. An icon beside a visible label does not need its own check.',
+      },
+      {
+        name: 'Selected state indicator',
+        category: 'Color contrast',
+        criterion: '1.4.11 Non-text Contrast',
+        requirement: '3:1 if relied upon',
+        states: ['Selected'],
+        description:
+          'The selected background must reach 3:1 only when users need it to tell selected from unselected. Label weight or a changed icon can also show selection.',
+      },
+      {
+        name: 'Visible control boundary',
+        category: 'Color contrast',
+        criterion: '1.4.11 Non-text Contrast',
+        requirement: '3:1 if needed',
+        states: ['Rest'],
+        description:
+          'The button edge needs 3:1 contrast only when users need it to see the control. A visible label or icon can show the control instead.',
+      },
+      {
+        name: 'Keyboard focus indicator',
+        category: 'Color contrast',
+        criterion: '1.4.11 Non-text Contrast',
+        requirement: '3:1',
+        states: ['Focus visible'],
+        description:
+          'The focus outline must have at least 3:1 contrast with the area around the button. Check both selected and unselected states.',
+      },
+      {
+        name: 'Disabled appearance',
+        category: 'Color contrast',
+        criterion: '1.4.3 and 1.4.11 exceptions',
+        requirement: 'Not required',
+        states: ['Disabled'],
+        description:
+          'Disabled controls do not need to meet these contrast ratios.',
+      },
+    ],
     bestPractices: [
       {guidance: true, description: 'Use a filled or colored icon for the pressed state so users can see the current state at a glance: an outline star vs a solid star, for example.'},
       {guidance: true, description: 'Keep the label identical between pressed and unpressed states. Let the visual treatment (icon, weight, background) communicate the change.'},

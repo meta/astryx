@@ -4,7 +4,6 @@
 
 import {useState} from 'react';
 import {CheckboxList, CheckboxListItem} from '@astryxdesign/core/CheckboxList';
-import {Divider} from '@astryxdesign/core/Divider';
 
 const DOCUMENTS = [
   {id: 'transactions', label: 'Transaction history'},
@@ -27,7 +26,7 @@ export default function CheckboxListSelectAllPattern() {
       : ('indeterminate' as const);
 
   return (
-    <CheckboxList label="Include in export">
+    <CheckboxList label="Include in export" hasDividers>
       <CheckboxListItem
         label="Select all"
         isChecked={selectAllState}
@@ -35,7 +34,6 @@ export default function CheckboxListSelectAllPattern() {
           setSelected(checked ? [...ALL_IDS] : []);
         }}
       />
-      <Divider />
       {DOCUMENTS.map(doc => (
         <CheckboxListItem
           key={doc.id}

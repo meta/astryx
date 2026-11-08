@@ -142,12 +142,15 @@ function FilterTable({
   });
 
   return (
-    <Table
-      data={testData}
-      columns={columns}
-      idKey="id"
-      plugins={{filter: filterPlugin}}
-    />
+    <>
+      <Table
+        data={testData}
+        columns={columns}
+        idKey="id"
+        plugins={{filter: filterPlugin}}
+      />
+      <output data-testid="filters">{JSON.stringify(filters)}</output>
+    </>
   );
 }
 
@@ -209,6 +212,41 @@ describe('useTableFiltering', () => {
       const textInputs = screen.getAllByPlaceholderText(/^Filter /);
       await user.type(textInputs[0], 'Alice');
       expect(textInputs[0]).toHaveValue('Alice');
+    });
+
+    it('updates a number filter while typing', async () => {
+      const user = userEvent.setup();
+      render(<FilterTable variant="inline" />);
+      const input = screen.getByRole('spinbutton', {name: 'Filter Age'});
+
+      await user.type(input, '30');
+
+      expect(screen.getByTestId('filters')).toHaveTextContent('{"age":30}');
+    });
+
+    it('restores the pre-edit number filter when an invalid draft blurs', async () => {
+      const user = userEvent.setup();
+      render(<FilterTable variant="inline" />);
+      const input = screen.getByRole('spinbutton', {name: 'Filter Age'});
+
+      await user.type(input, '3·');
+      expect(screen.getByTestId('filters')).toHaveTextContent('{"age":3}');
+      await user.tab();
+
+      expect(screen.getByTestId('filters')).toHaveTextContent('{}');
+    });
+
+    it('restores the pre-edit number filter when Enter rejects a draft', async () => {
+      const user = userEvent.setup();
+      render(<FilterTable variant="inline" />);
+      const input = screen.getByRole('spinbutton', {name: 'Filter Age'});
+
+      await user.type(input, '3·');
+      await user.keyboard('{Enter}');
+
+      expect(input).toHaveValue('3·');
+      expect(input).toHaveAttribute('aria-invalid', 'true');
+      expect(screen.getByTestId('filters')).toHaveTextContent('{}');
     });
   });
 

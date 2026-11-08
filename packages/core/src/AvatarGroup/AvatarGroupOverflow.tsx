@@ -3,13 +3,14 @@
 
 /**
  * @file AvatarGroupOverflow.tsx
- * @input Uses React, StyleX, AvatarGroupContext, i18n (useTranslator)
+ * @input Uses React, StyleX, AvatarGroupContext, i18n (useComponentTranslator)
  * @output Exports AvatarGroupOverflow for overflow indicator
  * @position Slot component used inside AvatarGroup
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/AvatarGroup/AvatarGroup.doc.mjs
  * - /packages/core/src/AvatarGroup/index.ts
+ * - /apps/storybook/stories/AvatarGroupOverflow.stories.tsx
  * - /packages/cli/assets/templates/blocks/components/AvatarGroup/ (showcase blocks)
  */
 
@@ -29,7 +30,15 @@ import {useAvatarGroup} from './AvatarGroupContext';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
-import {useTranslator} from '../i18n';
+import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
+import {usePressFeedback} from '../hooks/usePressFeedback';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/AvatarGroup/AvatarGroupOverflow.generated';
+
+registerEnglishFallback(english);
 
 const BORDER_WIDTH = 2;
 const OVERFLOW_FONT_RATIO = 0.35;
@@ -96,23 +105,13 @@ const styles = stylex.create({
     // Reset the UA button's block padding only; the inline padding from `base`
     // provides the pill's breathing room and must be preserved.
     paddingBlock: 0,
-    // Interactive overlay states layered on top via backgroundImage
-    backgroundImage: {
-      default: `linear-gradient(${colorVars['--color-neutral']}, ${colorVars['--color-neutral']})`,
-      ':hover:where(:not(:disabled,[aria-disabled="true"]))': {
-        '@media (hover: hover)': `linear-gradient(${colorVars['--color-overlay-hover']}, ${colorVars['--color-overlay-hover']}), linear-gradient(${colorVars['--color-neutral']}, ${colorVars['--color-neutral']})`,
-      },
-      ':active': `linear-gradient(${colorVars['--color-overlay-pressed']}, ${colorVars['--color-overlay-pressed']}), linear-gradient(${colorVars['--color-neutral']}, ${colorVars['--color-neutral']})`,
-    },
     // Focus ring via focus-visible
   },
   overlap: {
-    // Matches Avatar's own overlap rule: the first item in the row must not be
-    // pulled outside the group's box.
-    marginInlineStart: {
-      default: null,
-      ':not(:first-child)': 'var(--_avatar-group-overlap)',
-    },
+    // Matches Avatar's own overlap rule. AvatarGroup pads its start edge by
+    // the same amount, so the indicator stays inside the group's box even
+    // when it is the first child.
+    marginInlineStart: 'var(--_avatar-group-overlap)',
   },
 });
 
@@ -166,7 +165,8 @@ export function AvatarGroupOverflow({
   style,
   ...rest
 }: AvatarGroupOverflowProps): ReactNode {
-  const t = useTranslator();
+  const pressable = usePressFeedback();
+  const t = useComponentTranslator();
   const group = useAvatarGroup();
   const size = group?.size ?? 'md';
   const shape = group?.shape ?? 'circle';
@@ -189,11 +189,13 @@ export function AvatarGroupOverflow({
         {...rest}
         aria-label={label}
         data-avatar-item=""
+        {...pressable}
         {...mergeProps(
           themeProps('avatar-group-overflow', {size, shape}),
           focusOutlineProps.focusVisible(
             styles.base,
             styles.button,
+            interactionOverlayStyles.backgroundImageOnNeutral,
             styles.overlap,
             dynamicStyles.size(numericSize),
             dynamicStyles.fontSize(numericSize),
@@ -212,6 +214,8 @@ export function AvatarGroupOverflow({
   return (
     <span
       ref={ref}
+      // Before the caller's props so a caller-supplied role still wins.
+      role="img"
       {...rest}
       aria-label={label}
       {...mergeProps(

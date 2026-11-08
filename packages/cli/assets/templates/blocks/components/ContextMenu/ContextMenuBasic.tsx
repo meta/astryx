@@ -7,6 +7,7 @@ import {ContextMenu} from '@astryxdesign/core/ContextMenu';
 export default function ContextMenuBasic() {
   return (
     <ContextMenu
+      presentation="adaptive"
       items={[
         {label: 'Cut', onClick: () => {}},
         {label: 'Copy', onClick: () => {}},
@@ -25,7 +26,7 @@ export default function ContextMenuBasic() {
           color: '#6b7280',
           userSelect: 'none',
         }}>
-        Right-click this area
+        Long-press or right-click this area
       </div>
     </ContextMenu>
   );

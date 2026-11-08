@@ -5,37 +5,55 @@
 import {Collapsible, CollapsibleGroup} from '@astryxdesign/core/Collapsible';
 import {Card} from '@astryxdesign/core/Card';
 import {Text} from '@astryxdesign/core/Text';
-import {VStack} from '@astryxdesign/core/Layout';
+import {Stack} from '@astryxdesign/core/Stack';
 
+/**
+ * One Collapsible per Card, several open at once so the reader can compare
+ * across them — the case type="multiple" is for.
+ *
+ * Here the triggers keep their own `large` type: each is the heading of its
+ * own surface, not a row in a list, so the 17px semibold is doing the job it
+ * was sized for. Compare with the FAQ and Showcase examples, where the rows
+ * share a surface and the questions step down to body-semibold.
+ */
 export default function CollapsibleMultipleAccordion() {
   return (
     <CollapsibleGroup type="multiple" defaultValue={['features', 'pricing']}>
-      <VStack gap={2} style={{width: '100%', maxWidth: 400}}>
+      <Stack gap={2} maxWidth={440}>
         <Card>
           <Collapsible trigger="Features" value="features">
-            <Text type="body">
-              Includes real-time collaboration, version history, and granular
-              permissions for teams of any size.
+            <Text type="body" color="secondary">
+              Real-time collaboration, full version history, and granular
+              permissions. Every plan includes unlimited documents and unlimited
+              guests — seats are counted for editors only.
             </Text>
           </Collapsible>
         </Card>
+
         <Card>
           <Collapsible trigger="Pricing" value="pricing">
-            <Text type="body">
-              Free for up to 5 users. Pro plans start at $12/user/month with
-              annual billing.
-            </Text>
+            <Stack gap={2}>
+              <Text type="body" color="secondary">
+                Free for up to 5 editors. Pro is $12 per editor per month billed
+                annually, or $15 month to month.
+              </Text>
+              <Text type="supporting">
+                Non-profit and education pricing is 50% off any paid plan.
+              </Text>
+            </Stack>
           </Collapsible>
         </Card>
+
         <Card>
           <Collapsible trigger="Integrations" value="integrations">
-            <Text type="body">
-              Connect with Slack, GitHub, Jira, and 40+ other tools through our
-              REST API and pre-built connectors.
+            <Text type="body" color="secondary">
+              Slack, GitHub, Jira, Figma, and 40 more through pre-built
+              connectors, plus a REST API and outbound webhooks for anything not
+              on the list.
             </Text>
           </Collapsible>
         </Card>
-      </VStack>
+      </Stack>
     </CollapsibleGroup>
   );
 }

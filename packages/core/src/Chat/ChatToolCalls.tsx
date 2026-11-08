@@ -4,7 +4,7 @@
 
 /**
  * @file ChatToolCalls.tsx
- * @input Uses React, StyleX, theme tokens
+ * @input Uses React, StyleX, semantic icon registry, theme tokens
  * @output Exports ChatToolCalls component
  * @position Chat component — displays tool/function call invocations
  *
@@ -30,6 +30,7 @@ import {
   radiusVars,
   durationVars,
   easeVars,
+  focusVars,
 } from '../theme/tokens.stylex';
 import {getKey, mergeProps} from '../utils';
 import {Badge} from '../Badge';
@@ -37,7 +38,14 @@ import {Icon, type IconName} from '../Icon';
 import {Spinner} from '../Spinner';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
+import {focusOutlineProps} from '../utils/focusOutline.stylex';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Chat/ChatToolCalls.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Types
@@ -63,14 +71,14 @@ export interface ChatToolCallItem {
   /** Additional info rendered after the label. Free-form ReactNode. */
   stats?: ReactNode;
   /**
-   * Error message when status is 'error'. Rendered as visually hidden text in
-   * the row (so screen readers and keyboard users perceive it) and echoed in a
-   * hover tooltip on the status icon.
+   * Error message when status is 'error'. Exposed as visually hidden text in
+   * the row for assistive technology and echoed in a hover tooltip on the
+   * status icon.
    */
   errorMessage?: string;
   /** Unique key for React list rendering. Derived from stable metadata if omitted. */
   key?: string;
-  /** Arbitrary data passed through to renderDetail. Store tool args, result, etc. */
+  /** Arbitrary caller data retained with the call item. */
   data?: unknown;
   /** Inline detail content shown when the row is expanded (e.g. code diff, command output). */
   resultDetail?: ReactNode;
@@ -80,11 +88,11 @@ export interface ChatToolCallsProps extends BaseProps<HTMLDivElement> {
   ref?: React.Ref<HTMLDivElement>;
   /** Array of tool call data. */
   calls: ChatToolCallItem[];
-  /** Custom summary label for groups. Auto-generated from count if omitted. */
+  /** Custom summary label shown for an expanded group. */
   label?: string;
   /** Whether the group is expanded. Uncontrolled by default. */
   isExpanded?: boolean;
-  /** Default expanded state. @default true for ≤3 calls, false for >3. */
+  /** Default expanded state when uncontrolled. @default false */
   defaultIsExpanded?: boolean;
   /** Callback when expanded state changes. */
   onExpandedChange?: (isExpanded: boolean) => void;
@@ -136,7 +144,7 @@ const styles = stylex.create({
     flexShrink: 0,
     width: '14px',
     height: '14px',
-    color: colorVars['--color-text-disabled'],
+    color: colorVars['--color-text-secondary'],
   },
   // Rides on the chevron <Icon> (via `xstyle`), next to the rotation it
   // animates, so one element carries both the transform and the theme target.
@@ -194,6 +202,12 @@ const styles = stylex.create({
     minHeight: '24px',
     paddingBlock: spacingVars['--spacing-0-5'],
   },
+  callRowFocusInset: {
+    outlineOffset: {
+      default: null,
+      ':focus-visible': `calc(-1 * ${focusVars['--focus-outline-width']})`,
+    },
+  },
   callRowClickable: {
     cursor: {
       default: 'pointer',
@@ -224,17 +238,6 @@ const styles = stylex.create({
     height: '16px',
     borderRadius: radiusVars['--radius-full'],
   },
-  statusIconCircle: {
-    position: 'absolute',
-    inset: 0,
-    borderRadius: 'inherit',
-    backgroundColor: 'currentColor',
-    opacity: 0.15,
-  },
-  statusIconInner: {
-    position: 'relative',
-    display: 'inline-flex',
-  },
   callName: {
     fontSize: typeScaleVars['--text-supporting-size'],
     lineHeight: typeScaleVars['--text-supporting-leading'],
@@ -251,7 +254,7 @@ const styles = stylex.create({
     fontSize: typeScaleVars['--text-supporting-size'],
     lineHeight: typeScaleVars['--text-supporting-leading'],
     fontFamily: typographyVars['--font-family-body'],
-    color: colorVars['--color-text-disabled'],
+    color: colorVars['--color-text-secondary'],
     whiteSpace: 'nowrap',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -262,7 +265,7 @@ const styles = stylex.create({
     fontSize: typeScaleVars['--text-supporting-size'],
     lineHeight: typeScaleVars['--text-supporting-leading'],
     fontFamily: typographyVars['--font-family-body'],
-    color: colorVars['--color-text-disabled'],
+    color: colorVars['--color-text-secondary'],
     whiteSpace: 'nowrap',
     flexShrink: 0,
   },
@@ -276,17 +279,17 @@ const styles = stylex.create({
     fontSize: typeScaleVars['--text-supporting-size'],
     lineHeight: typeScaleVars['--text-supporting-leading'],
     fontFamily: typographyVars['--font-family-body'],
-    color: colorVars['--color-text-disabled'],
+    color: colorVars['--color-text-secondary'],
     flexShrink: 0,
   },
   statsAdditions: {
-    color: colorVars['--color-success'],
+    color: colorVars['--color-text-success'],
   },
   statsDeletions: {
-    color: colorVars['--color-error'],
+    color: colorVars['--color-text-error'],
   },
   errorText: {
-    color: colorVars['--color-error'],
+    color: colorVars['--color-text-error'],
   },
 
   // Inline result detail
@@ -297,7 +300,7 @@ const styles = stylex.create({
     flexShrink: 0,
     width: '14px',
     height: '14px',
-    color: colorVars['--color-text-disabled'],
+    color: colorVars['--color-text-secondary'],
     marginInlineStart: 'auto',
   },
   callDetailContent: {
@@ -311,7 +314,7 @@ const styles = stylex.create({
     fontSize: typeScaleVars['--text-supporting-size'],
     lineHeight: typeScaleVars['--text-supporting-leading'],
     fontFamily: typographyVars['--font-family-body'],
-    color: colorVars['--color-text-disabled'],
+    color: colorVars['--color-text-secondary'],
     flexShrink: 0,
   },
 
@@ -340,8 +343,8 @@ const styles = stylex.create({
   // Status colors
   colorPending: {color: colorVars['--color-text-disabled']},
   colorRunning: {color: colorVars['--color-accent']},
-  colorComplete: {color: colorVars['--color-success']},
-  colorError: {color: colorVars['--color-error']},
+  colorComplete: {color: colorVars['--color-icon-success']},
+  colorError: {color: colorVars['--color-icon-error']},
 });
 
 // =============================================================================
@@ -351,8 +354,8 @@ const styles = stylex.create({
 const STATUS_ICON_NAMES: Record<ChatToolCallStatus, IconName | null> = {
   pending: 'clock',
   running: null,
-  complete: 'check',
-  error: 'close',
+  complete: 'success',
+  error: 'error',
 };
 
 const STATUS_STYLES: Record<
@@ -364,6 +367,26 @@ const STATUS_STYLES: Record<
   complete: styles.colorComplete,
   error: styles.colorError,
 };
+
+function getStatusAnnouncement(
+  t: ReturnType<typeof useComponentTranslator>,
+  status: ChatToolCallStatus,
+  errorMessage?: string,
+): string {
+  if (status === 'error' && errorMessage != null) {
+    return t('@astryx.chatToolCalls.error', {message: errorMessage});
+  }
+  switch (status) {
+    case 'pending':
+      return t('@astryx.chatToolCalls.status.pending');
+    case 'running':
+      return t('@astryx.chatToolCalls.status.running');
+    case 'complete':
+      return t('@astryx.chatToolCalls.status.complete');
+    case 'error':
+      return t('@astryx.chatToolCalls.status.error');
+  }
+}
 
 function getToolCallKey(call: ChatToolCallItem): string {
   return getKey(call.key, () =>
@@ -384,12 +407,23 @@ function getToolCallKey(call: ChatToolCallItem): string {
 // Internal: single call row
 // =============================================================================
 
-function CallRow({call}: {call: ChatToolCallItem}) {
-  const t = useTranslator();
+function CallRow({
+  call,
+  hasClippedFocusRing = false,
+}: {
+  call: ChatToolCallItem;
+  hasClippedFocusRing?: boolean;
+}) {
+  const t = useComponentTranslator();
   const status = call.status ?? 'complete';
   const hasDetail = call.resultDetail != null;
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const detailId = useId();
+  const statusAnnouncement = getStatusAnnouncement(
+    t,
+    status,
+    call.errorMessage,
+  );
 
   const toggleDetail = hasDetail
     ? () => setIsDetailOpen(prev => !prev)
@@ -412,42 +446,32 @@ function CallRow({call}: {call: ChatToolCallItem}) {
             }
           : undefined
       }
-      {...stylex.props(styles.callRow, hasDetail && styles.callRowClickable)}>
+      {...focusOutlineProps.focusVisible(
+        styles.callRow,
+        hasDetail && styles.callRowClickable,
+        hasDetail && hasClippedFocusRing && styles.callRowFocusInset,
+      )}>
       <span
         title={status === 'error' ? call.errorMessage : undefined}
         {...stylex.props(styles.statusIcon, STATUS_STYLES[status])}>
         {status === 'running' ? (
-          <Spinner size="sm" shade="subtle" />
+          <Spinner size="sm" shade="subtle" aria-hidden="true" />
         ) : status === 'pending' ? (
-          <Spinner size="sm" shade="subtle" />
+          <Spinner size="sm" shade="subtle" aria-hidden="true" />
         ) : (
-          <>
-            <span {...stylex.props(styles.statusIconCircle)} />
-            <span {...stylex.props(styles.statusIconInner)}>
-              <Icon
-                icon={STATUS_ICON_NAMES[status] ?? 'check'}
-                size="xsm"
-                color="inherit"
-              />
-            </span>
-          </>
+          <Icon
+            icon={STATUS_ICON_NAMES[status] ?? 'success'}
+            size="xsm"
+            color="inherit"
+          />
         )}
-        {status === 'error' && call.errorMessage != null && (
-          // The title attribute above is hover-only; expose the error detail
-          // as real text so it reaches screen readers, keyboard, and touch
-          // users. Rendering it inside the row also folds it into the
-          // accessible name of expandable (role="button") rows.
-          <VisuallyHidden>
-            {t('@astryx.chatToolCalls.error', {
-              message: call.errorMessage ?? '',
-            })}
-          </VisuallyHidden>
-        )}
+        <VisuallyHidden>{statusAnnouncement}</VisuallyHidden>
       </span>
       <span {...stylex.props(styles.callName)}>{call.name}</span>
       {call.node != null && (
         <Badge label={call.node} variant="neutral" xstyle={styles.nodePill} />
       )}
+      {/* eslint-disable-next-line @astryx/no-nullish-jsx-guard -- `target` is a string field: an empty string still marks a target */}
       {call.target != null && (
         <span {...stylex.props(styles.callLabel)}>{call.target}</span>
       )}
@@ -455,11 +479,13 @@ function CallRow({call}: {call: ChatToolCallItem}) {
         call.deletions != null ||
         call.stats != null) && (
         <span {...stylex.props(styles.stats)}>
+          {/* eslint-disable-next-line @astryx/no-nullish-jsx-guard -- `additions` is a count: 0 renders "+0" */}
           {call.additions != null && (
             <span {...stylex.props(styles.statsAdditions)}>
               +{call.additions}
             </span>
           )}
+          {/* eslint-disable-next-line @astryx/no-nullish-jsx-guard -- `deletions` is a count: 0 renders "-0" */}
           {call.deletions != null && (
             <span {...stylex.props(styles.statsDeletions)}>
               -{call.deletions}
@@ -468,6 +494,7 @@ function CallRow({call}: {call: ChatToolCallItem}) {
           {call.stats}
         </span>
       )}
+      {/* eslint-disable-next-line @astryx/no-nullish-jsx-guard -- `duration` is a string field, not a slot */}
       {call.duration != null && status === 'complete' && (
         <span {...stylex.props(styles.callDuration)}>{call.duration}</span>
       )}
@@ -521,18 +548,16 @@ function CallRow({call}: {call: ChatToolCallItem}) {
  *     name: tc.toolName,
  *     status: tc.state,
  *     duration: tc.duration,
+ *     resultDetail: <CodeBlock code={tc.args} language="json" />,
  *   }))}
- *   renderDetail={(call) => (
- *     <CodeBlock code={call.args} language="json" />
- *   )}
  * />
  * ```
  */
 export function ChatToolCalls(props: ChatToolCallsProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const {
     calls,
-    label: _customLabel,
+    label: customLabel,
     isExpanded: controlledExpanded,
     defaultIsExpanded,
     onExpandedChange,
@@ -581,6 +606,11 @@ export function ChatToolCalls(props: ChatToolCallsProps) {
   // Multiple calls: latest call at surface with chevron to expand all
   const latestCall = calls[calls.length - 1];
   const latestStatus = latestCall.status ?? 'complete';
+  const latestStatusAnnouncement = getStatusAnnouncement(
+    t,
+    latestStatus,
+    latestCall.errorMessage,
+  );
 
   return (
     <div
@@ -605,14 +635,18 @@ export function ChatToolCalls(props: ChatToolCallsProps) {
             toggle();
           }
         }}
-        {...stylex.props(styles.callRow, styles.callRowToggle)}>
+        {...focusOutlineProps.focusVisible(
+          styles.callRow,
+          styles.callRowToggle,
+        )}>
         {isExpanded ? (
           <>
             <span {...stylex.props(styles.groupIcon)}>
               <Icon icon="wrench" size="sm" color="inherit" />
             </span>
             <span {...stylex.props(styles.groupLabel)}>
-              {t('@astryx.chatToolCalls.groupLabel', {count: calls.length})}
+              {customLabel ??
+                t('@astryx.chatToolCalls.groupLabel', {count: calls.length})}
             </span>
           </>
         ) : (
@@ -620,23 +654,20 @@ export function ChatToolCalls(props: ChatToolCallsProps) {
             <span
               {...stylex.props(styles.statusIcon, STATUS_STYLES[latestStatus])}>
               {latestStatus === 'running' ? (
-                <Spinner size="sm" shade="subtle" />
+                <Spinner size="sm" shade="subtle" aria-hidden="true" />
               ) : latestStatus === 'pending' ? (
-                <Spinner size="sm" shade="subtle" />
+                <Spinner size="sm" shade="subtle" aria-hidden="true" />
               ) : (
-                <>
-                  <span {...stylex.props(styles.statusIconCircle)} />
-                  <span {...stylex.props(styles.statusIconInner)}>
-                    <Icon
-                      icon={STATUS_ICON_NAMES[latestStatus] ?? 'check'}
-                      size="xsm"
-                      color="inherit"
-                    />
-                  </span>
-                </>
+                <Icon
+                  icon={STATUS_ICON_NAMES[latestStatus] ?? 'success'}
+                  size="xsm"
+                  color="inherit"
+                />
               )}
+              <VisuallyHidden>{latestStatusAnnouncement}</VisuallyHidden>
             </span>
             <span {...stylex.props(styles.callName)}>{latestCall.name}</span>
+            {/* eslint-disable-next-line @astryx/no-nullish-jsx-guard -- `target` is a string field: an empty string still marks a target */}
             {latestCall.target != null && (
               <span {...stylex.props(styles.callLabel)}>
                 {latestCall.target}
@@ -668,6 +699,7 @@ export function ChatToolCalls(props: ChatToolCallsProps) {
       {/* Expanded: all calls with full metadata */}
       <div
         id={contentId}
+        inert={isExpanded ? undefined : true}
         {...stylex.props(
           styles.groupContent,
           isExpanded && styles.groupContentExpanded,
@@ -675,7 +707,11 @@ export function ChatToolCalls(props: ChatToolCallsProps) {
         <div {...stylex.props(styles.groupContentInner)}>
           <div {...stylex.props(styles.list)}>
             {calls.map(call => (
-              <CallRow key={getToolCallKey(call)} call={call} />
+              <CallRow
+                key={getToolCallKey(call)}
+                call={call}
+                hasClippedFocusRing
+              />
             ))}
           </div>
         </div>

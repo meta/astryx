@@ -2,7 +2,7 @@
 
 /**
  * @file FieldStatus.tsx
- * @input Uses React, stylex, theme tokens, useAnnounce, Icon
+ * @input Uses React, stylex, theme tokens, useFieldStatusAnnouncement, Icon
  * @output Exports FieldStatus component, FieldStatusProps
  * @position Core implementation; consumed by Field, Switch, CheckboxInput, and the FieldStatus entrypoint
  *
@@ -10,17 +10,17 @@
  * - /packages/core/src/FieldStatus/FieldStatus.doc.mjs (props table, features, implementation notes)
  * - /packages/core/src/Field/Field.doc.mjs (compat docs when public API changes)
  * - /packages/core/src/FieldStatus/index.ts (exports if types change)
+ * - /packages/core/src/FieldStatus/useFieldStatusAnnouncement.ts (announcement timing shared with Field)
  * - /packages/core/src/Field/index.ts (compat re-export if public API changes)
  * - /packages/cli/assets/templates/blocks/components/FieldStatus/ (showcase blocks)
  */
 
 'use client';
 
-import React, {useEffect} from 'react';
+import React from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
-import {useAnnounce} from '../hooks/useAnnounce';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 import {
   colorVars,
   radiusVars,
@@ -31,9 +31,10 @@ import {
 import type {InputStatusType} from '../Field/types';
 import {useEntryAnimation} from '../hooks/useEntryAnimation';
 import {themeProps} from '../utils/themeProps';
-import {Icon} from '../Icon';
+import {Icon} from '../Icon/Icon';
 import type {IconName} from '../Icon';
 import type {FieldStatusVariantMap} from './index';
+import {useFieldStatusAnnouncement} from './useFieldStatusAnnouncement';
 
 /**
  * Maps each status type to its status glyph. Mirrors the mapping the input
@@ -46,19 +47,39 @@ const statusIconMap: Record<InputStatusType, IconName> = {
   success: 'success',
 };
 
+const ATTACHED_OVERLAP = `var(--_field-status-overlap, ${spacingVars['--spacing-1-5']})`;
+
 const styles = stylex.create({
   base: {
+    // Forced colors replace status fills with Canvas; this boundary keeps the
+    // fill's shape visible (architecture:theme-tokens INV11).
+    outlineWidth: {default: null, '@media (forced-colors: active)': '1px'},
+    outlineStyle: {default: null, '@media (forced-colors: active)': 'solid'},
+    outlineColor: {
+      default: null,
+      '@media (forced-colors: active)': 'CanvasText',
+    },
+    outlineOffset: {default: null, '@media (forced-colors: active)': '-1px'},
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-supporting-size'],
     lineHeight: typeScaleVars['--text-supporting-leading'],
+    // A validation message often echoes the value that failed (an address, a
+    // URL). Let such an unbroken token wrap inside the field instead of
+    // painting past its edges (WCAG 2.2 SC 1.4.10 Reflow).
+    overflowWrap: 'anywhere',
+    // Text inside keeps `anywhere` too (Text FR3).
+    '--_astryx-text-overflow-wrap': 'anywhere',
   },
   attached: {
-    marginTop: `calc(-1 * ${spacingVars['--spacing-1-5']})`,
-    paddingBlockStart: `calc(${spacingVars['--spacing-1-5']} + ${spacingVars['--spacing-2']})`,
+    marginTop: `calc(-1 * ${ATTACHED_OVERLAP})`,
+    paddingBlockStart: `calc(${ATTACHED_OVERLAP} + ${spacingVars['--spacing-2']})`,
     paddingBlockEnd: spacingVars['--spacing-2'],
     paddingInline: spacingVars['--spacing-2'],
     borderEndStartRadius: radiusVars['--radius-element'],
     borderEndEndRadius: radiusVars['--radius-element'],
+    // The overlap is visual only. Let pointer input reach the control beneath
+    // it instead of allowing the later-painted status box to steal the click.
+    pointerEvents: 'none',
   },
   detached: {
     marginTop: spacingVars['--spacing-1'],
@@ -85,15 +106,15 @@ const styles = stylex.create({
 const colorStyles = stylex.create({
   warning: {
     backgroundColor: colorVars['--color-warning-muted'],
-    color: colorVars['--color-text-yellow'],
+    color: colorVars['--color-on-warning-muted'],
   },
   error: {
     backgroundColor: colorVars['--color-error-muted'],
-    color: colorVars['--color-text-red'],
+    color: colorVars['--color-on-error-muted'],
   },
   success: {
     backgroundColor: colorVars['--color-success-muted'],
-    color: colorVars['--color-text-green'],
+    color: colorVars['--color-on-success-muted'],
   },
 });
 
@@ -103,6 +124,9 @@ const colorStyles = stylex.create({
 export type FieldStatusVariant = keyof FieldStatusVariantMap;
 
 export interface FieldStatusProps extends BaseProps<HTMLDivElement> {
+  /**
+   * Ref to the rendered message box.
+   */
   ref?: React.Ref<HTMLDivElement>;
   /**
    * The type of status to display.
@@ -121,6 +145,28 @@ export interface FieldStatusProps extends BaseProps<HTMLDivElement> {
   variant?: FieldStatusVariant;
 }
 
+// A direct `tooltip` resolves to the deprecated signature first; every other
+// call, a `FieldStatusVariant`-typed value included, resolves to the second,
+// which `ComponentProps<typeof FieldStatus>` reads.
+/**
+ * @deprecated FieldStatus has no `tooltip` presentation
+ * (`component:FieldStatus` FR7): it draws a plain message box with no tooltip.
+ * Set `statusVariant="tooltip"` on the field control instead, which shows the
+ * message from its on-field status icon. Removed in the next minor release.
+ */
+export function FieldStatus(
+  props: FieldStatusProps & {variant: 'tooltip'},
+): React.JSX.Element;
+/**
+ * A status message component for form fields: an `attached` message under a
+ * field, or a `detached` one with its own status icon.
+ *
+ * @example
+ * ```
+ * <FieldStatus type="error" message="This field is required" />
+ * ```
+ */
+export function FieldStatus(props: FieldStatusProps): React.JSX.Element;
 /**
  * A status message component for form fields.
  *
@@ -129,9 +175,10 @@ export interface FieldStatusProps extends BaseProps<HTMLDivElement> {
  * decorative for assistive tech (`aria-hidden`): the message text already names
  * the status in words and is announced through the live region. The `attached`
  * variant keeps its status affordance on the bordered input, so it renders no
- * icon here to avoid a duplicate. The `tooltip` variant renders no message box
- * at all — the input surfaces the status through a tooltip on its on-field
- * icon — so callers skip rendering FieldStatus for it.
+ * icon here to avoid a duplicate. FieldStatus has no `tooltip` presentation:
+ * a field control given `statusVariant="tooltip"` surfaces the status through
+ * a tooltip on its on-field icon and renders no FieldStatus for it
+ * (`component:FieldStatus` FR7).
  *
  * Screen-reader announcements go through the persistent `useAnnounce` live
  * regions (assertive for errors, polite otherwise) rather than `role`/
@@ -166,17 +213,10 @@ export function FieldStatus({
   ...rest
 }: FieldStatusProps) {
   const entryStyle = useEntryAnimation('slideDown');
-  const announce = useAnnounce();
-
-  // Announce the message through the persistently-mounted live regions.
   // Announce-on-mount is intentional: callers conditionally mount FieldStatus
   // when a status appears (and whole forms can mount with a server-side
   // validation error already present), and both cases must be heard.
-  useEffect(() => {
-    if (message) {
-      announce(message, type === 'error' ? 'assertive' : 'polite');
-    }
-  }, [announce, message, type]);
+  useFieldStatusAnnouncement(message, type);
 
   return (
     <div

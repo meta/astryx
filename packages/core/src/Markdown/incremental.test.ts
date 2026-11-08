@@ -5,9 +5,15 @@ import {
   parseMarkdown,
   parseMarkdownIncremental,
   createIncrementalState,
+  getIncrementalParseWork,
   trimStreamingArtifacts,
 } from './parser';
-import type {BlockNode, InlineNode} from './parser';
+import type {
+  BlockNode,
+  BlockNodeWithMath,
+  InlineNode,
+  InlineNodeWithMath,
+} from './parser';
 
 function simulateStreaming(fullText: string, chunkSize = 10) {
   const state = createIncrementalState();
@@ -39,6 +45,18 @@ describe('parseMarkdownIncremental', () => {
       expect(final[0].items).toHaveLength(3);
       expect(final[0].loose).toBe(true);
     }
+  });
+
+  it('keeps projected settled-list identity when a following block settles too', () => {
+    const state = createIncrementalState();
+    parseMarkdownIncremental('1. a\n\nTail', state);
+    const result = parseMarkdownIncremental(
+      '1. a\n\n1. b\n\nAfter\n\nTail',
+      state,
+    );
+
+    expect(state.settledBlocks).toEqual(parseMarkdown(state.settledText));
+    expect(result[0]).toBe(state.settledBlocks[0]);
   });
 
   it('joins loose ) ordered list across streamed chunks', () => {
@@ -89,6 +107,150 @@ describe('parseMarkdownIncremental', () => {
     expect(final).toEqual(full);
   });
 
+  it('matches the full parse when math delimiters arrive across chunks', () => {
+    const text = 'Before $x_1 + *y*$ after.\n\n$$\n\\sum_i x_i\n$$\n\nDone.';
+    const state = createIncrementalState<true>();
+    let final: BlockNodeWithMath[] = [];
+    for (let end = 1; end <= text.length; end++) {
+      final = parseMarkdownIncremental(text.slice(0, end), state, {math: true});
+    }
+    expect(final).toEqual(parseMarkdown(text, {math: true}));
+  });
+
+  describe.each([
+    ['list', '- $$\n  x + y\n  $$'],
+    ['task list', '- [ ] $$\n  x + y\n  $$'],
+    ['blockquote', '> $$\n> x + y\n> $$'],
+    ['blockquote in a list', '- > $$\n  > x + y\n  > $$'],
+    ['CRLF list', '- $$\r\n  x + y\r\n  $$\r\n'],
+  ] as const)('nested display math in a %s', (_label, text) => {
+    it.each([false, true])(
+      'withholds the incomplete container (sourceRanges=%s)',
+      sourceRanges => {
+        const closingDelimiter = text.lastIndexOf('$$');
+        const state = createIncrementalState<true>();
+        expect(
+          parseMarkdownIncremental(text.slice(0, closingDelimiter), state, {
+            math: true,
+            sourceRanges,
+          }),
+        ).toEqual([]);
+      },
+    );
+
+    it.each([false, true])(
+      'matches the full parse at every stream split (sourceRanges=%s)',
+      sourceRanges => {
+        const options = {math: true as const, sourceRanges};
+        const full = parseMarkdown(text, options);
+
+        // One long-lived state sees every character boundary in order.
+        const characterState = createIncrementalState<true>();
+        let characterResult = parseMarkdownIncremental(
+          '',
+          characterState,
+          options,
+        );
+        for (let end = 1; end <= text.length; end++) {
+          characterResult = parseMarkdownIncremental(
+            text.slice(0, end),
+            characterState,
+            options,
+          );
+        }
+        expect(characterResult).toEqual(full);
+
+        // Markdown's production streaming path trims partial syntax before it
+        // reaches the incremental parser. A terminal nested closer must survive
+        // that pass rather than being mistaken for a fresh opener.
+        const productionState = createIncrementalState<true>();
+        let productionResult = parseMarkdownIncremental(
+          '',
+          productionState,
+          options,
+        );
+        for (let end = 1; end <= text.length; end++) {
+          const prefix = trimStreamingArtifacts(text.slice(0, end), options);
+          productionResult = parseMarkdownIncremental(
+            prefix,
+            productionState,
+            options,
+          );
+        }
+        expect(productionResult).toEqual(full);
+
+        // Every possible two-chunk split converges to the same complete tree,
+        // both directly and through Markdown's production trimming pass.
+        for (let split = 0; split <= text.length; split++) {
+          const state = createIncrementalState<true>();
+          parseMarkdownIncremental(text.slice(0, split), state, options);
+          expect(parseMarkdownIncremental(text, state, options)).toEqual(full);
+
+          const trimmedState = createIncrementalState<true>();
+          parseMarkdownIncremental(
+            trimStreamingArtifacts(text.slice(0, split), options),
+            trimmedState,
+            options,
+          );
+          expect(
+            parseMarkdownIncremental(
+              trimStreamingArtifacts(text, options),
+              trimmedState,
+              options,
+            ),
+          ).toEqual(full);
+        }
+      },
+    );
+  });
+
+  describe.each([
+    ['list', '- $$\n  x\n- next\n\nAfter'],
+    ['blockquote', '> $$\n> x\n\nAfter'],
+    ['deeper blockquote', '> $$\n> > x\n> > $$'],
+    ['deeper blockquote in a list', '- > $$\n  > > x\n  > > $$'],
+    ['deeper inner quote in a quoted list', '> - $$\n>   > x\n>   > $$'],
+  ] as const)('unmatched display math after a %s ends', (_label, text) => {
+    it.each([false, true])(
+      'returns to literal parsing (sourceRanges=%s)',
+      sourceRanges => {
+        const options = {math: true as const, sourceRanges};
+        const full = parseMarkdown(text, options);
+        for (const trimsStreamingArtifacts of [false, true]) {
+          const state = createIncrementalState<true>();
+          let result = parseMarkdownIncremental('', state, options);
+          for (let end = 1; end <= text.length; end++) {
+            const prefix = text.slice(0, end);
+            result = parseMarkdownIncremental(
+              trimsStreamingArtifacts
+                ? trimStreamingArtifacts(prefix, options)
+                : prefix,
+              state,
+              options,
+            );
+          }
+          expect(result).toEqual(full);
+        }
+      },
+    );
+  });
+
+  it('withholds an incomplete display-math block while streaming', () => {
+    const state = createIncrementalState<true>();
+    const blocks = parseMarkdownIncremental('Intro\n\n$$\nx + y', state, {
+      math: true,
+    });
+    expect(blocks).toEqual(parseMarkdown('Intro'));
+  });
+
+  it('stores math nodes only in a math-enabled incremental state', () => {
+    const text = 'Intro.\n\nInline $x$.';
+    const state = createIncrementalState<true>();
+    const blocks = parseMarkdownIncremental(text, state, {math: true});
+    expect(blocks).toEqual(parseMarkdown(text, {math: true}));
+    expect(state.settledBlocks).toEqual(parseMarkdown('Intro.', {math: true}));
+  });
+
   it('handles table streaming', () => {
     const text = '| Col1 | Col2 |\n| --- | --- |\n| a | b |\n| c | d |';
     const {final} = simulateStreaming(text, 5);
@@ -105,6 +267,49 @@ describe('parseMarkdownIncremental', () => {
       expect(final[0].items).toHaveLength(3);
     }
   });
+
+  it.each([
+    ['blockquote', 'Intro.\n\n> quoted\ncontinued lazily'],
+    ['unordered list', 'Intro.\n\n- listed\ncontinued lazily'],
+    ['ordered list', 'Intro.\n\n1. listed\ncontinued lazily'],
+    ['task list', 'Intro.\n\n- [ ] listed\ncontinued lazily'],
+    ['CRLF blockquote', 'Intro.\r\n\r\n> quoted\r\ncontinued lazily'],
+    [
+      'later blockquote paragraph',
+      'Intro.\n\n> para1\n>\n> para2\ncontinued lazily',
+    ],
+    ['nested containers', 'Intro.\n\n> 1. > quoted\ncontinued lazily'],
+  ] as const)(
+    'keeps a lazy continuation in its %s at every stream split',
+    (_label, text) => {
+      const full = parseMarkdown(text, {sourceRanges: true});
+      expect(full).toHaveLength(2);
+      expect(JSON.stringify(full[1])).toContain('continued lazily');
+      const characterState = createIncrementalState();
+      let result: BlockNode[] = [];
+      for (let end = 1; end <= text.length; end++) {
+        result = parseMarkdownIncremental(text.slice(0, end), characterState, {
+          sourceRanges: true,
+          isFinal: false,
+        });
+      }
+      expect(result).toEqual(full);
+
+      for (let split = 0; split <= text.length; split++) {
+        const state = createIncrementalState();
+        parseMarkdownIncremental(text.slice(0, split), state, {
+          sourceRanges: true,
+          isFinal: false,
+        });
+        expect(
+          parseMarkdownIncremental(text, state, {
+            sourceRanges: true,
+            isFinal: true,
+          }),
+        ).toEqual(full);
+      }
+    },
+  );
 
   it('handles 1-char chunks and matches full parse', () => {
     const text = '# Hello\n\nWorld';
@@ -209,6 +414,76 @@ describe('parseMarkdownIncremental', () => {
     expect(state.settledBlocks).toBe(cachedBlocks);
   });
 
+  it('returns a fresh array and leaves earlier snapshots untouched', () => {
+    const state = createIncrementalState();
+    const first = parseMarkdownIncremental(
+      '# Stable\n\nFirst paragraph\n\nTail',
+      state,
+    );
+    const stableHeading = first[0];
+    const snapshot = structuredClone(first);
+
+    const second = parseMarkdownIncremental(
+      '# Stable\n\nFirst paragraph\n\nTail grows',
+      state,
+    );
+
+    // Call 1's return is a stable snapshot: a later call neither replaces it
+    // in place nor edits the block nodes it holds.
+    expect(second).not.toBe(first);
+    expect(first).toEqual(snapshot);
+    // Settled block objects are reused across calls by reference.
+    expect(second[0]).toBe(stableHeading);
+    expect(second).toEqual(
+      parseMarkdown('# Stable\n\nFirst paragraph\n\nTail grows'),
+    );
+  });
+
+  it('re-parses when settled text is replaced at the same length', () => {
+    const state = createIncrementalState();
+    const before = '# Alpha\n\nOld body copy';
+    const after = '# Bravo\n\nNew body copy';
+    expect(after).toHaveLength(before.length);
+
+    parseMarkdownIncremental(before, state);
+    const blocks = parseMarkdownIncremental(after, state);
+
+    expect(blocks).toEqual(parseMarkdown(after));
+  });
+
+  it('re-parses when settled text is replaced by longer content', () => {
+    const state = createIncrementalState();
+    parseMarkdownIncremental('# Alpha\n\nOld body copy', state);
+
+    const after =
+      '# Bravo heading\n\nNew body copy, longer than before\n\nTail';
+    const blocks = parseMarkdownIncremental(after, state);
+
+    expect(blocks).toEqual(parseMarkdown(after));
+  });
+
+  it('keeps the prefix settled while a long fence streams and closes', () => {
+    const state = createIncrementalState();
+    const prefix = '# Stable\n\n';
+    const fence = '```ts\nconst a = 1;\n\nconst b = 2;';
+    let stableHeading: BlockNode | undefined;
+
+    for (let end = 1; end <= fence.length; end++) {
+      const blocks = parseMarkdownIncremental(
+        prefix + fence.slice(0, end),
+        state,
+      );
+      stableHeading ??= blocks[0];
+      expect(blocks[0]).toBe(stableHeading);
+      expect(state.settledText).toBe('# Stable');
+    }
+
+    const complete = `${prefix}${fence}\n\`\`\`\n\nAfter`;
+    const blocks = parseMarkdownIncremental(complete, state);
+    expect(blocks[0]).toBe(stableHeading);
+    expect(blocks).toEqual(parseMarkdown(complete));
+  });
+
   it('tracks settledText correctly', () => {
     const state = createIncrementalState();
     parseMarkdownIncremental('# Hello\n\nWorld', state);
@@ -260,6 +535,15 @@ describe('trimStreamingArtifacts', () => {
 
   it('preserves closed inline code', () => {
     expect(trimStreamingArtifacts('Hello `code`')).toBe('Hello `code`');
+  });
+
+  it('withholds incomplete inline math only when math parsing is enabled', () => {
+    expect(trimStreamingArtifacts('Value $', {math: true})).toBe('Value ');
+    expect(trimStreamingArtifacts('Value $x + 1', {math: true})).toBe('Value ');
+    expect(trimStreamingArtifacts('Value $x + 1')).toBe('Value $x + 1');
+    expect(trimStreamingArtifacts('Value $x + 1$', {math: true})).toBe(
+      'Value $x + 1$',
+    );
   });
 
   it('trims trailing unclosed strikethrough', () => {
@@ -360,6 +644,199 @@ describe('streaming structural suppression', () => {
     }
   });
 
+  // A `\|` is literal text, not a cell delimiter, so an unfinished line
+  // carrying only escaped pipes is ordinary prose. Holding it back hid the
+  // text — and when it was the whole document, rendered nothing at all.
+  describe('escaped pipes in the unsettled tail', () => {
+    it('renders an unfinished first line whose only pipes are escaped', () => {
+      const text = 'Costs 5 \\| 10 per unit';
+      const state = createIncrementalState();
+
+      const blocks = parseMarkdownIncremental(text, state);
+
+      expect(blocks).toEqual(parseMarkdown(text));
+      expect(blocks).toHaveLength(1);
+    });
+
+    it('renders an unfinished tail line after a settled block', () => {
+      const text = 'Intro\n\nCosts 5 \\| 10 per unit';
+      const state = createIncrementalState();
+
+      const blocks = parseMarkdownIncremental(text, state);
+
+      expect(blocks).toEqual(parseMarkdown(text));
+      expect(blocks).toHaveLength(2);
+    });
+
+    /** The text a reader would see for one block. */
+    function visibleText(block: BlockNodeWithMath): string {
+      const fromInline = (nodes: InlineNodeWithMath[]): string =>
+        nodes
+          .map(node => {
+            switch (node.type) {
+              case 'text':
+              case 'code':
+                return node.content;
+              case 'math':
+                return node.value;
+              case 'bold':
+              case 'italic':
+              case 'strikethrough':
+              case 'link':
+                return fromInline(node.children);
+              case 'break':
+                return '\n';
+              case 'image':
+                return node.alt;
+              case 'citation':
+                return '';
+            }
+          })
+          .join('');
+      switch (block.type) {
+        case 'heading':
+        case 'paragraph':
+          return fromInline(block.children);
+        case 'codeblock':
+          return block.content;
+        case 'math':
+          return block.value;
+        case 'blockquote':
+          return block.children.map(visibleText).join('\n');
+        case 'list':
+          return block.items
+            .map(item => item.children.map(visibleText).join('\n'))
+            .join('\n');
+        case 'table':
+          return [block.headers, ...block.rows]
+            .map(row => row.map(cell => fromInline(cell.children)).join(' '))
+            .join('\n');
+        case 'image':
+          return block.alt;
+        case 'hr':
+          return '';
+      }
+    }
+
+    /**
+     * What the tail of a streamed prose line should read as once rendered:
+     * every `\|` is one literal pipe, and the parser trims the unsettled
+     * tail's surrounding whitespace.
+     */
+    function expectedTail(source: string): string {
+      return source.replace(/\\\|/g, '|').trim();
+    }
+
+    it('keeps the whole tail visible at every prefix, with no settled text', () => {
+      const text = 'Costs 5 \\| 10 per unit';
+      const state = createIncrementalState();
+
+      for (let length = 1; length <= text.length; length++) {
+        const blocks = parseMarkdownIncremental(text.slice(0, length), state);
+        const tail = expectedTail(text.slice(0, length));
+
+        expect(blocks).toHaveLength(1);
+        expect(visibleText(blocks[0])).toBe(tail);
+      }
+    });
+
+    it('keeps the whole tail visible at every prefix, after a settled block', () => {
+      const settled = 'Intro\n\n';
+      const text = `${settled}Costs 5 \\| 10 per unit`;
+      const state = createIncrementalState();
+
+      for (let length = settled.length + 1; length <= text.length; length++) {
+        const blocks = parseMarkdownIncremental(text.slice(0, length), state);
+        const tail = expectedTail(text.slice(settled.length, length));
+
+        // The settled paragraph stays put and the tail is fully readable.
+        expect(blocks).toHaveLength(2);
+        expect(visibleText(blocks[0])).toBe('Intro');
+        expect(visibleText(blocks[1])).toBe(tail);
+      }
+
+      expect(parseMarkdownIncremental(text, state)).toEqual(
+        parseMarkdown(text),
+      );
+    });
+
+    it('keeps parsing bounded to the tail as the line streams in', () => {
+      const prefix = 'Filler paragraph.\n\n'.repeat(40);
+      const text = `${prefix}Costs 5 \\| 10 per unit`;
+      const state = createIncrementalState();
+      // Prime the cache: the first call has nothing settled yet and reads the
+      // whole snapshot by definition.
+      parseMarkdownIncremental(`${prefix}C`, state);
+      let worstSplitCharacters = 0;
+
+      for (let length = prefix.length + 2; length <= text.length; length++) {
+        parseMarkdownIncremental(text.slice(0, length), state);
+        worstSplitCharacters = Math.max(
+          worstSplitCharacters,
+          getIncrementalParseWork(state).splitCharacters,
+        );
+      }
+
+      // Only the unsettled tail is re-split, never the settled filler.
+      expect(worstSplitCharacters).toBeLessThan(
+        text.length - prefix.length + 5,
+      );
+    });
+
+    it.each([false, true])(
+      'decodes escaped pipes in code spans during production streaming (sourceRanges=%s)',
+      sourceRanges => {
+        const text =
+          'Intro\n\n| Concept | TypeScript |\n| --- | --- |\n| Null safety | **`T \\| null`** |';
+        const options = {sourceRanges, math: false as const};
+        const full = parseMarkdown(text, options);
+
+        for (const trimsArtifacts of [false, true]) {
+          const state = createIncrementalState();
+          let streamed = parseMarkdownIncremental('', state, options);
+          for (let end = 1; end <= text.length; end++) {
+            const prefix = text.slice(0, end);
+            streamed = parseMarkdownIncremental(
+              trimsArtifacts ? trimStreamingArtifacts(prefix, options) : prefix,
+              state,
+              options,
+            );
+          }
+
+          expect(state.settledText).toBe('Intro');
+          expect(streamed).toEqual(full);
+          expect(streamed).toHaveLength(2);
+          expect(streamed[1].type).toBe('table');
+          expect(visibleText(streamed[1])).toBe(
+            'Concept TypeScript\nNull safety T | null',
+          );
+        }
+      },
+    );
+
+    it('still holds back a lone header whose pipes are unescaped', () => {
+      const state = createIncrementalState();
+
+      const blocks = parseMarkdownIncremental('Col1 | Col2', state);
+
+      expect(blocks).toHaveLength(0);
+    });
+
+    it('streams table rows containing escaped pipes once the table exists', () => {
+      const text = '| Col1 | Col2 |\n| --- | --- |\n| a \\| b | c |';
+      const state = createIncrementalState();
+
+      const blocks = parseMarkdownIncremental(text, state);
+
+      const table = blocks.find(b => b.type === 'table');
+      expect(table?.type).toBe('table');
+      if (table?.type === 'table') {
+        expect(table.rows).toHaveLength(1);
+        expect(table.rows[0]).toHaveLength(2);
+      }
+    });
+  });
+
   it('suppresses ordered list marker without content', () => {
     const state = createIncrementalState();
     const input = 'Intro\n\n1. ';
@@ -408,7 +885,7 @@ describe('streaming end-to-end: no raw syntax visible', () => {
    * Helper: extract all visible text from a block tree.
    * Returns the text that would be rendered to the user, without markdown syntax.
    */
-  function extractVisibleText(blocks: BlockNode[]): string {
+  function extractVisibleText(blocks: BlockNodeWithMath[]): string {
     let text = '';
     for (const block of blocks) {
       switch (block.type) {
@@ -418,6 +895,9 @@ describe('streaming end-to-end: no raw syntax visible', () => {
           break;
         case 'codeblock':
           text += block.content;
+          break;
+        case 'math':
+          text += block.value;
           break;
         case 'blockquote':
           text += extractVisibleText(block.children);
@@ -447,7 +927,7 @@ describe('streaming end-to-end: no raw syntax visible', () => {
     return text;
   }
 
-  function extractInlineText(nodes: InlineNode[]): string {
+  function extractInlineText(nodes: InlineNodeWithMath[]): string {
     let text = '';
     for (const node of nodes) {
       switch (node.type) {
@@ -456,6 +936,9 @@ describe('streaming end-to-end: no raw syntax visible', () => {
           break;
         case 'code':
           text += node.content;
+          break;
+        case 'math':
+          text += node.value;
           break;
         case 'bold':
         case 'italic':
@@ -478,11 +961,11 @@ describe('streaming end-to-end: no raw syntax visible', () => {
   }
 
   function streamCharByChar(fullText: string): {
-    snapshots: BlockNode[][];
+    snapshots: BlockNodeWithMath[][];
     visibleTexts: string[];
   } {
     const state = createIncrementalState();
-    const snapshots: BlockNode[][] = [];
+    const snapshots: BlockNodeWithMath[][] = [];
     const visibleTexts: string[] = [];
     for (let i = 1; i <= fullText.length; i++) {
       const trimmed = trimStreamingArtifacts(fullText.slice(0, i));
@@ -698,5 +1181,18 @@ describe('parseMarkdownIncremental link reference definitions', () => {
       state,
     );
     expect(firstLinkHref(after)).toBe('/docs');
+  });
+
+  it('keeps first-definition-wins when definitions move into the settled prefix', () => {
+    const state = createIncrementalState();
+    const first = 'See [d].\n\n[d]: /first\n\nMiddle paragraph\n\n[d]: /second';
+    expect(firstLinkHref(parseMarkdownIncremental(first, state))).toBe(
+      '/first',
+    );
+
+    const complete = `${first}\n\nAfter`;
+    const blocks = parseMarkdownIncremental(complete, state);
+    expect(blocks).toEqual(parseMarkdown(complete));
+    expect(firstLinkHref(blocks)).toBe('/first');
   });
 });

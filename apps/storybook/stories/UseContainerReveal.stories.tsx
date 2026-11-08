@@ -78,7 +78,7 @@ function RevealRow({label}: {label: string}) {
 }
 
 const meta: Meta = {
-  title: 'Hooks/useContainerReveal',
+  title: 'Core/Hooks/useContainerReveal',
 };
 export default meta;
 type Story = StoryObj;

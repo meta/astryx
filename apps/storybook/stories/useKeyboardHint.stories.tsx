@@ -113,7 +113,7 @@ function HintToolbar({label, orientation, items}: HintToolbarProps) {
 }
 
 const meta: Meta = {
-  title: 'Hooks/useKeyboardHint',
+  title: 'Core/Hooks/useKeyboardHint',
   parameters: {
     layout: 'centered',
   },

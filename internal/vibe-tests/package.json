@@ -20,7 +20,6 @@
     "generate-a11y-manifest": "tsx src/generate-a11y-manifest.ts",
     "report:build": "tsx src/build-report.ts",
     "report:dev": "tsx src/build-report.ts --dev",
-    "report:deploy": "tsx src/deploy-report.ts",
     "preview:dev": "vite --config app/vite.config.preview.ts",
     "preview:build": "vite build --config app/vite.config.preview.ts",
     "screenshot:previews": "tsx src/screenshot-previews.ts",
@@ -28,7 +27,15 @@
     "design-judge:dry": "tsx src/design-judge.ts --dry-run",
     "correct": "tsx src/correct-previews.ts",
     "correct:dry": "tsx src/correct-previews.ts --dry-run",
-    "preview:tsc-only": "tsx src/build-previews.ts --tsc-only"
+    "preview:tsc-only": "tsx src/build-previews.ts --tsc-only",
+    "setup:prepare": "node setup-test/run-setup.mjs",
+    "setup:test": "vitest run --root ../.. internal/vibe-tests/setup-test --project node",
+    "fixtures:verify": "node scripts/fixture-suite.mjs verify",
+    "fixtures:prepare": "node scripts/fixture-suite.mjs prepare",
+    "fixtures:refresh": "node scripts/fixture-suite.mjs refresh",
+    "fixtures:build": "node scripts/fixture-suite.mjs build",
+    "fixtures:contrast": "node scripts/fixture-browser.mjs contrast",
+    "fixtures:screenshots": "node scripts/fixture-browser.mjs screenshots"
   },
   "dependencies": {
     "@astryxdesign/cli": "*",

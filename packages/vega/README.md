@@ -17,6 +17,7 @@ Renders [Vega](https://vega.github.io/vega/) and [Vega-Lite](https://vega.github
 | `tsup.config.ts`    | Config    | Build config: CJS + ESM + `.d.ts` outputs                    |
 | `src/index.ts`      | Barrel    | Public API surface                                           |
 | `src/VegaChart.tsx` | Component | Inspects `$schema`, compiles or renders, owns View lifecycle |
+| `src/viewInputs.ts` | Utility   | Detects value changes in the props that own the View         |
 | `src/schema.ts`     | Utility   | Parses and validates Vega/Vega-Lite `$schema` URLs           |
 | `src/types.ts`      | Types     | Shared TypeScript types for this package                     |
 
@@ -28,7 +29,7 @@ Vega is published **only** under the `@canary` dist-tag, so you must request tha
 npm install @astryxdesign/vega@canary vega vega-lite
 ```
 
-> Canary builds track the latest commit on `main` (`0.x.y-canary.<sha>`). They can break between any two versions — pin an exact version if you need stability.
+> Canary builds follow `main`'s tip, published at most once an hour and on demand (`0.x.y-canary.<sha>`). They can break between any two versions — pin an exact version if you need stability.
 
 ## Usage
 
@@ -133,9 +134,51 @@ import {VegaChart} from '@astryxdesign/vega';
 | -------------------- | --------- | --------------------------------------------------------- |
 | `ast`                | `boolean` | Retain expression AST in the runtime (useful for tooling) |
 
+### View lifecycle
+
+`<VegaChart>` builds a Vega `View` on mount and finalizes it on unmount. In
+between, it rebuilds the View only when `spec`, `compileOptions`,
+`parseConfig`, `parseOptions`, or `viewOptions` **changes value** — these props
+are compared by value against the values the live View was built from, not by
+reference. Two consequences, and you need neither `useMemo` nor a discipline
+about object identity for either:
+
+- an object literal rebuilt inline on every render does **not** tear the chart
+  down;
+- a spec you edit **in place** — held in a ref, a module constant, or shared
+  between renders — **is** picked up, because the comparison is against a copy
+  taken when the View was built, not against the previous props.
+
+Functions inside those props (a `tooltip` handler, `logger`, `loader`, `expr`,
+or `fieldTitle`) and class instances are compared by reference, since their
+behavior lives in methods a copy cannot capture: replace the value rather than
+mutating it.
+
+Two shapes cannot be copied for comparison: a subtree that re-enters an object
+already on its own path (a reference cycle), and one nested deeper than 100
+levels. Those parts are compared **by reference**, so passing the **same**
+object again is stable — a chart built from a cyclic spec is not rebuilt on
+every render — while passing a **new** object rebuilds the View even when it
+holds equal values.
+
+What that costs differs between the two:
+
+- **A cycle hides nothing.** Its re-entry edge points back at an object the
+  copy already walked, so an in-place edit anywhere in a cyclic spec is still
+  detected normally.
+- **Past 100 levels, an in-place edit is invisible** — the reference did not
+  change and the values below were never copied. Replace the object, or drive
+  the View through `onReady`, to update from down there.
+
+Everything the copy did reach is compared by value either way, so a mutation
+elsewhere in the spec is picked up even when part of it is opaque.
+
+Everything else is inert to the lifecycle: `data`, `className`, `style`,
+`onReady`, and `onError` never rebuild the View.
+
 ### Data loading
 
-`data` maps dataset names to tuple arrays and is applied via `view.data(name, tuples)` during View initialization, before the first render. It is _not reactive_; changes after mount are ignored.
+`data` maps dataset names to tuple arrays and is applied via `view.data(name, tuples)` during View initialization, before the first render. It is _not reactive_; changes after mount are ignored, and a new `data` object never rebuilds the View by itself. (When something else rebuilds the View, the new View loads whatever `data` holds at that moment.)
 
 To update data dynamically after render, use `onReady` to get the live View and drive it yourself:
 
@@ -155,6 +198,43 @@ To update data dynamically after render, use `onReady` to get the live View and 
   }}
 />
 ```
+
+### Untrusted specs
+
+A Vega/Vega-Lite spec is a program, not just data: Vega evaluates the
+expression strings inside it (signals, event streams, encodings, filters)
+and, by default, compiles them to JavaScript with the Function constructor.
+A spec's `data` entries can also name URLs — including signal-built dynamic
+ones — that the default loader will fetch with the page's credentials.
+
+`<VegaChart>` renders the spec you give it with Vega's defaults, so those
+defaults define the trust boundary: **only pass specs you author or
+review.** If specs come from users, stored documents, or model output, wire
+the safe evaluation mode through the existing pass-through options — Vega's
+own guidance for untrusted specs:
+
+```tsx
+import {expressionInterpreter} from 'vega-interpreter';
+import {loader} from 'vega';
+
+<VegaChart
+  spec={untrustedSpec}
+  // Retain the expression AST and evaluate it interpreted (no Function
+  // constructor). Slower, and a small subset of expressions is unsupported —
+  // see the vega-interpreter README.
+  parseOptions={{ast: true}}
+  viewOptions={{
+    expr: expressionInterpreter,
+    // Restrict (or disable) what a spec may load. `mode: 'file'` with no
+    // baseURL rejects everything; supply your own loader to allowlist hosts.
+    loader: loader({mode: 'file'}),
+  }}
+/>;
+```
+
+`vega-interpreter` is a separate package (`npm install vega-interpreter`);
+pair it with a `Content-Security-Policy` that omits `'unsafe-eval'` so the
+boundary is enforced by the platform, not only by configuration.
 
 ### `parseSchema(schema)` (exported utility)
 
@@ -184,20 +264,11 @@ pnpm -F @astryxdesign/vega build
 `package.json` keeps `"private": true` plus an `"astryx": { "canaryOnly": true }` marker. The release workflow (`.github/workflows/release.yml`) handles both dist-tags:
 
 - The **stable (`latest`) job** skips every package that is `private` **or** `canaryOnly`, so Vega can never be published as a stable release by accident.
-- The **canary job** runs on every push to `main`. In its ephemeral CI checkout only (never in git) it strips the `private` flag from `canaryOnly` packages and publishes them to the `@canary` dist-tag as `0.x.y-canary.<short-sha>`, with npm OIDC trusted publishing + provenance.
+- The **canary job** runs at most hourly from `main`'s tip, and on demand from `main`. In its ephemeral CI checkout only (never in git) it strips the `private` flag from `canaryOnly` packages and publishes them to the `@canary` dist-tag as `0.x.y-canary.<short-sha>`, with npm OIDC trusted publishing + provenance.
 
 The committed `private: true` is npm's hard guarantee that no stable publish can ever happen — **do not remove it until the graduation steps below are intentionally taken.**
 
-> **First canary won't publish until the package name is claimed on npm.** npm cannot register OIDC trust for a name that does not yet exist on the registry. An `@astryxdesign` npm org owner must bootstrap it once (this also applies before the first stable publish):
->
-> ```bash
-> npm i -g npm@latest
-> npm login --registry https://registry.npmjs.org   # must be an @astryxdesign org owner
-> pnpm run setup-trusted-publishing                  # audit — shows what needs bootstrap/trust
-> pnpm run setup-trusted-publishing --bootstrap --setup-trust --workflow release.yml
-> ```
->
-> This publishes a deprecated `0.0.0-bootstrap.0` stub to claim the name and registers `release.yml` as the trusted publisher. Until this is done, CI's canary publish for this package will fail.
+> **First canary won't publish until the package name is claimed on npm.** npm cannot register OIDC trust for a name that does not yet exist on the registry. An `@astryxdesign` npm org owner must claim the name and register `release.yml` as its trusted publisher once, following [Trusted-publisher setup](https://github.com/meta/astryx/blob/main/docs/release.md#trusted-publisher-setup) (this also applies before the first stable publish). Until this is done, CI's canary publish for this package will fail.
 
 ### Graduating to a public stable (`latest`) release
 
@@ -218,7 +289,7 @@ When Vega is ready to be published publicly as a stable release, take these step
    ```
 
 5. **Land the change, then version + publish** through the normal release flow:
-   - Merge the PR that removes the gating (a canary publishes automatically on that push to `main`).
+   - Merge the PR that removes the gating (the next hourly canary, or a canary dispatch from `main`, publishes it).
    - Run the version-bump PR (`pnpm version-packages`, refresh the lockfile, merge) — this bumps versions on `main` but publishes nothing.
    - Dispatch the stable Release workflow to publish the `latest` dist-tag:
 

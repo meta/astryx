@@ -2,14 +2,18 @@
 
 /**
  * @file Chart.test.tsx
- * @input Uses vitest, @testing-library/react, Chart component
- * @output Unit tests for Chart accessibility (WCAG 1.1.1)
+ * @input Uses vitest, @testing-library/react, Chart component, useChart
+ * @output Unit tests for Chart accessibility (WCAG 1.1.1) plus the root's
+ *         measurement gate, margin convention, and the useChart context guard
+ *         (issue #4295 viz coverage)
  * @position Testing; validates Chart.tsx accessible name + data-table fallback
+ *           and ChartContext.ts's outside-provider error
  */
 
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
-import {render, screen, act} from '@testing-library/react';
+import {render, renderHook, screen, act} from '@testing-library/react';
 import {Chart} from './Chart';
+import {useChart} from './ChartContext';
 
 const data = [
   {month: 'Jan', revenue: 100, profit: 20},
@@ -122,5 +126,93 @@ describe('Chart data table fallback', () => {
     reportWidth(600);
 
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
+  });
+});
+
+describe('Chart measurement gate', () => {
+  it('renders no svg until the container reports a width', () => {
+    const {container} = render(
+      <Chart data={data} xKey="month" yKeys={['revenue']}>
+        <circle data-testid="mark" />
+      </Chart>,
+    );
+
+    expect(container.querySelector('svg')).toBeNull();
+    expect(screen.queryByTestId('mark')).toBeNull();
+  });
+
+  it('renders the svg at the reported width and the default height once measured', () => {
+    const {container} = render(
+      <Chart data={data} xKey="month" yKeys={['revenue']}>
+        <circle data-testid="mark" />
+      </Chart>,
+    );
+
+    reportWidth(464);
+
+    const svg = container.querySelector('svg');
+    expect(svg).not.toBeNull();
+    expect(svg).toHaveAttribute('width', '464');
+    expect(svg).toHaveAttribute('height', '300');
+  });
+
+  it('renders children inside the margin-translated group', () => {
+    render(
+      <Chart data={data} xKey="month" yKeys={['revenue']}>
+        <circle data-testid="mark" />
+      </Chart>,
+    );
+
+    reportWidth(464);
+
+    // Default margins: left 48, top 16 (d3 margin convention)
+    const mark = screen.getByTestId('mark');
+    expect(mark.closest('g')).toHaveAttribute('transform', 'translate(48,16)');
+  });
+});
+
+describe('Chart container observation', () => {
+  it('observes its container while mounted and stops on unmount', () => {
+    const observed = new Set<Element>();
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe(element: Element) {
+          observed.add(element);
+        }
+        unobserve(element: Element) {
+          observed.delete(element);
+        }
+        disconnect() {
+          observed.clear();
+        }
+      },
+    );
+    const {container, unmount} = render(
+      <Chart data={data} xKey="month" yKeys={['revenue']}>
+        <g />
+      </Chart>,
+    );
+    const chartContainer = container.firstElementChild;
+    expect(chartContainer).not.toBeNull();
+    expect(observed.has(chartContainer!)).toBe(true);
+
+    unmount();
+    expect(observed.size).toBe(0);
+  });
+});
+
+describe('useChart', () => {
+  it('throws a clear error when used outside <Chart>', () => {
+    // React reports the uncaught render error via console.error; keep the
+    // test output quiet.
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(() => renderHook(() => useChart())).toThrow(
+        'Chart components must be used inside <Chart>',
+      );
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 });

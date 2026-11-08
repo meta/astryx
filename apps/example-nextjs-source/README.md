@@ -2,6 +2,15 @@
 
 Reference application for compiling **@astryxdesign/core** from raw TypeScript + StyleX source alongside product code. Uses `@astryxdesign/build` for independent CSS layer separation.
 
+> **Runs on webpack, not Turbopack.** The source build configures resolution through
+> `nextConfig.webpack`, which Turbopack never calls — under Turbopack the app loads
+> `dist` while PostCSS compiles the library from `source`, and the page renders unstyled
+> without erroring.
+>
+> This example pins Next 16 and explicitly passes `--webpack` to `next dev` and
+> `next build`. Next 16 defaults to Turbopack, but this source build requires
+> webpack because `nextConfig.webpack` sets its source-resolution conditions.
+
 ## Why source build?
 
 |               | Source build                                       | Dist build                   |

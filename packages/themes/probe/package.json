@@ -1,0 +1,34 @@
+{
+  "name": "@astryxdesign/theme-probe",
+  "version": "0.5.0",
+  "private": true,
+  "description": "Test fixture: a generated theme that styles every declared theming target, so the visual gate can prove each one still reaches the pixels. Never published.",
+  "author": "Meta Open Source",
+  "license": "MIT",
+  "sideEffects": false,
+  "main": "./dist/source.js",
+  "types": "./dist/source.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/source.d.ts",
+      "import": "./dist/source.mjs",
+      "require": "./dist/source.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "node ../../../scripts/clean-dist.mjs && astryx theme build src/probeTheme.ts -o dist/theme.css --icons-specifier ./registries.mjs && tsup && tsc --project tsconfig.build.json && node ../../../scripts/check-fully-specified.mjs"
+  },
+  "peerDependencies": {
+    "@astryxdesign/core": "0.7.12",
+    "react": ">=19"
+  },
+  "devDependencies": {
+    "tsup": "^8.3.0",
+    "@astryxdesign/cli": "0.7.12"
+  },
+  "module": "./dist/source.mjs"
+}

@@ -112,7 +112,7 @@ describe('Edge Compensation', () => {
   describe('Banner container compensation', () => {
     it('renders dismissable banner with ghost dismiss button', () => {
       render(<Banner status="info" title="Test" isDismissable />);
-      const dismissButton = screen.getByRole('button', {name: 'Dismiss'});
+      const dismissButton = screen.getByRole('button', {name: 'Dismiss Test'});
       expect(dismissButton).toHaveAttribute(EDGE_COMP_ATTR);
     });
   });

@@ -163,6 +163,21 @@ describe('integration codemod discovery', () => {
     ).rejects.toThrow(/is invalid/i);
   });
 
+  it('names a broken codemod by its path inside the package', async () => {
+    scaffold({
+      '1.1.0/no-default.mjs': `export const nope = 1;\n`,
+    });
+    const project = await Project.load(tmpDir);
+    const failure = await discoverIntegrationCodemods(
+      project.loadedIntegrations,
+    ).then(
+      () => null,
+      error => error,
+    );
+    expect(failure?.message).toContain('(codemods/1.1.0/no-default.mjs)');
+    expect(failure?.message).not.toContain(tmpDir);
+  });
+
   it('fails discovery when default export is not a codemod envelope', async () => {
     scaffold({
       '0.2.0/bad.mjs': `export default { title: 'x', transform: () => null };\n`,
@@ -219,5 +234,127 @@ describe('integration codemod discovery', () => {
     await expect(
       discoverIntegrationCodemods(project.loadedIntegrations),
     ).rejects.toThrow(/across versions/i);
+  });
+});
+
+describe('test files beside a codemod', () => {
+  // The incident this closes: every .ts/.mjs/.js under a version folder was
+  // loaded AND VALIDATED as a codemod, so a test file colocated with its
+  // transform failed validation — and because a definition error is a hard
+  // error, it took every codemod in that version with it. `astryx upgrade`
+  // then applied nothing and reported success. Core is immune because its own
+  // codemods are enumerated in a registry rather than discovered by walking a
+  // directory, so its colocated tests are simply never visited. Only
+  // integrations carry the landmine.
+  const TRANSFORM = `
+    export default {
+      type: 'code',
+      title: 'Drop foo',
+      transform: (file) => file.source.replace(/foo/g, 'bar'),
+    };
+  `;
+  // Not a codemod: no default export of the right shape. Loading it throws.
+  const A_TEST = `
+    import {describe, it, expect} from 'vitest';
+    describe('drop-foo', () => {
+      it('drops foo', () => expect(1).toBe(1));
+    });
+  `;
+
+  it.each([
+    ['a .test. sibling', '0.2.0/drop-foo.test.mjs'],
+    ['a .spec. sibling', '0.2.0/drop-foo.spec.mjs'],
+    ['a fixture sibling', '0.2.0/drop-foo.fixture.mjs'],
+    ['a __tests__ directory', '0.2.0/__tests__/drop-foo.mjs'],
+    ['a __fixtures__ directory', '0.2.0/__fixtures__/input.mjs'],
+  ])('ignores %s and still discovers the codemod', async (_label, testPath) => {
+    scaffold({'0.2.0/drop-foo.mjs': TRANSFORM, [testPath]: A_TEST});
+
+    const project = await Project.load(tmpDir);
+    const byVersion = await discoverIntegrationCodemods(
+      project.loadedIntegrations,
+    );
+
+    expect([...byVersion.keys()]).toEqual(['0.2.0']);
+    expect(byVersion.get('0.2.0').map(entry => entry.id)).toEqual(['drop-foo']);
+  });
+
+  it('a nested helper directory is still walked', async () => {
+    // Only test and fixture names are skipped. A package that organises its
+    // transforms into subdirectories keeps working.
+    scaffold({'0.2.0/imports/drop-foo.mjs': TRANSFORM});
+
+    const project = await Project.load(tmpDir);
+    const byVersion = await discoverIntegrationCodemods(
+      project.loadedIntegrations,
+    );
+
+    expect(byVersion.get('0.2.0').map(entry => entry.id)).toEqual([
+      'imports/drop-foo',
+    ]);
+  });
+});
+
+describe('non-source directories at codemods root', () => {
+  const MARKER_CODEMOD = `
+    import * as fs from 'node:fs';
+    export default {
+      type: 'code',
+      title: 'Evil marker',
+      transform: (file) => {
+        fs.writeFileSync('/tmp/evil-marker', 'pwned');
+        return file.source;
+      },
+    };
+  `;
+  const REAL_CODEMOD = `
+    export default {
+      type: 'code',
+      title: 'Real transform',
+      transform: (file) => file.source.replace(/old/g, 'new'),
+    };
+  `;
+
+  it('excludes node_modules from version folder discovery', async () => {
+    // When codemods root is the package root (codemods: "./"), node_modules
+    // must not be treated as a version folder.
+    const pkgDir = scaffold({
+      '0.2.0/real.mjs': REAL_CODEMOD,
+    });
+    // Plant a file inside node_modules at the codemods root level
+    const nmDir = path.join(pkgDir, 'codemods', 'node_modules', 'evil');
+    fs.mkdirSync(nmDir, {recursive: true});
+    fs.writeFileSync(path.join(nmDir, 'index.mjs'), MARKER_CODEMOD);
+
+    const project = await Project.load(tmpDir);
+    const byVersion = await discoverIntegrationCodemods(
+      project.loadedIntegrations,
+    );
+
+    // Only the real version folder is discovered
+    expect([...byVersion.keys()]).toEqual(['0.2.0']);
+    expect(byVersion.get('0.2.0').map(e => e.id)).toEqual(['real']);
+  });
+
+  it.each([
+    ['node_modules'],
+    ['.git'],
+    ['__tests__'],
+    ['__fixtures__'],
+  ])('excludes %s from version folder enumeration', async (dirName) => {
+    const pkgDir = scaffold({
+      '0.3.0/legit.mjs': REAL_CODEMOD,
+    });
+    // Create a non-source dir at the codemods root with a valid-looking codemod
+    const badDir = path.join(pkgDir, 'codemods', dirName, 'sneaky.mjs');
+    fs.mkdirSync(path.dirname(badDir), {recursive: true});
+    fs.writeFileSync(badDir, REAL_CODEMOD);
+
+    const project = await Project.load(tmpDir);
+    const byVersion = await discoverIntegrationCodemods(
+      project.loadedIntegrations,
+    );
+
+    expect([...byVersion.keys()]).toEqual(['0.3.0']);
   });
 });

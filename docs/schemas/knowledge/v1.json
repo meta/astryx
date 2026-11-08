@@ -1,0 +1,205 @@
+{
+  "schemaVersion": 1,
+  "activeAuthorities": ["draft", "current"],
+  "authorities": ["draft", "current", "archived"],
+  "archiveReasons": ["superseded", "withdrawn", "historical"],
+  "kinds": {
+    "component": {
+      "template": "docs/templates/knowledge/component-spec.md",
+      "requiredFrontmatter": [
+        "schema_version",
+        "template_version",
+        "kind",
+        "id",
+        "authority",
+        "archive_reason",
+        "superseded_by",
+        "approved_by",
+        "approved_at",
+        "owners",
+        "review_triggers",
+        "verified_by",
+        "families",
+        "design_specs",
+        "architecture",
+        "contributing",
+        "system_specs"
+      ],
+      "requiredSections": [
+        "Intent",
+        "Compatibility and migration",
+        "Ownership boundary",
+        "Public concepts",
+        "Behavioral and layout contract",
+        "Accessibility contract",
+        "Design relationships",
+        "Family and system relationships",
+        "Verification map",
+        "Decision log",
+        "Open questions",
+        "Content boundary"
+      ],
+      "currentNonEmptyFields": ["owners", "review_triggers", "verified_by"]
+    },
+    "family": {
+      "template": "docs/templates/knowledge/family-contract.md",
+      "requiredFrontmatter": [
+        "schema_version",
+        "template_version",
+        "kind",
+        "id",
+        "authority",
+        "archive_reason",
+        "superseded_by",
+        "approved_by",
+        "approved_at",
+        "owners",
+        "review_triggers",
+        "verified_by",
+        "members",
+        "architecture",
+        "contributing",
+        "deciding_specs"
+      ],
+      "requiredSections": [
+        "Intent",
+        "Membership rule",
+        "Shared owner",
+        "Canonical concepts",
+        "Cross-component invariants",
+        "Allowed component variation",
+        "Representative matrix",
+        "Adoption and exceptions",
+        "Verification map",
+        "Decision links",
+        "Open questions",
+        "Content boundary"
+      ],
+      "currentNonEmptyFields": [
+        "owners",
+        "members",
+        "review_triggers",
+        "verified_by"
+      ]
+    },
+    "architecture": {
+      "template": "docs/templates/knowledge/architecture.md",
+      "requiredFrontmatter": [
+        "schema_version",
+        "template_version",
+        "kind",
+        "id",
+        "authority",
+        "archive_reason",
+        "superseded_by",
+        "approved_by",
+        "approved_at",
+        "owners",
+        "applies_to",
+        "verified_by",
+        "deciding_specs"
+      ],
+      "requiredSections": [
+        "Purpose",
+        "System model",
+        "Boundaries and invariants",
+        "Change coupling",
+        "Owning code",
+        "Deciding specs",
+        "Verification"
+      ],
+      "currentNonEmptyFields": ["owners", "applies_to", "verified_by"]
+    },
+    "system-spec": {
+      "template": "docs/templates/knowledge/system-spec.md",
+      "requiredFrontmatter": [
+        "schema_version",
+        "template_version",
+        "kind",
+        "id",
+        "authority",
+        "archive_reason",
+        "superseded_by",
+        "approved_by",
+        "approved_at",
+        "phase",
+        "owners",
+        "affects_architecture",
+        "affects_families",
+        "affects_contributing",
+        "affects_consumer_docs"
+      ],
+      "requiredSections": [
+        "Intent",
+        "Non-goals",
+        "Requirements",
+        "Current-state impact",
+        "Verification",
+        "Decision log",
+        "Open questions"
+      ],
+      "currentNonEmptyFields": ["owners"]
+    },
+    "implementation-plan": {
+      "template": "docs/templates/knowledge/implementation-plan.md",
+      "requiredFrontmatter": [
+        "schema_version",
+        "template_version",
+        "kind",
+        "id",
+        "authority",
+        "archive_reason",
+        "superseded_by",
+        "approved_by",
+        "approved_at",
+        "spec",
+        "owners"
+      ],
+      "requiredSections": ["Phases", "Verification", "Status"],
+      "currentNonEmptyFields": ["owners"]
+    },
+    "design": {
+      "template": "docs/templates/knowledge/design-spec.md",
+      "requiredFrontmatter": [
+        "schema_version",
+        "template_version",
+        "kind",
+        "id",
+        "authority",
+        "archive_reason",
+        "superseded_by",
+        "approved_by",
+        "approved_at",
+        "owners",
+        "review_triggers",
+        "verified_by",
+        "architecture",
+        "components",
+        "families",
+        "deciding_specs"
+      ],
+      "requiredSections": [
+        "User intent",
+        "Design principles",
+        "Anatomy and hierarchy",
+        "State representation",
+        "Responsive and input behavior",
+        "Accessibility intent",
+        "Representative examples",
+        "Visual references",
+        "Component contract links",
+        "Decision log",
+        "Open questions",
+        "Content boundary"
+      ],
+      "currentNonEmptyFields": [
+        "owners",
+        "review_triggers",
+        "verified_by",
+        "architecture"
+      ],
+      "referenceFields": ["architecture"]
+    }
+  },
+  "approvalOwners": ["cixzhang", "imdreamrunner"]
+}

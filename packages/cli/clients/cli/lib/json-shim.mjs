@@ -29,15 +29,40 @@
  *   4. Routing unknown-subcommand attempts through the same error
  *      envelope path (so `astryx bogus-cmd --json` gets exit 1 + envelope
  *      instead of exit 0 + help envelope).
+ *   5. Emitting an error envelope, not the help envelope, when Commander
+ *      shows help because the invocation failed (`help <unknown>`, or a
+ *      command group with no subcommand), which exits 1.
  *
- * Non-JSON behavior is preserved exactly: every code path that printed
- * to stderr before still prints to stderr. Commander writes its
- * "error: ..." line via configureOutput.writeErr, which we pass
- * through verbatim outside of --json mode.
+ * Commander writes its own "error: ..." line via configureOutput.writeErr.
+ * The shim drops that line in both modes. Under --json the error envelope
+ * replaces it; in text mode `handleCommanderError` writes the Astryx line
+ * instead (`Error: <message>`, the same message the envelope carries), so
+ * a parse failure reads like every other CLI error. Other stderr output,
+ * such as help printed as the failure report, still passes through.
  */
 
 import {API_VERSION, isJsonMode, toErrorEnvelope} from '../../../foundation/response/json.mjs';
+import {answeredBy} from '../../../foundation/release/run-context.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
+import {setCommand, setOutcome, recordHelp} from '../../../foundation/debug/index.mjs';
+
+/**
+ * Fully-qualified name of a command relative to the root program, e.g.
+ * `theme build`. The root itself is ''.
+ * @param {import('commander').Command} cmd
+ * @returns {string}
+ */
+function fullNameOf(cmd) {
+  /** @type {string[]} */
+  const parts = [];
+  /** @type {any} */
+  let node = cmd;
+  while (node?.parent) {
+    parts.unshift(node.name());
+    node = node.parent;
+  }
+  return parts.join(' ');
+}
 
 /**
  * Cheap argv check used before preAction has had a chance to engage
@@ -60,7 +85,7 @@ function jsonActive() {
  * subcommand (e.g. `astryx component --help --json`).
  *
  * @param {import('commander').Command} cmd
- * @returns {{apiVersion: number, type: 'help', data: object}}
+ * @returns {{apiVersion: number, type: 'help', data: object, meta: {answeredBy: {cli: string, core: string | null, copy: 'project' | 'starting' | 'matched' | 'carried' | 'fallback'}}}}
  */
 export function buildHelpEnvelope(cmd) {
   // Reconstruct the fully-qualified command name (e.g. "astryx theme build").
@@ -95,7 +120,37 @@ export function buildHelpEnvelope(cmd) {
       options,
       subcommands,
     },
+    meta: {answeredBy: answeredBy()},
   };
+}
+
+/**
+ * The error envelope for help Commander shows because the invocation failed
+ * (it then exits 1): `help <name>` for an unknown name on the root, or a
+ * command group run without a subcommand.
+ *
+ * @param {import('commander').Command} cmd the command whose help was shown
+ * @returns {ReturnType<typeof toErrorEnvelope>}
+ */
+export function buildHelpErrorEnvelope(cmd) {
+  const available = cmd.commands
+    .filter(s => !(/** @type {any} */ (s))._hidden && s.name() !== 'help')
+    .map(s => s.name());
+  if (!cmd.parent) {
+    // Commander dispatches `help <name>` with ['help', <name>, ...] in args.
+    const requested = cmd.args[1];
+    return toErrorEnvelope(
+      requested ? `unknown command '${requested}'` : 'unknown command',
+      available.map(name => ({name, reason: 'available command'})),
+      ERROR_CODES.ERR_UNKNOWN_COMMAND,
+    );
+  }
+  const group = fullNameOf(cmd);
+  return toErrorEnvelope(
+    `'${group}' needs a subcommand`,
+    available.map(name => ({name: `${group} ${name}`, reason: 'available subcommand'})),
+    ERROR_CODES.ERR_MISSING_ARGUMENT,
+  );
 }
 
 /**
@@ -184,20 +239,81 @@ export function installJsonShim(program) {
  * @param {import('commander').Command} cmd
  */
 function applyShimRecursively(cmd) {
-  cmd.exitOverride();
+  // The exitOverride callback is the only place that knows WHICH command
+  // Commander rejected. Parse errors happen before any preAction hook runs,
+  // so without this every `astryx theme build` (missing argument) would be
+  // recorded against the root program instead of `theme build`.
+  cmd.exitOverride(err => {
+    try {
+      setCommand(fullNameOf(cmd));
+    } catch {
+      // Never let recording interfere with the error path.
+    }
+    throw err;
+  });
   cmd.configureOutput({
     writeOut: (str) => process.stdout.write(str),
+    // Commander's own "error: ..." line never reaches the user. Under --json a
+    // consumer parsing both streams must not see it alongside the envelope;
+    // in text mode it is Commander's format, not Astryx's, so an invalid
+    // global option (`--lang zh-Hans`) printed `error: option '--lang
+    // <locale>' argument 'zh-Hans' is invalid…` where every other CLI error
+    // prints `Error: …`. handleCommanderError writes the Astryx line below,
+    // for both modes, from the same message.
+    //
+    // ONLY that line. Commander also writes HELP through this channel when it
+    // shows help because the invocation failed (a command group with no
+    // subcommand), and that output is still wanted in text mode.
     writeErr: (str) => {
-      // Suppress Commander's "error: ..." stderr line when --json is
-      // active, so a JSON consumer parsing both streams doesn't see
-      // it alongside the envelope. Non-JSON callers are unaffected.
       if (jsonActive()) return;
+      if (/^error:\s/i.test(str)) return;
       process.stderr.write(str);
     },
   });
+  makeSelfInstalling(cmd);
   for (const sub of cmd.commands) {
     applyShimRecursively(sub);
   }
+}
+
+/** Marks a command whose `command`/`addCommand` already self-install the shim. */
+const SELF_INSTALLING = Symbol.for('astryx.jsonShim.selfInstalling');
+
+/**
+ * Make a shimmed command shim anything attached to it later.
+ *
+ * A one-time recursive walk is order-dependent: it only covers commands that
+ * exist when `installJsonShim` runs, so anything registered afterwards keeps
+ * Commander's default `_exit` and silently drops out of the --json contract
+ * AND out of parse-error attribution. Wrapping the two registration methods
+ * removes the ordering requirement entirely — a command is shimmed the moment
+ * it joins the tree, whenever that happens and at whatever depth.
+ *
+ * @param {import('commander').Command} cmd
+ */
+function makeSelfInstalling(cmd) {
+  const node = /** @type {any} */ (cmd);
+  if (node[SELF_INSTALLING]) return;
+  node[SELF_INSTALLING] = true;
+
+  const originalCommand = node.command.bind(node);
+  const originalAddCommand = node.addCommand.bind(node);
+
+  /** @param {...any} args */
+  node.command = (...args) => {
+    const created = originalCommand(...args);
+    // The `.command(name, description)` executable form returns `this`, not a
+    // new command — only recurse when we actually got a child back.
+    if (created && created !== node) applyShimRecursively(created);
+    return created;
+  };
+
+  /** @param {any} sub @param {any} [opts] */
+  node.addCommand = (sub, opts) => {
+    const result = originalAddCommand(sub, opts);
+    if (sub) applyShimRecursively(sub);
+    return result;
+  };
 }
 
 /**
@@ -239,7 +355,9 @@ function patchOutputHelp(cmd) {
     if (jsonActive()) {
       if (!process.__xdsJsonHandled) {
         process.__xdsJsonHandled = true;
-        const env = buildHelpEnvelope(cmd);
+        const env = contextOptions?.error
+          ? buildHelpErrorEnvelope(cmd)
+          : buildHelpEnvelope(cmd);
         process.stdout.write(`${JSON.stringify(env, null, 2)}\n`);
       }
       return;
@@ -263,7 +381,9 @@ function patchPrototype(CommandCtor) {
     if (jsonActive()) {
       if (!process.__xdsJsonHandled) {
         process.__xdsJsonHandled = true;
-        const env = buildHelpEnvelope(this);
+        const env = contextOptions?.error
+          ? buildHelpErrorEnvelope(this)
+          : buildHelpEnvelope(this);
         process.stdout.write(`${JSON.stringify(env, null, 2)}\n`);
       }
       return;
@@ -308,19 +428,32 @@ export function handleCommanderError(err) {
     code === 'commander.help' ||
     code === 'commander.version'
   ) {
+    // Showing help is a success by the exit-code contract, but it is also the
+    // best available signal that someone could not find what they needed — so
+    // it is flagged on the event rather than being lost in the `ok` bucket.
+    recordHelp();
+    setOutcome('ok', {exitCode});
     process.exit(exitCode);
   }
 
-  // Real error paths.
+  // Parse failures never reach a preAction hook, so this is the only place
+  // that sees them. Commander's own code (e.g. commander.unknownOption) is
+  // more specific than anything we could infer, so keep it.
+  setOutcome('parse-error', {
+    exitCode: exitCode || 1,
+    error: new Error(message.replace(/^error:\s*/i, '')),
+    code: commanderCodeToErrorCode(code, message),
+  });
+
+  // Real error paths. Strip Commander's "error: " prefix once: in the envelope
+  // the key is already `error`, and in text mode the Astryx prefix replaces it.
+  const cleaned = message.replace(/^error:\s*/i, '');
   if (jsonActive()) {
-    // Strip Commander's "error: " prefix — the envelope key is `error`
-    // already, doubled "error" is noise.
-    const cleaned = message.replace(/^error:\s*/i, '');
     emitJsonError(cleaned, undefined, commanderCodeToErrorCode(code, cleaned));
   } else {
-    // Non-JSON mode: Commander already wrote the "error: ..." line
-    // to stderr via configureOutput.writeErr before throwing the
-    // CommanderError. Nothing to do — exit with the original code.
+    // Commander's own line was suppressed above, so a parse failure reads the
+    // same as every other CLI error — the `Error: …` line cliError prints.
+    process.stderr.write(`Error: ${cleaned}\n`);
   }
   process.exit(exitCode || 1);
 }

@@ -568,3 +568,141 @@ export const DisabledWithMessage: Story = {
     disabledMessage: 'Notifications are turned off org-wide',
   },
 };
+
+// The owner changes the value, not the user. A settings page does this when a
+// saved value arrives, or when another control implies this one. The switch
+// still reports the new state, and is still operable afterwards.
+export const ControlledUpdate: Story = {
+  render: args => {
+    const [value, setValue] = useState(false);
+    const {value: _value, onChange: _onChange, ...restArgs} = args;
+    return (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'flex-start',
+          gap: '12px',
+        }}>
+        <Switch
+          {...restArgs}
+          value={value}
+          onChange={checked => setValue(checked)}
+        />
+        <button type="button" onClick={() => setValue(true)}>
+          Turn on remotely
+        </button>
+      </div>
+    );
+  },
+  args: {
+    label: 'Sync photos',
+  },
+};
+
+// Waiting on the change it just started. The switch stays focusable and reports
+// itself busy, and activation is blocked until the change settles, so a second
+// press cannot queue a second change.
+export const Loading: Story = {
+  render: args => {
+    const [value, setValue] = useState(args.value ?? false);
+    const {value: _value, onChange: _onChange, ...restArgs} = args;
+    return (
+      <Switch
+        {...restArgs}
+        value={value}
+        onChange={checked => setValue(checked)}
+      />
+    );
+  },
+  args: {
+    label: 'Sync photos',
+    isLoading: true,
+  },
+};
+
+export const PressedState: Story = {
+  name: 'Pressed state',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Press and hold an enabled switch to paint the system's `--color-overlay-pressed` layer on its track and thumb together. The disabled example remains visually unchanged and cannot toggle.",
+      },
+    },
+  },
+  render: () => {
+    const [off, setOff] = useState(false);
+    const [on, setOn] = useState(true);
+    return (
+      <div style={{display: 'flex', flexDirection: 'column', gap: 16}}>
+        <Switch label="Off — press and hold" value={off} onChange={setOff} />
+        <Switch label="On — press and hold" value={on} onChange={setOn} />
+        <Switch
+          label="Disabled — no pressed state"
+          value={false}
+          onChange={() => {}}
+          isDisabled
+        />
+      </div>
+    );
+  },
+};
+
+export const BesideALink: Story = {
+  name: 'Beside a link',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'A small switch 8 px from a link. Under a coarse pointer the switch’s invisible hit area grows toward 44 × 44 px but stops halfway to the link, so a tap on the link opens it and a tap nearer the switch toggles it.',
+      },
+    },
+  },
+  render: () => {
+    const [value, setValue] = useState(false);
+    return (
+      <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
+        <Switch
+          label="Wi-Fi"
+          isLabelHidden
+          size="sm"
+          value={value}
+          onChange={setValue}
+        />
+        <a href="#wifi-details">Details</a>
+      </div>
+    );
+  },
+};
+
+export const InScrollingList: Story = {
+  name: 'In a scrolling list',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Switches in rows of a list taller than the screen, as in a settings page. Under a finger, a vertical drag scrolls the page and changes nothing, even after the finger rests on a switch; a horizontal drag moves the thumb, and a tap toggles.',
+      },
+    },
+  },
+  render: () => {
+    const [values, setValues] = useState<boolean[]>(() =>
+      Array.from({length: 24}, (_, i) => i % 3 === 0),
+    );
+    return (
+      <div style={{display: 'flex', flexDirection: 'column', gap: 20}}>
+        {values.map((value, i) => (
+          <Switch
+            key={i}
+            label={`Setting ${i + 1}`}
+            value={value}
+            onChange={next =>
+              setValues(current => current.map((v, j) => (j === i ? next : v)))
+            }
+          />
+        ))}
+      </div>
+    );
+  },
+};

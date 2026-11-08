@@ -19,7 +19,7 @@
  * - Data-driven APIs (array of config objects)
  * - CSS-based solutions (grid, flexbox, :nth-child, etc.)
  *
- * @see https://github.com/facebook/astryx/wiki/API-Conventions
+ * @see https://github.com/meta/astryx/wiki/API-Conventions
  */
 
 // React.Children methods that introspect the children tree
@@ -39,7 +39,7 @@ const noReactIntrospectionRule = {
         'Ban React child introspection (Children.map, cloneElement, child.props, child.type)',
       category: 'Astryx Architecture',
       recommended: true,
-      url: 'https://github.com/facebook/astryx/wiki/API-Conventions',
+      url: 'https://github.com/meta/astryx/wiki/API-Conventions',
     },
     messages: {
       childrenMethod:
@@ -74,8 +74,13 @@ const noReactIntrospectionRule = {
     const options = context.options[0] || {};
     const allowFiles = options.allowFiles || [];
 
-    // Check if this file is explicitly allowed
-    const filename = context.filename ?? context.getFilename();
+    // Check if this file is explicitly allowed. Patterns are written with
+    // forward slashes; normalize before matching so this also works on
+    // Windows, where context.filename comes back with backslashes.
+    const filename = (context.filename ?? context.getFilename()).replace(
+      /\\/g,
+      '/',
+    );
     if (allowFiles.some(pattern => filename.includes(pattern))) {
       return {};
     }

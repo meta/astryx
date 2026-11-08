@@ -139,10 +139,10 @@ Component overrides generate scoped CSS:
 
 ```css
 @scope ([data-astryx-theme="{themeName}"]) to ([data-astryx-theme]) {
-  .astryx-button.secondary {
+  .astryx-button[data-variant='secondary'] {
     background-color: ...;
   }
-  .astryx-heading.level-1 {
+  .astryx-heading[data-level='1'] {
     font-size: var(--font-size-2xl);
   }
 }

@@ -29,28 +29,68 @@ export interface Suggestion {
  * human-readable `error` string, which changes freely.
  */
 export interface CLIError {
+  /** Version of the JSON envelope contract, as on the success envelope. */
+  apiVersion: number;
   error: string;
   code: ErrorCode;
   suggestions?: Suggestion[];
+  /**
+   * What the command had already done when it failed, present only on errors
+   * from a command that changes files before it can fail (for example the
+   * `upgrade.run` data of a failed `astryx upgrade`). The error is still an
+   * error: branch on `code`.
+   */
+  receipt?: Record<string, unknown>;
 }
 
 /** Returned by the fallback hook for commands without --json support. */
 export interface CLIUnsupportedError {
+  apiVersion: number;
   error: `JSON output is not supported for the '${string}' command`;
   code: ErrorCode;
 }
 
 /**
- * A success response envelope: a `type` discriminator, its `data` payload, and
- * an optional `meta` sidecar (emitted as a sibling of `data`, never merged in).
+ * A success response: a `type` discriminator, the `package` that owns what the
+ * response is about, its `data` payload, and an optional `meta` object
+ * (emitted as a sibling of `data`, never merged in) that carries
+ * `answeredBy` and fields such as `deprecations`. `--json` prints it with
+ * `apiVersion` added (see `parseResponse`).
+ *
+ * `package` is present when the response is about one thing: one component,
+ * one doc, one template. A response that lists things from more than one
+ * package leaves it out, and each listed item names its own `package`.
  *
  * Structural by design — there is no central union of every response `type`.
  * A specific command narrows `data` via its own return type.
  */
+/**
+ * Which copy of the CLI answered a run (spec AST-081 FR5): carried in `meta`
+ * on every successful machine-readable result of a release that has it.
+ * - `project`: the project's own CLI.
+ * - `starting`: the copy that started the run, in a project with no CLI of
+ *   its own.
+ * - `matched`: the release equal to the project's Core, when the project's
+ *   own CLI cannot start, from the per-user cache or the copy that started
+ *   the run.
+ * - `carried`: outside a project, the copy that started the run, with the Core
+ *   it carries.
+ * - `fallback`: the matched release could not be obtained, so the copy that
+ *   started the run answered instead.
+ */
+export interface AnsweredBy {
+  /** The answering CLI's version. */
+  cli: string;
+  /** The Core the run pairs with, or `null` when there is none. */
+  core: string | null;
+  copy: 'project' | 'starting' | 'matched' | 'carried' | 'fallback';
+}
+
 export interface CLIResponse {
   type: string;
+  package?: string;
   data: unknown;
-  meta?: Record<string, unknown>;
+  meta?: {answeredBy?: AnsweredBy} & Record<string, unknown>;
 }
 
 /** Wrap any response type to include possible error shapes. */
@@ -75,7 +115,7 @@ export function jsonError(
 /** Parse raw CLI output (string or object) into a typed result. */
 export function parseResponse(
   raw: unknown,
-): CLIResponse | CLIError | CLIUnsupportedError;
+): (CLIResponse & {apiVersion: number}) | CLIError | CLIUnsupportedError;
 
 /** Type guard: returns true if result is an error. */
 export function isError(
@@ -90,7 +130,7 @@ export function isError(
 export function assertResponse<T extends string>(
   raw: unknown,
   type: T,
-): CLIResponse & {type: T};
+): CLIResponse & {apiVersion: number; type: T};
 
 declare global {
   namespace NodeJS {

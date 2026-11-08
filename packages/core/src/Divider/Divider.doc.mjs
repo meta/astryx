@@ -1,5 +1,26 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/** @type {import('@astryxdesign/cli/authoring').ComponentAnatomyElement[]} */
+const anatomy = [
+  {
+    name: 'Divider group',
+    required: true,
+    description:
+      'Separator group that arranges one or two rules around an optional label.',
+  },
+  {
+    name: 'Rule',
+    required: true,
+    description:
+      'Painted line segment; a second segment renders when a label is present.',
+  },
+  {
+    name: 'Label',
+    required: false,
+    description: 'Optional content displayed between two rule segments.',
+  },
+];
+
 
 
 /** @type {import('@astryxdesign/cli/authoring').ComponentDoc} */
@@ -19,7 +40,8 @@ export const docs = {
     {
       name: 'label',
       type: 'ReactNode',
-      description: 'Optional label centered on the divider.',
+      description:
+        'Optional label centered on the divider. Numeric zero is preserved; null, booleans, and empty strings render no label.',
     },
     {
       name: 'variant',
@@ -47,6 +69,7 @@ export const docs = {
     ],
   },
   usage: {
+    anatomy,
     description: 'A visual separator that divides content into distinct sections. Use to create clear boundaries between groups of related content, or to demarcate interactive regions within a layout.',
     bestPractices: [
       { guidance: true, description: 'Use subtle dividers between related content sections and strong dividers for high-contrast boundaries.' },
@@ -70,7 +93,8 @@ export const docsZh = {
     {
       name: 'label',
       type: 'ReactNode',
-      description: '居中显示在分隔线上的可选标签。',
+      description:
+        '居中显示在分隔线上的可选标签。数字 0 会保留；null、布尔值和空字符串不渲染标签。',
     },
     {
       name: 'variant',
@@ -97,6 +121,7 @@ export const docsZh = {
     ],
   },
   usage: {
+    anatomy,
     description: 'A visual separator that divides content into distinct sections. Use to create clear boundaries between groups of related content, or to demarcate interactive regions within a layout.',
     bestPractices: [
       { guidance: true, description: 'Use subtle dividers between related content sections and strong dividers for high-contrast boundaries.' },
@@ -110,6 +135,7 @@ export const docsZh = {
 export const docsDense = {
   description: 'visual separator w/ optional label, using Astryx design tokens',
   usage: {
+    anatomy,
     description: 'A visual separator that divides content into distinct sections. Use to create clear boundaries between groups of related content, or to demarcate interactive regions within a layout.',
     bestPractices: [
       { guidance: true, description: 'Use subtle dividers between related content sections and strong dividers for high-contrast boundaries.' },
@@ -119,7 +145,7 @@ export const docsDense = {
   },
   propDescriptions: {
     orientation: 'divider orientation',
-    label: 'optional centered label on divider',
+    label: 'optional centered label; preserves 0; null/boolean/"" omit it',
     variant: 'visual weight of divider line',
     isFullBleed: 'extend to container edges w/ negative margins',
     xstyle: 'StyleX styles for layout; must be stylex.create() value',

@@ -1,131 +1,127 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 
-# Crowdin download — pull translated locale files from Crowdin and open a PR
-# against main.
+# Crowdin translations validation — Crowdin's native GitHub integration now
+# commits translated locale files directly and keeps its own PR up to date,
+# so this workflow no longer downloads translations or opens one itself.
 #
-# TRIGGER: nightly plus manual dispatch. Each run downloads nonempty translated
-# locale files and opens (or updates) a reviewable PR; when nothing changed,
-# create-pull-request is a no-op.
-#
-# Why not use Crowdin's built-in PR creation? Its PR flow is limited (title/
-# body/labels), so we let the Crowdin action land translations on a staging
-# branch (`l10n/crowdin`) and use peter-evans/create-pull-request to open the
-# actual PR with the metadata we want. Downloaded JSON is run through prettier
-# so the diff matches the repo's formatting.
-name: Crowdin Download
+# What it still needs to gate, because nothing else in CI does:
+#   - A malformed or non-JSON-object export should fail loudly.
+#   - `skip_untranslated_strings` strips untranslated keys from within a
+#     file, but a locale with zero translated keys still comes back as an
+#     empty `{}` file rather than being omitted.
+#   - Crowdin's raw export isn't run through Prettier, so translated locale
+#     JSON can drift from the repo's formatting. Crowdin's export differs
+#     from this repo's Prettier output only by an extra trailing blank
+#     line, so that harmless difference is normalized away before checking
+#     — only substantive formatting drift fails.
+# Only locale files this PR actually changed are checked, so a PR that
+# doesn't touch a given locale file isn't penalized for its pre-existing
+# state.
+# (CLDR weekday freshness and catalog/ICU correctness are already covered by
+# `pnpm check:repo` in the Lint workflow.)
+name: Crowdin Translations Validation
 
 on:
-  workflow_dispatch:
-  schedule:
-    # 06:00 UTC — overnight in US time zones; opens a PR only when translations changed.
-    - cron: '0 6 * * *'
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main]
+    paths:
+      - 'packages/core/locales/*.json'
 
 permissions: {}
 
 concurrency:
-  group: crowdin-download
-  cancel-in-progress: false
+  group: crowdin-validate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
-  download:
-    runs-on: 4-core-ubuntu
+  validate:
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')))
+    runs-on: ubuntu-latest
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
     steps:
+      # Full history so base.sha and head.sha are both guaranteed to be
+      # present locally for the diff below, regardless of how far apart
+      # they are or how many commits the PR has picked up.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - uses: ./.github/actions/setup
 
-      # crowdin/github-action@v2.16.4 — pinned by SHA per repo policy.
-      # download_translations writes files into the working tree; we do NOT let
-      # the action push or open its own PR — peter-evans handles that below so
-      # we control title/body/labels.
-      - name: Download translations from Crowdin
-        uses: crowdin/github-action@c7af9bc98b01694653031fef2a0dc6c7888ce9bc
-        with:
-          upload_sources: false
-          upload_translations: false
-          download_translations: true
-          push_translations: false
-          create_pull_request: false
-          localization_branch_name: l10n/crowdin
-        env:
-          CROWDIN_PROJECT_ID: ${{ vars.CROWDIN_PROJECT_ID }}
-          CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
-
-      # crowdin/github-action runs inside a Docker container as root, so any
-      # files it writes into the working tree are owned by root. Later steps
-      # run as the `runner` user and can't overwrite those files (EACCES).
-      # Reclaim ownership of anything in the locales dir before subsequent
-      # steps touch it.
-      - name: Reclaim ownership of downloaded files
-        run: sudo chown -R "$(id -u):$(id -g)" packages/core/locales
-
-      # Skip the `skip_untranslated_files` flag in crowdin.yml (Crowdin's CLI
-      # rejects `skip_untranslated_files + skip_untranslated_strings` together).
-      # `skip_untranslated_strings` alone strips untranslated keys inside a
-      # file, but Crowdin still emits an empty `{}` file for a target language
-      # that has zero translations. Delete those here so `en.json`'s siblings
-      # only include locales that have real content.
-      - name: Drop empty locale files
+      - name: Determine locale files changed by this PR
+        id: changed
         run: |
-          shopt -s nullglob
-          removed=0
-          for f in packages/core/locales/*.json; do
-            case "$f" in
-              packages/core/locales/en.json|packages/core/locales/pseudo.json) continue ;;
-            esac
-            # A JSON object with no entries. `jq` returns 0 for `{}`.
-            if [ "$(jq -r 'if type == "object" then length else -1 end' "$f")" = "0" ]; then
-              rm "$f"
-              removed=$((removed + 1))
-            fi
-          done
-          echo "Removed $removed empty locale file(s)."
-
-      # If any locale JSON survived, normalize it with prettier so the diff
-      # matches the repo's formatting conventions. Shell guard makes the step
-      # a no-op when no locale files remain — the expected state until
-      # translators start contributing.
-      - name: Normalize locale JSON with prettier
-        run: |
-          shopt -s nullglob
-          files=(packages/core/locales/*.json)
-          # Filter out en.json (the source) — we only re-format translated files.
-          filtered=()
-          for f in "${files[@]}"; do
-            case "$f" in
-              packages/core/locales/en.json|packages/core/locales/pseudo.json) continue ;;
-            esac
-            filtered+=("$f")
-          done
-          if [ "${#filtered[@]}" -gt 0 ]; then
-            pnpm exec prettier --write "${filtered[@]}"
+          set -euo pipefail
+          git diff --name-only --diff-filter=ACMR \
+            "${{ github.event.pull_request.base.sha }}" \
+            "${{ github.event.pull_request.head.sha }}" \
+            -- 'packages/core/locales/*.json' > changed-locales.txt
+          cat changed-locales.txt
+          if [ -s changed-locales.txt ]; then
+            echo "any=true" >> "$GITHUB_OUTPUT"
           else
-            echo "No translated locale files present; nothing to normalize."
+            echo "any=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Generate Calendar CLDR weekdays
-        run: pnpm generate:cldr-weekdays
+      - name: Validate changed locale JSON
+        if: steps.changed.outputs.any == 'true'
+        run: |
+          set -euo pipefail
+          workdir=$(mktemp -d "$PWD/.crowdin-validate.XXXXXX")
+          trap 'rm -rf "$workdir"' EXIT
 
-      # peter-evans/create-pull-request@v7.0.11 — pinned by SHA per repo policy.
-      - name: Open translations PR
-        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1
-        with:
-          token: ${{ secrets.CROWDIN_PR_TOKEN }}
-          branch: l10n/crowdin
-          base: main
-          title: 'chore(i18n): translations update from Crowdin'
-          commit-message: 'chore(i18n): translations update from Crowdin'
-          author: 'github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>'
-          committer: 'github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>'
-          labels: i18n
-          body: |
-            Automated translations pulled from Crowdin.
+          malformed=()
+          empty=()
+          to_format_check=()
 
-            Source: https://crowdin.com/project/astryx
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            # Deleted by this PR — nothing left to validate.
+            [ -f "$f" ] || continue
 
-            Locale JSON has been normalized with `prettier`. Review the diff
-            for any strings that shifted meaning or formatting, then merge
-            when ready.
+            if ! jq -e 'type == "object"' "$f" >/dev/null 2>&1; then
+              malformed+=("$f")
+              continue
+            fi
+
+            case "$f" in
+              packages/core/locales/en.json|packages/core/locales/pseudo.json) ;;
+              *)
+                if [ "$(jq -r 'length' "$f")" = "0" ]; then
+                  empty+=("$f")
+                fi
+                ;;
+            esac
+
+            to_format_check+=("$f")
+          done < changed-locales.txt
+
+          if [ "${#malformed[@]}" -gt 0 ]; then
+            echo "::error::Malformed locale JSON, not a JSON object: ${malformed[*]}"
+          fi
+          if [ "${#empty[@]}" -gt 0 ]; then
+            echo "::error::Empty locale catalog(s) with zero translated keys — delete before merging: ${empty[*]}"
+          fi
+
+          format_failed=0
+          if [ "${#to_format_check[@]}" -gt 0 ]; then
+            for f in "${to_format_check[@]}"; do
+              dest="$workdir/$(basename "$f")"
+              # Crowdin's export differs from this repo's Prettier output
+              # only by an extra trailing blank line. Collapsing all
+              # trailing newlines down to exactly one before checking
+              # means that harmless difference can't fail the check, while
+              # any other formatting drift still does.
+              printf '%s\n' "$(cat "$f")" > "$dest"
+            done
+            if ! pnpm exec prettier --check "$workdir"/*.json; then
+              echo "::error::Locale JSON is not Prettier-formatted (checked after normalizing the trailing newline): ${to_format_check[*]}"
+              format_failed=1
+            fi
+          fi
+
+          if [ "${#malformed[@]}" -gt 0 ] || [ "${#empty[@]}" -gt 0 ] || [ "$format_failed" = "1" ]; then
+            exit 1
+          fi

@@ -2,27 +2,11 @@
 
 'use client';
 
-import type {ComponentProps} from 'react';
 import {Breadcrumbs, BreadcrumbItem} from '@astryxdesign/core/Breadcrumbs';
+import {Icon} from '@astryxdesign/core/Icon';
 import {VStack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
-
-function HomeIcon(props: ComponentProps<'svg'>) {
-  return (
-    <svg
-      fill="none"
-      viewBox="0 0 24 24"
-      strokeWidth={2}
-      stroke="currentColor"
-      {...props}>
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z"
-      />
-    </svg>
-  );
-}
+import {HomeIcon} from '@heroicons/react/24/outline';
 
 export default function BreadcrumbItemShowcase() {
   return (
@@ -32,7 +16,9 @@ export default function BreadcrumbItemShowcase() {
           With start icon
         </Text>
         <Breadcrumbs>
-          <BreadcrumbItem href="/" startIcon={<HomeIcon />}>
+          <BreadcrumbItem
+            href="/"
+            startIcon={<Icon icon={HomeIcon} size="sm" />}>
             Home
           </BreadcrumbItem>
           <BreadcrumbItem href="/docs">Docs</BreadcrumbItem>

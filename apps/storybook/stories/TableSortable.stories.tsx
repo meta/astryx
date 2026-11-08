@@ -11,6 +11,7 @@ import {
 } from '@astryxdesign/core/Table';
 import type {TableColumn, TableSortState} from '@astryxdesign/core/Table';
 import {useCollator} from '@astryxdesign/core';
+import {defineTheme, Theme} from '@astryxdesign/core/theme';
 
 // =============================================================================
 // Sample Data
@@ -98,7 +99,12 @@ export const SingleSort: Story = {
 
     return (
       <div style={{maxWidth: 700}}>
-        <p style={{marginBottom: 8, fontSize: 14, color: '#666'}}>
+        <p
+          style={{
+            marginBottom: 8,
+            fontSize: 14,
+            color: 'var(--color-text-secondary)',
+          }}>
           Click a column header to sort. Current:{' '}
           {sort.length > 0 ? `${sort[0].sortKey} ${sort[0].direction}` : 'none'}
         </p>
@@ -125,7 +131,12 @@ export const MultiSort: Story = {
 
     return (
       <div style={{maxWidth: 700}}>
-        <p style={{marginBottom: 8, fontSize: 14, color: '#666'}}>
+        <p
+          style={{
+            marginBottom: 8,
+            fontSize: 14,
+            color: 'var(--color-text-secondary)',
+          }}>
           Shift+click column headers to add secondary sorts. Active sorts:{' '}
           {sort.map(s => `${s.sortKey} (${s.direction})`).join(', ') || 'none'}
         </p>
@@ -163,7 +174,12 @@ export const CustomSortKey: Story = {
 
     return (
       <div style={{maxWidth: 700}}>
-        <p style={{marginBottom: 8, fontSize: 14, color: '#666'}}>
+        <p
+          style={{
+            marginBottom: 8,
+            fontSize: 14,
+            color: 'var(--color-text-secondary)',
+          }}>
           Age column uses sortKey &quot;yearsOld&quot;, Email uses
           &quot;emailSort&quot;. Current:{' '}
           {sort.length > 0 ? `${sort[0].sortKey} ${sort[0].direction}` : 'none'}
@@ -190,7 +206,12 @@ export const AllowUnsortedState: Story = {
 
     return (
       <div style={{maxWidth: 700}}>
-        <p style={{marginBottom: 8, fontSize: 14, color: '#666'}}>
+        <p
+          style={{
+            marginBottom: 8,
+            fontSize: 14,
+            color: 'var(--color-text-secondary)',
+          }}>
           Cycles: ascending → descending → unsorted. Current:{' '}
           {sort.length > 0
             ? `${sort[0].sortKey} ${sort[0].direction}`
@@ -228,7 +249,12 @@ export const WithSelection: Story = {
 
     return (
       <div style={{maxWidth: 700}}>
-        <p style={{marginBottom: 8, fontSize: 14, color: '#666'}}>
+        <p
+          style={{
+            marginBottom: 8,
+            fontSize: 14,
+            color: 'var(--color-text-secondary)',
+          }}>
           Sorting + Selection composed together. Selected: {selectedKeys.size}{' '}
           of {employees.length}. Sort:{' '}
           {sort.length > 0 ? `${sort[0].sortKey} ${sort[0].direction}` : 'none'}
@@ -260,7 +286,12 @@ export const Controlled: Story = {
 
     return (
       <div style={{maxWidth: 700}}>
-        <p style={{marginBottom: 8, fontSize: 14, color: '#666'}}>
+        <p
+          style={{
+            marginBottom: 8,
+            fontSize: 14,
+            color: 'var(--color-text-secondary)',
+          }}>
           Controlled mode — external state. Current:{' '}
           {sort.length > 0 ? `${sort[0].sortKey} ${sort[0].direction}` : 'none'}
         </p>
@@ -285,6 +316,61 @@ export const Controlled: Story = {
           idKey="id"
           plugins={{sortable: sortablePlugin}}
         />
+      </div>
+    );
+  },
+};
+
+const largeIndicatorTheme = defineTheme({
+  name: 'story-large-sort-indicator',
+  componentIcons: {'table-sort-indicator': {size: 'lg'}},
+});
+
+const hiddenIndicatorTheme = defineTheme({
+  name: 'story-hidden-sort-indicator',
+  componentIcons: {'table-sort-indicator': null},
+});
+
+/**
+ * The same sorted table with the default indicator, with a theme that asks
+ * the `table-sort-indicator` slot for a large glyph, and with a theme that
+ * hides it. The large glyph grows while the Sort control and the header row
+ * keep their height; the hidden glyph leaves no gap beside the label.
+ */
+export const IndicatorSlotSize: Story = {
+  render: () => {
+    const sort: TableSortState = [{sortKey: 'name', direction: 'ascending'}];
+    const sortPlugin = useTableSortable<Employee>({
+      sort,
+      onSortChange: () => {},
+    });
+    return (
+      <div style={{display: 'grid', gap: 24}}>
+        <div data-testid="default-indicator">
+          <Table
+            data={employees}
+            columns={columns}
+            plugins={{sort: sortPlugin}}
+          />
+        </div>
+        <Theme theme={largeIndicatorTheme}>
+          <div data-testid="large-indicator">
+            <Table
+              data={employees}
+              columns={columns}
+              plugins={{sort: sortPlugin}}
+            />
+          </div>
+        </Theme>
+        <Theme theme={hiddenIndicatorTheme}>
+          <div data-testid="hidden-indicator">
+            <Table
+              data={employees}
+              columns={columns}
+              plugins={{sort: sortPlugin}}
+            />
+          </div>
+        </Theme>
       </div>
     );
   },

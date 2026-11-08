@@ -14,6 +14,8 @@ export type {
   DateTimeInputProps,
   DateTimeInputSize,
   DateTimeInputHourFormat,
+  DateTimeInputNativePicker,
+  DateTimeInputPresentation,
   DateTimeInputTimeIncrement,
   DateTimeInputTimeOptionInterval,
   DateTimeInputStatus,

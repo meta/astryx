@@ -79,7 +79,7 @@ const COLORS = {
   green: 'var(--color-data-categorical-green, #0B991F)',
   orange: 'var(--color-data-categorical-orange, #EB6E00)',
   purple: 'var(--color-data-categorical-purple, #6B1EFD)',
-  teal: 'var(--color-data-categorical-teal, #008E80)',
+  teal: 'var(--color-data-categorical-teal, #08A3A3)',
 };
 const GRID_STROKE = 'var(--color-border, rgba(5, 54, 89, 0.1))';
 const AXIS_TICK = {

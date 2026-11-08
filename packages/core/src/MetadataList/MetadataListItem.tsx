@@ -27,6 +27,7 @@ import {
 import {MetadataListContext} from './MetadataListContext';
 import type {BaseProps} from '../BaseProps';
 import {mergeProps} from '../utils';
+import {isRenderable} from '../utils/isRenderable';
 import {themeProps} from '../utils/themeProps';
 
 // =============================================================================
@@ -144,6 +145,7 @@ export function MetadataListItem({
   style,
   'data-testid': testId,
   ref,
+  ...rest
 }: MetadataListItemProps) {
   const ctx = use(MetadataListContext);
   const labelPosition = ctx?.labelConfig.position ?? 'start';
@@ -152,7 +154,7 @@ export function MetadataListItem({
 
   const labelContent = (
     <>
-      {icon != null && (
+      {isRenderable(icon) && (
         <span {...stylex.props(styles.iconWrapper)}>{icon}</span>
       )}
       {label}
@@ -170,7 +172,8 @@ export function MetadataListItem({
           stylex.props(styles.stackedWrapper, xstyle),
           className,
           style,
-        )}>
+        )}
+        {...rest}>
         <dt {...stylex.props(styles.stackedLabel)}>{labelContent}</dt>
         <dd {...stylex.props(styles.stackedValue)}>{children}</dd>
       </div>
@@ -188,7 +191,8 @@ export function MetadataListItem({
           stylex.props(styles.label, xstyle),
           className,
           style,
-        )}>
+        )}
+        {...rest}>
         {labelContent}
       </dt>
       <dd

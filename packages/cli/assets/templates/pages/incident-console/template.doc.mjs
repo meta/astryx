@@ -6,7 +6,16 @@ export const doc = {
   name: 'Incident Console',
   displayName: 'Incident Console',
   description:
-    'On-call incident response console: grouped dense incident rows with severity dots, PowerSearch filtering, status segmented control, and a resizable inspector panel with metadata and timeline. Frame-first tracker archetype: rows, not cards.',
+    'Dense row queue with an inspector: severity-coded rows grouped by status, a saved-search filter bar, a segmented status control, and a resizable detail pane for the selected row. Rows, not cards, sized for scanning volume.',
+  keywords: [
+    'incident',
+    'alert',
+    'on-call',
+    'outage',
+    'ticket',
+    'triage console',
+  ],
   isReady: false,
   category: 'Tools - Incident Console',
+  icons: {BellAlertIcon: 'notificationActive', PlusIcon: 'add'},
 };

@@ -15,8 +15,8 @@ import {Text, Heading} from '@astryxdesign/core/Text';
 export default function ResizableShowcase() {
   const sidebar = useResizable({
     defaultSize: 200,
-    minSizePx: 120,
-    maxSizePx: 400,
+    minSize: 120,
+    maxSize: 400,
   });
 
   return (

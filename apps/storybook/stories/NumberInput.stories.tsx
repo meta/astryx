@@ -3,6 +3,7 @@
 import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {NumberInput} from '@astryxdesign/core/NumberInput';
+import {InternationalizationProvider} from '@astryxdesign/core/i18n';
 import {HashtagIcon, CurrencyDollarIcon} from '@heroicons/react/24/outline';
 
 const meta: Meta<typeof NumberInput> = {
@@ -53,7 +54,7 @@ const meta: Meta<typeof NumberInput> = {
     isReadOnly: {
       control: 'boolean',
       description:
-        'Whether the input is read-only. The value still submits with the form but cannot be edited. Unlike isDisabled it is not dimmed and stays in the tab order.',
+        'Whether the input is read-only. The value still submits with the form but cannot be edited. Unlike isDisabled it is not dimmed and keeps its form value.',
     },
     disabledMessage: {
       control: 'text',
@@ -125,6 +126,44 @@ export const Default: Story = {
   },
 };
 
+export const PasteFormattedNumber: Story = {
+  render: () => {
+    const [enUS, setEnUS] = useState<number | null>(null);
+    const [deDE, setDeDE] = useState<number | null>(null);
+    return (
+      <div style={{display: 'flex', flexDirection: 'column', gap: 24}}>
+        <div>
+          <NumberInput
+            label="Impressions (en-US)"
+            description="Paste 1,234,234,234 or $1,234.56, then blur"
+            placeholder="Paste a formatted number"
+            value={enUS}
+            onChange={setEnUS}
+            hasClear
+          />
+          <p data-testid="en-committed">Committed: {String(enUS)}</p>
+        </div>
+        <InternationalizationProvider locale="de-DE">
+          <div>
+            <NumberInput
+              label="Impressionen (de-DE)"
+              description="Paste 1.234.234.234 or 1,5"
+              placeholder="Paste a formatted number"
+              value={deDE}
+              onChange={setDeDE}
+              formatValue={value =>
+                new Intl.NumberFormat('de-DE').format(value)
+              }
+              hasClear
+            />
+            <p data-testid="de-committed">Committed: {String(deDE)}</p>
+          </div>
+        </InternationalizationProvider>
+      </div>
+    );
+  },
+};
+
 export const WithDescription: Story = {
   render: args => {
     const [value, setValue] = useState<number | null>(args.value ?? null);
@@ -185,6 +224,14 @@ export const FormattedDisplay: Story = {
 };
 
 export const WithNumberSteppers: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'The compact steppers are shown on fine pointers and hidden on coarse pointers, regardless of viewport width. Direct entry and arrow-key stepping remain available.',
+      },
+    },
+  },
   render: args => {
     const [value, setValue] = useState<number | null>(args.value ?? 2);
     return <NumberInput {...args} value={value} onChange={setValue} />;
@@ -389,7 +436,7 @@ export const RequiredField: Story = {
 };
 
 // Read-only shows a value the user should see and send but not change. Unlike
-// a disabled field it is not dimmed, stays in the tab order, and still submits.
+// a disabled field it is not dimmed and still submits.
 export const ReadOnly: Story = {
   render: args => {
     const [value, setValue] = useState<number | null>(args.value ?? 1024);
@@ -614,7 +661,12 @@ export const WithEventHandlers: Story = {
           onBlur={() => addEvent('onBlur')}
           onEnter={() => addEvent('onEnter')}
         />
-        <div style={{marginTop: '16px', fontSize: '12px', color: '#666'}}>
+        <div
+          style={{
+            marginTop: '16px',
+            fontSize: '12px',
+            color: 'var(--color-text-secondary)',
+          }}>
           <strong>Events:</strong>
           <ul style={{margin: '4px 0', paddingLeft: '20px'}}>
             {events.map((event, i) => (

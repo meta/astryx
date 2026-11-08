@@ -4,7 +4,7 @@
 
 /**
  * @file TransferListSelector.tsx
- * @input Controlled option data, uncontrolled ComplexSelector state, TransferList, and action controls
+ * @input Controlled option data, uncontrolled ComplexSelector state, TransferList, action controls, and the core i18n catalog
  * @output Exports the immediate-or-staged TransferListSelector composition with draft cleanup after dismissal
  * @position Lab collection input shell; consumed by the TransferList entry point, docs, and tests
  *
@@ -21,6 +21,7 @@ import {
   ComplexSelector,
   type ComplexSelectorProps,
 } from '@astryxdesign/core/ComplexSelector';
+import {useTranslator} from '@astryxdesign/core/i18n';
 import {HStack} from '@astryxdesign/core/Stack';
 import {borderVars, colorVars} from '@astryxdesign/core/theme/tokens.stylex';
 import {TransferList, type TransferListProps} from './TransferList';
@@ -58,6 +59,16 @@ const styles = stylex.create({
     overflowY: 'auto',
     overscrollBehavior: 'contain',
   },
+  // Busy is not disabled: `disabled` on this fieldset would blur the Add or
+  // Remove button the user just activated, dropping focus to <body>. The
+  // pending state is carried by aria-busy plus the trigger's spinner, so this
+  // only has to read as unavailable to the pointer.
+  fieldsetBusy: {
+    cursor: {
+      default: 'progress',
+      ':is(:disabled,[aria-disabled="true"])': 'default',
+    },
+  },
   footer: {
     flexShrink: 0,
     borderBlockStartWidth: borderVars['--border-width'],
@@ -82,9 +93,9 @@ type TransferListSelectorShellProp =
   | 'size'
   | 'width'
   | 'placement'
-  | 'xstyle'
-  | 'className'
-  | 'style'
+  | 'controlXstyle'
+  | 'controlClassName'
+  | 'controlStyle'
   | 'data-testid';
 
 type TransferListContentProp =
@@ -184,8 +195,8 @@ export function TransferListSelector<T extends string = string>({
   isDisabled,
   isLoading,
   width,
-  applyLabel = 'Apply',
-  cancelLabel = 'Cancel',
+  applyLabel: applyLabelFromProps,
+  cancelLabel: cancelLabelFromProps,
   selectedLabel,
   availableLabel,
   hasSearch,
@@ -200,28 +211,30 @@ export function TransferListSelector<T extends string = string>({
   noResultsText,
   ...selectorProps
 }: TransferListSelectorProps<T>): ReactNode {
+  const t = useTranslator();
+  const applyLabel =
+    applyLabelFromProps ?? t('@astryx.transferListSelector.apply');
+  const cancelLabel =
+    cancelLabelFromProps ?? t('@astryx.transferListSelector.cancel');
   const [draftValue, setDraftValue] = useState<readonly T[]>(value);
-  const previousAppliedValueRef = useRef<readonly T[]>([...value]);
-  const previousCommitBehaviorRef = useRef(commitBehavior);
 
   const resetDraft = useCallback(() => {
     setDraftValue([...value]);
   }, [value]);
 
-  useEffect(() => {
-    const previousAppliedValue = previousAppliedValueRef.current;
-    previousAppliedValueRef.current = [...value];
-    if (!areOrderedValuesEqual(previousAppliedValue, value)) {
-      resetDraft();
-    }
-  }, [resetDraft, value]);
-
-  useEffect(() => {
-    if (previousCommitBehaviorRef.current !== commitBehavior) {
-      resetDraft();
-    }
-    previousCommitBehaviorRef.current = commitBehavior;
-  }, [commitBehavior, resetDraft]);
+  // A changed applied value or commit behavior discards the staged draft.
+  // Adjusted during render, so no commit paints the discarded draft.
+  const [draftSource, setDraftSource] = useState(() => ({
+    value: [...value],
+    commitBehavior,
+  }));
+  if (
+    !areOrderedValuesEqual(draftSource.value, value) ||
+    !Object.is(draftSource.commitBehavior, commitBehavior)
+  ) {
+    setDraftSource({value: [...value], commitBehavior});
+    setDraftValue([...value]);
+  }
 
   const resolvedWidth =
     typeof width === 'number'
@@ -236,7 +249,10 @@ export function TransferListSelector<T extends string = string>({
       value={value}
       onChange={onChange}
       changeAction={changeAction}
-      triggerLabel={triggerLabel ?? `${value.length} selected`}
+      triggerLabel={
+        triggerLabel ??
+        t('@astryx.transferListSelector.triggerLabel', {count: value.length})
+      }
       isDisabled={isDisabled}
       isLoading={isLoading}
       width={resolvedWidth}
@@ -256,14 +272,27 @@ export function TransferListSelector<T extends string = string>({
               />
             )}
             <fieldset
-              disabled={isDisabled || state.isBusy}
-              {...stylex.props(styles.fieldset)}>
+              aria-disabled={isDisabled || undefined}
+              {...stylex.props(
+                styles.fieldset,
+                state.isBusy && styles.fieldsetBusy,
+              )}>
               <TransferList
                 label={label}
                 isLabelHidden
                 options={options}
+                isDisabled={isDisabled}
                 value={transferListValue}
                 onChange={nextValue => {
+                  if (isDisabled) {
+                    return;
+                  }
+                  // Now that busy no longer disables the fieldset, the controls
+                  // stay live while a change is in flight; ignore transfers
+                  // until it settles so one pending action cannot be stacked.
+                  if (state.isBusy) {
+                    return;
+                  }
                   if (isStaged) {
                     setDraftValue(nextValue);
                   } else {

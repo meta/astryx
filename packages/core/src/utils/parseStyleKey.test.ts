@@ -4,49 +4,53 @@ import {describe, it, expect} from 'vitest';
 import {parseStyleKey} from './parseStyleKey';
 
 describe('parseStyleKey', () => {
-  it('returns empty string for base', () => {
+  it('returns no suffix for base', () => {
     expect(parseStyleKey('base')).toBe('');
   });
 
-  it('converts variant:value to .value', () => {
-    expect(parseStyleKey('variant:secondary')).toBe('.secondary');
+  it('preserves the prop axis in data-attribute selectors', () => {
+    expect(parseStyleKey('variant:secondary')).toBe(
+      '[data-variant="secondary"]',
+    );
+    expect(parseStyleKey('size:sm')).toBe('[data-size="sm"]');
   });
 
-  it('prefixes numeric values with prop name', () => {
-    expect(parseStyleKey('level:1')).toBe('.level-1');
+  it('keeps numeric values literal', () => {
+    expect(parseStyleKey('level:2')).toBe('[data-level="2"]');
   });
 
-  it('handles compound keys', () => {
+  it('kebab-cases camelCase prop names', () => {
+    expect(parseStyleKey('listStyle:ordered')).toBe(
+      '[data-list-style="ordered"]',
+    );
+  });
+
+  it('combines multiple prop selectors', () => {
     expect(parseStyleKey('variant:destructive+size:sm')).toBe(
-      '.destructive.sm',
+      '[data-variant="destructive"][data-size="sm"]',
     );
   });
 
-  it('handles compound with numeric value', () => {
-    expect(parseStyleKey('variant:primary+level:2')).toBe('.primary.level-2');
-  });
-});
-
-describe('parseStyleKey — bare state keys', () => {
-  it('converts bare state to .state', () => {
-    expect(parseStyleKey('checked')).toBe('.checked');
+  it('converts bare states to reflected state attributes', () => {
+    expect(parseStyleKey('checked')).toBe('[data-checked="checked"]');
+    expect(parseStyleKey('checked+disabled')).toBe(
+      '[data-checked="checked"][data-disabled="disabled"]',
+    );
   });
 
-  it('converts disabled state', () => {
-    expect(parseStyleKey('disabled')).toBe('.disabled');
-  });
-
-  it('converts selected state', () => {
-    expect(parseStyleKey('selected')).toBe('.selected');
-  });
-
-  it('handles compound bare states', () => {
-    expect(parseStyleKey('checked+disabled')).toBe('.checked.disabled');
-  });
-
-  it('handles mixed bare state + prop:value', () => {
+  it('combines a prop selector and a bare state selector', () => {
     expect(parseStyleKey('variant:destructive+disabled')).toBe(
-      '.destructive.disabled',
+      '[data-variant="destructive"][data-disabled="disabled"]',
     );
+  });
+
+  it('escapes CSS string metacharacters in values', () => {
+    expect(parseStyleKey('variant:quote"slash\\')).toBe(
+      '[data-variant="quote\\22 slash\\5c "]',
+    );
+  });
+
+  it('preserves empty values for compatibility', () => {
+    expect(parseStyleKey('variant:')).toBe('[data-variant=""]');
   });
 });

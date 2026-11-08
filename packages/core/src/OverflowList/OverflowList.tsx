@@ -18,12 +18,21 @@
  * - /packages/cli/assets/templates/blocks/components/OverflowList/ (showcase blocks)
  */
 
-import {type ReactNode, type ReactElement, Children} from 'react';
+import {
+  type ReactNode,
+  type ReactElement,
+  Children,
+  useCallback,
+  useRef,
+  useState,
+} from 'react';
 import type {BaseProps} from '../BaseProps';
+import {isRenderable} from '../utils/isRenderable';
 import type {SpacingStep} from '../utils/types';
 import * as stylex from '@stylexjs/stylex';
 import {mergeProps} from '../utils';
-import {useOverflow} from '../hooks/useOverflow';
+import {useOverflowInternal} from '../hooks/useOverflow';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {spacingVars} from '../theme/tokens.stylex';
 import {themeProps} from '../utils/themeProps';
 
@@ -187,6 +196,47 @@ export interface OverflowListProps extends BaseProps<HTMLDivElement> {
    * ```
    */
   overflowRenderer?: (overflowItems: OverflowItem[]) => ReactNode;
+
+  /**
+   * Called with the items that are currently collapsed, whenever that set
+   * changes.
+   *
+   * Use it when the collapsed items belong in a menu the surrounding UI
+   * already renders (a row that already has its own "…" button), so the list
+   * does not grow a second anchor beside it. `overflowRenderer` cannot serve
+   * that case: it is only rendered while items overflow, and its measurement
+   * copy always receives every item.
+   *
+   * The contract:
+   * - It fires once measurement has collapsed something, and again with an
+   *   empty array once the row widens back out and everything fits.
+   * - It is **silent while nothing overflows** — including on mount, so a list
+   *   that fits from the start never calls it. There is no report of the
+   *   pre-measurement state, which would always be an empty set whether or not
+   *   the row actually overflows. Hold the collapsed set in state initialised
+   *   to `[]` and it is correct at every moment; if you remount the list while
+   *   keeping that state, reset it yourself.
+   * - Reports are keyed on the collapsed items' original indices and React
+   *   keys. Membership and order changes report even when the count stays the
+   *   same; unrelated re-renders and callback identity changes do not.
+   *
+   * Give dynamic children stable React keys. Items include their current
+   * original `index`; use it to look up your own data rather than storing
+   * `child`.
+   *
+   * @example
+   * ```
+   * const [hidden, setHidden] = useState<OverflowItem[]>([]);
+   * <>
+   *   <OverflowList onOverflowChange={setHidden}>{items}</OverflowList>
+   *   <DropdownMenu
+   *     button={{label: 'More', variant: 'ghost'}}
+   *     items={[...alwaysThere, ...hidden.map(({index}) => actions[index])]}
+   *   />
+   * </>
+   * ```
+   */
+  onOverflowChange?: (overflowItems: OverflowItem[]) => void;
 }
 
 /**
@@ -219,6 +269,7 @@ export function OverflowList({
   collapseFrom = 'end',
   behavior = 'observeSelf',
   overflowRenderer,
+  onOverflowChange,
   xstyle,
   className,
   style,
@@ -233,15 +284,21 @@ export function OverflowList({
   const observeParent = behavior === 'observeParent';
   const isMultiRow = maxRows != null && maxRows > 1;
 
+  // Only the multi-row path renders from `rowHeight` (it caps the
+  // container's height), so only that path tracks it.
   const {containerRef, measureRef, visibleCount, hasOverflow, rowHeight} =
-    useOverflow(itemCount, {
-      gap: gapPx,
-      minVisibleItems,
-      maxVisibleItems,
-      maxRows,
-      collapseFrom,
-      behavior,
-    });
+    useOverflowInternal(
+      itemCount,
+      {
+        gap: gapPx,
+        minVisibleItems,
+        maxVisibleItems,
+        maxRows,
+        collapseFrom,
+        behavior,
+      },
+      {tracksRows: isMultiRow},
+    );
 
   const allItems: OverflowItem[] = childArray.map((child, index) => ({
     child,
@@ -263,16 +320,66 @@ export function OverflowList({
   // so the indicator renders at its maximum possible width.
   const measureIndicator = overflowRenderer?.(allItems);
 
+  // Re-run measurement when keyed children change without resizing the row.
+  // The measured key delays reporting until that measurement has committed.
+  // Lists without the callback skip all identity work.
+  const measurementKey = onOverflowChange
+    ? JSON.stringify({
+        children: childArray.map((child, index) => [index, child.key]),
+        gap,
+        minVisibleItems,
+        maxVisibleItems,
+        maxRows,
+        collapseFrom,
+        behavior,
+      })
+    : '';
+  const [measuredKey, setMeasuredKey] = useState(measurementKey);
+  const reportMeasureRef = useCallback(
+    (element: HTMLElement | null) => {
+      measureRef(element);
+      if (element) {
+        setMeasuredKey(measurementKey);
+      }
+    },
+    [measureRef, measurementKey],
+  );
+
+  // Report after measurement, before paint, so a standing menu updates in the
+  // same frame as the visible row. Keys distinguish membership and order while
+  // suppressing callback-only or unrelated re-renders. The initial empty key
+  // suppresses the optimistic pre-measurement render.
+  const overflowKey = onOverflowChange
+    ? JSON.stringify(overflowItems.map(({child, index}) => [index, child.key]))
+    : '[]';
+  const reportedKeyRef = useRef('[]');
+  const overflowItemsRef = useRef(overflowItems);
+  overflowItemsRef.current = overflowItems;
+
+  // Reports the measured overflow to `onOverflowChange`. A ResizeObserver
+  // drives the measurement, so no event handler can report it.
+  useIsomorphicLayoutEffect(() => {
+    if (
+      !onOverflowChange ||
+      measuredKey !== measurementKey ||
+      reportedKeyRef.current === overflowKey
+    ) {
+      return;
+    }
+    reportedKeyRef.current = overflowKey;
+    onOverflowChange(overflowItemsRef.current);
+  }, [measuredKey, measurementKey, overflowKey, onOverflowChange]);
+
   return (
     <>
       {/* Hidden measurement container */}
       <div
-        ref={measureRef}
+        ref={reportMeasureRef}
         aria-hidden="true"
         inert
         {...stylex.props(styles.measureContainer, gapStyles[gap])}>
         {childArray}
-        {measureIndicator != null && (
+        {isRenderable(measureIndicator) && (
           <div {...stylex.props(styles.measureIndicator)}>
             {measureIndicator}
           </div>

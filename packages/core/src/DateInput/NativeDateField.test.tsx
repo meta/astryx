@@ -20,9 +20,33 @@
  */
 
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
-import {render, screen, fireEvent} from '@testing-library/react';
+import {render, screen, fireEvent, act} from '@testing-library/react';
 import {DateInput} from './DateInput';
+import type * as NativeDateSegments from './nativeDateSegments';
+import {
+  hasEditableDateSegments,
+  resetDateSegmentProbe,
+} from './nativeDateSegments';
 import {InternationalizationProvider} from '../i18n';
+
+/**
+ * Lets a test say which kind of `<input type="date">` the engine draws.
+ * `null` (the default) runs the real probe, so every other test in this file
+ * exercises the shipping path: jsdom lays nothing out, so the probe reports
+ * `'unknown'` and the coarse pointer resolves it to picker-only.
+ */
+const {segmentState} = vi.hoisted(() => ({
+  segmentState: {editable: null as boolean | null},
+}));
+
+vi.mock('./nativeDateSegments', async importOriginal => {
+  const actual = await importOriginal<typeof NativeDateSegments>();
+  return {
+    ...actual,
+    hasEditableDateSegments: (isTouchPointer: boolean) =>
+      segmentState.editable ?? actual.hasEditableDateSegments(isTouchPointer),
+  };
+});
 
 const HOVER_CAPABLE = /\(\s*hover\s*:\s*hover\s*\)/;
 
@@ -87,6 +111,8 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  segmentState.editable = null;
+  resetDateSegmentProbe();
 });
 
 describe('DateInput nativePicker', () => {
@@ -170,12 +196,56 @@ describe('DateInput nativePicker', () => {
     expect(onChange).toHaveBeenCalledExactlyOnceWith('2026-03-21');
   });
 
+  it('runs changeAction after onChange and exposes the pending state', async () => {
+    stubPointer(true);
+    const calls: string[] = [];
+    let resolveAction: () => void = () => {};
+    const changeAction = vi.fn(
+      async () =>
+        new Promise<void>(resolve => {
+          calls.push('changeAction');
+          resolveAction = resolve;
+        }),
+    );
+    const onChange = vi.fn(() => calls.push('onChange'));
+    render(
+      <DateInput
+        label="Date"
+        onChange={onChange}
+        changeAction={changeAction}
+      />,
+    );
+
+    fireEvent.change(getInput(), {target: {value: '2026-03-21'}});
+
+    expect(calls).toEqual(['onChange', 'changeAction']);
+    expect(changeAction).toHaveBeenCalledExactlyOnceWith('2026-03-21');
+    expect(getInput()).not.toBeDisabled();
+    expect(getInput()).toHaveAttribute('aria-busy', 'true');
+    // The busy Spinner is decorative (spec:AST-086 FR8).
+    expect(document.querySelector('.astryx-spinner')).toHaveAttribute(
+      'aria-hidden',
+      'true',
+    );
+    expect(screen.getByText('March 21, 2026')).toBeInTheDocument();
+
+    fireEvent.change(getInput(), {target: {value: '2026-03-22'}});
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(changeAction).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('March 21, 2026')).toBeInTheDocument();
+
+    await act(async () => resolveAction());
+
+    fireEvent.change(getInput(), {target: {value: '2026-03-22'}});
+    expect(onChange).toHaveBeenCalledTimes(2);
+    expect(changeAction).toHaveBeenNthCalledWith(2, '2026-03-22');
+    await act(async () => resolveAction());
+  });
+
   it('fires onChange with undefined when the control is emptied', () => {
     stubPointer(true);
     const onChange = vi.fn();
-    render(
-      <DateInput label="Date" value="2026-03-21" onChange={onChange} />,
-    );
+    render(<DateInput label="Date" value="2026-03-21" onChange={onChange} />);
 
     fireEvent.change(getInput(), {target: {value: ''}});
 
@@ -191,9 +261,7 @@ describe('DateInput nativePicker', () => {
     // sees the real one.
     stubPointer(true);
     const onChange = vi.fn();
-    render(
-      <DateInput label="Date" value="2026-03-21" onChange={onChange} />,
-    );
+    render(<DateInput label="Date" value="2026-03-21" onChange={onChange} />);
 
     const input = getInput();
     input.value = '2026-03-09';
@@ -205,9 +273,7 @@ describe('DateInput nativePicker', () => {
   it('fires one change when both commit paths see the same edit', () => {
     stubPointer(true);
     const onChange = vi.fn();
-    render(
-      <DateInput label="Date" value="2026-03-21" onChange={onChange} />,
-    );
+    render(<DateInput label="Date" value="2026-03-21" onChange={onChange} />);
 
     fireEvent.change(getInput(), {target: {value: '2026-03-09'}});
 
@@ -225,9 +291,7 @@ describe('DateInput nativePicker', () => {
     const input = getInput();
 
     fireEvent.focus(input);
-    rerender(
-      <DateInput label="Date" value="2026-12-25" onChange={() => {}} />,
-    );
+    rerender(<DateInput label="Date" value="2026-12-25" onChange={() => {}} />);
 
     expect(input).toHaveValue('2026-03-21');
   });
@@ -240,9 +304,7 @@ describe('DateInput nativePicker', () => {
     const input = getInput();
 
     fireEvent.focus(input);
-    rerender(
-      <DateInput label="Date" value="2026-12-25" onChange={() => {}} />,
-    );
+    rerender(<DateInput label="Date" value="2026-12-25" onChange={() => {}} />);
     fireEvent.blur(input);
 
     expect(input).toHaveValue('2026-12-25');
@@ -391,9 +453,7 @@ describe('DateInput nativePicker', () => {
   it('keeps painting the value while the picker is open', () => {
     // The OS picker has no segments to reveal, so `format` holds throughout.
     stubPointer(true);
-    render(
-      <DateInput label="Date" value="2026-01-25" onChange={() => {}} />,
-    );
+    render(<DateInput label="Date" value="2026-01-25" onChange={() => {}} />);
 
     fireEvent.focus(getInput());
 
@@ -402,14 +462,10 @@ describe('DateInput nativePicker', () => {
 
   it('shows the placeholder when empty, and drops it when filled', () => {
     stubPointer(true);
-    const {rerender} = render(
-      <DateInput label="Date" onChange={() => {}} />,
-    );
+    const {rerender} = render(<DateInput label="Date" onChange={() => {}} />);
     expect(screen.getByText('Select a date')).toBeInTheDocument();
 
-    rerender(
-      <DateInput label="Date" value="2026-01-25" onChange={() => {}} />,
-    );
+    rerender(<DateInput label="Date" value="2026-01-25" onChange={() => {}} />);
 
     expect(screen.queryByText('Select a date')).toBeNull();
   });
@@ -418,9 +474,7 @@ describe('DateInput nativePicker', () => {
     // The input still holds the value and carries the label, so announcing
     // the overlay too would double-speak.
     stubPointer(true);
-    render(
-      <DateInput label="Date" value="2026-01-25" onChange={() => {}} />,
-    );
+    render(<DateInput label="Date" value="2026-01-25" onChange={() => {}} />);
 
     expect(screen.getByText('January 25, 2026')).toHaveAttribute(
       'aria-hidden',
@@ -430,9 +484,7 @@ describe('DateInput nativePicker', () => {
 
   it('hides the engine\u2019s own text under the overlay', () => {
     stubPointer(true);
-    render(
-      <DateInput label="Date" value="2026-01-25" onChange={() => {}} />,
-    );
+    render(<DateInput label="Date" value="2026-01-25" onChange={() => {}} />);
 
     const rules = rulesFor(getInput());
     // One transparent colour covers Chromium's `::-webkit-datetime-edit` and
@@ -523,12 +575,72 @@ describe('DateInput nativePicker', () => {
     expect(getInput()).not.toHaveFocus();
   });
 
-  it('disables the control and its toggle when isDisabled', () => {
+  it('runs clear through changeAction after onChange', async () => {
+    stubPointer(true);
+    const calls: string[] = [];
+    let resolveAction: () => void = () => {};
+    const changeAction = vi.fn(
+      async () =>
+        new Promise<void>(resolve => {
+          calls.push('changeAction');
+          resolveAction = resolve;
+        }),
+    );
+    const onChange = vi.fn(() => calls.push('onChange'));
+    render(
+      <DateInput
+        label="Date"
+        value="2026-03-21"
+        hasClear
+        onChange={onChange}
+        changeAction={changeAction}
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText('Clear Date'));
+
+    expect(calls).toEqual(['onChange', 'changeAction']);
+    expect(changeAction).toHaveBeenCalledExactlyOnceWith(undefined);
+    // The busy Spinner is decorative (spec:AST-086 FR8).
+    expect(document.querySelector('.astryx-spinner')).toHaveAttribute(
+      'aria-hidden',
+      'true',
+    );
+    await act(async () => resolveAction());
+  });
+
+  it('keeps a disabled control focusable and its toggle inert (AST-085 FR1, FR2)', () => {
     stubPointer(true);
     render(<DateInput label="Date" isDisabled onChange={() => {}} />);
 
-    expect(getInput()).toBeDisabled();
-    expect(screen.getByLabelText('Open calendar')).toBeDisabled();
+    const input = getInput();
+    expect(input).not.toHaveAttribute('disabled');
+    expect(input).toHaveAttribute('aria-disabled', 'true');
+    expect(input).toHaveAttribute('readonly');
+    input.focus();
+    expect(input).toHaveFocus();
+    const toggle = screen.getByLabelText('Open calendar');
+    expect(toggle).not.toHaveAttribute('disabled');
+    expect(toggle).toHaveAttribute('aria-disabled', 'true');
+    const showPicker = vi.fn();
+    Object.defineProperty(input, 'showPicker', {value: showPicker});
+    fireEvent.click(toggle);
+    expect(showPicker).not.toHaveBeenCalled();
+  });
+
+  it('does not call a caller onClick while disabled (AST-085 FR2)', () => {
+    stubPointer(true);
+    const onClick = vi.fn();
+    render(
+      <DateInput
+        label="Date"
+        isDisabled
+        onClick={onClick}
+        onChange={() => {}}
+      />,
+    );
+    fireEvent.click(getInput());
+    expect(onClick).not.toHaveBeenCalled();
   });
 
   it('ignores a change while disabled', () => {
@@ -561,5 +673,69 @@ describe('DateInput nativePicker', () => {
     expect(input).toHaveAttribute('type', 'date');
     expect(input).toHaveAttribute('aria-required', 'true');
     expect(ref).toHaveBeenCalledWith(expect.any(HTMLInputElement));
+  });
+
+  // ===========================================================================
+  // Engines that draw editable segments
+  //
+  // Chrome's touch simulator, a Windows tablet and a ChromeOS convertible all
+  // render `<input type="date">` as typable fields while reporting a coarse
+  // pointer. See ./nativeDateSegments.
+  // ===========================================================================
+
+  it('reveals the engine’s own segments while an editable control has focus', () => {
+    // Measured in Chrome: with the overlay up, typing paints nothing but a
+    // selection highlight drifting across the placeholder.
+    segmentState.editable = true;
+    stubPointer(true);
+    render(<DateInput label="Date" value="2026-01-25" onChange={() => {}} />);
+
+    expect(screen.getByText('January 25, 2026')).toBeInTheDocument();
+
+    fireEvent.focus(getInput());
+
+    expect(screen.queryByText('January 25, 2026')).toBeNull();
+    // `-webkit-text-fill-color` is what wins inside a date control, and
+    // unlike a bare `color:` cannot be confused with the wrapper's
+    // `background-color: transparent`.
+    expect(rulesFor(getInput())).not.toContain(
+      '-webkit-text-fill-color: transparent',
+    );
+  });
+
+  it('paints the formatted date again once the segments lose focus', () => {
+    segmentState.editable = true;
+    stubPointer(true);
+    render(<DateInput label="Date" value="2026-01-25" onChange={() => {}} />);
+
+    fireEvent.focus(getInput());
+    fireEvent.blur(getInput());
+
+    expect(screen.getByText('January 25, 2026')).toBeInTheDocument();
+    expect(rulesFor(getInput())).toContain(
+      '-webkit-text-fill-color: transparent',
+    );
+  });
+
+  it('stands aside for the engine’s placeholder while empty and focused', () => {
+    // `mm/dd/yyyy` says which order to type in, which ours cannot.
+    segmentState.editable = true;
+    stubPointer(true);
+    render(<DateInput label="Date" onChange={() => {}} />);
+
+    expect(screen.getByText('Select a date')).toBeInTheDocument();
+
+    fireEvent.focus(getInput());
+
+    expect(screen.queryByText('Select a date')).toBeNull();
+  });
+
+  it('resolves an unprobeable engine with the pointer', () => {
+    // jsdom lays nothing out, so neither pseudo can be measured — the same
+    // answer Firefox gives, which exposes neither.
+    resetDateSegmentProbe();
+
+    expect(hasEditableDateSegments(true)).toBe(false);
+    expect(hasEditableDateSegments(false)).toBe(true);
   });
 });

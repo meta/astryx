@@ -126,12 +126,18 @@ These are intentional and documented; they slightly favor baseline, making Astry
 - **Maintainability:** Tailwind scale values (`p-4`, `text-sm`) count as semantic, which is generous compared to how raw `16px` is counted for HTML
 - **Astryx+Tailwind scoring:** The hybrid target counts styling decisions from both Astryx props and Tailwind classes. This may inflate its decision count relative to pure Astryx, but accurately reflects the code's actual styling surface area
 
+## Execution Provenance
+
+Runners may write an optional `<promptId>.provenance.json` sidecar beside each result. It records versioned, executor-neutral task, fixture, condition, executor, timing, and token metadata without embedding prompts or filesystem paths. Collection copies the sidecar, and universal aggregation preserves per-run harness/model labels, supports provenance filters, and marks measured, derived, estimated, complete, and incomplete cost data explicitly.
+
+See [`docs/execution-provenance.md`](docs/execution-provenance.md) for the schema, example, fallback rules, and runner migration contract.
+
 ## Directory Structure
 
 ```
 internal/vibe-tests/
 ├── test-sets/           # Prompt batteries (JSON)
-├── src/                 # Runner scripts and evaluation
+├── src/                 # Runner scripts, evaluation, and fixture guards
 │   ├── setup-nightly.mjs     # 4-target nightly setup
 │   ├── universal-eval.ts     # Static analysis scoring (5 dimensions)
 │   ├── universal-aggregate.ts # Score aggregation
@@ -140,7 +146,60 @@ internal/vibe-tests/
 │   ├── screenshot-previews.ts # Playwright screenshots
 │   ├── build-report.ts       # Vite HTML report
 │   └── deploy-report.ts      # gh-pages deployment
+├── fixtures/            # Immutable standalone consumer-app fixtures
+├── fixture-recipes/     # Pinned provenance and SHA-256 manifests
+├── scripts/             # Fixture setup plus report helpers
 ├── .baseline/           # Real shadcn/ui components for baseline tsc
+├── setup-test/          # Setup evaluation over the canonical fixture matrix
+│   ├── PLAN.md               # controls, pilot stages, measures, decision rule
+│   ├── matrix.json           # fixtures × controls × prompts × bundles × reps
+│   ├── conditions.json       # controls plus the opt-in established-app strategies
+│   ├── guidance/             # one document per patch, including both strategies
+│   ├── run-setup.mjs         # sandbox + task + provenance preparation only
+│   ├── setup-interactions.mjs # marker-driven dialog and nested-overlay opener
+│   ├── setup-measure.mjs     # build + exact style, geometry, and overlay probes
+│   ├── setup-workspace.mjs   # copy-on-write build root; the sandbox is never written to
+│   ├── setup-integrity.mjs   # read-only diff attestation and escape-hatch checks
+│   ├── setup-important.mjs   # syntactic `!important` detection for that checker
+│   ├── setup-eval.ts         # strict deterministic deltas against each fixture
+│   └── setup-aggregate.ts    # matrix coverage, A/B deltas, and final acceptance
 ├── results/             # Iteration results (gitignored)
 └── README.md            # This file
 ```
+
+## Canonical fixture suite
+
+The three apps under `fixtures/` represent a plain Tailwind v4 control, an
+established shadcn-style Tailwind v4 app, and an original enterprise-style app
+with a marked guest design-system boundary. The two established-app fixtures
+include controlled portal dialogs and nested tooltip/menu surfaces so setup can
+measure clipping, occlusion, and layer order. They are standalone packages with
+exact dependencies and lockfiles; none has Astryx installed.
+
+Treat canonical fixture files as immutable inputs. Setup validates their pinned
+recipe and SHA-256 manifest, then copies the listed files into a sandbox without
+writing into the canonical directory:
+
+```bash
+pnpm -F @astryxdesign/vibe-tests fixtures:verify
+pnpm -F @astryxdesign/vibe-tests fixtures:prepare -- tailwind-v4-control --output /tmp/tailwind-control-run
+pnpm -F @astryxdesign/vibe-tests fixtures:build
+```
+
+When intentionally refreshing a fixture, update its pinned recipe, regenerate
+its lockfile, review the authored patches, and refresh the recorded hashes:
+
+```bash
+pnpm -F @astryxdesign/vibe-tests fixtures:refresh -- tailwind-v4-control
+```
+
+The root repository guard verifies provenance, exact manifests, deterministic
+source, dependency isolation, workspace exclusion, and separation from every
+publishable package root. This keeps future setup or migration tests independent
+of any unlanded harness branch.
+
+Generated public artifacts never retain machine-local paths. Setup configs use
+paths relative to their output directory; measurements identify the fixture and
+redact private paths or hosts from build diagnostics; exported provenance uses a
+generic usage-source label. Setup and universal aggregation fail closed before
+emitting a report that still contains an absolute path or private host.

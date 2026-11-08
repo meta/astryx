@@ -3,8 +3,13 @@
 import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {CheckboxList, CheckboxListItem} from '@astryxdesign/core/CheckboxList';
+import {CheckboxInput} from '@astryxdesign/core/CheckboxInput';
 import {List} from '@astryxdesign/core/List';
+import {Badge} from '@astryxdesign/core/Badge';
 import {Card} from '@astryxdesign/core/Card';
+import {ClickableCard} from '@astryxdesign/core/ClickableCard';
+import {Link} from '@astryxdesign/core/Link';
+import CheckboxListSelectAllPattern from '../../../packages/cli/assets/templates/blocks/components/CheckboxList/CheckboxListSelectAllPattern';
 
 const meta: Meta<typeof CheckboxList> = {
   title: 'Core/CheckboxList',
@@ -96,6 +101,45 @@ export const WithDescriptions: Story = {
   },
 };
 
+export const RichDescriptions: Story = {
+  render: args => {
+    const [value, setValue] = useState<string[]>(args.value ?? ['analytics']);
+    const {value: _value, onChange: _onChange, ...restArgs} = args;
+    return (
+      <CheckboxList {...restArgs} value={value} onChange={setValue}>
+        <CheckboxListItem
+          label={
+            <>
+              Analytics <Link href="#analytics-details">details</Link>
+            </>
+          }
+          value="analytics"
+          description={
+            <>
+              Usage data only. <Link href="#privacy">Read the policy</Link>
+            </>
+          }
+          endContent={<span data-testid="checkbox-end-content">$0/mo</span>}
+        />
+        <CheckboxListItem
+          label="Personalization"
+          value="personalization"
+          description={
+            <>
+              Tailors what you see. <Link href="#privacy">Learn more</Link>
+            </>
+          }
+        />
+      </CheckboxList>
+    );
+  },
+  args: {
+    label: 'Data sharing',
+    description:
+      'Labels and descriptions can carry links and other rich content without toggling the item.',
+  },
+};
+
 export const DynamicItems: Story = {
   render: args => {
     const items = [
@@ -157,6 +201,62 @@ export const ReadOnly: Story = {
   ),
 };
 
+/**
+ * A checkbox placed in a row's content is its own control. Under a finger it
+ * paints its own press, and the row it sits in does not.
+ */
+export const CheckboxInRowContent: Story = {
+  name: "Checkbox in a row's content",
+  render: () => {
+    const [value, setValue] = useState<string[]>([]);
+    const [digest, setDigest] = useState(false);
+    return (
+      <CheckboxList label="Notifications" value={value} onChange={setValue}>
+        <CheckboxListItem
+          label="Email"
+          value="email"
+          endContent={
+            <CheckboxInput
+              label="Daily digest"
+              value={digest}
+              onChange={setDigest}
+            />
+          }
+        />
+        <CheckboxListItem label="SMS" value="sms" />
+      </CheckboxList>
+    );
+  },
+};
+
+// A CheckboxList placed in a row's content keeps its own rows' press: holding
+// the outer row leaves the inner list's boxes at rest.
+export const CheckboxListInRowContent: Story = {
+  name: "Checkbox list in a row's content",
+  render: () => {
+    const [value, setValue] = useState<string[]>([]);
+    const [channels, setChannels] = useState<string[]>([]);
+    return (
+      <CheckboxList label="Notifications" value={value} onChange={setValue}>
+        <CheckboxListItem
+          label="Email"
+          value="email"
+          endContent={
+            <CheckboxList
+              label="Email channels"
+              value={channels}
+              onChange={setChannels}>
+              <CheckboxListItem label="Work" value="work" />
+              <CheckboxListItem label="Personal" value="personal" />
+            </CheckboxList>
+          }
+        />
+        <CheckboxListItem label="SMS" value="sms" />
+      </CheckboxList>
+    );
+  },
+};
+
 export const SelectAllWithIndeterminate: Story = {
   render: () => {
     const allItems = ['email', 'sms', 'push'];
@@ -200,6 +300,14 @@ export const SelectAllWithIndeterminate: Story = {
       </CheckboxList>
     );
   },
+};
+
+/**
+ * The select-all block exactly as the CLI ships it, so browser and axe audits
+ * cover the copied template rather than a look-alike.
+ */
+export const SelectAllPatternBlock: Story = {
+  render: () => <CheckboxListSelectAllPattern />,
 };
 
 export const Disabled: Story = {
@@ -281,6 +389,53 @@ export const DisabledItem: Story = {
   },
 };
 
+export const Optional: Story = {
+  render: args => {
+    const [value, setValue] = useState<string[]>([]);
+    const {value: _value, onChange: _onChange, ...restArgs} = args;
+    return (
+      <CheckboxList {...restArgs} value={value} onChange={setValue}>
+        <CheckboxListItem label="Email" value="email" />
+        <CheckboxListItem label="SMS" value="sms" />
+        <CheckboxListItem label="Push notification" value="push" />
+      </CheckboxList>
+    );
+  },
+  args: {
+    label: 'Notification preferences',
+    description: 'Leave all unchecked to receive no notifications.',
+    isOptional: true,
+  },
+};
+
+export const Required: Story = {
+  render: args => {
+    const [value, setValue] = useState<string[]>([]);
+    const [submitted, setSubmitted] = useState(false);
+    const {value: _value, onChange: _onChange, ...restArgs} = args;
+    return (
+      <form
+        onSubmit={event => {
+          event.preventDefault();
+          setSubmitted(true);
+        }}>
+        <CheckboxList {...restArgs} value={value} onChange={setValue}>
+          <CheckboxListItem label="Design" value="design" />
+          <CheckboxListItem label="Engineering" value="eng" />
+          <CheckboxListItem label="Research" value="research" />
+        </CheckboxList>
+        <button type="submit">Submit</button>
+        {submitted ? <p>Submitted</p> : null}
+      </form>
+    );
+  },
+  args: {
+    label: 'Topics',
+    description: 'Choose at least one.',
+    isRequired: true,
+  },
+};
+
 export const WithErrorStatus: Story = {
   render: args => {
     const [value, setValue] = useState<string[]>([]);
@@ -312,19 +467,19 @@ export const WithEndContent: Story = {
           label="Free tier"
           value="free"
           description="Basic features included"
-          endContent={<span style={{color: '#0D8626'}}>$0/mo</span>}
+          endContent={<Badge variant="success" label="$0/mo" />}
         />
         <CheckboxListItem
           label="Pro tier"
           value="pro"
           description="Advanced features"
-          endContent={<span style={{color: '#0064E0'}}>$9/mo</span>}
+          endContent={<Badge variant="info" label="$9/mo" />}
         />
         <CheckboxListItem
           label="Enterprise"
           value="enterprise"
           description="Custom solutions"
-          endContent={<span style={{color: '#5B08D8'}}>Custom</span>}
+          endContent={<Badge variant="purple" label="Custom" />}
         />
       </CheckboxList>
     );
@@ -456,6 +611,70 @@ export const InsideCardWithDividers: Story = {
         </Card>
       </div>
     );
+  },
+};
+
+// A list inside a ClickableCard. Nested controls work independently, so a
+// finger on the card presses the card, and a finger on a row presses that row.
+export const InsideClickableCard: Story = {
+  name: 'Inside a clickable card',
+  render() {
+    const [selected, setSelected] = useState<string[]>(['email']);
+    return (
+      <div style={{maxWidth: 400}}>
+        <ClickableCard label="Notification settings" onClick={() => {}}>
+          <CheckboxList
+            label="Notifications"
+            value={selected}
+            onChange={setSelected}>
+            <CheckboxListItem value="email" label="Email" />
+            <CheckboxListItem value="sms" label="SMS" />
+          </CheckboxList>
+        </ClickableCard>
+      </div>
+    );
+  },
+};
+
+// Long option content in a sized field. String labels and descriptions stay on
+// one line with an ellipsis (the full string still names the checkbox); rich
+// labels and descriptions wrap. `width` sizes the label, list, and status
+// together.
+export const LongContent: Story = {
+  render: args => {
+    const [value, setValue] = useState<string[]>(['comments']);
+    const {value: _value, onChange: _onChange, ...restArgs} = args;
+    return (
+      <CheckboxList {...restArgs} value={value} onChange={setValue}>
+        <CheckboxListItem
+          label="Comments, mentions, and replies across every shared workspace"
+          value="comments"
+          description="Delivered to the primary address listed in your account settings"
+        />
+        <CheckboxListItem
+          label={
+            <span>
+              Security alerts for new sign-ins on phones, tablets, and desktops
+            </span>
+          }
+          value="security"
+          description={
+            <span>
+              Includes a weekly summary of every device that accessed your
+              account
+            </span>
+          }
+        />
+        <CheckboxListItem label="SMS" value="sms" />
+      </CheckboxList>
+    );
+  },
+  args: {
+    label: 'Notification channels for workspace activity and account security',
+    description:
+      'Choose every channel that should receive these notifications. You can change this at any time.',
+    width: 280,
+    hasDividers: true,
   },
 };
 

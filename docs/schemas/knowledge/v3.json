@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 3,
+  "extends": 2,
+  "kinds": {
+    "component": {
+      "template": "docs/templates/knowledge/component-spec.md",
+      "requiredFrontmatter": [
+        "schema_version",
+        "template_version",
+        "kind",
+        "id",
+        "authority",
+        "archive_reason",
+        "superseded_by",
+        "approved_by",
+        "approved_at",
+        "owners",
+        "review_triggers",
+        "verified_by",
+        "modules",
+        "families",
+        "design_specs",
+        "architecture",
+        "contributing",
+        "system_specs"
+      ],
+      "requiredSections": [
+        "Intent",
+        "Compatibility and migration",
+        "Ownership boundary",
+        "Public concepts",
+        "Behavioral and layout contract",
+        "Accessibility contract",
+        "Design relationships",
+        "Family and system relationships",
+        "Verification map",
+        "Decision log",
+        "Open questions",
+        "Content boundary"
+      ],
+      "currentNonEmptyFields": ["owners", "review_triggers", "verified_by"],
+      "listFields": [
+        "owners",
+        "review_triggers",
+        "verified_by",
+        "modules",
+        "families",
+        "design_specs",
+        "architecture",
+        "contributing",
+        "system_specs"
+      ],
+      "idPattern": "^component:[A-Z][A-Za-z0-9]*$"
+    },
+    "module": {
+      "template": "docs/templates/knowledge/module-spec.md",
+      "requiredFrontmatter": [
+        "schema_version",
+        "template_version",
+        "kind",
+        "id",
+        "authority",
+        "archive_reason",
+        "superseded_by",
+        "approved_by",
+        "approved_at",
+        "owners",
+        "review_triggers",
+        "verified_by",
+        "parent_component",
+        "references"
+      ],
+      "requiredSections": [
+        "Intent",
+        "Compatibility and migration",
+        "Ownership boundary",
+        "Public API and concepts",
+        "Behavioral contract",
+        "Accessibility contract",
+        "Design relationships",
+        "Parent and system relationships",
+        "Verification map",
+        "Decision log",
+        "Open questions",
+        "Content boundary"
+      ],
+      "currentNonEmptyFields": ["owners", "review_triggers", "verified_by"],
+      "requiredNonEmptyStringFields": ["parent_component"],
+      "listFields": ["owners", "review_triggers", "verified_by", "references"],
+      "referenceFields": ["references"],
+      "idPattern": "^module:[A-Z][A-Za-z0-9]*/[A-Za-z][A-Za-z0-9]*$"
+    }
+  }
+}

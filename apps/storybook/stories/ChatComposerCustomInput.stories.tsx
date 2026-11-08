@@ -16,7 +16,7 @@ import {OnChangePlugin} from '@lexical/react/LexicalOnChangePlugin';
 import {$getRoot, type EditorState} from 'lexical';
 
 const meta: Meta<typeof ChatComposer> = {
-  title: 'Components/ChatComposer/Custom Input',
+  title: 'Core/ChatComposer',
   component: ChatComposer,
   parameters: {
     docs: {

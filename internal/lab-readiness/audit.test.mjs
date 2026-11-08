@@ -348,11 +348,49 @@ describe('CI wiring parsers', () => {
     const roots = _internal.ciComponentRoots(repoRoot);
     expect(roots).toContain('packages/core/src/');
     expect(roots).toContain('packages/lab/src/');
+    expect(roots).toContain('packages/charts/src/');
+    expect(roots).toContain('packages/richtext/src/');
+    expect(roots).toContain('packages/vega/src/');
+  });
+
+  it('covers nothing when ci.yml has no recognizable component gate', () => {
+    const repoRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'lab-readiness-ci-'),
+    );
+    try {
+      fs.mkdirSync(path.join(repoRoot, '.github/workflows'), {recursive: true});
+      fs.writeFileSync(
+        path.join(repoRoot, '.github/workflows/ci.yml'),
+        'jobs:\n  build:\n    runs-on: ubuntu-latest\n',
+      );
+      expect(_internal.ciComponentRoots(repoRoot)).toEqual([]);
+    } finally {
+      fs.rmSync(repoRoot, {recursive: true, force: true});
+    }
+  });
+
+  it('routes Charts, Rich Text, and Vega source-only changes into component audit scope', () => {
+    const repoRoot = path.resolve(import.meta.dirname, '..', '..');
+    const roots = _internal.ciComponentRoots(repoRoot);
+    const changedFiles = [
+      'packages/charts/src/Chart.tsx',
+      'packages/richtext/src/RichTextEditor.tsx',
+      'packages/vega/src/VegaChart.tsx',
+    ];
+    expect(
+      changedFiles.every(file => roots.some(root => file.startsWith(root))),
+    ).toBe(true);
   });
 
   it('reads the audited story prefixes out of the real rtl-audit', () => {
     const repoRoot = path.resolve(import.meta.dirname, '..', '..');
-    expect(_internal.rtlAuditedPrefixes(repoRoot)).toEqual(['core-', 'lab-']);
+    expect(_internal.rtlAuditedPrefixes(repoRoot)).toEqual([
+      'core-',
+      'lab-',
+      'charts-',
+      'richtext-',
+      'vega-',
+    ]);
   });
 
   it('derives the component name pr-a11y matches against', () => {

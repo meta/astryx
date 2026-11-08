@@ -4,10 +4,10 @@
 
 /**
  * @file CollapsibleGroupContext.tsx
- * @input Uses React createContext
+ * @input Layer-scoped React context
  * @output Exports CollapsibleGroupContext, CollapsibleGroupContextValue,
  *   CollapsibleGroupPresentationContext, CollapsibleGroupPresentationValue,
- *   and CollapsibleGroupDensity types
+ *   CollapsibleGroupDensity, and CollapsibleChevronPosition types
  * @position Context definitions for collapsible group coordination and presentation
  *
  * SYNC: When modified, update these files to stay in sync:
@@ -16,7 +16,8 @@
  * - /packages/cli/assets/templates/blocks/components/Collapsible/ (showcase blocks)
  */
 
-import {createContext} from 'react';
+import {createLayerScopedContext} from '../Layer/layerScopedContext';
+import {createSharedContext} from '../utils/sharedContext';
 
 /**
  * Context value provided by CollapsibleGroup to coordinate collapsible children.
@@ -33,7 +34,11 @@ export interface CollapsibleGroupContextValue {
  * When present, collapsible components defer their open/close state to the group.
  */
 export const CollapsibleGroupContext =
-  createContext<CollapsibleGroupContextValue | null>(null);
+  createSharedContext<CollapsibleGroupContextValue | null>(
+    'CollapsibleGroupContext',
+    1,
+    null,
+  );
 CollapsibleGroupContext.displayName = 'CollapsibleGroupContext';
 
 /**
@@ -42,6 +47,15 @@ CollapsibleGroupContext.displayName = 'CollapsibleGroupContext';
  * (Table, List, Item).
  */
 export type CollapsibleGroupDensity = 'compact' | 'balanced' | 'spacious';
+
+/**
+ * Logical position of Collapsible's disclosure chevron.
+ *
+ * `end` is the default trailing indicator: down when collapsed, up when
+ * expanded. `start` is the leading disclosure pattern: inward toward content
+ * when collapsed (mirrored under RTL), down when expanded.
+ */
+export type CollapsibleChevronPosition = 'start' | 'end';
 
 /**
  * Presentation value provided by CollapsibleGroup so each Collapsible can
@@ -53,6 +67,13 @@ export interface CollapsibleGroupPresentationValue {
   hasDividers: boolean;
   /** Resolved row density, or null to keep the default (unpadded) look. */
   density: CollapsibleGroupDensity | null;
+  /**
+   * Chevron position for the group's direct items, or null to leave each item on
+   * its own default. An item's own `chevronPosition` still wins, but mixing
+   * positions within one group reads as a mistake, so the group is the usual
+   * place to set it.
+   */
+  chevronPosition: CollapsibleChevronPosition | null;
 }
 
 /**
@@ -62,6 +83,10 @@ export interface CollapsibleGroupPresentationValue {
  * children so nested collapsibles never inherit row chrome.
  */
 export const CollapsibleGroupPresentationContext =
-  createContext<CollapsibleGroupPresentationValue | null>(null);
+  createLayerScopedContext<CollapsibleGroupPresentationValue | null>(
+    'CollapsibleGroupPresentationContext',
+    1,
+    null,
+  );
 CollapsibleGroupPresentationContext.displayName =
   'CollapsibleGroupPresentationContext';

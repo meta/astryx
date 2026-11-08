@@ -8,6 +8,10 @@ export const docs = {
   displayName: 'Breadcrumb Item',
   isHiddenFromOverview: true,
   description: 'Individual breadcrumb item that renders as a link when href is provided, or as plain text for the current page.',
+  usage: {
+    description:
+      'BreadcrumbItem represents one destination, action, current location, or sibling-menu trigger inside a Breadcrumbs trail.',
+  },
   props: [
     {
       name: 'children',
@@ -28,8 +32,8 @@ export const docs = {
     {
       name: 'isCurrent',
       type: 'boolean',
-      description: 'Marks this item as the current page, applying aria-current="page".',
-      default: 'false',
+      description:
+        'Marks this item as the current page, applying aria-current="page". When omitted, the last item is auto-detected if no item is explicitly current; pass false to opt out.',
     },
     {
       name: 'startIcon',
@@ -90,8 +94,8 @@ export const docsZh = {
     {
       name: 'isCurrent',
       type: 'boolean',
-      description: '将此项标记为当前页面，应用 aria-current="page"。',
-      default: 'false',
+      description:
+        '将此项标记为当前页面，应用 aria-current="page"。省略时，如果没有显式的当前项，则自动将最后一项标记为当前项；传入 false 可退出自动检测。',
     },
     {
       name: 'startIcon',
@@ -127,7 +131,8 @@ export const docsDense = {
     children: 'label content',
     href: 'link URL; omit for non-navigable items',
     onClick: 'click handler',
-    isCurrent: 'marks current page w/ aria-current="page"',
+    isCurrent:
+      'marks current page w/ aria-current="page"; omitted auto-detects the last item; false opts out',
     startIcon: 'icon before label',
     menu: 'DropdownMenuOption[] | children; opens a menu trigger (aria-haspopup="menu"); reuses the DropdownMenu item API',
     menuSize: "menu item size; defaults from variant (supporting→sm, else md)",

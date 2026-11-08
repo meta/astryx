@@ -14,7 +14,9 @@
  *   scroll control. Exposes APG
  *   carousel semantics: the root is a labelled region with
  *   aria-roledescription="carousel" and each item wrapper is a group with
- *   aria-roledescription="slide" named "Slide N of M".
+ *   aria-roledescription="slide" named "Slide N of M". The scroll area is a
+ *   group named like the carousel and a tab stop only while its content
+ *   overflows (AST-025 FR12).
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Carousel/index.ts (exports)
@@ -28,6 +30,7 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useState,
   Children,
   isValidElement,
 } from 'react';
@@ -39,19 +42,41 @@ import {
   radiusVars,
   durationVars,
   easeVars,
+  focusVars,
 } from '../theme/tokens.stylex';
+import {focusOutlineStyles} from '../utils/focusOutline.stylex';
+import {
+  focusOwnerProps,
+  focusWithinOwnerOverlay,
+} from '../privateAttributes/focusOwner.stylex';
 import {Button} from '../Button';
 import {Icon} from '../Icon';
 import {useLayer} from '../Layer';
-import {useScrollOverflow} from '../hooks/useScrollOverflow';
+import {useAttachment} from '../hooks/useAttachment';
+import {useShownScrollOverflow} from '../hooks/useScrollOverflow';
 import {isRtlElement} from '../hooks/isRtlElement';
 import type {BaseProps} from '../BaseProps';
 import {mergeProps, rtlStyles} from '../utils';
 import type {SpacingStep} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {
+  attachSnapPaging,
+  isSnapPaging,
+  moveHeldSnapPaging,
+  moveSnapPaging,
+  nearestStop,
+  type SnapPaging,
+  snapStops,
+} from '../SnapPaging/snapPagingValue';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Carousel/Carousel.generated';
+
+registerEnglishFallback(english);
 /**
  * Imperative control surface for the Carousel, accessed via the `handleRef`
  * prop. Methods drive the same native-scroll machinery as the built-in
@@ -124,10 +149,14 @@ export interface CarouselProps extends BaseProps<HTMLDivElement> {
    */
   hasLoop?: boolean;
   /**
-   * Enable scroll-snap on items. Each direct child snaps to the start edge.
+   * Snap each item to the start edge. `true` (written `hasSnap`) uses native
+   * CSS scroll snap. A `useSnapPaging()` value adds iOS paging on the same
+   * stops, under a finger and on a trackpad swipe. A flick moves one view, or
+   * one item with `useSnapPaging({pages: 'item'})`. Only that value loads the
+   * paging code.
    * @default false
    */
-  hasSnap?: boolean;
+  hasSnap?: boolean | SnapPaging;
   /**
    * Inline padding on the scroll container. Applied as padding-inline
    * so the gutter is inside the scrollable area — items can scroll fully
@@ -176,18 +205,18 @@ const styles = stylex.create({
     },
     scrollbarWidth: 'none',
     maskImage: 'none',
-    transitionProperty: 'mask-image',
-    transitionDuration: {
-      default: durationVars['--duration-medium'],
-      '@media (prefers-reduced-motion: reduce)': '0ms',
-    },
-    transitionTimingFunction: easeVars['--ease-standard'],
   },
   fadeStart: {
-    maskImage: `linear-gradient(to right, transparent 0%, rgba(0,0,0,0.3) 2px, black ${spacingVars['--spacing-1']})`,
+    maskImage: {
+      default: `linear-gradient(to right, transparent 0%, rgba(0,0,0,0.3) 2px, black ${spacingVars['--spacing-1']})`,
+      ':is([dir="rtl"] *)': `linear-gradient(to left, transparent 0%, rgba(0,0,0,0.3) 2px, black ${spacingVars['--spacing-1']})`,
+    },
   },
   fadeEnd: {
-    maskImage: `linear-gradient(to left, transparent 0%, rgba(0,0,0,0.3) 2px, black ${spacingVars['--spacing-1']})`,
+    maskImage: {
+      default: `linear-gradient(to left, transparent 0%, rgba(0,0,0,0.3) 2px, black ${spacingVars['--spacing-1']})`,
+      ':is([dir="rtl"] *)': `linear-gradient(to right, transparent 0%, rgba(0,0,0,0.3) 2px, black ${spacingVars['--spacing-1']})`,
+    },
   },
   fadeBoth: {
     maskImage: `linear-gradient(to right, transparent 0%, rgba(0,0,0,0.3) 2px, black ${spacingVars['--spacing-1']}, black calc(100% - ${spacingVars['--spacing-1']}), rgba(0,0,0,0.3) calc(100% - 2px), transparent 100%)`,
@@ -299,6 +328,52 @@ const paddingStyles = stylex.create({
   },
 });
 
+/**
+ * Runs one of Carousel's own calls into the paging: a scroll call or the
+ * detach. Such a call can run inside React's commit, so a report it raises
+ * takes React's scheduling.
+ */
+function ownCall<T>(depth: {current: number}, run: () => T): T {
+  depth.current += 1;
+  try {
+    return run();
+  } finally {
+    depth.current -= 1;
+  }
+}
+
+/**
+ * Where an edge press under snap paging goes from offset `at`: about one view
+ * on, to the nearest stop and at least one stop on. With `wraps`, a press past
+ * an edge goes to the opposite edge.
+ */
+function pagingStep(
+  el: HTMLElement,
+  at: number,
+  end: number,
+  direction: -1 | 1,
+  wraps: boolean,
+): number {
+  if (wraps && (direction === 1 ? at >= end - 0.5 : at <= 0.5)) {
+    return direction === 1 ? 0 : end;
+  }
+  const firstChild = el.firstElementChild as HTMLElement | null;
+  const itemWidth = firstChild ? firstChild.offsetWidth : 0;
+  const amount = el.clientWidth - itemWidth * 0.5;
+  const stops = snapStops(el, at, end);
+  const nearest = nearestStop(
+    stops,
+    at + direction * Math.max(amount, itemWidth),
+  );
+  if (direction === 1 && nearest <= at + 0.5) {
+    return stops.find(stop => stop > at + 0.5) ?? nearest;
+  }
+  if (direction === -1 && nearest >= at - 0.5) {
+    return [...stops].reverse().find(stop => stop < at - 0.5) ?? nearest;
+  }
+  return nearest;
+}
+
 // =============================================================================
 // Component
 // =============================================================================
@@ -338,11 +413,19 @@ export function Carousel({
   'data-testid': testId,
   ...htmlProps
 }: CarouselProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const ariaLabel = ariaLabelFromProps ?? t('@astryx.carousel.label');
   const scrollElRef = useRef<HTMLElement | null>(null);
-  const {scrollRef, overflowStart, overflowEnd, hasOverflow} =
-    useScrollOverflow();
+  const runningOwnCallsRef = useRef(0);
+  const startButtonRef = useRef<HTMLButtonElement>(null);
+  const endButtonRef = useRef<HTMLButtonElement>(null);
+  // Which nav button last held focus, and what the overflow state was on the
+  // previous render. Together they are how the Effect below recognises the one
+  // transition it is allowed to act on.
+  const focusedNavRef = useRef<'start' | 'end' | null>(null);
+  const prevCanScrollRef = useRef<{start: boolean; end: boolean} | null>(null);
+  const {scrollRef, followShown, overflowStart, overflowEnd, hasOverflow} =
+    useShownScrollOverflow();
 
   // Children.toArray drops null/undefined/boolean children and assigns
   // stable keys, so slide numbering ("Slide N of M") matches what actually
@@ -354,6 +437,7 @@ export function Carousel({
     lightDismiss: false,
   });
 
+  // Syncs the layer with `hasButtons`.
   useEffect(() => {
     if (hasButtons) {
       layer.show();
@@ -370,35 +454,89 @@ export function Carousel({
     [scrollRef],
   );
 
-  // Map Shift + vertical wheel to horizontal scroll. Trackpads emit
-  // horizontal deltas natively, but a standard mouse only produces deltaY —
-  // so mouse users can't wheel-scroll a horizontal container. Shift + wheel
-  // is the long-established convention for horizontal scroll containers; we
-  // honor it by translating the vertical delta into a horizontal scroll.
+  // Snap paging attaches once, with the first value. A new value on a later
+  // render does not restart a settle or attach again.
+  const snapPaging = isSnapPaging(hasSnap) ? hasSnap : null;
+  const isPaging = snapPaging != null;
+  const [attachedPaging, setAttachedPaging] = useState(snapPaging);
+  if ((attachedPaging != null) !== isPaging) {
+    setAttachedPaging(snapPaging);
+  }
+  // Attaches snap paging to the scroll area, and follows a replaced one.
+  // While the paging holds the row, the edges follow the row as shown.
+  useAttachment(
+    scrollElRef,
+    scroller => {
+      if (attachedPaging == null) {
+        return () => {};
+      }
+      const detach = attachSnapPaging(attachedPaging, scroller, held =>
+        followShown(held, runningOwnCallsRef.current === 0),
+      );
+      return () => ownCall(runningOwnCallsRef, detach);
+    },
+    attachedPaging,
+  );
+  // React's wheel listener is passive, so it can't stop the browser's own
+  // scroll; this native one can. While a flick holds the row, the paging takes
+  // a wheel the gesture host leaves to the stop nearest its travel.
   //
-  // Only kicks in when Shift is held and the wheel is purely vertical
-  // (deltaX === 0), so native trackpad horizontal scrolling is untouched.
-  const handleWheel = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
-    if (!event.shiftKey || event.deltaY === 0 || event.deltaX !== 0) {
-      return;
-    }
-    const el = scrollElRef.current;
-    if (!el) {
-      return;
-    }
-    // Nothing to scroll horizontally — let the event fall through so the page
-    // can scroll as it normally would.
-    if (el.scrollWidth <= el.clientWidth) {
-      return;
-    }
-    event.preventDefault();
-    el.scrollBy({left: event.deltaY, behavior: 'auto'});
-  }, []);
+  // A mouse wheel gives only deltaY. Shift + wheel is the convention for a
+  // horizontal scroll. A trackpad gives deltaX, so the browser scrolls the row.
+  // A row that fits gets no listener, so a page scroll over it does not wait
+  // for script. The listener reads no style or layout unless a flick holds
+  // the row.
+  useAttachment(
+    scrollElRef,
+    el => {
+      if (!hasOverflow) {
+        return () => {};
+      }
+      const onWheel = (event: WheelEvent) => {
+        if (event.defaultPrevented) {
+          return;
+        }
+        const delta = event.deltaX || (event.shiftKey ? event.deltaY : 0);
+        if (
+          delta !== 0 &&
+          moveHeldSnapPaging(el, (at, end) =>
+            nearestStop(
+              snapStops(el, at, end),
+              at + (isRtlElement(el) ? -delta : delta),
+            ),
+          )
+        ) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+        if (!event.shiftKey || event.deltaY === 0 || event.deltaX !== 0) {
+          return;
+        }
+        event.preventDefault();
+        el.scrollBy({left: event.deltaY, behavior: 'auto'});
+      };
+      el.addEventListener('wheel', onWheel, {passive: false});
+      return () => el.removeEventListener('wheel', onWheel);
+    },
+    hasOverflow,
+  );
 
   const scrollBy = useCallback(
     (direction: -1 | 1) => {
       const el = scrollElRef.current;
       if (!el) {
+        return;
+      }
+      // Under snap paging the paging moves the row, held or at rest. A touch
+      // then catches the move, and the release rests on a page.
+      if (
+        ownCall(runningOwnCallsRef, () =>
+          moveSnapPaging(el, (at, end) =>
+            pagingStep(el, at, end, direction, hasLoop && hasOverflow),
+          ),
+        )
+      ) {
         return;
       }
       // Respect the user's reduced-motion preference — mirrors the CSS
@@ -430,6 +568,20 @@ export function Carousel({
       const firstChild = el.firstElementChild as HTMLElement | null;
       const itemWidth = firstChild ? firstChild.offsetWidth : 0;
       const amount = el.clientWidth - itemWidth * 0.5;
+      if (isPaging) {
+        // Snap paging lands the step on the nearest stop, at least one stop
+        // on, in every engine. A native snap after scrollBy picks its own.
+        const end = Math.max(0, el.scrollWidth - el.clientWidth);
+        const next = pagingStep(
+          el,
+          Math.abs(el.scrollLeft),
+          end,
+          direction,
+          false,
+        );
+        el.scrollTo({left: rtlSign * next, behavior});
+        return;
+      }
       el.scrollBy({
         // `direction` is the logical intent (-1 = toward content start, +1 =
         // toward content end).
@@ -437,7 +589,7 @@ export function Carousel({
         behavior,
       });
     },
-    [hasLoop, hasOverflow, overflowStart, overflowEnd],
+    [hasLoop, hasOverflow, overflowStart, overflowEnd, isPaging],
   );
 
   const scrollToIndex = useCallback((index: number) => {
@@ -462,6 +614,20 @@ export function Carousel({
     const delta = isRtlElement(el)
       ? itemRect.right - containerRect.right
       : itemRect.left - containerRect.left;
+    // Under snap paging the row goes to the item's stop, inside the scroll
+    // padding, so the hand-back's snap does not pull it back.
+    if (
+      ownCall(runningOwnCallsRef, () =>
+        moveSnapPaging(el, (at, end) =>
+          nearestStop(
+            snapStops(el, at, end),
+            at + (isRtlElement(el) ? -delta : delta),
+          ),
+        ),
+      )
+    ) {
+      return;
+    }
     el.scrollBy({
       left: delta,
       behavior: prefersReducedMotion ? 'auto' : 'smooth',
@@ -486,6 +652,69 @@ export function Carousel({
   // something to scroll; without loop they follow the per-edge overflow state.
   const canScrollStart = hasLoop && hasOverflow ? true : overflowStart;
   const canScrollEnd = hasLoop && hasOverflow ? true : overflowEnd;
+
+  // Keep the keyboard user where they are when a nav button disables under
+  // them. The browser drops focus off a control it disables, so reaching an
+  // edge used to land the user on <body> and cost them their place in the page.
+  //
+  // This is an Effect on purpose, and the exception is narrow. The thing that
+  // disables the button IS this state transition, so it is the only correct
+  // trigger: three attempts to predict it from the press -- the position after
+  // the scroll, the position before it plus the step, and the settled position
+  // reported by `scrollend` -- were each wrong somewhere, under reduced motion,
+  // under mandatory scroll-snap, and on a browser that never fires the event.
+  // Ruled acceptable by the
+  // maintainer, 2026-08-27, on the conditions encoded below: it acts only on
+  // the transition that newly disables the focused button, it moves focus and
+  // nothing else, and it cannot fire twice for one transition.
+  //
+  // Which button the person is on is tracked by the buttons' own focus and blur
+  // handlers, and the blur has to ignore the one the commit itself causes: a
+  // tracker that outlived the person let a later edge -- a swipe, a resize, no
+  // press at all -- pull their focus back onto a control they never chose.
+  useEffect(() => {
+    const previous = prevCanScrollRef.current;
+    prevCanScrollRef.current = {start: canScrollStart, end: canScrollEnd};
+    const side = focusedNavRef.current;
+    if (previous == null || side == null) {
+      return;
+    }
+
+    // Only the edge that just ran out, and only while it held focus. An edge
+    // that was already disabled, or one the user was not on, is not ours.
+    const wasEnabled = side === 'start' ? previous.start : previous.end;
+    const isEnabled = side === 'start' ? canScrollStart : canScrollEnd;
+    if (!wasEnabled || isEnabled) {
+      return;
+    }
+
+    const pressed =
+      side === 'start' ? startButtonRef.current : endButtonRef.current;
+    if (pressed == null) {
+      return;
+    }
+    // The browser has already blurred it, so focus reads as the body. Anything
+    // else means the user moved on themselves and this is not ours to redirect.
+    const active = pressed.ownerDocument.activeElement;
+    if (active !== pressed && active !== pressed.ownerDocument.body) {
+      return;
+    }
+
+    // The scroll area is the receiver (component:Carousel FR2). It takes focus
+    // programmatically even when it is out of the tab order.
+    const receiver = scrollElRef.current;
+    if (receiver == null) {
+      return;
+    }
+
+    // One move per transition: clearing the tracker first means a re-render or
+    // a StrictMode double-invoke re-runs this and returns at the `side == null`
+    // guard above.
+    focusedNavRef.current = null;
+    // preventScroll: a plain focus() scrolls its element into view, which on
+    // the scroll container cancels the scroll the press just started.
+    receiver.focus({preventScroll: true});
+  }, [canScrollStart, canScrollEnd]);
 
   const fadeStyle = hasEdgeFade
     ? (hasLoop && hasOverflow) || (overflowStart && overflowEnd)
@@ -512,7 +741,13 @@ export function Carousel({
       {...htmlProps}
       {...mergeProps(
         themeProps('carousel'),
-        stylex.props(styles.root, xstyle),
+        stylex.props(
+          styles.root,
+          // The scroller is the focus owner. Its edge-fade mask would cover a
+          // ring the root draws itself.
+          focusWithinOwnerOverlay,
+          xstyle,
+        ),
         className,
         style,
       )}
@@ -521,14 +756,30 @@ export function Carousel({
       aria-roledescription="carousel">
       <div
         ref={composedRef}
-        tabIndex={0}
-        onWheel={handleWheel}
-        {...stylex.props(
-          styles.scroller,
-          gapStyles[gap],
-          padding != null && paddingStyles[padding],
-          hasSnap && styles.snap,
-          fadeStyle,
+        // The scroll area takes keyboard scrolling (spec:AST-025 FR12): a
+        // group named like the carousel, in the tab order only while its
+        // content overflows. While it fits it still takes focus
+        // programmatically, for the edge buttons' hand-off (FR2).
+        role="group"
+        aria-label={ariaLabel}
+        tabIndex={hasOverflow ? 0 : -1}
+        {...focusOwnerProps}
+        {...mergeProps(
+          themeProps('carousel-scroller', {
+            gap,
+            padding,
+            snap: hasSnap ? 'snap' : null,
+            edgeFade: hasEdgeFade ? 'edge-fade' : null,
+          }),
+          stylex.props(
+            styles.scroller,
+            // A tab stop whose shared ring the root paints.
+            focusOutlineStyles.suppressed,
+            gapStyles[gap],
+            padding != null && paddingStyles[padding],
+            hasSnap && styles.snap,
+            fadeStyle,
+          ),
         )}>
         {slides.map((child, index) => (
           // APG carousel pattern: each slide container is a group with
@@ -554,12 +805,16 @@ export function Carousel({
         layer.render(
           <>
             <div
+              // A hidden button is never a Tab stop or in the a11y tree. Its
+              // disabled state alone would keep it focusable.
+              inert={!canScrollStart || undefined}
               {...stylex.props(
                 styles.buttonPill,
                 styles.buttonPillStart,
                 !canScrollStart && styles.buttonHidden,
               )}>
               <Button
+                ref={startButtonRef}
                 icon={
                   <Icon
                     icon="chevronLeft"
@@ -572,21 +827,36 @@ export function Carousel({
                 size="sm"
                 isIconOnly
                 // Disabled when there's nothing to scroll toward. Keeps the
-                // button mounted (stable layout/focus) but removes it from the
-                // tab order and a11y tree while it's visually hidden, so
-                // keyboard users don't land on an invisible control.
+                // button mounted (stable layout). The Effect above hands focus
+                // to the scroll area when the state behind this one flips it
+                // disabled.
                 isDisabled={!canScrollStart}
+                onFocus={() => {
+                  focusedNavRef.current = 'start';
+                }}
+                onBlur={event => {
+                  // A disabled button was blurred by the commit, not the person.
+                  if (
+                    event.currentTarget.getAttribute('aria-disabled') !== 'true'
+                  ) {
+                    focusedNavRef.current = null;
+                  }
+                }}
                 onClick={() => scrollBy(-1)}
                 xstyle={styles.buttonRadiusOverride}
               />
             </div>
             <div
+              // A hidden button is never a Tab stop or in the a11y tree. Its
+              // disabled state alone would keep it focusable.
+              inert={!canScrollEnd || undefined}
               {...stylex.props(
                 styles.buttonPill,
                 styles.buttonPillEnd,
                 !canScrollEnd && styles.buttonHidden,
               )}>
               <Button
+                ref={endButtonRef}
                 icon={
                   <Icon
                     icon="chevronRight"
@@ -599,8 +869,19 @@ export function Carousel({
                 size="sm"
                 isIconOnly
                 // See "Scroll left" — disabled while visually hidden so the
-                // button stays mounted but out of the tab order / a11y tree.
+                // button stays mounted.
                 isDisabled={!canScrollEnd}
+                onFocus={() => {
+                  focusedNavRef.current = 'end';
+                }}
+                onBlur={event => {
+                  // A disabled button was blurred by the commit, not the person.
+                  if (
+                    event.currentTarget.getAttribute('aria-disabled') !== 'true'
+                  ) {
+                    focusedNavRef.current = null;
+                  }
+                }}
                 onClick={() => scrollBy(1)}
                 xstyle={styles.buttonRadiusOverride}
               />

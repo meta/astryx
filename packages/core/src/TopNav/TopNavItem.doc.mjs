@@ -8,6 +8,9 @@ export const docs = {
   displayName: 'Top Nav Item',
   isHiddenFromOverview: true,
   description: 'Navigation link item for use in TopNav startContent: renders as an anchor with hover and selected states.',
+  playground: {
+    defaults: {label: 'Projects', href: '#', isSelected: true},
+  },
   props: [
     {
       name: 'label',

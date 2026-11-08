@@ -43,18 +43,9 @@ import {
 // ─── Styles ─────────────────────────────────────────────────────────────────
 import type {CSSProperties} from 'react';
 
-// The only custom CSS in this template is small optical-alignment negative
-// margins: LayoutHeader/TabList have no edge-dock prop (#2622) and List
-// has no "bleed to container edge" prop (#2626). Everything else uses props.
-// Plain inline styles — no StyleX compiler required.
-
-// Bleed the tab bar to the header's content edges so the active-tab underline
-// meets the header divider. No edge-dock prop on TabList (#2622).
-const tabsRow: CSSProperties = {
-  marginInline: -12,
-  marginBottom: -16,
-  marginTop: 12,
-};
+// The only custom CSS in this template is a small optical-alignment negative
+// margin: List has no "bleed to container edge" prop (#2626). Everything else
+// uses props. Plain inline styles — no StyleX compiler required.
 // Pull the list items' inner padding back so their content optically aligns
 // with the section heading above (ListItem insets content by ~8px). No
 // edge/inset prop on List (#2626).
@@ -176,7 +167,7 @@ function PageHeader({
   isNarrow: boolean;
 }) {
   return (
-    <LayoutHeader hasDivider padding={4}>
+    <LayoutHeader hasDivider padding={4} paddingBlockEnd={0}>
       <VStack gap={3}>
         <HStack gap={4} vAlign="start">
           <StackItem size="fill">
@@ -258,9 +249,13 @@ function PageHeader({
           </HStack>
         )}
 
-        <HStack vAlign="center" style={tabsRow}>
+        <HStack vAlign="center">
           <StackItem size="fill">
-            <TabList value={activeTab} onChange={onTabChange} size="lg">
+            <TabList
+              value={activeTab}
+              onChange={onTabChange}
+              size="lg"
+              isFullBleed>
               <Tab value="details" label="Details" />
               <Tab value="invoices" label="Invoices" />
               <Tab value="timeline" label="Timeline" />
@@ -605,9 +600,9 @@ export default function DetailPage2Template() {
         }
         end={!isNarrow && showSidePanel ? <RightPanel /> : undefined}
       />
-      {/* Mobile: the side panel content opens as a full-screen dialog. (A
-          side drawer/sheet would be more idiomatic, but Astryx has no Drawer
-          component yet — #2575 — so we use the fullscreen Dialog variant.) */}
+      {/* Mobile: the side-panel content uses the full viewport so order details
+          are not squeezed beside narrow page chrome. Drawer remains available
+          for side-overlay flows that intentionally preserve page context. */}
       <Dialog
         variant="fullscreen"
         isOpen={isNarrow && isPanelDialogOpen}

@@ -8,21 +8,33 @@
  *   (relationship-based, no golden screenshots). Two layers:
  *     (A) AUTO-DISCOVERY — runs over EVERY `core-*` and `lab-*` story with zero
  *         curated selectors, so a NEW component that ships without RTL handling
- *         is caught automatically. Two auto passes:
- *           - D1 (icon-mirror): directional glyphs must flip/swap under RTL.
+ *         is caught automatically. Three auto passes:
+ *           - D1 (icon-mirror): directional SVG icons must flip/swap under RTL.
  *           - D5 (positional-mirror): an absolutely/fixed-positioned element
  *             with a LOGICAL anchor (insetInlineStart/End) + an UNFLIPPED
  *             PHYSICAL transform (translate/translateX) lands on the WRONG SIDE
  *             in RTL. Lint can't see this — each prop is individually fine; the
  *             bug is their interaction at layout time. We assert each candidate's
  *             RTL center mirrors its LTR center about the offsetParent center.
+ *           - D6 (directional-decoration): single-glyph, aria-hidden decorations
+ *             in repeated-item or between-sibling contexts mirror exactly once.
  *     (B) CURATED PRECISION — targets.json entries add D2 (order-flip),
- *         D3 (behavior-flip), D4 (overlay-side): the geometry/behavior dims that
- *         genuinely need hand-written selectors.
- * @input --storybook-dir <path> --output <file> [--targets <path>] [--filter <csv>]
+ *         D3 (behavior-flip), D4 (overlay-side), D7 (coarse native size/alignment),
+ *         D8 (logical inline-edge mirroring), and D9 (logical grouped corners):
+ *         the geometry/behavior dims that genuinely need hand-written selectors.
+ *     (C) APPLICABILITY: every component is measured, explicitly verified N/A,
+ *         or reported as a coverage gap. An all-N/A result is never called clean.
+ * @input Resolved Storybook `rtlAudit` parameters plus --storybook-dir <path>
+ *   --output <file> [--targets <path>]
+ *   [--verified-not-applicable <path>] [--filter <csv>] [--packages <csv>]
  *   [--auto-only] [--curated-only]
- * @output JSON scorecard: auto-discovery D1 verdicts across all audited stories
- *   + curated D2/D3/D4 results. Mirrors the pr-a11y accessibility-audit harness.
+ *   [--shard <i>/<n> --shard-output <file>] audit every n-th planned item and
+ *   write only those cards; [--merge-shards <dir>] build the report from a
+ *   complete shard set without a browser (rtl-audit-shards.mjs).
+ * @output JSON scorecard: D1/D5/D6 auto verdicts, declared D1 exclusions,
+ *   curated D2/D3/D4/D7/D8/D9 results, exact planned/completed scan counts, a
+ *   component coverage rollup, and the worker pages replaced after a failed
+ *   story (`pageRecoveries`). Mirrors the pr-a11y accessibility-audit harness.
  * @position internal test harness; run by the soft-gated `pr-rtl` CI job and
  *   locally via `pnpm -F @astryxdesign/storybook rtl-audit`.
  *
@@ -40,6 +52,58 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import componentPackages from '../../../scripts/component-packages.cjs';
+import {
+  AUDITED_PACKAGE_NAMES,
+  AUDITED_STORY_PREFIXES,
+  buildAuditedComponentRoster,
+  buildComponentCoverage,
+  buildD1Target,
+  buildStoryComponentRoutes,
+  classifyLogicalGroupedCorners,
+  classifyLogicalInlinePair,
+  collectDirectionalDecorations,
+  componentFromTarget,
+  evaluateDirectionalDecorations,
+  filterStoryRoutesByPackages,
+  assertSelectorParses,
+  bindDetectorValue,
+  resolveFilterRoutes,
+  finishFiniteAnimations,
+  d1GlyphKey,
+  d1PairKey,
+  glyphRendersOnBlockAxis,
+  gradeDirectionalPair,
+  gradePositionedPair,
+  ignoredStoryIdentities,
+  isUnchangedBlockAxisPair,
+  orderD1StoryCandidates,
+  resolveD1Applicability,
+  validateStoryRtlAuditParameters,
+  withD1CompletionIdentity,
+} from './rtl-audit-coverage.mjs';
+import {
+  createCuratedPages,
+  createPagePool,
+  mapPool,
+  runSteps,
+} from './rtl-audit-pool.mjs';
+import {
+  mergeRtlShards,
+  parseShard,
+  readShardFiles,
+  readStorybookSha,
+  shardFile,
+  shardPositions,
+} from './rtl-audit-shards.mjs';
+
+const {
+  componentExportsFromBarrel,
+  componentPackage,
+  documentedComponentsOutsideComponentDirectories,
+  flatPackageComponentNames,
+  nestedPackageComponentNames,
+} = componentPackages;
 
 const args = process.argv.slice(2);
 const getArg = name => {
@@ -48,23 +112,38 @@ const getArg = name => {
 };
 const hasFlag = name => args.includes(`--${name}`);
 const HERE = path.dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = path.resolve(HERE, '../../..');
 const DIST = getArg('storybook-dir') || 'apps/storybook/dist';
 const OUT = getArg('output') || 'rtl-audit-report.json';
 const TARGETS_PATH = getArg('targets') || path.join(HERE, 'targets.json');
+const VERIFIED_NA_PATH =
+  getArg('verified-not-applicable') ||
+  path.join(HERE, 'verified-not-applicable.json');
 const FILTER = (getArg('filter') || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+const PACKAGE_FILTER = (getArg('packages') || '')
+  .split(',')
+  .map(value => value.trim().toLowerCase())
+  .filter(Boolean);
+const invalidPackages = PACKAGE_FILTER.filter(
+  packageName => !AUDITED_PACKAGE_NAMES.includes(packageName),
+);
+if (invalidPackages.length > 0) {
+  throw new Error(`unknown audited package(s): ${invalidPackages.join(', ')}`);
+}
+const ACTIVE_PACKAGE_NAMES = PACKAGE_FILTER.length > 0
+  ? PACKAGE_FILTER
+  : AUDITED_PACKAGE_NAMES;
 const AUTO_ONLY = hasFlag('auto-only');
 const CURATED_ONLY = hasFlag('curated-only');
-// Story-id prefixes the auto-discovery layer sweeps. These mirror the
-// publishable component packages in analyze-pr.js — a component the PR job can
-// name in --filter must also be discoverable here, or the audit silently
-// reports zero targets. Lab stories (`lab-*`) were excluded until this list
-// existed, so no lab component had ever been RTL-audited.
-const AUDITED_STORY_PREFIXES = ['core-', 'lab-'];
+// Story-id prefixes the auto-discovery layer sweeps come from the same
+// canonical package registry used for source discovery below.
 const AUDITED_STORY_PREFIX = new RegExp(`^(?:${AUDITED_STORY_PREFIXES.join('|')})`);
-// Worker pool size. Each worker owns its own Playwright page; stories are
-// independent, and the run is dominated by page-load latency rather than CPU.
+// Worker pool size. Each worker holds one Playwright page at a time; stories
+// are independent, and the run is dominated by page-load latency rather than
+// CPU. A worker whose story fails gets a fresh page before its next story
+// (rtl-audit-pool.mjs), so one unusable page cannot fail the stories after it.
 // Defaults to 1 (serial) so the per-PR job's behaviour is unchanged while the
-// suite is still soft-gated; rtl-weekly.yml opts into 4 for the full sweep.
+// suite is still soft-gated; the CI RTL shards opt into 8.
 const CONCURRENCY = Math.max(1, Number(getArg('concurrency') || process.env.RTL_CONCURRENCY || 1));
 // D5 positional-mirror reveal: opening interaction-gated surfaces on EVERY core
 // story (1365 stories) is expensive and, at that scale, a flake/timeout risk
@@ -76,6 +155,19 @@ const CONCURRENCY = Math.max(1, Number(getArg('concurrency') || process.env.RTL_
 // is validated (DateInput popover elements mirror), but stays opt-in until the
 // stability window promotes it. See README "D5 positional-mirror".
 const PM_REVEAL = hasFlag('pm-reveal');
+// A sharded audit: each `--shard i/n` job audits every n-th D1 target, story
+// and curated target and writes only those cards (`--shard-output`);
+// `--merge-shards` then builds the report from the complete set, exactly as
+// one run would, without opening a browser.
+const SHARD = getArg('shard') === null ? null : parseShard(getArg('shard'));
+const SHARD_OUTPUT = getArg('shard-output');
+const MERGE_SHARDS = getArg('merge-shards');
+if ((SHARD === null) !== (SHARD_OUTPUT === null)) {
+  throw new Error('--shard and --shard-output must be given together');
+}
+if (SHARD !== null && MERGE_SHARDS !== null) {
+  throw new Error('--shard and --merge-shards cannot be combined');
+}
 
 // ---------------------------------------------------------------------------
 // static file server (same shape as accessibility-audit.js)
@@ -109,14 +201,25 @@ function serve(root) {
   });
 }
 
-const storyUrl = (port, id, rtl) =>
-  `http://127.0.0.1:${port}/iframe.html?id=${id}&viewMode=story${rtl ? '&globals=direction:rtl' : ''}`;
+const storyUrl = (port, id, rtl, args = {}) => {
+  const argQuery = Object.entries(args)
+    .map(([name, value]) => `${name}:${value}`)
+    .join(';');
+  const argsParam = argQuery ? `&args=${encodeURIComponent(argQuery)}` : '';
+  return `http://127.0.0.1:${port}/iframe.html?id=${id}&viewMode=story${rtl ? '&globals=direction:rtl' : ''}${argsParam}`;
+};
 
 async function settle(page) {
   // Wait for the story to render (load event + fonts), but do NOT block on
   // `networkidle` — some stories keep long-lived connections open and would
-  // stall the whole run. A short fixed settle is enough for RTL to apply.
+  // stall the whole run. Wait for Storybook to mount the story root, then use
+  // a short fixed settle for fonts, direction globals, and layout to apply.
   await page.waitForLoadState('load').catch(() => {});
+  await page
+    .locator('#storybook-root > *')
+    .first()
+    .waitFor({state: 'attached', timeout: 10000})
+    .catch(() => {});
   await page.evaluate(() => document.fonts?.ready).catch(() => {});
   await page
     .addStyleTag({
@@ -124,10 +227,53 @@ async function settle(page) {
         '*,*::before,*::after{animation-duration:0s!important;transition-duration:0s!important;animation-delay:0s!important;caret-color:transparent!important}',
     })
     .catch(() => {});
+  // Transitions a story started before the style above (an entrance on mount)
+  // keep their own duration: finish them so both directions measure the
+  // resting layout.
+  await page
+    .evaluate(`(${finishFiniteAnimations.toString()})(document)`)
+    .catch(() => {});
   await page.waitForTimeout(200);
 }
 
+async function readStoryRtlAuditParameters(page, storyId) {
+  const marker = page.locator('[data-astryx-rtl-audit]').first();
+  await marker
+    .waitFor({state: 'attached', timeout: 5000})
+    .catch(() => {
+      throw new Error(`${storyId} rtlAudit metadata was not rendered`);
+    });
+  const raw = await marker.getAttribute('data-astryx-rtl-audit');
+  if (raw == null) {
+    throw new Error(`${storyId} rtlAudit metadata was not rendered`);
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(`${storyId} rtlAudit metadata is not valid JSON`);
+  }
+  return validateStoryRtlAuditParameters(parsed, storyId);
+}
+
 async function doSetup(page, t) {
+  if (t?.setup?.args) {
+    await page
+      .waitForFunction(() => window.__STORYBOOK_ADDONS_CHANNEL__ != null)
+      .catch(() => {});
+    await page
+      .evaluate(
+        ({storyId, updatedArgs}) => {
+          window.__STORYBOOK_ADDONS_CHANNEL__?.emit('updateStoryArgs', {
+            storyId,
+            updatedArgs,
+          });
+        },
+        {storyId: t.storyId, updatedArgs: t.setup.args},
+      )
+      .catch(() => {});
+    await page.waitForTimeout(250);
+  }
   if (t?.setup?.click) {
     for (const sel of [].concat(t.setup.click)) {
       await page.locator(sel).first().click({timeout: 2500}).catch(() => {});
@@ -185,6 +331,7 @@ async function revealInteractionGated(page) {
 
 async function boxOf(page, sel, nth = 0) {
   const loc = page.locator(sel).nth(nth);
+  await loc.waitFor({state: 'visible', timeout: 2500}).catch(() => {});
   if ((await loc.count()) === 0) return null;
   const b = await loc.first().boundingBox().catch(() => null);
   return b ? {cx: b.x + b.width / 2, cy: b.y + b.height / 2, ...b} : null;
@@ -238,6 +385,8 @@ async function iconPath(page, sel) {
 // Ambiguous glyphs are treated as NON-DIRECTIONAL (err toward not flagging).
 const DETECTOR = /* js */ `
 (() => {
+  const glyphRendersOnBlockAxis = ${glyphRendersOnBlockAxis.toString()};
+  const d1GlyphKey = ${d1GlyphKey.toString()};
   // Known directional path signatures (whitespace-normalized, lowercased).
   const LEFT_PATHS = new Set([
     'm15 6l-6 6 6 6',        // core defaultIcons chevronLeft
@@ -332,14 +481,15 @@ const DETECTOR = /* js */ `
     // icon has a real box and IS scanned.
     const box = svg.getBoundingClientRect();
     if (box.width < 1 || box.height < 1) continue;
-    // dedupe by (direction + path signature) so a repeated glyph (e.g. many
-    // tree rows) is reported once
-    const key = dir + '::' + dcat;
+    // dedupe by (direction + path signature + rendered axis) so a repeated
+    // glyph (e.g. many tree rows) is reported once, while an expanded copy and
+    // a collapsed copy of one chevron are both kept
+    const matrix = composedMatrixFor(svg);
+    const key = d1GlyphKey(dir, dcat, matrix);
     if (seenPaths.has(key)) continue;
     seenPaths.add(key);
     const btn = svg.closest('button,[role=button],a');
     const aria = btn ? (btn.getAttribute('aria-label') || '') : '';
-    const matrix = composedMatrixFor(svg);
     const flip =
       Math.abs(matrix[0] + 1) < 0.01 && Math.abs(matrix[1]) < 0.01 &&
       Math.abs(matrix[2]) < 0.01 && Math.abs(matrix[3] - 1) < 0.01;
@@ -351,6 +501,30 @@ const DETECTOR = /* js */ `
 
 async function detectDirectionalIcons(page) {
   return page.evaluate(DETECTOR).catch(() => []);
+}
+
+async function detectDirectionalDecorations(page) {
+  return page.evaluate(collectDirectionalDecorations).catch(() => []);
+}
+
+// D6 contextual directional decorations: every story, because contextual
+// separators often live outside a component's default story. The verdict comes
+// from one LTR and (only when LTR found a candidate) one RTL measurement taken
+// by measureAutoStory() below.
+function decorationCard(component, storyId, ltr, rtl) {
+  const card = {component, storyId, dim: 'D6-decoration', verdict: 'N-A', notes: [], decorations: 0, results: []};
+  if (ltr.decorations.length === 0) {
+    if (ltr.revealed) card.notes.push('opened an interaction-gated surface before scanning');
+    card.notes.push('no contextual directional decorations');
+    return card;
+  }
+  const evaluated = evaluateDirectionalDecorations(ltr.decorations, rtl.decorations);
+  card.verdict = evaluated.verdict;
+  card.notes.push(...evaluated.notes);
+  card.results = evaluated.results;
+  card.decorations = Math.max(ltr.decorations.length, rtl.decorations.length);
+  if (ltr.revealed || rtl.revealed) card.notes.unshift('opened an interaction-gated surface before scanning');
+  return card;
 }
 
 // ===========================================================================
@@ -379,7 +553,7 @@ async function detectDirectionalIcons(page) {
 // or "wildly off" reading that is pure noise — the spike's single false
 // positive came from exactly this, and the guard removes it.
 const PM_DETECTOR = /* js */ `
-(() => {
+((PHYSICAL) => {
   function parseMatrixX(t) {
     if (!t || t === 'none') return null;
     let m = t.match(/^matrix\\(([^)]+)\\)/);
@@ -435,28 +609,41 @@ const PM_DETECTOR = /* js */ `
       cls: (el.className && el.className.toString().slice(0, 48)) || '',
       parentW: pr.width,
       relCenterX,
+      // Inside the story-declared plot (rtlAudit.D5), chart coordinates stay
+      // physical (DR5).
+      physical: PHYSICAL && el.closest(PHYSICAL.within) ? PHYSICAL.physical : null,
     });
   }
   return out;
-})()
+})(__RTL_PHYSICAL__)
 `;
 
-async function detectPositioned(page) {
-  return page.evaluate(PM_DETECTOR).catch(() => []);
+async function detectPositioned(page, physical = null) {
+  // An unparsable plot selector errors the story rather than being skipped
+  // (INV13); it is checked outside the catch below.
+  if (physical) {
+    await page.evaluate(
+      `(${assertSelectorParses.toString()})(document, ${JSON.stringify(physical.within)})`,
+    );
+  }
+  const detector = bindDetectorValue(PM_DETECTOR, '__RTL_PHYSICAL__', physical);
+  return page.evaluate(detector).catch(() => []);
 }
 
 // Auto-discovery D5 for one story: compare LTR vs RTL positioned-element
-// centers about their offsetParent. Reuses settle() + the reveal step so
-// interaction-gated positioned elements (dialogs/popovers/menus) are covered,
-// not just static ones.
+// centers about their offsetParent. With --pm-reveal the measurement follows
+// the reveal step, so interaction-gated positioned elements
+// (dialogs/popovers/menus) are covered, not just static ones.
 const PM_TOL = Number(process.env.PM_TOL || 3); // px tolerance (signal gap was ~10x)
 
-async function autoPositionalMirror(page, port, storyId, component) {
+function positionalCard(component, storyId, ltrMeasure, rtlMeasure) {
   const card = {component, storyId, dim: 'D5-positional', verdict: 'N-A', notes: [], candidates: 0, fails: []};
-  await page.goto(storyUrl(port, storyId, false), {waitUntil: 'domcontentloaded'});
-  await settle(page);
-  const revealedL = PM_REVEAL ? await revealInteractionGated(page) : false;
-  const ltr = await detectPositioned(page);
+  // Disclose every declared physical region (INV16), whatever the verdict.
+  if (ltrMeasure.physical) {
+    card.declaredD5Physical = {component, storyId, ...ltrMeasure.physical};
+  }
+  const ltr = ltrMeasure.positioned;
+  const revealedL = PM_REVEAL && ltrMeasure.revealed;
 
   // Short-circuit before the RTL navigation: with no LTR candidate there is
   // nothing to measure an RTL center against, so the second load can't change
@@ -469,10 +656,8 @@ async function autoPositionalMirror(page, port, storyId, component) {
     return card;
   }
 
-  await page.goto(storyUrl(port, storyId, true), {waitUntil: 'domcontentloaded'});
-  await settle(page);
-  const revealedR = PM_REVEAL ? await revealInteractionGated(page) : false;
-  const rtl = await detectPositioned(page);
+  const rtl = rtlMeasure.positioned;
+  const revealedR = PM_REVEAL && rtlMeasure.revealed;
   if (revealedL || revealedR) card.notes.push('opened an interaction-gated surface before scanning');
 
   // Same reasoning in the other direction: zero comparisons is not a pass.
@@ -490,25 +675,29 @@ async function autoPositionalMirror(page, port, storyId, component) {
   // parent's horizontal center.
   const n = Math.min(ltr.length, rtl.length);
   let anyFail = false;
+  let anyPhysical = false;
   const perEl = [];
   for (let i = 0; i < n; i++) {
     const L = ltr[i], R = rtl[i];
-    const expectedRtlCX = L.parentW - L.relCenterX; // mirror about parent center
-    const delta = Math.abs(R.relCenterX - expectedRtlCX);
-    const mirrored = delta <= PM_TOL;
-    if (!mirrored) {
+    // Mirror about the parent center, or keep the physical position under a
+    // declared chart marker (DR5); an unknown marker fails closed.
+    const grade = gradePositionedPair(L, R, PM_TOL);
+    if (grade.expectation === 'physical') anyPhysical = true;
+    if (!grade.pass) {
       anyFail = true;
       card.fails.push({
         cls: L.cls,
         tag: L.tag,
+        expectation: grade.expectation,
         parentW: Math.round(L.parentW),
         ltrRelCenterX: Math.round(L.relCenterX * 10) / 10,
         rtlRelCenterX: Math.round(R.relCenterX * 10) / 10,
-        expectedRtlCenterX: Math.round(expectedRtlCX * 10) / 10,
-        delta: Math.round(delta * 10) / 10,
+        expectedRtlCenterX: grade.expected == null ? null : Math.round(grade.expected * 10) / 10,
+        delta: grade.delta == null ? null : Math.round(grade.delta * 10) / 10,
+        reason: grade.reason,
       });
     }
-    perEl.push({idx: i, cls: L.cls, delta: Math.round(delta * 10) / 10, mirrored});
+    perEl.push({idx: i, cls: L.cls, expectation: grade.expectation, delta: grade.delta == null ? null : Math.round(grade.delta * 10) / 10, pass: grade.pass});
   }
   card.perEl = perEl;
   if (anyFail) {
@@ -516,23 +705,78 @@ async function autoPositionalMirror(page, port, storyId, component) {
     card.notes.push(
       `positioned element(s) land on the wrong side in RTL: ` +
         card.fails
-          .map(f => `${f.cls || f.tag} (LTR cx ${f.ltrRelCenterX} → RTL cx ${f.rtlRelCenterX}, expected ~${f.expectedRtlCenterX}, Δ${f.delta}px)`)
+          .map(f => f.reason
+            ? `${f.cls || f.tag} (${f.reason})`
+            : `${f.cls || f.tag} (${f.expectation === 'physical' ? 'chart position should stay physical; ' : ''}LTR cx ${f.ltrRelCenterX} → RTL cx ${f.rtlRelCenterX}, expected ~${f.expectedRtlCenterX}, Δ${f.delta}px)`)
           .join('; '),
     );
   } else {
     card.verdict = 'pass';
-    card.notes.push(`every positioned candidate mirrors about its parent center (≤${PM_TOL}px)`);
+    card.notes.push(
+      anyPhysical
+        ? `every positioned candidate holds its expected position (mirrored, or physical in a declared chart plot) (≤${PM_TOL}px)`
+        : `every positioned candidate mirrors about its parent center (≤${PM_TOL}px)`,
+    );
   }
   return card;
 }
 
-// Auto-discovery D1 for one story: compare LTR vs RTL directional-icon flip.
-async function autoD1(page, port, storyId, component) {
-  const card = {component, storyId, dim: 'D1', verdict: 'N-A', notes: [], icons: 0};
-  await page.goto(storyUrl(port, storyId, false), {waitUntil: 'domcontentloaded'});
+// D5 and D6 both scan every audited story from the same LTR render, so one
+// LTR load serves both. Each dimension still reads the page at the point it
+// always did: D5 before the reveal step (unless --pm-reveal), D6 after it. The
+// RTL load runs only when either dimension found an LTR candidate, which is
+// when each of them used to load RTL on its own.
+async function measureAutoStory(page, port, storyId, rtl, {positioned, decorations}) {
+  await page.goto(storyUrl(port, storyId, rtl), {waitUntil: 'domcontentloaded'});
   await settle(page);
-  const revealedL = await revealInteractionGated(page);
-  const ltr = await detectDirectionalIcons(page);
+  const measure = {positioned: [], decorations: [], revealed: false};
+  // A story may declare a plot whose overlays stay physical (rtlAudit.D5);
+  // D5 still scans it. Malformed metadata throws (INV13).
+  const physical = positioned
+    ? (await readStoryRtlAuditParameters(page, storyId)).D5 ?? null
+    : null;
+  if (positioned && !PM_REVEAL) measure.positioned = await detectPositioned(page, physical);
+  if (decorations || (positioned && PM_REVEAL)) {
+    measure.revealed = await revealInteractionGated(page);
+  }
+  if (positioned && PM_REVEAL) measure.positioned = await detectPositioned(page, physical);
+  if (decorations) measure.decorations = await detectDirectionalDecorations(page);
+  measure.physical = physical;
+  return measure;
+}
+
+async function autoPositionalAndDecorations(page, port, storyId, component) {
+  const ltr = await measureAutoStory(page, port, storyId, false, {positioned: true, decorations: true});
+  const needPositioned = ltr.positioned.length > 0;
+  const needDecorations = ltr.decorations.length > 0;
+  const rtl = needPositioned || needDecorations
+    ? await measureAutoStory(page, port, storyId, true, {positioned: needPositioned, decorations: needDecorations})
+    : null;
+  return {
+    positional: positionalCard(component, storyId, ltr, rtl),
+    decoration: decorationCard(component, storyId, ltr, rtl),
+  };
+}
+
+// Auto-discovery D1 for one story: compare LTR vs RTL directional-icon flip.
+async function autoD1(
+  page,
+  port,
+  storyId,
+  component,
+  {ltrMeasurement: premeasuredLtr = null} = {},
+) {
+  const card = {component, storyId, dim: 'D1', verdict: 'N-A', notes: [], icons: 0};
+  let ltrMeasurement = premeasuredLtr;
+  if (ltrMeasurement == null) {
+    await page.goto(storyUrl(port, storyId, false), {waitUntil: 'domcontentloaded'});
+    await settle(page);
+    ltrMeasurement = {
+      revealed: await revealInteractionGated(page),
+      icons: await detectDirectionalIcons(page),
+    };
+  }
+  const {revealed: revealedL, icons: ltr} = ltrMeasurement;
   await page.goto(storyUrl(port, storyId, true), {waitUntil: 'domcontentloaded'});
   await settle(page);
   const revealedR = await revealInteractionGated(page);
@@ -549,7 +793,7 @@ async function autoD1(page, port, storyId, component) {
   // Pair LTR<->RTL directional icons by aria-context (fallback: positional
   // index) and evaluate EACH pair, so a two-button name-swap (prev/next) is
   // seen per-button rather than washed out by a global multiset.
-  const keyOf = (i, idx) => (i.aria && i.aria.trim() ? 'aria:' + i.aria.trim() : 'idx:' + idx);
+  const keyOf = d1PairKey;
   const ltrBy = new Map();
   ltr.forEach((i, idx) => ltrBy.set(keyOf(i, idx), i));
   const rtlBy = new Map();
@@ -560,6 +804,7 @@ async function autoD1(page, port, storyId, component) {
   let anyUnhandled = false; // at least one directional icon neither flips nor swaps
   let anyDoubleFlip = false;
   const perIcon = [];
+  let blockAxisOnly = 0; // unmirrored glyphs that point up or down in both directions
   for (const k of keys) {
     const L = ltrBy.get(k), R = rtlBy.get(k);
     // transform-mirror: the glyph's COMPOSED transform under RTL equals its LTR
@@ -580,6 +825,17 @@ async function autoD1(page, port, storyId, component) {
     const doubleFlip =
       L && R && L.flip && R.flip &&
       L.matrix.every((v, i) => Math.abs(v - R.matrix[i]) < 0.01);
+    // A horizontal glyph turned a quarter turn (an expanded disclosure) points
+    // up or down. Pointing the same way along the block axis in BOTH
+    // directions, it carries no inline meaning (DR5): leaving it unmirrored is
+    // correct, so it is not judged. One that flips between down and up is
+    // still judged; a mirrored one renders the same and counts as handled.
+    const blockAxis = !mirrored && !swapped && isUnchangedBlockAxisPair(L, R);
+    if (blockAxis) {
+      blockAxisOnly++;
+      perIcon.push({icon: k, ltrDir: L.dir, rtlDir: R.dir, ltrMatrix: L.matrix, rtlMatrix: R.matrix, blockAxis: true});
+      continue;
+    }
     if (mirrored || swapped) anyMirrored = true;
     else if (doubleFlip) { anyDoubleFlip = true; anyUnhandled = true; }
     else anyUnhandled = true;
@@ -589,7 +845,10 @@ async function autoD1(page, port, storyId, component) {
   // A component is RTL-ready for D1 iff EVERY directional icon is handled
   // (flips or swaps) and none double-flips. Any unhandled directional icon =>
   // not-RTL (the "shipped without RTL handling" signal).
-  if (!anyUnhandled && anyMirrored) {
+  if (!anyUnhandled && !anyMirrored && blockAxisOnly > 0) {
+    card.verdict = 'N-A';
+    card.notes.push('every directional glyph points along the block axis in both directions (rotated a quarter turn)');
+  } else if (!anyUnhandled && anyMirrored) {
     card.verdict = 'pass';
     card.notes.push('every directional icon mirrors (transform-flip and/or name-swap)');
   } else if (anyDoubleFlip) {
@@ -597,7 +856,7 @@ async function autoD1(page, port, storyId, component) {
     card.notes.push('double-flip: a directional icon is flipped in BOTH LTR and RTL (nets to no mirror)');
   } else {
     card.verdict = 'fail';
-    const bad = perIcon.filter(p => !p.mirrored && !p.swapped).map(p => p.icon);
+    const bad = perIcon.filter(p => !p.blockAxis && !p.mirrored && !p.swapped).map(p => p.icon);
     card.notes.push(`directional glyph never mirrors: ${bad.join(', ')}`);
   }
   card.perIcon = perIcon;
@@ -606,8 +865,73 @@ async function autoD1(page, port, storyId, component) {
   return card;
 }
 
+async function autoD1ForComponent(page, port, candidates, component) {
+  const orderedCandidates = orderD1StoryCandidates(candidates);
+  const parametersByStoryId = new Map();
+  let selectedLtr = null;
+  for (const candidate of orderedCandidates) {
+    await page.goto(storyUrl(port, candidate.id, false), {
+      waitUntil: 'domcontentloaded',
+    });
+    await settle(page);
+    const parameters = await readStoryRtlAuditParameters(page, candidate.id);
+    parametersByStoryId.set(candidate.id, parameters);
+    if (
+      selectedLtr == null &&
+      parameters.D1?.applicable !== false
+    ) {
+      selectedLtr = {
+        storyId: candidate.id,
+        revealed: await revealInteractionGated(page),
+        icons: await detectDirectionalIcons(page),
+      };
+    }
+  }
+
+  const {selectedCandidate, declaredExclusions} = resolveD1Applicability(
+    component,
+    orderedCandidates,
+    parametersByStoryId,
+  );
+  const skippedStories = declaredExclusions.map(({storyId, reason}) => ({
+    storyId,
+    reason,
+  }));
+  if (selectedCandidate != null) {
+    if (selectedLtr?.storyId !== selectedCandidate.id) {
+      throw new Error(
+        `${component} D1 selected story did not retain its LTR measurement`,
+      );
+    }
+    const card = await autoD1(page, port, selectedCandidate.id, component, {
+      ltrMeasurement: {
+        revealed: selectedLtr.revealed,
+        icons: selectedLtr.icons,
+      },
+    });
+    card.skippedStories = skippedStories;
+    card.declaredD1Exclusions = declaredExclusions;
+    if (skippedStories.length > 0) {
+      card.notes.unshift(
+        `skipped ${skippedStories.length} fixture(s) explicitly not applicable to D1`,
+      );
+    }
+    return card;
+  }
+  return {
+    component,
+    storyId: null,
+    dim: 'D1',
+    verdict: 'N-A',
+    notes: ['every candidate story is explicitly not applicable to D1'],
+    icons: 0,
+    skippedStories,
+    declaredD1Exclusions: declaredExclusions,
+  };
+}
+
 // ===========================================================================
-// CURATED precision dims (D2/D3/D4) — hand selectors from targets.json
+// CURATED precision dims (D2/D3/D4/D7/D8/D9) — hand selectors from targets.json
 // ===========================================================================
 async function checkD2(page, port, t, card) {
   const {prev, next} = t.selectors;
@@ -619,7 +943,7 @@ async function checkD2(page, port, t, card) {
   const pR = await boxOf(page, prev), nR = await boxOf(page, next);
   if (!pL || !nL || !pR || !nR) { card.dims.D2 = 'N-A'; card.notes.push('D2: prev/next not found'); return; }
   const ltrOk = pL.cx < nL.cx, rtlOk = pR.cx > nR.cx;
-  card.dims.D2 = ltrOk && rtlOk ? 'pass' : ltrOk || rtlOk ? 'partial' : 'fail';
+  card.dims.D2 = gradeDirectionalPair(ltrOk, rtlOk);
   card.notes.push(`D2 prev/next cx: LTR ${pL.cx.toFixed(0)}<${nL.cx.toFixed(0)}=${ltrOk}; RTL ${pR.cx.toFixed(0)}>${nR.cx.toFixed(0)}=${rtlOk}`);
 }
 async function checkD3Scroll(page, port, t, card) {
@@ -636,7 +960,7 @@ async function checkD3Scroll(page, port, t, card) {
   const dL = await run(false), dR = await run(true);
   if (dL == null || dR == null) { card.dims.D3 = 'N-A'; card.notes.push('D3: scroller/next not found'); return; }
   const ltrOk = dL > 1, rtlOk = dR < -1;
-  card.dims.D3 = ltrOk && rtlOk ? 'pass' : ltrOk || rtlOk ? 'partial' : 'fail';
+  card.dims.D3 = gradeDirectionalPair(ltrOk, rtlOk);
   card.notes.push(`D3 scroll delta on next: LTR ${dL.toFixed(0)} (>0=${ltrOk}); RTL ${dR.toFixed(0)} (<0=${rtlOk})`);
 }
 async function checkD4(page, port, t, card) {
@@ -654,19 +978,236 @@ async function checkD4(page, port, t, card) {
   card.notes.push(`D4 overlay side frac: LTR ${sideL.toFixed(2)} RTL ${sideR.toFixed(2)} flipped=${flipped}`);
 }
 
-async function scoreCurated(page, port, t) {
+async function checkD7CoarseHit(page, port, t, card) {
+  const wrapperSel = t.selectors?.wrapperSelector;
+  const sizes = t.sizes || ['md'];
+  const minimumTargetSize = t.minimumTargetSize;
+  if (!['width', 'height'].every(axis =>
+    Number.isFinite(minimumTargetSize?.[axis]) && minimumTargetSize[axis] > 0,
+  )) {
+    throw new Error('D7 requires positive minimumTargetSize width and height from the owning target contract');
+  }
+
+  const testDir = async (rtl, size) => {
+    const inputSel = t.selectors?.inputSelectorBySize?.[size] ||
+      t.selectors?.inputSelector || 'input[type="checkbox"], input[type="radio"]';
+    await page.goto(storyUrl(port, t.storyId, rtl, {size}), {waitUntil: 'domcontentloaded'});
+    await settle(page);
+    await doSetup(page, t);
+
+    return page.evaluate(({inputSel, wrapperSel, size, rtl, minimumTargetSize}) => {
+      const coarse = window.matchMedia('(pointer: coarse)').matches;
+      const touchPoints = navigator.maxTouchPoints;
+      const inputs = Array.from(document.querySelectorAll(inputSel));
+      if (inputs.length === 0) return {coarse, touchPoints, size, rtl, count: 0, allHitsOk: false};
+
+      let allHitsOk = true;
+      let count = 0;
+      const centers = [];
+      for (const input of inputs) {
+        const wrapper = wrapperSel ? input.closest(wrapperSel) : input.parentElement;
+        if (!wrapper) continue;
+        const b = wrapper.getBoundingClientRect();
+        const inputBox = input.getBoundingClientRect();
+        if (b.width < 1 || b.height < 1) continue;
+        const cx = b.x + b.width / 2;
+        const cy = b.y + b.height / 2;
+        const hit = document.elementFromPoint(cx, cy);
+        const isHit = hit === input || input.contains(hit);
+        const isCentered = Math.abs(inputBox.x + inputBox.width / 2 - cx) < 0.5 &&
+          Math.abs(inputBox.y + inputBox.height / 2 - cy) < 0.5;
+        const meetsMinimum = inputBox.width >= minimumTargetSize.width &&
+          inputBox.height >= minimumTargetSize.height;
+        if (!isHit || !isCentered || !meetsMinimum) allHitsOk = false;
+        centers.push({
+          wrapper: {x: b.x, y: b.y, width: b.width, height: b.height},
+          native: {x: inputBox.x, y: inputBox.y, width: inputBox.width, height: inputBox.height},
+          hit: isHit,
+          centered: isCentered,
+          meetsMinimum,
+        });
+        count++;
+      }
+      return {coarse, touchPoints, size, rtl, count, allHitsOk, centers};
+    }, {inputSel, wrapperSel, size, rtl, minimumTargetSize}).catch(() => null);
+  };
+
+  const results = [];
+  for (const size of sizes) {
+    results.push(await testDir(false, size));
+    results.push(await testDir(true, size));
+  }
+
+  if (results.some(result => result === null || !result.coarse || result.touchPoints < 1 || result.count === 0)) {
+    card.dims.D7 = 'N-A';
+    card.notes.push('D7: coarse-pointer context or input/wrapper targets not verified');
+    return;
+  }
+
+  card.coarseHits = {minimumTargetSize, results};
+  const pass = results.every(result => result.allHitsOk);
+  card.dims.D7 = pass ? 'pass' : 'fail';
+  const formatTarget = target => {
+    const {width, height} = target.wrapper;
+    const cx = target.wrapper.x + width / 2;
+    const cy = target.wrapper.y + height / 2;
+    return `wrapper ${width}x${height}@(${cx.toFixed(0)},${cy.toFixed(0)}) native ${target.native.width}x${target.native.height} hit=${target.hit} centered=${target.centered} size=${target.meetsMinimum}`;
+  };
+  card.notes.push(`D7 coarse native target (minimum ${minimumTargetSize.width}x${minimumTargetSize.height}): ${results.map(result => `${result.rtl ? 'RTL' : 'LTR'} ${result.size}:${result.centers.map(formatTarget).join(',')}`).join('; ')}`);
+}
+
+async function measureLogicalInlineSubject(page, subject) {
+  const subjects = page.locator(subject);
+  const count = await subjects.count();
+  if (count !== 1) return {count, visible: false};
+  return subjects.first().evaluate(element => {
+    const style = getComputedStyle(element);
+    const rect = element.getBoundingClientRect();
+    const number = value => Number.parseFloat(value);
+    const visible = typeof element.checkVisibility === 'function'
+      ? element.checkVisibility({checkOpacity: true, checkVisibilityCSS: true})
+      : style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) !== 0;
+    return {
+      count: 1, visible, width: rect.width, height: rect.height,
+      direction: style.direction,
+      writingMode: style.writingMode,
+      inlineStart: number(style.paddingInlineStart),
+      inlineEnd: number(style.paddingInlineEnd),
+      top: number(style.paddingTop), right: number(style.paddingRight),
+      bottom: number(style.paddingBottom), left: number(style.paddingLeft),
+    };
+  }).catch(() => null);
+}
+
+async function verifyD8BrowserContract(page) {
+  await page.setContent(`
+    <div id="d8-horizontal" dir="ltr" style="box-sizing:border-box;width:160px;height:40px;padding-block:4px 12px;padding-inline-start:8px;padding-inline-end:24px">horizontal</div>
+    <div id="d8-vertical" dir="ltr" style="box-sizing:border-box;width:160px;height:80px;writing-mode:vertical-rl;padding-block:4px 12px;padding-inline-start:8px;padding-inline-end:24px">vertical</div>
+  `);
+  const verifyPair = async subject => {
+    const ltr = await measureLogicalInlineSubject(page, subject);
+    await page.locator(subject).evaluate(element => { element.dir = 'rtl'; });
+    const rtl = await measureLogicalInlineSubject(page, subject);
+    return {ltr, rtl, result: classifyLogicalInlinePair(ltr, rtl)};
+  };
+  const horizontal = await verifyPair('#d8-horizontal');
+  const vertical = await verifyPair('#d8-vertical');
+  await page.locator('#d8-horizontal').evaluate(element => { element.style.display = 'none'; });
+  const hidden = await measureLogicalInlineSubject(page, '#d8-horizontal');
+  const hiddenVerdict = classifyLogicalInlinePair(hidden, hidden);
+  if (
+    horizontal.result.verdict !== 'pass' ||
+    vertical.result.verdict !== 'pass' ||
+    hiddenVerdict.verdict !== 'fail'
+  ) {
+    throw new Error(
+      `D8 browser contract failed: ${JSON.stringify({horizontal, vertical, hidden: {measurement: hidden, result: hiddenVerdict}})}`,
+    );
+  }
+  return {
+    horizontal,
+    vertical,
+    hidden: {measurement: hidden, result: hiddenVerdict},
+  };
+}
+
+async function checkD8LogicalInline(page, port, t, card) {
+  const subject = t.selectors?.subject;
+  if (!subject) { card.dims.D8 = 'N-A'; card.notes.push('D8: no subject selector configured'); return; }
+  const run = async rtl => {
+    await page.goto(storyUrl(port, t.storyId, rtl), {waitUntil: 'domcontentloaded'});
+    await settle(page); await doSetup(page, t);
+    return measureLogicalInlineSubject(page, subject);
+  };
+  const ltr = await run(false), rtl = await run(true);
+  if (ltr == null || rtl == null) { card.dims.D8 = 'N-A'; card.notes.push('D8: logical inline-edge subject was not measurable'); return; }
+  const result = classifyLogicalInlinePair(ltr, rtl);
+  card.dims.D8 = result.verdict;
+  const formatPhysical = measurement =>
+    `${measurement.top}/${measurement.right}/${measurement.bottom}/${measurement.left}px`;
+  card.notes.push(
+    `D8 logical inline edges: ${result.reason}; writing-mode ${ltr.writingMode}; ` +
+    `LTR start/end ${ltr.inlineStart}/${ltr.inlineEnd}px T/R/B/L ${formatPhysical(ltr)}; ` +
+    `RTL start/end ${rtl.inlineStart}/${rtl.inlineEnd}px T/R/B/L ${formatPhysical(rtl)}`,
+  );
+}
+
+async function measureGroupedCorners(page, group) {
+  return page.evaluate(({first, middle, last}) => {
+    const selectors = [first, middle, last];
+    const boxes = selectors.map(selector => {
+      const elements = document.querySelectorAll(selector);
+      if (elements.length !== 1) return null;
+      const element = elements[0];
+      const style = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      const number = value => Number.parseFloat(value);
+      const visible = typeof element.checkVisibility === 'function'
+        ? element.checkVisibility({checkOpacity: true, checkVisibilityCSS: true})
+        : style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) !== 0;
+      return {
+        visible, width: rect.width, height: rect.height,
+        direction: style.direction, writingMode: style.writingMode,
+        corners: {
+          topLeft: number(style.borderTopLeftRadius),
+          topRight: number(style.borderTopRightRadius),
+          bottomRight: number(style.borderBottomRightRadius),
+          bottomLeft: number(style.borderBottomLeftRadius),
+        },
+      };
+    });
+    return {
+      direction: boxes.find(Boolean)?.direction ?? null,
+      writingMode: boxes.find(Boolean)?.writingMode ?? null,
+      boxes,
+    };
+  }, group).catch(() => null);
+}
+
+async function checkD9GroupedCorners(page, port, t, card) {
+  const groups = t.selectors?.groups;
+  if (!Array.isArray(groups) || groups.length === 0) {
+    card.dims.D9 = 'N-A';
+    card.notes.push('D9: no grouped-corner selectors configured');
+    return;
+  }
+  const run = async rtl => {
+    await page.goto(storyUrl(port, t.storyId, rtl), {waitUntil: 'domcontentloaded'});
+    await settle(page); await doSetup(page, t);
+    return Promise.all(groups.map(group => measureGroupedCorners(page, group)));
+  };
+  const ltr = await run(false), rtl = await run(true);
+  const results = groups.map((group, index) => ({
+    name: group.name,
+    logicalSide: group.logicalSide,
+    ...classifyLogicalGroupedCorners(ltr[index], rtl[index], group.logicalSide),
+  }));
+  card.dims.D9 = results.every(result => result.verdict === 'pass') ? 'pass' : 'fail';
+  card.notes.push(...results.map(result => `D9 ${result.name ?? result.logicalSide}: ${result.reason}`));
+  card.groupedCorners = results;
+}
+
+// `pages` is the curated page pair (rtl-audit-pool.mjs). A dim that throws is
+// recorded as an ERROR, and the page it ran on is replaced before the next dim.
+async function scoreCurated(pages, port, t) {
   const card = {component: t.component, storyId: t.storyId, dims: {}, notes: []};
-  for (const dim of t.dims) {
-    try {
+  await runSteps(t.dims, pages, {
+    pageFor: dim => (dim === 'D7' ? 'coarse' : 'main'),
+    run: async (dim, page) => {
       if (dim === 'D2') await checkD2(page, port, t, card);
       else if (dim === 'D3') await checkD3Scroll(page, port, t, card);
       else if (dim === 'D4') await checkD4(page, port, t, card);
+      else if (dim === 'D7') await checkD7CoarseHit(page, port, t, card);
+      else if (dim === 'D8') await checkD8LogicalInline(page, port, t, card);
+      else if (dim === 'D9') await checkD9GroupedCorners(page, port, t, card);
       // D1 is handled by auto-discovery; ignore any stray D1 in curated entries.
-    } catch (e) {
+    },
+    onError: (dim, e) => {
       card.dims[dim] = 'ERROR';
       card.notes.push(`${dim} threw: ${String(e).slice(0, 160)}`);
-    }
-  }
+    },
+    describe: dim => ({phase: 'curated', storyId: t.storyId, dim}),
+  });
   const vals = Object.entries(card.dims).filter(([, v]) => v !== 'N-A');
   const anyFail = vals.some(([, v]) => v === 'fail' || v === 'ERROR');
   const allPass = vals.length > 0 && vals.every(([, v]) => v === 'pass');
@@ -675,143 +1216,513 @@ async function scoreCurated(page, port, t) {
 }
 
 // ---------------------------------------------------------------------------
-function componentFromId(id) {
-  // core-tabletree--default -> TableTree (best-effort display name)
-  // lab-listinput--tag-options -> listinput
-  const seg = id.replace(AUDITED_STORY_PREFIX, '').split('--')[0];
-  return seg;
+const STORY_SOURCE_ROOT = path.resolve(PROJECT_ROOT, 'apps/storybook');
+const storySourceCache = new Map();
+
+function storySourceOrder(entry) {
+  const importPath = entry?.importPath ?? '';
+  const exportName = entry?.exportName ?? '';
+  const sourcePath = path.resolve(
+    STORY_SOURCE_ROOT,
+    importPath.replace(/^\.\//, ''),
+  );
+  if (
+    !sourcePath.startsWith(`${STORY_SOURCE_ROOT}${path.sep}`) ||
+    !exportName
+  ) {
+    return Number.MAX_SAFE_INTEGER;
+  }
+  let source = storySourceCache.get(sourcePath);
+  if (source == null) {
+    try {
+      source = fs.readFileSync(sourcePath, 'utf8');
+    } catch {
+      source = '';
+    }
+    storySourceCache.set(sourcePath, source);
+  }
+  const escaped = exportName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return (
+    new RegExp(`export\\s+(?:const|function)\\s+${escaped}\\b`).exec(source)
+      ?.index ?? Number.MAX_SAFE_INTEGER
+  );
 }
 
-// Run `fn` over `items` with `pages.length` workers, each pinned to its own
-// page. Results are written by index, so the output array is in input order
-// regardless of completion order — the report stays byte-identical to a serial
-// run. Progress lines still print as they land, so they interleave.
-async function mapPool(items, pages, fn) {
-  const out = new Array(items.length);
-  let next = 0;
-  await Promise.all(
-    pages.slice(0, Math.max(1, Math.min(pages.length, items.length))).map(async page => {
-      for (let i = next++; i < items.length; i = next++) {
-        out[i] = await fn(items[i], page);
-      }
-    }),
-  );
-  return out;
+function matchesFilter(component) {
+  const normalized = component.toLowerCase();
+  const name = normalized.split('/').at(-1) ?? normalized;
+  return !FILTER.length || FILTER.includes(normalized) || FILTER.includes(name);
+}
+
+const storyFileSources = new Map();
+
+/** Whether a story file (an index `importPath`) uses a component by name. */
+function storyFileUses(importPath, component) {
+  if (!importPath) return false;
+  const file = path.join(PROJECT_ROOT, 'apps/storybook', importPath);
+  if (!storyFileSources.has(file)) {
+    let source = '';
+    try {
+      source = fs.readFileSync(file, 'utf8');
+    } catch {}
+    storyFileSources.set(file, source);
+  }
+  const name = component.split('/').at(-1);
+  return new RegExp(`\\b${name}\\b`).test(storyFileSources.get(file));
+}
+
+function readVerifiedNa() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(VERIFIED_NA_PATH, 'utf8'));
+    if (!Array.isArray(parsed)) throw new Error('verified-not-applicable registry must be a JSON array');
+    return {verifiedNa: parsed, verifiedNaError: null};
+  } catch (error) {
+    return {verifiedNa: [], verifiedNaError: String(error).slice(0, 200)};
+  }
+}
+
+/**
+ * A filter's public component and the source folder that implements it, from
+ * its package's barrel (`core/resizehandle` → core/ResizeHandle in
+ * packages/core/src/Resizable), or null.
+ */
+const barrelExportsByPackage = new Map();
+
+function sourceOwnerOf(filter, publicComponentsByPackage) {
+  const [packageName, requested] = filter.includes('/')
+    ? filter.split('/')
+    : [null, filter];
+  for (const name of packageName ? [packageName] : ACTIVE_PACKAGE_NAMES) {
+    const pkg = componentPackage(name);
+    if (!pkg) continue;
+    const component = (publicComponentsByPackage[name] ?? []).find(
+      candidate => candidate.toLowerCase() === requested,
+    );
+    if (!component) continue;
+    const sourceRoot = path.join(PROJECT_ROOT, pkg.src);
+    // A full run asks for every storyless component, so read each barrel once.
+    if (!barrelExportsByPackage.has(name)) {
+      barrelExportsByPackage.set(
+        name,
+        componentExportsFromBarrel(path.join(sourceRoot, 'index.ts'), sourceRoot),
+      );
+    }
+    const implementation = barrelExportsByPackage.get(name).get(component);
+    if (!implementation) continue;
+    const folder = path
+      .relative(PROJECT_ROOT, path.dirname(implementation))
+      .split(path.sep)
+      .join('/');
+    return {component: `${name}/${component}`, folder};
+  }
+  return null;
+}
+
+function belongsToActivePackage(route) {
+  return filterStoryRoutesByPackages([route], ACTIVE_PACKAGE_NAMES).length === 1;
+}
+
+const runtime = {
+  server: null,
+  browser: null,
+  pool: null,
+  coarseContext: null,
+};
+
+async function cleanupRuntime() {
+  await runtime.pool?.close();
+  await runtime.coarseContext?.close().catch(() => {});
+  await runtime.browser?.close().catch(() => {});
+  if (runtime.server) {
+    await new Promise(resolve => runtime.server.close(() => resolve()));
+  }
 }
 
 (async () => {
-  const {server, port} = await serve(path.resolve(DIST));
-  const browser = await chromium.launch();
-  const pages = await Promise.all(
-    Array.from({length: CONCURRENCY}, () =>
-      browser.newPage({viewport: {width: 1100, height: 760}, deviceScaleFactor: 1}),
-    ),
-  );
-  const page = pages[0]; // curated dims run serially on the first page
+  // A failed invocation must never leave an earlier successful report behind.
+  fs.rmSync(OUT, {force: true});
 
-  let entries = {};
+  let entries;
   try {
-    entries = JSON.parse(fs.readFileSync(path.join(DIST, 'index.json'), 'utf8')).entries || {};
-  } catch (e) {
-    console.error('FATAL: cannot read index.json:', String(e).slice(0, 120));
-    process.exit(2);
+    const index = JSON.parse(fs.readFileSync(path.join(DIST, 'index.json'), 'utf8'));
+    entries = index.entries ?? index.stories;
+  } catch (error) {
+    throw new Error(`cannot read index.json: ${String(error).slice(0, 120)}`, {
+      cause: error,
+    });
+  }
+  if (entries == null || typeof entries !== 'object' || Array.isArray(entries)) {
+    throw new Error('index.json does not contain a Storybook entries object');
   }
 
-  // ---- (A) auto-discovery over every audited-package story ----
+  let targets = [];
+  try { targets = JSON.parse(fs.readFileSync(TARGETS_PATH, 'utf8')); } catch {}
+
+  const storyIds = Object.keys(entries).filter(
+    id =>
+      entries[id].type === 'story' &&
+      AUDITED_STORY_PREFIX.test(id) &&
+      !/--docs$/.test(id),
+  );
+  if (storyIds.length === 0) {
+    throw new Error('index.json contains no runnable audited stories');
+  }
+
+  const publicComponentsByPackage = {};
+  const sourceComponents = [];
+  for (const packageName of AUDITED_PACKAGE_NAMES) {
+    try {
+      const pkg = componentPackage(packageName);
+      if (!pkg) throw new Error('package is missing from component registry');
+      // Documented exports outside component directories (Core's Theme
+      // family) are public too (INV5): they get roster entries and route
+      // their stories.
+      const componentNames = pkg.layout === 'flat'
+        ? flatPackageComponentNames(PROJECT_ROOT, pkg)
+        : Array.from(new Set([
+          ...nestedPackageComponentNames(PROJECT_ROOT, pkg),
+          ...documentedComponentsOutsideComponentDirectories(PROJECT_ROOT, pkg),
+        ])).sort();
+      publicComponentsByPackage[packageName] = componentNames;
+      if (ACTIVE_PACKAGE_NAMES.includes(packageName)) {
+        sourceComponents.push(
+          ...componentNames.map(component => `${packageName}/${component}`),
+        );
+      }
+    } catch (error) {
+      console.error(`WARN: cannot discover ${packageName} component roster: ${String(error).slice(0, 120)}`);
+    }
+  }
+  const storyRoutes = buildStoryComponentRoutes({
+    stories: storyIds.map(id => ({id, title: entries[id].title})),
+    targets,
+    publicComponentsByPackage,
+  }).filter(belongsToActivePackage);
+  // Filters resolve through the index: a sub-component whose stories carry
+  // its parent folder's non-component title (ResizeHandle under
+  // Core/Resizable) audits them under its own name, in a filtered run and in
+  // the full run alike.
+  const resolvedFilters = resolveFilterRoutes({
+    routes: storyRoutes,
+    filters: FILTER,
+    knownComponents: Object.entries(publicComponentsByPackage).flatMap(
+      ([packageName, names]) => names.map(name => `${packageName}/${name}`),
+    ),
+    componentPathOf: id => entries[id]?.componentPath,
+    ownerOf: filter => sourceOwnerOf(filter, publicComponentsByPackage),
+    renders: (id, component) => storyFileUses(entries[id]?.importPath, component),
+  });
+  // A curated target on an adopted story checks the adopting component.
+  const adoptedBy = new Map(
+    Object.entries(resolvedFilters.adopted).flatMap(([component, storyIds]) =>
+      storyIds.map(id => [id, component]),
+    ),
+  );
+  const scopedStoryRoutes = resolvedFilters.routes;
+  for (const [component, storyIds] of Object.entries(resolvedFilters.adopted)) {
+    console.error(`NOTE ${component}: audits its folder's stories ${storyIds.join(', ')}`);
+  }
+  const auditedComponents = buildAuditedComponentRoster({
+    sourceComponents,
+    storyComponents: scopedStoryRoutes.map(route => route.component),
+    filters: FILTER,
+  });
+  if (scopedStoryRoutes.length === 0) {
+    if (FILTER.length === 0 || SHARD !== null) {
+      throw new Error(`no runnable stories resolved for ${ACTIVE_PACKAGE_NAMES.join(',')} scope`);
+    }
+    // A filtered run whose components have no story renders nothing, but its
+    // components are still in scope: write the coverage report, where each
+    // reads as a coverage gap or its verified N/A (INV5), instead of crashing.
+    const {verifiedNa, verifiedNaError} = readVerifiedNa();
+    const coverage = buildComponentCoverage({components: auditedComponents, verifiedNa});
+    if (verifiedNaError) coverage.registryError = verifiedNaError;
+    fs.writeFileSync(
+      OUT,
+      `${JSON.stringify(
+        {
+          generatedAt: new Date().toISOString(),
+          scope: {packages: ACTIVE_PACKAGE_NAMES, filters: FILTER},
+          coverage,
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    console.error(`NOTE no stories for ${FILTER.join(',')}; WROTE ${OUT} with coverage only`);
+    console.error(`COV : ${coverage.measured} measured / ${coverage.verifiedNa} verified N-A / ${coverage.gaps} gap / ${coverage.staleVerifiedNa} stale`);
+    process.exitCode =
+      coverage.gaps > 0 || coverage.staleVerifiedNa > 0 || coverage.registryError != null ? 1 : 0;
+    return;
+  }
+
+  // The audit's plan: D1 uses one deterministic representative story per
+  // component. Repository story-file/export order preserves the existing
+  // representative while remaining independent of index.json object order.
+  // Fixtures may opt out with typed rtlAudit metadata. D5 (positional-mirror)
+  // and D6 still run over EVERY story because those bugs can be story-specific;
+  // curated targets add the behaviour and geometry dims.
+  const perComponent = new Map();
+  for (const {component, id} of scopedStoryRoutes) {
+    if (!perComponent.has(component)) perComponent.set(component, []);
+    perComponent.get(component).push({
+      id,
+      importPath: entries[id]?.importPath ?? '',
+      sourceOrder: storySourceOrder(entries[id]),
+    });
+  }
+  const d1Targets = [...perComponent].map(([component, candidates]) =>
+    buildD1Target(component, candidates),
+  );
+  const storyTargets = scopedStoryRoutes.map(({id, component}) => ({id, comp: component}));
+  const curatedTargets = [];
+  for (const t of targets) {
+    const component =
+      adoptedBy.get(t.storyId) ??
+      componentFromTarget(t, AUDITED_PACKAGE_NAMES, publicComponentsByPackage);
+    if (!belongsToActivePackage({component, id: t.storyId})) continue;
+    if (!matchesFilter(component)) continue;
+    if (!entries[t.storyId]) {
+      curatedTargets.push({t, component, missing: true});
+      continue;
+    }
+    // skip if the entry only had D1 (now covered by auto-discovery)
+    const dims = (t.dims || []).filter(d => d !== 'D1');
+    if (dims.length === 0) continue;
+    curatedTargets.push({t, component, dims});
+  }
+  const plan = {
+    d1: CURATED_ONLY ? [] : d1Targets.map(({comp, id}) => `${comp}::${id}`),
+    stories: CURATED_ONLY ? [] : storyTargets.map(({comp, id}) => `${comp}::${id}`),
+    curated: AUTO_ONLY
+      ? []
+      : curatedTargets.map(({t, component}) => `${component}::${t.storyId}`),
+  };
+  const storybookSha = readStorybookSha(DIST);
+  /** Positions of `items` this run audits. */
+  const mine = items =>
+    SHARD === null
+      ? items.map((_, position) => position)
+      : shardPositions(items.length, SHARD);
+
   const autoResults = []; // D1 icon-mirror
   const pmResults = []; // D5 positional-mirror
-  if (!CURATED_ONLY) {
-    const storyIds = Object.keys(entries).filter(
-      id =>
-        entries[id].type === 'story' &&
-        AUDITED_STORY_PREFIX.test(id) &&
-        !/--docs$/.test(id),
-    );
-    // D1 runs one representative story per component (extra stories add little
-    // D1 signal). D5 (positional-mirror) runs over EVERY core story — a
-    // positioned bug can be story-specific (only a `withStatus` variant mounts
-    // the offending element), so we don't collapse to one-per-component.
-    const perComponent = new Map();
-    for (const id of storyIds) {
-      const comp = componentFromId(id);
-      if (!perComponent.has(comp)) perComponent.set(comp, id);
-    }
-    const d1Targets = [...perComponent]
-      .filter(([comp]) => !FILTER.length || FILTER.includes(comp.toLowerCase()))
-      .map(([comp, id]) => ({comp, id}));
-    autoResults.push(
-      ...(await mapPool(d1Targets, pages, async ({comp, id}, workerPage) => {
-        try {
-          const card = await autoD1(workerPage, port, id, comp);
+  const decorationResults = []; // D6 contextual directional decoration
+  const curatedResults = [];
+  let d8BrowserContract;
+  let pageRecoveries;
+
+  if (MERGE_SHARDS !== null) {
+    const merged = mergeRtlShards(readShardFiles(MERGE_SHARDS), {plan, storybookSha});
+    autoResults.push(...merged.d1);
+    pmResults.push(...merged.stories.map(cards => cards.positional));
+    decorationResults.push(...merged.stories.map(cards => cards.decoration));
+    curatedResults.push(...merged.curated);
+    d8BrowserContract = merged.d8BrowserContract;
+    pageRecoveries = merged.pageRecoveries;
+    console.error(`MERGED ${MERGE_SHARDS}: ${autoResults.length} D1, ${pmResults.length} story, ${curatedResults.length} curated cards`);
+  } else {
+    const {server, port} = await serve(path.resolve(DIST));
+    runtime.server = server;
+    const browser = await chromium.launch();
+    runtime.browser = browser;
+    const pool = await createPagePool({
+      size: CONCURRENCY,
+      openPage: () =>
+        browser.newPage({viewport: {width: 1100, height: 760}, deviceScaleFactor: 1}),
+    });
+    runtime.pool = pool;
+    // Curated dims run serially on the first slot's current page.
+    d8BrowserContract = await verifyD8BrowserContract(pool.first());
+    const coarseContext = await browser.newContext({
+      viewport: {width: 1100, height: 760},
+      deviceScaleFactor: 1,
+      hasTouch: true,
+      isMobile: true,
+    });
+    runtime.coarseContext = coarseContext;
+    const curatedPages = createCuratedPages({
+      pool,
+      coarsePage: await coarseContext.newPage(),
+      openCoarsePage: () => coarseContext.newPage(),
+    });
+
+    // Cards by plan position, for a shard file.
+    const shardCards = {d1: new Map(), stories: new Map(), curated: new Map()};
+
+    // ---- (A) auto-discovery over every audited-package story ----
+    if (!CURATED_ONLY) {
+      const d1Positions = mine(d1Targets);
+      const d1Cards = await mapPool(d1Positions.map(position => d1Targets[position]), pool, {
+        scan: async ({comp, id, candidates}, workerPage) => {
+          const card = await autoD1ForComponent(
+            workerPage,
+            port,
+            candidates,
+            comp,
+          );
           if (card.verdict !== 'N-A') {
             console.error(`AUTO ${card.verdict.toUpperCase().padEnd(4)} ${comp.padEnd(24)} icons=${card.icons}`);
           }
-          return card;
-        } catch (e) {
+          return withD1CompletionIdentity(card, id);
+        },
+        onError: ({comp, id}, e) => {
           console.error(`AUTO ERROR ${comp}: ${String(e).slice(0, 120)}`);
           return {component: comp, storyId: id, dim: 'D1', verdict: 'ERROR', notes: [String(e).slice(0, 160)], icons: 0};
-        }
-      })),
-    );
-    // D5 positional-mirror over every audited story.
-    const pmTargets = storyIds
-      .map(id => ({id, comp: componentFromId(id)}))
-      .filter(({comp}) => !FILTER.length || FILTER.includes(comp.toLowerCase()));
-    pmResults.push(
-      ...(await mapPool(pmTargets, pages, async ({id, comp}, workerPage) => {
-        try {
-          const card = await autoPositionalMirror(workerPage, port, id, comp);
-          if (card.verdict !== 'N-A') {
-            console.error(`PM   ${card.verdict.toUpperCase().padEnd(4)} ${comp.padEnd(24)} ${id.padEnd(40)} cand=${card.candidates}`);
+        },
+        describe: ({id}) => ({phase: 'D1', storyId: id}),
+      });
+      autoResults.push(...d1Cards);
+      d1Positions.forEach((position, i) => shardCards.d1.set(position, d1Cards[i]));
+      // D5 positional-mirror and D6 contextual decorations over every audited
+      // story, sharing one LTR load per story (see measureAutoStory).
+      const storyPositions = mine(storyTargets);
+      const storyCards = await mapPool(storyPositions.map(position => storyTargets[position]), pool, {
+        scan: async ({id, comp}, workerPage) => {
+          const cards = await autoPositionalAndDecorations(workerPage, port, id, comp);
+          if (cards.positional.verdict !== 'N-A') {
+            console.error(`PM   ${cards.positional.verdict.toUpperCase().padEnd(4)} ${comp.padEnd(24)} ${id.padEnd(40)} cand=${cards.positional.candidates}`);
           }
-          return card;
-        } catch (e) {
-          console.error(`PM   ERROR ${comp} ${id}: ${String(e).slice(0, 120)}`);
-          return {component: comp, storyId: id, dim: 'D5-positional', verdict: 'ERROR', notes: [String(e).slice(0, 160)], candidates: 0, fails: []};
-        }
-      })),
-    );
-  }
+          if (cards.decoration.verdict !== 'N-A') {
+            console.error(`DEC  ${cards.decoration.verdict.toUpperCase().padEnd(4)} ${comp.padEnd(24)} ${id.padEnd(40)} glyphs=${cards.decoration.decorations}`);
+          }
+          return cards;
+        },
+        onError: ({id, comp}, e) => {
+          console.error(`PM+DEC ERROR ${comp} ${id}: ${String(e).slice(0, 120)}`);
+          const notes = [String(e).slice(0, 160)];
+          return {
+            positional: {component: comp, storyId: id, dim: 'D5-positional', verdict: 'ERROR', notes, candidates: 0, fails: []},
+            decoration: {component: comp, storyId: id, dim: 'D6-decoration', verdict: 'ERROR', notes: [...notes], decorations: 0, results: []},
+          };
+        },
+        describe: ({id}) => ({phase: 'D5+D6', storyId: id}),
+      });
+      pmResults.push(...storyCards.map(cards => cards.positional));
+      decorationResults.push(...storyCards.map(cards => cards.decoration));
+      storyPositions.forEach((position, i) => shardCards.stories.set(position, storyCards[i]));
+    }
 
-  // ---- (B) curated precision dims ----
-  // Deliberately serial on one page: only a handful of targets, and these do
-  // multi-step interactions (setup clicks, scroll assertions) where a shared
-  // machine under load is more likely to change behaviour than to save time.
-  const curatedResults = [];
-  if (!AUTO_ONLY) {
-    let targets = [];
-    try { targets = JSON.parse(fs.readFileSync(TARGETS_PATH, 'utf8')); } catch {}
-    for (const t of targets) {
-      if (FILTER.length && !FILTER.includes(t.component.toLowerCase())) continue;
-      if (!entries[t.storyId]) {
-        curatedResults.push({component: t.component, storyId: t.storyId, rollup: 'MISSING-STORY', dims: {}, notes: ['story not in index.json']});
-        continue;
-      }
-      // skip if the entry only had D1 (now covered by auto-discovery)
-      const dims = (t.dims || []).filter(d => d !== 'D1');
-      if (dims.length === 0) continue;
-      try {
-        const card = await scoreCurated(page, port, {...t, dims});
+    // ---- (B) curated precision dims ----
+    // Deliberately serial on one page: only a handful of targets, and these do
+    // multi-step interactions (setup clicks, scroll assertions) where a shared
+    // machine under load is more likely to change behaviour than to save time.
+    if (!AUTO_ONLY) {
+      for (const position of mine(curatedTargets)) {
+        const {t, component, dims, missing} = curatedTargets[position];
+        if (missing) {
+          const card = {component, storyId: t.storyId, rollup: 'MISSING-STORY', dims: {}, notes: ['story not in index.json']};
+          curatedResults.push(card);
+          shardCards.curated.set(position, card);
+          continue;
+        }
+        // scoreCurated records each dim's failure itself; what escapes it is a
+        // page that could not be replaced, which ends the run.
+        const card = await scoreCurated(curatedPages, port, {...t, component, dims});
         curatedResults.push(card);
-        console.error(`CUR  ${card.rollup.padEnd(10)} ${t.component.padEnd(20)} ${JSON.stringify(card.dims)}`);
-      } catch (e) {
-        curatedResults.push({component: t.component, storyId: t.storyId, rollup: 'ERROR', dims: {}, notes: [String(e).slice(0, 200)]});
+        shardCards.curated.set(position, card);
+        console.error(`CUR  ${card.rollup.padEnd(10)} ${component.padEnd(20)} ${JSON.stringify(card.dims)}`);
       }
+    }
+    pageRecoveries = pool.recoveries;
+
+    if (SHARD !== null) {
+      fs.writeFileSync(
+        SHARD_OUTPUT,
+        JSON.stringify(
+          shardFile({
+            plan,
+            shard: SHARD,
+            storybookSha,
+            cards: shardCards,
+            d8BrowserContract,
+            pageRecoveries,
+          }),
+        ),
+      );
+      console.error(`WROTE ${SHARD_OUTPUT} (shard ${SHARD.index}/${SHARD.count})`);
+      return;
     }
   }
 
-  await Promise.all(pages.map(p => p.close().catch(() => {})));
-  await browser.close();
-  server.close();
+  const {verifiedNa, verifiedNaError} = readVerifiedNa();
+
+  const coverage = buildComponentCoverage({
+    components: auditedComponents,
+    autoResults,
+    positionalResults: pmResults,
+    decorationResults,
+    curatedResults,
+    verifiedNa,
+    // Partial modes intentionally omit dimensions, so they report but do not
+    // enforce applicability gaps.
+    enforced: !AUTO_ONLY && !CURATED_ONLY,
+  });
+  if (verifiedNaError) coverage.registryError = verifiedNaError;
+  // Story identities with no public component are not roster entries (INV5);
+  // name them so the report shows what the roster left out.
+  coverage.ignoredStoryIdentities = ignoredStoryIdentities({
+    sourceComponents,
+    storyComponents: scopedStoryRoutes.map(route => route.component),
+    filters: FILTER,
+  });
 
   const autoFails = autoResults.filter(r => r.verdict === 'fail' || r.verdict === 'ERROR');
   // No allowlist: every not-RTL component is a surprise. The RTL migration is
   // complete, so any directional icon that fails to mirror is a real regression.
   const surprises = autoFails;
   const pmFails = pmResults.filter(r => r.verdict === 'fail' || r.verdict === 'ERROR');
+  const decorationFails = decorationResults.filter(r => r.verdict === 'fail' || r.verdict === 'ERROR');
+  const declaredD5PhysicalRegions = pmResults.flatMap(result =>
+    result.declaredD5Physical ? [result.declaredD5Physical] : [],
+  );
+  const declaredD1Exclusions = autoResults
+    .flatMap(result => result.declaredD1Exclusions ?? [])
+    .sort(
+      (left, right) =>
+        left.component.localeCompare(right.component) ||
+        left.storyId.localeCompare(right.storyId) ||
+        left.dimension.localeCompare(right.dimension),
+    );
   const report = {
     generatedAt: new Date().toISOString(),
+    scope: {
+      packages: ACTIVE_PACKAGE_NAMES,
+      filters: FILTER,
+    },
+    completion: {
+      plannedComponentScans: new Set(scopedStoryRoutes.map(route => route.component)).size,
+      completedComponentScans: autoResults.length,
+      plannedStoryScans: scopedStoryRoutes.length,
+      completedPositionalScans: pmResults.length,
+      completedDecorationScans: decorationResults.length,
+      plannedComponentIdentities: [
+        ...new Set(scopedStoryRoutes.map(route => route.component)),
+      ].sort(),
+      completedComponentIdentities: autoResults.map(result => result.component).sort(),
+      plannedD1Identities: d1Targets.map(target => `${target.comp}::${target.id}`).sort(),
+      completedD1Identities: autoResults
+        .map(result => `${result.component}::${result.storyId}`)
+        .sort(),
+      plannedStoryIdentities: scopedStoryRoutes
+        .map(route => `${route.component}::${route.id}`)
+        .sort(),
+      completedPositionalIdentities: pmResults
+        .map(result => `${result.component}::${result.storyId}`)
+        .sort(),
+      completedDecorationIdentities: decorationResults
+        .map(result => `${result.component}::${result.storyId}`)
+        .sort(),
+    },
     dist: DIST,
+    selfChecks: {d8LogicalInline: d8BrowserContract},
+    // Worker pages replaced after a story failed on them. The failed story
+    // keeps its ERROR result; the record shows the stories after it ran on a
+    // fresh page.
+    pageRecoveries,
+    declaredD1Exclusions,
+    // Story-declared plots whose overlays D5 grades as physical (DR5).
+    declaredD5PhysicalRegions,
     autoDiscovery: {
       total: autoResults.length,
       applicable: autoResults.filter(r => r.verdict !== 'N-A').length,
@@ -831,17 +1742,38 @@ async function mapPool(items, pages, fn) {
       // fails carry per-element cls + LTR/RTL relCenterX + delta (actionable).
       results: pmResults,
     },
+    directionalDecorations: {
+      total: decorationResults.length,
+      applicable: decorationResults.filter(r => r.verdict !== 'N-A').length,
+      pass: decorationResults.filter(r => r.verdict === 'pass').length,
+      fail: decorationFails.length,
+      na: decorationResults.filter(r => r.verdict === 'N-A').length,
+      results: decorationResults,
+    },
     curated: {results: curatedResults},
+    coverage,
   };
   fs.writeFileSync(OUT, JSON.stringify(report, null, 2));
   console.error(`\nWROTE ${OUT}`);
   console.error(`AUTO: ${report.autoDiscovery.pass} pass / ${report.autoDiscovery.fail} fail (${surprises.length} surprise) / ${report.autoDiscovery.na} N-A`);
   console.error(`PM  : ${report.positionalMirror.pass} pass / ${report.positionalMirror.fail} fail / ${report.positionalMirror.na} N-A (tol ${PM_TOL}px)`);
+  console.error(`DEC : ${report.directionalDecorations.pass} pass / ${report.directionalDecorations.fail} fail / ${report.directionalDecorations.na} N-A`);
+  console.error(`POOL: ${pageRecoveries.length} page replacement(s) after a failed story`);
+  console.error(`COV : ${coverage.measured} measured / ${coverage.verifiedNa} verified N-A / ${coverage.gaps} gap / ${coverage.staleVerifiedNa} stale`);
+  if (coverage.ignoredStoryIdentities.length > 0) console.error(`IGN : ${coverage.ignoredStoryIdentities.length} story identities name no public component (not roster entries): ${coverage.ignoredStoryIdentities.map(entry => entry.component).join(', ')}`);
+  if (declaredD5PhysicalRegions.length > 0) console.error(`D5P : ${declaredD5PhysicalRegions.length} declared physical region(s): ${declaredD5PhysicalRegions.map(r => `${r.storyId} (${r.physical} within ${r.within})`).join('; ')}`);
   // Non-zero exit only signals CI (which is soft/continue-on-error). Surface a
   // signal but never let it hard-block during the stability window.
   const anySignal =
     autoFails.length > 0 ||
     pmFails.length > 0 ||
+    decorationFails.length > 0 ||
+    (coverage.enforced && (coverage.gaps > 0 || coverage.staleVerifiedNa > 0 || coverage.registryError != null)) ||
     curatedResults.some(r => r.rollup === 'not-RTL' || r.rollup === 'ERROR' || r.rollup === 'MISSING-STORY');
-  process.exit(anySignal ? 1 : 0);
-})();
+  process.exitCode = anySignal ? 1 : 0;
+})()
+  .catch(error => {
+    console.error(`FATAL: ${error.message}`);
+    process.exitCode = 2;
+  })
+  .finally(cleanupRuntime);

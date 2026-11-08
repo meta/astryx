@@ -19,7 +19,7 @@ import {Card} from '@astryxdesign/core/Card';
 // =============================================================================
 
 const meta: Meta = {
-  title: 'Core/MediaTheme',
+  title: 'Core/Themes/MediaTheme',
   parameters: {
     docs: {
       description: {
@@ -109,11 +109,7 @@ function OnLightDemo() {
                 Content on a light surface in dark mode: text and icons become
                 dark.
               </Text>
-              <Stack
-                direction="horizontal"
-                gap={2}
-                align="center"
-                wrap="wrap">
+              <Stack direction="horizontal" gap={2} align="center" wrap="wrap">
                 <Button label="Primary" />
                 <Button label="Secondary" variant="secondary" />
                 <Button label="Ghost" variant="ghost" />
@@ -232,8 +228,8 @@ function ComponentOverrideBoundaryDemo() {
     <Theme theme={y2kTheme}>
       <Stack gap={4}>
         <Text weight="semibold">
-          Y2K theme, notice the component overrides: square buttons with
-          visible borders, bordered button variants, pill-shaped badges.
+          Y2K theme, notice the component overrides: square buttons with visible
+          borders, bordered button variants, pill-shaped badges.
         </Text>
 
         {/* Normal surface — themed component overrides apply */}
@@ -264,11 +260,7 @@ function ComponentOverrideBoundaryDemo() {
               <Text type="supporting" weight="semibold">
                 Dark surface (same overrides, inverted tokens)
               </Text>
-              <Stack
-                direction="horizontal"
-                gap={2}
-                align="center"
-                wrap="wrap">
+              <Stack direction="horizontal" gap={2} align="center" wrap="wrap">
                 <Button label="Primary" />
                 <Button label="Secondary" variant="secondary" />
                 <Button label="Ghost" variant="ghost" />

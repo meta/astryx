@@ -27,6 +27,67 @@ const MAX_BYTES = 5 * 1024 * 1024; // 5 MB — a blog feed is never larger.
  */
 export const FEED_URL = new URL('/rss.xml', SITE_URL).toString();
 
+/** @param {string} url @param {unknown} e @returns {AstryxError} */
+function toFetchError(url, e) {
+  const reason =
+    e instanceof Error
+      ? e.name === 'AbortError'
+        ? 'timed out'
+        : e.message
+      : String(e);
+  return new AstryxError(
+    `Could not reach ${url}: ${reason}`,
+    [],
+    ERROR_CODES.ERR_FETCH_FAILED,
+  );
+}
+
+/**
+ * Reads a response body as text, stopping as soon as the decoded size
+ * exceeds MAX_BYTES instead of buffering the full response first. Falls
+ * back to `res.text()` when the runtime/stub doesn't expose a streamable
+ * body (buffers fully, but still enforces the cap after the fact).
+ * @param {Response} res
+ * @param {string} url
+ * @returns {Promise<string>}
+ */
+async function readLimitedText(res, url) {
+  if (!res.body) {
+    const body = await res.text();
+    if (Buffer.byteLength(body, 'utf8') > MAX_BYTES) {
+      throw new AstryxError(
+        `Response from ${url} exceeded ${MAX_BYTES} bytes`,
+        [],
+        ERROR_CODES.ERR_FETCH_FAILED,
+      );
+    }
+    return body;
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let received = 0;
+  let text = '';
+  while (true) {
+    const {done, value} = await reader.read();
+    if (done) {
+      break;
+    }
+    received += value.byteLength;
+    if (received > MAX_BYTES) {
+      await reader.cancel();
+      throw new AstryxError(
+        `Response from ${url} exceeded ${MAX_BYTES} bytes`,
+        [],
+        ERROR_CODES.ERR_FETCH_FAILED,
+      );
+    }
+    text += decoder.decode(value, {stream: true});
+  }
+  text += decoder.decode();
+  return text;
+}
+
 /**
  * @param {string} url
  * @returns {Promise<string>}
@@ -34,43 +95,38 @@ export const FEED_URL = new URL('/rss.xml', SITE_URL).toString();
 async function fetchText(url) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  let res;
+  // The timer stays active through body consumption (cleared only in
+  // `finally`), so a response whose headers arrive promptly but whose body
+  // stream stalls is still bounded by FETCH_TIMEOUT_MS, not left pending
+  // indefinitely.
   try {
-    res = await fetch(url, {
-      signal: controller.signal,
-      redirect: 'follow',
-    });
-  } catch (e) {
+    let res;
+    try {
+      res = await fetch(url, {
+        signal: controller.signal,
+        redirect: 'follow',
+      });
+    } catch (e) {
+      throw toFetchError(url, e);
+    }
+    if (!res.ok) {
+      throw new AstryxError(
+        `Request to ${url} failed with ${res.status}`,
+        [],
+        ERROR_CODES.ERR_FETCH_FAILED,
+      );
+    }
+    try {
+      return await readLimitedText(res, url);
+    } catch (e) {
+      if (e instanceof AstryxError) {
+        throw e;
+      }
+      throw toFetchError(url, e);
+    }
+  } finally {
     clearTimeout(timer);
-    const reason =
-      e instanceof Error
-        ? e.name === 'AbortError'
-          ? 'timed out'
-          : e.message
-        : String(e);
-    throw new AstryxError(
-      `Could not reach ${url}: ${reason}`,
-      [],
-      ERROR_CODES.ERR_FETCH_FAILED,
-    );
   }
-  clearTimeout(timer);
-  if (!res.ok) {
-    throw new AstryxError(
-      `Request to ${url} failed with ${res.status}`,
-      [],
-      ERROR_CODES.ERR_FETCH_FAILED,
-    );
-  }
-  const body = await res.text();
-  if (body.length > MAX_BYTES) {
-    throw new AstryxError(
-      `Response from ${url} exceeded ${MAX_BYTES} bytes`,
-      [],
-      ERROR_CODES.ERR_FETCH_FAILED,
-    );
-  }
-  return body;
 }
 
 /**

@@ -22,12 +22,21 @@ import type {ReactNode} from 'react';
 import {useIcon} from '../Icon';
 import {DropdownMenu} from '../DropdownMenu/DropdownMenu';
 import {useSize} from '../SizeContext/SizeContext';
-import type {DropdownMenuOption} from '../DropdownMenu';
+import type {
+  DropdownMenuOption,
+  DropdownMenuPresentation,
+} from '../DropdownMenu';
 import type {LayerAlignment, LayerPlacement} from '../Layer';
 import type {ButtonVariant, ButtonSize} from '../Button';
 import type {BaseProps} from '../BaseProps';
 import {stableClassName} from '../naming';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/MoreMenu/MoreMenu.generated';
+
+registerEnglishFallback(english);
 
 export interface MoreMenuProps extends Pick<
   BaseProps,
@@ -88,6 +97,15 @@ export interface MoreMenuProps extends Pick<
   alignment?: LayerAlignment;
 
   /**
+   * Menu presentation policy, forwarded to DropdownMenu. `adaptive` uses a
+   * BottomSheet on compact coarse-pointer viewports and an anchored popover
+   * elsewhere. Omitted, the menu is the anchored popover, and the finger that
+   * opened it follows UIMenu's handoff on every device. `'popover'` pins the
+   * pointer behavior on every device.
+   */
+  presentation?: DropdownMenuPresentation;
+
+  /**
    * Controlled open state for the menu.
    */
   isMenuOpen?: boolean;
@@ -125,6 +143,7 @@ export function MoreMenu({
   isDisabled = false,
   placement,
   alignment,
+  presentation,
   isMenuOpen,
   onOpenChange,
   xstyle,
@@ -133,7 +152,7 @@ export function MoreMenu({
   'data-testid': testId,
   ref,
 }: MoreMenuProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const label = labelFromProps ?? t('@astryx.moreMenu.label');
   const size = useSize(sizeProp, 'md');
   const moreIcon = useIcon('moreHorizontal');
@@ -151,6 +170,7 @@ export function MoreMenu({
       onOpenChange={onOpenChange}
       placement={placement}
       alignment={alignment}
+      presentation={presentation}
       button={{
         label,
         icon: icon ?? moreIcon,

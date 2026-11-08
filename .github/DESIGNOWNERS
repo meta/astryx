@@ -1,14 +1,20 @@
 # Design owners for the Astryx repository
+# Design-team members. This list has three responsibilities:
 #
-# Design-team members. The Copilot reviewer reads this list to frame its review
-# for a designer (see .github/copilot-instructions.md, "Review buckets") — it
-# names what crosses into engineering territory and needs an engineer's eye.
+# - Current design and theme specs, component/module Design decisions, and
+#   normative design assets may be approved by any DESIGNOWNER; an approval
+#   binds the spec content (architecture:knowledge-contracts DEC-14). ENGOWNERS
+#   may approve every spec.
+# - A DESIGNOWNER approves with a review or `/approve-spec <sha>`, like every
+#   other owner; in a mixed PR every other applicable code or
+#   spec-owner group remains required. A classifier-proven appearance-only Core
+#   runtime change may bypass the engineering review gate only when no other
+#   code reason applies. The gate decides approval only; it never enables
+#   auto-merge.
+# - Review tooling may use the list to frame design-authored changes.
 #
-# This only shapes the TONE of Copilot's comment. It does NOT change merge
-# rights or exempt anyone from review: the auto-merge gate is decided by
-# high-risk AREA (new package/component/API), not by who authored the PR — see
-# .github/workflows/review-signal.yml. No author is exempt from the high-risk
-# gate; the low-risk carve-out exempts by area, not by person.
+# This is not general merge permission. Design approval alone never
+# authorizes non-design records or mixed code/spec changes.
 #
 # Uses the same @handle format as CODEOWNERS. Keep this list current.
 

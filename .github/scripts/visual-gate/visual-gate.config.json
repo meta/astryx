@@ -1,15 +1,32 @@
 {
   "$comment": "Configuration for .github/scripts/visual-gate. Every excludeStories entry needs the reason the story cannot reproduce itself — the list stays reviewable instead of growing quietly, and `gate.mjs flaky` is how entries are found (run it, do not guess). A key ending in * covers a whole story file.",
   "defaultTheme": "neutral",
-  "tiers": ["surface", "theme-matrix"],
+  "$probeTheme": "A generated fixture styling every declared target (packages/themes/probe). The gate treats it as the coverage instrument, not a design: it is what makes a NEW theming target verified from the day its doc lands.",
+  "probeTheme": "probe",
+  "$baselineThemes": "Themes allowed to own canonical stable baseline frames. Neutral is the default product reference; probe is the generated coverage fixture.",
+  "baselineThemes": ["neutral", "probe"],
+  "$stableStoryPackages": "Only these workspace packages may own stable visual stories.",
+  "stableStoryPackages": ["Core", "RichText"],
+  "$stableStoryGroups": "Ownership fallback for stories that declare no component: only these Storybook title groups may own canonical baseline frames, so a story from another group cannot earn one merely by importing Core. A story that DOES declare a component published by stableStoryPackages owns its frames wherever it is titled.",
+  "stableStoryGroups": ["Core", "RichText"],
+  "$prVisualShotLimit": "Review ceiling for focused component shots and broad shared-infrastructure plans. Theme-only matrices are not component-budgeted.",
+  "prVisualShotLimit": 240,
+  "$visualPlanSafetyLimit": "Absolute resource ceiling for every ordinary and trusted visual plan, regardless of scope.",
+  "visualPlanSafetyLimit": 5000,
+  "tiers": ["surface", "theme-matrix", "probe"],
   "viewport": {"width": 1024, "height": 768},
   "settleMs": 50,
+  "$scoutConcurrency": "Scouting is independent by story and uses two bounded browser contexts on the pinned two-core runner.",
+  "scoutConcurrency": 2,
+  "$captureConcurrency": "Independent stories may capture concurrently, but every shot for one story stays on one worker so seeded state and fast theme switches remain deterministic.",
+  "captureConcurrency": 2,
+  "$compareConcurrency": "PNG decoding and pixel comparison run on two CPU workers after browser capture closes.",
+  "compareConcurrency": 2,
   "threshold": 0.1,
   "maxDiffPixels": 0,
   "excludeStories": {
     "lab-chartstreamgl--*": "Streams live data on a setInterval; every frame is a different chart.",
     "lab-chartstreamperf--*": "Renders measured fps and frame times, which differ every run by construction.",
-    "lab-codeeditorperf--*": "Renders performance.now() mount timings on screen.",
-    "lab-usechartrange--*": "Advances its own domain on a setInterval while the shot is taken."
+    "lab-codeeditorperf--*": "Renders performance.now() mount timings on screen."
   }
 }

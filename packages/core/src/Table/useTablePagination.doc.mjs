@@ -75,7 +75,7 @@ export const docs = {
     {
       name: 'label',
       type: 'string',
-      description: "Accessible name for the pagination nav landmark. With position='both' the two navs get distinct names — the label suffixed as '(top)' and '(bottom)' — so same-type landmarks stay unique (axe landmark-unique).",
+      description: "Accessible name for the pagination nav landmark. With position='both' the two navs get distinct names (the label suffixed as '(top)' and '(bottom)') so same-type landmarks stay unique (axe landmark-unique).",
       default: "'Table pagination'",
     },
   ],

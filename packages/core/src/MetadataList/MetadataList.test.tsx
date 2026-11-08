@@ -1,7 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {describe, it, expect} from 'vitest';
-import {render, screen} from '@testing-library/react';
+import type {ReactNode} from 'react';
+import {describe, it, expect, vi} from 'vitest';
+import {render, screen, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {MetadataList} from './MetadataList';
 import {MetadataListItem} from './MetadataListItem';
@@ -124,6 +125,30 @@ describe('MetadataList', () => {
     expect(screen.getByText('B')).toBeInTheDocument();
   });
 
+  it('uses top labels in horizontal orientation even when position is start', () => {
+    render(
+      <MetadataList orientation="horizontal" label={{position: 'start'}}>
+        <MetadataListItem label="A">1</MetadataListItem>
+      </MetadataList>,
+    );
+
+    const item = screen.getByRole('term').closest('.astryx-metadata-list-item');
+    expect(item).toContainElement(screen.getByRole('definition'));
+  });
+
+  it('defaults to side labels and preserves width when position is omitted', () => {
+    const {container} = render(
+      <MetadataList label={{width: 120}}>
+        <MetadataListItem label="A">1</MetadataListItem>
+      </MetadataList>,
+    );
+
+    const list = container.querySelector('dl');
+    expect(list?.getAttribute('style')).toContain('120px minmax(0, 1fr)');
+    expect(screen.getByRole('term').parentElement).toBe(list);
+    expect(screen.getByRole('definition').parentElement).toBe(list);
+  });
+
   describe('numeric columns', () => {
     // A fixed column count is a runtime value, so it arrives as a StyleX
     // dynamic style: the template lands in the element's inline style (as the
@@ -148,7 +173,9 @@ describe('MetadataList', () => {
         </MetadataList>,
       );
 
-      expect(gridTemplateOf(container)).toContain('repeat(3, auto 1fr)');
+      expect(gridTemplateOf(container)).toContain(
+        'repeat(3, auto minmax(0, 1fr))',
+      );
     });
 
     it('leaves the grid to the static rule for columns="multi"', () => {
@@ -159,6 +186,20 @@ describe('MetadataList', () => {
       );
 
       expect(gridTemplateOf(container)).not.toContain('repeat(');
+    });
+
+    it('defaults to top labels for columns={2} with a width-only label config', () => {
+      const {container} = render(
+        <MetadataList columns={2} label={{width: 260}}>
+          <MetadataListItem label="A">1</MetadataListItem>
+        </MetadataList>,
+      );
+
+      expect(gridTemplateOf(container)).toContain('repeat(2, 1fr)');
+      const item = screen
+        .getByRole('term')
+        .closest('.astryx-metadata-list-item');
+      expect(item).toContainElement(screen.getByRole('definition'));
     });
 
     it('ignores numeric columns in horizontal orientation', () => {
@@ -178,7 +219,7 @@ describe('MetadataList', () => {
         </MetadataList>,
       );
 
-      expect(gridTemplateOf(container)).toContain('120px 1fr');
+      expect(gridTemplateOf(container)).toContain('120px minmax(0, 1fr)');
     });
   });
 });
@@ -221,5 +262,173 @@ describe('MetadataListItem', () => {
     expect(wrapper).toBeInTheDocument();
     expect(wrapper?.querySelector('dt')).toBeInTheDocument();
     expect(wrapper?.querySelector('dd')).toBeInTheDocument();
+  });
+});
+
+describe('MetadataListItem pass-through props', () => {
+  it('forwards pass-through props to the item element', () => {
+    render(
+      <MetadataList>
+        <MetadataListItem
+          label="Owner"
+          aria-label="Owner field"
+          id="owner"
+          data-source="crm"
+          data-testid="item">
+          Alice
+        </MetadataListItem>
+      </MetadataList>,
+    );
+    const item = screen.getByTestId('item-label');
+    expect(item).toHaveAttribute('aria-label', 'Owner field');
+    expect(item).toHaveAttribute('id', 'owner');
+    expect(item).toHaveAttribute('data-source', 'crm');
+  });
+
+  it('forwards pass-through props in the stacked layout', () => {
+    render(
+      <MetadataList orientation="horizontal">
+        <MetadataListItem label="Owner" id="owner-stacked" data-testid="item">
+          Alice
+        </MetadataListItem>
+      </MetadataList>,
+    );
+    expect(screen.getByTestId('item')).toHaveAttribute('id', 'owner-stacked');
+  });
+});
+
+describe('MetadataListItem pass-through target', () => {
+  it('lands pass-through props on the <dt> in the inline layout, where the ref also goes', () => {
+    const handleClick = vi.fn();
+    render(
+      <MetadataList>
+        <MetadataListItem
+          label="Owner"
+          onClick={handleClick}
+          data-testid="item">
+          Alice
+        </MetadataListItem>
+      </MetadataList>,
+    );
+
+    const label = screen.getByTestId('item-label');
+    expect(label.tagName).toBe('DT');
+    fireEvent.click(label);
+    expect(handleClick).toHaveBeenCalledOnce();
+
+    fireEvent.click(screen.getByTestId('item-value'));
+    expect(handleClick).toHaveBeenCalledOnce();
+  });
+
+  it('lands them on the wrapper in the stacked layout, so both halves are covered', () => {
+    const handleClick = vi.fn();
+    render(
+      <MetadataList orientation="horizontal">
+        <MetadataListItem
+          label="Owner"
+          onClick={handleClick}
+          data-testid="item">
+          Alice
+        </MetadataListItem>
+      </MetadataList>,
+    );
+
+    fireEvent.click(screen.getByText('Alice'));
+    expect(handleClick).toHaveBeenCalledOnce();
+  });
+});
+
+describe('MetadataList pass-through props', () => {
+  it('forwards pass-through props to the root element', () => {
+    render(
+      <MetadataList
+        aria-label="Record details"
+        id="record-meta"
+        data-source="crm"
+        data-testid="list">
+        <MetadataListItem label="Owner">Alice</MetadataListItem>
+      </MetadataList>,
+    );
+    const rootEl = screen.getByTestId('list');
+    expect(rootEl).toHaveAttribute('aria-label', 'Record details');
+    expect(rootEl).toHaveAttribute('id', 'record-meta');
+    expect(rootEl).toHaveAttribute('data-source', 'crm');
+  });
+
+  it('forwards event handlers to the root element', () => {
+    const handleClick = vi.fn();
+    render(
+      <MetadataList onClick={handleClick} data-testid="list">
+        <MetadataListItem label="Owner">Alice</MetadataListItem>
+      </MetadataList>,
+    );
+    fireEvent.click(screen.getByTestId('list'));
+    expect(handleClick).toHaveBeenCalledOnce();
+  });
+
+  it('keeps component-owned theme metadata over colliding pass-throughs', () => {
+    render(
+      <MetadataList
+        columns={2}
+        orientation="horizontal"
+        data-columns="99"
+        data-orientation="vertical"
+        data-testid="list">
+        <MetadataListItem label="Owner">Alice</MetadataListItem>
+      </MetadataList>,
+    );
+    const rootEl = screen.getByTestId('list');
+    expect(rootEl).toHaveAttribute('data-columns', '2');
+    expect(rootEl).toHaveAttribute('data-orientation', 'horizontal');
+  });
+
+  it.each([
+    ['an empty string', ''],
+    ['false', false],
+    ['true', true],
+    ['null', null],
+  ])('renders no title wrapper for %s', (_name, title) => {
+    const {container: withTitle} = render(
+      <MetadataList title={title as ReactNode}>
+        <MetadataListItem label="Owner">Ana</MetadataListItem>
+      </MetadataList>,
+    );
+    const {container: without} = render(
+      <MetadataList>
+        <MetadataListItem label="Owner">Ana</MetadataListItem>
+      </MetadataList>,
+    );
+    // The list's generated id differs between the two renders.
+    const html = (element: HTMLElement) =>
+      element.innerHTML.replace(/id="[^"]*"/g, 'id');
+    expect(html(withTitle)).toBe(html(without));
+  });
+
+  it.each([
+    ['an empty string', ''],
+    ['false', false],
+    ['true', true],
+    ['null', null],
+  ])('renders no item icon wrapper for %s', (_name, icon) => {
+    const {container: withIcon} = render(
+      <MetadataListItem label="Owner" icon={icon as ReactNode}>
+        Ana
+      </MetadataListItem>,
+    );
+    const {container: without} = render(
+      <MetadataListItem label="Owner">Ana</MetadataListItem>,
+    );
+    expect(withIcon.innerHTML).toBe(without.innerHTML);
+  });
+
+  it('renders 0 as a title and as an item icon, as React does', () => {
+    render(
+      <MetadataList title={0}>
+        <MetadataListItem label="Owner" icon={0}>
+          Ana
+        </MetadataListItem>
+      </MetadataList>,
+    );
+    expect(screen.getAllByText('0')).toHaveLength(2);
   });
 });

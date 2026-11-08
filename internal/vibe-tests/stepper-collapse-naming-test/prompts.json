@@ -1,0 +1,34 @@
+{
+  "note": "Identical across all arms. Each maps to one cell of the 2x2 of what the surrounding page already provides. No prompt names a prop, a value, or the word 'collapse'.",
+  "prompts": [
+    {
+      "id": "p1",
+      "cell": "own controls, no own heading",
+      "correct": "controls off, name kept",
+      "text": "Build the progress indicator for a four-step checkout: Cart, Address, Delivery, Payment. The page already has its own Back and Continue buttons pinned to the bottom of the form, and those are how people move through the flow. Someone should still be able to tap a step they have already finished to jump back to it. On a phone, the progress indicator must not put a second pair of navigation buttons on the screen — two pairs would compete with each other. Assume `step` and `setStep` already exist."
+    },
+    {
+      "id": "p2",
+      "cell": "own heading, no own controls",
+      "correct": "name off, controls kept",
+      "text": "Build the progress indicator for a four-step import wizard: Upload, Map columns, Review, Import. Each step's panel opens with a large heading naming that step, sitting directly below the indicator. Tapping through the indicator is the only way people move between steps. On a phone, the indicator must not also spell out the name of the step — it would sit immediately above the heading that already says it. Assume `step` and `setStep` already exist."
+    },
+    {
+      "id": "p3",
+      "cell": "own controls and own heading",
+      "correct": "both off — bare track",
+      "text": "Build the progress indicator for a four-step onboarding flow: Account, Profile, Team, Done. The page has its own Back and Next buttons, and every panel opens with a heading naming the step. People can also tap a finished step to return to it. On a phone, the indicator should be nothing but the progress itself — no words, no buttons. Assume `step` and `setStep` already exist."
+    },
+    {
+      "id": "p4",
+      "cell": "neither — negative control",
+      "correct": "set nothing; defaults are already right",
+      "text": "Build the progress indicator for a four-step form: Details, Contacts, Billing, Review. Nothing else on the page tells people which step they are on, and nothing else lets them move between steps — the indicator is the only thing doing either job. It has to work on a phone as well as on a desktop. Assume `step` and `setStep` already exist."
+    }
+  ],
+  "recall": {
+    "id": "recall",
+    "note": "One agent produces all three, because naming a coherent pair is the realistic act. Deliberate deviation from one-agent-per-prompt, recorded in PLAN.md caveats.",
+    "scenarios": ["p1", "p2", "p3"]
+  }
+}

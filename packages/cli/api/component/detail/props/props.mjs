@@ -13,8 +13,9 @@ import {extractProps} from '../../_adapter.mjs';
 /**
  * Project a resolved doc into the `component.detail.props` envelope.
  * @param {import('../../_adapter.mjs').LoadedComponentDoc} docs
+ * @param {string} ownerPackage - the npm package that owns the component
  * @returns {import('../../component.type.mjs').ComponentDetailPropsResponse}
  */
-export function componentDetailProps(docs) {
-  return {type: 'component.detail.props', data: extractProps(docs)};
+export function componentDetailProps(docs, ownerPackage) {
+  return {type: 'component.detail.props', package: ownerPackage, data: extractProps(docs)};
 }

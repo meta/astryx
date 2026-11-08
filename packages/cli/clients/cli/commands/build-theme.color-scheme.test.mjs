@@ -17,7 +17,9 @@
  *   html[data-theme="dark"] { color-scheme: dark; }
  *
  * Themes that never use `light-dark()` have no `color-scheme` ambiguity to
- * resolve, so none of the three rules should be emitted for them.
+ * resolve, so none of the three rules should be emitted for them. Canonical data
+ * defaults come from StyleX rather than theme output, so this decision continues
+ * to read only the theme's authored values.
  *
  * Building `astryx theme build` requires a compiled @astryxdesign/core (there is no in-CLI
  * fallback generator), so this suite builds core once in beforeAll via the
@@ -33,8 +35,10 @@ import {ensureCoreBuilt} from './ensure-core-built.mjs';
 import {runCli} from '../../../test-utils/run-cli.mjs';
 
 const COLOR_SCHEME_ROOT_DECL = ':root { color-scheme: light dark; }';
-const COLOR_SCHEME_LIGHT_DECL = 'html[data-theme="light"] { color-scheme: light; }';
-const COLOR_SCHEME_DARK_DECL = 'html[data-theme="dark"] { color-scheme: dark; }';
+const COLOR_SCHEME_LIGHT_DECL =
+  'html[data-theme="light"] { color-scheme: light; }';
+const COLOR_SCHEME_DARK_DECL =
+  'html[data-theme="dark"] { color-scheme: dark; }';
 
 function writeTheme(dir, name, tokens) {
   fs.mkdirSync(dir, {recursive: true});
@@ -56,7 +60,9 @@ beforeAll(() => {
 
 let tmpDir;
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-build-theme-color-scheme-'));
+  tmpDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'astryx-build-theme-color-scheme-'),
+  );
 });
 afterEach(() => {
   fs.rmSync(tmpDir, {recursive: true, force: true});
@@ -67,10 +73,9 @@ describe('theme build color-scheme output', () => {
     const project = path.join(tmpDir, 'project');
     const themesDir = path.join(project, 'themes');
     // A raw light-dark() token value is what triggers the color-scheme
-    // injection in build-theme.mjs (it checks the generated CSS for the
-    // literal substring). `defineTheme.test.ts` already covers the separate
-    // [light, dark] tuple -> light-dark() conversion; this fixture writes
-    // the string directly so this test stays focused on the CLI's own
+    // injection in theme.mjs. `defineTheme.test.ts` already covers the
+    // separate [light, dark] tuple -> light-dark() conversion; this fixture
+    // writes the string directly so this test stays focused on the CLI's own
     // color-scheme decision, not on that conversion.
     const themeFile = writeTheme(themesDir, 'with-light-dark', {
       '--color-accent': 'light-dark(#0077B6, #48CAE4)',
@@ -123,7 +128,7 @@ describe('theme build color-scheme output', () => {
     expect(fs.existsSync(cssPath)).toBe(true);
     const css = fs.readFileSync(cssPath, 'utf-8');
 
-    expect(css).not.toContain('light-dark(');
+    expect(css).toContain('--color-accent: #0077B6');
     expect(css).not.toContain(COLOR_SCHEME_ROOT_DECL);
     expect(css).not.toContain(COLOR_SCHEME_LIGHT_DECL);
     expect(css).not.toContain(COLOR_SCHEME_DARK_DECL);

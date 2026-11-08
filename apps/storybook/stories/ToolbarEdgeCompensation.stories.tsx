@@ -46,7 +46,14 @@ function AlignmentGuide({
 }) {
   return (
     <div>
-      <div style={{marginBottom: 8, fontSize: 12, color: '#666'}}>{label}</div>
+      <div
+        style={{
+          marginBottom: 8,
+          fontSize: 12,
+          color: 'var(--color-text-secondary)',
+        }}>
+        {label}
+      </div>
       {children}
     </div>
   );

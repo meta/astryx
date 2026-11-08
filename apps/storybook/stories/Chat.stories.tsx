@@ -286,7 +286,7 @@ export const ChatConversation: StoryObj = {
     const nameStyle = {
       fontSize: 12,
       fontWeight: 600,
-      color: '#666',
+      color: 'var(--color-text-secondary)',
       lineHeight: '16px',
     };
     return (
@@ -549,7 +549,7 @@ export const MultiBubble: StoryObj = {
                 status="delivered"
               />
             }>
-            Link: github.com/facebook/astryx/pull/1180
+            Link: github.com/meta/astryx/pull/1180
           </ChatMessageBubble>
         </ChatMessage>
         <ChatMessage

@@ -58,6 +58,12 @@ const meta: Meta<typeof ContextMenu> = {
       control: 'boolean',
       description: 'Disable custom context menu',
     },
+    presentation: {
+      control: 'select',
+      options: ['popover', 'bottom-sheet', 'adaptive'],
+      description:
+        'Cursor popover, BottomSheet, or adaptive compact-touch presentation',
+    },
     'data-testid': {
       control: 'text',
       description: 'Test ID for testing frameworks',
@@ -79,6 +85,48 @@ export const Default: Story = {
       <div {...stylex.props(triggerStyles.area)}>Right-click this area</div>
     </ContextMenu>
   ),
+};
+
+export const PointerPresentation: Story = {
+  name: 'Presentation / pointer menu',
+  tags: ['visual-theme-matrix'],
+  render: () => (
+    <ContextMenu
+      data-testid="pointer-context-menu"
+      label="Document actions"
+      items={[
+        {label: 'Edit', icon: PencilIcon, onClick: () => {}},
+        {
+          label: 'Duplicate',
+          icon: DocumentDuplicateIcon,
+          onClick: () => {},
+        },
+        {type: 'divider'},
+        {
+          label: 'Delete',
+          icon: TrashIcon,
+          variant: 'destructive',
+          onClick: () => {},
+        },
+      ]}>
+      <div {...stylex.props(triggerStyles.area)}>
+        Right-click for document actions
+      </div>
+    </ContextMenu>
+  ),
+  play: async ({canvasElement}) => {
+    const trigger = canvasElement.querySelector(
+      '[data-testid="pointer-context-menu"]',
+    );
+    const box = trigger?.getBoundingClientRect();
+    trigger?.dispatchEvent(
+      new MouseEvent('contextmenu', {
+        bubbles: true,
+        clientX: (box?.left ?? 0) + 40,
+        clientY: (box?.top ?? 0) + 40,
+      }),
+    );
+  },
 };
 
 export const WithIcons: Story = {
@@ -385,5 +433,217 @@ export const WithSelectableItems: Story = {
           'Checkbox and radio menu items compose inside a ContextMenu just like in a DropdownMenu. The radio group is a single-select set (menuitemradio) that closes the menu on selection; the checkbox items are independent toggles (menuitemcheckbox) that keep the menu open so several can be flipped. Arrow keys, typeahead, and Enter/Space traverse and activate all three row types alongside plain items.',
       },
     },
+  },
+};
+
+export const BottomSheetPresentation: Story = {
+  name: 'Presentation / BottomSheet',
+  parameters: {
+    layout: 'fullscreen',
+    viewport: {defaultViewport: 'mobile1'},
+    docs: {
+      story: {inline: false, height: '560px'},
+      description: {
+        story:
+          'The real ContextMenu component forced to BottomSheet presentation. Long-press opens this surface on touch; this story opens it with a contextmenu event so the sheet is directly reviewable.',
+      },
+    },
+  },
+  render: () => (
+    <div style={{padding: 16}}>
+      <ContextMenu
+        data-testid="bottom-sheet-context-menu"
+        presentation="bottom-sheet"
+        label="Document actions"
+        items={[
+          {label: 'Edit', icon: PencilIcon, onClick: () => {}},
+          {
+            label: 'Duplicate',
+            icon: DocumentDuplicateIcon,
+            onClick: () => {},
+          },
+          {label: 'Share', icon: ShareIcon, onClick: () => {}},
+          {
+            label: 'Delete',
+            icon: TrashIcon,
+            variant: 'destructive',
+            onClick: () => {},
+          },
+        ]}>
+        <div {...stylex.props(triggerStyles.area)}>
+          Long-press or right-click for document actions
+        </div>
+      </ContextMenu>
+    </div>
+  ),
+  play: async ({canvasElement}) => {
+    const trigger = canvasElement.querySelector(
+      '[data-testid="bottom-sheet-context-menu"]',
+    );
+    trigger?.dispatchEvent(
+      new MouseEvent('contextmenu', {bubbles: true, clientX: 40, clientY: 40}),
+    );
+  },
+};
+
+export const AdaptivePresentation: Story = {
+  name: 'Presentation / adaptive',
+  parameters: {
+    layout: 'fullscreen',
+    viewport: {defaultViewport: 'mobile1'},
+    docs: {
+      description: {
+        story:
+          'Uses the built-in adaptive policy: BottomSheet on a compact touch screen (a coarse primary pointer, and a viewport narrower than the theme `md` breakpoint (768px by default) or shorter than 500px), cursor-positioned popover otherwise. Important actions still need a visible MoreMenu or equivalent entry point.',
+      },
+    },
+  },
+  render: () => (
+    <div style={{padding: 16}}>
+      <ContextMenu
+        presentation="adaptive"
+        label="Document actions"
+        items={[
+          {label: 'Edit', icon: PencilIcon, onClick: () => {}},
+          {label: 'Share', icon: ShareIcon, onClick: () => {}},
+          {
+            label: 'Delete',
+            icon: TrashIcon,
+            variant: 'destructive',
+            onClick: () => {},
+          },
+        ]}>
+        <div {...stylex.props(triggerStyles.area)}>
+          Long-press or right-click for document actions
+        </div>
+      </ContextMenu>
+    </div>
+  ),
+};
+
+export const InlineTrigger: Story = {
+  name: 'Inline trigger in prose (triggerAs)',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'A reference inside running text owns a context menu without breaking the flow: `triggerAs="span"` wraps it inline. Right-click, a held press or Shift+F10 on the reference opens the menu at the pointer.',
+      },
+    },
+  },
+  render: () => (
+    <p style={{maxWidth: 480, lineHeight: 1.6}}>
+      The regression was tracked in{' '}
+      <ContextMenu
+        triggerAs="span"
+        label="Task actions"
+        items={[
+          {label: 'Open', onClick: () => {}},
+          {label: 'Copy link', onClick: () => {}},
+        ]}>
+        <a href="/tasks/123">T123</a>
+      </ContextMenu>{' '}
+      and fixed by{' '}
+      <ContextMenu
+        triggerAs="span"
+        label="Diff actions"
+        items={[
+          {label: 'Open', onClick: () => {}},
+          {label: 'Copy link', onClick: () => {}},
+        ]}>
+        <a href="/diff/456">D456</a>
+      </ContextMenu>{' '}
+      the same afternoon.
+    </p>
+  ),
+};
+
+export const InScrollContainer: Story = {
+  name: 'Inside a scroll container',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'The trigger scrolls inside a box. The menu opens at the pointer, and the browser hides it while the box scrolls the pointer position out of view.',
+      },
+    },
+  },
+  render: () => (
+    <div
+      data-testid="context-menu-scroller"
+      // The box scrolls but holds nothing focusable, so it needs a tab stop
+      // and a name for keyboard scrolling (axe: scrollable-region-focusable).
+      tabIndex={0}
+      role="region"
+      aria-label="Scrolling content"
+      style={{width: 320, height: 160, overflowY: 'auto'}}>
+      <p style={{height: 240, margin: 0}}>Scroll down to the area.</p>
+      <ContextMenu
+        items={[
+          {label: 'Cut', onClick: () => {}},
+          {label: 'Copy', onClick: () => {}},
+          {label: 'Paste', onClick: () => {}},
+        ]}>
+        <div {...stylex.props(triggerStyles.area)}>Right-click this area</div>
+      </ContextMenu>
+    </div>
+  ),
+};
+
+/**
+ * The BottomSheet presentation opened into a submenu. The sheet's back button
+ * points toward the previous view, so its chevron mirrors in right-to-left
+ * layouts; this story keeps that view on screen for the RTL audit.
+ */
+export const BottomSheetSubmenu: Story = {
+  name: 'Presentation / BottomSheet submenu',
+  parameters: {
+    layout: 'fullscreen',
+    viewport: {defaultViewport: 'mobile1'},
+    docs: {story: {inline: false, height: '560px'}},
+  },
+  render: () => (
+    <div style={{padding: 16}}>
+      <ContextMenu
+        data-testid="bottom-sheet-submenu-context-menu"
+        presentation="bottom-sheet"
+        label="Document actions"
+        items={[
+          {label: 'Edit', icon: PencilIcon, onClick: () => {}},
+          {
+            label: 'Share',
+            icon: ShareIcon,
+            items: [
+              {label: 'Copy link', onClick: () => {}},
+              {label: 'Email', onClick: () => {}},
+            ],
+          },
+        ]}>
+        <div {...stylex.props(triggerStyles.area)}>
+          Long-press or right-click for document actions
+        </div>
+      </ContextMenu>
+    </div>
+  ),
+  play: async ({canvasElement}) => {
+    const trigger = canvasElement.querySelector(
+      '[data-testid="bottom-sheet-submenu-context-menu"]',
+    );
+    trigger?.dispatchEvent(
+      new MouseEvent('contextmenu', {bubbles: true, clientX: 40, clientY: 40}),
+    );
+    // The sheet renders in the top layer, outside the canvas.
+    for (let attempt = 0; attempt < 40; attempt++) {
+      const share = Array.from(
+        document.body.querySelectorAll<HTMLElement>(
+          '[role="menuitem"], button',
+        ),
+      ).find(element => element.textContent?.trim() === 'Share');
+      if (share != null) {
+        share.click();
+        return;
+      }
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
   },
 };

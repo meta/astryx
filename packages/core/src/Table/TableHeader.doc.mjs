@@ -8,7 +8,7 @@ export const docs = {
   displayName: 'Table Header',
   isHiddenFromOverview: true,
   description:
-    '<thead> wrapper for children mode. Holds the header row, whose cells are TableHeaderCell. A row must sit inside a section — <table> cannot contain a <tr> directly, because the HTML parser inserts an implied <tbody> when it parses server-rendered markup and React does not when it renders on the client, so the two trees mismatch on hydration. The data-driven data={...} mode renders this element itself whenever columns are supplied; in children mode it is yours to supply.',
+    '<thead> wrapper for children mode. Holds the header row, whose cells are TableHeaderCell. A row must sit inside a section: <table> cannot contain a <tr> directly, because the HTML parser inserts an implied <tbody> when it parses server-rendered markup and React does not when it renders on the client, so the two trees mismatch on hydration. The data-driven data={...} mode renders this element itself whenever columns are supplied; in children mode it is yours to supply.',
   props: [
     {
       name: 'children',

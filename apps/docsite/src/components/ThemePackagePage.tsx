@@ -8,8 +8,8 @@ import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {usePathname, useRouter} from 'next/navigation';
 import {Sun, Moon} from 'lucide-react';
-import {HStack, VStack} from '@astryxdesign/core/Layout';
-import {Heading, Text} from '@astryxdesign/core/Text';
+import {VStack} from '@astryxdesign/core/Layout';
+import {Text} from '@astryxdesign/core/Text';
 import {Card} from '@astryxdesign/core/Card';
 import {Carousel} from '@astryxdesign/core/Carousel';
 import {Theme} from '@astryxdesign/core/theme';
@@ -17,45 +17,33 @@ import type {DefinedTheme} from '@astryxdesign/core/theme';
 import {Button} from '@astryxdesign/core/Button';
 import {CodeBlock} from '@astryxdesign/core/CodeBlock';
 import {Popover} from '@astryxdesign/core/Popover';
-import {Link} from '@astryxdesign/core/Link';
 import {LinkProvider} from '@astryxdesign/core/Link';
 import {SelectableCard} from '@astryxdesign/core/SelectableCard';
 import {Selector} from '@astryxdesign/core/Selector';
-import {Divider} from '@astryxdesign/core/Divider';
-import {useMediaQuery} from '@astryxdesign/core/hooks';
 import {ThemeShowcaseStore} from '../../../../packages/cli/assets/templates/pages/theme-showcase/page';
 import {getThemeShowcaseContent} from './themeShowcaseContent';
 import {buildPlaygroundHref} from './playgroundLink';
-import {packages} from '../generated/packageRegistry';
-import {layout} from '../layout.stylex';
 import {themeObjects} from '../generated/themeRegistry';
-import {templates} from '../generated/templateRegistry';
+import type {ThemeExplorerPackage} from './themeExplorerData';
 import {trackCopy, trackOpenPlayground, trackToggle} from '../lib/analytics';
 import {useThemeMode} from '../app/providers';
-import commandBlockStyles from './ThemeCommandBlock.module.css';
-
-// Raw source of the theme-showcase page template (embedded as a string in
-// the generated template registry). Used to prepopulate the playground's
-// code editor when the user clicks "Open in Playground" from a theme.
-const THEME_SHOWCASE_SOURCE =
-  templates.find(t => t.slug === 'theme-showcase')?.source ?? '';
+import {ThemeHeading} from './ThemeHeading';
+import {
+  ThemeExplorerActions,
+  ThemeExplorerLayout,
+  ThemeExplorerMobileBar,
+  ThemeExplorerMobileCarousel,
+  ThemeExplorerMobileCarouselItem,
+  ThemeExplorerMobileContext,
+  ThemeExplorerPreview,
+  ThemeExplorerRightColumn,
+  ThemeExplorerSidebar,
+  ThemeExplorerSidebarContent,
+  ThemeExplorerSidebarSurface,
+} from './ThemeExplorerLayout';
 
 // Per-theme picker banners are self-hosted under the docsite's /public/images
 // dir (same location as the showcase product photos).
-
-// Gallery order — themes are listed in the same canonical visual-
-// closeness order used elsewhere (most restrained → most expressive).
-// Lives here so the sidebar's theme list reads in the same order as
-// /themes (Neutral → Stone → Gothic → Matcha → Y2K → Butter). Any
-// theme not in this list falls to the end alphabetically.
-const THEME_ORDER: ReadonlyArray<string> = [
-  '@astryxdesign/theme-neutral',
-  '@astryxdesign/theme-stone',
-  '@astryxdesign/theme-gothic',
-  '@astryxdesign/theme-matcha',
-  '@astryxdesign/theme-y2k',
-  '@astryxdesign/theme-butter',
-];
 
 // The package whose selection corresponds to the canonical bare
 // `/themes` URL (no `?theme=` query string). Must agree with the
@@ -93,14 +81,6 @@ function packageNameToSlug(packageName: string): string {
   return packageName.replace(/^@astryxdesign\/theme-/, '');
 }
 
-// Below this viewport width the sidebar collapses to a compact
-// Selector dropdown + inline action row above the preview. The
-// sidebar is hidden via @media at the same breakpoint so the two
-// surfaces don't double-render. Picked so the right pane keeps
-// enough horizontal room for the themed preview's product grid.
-const SIDEBAR_QUERY = '(max-width: 900px)';
-const SIDEBAR_BREAKPOINT = `@media ${SIDEBAR_QUERY}`;
-
 // Inert anchor for the showcase preview — preventDefaults clicks so demo
 // href="#" links don't scroll the docsite to the top.
 function PreviewAnchor({
@@ -118,88 +98,7 @@ function PreviewAnchor({
   );
 }
 
-// Fixed sidebar width — compact enough that the right pane gets the
-// lion's share of horizontal space, wide enough to fit the longest
-// theme name, the hero heading + description, and the full-width
-// "Build a custom theme" / "How theming works" CTAs at size="md".
-const SIDEBAR_WIDTH = 260;
-
-// Sticky-top offset for the sidebar. Clears the docsite's sticky
-// AppShell top nav (which uses --appshell-header-height,
-// populated post-hydration) plus a touch of breathing room so the
-// sidebar pill doesn't look glued to the nav's bottom edge.
-const SIDEBAR_STICKY_TOP =
-  'calc(var(--appshell-header-height, 64px) + var(--spacing-4))';
-
 const styles = stylex.create({
-  // Outer two-column container. Sidebar (fixed width) sits left,
-  // right pane (flex:1) holds the existing preview + showcase. The
-  // gap keeps the two surfaces from butting against each other.
-  // alignItems:flex-start so the sticky sidebar's vertical reference
-  // is the column top, not the (potentially shorter) sidebar height.
-  twoColumn: {
-    display: 'flex',
-    flexDirection: 'row' as const,
-    alignItems: 'flex-start',
-    gap: 'var(--spacing-6)',
-    [SIDEBAR_BREAKPOINT]: {
-      flexDirection: 'column' as const,
-    },
-  },
-  // Sticky sidebar wrapper. position:sticky keeps the panel in view
-  // while the right pane scrolls past; top offset clears the docsite
-  // top nav so the sidebar doesn't disappear behind it. flex:0 0 auto
-  // pins the width to SIDEBAR_WIDTH; the right pane (flex:1) absorbs
-  // any leftover horizontal space. Hidden at narrow viewports — the
-  // mobile selector + actions row takes its place above the preview.
-  //
-  // Caps the sidebar at the viewport height (minus the top nav and
-  // matching bottom breathing room) and gives it its own scroll
-  // container via overflowY:auto. Without that, the sticky panel
-  // tracks the viewport but its own contents extend off the bottom
-  // edge — users have to scroll the whole page to the bottom before
-  // the rest of the sidebar comes into view. With the cap + inner
-  // overflow, the sidebar scrolls independently of the page.
-  sidebar: {
-    flex: '0 0 auto',
-    width: SIDEBAR_WIDTH,
-    position: 'sticky' as const,
-    top: SIDEBAR_STICKY_TOP,
-    maxHeight: `calc(100dvh - var(--appshell-header-height, 64px) - var(--spacing-4) * 2)`,
-    overflowY: 'auto' as const,
-    [SIDEBAR_BREAKPOINT]: {
-      display: 'none',
-    },
-  },
-  // Sidebar card — surface chrome (background, border, radius).
-  // Padding is generous-but-compact so the inner action stack +
-  // theme list breathe without burning horizontal space the right
-  // pane needs.
-  sidebarCard: {
-    padding: 'var(--spacing-4)',
-  },
-  // Right column — takes the rest of the horizontal space. The
-  // inner preview + showcase blocks keep their own 1200px caps so
-  // the right pane just hosts them; it doesn't impose its own
-  // width constraint. minWidth:0 lets flex shrink it correctly
-  // when the viewport is narrow.
-  rightColumn: {
-    flex: '1 1 0',
-    minWidth: 0,
-    width: '100%',
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: 'var(--spacing-8)',
-  },
-  // Theme list — vertical stack of themed cards, one per theme.
-  // gap separates each card so the inset accent border of the
-  // selected card has breathing room around it (rather than
-  // bumping into neighboring cards).
-  themeList: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: 'var(--spacing-2)',
-  },
   // Make every action button (hero CTAs, mode toggle, Open in Playground)
   // stretch to the sidebar width and left-align its label
   // (Button's default is centered, which looks off in a vertical
@@ -212,24 +111,13 @@ const styles = stylex.create({
   actionButton: {
     width: '100%',
   },
-  // Title row — heading takes the leading flex space (minWidth:0 lets it
-  // shrink) so the icon-only mode toggle stays pinned to the trailing edge.
-  titleRow: {
-    width: '100%',
-  },
-  titleText: {
-    flex: 1,
-    minWidth: 0,
-  },
   // The command snippet in the popover — CodeBlock with container="section"
-  // (no border/radius of its own), so paint the muted inset here. The extra
-  // inline-end padding keeps wrapping text clear of the absolutely-positioned
-  // copy button (see ThemeCommandBlock.module.css).
+  // (no border/radius of its own), so paint the muted inset here. CodeBlock
+  // keeps its headerless copy button in a column beside the code.
   commandBlock: {
     width: '100%',
     borderRadius: 'var(--radius-element)',
     backgroundColor: 'var(--color-background-muted)',
-    paddingInlineEnd: 'var(--spacing-5)',
   },
   // Themed theme-row card. The SelectableCard wrapper itself
   // stays variant="transparent" + padding=0 so it doesn't paint a
@@ -380,8 +268,7 @@ const styles = stylex.create({
     // (distressed display), and themes without a display family
     // override fall back to their heading font (Outfit, system,
     // etc.). The Text below uses type="display-3" so the
-    // .astryx-text.display-3 selector in each theme's @scope'd CSS (legacy class
-    // selector; text also emits data-type="display-3")
+    // .astryx-text[data-type="display-3"] selector in each theme's @scope'd CSS
     // applies the right family per card.
     fontSize: 24,
     lineHeight: 1.2,
@@ -396,100 +283,13 @@ const styles = stylex.create({
   mobileThemeCardLabel: {
     fontSize: 20,
   },
-  // Mobile-only floating toolbar that replaces the sidebar at
-  // narrow viewports. position:fixed so it stays pinned to the
-  // bottom of the viewport as the user scrolls the right pane;
-  // horizontally centered with inset + auto margins instead of
-  // transform so CSS-anchor-positioned popovers inside it (like
-  // Selector's menu) anchor to the visible trigger location.
-  // Floating toolbar — appears when the theme carousel scrolls out of
-  // view. Hidden by default (opacity:0, pointer-events:none) and becomes
-  // visible when the `data-visible` attribute is set.
-  mobileBar: {
-    display: 'none',
-    [SIDEBAR_BREAKPOINT]: {
-      display: 'flex',
-      flexDirection: 'row' as const,
-      alignItems: 'center',
-      gap: 'var(--spacing-2)',
-      padding: 'var(--spacing-2)',
-      borderRadius: 'var(--radius-full)',
-      borderWidth: 'var(--border-width)',
-      borderStyle: 'solid',
-      borderColor: 'var(--color-border)',
-      backgroundColor: 'var(--color-background-card)',
-      boxShadow: 'var(--shadow-high)',
-      position: 'fixed' as const,
-      bottom: 'var(--spacing-4)',
-      left: 0,
-      right: 0,
-      marginInline: 'auto',
-      zIndex: 100,
-      width: 'fit-content',
-      maxWidth: `calc(100vw - var(--spacing-4) * 2)`,
-      opacity: 0,
-      pointerEvents: 'none' as const,
-      transition: 'opacity 0.2s ease',
-    },
-  },
-  // Visible state for the floating toolbar.
-  mobileBarVisible: {
-    [SIDEBAR_BREAKPOINT]: {
-      opacity: 1,
-      pointerEvents: 'auto' as const,
-    },
-  },
-  // Mobile selector — fixed minimum so the dropdown trigger has
-  // room for the longest theme label without forcing the floating
-  // pill to span the entire viewport. No flex:1 here (the parent
-  // is fit-content sized, not a stretched row).
-  mobileSelector: {
-    minWidth: 160,
-  },
-  // Mobile theme carousel — horizontal row of theme cards. Carousel
-  // owns scrolling, snapping, overflow affordances, and scrollbar behavior;
-  // this wrapper style only controls breakpoint visibility.
-  mobileCarousel: {
-    display: 'none',
-    [SIDEBAR_BREAKPOINT]: {
-      display: 'flex',
-      width: '100%',
-    },
-  },
-  // Individual card in the mobile carousel — fixed width so cards
-  // are uniformly sized and scroll-snappable.
-  mobileCarouselCard: {
-    flexShrink: 0,
-    width: 140,
-  },
+
   // Showcase card — clips the theme-showcase template's own
   // backgrounds (top nav, sections) to the card's rounded corners.
   // The card's default variant supplies the border + radius; the
   // template paints its own themed body background inside.
   showcaseCard: {
     overflow: 'hidden',
-  },
-  // Caps the showcase at the site's wide-content width and centers it so
-  // it doesn't run edge-to-edge on very wide screens. overflow:hidden
-  // clips template content that exceeds the width on mobile (e.g.
-  // inventory filter rows, tables) to the card's rounded corners.
-  showcaseBlock: {
-    width: '100%',
-    maxWidth: layout.contentMaxWidth,
-    marginInline: 'auto',
-    overflow: 'hidden',
-    borderRadius: 'var(--radius-container)',
-  },
-  // Mobile-only context heading — shown above the preview at narrow
-  // viewports. Includes the heading, description, and action row
-  // (Open in Playground + mode toggle) mirroring the sidebar's hero.
-  mobileContext: {
-    display: 'none',
-    [SIDEBAR_BREAKPOINT]: {
-      display: 'flex',
-      flexDirection: 'column' as const,
-      gap: 'var(--spacing-5)',
-    },
   },
 });
 
@@ -532,64 +332,6 @@ const PICKER_OVERRIDES: Record<
   },
 };
 
-function ThemeHeading({
-  align = 'start',
-  isMobile = false,
-  mode,
-  onToggleMode,
-}: {
-  align?: 'start' | 'center';
-  isMobile?: boolean;
-  /** Effective preview color mode — drives the toggle beside the title. */
-  mode: 'light' | 'dark';
-  /** Toggle the preview color mode. */
-  onToggleMode: () => void;
-}) {
-  const isCentered = align === 'center';
-  const modeToggleLabel =
-    mode === 'light'
-      ? 'Switch preview to dark mode'
-      : 'Switch preview to light mode';
-  const modeToggleIcon =
-    mode === 'light' ? <Moon size={16} /> : <Sun size={16} />;
-
-  return (
-    <VStack gap={2} hAlign={isCentered ? 'center' : undefined}>
-      {/* Title row — heading takes the leading flex space so the icon-only
-          mode toggle stays pinned to the trailing edge. display-3 in the
-          260px sidebar; display-2 in the narrow layout. */}
-      <HStack gap={2} vAlign="center" xstyle={styles.titleRow}>
-        <Heading
-          level={1}
-          type={isMobile ? 'display-2' : 'display-3'}
-          justify={align}
-          xstyle={styles.titleText}>
-          Themes
-        </Heading>
-        <Button
-          variant="ghost"
-          size="lg"
-          isIconOnly
-          label={modeToggleLabel}
-          tooltip={modeToggleLabel}
-          icon={modeToggleIcon}
-          onClick={onToggleMode}
-        />
-      </HStack>
-      {/* Body + docs link on its own line below it. */}
-      <VStack gap={1} hAlign={isCentered ? 'center' : undefined}>
-        <Text type="body" color="secondary" justify={align}>
-          Astryx comes with a default theme built in. To make it your own, copy
-          any theme you see here into a theme file you own.
-        </Text>
-        <Link type="body" color="secondary" href="/docs/theme" hasUnderline>
-          Learn how theming works
-        </Link>
-      </VStack>
-    </VStack>
-  );
-}
-
 interface ThemeActionsProps {
   selectedPkgName: string;
   /** Playground deep link for the selected theme + showcase source. */
@@ -609,7 +351,7 @@ function ThemeActions({selectedPkgName, customizeHref}: ThemeActionsProps) {
   const displayName = slug.charAt(0).toUpperCase() + slug.slice(1);
 
   return (
-    <VStack gap={2} align="stretch">
+    <ThemeExplorerActions>
       <Popover
         width={300}
         label="Use this theme"
@@ -628,7 +370,6 @@ function ThemeActions({selectedPkgName, customizeHref}: ThemeActionsProps) {
               isWrapped
               hasLanguageLabel={false}
               xstyle={styles.commandBlock}
-              className={commandBlockStyles.commandBlock}
               onCopy={() => {
                 trackCopy({
                   page: 'themes',
@@ -666,7 +407,7 @@ function ThemeActions({selectedPkgName, customizeHref}: ThemeActionsProps) {
           });
         }}
       />
-    </VStack>
+    </ThemeExplorerActions>
   );
 }
 
@@ -674,9 +415,18 @@ interface ThemePackagePageProps {
   /** Full npm package name — seeds the initial selected theme. */
   packageName: string;
   theme: DefinedTheme;
+  /** Theme packages in gallery order. They feed the sidebar and the mobile carousel. */
+  themePackages: ThemeExplorerPackage[];
+  /** Theme-showcase template source that seeds the playground code editor. */
+  showcaseSource: string;
 }
 
-export function ThemePackagePage({packageName, theme}: ThemePackagePageProps) {
+export function ThemePackagePage({
+  packageName,
+  theme,
+  themePackages,
+  showcaseSource,
+}: ThemePackagePageProps) {
   // Preview color mode. `siteMode` is the docsite's already-resolved concrete
   // light/dark — the provider maps its default `system` to the OS preference
   // (falling back to light on the first paint), so the preview never sees
@@ -706,12 +456,6 @@ export function ThemePackagePage({packageName, theme}: ThemePackagePageProps) {
   // to toggle the floating toolbar visibility.
   const carouselRef = useRef<HTMLDivElement>(null);
   const [showMobileBar, setShowMobileBar] = useState(false);
-
-  // Narrow-viewport check — the same SIDEBAR_QUERY breakpoint that hides the
-  // sidebar and shows the mobile context block. Drives the heading's type so
-  // the JS render matches the layout swap (no parallel CSS breakpoint). Server
-  // default is desktop (false), matching the sidebar shown on first paint.
-  const isMobile = useMediaQuery(SIDEBAR_QUERY);
 
   // Show the floating toolbar when the carousel scrolls out of view.
   useEffect(() => {
@@ -759,27 +503,6 @@ export function ThemePackagePage({packageName, theme}: ThemePackagePageProps) {
     },
     [router, pathname],
   );
-
-  // Sorted list of all theme packages — feeds the sidebar list and
-  // the mobile dropdown. Order matches the /themes overview gallery.
-  const themePackages = useMemo(() => {
-    return packages
-      .filter(p => p.name.startsWith('@astryxdesign/theme-'))
-      .sort((a, b) => {
-        const ai = THEME_ORDER.indexOf(a.name);
-        const bi = THEME_ORDER.indexOf(b.name);
-        if (ai === -1 && bi === -1) {
-          return a.name.localeCompare(b.name);
-        }
-        if (ai === -1) {
-          return 1;
-        }
-        if (bi === -1) {
-          return -1;
-        }
-        return ai - bi;
-      });
-  }, []);
 
   // Resolve the currently-selected theme object. Falls back to the
   // SSR-seeded prop if the lookup ever misses (shouldn't happen —
@@ -835,124 +558,96 @@ export function ThemePackagePage({packageName, theme}: ThemePackagePageProps) {
   // the query string), which runs after the navigation has committed the
   // new URL, so the hash is reliably present when it's read.
   const customizeHref = buildPlaygroundHref(
-    THEME_SHOWCASE_SOURCE,
+    showcaseSource,
     packageNameToSlug(selectedPkgName),
   );
 
   return (
-    <div {...stylex.props(styles.twoColumn)}>
+    <ThemeExplorerLayout>
       {/* Sidebar — sticky on desktop, hidden on narrow viewports
           (the mobile bar in the right column takes over). Holds:
           hero block (heading + description + Open in Playground CTA + mode
           toggle), divider, and the theme picker (one card per
           theme). */}
-      <aside {...stylex.props(styles.sidebar)} aria-label="Theme picker">
-        <Card variant="default" padding={0} xstyle={styles.sidebarCard}>
-          <VStack gap={4}>
-            {/* Hero block — page-level heading + description + CTAs.
-                Heading is display-3 in this sidebar (display-2 wraps in the
-                260px column); the narrow layout uses display-2 (see isMobile).
-                CTAs stack full-width. */}
-            <VStack gap={5}>
+      <ThemeExplorerSidebar>
+        <ThemeExplorerSidebarSurface>
+          <ThemeExplorerSidebarContent
+            heading={
               <ThemeHeading
-                isMobile={isMobile}
                 mode={mode}
                 onToggleMode={handleToggleModeTracked}
               />
+            }
+            actions={
               <ThemeActions
                 selectedPkgName={selectedPkgName}
                 customizeHref={customizeHref}
               />
-            </VStack>
-
-            <Divider />
-
-            {/* Theme list — one SelectableCard per theme. Each
-                card's inner content is wrapped in <Theme> so the
-                background color + heading typography reflect the
-                theme it represents, giving users a miniature brand
-                preview right in the picker. SelectableCard
-                handles selection state (inset accent border),
-                aria-selected, and focus chrome. */}
-            <div {...stylex.props(styles.themeList)}>
-              {themePackages.map(pkg => {
-                const cardTheme = themeObjects[pkg.name];
-                const isActive = pkg.name === selectedPkgName;
-                const label = themeLabel(pkg.displayName) || pkg.displayName;
-                // Per-theme bespoke artwork lookup. Themes without an
-                // entry render with the default radial-gradient
-                // backdrop + default wordmark color; themes WITH an
-                // entry get a custom photo background + brand-accent
-                // wordmark.
-                const override = PICKER_OVERRIDES[pkg.name];
-                return (
-                  <SelectableCard
-                    key={pkg.name}
-                    label={`Preview ${label} theme`}
-                    isSelected={isActive}
-                    onChange={() => handleSelectPkg(pkg.name)}
-                    padding={0}
-                    variant="transparent"
-                    xstyle={styles.themeCard}>
-                    {cardTheme ? (
-                      // Always render mini cards in light mode so the
-                      // picker reads as a stable swatch palette,
-                      // even when the user has flipped the preview
-                      // mode toggle to dark. (The dark-mode brand
-                      // colors for some themes are much darker,
-                      // which would make the picker look gloomy.)
-                      <Theme theme={cardTheme} mode="light">
-                        <div
-                          {...stylex.props(
-                            styles.themedSurface,
-                            // StyleX's props() walks rest args strictly;
-                            // pass `false` (not `undefined`) when there's
-                            // no override so the call doesn't choke.
-                            override?.surface ?? false,
-                          )}>
+            }
+            themes={
+              <>
+                {themePackages.map(pkg => {
+                  const cardTheme = themeObjects[pkg.name];
+                  const isActive = pkg.name === selectedPkgName;
+                  const label = themeLabel(pkg.displayName) || pkg.displayName;
+                  const override = PICKER_OVERRIDES[pkg.name];
+                  return (
+                    <SelectableCard
+                      key={pkg.name}
+                      label={`Preview ${label} theme`}
+                      isSelected={isActive}
+                      onChange={() => handleSelectPkg(pkg.name)}
+                      padding={0}
+                      variant="transparent"
+                      xstyle={styles.themeCard}>
+                      {cardTheme ? (
+                        <Theme theme={cardTheme} mode="light">
+                          <div
+                            {...stylex.props(
+                              styles.themedSurface,
+                              override?.surface ?? false,
+                            )}>
+                            <Text
+                              type="display-3"
+                              weight="bold"
+                              xstyle={[
+                                styles.themeCardLabel,
+                                override?.label ?? false,
+                              ]}>
+                              {label}
+                            </Text>
+                          </div>
+                        </Theme>
+                      ) : (
+                        <div {...stylex.props(styles.themedSurface)}>
                           <Text
                             type="display-3"
                             weight="bold"
-                            xstyle={[
-                              styles.themeCardLabel,
-                              override?.label ?? false,
-                            ]}>
+                            xstyle={styles.themeCardLabel}>
                             {label}
                           </Text>
                         </div>
-                      </Theme>
-                    ) : (
-                      <div {...stylex.props(styles.themedSurface)}>
-                        <Text
-                          type="display-3"
-                          weight="bold"
-                          xstyle={styles.themeCardLabel}>
-                          {label}
-                        </Text>
-                      </div>
-                    )}
-                  </SelectableCard>
-                );
-              })}
-            </div>
-          </VStack>
-        </Card>
-      </aside>
+                      )}
+                    </SelectableCard>
+                  );
+                })}
+              </>
+            }
+          />
+        </ThemeExplorerSidebarSurface>
+      </ThemeExplorerSidebar>
 
       {/* Right column — themed preview + card showcase. The mobile
           bar lives at the top of this column and takes over for the
           hidden sidebar at narrow viewports. */}
-      <div {...stylex.props(styles.rightColumn)}>
+      <ThemeExplorerRightColumn>
         {/* Mobile floating toolbar — hidden until the carousel scrolls
             out of view, then animates in from below. Contains the theme
             selector dropdown + mode toggle so users always have access
             to theme switching as they scroll the long preview. */}
-        <div
-          {...stylex.props(
-            styles.mobileBar,
-            showMobileBar && styles.mobileBarVisible,
-          )}>
-          <div {...stylex.props(styles.mobileSelector)}>
+        <ThemeExplorerMobileBar
+          isVisible={showMobileBar}
+          selector={
             <Selector
               label="Theme"
               isLabelHidden
@@ -962,25 +657,27 @@ export function ThemePackagePage({packageName, theme}: ThemePackagePageProps) {
               value={selectedPkgName}
               onChange={handleSelectPkg}
             />
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            isIconOnly
-            label={modeToggleLabel}
-            tooltip={modeToggleLabel}
-            icon={modeToggleIcon}
-            onClick={handleToggleMode}
-          />
-        </div>
+          }
+          modeToggle={
+            <Button
+              variant="ghost"
+              size="sm"
+              isIconOnly
+              label={modeToggleLabel}
+              tooltip={modeToggleLabel}
+              icon={modeToggleIcon}
+              onClick={handleToggleMode}
+            />
+          }
+        />
 
         {/* Mobile context heading — visible only at narrow viewports.
             Mirrors the sidebar's hero: heading, description, and
             action buttons (Open in Playground + mode toggle). */}
-        <div {...stylex.props(styles.mobileContext)}>
+        <ThemeExplorerMobileContext>
           <ThemeHeading
             align="center"
-            isMobile={isMobile}
+            isMobile
             mode={mode}
             onToggleMode={handleToggleModeTracked}
           />
@@ -988,68 +685,72 @@ export function ThemePackagePage({packageName, theme}: ThemePackagePageProps) {
             selectedPkgName={selectedPkgName}
             customizeHref={customizeHref}
           />
-        </div>
+        </ThemeExplorerMobileContext>
 
         {/* Mobile theme carousel — horizontal row of theme cards.
             When this scrolls out of view, the floating toolbar appears.
             Carousel owns scroll behavior and snap affordances. */}
-        <Carousel
-          ref={carouselRef}
-          gap={3}
-          hasButtons={false}
-          hasSnap
-          aria-label="Themes"
-          xstyle={styles.mobileCarousel}>
-          {themePackages.map(pkg => {
-            const cardTheme = themeObjects[pkg.name];
-            const isActive = pkg.name === selectedPkgName;
-            const label = themeLabel(pkg.displayName) || pkg.displayName;
-            const override = PICKER_OVERRIDES[pkg.name];
-            return (
-              <div key={pkg.name} {...stylex.props(styles.mobileCarouselCard)}>
-                <SelectableCard
-                  label={`Preview ${label} theme`}
-                  isSelected={isActive}
-                  onChange={() => handleSelectPkg(pkg.name)}
-                  padding={0}
-                  variant="transparent">
-                  {cardTheme ? (
-                    <Theme theme={cardTheme} mode="light">
-                      <div
-                        {...stylex.props(
-                          styles.themedSurface,
-                          override?.surface ?? false,
-                        )}>
-                        <Text
-                          type="display-3"
-                          weight="bold"
-                          xstyle={[
-                            styles.themeCardLabel,
-                            styles.mobileThemeCardLabel,
-                            override?.label ?? false,
-                          ]}>
-                          {label}
-                        </Text>
-                      </div>
-                    </Theme>
-                  ) : (
-                    <div {...stylex.props(styles.themedSurface)}>
-                      <Text
-                        type="display-3"
-                        weight="bold"
-                        xstyle={[
-                          styles.themeCardLabel,
-                          styles.mobileThemeCardLabel,
-                        ]}>
-                        {label}
-                      </Text>
-                    </div>
-                  )}
-                </SelectableCard>
-              </div>
-            );
-          })}
-        </Carousel>
+        <ThemeExplorerMobileCarousel>
+          {mobileCarouselStyle => (
+            <Carousel
+              ref={carouselRef}
+              gap={3}
+              hasButtons={false}
+              hasSnap
+              aria-label="Themes"
+              xstyle={mobileCarouselStyle}>
+              {themePackages.map(pkg => {
+                const cardTheme = themeObjects[pkg.name];
+                const isActive = pkg.name === selectedPkgName;
+                const label = themeLabel(pkg.displayName) || pkg.displayName;
+                const override = PICKER_OVERRIDES[pkg.name];
+                return (
+                  <ThemeExplorerMobileCarouselItem key={pkg.name}>
+                    <SelectableCard
+                      label={`Preview ${label} theme`}
+                      isSelected={isActive}
+                      onChange={() => handleSelectPkg(pkg.name)}
+                      padding={0}
+                      variant="transparent">
+                      {cardTheme ? (
+                        <Theme theme={cardTheme} mode="light">
+                          <div
+                            {...stylex.props(
+                              styles.themedSurface,
+                              override?.surface ?? false,
+                            )}>
+                            <Text
+                              type="display-3"
+                              weight="bold"
+                              xstyle={[
+                                styles.themeCardLabel,
+                                styles.mobileThemeCardLabel,
+                                override?.label ?? false,
+                              ]}>
+                              {label}
+                            </Text>
+                          </div>
+                        </Theme>
+                      ) : (
+                        <div {...stylex.props(styles.themedSurface)}>
+                          <Text
+                            type="display-3"
+                            weight="bold"
+                            xstyle={[
+                              styles.themeCardLabel,
+                              styles.mobileThemeCardLabel,
+                            ]}>
+                            {label}
+                          </Text>
+                        </div>
+                      )}
+                    </SelectableCard>
+                  </ThemeExplorerMobileCarouselItem>
+                );
+              })}
+            </Carousel>
+          )}
+        </ThemeExplorerMobileCarousel>
 
         {/* Themed preview — the theme-showcase template rendered with
             the selected theme, wrapped in a bordered, rounded card so
@@ -1058,7 +759,7 @@ export function ThemePackagePage({packageName, theme}: ThemePackagePageProps) {
             own backgrounds (top nav, sections) to the card's radius.
             LinkProvider keeps demo href="#" clicks from scrolling the
             page to the top (see PreviewAnchor). */}
-        <div {...stylex.props(styles.showcaseBlock)}>
+        <ThemeExplorerPreview>
           <Card padding={0} xstyle={styles.showcaseCard}>
             <Theme theme={selectedTheme} mode={mode}>
               <LinkProvider component={PreviewAnchor}>
@@ -1072,8 +773,8 @@ export function ThemePackagePage({packageName, theme}: ThemePackagePageProps) {
               </LinkProvider>
             </Theme>
           </Card>
-        </div>
-      </div>
-    </div>
+        </ThemeExplorerPreview>
+      </ThemeExplorerRightColumn>
+    </ThemeExplorerLayout>
   );
 }

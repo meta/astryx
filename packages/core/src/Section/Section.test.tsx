@@ -41,7 +41,7 @@ describe('Section', () => {
     const {container} = render(<Section>Content</Section>);
     const inner = container.firstElementChild!.firstElementChild!;
     expect(inner.className).toContain('astryx-section');
-    expect(inner.className).toContain('section');
+    expect(inner).toHaveAttribute('data-variant', 'section');
   });
 
   it('renders with variant="transparent"', () => {
@@ -50,14 +50,14 @@ describe('Section', () => {
     );
     const inner = container.firstElementChild!.firstElementChild!;
     expect(inner.className).toContain('astryx-section');
-    expect(inner.className).toContain('transparent');
+    expect(inner).toHaveAttribute('data-variant', 'transparent');
   });
 
   it('renders with variant="muted"', () => {
     const {container} = render(<Section variant="muted">Content</Section>);
     const inner = container.firstElementChild!.firstElementChild!;
     expect(inner.className).toContain('astryx-section');
-    expect(inner.className).toContain('muted');
+    expect(inner).toHaveAttribute('data-variant', 'muted');
   });
 
   it('renders with dividers', () => {
@@ -126,7 +126,7 @@ describe('Section', () => {
     const {container} = render(<Section variant="muted">Content</Section>);
     const inner = container.firstElementChild!.firstElementChild!;
     expect(inner.className).toContain('astryx-section');
-    expect(inner.className).toContain('muted');
+    expect(inner).toHaveAttribute('data-variant', 'muted');
   });
 
   it('accepts xstyle prop without error', () => {

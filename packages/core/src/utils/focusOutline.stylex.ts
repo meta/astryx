@@ -5,23 +5,14 @@
  * @input Uses StyleX and theme color tokens
  * @output Exports shared focus-outline prop builders
  * @position Internal utility for consistent keyboard focus outlines across core components
- *
- * Centralizes the standard Astryx focus outline, shown only for keyboard focus.
- * Every focusable surface drew the same 2px accent ring already; writing it per
- * component meant dozens of identical definitions to keep in step, and they did
- * not stay in step — offsets drifted and one ring was a border-width thick.
- *
- * Every ring in core and lab is drawn from here, with one exception recorded in
- * Switch: its condition is a component-scoped ancestor marker, which cannot be
- * shared without leaking focus state between components. A component may still
- * override the OFFSET (a ring that must sit inset, or clear of a field border);
- * width, style and color are not restated anywhere.
- *
- * Every value comes from the `--focus-outline-*` tokens, which is how a theme
- * restyles the ring: one override reaches every component at once. The
- * `:focus-visible` condition is not themeable and stays here, so a theme can
- * change what the ring looks like but cannot show it to pointer users.
  */
+
+// Every ring in core and lab comes from here, except Switch's: its condition
+// is a component-scoped ancestor marker, which cannot be shared without
+// leaking focus state. A component may override only the offset. The values
+// come from the `--focus-outline-*` tokens, so a theme restyles every ring at
+// once. The `:focus-visible` condition is not themeable, so a theme cannot
+// show the ring to pointer users.
 
 import * as stylex from '@stylexjs/stylex';
 import {focusVars} from '../theme/tokens.stylex';
@@ -69,6 +60,10 @@ const focusOutlineLonghands = {
  * the ring without restating its width and style. Split, each part is
  * independently overridable — and every part stays a var, so a theme's
  * `--focus-outline-*` overrides still flow through.
+ *
+ * NOT usable inside another file's `stylex.create`, for the same reason as
+ * {@link FOCUS_OUTLINE}: StyleX compiles each member there to a CSS variable
+ * nothing defines. Compose the `focusVars` tokens instead.
  *
  * Keys are camelCase to match `HTMLElement.style`, so this spreads straight
  * onto an element:
@@ -124,6 +119,79 @@ export const focusOutlineStyles = stylex.create({
     },
     outlineOffset: {default: '0', ':has(:focus-visible)': FOCUS_OUTLINE_OFFSET},
   },
+  /**
+   * Like {@link focusOutlineStyles.focusWithin}, but only for the element's
+   * FIRST child — for a wrapper that paints the ring on behalf of one primary
+   * control while its siblings ring themselves.
+   *
+   * `focusWithin` matches any descendant, so a row holding more than one tab
+   * stop lights the whole row *on top of* the focused control's own ring: two
+   * outlines for one tab stop. Scoping to `> :first-child` keeps the ring the
+   * primary's, and leaves every sibling control ringing itself.
+   *
+   * The wrapper owns the coupling: the primary has to be its first child, and
+   * the wrapper must not be a tab stop (its own `:focus-visible` would never
+   * match). Pair it with {@link focusOutlineStyles.suppressed} on the primary.
+   */
+  focusWithinFirstChild: {
+    outlineWidth: {
+      default: '0',
+      ':has(> :first-child:focus-visible)': focusOutlineLonghands.outlineWidth,
+    },
+    outlineStyle: {
+      default: 'none',
+      ':has(> :first-child:focus-visible)': focusOutlineLonghands.outlineStyle,
+    },
+    outlineColor: {
+      default: null,
+      ':has(> :first-child:focus-visible)': focusOutlineLonghands.outlineColor,
+    },
+    outlineOffset: {
+      default: '0',
+      ':has(> :first-child:focus-visible)': FOCUS_OUTLINE_OFFSET,
+    },
+  },
+  /**
+   * Like {@link focusOutlineStyles.focusWithin}, but only for a direct child
+   * with `role="combobox"`: for a control box that paints the ring for its
+   * combobox trigger while sibling controls inside it (a status info-tip, a
+   * clear button) ring themselves. One focus move shows one ring.
+   */
+  focusWithinCombobox: {
+    outlineWidth: {
+      default: '0',
+      ':has(> [role="combobox"]:focus-visible)':
+        focusOutlineLonghands.outlineWidth,
+    },
+    outlineStyle: {
+      default: 'none',
+      ':has(> [role="combobox"]:focus-visible)':
+        focusOutlineLonghands.outlineStyle,
+    },
+    outlineColor: {
+      default: null,
+      ':has(> [role="combobox"]:focus-visible)':
+        focusOutlineLonghands.outlineColor,
+    },
+    outlineOffset: {
+      default: '0',
+      ':has(> [role="combobox"]:focus-visible)': FOCUS_OUTLINE_OFFSET,
+    },
+  },
+  /**
+   * Draws no ring, and keeps the UA's own off — for an element whose ring an
+   * ancestor paints.
+   *
+   * The reset is not optional. Every other style here suppresses the browser
+   * default through its `default` branch, so dropping the ring from a control
+   * drops that suppression with it, and a bare `<a>` or `<button>` goes back
+   * to the UA focus ring — painted *inside* the ancestor's.
+   */
+  suppressed: {
+    outlineWidth: '0',
+    outlineStyle: 'none',
+    outlineOffset: '0',
+  },
   publishFocusVisibleVars: {
     '--_focus-outline': {
       default: 'none',
@@ -168,6 +236,10 @@ function makeFocusOutlineProps(style: StyleXPropsArg) {
 export const focusOutlineProps = {
   focusVisible: makeFocusOutlineProps(focusOutlineStyles.focusVisible),
   focusWithin: makeFocusOutlineProps(focusOutlineStyles.focusWithin),
+  focusWithinFirstChild: makeFocusOutlineProps(
+    focusOutlineStyles.focusWithinFirstChild,
+  ),
+  suppressed: makeFocusOutlineProps(focusOutlineStyles.suppressed),
   publishFocusVisibleVars: makeFocusOutlineProps(
     focusOutlineStyles.publishFocusVisibleVars,
   ),

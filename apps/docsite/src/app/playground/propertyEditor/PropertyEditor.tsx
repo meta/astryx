@@ -45,6 +45,7 @@ import {
 } from './componentInstances';
 import {isEditable, isSupportedProp} from './isSupportedProp';
 import {getComponentByModule} from './componentLookup';
+import {useLiveNumberInput} from '@/lib/useLiveNumberInput';
 
 const NUMERIC_RE = /^-?\d+(\.\d+)?$/;
 
@@ -71,6 +72,35 @@ interface PropRowProps {
   instance: InstanceInfo;
   code: string;
   onCodeChange: (code: string) => void;
+}
+
+function LiveNumberControl({
+  label,
+  value,
+  isRequired,
+  onChange,
+}: {
+  label: string;
+  value: number | null;
+  isRequired: boolean;
+  onChange: (value: number | null) => void;
+}) {
+  const liveNumber = useLiveNumberInput(value, onChange);
+  return (
+    <NumberInput
+      label={label}
+      isLabelHidden
+      value={liveNumber.value}
+      placeholder={isRequired ? undefined : 'unset'}
+      hasClear={!isRequired}
+      onChange={liveNumber.handleChange}
+      onFocus={liveNumber.handleFocus}
+      onInput={liveNumber.handleInput}
+      onBlur={liveNumber.handleBlur}
+      onKeyDown={liveNumber.handleKeyDown}
+      controlXstyle={s.inputControl}
+    />
+  );
 }
 
 function PropRow({prop, instance, code, onCodeChange}: PropRowProps) {
@@ -176,7 +206,7 @@ function PropRow({prop, instance, code, onCodeChange}: PropRowProps) {
         value={value}
         options={control.options}
         onChange={next => commit('enum', coerceEnumOption(control, next))}
-        xstyle={s.inputControl}
+        controlXstyle={s.inputControl}
       />
     );
   } else if (control.kind === 'string') {
@@ -188,7 +218,7 @@ function PropRow({prop, instance, code, onCodeChange}: PropRowProps) {
         placeholder="value"
         value={value}
         onChange={next => commit('string', next)}
-        xstyle={s.inputControl}
+        controlXstyle={s.inputControl}
       />
     );
   } else {
@@ -198,14 +228,11 @@ function PropRow({prop, instance, code, onCodeChange}: PropRowProps) {
     // prop like maxWidth render `max-width: 0` with no way back to unset.
     const value = typeof attr?.value === 'number' ? attr.value : (def ?? null);
     controlEl = (
-      <NumberInput
+      <LiveNumberControl
         label={prop.name}
-        isLabelHidden
         value={value}
-        placeholder={prop.required ? undefined : 'unset'}
-        hasClear={!prop.required}
-        onChange={(next: number | null) => commit('number', next)}
-        xstyle={s.inputControl}
+        isRequired={!!prop.required}
+        onChange={next => commit('number', next)}
       />
     );
   }

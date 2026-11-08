@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "fixture": "enterprise-scoped-synthetic",
+  "synthetic": true,
+  "source": "original synthetic fixture",
+  "generator": "hand-authored",
+  "version": "1",
+  "commit": "not-applicable-original-work",
+  "license": "MIT",
+  "commands": [
+    {
+      "command": "pnpm install --lockfile-only --ignore-scripts",
+      "flags": ["--lockfile-only", "--ignore-scripts"]
+    }
+  ],
+  "authoredPatches": [
+    "Created an original generic application with no copied application code or data.",
+    "Added app-controlled light and dark modes with non-shadcn success, warning, error, overlay, accent, and border semantics.",
+    "Separated host table and settings surfaces from a marked guest design-system subtree that reuses generic token names.",
+    "Added a guest-scoped portal dialog and nested portal menu that cross the host boundary without time, UUID, or network input.",
+    "Pinned every dependency, pnpm, and the Node 24 range."
+  ],
+  "refresh": {
+    "command": "pnpm -F @astryxdesign/vibe-tests fixtures:refresh -- enterprise-scoped-synthetic",
+    "notes": "Edit the original fixture directly, regenerate the lockfile when dependencies change, then refresh this manifest."
+  },
+  "manifest": {
+    "algorithm": "sha256",
+    "files": {
+      "index.html": "dc6a838d1c59ef085686780cb2d14afcc76b893906c3d951038858f42d47a601",
+      "package.json": "a0cb3ccf5bca798a72d14b88dc025c0c293ced9987afbfccd5f50dccde7f1488",
+      "pnpm-lock.yaml": "5b50b51c8b1f5045813b3fbdcf9842527e684b34eb7aa1129a7c496b0be3158c",
+      "src/App.tsx": "156fee7215d0ade61a56607461b9df7814649505ae37023137d1631faa754943",
+      "src/index.css": "2766bb7e84f6737cd44f2f16cb224d3d3ff141794327e849cfc21aa27054e9e3",
+      "src/main.tsx": "47cc0b4b1cc9e21351c3a37b160d7f64277f59cd57937659022cdae97608a6a5",
+      "tsconfig.json": "39e5a743eb4be3f35a40bb28a216567a2df28de553728b5e9fb545ace0a2042c",
+      "vite.config.ts": "c5f65f5b80994105ba79afc20590c2e42ca0c67166dfaf250269eb0bab9db3b6"
+    }
+  }
+}

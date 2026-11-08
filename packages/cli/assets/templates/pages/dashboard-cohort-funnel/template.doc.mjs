@@ -6,7 +6,23 @@ export const doc = {
   name: 'Funnel & Cohort Dashboard',
   displayName: 'Funnel & Cohort Dashboard',
   description:
-    'Growth analytics dashboard: conversion-rate KPIs, a multi-stage conversion funnel with step-by-step drop-off cards, a conversion-over-time trend chart, and a weekly cohort retention grid rendered as a color-coded heatmap table. Segment and funnel-window controls reshape the funnel, trend, and KPIs.',
-  isReady: false,
+    'Analytics for sequence and retention questions, pairing two shapes a plain dashboard cannot hold: a staged funnel where each step reads as drop-off against the one before, and a two-axis cohort matrix rendered as a heatmap.',
+  keywords: [
+    'conversion',
+    'drop-off',
+    'activation',
+    'churn',
+    'retention reporting',
+    'stages',
+    'segments',
+  ],
+  isReady: true,
   category: 'Dashboard - Funnel & Cohort',
+  icons: {
+    ArrowDownIcon: 'arrowDown',
+    ArrowDownTrayIcon: 'download',
+    ArrowTrendingDownIcon: 'trendDown',
+    ArrowUpIcon: 'arrowUp',
+    StopIcon: 'stop',
+  },
 };

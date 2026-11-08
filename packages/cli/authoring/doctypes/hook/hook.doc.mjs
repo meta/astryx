@@ -16,7 +16,8 @@ export const doc = {
     'The doc-type for a standalone React hook (e.g. useMediaQuery, useFocusTrap, ' +
     'useOverflow) that gets its own `.doc.mjs`. Hooks that are part of a component API ' +
     "(e.g. useImperativeDialog) belong in that component's MultiComponentDoc `components` " +
-    "array instead. `HookDoc` is the hook-flavored view of the shared `type: 'function'` kind.",
+    "array instead. `HookDoc` is the hook-flavored view of the shared `type: 'function'` kind. " +
+    "`astryx hook` reads Core's hook docs only; an integration lists its hooks in a component doc's `components` array.",
   appliesTo: '{useX}.doc.mjs',
   fields: [
     {
@@ -29,7 +30,7 @@ export const doc = {
       name: 'name',
       type: 'string',
       description:
-        "Hook name exactly as exported, e.g. 'useMediaQuery', 'useFocusTrap'.",
+        "Stable hook name exactly as exported, e.g. 'useMediaQuery', 'useFocusTrap'. Change `displayName`, not `name`, to edit the visible label; registry URLs derive from this identity by default.",
       required: true,
     },
     {
@@ -38,6 +39,12 @@ export const doc = {
       description:
         "Human-readable display name. Hooks read better as the raw identifier ('useMediaQuery') than spaced, so keep the identifier verbatim.",
       required: true,
+    },
+    {
+      name: 'registry',
+      type: 'RegistryDocIdentity',
+      description:
+        'Optional public registry identity. The converter derives a stable kebab-case slug from `name`; set `slug` only to override it, and keep prior relative paths in `aliases` after a published rename.',
     },
     {
       name: 'group',
@@ -134,6 +141,12 @@ export const doc = {
             "3-4 do/don't design-guidance items ({guidance: boolean, description: string}).",
         },
         {
+          name: 'usage.accessibility',
+          type: 'ComponentAccessibilityRequirement[]',
+          description:
+            'Accessibility requirements specific to using the hook ({name, description}).',
+        },
+        {
           name: 'usage.anatomy',
           type: 'ComponentAnatomyElement[]',
           description:
@@ -183,18 +196,22 @@ export const docs = {
     description:
       'Subscribes to a CSS media query and re-renders when it changes. Use for responsive behavior that CSS alone cannot express, such as swapping components by breakpoint.',
   },
-  relatedHooks: ['useIsMobile'],
+  relatedHooks: ['useImageMode'],
 };`,
     },
   ],
   notes: [
     {
       type: 'prose',
+      text: '`parseDoc` accepts a stamped hook doc without `displayName` and does not check its `usage`, and `astryx hook` prints a hook doc without checking it at all. Write to the type anyway; it is the contract.',
+    },
+    {
+      type: 'prose',
       text: "A hook's discriminant is `type: 'function'`: HookDoc and FunctionDoc share the generalized function kind. HookDoc is the hook-flavored view: named `returns` fields and a required `usage` block.",
     },
     {
       type: 'prose',
-      text: "Only standalone hooks get their own file. A hook that is part of a component API is documented as an entry in that component's MultiComponentDoc `components` array (with `params`/`returns`), so it renders under the component.",
+      text: "A hook that is part of a component API is listed in that component's MultiComponentDoc `components` array: inline with `params`/`returns`, or by name with its own SubComponentDoc file, as Core's useTableSelection is.",
     },
   ],
 };

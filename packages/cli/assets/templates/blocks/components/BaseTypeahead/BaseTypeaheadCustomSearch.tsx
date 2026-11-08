@@ -3,11 +3,19 @@
 'use client';
 
 import {useRef, useState} from 'react';
+import * as stylex from '@stylexjs/stylex';
 import {BaseTypeahead, createStaticSource} from '@astryxdesign/core/Typeahead';
 import type {SearchableItem} from '@astryxdesign/core/Typeahead';
 import {Icon} from '@astryxdesign/core/Icon';
 import {HStack, VStack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
+import {
+  borderVars,
+  colorVars,
+  focusVars,
+  radiusVars,
+  spacingVars,
+} from '@astryxdesign/core/theme/tokens.stylex';
 import {MagnifyingGlassIcon} from '@heroicons/react/24/outline';
 
 const frameworks: SearchableItem[] = [
@@ -23,24 +31,42 @@ const frameworks: SearchableItem[] = [
 
 const source = createStaticSource(frameworks);
 
+const styles = stylex.create({
+  root: {
+    width: '100%',
+    maxWidth: 360,
+  },
+  field: {
+    backgroundColor: colorVars['--color-background-surface'],
+    borderColor: colorVars['--color-border'],
+    borderRadius: radiusVars['--radius-element'],
+    borderStyle: 'solid',
+    borderWidth: borderVars['--border-width'],
+    paddingBlock: spacingVars['--spacing-1-5'],
+    paddingInline: spacingVars['--spacing-2'],
+    outlineColor: {
+      default: 'transparent',
+      ':has(input:focus-visible)': focusVars['--focus-outline-color'],
+    },
+    outlineOffset: focusVars['--focus-outline-offset'],
+    outlineStyle: 'solid',
+    outlineWidth: {
+      default: '0',
+      ':has(input:focus-visible)': focusVars['--focus-outline-width'],
+    },
+  },
+});
+
 export default function BaseTypeaheadCustomSearch() {
   const [value, setValue] = useState<SearchableItem | null>(null);
-  const wrapperRef = useRef<HTMLElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
 
   return (
-    <VStack gap={3} style={{width: 320}}>
-      <HStack
-        ref={wrapperRef}
-        gap={2}
-        vAlign="center"
-        style={{
-          border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-control)',
-          padding: '6px 10px',
-          background: 'var(--color-surface)',
-        }}>
+    <VStack gap={3} xstyle={styles.root}>
+      <HStack ref={wrapperRef} gap={2} vAlign="center" xstyle={styles.field}>
         <Icon icon={MagnifyingGlassIcon} size="sm" color="secondary" />
         <BaseTypeahead
+          aria-label="Search frameworks"
           searchSource={source}
           value={value}
           onChange={setValue}

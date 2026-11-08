@@ -42,6 +42,12 @@ export const docs = {
       description: "Row density controlling trigger and content block padding on the group's items. Defaults to 'balanced' when dividers are shown; otherwise items keep their default unpadded look.",
     },
     {
+      name: 'chevronPosition',
+      type: "'start' | 'end'",
+      description: "Logical position shared by the group's direct Collapsible items. `end` is the default trailing indicator; `start` is a leading disclosure arrow that points inward when collapsed (mirrored under RTL) and down when expanded. An individual Collapsible can still override it.",
+      default: "'end'",
+    },
+    {
       name: 'children',
       type: 'ReactNode',
       description: 'Collapsible instances to coordinate.',
@@ -55,6 +61,36 @@ export const docs = {
           children: 'Content',
         },
       ],
+    },
+    {
+      name: 'ref',
+      type: 'React.Ref<HTMLElement>',
+      description:
+        'Ref forwarded to the group wrapper when hasDividers renders one.',
+    },
+    {
+      name: 'xstyle',
+      type: 'StyleXStyles',
+      description:
+        'StyleX styles for the group wrapper when hasDividers renders one. Must be a stylex.create() value.',
+    },
+    {
+      name: 'className',
+      type: 'string',
+      description:
+        'CSS class name for the group wrapper when hasDividers renders one. Prefer xstyle for styling.',
+    },
+    {
+      name: 'style',
+      type: 'CSSProperties',
+      description:
+        'Inline styles for the group wrapper when hasDividers renders one. Prefer xstyle for StyleX-optimized styling.',
+    },
+    {
+      name: 'data-testid',
+      type: 'string',
+      description:
+        'Test selector forwarded to the group wrapper when hasDividers renders one.',
     },
   ],
 };
@@ -98,6 +134,12 @@ export const docsZh = {
       description: "控制组内项目触发器和内容块内边距的行密度。显示分隔线时默认为 'balanced'；否则项目保持默认的无内边距外观。",
     },
     {
+      name: 'chevronPosition',
+      type: "'start' | 'end'",
+      description: "组内直接 Collapsible 项目的逻辑箭头位置。`end` 是默认的尾随指示器；`start` 是前置展开箭头，折叠时指向内容（RTL 下镜像），展开时向下。单个 Collapsible 仍可覆盖此设置。",
+      default: "'end'",
+    },
+    {
       name: 'children',
       type: 'ReactNode',
       description: '需要协调的 Collapsible 实例。',
@@ -118,6 +160,7 @@ export const docsDense = {
     onChange: 'callback on open items change',
     hasDividers: "draw hairline dividers between items; enables wrapper div + 'balanced' density; use bare Collapsible children",
     density: "row padding 'compact' | 'balanced' | 'spacious'; defaults 'balanced' with dividers, else unpadded",
+    chevronPosition: "logical chevron position for direct items: 'end' (default trailing, down/up) | 'start' (leading, inward/down with RTL mirroring); per-item prop wins",
     children: 'Collapsible instances to coordinate',
   },
 };

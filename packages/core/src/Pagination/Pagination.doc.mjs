@@ -1,5 +1,76 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/** @type {import('@astryxdesign/cli/authoring').ComponentAnatomyElement[]} */
+const anatomy = [
+  {
+    name: 'Pagination',
+    required: true,
+    description:
+      'Navigation landmark containing the current paging controls and optional page-size selector.',
+  },
+  {
+    name: 'Page-size selector',
+    required: false,
+    description: 'Optional Selector for choosing how many items appear per page.',
+  },
+  {
+    name: 'First/last buttons',
+    required: false,
+    description:
+      'Optional Button controls that jump to the first or last known page.',
+  },
+  {
+    name: 'Previous/next buttons',
+    required: true,
+    description:
+      'Button controls that move backward or forward through the pages.',
+  },
+  {
+    name: 'Page number button',
+    required: false,
+    description:
+      'Button for one directly selectable page in the numbered presentation.',
+  },
+  {
+    name: 'Ellipsis',
+    required: false,
+    description:
+      'Visual omission marker between non-adjacent page-number buttons.',
+  },
+  {
+    name: 'Count readout',
+    required: false,
+    description:
+      'Text showing the current item range and total item count.',
+  },
+  {
+    name: 'Compact readout',
+    required: false,
+    description: 'Text showing the current page and total page count.',
+  },
+  {
+    name: 'Dot',
+    required: false,
+    description:
+      'Page indicator control that reflects and changes the active page.',
+  },
+  {
+    name: 'Page input label',
+    required: false,
+    description: 'Leading visible label for the editable page-number field.',
+  },
+  {
+    name: 'Page input',
+    required: false,
+    description: 'NumberInput used to enter a page directly.',
+  },
+  {
+    name: 'Page input total',
+    required: false,
+    description: 'Trailing text showing the known total page count.',
+  },
+];
+
 /** @type {import('@astryxdesign/cli/authoring').ComponentDoc} */
 
 export const docs = {
@@ -66,7 +137,7 @@ export const docs = {
       name: 'variant',
       type: "'pages' | 'count' | 'compact' | 'dots' | 'input' | 'none'",
       description:
-        "Visual variant controlling what appears between prev/next buttons. 'pages' shows page number buttons with ellipsis, 'count' shows 'X-Y of Z' text, 'compact' shows 'Page X of Y', 'dots' shows dot indicators, 'input' shows an editable page-number box with a leading label ('Page [ n ] / N') flanked by first/last buttons by default (the box needs a known total to clamp against, so it is disabled in cursor/hasMore mode), 'none' shows just prev/next buttons.",
+        "Visual variant controlling what appears between prev/next buttons. 'pages' shows page number buttons with ellipsis, 'count' shows 'X-Y of Z' text, 'compact' shows 'Page X of Y' (add first/last buttons with hasFirstLast), 'dots' shows dot indicators, 'input' shows an editable page-number box with a leading label ('Page [ n ] / N') flanked by first/last buttons by default (the box needs a known total to clamp against, so it is disabled in cursor/hasMore mode), 'none' shows just prev/next buttons.",
       default: "'pages'",
     },
     {
@@ -79,8 +150,8 @@ export const docs = {
       name: 'hasFirstLast',
       type: 'boolean',
       description:
-        "Whether to show first/last («/») double-chevron buttons flanking prev/next. Only applies to the 'input' variant; omitted when the page count is unknown (cursor/hasMore pagination).",
-      default: 'true',
+        "Whether to show first/last («/») double-chevron buttons flanking prev/next. Applies to the 'input' variant (shown unless false) and the 'compact' variant (shown only when true); other variants ignore it. Omitted when the page count is unknown (cursor/hasMore pagination).",
+      default: "true for 'input'; false for 'compact'",
     },
     {
       name: 'step',
@@ -138,6 +209,7 @@ export const docs = {
     },
   },
   usage: {
+    anatomy,
     description:
       'Pagination lets users step through pages of content. Place it below a table, list, or card grid so users can move forward and backward through results. Pick a variant to match the context: numbered pages for data tables, a count for large lists, compact for tight spaces, or dots for carousels.',
     bestPractices: [
@@ -216,7 +288,7 @@ export const docsZh = {
       name: 'variant',
       type: "'pages' | 'count' | 'compact' | 'dots' | 'input' | 'none'",
       description:
-        "控制上一页/下一页按钮之间显示内容的视觉变体。'pages' 显示带省略号的页码按钮，'count' 显示 'X-Y of Z' 文本，'compact' 显示 'Page X of Y'，'dots' 显示点指示器，'input' 显示带前置标签的可编辑页码框——'Page [ n ] / N'——默认两侧带首页/末页按钮，'none' 仅显示上一页/下一页按钮。",
+        "控制上一页/下一页按钮之间显示内容的视觉变体。'pages' 显示带省略号的页码按钮，'count' 显示 'X-Y of Z' 文本，'compact' 显示 'Page X of Y'（可通过 hasFirstLast 添加首页/末页按钮），'dots' 显示点指示器，'input' 显示带前置标签的可编辑页码框——'Page [ n ] / N'——默认两侧带首页/末页按钮，'none' 仅显示上一页/下一页按钮。",
       default: "'pages'",
     },
     {
@@ -229,8 +301,8 @@ export const docsZh = {
       name: 'hasFirstLast',
       type: 'boolean',
       description:
-        "是否显示首页/末页（«/»）双箭头按钮，位于上一页/下一页两侧。仅适用于 'input' 变体；当页数未知（游标/hasMore 分页）时省略。",
-      default: 'true',
+        "是否显示首页/末页（«/»）双箭头按钮，位于上一页/下一页两侧。适用于 'input' 变体（除非设为 false 否则显示）和 'compact' 变体（仅在设为 true 时显示）；其他变体忽略此项。当页数未知（游标/hasMore 分页）时省略。",
+      default: "'input' 为 true；'compact' 为 false",
     },
     {
       name: 'step',
@@ -280,6 +352,7 @@ export const docsZh = {
     ],
   },
   usage: {
+    anatomy,
     description:
       'Pagination lets users step through pages of content. Place it below a table, list, or card grid so users can move forward and backward through results. Pick a variant to match the context: numbered pages for data tables, a count for large lists, compact for tight spaces, or dots for carousels.',
     bestPractices: [
@@ -300,6 +373,7 @@ export const docsDense = {
   description:
     'Standalone pagination controls for navigating content pages. Supports multiple display variants + works w/ known totals or cursor-based pagination.',
   usage: {
+    anatomy,
     description:
       'Pagination lets users step through pages of content. Place it below a table, list, or card grid so users can move forward and backward through results. Pick a variant to match the context: numbered pages for data tables, a count for large lists, compact for tight spaces, or dots for carousels.',
     bestPractices: [
@@ -326,7 +400,7 @@ export const docsDense = {
     onPageSizeChange: 'Called on page size change. Auto resets to page 1.',
     variant: "Display between prev/next. 'input' = 'Page [n] / N' + first/last.",
     pageLabel: "Noun before the 'input' box (e.g. 'Page' or 'Row'). Navigation stays page-based. Default localized 'Page'.",
-    hasFirstLast: "Show first/last («/») buttons in the 'input' variant. Omitted when total unknown.",
+    hasFirstLast: "Show first/last («/») buttons. 'input' default true; 'compact' default false (opt in). Other variants ignore. Omitted when total unknown.",
     step: 'Pages the prev/next buttons advance per click. Clamped to range; < 1 or non-integer falls back to 1.',
     siblingCount: "Page buttons each side of current; only variant='pages'.",
     size: 'Control size.',

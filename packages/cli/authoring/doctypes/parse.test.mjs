@@ -25,8 +25,18 @@ const goodComponent = {
   displayName: 'Widget',
   description: 'A small widget.',
   props: [
-    {name: 'label', type: 'string', description: 'Visible label.', required: true},
-    {name: 'size', type: "'sm' | 'md'", description: 'Control size.', default: "'md'"},
+    {
+      name: 'label',
+      type: 'string',
+      description: 'Visible label.',
+      required: true,
+    },
+    {
+      name: 'size',
+      type: "'sm' | 'md'",
+      description: 'Control size.',
+      default: "'md'",
+    },
   ],
 };
 
@@ -35,7 +45,9 @@ const goodFunction = {
   name: 'useThing',
   displayName: 'useThing',
   description: 'A thing hook.',
-  params: [{name: 'input', type: 'string', description: 'The input.', required: true}],
+  params: [
+    {name: 'input', type: 'string', description: 'The input.', required: true},
+  ],
   returns: [{name: 'value', type: 'string', description: 'The result.'}],
 };
 
@@ -43,7 +55,11 @@ const goodGeneric = {
   type: 'generic',
   name: 'Theming',
   displayName: 'Theming',
+  title: 'Theming',
   description: 'How theming works.',
+  sections: [
+    {title: 'Overview', content: [{type: 'prose', text: 'Use a theme.'}]},
+  ],
 };
 
 /** Run parseDoc and return the thrown message (asserting it throws). */
@@ -101,6 +117,34 @@ describe('per-kind parsers (stamped format)', () => {
     expect(() => parseReference(goodGeneric)).not.toThrow();
   });
 
+  it('normalizes a migrated minimal generic doc to the public shape', () => {
+    expect(
+      parseReference({
+        type: 'generic',
+        name: 'Theming',
+        description: 'How theming works.',
+      }),
+    ).toMatchObject({
+      type: 'generic',
+      name: 'Theming',
+      title: 'Theming',
+      description: 'How theming works.',
+      sections: [],
+    });
+  });
+
+  it('rejects duplicate stable section IDs', () => {
+    expect(() =>
+      parseReference({
+        ...goodGeneric,
+        sections: [
+          {id: 'start', title: 'Start', content: []},
+          {id: 'start', title: 'Renamed start', content: []},
+        ],
+      }),
+    ).toThrow(/sections\.1\.id.*duplicate section id/u);
+  });
+
   it('keeps nested rich blobs loose (usage/theming/playground passthrough)', () => {
     expect(() =>
       parseComponent({
@@ -122,6 +166,53 @@ describe('per-kind parsers (stamped format)', () => {
     });
     expect(parsed.parent).toBe('WidgetGroup');
     expect(parsed.relatedDocs).toEqual(['Gauge', 'useThing']);
+  });
+
+  it('validates graph metadata on unstamped legacy docs', () => {
+    expect(() =>
+      parseDoc({name: 'Widget', props: [], placement: {parent: ''}}),
+    ).toThrow(/placement\.parent/u);
+    expect(() => parseDoc({name: 'Widget', props: [], aliases: [1]})).toThrow();
+    expect(() =>
+      parseDoc({name: 'Widget', props: [], audience: 'secret'}),
+    ).toThrow();
+  });
+
+  it('accepts a deprecated component that names its replacement, stamped or not', () => {
+    const deprecated = {
+      replacement: 'Gauge',
+      description: 'Render a Gauge instead.',
+    };
+    const {type, ...loose} = goodComponent;
+    expect(parseComponent({...goodComponent, deprecated}).deprecated).toEqual(
+      deprecated,
+    );
+    expect(parseDoc({...loose, deprecated}).deprecated).toEqual(deprecated);
+    expect(
+      parseDoc({
+        name: 'Part',
+        subComponentOf: 'Widget',
+        description: 'A part.',
+        props: [],
+        deprecated,
+      }).deprecated,
+    ).toEqual(deprecated);
+  });
+
+  it('rejects a deprecation without a replacement or with a field it does not know', () => {
+    const {type, ...loose} = goodComponent;
+    for (const deprecated of [
+      {description: 'Render a Gauge instead.'},
+      {replacement: '', description: 'Render a Gauge instead.'},
+      {replacement: 'Gauge'},
+      {replacement: 'Gauge', description: 'Render a Gauge.', since: '0.7.5'},
+      'Use Gauge.',
+    ]) {
+      expect(() => parseComponent({...goodComponent, deprecated})).toThrow(
+        /deprecated/u,
+      );
+      expect(() => parseDoc({...loose, deprecated})).toThrow();
+    }
   });
 });
 
@@ -173,6 +264,24 @@ describe('parseDoc (load boundary, both formats)', () => {
       returns: [{name: 'value', type: 'boolean', description: 'match'}],
     };
     expect(() => parseDoc(hook)).not.toThrow();
+  });
+
+  it('accepts and validates the OLD loose reference-topic shape', () => {
+    const reference = {
+      name: 'theming',
+      title: 'Theming',
+      description: 'How theming works.',
+      sections: [
+        {id: 'start', title: 'Start', content: [{type: 'prose', text: 'Go.'}]},
+      ],
+    };
+    expect(parseDoc(reference)).toEqual(reference);
+    expect(() =>
+      parseDoc({
+        ...reference,
+        sections: [{title: 'Start', content: [{type: 'prose'}]}],
+      }),
+    ).toThrow();
   });
 
   it('accepts BOTH parent and legacy subComponentOf', () => {
@@ -289,7 +398,9 @@ describe('loadComponentDoc (end-to-end load boundary)', () => {
         "  type: 'generic',",
         "  name: 'Theming',",
         "  displayName: 'Theming',",
+        "  title: 'Theming',",
         "  description: 'How theming works.',",
+        "  sections: [{title: 'Overview', content: [{type: 'prose', text: 'Use a theme.'}]}],",
         '};',
       ].join('\n'),
     );

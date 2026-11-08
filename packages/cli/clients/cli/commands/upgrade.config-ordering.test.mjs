@@ -28,6 +28,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {Command} from 'commander';
 import {registerUpgrade} from './upgrade.mjs';
+import {Project} from '../../../foundation/config/project.mjs';
+import {generateCompressedIndex} from '../../../foundation/agent-docs/agent-docs.mjs';
+import {CLI_VERSION} from '../../../test-utils/release-fixtures.mjs';
 
 let tmpDir;
 let originalCwd;
@@ -185,8 +188,9 @@ describe('upgrade — core codemods run before config load', () => {
 
     const out = await runHuman(['upgrade', '--from', '0.1.2', '--path', 'src']);
     expect(out).toMatch(/fails strict validation/i);
+    // The fixture has no `astryx` bin installed, so the command names the scoped package.
     expect(out).toContain(
-      'astryx upgrade --from 0.1.2 --codemod migrate-layout-components-to-experimental --apply',
+      `@astryxdesign/cli@${CLI_VERSION} upgrade --from 0.1.2 --codemod migrate-layout-components-to-experimental --apply`,
     );
     expect(exitCode).not.toBe(1);
   });
@@ -271,5 +275,68 @@ describe('upgrade — core codemods run before config load', () => {
     expect(exitCode).not.toBe(1);
     // Completed as a run (the config codemod is a no-op on an already-migrated config).
     expect(result.type).toBe('upgrade.run');
+  });
+
+  it('--apply: legacy config + integration agentDocs.append renders the integration line AFTER config repair', async () => {
+    writePkg();
+    writeInstalledCore('0.1.3');
+    writeConfig(`export default {
+  integrations: ['@acme/widgets'],
+  layout: {
+    components: {
+      KpiCard: '@/components/KpiCard',
+    },
+  },
+};
+`);
+    writeSource();
+
+    const pkgDir = path.join(tmpDir, 'node_modules', '@acme', 'widgets');
+    fs.mkdirSync(pkgDir, {recursive: true});
+    fs.writeFileSync(
+      path.join(pkgDir, 'package.json'),
+      JSON.stringify({name: '@acme/widgets', version: '1.0.0'}),
+    );
+    fs.writeFileSync(
+      path.join(pkgDir, 'astryx.integration.mjs'),
+      `export default {agentDocs: {append: ['Widget integration guidance.']}};\n`,
+    );
+
+    const staleBlock = generateCompressedIndex('0.1.2');
+    fs.writeFileSync(
+      path.join(tmpDir, 'AGENTS.md'),
+      `# Agents\n\n${staleBlock}\n`,
+    );
+
+    // The real CLI debug preflight imports config before dispatch. Cache the
+    // invalid legacy module so the post-codemod load must be explicitly fresh.
+    await expect(Project.load(tmpDir)).rejects.toThrow();
+
+    const result = await runJson([
+      '--json',
+      'upgrade',
+      '--from',
+      '0.1.2',
+      '--path',
+      'src',
+      '--apply',
+    ]);
+
+    expect(result).not.toBeNull();
+    expect(result.error).toBeUndefined();
+    expect(exitCode).not.toBe(1);
+    expect(result.type).toBe('upgrade.run');
+    expect(result.data.agentDocs.action).not.toBe('error');
+
+    const agents = fs.readFileSync(path.join(tmpDir, 'AGENTS.md'), 'utf-8');
+    expect(agents).toContain('Widget integration guidance.');
+    expect(agents).toContain('INTEGRATIONS:');
+
+    const onDisk = fs.readFileSync(
+      path.join(tmpDir, 'astryx.config.mjs'),
+      'utf-8',
+    );
+    expect(onDisk).toContain('experimental');
+    expect(onDisk).not.toMatch(/layout\s*:/);
   });
 });

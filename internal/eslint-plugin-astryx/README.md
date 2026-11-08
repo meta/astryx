@@ -21,7 +21,7 @@ This plugin implements a two-tier linting strategy:
 ### `@astryx/no-raw-intl-locale`
 
 `InternationalizationProvider` is the sole user-facing locale source. This
-rule forbids two independent things, anywhere in the lint scope:
+rule forbids three independent things, anywhere in the lint scope:
 
 1. **Raw `Intl` access** — constructing a locale-sensitive `Intl` formatter,
    calling `toLocaleString`/`toLocaleDateString`/`toLocaleTimeString`/
@@ -40,12 +40,17 @@ Intl.DateTimeFormat`), destructuring (`const {DateTimeFormat} = Intl`),
    _any_ position, not only as an argument to an `Intl`/locale-method call.
    `recognition.lang = lang ?? navigator.language` is flagged even though no
    `Intl` API is involved.
+3. **Date-helper calls without a locale** — calls to `plainDateFormat`,
+   `formatSharedDate`, `parseDateInput`, and `isLocaleDayFirst` imported from
+   the Astryx helper modules must pass their locale argument. The rule follows
+   named imports, aliases, and namespace imports without matching unrelated
+   local functions that happen to use the same name.
 
 Shipped component code should read the locale through the public
 provider-aware utilities instead — `useLocale()`/`useCollator()` (exported
-from `@astryxdesign/core/i18n`) — or an existing formatting helper such as
-`plainDateFormat`/`formatInstant`/`formatFilterValue`, so the value always
-traces back to the provider.
+from `@astryxdesign/core/i18n`) — or use an existing formatting helper such as
+`plainDateFormat`/`formatInstant`/`formatFilterValue`. Date-helper callers pass
+`useLocale()` explicitly so the value always traces back to the provider.
 
 **Raw `Intl` is controlled by two closed file lists in the rule source:**
 
@@ -53,20 +58,30 @@ traces back to the provider.
   implementations. Direct Intl calls there still require a syntactically
   explicit locale; `Intl.NumberFormat(undefined)`, an omitted locale, and
   locale methods without their locale argument are errors. Aliasing or
-  destructuring Intl is also rejected. The only temporary ambient exceptions
-  are the existing calls inside the named `plainDateFormat` and
-  `isLocaleDayFirst` functions, pending #5120.
+  destructuring Intl is also rejected.
 - `APPROVED_TEST_ORACLE_FILES` contains named tests that deliberately construct
   independent Intl expectations so assertions are not circular.
+- `DATE_HELPER_DEFAULT_TEST_FILES` contains only the two helper suites that
+  verify the backward-compatible default locale. This exemption applies only
+  to the helper-call locale requirement, not to raw Intl or navigator access.
 
 Approved implementations:
 
 - `packages/core/src/utils/plainDate.ts`, `.../utils/dateParser.ts` — date
   formatting/parsing core
 - `packages/core/src/Timestamp/formatInstant.ts`,
-  `.../Timestamp/tooltipEntries.ts` — Timestamp formatting and its
-  non-display time-zone validity probe
+  `.../Timestamp/formatRelativeTime.ts`, `.../Timestamp/tooltipEntries.ts` —
+  Timestamp absolute/relative formatting and its non-display time-zone validity
+  probe
 - `packages/core/src/PowerSearch/formatFilterValue.ts`
+- `packages/core/src/NumberInput/numberParser.ts` — reads typed and pasted
+  numbers under the field's locale
+- `packages/core/src/utils/calendarDateParser.ts` — typed dates for DateInput
+  and DateTimeInput in any calendar: names, eras, field order, and digits read
+  off Intl and parsed back, the committed text, and the calendar's name
+- `packages/core/src/utils/timeFormat.ts` — time-of-day text for TimeInput and
+  DateTimeInput: the locale's hour cycle, digits, separator, and day periods,
+  formatted and parsed back
 - `packages/core/src/i18n/useCollator.ts`
 - `packages/charts/src/formatters.ts`
 
@@ -75,10 +90,17 @@ Named test oracles:
 - `packages/charts/src/formatters.test.ts`
 - `packages/core/src/Calendar/Calendar.test.tsx`
 - `packages/core/src/NumberInput/NumberInput.test.tsx`
+- `packages/core/src/NumberInput/numberParser.test.ts`
+- `packages/core/src/NumberInput/numberParser.docblock.test.ts`
 - `packages/core/src/Table/plugins/tree/useTableTreeState.test.tsx`
 - `packages/core/src/Timestamp/tooltipEntries.test.ts`
 - `packages/core/src/PowerSearch/formatFilterValue.test.ts`
 - `packages/core/src/Timestamp/Timestamp.test.tsx`
+
+Named helper-default test files:
+
+- `packages/core/src/utils/plainDate.test.ts`
+- `packages/core/src/utils/dateParser.test.ts`
 
 These lists are the **only** exception mechanism. There is no rule option or
 `eslint.config.js` override that widens them. A new entry requires a rule-source
@@ -169,6 +191,189 @@ function useSortedNames(names: string[]) {
 }
 ```
 
+### `@astryx/no-internal-barrel-import`
+
+Reports a relative import, inside a package's own shipped source, that
+resolves to a folder's index file (a barrel) instead of the module that defines
+what it imports: `import {List} from '../List'` rather than
+`import {List} from '../List/List'`. A barrel pulls every sibling export into
+the importer's module graph, so a lazily imported module that goes through one
+drags unrelated code, and in a single-file bundle import cycles, along with it.
+It checks `import`, `export … from` and literal `import()`; type-only imports
+and exports are erased by the compiler and allowed. Public consumers keep
+importing from the package entry (`@astryxdesign/core`), which this rule never
+reads.
+
+The repo config turns it on for `packages/*/src`, outside tests, stories and
+test helpers, at the strict-mode severity (an error in CI). Barrel imports that
+existed when the rule arrived are listed by file in
+`no-internal-barrel-import.baseline.json` and stay allowed until a codemod
+removes them; remove an entry when you fix its import, and never add one.
+`node internal/eslint-plugin-astryx/no-internal-barrel-import.baseline.mjs`
+rewrites the list from the source (`--check` verifies it), for example after
+merging `main` into this rule's own branch or after a codemod.
+
+### `@astryx/no-raw-private-attribute`
+
+Reports a private `data-astryx-*` attribute written by hand outside its owner
+module (`architecture:public-component-api` INV23). Each private attribute has
+one owner module in the package that writes it,
+`packages/<package>/src/privateAttributes/<name>.stylex.ts`, named in camelCase
+(`focusOwner.stylex.ts` owns `data-astryx-focus-owner`), that writes its
+name and selectors once and exports ready-made styles, setter props and the
+runtime readers its package needs; every other file spreads those exports.
+
+In Core, the owner can instead be a plain-TS module,
+`packages/core/src/privateAttributes/<name>.ts`, that the uncompiled theme
+engine can import. It may export its name and the selector text built on it,
+and only its `.stylex.ts` sibling and the theme engine in
+`packages/core/src/theme/` may import it; a `.stylex.ts` owner never exports
+them. When a plain-TS owner exists, its `.stylex.ts` sibling is not an owner:
+it writes the attribute's selectors only as literals that reach its own
+`stylex.create` calls (directly, or through module constants read only there),
+because StyleX resolves a selector only where it is written. It never sets the
+attribute or exports a selector, through a literal or through the name it
+imports from its owner, and it never re-exports the owner.
+
+```ts
+// fine in privateAttributes/press.ts, a plain-TS owner
+export const PRESS_ATTRIBUTE = 'data-astryx-press';
+// fine in privateAttributes/press.stylex.ts, its sibling
+const PRESSED_ON = '[data-astryx-press="on"]';
+const styles = stylex.create({
+  base: {opacity: {default: 1, [PRESSED_ON]: 0.8}},
+});
+import {PRESS_ATTRIBUTE} from './press';
+const isPressed = element => element.hasAttribute(PRESS_ATTRIBUTE);
+// flagged in privateAttributes/press.stylex.ts once press.ts exists
+const pressOn = {'data-astryx-press': 'on'};
+el.setAttribute('data-astryx-press', 'on');
+export const pressOn = {[PRESS_ATTRIBUTE]: 'on'};
+export {PRESS_ATTRIBUTE} from './press';
+// flagged in any other Core file but the theme engine, neighbours included
+import {PRESS_ATTRIBUTE} from '../privateAttributes/press';
+```
+
+```ts
+// flagged outside the owner module
+el.setAttribute('data-astryx-popover-fallback-close', '');
+const styles = stylex.create({
+  base: {transform: {default: null, '[data-astryx-press="on"]': 'scale(0.98)'}},
+});
+<div data-astryx-submenu-host="" />;
+style.setAttribute(dataAttr('theme-prose'), name);
+
+// fine: public attributes INV23 lists
+<div data-astryx-theme="dark" />;
+const scope = `[data-astryx-media="${surface}"]`;
+el.setAttribute(dataAttr('theme'), name);
+```
+
+It checks string literals in any position (object keys, call arguments,
+selectors inside `stylex.create` and `stylex.when.*`),
+template literals (including `data-${dataAttrNamespace}-…`), JSX attribute
+names, and `dataAttr()` calls. A name it cannot read (`data-astryx-${part}`,
+`dataAttr(name)`) is reported as `data-astryx-*`. Inside an owner module only
+its own attribute may be written, and a `.stylex.ts` owner may not export the raw name or
+a selector as a string: not as an exported or default-exported value, not inside
+an exported object, array or function's return value, and not through a module
+constant one of those uses, including a selector built from that constant in a
+template or with `+`. The name stays allowed there as an object key
+(setter props and `stylex.create` selectors) and as a call argument (a writer,
+or a `closest`/`matches` reader). An import of another package's owner module is
+reported. The public attributes INV23 lists are never reported: `theme`,
+`media`, `aspect-ratio-override`, `token`, `token-value`, `menu-press`,
+`pressable` and `edge-comp`, each after `data-astryx-`. `naming.ts`, which
+builds every name, is not checked.
+
+The repo config turns it on for `packages/*/src`, outside tests, stories and
+test helpers, at the strict-mode severity (an error in CI). The repo config does
+not lint `.mjs` outside the CLI, so `.doc.mjs` text stays with public-API
+review. Sites that existed when the rule arrived are listed by file in
+`no-raw-private-attribute.baseline.json`, once per site, and that many stay
+allowed until they move into an owner module; remove an entry when you move its
+site, and never add one.
+`node internal/eslint-plugin-astryx/no-raw-private-attribute.baseline.mjs`
+rewrites the list from the source (`--check` verifies it).
+
+### `@astryx/no-comment-provenance`
+
+Reports provenance in source comments. A comment explains only what the code
+cannot show: a reason, a constraint, an invariant, or a platform quirk. The
+record links the code, so `pnpm specs:for <path>` finds it; a citation in a
+comment goes stale and duplicates that link. The "Source comments" rule in
+`docs/architecture/knowledge-contracts.md` is the authority.
+
+```ts
+// flagged
+// Matches spec:AST-108 FR4 and component:Button (#9428).
+// Decided 2026-10-31; true as of Oct 2026.
+// The panel MUST close when focus leaves it.
+
+// fine
+// Safari fires blur before click, so the close waits a frame.
+```
+
+It finds four kinds of text, in comments only, never in strings:
+
+- record ids (`spec:AST-108`, `component:Button`, `module:Icon/registry`,
+  `architecture:…`, `family:…`, `design:…`, `theme:…`, a bare `AST-094`) and
+  claim ids with a known prefix (`FR12`, `INV3`, `DEC-4`, `AR2`, `DR1`, …);
+- pull request and issue references: `#1234`, `PR #77`, `issue 12`, and GitHub
+  pull request, issue, discussion, and commit URLs. A bare `#123` with 3, 6, or
+  8 digits can be a hex colour, so it is not reported;
+- date stamps: an ISO date outside quotes (`2026-10-31`) and `as of Oct 2026`;
+- quote blocks: a comment block with `MUST` or `SHALL` in capitals, or a block
+  of more than six prose lines that also cites a record or a claim. The block
+  is reported once, as `spec quote`, beside its citations.
+
+Every comment is checked, public JSDoc, Effect notes, and file headers
+included. Only the lines a tool reads and code samples are skipped: lint,
+TypeScript, and other tool directives (with their `--` reasons); `@pr-a11y`
+routing lines and `SYNC:` blocks, with their continuation lines; the copyright
+line; and `@example` sections and fenced code. Adjacent line comments in one
+column are one block.
+
+When a citation is the file's only link to a record or a claim, link the file
+from a record first, then remove the citation: the source-comments rule says
+which field to use. A claim citation that `pnpm check:knowledge` cannot resolve
+yet stays in the baseline until it can.
+
+The repo config turns it on for `packages/*/src`, outside tests, stories and
+test helpers, at the strict-mode severity (an error in CI). Sites that existed
+when the rule arrived are listed by file in
+`no-comment-provenance.baseline.json`, once per site, and that many stay
+allowed until they are removed; remove an entry when you remove its site, and
+never add one.
+`node internal/eslint-plugin-astryx/no-comment-provenance.baseline.mjs`
+rewrites the list from the source (`--check` verifies it).
+
+### `@astryx/no-core-internal-import`
+
+Reports imports of Core's internal subpaths (`@astryxdesign/core/internal` and
+`@astryxdesign/core/internal/*`), which are reserved for Astryx's own packages
+and sit outside the compatibility promise (`spec:AST-017` FR21), and of Core's
+internal, gesture, motion and touch-support source (`@astryxdesign/core/gestures`,
+`@astryxdesign/core/motion` and their subpaths, or any path into
+`core/src/{internal,gestures,motion,touch-support}`), which a package outside Core and Lab reaches only through public entries
+(`architecture:react-component-runtime` INV13). It checks `import`,
+`export … from`, `import()`, `require()` and `typeof import()`, a dynamic
+import or require named by a string or a template literal with no expressions. The repo config
+turns it on for every linted file outside `packages/core` and `packages/lab`
+(the global ignores still leave some scripts unlinted), so only Core and Lab
+may import them.
+
+An internal subpath is one file, `packages/core/src/internal/<name>.ts`, whose
+header says it is reserved for Astryx's own packages, undocumented, and outside
+the compatibility promise. It gets its own explicit entry in Core's
+`package.json` `exports` (`"./internal/<name>": {source, types, default}`, never
+a wildcard), listed with the file-module subpaths in `scripts/sync-exports.js`
+(`FILE_MODULE_SUBPATH_EXPORTS`).
+
+It is a custom rule, not a `no-restricted-imports` block: flat config overrides
+a same-named rule per file, so a repo-wide block would undo the layer blocks
+that already use `no-restricted-imports`.
+
 ### `@astryx/no-hardcoded-styles`
 
 Detects hardcoded CSS values in `stylex.create()` that should use Astryx tokens:
@@ -204,6 +409,10 @@ const styles = stylex.create({
   },
 });
 ```
+
+Colour is only half-covered here: this rule reads the property name, so it sees
+a literal on `color`/`backgroundColor`/`borderColor` inside `stylex.create()`
+and nothing else. `@astryx/no-raw-color` covers the rest.
 
 ### `@astryx/no-style-only-wrapper`
 
@@ -285,6 +494,34 @@ The rule is an error in both tiers because core contains no render-time
 Recommends adding `letterSpacing` when `fontSize` is defined (common design pattern for badges, labels).
 
 **Strict mode only.** Helps catch missing letter-spacing in compact text elements.
+
+### `@astryx/require-baseprops-passthrough`
+
+Ensures a component actually forwards the styling props it accepts via `BaseProps`:
+`xstyle`, `className`, and `style`. A component's props may promise consumers these
+escape hatches, but the implementation can silently drop them:
+
+- **Unused** — a styling prop is destructured but never referenced, so the override is dropped.
+- **Not forwarded** — a styling prop the type promises is never destructured and never reaches
+  the root element.
+
+Forwarding paths differ by what each prop _is_:
+
+- `className` and `style` are real DOM attributes, so they survive a `{...rest}` spread onto
+  the root element (native or composed) — that counts as forwarding them.
+- `xstyle` is a StyleX style object, **not** a DOM attribute. It cannot ride a `{...rest}`
+  spread onto a native element (it renders inert); the only valid un-destructured path is a
+  rest spread onto a composed Astryx component, which re-accepts `xstyle` via its own `BaseProps`.
+
+Fix by threading each prop into the root `mergeProps(...)` / `stylex.props(...)` call, or
+forwarding to a composed component.
+
+Scoped to public components (those with a `.displayName`). Opt out by omitting the prop from
+the type, e.g. `Omit<BaseProps, 'className' | 'style'>` (as `VisuallyHidden` does),
+or mark an intentionally-unused binding with a leading underscore (`className: _className`).
+
+Currently `warn` in both tiers because known violations remain on main. Promote it
+deliberately only once the repository is clean.
 
 ## Usage
 
@@ -408,7 +645,7 @@ export function Badge({label}) {
 - Make state controlled via props (consumer owns the state)
 - If the component legitimately needs client behavior, remove it from the presentational list
 
-See: https://github.com/facebook/astryx/issues/493
+See: https://github.com/meta/astryx/issues/493
 
 ### `@astryx/no-nullish-jsx-guard`
 
@@ -440,9 +677,49 @@ import {isRenderable} from '@astryxdesign/core/utils';
 }
 ```
 
-Ships as a **warning in both tiers** while core migrates its existing call sites; promote to `error` in strict mode once migrated. Provides an ESLint suggestion that rewrites the comparison to `isRenderable(value)` (add the import manually).
+It also flags `isRenderable` written out by hand anywhere (an assignment, a condition, a return): a chain that tests one value for nullishness or the empty string and for a boolean.
 
-See: https://github.com/facebook/astryx/issues/2538
+```ts
+const hasLabel = label !== '' && label != null && typeof label !== 'boolean'; // flagged
+if (rendered == null || typeof rendered === 'boolean') return null; // flagged
+const hasLabel = isRenderable(label); // good
+```
+
+The presets ship it as a warning. The repository config enforces it in core and richtext, where it is an error in strict mode. A check of a string, number or data value, or a documented `false` opt-out, says so with `// eslint-disable-next-line @astryx/no-nullish-jsx-guard -- <reason>`. The rule still takes `{baseline, root}` (each value's allowed checks per file) for a codebase that adopts it with existing call sites. A chain that also tests the value against another type (`typeof value === 'string'`, `isValidElement`, `Array.isArray`, `instanceof`) is a type switch and is not flagged. For a JSX guard, the rule also provides an ESLint suggestion that rewrites the comparison to `isRenderable(value)` (add the import manually).
+
+See: https://github.com/meta/astryx/issues/2538
+
+### `@astryx/no-truthy-jsx-guard`
+
+Flags a bare truthiness guard on a `ReactNode` value in front of rendered JSX. A `ReactNode` can be `0`: `0 && <Slot />` evaluates to `0`, so React renders a stray "0" where the slot should be, and a ternary drops the slot although `0` is content that renders. Use `isRenderable(value)` from `@astryxdesign/core/utils`; it is false only for `null`, `undefined`, `true`, `false` and `''`.
+
+**Scope:** the guard is a bare value reference (`icon`, `item.icon`) in an `&&` chain whose right side is JSX, or the test of a ternary that renders JSX or `null`. The rule reads types and flags only a value whose type can be both a number and an object, as `ReactNode` and `ReactNode | IconType` can. A boolean, a string, a plain number or a data object is not flagged, and neither is a converted guard (`!!icon`, `Boolean(icon)`, a `hasIcon` local) or a value typed `any`.
+
+**Bad:**
+
+```tsx
+{
+  startIcon && <Slot>{startIcon}</Slot>;
+}
+{
+  label ? <span>{label}</span> : null;
+}
+```
+
+**Good:**
+
+```tsx
+import {isRenderable} from '@astryxdesign/core/utils';
+
+{
+  isRenderable(startIcon) && <Slot>{startIcon}</Slot>;
+}
+{
+  isOpen && <Panel />; // a boolean guard
+}
+```
+
+The rule needs type information (`parserOptions.projectService`) and stops with an error without it, so it is not in the presets. The repository config enforces it in core, where it is an error in strict mode. Other packages read core's types from core's build output, so a core type there is `any` before a build and real after it; the rule would give a different result per build state, so they are out of scope. Core has no baseline: every guard is reported. A guard that is right as written says so with `// eslint-disable-next-line @astryx/no-truthy-jsx-guard -- <reason>`. The rule also provides an ESLint suggestion that wraps the guard in `isRenderable(value)` (add the import manually).
 
 ### `@astryx/focus-outline-keyboard-only`
 
@@ -539,7 +816,9 @@ const styles = stylex.create({
 
 **Scope:** `:hover` on the styled element itself. A key that hovers something else — `:is(th:hover *)`, `stylex.when.ancestor(':hover')` — styles a descendant when an **ancestor** is hovered, which is a different question (a row may legitimately highlight around a disabled control) and is left alone. The rule is deliberately unconditional rather than scoped to components that have a disabled state: on an element that can never be disabled the guard is a no-op, and asking the question per component is what leaves the gaps.
 
-Autofixable, and mirrored at runtime by `.github/scripts/disabled-hover-audit.js`, which forces `:hover` on every disabled element in every story in Chromium and fails on any painted difference.
+**Pseudo-elements:** `:hover::after` and `:hover::before` are reported but never autofixed. StyleX 0.19.0 drops the pseudo-element's weight from the ranking of any key that also carries a `:not()` guard (priority 8330 becomes 3240), so the guarded rule loses to a plain `::after` rule and the hover treatment silently never paints. No spelling of the guard inside such a key avoids it, and an already guarded pseudo-element key is reported too. The fix is outside the selector: keep the disabled case out in JS (apply the class only when the control is enabled) and silence that one key with an `eslint-disable` comment that says so.
+
+Autofixable for every other key, and mirrored at runtime by `.github/scripts/disabled-hover-audit.js`, which forces `:hover` on every disabled element in every story in Chromium and fails on any painted difference.
 
 Ships as an **error in both tiers**: core and lab are clean, and this keeps them that way.
 
@@ -578,7 +857,7 @@ The second spread replaced the className the first built, so `astryx-breadcrumb-
 
 **Scope:** two or more spreads on one opening element whose expressions are statically recognizable className producers. A spread of anything else — `{...rest}`, `{...popover.triggerProps}`, an unknown call — is not a producer and does not count, so one producer beside any number of those is fine. `mergeProps()` is the sanctioned merge and concatenates class names, so anything already inside a single `mergeProps()` call is correct however many producers it takes; it only becomes a problem beside a **second** spread that produces a className of its own. A producer reached through a conditional (`{...(cond ? stylex.props(a) : {})}`) is out of scope: no call site writes one, and reading through the branches invites guesses the rule cannot verify.
 
-Ships as a **warning in both tiers** for now. The spread check has exactly one violation in the repo, in `BreadcrumbItem.tsx`, whose fix is open in [#5332](https://github.com/facebook/astryx/pull/5332); both tiers go back to `error` when that lands.
+Ships as a **warning in both tiers** for now. The spread check has exactly one violation in the repo, in `BreadcrumbItem.tsx`, whose fix is open in [#5332](https://github.com/meta/astryx/pull/5332); both tiers go back to `error` when that lands.
 
 ### `@astryx/disabled-cursor`
 
@@ -679,7 +958,7 @@ detected). Handler indirection is resolved only one hop within the same file —
 imported handler is treated as unknown and not flagged. A `role`/`type`/
 `contentEditable` spread via `{...props}` is not seen.
 
-See: https://github.com/facebook/astryx/issues/4892
+See: https://github.com/meta/astryx/issues/4892
 
 ### `@astryx/require-table-section`
 
@@ -779,4 +1058,247 @@ the tests, so a change in that behaviour has to be deliberate. A deliberate
 unwrapped row (the contract test in `Table.test.tsx`) opts out with an
 `eslint-disable-next-line` and a reason.
 
-See: https://github.com/facebook/astryx/issues/5277
+See: https://github.com/meta/astryx/issues/5277
+
+### `@astryx/no-light-dark-outside-theme`
+
+Flags the CSS `light-dark()` function written in component source.
+
+`light-dark(a, b)` picks a value from the resolved `color-scheme`. In a
+component that hardcodes both halves of the choice at the one place a theme
+cannot reach: a theme can retint every token a component consumes, but it
+cannot reach inside a literal.
+
+That is why the same defect keeps coming back. A dark-mode contrast failure
+patched with a component-level `light-dark()` fixes exactly the scheme the
+author was looking at; the element still fails on the light side in every theme
+whose palette lands differently, and no theme can do anything about it. A token
+pair fixed once in the theme layer reaches both schemes in every theme.
+
+**Bad** — the component decides, and only for the scheme it was written for:
+
+```ts
+const SHADOW_TINT = 'light-dark(rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.32))';
+```
+
+**Good** — the theme decides, and every theme gets to:
+
+```ts
+const SHADOW_TINT = colorVars['--color-shadow'];
+```
+
+If no token fits, add the `[light, dark]` pair in the theme layer, where
+`defineTheme` generates the `light-dark()` for every theme at once.
+
+**Scope:** `packages/core/src/**` (error) and `packages/lab/src/**` (warn).
+Core is clean. Lab has one violation — `LogStream`'s `levelWarn`/`levelError`,
+a WCAG contrast fix written per scheme — and moving it to the theme layer means
+choosing which contrast-tuned status-text token those levels should read; until
+that is decided lab warns rather than blocks.
+
+**Exemptions**, kept in the rule source rather than only in `eslint.config.js`
+so they are testable and a config edit cannot quietly turn the theme layer into
+a violation:
+
+| Location                                                           | Reported? |
+| ------------------------------------------------------------------ | --------- |
+| Component source under `packages/core/src`, `packages/lab/src`     | ✅ yes    |
+| A `theme/` or `themes/` directory (`defineTheme`, `tokens.stylex`) | ❌ no     |
+| `*.test.*`, `*.spec.*`, `*.stories.*`, `*.doc.*`, `__tests__/`     | ❌ no     |
+| A comment (the rule reads literals, never comments)                | ❌ no     |
+| A `.css` file (ESLint never parses one)                            | ❌ no     |
+| `'light-dark('` with no closing parenthesis (a parser's prefix)    | ❌ no     |
+
+That last one is the interesting case: a resolver detecting a token it has to
+parse writes the opening text only (`raw.startsWith('light-dark(')` in
+`getChartColors`), never a complete call, so requiring a balanced closing
+parenthesis separates authoring a value from recognising one. Nesting counts,
+so `light-dark(color-mix(…), …)` closes on its own parenthesis. Template
+literals are checked across their quasis with interpolations replaced by a
+placeholder, so an expression carrying a stray parenthesis cannot skew the
+balance. Matching is case-insensitive, like CSS.
+
+**Known limitation (intentional false-negative):** the sibling mechanisms are
+not covered — a `@media (prefers-color-scheme: …)` block or a
+`:is([data-theme='dark'] *)` selector hardcodes the same decision and this rule
+says nothing about either. `light-dark()` is where the pattern actually shows up
+in this repo; the others can be added if they start to.
+
+See: https://github.com/meta/astryx/pull/5321
+
+### `@astryx/no-raw-color`
+
+Flags a raw colour value — hex, `rgb()`, `hsl()`, `hwb()`, `lab()`, `lch()`,
+`oklab()`, `oklch()`, `color()` — anywhere in component source.
+
+A theme can retint every token a component reads. It cannot reach inside a
+literal. So a colour written into a component is the colour every theme gets,
+including a consumer's own, and the only way to change it is to edit the
+component.
+
+**Bad** — this grey is the same grey in all seven themes:
+
+```ts
+const TINT = '#6b7280';
+boxShadow: `0 1px 2px rgba(0, 0, 0, 0.12)`;
+```
+
+**Good** — the theme decides:
+
+```ts
+const TINT = colorVars['--color-text-secondary'];
+boxShadow: shadowVars['--shadow-sm'];
+```
+
+If no token fits, the value belongs in the theme layer, where `defineTheme`
+gives every theme a way to override it.
+
+#### Why this is not `@astryx/no-hardcoded-styles`
+
+That rule is keyed on the **property name** and only reads values sitting
+directly inside `stylex.create()`, against an anchored pattern. It covers
+`color`, `backgroundColor` and `borderColor`, and nothing else. This one walks
+the literal text instead, so the hiding place stops mattering — these are all
+shapes it catches and the older rule does not:
+
+| shape                                             | example                                                 |
+| ------------------------------------------------- | ------------------------------------------------------- |
+| an argument to another CSS function               | `'light-dark(#fff, #000)'`, `color-mix(…, #1c1c1e 20%)` |
+| behind a `const`, one hop from the style object   | `const TINT = '#00000020'`                              |
+| inside a template literal, `boxShadow` especially | `` `0 1px 2px rgba(0,0,0,.12)` ``                       |
+| a `var()` fallback                                | `'var(--color-text-disabled, #999)'`                    |
+| a JSX attribute                                   | `<circle fill="#fff" />`                                |
+| any other colour property                         | `outlineColor`, `fill`, `stroke`, `caretColor`          |
+| `hsl()` and the modern notations                  | `'oklch(0.7 0.1 200)'`                                  |
+
+The two rules are complementary and both stay on: `no-hardcoded-styles` also
+covers spacing, radius and type, which this one says nothing about.
+
+#### What it stays quiet about
+
+The rule is colour-shaped, so it structurally cannot reach the sanctioned
+non-token values — `0`, `none`, `transparent`, `inherit`, `currentColor` — or
+layout values like `width: '100%'` and a dropdown's `maxHeight: '300px'`. Beyond
+that:
+
+| Location or shape                                                         | Reported? |
+| ------------------------------------------------------------------------- | --------- |
+| Component source under `packages/{core,lab,charts,richtext,vega}/src`     | ✅ yes    |
+| A `theme/` or `themes/` directory (`tokens.stylex`, `defineTheme`)        | ❌ no     |
+| `*.test.*`, `*.spec.*`, `*.stories.*`, `*.doc.*`, `__tests__/`            | ❌ no     |
+| A comment (the rule reads literals, never comments)                       | ❌ no     |
+| A colour assembled from values passed in — `rgba(${r}, ${g}, ${b}, ${a})` | ❌ no     |
+| Every channel from a token — `rgb(var(--r) var(--g) var(--b))`            | ❌ no     |
+| `'rgb('` with no closing parenthesis (a parser's prefix)                  | ❌ no     |
+| `mask`/`maskImage` and friends — the colour resolves through alpha        | ❌ no     |
+
+Two of those are worth the detail. A **colour function only counts when its
+arguments carry a literal digit** — that separates authoring a colour from
+building one out of channels handed in, which is how `utils/color.ts` serializes
+and `getChartColors` parses. One literal channel is enough, so
+`hsl(var(--accent-hue), 80%, 50%)` is still a colour this file chose. And a
+**mask** is the one place a colour is not paint: `mask-image` resolves a
+gradient through its alpha channel, so `rgba(0, 0, 0, 0.3)` in one of its stops
+is a 30% opacity stop and the black is discarded — `backgroundImage`, which
+paints the same gradient, is not exempt.
+
+Path exemptions live in the rule source rather than only in `eslint.config.js`,
+so they are testable and a config edit cannot quietly turn the theme layer into
+a violation. That layer has ~200 colour literals and defining them is its job.
+
+#### On `eslint-disable`
+
+**A disable suppresses this rule, deliberately.** The only mechanism that would
+close the door is `noInlineConfig`, and it **cannot be scoped to one rule** —
+verified: under `linterOptions: {noInlineConfig: true}`, a file disabling both
+`@astryx/no-raw-color` and `no-unused-vars` reports both again. It _is_ scopable
+by `files` glob, so the choice on offer is never "harden this rule" but "void
+every inline disable in this directory", which takes the sanctioned ones with it
+— the deliberately unwrapped row `require-table-section` documents, and the
+`no-nullish-jsx-guard` migration sites.
+
+So the escape hatch stays open and stays _visible_. A disable on this rule means
+someone knowingly wrote a raw colour: it is greppable
+(`git grep no-raw-color -- packages`), it is permanent in the diff, and it is a
+review signal rather than a resolution. A rule with no escape hatch gets evaded
+by moving the literal somewhere the rule cannot see, which is worse — that is
+invisible. The reviewer still owes the finding.
+
+The hatch also covers the rule's one known over-reach: a hex-shaped fragment in a
+string that is not a colour (`'#abc'` as a fragment identifier). There are none
+in the repo today.
+
+**Known limitations (intentional false-negatives).** Each was probed rather than
+assumed, and none has an instance in the repo except the last:
+
+- **Named CSS colours** (`red`, `rebeccapurple`). A bare word is
+  indistinguishable from any other string and the false-positive cost is far
+  higher than the rate at which they appear here.
+- **A colour assembled at runtime from parts** (`'#' + hex`), which would mean
+  evaluating expressions rather than reading literals.
+- **A percent-encoded colour inside a data URI** —
+  `url("data:image/svg+xml,%3Csvg fill=%22%23ff0000%22/%3E")`. Decoding URIs to
+  look for colours is a different rule.
+- **A `.css` file**, which ESLint never parses. There is one live instance:
+  `packages/core/src/reset.css:291` reads
+  `var(--color-text-secondary, light-dark(#4E606F, #AAAFB5))` — the same
+  defensive-fallback shape as the `Sankey` hits, and it rides with them.
+
+Everything else the rule reaches, and a probe confirms it: a `const`, an object
+property, an array element, an enum member, a computed key, a template
+`boxShadow` in modern space-separated syntax, and an inline `style={{}}` — which
+sits at the very top of the cascade, where a theme has no answer at all.
+
+**Scope:** `warn` in `packages/{core,lab,charts,richtext,vega}/src`. There are 23
+violations on `main` — 20 in lab (`LogStream`'s console palette, `Sankey`'s
+`var()` fallbacks), 2 in core, 1 in charts.
+
+**Not in scope, deliberately:** `packages/cli/assets/templates/**`, which the
+CLI scaffolds into a consumer's app. The rule finds **194** there (102 in
+`blocks`, 92 in `pages`) if pointed at it. A raw colour in a template a consumer
+copies is a real finding — the rubric calls a literal _presented as the
+recommended way to style a component_ a docs-quality problem — but many of those
+194 are showcase content demonstrating a colour on purpose, so turning it on
+there is a triage decision of its own rather than a consequence of this rule
+existing. Each wants a token decision rather
+than a mechanical substitution, so they are tracked separately; promote a
+package to `error` once it reaches zero, the same path
+`no-physical-properties` took.
+
+### `@astryx/no-prevent-default-in-passive-react-handler`
+
+Reports `preventDefault()` on the event inside a React `onWheel`,
+`onTouchStart` or `onTouchMove` handler, or their capture forms. React attaches
+its root `wheel`, `touchstart` and `touchmove` listeners as passive, and the
+browser ignores `preventDefault()` in a passive listener: the page still
+scrolls or zooms, and `event.defaultPrevented` stays `false`. A handler that
+must cancel the default uses a native listener added with `{passive: false}`,
+in an Effect or a ref callback.
+
+```tsx
+// flagged
+<div
+  onWheel={e => {
+    e.preventDefault();
+    zoom(e.deltaY);
+  }}
+/>;
+const handleWheel = useCallback(event => event.preventDefault(), []);
+<div onWheel={handleWheel} />;
+
+// fine
+<div onTouchEnd={e => e.preventDefault()} />;
+useEffect(() => {
+  const node = ref.current;
+  const onWheel = event => event.preventDefault();
+  node.addEventListener('wheel', onWheel, {passive: false});
+  return () => node.removeEventListener('wheel', onWheel);
+}, []);
+```
+
+It follows an inline function, or an identifier that names a function in the
+same file (a declaration, a function or arrow, or a `useCallback` of one), and
+reports `<event>.preventDefault()` and `<event>.nativeEvent.preventDefault()`
+on the handler's first parameter. It does not follow a handler imported from
+another module or a function the handler calls. The repo config turns it on at
+`error` for `packages/*/src`, outside tests, stories and test helpers.

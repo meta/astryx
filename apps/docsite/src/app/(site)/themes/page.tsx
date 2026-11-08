@@ -16,12 +16,33 @@
  */
 
 import type {Metadata} from 'next';
+import * as stylex from '@stylexjs/stylex';
 import {Suspense} from 'react';
 import {notFound} from 'next/navigation';
 import {Section} from '@astryxdesign/core/Section';
+import {Skeleton} from '@astryxdesign/core/Skeleton';
+import {Carousel} from '@astryxdesign/core/Carousel';
 import {packages} from '../../../generated/packageRegistry';
 import {themeObjects} from '../../../generated/themeRegistry';
 import {ThemePackagePage} from '../../../components/ThemePackagePage';
+import {
+  getThemeExplorerPackages,
+  getThemeShowcaseSource,
+} from '../../../components/themeExplorerData';
+import {ThemeHeading} from '../../../components/ThemeHeading';
+import {
+  ThemeExplorerActions,
+  ThemeExplorerLayout,
+  ThemeExplorerMobileCarousel,
+  ThemeExplorerMobileCarouselItem,
+  ThemeExplorerMobileContext,
+  ThemeExplorerPreview,
+  ThemeExplorerPreviewSkeleton,
+  ThemeExplorerRightColumn,
+  ThemeExplorerSidebar,
+  ThemeExplorerSidebarContent,
+  ThemeExplorerSidebarSurface,
+} from '../../../components/ThemeExplorerLayout';
 import {pageMetadata} from '../../../lib/pageMetadata';
 
 // Static canonical metadata for /themes. The page also accepts a `?theme=`
@@ -40,6 +61,12 @@ export const metadata: Metadata = pageMetadata({
 // users browse into the more expressive themes (Y2K, Butter, etc.).
 const DEFAULT_THEME_PACKAGE = '@astryxdesign/theme-neutral';
 
+const styles = stylex.create({
+  loadingMobileCarousel: {
+    overflow: 'hidden',
+  },
+});
+
 function slugToPackageName(slug: string): string {
   return `@astryxdesign/theme-${slug}`;
 }
@@ -51,7 +78,7 @@ export default function ThemesPage({
 }) {
   return (
     <Section maxWidth="lg" padding={6}>
-      <Suspense fallback={null}>
+      <Suspense fallback={<ThemeExplorerFallback />}>
         <SeededThemeExplorer searchParams={searchParams} />
       </Suspense>
     </Section>
@@ -98,5 +125,80 @@ async function SeededThemeExplorer({
     notFound();
   }
 
-  return <ThemePackagePage packageName={seedPkg.name} theme={seedTheme} />;
+  return (
+    <ThemePackagePage
+      packageName={seedPkg.name}
+      theme={seedTheme}
+      themePackages={getThemeExplorerPackages()}
+      showcaseSource={getThemeShowcaseSource()}
+    />
+  );
+}
+
+/**
+ * The selected theme is request-dependent, but the page heading is not. Render
+ * the exact same ThemeHeading component at the exact same desktop/mobile
+ * positions as ThemePackagePage, replacing only theme-dependent controls,
+ * cards, and preview content with Skeletons.
+ */
+function ThemeActionsFallback({index = 1}: {index?: number}) {
+  return (
+    <ThemeExplorerActions>
+      <Skeleton width="100%" height={40} index={index} />
+      <Skeleton width="100%" height={40} index={index + 1} />
+    </ThemeExplorerActions>
+  );
+}
+
+function ThemeExplorerFallback() {
+  return (
+    <ThemeExplorerLayout statusLabel="Loading theme explorer">
+      <ThemeExplorerSidebar>
+        <ThemeExplorerSidebarSurface>
+          <ThemeExplorerSidebarContent
+            heading={<ThemeHeading isLoading />}
+            actions={<ThemeActionsFallback />}
+            themes={
+              <>
+                {Array.from({length: 6}, (_, index) => (
+                  <Skeleton
+                    key={index}
+                    width="100%"
+                    height={120}
+                    index={index + 3}
+                  />
+                ))}
+              </>
+            }
+          />
+        </ThemeExplorerSidebarSurface>
+      </ThemeExplorerSidebar>
+
+      <ThemeExplorerRightColumn>
+        <ThemeExplorerMobileContext>
+          <ThemeHeading align="center" isMobile isLoading />
+          <ThemeActionsFallback />
+        </ThemeExplorerMobileContext>
+        <ThemeExplorerMobileCarousel>
+          {mobileCarouselStyle => (
+            <Carousel
+              gap={3}
+              hasButtons={false}
+              hasSnap
+              aria-label="Themes loading"
+              xstyle={[mobileCarouselStyle, styles.loadingMobileCarousel]}>
+              {Array.from({length: 4}, (_, index) => (
+                <ThemeExplorerMobileCarouselItem key={index}>
+                  <Skeleton width="100%" height={120} index={index + 3} />
+                </ThemeExplorerMobileCarouselItem>
+              ))}
+            </Carousel>
+          )}
+        </ThemeExplorerMobileCarousel>
+        <ThemeExplorerPreview>
+          <ThemeExplorerPreviewSkeleton index={7} />
+        </ThemeExplorerPreview>
+      </ThemeExplorerRightColumn>
+    </ThemeExplorerLayout>
+  );
 }

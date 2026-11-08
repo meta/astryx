@@ -22,7 +22,10 @@
 type ResizeCallback = (entry: ResizeObserverEntry) => void;
 
 let observer: ResizeObserver | null = null;
-const callbacks = new Map<Element, ResizeCallback>();
+// A callback may be registered more than once for one element. The inner map
+// keeps those registrations alive independently without dispatching duplicate
+// work for the same callback reference.
+const callbacks = new Map<Element, Map<ResizeCallback, number>>();
 
 /**
  * The shared observer, or null where the API does not exist (jsdom, an old
@@ -36,9 +39,12 @@ function getObserver(): ResizeObserver | null {
   if (!observer) {
     observer = new ResizeObserver(entries => {
       for (const entry of entries) {
-        const cb = callbacks.get(entry.target);
-        if (cb) {
-          cb(entry);
+        const targetCallbacks = callbacks.get(entry.target);
+        if (targetCallbacks) {
+          // A callback may unsubscribe while dispatch is in progress.
+          for (const cb of [...targetCallbacks.keys()]) {
+            cb(entry);
+          }
         }
       }
     });
@@ -53,38 +59,78 @@ function getObserver(): ResizeObserver | null {
  * synthetic entry) so callers don't need separate initial-measurement
  * logic. Subsequent callbacks fire on actual resizes.
  *
- * Call `unobserveResize` when the element unmounts or observation is
- * no longer needed. The shared observer is destroyed when the last
- * element is unobserved.
+ * Returns an unsubscribe function that removes only this registration, leaving
+ * every other observer of the same element intact — prefer it over
+ * `unobserveResize(element)`, which drops them all. The shared observer is
+ * destroyed when the last element is unobserved.
  *
  * @example
  * ```
- * observeResize(element, (entry) => {
+ * const unsubscribe = observeResize(element, (entry) => {
  *   console.log(entry.contentBoxSize);
  * });
  *
  * // Cleanup:
- * unobserveResize(element);
+ * unsubscribe();
  * ```
  */
 export function observeResize(
   element: Element,
   callback: ResizeCallback,
-): void {
-  callbacks.set(element, callback);
+): () => void {
+  const existing = callbacks.get(element);
+  if (existing) {
+    existing.set(callback, (existing.get(callback) ?? 0) + 1);
+  } else {
+    callbacks.set(element, new Map([[callback, 1]]));
+  }
   getObserver()?.observe(element);
 
   // Fire once immediately so callers get an initial measurement
   // without duplicating their logic outside the observer path.
   const entry: Partial<ResizeObserverEntry> = {target: element};
   callback(entry as ResizeObserverEntry);
+
+  let isSubscribed = true;
+  return () => {
+    if (!isSubscribed) {
+      return;
+    }
+    isSubscribed = false;
+    unobserveResize(element, callback);
+  };
 }
 
 /**
- * Stop observing an element. If no elements remain, the shared
- * observer is disconnected and released for garbage collection.
+ * Stop observing an element.
+ *
+ * Pass the callback to remove only that registration — the unsubscribe returned
+ * by `observeResize` does this for you. Omitting it removes EVERY callback on
+ * the element, which silences peers that are still mounted, so it is only
+ * correct for a caller that owns the element outright.
+ *
+ * If no elements remain, the shared observer is disconnected and released for
+ * garbage collection.
  */
-export function unobserveResize(element: Element): void {
+export function unobserveResize(
+  element: Element,
+  callback?: ResizeCallback,
+): void {
+  const targetCallbacks = callbacks.get(element);
+  if (callback != null) {
+    const registrationCount = targetCallbacks?.get(callback);
+    if (targetCallbacks == null || registrationCount == null) {
+      return;
+    }
+    if (registrationCount > 1) {
+      targetCallbacks.set(callback, registrationCount - 1);
+      return;
+    }
+    targetCallbacks.delete(callback);
+    if (targetCallbacks.size > 0) {
+      return;
+    }
+  }
   callbacks.delete(element);
   if (observer) {
     observer.unobserve(element);

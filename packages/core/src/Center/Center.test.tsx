@@ -11,6 +11,7 @@
 
 import {describe, it, expect, vi} from 'vitest';
 import {render, screen} from '@testing-library/react';
+import {renderToString} from 'react-dom/server';
 import {Center} from './Center';
 
 /**
@@ -39,8 +40,11 @@ describe('Center', () => {
     const element = screen.getByTestId('center');
     expect(screen.getByText('Centered Content')).toBeInTheDocument();
     expect(element).toBeInTheDocument();
-    // Check that it has flex display
-    expect(element).toHaveStyle({display: 'flex'});
+    expect(element).toHaveStyle({
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+    });
   });
 
   it('centers horizontally only', () => {
@@ -51,7 +55,11 @@ describe('Center', () => {
     );
     const element = screen.getByTestId('center');
     expect(screen.getByText('Horizontal Center')).toBeInTheDocument();
-    expect(element).toHaveStyle({display: 'flex'});
+    expect(element).toHaveStyle({
+      display: 'flex',
+      justifyContent: 'center',
+    });
+    expect(element).not.toHaveStyle({alignItems: 'center'});
   });
 
   it('centers vertically only', () => {
@@ -62,7 +70,11 @@ describe('Center', () => {
     );
     const element = screen.getByTestId('center');
     expect(screen.getByText('Vertical Center')).toBeInTheDocument();
-    expect(element).toHaveStyle({display: 'flex'});
+    expect(element).toHaveStyle({
+      display: 'flex',
+      alignItems: 'center',
+    });
+    expect(element).not.toHaveStyle({justifyContent: 'center'});
   });
 
   it('applies height prop', () => {
@@ -212,6 +224,32 @@ describe('Center', () => {
     );
     const element = screen.getByTestId('center');
     expect(element).toHaveAttribute('aria-label', 'centered container');
+  });
+
+  it('does not let consumer data attributes override the reflected axis', () => {
+    const {container} = render(
+      <Center axis="horizontal" data-axis="vertical">
+        <div>Content</div>
+      </Center>,
+    );
+
+    expect(container.firstElementChild).toHaveAttribute(
+      'data-axis',
+      'horizontal',
+    );
+  });
+
+  it('renders on the server without a client boundary', () => {
+    const html = renderToString(
+      <Center axis="horizontal" paddingInlineStart={2}>
+        Centered content
+      </Center>,
+    );
+
+    expect(html).toContain('<div');
+    expect(html).toContain('astryx-center');
+    expect(html).toContain('data-axis="horizontal"');
+    expect(html).toContain('Centered content');
   });
 
   it('renders as div element', () => {

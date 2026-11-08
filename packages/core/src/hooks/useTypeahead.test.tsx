@@ -10,7 +10,9 @@
  */
 
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
-import {renderHook} from '@testing-library/react';
+import {Activity, type ReactNode} from 'react';
+import {render, renderHook} from '@testing-library/react';
+import {InternationalizationProvider} from '../i18n/InternationalizationProvider';
 import {useTypeahead} from './useTypeahead';
 
 const LABELS = ['Apple', 'Apricot', 'Banana', 'Cherry'] as const;
@@ -84,6 +86,46 @@ describe('useTypeahead', () => {
     vi.advanceTimersByTime(800);
     api.onKeyDown(key('b')); // fresh buffer → Banana
     expect(onMatch).toHaveBeenLastCalledWith(2);
+  });
+
+  it('clears the pending buffer reset when the component unmounts', () => {
+    const {result, unmount} = renderHook(() =>
+      useTypeahead({getItemLabels: () => LABELS, onMatch: vi.fn()}),
+    );
+    result.current.onKeyDown(key('a'));
+    expect(vi.getTimerCount()).toBe(1);
+    unmount();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('empties the buffer when an Activity boundary hides the collection', () => {
+    const latest: {api: ReturnType<typeof useTypeahead> | null} = {api: null};
+    function Probe(): ReactNode {
+      latest.api = useTypeahead({
+        getItemLabels: () => LABELS,
+        onMatch: vi.fn(),
+      });
+      return null;
+    }
+    const {rerender} = render(
+      <Activity mode="visible">
+        <Probe />
+      </Activity>,
+    );
+    latest.api?.onKeyDown(key('a'));
+    rerender(
+      <Activity mode="hidden">
+        <Probe />
+      </Activity>,
+    );
+    expect(vi.getTimerCount()).toBe(0);
+    rerender(
+      <Activity mode="visible">
+        <Probe />
+      </Activity>,
+    );
+    // The typed prefix went with the hide, so a bare Space is not typeahead.
+    expect(latest.api?.onKeyDown(key(' '))).toBe(false);
   });
 
   it('skips disabled items', () => {
@@ -255,5 +297,185 @@ describe('useTypeahead', () => {
     );
     expect(handled).toBe(true);
     expect(onMatch).toHaveBeenCalledWith(0);
+  });
+
+  it('ignores a key that is part of an input method composition', () => {
+    const {onMatch, api} = setup();
+    const handled = api.onKeyDown(
+      new KeyboardEvent('keydown', {key: 'b', isComposing: true}),
+    );
+    expect(handled).toBe(false);
+    expect(onMatch).not.toHaveBeenCalled();
+  });
+
+  it('ignores a composing Space even mid-buffer', () => {
+    const {onMatch, api} = setup();
+    api.onKeyDown(key('a'));
+    const handled = api.onKeyDown(
+      new KeyboardEvent('keydown', {key: ' ', isComposing: true}),
+    );
+    expect(handled).toBe(false);
+    expect(onMatch).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores Control and Command chords on a letter', () => {
+    const {onMatch, api} = setup();
+    expect(
+      api.onKeyDown(new KeyboardEvent('keydown', {key: 'b', ctrlKey: true})),
+    ).toBe(false);
+    expect(
+      api.onKeyDown(new KeyboardEvent('keydown', {key: 'b', metaKey: true})),
+    ).toBe(false);
+    expect(onMatch).not.toHaveBeenCalled();
+  });
+
+  it('leaves the highlight where it was when nothing matches', () => {
+    const {onMatch, api} = setup({current: 1});
+    const handled = api.onKeyDown(key('z'));
+    // The key is still consumed — it is typing, not a shortcut for the host.
+    expect(handled).toBe(true);
+    expect(onMatch).not.toHaveBeenCalled();
+  });
+
+  it('reads a React synthetic event’s isComposing through nativeEvent', () => {
+    const {onMatch, api} = setup();
+    const synthetic = {
+      key: 'b',
+      ctrlKey: false,
+      metaKey: false,
+      altKey: false,
+      nativeEvent: {isComposing: true},
+    } as unknown as React.KeyboardEvent;
+    expect(api.onKeyDown(synthetic)).toBe(false);
+    expect(onMatch).not.toHaveBeenCalled();
+  });
+
+  describe('accents and stroked letters', () => {
+    function setupLabels(
+      labels: ReadonlyArray<string>,
+      current = -1,
+      locale?: string,
+    ) {
+      const onMatch = vi.fn();
+      const {result} = renderHook(
+        () =>
+          useTypeahead({
+            getItemLabels: () => labels,
+            onMatch,
+            getCurrentIndex: () => current,
+          }),
+        locale == null
+          ? undefined
+          : {
+              wrapper: ({children}: {children: ReactNode}) => (
+                <InternationalizationProvider locale={locale}>
+                  {children}
+                </InternationalizationProvider>
+              ),
+            },
+      );
+      return {onMatch, api: result.current};
+    }
+
+    it('matches a base letter against an accented first letter', () => {
+      const {onMatch, api} = setupLabels(['Anh', 'Dung', 'Đào', 'Ánh']);
+      api.onKeyDown(key('d'));
+      expect(onMatch).toHaveBeenLastCalledWith(1); // Dung
+      const second = setupLabels(['Dung', 'Đào'], 0);
+      second.api.onKeyDown(key('d'));
+      expect(second.onMatch).toHaveBeenLastCalledWith(1); // Đào
+    });
+
+    it('matches decomposed labels and a typed accent against the base letter', () => {
+      const decomposed = setupLabels(['Bob', 'Ánh']);
+      decomposed.api.onKeyDown(key('a'));
+      expect(decomposed.onMatch).toHaveBeenLastCalledWith(1);
+      const typed = setupLabels(['Bob', 'Ángel']);
+      typed.api.onKeyDown(key('á'));
+      expect(typed.onMatch).toHaveBeenLastCalledWith(1);
+    });
+
+    it('folds letters Unicode does not decompose (ł, ø)', () => {
+      const {onMatch, api} = setupLabels(['Anna', 'Łukasz']);
+      api.onKeyDown(key('l'));
+      expect(onMatch).toHaveBeenLastCalledWith(1);
+      const nordic = setupLabels(['Eva', 'Øystein']);
+      nordic.api.onKeyDown(key('o'));
+      expect(nordic.onMatch).toHaveBeenLastCalledWith(1);
+    });
+
+    it.each(['en-US', 'vi-VN', 'pl-PL', 'sv-SE', 'tr-TR'])(
+      'folds the same way under the %s provider (INV17)',
+      locale => {
+        const reach = (
+          labels: ReadonlyArray<string>,
+          k: string,
+        ): number | undefined => {
+          const {onMatch, api} = setupLabels(labels, -1, locale);
+          api.onKeyDown(key(k));
+          return onMatch.mock.calls.at(-1)?.[0] as number | undefined;
+        };
+        expect(reach(['Bo', 'Åsa'], 'a')).toBe(1);
+        expect(reach(['Ana', 'Ñandú'], 'n')).toBe(1);
+        expect(reach(['Ana', 'Đào'], 'd')).toBe(1);
+        expect(reach(['Ana', 'Łódź'], 'l')).toBe(1);
+        expect(reach(['Ana', 'Ŧara'], 't')).toBe(1);
+        expect(reach(['Ana', 'Øystein'], 'o')).toBe(1);
+        expect(reach(['Ana', 'Ħamrun'], 'h')).toBe(1);
+        expect(reach(['Ana', 'Ƀorg'], 'b')).toBe(1);
+        expect(reach(['Ana', 'Isparta'], 'ı')).toBe(1);
+        expect(reach(['Ana', 'İzmir'], 'i')).toBe(1);
+        expect(reach(['Dung', 'Đào'], 'đ')).toBe(1);
+        expect(reach(['İzmir', 'Isparta'], 'ı')).toBe(1);
+        expect(reach(['Isparta', 'İzmir'], 'İ')).toBe(1);
+      },
+    );
+
+    it('keeps a combining mark typed after a letter (Thai tone mark, Devanagari anusvara)', () => {
+      const typeAll = (
+        labels: ReadonlyArray<string>,
+        keys: ReadonlyArray<string>,
+      ): number | undefined => {
+        const {onMatch, api} = setupLabels(labels);
+        keys.forEach(k => api.onKeyDown(key(k)));
+        return onMatch.mock.calls.at(-1)?.[0];
+      };
+      // ตั้ง over ตัด and ตั้งค่า: the tone mark tells them apart.
+      expect(
+        typeAll(
+          ['วาง', 'ตัด', 'ตั้งค่า'],
+          ['ต', String.fromCharCode(0x0e31), String.fromCharCode(0xe49), 'ง'],
+        ),
+      ).toBe(2);
+      // हिंद over हिम and हिंदी: the anusvara tells them apart.
+      expect(
+        typeAll(
+          ['हिम', 'हिंदी'],
+          ['ह', String.fromCharCode(0x93f), String.fromCharCode(0x902), 'द'],
+        ),
+      ).toBe(1);
+    });
+
+    it('counts an accent typed as its own key as one letter, and matches decomposed labels', () => {
+      const typeAll = (
+        labels: ReadonlyArray<string>,
+        keys: ReadonlyArray<string>,
+      ): number | undefined => {
+        const {onMatch, api} = setupLabels(labels);
+        keys.forEach(k => api.onKeyDown(key(k)));
+        return onMatch.mock.calls.at(-1)?.[0];
+      };
+      const acute = String.fromCharCode(0x301);
+      // a, U+0301, n over a composed label.
+      expect(typeAll(['Ada', 'Ánh'], ['a', acute, 'n'])).toBe(1);
+      // The same over a label stored decomposed (A, U+0301, n, h).
+      expect(typeAll(['Ada', 'A' + acute + 'nh'], ['a', acute, 'n'])).toBe(1);
+    });
+
+    it('ignores a key that is only a combining mark', () => {
+      const {onMatch, api} = setupLabels(['Anna', 'Bob']);
+      expect(api.onKeyDown(key(String.fromCharCode(0x301)))).toBe(false);
+      expect(onMatch).not.toHaveBeenCalled();
+    });
   });
 });

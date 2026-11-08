@@ -4,7 +4,7 @@
 
 /**
  * @file TouchDateField.tsx
- * @input Uses React, Field, BottomSheet, Button, Icon, Calendar hooks, MonthScroller, MonthYearWheels
+ * @input Uses React, Field, BottomSheet, Button, Icon, Calendar hooks, the resolved calendar, MonthScroller, MonthYearWheels
  * @output Exports TouchDateField — the touch surface behind DateInput
  * @position Internal component; consumed by DateInput.tsx
  *
@@ -38,6 +38,10 @@
  * 3. The title is the escape hatch. Tap it and the same box becomes a month
  *    wheel and a year wheel — a flick each to reach 2019 instead of forty.
  *
+ * Reset is chrome, so it sits in the header beside the arrows rather than in
+ * the footer: the footer is where the task ends, and an undo of equal weight
+ * beside Save is a mis-tap that throws away the date just chosen.
+ *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/DateInput/DateInput.tsx
  * - /packages/core/src/DateInput/DateInput.doc.mjs
@@ -54,7 +58,10 @@ import {
   useState,
   useTransition,
 } from 'react';
+import {flushSync} from 'react-dom';
+import {moveFocusLeftBehind, noteFocusWithin} from '../utils/focusReturn';
 import * as stylex from '@stylexjs/stylex';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {BottomSheet} from '../BottomSheet';
 import {Button} from '../Button';
 import {useCalendarConstraints} from '../Calendar';
@@ -69,12 +76,15 @@ import {
 } from '../Field';
 import {useInputStatusIcon, useMergedRefs} from '../hooks';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
+import {useToday} from '../hooks/useToday';
+import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {Icon} from '../Icon';
 import {IconButton} from '../IconButton';
-import {useTranslator} from '../i18n';
+import {useLocale} from '../i18n';
 import {useInputGroup} from '../InputGroup';
-import {groupStyles} from '../InputGroup/groupStyles';
-import {stableClassName} from '../naming';
+import {useFieldInputStyling} from '../Field/fieldParts';
+import {joinAriaIDs} from '../utils/inputAria';
+import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useSize} from '../SizeContext';
 import {Spinner} from '../Spinner';
 import {
@@ -98,29 +108,48 @@ import {
   mergeProps,
   rtlStyles,
   themeProps,
-  formatSharedDate,
   plainDateFromISO,
+  plainDateIsEqual,
+  plainDateToISO,
   plainDateToday,
-  plainDateFormat,
-  DATE_FORMAT_MONTH_YEAR,
-  DATE_FORMAT_WEEKDAY_ONLY,
   type ISODateString,
 } from '../utils';
+import {useCalendarSystem} from '../i18n/useCalendarSystem';
+import {
+  calendarDayOfMonth,
+  formatCalendarMonthLabel,
+} from '../utils/calendarSystem';
+import {formatCalendarDateText} from '../utils/calendarDateParser';
+import {chainEventHandlers} from '../utils/chainEventHandlers';
+import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
+import {usePressFeedback} from '../hooks/usePressFeedback';
 import {normalizeDayOfWeek} from '../utils/dateTypes';
+import {getWeekdayHeaders} from '../Calendar/getWeekdayHeaderNames';
+import {useTouchPresentation} from '../utils/touchPresentation';
 import {MonthScroller, type MonthScrollerHandle} from './MonthScroller';
 import {MonthYearWheels} from './MonthYearWheels';
 import {
   DEFAULT_MONTH_REACH,
   clampIndex,
-  fromMonthIndex,
-  monthIndexOf,
+  createMonthModel,
+  dateInMonth,
 } from './monthGeometry';
 import {dateInputTouchSizes, dateInputTouchGeometry} from './tokens.stylex';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/DateInput/TouchDateField.generated';
+
+// The month math needs a date before today is known (server render,
+// hydration). The sheet's content, which shows the month, waits for today.
+const UNKNOWN_TODAY_STAND_IN = plainDateFromISO('1970-01-01');
+
+registerEnglishFallback(english);
 
 /**
- * The comfortable minimum tap target on both iOS and Android. Applied as a
- * FLOOR under the size prop rather than replacing it: `size` still means what
- * it means, it just cannot produce a control a thumb misses.
+ * The comfortable minimum tap target on both iOS and Android, honoured by
+ * every target inside the sheet.
  */
 const TOUCH_TARGET = dateInputTouchSizes.daySize;
 
@@ -147,17 +176,14 @@ const sizeStyles = stylex.create({
   sm: {
     height: sizeVars['--size-element-sm'],
     minWidth: 180,
-    minBlockSize: {default: null, '@media (pointer: coarse)': TOUCH_TARGET},
   },
   md: {
     height: sizeVars['--size-element-md'],
     minWidth: 180,
-    minBlockSize: {default: null, '@media (pointer: coarse)': TOUCH_TARGET},
   },
   lg: {
     height: sizeVars['--size-element-lg'],
     minWidth: 180,
-    minBlockSize: {default: null, '@media (pointer: coarse)': TOUCH_TARGET},
   },
 });
 
@@ -193,10 +219,14 @@ const styles = stylex.create({
     padding: 0,
     fontFamily: typographyVars['--font-family-body'],
     // Below 16px iOS zooms the page on focus. The field is focusable even
-    // though it is not typable, so it needs the same floor DateInput has.
+    // though it is not typable, so it needs the same floor DateInput has —
+    // keyed to iOS alone, since only iOS WebKit implements
+    // -webkit-touch-callout.
     fontSize: {
       default: typeScaleVars['--text-body-size'],
-      '@media (pointer: coarse)': `max(1rem, ${typeScaleVars['--text-body-size']})`,
+      '@media (pointer: coarse)': {
+        '@supports (-webkit-touch-callout: none)': `max(1rem, ${typeScaleVars['--text-body-size']})`,
+      },
     },
     lineHeight: typeScaleVars['--text-body-leading'],
     color: colorVars['--color-text-primary'],
@@ -282,7 +312,7 @@ const styles = stylex.create({
   /**
    * `Button`'s own sizes top out at 36px, which is fine for a mouse and short
    * of the 44px every other target in this sheet honours. Floor it on a
-   * coarse pointer, the same way the field and the day cells do.
+   * coarse pointer, the same way the day cells do.
    */
   monthArrow: {
     minBlockSize: {default: null, '@media (pointer: coarse)': TOUCH_TARGET},
@@ -296,6 +326,37 @@ const styles = stylex.create({
    */
   monthArrowIcon: {
     display: 'inline-flex',
+  },
+  /**
+   * Reset, past the arrows. It fades on their timing for their reason: the
+   * plate starts below the header, so the two of them are what the layer
+   * above cannot cover, and they have to leave together.
+   */
+  headerReset: {
+    display: 'flex',
+    alignItems: 'center',
+    transitionProperty: 'opacity, visibility',
+    transitionDuration: SWAP_DURATION,
+    transitionTimingFunction: 'linear',
+    '@media (prefers-reduced-motion: reduce)': {
+      transitionDuration: '0.01s',
+    },
+  },
+  headerResetHidden: {
+    visibility: 'hidden',
+    opacity: 0,
+    pointerEvents: 'none',
+  },
+  /**
+   * The same 44px floor the arrows take. `Button`'s `sm` is 32px, which is
+   * fine beside a mouse and short of what every other target in this sheet
+   * honours.
+   */
+  resetButton: {
+    minBlockSize: {
+      default: sizeVars['--size-element-sm'],
+      '@media (pointer: coarse)': TOUCH_TARGET,
+    },
   },
   /**
    * The month and year, and the toggle into the wheels. Leading, so it reads
@@ -313,15 +374,7 @@ const styles = stylex.create({
     borderWidth: 0,
     borderStyle: 'none',
     borderRadius: radiusVars['--radius-element'],
-    backgroundColor: {
-      default: 'transparent',
-      '@media (hover: hover)': {
-        default: 'transparent',
-        ':hover:where(:not(:disabled,[aria-disabled="true"]))':
-          colorVars['--color-overlay-hover'],
-      },
-      ':active': colorVars['--color-overlay-pressed'],
-    },
+    backgroundColor: 'transparent',
     color: colorVars['--color-text-primary'],
     fontSize: typeScaleVars['--text-large-size'],
     fontWeight: fontWeightVars['--font-weight-semibold'],
@@ -330,9 +383,19 @@ const styles = stylex.create({
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
     whiteSpace: 'nowrap',
+    // The header now ends with Reset, so the title is the part that gives:
+    // it ellipses rather than pushing the corner off a narrow screen.
+    minInlineSize: 0,
+    overflow: 'hidden',
+  },
+  titleText: {
+    minInlineSize: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   },
   titleChevron: {
     display: 'inline-flex',
+    flexShrink: 0,
     // The one part of the swap that keeps `--ease-standard`, because it is
     // the one part that travels: a rotation has a distance to cover, and
     // fast-out-slow-in is what that curve is for. Same duration as the
@@ -479,24 +542,20 @@ const styles = stylex.create({
   },
   /**
    * One footer action. Both occupy the same cell, and the wheels' one is a
-   * layer over the calendar's pair exactly as the panels above are. The row
+   * layer over the calendar's, exactly as the panels above are. The row
    * never changes height either way.
    */
   footerAction: {
     gridArea: '1 / 1',
-    // Side by side and equal: the calendar's cell holds Reset and Save, the
-    // wheels' holds one button. `1fr` each rather than content width, so
-    // neither label's length decides how the row is divided.
+    // One button per surface, filling the row: Save on the calendar, Done on
+    // the wheels.
     display: 'flex',
-    gap: spacingVars['--spacing-2'],
   },
   sheetBody: {
-    // One inset on every edge. The block-start is the exception and has to
-    // be: the sheet's grab handle floats out of flow, costing no layout
-    // height of its own, so the content wrapper owes it the 24px it occupies
-    // — which reads as the same inset, because the handle sits in it.
+    // One inset on every edge but the top: BottomSheet keeps the band under
+    // its grab bar, which reads as the same inset because the bar sits in it.
     paddingInline: spacingVars['--spacing-4'],
-    paddingBlockStart: spacingVars['--spacing-6'],
+    paddingBlockStart: 0,
     paddingBlockEnd: spacingVars['--spacing-4'],
   },
   divider: {
@@ -537,21 +596,44 @@ export function TouchDateField({
   numberOfMonths: _numberOfMonths,
   weekStartsOn: weekStartsOnProp = 0,
   format = 'date_long',
+  calendar: calendarProp,
   width,
-  xstyle,
-  className,
-  style,
+  containerXstyle,
+  containerClassName,
+  containerStyle,
+  controlXstyle,
+  controlClassName,
+  controlStyle,
   ref,
-  ...rest
+  ...restProps
 }: DateInputProps) {
-  const t = useTranslator();
+  const {rest, container} = useFieldInputStyling('DateInput', restProps, {
+    containerXstyle,
+    containerClassName,
+    containerStyle,
+  });
+  const {
+    id: idProp,
+    'aria-describedby': ariaDescribedByProp,
+    'aria-labelledby': ariaLabelledByProp,
+    onClick: onClickProp,
+    onKeyDown: onKeyDownProp,
+    ...controlProps
+  } = rest;
+  const pressable = usePressFeedback();
+  const t = useComponentTranslator();
+  const locale = useLocale();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const placeholder =
     placeholderFromProps ?? t('@astryx.dateInput.placeholder');
   const size = useSize(sizeProp, 'md');
   const weekStartsOn = normalizeDayOfWeek(weekStartsOnProp);
+  const calendar = useCalendarSystem(calendarProp, 'DateInput');
+  const monthModel = useMemo(() => createMonthModel(calendar), [calendar]);
 
-  const id = useId();
+  const generatedID = useId();
+  const id = idProp ?? generatedID;
+  const fieldLabelID = useId();
   const inputLabelID = useId();
   const descriptionID = useId();
   const statusMessageID = useId();
@@ -564,11 +646,11 @@ export function TouchDateField({
   const isBusy = isLoading || optimisticValue !== value;
   const isEffectivelyDisabled = isDisabled || isBusy;
 
-  // Disabled-reason tooltip, same contract as DateInput: a disabled control
-  // swallows pointer events, so the listeners attach to the wrapper and the
-  // input stays focusable via aria-disabled rather than the disabled
-  // attribute. Only the persistent disabled state surfaces a reason, never
-  // the transient busy one.
+  // Same contract as DateInput: a disabled or busy field never renders native
+  // `disabled` (spec:AST-085 FR1); the input stays focusable via
+  // aria-disabled. The disabled-reason tooltip's listeners attach to the
+  // wrapper. Only the persistent disabled state surfaces a reason, never the
+  // transient busy one.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
   const disabledMessageTooltip = useTooltip({
     placement: 'above',
@@ -592,15 +674,29 @@ export function TouchDateField({
       statusVariant !== 'tooltip' && status?.message ? statusMessageID : null,
       statusTooltipDescribedBy,
       showsDisabledMessage ? disabledMessageTooltip.describedBy : null,
+      ariaDescribedByProp,
     ],
     inputGroup,
   );
 
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const sheetBodyRef = useRef<HTMLDivElement | null>(null);
+  // The busy Spinner is decorative; this control announces its busy start
+  // (spec:AST-086 FR8). A date picked under a pending changeAction starts it
+  // while the modal sheet is open, so it is announced from inside the sheet.
+  useBusyAnnouncement(
+    isBusy,
+    t('@astryx.spinner.loading'),
+    isSheetOpen ? sheetBodyRef : inputRef,
+  );
   const [isWheelOpen, setIsWheelOpen] = useState(false);
   const scrollerHandleRef = useRef<MonthScrollerHandle | null>(null);
+  const previousArrowRef = useRef<HTMLButtonElement | null>(null);
+  const nextArrowRef = useRef<HTMLButtonElement | null>(null);
+  const monthYearButtonRef = useRef<HTMLButtonElement | null>(null);
   // Pending focus handoff from the clear button; see handleClear.
   const clearFocusTimerRef = useRef<number | null>(null);
+  // Releases the focus timer on unmount.
   useEffect(
     () => () => {
       if (clearFocusTimerRef.current != null) {
@@ -610,7 +706,9 @@ export function TouchDateField({
     [],
   );
 
-  const today = useMemo(() => plainDateToday(), []);
+  // Unknown on the server and while hydrating. The sheet's content waits for
+  // it, so hydration matches the server markup.
+  const today = useToday();
   const selectedDate = useMemo(
     () =>
       optimisticValue != null && /^\d{4}-\d{2}-\d{2}$/.test(optimisticValue)
@@ -620,78 +718,80 @@ export function TouchDateField({
   );
 
   // The reachable range. Explicit bounds win; otherwise the scroller reaches a
-  // century in each direction from wherever it opened. Anchored once, in a
-  // state initializer: recomputing it as the selection moves would shift every
-  // pane's scroll offset under the user mid-gesture.
-  const [anchorMonthIndex] = useState(() =>
-    monthIndexOf(
-      value != null && /^\d{4}-\d{2}-\d{2}$/.test(value)
-        ? plainDateFromISO(value)
-        : plainDateToday(),
-    ),
+  // century in each direction from wherever it opened. It is anchored once:
+  // recomputing it as the selection moves would shift every pane's scroll
+  // offset under the user mid-gesture.
+  // Indexes belong to the calendar, so DateInput remounts this surface when
+  // the calendar changes.
+  // Without a value, the sheet opens on today's month. A hydrated sheet stores
+  // that month in the first render that knows today. Then a later render after
+  // a month-end midnight does not move an open sheet.
+  const [anchoredMonthIndex, setAnchoredMonthIndex] = useState<number | null>(
+    () => {
+      const opening =
+        value != null && /^\d{4}-\d{2}-\d{2}$/.test(value)
+          ? plainDateFromISO(value)
+          : today;
+      return opening == null ? null : monthModel.indexOf(opening);
+    },
   );
+  if (anchoredMonthIndex == null && today != null) {
+    setAnchoredMonthIndex(monthModel.indexOf(today));
+  }
+  const anchorMonthIndex =
+    anchoredMonthIndex ?? monthModel.indexOf(today ?? UNKNOWN_TODAY_STAND_IN);
   const minMonthIndex =
     min != null
-      ? monthIndexOf(plainDateFromISO(min))
+      ? monthModel.indexOf(plainDateFromISO(min))
       : anchorMonthIndex - DEFAULT_MONTH_REACH;
   const maxMonthIndex =
     max != null
-      ? monthIndexOf(plainDateFromISO(max))
+      ? monthModel.indexOf(plainDateFromISO(max))
       : anchorMonthIndex + DEFAULT_MONTH_REACH;
 
-  const [monthIndex, setMonthIndex] = useState(() =>
-    clampIndex(anchorMonthIndex, minMonthIndex, maxMonthIndex),
+  // Set once the person moves the month; until then the opening month.
+  const [chosenMonthIndex, setMonthIndex] = useState<number | null>(() =>
+    anchoredMonthIndex == null
+      ? null
+      : clampIndex(anchoredMonthIndex, minMonthIndex, maxMonthIndex),
   );
+  const monthIndex =
+    chosenMonthIndex ??
+    clampIndex(anchorMonthIndex, minMonthIndex, maxMonthIndex);
 
-  const {year, month} = fromMonthIndex(monthIndex);
-
-  /**
-   * Three-letter weekday names — "Sun", not Calendar's "Su".
-   *
-   * The sheet is full width and the columns are ~51px, so there is room for
-   * the form people actually read, and a picker operated by thumb should not
-   * make anyone decode "Tu" against "Th".
-   *
-   * This is CLDR's `abbreviated` width, which `Intl` produces natively — no
-   * truncation, so the 28 non-English locales stay correct rather than being
-   * sliced to three characters. (Verified against the CLDR tables for all 30
-   * locales in the catalog.) Calendar's 2-letter row is CLDR's *short* width,
-   * which `Intl` cannot express, which is exactly why that surface needs a
-   * generated table and this one does not.
-   *
-   * Built here rather than taken from `useCalendarDays`, which supplies the
-   * short form for Calendar's own header. The rotation matches: day 4 of
-   * January 1970 was a Sunday, so offsetting from it by `weekStartsOn` walks
-   * the week in the same order the panes lay out their columns.
-   */
-  const dayNames = useMemo(
-    () =>
-      Array.from({length: 7}, (_, offset) =>
-        plainDateFormat(
-          {year: 1970, month: 1, day: 4 + ((weekStartsOn + offset) % 7)},
-          DATE_FORMAT_WEEKDAY_ONLY,
-        ),
-      ),
-    [weekStartsOn],
+  const weekdayHeaders = useMemo(
+    () => getWeekdayHeaders(locale, weekStartsOn),
+    [locale, weekStartsOn],
   );
-  const monthYearLabel = plainDateFormat(
-    {year, month, day: 1},
-    DATE_FORMAT_MONTH_YEAR,
+  // The day the picker keeps: the selected date's day of its month. A month
+  // with an era change takes its heading era from this day.
+  const keptDay =
+    selectedDate == null ? 1 : calendarDayOfMonth(calendar, selectedDate);
+  const monthYearLabel = formatCalendarMonthLabel(
+    calendar,
+    monthModel.monthAt(monthIndex),
+    locale,
+    keptDay,
   );
 
   // Formats the committed value only. A function format is called with the ISO
-  // value; a named one reuses Timestamp's shared date mapping, so the same
-  // literal renders the same shape here and on the desktop control.
+  // value; a named one writes the date in the calendar exactly as the desktop
+  // control commits it.
   const displayValue =
     optimisticValue != null && /^\d{4}-\d{2}-\d{2}$/.test(optimisticValue)
       ? typeof format === 'function'
         ? format(optimisticValue)
-        : formatSharedDate(plainDateFromISO(optimisticValue), format)
+        : formatCalendarDateText(
+            plainDateFromISO(optimisticValue),
+            format,
+            locale,
+            calendar,
+          )
       : '';
 
   const fireChange = useCallback(
     (newValue: ISODateString | undefined) => {
-      if (isBusy) {
+      if (isEffectivelyDisabled) {
         return;
       }
       onChange?.(newValue);
@@ -702,7 +802,13 @@ export function TouchDateField({
         });
       }
     },
-    [isBusy, onChange, changeAction, startTransition, setOptimisticValue],
+    [
+      isEffectivelyDisabled,
+      onChange,
+      changeAction,
+      startTransition,
+      setOptimisticValue,
+    ],
   );
 
   const openSheet = useCallback(() => {
@@ -760,8 +866,13 @@ export function TouchDateField({
    * value is still cleared either way — that half never depends on the range.
    */
   const handleResetInSheet = useCallback(() => {
+    // Disabled: reject the entire reset without closing or moving focus.
+    // Busy-only fields keep month navigation; fireChange blocks the clear.
+    if (isDisabled) {
+      return;
+    }
     fireChange(undefined);
-    const currentMonth = monthIndexOf(today);
+    const currentMonth = monthModel.indexOf(plainDateToday());
     if (currentMonth < minMonthIndex || currentMonth > maxMonthIndex) {
       return;
     }
@@ -770,7 +881,14 @@ export function TouchDateField({
     }
     setMonthIndex(currentMonth);
     scrollerHandleRef.current?.scrollToMonth(currentMonth, 'smooth');
-  }, [fireChange, today, monthIndex, minMonthIndex, maxMonthIndex]);
+  }, [
+    isDisabled,
+    fireChange,
+    monthModel,
+    monthIndex,
+    minMonthIndex,
+    maxMonthIndex,
+  ]);
 
   // Selection commits on the tap and leaves the sheet up, so a mistake can be
   // corrected in place and a nearby date reconsidered without reopening.
@@ -810,13 +928,81 @@ export function TouchDateField({
     [monthIndex, minMonthIndex, maxMonthIndex],
   );
 
+  // An arrow at the range end hides, and a hidden element loses focus. So
+  // when a move to `target` hides the focused arrow, focus moves to the other
+  // arrow, or to the month-and-year button when both hide. The move renders
+  // first, because in a two-month range the other arrow is hidden until then.
+  const moveMonth = useCallback(
+    (target: number, move: () => void) => {
+      const previousHides = target <= minMonthIndex;
+      const nextHides = target >= maxMonthIndex;
+      const previousArrow = previousArrowRef.current;
+      const nextArrow = nextArrowRef.current;
+      const focusOnPrevious = previousHides
+        ? noteFocusWithin(previousArrow)
+        : null;
+      const focusOnNext = nextHides ? noteFocusWithin(nextArrow) : null;
+      const focusOnArrow = focusOnPrevious ?? focusOnNext;
+      if (focusOnArrow == null) {
+        move();
+        return;
+      }
+      // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the other arrow must be shown before it can take focus
+      flushSync(move);
+      const isOnPrevious = focusOnPrevious != null;
+      const otherArrowHides = isOnPrevious ? nextHides : previousHides;
+      const destination = otherArrowHides
+        ? monthYearButtonRef.current
+        : isOnPrevious
+          ? nextArrowRef.current
+          : previousArrowRef.current;
+      moveFocusLeftBehind(
+        focusOnArrow,
+        destination,
+        isOnPrevious ? previousArrow : nextArrow,
+      );
+    },
+    [minMonthIndex, maxMonthIndex],
+  );
+
+  const stepMonthFromArrow = useCallback(
+    (delta: -1 | 1) => {
+      const target = clampIndex(
+        monthIndex + delta,
+        minMonthIndex,
+        maxMonthIndex,
+      );
+      moveMonth(target, () => stepMonth(delta));
+    },
+    [monthIndex, minMonthIndex, maxMonthIndex, moveMonth, stepMonth],
+  );
+
   // A wheel commit steers the scroller immediately, even though it is behind
   // the wheels: it keeps its layout box while hidden, so by the time the
-  // wheels close it is already resting on the new month.
-  const handleWheelChange = useCallback((next: number) => {
-    setMonthIndex(next);
-    scrollerHandleRef.current?.scrollToMonth(next, 'auto');
-  }, []);
+  // wheels close it is already resting on the new month. Under a finger,
+  // UIDatePicker moves a chosen date with these wheels
+  // (datePicker.calendar.monthYearWheels.changesDate).
+  const {isTouch} = useTouchPresentation();
+  const handleWheelChange = useCallback(
+    (next: number) => {
+      setMonthIndex(next);
+      scrollerHandleRef.current?.scrollToMonth(next, 'auto');
+      if (!isTouch || selectedDate == null) {
+        return;
+      }
+      const moved = dateInMonth(
+        monthModel,
+        selectedDate,
+        next,
+        min != null ? plainDateFromISO(min) : null,
+        max != null ? plainDateFromISO(max) : null,
+      );
+      if (!plainDateIsEqual(moved, selectedDate) && !isDateDisabled(moved)) {
+        fireChange(plainDateToISO(moved));
+      }
+    },
+    [isTouch, selectedDate, monthModel, min, max, isDateDisabled, fireChange],
+  );
 
   /**
    * The calendar reports the month it has scrolled to — but only while it is
@@ -841,9 +1027,10 @@ export function TouchDateField({
       if (isWheelOpen) {
         return;
       }
-      setMonthIndex(next);
+      // A swipe to the range end hides an arrow, as a press does.
+      moveMonth(next, () => setMonthIndex(next));
     },
-    [isWheelOpen],
+    [isWheelOpen, moveMonth],
   );
 
   /**
@@ -903,6 +1090,7 @@ export function TouchDateField({
     <div {...stylex.props(styles.surface)}>
       <div {...stylex.props(styles.header)}>
         <button
+          ref={monthYearButtonRef}
           type="button"
           onClick={() => setIsWheelOpen(open => !open)}
           aria-expanded={isWheelOpen}
@@ -918,8 +1106,13 @@ export function TouchDateField({
           // restyle the header button. Adding a target later is additive;
           // withdrawing one is not.
           data-title="month-year"
-          {...stylex.props(styles.title, focusOutlineStyles.focusVisible)}>
-          <span>{monthYearLabel}</span>
+          {...pressable}
+          {...stylex.props(
+            styles.title,
+            interactionOverlayStyles.backgroundColor,
+            focusOutlineStyles.focusVisible,
+          )}>
+          <span {...stylex.props(styles.titleText)}>{monthYearLabel}</span>
           <Icon
             icon="chevronDown"
             size="sm"
@@ -957,8 +1150,9 @@ export function TouchDateField({
               styles.monthArrow,
               !canStepBack && styles.monthArrowUnavailable,
             ]}
+            ref={previousArrowRef}
             isDisabled={!canStepBack}
-            onClick={() => stepMonth(-1)}
+            onClick={() => stepMonthFromArrow(-1)}
             label={t('@astryx.calendar.previousMonth')}
             icon={
               <span {...stylex.props(styles.monthArrowIcon, rtlStyles.mirror)}>
@@ -973,14 +1167,36 @@ export function TouchDateField({
               styles.monthArrow,
               !canStepForward && styles.monthArrowUnavailable,
             ]}
+            ref={nextArrowRef}
             isDisabled={!canStepForward}
-            onClick={() => stepMonth(1)}
+            onClick={() => stepMonthFromArrow(1)}
             label={t('@astryx.calendar.nextMonth')}
             icon={
               <span {...stylex.props(styles.monthArrowIcon, rtlStyles.mirror)}>
                 <Icon icon="chevronRight" size="sm" color="inherit" />
               </span>
             }
+          />
+        </span>
+        {/* Reset, past the arrows, and gone with them on the wheels: the
+            wheels choose a month, and there is no date there to put back.
+            Hidden rather than unmounted, for the arrows' reason — the corner
+            keeps its size, so the header cannot change height mid-swap. */}
+        <span
+          data-action="reset"
+          inert={isWheelOpen ? true : undefined}
+          {...stylex.props(
+            styles.headerReset,
+            isWheelOpen && styles.headerResetHidden,
+          )}>
+          <Button
+            // ghost: a filled button up here would outrank the Save that
+            // finishes the task.
+            variant="ghost"
+            size="sm"
+            xstyle={styles.resetButton}
+            label={t('@astryx.dateInput.resetPicking')}
+            onClick={handleResetInSheet}
           />
         </span>
       </div>
@@ -994,8 +1210,8 @@ export function TouchDateField({
           styles.weekdays,
           isWheelOpen && styles.weekdaysHidden,
         )}>
-        {dayNames.map(name => (
-          <div key={name} {...stylex.props(styles.weekday)}>
+        {weekdayHeaders.map(({dayOfWeek, name}) => (
+          <div key={dayOfWeek} {...stylex.props(styles.weekday)}>
             {name}
           </div>
         ))}
@@ -1017,6 +1233,7 @@ export function TouchDateField({
           <MonthScroller
             key={`${minMonthIndex}:${maxMonthIndex}`}
             handleRef={scrollerHandleRef}
+            monthModel={monthModel}
             minMonthIndex={minMonthIndex}
             maxMonthIndex={maxMonthIndex}
             initialMonthIndex={monthIndex}
@@ -1037,7 +1254,9 @@ export function TouchDateField({
             !isWheelOpen && styles.panelOverlayHidden,
           )}>
           <MonthYearWheels
+            monthModel={monthModel}
             monthIndex={monthIndex}
+            keptDay={keptDay}
             minMonthIndex={minMonthIndex}
             maxMonthIndex={maxMonthIndex}
             onChange={handleWheelChange}
@@ -1078,13 +1297,6 @@ export function TouchDateField({
             isWheelOpen && styles.panelBeneathHidden,
           )}>
           <Button
-            variant="secondary"
-            size="md"
-            width="100%"
-            label={t('@astryx.dateInput.resetPicking')}
-            onClick={handleResetInSheet}
-          />
-          <Button
             variant="primary"
             // md, not sm: it is the action a thumb reaches for, so it gets
             // the comfortable size rather than the compact one the header's
@@ -1124,7 +1336,7 @@ export function TouchDateField({
         // Gated internally by isEnabled, so attaching unconditionally is safe.
         disabledMessageTooltip.ref(el);
       }}
-      {...rest}
+      {...(inputGroup ? inputGroupItemProps : undefined)}
       {...mergeProps(
         themeProps('date-input', {
           size,
@@ -1133,25 +1345,30 @@ export function TouchDateField({
         }),
         stylex.props(
           inputWrapperStyles.base,
+          inputWrapperStyles.textField,
           sizeStyles[size],
           styles.wrapper,
-          isEffectivelyDisabled && inputWrapperStyles.disabled,
+          // Disabled paint belongs to the disabled state only; a busy field
+          // keeps its ordinary paint and shows the Spinner (spec:AST-085
+          // FR6, family:buttons FR4).
+          isDisabled && inputWrapperStyles.disabled,
+          isEffectivelyDisabled && inputDisabledFocusStyles.inputFocusRing,
           status && inputStatusBorderStyles[status.type],
           status &&
             !isEffectivelyDisabled &&
             inputStatusHoverShadowStyles[status.type],
           status && inputStatusFocusWithinStyles[status.type],
           inputGroup && groupStyles.inGroup,
-          xstyle,
+          controlXstyle,
         ),
-        className,
-        style,
+        controlClassName,
+        controlStyle,
       )}>
       {inputGroup && <VisuallyHidden id={inputLabelID}>{label}</VisuallyHidden>}
       <button
         type="button"
         onClick={openSheet}
-        disabled={isEffectivelyDisabled}
+        aria-disabled={isEffectivelyDisabled || undefined}
         aria-label={t('@astryx.dateInput.openCalendar')}
         tabIndex={-1}
         {...stylex.props(
@@ -1169,6 +1386,7 @@ export function TouchDateField({
         />
       </button>
       <input
+        {...controlProps}
         ref={mergedInputRef}
         id={id}
         type="text"
@@ -1181,12 +1399,19 @@ export function TouchDateField({
         readOnly
         inputMode="none"
         onChange={() => {}}
-        onClick={openSheet}
-        onKeyDown={handleInputKeyDown}
+        onClick={
+          isEffectivelyDisabled
+            ? undefined
+            : chainEventHandlers(openSheet, onClickProp)
+        }
+        onKeyDown={chainEventHandlers(handleInputKeyDown, onKeyDownProp)}
         placeholder={placeholder}
-        disabled={isEffectivelyDisabled && !showsDisabledMessage}
-        aria-disabled={showsDisabledMessage ? 'true' : undefined}
-        aria-labelledby={ariaLabelledBy}
+        aria-disabled={isEffectivelyDisabled ? 'true' : undefined}
+        aria-labelledby={
+          ariaLabelledByProp != null
+            ? joinAriaIDs(ariaLabelledBy ?? fieldLabelID, ariaLabelledByProp)
+            : ariaLabelledBy
+        }
         aria-describedby={ariaDescribedBy}
         aria-required={isEffectivelyRequired ? 'true' : undefined}
         aria-invalid={status?.type === 'error' ? 'true' : undefined}
@@ -1204,10 +1429,9 @@ export function TouchDateField({
         <InputClearButton
           label={t('@astryx.dateInput.clear', {label})}
           onClick={handleClear}
-          iconClassName={stableClassName('date-input-clear-icon')}
         />
       )}
-      {isBusy && <Spinner size="sm" />}
+      {isBusy && <Spinner size="sm" aria-hidden="true" />}
       {statusIcon}
       <BottomSheet
         isOpen={isSheetOpen}
@@ -1215,8 +1439,13 @@ export function TouchDateField({
         label={t('@astryx.dateInput.dialogLabel')}
         // The picker is a fixed height by construction, so the sheet should be
         // exactly as tall as it is rather than claiming a viewport budget.
-        height="hug">
-        <div {...stylex.props(styles.sheetBody)}>{surface}</div>
+        height="hug"
+        // sheetBody owns the inset; the sheet keeps the band under its grab
+        // bar.
+        padding={0}>
+        <div ref={sheetBodyRef} {...stylex.props(styles.sheetBody)}>
+          {today != null && surface}
+        </div>
       </BottomSheet>
       {showsDisabledMessage &&
         disabledMessageTooltip.renderTooltip(disabledMessage)}
@@ -1229,10 +1458,12 @@ export function TouchDateField({
 
   return (
     <Field
+      {...container}
       label={label}
       isLabelHidden={isLabelHidden}
       description={description}
       inputID={id}
+      labelID={ariaLabelledByProp != null ? fieldLabelID : undefined}
       descriptionID={description ? descriptionID : undefined}
       isOptional={isOptional}
       isRequired={isRequired}

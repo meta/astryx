@@ -9,7 +9,9 @@
  * @position Package entry point for Resizable
  */
 
+export {percent} from './utils';
 export {useResizable} from './useResizable';
+export type {ResizablePercentSize, ResizableSize} from './utils';
 export type {
   ResizableRegion,
   ResizableRegionConfig,

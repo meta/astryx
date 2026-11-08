@@ -278,24 +278,28 @@ export const SizeComparison: Story = {
         }}>
         <CheckboxInput
           label="Medium size (default)"
+          data-testid="checkbox-md"
           value={value1}
           onChange={setValue1}
           size="md"
         />
         <CheckboxInput
           label="Small size"
+          data-testid="checkbox-sm"
           value={value2}
           onChange={setValue2}
           size="sm"
         />
         <CheckboxInput
           label="Medium size checked"
+          data-testid="checkbox-md"
           value={value3}
           onChange={setValue3}
           size="md"
         />
         <CheckboxInput
           label="Small size checked"
+          data-testid="checkbox-sm"
           value={value4}
           onChange={setValue4}
           size="sm"
@@ -539,12 +543,12 @@ export const ThemedIndicator: Story = {
   ),
 };
 
-// Restyling without replacing: the indicator renders the `checkbox` theme
-// target, so ordinary component overrides reach it.
+// Restyling without replacing: the indicator renders the
+// `checkbox-indicator` theme target, so ordinary component overrides reach it.
 const roundCheckboxTheme = defineTheme({
   name: 'checkbox-round-demo',
   components: {
-    checkbox: {
+    'checkbox-indicator': {
       base: {borderRadius: 'var(--radius-full)'},
       checked: {
         backgroundColor: 'var(--color-positive)',
@@ -563,4 +567,42 @@ export const ThemedCheckboxTarget: Story = {
       </div>
     </Theme>
   ),
+};
+
+export const PressedState: Story = {
+  name: 'Pressed state',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Press and hold an enabled row to paint the system's `--color-overlay-pressed` layer on its indicator. Checked and unchecked indicators both respond; the disabled example remains visually unchanged.",
+      },
+    },
+  },
+  render: () => {
+    const [unchecked, setUnchecked] = useState<boolean | 'indeterminate'>(
+      false,
+    );
+    const [checked, setChecked] = useState<boolean | 'indeterminate'>(true);
+    return (
+      <div style={{display: 'flex', flexDirection: 'column', gap: 12}}>
+        <CheckboxInput
+          label="Unchecked — press and hold"
+          value={unchecked}
+          onChange={setUnchecked}
+        />
+        <CheckboxInput
+          label="Checked — press and hold"
+          value={checked}
+          onChange={setChecked}
+        />
+        <CheckboxInput
+          label="Disabled — no pressed state"
+          value={false}
+          onChange={() => {}}
+          isDisabled
+        />
+      </div>
+    );
+  },
 };

@@ -1,5 +1,19 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/** @type {import('@astryxdesign/cli/authoring').ComponentAnatomyElement[]} */
+const anatomy = [
+  {
+    name: 'Section container',
+    required: true,
+    description: 'Painted container that groups a page region.',
+  },
+  {
+    name: 'Consumer content',
+    required: false,
+    description: 'Caller-provided content rendered inside the section container.',
+  },
+];
+
 /** @type {import('@astryxdesign/cli/authoring').ComponentDoc} */
 
 export const docs = {
@@ -99,6 +113,7 @@ export const docs = {
     ],
   },
   usage: {
+    anatomy,
     description:
       'Section is the correct way to create page regions and group related content on a page. Use it for settings groups, form sections, sidebar areas, or any time you need visual separation between parts of a page. If you are tempted to use a Card for a page section, use Section instead.',
     bestPractices: [
@@ -107,8 +122,28 @@ export const docs = {
       { guidance: true, description: 'Add dividers between same-background sections that need separation.' },
       { guidance: true, description: 'Combine with a heading + Stack for a typical page section pattern.' },
       { guidance: false, description: 'Use Card when you mean Section. Cards are for discrete items (one notification, one profile). Sections are for page regions.' },
+      { guidance: true, description: "To center a Section, set marginInlineStart and marginInlineEnd to 'auto' in xstyle. If Astryx source is compiled in your app's own StyleX pass, the marginInline shorthand loses to Section's own inline margins." },
     ],
   },
+  examples: [
+    {
+      label: 'Center a Section with a maximum width',
+      code: `import * as stylex from '@stylexjs/stylex';
+import {Section} from '@astryxdesign/core/Section';
+
+const styles = stylex.create({
+  centered: {marginInlineStart: 'auto', marginInlineEnd: 'auto'},
+});
+
+function Page({children}: {children: React.ReactNode}) {
+  return (
+    <Section maxWidth={1280} xstyle={styles.centered}>
+      {children}
+    </Section>
+  );
+}`,
+    },
+  ],
 };
 
 /** @type {import('@astryxdesign/cli/authoring').ComponentDoc} */
@@ -206,6 +241,7 @@ export const docsZh = {
     ],
   },
   usage: {
+    anatomy,
     description:
       'Section is the correct way to create page regions and group related content on a page. Use it for settings groups, form sections, sidebar areas, or any time you need visual separation between parts of a page. If you are tempted to use a Card for a page section, use Section instead.',
     bestPractices: [
@@ -214,6 +250,7 @@ export const docsZh = {
       { guidance: true, description: 'Add dividers between same-background sections that need separation.' },
       { guidance: true, description: 'Combine with a heading + Stack for a typical page section pattern.' },
       { guidance: false, description: 'Use Card when you mean Section. Cards are for discrete items (one notification, one profile). Sections are for page regions.' },
+      { guidance: true, description: '要让 Section 居中，在 xstyle 中把 marginInlineStart 和 marginInlineEnd 设为 \'auto\'。如果 Astryx 源码在你的应用自己的 StyleX 编译中处理，marginInline 简写会输给 Section 自身的行内外边距。' },
     ],
   },
 };
@@ -223,6 +260,7 @@ export const docsDense = {
   description:
     'Page-level container for grouping content into regions. Use INSTEAD of Card for settings panels, form groups, and page sections.',
   usage: {
+    anatomy,
     description:
       'Section creates page regions. Use for settings groups, form sections, sidebar areas. If you want to visually separate a part of a page, use Section, not Card. Cards are for discrete items (one profile, one notification).',
     bestPractices: [
@@ -231,6 +269,7 @@ export const docsDense = {
       { guidance: true, description: 'Add dividers between same-background sections that need separation.' },
       { guidance: true, description: 'Combine w/ heading + Stack for typical page section pattern.' },
       { guidance: false, description: 'Use Card when you mean Section. Cards = discrete items (one notification, one profile). Sections = page regions.' },
+      { guidance: true, description: "Center: xstyle marginInlineStart + marginInlineEnd 'auto'. If Astryx source goes through your app's StyleX pass, marginInline shorthand loses to Section's inline margins." },
     ],
   },
   propDescriptions: {

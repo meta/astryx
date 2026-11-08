@@ -56,6 +56,36 @@ describe('parseConfig (load boundary)', () => {
     expect(msg).toContain('packages');
   });
 
+  it('accepts the project gap-report handler shape', () => {
+    const handle = () => ({status: 'filed', message: 'ok'});
+    expect(
+      parseConfig({gapReport: {audience: 'internal', handle}}).gapReport,
+    ).toEqual({audience: 'internal', handle});
+  });
+
+  it('accepts a discover source function and refuses anything else', () => {
+    const discover = async () => ({});
+    expect(parseConfig({discover}).discover).toBe(discover);
+    expect(reason({discover: 'https://example.com/catalog.json'})).toContain(
+      'discover',
+    );
+  });
+
+  it('rejects obsolete or extended gap-report handler shapes', () => {
+    expect(reason({gapReport: {command: './report.mjs'}})).toContain(
+      'gapReport',
+    );
+    expect(
+      reason({
+        gapReport: {
+          audience: 'internal',
+          handle: () => ({status: 'skipped'}),
+          extra: true,
+        },
+      }),
+    ).toContain('gapReport');
+  });
+
   it('rejects a non-array integrations field', () => {
     expect(reason({integrations: '@acme/widgets'})).toContain('expected array');
     expect(reason({integrations: [1]})).toContain('integrations.0');
@@ -72,9 +102,9 @@ describe('parseConfig (load boundary)', () => {
   });
 
   it('rejects a non-function postCodemod.buildCommand', () => {
-    expect(reason({hooks: {postCodemod: [{buildCommand: 'notAFn'}]}})).toContain(
-      'buildCommand',
-    );
+    expect(
+      reason({hooks: {postCodemod: [{buildCommand: 'notAFn'}]}}),
+    ).toContain('buildCommand');
   });
 
   it('rejects unknown nested keys inside experimental.xle.components', () => {

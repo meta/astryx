@@ -17,11 +17,15 @@
  * - `scrollToBottom({behavior: 'instant'})` jumps in one frame, no animation
  * - Under `prefers-reduced-motion`, every spring path falls back to the
  *   same instant jump — following still works, it just doesn't animate
+ * - Fractional spring position is retained between frames so browsers that
+ *   round scrollTop do not strand the animation short of the bottom
  *
- * Uses scroll direction (lastScrollTop comparison) to detect user
- * intent — works for wheel, touch, scrollbar drag, keyboard, everything.
- * Tracks scrollHeight/offsetHeight changes to ignore Chrome synthetic
- * scroll events caused by content resize.
+ * Reads user intent from position: a scroll that lands above the last
+ * position this hook set or saw is the reader — wheel, touch, scrollbar
+ * drag, keyboard, everything, including a move the spring's next frame
+ * would otherwise outrun. While following, the hook owns the position:
+ * it disables scroll anchoring on the container, so the only move the
+ * browser makes on its own is a resize clamp onto the bottom.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Chat/index.ts (exports)
@@ -29,6 +33,7 @@
 
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {useMediaQuery} from '../hooks/useMediaQuery';
+import {setScrollAnchoringOff} from '../privateAttributes/scrollAnchoring.stylex';
 
 // =============================================================================
 // Types
@@ -124,6 +129,29 @@ export interface UseChatStreamScrollReturn {
 
 const SIXTY_FPS_MS = 1000 / 60;
 
+// The scrollers whose hook follows the newest message now, kept in step with
+// each hook's lock.
+const following = new WeakSet<Element>();
+
+/**
+ * Whether the stream scroll on `scroller` follows its newest message now, as
+ * its lock says. Internal to Chat.
+ */
+export function isFollowingNewest(scroller: Element): boolean {
+  return following.has(scroller);
+}
+
+// The lock's marks on the scroller: anchoring off while the hook follows, and
+// the state `isFollowingNewest` reads.
+function markFollowing(el: Element, locked: boolean): void {
+  setScrollAnchoringOff(el, locked);
+  if (locked) {
+    following.add(el);
+  } else {
+    following.delete(el);
+  }
+}
+
 export function useChatStreamScroll({
   scrollRef,
   enabled = true,
@@ -141,14 +169,33 @@ export function useChatStreamScroll({
   // scrollIfLocked that sees scrollable content.
   const initialFillPendingRef = useRef(true);
   const velocityRef = useRef(0);
+  const springPositionRef = useRef<number | undefined>(undefined);
   const animatingRef = useRef(false);
   const lastTickRef = useRef<number | undefined>(undefined);
-
-  // For scroll direction detection
+  // The spring's pending frame, so a jump can cancel it for real.
+  const rafRef = useRef<number>(0);
+  // The last position this hook set or saw. Updated by every write of ours
+  // (spring frame, jump, scrollToMessage) as well as by every scroll event,
+  // so a reader's move that lands between two spring frames still shows as
+  // "above where we put it" even when the next frame's write outran it.
   const lastScrollTopRef = useRef(0);
-  // For synthetic scroll detection
-  const lastScrollHeightRef = useRef(0);
-  const lastOffsetHeightRef = useRef(0);
+
+  // While following, this hook is the only thing that should move the
+  // container: scroll anchoring is off, so the browser's one remaining move
+  // is the resize clamp onto the bottom, and every other upward move is the
+  // reader. Unlocked, the element's own anchoring applies again — a reader up
+  // in the history wants it when content above them changes.
+  const setLocked = useCallback(
+    (locked: boolean) => {
+      lockedRef.current = locked;
+      setIsLocked(locked);
+      const el = scrollRef.current;
+      if (el != null) {
+        markFollowing(el, locked);
+      }
+    },
+    [scrollRef],
+  );
 
   // --- Spring animation ---
 
@@ -169,7 +216,11 @@ export function useChatStreamScroll({
     }
 
     const target = el.scrollHeight - el.clientHeight;
-    const diff = target - el.scrollTop;
+    const position = Math.max(
+      0,
+      Math.min(target, springPositionRef.current ?? el.scrollTop),
+    );
+    const diff = target - position;
 
     if (Math.abs(diff) < 0.5 && Math.abs(velocityRef.current) < 0.1) {
       // eslint-disable-next-line react-compiler/react-compiler -- imperative DOM: scrollTop assignment
@@ -188,9 +239,11 @@ export function useChatStreamScroll({
 
     velocityRef.current =
       (damping * velocityRef.current + stiffness * diff) / mass;
-    el.scrollTop += velocityRef.current * tickDelta;
+    springPositionRef.current = position + velocityRef.current * tickDelta;
+    el.scrollTop = springPositionRef.current;
+    lastScrollTopRef.current = el.scrollTop;
 
-    requestAnimationFrame(animate);
+    rafRef.current = requestAnimationFrame(animate);
   }, [scrollRef, damping, stiffness, mass]);
 
   // Jump to the bottom in a single frame — cancels any in-flight spring so
@@ -200,6 +253,7 @@ export function useChatStreamScroll({
     if (!el) {
       return;
     }
+    cancelAnimationFrame(rafRef.current);
     animatingRef.current = false;
     velocityRef.current = 0;
     lastTickRef.current = undefined;
@@ -224,16 +278,16 @@ export function useChatStreamScroll({
     if (!animatingRef.current) {
       animatingRef.current = true;
       lastTickRef.current = undefined;
-      requestAnimationFrame(animate);
+      springPositionRef.current = scrollRef.current?.scrollTop;
+      rafRef.current = requestAnimationFrame(animate);
     }
-  }, [animate, jumpToBottom, prefersReducedMotion]);
+  }, [animate, jumpToBottom, prefersReducedMotion, scrollRef]);
 
   // --- Public API ---
 
   const scrollToBottom = useCallback(
     (options?: ChatScrollToBottomOptions) => {
-      lockedRef.current = true;
-      setIsLocked(true);
+      setLocked(true);
       setIsScrolledUp(false);
       initialFillPendingRef.current = false;
       if (options?.behavior === 'instant') {
@@ -242,7 +296,7 @@ export function useChatStreamScroll({
       }
       startAnimation();
     },
-    [startAnimation, jumpToBottom],
+    [setLocked, startAnimation, jumpToBottom],
   );
 
   const scrollToMessage = useCallback(
@@ -273,17 +327,15 @@ export function useChatStreamScroll({
   }, [scrollRef, scrollToMessage]);
 
   const lock = useCallback(() => {
-    lockedRef.current = true;
-    setIsLocked(true);
+    setLocked(true);
     setIsScrolledUp(false);
     startAnimation();
-  }, [startAnimation]);
+  }, [setLocked, startAnimation]);
 
   const unlock = useCallback(() => {
-    lockedRef.current = false;
+    setLocked(false);
     animatingRef.current = false;
-    setIsLocked(false);
-  }, []);
+  }, [setLocked]);
 
   const scrollIfLocked = useCallback(() => {
     if (!enabled) {
@@ -311,16 +363,16 @@ export function useChatStreamScroll({
 
   // --- Event listeners ---
 
+  // Syncs scroll and scrollend listeners on the stream container with
+  // `enabled`.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el || !enabled) {
       return;
     }
 
-    // Initialize tracking values
     lastScrollTopRef.current = el.scrollTop;
-    lastScrollHeightRef.current = el.scrollHeight;
-    lastOffsetHeightRef.current = el.offsetHeight;
+    markFollowing(el, lockedRef.current);
 
     const onScroll = () => {
       const {scrollTop, scrollHeight, offsetHeight} = el;
@@ -329,62 +381,30 @@ export function useChatStreamScroll({
       // Button visibility
       setIsScrolledUp(dist > buttonThreshold);
 
-      // Detect synthetic scroll — Chrome fires scroll events when
-      // scrollHeight or offsetHeight changes (content resize, keyboard).
-      const scrollHeightChanged = scrollHeight !== lastScrollHeightRef.current;
-      const offsetHeightChanged = offsetHeight !== lastOffsetHeightRef.current;
-      lastScrollHeightRef.current = scrollHeight;
-      lastOffsetHeightRef.current = offsetHeight;
-
-      if (scrollHeightChanged || offsetHeightChanged) {
-        // Synthetic scroll from resize — don't change lock state
-        lastScrollTopRef.current = scrollTop;
-        return;
-      }
-
-      // Scroll direction — unlock on scroll up
       const isScrollingUp = scrollTop < lastScrollTopRef.current;
       lastScrollTopRef.current = scrollTop;
 
-      if (isScrollingUp && lockedRef.current) {
-        lockedRef.current = false;
+      // With anchoring off, the browser only ever moves a following
+      // container up to clamp it onto a new, smaller bottom, and a reader
+      // scrolling up never lands there. (clientHeight, not dist: offsetHeight
+      // includes borders and a horizontal scrollbar.)
+      const landedAtBottom = scrollHeight - scrollTop - el.clientHeight < 1;
+
+      if (isScrollingUp && !landedAtBottom && lockedRef.current) {
+        setLocked(false);
         animatingRef.current = false;
-        setIsLocked(false);
       }
     };
 
     const onScrollEnd = () => {
       const dist = el.scrollHeight - el.scrollTop - el.offsetHeight;
       if (dist <= lockThreshold) {
-        lockedRef.current = true;
-        setIsLocked(true);
-      }
-    };
-
-    // Wheel up while animating — interrupt immediately.
-    // onScroll direction detection covers most cases, but wheel fires
-    // before the scroll position updates so we can react faster.
-    const onWheel = (e: WheelEvent) => {
-      if (e.deltaY < 0 && animatingRef.current) {
-        lockedRef.current = false;
-        animatingRef.current = false;
-        setIsLocked(false);
-      }
-    };
-
-    // Touch move — user is dragging, take control
-    const onTouchMove = () => {
-      if (animatingRef.current) {
-        lockedRef.current = false;
-        animatingRef.current = false;
-        setIsLocked(false);
+        setLocked(true);
       }
     };
 
     el.addEventListener('scroll', onScroll, {passive: true});
     el.addEventListener('scrollend', onScrollEnd);
-    el.addEventListener('wheel', onWheel, {passive: true});
-    el.addEventListener('touchmove', onTouchMove, {passive: true});
 
     // Initial scroll to bottom — content already present at mount.
     requestAnimationFrame(() => {
@@ -398,10 +418,9 @@ export function useChatStreamScroll({
     return () => {
       el.removeEventListener('scroll', onScroll);
       el.removeEventListener('scrollend', onScrollEnd);
-      el.removeEventListener('wheel', onWheel);
-      el.removeEventListener('touchmove', onTouchMove);
+      markFollowing(el, false);
     };
-  }, [scrollRef, enabled, lockThreshold, buttonThreshold]);
+  }, [scrollRef, enabled, lockThreshold, buttonThreshold, setLocked]);
 
   return {
     isScrolledUp,

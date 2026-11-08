@@ -18,4 +18,7 @@ results/
 
 # Preview build temp dirs
 .preview-tmp*
+
+# Canonical fixture run sandboxes
+.fixture-runs/
 # .baseline/ is committed (real shadcn components for type checking)

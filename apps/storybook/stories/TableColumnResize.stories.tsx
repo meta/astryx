@@ -95,7 +95,12 @@ export const Default: Story = {
 
     return (
       <div style={{maxWidth: 600}}>
-        <p style={{marginBottom: 8, fontSize: 14, color: '#666'}}>
+        <p
+          style={{
+            marginBottom: 8,
+            fontSize: 14,
+            color: 'var(--color-text-secondary)',
+          }}>
           Drag the right edge of any column header to resize. The last
           proportional column has no handle; it flexes to fill remaining space.
         </p>
@@ -128,7 +133,12 @@ export const WithMinMaxConstraints: Story = {
 
     return (
       <div style={{maxWidth: 600}}>
-        <p style={{marginBottom: 8, fontSize: 14, color: '#666'}}>
+        <p
+          style={{
+            marginBottom: 8,
+            fontSize: 14,
+            color: 'var(--color-text-secondary)',
+          }}>
           Columns are constrained between 80px and 300px.
         </p>
         <Table
@@ -158,7 +168,12 @@ export const PersistingWidths: Story = {
 
     return (
       <div style={{maxWidth: 600}}>
-        <p style={{marginBottom: 8, fontSize: 14, color: '#666'}}>
+        <p
+          style={{
+            marginBottom: 8,
+            fontSize: 14,
+            color: 'var(--color-text-secondary)',
+          }}>
           Current widths:{' '}
           {Object.keys(columnWidths).length > 0
             ? Object.entries(columnWidths)
@@ -198,7 +213,12 @@ export const KeyboardResize: Story = {
 
     return (
       <div style={{maxWidth: 600}}>
-        <p style={{marginBottom: 8, fontSize: 14, color: '#666'}}>
+        <p
+          style={{
+            marginBottom: 8,
+            fontSize: 14,
+            color: 'var(--color-text-secondary)',
+          }}>
           Tab to a resize handle, press Enter to activate, use Arrow keys to
           resize (Shift for larger steps), Enter to commit, Escape to cancel.
         </p>
@@ -238,7 +258,12 @@ export const WithSelectionAndResize: Story = {
 
     return (
       <div style={{maxWidth: 600}}>
-        <p style={{marginBottom: 8, fontSize: 14, color: '#666'}}>
+        <p
+          style={{
+            marginBottom: 8,
+            fontSize: 14,
+            color: 'var(--color-text-secondary)',
+          }}>
           Selection and column resize plugins composed together. Selected:{' '}
           {selectedKeys.size} of {users.length}
         </p>
@@ -275,7 +300,12 @@ export const AllPixelColumns: Story = {
 
     return (
       <div style={{maxWidth: 600}}>
-        <p style={{marginBottom: 8, fontSize: 14, color: '#666'}}>
+        <p
+          style={{
+            marginBottom: 8,
+            fontSize: 14,
+            color: 'var(--color-text-secondary)',
+          }}>
           All columns are pixel-width. Every column gets a resize handle,
           including the last one. Min width defaults to the column&apos;s
           declared pixel value.

@@ -54,7 +54,8 @@ export interface TypeaheadItemProps<
   isDisabled?: boolean;
 
   /**
-   * Group label for grouping items visually.
+   * This prop has no effect. Set `item.auxiliaryData.group` on search-source
+   * items to group results in Typeahead or BaseTypeahead.
    */
   group?: string;
 }
@@ -132,7 +133,11 @@ export function TypeaheadItem<T extends SearchableItem>({
   icon,
   description,
   isDisabled = false,
+  group: _group,
   xstyle,
+  className,
+  style,
+  ...rest
 }: TypeaheadItemProps<T>) {
   // If item has a pre-rendered element, use it
   if (item.element) {
@@ -145,7 +150,10 @@ export function TypeaheadItem<T extends SearchableItem>({
       {...mergeProps(
         themeProps('typeahead-item'),
         stylex.props(styles.container, isDisabled && styles.disabled, xstyle),
-      )}>
+        className,
+        style,
+      )}
+      {...rest}>
       {icon}
       <div {...stylex.props(styles.content)}>
         <span {...stylex.props(styles.label)}>{item.label}</span>

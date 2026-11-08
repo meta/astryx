@@ -2,9 +2,14 @@
 
 /**
  * @file formatters.ts
+ * @input Tick values, optional BCP 47 locale tags, and for dates an optional
+ *   calendar
  * @output Built-in tick format utilities for common data types
  * @position Utility; consumed by ChartAxis via tickFormat prop
  */
+
+import type {CalendarSystem, Locale} from '@astryxdesign/core/i18n';
+import {plainDateFormat, plainDateFromDate} from '@astryxdesign/core/utils';
 
 /**
  * Compact number formatter (e.g. 1200 → "1.2K", 1500000 → "1.5M")
@@ -36,7 +41,10 @@ export function compactNumber(value: unknown): string {
  * <ChartAxis tickFormat={currency('¥')} />    // ¥1.5K
  * ```
  */
-export function currency(symbol = '$'): (value: unknown) => string {
+export function currency(
+  symbol = '$',
+  locale: Locale = 'en',
+): (value: unknown) => string {
   return (value: unknown) => {
     const n = Number(value);
     if (isNaN(n)) {
@@ -51,7 +59,7 @@ export function currency(symbol = '$'): (value: unknown) => string {
     if (Math.abs(n) >= 1_000) {
       return `${symbol}${strip(n / 1_000)}K`;
     }
-    return `${symbol}${n.toLocaleString()}`;
+    return `${symbol}${n.toLocaleString(locale)}`;
   };
 }
 
@@ -73,23 +81,41 @@ export function percent(value: unknown): string {
 }
 
 /**
- * Date formatter — short date (e.g. "Jan 5", "Mar 12")
+ * Date formatter — short date (e.g. "Jan 5", "Mar 12"), in `calendar`
+ * (Gregorian by default)
  */
-export function shortDate(value: unknown): string {
+export function shortDate(
+  value: unknown,
+  locale: Locale = 'en',
+  calendar: CalendarSystem = 'gregory',
+): string {
   const d = value instanceof Date ? value : new Date(Number(value));
   if (isNaN(d.getTime())) {
     return String(value);
   }
-  return d.toLocaleDateString(undefined, {month: 'short', day: 'numeric'});
+  return plainDateFormat(
+    plainDateFromDate(d),
+    {month: 'short', day: 'numeric', calendar},
+    locale,
+  );
 }
 
 /**
- * Date formatter — month/year (e.g. "Jan 2024", "Mar 2025")
+ * Date formatter — month/year (e.g. "Jan 2024", "Mar 2025"), in `calendar`
+ * (Gregorian by default)
  */
-export function monthYear(value: unknown): string {
+export function monthYear(
+  value: unknown,
+  locale: Locale = 'en',
+  calendar: CalendarSystem = 'gregory',
+): string {
   const d = value instanceof Date ? value : new Date(Number(value));
   if (isNaN(d.getTime())) {
     return String(value);
   }
-  return d.toLocaleDateString(undefined, {month: 'short', year: 'numeric'});
+  return plainDateFormat(
+    plainDateFromDate(d),
+    {month: 'short', year: 'numeric', calendar},
+    locale,
+  );
 }

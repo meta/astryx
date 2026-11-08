@@ -30,15 +30,44 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {describe, it, expect} from 'vitest';
+import {docs} from '../packages/cli/api/docs/docs.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
 const TEMPLATE = path.join(REPO_ROOT, 'packages/cli/assets/theme.template.ts');
 const THEME_SRC = path.join(REPO_ROOT, 'packages/core/src/theme');
 const CORE_SRC = path.join(REPO_ROOT, 'packages/core/src');
-const DOCS_DIR = path.join(REPO_ROOT, 'packages/cli/assets/docs');
+const NEUTRAL_PALETTE = path.join(
+  REPO_ROOT,
+  'packages/themes/neutral/src/neutralPalettes.ts',
+);
+const NEUTRAL_PALETTE_TEMPLATE = path.join(
+  REPO_ROOT,
+  'packages/cli/assets/templates/themes/neutral/neutralPalettes.ts',
+);
+const NEUTRAL_GENERATED_PALETTE = path.join(
+  REPO_ROOT,
+  'packages/themes/neutral/src/neutralPalettes.generated.ts',
+);
+const NEUTRAL_PALETTE_REFS = path.join(
+  REPO_ROOT,
+  'packages/themes/neutral/src/neutralPaletteRefs.generated.ts',
+);
+const NEUTRAL_GENERATED_RECEIPT = path.join(
+  REPO_ROOT,
+  'packages/themes/neutral/src/neutralPalettes.generated.receipt.json',
+);
+const NEUTRAL_PALETTE_CONFIG = path.join(
+  REPO_ROOT,
+  'packages/themes/neutral/palette.config.json',
+);
+const NEUTRAL_TEMPLATE_DIR = path.join(
+  REPO_ROOT,
+  'packages/cli/assets/templates/themes/neutral',
+);
 
 const template = fs.readFileSync(TEMPLATE, 'utf-8');
 
@@ -56,13 +85,19 @@ const SYNC_SOURCES = [
 // Live facts
 // ---------------------------------------------------------------------------
 
-const defineThemeSrc = fs.readFileSync(path.join(THEME_SRC, 'defineTheme.ts'), 'utf-8');
-const tokensSrc = fs.readFileSync(path.join(THEME_SRC, 'tokens.stylex.ts'), 'utf-8');
+const defineThemeSrc = fs.readFileSync(
+  path.join(THEME_SRC, 'defineTheme.ts'),
+  'utf-8',
+);
+const tokensSrc = fs.readFileSync(
+  path.join(THEME_SRC, 'tokens.stylex.ts'),
+  'utf-8',
+);
 
 /** Field names declared on `DefineThemeInput`. */
 function defineThemeFields() {
   const body = defineThemeSrc.match(
-    /export interface DefineThemeInput \{([\s\S]*?)\n\}/,
+    /export interface DefineThemeInput(?:<[\s\S]*?>)? \{([\s\S]*?)\n\}/,
   );
   if (!body) throw new Error('DefineThemeInput not found in defineTheme.ts');
   return [...body[1].matchAll(/^ {2}(\w+)\??:/gm)].map(m => m[1]);
@@ -76,7 +111,9 @@ function tokenGroups() {
     const name = chunk.split(/[\s:=]/)[0];
     if (!name.endsWith('Defaults')) continue;
     const body = chunk.split('export const')[0];
-    groups[name] = [...body.matchAll(/'(--[a-zA-Z0-9-]+)'\s*:/g)].map(m => m[1]);
+    groups[name] = [...body.matchAll(/'(--[a-zA-Z0-9-]+)'\s*:/g)].map(
+      m => m[1],
+    );
   }
   return groups;
 }
@@ -89,9 +126,7 @@ function tokenGroups() {
  * this guard starts requiring the template to cover it.
  */
 function settableTokenGroups() {
-  const union = defineThemeSrc.match(
-    /export type CoreTokenName =([\s\S]*?);/,
-  );
+  const union = defineThemeSrc.match(/export type CoreTokenName =([\s\S]*?);/);
   if (!union) throw new Error('CoreTokenName not found in defineTheme.ts');
   return [...union[1].matchAll(/typeof (\w+Defaults)/g)].map(m => m[1]);
 }
@@ -125,13 +160,20 @@ function themingTargets() {
   return {targets, publicVars};
 }
 
-/** Doc topics `astryx docs <topic>` can print. */
-function docTopics() {
-  return fs
-    .readdirSync(DOCS_DIR)
-    .map(f => f.match(/^([\w-]+)\.doc\.mjs$/))
-    .filter(Boolean)
-    .map(m => m[1]);
+/**
+ * Whether `astryx docs <route>` prints something: a flat topic, or a node of
+ * the docs tree (a namespace such as `tokens`, or a guide such as
+ * `tokens/tokens-color`), resolved the way the command resolves it.
+ * @param {string} route
+ * @returns {Promise<boolean>}
+ */
+async function docsRouteExists(route) {
+  try {
+    await docs(route, undefined, {index: true});
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -139,13 +181,16 @@ function docTopics() {
 // ---------------------------------------------------------------------------
 
 /**
- * Top-level keys the template sets, plus the optional ones it shows commented
- * out (`// syntax: dracula,`). A commented field must carry a value, so an
- * ordinary prose comment is not mistaken for one.
+ * Top-level keys the template sets, plus optional fields shown commented out.
+ * A commented field must carry either a same-line value (`// syntax: dracula,`)
+ * or open a commented object block (`// adaptations: {`), so ordinary prose is
+ * not mistaken for a field.
  */
 function templateFields() {
   const set = [...template.matchAll(/^ {2}(\w+):/gm)].map(m => m[1]);
-  const commented = [...template.matchAll(/^ {2}\/\/ (\w+): .+,$/gm)].map(m => m[1]);
+  const commented = [
+    ...template.matchAll(/^ {2}\/\/ (\w+): (?:.+,|\{)$/gm),
+  ].map(m => m[1]);
   return [...new Set([...set, ...commented])];
 }
 
@@ -156,7 +201,9 @@ function templateFields() {
  */
 function templateVars() {
   const set = [...template.matchAll(/'(--[a-z][a-z0-9-]*)':/g)].map(m => m[1]);
-  const read = [...template.matchAll(/var\((--[a-z][a-z0-9-]*)\)/g)].map(m => m[1]);
+  const read = [...template.matchAll(/var\((--[a-z][a-z0-9-]*)\)/g)].map(
+    m => m[1],
+  );
   return [...new Set([...set, ...read])];
 }
 
@@ -197,7 +244,9 @@ function commonPrefix(names) {
 function templateComponentKeys() {
   const block = template.match(/\n {2}components: \{([\s\S]*?)\n {2}\},/);
   if (!block) throw new Error('components block not found in the template');
-  return [...block[1].matchAll(/^ {4}'?([a-z][a-z0-9-]*)'?: \{/gm)].map(m => m[1]);
+  return [...block[1].matchAll(/^ {4}'?([a-z][a-z0-9-]*)'?: \{/gm)].map(
+    m => m[1],
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -205,6 +254,53 @@ function templateComponentKeys() {
 // ---------------------------------------------------------------------------
 
 describe('theme template stays in sync with the theme system', () => {
+  it('keeps the shipped Neutral palette template aligned with its owner', () => {
+    for (const [source, output] of [
+      [NEUTRAL_PALETTE, NEUTRAL_PALETTE_TEMPLATE],
+      [
+        NEUTRAL_GENERATED_PALETTE,
+        path.join(NEUTRAL_TEMPLATE_DIR, 'neutralPalettes.generated.ts'),
+      ],
+      [
+        NEUTRAL_PALETTE_REFS,
+        path.join(NEUTRAL_TEMPLATE_DIR, 'neutralPaletteRefs.generated.ts'),
+      ],
+      [
+        NEUTRAL_GENERATED_RECEIPT,
+        path.join(
+          NEUTRAL_TEMPLATE_DIR,
+          'neutralPalettes.generated.receipt.json',
+        ),
+      ],
+      [
+        NEUTRAL_PALETTE_CONFIG,
+        path.join(NEUTRAL_TEMPLATE_DIR, 'palette.config.json'),
+      ],
+    ]) {
+      expect(fs.readFileSync(output, 'utf-8')).toBe(
+        fs.readFileSync(source, 'utf-8'),
+      );
+    }
+  });
+
+  it('keeps Neutral generation inputs and output aligned with its receipt', () => {
+    const config = JSON.parse(fs.readFileSync(NEUTRAL_PALETTE_CONFIG, 'utf-8'));
+    const receipt = JSON.parse(
+      fs.readFileSync(NEUTRAL_GENERATED_RECEIPT, 'utf-8'),
+    );
+    const generated = fs
+      .readFileSync(NEUTRAL_GENERATED_PALETTE, 'utf-8')
+      // Repository lint adds this license to committed TypeScript. The receipt
+      // hashes the generator-owned bytes that follow it.
+      .replace('// Copyright (c) Meta Platforms, Inc. and affiliates.\n\n', '');
+
+    expect(receipt.recipe).toBe(config.recipe);
+    expect(receipt.request).toMatchObject(config);
+    expect(createHash('sha256').update(generated).digest('hex')).toBe(
+      receipt.candidateSha256,
+    );
+  });
+
   it('documents every defineTheme field', () => {
     const documented = new Set(templateFields());
     const missing = defineThemeFields().filter(f => !documented.has(f));
@@ -214,6 +310,18 @@ describe('theme template stays in sync with the theme system', () => {
         `DefineThemeInput gained a field the template never mentions, so every ` +
         `author who reads the template will not know it exists.`,
     ).toEqual([]);
+  });
+
+  it('documents the color scale without enabling it for new themes', () => {
+    expect(template).toMatch(/^ {2}\/\/ color: \{/m);
+    expect(template).not.toMatch(/^ {2}color: \{/m);
+    expect(template).toContain(
+      'astryx theme palette generate palette.config.json --out palette.generated.ts',
+    );
+    expect(template).toContain(
+      "// import {palette} from './palette.generated';",
+    );
+    expect(template).toContain('palette.neutral.light[100]');
   });
 
   it('invents no field that defineTheme does not accept', () => {
@@ -246,7 +354,11 @@ describe('theme template stays in sync with the theme system', () => {
     const {publicVars} = themingTargets();
     // Domain tokens (syntax, data-viz) live outside tokens.stylex.ts and are
     // referenced by prefix in the inventory, not by full name.
-    const domainPrefixes = ['--color-syntax-', '--color-data-'];
+    const domainPrefixes = [
+      '--color-syntax-',
+      '--color-data-',
+      '--astryx-theme-my-theme-',
+    ];
     const bogus = templateVars().filter(
       v =>
         !known.has(v) &&
@@ -271,10 +383,19 @@ describe('theme template stays in sync with the theme system', () => {
     ).toEqual([]);
   });
 
-  it('cites only doc topics that exist', () => {
-    const topics = new Set(docTopics());
-    const cited = [...new Set([...template.matchAll(/astryx docs ([a-z-]+)/g)].map(m => m[1]))];
-    const dead = cited.filter(t => !topics.has(t));
+  it('cites only doc topics that exist', async () => {
+    const cited = [
+      ...new Set(
+        [...template.matchAll(/astryx docs ([a-z-]+(?:\/[a-z-]+)*)/g)].map(
+          m => m[1],
+        ),
+      ),
+    ];
+    expect(cited.length).toBeGreaterThan(0);
+    const dead = [];
+    for (const route of cited) {
+      if (!(await docsRouteExists(route))) dead.push(route);
+    }
     expect(
       dead,
       `The template tells authors to run \`astryx docs ${dead.join('`, `astryx docs ')}\`, ` +
@@ -285,7 +406,10 @@ describe('theme template stays in sync with the theme system', () => {
   it('is still named by the SYNC comment in every theme source that points here', () => {
     const relTemplate = 'packages/cli/assets/theme.template.ts';
     const orphaned = SYNC_SOURCES.filter(
-      f => !fs.readFileSync(path.join(THEME_SRC, f), 'utf-8').includes(relTemplate),
+      f =>
+        !fs
+          .readFileSync(path.join(THEME_SRC, f), 'utf-8')
+          .includes(relTemplate),
     );
     expect(
       orphaned,

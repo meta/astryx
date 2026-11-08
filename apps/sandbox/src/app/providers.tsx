@@ -62,8 +62,8 @@ const MODE_STORAGE_KEY = 'astryx-sandbox-mode';
  * useSearchParams in the root Providers component.
  *
  * For non-embed contexts, localStorage hydration is handled via useEffect in
- * Providers so the initial server render matches the client (avoiding hydration
- * mismatches on Next.js SSR).
+ * Providers so the default theme appears immediately before a saved preference
+ * replaces it. Embeds take their initial theme from the URL instead.
  */
 function getEmbedThemeParams(): {
   initialTheme: string;
@@ -79,8 +79,12 @@ function getEmbedThemeParams(): {
   const paramMode = params.get('mode');
 
   return {
+    // Object.hasOwn (not `in`): the lookup must match a sandbox theme, not an
+    // inherited Object.prototype key like "constructor".
     initialTheme:
-      isEmbed && paramTheme && paramTheme in themes ? paramTheme : 'neutral',
+      isEmbed && paramTheme && Object.hasOwn(themes, paramTheme)
+        ? paramTheme
+        : 'neutral',
     initialMode:
       isEmbed && (paramMode === 'light' || paramMode === 'dark')
         ? (paramMode as ThemeMode)
@@ -106,7 +110,7 @@ export function Providers({children}: {children: React.ReactNode}) {
     try {
       const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
       const storedMode = window.localStorage.getItem(MODE_STORAGE_KEY);
-      if (storedTheme && storedTheme in themes) {
+      if (storedTheme && Object.hasOwn(themes, storedTheme)) {
         setThemeName(storedTheme);
       }
       if (storedMode === 'light' || storedMode === 'dark') {
@@ -149,9 +153,15 @@ export function Providers({children}: {children: React.ReactNode}) {
       return;
     }
     const handler = (event: MessageEvent) => {
+      // The shell that embeds the sandbox is same-origin by design
+      // (PreviewShell renders /?embed=1 from a relative src); no other
+      // window gets to drive theme state.
+      if (event.origin !== window.location.origin) {
+        return;
+      }
       if (event.data?.type === 'astryx-theme-sync') {
         const {theme: newTheme, mode: newMode} = event.data;
-        if (newTheme && newTheme in themes) {
+        if (typeof newTheme === 'string' && Object.hasOwn(themes, newTheme)) {
           setThemeName(newTheme);
         }
         if (newMode === 'light' || newMode === 'dark') {

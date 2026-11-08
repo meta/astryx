@@ -2,34 +2,22 @@
 
 'use client';
 
+/**
+ * @file inlineMarkdown.tsx
+ * @input Authored docs prose containing the inline markdown subset.
+ * @output React nodes: plain text, code chips via InlineCode, and links
+ *   carrying the shared prose-link treatment from proseLink.ts.
+ * @position Inline renderer for /docs page prose, lists, and table cells.
+ */
+
 import {Fragment, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Code} from '@astryxdesign/core/CodeBlock';
 import {InlineCode} from '../InlineCode';
+import {proseLinkStyles} from '../proseLink';
 import {tokenizeInline, type InlineToken} from './inlineTokens';
 
 type LinkToken = Extract<InlineToken, {type: 'link'}>;
-
-const styles = stylex.create({
-  link: {
-    color: 'var(--color-text-accent)',
-    textDecorationLine: 'underline',
-    textDecorationThickness: '1px',
-    textUnderlineOffset: '0.16em',
-    transition: 'color 120ms ease, text-decoration-color 120ms ease',
-    ':hover': {
-      '@media (hover: hover)': {
-        color: 'var(--color-accent)',
-        textDecorationThickness: '2px',
-      },
-    },
-    ':focus-visible': {
-      borderRadius: 'var(--radius-sm)',
-      outline: '2px solid var(--color-accent)',
-      outlineOffset: 2,
-    },
-  },
-});
 
 function renderLink(token: LinkToken): ReactNode {
   const isExternal = /^https?:\/\//.test(token.href);
@@ -38,7 +26,12 @@ function renderLink(token: LinkToken): ReactNode {
       href={token.href}
       rel={isExternal ? 'noreferrer' : undefined}
       target={isExternal ? '_blank' : undefined}
-      {...stylex.props(styles.link)}>
+      {...stylex.props(
+        proseLinkStyles.underline,
+        proseLinkStyles.color,
+        proseLinkStyles.focusRing,
+        token.isCodeLabel && proseLinkStyles.chipOffset,
+      )}>
       {token.isCodeLabel ? (
         // color="inherit" keeps the link's accent color on the code span;
         // Code's default `primary` would read as body text inside the anchor.

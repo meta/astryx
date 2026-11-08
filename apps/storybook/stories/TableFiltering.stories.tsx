@@ -121,7 +121,12 @@ export const TextFilter: Story = {
     );
     return (
       <div style={{maxWidth: 800}}>
-        <p style={{marginBottom: 8, fontSize: 14, color: '#666'}}>
+        <p
+          style={{
+            marginBottom: 8,
+            fontSize: 14,
+            color: 'var(--color-text-secondary)',
+          }}>
           Showing {data.length}/{employees.length} rows.
         </p>
         <Table
@@ -156,7 +161,12 @@ export const SelectorFilter: Story = {
     );
     return (
       <div style={{maxWidth: 800}}>
-        <p style={{marginBottom: 8, fontSize: 14, color: '#666'}}>
+        <p
+          style={{
+            marginBottom: 8,
+            fontSize: 14,
+            color: 'var(--color-text-secondary)',
+          }}>
           Enum → selector. Showing {data.length}/{employees.length} rows.
         </p>
         <Table
@@ -191,7 +201,12 @@ export const MultiSelectorFilter: Story = {
     );
     return (
       <div style={{maxWidth: 800}}>
-        <p style={{marginBottom: 8, fontSize: 14, color: '#666'}}>
+        <p
+          style={{
+            marginBottom: 8,
+            fontSize: 14,
+            color: 'var(--color-text-secondary)',
+          }}>
           Enum list → multi-selector. Showing {data.length}/{employees.length}{' '}
           rows.
         </p>
@@ -227,7 +242,12 @@ export const NumberFilter: Story = {
     );
     return (
       <div style={{maxWidth: 800}}>
-        <p style={{marginBottom: 8, fontSize: 14, color: '#666'}}>
+        <p
+          style={{
+            marginBottom: 8,
+            fontSize: 14,
+            color: 'var(--color-text-secondary)',
+          }}>
           Number field → numeric input. Showing {data.length}/{employees.length}{' '}
           rows.
         </p>
@@ -264,7 +284,12 @@ export const InlineVariant: Story = {
     );
     return (
       <div style={{maxWidth: 800}}>
-        <p style={{marginBottom: 8, fontSize: 14, color: '#666'}}>
+        <p
+          style={{
+            marginBottom: 8,
+            fontSize: 14,
+            color: 'var(--color-text-secondary)',
+          }}>
           Inline variant. Showing {data.length}/{employees.length} rows.
         </p>
         <Table
@@ -307,7 +332,12 @@ export const WithSelection: Story = {
     const selectionPlugin = useTableSelection<Employee>(selectionConfig);
     return (
       <div style={{maxWidth: 800}}>
-        <p style={{marginBottom: 8, fontSize: 14, color: '#666'}}>
+        <p
+          style={{
+            marginBottom: 8,
+            fontSize: 14,
+            color: 'var(--color-text-secondary)',
+          }}>
           Filtering + Selection. Selected: {selectedKeys.size} | Showing{' '}
           {data.length}/{employees.length} rows.
         </p>
@@ -353,7 +383,12 @@ export const WithSorting: Story = {
     const data = applySort(filtered);
     return (
       <div style={{maxWidth: 800}}>
-        <p style={{marginBottom: 8, fontSize: 14, color: '#666'}}>
+        <p
+          style={{
+            marginBottom: 8,
+            fontSize: 14,
+            color: 'var(--color-text-secondary)',
+          }}>
           Filtering + Sorting. Showing {data.length}/{employees.length} rows.
         </p>
         <Table
@@ -398,7 +433,12 @@ export const WithResize: Story = {
     );
     return (
       <div style={{maxWidth: 800}}>
-        <p style={{marginBottom: 8, fontSize: 14, color: '#666'}}>
+        <p
+          style={{
+            marginBottom: 8,
+            fontSize: 14,
+            color: 'var(--color-text-secondary)',
+          }}>
           Inline filtering + Resize. Showing {data.length}/{employees.length}{' '}
           rows.
         </p>
@@ -456,7 +496,12 @@ export const WithAllPlugins: Story = {
     const selectionPlugin = useTableSelection<Employee>(selectionConfig);
     return (
       <div style={{maxWidth: 900}}>
-        <p style={{marginBottom: 8, fontSize: 14, color: '#666'}}>
+        <p
+          style={{
+            marginBottom: 8,
+            fontSize: 14,
+            color: 'var(--color-text-secondary)',
+          }}>
           All plugins. Selected: {selectedKeys.size} | Showing {data.length}/
           {employees.length} rows.
         </p>
@@ -498,7 +543,12 @@ export const InlineWithClear: Story = {
     );
     return (
       <div style={{maxWidth: 800}}>
-        <p style={{marginBottom: 8, fontSize: 14, color: '#666'}}>
+        <p
+          style={{
+            marginBottom: 8,
+            fontSize: 14,
+            color: 'var(--color-text-secondary)',
+          }}>
           Inline variant with clear buttons. Type to filter, then click ✕ to
           clear. Showing {data.length}/{employees.length} rows.
         </p>
@@ -535,7 +585,12 @@ export const EmptyState: Story = {
     );
     return (
       <div style={{maxWidth: 800}}>
-        <p style={{marginBottom: 8, fontSize: 14, color: '#666'}}>
+        <p
+          style={{
+            marginBottom: 8,
+            fontSize: 14,
+            color: 'var(--color-text-secondary)',
+          }}>
           Try filtering to get zero results; empty state appears.
         </p>
         <Table

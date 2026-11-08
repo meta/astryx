@@ -5,7 +5,7 @@
 export const docs = {
   name: 'ChartStreamGL',
   displayName: 'Chart Stream GL',
-  group: 'Chart',
+  group: 'Charts',
   category: 'Data Visualization',
 
   usage: {

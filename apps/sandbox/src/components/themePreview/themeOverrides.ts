@@ -134,13 +134,15 @@ export function resolveOverrideHex(
   tone: ToneStep,
   mode: Mode,
 ): string {
-  if (seed.tones) {
-    const v = seed.tones[tone];
-    if (typeof v === 'string') {
-      return v;
+  const canonicalTones = (mode === 'dark' && seed.dark?.tones) || seed.tones;
+  if (canonicalTones) {
+    const value = canonicalTones[tone];
+    if (typeof value === 'string') {
+      return value;
     }
   }
-  const {hue, chroma} = hexToHct(seed.sourceHex);
+  const sourceHex = (mode === 'dark' && seed.dark?.sourceHex) || seed.sourceHex;
+  const {hue, chroma} = hexToHct(sourceHex);
   return tonalPaletteForMode(hue, chroma, mode)[tone];
 }
 
@@ -160,7 +162,7 @@ export function buildModeOverride(
   return {
     kind: 'palette',
     rampName: seed.name,
-    rampSourceHex: seed.sourceHex,
+    rampSourceHex: (mode === 'dark' && seed.dark?.sourceHex) || seed.sourceHex,
     tone,
     alpha: clampAlpha(alpha),
     hex: composeAlphaHex(baseHex, alpha),

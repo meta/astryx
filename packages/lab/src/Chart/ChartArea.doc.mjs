@@ -5,7 +5,7 @@
 export const docs = {
   name: 'ChartArea',
   displayName: 'Chart Area',
-  group: 'Chart',
+  group: 'Charts',
   category: 'Data Visualization',
 
   usage: {

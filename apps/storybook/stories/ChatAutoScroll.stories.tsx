@@ -4,7 +4,7 @@
  * Demonstrates the auto-scroll behavior difference between streaming text
  * and discrete block additions (tool calls, custom elements).
  *
- * Issue: https://github.com/facebook/astryx/issues/2282
+ * Issue: https://github.com/meta/astryx/issues/2282
  *
  * The auto-scroll system (useChatStreamScroll + useChatNewMessages)
  * relies on ResizeObserver detecting content height changes. This story

@@ -12,5 +12,5 @@ export const doc = {
   isReady: true,
   isShowcase: true,
   aspectRatio: 16 / 9,
-  componentsUsed: ['Collapsible', 'Text', 'Card'],
+  componentsUsed: ['Collapsible', 'CollapsibleGroup', 'Text', 'Card', 'Stack'],
 };

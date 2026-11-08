@@ -57,7 +57,7 @@ function TextButtonDemo({value, announce, resetAfterMs}: ClipboardDemoProps) {
 }
 
 const meta: Meta<typeof IconButtonDemo> = {
-  title: 'Hooks/useClipboard',
+  title: 'Core/Hooks/useClipboard',
   component: IconButtonDemo,
   tags: ['autodocs'],
   argTypes: {

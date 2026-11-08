@@ -6,12 +6,16 @@
  */
 
 import {describe, it, expect} from 'vitest';
-import {runDrift} from './docs-drift.mjs';
+import {requireNatively} from '../../test-utils/native-require.mjs';
 
-describe('colocated CLI docs drift', () => {
+const require = requireNatively(import.meta.url);
+/** @type {typeof import('./docs-drift.mjs')} */
+const {runDrift} = require('./docs-drift.mjs');
+
+describe('production authored-doc drift', () => {
   it('every doc parses and stays in sync with its source of truth', async () => {
     const {count, errors} = await runDrift();
-    expect(count).toBeGreaterThan(0);
+    expect(count).toBeGreaterThan(1000);
     if (errors.length) {
       throw new Error(
         `docs drift detected (${errors.length}):\n  ${errors.join('\n  ')}`,

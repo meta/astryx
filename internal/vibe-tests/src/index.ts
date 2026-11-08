@@ -6,4 +6,6 @@
  */
 
 export * from './types.js';
+export * from './provenance.js';
+export * from './provenance-matrix.js';
 export {stratifiedSample} from './sampling.js';

@@ -62,7 +62,7 @@ export const WithRemove: Story = {
     const [visible, setVisible] = useState(true);
     if (!visible) {
       return (
-        <p style={{color: '#888', fontSize: 12}}>
+        <p style={{color: 'var(--color-text-secondary)', fontSize: 12}}>
           Removed. <button onClick={() => setVisible(true)}>Undo</button>
         </p>
       );
@@ -124,7 +124,7 @@ export const WithCaption: Story = {
     const [visible, setVisible] = useState(true);
     if (!visible) {
       return (
-        <p style={{color: '#888', fontSize: 12}}>
+        <p style={{color: 'var(--color-text-secondary)', fontSize: 12}}>
           Removed. <button onClick={() => setVisible(true)}>Undo</button>
         </p>
       );
@@ -174,7 +174,7 @@ export const Placeholder: Story = {
     const [visible, setVisible] = useState(true);
     if (!visible) {
       return (
-        <p style={{color: '#888', fontSize: 12}}>
+        <p style={{color: 'var(--color-text-secondary)', fontSize: 12}}>
           Removed. <button onClick={() => setVisible(true)}>Undo</button>
         </p>
       );
@@ -211,7 +211,12 @@ export const MediaModeTest: Story = {
     const [items, setItems] = useState(images);
     return (
       <div>
-        <p style={{fontSize: 12, color: '#888', marginBottom: 8}}>
+        <p
+          style={{
+            fontSize: 12,
+            color: 'var(--color-text-secondary)',
+            marginBottom: 8,
+          }}>
           Remove buttons should adapt: light icon on dark images, dark icon on
           light images.
         </p>
@@ -229,7 +234,7 @@ export const MediaModeTest: Story = {
             />
           ))}
           {items.length === 0 && (
-            <p style={{color: '#888', fontSize: 12}}>
+            <p style={{color: 'var(--color-text-secondary)', fontSize: 12}}>
               All removed.{' '}
               <button onClick={() => setItems(images)}>Reset</button>
             </p>
@@ -263,7 +268,7 @@ export const Gallery: Story = {
           />
         ))}
         {items.length === 0 && (
-          <p style={{color: '#888', fontSize: 12}}>
+          <p style={{color: 'var(--color-text-secondary)', fontSize: 12}}>
             All removed.{' '}
             <button onClick={() => setItems(initial)}>Reset</button>
           </p>

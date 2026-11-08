@@ -13,7 +13,10 @@
 import type {Metadata} from 'next';
 import {notFound} from 'next/navigation';
 import {docTopics} from '../../../../generated/docsRegistry';
-import {packages} from '../../../../generated/packageRegistry';
+import {
+  packages,
+  type PackageMeta,
+} from '../../../../generated/packageRegistry';
 import {components} from '../../../../generated/componentRegistry';
 import {ReferenceDocView} from '../../../../components/docs/ReferenceDocView';
 import {TokensDocView} from '../../../../components/docs/TokensDocView';
@@ -46,18 +49,19 @@ function isThemePackage(name: string): boolean {
   return name.includes('theme-');
 }
 
-function getInstallSteps(pkgName: string): InstallStep[] {
-  if (pkgName.endsWith('/cli')) {
+function getInstallSteps(pkg: PackageMeta): InstallStep[] {
+  const installTarget = pkg.canaryOnly ? `${pkg.name}@canary` : pkg.name;
+  if (pkg.name.endsWith('/cli')) {
     return [
-      {label: 'Install the CLI', code: `npm install -D ${pkgName}`},
+      {label: 'Install the CLI', code: `npm install -D ${installTarget}`},
       {label: 'Run a command', code: `npx @astryxdesign/cli component --list`},
     ];
   }
   return [
-    {label: 'Install the package', code: `npm install ${pkgName}`},
+    {label: 'Install the package', code: `npm install ${installTarget}`},
     {
       label: 'Import a component',
-      code: `import {...} from '${pkgName}/ComponentName';`,
+      code: `import {...} from '${pkg.name}/ComponentName';`,
       language: 'typescript',
     },
   ];
@@ -148,7 +152,8 @@ export default async function DocPage({
     notFound();
   }
 
-  const isComponentPkg = pkg.name === '@astryxdesign/core';
+  const isCorePackage = pkg.name === '@astryxdesign/core';
+  const firstComponent = components[pkg.name]?.find(comp => !comp.hidden);
 
   return (
     <PackageStubPage
@@ -156,14 +161,17 @@ export default async function DocPage({
       description={pkg.description}
       version={pkg.version}
       readme={pkg.readme}
-      installSteps={getInstallSteps(pkg.name)}
+      installSteps={getInstallSteps(pkg)}
       cta={
-        isComponentPkg
-          ? {label: 'View Components', href: '/components/Button'}
+        firstComponent
+          ? {
+              label: 'View Components',
+              href: `/components/${firstComponent.name}`,
+            }
           : undefined
       }
-      stripSections={isComponentPkg ? CORE_STRIP_SECTIONS : undefined}
-      stripIntro={isComponentPkg}
+      stripSections={isCorePackage ? CORE_STRIP_SECTIONS : undefined}
+      stripIntro={isCorePackage}
     />
   );
 }

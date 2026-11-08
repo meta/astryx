@@ -34,6 +34,54 @@ function stubFetch(routes) {
   });
 }
 
+/**
+ * Build a fetch stub whose response exposes a real streaming `body`
+ * (ReadableStream) instead of a `.text()` shortcut, so tests can exercise
+ * the adapter's chunked-read path. The stream reacts to the request's
+ * AbortSignal the way a real fetch response body does: aborting rejects any
+ * pending read with an AbortError, rather than hanging forever.
+ *
+ * @param {{chunks?: Uint8Array[], staysOpenUntilAbort?: boolean}} options
+ * @returns {{fetch: import('vitest').Mock, pulled: {count: number}}}
+ */
+function stubStreamingFetch({chunks = [], staysOpenUntilAbort = false} = {}) {
+  const pulled = {count: 0};
+  const fetch = vi.fn(async (_url, requestOptions) => {
+    const signal = requestOptions?.signal;
+    const stream = new ReadableStream({
+      start(controller) {
+        signal?.addEventListener('abort', () => {
+          controller.error(new DOMException('The operation was aborted', 'AbortError'));
+        });
+      },
+      pull(controller) {
+        if (staysOpenUntilAbort) {
+          // Never enqueue or close — only the abort listener above settles
+          // this stream, simulating a body that stalls after headers arrive.
+          return;
+        }
+        if (pulled.count >= chunks.length) {
+          controller.close();
+          return;
+        }
+        controller.enqueue(chunks[pulled.count]);
+        pulled.count += 1;
+      },
+    });
+    return {
+      ok: true,
+      status: 200,
+      body: stream,
+      text: async () => {
+        throw new Error(
+          'text() should not be called when a streamable body is available',
+        );
+      },
+    };
+  });
+  return {fetch, pulled};
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
 });
@@ -90,5 +138,46 @@ describe('blog adapter — fetchPostText SSRF/origin guard', () => {
     const url = `${SITE_URL}/blog/how-astryx-works.txt`;
     vi.stubGlobal('fetch', stubFetch({[url]: {status: 200, body: '# body'}}));
     await expect(fetchPostText(url)).resolves.toBe('# body');
+  });
+});
+
+describe('blog adapter — fetchPostText timeout and size cap (issue #5249)', () => {
+  it('keeps the abort timer active through body consumption, so a body that stalls after headers still times out', async () => {
+    vi.useFakeTimers();
+    try {
+      const {fetch} = stubStreamingFetch({staysOpenUntilAbort: true});
+      vi.stubGlobal('fetch', fetch);
+      const url = `${SITE_URL}/blog/how-astryx-works.txt`;
+
+      const result = fetchPostText(url);
+      const assertion = expect(result).rejects.toMatchObject({
+        code: 'ERR_FETCH_FAILED',
+      });
+      // 15s is the adapter's own FETCH_TIMEOUT_MS. If the timer were cleared
+      // as soon as headers arrive (the bug), this stalled body would hang
+      // forever instead of rejecting once the timer fires.
+      await vi.advanceTimersByTimeAsync(15000);
+      await assertion;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('stops reading once decoded size exceeds the cap, without pulling the rest of the stream', async () => {
+    const CHUNK_BYTES = 2 * 1024 * 1024; // 2 MB
+    const TOTAL_CHUNKS = 5; // 10 MB total; the adapter's cap is 5 MB.
+    const chunk = new Uint8Array(CHUNK_BYTES).fill(97); // 'a'
+    const chunks = Array.from({length: TOTAL_CHUNKS}, () => chunk);
+    const {fetch, pulled} = stubStreamingFetch({chunks});
+    vi.stubGlobal('fetch', fetch);
+    const url = `${SITE_URL}/blog/how-astryx-works.txt`;
+
+    await expect(fetchPostText(url)).rejects.toMatchObject({
+      code: 'ERR_FETCH_FAILED',
+    });
+    // 5 MB / 2 MB per chunk needs 3 chunks to cross the cap. Pulling fewer
+    // than all 5 proves the read stopped early instead of buffering the
+    // full 10 MB body before checking the limit.
+    expect(pulled.count).toBeLessThan(TOTAL_CHUNKS);
   });
 });

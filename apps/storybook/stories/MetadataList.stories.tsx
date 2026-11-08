@@ -126,7 +126,7 @@ export const TwoColumns: Story = {
 
 export const CustomLabelWidth: Story = {
   render: args => (
-    <MetadataList label={{position: 'start', width: 200}} {...args}>
+    <MetadataList label={{width: 200}} {...args}>
       <MetadataListItem label="Full Name">
         MetadataList Component
       </MetadataListItem>
@@ -160,9 +160,7 @@ export const WithIcons: Story = {
         icon={<Icon icon={CalendarIcon} size="sm" />}>
         January 1, 2023
       </MetadataListItem>
-      <MetadataListItem
-        label="Tags"
-        icon={<Icon icon={TagIcon} size="sm" />}>
+      <MetadataListItem label="Tags" icon={<Icon icon={TagIcon} size="sm" />}>
         <span style={{display: 'flex', gap: 4}}>
           <Token label="component" />
           <Token label="astryx" />

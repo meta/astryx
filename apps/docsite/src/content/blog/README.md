@@ -161,6 +161,57 @@ so the decision is made at build time — no runtime request, no flash. If no
 dark variant exists (the common case), the single image is used in both modes.
 The swap follows the site's theme toggle, not just the OS preference.
 
+### Retina screenshots (`@2x`)
+
+A screenshot taken on a 2× display has twice as many pixels as the component
+is wide on screen, so by default it renders at double size, capped only by the
+column. Name the file with an `@2x` suffix and it renders at half its pixel
+width — the component's real size — with `height: auto` and still capped at
+the column width:
+
+```
+public/blog/<slug>/swipe@2x.webp        ← 780 px wide file → 390 CSS px
+public/blog/<slug>/swipe@2x.dark.webp   ← dark variant, same width (optional)
+```
+
+```md
+![Swiping an item reveals its actions](/blog/<slug>/swipe@2x.webp)
+```
+
+How it works: the same build-time scan records the natural size of every
+`@2x` image (PNG, JPEG, or WebP — including an animated WebP's canvas) in a
+`blogImageSizes` manifest, and the renderer sets the image's `width` to half
+of it. The dark variant takes the light image's width, so the theme toggle
+never shifts the layout. Images without the suffix are unchanged.
+
+## 5a. Live examples
+
+A fenced block whose info string is `tsx live` runs as a live example instead
+of showing as code:
+
+````md
+```tsx live
+import {Button} from '@astryxdesign/core/Button';
+
+export default function Example() {
+  return <Button label="Try me" />;
+}
+```
+````
+
+- The block needs a default-exported component. It runs in the playground's
+  preview frame: sandboxed, with its own origin, so a compile or runtime error
+  shows inside the frame and the rest of the post still renders.
+- It can import published Astryx packages, plus demo material that lives
+  beside the post: put `.tsx` modules in a folder named after the post
+  (`posts/<slug>/TarotCard.tsx` next to `posts/<slug>.md`) and import them as
+  `./TarotCard`. They are not Astryx components, no package exports them, and
+  only this post's examples can import them.
+- The plain-text route (`/blog/<slug>.txt`) shows the block's source as an
+  ordinary `tsx` code block.
+- `src/content/blog/fixtures/` holds test posts: the canary serves them at
+  `/blog/<slug>`, but the index, feed and sitemap never list them.
+
 ## 6. Preview locally
 
 ```bash
@@ -184,13 +235,11 @@ automatically and sorted into place by date.
 
 ## How posts are reviewed
 
-Blog posts are reviewed against the
-**[Blog Review Rubric](https://github.com/facebook/astryx/wiki/Blog-Review-Rubric)**.
-It's type-aware (a changelog `update`, an `engineering` deep-dive, and a
+Blog posts are reviewed against the **[Blog Review
+Rubric](https://github.com/meta/astryx/wiki/Blog-Review-Rubric#three-required-scored-criteria)**.
+The rubric is type-aware (a changelog `update`, an `engineering` deep-dive, and a
 `perspective` essay are judged by different profiles), gates on accuracy
 (verifiable claims — commands, APIs, numbers — are checked against the codebase,
 and a confirmed error blocks publish), and checks substance, efficiency, craft,
-and voice **without homogenizing your voice**. The same rubric powers the Copilot
-reviewer at `.github/instructions/blog.instructions.md`, so a blog-post PR gets
-the check automatically. Reading it before you write is the fastest way to land
-an A.
+and voice **without homogenizing your voice**. Reading it before you write is
+the fastest way to land an A.

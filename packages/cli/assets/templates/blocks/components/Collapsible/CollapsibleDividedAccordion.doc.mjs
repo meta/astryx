@@ -4,10 +4,12 @@
 export const doc = {
   type: 'block',
   exampleFor: 'Collapsible',
-  name: 'Collapsible — Divided Accordion',
-  displayName: 'Collapsible — Divided Accordion',
-  description: 'FAQ-style accordion using the hasDividers prop on CollapsibleGroup: built-in row hairlines and density padding with zero custom CSS. Use for FAQs, settings lists, and nav sections.',
+  name: 'Collapsible — FAQ',
+  displayName: 'Collapsible — FAQ',
+  registry: {aliases: ['collapsible/divided-accordion']},
+  description:
+    "FAQ built with hasDividers: row hairlines and density padding with no custom CSS. Questions set their own type — body at semibold, not the trigger's default 17px large — so a list of questions reads as rows rather than a stack of headings, and question and answer separate on weight and color instead of size.",
   isReady: true,
   aspectRatio: 4 / 3,
-  componentsUsed: ['Collapsible', 'CollapsibleGroup', 'Text'],
+  componentsUsed: ['Collapsible', 'CollapsibleGroup', 'Text', 'Link', 'Stack'],
 };

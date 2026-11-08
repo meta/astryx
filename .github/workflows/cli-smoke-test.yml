@@ -6,44 +6,120 @@ name: CLI Smoke Test
 
 on:
   pull_request:
-    branches: ["main"]
-    paths-ignore:
-      - "apps/docsite/**"
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: ['main']
+    # Runs only when something the CLI reads or the smoke scripts run can
+    # change (spec:AST-030 FR14): every package (the CLI discovers Core, Lab,
+    # Charts, Rich Text and the themes from the workspace), the workspace's
+    # dependency and TypeScript configuration, the setup action and the smoke
+    # scripts themselves. A merge-group entry, which cannot filter by path,
+    # keeps running.
+    paths:
+      - 'packages/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'tsconfig*.json'
+      - '.nvmrc'
+      - '.github/actions/setup/**'
+      - '.github/scripts/cli-smoke-test.mjs'
+      - '.github/scripts/cli-json-smoke-test.mjs'
+      - '.github/scripts/api-cli-parity-test.mjs'
+      - '.github/scripts/cdn-template-smoke-test.mjs'
+      - '.github/scripts/lib/cdn-*.mjs'
+      - '.github/scripts/vitest.browser-scripts.config.mjs'
+      - '.github/workflows/cli-smoke-test.yml'
   merge_group:
 
 permissions: {}
 
 concurrency:
-  group: "cli-smoke-${{ github.event.merge_group.head_sha || github.head_ref }}"
+  group: 'cli-smoke-${{ github.event.pull_request.number || github.event.merge_group.head_sha }}'
   cancel-in-progress: true
 
 jobs:
   smoke-test:
-    runs-on: 2-core-ubuntu-arm
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')))
+    runs-on: ubuntu-24.04-arm
+    # PR CI's budget is 15 minutes (see ci.yml).
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 50
+
+      - name: Classify changed files
+        if: github.event_name == 'pull_request'
+        id: scope
+        run: |
+          git fetch origin ${{ github.base_ref }} --depth=50
+          MERGE_BASE=$(git merge-base HEAD origin/${{ github.base_ref }} 2>/dev/null || echo "")
+          if [ -z "$MERGE_BASE" ]; then
+            printf 'docsite_only=false\nspec_only=false\ntooling_only=false\n' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          CLASSIFIER_ROOT="$RUNNER_TEMP/change-scope"
+          CLASSIFIER_DIR="$CLASSIFIER_ROOT/.github/scripts"
+          REGISTRY_DIR="$CLASSIFIER_ROOT/scripts"
+          mkdir -p "$CLASSIFIER_DIR" "$REGISTRY_DIR"
+          CLASSIFIER="$CLASSIFIER_DIR/change-scope.cjs"
+          MATCHER="$CLASSIFIER_DIR/knowledge-paths.cjs"
+          REGISTRY="$REGISTRY_DIR/component-packages.cjs"
+          if git show "origin/${{ github.base_ref }}:.github/scripts/change-scope.cjs" > "$CLASSIFIER" 2>/dev/null \
+            && git show "origin/${{ github.base_ref }}:.github/scripts/knowledge-paths.cjs" > "$MATCHER" 2>/dev/null \
+            && git show "origin/${{ github.base_ref }}:scripts/component-packages.cjs" > "$REGISTRY" 2>/dev/null; then
+            git diff --name-status "$MERGE_BASE"...HEAD \
+              | node "$CLASSIFIER" --github-output
+          else
+            # Missing trusted policy cannot grant a specialized lane.
+            printf 'docsite_only=false\nspec_only=false\ntooling_only=false\n' \
+              >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip CLI checks for spec-only changes
+        if: steps.scope.outputs.spec_only == 'true'
+        run: echo "Spec-only PR — CLI behavior cannot change"
 
       - uses: ./.github/actions/setup
+        if: steps.scope.outputs.spec_only != 'true'
 
       - name: CLI smoke test
+        if: steps.scope.outputs.spec_only != 'true'
         run: node .github/scripts/cli-smoke-test.mjs
 
       - name: Typecheck JSON API types
+        if: steps.scope.outputs.spec_only != 'true'
         run: cd packages/cli && pnpm typecheck:json-api
 
       - name: CLI --json smoke test
+        if: steps.scope.outputs.spec_only != 'true'
         run: node .github/scripts/cli-json-smoke-test.mjs
 
       - name: API ↔ CLI parity test
+        if: steps.scope.outputs.spec_only != 'true'
         run: node .github/scripts/api-cli-parity-test.mjs --no-baseline
 
       # The CDN starter page is the only thing we ship that runs with no
       # bundler and no test double for the CDNs, so it is verified by rendering
       # it. Needs network access to jsDelivr, esm.sh and the npm registry.
       - name: Install Playwright
+        if: steps.scope.outputs.spec_only != 'true'
         run: npx playwright install chromium
 
+      # cdn-page-render's real-browser half: a page whose module request hangs
+      # never goes idle, and renderPage reports that timeout. With
+      # ASTRYX_CDN_SMOKE_BROWSER set, a missing browser fails the cases.
+      # ci-browser-gated-tests.test.mjs keeps this step after the install.
+      - name: CDN page render in a real browser
+        if: steps.scope.outputs.spec_only != 'true'
+        env:
+          ASTRYX_CDN_SMOKE_BROWSER: '1'
+        # Its own config: the workspace's global setup builds Core, which this
+        # test never imports.
+        run: pnpm exec vitest run --config .github/scripts/vitest.browser-scripts.config.mjs .github/scripts/lib/cdn-page-render.browser.test.mjs --maxWorkers=1
+
       - name: CDN starter page smoke test
+        if: steps.scope.outputs.spec_only != 'true'
         run: node .github/scripts/cdn-template-smoke-test.mjs

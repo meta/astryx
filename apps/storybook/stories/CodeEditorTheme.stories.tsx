@@ -86,7 +86,7 @@ function ThemedEditor({
 }
 
 const meta: Meta = {
-  title: 'Lab/CodeEditorTheme',
+  title: 'Lab/Themes/CodeEditorTheme',
   parameters: {
     docs: {
       description: {
@@ -179,7 +179,7 @@ function GalleryEditor({
           style={{
             fontSize: 11,
             fontWeight: 600,
-            color: '#888',
+            color: 'var(--color-text-secondary)',
             marginBottom: 4,
             fontFamily: 'monospace',
           }}>

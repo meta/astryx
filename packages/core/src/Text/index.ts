@@ -44,6 +44,7 @@ export {
   type HeadingProps,
   type HeadingLevel,
   type HeadingType,
+  type HeadingTypeMap,
 } from '../Heading';
 
 // Re-export shared types from theme for convenience

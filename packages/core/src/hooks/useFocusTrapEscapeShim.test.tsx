@@ -9,9 +9,10 @@
  * @position Testing; guards the deprecated public shim in useFocusTrap.ts
  *
  * The shim is public API. Its answer must not change now that Escape moved to
- * the shared stack: `BottomSheetSwitcher` gates its own dismissal on it, so a
- * shim that also counts tooltips, hover cards and dialogs tells the sheet a
- * trap is above it when none is, and the sheet stops closing.
+ * the shared stack: existing consumers still observe whether an
+ * Escape-participating focus trap is active. Families that never trapped focus
+ * stay out of this count; BottomSheetSwitcher preserves its historical modal
+ * signal without registering a second dismissal owner.
  *
  * SYNC: When useFocusTrap.ts changes, update tests to match new behavior
  */

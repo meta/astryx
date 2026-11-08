@@ -13,7 +13,7 @@
 import {describe, it, expect, vi} from 'vitest';
 import type {KeyboardEvent as ReactKeyboardEvent} from 'react';
 import {render, screen, fireEvent} from '@testing-library/react';
-import {useListFocus} from './useListFocus';
+import {useInternalListFocus, useListFocus} from './useListFocus';
 
 const NO_DISABLED: string[] = [];
 
@@ -109,7 +109,7 @@ describe('useListFocus disabled-item skipping', () => {
 
 // ---------------------------------------------------------------------------
 // Roving-tabindex mode + composite navigation behaviors.
-// These exercise the opt-in `hasRovingTabIndex`, `isRtl`, `orientation: 'both'`,
+// These exercise the opt-in `hasRovingTabIndex`, `orientation: 'both'`,
 // `hasCaretGuard`, and shortcut-passthrough behaviors.
 // ---------------------------------------------------------------------------
 
@@ -122,13 +122,15 @@ function RovingToolbar({
 }: {
   labels?: string[];
   disabledLabels?: string[];
-} & Parameters<typeof useListFocus>[0]) {
-  const {listRef, handleKeyDown, handleFocus} = useListFocus<HTMLDivElement>({
-    itemSelector: 'button, input, [tabindex]',
-    hasRovingTabIndex: true,
-    orientation: 'horizontal',
-    ...opts,
-  });
+} & Parameters<typeof useInternalListFocus>[0]) {
+  // The internal hook takes the public options plus the Core-only ones.
+  const {listRef, handleKeyDown, handleFocus} =
+    useInternalListFocus<HTMLDivElement>({
+      itemSelector: 'button, input, [tabindex]',
+      hasRovingTabIndex: true,
+      orientation: 'horizontal',
+      ...opts,
+    });
   return (
     <div
       ref={listRef}
@@ -148,6 +150,16 @@ function RovingToolbar({
   );
 }
 
+function orderBy(first: string) {
+  return (list: HTMLElement) => {
+    const buttons = Array.from(list.querySelectorAll<HTMLElement>('button'));
+    const stop = buttons.find(button => button.dataset.testid === first);
+    return stop == null
+      ? buttons
+      : [stop, ...buttons.filter(button => button !== stop)];
+  };
+}
+
 describe('useListFocus roving tabindex (hasRovingTabIndex)', () => {
   it('stamps a single tab stop (first enabled item is tabbable)', () => {
     render(<RovingToolbar />);
@@ -160,6 +172,45 @@ describe('useListFocus roving tabindex (hasRovingTabIndex)', () => {
     render(<RovingToolbar disabledLabels={['A']} />);
     expect(screen.getByTestId('B')).toHaveAttribute('tabindex', '0');
     expect(screen.getByTestId('A')).toHaveAttribute('tabindex', '-1');
+  });
+
+  it('leaves no tab stop while every item is disabled, by default', () => {
+    render(<RovingToolbar disabledLabels={ROVING_LABELS} />);
+    for (const label of ROVING_LABELS) {
+      expect(screen.getByTestId(label)).not.toHaveAttribute('tabindex', '0');
+    }
+  });
+
+  it('keeps one tab stop while every item is disabled, on the element the callback returns first', () => {
+    const {rerender} = render(
+      <RovingToolbar
+        disabledLabels={ROVING_LABELS}
+        tabStopOrder={orderBy('B')}
+      />,
+    );
+    expect(screen.getByTestId('B')).toHaveAttribute('tabindex', '0');
+    expect(screen.getByTestId('A')).toHaveAttribute('tabindex', '-1');
+    expect(screen.getByTestId('C')).toHaveAttribute('tabindex', '-1');
+
+    // The stop follows what the callback returns first.
+    rerender(
+      <RovingToolbar
+        disabledLabels={ROVING_LABELS}
+        tabStopOrder={orderBy('A')}
+      />,
+    );
+    expect(screen.getByTestId('A')).toHaveAttribute('tabindex', '0');
+    expect(screen.getByTestId('B')).toHaveAttribute('tabindex', '-1');
+    expect(screen.getByTestId('C')).toHaveAttribute('tabindex', '-1');
+  });
+
+  it('puts the stop where the callback says while items are enabled too, even on a disabled item', () => {
+    render(
+      <RovingToolbar disabledLabels={['B']} tabStopOrder={orderBy('B')} />,
+    );
+    expect(screen.getByTestId('B')).toHaveAttribute('tabindex', '0');
+    expect(screen.getByTestId('A')).toHaveAttribute('tabindex', '-1');
+    expect(screen.getByTestId('C')).toHaveAttribute('tabindex', '-1');
   });
 
   it('ArrowRight moves the tab stop to the next enabled item', () => {
@@ -204,15 +255,6 @@ describe('useListFocus roving tabindex (hasRovingTabIndex)', () => {
     expect(screen.getByTestId('C')).toHaveFocus();
     fireEvent.keyDown(toolbar, {key: 'Home'});
     expect(screen.getByTestId('A')).toHaveFocus();
-  });
-
-  it('flips ArrowLeft/ArrowRight under RTL', () => {
-    render(<RovingToolbar isRtl />);
-    const toolbar = screen.getByRole('toolbar');
-    screen.getByTestId('A').focus();
-    // In RTL, ArrowLeft is "forward".
-    fireEvent.keyDown(toolbar, {key: 'ArrowLeft'});
-    expect(screen.getByTestId('B')).toHaveFocus();
   });
 
   it('orientation "both" navigates with all four arrows', () => {
@@ -382,10 +424,9 @@ describe('useListFocus shortcut passthrough', () => {
  * `dir` is set on the list container itself — the element the hook reads via
  * listRef.
  */
-function HorizontalMenu({dir, isRtl}: {dir?: 'ltr' | 'rtl'; isRtl?: boolean}) {
+function HorizontalMenu({dir}: {dir?: 'ltr' | 'rtl'}) {
   const {listRef, handleKeyDown} = useListFocus<HTMLDivElement>({
     orientation: 'horizontal',
-    isRtl,
   });
   const items = ['One', 'Two', 'Three'];
   return (
@@ -421,22 +462,6 @@ describe('useListFocus RTL auto-detection (WCAG 1.3.2)', () => {
     const menu = screen.getByRole('menu');
     screen.getByTestId('One').focus();
     fireEvent.keyDown(menu, {key: 'ArrowRight'});
-    expect(screen.getByTestId('Two')).toHaveFocus();
-  });
-
-  it('explicit isRtl={false} overrides a dir="rtl" container', () => {
-    render(<HorizontalMenu dir="rtl" isRtl={false} />);
-    const menu = screen.getByRole('menu');
-    screen.getByTestId('One').focus();
-    fireEvent.keyDown(menu, {key: 'ArrowRight'});
-    expect(screen.getByTestId('Two')).toHaveFocus();
-  });
-
-  it('explicit isRtl={true} flips arrows without a dir attribute', () => {
-    render(<HorizontalMenu isRtl />);
-    const menu = screen.getByRole('menu');
-    screen.getByTestId('One').focus();
-    fireEvent.keyDown(menu, {key: 'ArrowLeft'});
     expect(screen.getByTestId('Two')).toHaveFocus();
   });
 });
@@ -585,5 +610,106 @@ describe('useListFocus Escape', () => {
     });
     expect(wasCancelled).toBe(true);
     expect(screen.getByTestId('Two')).toHaveFocus();
+  });
+});
+
+describe('useListFocus paging (hasPaging)', () => {
+  const ROW_HEIGHT = 40;
+  const VIEWPORT = 100;
+
+  function PagedMenu({hasPaging = true}: {hasPaging?: boolean}) {
+    const {listRef, handleKeyDown} = useListFocus<HTMLDivElement>({
+      hasPaging,
+      wrap: true,
+    });
+    const items = ['One', 'Two', 'Three', 'Four', 'Five', 'Six'];
+    return (
+      <div ref={listRef} role="menu" onKeyDown={handleKeyDown}>
+        {items.map(label => (
+          <div key={label} role="menuitem" tabIndex={-1} data-testid={label}>
+            {label}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  /**
+   * jsdom has no layout: give the container a 100px viewport and each row
+   * 40px, so rows One and Two are fully visible, Three is cut, and the rest
+   * sit below the fold.
+   */
+  function layOut() {
+    const menu = screen.getByRole('menu');
+    const rect = (top: number, bottom: number) =>
+      ({
+        top,
+        bottom,
+        left: 0,
+        right: 200,
+        width: 200,
+        height: bottom - top,
+        x: 0,
+        y: top,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    vi.spyOn(menu, 'getBoundingClientRect').mockReturnValue(rect(0, VIEWPORT));
+    Object.defineProperty(menu, 'clientHeight', {value: VIEWPORT});
+    screen.getAllByRole('menuitem').forEach((item, index) => {
+      vi.spyOn(item, 'getBoundingClientRect').mockReturnValue(
+        rect(index * ROW_HEIGHT, (index + 1) * ROW_HEIGHT),
+      );
+    });
+    return menu;
+  }
+
+  it('PageDown moves to the last fully visible item', () => {
+    render(<PagedMenu />);
+    const menu = layOut();
+    screen.getByTestId('One').focus();
+    fireEvent.keyDown(menu, {key: 'PageDown'});
+    expect(screen.getByTestId('Two')).toHaveFocus();
+  });
+
+  it('PageDown pressed at the visible edge moves one viewport further, never wrapping', () => {
+    render(<PagedMenu />);
+    const menu = layOut();
+    screen.getByTestId('Two').focus();
+    fireEvent.keyDown(menu, {key: 'PageDown'});
+    expect(screen.getByTestId('Four')).toHaveFocus();
+    fireEvent.keyDown(menu, {key: 'PageDown'});
+    expect(screen.getByTestId('Six')).toHaveFocus();
+    fireEvent.keyDown(menu, {key: 'PageDown'});
+    expect(screen.getByTestId('Six')).toHaveFocus();
+  });
+
+  it('PageUp mirrors PageDown', () => {
+    render(<PagedMenu />);
+    const menu = layOut();
+    screen.getByTestId('Two').focus();
+    fireEvent.keyDown(menu, {key: 'PageUp'});
+    expect(screen.getByTestId('One')).toHaveFocus();
+    fireEvent.keyDown(menu, {key: 'PageUp'});
+    expect(screen.getByTestId('One')).toHaveFocus();
+  });
+
+  it('PageDown in a list that does not scroll acts as End', () => {
+    render(<PagedMenu />);
+    const menu = screen.getByRole('menu');
+    screen.getByTestId('One').focus();
+    fireEvent.keyDown(menu, {key: 'PageDown'});
+    expect(screen.getByTestId('Six')).toHaveFocus();
+    fireEvent.keyDown(menu, {key: 'PageDown'});
+    expect(screen.getByTestId('Six')).toHaveFocus();
+  });
+
+  it('leaves PageDown to the host when paging is off', () => {
+    render(<PagedMenu hasPaging={false} />);
+    const menu = screen.getByRole('menu');
+    screen.getByTestId('One').focus();
+    const event = fireEvent.keyDown(menu, {key: 'PageDown'});
+    expect(screen.getByTestId('One')).toHaveFocus();
+    // Not consumed: fireEvent returns false when preventDefault was called.
+    expect(event).toBe(true);
   });
 });

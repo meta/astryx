@@ -1,0 +1,127 @@
+{
+  "name": "setup",
+  "description": "Can an executor add Astryx to an established Tailwind app without damaging the host UI? Astryx is absent from every canonical fixture. The fixture, condition, prompt, repetition, and executor bundle are explicit matrix dimensions.",
+  "base": {
+    "fixtures": [
+      "tailwind-v4-control",
+      "shadcn-tailwind-v4-established",
+      "enterprise-scoped-synthetic"
+    ],
+    "notes": "Every run starts from a validated copy of a canonical fixture. The committed fixture is never modified."
+  },
+  "conditions": [
+    {
+      "id": "floor",
+      "label": "Task only (floor)",
+      "role": "floor",
+      "patches": [],
+      "hypothesis": "Without an added discovery cue, setup depends on what the executor finds from the package and project alone."
+    },
+    {
+      "id": "current",
+      "label": "Current public guidance",
+      "role": "current-control",
+      "patches": ["patch:pointer"],
+      "hypothesis": "A pointer makes the current public setup guidance discoverable but does not change its instructions."
+    },
+    {
+      "id": "candidate",
+      "label": "Candidate existing-app guidance",
+      "role": "candidate",
+      "patches": ["patch:pointer", "patch:existing-app"],
+      "hypothesis": "Existing-app guidance preserves the host Tailwind entry, cascade order, color mode, and app-owned tokens."
+    },
+    {
+      "id": "direct",
+      "label": "Directed setup control",
+      "role": "direct-control",
+      "patches": ["patch:pointer", "patch:existing-app", "patch:directed"],
+      "hypothesis": "Precise setup instructions remove discovery ambiguity. Any remaining visible host damage is a product gap and blocks instruction shipping."
+    },
+    {
+      "id": "host-aligned",
+      "label": "Host-aligned strategy (pilot)",
+      "role": "strategy-pilot",
+      "optIn": true,
+      "patches": ["patch:pointer", "patch:host-aligned"],
+      "hypothesis": "When the established host stays authoritative over typography and color, an app-owned theme that extends neutral and matches host fonts, semantic colors, and mode pairs avoids host damage that a stock theme stylesheet would cause."
+    },
+    {
+      "id": "guest-contained",
+      "label": "Guest-contained strategy (pilot)",
+      "role": "strategy-pilot",
+      "optIn": true,
+      "patches": ["patch:pointer", "patch:guest-contained"],
+      "hypothesis": "When the host owns global preflight and tokens, mounting the provider around only the new subtree and withholding the reset avoids host damage, at a portal-scope cost that must be measured rather than assumed."
+    },
+    {
+      "id": "guest-contained-r2",
+      "label": "Guest-contained strategy (pilot, revision 2)",
+      "role": "strategy-pilot",
+      "optIn": true,
+      "patches": ["patch:pointer", "patch:guest-contained"],
+      "supersedes": "guest-contained",
+      "revisionOf": "guest-contained",
+      "changedSincePriorRevision": "measurement only — the guest-contained document is byte-identical to the revision this supersedes. Two measurement faults it exposed were corrected: host container text now counts only text the browser renders, and probes are read after running CSS transitions settle. Both faults reported an unchanged host as damaged.",
+      "hypothesis": "The two guest-contained cells that failed the pilot failed on how the host was measured rather than on what the strategy did to the host, so the same document under a corrected measurement produces no host damage."
+    },
+    {
+      "id": "host-aligned-r2",
+      "label": "Host-aligned strategy (pilot, revision 2)",
+      "role": "strategy-pilot",
+      "optIn": true,
+      "patches": ["patch:pointer", "patch:host-aligned"],
+      "supersedes": "host-aligned",
+      "revisionOf": "host-aligned",
+      "changedSincePriorRevision": "document and measurement. The document states its non-negotiable rules before the reasoning and adds a section on host markup composed inside a design-system overlay. The rule against ignoring generated theme output was already written but is not present in any sandbox the prior revision produced, so that rule has never actually been tested.",
+      "hypothesis": "Told before the reasoning that generated theme output is committed, and told that relocated host markup must carry the host's own token-scoping hook, the executor produces no integrity failure and no host-surface style change."
+    },
+    {
+      "id": "guest-contained-r3",
+      "label": "Guest-contained strategy (pilot, revision 3)",
+      "role": "strategy-pilot",
+      "optIn": true,
+      "patches": ["patch:pointer", "patch:guest-contained"],
+      "supersedes": "guest-contained-r2",
+      "revisionOf": "guest-contained-r2",
+      "changedSincePriorRevision": "document only. The guest-contained document now names the supported pnpm 11 mechanism for approving a dependency's build script. The r2 run failed its build before any measurement could happen: the executor wrote the approval into package.json, which pnpm 11 does not read, so the install aborted with ERR_PNPM_IGNORED_BUILDS. Nothing about the strategy itself was measured on that cell.",
+      "hypothesis": "Told the mechanism pnpm 11 actually reads, the executor installs and builds, and the cell can finally be measured on what the strategy does to the host rather than on how it configured a package manager."
+    },
+    {
+      "id": "host-aligned-r3",
+      "label": "Host-aligned strategy (pilot, revision 3)",
+      "role": "strategy-pilot",
+      "optIn": true,
+      "patches": ["patch:pointer", "patch:host-aligned"],
+      "supersedes": "host-aligned-r2",
+      "revisionOf": "host-aligned-r2",
+      "changedSincePriorRevision": "document and measurement. The relocation rule is now one of the document's stated non-negotiables rather than a section far down it, and it carries a procedure for finding the boundary rather than an instruction to find one. The measurement now records which host token scopes a surface sits inside and reports a lost boundary as its own failure, so the r2 outcome is diagnosable instead of appearing only as a list of colours.",
+      "hypothesis": "The r2 executor carried the host's mode hooks onto the relocated menu but not the attribute scoping its palette, which is the specific mistake the procedure now addresses. Told to carry the boundary and how to find it, the executor keeps the relocated host surface inside its own token region and matching its reference exactly."
+    }
+  ],
+  "strategyPilot": {
+    "conditions": [
+      "host-aligned",
+      "guest-contained",
+      "host-aligned-r2",
+      "guest-contained-r2",
+      "guest-contained-r3",
+      "host-aligned-r3"
+    ],
+    "revisions": {
+      "$comment": "A revision is a new condition id, never an edit to an existing one. Earlier cells keep their ids, their measurements, and their verdicts exactly as recorded; a revision reruns a named subset beside them under its own identity so the two can be compared and neither can overwrite the other. Revisions chain: r3 supersedes r2, which supersedes the original, and each names the one it revises.",
+      "host-aligned-r2": "host-aligned",
+      "guest-contained-r2": "guest-contained",
+      "guest-contained-r3": "guest-contained-r2",
+      "host-aligned-r3": "host-aligned-r2"
+    },
+    "notes": "Opt-in established-app strategies explored additively. They do not replace floor, current, candidate, or direct, and they change no default or core behavior: greenfield adoption is unaffected. Each strategy condition carries the discovery pointer plus its own self-contained strategy document. Neither strategy is presented as universally correct.",
+    "supersedes": "A strategy document is self-contained and is not combined with patch:existing-app, because the two strategies deliberately disagree with parts of that recipe — host-aligned replaces the stock theme stylesheet, and guest-contained withholds the reset. Combining them would hand the executor contradictory instructions and make the measurement unreadable."
+  },
+  "measurement": {
+    "reference": "A pristine copied fixture, measured by the same code before setup.",
+    "schemes": ["light", "dark"],
+    "notes": "Both preferred color schemes are measured even when the fixture has its own explicit mode control.",
+    "emittedCss": "Cascade order is read from the built CSS rather than inferred from source order."
+  }
+}

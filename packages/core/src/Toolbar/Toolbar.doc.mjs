@@ -1,5 +1,21 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/** @type {import('@astryxdesign/cli/authoring').ComponentAnatomyElement[]} */
+const anatomy = [
+  {
+    name: 'Outer chrome',
+    required: true,
+    description:
+      'Section-owned container that supplies the toolbar surface, padding, and selected divider edges.',
+  },
+  {
+    name: 'Toolbar',
+    required: true,
+    description:
+      'Named toolbar row that owns toolbar semantics and the start, optional center, and end layout.',
+  },
+];
+
 /** @type {import('@astryxdesign/cli/authoring').ComponentDoc} */
 
 export const docs = {
@@ -75,7 +91,7 @@ export const docs = {
           name: 'centerContent',
           type: 'ReactNode',
           description:
-            'Centered content. Switches layout to CSS grid (1fr auto 1fr).',
+            'Centered content. Switches to the three-lane layout: centered while each side lane fits in half of the width it leaves, and the row wraps when the lanes do not fit.',
           slotElements: [
             {__element: 'Text', props: {type: 'body', weight: 'bold'}, children: 'Center'},
             {
@@ -147,6 +163,7 @@ export const docs = {
       ],    },
   ],
   usage: {
+    anatomy,
     description:
       'Toolbar is a horizontal bar with left, center, and right areas. Use it for contextual actions within a content area (above a table, inside a card, or in a panel), not as a page-level header. Set the size once on the toolbar and all buttons, inputs, and tabs inside it match automatically.',
     bestPractices: [
@@ -171,7 +188,7 @@ export const docsZh = {
       propDescriptions: {
         label: '工具栏的无障碍标签，作为 aria-label 应用。',
         startContent: '起始内容（LTR 中靠左对齐）。',
-        centerContent: '居中内容。切换为 CSS grid（1fr auto 1fr）。',
+        centerContent: '居中内容。切换为三栏布局：两侧各栏都能放进中间栏剩余宽度的一半时居中；各栏放不下时换行。',
         endContent: '结束内容（LTR 中靠右对齐）。',
         size: '工具栏尺寸。控制最小高度，子组件通过 SizeContext 继承此尺寸作为默认值。',
         gap: '插槽内项目间距。',
@@ -182,6 +199,7 @@ export const docsZh = {
     },
   ],
   usage: {
+    anatomy,
     description:
       'Toolbar is a horizontal bar with left, center, and right areas. Use it for contextual actions within a content area (above a table, inside a card, or in a panel), not as a page-level header. Set the size once on the toolbar and all buttons, inputs, and tabs inside it match automatically.',
     bestPractices: [
@@ -200,6 +218,7 @@ export const docsZh = {
 export const docsDense = {
   description: 'Horizontal bar w/ left, center, right areas. For contextual actions in content, not page headers. Size cascades to children.',
   usage: {
+    anatomy,
     description:
       'Horizontal bar w/ left, optional center, right. For contextual actions within content (tables, cards, panels), not page-level headers. Size cascades to children.',
     bestPractices: [
@@ -220,7 +239,7 @@ export const docsDense = {
       propDescriptions: {
         label: 'A11y label, aria-label on toolbar.',
         startContent: 'Start-aligned content.',
-        centerContent: 'Centered content; switches to 3-col grid.',
+        centerContent: 'Centered content; three lanes, wraps when they do not fit.',
         endContent: 'End-aligned content.',
         size: 'Toolbar size; controls min-height + cascades to children via SizeContext.',
         gap: 'Gap between slot items.',

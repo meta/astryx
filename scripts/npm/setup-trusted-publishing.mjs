@@ -8,7 +8,7 @@
  * active npm session) that prepares every publishable @astryxdesign/* package
  * for npm TRUSTED PUBLISHING: OIDC-based publishing from GitHub Actions with no
  * long-lived npm token. Once configured, the `publish`/`canary` jobs in
- * .github/workflows/deploy.yml can publish with `--provenance` and zero secrets.
+ * .github/workflows/release.yml can publish with `--provenance` and zero secrets.
  *
  * It ports facebook/lexical's scripts/npm/setup-trusted-publishing.mjs to astryx
  * conventions (node:util parseArgs, node:fs, node:child_process, global fetch —
@@ -29,17 +29,19 @@
  * Modes combine: e.g. `--bootstrap --setup-trust` claims then configures in one
  * pass. `--dry-run` prints what would happen without any registry writes.
  *
- * This script does NOT publish real releases — that is deploy.yml's job. Its only
- * purpose is to make the tokenless OIDC publish in CI succeed.
+ * This script does NOT publish real releases — that is release.yml's job. Its
+ * only purpose is to make the tokenless OIDC publish in CI succeed.
  *
- * WHY `deploy.yml` is the default --workflow (the workflow_ref subtlety):
+ * WHY `release.yml` is the default --workflow (the workflow_ref subtlety):
  *   npm validates a trusted publish by matching the trust config's workflow
  *   filename against the OIDC token's `workflow_ref` claim. `workflow_ref` is the
  *   CALLING (entry) workflow — the file that triggered the run — NOT a reusable
  *   workflow that merely contains the publish job (npm does not check
- *   `job_workflow_ref`). astryx's publish runs directly in the non-reusable
- *   .github/workflows/deploy.yml on push to main, so the caller IS the publish
- *   workflow, and the filename to trust is `deploy.yml`.
+ *   `job_workflow_ref`). ALL of astryx's npm publishing (stable and canary) runs
+ *   directly in the non-reusable .github/workflows/release.yml — deploy.yml is
+ *   website-only — so the caller IS the publish workflow, and the filename to
+ *   trust is `release.yml` (see release.yml's own header, which states the same
+ *   single-trusted-publisher constraint).
  *
  * npm also allows only ONE trust config per package: POSTing a second config
  * (even for a different workflow) returns E409, which is why --workflow takes a
@@ -134,10 +136,10 @@ function parseCliArgs(argv) {
       registry: {type: 'string', default: 'https://registry.npmjs.org'},
       'stub-version': {type: 'string', default: '0.0.0-bootstrap.0'},
       // The CALLING workflow filename npm should trust. For astryx this is the
-      // single, non-reusable deploy.yml that runs the publish on push to main
-      // (see the workflow_ref subtlety in the file header).
-      workflow: {type: 'string', default: 'deploy.yml'},
-      repo: {type: 'string', default: 'facebook/astryx'},
+      // single, non-reusable release.yml that runs ALL npm publishing (see the
+      // workflow_ref subtlety in the file header and release.yml's own header).
+      workflow: {type: 'string', default: 'release.yml'},
+      repo: {type: 'string', default: 'meta/astryx'},
     },
     allowPositionals: false,
   });
@@ -235,8 +237,10 @@ async function checkAuth(registry) {
   }
 }
 
-// npm >= 11.10 is required for `npm trust github`. The subcommand landed in npm
-// 11.5, but upstream trusted-publishing docs (and lexical) pin 11.10+.
+// npm >= 11.15 is required. Older npm ignores `--allow-publish`, so the
+// publisher it creates may only stage releases and CI's direct publish fails,
+// and its `npm trust list` omits permissions, so every existing publisher
+// reads as a conflict.
 async function checkNpmTrustSupport() {
   let version;
   try {
@@ -246,12 +250,12 @@ async function checkNpmTrustSupport() {
     return {ok: false, reason: `Unable to determine npm version: ${err}`};
   }
   const [major, minor] = version.split('.').map(n => parseInt(n, 10));
-  if (major < 11 || (major === 11 && minor < 10)) {
+  if (major < 11 || (major === 11 && minor < 15)) {
     return {
       ok: false,
       reason:
         `npm ${version} is too old for 'npm trust github'. ` +
-        `Upgrade to npm >= 11.10 (\`npm i -g npm@latest\`) and re-run.`,
+        `Upgrade to npm >= 11.15 (\`npm i -g npm@latest\`) and re-run.`,
     };
   }
   try {
@@ -322,19 +326,34 @@ async function publishStub(pkg, {registry, stubVersion, repo, dryRun}) {
       console.log(`  [dry-run] Would publish ${pkg.name}@${stubVersion}`);
       return true;
     }
-    await execFileAsync(
-      'npm',
-      [
-        'publish',
-        '--registry',
-        registry,
-        '--access',
-        'public',
-        '--tag',
-        'bootstrap',
-      ],
-      {cwd: tmpDir},
-    );
+    try {
+      await execFileAsync(
+        'npm',
+        [
+          'publish',
+          '--registry',
+          registry,
+          '--access',
+          'public',
+          '--tag',
+          'bootstrap',
+        ],
+        {cwd: tmpDir},
+      );
+    } catch (err) {
+      // 409: this version already exists, which means an earlier run claimed
+      // the name. Registry reads can keep answering 404 for a few minutes after
+      // a package is created, so a re-run lands here; continue to trust setup.
+      if (
+        /E409|409 Conflict/.test(`${err.stderr ?? ''}\n${err.message ?? ''}`)
+      ) {
+        console.log(
+          `  ${pkg.name}@${stubVersion} already exists; the name is claimed`,
+        );
+        return true;
+      }
+      throw err;
+    }
     console.log(`  Published ${pkg.name}@${stubVersion}`);
     // Best-effort deprecate — the stub is already published (which is what
     // unblocks trust setup), so a deprecation failure must not fail the run.
@@ -496,7 +515,9 @@ async function addTrustConfig(pkg, {registry, repo, workflow, dryRun}) {
     console.error(`  FAILED ${pkg.name} (npm exit ${code})`);
     return 'failed';
   }
-  console.error(`  FAILED ${pkg.name} (gave up after ${MAX_TRUST_ATTEMPTS} attempts)`);
+  console.error(
+    `  FAILED ${pkg.name} (gave up after ${MAX_TRUST_ATTEMPTS} attempts)`,
+  );
   return 'failed';
 }
 
@@ -557,14 +578,14 @@ async function main() {
   if (typeof workflow !== 'string' || workflow.includes(',')) {
     console.error(
       `Invalid --workflow value "${workflow}". Expected a single workflow ` +
-        `filename, e.g. deploy.yml.`,
+        `filename, e.g. release.yml.`,
     );
     process.exit(1);
   }
   const [repoOwner, repoName] = repo.split('/');
   if (!repoOwner || !repoName) {
     console.error(
-      `Invalid --repo value "${repo}". Expected owner/name, e.g. facebook/astryx.`,
+      `Invalid --repo value "${repo}". Expected owner/name, e.g. meta/astryx.`,
     );
     process.exit(1);
   }
@@ -594,8 +615,9 @@ async function main() {
     console.log(`Authenticated to ${registry} as ${authedUser}`);
   }
 
-  // Preflight: npm >= 11.10 with `npm trust` available.
-  if (setupTrust && !dryRun) {
+  // Preflight: npm >= 11.15 with `npm trust` available, before any trust read
+  // or write (the trust reads below run whenever this is not a pure dry run).
+  if (setupTrust || !dryRun) {
     const support = await checkNpmTrustSupport();
     if (!support.ok) {
       console.error(support.reason);
@@ -630,7 +652,9 @@ async function main() {
       try {
         await publishStub(pkg, {dryRun, registry, repo, stubVersion});
       } catch (err) {
-        console.error(`  FAILED to bootstrap ${pkg.name}: ${err.message || err}`);
+        console.error(
+          `  FAILED to bootstrap ${pkg.name}: ${err.message || err}`,
+        );
         failures.push(pkg.name);
       }
     }
@@ -671,7 +695,9 @@ async function main() {
   for (const pkg of trustCandidates) {
     const {configs, error} = await fetchTrustConfig(pkg.name, {registry});
     if (error || !configs) {
-      console.log(`  ${pkg.name} ... unable to check (${error}); will try anyway`);
+      console.log(
+        `  ${pkg.name} ... unable to check (${error}); will try anyway`,
+      );
       anyUnknown = true;
       toRegister.push({pkg, existing: []});
     } else if (configs.some(c => configMatches(c, {repo, workflow}))) {

@@ -16,6 +16,7 @@ export const docs = {
     bestPractices: [
       {guidance: true, description: 'Include a target string on every call so the user can see what the tool acted on: a file path, a shell command, or a search query.'},
       {guidance: true, description: 'Show a duration on completed calls so users can judge which tools are slow and understand why a response took time.'},
+      {guidance: true, description: 'Provide a group label when the automatic count does not explain what the calls represent.'},
       {guidance: true, description: 'Provide resultDetail with a code block for calls that produce output (diffs for edits, terminal output for shell commands) so users can inspect results inline.'},
       {guidance: true, description: 'Set a unique key on each call item when streaming so React can animate additions without re-mounting completed rows.'},
       {guidance: false, description: "Don't omit the status field. Without it the call defaults to complete, which is misleading for calls that are still running or have failed."},
@@ -23,7 +24,7 @@ export const docs = {
       {guidance: false, description: "Don't use custom wrappers around individual calls; the component handles single vs. grouped layout automatically based on the array length."},
     ],
     anatomy: [
-      {name: 'Status icon', required: true, description: 'A colored circle with a check, cross, or spinner indicating whether the call is pending, running, complete, or errored.'},
+      {name: 'Status icon', required: true, description: 'A themed semantic success/error icon, or a spinner while the call is pending or running.'},
       {name: 'Tool name', required: true, description: 'The function or tool name displayed in monospace: bash, edit, read, web_search, etc.'},
       {name: 'Node badge', required: false, description: 'A neutral pill badge showing which sandbox or environment ran the tool, like cli:remote-server or workspace.'},
       {name: 'Target label', required: false, description: 'The target of the action (a file path, command, or search query) shown after the tool name.'},
@@ -31,6 +32,15 @@ export const docs = {
       {name: 'Duration', required: false, description: 'Execution time shown on the trailing edge for completed calls.'},
       {name: 'Group header', required: false, description: 'A wrench icon with a call count, shown when multiple calls are present. Clicking toggles between the summary and the full list.'},
     ],
+  },
+
+  playground: {
+    defaults: {
+      calls: [
+        {name: 'read_file', status: 'complete', target: 'Button.tsx', duration: '120ms'},
+        {name: 'run_tests', status: 'complete', target: 'yarn test', duration: '1.2s', additions: 12, deletions: 3},
+      ],
+    },
   },
 
   props: [
@@ -45,7 +55,7 @@ export const docs = {
       name: 'label',
       type: 'string',
       description:
-        'Custom summary label for groups. Auto-generated from count if omitted.',
+        'Custom summary label shown for an expanded group. The translated call count is used when omitted.',
     },
     {
       name: 'isExpanded',
@@ -81,6 +91,7 @@ export const docsZh = {
     bestPractices: [
       {guidance: true, description: 'Include a target string on every call so the user can see what the tool acted on: a file path, a shell command, or a search query.'},
       {guidance: true, description: 'Show a duration on completed calls so users can judge which tools are slow and understand why a response took time.'},
+      {guidance: true, description: 'Provide a group label when the automatic count does not explain what the calls represent.'},
       {guidance: true, description: 'Provide resultDetail with a code block for calls that produce output (diffs for edits, terminal output for shell commands) so users can inspect results inline.'},
       {guidance: true, description: 'Set a unique key on each call item when streaming so React can animate additions without re-mounting completed rows.'},
       {guidance: false, description: "Don't omit the status field. Without it the call defaults to complete, which is misleading for calls that are still running or have failed."},
@@ -106,6 +117,7 @@ export const docsDense = {
     bestPractices: [
       {guidance: true, description: 'Include target on every call: file path, command, or search query.'},
       {guidance: true, description: 'Show duration on completed calls so users understand timing.'},
+      {guidance: true, description: 'Provide group label when count alone is ambiguous.'},
       {guidance: true, description: 'Provide resultDetail with code blocks for calls that produce output.'},
       {guidance: true, description: 'Set unique key on each call item when streaming for stable animations.'},
       {guidance: false, description: "Don't omit status; defaults to complete, misleading for running/failed calls."},

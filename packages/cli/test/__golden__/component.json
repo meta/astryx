@@ -1,0 +1,57 @@
+{
+  "apiVersion": 1,
+  "type": "component.detail",
+  "package": "@acme/kit",
+  "data": {
+    "type": "component",
+    "name": "AcmeCard",
+    "displayName": "Acme Card",
+    "category": "Layout",
+    "keywords": [
+      "zorblax",
+      "card"
+    ],
+    "usage": {
+      "description": "A zorblax card that groups one topic.",
+      "bestPractices": [
+        {
+          "guidance": true,
+          "description": "Keep one idea per card."
+        },
+        {
+          "guidance": false,
+          "description": "Do not nest cards."
+        }
+      ]
+    },
+    "props": [
+      {
+        "name": "title",
+        "type": "string",
+        "required": true,
+        "description": "Heading text."
+      },
+      {
+        "name": "tone",
+        "type": "'calm' | 'loud'",
+        "default": "'calm'",
+        "description": "Visual weight."
+      }
+    ],
+    "playground": {
+      "defaults": {
+        "tone": "calm"
+      }
+    },
+    "package": "@acme/kit",
+    "import": "@acme/kit",
+    "sourceAvailable": true
+  },
+  "meta": {
+    "answeredBy": {
+      "cli": "<cli version>",
+      "core": "<cli version>",
+      "copy": "project"
+    }
+  }
+}

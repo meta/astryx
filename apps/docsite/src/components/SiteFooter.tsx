@@ -10,7 +10,6 @@ import {HStack, VStack} from '@astryxdesign/core/Layout';
 import {Grid, GridSpan} from '@astryxdesign/core/Grid';
 import {Divider} from '@astryxdesign/core/Divider';
 import {Section} from '@astryxdesign/core/Section';
-import {useAppShellMobile} from '@astryxdesign/core/AppShell';
 import {DocsVersionFooterLink} from './DocsVersionFooterLink';
 import {
   GITHUB_REPO,
@@ -30,6 +29,8 @@ import {
   MetaOpenSourceLogo,
   DiscordLogo,
 } from './logos';
+
+const MOBILE = '@media (max-width: 768px)';
 
 const styles = stylex.create({
   siteFooter: {
@@ -54,8 +55,56 @@ const styles = stylex.create({
     display: 'block',
     color: 'var(--color-icon-secondary)',
   },
+  // Keeps the wrapped link list to a readable measure once it stacks; on
+  // desktop the links sit in their own grid column and must not be clamped.
   mobileFooterLinks: {
-    maxWidth: 320,
+    maxWidth: {default: 'none', [MOBILE]: 320},
+  },
+  // The footer is one markup at every width — the layout swaps in CSS, not in
+  // JS. It used to branch on `useAppShellMobile().isMobile`, which is a
+  // `useMediaQuery` whose server snapshot is always `false`: the prerendered
+  // HTML therefore carried the DESKTOP grid at every width, so on a phone the
+  // wordmark, the link list and the social buttons all painted on top of each
+  // other in ~80px columns until hydration replaced them. A media query has
+  // the right answer on the very first paint.
+  //
+  // Every override below RESTATES its desktop value in `default` rather than
+  // leaving it `null`. `xstyle` merges after the component's own styles and a
+  // `null` there *unsets* the property, so `{default: null, …}` would strip
+  // VStack's gap and Grid's `display: grid` at desktop width.
+  stack: {
+    // VStack gap={4}
+    gap: {default: 'var(--spacing-4)', [MOBILE]: 'var(--spacing-6)'},
+  },
+  // `grid-template-columns` (from Grid) and `grid-column` (from GridSpan) are
+  // inert under `display: flex`, and `flex-direction` is inert under
+  // `display: grid`, so switching `display` alone turns the row into a
+  // centered column.
+  row: {
+    display: {default: 'grid', [MOBILE]: 'flex'},
+    flexDirection: 'column',
+    alignItems: 'center',
+  },
+  navRow: {
+    gap: {default: 'normal', [MOBILE]: 'var(--spacing-6)'},
+  },
+  legalRow: {
+    gap: {default: 'normal', [MOBILE]: 'var(--spacing-2)'},
+  },
+  navLinks: {
+    // HStack gap={4}
+    gap: {default: 'var(--spacing-4)', [MOBILE]: 'var(--spacing-3)'},
+  },
+  copyright: {
+    // Text justify="end"
+    textAlign: {default: 'end', [MOBILE]: 'center'},
+  },
+  social: {
+    // Must stay `nowrap` on desktop: the social buttons sit in a `1fr` grid
+    // track, and a track only grows past its share to fit its MIN-CONTENT — a
+    // wrappable row has a one-icon min-content, so the track would stay at
+    // 1/5 of the row and the icons would wrap onto a second line.
+    flexWrap: {default: 'nowrap', [MOBILE]: 'wrap'},
   },
 });
 
@@ -68,6 +117,8 @@ const FOOTER_LINKS: ReadonlyArray<{
   {label: 'Templates', href: '/templates'},
   {label: 'Themes', href: '/themes'},
   {label: 'Playground', href: '/playground'},
+  {label: 'Storybook', href: '/storybook/'},
+  {label: 'Sandbox', href: '/sandbox/'},
   {label: 'Blog', href: '/blog'},
   {label: 'Community', href: '/community'},
   {label: 'Changelog', href: '/changelog'},
@@ -151,8 +202,6 @@ function LegalLinks() {
 }
 
 export function SiteFooter({year}: {year: number}) {
-  const {isMobile} = useAppShellMobile();
-
   // The regex compliance check requires the year to immediately follow the
   // copyright mark — `©{year}`, no separating space. See PR description.
   const copyright = `\u00A9${year} Meta Platforms, Inc.`;
@@ -175,61 +224,29 @@ export function SiteFooter({year}: {year: number}) {
     </Link>
   );
 
-  if (isMobile) {
-    // On narrow viewports the horizontal rows can't fit side by side, so we
-    // stack the three regions vertically and let the link lists wrap.
-    return (
-      <Section role="contentinfo" padding={6} xstyle={styles.siteFooter}>
-        <VStack gap={6}>
-          <VStack gap={6} hAlign="center">
-            {astryxLogo}
-            <HStack
-              gap={3}
-              wrap="wrap"
-              hAlign="center"
-              align="center"
-              xstyle={styles.mobileFooterLinks}>
-              <NavLinks />
-            </HStack>
-            <HStack gap={2} wrap="wrap" align="center">
-              <SocialButtons />
-            </HStack>
-          </VStack>
-
-          <Divider />
-
-          <VStack gap={2} hAlign="center">
-            {metaOpenSourceLink}
-            <HStack gap={4} hAlign="start" xstyle={styles.mobileFooterLinks}>
-              <LegalLinks />
-            </HStack>
-            <Text type="supporting" color="secondary">
-              {copyright}
-            </Text>
-          </VStack>
-        </VStack>
-      </Section>
-    );
-  }
-
   return (
     <Section role="contentinfo" padding={6} xstyle={styles.siteFooter}>
-      <VStack gap={4}>
-        <Grid columns={5} align="center">
+      <VStack gap={4} xstyle={styles.stack}>
+        <Grid columns={5} align="center" xstyle={[styles.row, styles.navRow]}>
           {astryxLogo}
           <GridSpan columns={3}>
-            <HStack gap={4} wrap="wrap" align="center" hAlign="center">
+            <HStack
+              gap={4}
+              wrap="wrap"
+              align="center"
+              hAlign="center"
+              xstyle={[styles.navLinks, styles.mobileFooterLinks]}>
               <NavLinks />
             </HStack>
           </GridSpan>
-          <HStack gap={2} align="center" justify="end">
+          <HStack gap={2} align="center" justify="end" xstyle={styles.social}>
             <SocialButtons />
           </HStack>
         </Grid>
 
         <Divider />
 
-        <Grid columns={4} align="center">
+        <Grid columns={4} align="center" xstyle={[styles.row, styles.legalRow]}>
           {metaOpenSourceLink}
           <GridSpan columns={2}>
             <HStack
@@ -241,7 +258,11 @@ export function SiteFooter({year}: {year: number}) {
               <LegalLinks />
             </HStack>
           </GridSpan>
-          <Text type="supporting" color="secondary" justify="end">
+          <Text
+            type="supporting"
+            color="secondary"
+            justify="end"
+            xstyle={styles.copyright}>
             {copyright}
           </Text>
         </Grid>

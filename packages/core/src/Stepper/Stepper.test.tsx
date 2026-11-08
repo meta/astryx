@@ -1,11 +1,16 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {StrictMode} from 'react';
+import {StrictMode, createRef, useLayoutEffect} from 'react';
 import {describe, it, expect, vi} from 'vitest';
-import {render, screen, within} from '@testing-library/react';
+import {act, render, screen, within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Stepper} from './Stepper';
 import {Step} from './Step';
+import {useStepperContext} from './StepperContext';
+import {useLayer} from '../Layer/useLayer';
+import {defineTheme} from '../theme/defineTheme';
+import {generateThemeCSS} from '../theme/generateThemeRules';
+import {getForcedColorsRules} from '../__tests__/forcedColors';
 
 describe('Stepper', () => {
   it('renders an ordered list of steps (not a nav landmark)', () => {
@@ -73,6 +78,38 @@ describe('Stepper', () => {
       screen.getByRole('list', {name: 'Checkout progress'}),
     ).toBeInTheDocument();
   });
+
+  it.each(['horizontal', 'vertical'] as const)(
+    'exposes only the supported public context keys at runtime when %s',
+    orientation => {
+      let contextKeys: string[] = [];
+
+      function ContextProbe() {
+        contextKeys = Object.keys(useStepperContext()).sort();
+        return null;
+      }
+
+      render(
+        <Stepper activeStep={0} orientation={orientation}>
+          <ContextProbe />
+          <Step step={0} label="Step 1" />
+        </Stepper>,
+      );
+
+      expect(contextKeys).toEqual(
+        [
+          'activeStep',
+          'previousActiveStep',
+          'orientation',
+          'isNonLinear',
+          'onStepClick',
+          'density',
+          'indicatorPosition',
+          'registerStep',
+        ].sort(),
+      );
+    },
+  );
 
   it('supports vertical orientation', () => {
     render(
@@ -148,17 +185,75 @@ describe('Stepper', () => {
     expect(handleClick).toHaveBeenCalledWith(2);
   });
 
-  it('does not render buttons for disabled steps', () => {
+  it('keeps a disabled step focusable and aria-disabled, and never activates it (spec:AST-085 FR1, FR2, FR5)', async () => {
+    const user = userEvent.setup();
+    const handleClick = vi.fn();
     render(
-      <Stepper activeStep={2} onStepClick={() => {}}>
+      <Stepper activeStep={2} onStepClick={handleClick}>
         <Step step={0} label="Step 1" isDisabled />
         <Step step={1} label="Step 2" />
         <Step step={2} label="Step 3" />
       </Stepper>,
     );
-    expect(
-      screen.queryByRole('button', {name: /Go to step 1: Step 1/}),
-    ).not.toBeInTheDocument();
+    const disabled = screen.getByRole('button', {name: /Go to step 1: Step 1/});
+    expect(disabled).toHaveAttribute('aria-disabled', 'true');
+    expect(disabled).not.toHaveAttribute('disabled');
+    await user.click(disabled);
+    disabled.focus();
+    await user.keyboard('{Enter}');
+    await user.keyboard(' ');
+    expect(handleClick).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['separated', {}],
+    ['on-track horizontal', {indicatorPosition: 'on-track'}],
+    [
+      'on-track vertical',
+      {indicatorPosition: 'on-track', orientation: 'vertical'},
+    ],
+  ] as const)(
+    "describes a disabled step with its reason, the step's description, %s (spec:AST-085 FR5)",
+    (_layout, layout) => {
+      render(
+        <Stepper activeStep={1} onStepClick={() => {}} {...layout}>
+          <Step step={0} label="Setup" />
+          <Step
+            step={1}
+            label="Permissions"
+            description="Requires admin role"
+            isDisabled
+          />
+        </Stepper>,
+      );
+      const step = screen.getByRole('button', {
+        name: /Go to step 2: Permissions/,
+      });
+      expect(step).toHaveAccessibleDescription('Requires admin role');
+      expect(
+        screen.getByRole('button', {name: /Go to step 1: Setup/}),
+      ).not.toHaveAttribute('aria-describedby');
+    },
+  );
+
+  it('keeps focus on a step that becomes disabled while focused (spec:AST-085 FR4)', () => {
+    const {rerender} = render(
+      <Stepper activeStep={2} onStepClick={() => {}}>
+        <Step step={0} label="Step 1" />
+        <Step step={1} label="Step 2" />
+      </Stepper>,
+    );
+    const step = screen.getByRole('button', {name: /Go to step 1: Step 1/});
+    step.focus();
+    rerender(
+      <Stepper activeStep={2} onStepClick={() => {}}>
+        <Step step={0} label="Step 1" isDisabled />
+        <Step step={1} label="Step 2" />
+      </Stepper>,
+    );
+    const after = screen.getByRole('button', {name: /Go to step 1: Step 1/});
+    expect(after).toHaveFocus();
+    expect(after).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('does not render buttons when onStepClick is not provided', () => {
@@ -573,7 +668,7 @@ describe('Stepper', () => {
       expect(handleClick).toHaveBeenCalledWith(0);
     });
 
-    it('tabs through steps in document order, skipping disabled ones', async () => {
+    it('tabs through steps in document order, disabled ones included', async () => {
       const user = userEvent.setup();
       render(
         <Stepper activeStep={3} onStepClick={() => {}}>
@@ -586,7 +681,11 @@ describe('Stepper', () => {
       expect(
         screen.getByRole('button', {name: 'Go to step 1: One, completed'}),
       ).toHaveFocus();
-      // The disabled step renders no button, so Tab lands on step 3 next.
+      // The disabled step keeps its tab stop (spec:AST-085 FR1).
+      await user.tab();
+      expect(
+        screen.getByRole('button', {name: 'Go to step 2: Two, completed'}),
+      ).toHaveFocus();
       await user.tab();
       expect(
         screen.getByRole('button', {name: 'Go to step 3: Three, completed'}),
@@ -1020,5 +1119,1052 @@ describe('Stepper', () => {
       expect(schedule(getByTestId('c'))).toEqual([{start: 0, length: 1}]);
       expect(isInstant(getByTestId('b'))).toBe(true);
     });
+  });
+
+  describe('Stepper collapse (narrow containers)', () => {
+    const FRAME = '.astryx-stepper-frame';
+    const SUMMARY = '.astryx-stepper-summary';
+
+    /**
+     * jsdom has no layout, so the width the public Stepper list measures is
+     * described by hand. The frame deliberately reports a wide parent: this
+     * catches any accidental switch to measuring an unconstrained wrapper, while
+     * the regression below separately pins consumer layout styling to that frame.
+     * The value has to be in place before the first render because the shared
+     * resize observer takes its opening measurement synchronously during commit.
+     */
+    function atWidth(width: number, ui: React.ReactElement) {
+      const original = Object.getOwnPropertyDescriptor(
+        Element.prototype,
+        'clientWidth',
+      );
+      Object.defineProperty(Element.prototype, 'clientWidth', {
+        configurable: true,
+        get(this: Element) {
+          if (this.classList.contains('astryx-stepper')) {
+            return width;
+          }
+          return this.classList.contains('astryx-stepper-frame') ? 1000 : 0;
+        },
+      });
+      try {
+        return render(ui);
+      } finally {
+        if (original) {
+          Object.defineProperty(Element.prototype, 'clientWidth', original);
+        } else {
+          delete (Element.prototype as {clientWidth?: number}).clientWidth;
+        }
+      }
+    }
+
+    const fourSteps = (
+      props: Partial<React.ComponentProps<typeof Stepper>>,
+    ) => (
+      <Stepper activeStep={1} {...props}>
+        <Step step={0} label="Cart" />
+        <Step step={1} label="Shipping" description="Where it goes" />
+        <Step step={2} label="Delivery" />
+        <Step step={3} label="Payment" />
+      </Stepper>
+    );
+
+    it('keeps every label while each step has room for one', () => {
+      // Four steps across 600px is 150 each, comfortably over the threshold.
+      atWidth(600, fourSteps({}));
+      for (const name of ['Cart', 'Shipping', 'Delivery', 'Payment']) {
+        expect(screen.getByText(name)).toBeInTheDocument();
+      }
+      expect(document.querySelector(FRAME)).toBeInTheDocument();
+    });
+
+    it('keeps a consumer-constrained summary inside the styled component box', () => {
+      atWidth(
+        320,
+        <div style={{width: 1000}}>
+          <Stepper activeStep={1} style={{width: 320}}>
+            <Step step={0} label="Cart" />
+            <Step step={1} label="Shipping" />
+            <Step step={2} label="Delivery" />
+            <Step step={3} label="Payment" />
+          </Stepper>
+        </div>,
+      );
+
+      const list = screen.getByRole<HTMLOListElement>('list');
+      const frame = list.parentElement as HTMLElement;
+      const summary = document.querySelector<HTMLElement>(SUMMARY);
+      expect(summary).not.toBeNull();
+      expect(frame).toHaveClass('astryx-stepper-frame');
+      expect(frame).toHaveStyle({width: '320px'});
+      expect(summary!.parentElement).toBe(frame);
+      expect(list.style.width).toBe('');
+    });
+
+    it('puts horizontal className on the frame without moving list DOM props or ref', () => {
+      const ref = createRef<HTMLOListElement>();
+      atWidth(
+        320,
+        <Stepper
+          ref={ref}
+          activeStep={1}
+          className="consumer-stepper"
+          data-testid="public-stepper-list"
+          aria-describedby="stepper-help">
+          <Step step={0} label="Cart" />
+          <Step step={1} label="Shipping" />
+          <Step step={2} label="Delivery" />
+          <Step step={3} label="Payment" />
+        </Stepper>,
+      );
+
+      const list = screen.getByTestId('public-stepper-list');
+      const frame = list.parentElement as HTMLElement;
+      expect(ref.current).toBe(list);
+      expect(list).toHaveAttribute('aria-describedby', 'stepper-help');
+      expect(list).not.toHaveClass('consumer-stepper');
+      expect(frame).toHaveClass('consumer-stepper');
+      expect(frame).not.toHaveAttribute('data-testid');
+      expect(frame).not.toHaveAttribute('aria-describedby');
+    });
+
+    it('drops the labels and names the current step once they no longer fit', () => {
+      // 320px over four steps is 80 each, under the 112px a label needs.
+      atWidth(320, fourSteps({}));
+      const summary = document.querySelector<HTMLElement>(SUMMARY);
+      expect(summary).not.toBeNull();
+
+      // Only the current step is named where it can be seen, and only it keeps
+      // a description — the rest have no label left to hang one under.
+      expect(within(summary!).getByText('Shipping')).toBeInTheDocument();
+      expect(within(summary!).getByText('Where it goes')).toBeInTheDocument();
+      // The separated track has no indicator nodes of its own, so the compact
+      // label keeps the active indicator beside it.
+      expect(
+        summary!.querySelector('.astryx-step-indicator'),
+      ).toBeInTheDocument();
+
+      const list = screen.getByRole('list');
+      expect(within(list).queryByText('Where it goes')).toBeNull();
+      expect(screen.getAllByRole('listitem')).toHaveLength(4);
+    });
+
+    it('places the compact summary directly against the track', () => {
+      atWidth(320, fourSteps({}));
+      const frame = document.querySelector<HTMLElement>(FRAME);
+      expect(frame).not.toBeNull();
+      expect(['0', '0px']).toContain(getComputedStyle(frame!).gap);
+    });
+
+    it('collapses later the more steps there are', () => {
+      // 320px is ample for two steps at 160 each, and far too little for four.
+      atWidth(
+        320,
+        <Stepper activeStep={0}>
+          <Step step={0} label="Details" />
+          <Step step={1} label="Review" />
+        </Stepper>,
+      );
+      expect(screen.getByRole('list')).toBeInTheDocument();
+      expect(document.querySelector('.astryx-stepper-summary')).toBeNull();
+    });
+
+    it('treats the minimum step width as pixels without a measurement probe', () => {
+      atWidth(
+        360,
+        fourSteps({
+          horizontalOptions: {
+            minimumStepWidth: 80,
+            collapsedVariant: 'withLabelAndControls',
+          },
+        }),
+      );
+
+      expect(document.querySelector(SUMMARY)).toBeNull();
+      expect(
+        Array.from(
+          document.querySelectorAll<HTMLElement>('[aria-hidden="true"]'),
+        ).find(element => element.style.width !== ''),
+      ).toBeUndefined();
+    });
+
+    it('leaves a vertical stepper alone at any width', () => {
+      // A column gives every label a row of its own, so there is nothing to
+      // run out of and no frame to measure.
+      atWidth(120, fourSteps({orientation: 'vertical'}));
+      for (const name of ['Cart', 'Shipping', 'Delivery', 'Payment']) {
+        expect(screen.getByText(name)).toBeInTheDocument();
+      }
+      expect(document.querySelector(FRAME)).toBeNull();
+    });
+
+    it('keeps the sequence whole for a screen reader after collapsing', () => {
+      atWidth(320, fourSteps({}));
+      const items = screen.getAllByRole('listitem');
+      // Every step still names itself and the current one is still marked, so
+      // the list reads as a complete sequence with the labels off the screen.
+      // The status word rides along with the name, as it does when visible —
+      // "Cart" is behind the current step, so it reads as completed.
+      expect(items.map(li => li.textContent)).toEqual([
+        'Cartcompleted',
+        'Shipping',
+        'Delivery',
+        'Payment',
+      ]);
+      expect(items[1]).toHaveAttribute('aria-current', 'step');
+    });
+
+    it('offers no step controls on a stepper that cannot be navigated', () => {
+      // A linear flow is driven by the form's own Back and Continue; a second
+      // pair pointed at a step it will not honour is worse than none.
+      atWidth(320, fourSteps({}));
+      expect(screen.queryByRole('button', {name: 'Next step'})).toBeNull();
+      expect(screen.queryByRole('button', {name: 'Previous step'})).toBeNull();
+    });
+
+    it('moves a step at a time through the controls when one is given', async () => {
+      const user = userEvent.setup();
+      const onStepClick = vi.fn();
+      atWidth(320, fourSteps({onStepClick}));
+
+      await user.click(screen.getByRole('button', {name: 'Next step'}));
+      expect(onStepClick).toHaveBeenCalledWith(2);
+
+      await user.click(screen.getByRole('button', {name: 'Previous step'}));
+      expect(onStepClick).toHaveBeenCalledWith(0);
+    });
+
+    it('skips disabled steps in either direction', async () => {
+      const user = userEvent.setup();
+      const onStepClick = vi.fn();
+      const forward = atWidth(
+        320,
+        <Stepper activeStep={1} onStepClick={onStepClick}>
+          <Step step={0} label="Cart" />
+          <Step step={1} label="Shipping" />
+          <Step step={2} label="Delivery" isDisabled />
+          <Step step={3} label="Payment" />
+        </Stepper>,
+      );
+
+      await user.click(screen.getByRole('button', {name: 'Next step'}));
+      expect(onStepClick).toHaveBeenLastCalledWith(3);
+      forward.unmount();
+
+      atWidth(
+        320,
+        <Stepper activeStep={2} onStepClick={onStepClick}>
+          <Step step={0} label="Cart" />
+          <Step step={1} label="Shipping" isDisabled />
+          <Step step={2} label="Delivery" />
+          <Step step={3} label="Payment" />
+        </Stepper>,
+      );
+      await user.click(screen.getByRole('button', {name: 'Previous step'}));
+      expect(onStepClick).toHaveBeenLastCalledWith(0);
+    });
+
+    it('reads registration state again when a compact control activates', async () => {
+      const user = userEvent.setup();
+      const onStepClick = vi.fn();
+      const disabled = {
+        0: false,
+        1: false,
+        2: false,
+        3: false,
+      };
+
+      function Registration({step}: {step: 0 | 1 | 2 | 3}) {
+        const {registerStep} = useStepperContext();
+        useLayoutEffect(
+          () =>
+            registerStep(step, {
+              getIsDisabled: () => disabled[step],
+            }),
+          [registerStep, step],
+        );
+        return null;
+      }
+
+      atWidth(
+        320,
+        <Stepper activeStep={1} onStepClick={onStepClick}>
+          <Registration step={0} />
+          <Registration step={1} />
+          <Registration step={2} />
+          <Registration step={3} />
+        </Stepper>,
+      );
+
+      // Step 2 was the target during render. Change only the registered source;
+      // no parent render should be needed before activation skips it.
+      disabled[2] = true;
+      await user.click(screen.getByRole('button', {name: 'Next step'}));
+      expect(onStepClick).toHaveBeenCalledWith(3);
+    });
+
+    it('reads the current disabled state from each registration', async () => {
+      const user = userEvent.setup();
+      const onStepClick = vi.fn();
+      const steps = (isDeliveryDisabled: boolean) => (
+        <Stepper activeStep={1} onStepClick={onStepClick}>
+          <Step step={0} label="Cart" />
+          <Step step={1} label="Shipping" />
+          <Step step={2} label="Delivery" isDisabled={isDeliveryDisabled} />
+          <Step step={3} label="Payment" />
+        </Stepper>
+      );
+      const {rerender} = atWidth(320, steps(true));
+
+      await user.click(screen.getByRole('button', {name: 'Next step'}));
+      expect(onStepClick).toHaveBeenLastCalledWith(3);
+
+      rerender(steps(false));
+      await user.click(screen.getByRole('button', {name: 'Next step'}));
+      expect(onStepClick).toHaveBeenLastCalledWith(2);
+    });
+
+    it('disables a summary control with no enabled step in its direction', () => {
+      atWidth(
+        320,
+        <Stepper activeStep={1} onStepClick={() => {}}>
+          <Step step={0} label="Cart" />
+          <Step step={1} label="Shipping" />
+          <Step step={2} label="Delivery" isDisabled />
+          <Step step={3} label="Payment" isDisabled />
+        </Stepper>,
+      );
+      expect(screen.getByRole('button', {name: 'Next step'})).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      );
+    });
+
+    it.each(['separated', 'on-track'] as const)(
+      'keeps %s step content mounted across compact resizing',
+      async indicatorPosition => {
+        const originalWidth = Object.getOwnPropertyDescriptor(
+          Element.prototype,
+          'clientWidth',
+        );
+        let width = 600;
+        let resize: ResizeObserverCallback = () => {};
+        class ResizeObserverStub {
+          constructor(callback: ResizeObserverCallback) {
+            resize = callback;
+          }
+          observe() {}
+          unobserve() {}
+          disconnect() {}
+        }
+        vi.stubGlobal('ResizeObserver', ResizeObserverStub);
+        Object.defineProperty(Element.prototype, 'clientWidth', {
+          configurable: true,
+          get(this: Element) {
+            return this.classList.contains('astryx-stepper') ? width : 0;
+          },
+        });
+
+        let view: ReturnType<typeof render> | null = null;
+        try {
+          view = render(
+            <Stepper activeStep={0} indicatorPosition={indicatorPosition}>
+              <Step step={0} label="Account">
+                <input aria-label="Account name" defaultValue="" />
+              </Step>
+              <Step step={1} label="Review" />
+            </Stepper>,
+          );
+          const user = userEvent.setup();
+          const input = screen.getByRole<HTMLInputElement>('textbox', {
+            name: 'Account name',
+          });
+          await user.type(input, 'Draft');
+          const list = screen.getByRole('list');
+
+          width = 120;
+          act(() =>
+            resize([{target: list} as unknown as ResizeObserverEntry], null!),
+          );
+          const compactInput = document.querySelector<HTMLInputElement>(
+            'input[aria-label="Account name"]',
+          );
+          expect(compactInput).toBe(input);
+          expect(compactInput).toHaveValue('Draft');
+          expect(compactInput?.closest('[hidden]')).not.toBeNull();
+          expect(document.querySelector(SUMMARY)).toBeInTheDocument();
+
+          width = 600;
+          act(() =>
+            resize([{target: list} as unknown as ResizeObserverEntry], null!),
+          );
+          expect(
+            document.querySelector('input[aria-label="Account name"]'),
+          ).toBe(input);
+          expect(input.closest('[hidden]')).toBeNull();
+          expect(document.querySelector(SUMMARY)).toBeNull();
+        } finally {
+          view?.unmount();
+          vi.unstubAllGlobals();
+          if (originalWidth) {
+            Object.defineProperty(
+              Element.prototype,
+              'clientWidth',
+              originalWidth,
+            );
+          } else {
+            delete (Element.prototype as {clientWidth?: number}).clientWidth;
+          }
+        }
+      },
+    );
+
+    it('measures the list only while it is mounted and horizontal', () => {
+      const observed = new Set<Element>();
+      class ResizeObserverStub {
+        observe(element: Element) {
+          observed.add(element);
+        }
+        unobserve(element: Element) {
+          observed.delete(element);
+        }
+        disconnect() {
+          observed.clear();
+        }
+      }
+      vi.stubGlobal('ResizeObserver', ResizeObserverStub);
+      const stepper = (orientation: 'horizontal' | 'vertical') => (
+        <Stepper activeStep={0} orientation={orientation}>
+          <Step step={0} label="Account" />
+          <Step step={1} label="Review" />
+        </Stepper>
+      );
+      try {
+        const view = render(stepper('horizontal'));
+        const horizontalList = screen.getByRole('list');
+        expect(observed.has(horizontalList)).toBe(true);
+
+        view.rerender(stepper('vertical'));
+        expect(observed.has(horizontalList)).toBe(false);
+        expect(observed.has(screen.getByRole('list'))).toBe(false);
+
+        view.rerender(stepper('horizontal'));
+        const list = screen.getByRole('list');
+        expect(observed.has(list)).toBe(true);
+
+        view.unmount();
+        expect(observed.has(list)).toBe(false);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it('stops the controls at both ends of the sequence', () => {
+      const onStepClick = vi.fn();
+      // Disabled the Astryx way: aria-disabled, so the control keeps its place
+      // in the tab order and can still explain itself at the end of a flow.
+      const disabled = (name: string) =>
+        screen.getByRole('button', {name}).getAttribute('aria-disabled');
+
+      const {unmount} = atWidth(320, fourSteps({onStepClick, activeStep: 0}));
+      expect(disabled('Previous step')).toBe('true');
+      expect(disabled('Next step')).not.toBe('true');
+      unmount();
+
+      atWidth(320, fourSteps({onStepClick, activeStep: 3}));
+      expect(disabled('Previous step')).not.toBe('true');
+      expect(disabled('Next step')).toBe('true');
+    });
+
+    it('takes the collapsed steps out of the tab order', () => {
+      // The label goes and the click target goes with it: a 4px bar is not
+      // something to press, and a focus stop with nothing visible to show for
+      // it is worse than no focus stop at all.
+      atWidth(320, fourSteps({onStepClick: vi.fn()}));
+      const stepButtons = screen
+        .getAllByRole('button')
+        .filter(b => (b.getAttribute('aria-label') ?? '').startsWith('Go to'));
+      expect(stepButtons).toHaveLength(0);
+    });
+
+    it('keeps collapsed on-track nodes visible but non-interactive', () => {
+      // The indicator stays on the rail as progress information, while the
+      // summary controls below it own navigation in the compact presentation.
+      atWidth(
+        320,
+        fourSteps({indicatorPosition: 'on-track', onStepClick: vi.fn()}),
+      );
+      const delivery = screen.getAllByRole('listitem')[2];
+      expect(
+        delivery.querySelector('.astryx-step-indicator'),
+      ).toBeInTheDocument();
+      const summary = document.querySelector<HTMLElement>(SUMMARY);
+      expect(summary).not.toBeNull();
+      expect(summary!.querySelector('.astryx-step-indicator')).toBeNull();
+      expect(
+        screen.queryByRole('button', {name: /^Go to step 3: Delivery/}),
+      ).not.toBeInTheDocument();
+      expect(screen.getByRole('button', {name: 'Previous step'})).toBeEnabled();
+      expect(screen.getByRole('button', {name: 'Next step'})).toBeEnabled();
+    });
+
+    it('drops the controls but keeps the name on request', () => {
+      // The shape of a wizard whose footer already has Back and Continue: the
+      // steps stay clickable at full width, and the phone gets one pair of
+      // controls rather than two.
+      atWidth(
+        320,
+        fourSteps({
+          onStepClick: vi.fn(),
+          horizontalOptions: {
+            minimumStepWidth: 112,
+            collapsedVariant: 'withLabel',
+          },
+        }),
+      );
+      expect(screen.queryByRole('button', {name: 'Next step'})).toBeNull();
+      expect(screen.queryByRole('button', {name: 'Previous step'})).toBeNull();
+
+      const summary = document.querySelector<HTMLElement>(SUMMARY);
+      expect(summary).not.toBeNull();
+      expect(within(summary!).getByText('Shipping')).toBeInTheDocument();
+    });
+
+    it('leaves a bare track when the label is hidden, even with a handler', () => {
+      // The surrounding flow owns both its heading and navigation. Keeping an
+      // onStepClick handler for the expanded layout must not add a compact row.
+      atWidth(
+        320,
+        fourSteps({
+          onStepClick: vi.fn(),
+          horizontalOptions: {
+            minimumStepWidth: 112,
+            collapsedVariant: 'hiddenLabel',
+          },
+        }),
+      );
+      expect(document.querySelector(SUMMARY)).toBeNull();
+      expect(screen.queryByRole('button', {name: 'Previous step'})).toBeNull();
+      expect(screen.queryByRole('button', {name: 'Next step'})).toBeNull();
+      expect(screen.getByRole('list')).toBeInTheDocument();
+      expect(screen.getAllByRole('listitem')).toHaveLength(4);
+    });
+
+    it('also leaves the bare track when there is no handler', () => {
+      atWidth(
+        320,
+        fourSteps({
+          horizontalOptions: {
+            minimumStepWidth: 112,
+            collapsedVariant: 'hiddenLabel',
+          },
+        }),
+      );
+      expect(document.querySelector(SUMMARY)).toBeNull();
+      expect(screen.getByRole('list')).toBeInTheDocument();
+      expect(screen.getAllByRole('listitem')).toHaveLength(4);
+    });
+
+    it('keeps the sequence whole for a screen reader when the label is hidden', () => {
+      // The visible row only repeats the list, so suppressing it cannot shorten
+      // what a screen reader hears. Same expectation as the default collapse.
+      atWidth(
+        320,
+        fourSteps({
+          horizontalOptions: {
+            minimumStepWidth: 112,
+            collapsedVariant: 'hiddenLabel',
+          },
+        }),
+      );
+      const items = screen.getAllByRole('listitem');
+      expect(items.map(li => li.textContent)).toEqual([
+        'Cartcompleted',
+        'Shipping',
+        'Delivery',
+        'Payment',
+      ]);
+      expect(items[1]).toHaveAttribute('aria-current', 'step');
+    });
+
+    it('leaves a stepper that has room for its labels alone', () => {
+      // The variant is scoped to the collapse and does not strip desktop labels.
+      atWidth(
+        600,
+        fourSteps({
+          onStepClick: vi.fn(),
+          horizontalOptions: {
+            minimumStepWidth: 112,
+            collapsedVariant: 'hiddenLabel',
+          },
+        }),
+      );
+      for (const name of ['Cart', 'Shipping', 'Delivery', 'Payment']) {
+        expect(screen.getByText(name)).toBeInTheDocument();
+      }
+      expect(
+        screen.getByRole('button', {name: /^Go to step 3: Delivery/}),
+      ).toBeInTheDocument();
+    });
+
+    it('keeps on-track nodes presentational after controls are dropped', () => {
+      // Compact navigation belongs to the summary controls in both layouts.
+      // Turning those controls off leaves the rail as progress information,
+      // rather than reviving a second, denser set of click targets.
+      atWidth(
+        320,
+        fourSteps({
+          indicatorPosition: 'on-track',
+          onStepClick: vi.fn(),
+          horizontalOptions: {
+            minimumStepWidth: 112,
+            collapsedVariant: 'withLabel',
+          },
+        }),
+      );
+      expect(screen.queryByRole('button', {name: 'Next step'})).toBeNull();
+      expect(
+        screen.queryByRole('button', {name: /^Go to step 3: Delivery/}),
+      ).toBeNull();
+      const indicators = screen
+        .getAllByRole('listitem')
+        .map(item => item.querySelector('.astryx-step-indicator'));
+      expect(indicators).toHaveLength(4);
+      expect(indicators.every(Boolean)).toBe(true);
+    });
+  });
+  describe('--step-connector-gap', () => {
+    // The on-track layouts draw the connector as one segment either side of
+    // the indicator. A theme that wants the track to stop short of the node
+    // sets one var; Astryx spends it on whichever side each segment faces the
+    // node from, so the pair leaves a symmetric hole and the caller never
+    // names the pieces.
+    const onTrack = (orientation: 'vertical' | 'horizontal') => (
+      <Stepper
+        activeStep={1}
+        orientation={orientation}
+        indicatorPosition="on-track">
+        <Step step={0} label="One" />
+        <Step step={1} label="Two" />
+      </Stepper>
+    );
+
+    /**
+     * Every declaration the injected stylesheet carries for an element's own
+     * atomic classes, `::before` rules included — the same route `fillEasings`
+     * above takes, because StyleX puts static styles in the sheet rather than
+     * inline and jsdom resolves no cascade of its own.
+     *
+     * Atomic class names are unique hashes, so the owning class is matched
+     * anywhere in the selector rather than only at its head: a StyleX variant
+     * such as the `dir="rtl"` mirror emits a compound selector the class does
+     * not lead. Those rules are tagged `rtl:` so a test can tell the two
+     * directions apart.
+     */
+    const declarationsFor = (el: Element) => {
+      const classes = new Set(el.className.split(/\s+/));
+      const out: string[] = [];
+      for (const sheet of Array.from(document.styleSheets)) {
+        for (const rule of Array.from(sheet.cssRules)) {
+          if (!('selectorText' in rule)) {
+            continue;
+          }
+          const {selectorText, style} = rule as CSSStyleRule;
+          const owner = [...selectorText.matchAll(/\.([\w-]+)/g)].find(match =>
+            classes.has(match[1]),
+          );
+          if (owner == null) {
+            continue;
+          }
+          const prefix =
+            (selectorText.includes('[dir="rtl"]') ? 'rtl:' : '') +
+            (selectorText.endsWith('::before') ? 'before:' : '');
+          for (const prop of Array.from(style)) {
+            out.push(`${prefix}${prop}:${style.getPropertyValue(prop)}`);
+          }
+        }
+      }
+      return out.join(';');
+    };
+
+    it('clips the side each segment faces the node from', () => {
+      const {container} = render(onTrack('vertical'));
+      const [lead, rail] = [
+        ...container.querySelectorAll('.astryx-step-connector'),
+      ];
+      // Above the node clips its bottom edge, below it clips its top —
+      // mirrored, so the hole is centred on the indicator.
+      expect(declarationsFor(lead)).toMatch(/clip-path:inset\(0 0 [^;]*\)/);
+      expect(declarationsFor(rail)).toMatch(/clip-path:inset\([^0][^;]*0 0\)/);
+    });
+
+    it('uses the inline axis when the stepper is horizontal', () => {
+      const {container} = render(onTrack('horizontal'));
+      const [lead, rail] = [
+        ...container.querySelectorAll('.astryx-step-connector'),
+      ];
+      expect(declarationsFor(lead)).toMatch(
+        /clip-path:inset\(0 [^0][^;]*0 0\)/,
+      );
+      expect(declarationsFor(rail)).toMatch(
+        /clip-path:inset\(0 0 0 [^0][^;]*\)/,
+      );
+    });
+
+    it('clips the track and the fill with one declaration', () => {
+      // The gap has to reach two layers: the track is the segment's own
+      // background, the accent fill an absolutely placed ::before. Spending it
+      // on each separately meant two declarations on two boxes, so a
+      // percentage resolved against a different containing block for each and
+      // stopped them ~1.2px apart. One clip on the segment covers both.
+      const {container} = render(onTrack('vertical'));
+      const lead = container.querySelector(
+        '.astryx-step-connector',
+      ) as HTMLElement;
+      const declarations = declarationsFor(lead);
+      expect(declarations).toContain('clip-path');
+      // No per-layer copy of the gap to disagree with.
+      expect(declarations).not.toMatch(
+        /before:[a-z-]*padding[^;]*connector-gap/,
+      );
+      expect(declarations).not.toMatch(/before:inset[^;]*connector-gap/);
+    });
+
+    it('clamps a negative gap away and caps an oversized one', () => {
+      // A theme value arrives with nothing in between to reject it, and
+      // `inset()` is not padding: Chromium ACCEPTS `inset(0 0 -4px 0)` rather
+      // than clamping it, so the floor has to be written. The cap is the
+      // flexible segment's own `min-height`, bounding an oversized gap to a
+      // short track. Neither can grow the Stepper — a clip cannot change
+      // layout.
+      const {container} = render(onTrack('vertical'));
+      const lead = container.querySelector(
+        '.astryx-step-connector',
+      ) as HTMLElement;
+      const declarations = declarationsFor(lead);
+      expect(declarations).toContain('max(0px');
+      expect(declarations).toContain('min(var(--step-connector-gap');
+    });
+
+    it('flips the horizontal clip under dir="rtl"', () => {
+      // `clip-path: inset()` is physical (top/right/bottom/left) and has no
+      // logical form, but the row reverses under `dir="rtl"`. Unflipped, the
+      // leading segment sits to the RIGHT of the node in RTL and still clips
+      // its right edge, opening the hole at the join between steps instead of
+      // at the indicator.
+      const {container} = render(onTrack('horizontal'));
+      const [lead, rail] = [
+        ...container.querySelectorAll('.astryx-step-connector'),
+      ];
+      // Each segment carries BOTH the LTR clip and its mirrored RTL variant.
+      const leadRules = declarationsFor(lead);
+      const railRules = declarationsFor(rail);
+      expect(leadRules).toMatch(/rtl:clip-path:inset\(0 0 0 [^0]/);
+      expect(railRules).toMatch(/rtl:clip-path:inset\(0 [^0][^;]*0 0\)/);
+    });
+
+    it('leaves the track unbroken when there is no indicator to avoid', () => {
+      // `indicator="none"` renders no node, so a gap is a hole in a track that
+      // is meant to be continuous.
+      const {container} = render(
+        <Stepper activeStep={0} indicatorPosition="on-track">
+          <Step step={0} label="One" indicator="none" />
+          <Step step={1} label="Two" indicator="none" />
+        </Stepper>,
+      );
+      const connectors = [
+        ...container.querySelectorAll('.astryx-step-connector'),
+      ];
+      expect(connectors.length).toBeGreaterThan(0);
+      for (const node of connectors) {
+        expect(declarationsFor(node)).not.toContain('--step-connector-gap');
+      }
+    });
+
+    it('defaults to no connector gap at the point of use', () => {
+      const {container} = render(onTrack('vertical'));
+      const root = container.querySelector('.astryx-stepper') as HTMLElement;
+      const lead = container.querySelector(
+        '.astryx-step-connector',
+      ) as HTMLElement;
+
+      expect(declarationsFor(root)).toContain('--step-connector-gap:inherit');
+      expect(declarationsFor(lead)).toContain('var(--step-connector-gap,0px)');
+    });
+
+    it('inherits a horizontal frame override through the root', () => {
+      // Horizontal layout props belong to the frame. The list must leave the
+      // public variable inheriting so that value reaches its connectors; the
+      // use-site fallback above supplies 0px when no ancestor sets a value.
+      const {container} = render(
+        <Stepper
+          activeStep={1}
+          orientation="horizontal"
+          indicatorPosition="on-track"
+          style={{'--step-connector-gap': '6px'} as React.CSSProperties}>
+          <Step step={0} label="One" />
+          <Step step={1} label="Two" />
+        </Stepper>,
+      );
+      const root = container.querySelector('.astryx-stepper') as HTMLElement;
+      const frame = container.querySelector(
+        '.astryx-stepper-frame',
+      ) as HTMLElement;
+      expect(frame.style.getPropertyValue('--step-connector-gap')).toBe('6px');
+      expect(declarationsFor(frame)).toContain('--step-connector-gap:0px');
+      expect(root.style.getPropertyValue('--step-connector-gap')).toBe('');
+      expect(declarationsFor(root)).toContain('--step-connector-gap:inherit');
+    });
+
+    it('emits a root-owned override through the theme build path', () => {
+      const theme = defineTheme({
+        name: 'stepper-connector-gap-test',
+        components: {
+          stepper: {
+            base: {'--step-connector-gap': '6px'},
+          },
+        },
+      });
+      const {component} = generateThemeCSS(theme);
+
+      expect(component).toMatch(
+        /\.astryx-stepper\s*\{[^}]*--step-connector-gap:\s*6px;/,
+      );
+      expect(component).not.toMatch(
+        /\.astryx-step-connector\s*\{[^}]*--step-connector-gap:/,
+      );
+    });
+
+    it('stops an outer gap at a layer opened from a step', async () => {
+      // An outer Stepper's gap is scoped to its own track. A layer opened from
+      // one of its steps is new content, so an inner Stepper there starts from
+      // the connector's own 0px fallback (AST-038 FR7) instead of inheriting
+      // the outer value through the DOM.
+      function StepLayer() {
+        const layer = useLayer({mode: 'context'});
+        return (
+          <>
+            <button type="button" ref={layer.ref} onClick={layer.show}>
+              Details
+            </button>
+            {layer.render(
+              <Stepper activeStep={0} indicatorPosition="on-track">
+                <Step step={0} label="Inner one" />
+                <Step step={1} label="Inner two" />
+              </Stepper>,
+            )}
+          </>
+        );
+      }
+      const user = userEvent.setup();
+      const {container} = render(
+        <div style={{'--step-connector-gap': '6px'} as React.CSSProperties}>
+          <Stepper activeStep={0} indicatorPosition="on-track">
+            <Step step={0} label="Outer one">
+              <StepLayer />
+            </Step>
+            <Step step={1} label="Outer two" />
+          </Stepper>
+        </div>,
+      );
+      await user.click(screen.getByRole('button', {name: 'Details'}));
+
+      const layerRoot = container.querySelector('[popover]') as HTMLElement;
+      expect(layerRoot).not.toBeNull();
+      expect(declarationsFor(layerRoot)).toContain(
+        '--step-connector-gap:initial',
+      );
+
+      // Ancestor inheritance still works outside the layer, and the inner
+      // Stepper keeps the same inheriting root, so a value set on it or through
+      // the `stepper` target still reaches its connectors.
+      const [outerRoot, innerRoot] = [
+        ...container.querySelectorAll<HTMLElement>('.astryx-stepper'),
+      ];
+      expect(layerRoot.contains(outerRoot)).toBe(false);
+      expect(layerRoot.contains(innerRoot)).toBe(true);
+      expect(declarationsFor(innerRoot)).toContain(
+        '--step-connector-gap:inherit',
+      );
+    });
+
+    it('leaves the connector target itself free of a segment vocabulary', () => {
+      // The pieces are an implementation of the on-track layout, not API: no
+      // `data-segment`, and no bare `lead`/`rail`/`content` class that could
+      // collide with a consumer's own stylesheet.
+      const {container} = render(onTrack('vertical'));
+      const connectors = [
+        ...container.querySelectorAll('.astryx-step-connector'),
+      ];
+      expect(connectors.length).toBeGreaterThan(0);
+      for (const node of connectors) {
+        expect(node.getAttribute('data-segment')).toBeNull();
+        for (const cls of ['lead', 'rail', 'content']) {
+          expect(node.classList.contains(cls)).toBe(false);
+        }
+      }
+    });
+  });
+});
+
+describe('step-label and step-description theme targets', () => {
+  // A step's two text parts each declare their own typography, so a theme
+  // cannot reach them by styling the step and letting the cascade do the rest
+  // — an inherited value never beats a value the element declares itself.
+  // These targets are the seam; the assertions below pin what a theme selects
+  // and, in the last case, why the cheaper route does not work.
+
+  const withText = (props = {}) => (
+    <Stepper activeStep={1}>
+      <Step step={0} label="Account" description="Your email" {...props} />
+      <Step step={1} label="Payment" description="Card details" />
+      <Step step={2} label="Review" description="Check and submit" />
+    </Stepper>
+  );
+
+  it('puts the target on the element that paints the text', () => {
+    const {container} = render(withText());
+    const label = container.querySelector('.astryx-step-label') as HTMLElement;
+    const description = container.querySelector(
+      '.astryx-step-description',
+    ) as HTMLElement;
+    // The text is the element's own content, not a descendant's: the target
+    // sits where the paint is rather than on a wrapper around it.
+    expect(label.textContent).toBe('Account');
+    expect(description.textContent).toBe('Your email');
+  });
+
+  it('reflects progress and status, the vocabulary step-indicator uses', () => {
+    // Same shape as the sibling target in this file, so a theme states a
+    // step's phase identically wherever it reaches in. Without it a theme
+    // could not say "the label of a completed step": the compiler emits a
+    // compound selector on one element, never a descendant of `.astryx-step`.
+    const {container} = render(
+      <Stepper activeStep={1}>
+        <Step step={0} label="Done" description="d" />
+        <Step step={1} label="Now" description="d" />
+        <Step step={2} label="Later" description="d" status="error" />
+      </Stepper>,
+    );
+    const labels = [
+      ...container.querySelectorAll<HTMLElement>('.astryx-step-label'),
+    ];
+    expect(labels.map(el => el.dataset.progress)).toEqual([
+      'completed',
+      'in-progress',
+      'not-started',
+    ]);
+    expect(labels[2].dataset.status).toBe('error');
+
+    const descriptions = [
+      ...container.querySelectorAll<HTMLElement>('.astryx-step-description'),
+    ];
+    expect(descriptions.map(el => el.dataset.progress)).toEqual([
+      'completed',
+      'in-progress',
+      'not-started',
+    ]);
+    expect(descriptions[2].dataset.status).toBe('error');
+  });
+
+  it('reflects disabled on the label target and emits its theme selector', () => {
+    // The label owns disabled paint (`styles.labelDisabled`); the description
+    // does not. The selector follows that ownership instead of being copied to
+    // every text target for vocabulary symmetry.
+    const {container} = render(
+      <Stepper activeStep={0}>
+        <Step
+          step={0}
+          label="Unavailable"
+          description="Try again later"
+          isDisabled
+        />
+      </Stepper>,
+    );
+    const label = container.querySelector('.astryx-step-label');
+    const description = container.querySelector('.astryx-step-description');
+    expect(label).toHaveAttribute('data-disabled', 'disabled');
+    expect(label).toHaveAttribute('data-disabled', 'disabled');
+    expect(description).not.toHaveAttribute('data-disabled');
+    expect(description).not.toHaveAttribute('data-disabled');
+
+    // A DOM attribute alone would not prove the public defineTheme path accepts
+    // and emits the state. Hold both halves of the contract.
+    const theme = defineTheme({
+      name: 'step-label-disabled-state-test',
+      components: {
+        'step-label': {
+          'disabled:disabled': {opacity: '0.4'},
+        },
+      },
+    });
+    const {component: css} = generateThemeCSS(theme);
+    expect(css).toContain('.astryx-step-label[data-disabled="disabled"]');
+    expect(css).toContain('opacity: 0.4');
+  });
+
+  it('carries them on the on-track layout too', () => {
+    // The indicator-on-the-connector layout renders its own label and
+    // description nodes; a target that only covered the default layout would
+    // leave a theme reaching for structural selectors in exactly one mode.
+    const {container} = render(
+      <Stepper activeStep={0} indicatorPosition="on-track">
+        <Step step={0} label="Account" description="Your email" />
+        <Step step={1} label="Payment" description="Card details" />
+      </Stepper>,
+    );
+    expect(container.querySelectorAll('.astryx-step-label')).toHaveLength(2);
+    expect(container.querySelectorAll('.astryx-step-description')).toHaveLength(
+      2,
+    );
+  });
+});
+
+describe('clickable step text reading', () => {
+  // axe-core's Label in Name rule joins a button's text nodes with nothing
+  // between them, aria-hidden ones included, so a number badge next to a label
+  // reads as one word ("1Account") that the step's name does not contain.
+  // Whitespace between them changes nothing on screen (the rows are flex
+  // containers) and keeps the two words apart.
+  it.each([
+    ['vertical', 'separated'],
+    ['horizontal', 'separated'],
+    ['vertical', 'on-track'],
+    ['horizontal', 'on-track'],
+  ] as const)(
+    'keeps the number and label apart in a %s %s step',
+    (orientation, indicatorPosition) => {
+      render(
+        <Stepper
+          orientation={orientation}
+          indicatorPosition={indicatorPosition}
+          activeStep={0}
+          label="Steps"
+          onStepClick={() => {}}>
+          <Step step={0} label="Account" indicator="number" />
+          <Step step={1} label="Payment" indicator="number" />
+        </Stepper>,
+      );
+
+      const button = screen.getByRole('button', {name: /Account/});
+      expect(button.textContent).toMatch(/1\s+Account/);
+      expect(button.textContent).not.toMatch(/1Account/);
+    },
+  );
+});
+
+// jsdom cannot emulate forced colors, so this asserts the compiled rule the
+// number badge fill relies on (architecture:theme-tokens INV11).
+describe('Step number badge forced colors', () => {
+  it('keeps a visible boundary on the badge fill', () => {
+    render(
+      <Stepper activeStep={0}>
+        <Step step={0} label="First" indicator="number" />
+        <Step step={1} label="Second" indicator="number" />
+      </Stepper>,
+    );
+    const css = getForcedColorsRules();
+    expect(css).toContain('outline-style: solid;');
+    expect(css).toContain('outline-color: canvastext;');
   });
 });

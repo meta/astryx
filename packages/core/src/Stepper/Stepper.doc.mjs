@@ -29,7 +29,12 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Use the vertical orientation for narrow containers or when steps have longer descriptions.',
+          'Use the vertical orientation when steps carry longer descriptions. A horizontal stepper handles narrow containers itself: once the frame gives each step less than horizontalOptions.minimumStepWidth (112px by default) it drops the labels for a segmented track and uses the configured collapsedVariant beneath it.',
+      },
+      {
+        guidance: true,
+        description:
+          "Set horizontalOptions.collapsedVariant to 'withLabel' when the page already supplies Back/Continue, or to 'hiddenLabel' when surrounding UI owns both the current-step heading and navigation and only a bare progress track is needed.",
       },
       {
         guidance: true,
@@ -54,10 +59,40 @@ export const docs = {
     ],
     anatomy: [
       {
+        name: 'Stepper',
+        required: true,
+        description:
+          'The ordered list holding the steps. Owns the orientation and the indicator placement the whole flow is laid out on.',
+      },
+      {
+        name: 'Frame',
+        required: true,
+        description:
+          'The layout frame that groups the ordered steps with the optional compact summary shown at narrow widths.',
+      },
+      {
+        name: 'Compact summary',
+        required: false,
+        description:
+          'The optional row a horizontal Stepper adds directly beneath the track once it is too narrow to label every step. horizontalOptions.collapsedVariant chooses a label with Previous/Next controls, the label alone, or no row for a bare progress track. The on-track layout keeps its indicators on the rail instead of repeating the active indicator beside the label. Every step keeps its name in the accessible sequence at any width.',
+      },
+      {
+        name: 'Step',
+        required: true,
+        description:
+          'One step in the flow, and the element carrying its status. Wraps the indicator, label, description, and the track segments belonging to it.',
+      },
+      {
         name: 'Progress bar',
         required: true,
         description:
-          'A 4px segmented bar per step. Filled for completed and active steps. Advancing one step grows the fill along the track it just covered, so the movement reads as progress rather than a bar changing color. Every other change applies at once: going back, jumping forward by more than one step, mounting mid-flow, and any change at all under prefers-reduced-motion. Where a span is drawn by more than one segment — the on-track layouts split it between two steps, three when a content slot sits between them — the segments run in track order at one constant speed, so the fill reads as a single line growing rather than pieces lighting in turn.',
+          'A 4px segmented bar per step. Filled for completed and active steps. Advancing one step grows the fill along the track it just covered, so the movement reads as progress rather than a bar changing color. Every other change applies at once: going back, jumping forward by more than one step, mounting mid-flow, and any change at all under prefers-reduced-motion. Where a span is drawn by more than one segment (the on-track layouts split it between two steps, three when a content slot sits between them), the segments run in track order at one constant speed, so the fill reads as a single line growing rather than pieces lighting in turn.',
+      },
+      {
+        name: 'Connector',
+        required: false,
+        description:
+          'The track drawn between indicators in the on-track layouts. Each connector paints an unfilled line and, over it, the accent fill covering the progress made. How many pieces a connector is drawn from is an implementation detail of the layout, not a themeable part; use --step-connector-gap to hold the track off the indicator.',
       },
       {
         name: 'Indicator',
@@ -83,10 +118,28 @@ export const docs = {
         className: 'astryx-stepper',
         visualProps: ['orientation', 'indicatorPosition'],
       },
+      {className: 'astryx-stepper-frame'},
+      {className: 'astryx-stepper-summary'},
       {className: 'astryx-step', visualProps: ['progress', 'status']},
       {className: 'astryx-step-indicator', visualProps: ['progress', 'status']},
+      {
+        className: 'astryx-step-label',
+        visualProps: ['progress', 'status', 'disabled'],
+      },
+      {
+        className: 'astryx-step-description',
+        visualProps: ['progress', 'status'],
+      },
       {className: 'astryx-step-bar'},
       {className: 'astryx-step-connector'},
+    ],
+    vars: [
+      {
+        name: '--step-connector-gap',
+        description:
+          'Gap a connector leaves where it meets the indicator, spent on the side facing it. Applies to the on-track layouts, whose connector is drawn as one segment either side of the node; 0 leaves the track running unbroken through it.',
+        default: '0px',
+      },
     ],
   },
   components: [
@@ -119,7 +172,7 @@ export const docs = {
           name: 'onStepClick',
           type: '(index: number) => void',
           description:
-            'Called when a step is clicked. Enables non-linear navigation. All non-disabled steps become clickable, including not-started steps.',
+            'Called when a step is clicked or a compact summary control is used. Enables non-linear navigation. Every step becomes a button until a horizontal Stepper collapses: enabled steps activate, and disabled steps stay focusable and are announced as unavailable but do not activate. When collapsed, navigation moves to summary controls that skip disabled steps.',
         },
         {
           name: 'label',
@@ -140,6 +193,14 @@ export const docs = {
           description:
             'Position of step indicators relative to the connector track.',
           default: "'separated'",
+        },
+        {
+          name: 'horizontalOptions',
+          type: "{ minimumStepWidth: number; collapsedVariant: 'withLabelAndControls' | 'withLabel' | 'hiddenLabel' }",
+          description:
+            'Options for horizontal collapse. minimumStepWidth is the per-step threshold in pixels. collapsedVariant selects a label with controls, the label alone, or a bare progress track with no compact row. Controls appear only for withLabelAndControls when onStepClick is set, and every step keeps its accessible name.',
+          default:
+            "{ minimumStepWidth: 112, collapsedVariant: 'withLabelAndControls' }",
         },
         {
           name: 'xstyle',
@@ -183,7 +244,12 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Keep step labels short. Use vertical in narrow containers.',
+          'Keep step labels short. Horizontal collapses under horizontalOptions.minimumStepWidth per step (112px by default); vertical is for long descriptions.',
+      },
+      {
+        guidance: true,
+        description:
+          'Choose horizontalOptions.collapsedVariant when the page owns its own Back/Continue, or both its step heading and navigation.',
       },
       {
         guidance: true,
@@ -205,9 +271,13 @@ export const docsDense = {
         activeStep: 'zero-based active step index',
         children: 'Step elements',
         orientation: 'horizontal or vertical layout',
-        onStepClick: 'enables non-linear navigation',
+        onStepClick:
+          'enables non-linear navigation; summary controls own compact navigation and skip disabled steps',
         label: 'ordered-list aria-label',
         density: 'padding of all steps',
+        indicatorPosition: 'indicators separated from or on the track',
+        horizontalOptions:
+          'horizontal collapse threshold and label/control presentation',
         xstyle: 'StyleX layout customization',
       },
     },
@@ -242,7 +312,13 @@ export const docsZh = {
       {guidance: true, description: '保持步骤标签简短和描述性。'},
       {
         guidance: true,
-        description: '在窄容器中使用垂直方向，或当步骤有较长描述时。',
+        description:
+          '当步骤有较长描述时使用垂直方向。水平步骤器会自行处理窄容器：当每个步骤的可用宽度不足 horizontalOptions.minimumStepWidth（默认为 112px）时，它会收起标签，并按 collapsedVariant 显示紧凑内容。',
+      },
+      {
+        guidance: true,
+        description:
+          "当页面已有返回/继续控件时，将 horizontalOptions.collapsedVariant 设为 'withLabel'；当周围界面同时提供当前步骤标题和导航、只需要裸进度轨道时，将其设为 'hiddenLabel'。",
       },
       {guidance: true, description: '为非线性工作流程提供 onStepClick。'},
       {guidance: false, description: '少于3个步骤时使用步骤器。'},
@@ -255,10 +331,28 @@ export const docsZh = {
         className: 'astryx-stepper',
         visualProps: ['orientation', 'indicatorPosition'],
       },
+      {className: 'astryx-stepper-frame'},
+      {className: 'astryx-stepper-summary'},
       {className: 'astryx-step', visualProps: ['progress', 'status']},
       {className: 'astryx-step-indicator', visualProps: ['progress', 'status']},
+      {
+        className: 'astryx-step-label',
+        visualProps: ['progress', 'status', 'disabled'],
+      },
+      {
+        className: 'astryx-step-description',
+        visualProps: ['progress', 'status'],
+      },
       {className: 'astryx-step-bar'},
       {className: 'astryx-step-connector'},
+    ],
+    vars: [
+      {
+        name: '--step-connector-gap',
+        description:
+          '连接线与指示器相接处留出的间隙，落在朝向指示器的一侧。适用于 on-track 布局——其连接线由节点两侧各一段绘制；取 0 时轨道将不间断地穿过节点。',
+        default: '0px',
+      },
     ],
   },
   components: [
@@ -288,7 +382,8 @@ export const docsZh = {
         {
           name: 'onStepClick',
           type: '(index: number) => void',
-          description: '点击步骤时调用。启用非线性导航。',
+          description:
+            '点击步骤或紧凑摘要控件时调用。启用非线性导航；水平步骤器折叠后，导航转移到会跳过已禁用步骤的摘要控件。',
         },
         {
           name: 'label',
@@ -301,6 +396,20 @@ export const docsZh = {
           type: "'compact' | 'balanced' | 'spacious'",
           description: '控制所有步骤的内边距。',
           default: "'balanced'",
+        },
+        {
+          name: 'indicatorPosition',
+          type: "'separated' | 'on-track'",
+          description: '步骤指示器相对于连接轨道的位置。',
+          default: "'separated'",
+        },
+        {
+          name: 'horizontalOptions',
+          type: "{ minimumStepWidth: number; collapsedVariant: 'withLabelAndControls' | 'withLabel' | 'hiddenLabel' }",
+          description:
+            '水平布局的收起选项。minimumStepWidth 是每个步骤的像素阈值。collapsedVariant 可选择显示标签和控件、仅显示标签，或只显示裸进度轨道而不显示紧凑行。仅当 collapsedVariant 为 withLabelAndControls 且设置 onStepClick 时显示控件，每个步骤始终保留无障碍名称。',
+          default:
+            "{ minimumStepWidth: 112, collapsedVariant: 'withLabelAndControls' }",
         },
         {
           name: 'xstyle',

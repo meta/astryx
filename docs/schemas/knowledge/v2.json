@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 2,
+  "extends": 1,
+  "kinds": {
+    "theme": {
+      "template": "docs/templates/knowledge/theme-spec.md",
+      "requiredFrontmatter": [
+        "schema_version",
+        "template_version",
+        "kind",
+        "id",
+        "authority",
+        "approved_by",
+        "approved_at",
+        "review_triggers",
+        "verified_by",
+        "package",
+        "source_theme",
+        "references"
+      ],
+      "requiredSections": [
+        "Intent and audience",
+        "Inheritance and base",
+        "Portable token overrides",
+        "Theme-local role definitions",
+        "Tonal palette definitions",
+        "Component and state mappings",
+        "Compatibility and migration",
+        "Accessibility and contrast evidence",
+        "Build and artifact contract",
+        "Verification map",
+        "Decision log",
+        "Open questions",
+        "Content boundary"
+      ],
+      "currentNonEmptyFields": ["review_triggers", "verified_by"],
+      "requiredNonEmptyStringFields": ["package", "source_theme"],
+      "listFields": ["review_triggers", "verified_by", "references"],
+      "referenceFields": ["references"],
+      "idPattern": "^theme:[a-z0-9]+(?:-[a-z0-9]+)*$"
+    }
+  }
+}

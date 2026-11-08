@@ -1,0 +1,46 @@
+{
+  "name": "palette-authoring",
+  "description": "Focused agent scenarios for choosing palette generator controls without inventing author intent.",
+  "prompts": [
+    {
+      "id": "palette-anchor-exact",
+      "prompt": "Create a palette from our brand blue #1682d5. That exact blue must not change."
+    },
+    {
+      "id": "palette-anchor-bounded",
+      "prompt": "Generate a blue palette, but keep #1682d5 within a perceptual distance of 2."
+    },
+    {
+      "id": "palette-anchor-flexible",
+      "prompt": "Use #ff4db8 as inspiration for the pink family, but it can move if that makes the ramp more balanced."
+    },
+    {
+      "id": "palette-vibrancy-muted",
+      "prompt": "Keep the same palette families but make the overall result more muted."
+    },
+    {
+      "id": "palette-accent-absent",
+      "prompt": "Create blue, green, and orange palette families."
+    },
+    {
+      "id": "palette-accent-ambiguous",
+      "prompt": "Use #ff4db8 as our accent."
+    },
+    {
+      "id": "palette-accent-ramp",
+      "prompt": "Generate a full light and dark accent ramp from #ff4db8."
+    },
+    {
+      "id": "palette-custom-stop",
+      "prompt": "Add an illustration color at stop 12.5 to the blue family."
+    },
+    {
+      "id": "palette-custom-layout",
+      "prompt": "Create a specialized five-stop palette for data visualization."
+    },
+    {
+      "id": "palette-omit-endpoints",
+      "prompt": "Generate the standard palette, but leave out the repeated black and white endpoints."
+    }
+  ]
+}

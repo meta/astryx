@@ -56,7 +56,9 @@ export const navItemStyles = stylex.create({
     alignItems: 'center',
     gap: spacingVars['--spacing-2'],
     width: '100%',
-    height: sizeVars['--size-element-md'],
+    // A minimum, so an item grows with a larger text size and its label never
+    // leaves it.
+    minHeight: sizeVars['--size-element-md'],
     paddingInline: spacingVars['--spacing-2'],
     paddingBlock: 0,
     borderRadius: radiusVars['--radius-element'],
@@ -75,14 +77,6 @@ export const navItemStyles = stylex.create({
     lineHeight: typeScaleVars['--text-label-leading'],
     textAlign: 'start',
     boxSizing: 'border-box',
-    ':hover:where(:not(:disabled,[aria-disabled="true"]))': {
-      '@media (hover: hover)': {
-        backgroundColor: colorVars['--color-overlay-hover'],
-      },
-    },
-    ':active': {
-      backgroundColor: colorVars['--color-overlay-pressed'],
-    },
   },
 
   /** Selected/active page indicator — deemphasized background, medium weight */
@@ -118,6 +112,23 @@ export const navItemStyles = stylex.create({
         '@media (forced-colors: active)': 'Highlight',
       },
     },
+    // The touch press model writes these instead of `:active`; the selected
+    // item keeps its fill under a finger the way it does under a mouse, and
+    // paints no overlay at any phase of the press.
+    '[data-astryx-press="on"]': {
+      backgroundColor: {
+        default: colorVars['--color-neutral'],
+        '@media (forced-colors: active)': 'Highlight',
+      },
+      backgroundImage: 'none',
+    },
+    '[data-astryx-press="fading"]': {
+      backgroundColor: {
+        default: colorVars['--color-neutral'],
+        '@media (forced-colors: active)': 'Highlight',
+      },
+      backgroundImage: 'none',
+    },
   },
 
   /** Disabled state — muted color, no interaction */
@@ -129,19 +140,19 @@ export const navItemStyles = stylex.create({
 
   /** Small size variant */
   sm: {
-    height: sizeVars['--size-element-sm'],
+    minHeight: sizeVars['--size-element-sm'],
     paddingInline: spacingVars['--spacing-1'],
   },
 
   /** Medium size variant (default) */
   md: {
-    height: sizeVars['--size-element-md'],
+    minHeight: sizeVars['--size-element-md'],
     paddingInline: spacingVars['--spacing-2'],
   },
 
   /** Large size variant */
   lg: {
-    height: sizeVars['--size-element-lg'],
+    minHeight: sizeVars['--size-element-lg'],
     paddingInline: spacingVars['--spacing-2'],
   },
 });

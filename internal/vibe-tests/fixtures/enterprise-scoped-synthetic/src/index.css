@@ -1,0 +1,75 @@
+/* Copyright (c) Meta Platforms, Inc. and affiliates. */
+
+@import 'tailwindcss';
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-panel: var(--panel);
+  --color-subtle: var(--subtle);
+  --color-secondary-ink: var(--secondary-ink);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-error: var(--error);
+  --color-overlay: var(--overlay);
+  --color-accent: var(--accent);
+  --color-border: var(--border);
+}
+
+:where(.fixture-shell[data-mode='light']) {
+  color-scheme: light;
+  --background: #f4f6f9;
+  --foreground: #172033;
+  --panel: #ffffff;
+  --subtle: #e9edf4;
+  --secondary-ink: #5b6578;
+  --success: #147a4b;
+  --warning: #9a5a00;
+  --error: #b42318;
+  --overlay: rgb(23 32 51 / 62%);
+  --accent: #2457d6;
+  --border: #c9d1df;
+}
+
+:where(.fixture-shell[data-mode='dark']) {
+  color-scheme: dark;
+  --background: #111726;
+  --foreground: #f2f5fb;
+  --panel: #182134;
+  --subtle: #222d43;
+  --secondary-ink: #aeb9cb;
+  --success: #5dd6a0;
+  --warning: #f0bd64;
+  --error: #ff8f87;
+  --overlay: rgb(4 8 16 / 78%);
+  --accent: #8dadff;
+  --border: #34425b;
+}
+
+/* The guest boundary deliberately reuses generic token names. */
+[data-guest-design-system] {
+  --accent: #7c3aed;
+  --border: #c4b5fd;
+  --panel: #f5f3ff;
+  --foreground: #2e1065;
+  --subtle: #ede9fe;
+  --error: #b42318;
+  color: var(--foreground);
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+::backdrop {
+  background: var(--overlay);
+}

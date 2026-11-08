@@ -5,7 +5,7 @@
 /**
  * @file useTableGroupedRows.tsx
  * @input React, StyleX, Icon, Table types + the flat data array
- * @output Exports useTableGroupedRows hook + config/result types
+ * @output Exports useTableGroupedRows hook + config/result types with layout-safe group headers
  * @position Grouped-rows plugin; consumed by Table via plugins prop
  *
  * SYNC: When modified, update these files to stay in sync:
@@ -21,7 +21,13 @@ import {
 } from '../../../theme/tokens.stylex';
 import {Icon} from '../../../Icon';
 import type {TablePlugin} from '../../types';
-import {useTranslator} from '../../../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../../../i18n/useComponentTranslator';
+import english from '../../../i18n/generated-english/Table/plugins/groupedRows/useTableGroupedRows.generated';
+
+registerEnglishFallback(english);
 
 // A synthetic group-header row injected into the flattened data. Real rows
 // never carry this marker.
@@ -126,15 +132,34 @@ const styles = stylex.create({
   },
   headerCell: {
     paddingBlock: spacingVars['--spacing-2'],
-    // No inline start padding so the chevron aligns with the table's leading
-    // edge (Ernest review #1).
-    paddingInlineStart: spacingVars['--spacing-1'],
+    // The start gutter lives on headerInner instead, so that it travels with
+    // the heading when the heading pins. Left here, the heading would sit one
+    // gutter in at rest and jump flush the moment it stuck.
+    paddingInlineStart: 0,
     paddingInlineEnd: spacingVars['--spacing-3'],
   },
+  // Shared row layout. Custom renderers keep this full-width so their layout
+  // continues to use the full spanning cell.
   headerInner: {
     display: 'flex',
     alignItems: 'center',
     gap: spacingVars['--spacing-1'],
+    // No inline start padding on the cell, so the chevron aligns with the
+    // table's leading edge (Ernest review #1).
+    paddingInlineStart: spacingVars['--spacing-1'],
+  },
+  // The built-in heading moves with its chevron and can safely shrink-wrap.
+  headerInnerPinned: {
+    insetInlineStart: 0,
+    position: 'sticky',
+    width: 'fit-content',
+  },
+  // A custom header may rely on the full row width. Pin only the plugin-owned
+  // control so custom content keeps its original containing block.
+  customHeaderChevronPinned: {
+    insetInlineStart: spacingVars['--spacing-1'],
+    position: 'sticky',
+    zIndex: 1,
   },
   // Standalone chevron button with no heavy chrome (transparent, borderless,
   // zero padding) so the icon sits flush with the start of the table
@@ -146,8 +171,9 @@ const styles = stylex.create({
     flexShrink: '0',
     padding: 0,
     margin: 0,
-    background: 'transparent',
-    border: 'none',
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    borderStyle: 'none',
     cursor: {
       default: 'pointer',
       ':is(:disabled,[aria-disabled="true"])': 'default',
@@ -222,11 +248,37 @@ const styles = stylex.create({
  *   plugins={{grouped: grouped.plugin}}
  * />;
  * ```
+ *
+ * ## Pairing with pagination
+ *
+ * Grouping runs on the rows it is handed, so the order is filter, sort, slice,
+ * then group. Sort by the group key first and the reader's own keys second —
+ * the same `ORDER BY group, sort` a backend would run. That keeps a section's
+ * rows contiguous in the result set, so pages fill sections in order and new
+ * rows always land at the bottom of the table. Slice a differently-ordered
+ * list and every page holds a scatter of sections instead, so loading more
+ * splices rows into the middle and new headings appear above the fold.
+ *
+ * @example
+ * ```
+ * const ordered = useMemo(
+ *   () => [...filtered].sort((a, b) => byTeam(a, b) || bySortKeys(a, b)),
+ *   [filtered, sortKeys],
+ * );
+ * const page = ordered.slice(0, loadedCount);
+ *
+ * const grouped = useTableGroupedRows({
+ *   data: page,
+ *   groupBy: r => r.team,
+ *   collapsedGroups,
+ *   onToggleGroup,
+ * });
+ * ```
  */
 export function useTableGroupedRows<T extends Record<string, unknown>>(
   config: UseTableGroupedRowsConfig<T>,
 ): UseTableGroupedRowsResult<T> {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const {
     data,
     groupBy,
@@ -331,10 +383,9 @@ export function useTableGroupedRows<T extends Record<string, unknown>>(
           htmlProps: {
             ...props.htmlProps,
             // Convenience: clicking anywhere on the row toggles it. The chevron
-            // button below is the accessible, keyboard-operable control, so the
-            // row keeps its implicit `row` role (no role override here).
+            // button below owns the disclosure state and keyboard interaction;
+            // the native row keeps only its implicit row semantics.
             onClick: toggle,
-            'aria-expanded': !collapsed,
           },
           xstyle: [...props.xstyle, styles.headerRow],
           children: (
@@ -342,12 +393,19 @@ export function useTableGroupedRows<T extends Record<string, unknown>>(
             // to the actual number of columns, so the header always spans the
             // full width without the plugin knowing the column count.
             <td colSpan={999} {...stylex.props(styles.headerCell)}>
-              <span {...stylex.props(styles.headerInner)}>
+              <span
+                {...stylex.props(
+                  styles.headerInner,
+                  !renderGroupHeader && styles.headerInnerPinned,
+                )}>
                 {/* Standalone chevron button, flush with the table's start
                     edge (no heavy button chrome) — the keyboard control. */}
                 <button
                   type="button"
-                  {...stylex.props(styles.chevron)}
+                  {...stylex.props(
+                    styles.chevron,
+                    renderGroupHeader && styles.customHeaderChevronPinned,
+                  )}
                   onClick={e => {
                     e.stopPropagation();
                     toggle();
@@ -364,7 +422,12 @@ export function useTableGroupedRows<T extends Record<string, unknown>>(
                   aria-expanded={!collapsed}>
                   <Icon
                     icon="chevronRight"
-                    size="xsm"
+                    // 16px, not the 12px this started at. The chevron is the
+                    // control for the whole section and sits beside a heading,
+                    // so at 12 it read as decoration on the label rather than
+                    // the thing you press, and it was the smallest hit target
+                    // in the table.
+                    size="sm"
                     // The rotation rides on the glyph rather than a wrapper
                     // span so the theme target below reaches both the mark and
                     // its open/closed transform.

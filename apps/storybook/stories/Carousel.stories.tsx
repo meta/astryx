@@ -5,6 +5,7 @@ import type {Meta, StoryObj} from '@storybook/react';
 import * as stylex from '@stylexjs/stylex';
 import {Carousel} from '@astryxdesign/core/Carousel';
 import type {CarouselHandle} from '@astryxdesign/core/Carousel';
+import {useSnapPaging} from '@astryxdesign/core/SnapPaging';
 import {Thumbnail} from '@astryxdesign/core/Thumbnail';
 import {Card} from '@astryxdesign/core/Card';
 import {Button} from '@astryxdesign/core/Button';
@@ -23,6 +24,9 @@ const styles = stylex.create({
   },
   constrainedWidth: {
     maxWidth: 400,
+  },
+  narrowWidth: {
+    maxWidth: 240,
   },
   card: {
     width: 160,
@@ -49,6 +53,27 @@ const styles = stylex.create({
     height: 80,
     borderRadius: radiusVars['--radius-element'],
     flexShrink: 0,
+  },
+  pagingFrame: {
+    width: 300,
+  },
+  pagingItem: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 120,
+    borderRadius: radiusVars['--radius-element'],
+    backgroundColor: colorVars['--color-background-muted'],
+    color: colorVars['--color-text-primary'],
+    fontFamily: typographyVars['--font-family-body'],
+    fontSize: 24,
+    fontWeight: 600,
+  },
+  oneUp: {
+    width: 300,
+  },
+  threeUp: {
+    width: `calc((300px - 2 * ${spacingVars['--spacing-2']}) / 3)`,
   },
   label: {
     fontSize: 12,
@@ -81,7 +106,12 @@ const meta: Meta<typeof Carousel> = {
     },
     hasButtons: {
       control: 'boolean',
-      description: 'Show navigation buttons on hover',
+      description: 'Show navigation buttons when the content can scroll',
+    },
+    padding: {
+      control: {type: 'select'},
+      options: [0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10],
+      description: 'Inline padding inside the scroll container',
     },
     hasEdgeFade: {
       control: 'boolean',
@@ -364,4 +394,183 @@ export const ImperativeControl: Story = {
       </div>
     );
   },
+};
+
+export const WithPadding: Story = {
+  name: 'Inline Padding',
+  render: () => (
+    <div {...stylex.props(styles.constrainedWidth)}>
+      <p {...stylex.props(styles.label)}>
+        padding=3 puts the gutter inside the scroll area, and scroll-padding
+        keeps snap points on the content edge
+      </p>
+      <Carousel gap={1} padding={3} hasSnap aria-label="Padded gallery">
+        {IMAGES.map(img => (
+          <Thumbnail
+            key={img.id}
+            src={img.src}
+            alt={img.label}
+            label={img.label}
+          />
+        ))}
+      </Carousel>
+    </div>
+  ),
+};
+
+export const NarrowContainer: Story = {
+  name: 'Narrow Container',
+  render: () => (
+    <div {...stylex.props(styles.narrowWidth)}>
+      <p {...stylex.props(styles.label)}>240px container</p>
+      <Carousel gap={1} aria-label="Narrow gallery">
+        {IMAGES.map(img => (
+          <Thumbnail
+            key={img.id}
+            src={img.src}
+            alt={img.label}
+            label={img.label}
+          />
+        ))}
+      </Carousel>
+    </div>
+  ),
+};
+
+export const LongTextItems: Story = {
+  name: 'Long Text Items',
+  render: () => (
+    <div {...stylex.props(styles.constrainedWidth)}>
+      <p {...stylex.props(styles.label)}>
+        One very long item among short ones, and a word with no break
+        opportunity
+      </p>
+      <Carousel gap={2} aria-label="Text items">
+        <Card xstyle={styles.card}>
+          <div {...stylex.props(styles.cardInner)}>
+            <p {...stylex.props(styles.cardDesc)}>Short</p>
+          </div>
+        </Card>
+        <Card xstyle={styles.card}>
+          <div {...stylex.props(styles.cardInner)}>
+            <p {...stylex.props(styles.cardDesc)}>
+              A much longer description that runs well past the width of its
+              neighbours and has to wrap inside a fixed-width card without
+              pushing the row out of shape.
+            </p>
+          </div>
+        </Card>
+        <Card xstyle={styles.card}>
+          <div {...stylex.props(styles.cardInner)}>
+            <p {...stylex.props(styles.cardDesc)}>
+              Unbreakable:
+              Donaudampfschiffahrtselektrizitaetenhauptbetriebswerkbauunterbeamtengesellschaft
+            </p>
+          </div>
+        </Card>
+      </Carousel>
+    </div>
+  ),
+};
+
+export const SingleItem: Story = {
+  name: 'Single Item',
+  render: () => (
+    <div {...stylex.props(styles.constrainedWidth)}>
+      <p {...stylex.props(styles.label)}>
+        One child: no overflow, no fade, no buttons
+      </p>
+      <Carousel gap={1} aria-label="Single item">
+        <Thumbnail
+          src={IMAGES[0].src}
+          alt={IMAGES[0].label}
+          label={IMAGES[0].label}
+        />
+      </Carousel>
+    </div>
+  ),
+};
+
+type PagingMode = 'snap' | 'paging' | 'item';
+
+/**
+ * A 300 px carousel of numbered items, snapping natively (`snap`) or with snap
+ * paging: one view per flick (`paging`) or one item (`item`).
+ */
+function PagingCarousel({
+  layout,
+  count,
+  mode,
+}: {
+  layout: '1-up' | '3-up';
+  count: number;
+  mode: PagingMode;
+}) {
+  // One value: Carousel keeps the value it first attached, and a new `pages`
+  // applies from the next flick.
+  const paging = useSnapPaging({pages: mode === 'item' ? 'item' : 'view'});
+  const hasSnap = mode === 'snap' ? true : paging;
+  return (
+    <div {...stylex.props(styles.pagingFrame)}>
+      <Carousel
+        gap={layout === '1-up' ? 0 : 2}
+        hasSnap={hasSnap}
+        aria-label="Numbered items">
+        {Array.from({length: count}, (_, i) => (
+          <div
+            key={i}
+            data-item={i}
+            {...stylex.props(
+              styles.pagingItem,
+              layout === '1-up' ? styles.oneUp : styles.threeUp,
+            )}>
+            {i + 1}
+          </div>
+        ))}
+      </Carousel>
+    </div>
+  );
+}
+
+const pagingArgTypes = {
+  mode: {
+    control: {type: 'select' as const},
+    options: ['snap', 'paging', 'item'],
+    description:
+      'hasSnap (native snap), hasSnap={useSnapPaging()} (one view per flick) or hasSnap={useSnapPaging({pages: "item"})}',
+  },
+};
+
+type PagingStory = StoryObj<{mode: PagingMode}>;
+
+export const SnapPagingOneUp: PagingStory = {
+  name: 'Snap Paging: One Item per View',
+  argTypes: pagingArgTypes,
+  args: {mode: 'paging'},
+  render: ({mode}) => <PagingCarousel layout="1-up" count={5} mode={mode} />,
+};
+
+export const SnapPagingThreeUp: PagingStory = {
+  name: 'Snap Paging: Three Items per View',
+  argTypes: pagingArgTypes,
+  args: {mode: 'paging'},
+  render: ({mode}) => <PagingCarousel layout="3-up" count={9} mode={mode} />,
+};
+
+export const SnapPagingPartialLastPage: PagingStory = {
+  name: 'Snap Paging: Partial Last Page',
+  argTypes: pagingArgTypes,
+  args: {mode: 'paging'},
+  render: ({mode}) => <PagingCarousel layout="3-up" count={7} mode={mode} />,
+};
+
+export const SnapPagingRightToLeft: PagingStory = {
+  name: 'Snap Paging: Right to Left',
+  argTypes: pagingArgTypes,
+  args: {mode: 'paging'},
+  render: ({mode}) => (
+    <div dir="rtl">
+      <PagingCarousel layout="3-up" count={9} mode={mode} />
+    </div>
+  ),
 };

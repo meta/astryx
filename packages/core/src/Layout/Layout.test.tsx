@@ -3,19 +3,20 @@
 /**
  * @file Layout.test.tsx
  * @input Uses vitest, @testing-library/react, Layout + layout contexts
- * @output Characterization tests for the Layout page-shell component
+ * @output Characterization tests for the five-slot Layout primitive
  * @position Testing; validates slot rendering, context provisioning, and
  *   divider/padding/height wiring
  *
  * SYNC: When Layout.tsx changes, update tests to match new behavior
  */
 
-import {describe, it, expect} from 'vitest';
-import {render, screen} from '@testing-library/react';
+import {describe, it, expect, vi} from 'vitest';
+import {fireEvent, render, screen} from '@testing-library/react';
 import {use, createRef} from 'react';
 import {Layout} from './Layout';
 import {LayoutHeader} from './LayoutHeader';
 import {LayoutFooter} from './LayoutFooter';
+import {Dialog} from '../Dialog/Dialog';
 import {LayoutAreaContext} from './LayoutAreaContext';
 import {LayoutSlotsContext} from './LayoutSlotsContext';
 
@@ -141,6 +142,26 @@ describe('Layout', () => {
       });
     });
 
+    it('reports a slot that renders nothing as empty', () => {
+      // `false` is what `isOpen && <LayoutHeader />` gives when closed.
+      render(
+        <Layout
+          header={false}
+          footer={true}
+          start=""
+          end={false}
+          content={<SlotsProbe />}
+        />,
+      );
+      const slots = JSON.parse(screen.getByTestId('slots').textContent ?? '{}');
+      expect(slots).toEqual({
+        hasHeader: false,
+        hasFooter: false,
+        hasStart: false,
+        hasEnd: false,
+      });
+    });
+
     it('reports every slot filled', () => {
       render(
         <Layout
@@ -219,6 +240,46 @@ describe('Layout', () => {
       ).toBeNull();
     });
 
+    it('a nested Layout without defaultHasDividers keeps its parent default', () => {
+      const {container} = render(
+        <Layout
+          defaultHasDividers
+          content={
+            <Layout
+              header={<LayoutHeader>Nested</LayoutHeader>}
+              content={<div>c</div>}
+            />
+          }
+        />,
+      );
+      expect(
+        container.querySelector('.astryx-layout-header[data-divider]'),
+      ).not.toBeNull();
+    });
+
+    it('stops the default at a layer boundary', () => {
+      render(
+        <Layout
+          defaultHasDividers
+          content={
+            <Dialog
+              isOpen
+              isInline
+              aria-label="Settings"
+              onOpenChange={() => {}}>
+              <Layout
+                header={<LayoutHeader>In dialog</LayoutHeader>}
+                content={<div>c</div>}
+              />
+            </Dialog>
+          }
+        />,
+      );
+      expect(
+        screen.getByText('In dialog').closest('.astryx-layout-header'),
+      ).not.toHaveAttribute('data-divider');
+    });
+
     it('an explicit hasDivider={false} on a header overrides the context default', () => {
       const {container} = render(
         <Layout
@@ -259,6 +320,70 @@ describe('Layout', () => {
     });
   });
 
+  describe('LayoutHeader paddingBlockEnd', () => {
+    /** StyleX classes on the header's inner (padding-owning) element, minus
+     * dev-only provenance classes (they contain "__"). */
+    function innerClassSet(container: HTMLElement): Set<string> {
+      const inner = container.firstElementChild!
+        .firstElementChild as HTMLElement;
+      return new Set(
+        inner.className
+          .split(' ')
+          .filter(Boolean)
+          .filter(c => !c.includes('__') && !c.includes('.')),
+      );
+    }
+
+    it('applies a class when paddingBlockEnd is set on its own', () => {
+      const {container, rerender} = render(<LayoutHeader>H</LayoutHeader>);
+      const baseline = innerClassSet(container);
+      rerender(<LayoutHeader paddingBlockEnd={0}>H</LayoutHeader>);
+      expect(innerClassSet(container)).not.toEqual(baseline);
+    });
+
+    it('overrides only the block-end edge of padding', () => {
+      // padding={4} sets all four edges; paddingBlockEnd={0} may only move the
+      // bottom edge, so every other padding class must survive unchanged.
+      const {container, rerender} = render(
+        <LayoutHeader padding={4}>H</LayoutHeader>,
+      );
+      const uniform = innerClassSet(container);
+      rerender(
+        <LayoutHeader padding={4} paddingBlockEnd={0}>
+          H
+        </LayoutHeader>,
+      );
+      const overridden = innerClassSet(container);
+      const removed = [...uniform].filter(c => !overridden.has(c));
+      const added = [...overridden].filter(c => !uniform.has(c));
+      // Something block-end related was dropped and replaced...
+      expect(removed.length).toBeGreaterThan(0);
+      expect(added.length).toBeGreaterThan(0);
+      // ...while the inline and block-start classes are shared by both renders.
+      expect(uniform.size - removed.length).toBeGreaterThan(0);
+    });
+
+    it('spells the override with the shared per-edge family', () => {
+      // The classes the override adds are exactly the ones the standalone
+      // per-edge prop produces, so LayoutHeader and Section stay one family.
+      const {container, rerender} = render(
+        <LayoutHeader padding={4}>H</LayoutHeader>,
+      );
+      const uniform = innerClassSet(container);
+      rerender(
+        <LayoutHeader padding={4} paddingBlockEnd={0}>
+          H
+        </LayoutHeader>,
+      );
+      const added = [...innerClassSet(container)].filter(c => !uniform.has(c));
+      rerender(<LayoutHeader paddingBlockEnd={0}>H</LayoutHeader>);
+      const standalone = innerClassSet(container);
+      for (const cls of added) {
+        expect(standalone.has(cls)).toBe(true);
+      }
+    });
+  });
+
   describe('styling & ref', () => {
     it('forwards ref to the root div', () => {
       const ref = createRef<HTMLDivElement>();
@@ -280,6 +405,41 @@ describe('Layout', () => {
         <Layout style={{outline: '1px solid red'}} content={<div>c</div>} />,
       );
       expect(root(container).style.outline).toBe('1px solid red');
+    });
+  });
+
+  describe('pass-through props', () => {
+    it('forwards pass-through props to the root element', () => {
+      const {container} = render(
+        <Layout
+          aria-label="Records workspace"
+          id="records-layout"
+          data-testid="layout-root"
+          data-zone="admin"
+          content={<div>c</div>}
+        />,
+      );
+      const el = root(container);
+      expect(el).toHaveAttribute('aria-label', 'Records workspace');
+      expect(el).toHaveAttribute('id', 'records-layout');
+      expect(el).toHaveAttribute('data-testid', 'layout-root');
+      expect(el).toHaveAttribute('data-zone', 'admin');
+    });
+
+    it('forwards event handlers to the root element', () => {
+      const onClick = vi.fn();
+      const {container} = render(
+        <Layout onClick={onClick} content={<div>c</div>} />,
+      );
+      fireEvent.click(root(container));
+      expect(onClick).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps component-owned theme metadata over a colliding pass-through', () => {
+      const {container} = render(
+        <Layout height="fill" data-height="auto" content={<div>c</div>} />,
+      );
+      expect(root(container)).toHaveAttribute('data-height', 'fill');
     });
   });
 });

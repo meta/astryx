@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import type {Meta, StoryObj} from '@storybook/react';
-import {useRef, useEffect} from 'react';
+import {useEffect, useRef, type RefObject} from 'react';
 import {
   Chart,
   ChartAxis,
@@ -15,31 +15,146 @@ import {Stack, Text} from '@astryxdesign/core';
 import {Heading} from '@astryxdesign/core/Text';
 
 const meta: Meta = {
-  title: 'Lab/useChartRange',
+  title: 'Lab/Hooks/useChartRange',
 };
 
 export default meta;
+
+const FRAME_MS = 33;
+const CAPTURE_OVERRUN = 60;
+const KNOWN_Y_DOMAIN: [number, number] = [0, 100];
+
+type Sample = readonly [x: number, y: number];
+type SampleFactory = () => () => Sample;
+type PushSample = ReturnType<typeof useChartRange>['push'];
+type ResetRange = ReturnType<typeof useChartRange>['reset'];
+
+function createRandom(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let value = state;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const createKnownRangeSamples: SampleFactory = () => {
+  const random = createRandom(0x4b1d);
+  let t = 0;
+  return () => {
+    t += 1;
+    return [t, Math.sin(t * 0.04) * 30 + 50 + (random() - 0.5) * 10];
+  };
+};
+
+const createUnknownRangeSamples: SampleFactory = () => {
+  let t = 0;
+  return () => {
+    t += 1;
+    const amplitude = 10 + t * 0.05;
+    return [t, Math.sin(t * 0.03) * amplitude + 50];
+  };
+};
+
+const createZeroCenteredSamples: SampleFactory = () => {
+  const random = createRandom(0x7e10);
+  let t = 0;
+  let quake = 0;
+  return () => {
+    t += 1;
+    if (random() < 0.003) {
+      quake = 30 + random() * 50;
+    }
+    quake *= 0.97;
+    const tremor = (random() - 0.5) * 2;
+    const displacement =
+      quake > 0.5 ? Math.sin(t * 0.5) * quake * (0.5 + random() * 0.5) : 0;
+    return [t, tremor + displacement];
+  };
+};
+
+function useStoryStream({
+  streamRef,
+  push,
+  reset,
+  createSamples,
+  captureSampleCount,
+  redrawKey,
+  useAnimationFrame = false,
+}: {
+  streamRef: RefObject<ChartStreamGLHandle | null>;
+  push: PushSample;
+  reset: ResetRange;
+  createSamples: SampleFactory;
+  captureSampleCount: number;
+  redrawKey: string;
+  useAnimationFrame?: boolean;
+}) {
+  useEffect(() => {
+    reset();
+    streamRef.current?.clear();
+    const nextSample = createSamples();
+    const emit = () => {
+      const sample = nextSample();
+      push(sample[0], sample[1], streamRef);
+      return sample;
+    };
+
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      let lastSample: Sample = [0, 0];
+      for (let index = 0; index < captureSampleCount; index += 1) {
+        lastSample = emit();
+      }
+      const redraw = window.setTimeout(() => {
+        streamRef.current?.push(lastSample[0], lastSample[1]);
+      }, 0);
+      return () => window.clearTimeout(redraw);
+    }
+
+    if (useAnimationFrame) {
+      let frame: number;
+      const tick = () => {
+        emit();
+        frame = window.requestAnimationFrame(tick);
+      };
+      frame = window.requestAnimationFrame(tick);
+      return () => window.cancelAnimationFrame(frame);
+    }
+
+    const interval = window.setInterval(emit, FRAME_MS);
+    return () => window.clearInterval(interval);
+  }, [
+    captureSampleCount,
+    createSamples,
+    push,
+    redrawKey,
+    reset,
+    streamRef,
+    useAnimationFrame,
+  ]);
+}
 
 /** Known y-range — useChartRange just manages the sliding x window */
 export const KnownRange: StoryObj = {
   render: () => {
     const colors = useChartColors();
+    const color = colors.categorical(1)[0];
     const streamRef = useRef<ChartStreamGLHandle>(null);
-    const tRef = useRef(0);
-    const {xDomain, yDomain, push} = useChartRange({
+    const {xDomain, yDomain, push, reset} = useChartRange({
       xWindow: 300,
-      yDomain: [0, 100],
+      yDomain: KNOWN_Y_DOMAIN,
     });
 
-    useEffect(() => {
-      const id = setInterval(() => {
-        tRef.current += 1;
-        const y =
-          Math.sin(tRef.current * 0.04) * 30 + 50 + (Math.random() - 0.5) * 10;
-        push(tRef.current, y, streamRef);
-      }, 33);
-      return () => clearInterval(id);
-    }, [push]);
+    useStoryStream({
+      streamRef,
+      push,
+      reset,
+      createSamples: createKnownRangeSamples,
+      captureSampleCount: 300 + CAPTURE_OVERRUN,
+      redrawKey: color,
+    });
 
     return (
       <Stack direction="vertical" gap={4}>
@@ -60,7 +175,7 @@ export const KnownRange: StoryObj = {
           <ChartAxis position="left" />
           <ChartStreamGL
             handleRef={streamRef}
-            color={colors.categorical(1)[0]}
+            color={color}
             bufferSize={300}
             lineWidth={1.5}
           />
@@ -74,23 +189,21 @@ export const KnownRange: StoryObj = {
 export const UnknownRange: StoryObj = {
   render: () => {
     const colors = useChartColors();
+    const color = colors.categorical(2)[1];
     const streamRef = useRef<ChartStreamGLHandle>(null);
-    const tRef = useRef(0);
-    const {xDomain, yDomain, push} = useChartRange({
+    const {xDomain, yDomain, push, reset} = useChartRange({
       xWindow: 300,
       yPadding: 0.1,
     });
 
-    useEffect(() => {
-      const id = setInterval(() => {
-        tRef.current += 1;
-        // Gradually increasing range to show auto-expansion
-        const amplitude = 10 + tRef.current * 0.05;
-        const y = Math.sin(tRef.current * 0.03) * amplitude + 50;
-        push(tRef.current, y, streamRef);
-      }, 33);
-      return () => clearInterval(id);
-    }, [push]);
+    useStoryStream({
+      streamRef,
+      push,
+      reset,
+      createSamples: createUnknownRangeSamples,
+      captureSampleCount: 300 + CAPTURE_OVERRUN,
+      redrawKey: color,
+    });
 
     return (
       <Stack direction="vertical" gap={4}>
@@ -111,7 +224,7 @@ export const UnknownRange: StoryObj = {
           <ChartAxis position="left" />
           <ChartStreamGL
             handleRef={streamRef}
-            color={colors.categorical(2)[1]}
+            color={color}
             bufferSize={300}
             lineWidth={1.5}
           />
@@ -125,36 +238,23 @@ export const UnknownRange: StoryObj = {
 export const ZeroCentered: StoryObj = {
   render: () => {
     const colors = useChartColors();
+    const color = colors.categorical(5)[3];
     const streamRef = useRef<ChartStreamGLHandle>(null);
-    const tRef = useRef(0);
-    const quakeRef = useRef(0);
-    const {xDomain, yDomain, push} = useChartRange({
+    const {xDomain, yDomain, push, reset} = useChartRange({
       xWindow: 600,
       yCenter: true,
       yPadding: 0.05,
     });
 
-    useEffect(() => {
-      let raf: number;
-      const tick = () => {
-        tRef.current += 1;
-        if (Math.random() < 0.003) {
-          quakeRef.current = 30 + Math.random() * 50;
-        }
-        quakeRef.current *= 0.97;
-        const tremor = (Math.random() - 0.5) * 2;
-        const quake =
-          quakeRef.current > 0.5
-            ? Math.sin(tRef.current * 0.5) *
-              quakeRef.current *
-              (0.5 + Math.random() * 0.5)
-            : 0;
-        push(tRef.current, tremor + quake, streamRef);
-        raf = requestAnimationFrame(tick);
-      };
-      raf = requestAnimationFrame(tick);
-      return () => cancelAnimationFrame(raf);
-    }, [push]);
+    useStoryStream({
+      streamRef,
+      push,
+      reset,
+      createSamples: createZeroCenteredSamples,
+      captureSampleCount: 600 + CAPTURE_OVERRUN,
+      redrawKey: color,
+      useAnimationFrame: true,
+    });
 
     return (
       <Stack direction="vertical" gap={4}>
@@ -176,7 +276,7 @@ export const ZeroCentered: StoryObj = {
           <ChartAxis position="left" />
           <ChartStreamGL
             handleRef={streamRef}
-            color={colors.categorical(5)[3]}
+            color={color}
             bufferSize={600}
             lineWidth={1}
             opacity={0.9}

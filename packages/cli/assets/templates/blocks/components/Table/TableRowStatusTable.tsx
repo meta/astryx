@@ -8,13 +8,16 @@ import {
   proportional,
   pixel,
 } from '@astryxdesign/core/Table';
-import type {TableColumn, TableRowStatus} from '@astryxdesign/core/Table';
+import type {
+  TableColumn,
+  UseTableRowStatusConfig,
+} from '@astryxdesign/core/Table';
 
 interface Job extends Record<string, unknown> {
   id: string;
   name: string;
   owner: string;
-  state: 'failed' | 'running' | 'queued' | 'succeeded';
+  state: 'failed' | 'running' | 'queued' | 'succeeded' | 'needsAttention';
 }
 
 const jobs: Job[] = [
@@ -23,6 +26,12 @@ const jobs: Job[] = [
   {id: 'j3', name: 'unit-tests', owner: 'Zoe', state: 'succeeded'},
   {id: 'j4', name: 'docsite-deploy', owner: 'Max', state: 'queued'},
   {id: 'j5', name: 'smoke-test', owner: 'Mia', state: 'succeeded'},
+  {
+    id: 'j6',
+    name: 'snapshot-review',
+    owner: 'Noah',
+    state: 'needsAttention',
+  },
 ];
 
 const columns: TableColumn<Job>[] = [
@@ -31,18 +40,20 @@ const columns: TableColumn<Job>[] = [
   {key: 'state', header: 'State', width: pixel(120)},
 ];
 
-function jobStatus(job: Job): TableRowStatus | null {
+const jobStatus: UseTableRowStatusConfig<Job>['getStatus'] = job => {
   switch (job.state) {
     case 'failed':
-      return {color: 'error', icon: 'error', label: 'Failed'};
+      return {status: 'error', label: 'Failed'};
     case 'running':
-      return {color: 'warning', icon: 'warning', label: 'Running'};
+      return {color: 'warning', icon: 'clock', label: 'Running'};
     case 'queued':
       return {color: 'gray', label: 'Queued'};
-    default:
-      return null; // succeeded: no dot
+    case 'succeeded':
+      return {status: 'success', label: 'Succeeded'};
+    case 'needsAttention':
+      return {status: 'warning', label: 'Needs attention'};
   }
-}
+};
 
 export default function TableRowStatusTable() {
   const rowStatus = useTableRowStatus<Job>({getStatus: jobStatus});

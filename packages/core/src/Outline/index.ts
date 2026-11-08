@@ -15,5 +15,6 @@ export {Outline} from './Outline';
 export type {OutlineProps} from './Outline';
 export type {OutlineItem} from './types';
 export {parseOutlineFromMarkdown} from './parseOutlineFromMarkdown';
+export type {ParseOutlineFromMarkdownOptions} from './parseOutlineFromMarkdown';
 export {useOutlineFromMarkdown} from './useOutlineFromMarkdown';
 export {useOutlineFromDOM} from './useOutlineFromDOM';

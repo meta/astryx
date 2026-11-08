@@ -26,6 +26,10 @@ export const docs = {
   category: 'foundations',
       content: [
         {
+          type: 'prose',
+          text: 'Seven radius tokens, from 0px to 9999px.',
+        },
+        {
           type: 'token-ref',
           topic: 'tokens',
           section: 'Radius Tokens',
@@ -38,14 +42,15 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'When a rounded container has padding, inner elements need a smaller radius to appear concentric. Components like Card handle this automatically; the inner radius is computed as max(0, outerRadius - padding).',
+          text: 'Inside a padded, rounded container, give nested elements a radius of outer radius minus padding so the curves stay concentric. Card does not do this for your content.',
         },
         {
           type: 'code',
           lang: 'css',
           label: 'Concentric radius formula',
-          code: `/* Automatic in Astryx Card */
---card-concentric-radius: max(0px, calc(var(--_card-radius) - var(--card-padding)));`,
+          code: `.inner {
+  border-radius: max(0px, calc(var(--radius-container) - var(--spacing-4)));
+}`,
         },
       ],
     },

@@ -38,7 +38,6 @@
  */
 
 import {
-  createContext,
   use,
   useCallback,
   useEffect,
@@ -53,7 +52,14 @@ import {CheckboxInput} from '../../../CheckboxInput';
 import {mergeRefs} from '../../../utils';
 import type {TablePlugin, TableColumn, BodyRowRenderProps} from '../../types';
 import {pixel} from '../../columnUtils';
-import {useTranslator} from '../../../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../../../i18n/useComponentTranslator';
+import english from '../../../i18n/generated-english/Table/plugins/selection/useTableSelection.generated';
+import {createSharedContext} from '../../../utils/sharedContext';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Config Type
@@ -159,8 +165,24 @@ function applyRowSelectionStyle(
   }
   // Written on every pass, not just when painting: the flag can flip while a
   // row is already selected, and the wash has to come back off.
-  el.style.backgroundColor =
-    isSelected && hasRowHighlight ? selectedBgColor : '';
+  const wash = isSelected && hasRowHighlight ? selectedBgColor : '';
+  if (el.style.backgroundColor !== wash) {
+    el.style.backgroundColor = wash;
+  }
+  // A pinned column paints its own opaque background over the row, so the
+  // wash alone stops at the freeze line. Publishing it as the row overlay is
+  // what lets useTableStickyColumns replay it on those cells — the same
+  // contract TableRow honours for striping and hover.
+  const currentOverlay = el.style.getPropertyValue(ROW_OVERLAY_VAR);
+  if (wash === '') {
+    if (currentOverlay !== '') {
+      el.style.removeProperty(ROW_OVERLAY_VAR);
+    }
+  } else {
+    if (currentOverlay !== wash) {
+      el.style.setProperty(ROW_OVERLAY_VAR, wash);
+    }
+  }
 }
 
 // =============================================================================
@@ -168,7 +190,11 @@ function applyRowSelectionStyle(
 // =============================================================================
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const SelectionStoreContext = createContext<SelectionStore<any> | null>(null);
+const SelectionStoreContext = createSharedContext<SelectionStore<any> | null>(
+  'SelectionStoreContext',
+  1,
+  null,
+);
 SelectionStoreContext.displayName = 'SelectionStoreContext';
 
 // =============================================================================
@@ -219,7 +245,7 @@ function SelectAllCheckboxInner<T extends Record<string, unknown>>({
 }: {
   store: SelectionStore<T>;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const getSnapshot = useCallback(() => {
     const config = store.getConfig();
     const allSelected = config.getIsAllSelected();
@@ -271,7 +297,7 @@ function SelectionCellContentInner<T extends Record<string, unknown>>({
   store: SelectionStore<T>;
   item: T;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const config = store.getConfig();
   const isSelected = useIsItemSelected(store, item);
   const selectable = config.getIsItemSelectable?.(item) ?? true;
@@ -305,6 +331,13 @@ function SelectionCellContentInner<T extends Record<string, unknown>>({
 // =============================================================================
 
 const selectedBgColor = colorVars['--color-accent-muted'];
+
+/**
+ * The row's current fill, republished for pinned cells to read. Declared as a
+ * literal rather than imported because StyleX needs the same name as a static
+ * key on the reading side, so there is no one constant both ends can share.
+ */
+const ROW_OVERLAY_VAR = '--table-row-overlay';
 
 const selectionColumnStyles = stylex.create({
   center: {
@@ -366,6 +399,7 @@ export function useTableSelection<T extends Record<string, unknown>>(
 
   return useMemo(
     (): TablePlugin<T> => ({
+      rowModel: 'flat',
       transformTableContext(children: ReactNode) {
         return (
           <SelectionStoreContext value={store}>

@@ -13,6 +13,7 @@
  */
 
 import type {Meta, StoryObj} from '@storybook/react';
+import {expect, userEvent, waitFor, within} from 'storybook/test';
 import {useEffect, useMemo, useRef, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
@@ -37,6 +38,7 @@ import {
   spacingVars,
   typeScaleVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
+import {LayerProvider} from '@astryxdesign/core/Layer';
 
 const GRID_CELL_SELECTOR = '[role="gridcell"]';
 
@@ -52,6 +54,9 @@ const meta: Meta<typeof ComplexSelector> = {
           'A high-level selector shell for rich custom content. The component owns the field, trigger, popover, focus restore, and async changeAction flow while consumers render the content. Its sm, md, and lg triggers use the 28px, 32px, and 36px element-height tokens. Custom content should use Astryx focus hooks where appropriate and be evaluated against WCAG 2.2.',
       },
     },
+  },
+  argTypes: {
+    variant: {control: 'radio', options: ['input', 'secondary', 'ghost']},
   },
 };
 
@@ -246,6 +251,18 @@ const categoryTree: DestinationNode[] = [
 ];
 
 const styles = stylex.create({
+  // Stands in for the app's bottom bar that LayerProvider's inset keeps the
+  // popup clear of.
+  appBar: {
+    position: 'fixed',
+    insetInline: 0,
+    insetBlockEnd: 0,
+    blockSize: 80,
+    backgroundColor: colorVars['--color-background-muted'],
+    borderBlockStartWidth: borderVars['--border-width'],
+    borderBlockStartStyle: 'solid',
+    borderBlockStartColor: colorVars['--color-border'],
+  },
   wrapper: {
     width: 340,
   },
@@ -398,9 +415,20 @@ const styles = stylex.create({
     borderRadius: radiusVars['--radius-container'],
     backgroundColor: colorVars['--color-background-muted'],
   },
+  toolbarDemoIntrinsic: {
+    width: 'max-content',
+  },
   toolbarContent: {
     width: 280,
     padding: spacingVars['--spacing-3'],
+  },
+  // Bounded inside the centered story frame's 32px padding on each side, so
+  // the 320px captures measure the component rather than a frame overflow.
+  auditMatrix: {
+    width: 'min(720px, calc(100vw - 64px))',
+  },
+  auditPopupContent: {
+    width: 220,
   },
 });
 
@@ -673,38 +701,40 @@ export const FruitRipenessGrid: Story = {
   },
 };
 
+function TreeListWithSearchExample() {
+  const [value, setValue] = useState<DestinationValue>({
+    id: 'teams-design-systems-accessibility',
+    label: 'Accessibility',
+    path: '/Teams/Design systems/Accessibility',
+  });
+
+  return (
+    <VStack gap={4} xstyle={styles.wrapper}>
+      <ComplexSelector<DestinationValue>
+        label="Project destination"
+        description="Search and browse nested folders from one selector."
+        value={value}
+        onChange={setValue}
+        triggerLabel={formatDestinationValue(value)}
+        contentXstyle={styles.treeContent}>
+        {(selectedValue, onChange, close) => (
+          <TreeSearchContent
+            label="destinations"
+            value={selectedValue}
+            tree={destinationTree}
+            searchPlaceholder="Search folders or teams"
+            onChange={onChange}
+            close={close}
+          />
+        )}
+      </ComplexSelector>
+    </VStack>
+  );
+}
+
 export const TreeListWithSearch: Story = {
   name: 'Tree list with search',
-  render: () => {
-    const [value, setValue] = useState<DestinationValue>({
-      id: 'teams-design-systems-accessibility',
-      label: 'Accessibility',
-      path: '/Teams/Design systems/Accessibility',
-    });
-
-    return (
-      <VStack gap={4} xstyle={styles.wrapper}>
-        <ComplexSelector<DestinationValue>
-          label="Project destination"
-          description="Search and browse nested folders from one selector."
-          value={value}
-          onChange={setValue}
-          triggerLabel={formatDestinationValue(value)}
-          contentXstyle={styles.treeContent}>
-          {(selectedValue, onChange, close) => (
-            <TreeSearchContent
-              label="destinations"
-              value={selectedValue}
-              tree={destinationTree}
-              searchPlaceholder="Search folders or teams"
-              onChange={onChange}
-              close={close}
-            />
-          )}
-        </ComplexSelector>
-      </VStack>
-    );
-  },
+  render: () => <TreeListWithSearchExample />,
   parameters: {
     docs: {
       description: {
@@ -713,6 +743,23 @@ export const TreeListWithSearch: Story = {
       },
     },
   },
+};
+
+/**
+ * The same selector in an app whose bottom bar covers the block-end edge,
+ * declared once through LayerProvider's `inset`, so the popup stays clear of it.
+ */
+export const TreeListWithSearchAboveAppBar: Story = {
+  name: 'Tree list with search above an app bar',
+  render: () => (
+    <LayerProvider inset={{blockEnd: 80}}>
+      <TreeListWithSearchExample />
+      <div aria-hidden {...stylex.props(styles.appBar)} />
+    </LayerProvider>
+  ),
+  // The bar is fixed to the viewport, so on the docs page the story gets its
+  // own frame instead of covering the page.
+  parameters: {docs: {story: {inline: false, height: '360px'}}},
 };
 
 export const CategoryTreeSelector: Story = {
@@ -760,37 +807,35 @@ export const CategoryTreeSelector: Story = {
 
 type ViewDensity = 'Comfortable' | 'Compact';
 
-export const ControlledToolbarTrigger: Story = {
-  name: 'Controlled toolbar trigger',
+export const SecondaryVariant: Story = {
+  name: 'Secondary toolbar trigger',
   render: () => {
     const [density, setDensity] = useState<ViewDensity>('Comfortable');
-    const selectorRef = useRef<ComplexSelectorHandle>(null);
 
     return (
-      <div {...stylex.props(styles.toolbarDemo)}>
+      <div {...stylex.props(styles.toolbarDemo, styles.toolbarDemoIntrinsic)}>
         <Button
-          label="Open options externally"
-          variant="ghost"
+          label="Reset view"
+          variant="secondary"
           size="sm"
-          onClick={() => selectorRef.current?.toggle()}
+          onClick={() => setDensity('Comfortable')}
         />
         <ComplexSelector<ViewDensity>
-          label="View options"
+          label="View density"
           isLabelHidden
           value={density}
           onChange={setDensity}
           triggerLabel={`Density: ${density}`}
-          variant="ghost"
+          variant="secondary"
+          size="sm"
+          width={190}
           startIcon="viewColumns"
           alignment="end"
-          handleRef={selectorRef}
           contentXstyle={styles.toolbarContent}>
           {(selectedDensity, onChange, close) => (
             <VStack gap={3}>
               <Text type="supporting" color="secondary">
-                The selector owns visibility. An external control drives it
-                imperatively via handleRef; choosing a density commits the value
-                and closes the surface.
+                Choose how densely rows are displayed.
               </Text>
               <HStack gap={2}>
                 {(['Comfortable', 'Compact'] as const).map(option => (
@@ -811,6 +856,102 @@ export const ControlledToolbarTrigger: Story = {
             </VStack>
           )}
         </ComplexSelector>
+        <Button label="Share" variant="secondary" size="sm" />
+      </div>
+    );
+  },
+  play: async ({canvasElement}) => {
+    await document.fonts.ready;
+    const canvas = within(canvasElement);
+    const root = canvasElement.querySelector<HTMLElement>(
+      '.astryx-complex-selector[data-variant="secondary"]',
+    );
+    if (root == null) {
+      throw new Error('Secondary ComplexSelector root not found');
+    }
+    const widthBefore = root.getBoundingClientRect().width;
+    expect(widthBefore).toBeCloseTo(190, 0);
+
+    const trigger = canvas.getByRole('combobox', {name: 'View density'});
+    await userEvent.click(trigger);
+    const dialog = within(document.body).getByRole('dialog', {
+      name: 'View density',
+    });
+    await userEvent.click(
+      within(dialog).getByRole('button', {name: 'Compact'}),
+    );
+    await waitFor(() =>
+      expect(root.getBoundingClientRect().width).toBeCloseTo(widthBefore, 0),
+    );
+    trigger.blur();
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'A compact toolbar composition where ComplexSelector uses the same neutral-filled treatment as adjacent secondary buttons.',
+      },
+    },
+  },
+};
+
+export const ControlledToolbarTrigger: Story = {
+  name: 'Controlled toolbar trigger',
+  render: () => {
+    const [density, setDensity] = useState<ViewDensity>('Comfortable');
+    const [isOpen, setIsOpen] = useState(false);
+    const selectorRef = useRef<ComplexSelectorHandle>(null);
+
+    return (
+      <div {...stylex.props(styles.toolbarDemo)}>
+        <Button
+          label="Open options externally"
+          variant="ghost"
+          size="sm"
+          onClick={() => selectorRef.current?.toggle()}
+        />
+        <ComplexSelector<ViewDensity>
+          label="View options"
+          isLabelHidden
+          value={density}
+          onChange={setDensity}
+          onOpenChange={setIsOpen}
+          triggerLabel={`Density: ${density}`}
+          variant="ghost"
+          startIcon="viewColumns"
+          alignment="end"
+          handleRef={selectorRef}
+          contentXstyle={styles.toolbarContent}>
+          {(selectedDensity, onChange, close) => (
+            <VStack gap={3}>
+              <Text type="supporting" color="secondary">
+                The selector owns visibility. An external control drives it
+                imperatively via handleRef; choosing a density commits the value
+                and closes the surface. onOpenChange reports every open and
+                close, including the ones the selector performs itself.
+              </Text>
+              <HStack gap={2}>
+                {(['Comfortable', 'Compact'] as const).map(option => (
+                  <Button
+                    key={option}
+                    label={option}
+                    size="sm"
+                    variant={
+                      selectedDensity === option ? 'primary' : 'secondary'
+                    }
+                    onClick={() => {
+                      onChange(option);
+                      close();
+                    }}
+                  />
+                ))}
+              </HStack>
+            </VStack>
+          )}
+        </ComplexSelector>
+        <Text type="supporting" color="secondary" data-testid="open-state">
+          {isOpen ? 'open' : 'closed'}
+        </Text>
       </div>
     );
   },
@@ -819,6 +960,102 @@ export const ControlledToolbarTrigger: Story = {
       description: {
         story:
           'A compact toolbar composition using the ghost trigger, a leading icon, end-aligned content, and an external control that opens the selector imperatively through its handleRef. The selector still owns its own visibility, focus restoration, and light dismiss.',
+      },
+    },
+  },
+};
+
+export const AuditMatrix: Story = {
+  name: 'Audit matrix',
+  tags: ['no-visual'],
+  render: () => {
+    const content = () => <Button label="Apply selection" size="sm" />;
+
+    return (
+      <VStack gap={4} xstyle={styles.auditMatrix} data-testid="audit-matrix">
+        <ComplexSelector label="Empty small" value="" size="sm">
+          {content}
+        </ComplexSelector>
+        <ComplexSelector
+          label="Selected medium"
+          value="Design systems"
+          triggerLabel="Design systems"
+          data-testid="rtl-trigger">
+          {content}
+        </ComplexSelector>
+        <ComplexSelector
+          label="Long large"
+          value="A long selected destination"
+          triggerLabel="A long selected destination that must truncate without widening the field"
+          size="lg">
+          {content}
+        </ComplexSelector>
+        <ComplexSelector
+          label="Ghost trigger"
+          value="Compact"
+          triggerLabel="Compact"
+          variant="ghost"
+          startIcon="viewColumns">
+          {content}
+        </ComplexSelector>
+        <ComplexSelector
+          label="Loading value"
+          value="Saving"
+          triggerLabel="Saving destination"
+          isLoading>
+          {content}
+        </ComplexSelector>
+        <ComplexSelector
+          label="Disabled value"
+          value="Unavailable"
+          triggerLabel="Unavailable"
+          isDisabled>
+          {content}
+        </ComplexSelector>
+        <ComplexSelector
+          label="Invalid required value"
+          value="Needs attention"
+          triggerLabel="Needs attention"
+          isRequired
+          status={{type: 'error', message: 'Choose an available destination.'}}>
+          {content}
+        </ComplexSelector>
+        <ComplexSelector
+          label="Warning value"
+          value="Draft destination"
+          triggerLabel="Draft destination"
+          status={{type: 'warning', message: 'This destination is archived.'}}>
+          {content}
+        </ComplexSelector>
+        <ComplexSelector
+          label="Successful value"
+          value="Ready"
+          triggerLabel="Ready"
+          status={{type: 'success', message: 'Destination is available.'}}>
+          {content}
+        </ComplexSelector>
+        <ComplexSelector
+          label="Custom trigger selector"
+          value="Custom"
+          contentXstyle={styles.auditPopupContent}
+          renderTrigger={props => (
+            <Button
+              data-testid="rtl-custom-trigger"
+              label="Custom trigger"
+              variant="secondary"
+              {...props}
+            />
+          )}>
+          {content}
+        </ComplexSelector>
+      </VStack>
+    );
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'A bounded audit fixture for the built-in sizes, variants, busy, disabled, validation, overflow, and caller-rendered trigger paths. Browser evidence drives this one fixture through light, dark, RTL, interaction, and 320px states.',
       },
     },
   },

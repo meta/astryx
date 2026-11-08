@@ -10,12 +10,13 @@
  * to catch cases where packages point to dist files that weren't produced.
  *
  * Existence is necessary but not sufficient: an entry file can exist and still be
- * unloadable, because nothing here opens it. That is how #4620 shipped — every
+ * unloadable, because an existence check never opens it. That is how #4620 shipped — every
  * theme's `./built` entry existed while carrying an extensionless relative import
- * that Node cannot resolve. So explicit `import`-condition ESM targets and
- * unconditional ESM targets are also imported. This runs after the build, so a
- * forward reference to something a later pipeline stage produces is already
- * satisfied.
+ * that Node cannot resolve. So explicit `import` and `require` targets, plus
+ * unconditional runtime targets, are also loaded. Maintained themes additionally
+ * assert that their ESM icon companion exists without an unused CommonJS twin.
+ * This runs after the build, so a forward reference to something a later pipeline
+ * stage produces is already satisfied.
  *
  * Scope, deliberately: importing a module only exercises the specifiers that are
  * evaluated when it loads — its static import graph. A bad specifier inside a
@@ -109,18 +110,16 @@ function checkWildcard(pkgDir, exportValue) {
 }
 
 /**
- * ESM targets worth actually importing. `.cjs` and `require`-condition targets
- * are skipped (loading CJS here would fire side effects under a different
- * module system), as are type declarations and assets, which Node cannot import
- * as modules anyway. `default` targets are deliberately outside this probe:
+ * Runtime targets worth actually loading. Type declarations and assets are not
+ * modules. `default` targets are deliberately outside this probe:
  * many are browser-focused, and evaluating every default entry would broaden
- * this packaging check beyond the explicit ESM import surface it protects.
+ * this packaging check beyond the explicit Node surfaces it protects.
  */
-const IMPORTABLE = /\.(js|mjs)$/;
-const NON_PROBED_CONDITIONS = new Set(['types', 'require', 'default']);
+const LOADABLE = /\.(?:cjs|js|mjs)$/;
+const NON_PROBED_CONDITIONS = new Set(['types', 'default']);
 
-/** Targets collected during the existence pass, imported afterwards. */
-const importTargets = [];
+/** Targets collected during the existence pass, loaded afterwards. */
+const loadTargets = [];
 
 /**
  * Recursively check an exports map value.
@@ -140,16 +139,17 @@ function checkExportsValue(pkgDir, pkgName, exportKey, value, parentCondition) {
       errors.push(`  ✗ ${label} → ${value} (${isWildcard ? 'no files match pattern' : 'file not found'})`);
     } else if (
       !isWildcard &&
-      IMPORTABLE.test(value) &&
+      LOADABLE.test(value) &&
       !NON_PROBED_CONDITIONS.has(parentCondition)
     ) {
-      importTargets.push({
+      loadTargets.push({
         pkgName,
         label: parentCondition
           ? `exports["${exportKey}"].${parentCondition}`
           : `exports["${exportKey}"]`,
         value,
         abs: resolve(pkgDir, value),
+        loader: parentCondition === 'require' ? 'require' : 'import',
       });
     }
   } else if (typeof value === 'object' && value !== null) {
@@ -193,6 +193,19 @@ for (const pkgJsonPath of packageJsons) {
     }
   }
 
+  if (pkg.name?.startsWith('@astryxdesign/theme-')) {
+    const esmIcons = join(pkgDir, 'dist', 'icons.mjs');
+    const cjsIcons = join(pkgDir, 'dist', 'icons.js');
+    if (!existsSync(esmIcons)) {
+      errors.push('  ✗ dist/icons.mjs (ESM icon companion not found)');
+    }
+    if (existsSync(cjsIcons)) {
+      errors.push(
+        '  ✗ dist/icons.js (unused CommonJS icon artifact was emitted)',
+      );
+    }
+  }
+
   packagesChecked++;
 
   if (errors.length > 0) {
@@ -208,7 +221,7 @@ for (const pkgJsonPath of packageJsons) {
 
 console.log(`\n${packagesChecked} packages checked.`);
 
-// Second pass: actually load each runtime ESM target. A target can exist and
+// Second pass: actually load each explicit Node runtime target. A target can exist and
 // still be unresolvable — see #4620, where every theme's `./built` entry was
 // present but imported an extensionless `./icons` that Node rejects.
 //
@@ -225,17 +238,26 @@ const RESOLUTION_CODES = new Set([
 ]);
 
 /** Sentinel exit code, distinct from anything an executable entry might use. */
-const IMPORT_FAILED = 9;
+const LOAD_FAILED = 9;
 
-let importFailures = 0;
+let loadFailures = 0;
 
-for (const target of importTargets) {
+for (const target of loadTargets) {
+  const failureHandler =
+    `e => { process.stderr.write(String((e && e.code) || (e && e.name) || e)); ` +
+    `process.exit(${LOAD_FAILED}); }`;
   const probe =
-    `import(${JSON.stringify(pathToFileURL(target.abs).href)})` +
-    `.then(() => process.exit(0))` +
-    `.catch(e => { process.stderr.write(String((e && e.code) || (e && e.name) || e)); process.exit(${IMPORT_FAILED}); })`;
+    target.loader === 'require'
+      ? `try { require(${JSON.stringify(target.abs)}); process.exit(0); } catch (e) { (${failureHandler})(e); }`
+      : `import(${JSON.stringify(pathToFileURL(target.abs).href)})` +
+        `.then(() => process.exit(0))` +
+        `.catch(${failureHandler})`;
 
-  const run = spawnSync(process.execPath, ['--input-type=module', '-e', probe], {
+  const args =
+    target.loader === 'require'
+      ? ['-e', probe]
+      : ['--input-type=module', '-e', probe];
+  const run = spawnSync(process.execPath, args, {
     encoding: 'utf-8',
     timeout: 20_000,
     stdio: ['ignore', 'ignore', 'pipe'],
@@ -244,36 +266,42 @@ for (const target of importTargets) {
   // Anything other than our sentinel is the module's own business: an
   // executable entry that printed help and exited 0, or one that failed for a
   // reason unrelated to packaging. Only resolution defects concern us here.
-  if (run.status !== IMPORT_FAILED) continue;
+  if (run.status !== LOAD_FAILED) continue;
 
   const code = (run.stderr || '').trim().split('\n')[0];
   if (!RESOLUTION_CODES.has(code)) continue;
 
-  if (importFailures === 0) {
-    console.error('\n❌ Export targets that exist but cannot be imported:\n');
+  if (loadFailures === 0) {
+    console.error('\n❌ Export targets that exist but cannot be loaded:\n');
   }
   console.error(`  ✗ ${target.pkgName} ${target.label} → ${target.value}`);
   console.error(`      ${code}`);
-  importFailures++;
+  loadFailures++;
 }
 
-if (importFailures === 0 && importTargets.length > 0) {
-  console.log(`${importTargets.length} ESM export target(s) imported cleanly.`);
+if (loadFailures === 0 && loadTargets.length > 0) {
+  const imports = loadTargets.filter(
+    target => target.loader === 'import',
+  ).length;
+  const requires = loadTargets.length - imports;
+  console.log(
+    `${imports} import and ${requires} require export target(s) loaded cleanly.`,
+  );
 }
 
-const failures = totalErrors + importFailures;
+const failures = totalErrors + loadFailures;
 
 if (failures > 0) {
   if (totalErrors > 0) {
-    console.error(`\n${totalErrors} broken export(s) found. Fix the paths above.`);
+    console.error(`\n${totalErrors} package artifact or export error(s) found. Fix the paths above.`);
   }
-  if (importFailures > 0) {
+  if (loadFailures > 0) {
     console.error(
-      `\n${importFailures} export target(s) exist but fail to load. A consumer importing ` +
-        `them from Node gets the same error.`,
+      `\n${loadFailures} export target(s) exist but fail to load. A Node consumer ` +
+        `using the advertised condition gets the same error.`,
     );
   }
   process.exit(1);
 } else {
-  console.log('All exports resolve to existing files; probed ESM targets load cleanly.');
+  console.log('All package artifacts and exports are valid; probed Node targets load cleanly.');
 }

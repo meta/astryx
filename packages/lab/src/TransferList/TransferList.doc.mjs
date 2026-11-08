@@ -15,7 +15,7 @@ export const docs = {
   name: 'TransferListSelector',
   displayName: 'Transfer List Selector',
   group: 'Selector',
-  category: 'Data Input',
+  category: 'Form Controls',
   keywords: [
     'transfer list',
     'dual list',
@@ -224,7 +224,7 @@ export const docs = {
     },
     {
       name: 'statusVariant',
-      type: 'FieldStatusVariant',
+      type: "'attached' | 'detached' | 'tooltip'",
       description: 'Placement treatment for the status message.',
     },
     {
@@ -239,24 +239,26 @@ export const docs = {
         'Optional async action run after each immediate commit or a changed staged Apply; drives optimistic and busy state.',
     },
     {
-      name: 'xstyle',
+      name: 'controlXstyle',
       type: 'StyleXStyles',
-      description: 'StyleX styles for the external selector field.',
+      description:
+        "StyleX styles for the external selector's bordered control box.",
     },
     {
-      name: 'className',
+      name: 'controlClassName',
       type: 'string',
-      description: 'Class name applied to the external selector field.',
+      description: "Class name applied to the external selector's control box.",
     },
     {
-      name: 'style',
+      name: 'controlStyle',
       type: 'CSSProperties',
-      description: 'Inline styles applied to the external selector field.',
+      description:
+        "Inline styles applied to the external selector's control box.",
     },
     {
       name: 'data-testid',
       type: 'string',
-      description: 'Test ID for the selector trigger container.',
+      description: 'Test ID for the selector trigger button.',
     },
   ],
   components: [
@@ -321,6 +323,13 @@ export const docs = {
           type: 'boolean',
           description:
             'Shows a shared search field that filters both lists by label and description.',
+          default: 'false',
+        },
+        {
+          name: 'isDisabled',
+          type: 'boolean',
+          description:
+            'Disables every transfer, reorder, Clear, Add all and search control. The row controls and the search field stay focusable.',
           default: 'false',
         },
         {
@@ -749,6 +758,8 @@ export const docsDense = {
         selectedLabel: 'Selected-list heading and name.',
         availableLabel: 'Available-list heading and name.',
         hasSearch: 'Shared list filter; default false.',
+        isDisabled:
+          'Disable every control; rows and search stay focusable; default false.',
         searchLabel: 'Accessible search label.',
         searchPlaceholder: 'Search placeholder.',
         isReorderable: 'Enable pointer and keyboard ordering; default true.',

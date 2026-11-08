@@ -103,6 +103,19 @@ export function linkifyComponents(
   return out + linkify(markdown.slice(lastIndex));
 }
 
+/** Add a visible note to release sections that contain only a version heading. */
+export function addEmptyReleasePlaceholders(markdown: string): string {
+  return markdown
+    .split(/\n+---\n+/)
+    .map(section => {
+      const trimmed = section.trim();
+      return /^#\s+\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(trimmed)
+        ? `${trimmed}\n\n_No changes in this release._`
+        : trimmed;
+    })
+    .join('\n\n---\n\n');
+}
+
 /** Strip the leading `# Title` line (the package name h1) from a changelog. */
 export function stripTitle(markdown: string): string {
   return markdown.replace(/^#\s+.+\n+/, '');

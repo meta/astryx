@@ -23,18 +23,25 @@ export const docs = {
     {
       name: 'isScrollable',
       type: 'boolean',
-      description: 'Enable scrollable overflow.',
+      description:
+        'Enable scrollable overflow. With arithmetic contentWidth values, the scrollport spans through every open side while context-aware insets keep children aligned.',
       default: 'true',
     },
     {
       name: 'label',
       type: 'string',
-      description: 'Accessible label for the landmark element.',
+      description:
+        'Accessible label for the landmark element. While the region scrolls, it also names the scrolling region, which otherwise takes a translated "Content".',
     },
     {
       name: 'role',
       type: 'AriaRole',
       description: 'ARIA landmark role.',
+    },
+    {
+      name: 'ref',
+      type: 'React.Ref<HTMLDivElement>',
+      description: 'Ref forwarded to the content region element.',
     },
   ],
 };
@@ -58,18 +65,25 @@ export const docsZh = {
     {
       name: 'isScrollable',
       type: 'boolean',
-      description: '启用可滚动溢出。',
+      description:
+        '启用可滚动溢出。设置可参与算术计算的 contentWidth 时，滚动区域会延伸到所有未被面板占用的边缘，同时根据上下文调整内边距以保持子内容对齐。',
       default: 'true',
     },
     {
       name: 'label',
       type: 'string',
-      description: '地标元素的无障碍标签。',
+      description:
+        '地标元素的无障碍标签。区域滚动时，它也为滚动区域命名；未提供时使用已翻译的“Content”（内容）。',
     },
     {
       name: 'role',
       type: 'AriaRole',
       description: 'ARIA 地标角色。',
+    },
+    {
+      name: 'ref',
+      type: 'React.Ref<HTMLDivElement>',
+      description: '转发到内容区域元素的 ref。',
     },
   ],
 };
@@ -82,8 +96,11 @@ export const docsDense = {
   propDescriptions: {
     children: 'Content.',
     padding: 'Internal padding on spacing scale. Overrides layout container default.',
-    isScrollable: 'Enable scrollable overflow.',
-    label: 'Accessible label for landmark element.',
+    isScrollable:
+      'Enable scrollable overflow. With arithmetic contentWidth values, the scrollport reaches open sides while context-aware insets align children.',
+    label:
+      'Accessible label for landmark element; also names the region while it scrolls (default "Content").',
     role: 'ARIA landmark role.',
+    ref: 'Ref forwarded to the content region element.',
   },
 };

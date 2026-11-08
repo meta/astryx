@@ -195,9 +195,11 @@ describe('useTableSelection', () => {
   it('disables checkbox for disabled rows', () => {
     render(<SelectionTable getIsItemEnabled={item => !item.isLocked} />);
     const rowCheckboxes = screen.getAllByLabelText('Select row');
-    expect(rowCheckboxes[0]).not.toBeDisabled();
-    expect(rowCheckboxes[1]).not.toBeDisabled();
-    expect(rowCheckboxes[2]).toBeDisabled();
+    expect(rowCheckboxes[0]).not.toHaveAttribute('aria-disabled');
+    expect(rowCheckboxes[1]).not.toHaveAttribute('aria-disabled');
+    // Focusable disabled (spec:AST-085 FR1): aria-disabled, no native disabled.
+    expect(rowCheckboxes[2]).toHaveAttribute('aria-disabled', 'true');
+    expect(rowCheckboxes[2]).not.toHaveAttribute('disabled');
   });
 
   it('prepends selection <td> to each body row', () => {
@@ -285,6 +287,81 @@ describe('useTableSelection', () => {
         'aria-selected',
       );
     });
+
+    // A pinned cell paints over the row, then replays whatever the row
+    // published as --table-row-overlay. Without the variable the wash simply
+    // stops at the freeze line, so it has to track the background exactly.
+    describe('--table-row-overlay', () => {
+      const readOverlay = (row: HTMLElement) =>
+        row.style.getPropertyValue('--table-row-overlay');
+
+      it('publishes the wash so pinned cells can replay it', async () => {
+        const user = userEvent.setup();
+        render(<SelectionTable />);
+
+        await user.click(screen.getAllByLabelText('Select row')[0]);
+
+        expect(readOverlay(screen.getAllByRole('row')[1])).toBe(
+          selectedBgColor,
+        );
+      });
+
+      it('publishes nothing when the row is not painted', async () => {
+        const user = userEvent.setup();
+        render(<SelectionTable hasRowHighlight={false} />);
+
+        await user.click(screen.getAllByLabelText('Select row')[0]);
+
+        expect(readOverlay(screen.getAllByRole('row')[1])).toBe('');
+      });
+
+      it('withdraws the variable when a row is unchecked', async () => {
+        const user = userEvent.setup();
+        render(<SelectionTable />);
+
+        const checkbox = screen.getAllByLabelText('Select row')[0];
+        await user.click(checkbox);
+        await user.click(checkbox);
+
+        expect(readOverlay(screen.getAllByRole('row')[1])).toBe('');
+      });
+
+      it('tracks the background when the flag flips', async () => {
+        const user = userEvent.setup();
+        const {rerender} = render(<SelectionTable />);
+
+        await user.click(screen.getAllByLabelText('Select row')[0]);
+        rerender(<SelectionTable hasRowHighlight={false} />);
+        expect(readOverlay(screen.getAllByRole('row')[1])).toBe('');
+
+        rerender(<SelectionTable hasRowHighlight />);
+        expect(readOverlay(screen.getAllByRole('row')[1])).toBe(
+          selectedBgColor,
+        );
+      });
+
+      it('leaves unchecked rows without the variable', async () => {
+        const user = userEvent.setup();
+        render(<SelectionTable />);
+
+        await user.click(screen.getAllByLabelText('Select row')[0]);
+
+        expect(readOverlay(screen.getAllByRole('row')[2])).toBe('');
+      });
+    });
+  });
+
+  it('leaves product chrome outside the selection plugin', () => {
+    const {result} = renderHook(() =>
+      useTableSelection<SelectableUser>({
+        getIsItemSelected: () => false,
+        onSelectItem: vi.fn(),
+        onSelectAll: vi.fn(),
+        getIsAllSelected: () => false,
+      }),
+    );
+
+    expect(result.current.transformScrollWrapper).toBeUndefined();
   });
 
   it('unsubscribes detached row refs instead of accumulating listeners', () => {

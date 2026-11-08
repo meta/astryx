@@ -2,9 +2,9 @@
 
 'use client';
 
+import {Center} from '@astryxdesign/core/Center';
 import {Card} from '@astryxdesign/core/Card';
 import {Stack} from '@astryxdesign/core/Layout';
-import {Heading} from '@astryxdesign/core/Text';
 import {Icon} from '@astryxdesign/core/Icon';
 import {IconButton} from '@astryxdesign/core/IconButton';
 import {
@@ -19,9 +19,8 @@ import {
 export default function CenterHorizontal() {
   return (
     <Card width={520} padding={2}>
-      <Stack direction="horizontal" vAlign="center">
-        <Heading level={2}>Untitled Document</Heading>
-        <Stack direction="horizontal" gap={0} hAlign="end" style={{flex: 1}}>
+      <Center axis="horizontal" width="100%">
+        <Stack direction="horizontal" gap={0} vAlign="center">
           <IconButton
             label="Bold"
             icon={<Icon icon={BoldIcon} />}
@@ -59,7 +58,7 @@ export default function CenterHorizontal() {
             size="sm"
           />
         </Stack>
-      </Stack>
+      </Center>
     </Card>
   );
 }

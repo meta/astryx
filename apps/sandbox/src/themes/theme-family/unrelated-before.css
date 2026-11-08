@@ -1,0 +1,9 @@
+/* Copyright (c) Meta Platforms, Inc. and affiliates. */
+
+/* Loaded before the generated family stylesheet. Scope proximity must keep the
+   active family rule in control despite equal specificity and layer. */
+@layer astryx-theme {
+  :where([data-family-order='before']) .astryx-button[data-variant='primary'] {
+    background-color: var(--color-error);
+  }
+}

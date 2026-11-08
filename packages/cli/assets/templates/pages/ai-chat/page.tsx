@@ -276,8 +276,8 @@ export default function AIChatConversationTemplate() {
   const rootRef = useRef<HTMLElement>(null);
   const artifactResize = useResizable({
     defaultSize: 640,
-    minSizePx: 480,
-    maxSizePx: 960,
+    minSize: 480,
+    maxSize: 960,
     autoSaveId: 'ai-chat-artifact-panel',
   });
 

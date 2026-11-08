@@ -202,24 +202,25 @@ export default function ResizableWorkspacePage() {
 
   const startPanel = useResizable({
     defaultSize: 256,
-    minSizePx: 160,
-    maxSizePx: 400,
+    minSize: 160,
+    maxSize: 400,
     collapsible: true,
     collapsedSize: 50,
   });
 
   const endPanel = useResizable({
     defaultSize: 320,
-    minSizePx: 180,
-    maxSizePx: 500,
+    minSize: 180,
+    maxSize: 500,
     collapsible: true,
     collapsedSize: 50,
   });
 
   const bottomPanel = useResizable({
     defaultSize: 300,
-    minSizePx: 80,
-    maxSizePx: Infinity,
+    minSize: 80,
+    maxSize: Infinity,
+    direction: 'vertical',
     collapsible: true,
     collapsedSize: 40,
   });

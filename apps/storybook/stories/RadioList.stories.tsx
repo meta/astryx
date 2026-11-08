@@ -3,6 +3,8 @@
 import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {RadioList, RadioListItem} from '@astryxdesign/core/RadioList';
+import {Badge} from '@astryxdesign/core/Badge';
+import {Link} from '@astryxdesign/core/Link';
 
 const meta: Meta<typeof RadioList> = {
   title: 'Core/RadioList',
@@ -98,6 +100,47 @@ export const WithDescription: Story = {
   args: {
     label: 'Notification preference',
     description: 'Choose how you would like to be notified',
+  },
+};
+
+export const RichContent: Story = {
+  render: args => {
+    const [value, setValue] = useState(args.value ?? 'pro');
+    const {value: _value, onChange: _onChange, ...restArgs} = args;
+    return (
+      <RadioList {...restArgs} value={value} onChange={setValue}>
+        <RadioListItem
+          label="Starter"
+          value="starter"
+          description={
+            <>
+              Free forever. <Link href="#pricing">Compare plans</Link>
+            </>
+          }
+        />
+        <RadioListItem
+          label={
+            <>
+              Pro <Link href="#pro-details">details</Link>{' '}
+              <Badge label="Popular" />
+            </>
+          }
+          aria-label="Pro"
+          value="pro"
+          description={
+            <>
+              $12 per seat. <Link href="#pricing">See what is included</Link>
+            </>
+          }
+          endContent={<span data-testid="radio-end-content">$12/mo</span>}
+        />
+      </RadioList>
+    );
+  },
+  args: {
+    label: 'Plan',
+    description:
+      'A ReactNode label or description can carry links and other rich content. Nested controls keep their own behavior without selecting the option.',
   },
 };
 
@@ -356,5 +399,45 @@ export const DisabledWithMessage: Story = {
     label: 'Notification preference',
     isDisabled: true,
     disabledMessage: 'Upgrade your account to change preferences',
+  },
+};
+
+export const PressedState: Story = {
+  name: 'Pressed state',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Press and hold an enabled option row to paint the system's `--color-overlay-pressed` layer on its indicator. Selected and unselected indicators both respond; the disabled example and the SMS row's nested link remain visually independent and cannot change selection.",
+      },
+    },
+  },
+  render: () => {
+    const [value, setValue] = useState('email');
+    return (
+      <RadioList
+        label="Notification preference"
+        value={value}
+        onChange={setValue}>
+        <RadioListItem label="Email — selected, press and hold" value="email" />
+        <RadioListItem
+          label={
+            <>
+              <span data-testid="radio-row-press-target">
+                SMS — press and hold
+              </span>{' '}
+              <Link href="#details">Details — independent link</Link>
+            </>
+          }
+          aria-label="SMS — press and hold"
+          value="sms"
+        />
+        <RadioListItem
+          label="Push — disabled, no pressed state"
+          value="push"
+          isDisabled
+        />
+      </RadioList>
+    );
   },
 };

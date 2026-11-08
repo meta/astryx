@@ -1,12 +1,12 @@
 /* Copyright (c) Meta Platforms, Inc. and affiliates. */
 
-/* The preview "window". A fixed-height frame (flex-filled by the page
-   wrapper) that contains the live template. It does not scroll itself —
-   the template's own content region is the single scroll container. */
+/* The preview window fills all space between the dialog header and footer.
+   Large desktop dialogs naturally reach 1440×900; constrained desktop and
+   mobile dialogs use every available pixel without forcing an aspect ratio. */
 .frame {
   position: relative;
   width: 100%;
-  max-width: 1600px;
+  height: 100%;
   margin-inline: auto;
   flex: 1 1 auto;
   min-height: 0;
@@ -21,4 +21,21 @@
      the preview host supplies the page background. Use the surface color so
      templates read as a real themed app surface. */
   background-color: var(--color-background-surface);
+}
+
+/* Templates render inline in the docsite, so 100dvh would otherwise resolve
+   against the browser viewport instead of this shorter preview window. Give
+   every page a definite preview-sized containing block, then normalize its
+   first rendered root. The scoped !important declarations intentionally beat
+   template inline height/min-height values such as 100dvh. Overflow remains
+   on `.frame`, so genuinely taller auto-height pages are still reachable. */
+.viewport {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.viewport > :first-child {
+  height: 100% !important;
+  min-height: 100% !important;
 }

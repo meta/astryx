@@ -12,18 +12,6 @@ on:
         description: 'Comma-separated prompt IDs (optional, defaults to all)'
         required: false
         default: ''
-      deploy_to_gh_pages:
-        description: 'Deploy screenshots to gh-pages (default: true)'
-        required: false
-        default: 'true'
-        type: choice
-        options:
-          - 'true'
-          - 'false'
-      report_iteration:
-        description: 'Primary iteration ID for report path (default: first in iterations list)'
-        required: false
-        default: ''
 
 concurrency:
   group: vibe-screenshots-${{ github.run_id }}
@@ -34,7 +22,7 @@ permissions: {}
 jobs:
   build-previews:
     name: Build Previews
-    runs-on: 2-core-ubuntu-arm
+    runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
     steps:
@@ -68,7 +56,7 @@ jobs:
   screenshot:
     name: Capture Screenshots
     needs: build-previews
-    runs-on: 2-core-ubuntu-arm
+    runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
     steps:
@@ -106,94 +94,3 @@ jobs:
           name: screenshot-manifest
           path: internal/vibe-tests/results/*/screenshots/manifest.json
           retention-days: 90
-
-  deploy-screenshots:
-    name: Deploy Screenshots to gh-pages
-    needs: screenshot
-    if: ${{ github.event.inputs.deploy_to_gh_pages != 'false' }}
-    runs-on: ubuntu-slim
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout gh-pages
-        uses: actions/checkout@v7
-        with:
-          ref: gh-pages
-          fetch-depth: 1
-
-      - name: Determine report iteration
-        id: report-id
-        run: |
-          # Use explicit report_iteration input, or fall back to first in the list
-          REPORT_ID="${{ github.event.inputs.report_iteration }}"
-          if [ -z "$REPORT_ID" ]; then
-            REPORT_ID=$(echo "${{ github.event.inputs.iterations }}" | cut -d',' -f1)
-          fi
-          echo "id=$REPORT_ID" >> "$GITHUB_OUTPUT"
-          echo "Report iteration: $REPORT_ID"
-
-      - name: Download screenshots
-        uses: actions/download-artifact@v8
-        with:
-          name: vibe-test-screenshots
-          path: /tmp/screenshots
-
-      - name: Download screenshot manifest
-        uses: actions/download-artifact@v8
-        with:
-          name: screenshot-manifest
-          path: /tmp/manifests
-
-      - name: Deploy screenshots to report directory
-        env:
-          REPORT_ID: ${{ steps.report-id.outputs.id }}
-        run: |
-          REPORT_DIR="reports/${REPORT_ID}"
-
-          # Create screenshots directory in the report
-          mkdir -p "${REPORT_DIR}/screenshots"
-
-          # Copy all screenshot PNGs from all iterations
-          find /tmp/screenshots -name '*.png' -exec cp {} "${REPORT_DIR}/screenshots/" \;
-
-          # Merge all manifest.json files into one
-          # Each iteration has its own manifest — merge them
-          node -e "
-            const fs = require('fs');
-            const path = require('path');
-            const merged = {};
-            const manifests = [];
-            const walkDir = (dir) => {
-              for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-                const fullPath = path.join(dir, entry.name);
-                if (entry.isDirectory()) walkDir(fullPath);
-                else if (entry.name === 'manifest.json') manifests.push(fullPath);
-              }
-            };
-            walkDir('/tmp/manifests');
-            for (const f of manifests) {
-              const data = JSON.parse(fs.readFileSync(f, 'utf-8'));
-              Object.assign(merged, data);
-            }
-            const outDir = 'reports/${REPORT_ID}/screenshots';
-            fs.mkdirSync(outDir, { recursive: true });
-            fs.writeFileSync(path.join(outDir, 'manifest.json'), JSON.stringify(merged, null, 2));
-            const pngCount = fs.readdirSync(outDir).filter(f => f.endsWith('.png')).length;
-            console.log('Deployed ' + pngCount + ' screenshots + manifest to ' + outDir);
-          "
-
-      - name: Commit and push
-        env:
-          REPORT_ID: ${{ steps.report-id.outputs.id }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add "reports/${REPORT_ID}/screenshots/"
-          if git diff --cached --quiet; then
-            echo "No new screenshots to deploy"
-          else
-            SCREENSHOT_COUNT=$(find "reports/${REPORT_ID}/screenshots" -name '*.png' | wc -l)
-            git commit -m "screenshots: ${REPORT_ID} (${SCREENSHOT_COUNT} images)"
-            git push origin gh-pages
-            echo "✅ Deployed ${SCREENSHOT_COUNT} screenshots to reports/${REPORT_ID}/screenshots/"
-          fi

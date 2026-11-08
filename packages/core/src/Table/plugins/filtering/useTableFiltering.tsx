@@ -14,12 +14,14 @@
  */
 
 import {
-  createContext,
   use,
   useRef,
   useMemo,
   useState,
   useCallback,
+  type FocusEvent,
+  type FormEvent,
+  type KeyboardEvent,
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
@@ -29,6 +31,10 @@ import {Button} from '../../../Button';
 import {Popover} from '../../../Popover';
 import {TextInput} from '../../../TextInput';
 import {NumberInput} from '../../../NumberInput';
+import {
+  parseNumberInput,
+  resolveNumberInputCommit,
+} from '../../../NumberInput/numberInputCommit';
 import {DateInput} from '../../../DateInput';
 import type {ISODateString} from '../../../utils/dateTypes';
 import {TimeInput} from '../../../TimeInput';
@@ -42,7 +48,7 @@ import type {
   HeaderCellRenderProps,
 } from '../../types';
 import {proportional} from '../../columnUtils';
-import {useTranslator} from '../../../i18n';
+import {useLocale} from '../../../i18n';
 import type {
   PowerSearchConfig,
   PowerSearchField,
@@ -57,6 +63,14 @@ import type {
   StringListOperatorValue,
   EntityListOperatorValue,
 } from '../../../PowerSearch/types';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../../../i18n/useComponentTranslator';
+import english from '../../../i18n/generated-english/Table/plugins/filtering/useTableFiltering.generated';
+import {createSharedContext} from '../../../utils/sharedContext';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Filter Value Types
@@ -324,7 +338,11 @@ interface FilterStore {
   getConfig: () => UseTableFilteringConfig;
 }
 
-const FilterStoreContext = createContext<FilterStore | null>(null);
+const FilterStoreContext = createSharedContext<FilterStore | null>(
+  'FilterStoreContext',
+  1,
+  null,
+);
 FilterStoreContext.displayName = 'FilterStoreContext';
 
 function useFilterStore(): FilterStore {
@@ -339,7 +357,11 @@ function useFilterStore(): FilterStore {
 
 /** Variant is stable per plugin instance — kept in a separate context so
  *  slot components can read it without going through the mutable store. */
-const FilterVariantContext = createContext<TableFilterVariant>('popover');
+const FilterVariantContext = createSharedContext<TableFilterVariant>(
+  'FilterVariantContext',
+  1,
+  'popover',
+);
 FilterVariantContext.displayName = 'FilterVariantContext';
 
 // =============================================================================
@@ -360,8 +382,9 @@ const filterStyles = stylex.create({
     minWidth: 0,
   },
   triggerButton: {
-    background: 'none',
-    border: 'none',
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    borderStyle: 'none',
     cursor: {
       default: 'pointer',
       ':is(:disabled,[aria-disabled="true"])': 'default',
@@ -422,7 +445,7 @@ function TextFilterControl({
   size: 'sm' | 'md';
   hasClear?: boolean;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const store = useFilterStore();
   const config = store.getConfig();
   const value = config.filters[columnKey];
@@ -445,6 +468,80 @@ function TextFilterControl({
   );
 }
 
+function useLiveNumberFilter({
+  value,
+  min,
+  max,
+  hasClear,
+  onChange,
+}: {
+  value: number | null;
+  min?: number | null;
+  max?: number | null;
+  hasClear: boolean;
+  onChange: (value: number | null) => void;
+}) {
+  const locale = useLocale();
+  const editStartValueRef = useRef(value);
+
+  const handleChange = useCallback(
+    (nextValue: number | null) => {
+      editStartValueRef.current = nextValue;
+      onChange(nextValue);
+    },
+    [onChange],
+  );
+  const handleFocus = useCallback(() => {
+    editStartValueRef.current = value;
+  }, [value]);
+  const handleInput = useCallback(
+    (event: FormEvent<HTMLElement>) => {
+      const nextValue = parseNumberInput(
+        (event.currentTarget as HTMLInputElement).value,
+        {
+          min,
+          max,
+          locale,
+        },
+      );
+      if (nextValue !== null && nextValue !== value) {
+        onChange(nextValue);
+      }
+    },
+    [locale, max, min, onChange, value],
+  );
+  const restoreRejectedDraft = useCallback(
+    (input: HTMLInputElement) => {
+      const decision = resolveNumberInputCommit(input.value, {
+        min,
+        max,
+        locale,
+        hasClear,
+      });
+      if (decision.type === 'revert' && value !== editStartValueRef.current) {
+        onChange(editStartValueRef.current);
+      }
+    },
+    [hasClear, locale, max, min, onChange, value],
+  );
+  const handleBlur = useCallback(
+    (event: FocusEvent<HTMLInputElement>) => {
+      restoreRejectedDraft(event.currentTarget);
+    },
+    [restoreRejectedDraft],
+  );
+  const handleKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLInputElement>) => {
+      if (event.key === 'Enter') {
+        restoreRejectedDraft(event.currentTarget);
+      }
+    },
+    [restoreRejectedDraft],
+  );
+
+  return {handleBlur, handleChange, handleFocus, handleInput, handleKeyDown};
+}
+
 function NumberFilterControl({
   columnKey,
   header,
@@ -458,7 +555,7 @@ function NumberFilterControl({
   size: 'sm' | 'md';
   hasClear?: boolean;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const store = useFilterStore();
   const config = store.getConfig();
   const value = config.filters[columnKey];
@@ -466,12 +563,19 @@ function NumberFilterControl({
 
   const step = operatorValue.type === 'integer' ? 1 : null;
 
-  const handleChange = useCallback(
+  const updateFilter = useCallback(
     (newValue: number | null) => {
       store.getConfig().onFilterChange(columnKey, newValue);
     },
     [store, columnKey],
   );
+  const liveFilter = useLiveNumberFilter({
+    value: numValue,
+    min: operatorValue.minValue,
+    max: operatorValue.maxValue,
+    hasClear: !!hasClear,
+    onChange: updateFilter,
+  });
 
   if (hasClear) {
     return (
@@ -479,7 +583,11 @@ function NumberFilterControl({
         label={t('@astryx.tableFiltering.filterByColumn', {header})}
         isLabelHidden
         value={numValue}
-        onChange={handleChange}
+        onChange={liveFilter.handleChange}
+        onFocus={liveFilter.handleFocus}
+        onInput={liveFilter.handleInput}
+        onBlur={liveFilter.handleBlur}
+        onKeyDown={liveFilter.handleKeyDown}
         placeholder={t('@astryx.tableFiltering.filterByColumn', {header})}
         min={operatorValue.minValue ?? null}
         max={operatorValue.maxValue ?? null}
@@ -495,7 +603,11 @@ function NumberFilterControl({
       label={t('@astryx.tableFiltering.filterByColumn', {header})}
       isLabelHidden
       value={numValue}
-      onChange={handleChange}
+      onChange={liveFilter.handleChange}
+      onFocus={liveFilter.handleFocus}
+      onInput={liveFilter.handleInput}
+      onBlur={liveFilter.handleBlur}
+      onKeyDown={liveFilter.handleKeyDown}
       placeholder={t('@astryx.tableFiltering.filterByColumn', {header})}
       min={operatorValue.minValue ?? null}
       max={operatorValue.maxValue ?? null}
@@ -518,7 +630,7 @@ function SelectorFilterControl({
   size: 'sm' | 'md';
   hasClear?: boolean;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const store = useFilterStore();
   const config = store.getConfig();
   const value = config.filters[columnKey];
@@ -582,7 +694,7 @@ function MultiSelectorFilterControl({
   size: 'sm' | 'md';
   hasClear?: boolean;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const store = useFilterStore();
   const config = store.getConfig();
   const value = config.filters[columnKey];
@@ -624,7 +736,7 @@ function DateFilterControl({
   size: 'sm' | 'md';
   hasClear?: boolean;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const store = useFilterStore();
   const value = store.getConfig().filters[columnKey] as string | undefined;
 
@@ -653,7 +765,7 @@ function TimeFilterControl({
   size: 'sm' | 'md';
   hasClear?: boolean;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const store = useFilterStore();
   const value = store.getConfig().filters[columnKey] as string | undefined;
 
@@ -684,7 +796,7 @@ function StringListFilterControl({
   size: 'sm' | 'md';
   hasClear?: boolean;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const store = useFilterStore();
   const value =
     (store.getConfig().filters[columnKey] as string[] | undefined) ?? [];
@@ -716,6 +828,7 @@ function StringListFilterControl({
       }}
       size={size}
       hasClear={hasClear}
+      presentation="popover"
     />
   );
 }
@@ -826,7 +939,7 @@ function PopoverFilterTrigger({
   header: string;
   operatorValue: OperatorValue;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const store = useFilterStore();
   const config = store.getConfig();
   const value = config.filters[columnKey];

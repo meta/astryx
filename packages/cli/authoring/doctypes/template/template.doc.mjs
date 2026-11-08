@@ -16,35 +16,60 @@ export const doc = {
   description:
     'The doc-type for template metadata. A discriminated union of PageTemplateDoc ' +
     "(type: 'page') for full page templates and BlockTemplateDoc (type: 'block') for " +
-    'component example blocks. Both share BaseTemplateDoc; block templates add ' +
-    'example/preview fields.',
-  appliesTo: '<Name>.template.mjs',
+    'editable compositions. A block can stand alone or use `exampleFor` to attach ' +
+    'to one component; `isShowcase` requires that component ownership.',
+  appliesTo: '<Name>.doc.mjs',
   fields: [
     {
       name: 'type',
       type: "'page' | 'block'",
       description:
-        "Discriminant selecting the variant: 'page' for a full page template, 'block' for a component example block.",
+        "Discriminant selecting the variant: 'page' for a full page template, 'block' for an editable composition that may be standalone or component-owned.",
       required: true,
     },
     {
       name: 'name',
       type: 'string',
       description:
-        'Identifier. For block templates it matches the React component import name; for page templates it is a human-readable label.',
+        "Stable identifier for block templates; change `displayName`, not `name`, to edit their visible label in the gallery. For page templates it is a human-readable label, while the existing template-directory/CLI slug owns the default registry path. `astryx template --list` and `astryx search` print `name` as the label of both, and `astryx template <id>` finds a template by its id, never by `name`: an integration template's id is its path under the templates folder without the `.doc.*` suffix.",
       required: true,
     },
     {
       name: 'displayName',
       type: 'string',
       description:
-        "Human-readable label for the gallery/CLI. Spaces out block names that mirror a PascalCase component ('ChatMessageMetadata' → 'Chat Message Metadata').",
+        "Human-readable label for the gallery. The CLI prints `name` instead; `astryx template --list --json` also returns an integration template's `displayName`. Spaces out block names that mirror a PascalCase component ('ChatMessageMetadata' → 'Chat Message Metadata').",
       required: true,
+    },
+    {
+      name: 'registry',
+      type: 'RegistryDocIdentity',
+      description:
+        'Optional public registry identity. The converter derives a stable kebab-case slug from `name` (or the existing page-template slug); set `slug` only to override it, and keep prior relative paths in `aliases` after a published rename.',
     },
     {
       name: 'description',
       type: 'string',
       description: 'One-sentence description of what the template provides.',
+    },
+    {
+      name: 'keywords',
+      type: 'string[]',
+      description:
+        "Search keywords for CLI discovery: the ideas, domains, and other names a builder might use for what the template serves (e.g. ['monitoring', 'uptime', 'on-call'] for a service-health dashboard). Lowercase. `astryx search` matches them as it matches the description and `astryx build` ranks page templates on them, so keep them out of `description`. Integration templates need @astryxdesign/cli 0.6.6 or later: earlier CLIs reject the field and drop that template, and CLIs before 0.6.4 also hide the package's doc topics.",
+    },
+    {
+      name: 'replaces',
+      type: 'string',
+      description:
+        "Integration templates only: the exact id of the Core template this one replaces for unqualified lookup. Find it with `astryx --json template --list --package @astryxdesign/core`; the Core original stays selectable with `--package @astryxdesign/core`. A page replaces only a Core page and a block only a Core block. Needs @astryxdesign/cli 0.6.4 or later: earlier CLIs reject the field, drop that template, and hide the package's doc topics.",
+    },
+    {
+      name: 'icons',
+      type: 'Record<string, string>',
+      stability: 'experimental',
+      description:
+        "The icon definition each icon the source imports draws, such as `{TrashIcon: 'delete'}`: a named import is keyed by the name it imports (`{Trash as TrashIcon}` is `Trash`), a default import by its local name (`import DeleteIcon from …` is `DeleteIcon`). When the project sets `experimental.iconSet`, `astryx template` (shown or copied) replaces each declared icon with the set's icon for that definition (`astryx docs cli/experimental/icon-definitions`) and reports every key as mapped or kept; an undeclared import is left alone. A name imported from two modules (`TrashIcon` from an outline and a solid module) needs one key, and each import keeps its variant when its module belongs to an installed set.",
     },
     {
       name: 'isReady',
@@ -74,7 +99,7 @@ export const doc = {
       name: 'exampleFor',
       type: 'string',
       description:
-        "Block templates only (required): the component this block is an example of, matching the component's doc name (e.g. 'Button'). Powers examples on component detail pages.",
+        'Block templates only: optional component ownership. Set this when the block is specifically an example of one component. Omit it for a standalone composition.',
     },
     {
       name: 'alsoExampleFor',
@@ -110,14 +135,14 @@ export const doc = {
       name: 'isShowcase',
       type: 'boolean',
       description:
-        "Block templates only: when true this block is the canonical 'hero' showcase for its `exampleFor` component.",
+        'Block templates only: when true this block is the canonical hero showcase for its `exampleFor` component. Requires `exampleFor`.',
     },
   ],
   examples: [
     {
       label: 'Page template',
       code: `/** @type {import('@astryxdesign/cli/authoring').TemplateDoc} */
-export const doc = {
+export default {
   type: 'page',
   name: 'Dashboard',
   displayName: 'Dashboard',
@@ -129,7 +154,7 @@ export const doc = {
     {
       label: 'Block template (component example)',
       code: `/** @type {import('@astryxdesign/cli/authoring').TemplateDoc} */
-export const doc = {
+export default {
   type: 'block',
   name: 'ButtonGroupExample',
   displayName: 'Button Group Example',
@@ -144,14 +169,18 @@ export const doc = {
   notes: [
     {
       type: 'prose',
-      text: "TemplateDoc is a discriminated union keyed by `type`. Set `type: 'page'` for a standalone page template (only the BaseTemplateDoc fields apply) or `type: 'block'` for a component example (the exampleFor/aspectRatio/showcase fields apply).",
+      text: 'When it loads, a template may leave out `displayName` and `aspectRatio` and use its own `category`, as integration templates already published do; a block with no `aspectRatio` previews at 1. Write to the type anyway; it is the contract, and `astryx doctor integration validate` warns about an integration template that leaves out `displayName` or `aspectRatio`.',
+    },
+    {
+      type: 'prose',
+      text: "TemplateDoc is a discriminated union keyed by `type`. Set `type: 'page'` for a full page template. Set `type: 'block'` for an editable composition; add `exampleFor` only when one component owns the example.",
     },
     {
       type: 'list',
       style: 'unordered',
       items: [
         "PageTemplateDoc (type: 'page'): a full page template; `name` doubles as its display value.",
-        "BlockTemplateDoc (type: 'block'): an example of a component; requires `exampleFor` and `aspectRatio`.",
+        "BlockTemplateDoc (type: 'block'): an editable composition. `exampleFor` is optional component ownership; omit it for a standalone block. `isShowcase` requires `exampleFor`.",
       ],
     },
     {

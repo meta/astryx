@@ -222,9 +222,8 @@ const styles = stylex.create({
   // Each typography sample sizes itself uniformly via a wrapper
   // class. The actual font family + weight comes from the underlying
   // Text / span using the theme's own typography tokens (or, for
-  // Display, the theme-scoped .astryx-text.display-3 rule (legacy class selector;
-  // text also emits data-type="display-3") which themes
-  // like Gothic use to swap in a signature display family).
+  // Display, the theme-scoped .astryx-text[data-type="display-3"] rule, which
+  // themes like Gothic use to swap in a signature display family).
   typeAa: {
     display: 'inline-block',
     fontSize: TYPE_SAMPLE_GLYPH_SIZE,
@@ -476,7 +475,7 @@ export function ThemeShowcaseTile({
                   display / heading / body / mono font with the role as
                   label. The Display sample uses Text type="display-3"
                   so themes that scope a custom display family to the
-                  .astryx-text.display-3 selector (legacy class selector; e.g. Gothic →
+                  .astryx-text[data-type="display-3"] selector (e.g. Gothic →
                   Manufacturing Consent) flow through cleanly. */}
               <HStack gap={3}>
                 <VStack gap={0.5} xstyle={styles.typeSample}>

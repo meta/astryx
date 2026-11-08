@@ -22,6 +22,7 @@ import {components} from '../../generated/componentRegistry';
 import {docTopics} from '../../generated/docsRegistry';
 import {blocks} from '../../generated/blockRegistry';
 import {templates} from '../../generated/templateRegistry';
+import {buildKeywordIndex, resolveKeywords} from './keywordIndex';
 
 import type {ComponentEntry} from '../../generated/componentRegistry';
 import type {DocTopic} from '../../generated/docsRegistry';
@@ -31,22 +32,22 @@ import type {TemplateEntry} from '../../generated/templateRegistry';
 const allComponents: ComponentEntry[] = Object.values(components).flat();
 const visibleComponents = allComponents.filter(c => !c.hidden);
 
+function componentImport(comp: ComponentEntry): string {
+  const importPath = comp.importPath ?? `@astryxdesign/core/${comp.name}`;
+  return `import {${comp.moduleName}} from '${importPath}';`;
+}
+
+function componentInstall(comp: ComponentEntry): string {
+  const importPath = comp.importPath ?? '@astryxdesign/core';
+  const packageName = /^@[^/]+\/[^/]+/.exec(importPath)?.[0] ?? importPath;
+  return `npm install ${packageName}${comp.isReady ? '' : '@canary'}`;
+}
+
 // ── Keyword Index ──────────────────────────────────────────────────────
 // Built from the `keywords` field on each component's .doc.mjs file.
 // Inverts keyword[] → component name so natural language queries resolve
 // to the right components without a hardcoded alias map.
-const keywordIndex: Record<string, string[]> = {};
-for (const comp of visibleComponents) {
-  for (const kw of comp.keywords) {
-    const lower = kw.toLowerCase();
-    if (!keywordIndex[lower]) {
-      keywordIndex[lower] = [];
-    }
-    if (!keywordIndex[lower].includes(comp.name)) {
-      keywordIndex[lower].push(comp.name);
-    }
-  }
-}
+const keywordIndex = buildKeywordIndex(visibleComponents);
 
 // ── Scoring ────────────────────────────────────────────────────────────
 
@@ -89,21 +90,6 @@ function score(text: string, query: string): number {
   return 0;
 }
 
-/** Resolve keywords from component docs to boost matching components */
-function resolveKeywords(query: string): string[] {
-  const lower = query.toLowerCase();
-  const resolved: string[] = [];
-
-  // Check each keyword in the index
-  for (const [keyword, componentNames] of Object.entries(keywordIndex)) {
-    if (lower.includes(keyword) || keyword.includes(lower)) {
-      resolved.push(...componentNames);
-    }
-  }
-
-  return [...new Set(resolved)];
-}
-
 // ── Context Budget ─────────────────────────────────────────────────────
 const MAX_TOPIC_BRIEF_CHARS = 4000;
 
@@ -115,7 +101,7 @@ const handler = createMcpHandler(
     server.tool(
       'search',
       `Search Astryx (XDS) design system: finds components, documentation topics, and page templates.\n\n` +
-        `Returns brief results (name, description, key info). Use the "get" tool with a ` +
+        `Returns brief results (name, description, key info). Components include isReady and the required install command; components that are not ready install from @canary. Use the "get" tool with a ` +
         `specific name for full details including props and code examples.\n\n` +
         `Examples: "dropdown menu", "form inputs", "theming", "dashboard template", ` +
         `"sidebar navigation", "toast notification", "table with sorting", "success message"`,
@@ -124,7 +110,7 @@ const handler = createMcpHandler(
         limit: z.number().optional().describe('Max results (default 8).'),
       },
       async ({query, limit = 8}) => {
-        const keywordMatches = resolveKeywords(query);
+        const keywordMatches = resolveKeywords(keywordIndex, query);
 
         const scored: Array<{
           item: ComponentEntry | DocTopic | TemplateEntry;
@@ -214,7 +200,9 @@ const handler = createMcpHandler(
               moduleName: comp.moduleName,
               group: comp.group,
               description: comp.description,
-              import: `import {${comp.moduleName}} from '@astryxdesign/core/${comp.name}';`,
+              isReady: comp.isReady,
+              install: componentInstall(comp),
+              import: componentImport(comp),
               keyProps: comp.props
                 .filter(
                   p =>
@@ -281,7 +269,7 @@ const handler = createMcpHandler(
     server.tool(
       'get',
       `Get full documentation for a specific Astryx (XDS) component, doc topic, or template by name.\n\n` +
-        `Returns complete props, usage guidelines, code examples, and theming info.\n\n` +
+        `Returns complete props, usage guidelines, code examples, theming info, isReady, and the required install command. Components that are not ready install from @canary.\n\n` +
         `For doc topics, optionally pass a section name to get just that section ` +
         `(recommended for large topics like "theme" to avoid context overload).\n\n` +
         `Examples:\n` +
@@ -327,13 +315,16 @@ const handler = createMcpHandler(
 
           const showcase = blocks.find(
             (b: BlockEntry) =>
-              exampleNames.includes(b.exampleFor.toLowerCase()) && b.isShowcase,
+              b.exampleFor != null &&
+              exampleNames.includes(b.exampleFor.toLowerCase()) &&
+              b.isShowcase,
           );
 
           // Find related blocks (non-showcase, limit 1 for budget)
           const relatedBlocks = blocks
             .filter(
               (b: BlockEntry) =>
+                b.exampleFor != null &&
                 exampleNames.includes(b.exampleFor.toLowerCase()) &&
                 !b.isShowcase,
             )
@@ -350,9 +341,11 @@ const handler = createMcpHandler(
           const result = {
             name: comp.name,
             moduleName: comp.moduleName,
-            import: `import {${comp.moduleName}} from '@astryxdesign/core/${comp.name}';`,
+            import: componentImport(comp),
             group: comp.group,
             description: comp.description,
+            isReady: comp.isReady,
+            install: componentInstall(comp),
             props: comp.props,
             usage: comp.usage,
             theming: comp.theming,
@@ -384,8 +377,10 @@ const handler = createMcpHandler(
                   groupMembers: groupMembers.slice(0, 6).map(m => ({
                     name: m.name,
                     moduleName: m.moduleName,
-                    import: `import {${m.moduleName}} from '@astryxdesign/core/${m.name}';`,
+                    import: componentImport(m),
                     description: m.description.slice(0, 120),
+                    isReady: m.isReady,
+                    install: componentInstall(m),
                     ...(m.params
                       ? {
                           returns: (m.returns ?? [])
@@ -510,7 +505,7 @@ const handler = createMcpHandler(
         }
 
         // ── Fuzzy fallback with keyword awareness ──────────────────────
-        const keywordResolved = resolveKeywords(name);
+        const keywordResolved = resolveKeywords(keywordIndex, name);
         const keywordComponents =
           keywordResolved.length > 0
             ? visibleComponents
@@ -518,8 +513,10 @@ const handler = createMcpHandler(
                 .map(c => ({
                   name: c.name,
                   moduleName: c.moduleName,
-                  import: `import {${c.moduleName}} from '@astryxdesign/core/${c.name}';`,
+                  import: componentImport(c),
                   description: c.description,
+                  isReady: c.isReady,
+                  install: componentInstall(c),
                 }))
             : [];
 

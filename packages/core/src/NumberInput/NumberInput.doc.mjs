@@ -5,7 +5,7 @@
 export const docs = {
   name: 'NumberInput',
   displayName: 'Number Input',
-  category: 'Data Input',
+  category: 'Form Controls',
   keywords: [
     'numberinput',
     'numberfield',
@@ -35,7 +35,7 @@ export const docs = {
       name: 'onChange',
       type: '(value: number) => void',
       description:
-        'Callback fired when input value changes (only on valid input).',
+        'Callback fired when a valid text edit commits on blur or Enter, or when a step or clear control changes the value.',
       required: true,
     },
     {
@@ -81,7 +81,7 @@ export const docs = {
       name: 'isReadOnly',
       type: 'boolean',
       description:
-        'Makes the input read-only: the value is shown at full opacity and still submits with the form, but cannot be edited. Unlike isDisabled, a read-only input is not dimmed and stays in the tab order. Stepping is off in every form while read-only: arrow keys, the wheel, and the number steppers. isDisabled takes precedence when both are set.',
+        'Makes the input read-only: the value is shown at full opacity and still submits with the form, but cannot be edited. Unlike isDisabled, a read-only input is not dimmed and keeps its form value. Stepping is off in every form while read-only: arrow keys, the wheel, and the number steppers. isDisabled takes precedence when both are set.',
       default: 'false',
     },
     {
@@ -128,12 +128,14 @@ export const docs = {
     {
       name: 'min',
       type: 'number | null',
-      description: 'Minimum value allowed.',
+      description:
+        'Minimum value allowed. A smaller entry commits at this value on blur or Enter.',
     },
     {
       name: 'max',
       type: 'number | null',
-      description: 'Maximum value allowed.',
+      description:
+        'Maximum value allowed. A larger entry commits at this value on blur or Enter.',
     },
     {
       name: 'step',
@@ -158,7 +160,7 @@ export const docs = {
       name: 'hasNumberSteppers',
       type: 'boolean',
       description:
-        'Shows increment and decrement buttons at the end of the input.',
+        'Shows increment and decrement buttons at the end of the input on fine pointers. Hidden on coarse pointers (such as touch screens); text entry and keyboard stepping remain available. Holding a button with a mouse or a pen repeats the step and commits once, when the hold ends.',
       default: 'false',
     },
     {
@@ -215,6 +217,40 @@ export const docs = {
       type: '() => void',
       description: 'Callback fired when the user presses the Enter key.',
     },
+    {
+      name: 'containerXstyle',
+      type: 'StyleXStyles',
+      description:
+        'StyleX styles for the field container (label, control, and status together). No effect inside InputGroup (style the InputGroup instead) or in a `horizontal-labels` FormLayout. Root `xstyle`, `className`, and `style` are not accepted.',
+    },
+    {
+      name: 'containerClassName',
+      type: 'string',
+      description:
+        'Class name for the field container. Same targeting as `containerXstyle`.',
+    },
+    {
+      name: 'containerStyle',
+      type: 'CSSProperties',
+      description:
+        'Inline styles for the field container. Same targeting as `containerXstyle`.',
+    },
+    {
+      name: 'controlXstyle',
+      type: 'StyleXStyles',
+      description:
+        'StyleX styles for the visual control box: the element that paints the border and background and holds icons and end controls. Never the native input.',
+    },
+    {
+      name: 'controlClassName',
+      type: 'string',
+      description: 'Class name for the visual control box.',
+    },
+    {
+      name: 'controlStyle',
+      type: 'CSSProperties',
+      description: 'Inline styles for the visual control box.',
+    },
   ],
   theming: {
     targets: [
@@ -245,6 +281,11 @@ export const docs = {
       {
         guidance: true,
         description:
+          "Let people paste formatted numbers: a pasted 1,234,234,234 is read under the field's locale and commits as 1234234234 on blur. Typing is never intercepted.",
+      },
+      {
+        guidance: true,
+        description:
           'Set min, max, and step to guide users toward valid values.',
       },
       {
@@ -269,7 +310,7 @@ export const docs = {
       {
         guidance: false,
         description:
-          "Wrap a disabled NumberInput in Tooltip to explain why it's disabled; disabled controls swallow the hover events the wrapper needs. Use the disabledMessage prop instead.",
+          "Wrap a disabled NumberInput in Tooltip to explain why it's disabled. Use the disabledMessage prop, which attaches the reason to the field itself.",
       },
     ],
     anatomy: [
@@ -323,7 +364,8 @@ export const docsZh = {
     {
       name: 'onChange',
       type: '(value: number) => void',
-      description: '输入值变化时触发的回调（仅在输入有效时触发）。',
+      description:
+        '有效文本编辑在失焦或按 Enter 时提交；步进或清除控件更改值时也会触发回调。',
       required: true,
     },
     {
@@ -361,7 +403,7 @@ export const docsZh = {
       name: 'isReadOnly',
       type: 'boolean',
       description:
-        '将输入框设为只读：值以完整不透明度显示并仍随表单提交，但无法编辑。与 isDisabled 不同，只读输入框不会变暗，并保留在 Tab 顺序中。只读时所有步进方式均被禁用：方向键、滚轮和步进按钮。同时设置时 isDisabled 优先。',
+        '将输入框设为只读：值以完整不透明度显示并仍随表单提交，但无法编辑。与 isDisabled 不同，只读输入框不会变暗，并保留其表单值。只读时所有步进方式均被禁用：方向键、滚轮和步进按钮。同时设置时 isDisabled 优先。',
       default: 'false',
     },
     {
@@ -405,12 +447,12 @@ export const docsZh = {
     {
       name: 'min',
       type: 'number | null',
-      description: '允许的最小值。',
+      description: '允许的最小值。更小的输入会在失焦或按 Enter 时提交为该值。',
     },
     {
       name: 'max',
       type: 'number | null',
-      description: '允许的最大值。',
+      description: '允许的最大值。更大的输入会在失焦或按 Enter 时提交为该值。',
     },
     {
       name: 'step',
@@ -434,7 +476,8 @@ export const docsZh = {
     {
       name: 'hasNumberSteppers',
       type: 'boolean',
-      description: '是否在输入框末尾显示递增和递减按钮。',
+      description:
+        '在精细指针设备上于输入框末尾显示递增和递减按钮。粗指针设备（例如触摸屏）上隐藏按钮；仍可直接输入数值或使用键盘步进。',
       default: 'false',
     },
     {
@@ -484,6 +527,38 @@ export const docsZh = {
       type: '() => void',
       description: '用户按下 Enter 键时触发的回调。',
     },
+    {
+      name: 'containerXstyle',
+      type: 'StyleXStyles',
+      description:
+        '字段容器（标签、控件和状态整体）的 StyleX 样式。在 InputGroup 内（请改为设置 InputGroup 的样式）或 `horizontal-labels` FormLayout 中无效。不接受根级 `xstyle`、`className` 和 `style`。',
+    },
+    {
+      name: 'containerClassName',
+      type: 'string',
+      description: '字段容器的类名，作用目标同 `containerXstyle`。',
+    },
+    {
+      name: 'containerStyle',
+      type: 'CSSProperties',
+      description: '字段容器的内联样式，作用目标同 `containerXstyle`。',
+    },
+    {
+      name: 'controlXstyle',
+      type: 'StyleXStyles',
+      description:
+        '可视控件框的 StyleX 样式：绘制边框和背景并包含图标与尾部控件的元素，而非原生输入元素。',
+    },
+    {
+      name: 'controlClassName',
+      type: 'string',
+      description: '可视控件框的类名。',
+    },
+    {
+      name: 'controlStyle',
+      type: 'CSSProperties',
+      description: '可视控件框的内联样式。',
+    },
   ],
   theming: {
     targets: [
@@ -512,6 +587,11 @@ export const docsZh = {
       {
         guidance: true,
         description:
+          '可以直接粘贴带格式的数字：粘贴 1,234,234,234 会按字段所在区域设置解析，失去焦点时提交为 1234234234。输入过程中不会拦截按键。',
+      },
+      {
+        guidance: true,
+        description:
           'Set min, max, and step to guide users toward valid values.',
       },
       {
@@ -536,7 +616,7 @@ export const docsZh = {
       {
         guidance: false,
         description:
-          "Wrap a disabled NumberInput in Tooltip to explain why it's disabled; disabled controls swallow the hover events the wrapper needs. Use the disabledMessage prop instead.",
+          "Wrap a disabled NumberInput in Tooltip to explain why it's disabled. Use the disabledMessage prop, which attaches the reason to the field itself.",
       },
     ],
     anatomy: [
@@ -581,6 +661,11 @@ export const docsDense = {
       {
         guidance: true,
         description:
+          "Pasted formatted numbers parse: 1,234,234,234 commits as 1234234234 under the field's locale. Typing is never intercepted.",
+      },
+      {
+        guidance: true,
+        description:
           'Set min, max, and step to guide users toward valid values.',
       },
       {
@@ -605,7 +690,7 @@ export const docsDense = {
       {
         guidance: false,
         description:
-          "Wrap a disabled NumberInput in Tooltip to explain why it's disabled; disabled controls swallow the hover events the wrapper needs. Use the disabledMessage prop instead.",
+          "Wrap a disabled NumberInput in Tooltip to explain why it's disabled. Use the disabledMessage prop, which attaches the reason to the field itself.",
       },
     ],
     anatomy: [
@@ -638,9 +723,18 @@ export const docsDense = {
     ],
   },
   propDescriptions: {
+    containerXstyle:
+      'StyleX styles for the field container; no effect in InputGroup or horizontal-labels FormLayout. No root xstyle/className/style.',
+    containerClassName: 'Class name for the field container.',
+    containerStyle: 'Inline styles for the field container.',
+    controlXstyle:
+      'StyleX styles for the visual control box (border, background, icons); not the native input.',
+    controlClassName: 'Class name for the visual control box.',
+    controlStyle: 'Inline styles for the visual control box.',
     label: 'Label text (always rendered for accessibility).',
     value: 'Current input value.',
-    onChange: 'Callback on valid input change.',
+    onChange:
+      'Callback when a valid text edit commits on blur/Enter, or a step/clear control changes the value.',
     size: 'Size variant.',
     isLabelHidden: 'Visually hide label (still accessible to screen readers).',
     description: 'Text between label + input.',
@@ -648,7 +742,7 @@ export const docsDense = {
     isRequired: 'Field required (mutually exclusive w/ isOptional).',
     isDisabled: 'Input disabled.',
     isReadOnly:
-      'Read-only: value visible + still submits, but not editable. Unlike isDisabled: not dimmed, stays in tab order.',
+      'Read-only: value visible + still submits, but not editable. Unlike isDisabled: not dimmed.',
     disabledMessage:
       'Explains why input is disabled. With isDisabled, shows tooltip on hover/focus + keeps input focusable via aria-disabled (field becomes read-only). Use instead of wrapping a disabled NumberInput in Tooltip.',
     placeholder: 'Placeholder text.',
@@ -665,7 +759,8 @@ export const docsDense = {
       'Formats committed value at rest; raw number is shown while editing.',
     isWheelEnabled:
       'Allow focused wheel gestures to step value. Defaults to true.',
-    hasNumberSteppers: 'Show increment + decrement buttons. Defaults to false.',
+    hasNumberSteppers:
+      'Show increment + decrement buttons on fine pointers; hidden on coarse pointers. Defaults to false.',
     units: 'Units suffix (e.g. "%" or "GB").',
     isIntegerOnly: 'Only allow integer values.',
     hasClear:

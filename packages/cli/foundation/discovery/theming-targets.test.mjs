@@ -25,6 +25,15 @@ import {describe, it, expect} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {findCoreDir} from '../fs/paths.mjs';
+const promotedThemeSurfaceTransform = new URL(
+  '../../assets/codemods/transforms/v0.7.0/migrate-deprecated-theme-surface.mjs',
+  import.meta.url,
+);
+const {DEPRECATED_THEME_TARGETS} = await import(
+  fs.existsSync(promotedThemeSurfaceTransform)
+    ? promotedThemeSurfaceTransform.href
+    : '../../assets/codemods/transforms/next/migrate-deprecated-theme-surface.mjs'
+);
 import {
   discoverComponents,
   findComponentReadme,
@@ -56,6 +65,15 @@ describe('collectThemingTargets', () => {
     }
   });
 
+  it('does not enumerate any removed target alias', async () => {
+    const keys = new Set((await enumerated).map(target => target.key));
+    for (const removed of Object.keys(DEPRECATED_THEME_TARGETS)) {
+      expect(keys, `${removed} must not remain discoverable`).not.toContain(
+        removed,
+      );
+    }
+  });
+
   it('carries the props and states a target reflects', async () => {
     const targets = await enumerated;
     expect(targets.find(t => t.key === 'switch-thumb')).toEqual({
@@ -66,6 +84,70 @@ describe('collectThemingTargets', () => {
       states: ['checked'],
     });
   });
+
+  it.each([
+    ['TableHeader', 'table-header'],
+    ['TableBody', 'table-body'],
+    ['TableFooter', 'table-footer'],
+  ])(
+    'keeps %s theming metadata available in its direct doc',
+    async (name, key) => {
+      const doc = await loadComponentDoc(
+        path.join(coreSrc, 'Table', `${name}.doc.mjs`),
+      );
+      expect(doc.subComponentOf).toBe('Table');
+      expect(doc.theming.targets).toContainEqual({className: `astryx-${key}`});
+    },
+  );
+
+  it('keeps DialogHeader theming metadata available in its direct doc', async () => {
+    const doc = await loadComponentDoc(
+      path.join(coreSrc, 'Dialog', 'DialogHeader.doc.mjs'),
+    );
+    expect(doc.subComponentOf).toBe('Dialog');
+    expect(doc.theming.targets).toEqual([
+      {className: 'astryx-dialog-header'},
+      {className: 'astryx-dialog-header-start-content'},
+      {className: 'astryx-dialog-header-title-block'},
+      {className: 'astryx-dialog-header-end-content'},
+      {className: 'astryx-dialog-header-close-icon'},
+    ]);
+  });
+
+  it.each([
+    'dialog-header',
+    'dialog-header-start-content',
+    'dialog-header-title-block',
+    'dialog-header-end-content',
+    'dialog-header-close-icon',
+  ])('enumerates %s once under its canonical Dialog owner', async key => {
+    const matches = (await enumerated).filter(target => target.key === key);
+    expect(matches).toEqual([
+      {
+        key,
+        className: `astryx-${key}`,
+        component: 'Dialog',
+        props: [],
+        states: [],
+      },
+    ]);
+  });
+
+  it.each(['table-header', 'table-body', 'table-footer'])(
+    'enumerates %s once under its canonical Table owner',
+    async key => {
+      const matches = (await enumerated).filter(target => target.key === key);
+      expect(matches).toEqual([
+        {
+          key,
+          className: `astryx-${key}`,
+          component: 'Table',
+          props: [],
+          states: [],
+        },
+      ]);
+    },
+  );
 
   it('is sorted by key, so a diff of two runs is readable', async () => {
     const keys = (await enumerated).map(t => t.key);
@@ -78,12 +160,13 @@ describe('collectThemingTargets', () => {
   it('collapses to the override keys, merging the components that share one', async () => {
     const byKey = targetsByKey(await enumerated);
     expect(byKey['switch']).toEqual(['size', 'checked', 'disabled']);
-    // `radio` is documented by both Indicator and RadioList.
-    const radio = (await enumerated).filter(t => t.key === 'radio');
-    expect(radio.length).toBeGreaterThan(1);
+    // `radio-indicator` is documented by two unrelated owners. Parent/child
+    // canonicalization must not collapse a shared target across families.
+    const radio = (await enumerated).filter(t => t.key === 'radio-indicator');
+    expect(radio.map(t => t.component)).toEqual(['Indicator', 'RadioList']);
     for (const t of radio) {
       for (const name of [...t.props, ...t.states]) {
-        expect(byKey['radio']).toContain(name);
+        expect(byKey['radio-indicator']).toContain(name);
       }
     }
   });

@@ -1,8 +1,10 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, it, expect} from 'vitest';
+import {createElement, Fragment, type ReactNode} from 'react';
 import {render, screen} from '@testing-library/react';
 import {Badge} from './Badge';
+import {getForcedColorsRules} from '../__tests__/forcedColors';
 
 describe('Badge', () => {
   it('renders with default variant', () => {
@@ -37,9 +39,7 @@ describe('Badge', () => {
       'yellow',
     ] as const;
 
-    const {rerender} = render(
-      <Badge variant={colors[0]} label={colors[0]} />,
-    );
+    const {rerender} = render(<Badge variant={colors[0]} label={colors[0]} />);
     expect(screen.getByText(colors[0])).toBeInTheDocument();
 
     for (const color of colors.slice(1)) {
@@ -52,7 +52,7 @@ describe('Badge', () => {
     const {container} = render(<Badge variant="purple" label="Tag" />);
     const root = container.firstElementChild!;
     expect(root.className).toContain('astryx-badge');
-    expect(root.className).toContain('purple');
+    expect(root).toHaveAttribute('data-variant', 'purple');
   });
 
   it('renders with icon', () => {
@@ -74,10 +74,74 @@ describe('Badge', () => {
     expect(screen.getByTestId('custom-badge')).toBeInTheDocument();
   });
 
+  describe('full-label fallback', () => {
+    it('carries the full text in title for a string label', () => {
+      // The label is clipped when it does not fit, so the full text has to be
+      // reachable. No measurement is involved, so this holds on the server too.
+      const {container} = render(<Badge label="Awaiting security review" />);
+      expect(container.firstElementChild).toHaveAttribute(
+        'title',
+        'Awaiting security review',
+      );
+    });
+
+    it('carries a number label too', () => {
+      const {container} = render(<Badge label={42} />);
+      expect(container.firstElementChild).toHaveAttribute('title', '42');
+    });
+
+    it('sets no title for a rich label', () => {
+      // Flattening a subtree to a string renders a guess — an icon or nested
+      // element reads differently — so it is left alone rather than guessed at.
+      const {container} = render(<Badge label={<strong>Rich</strong>} />);
+      expect(container.firstElementChild).not.toHaveAttribute('title');
+    });
+
+    it('sets no title for an empty string label', () => {
+      // Nothing to recover, so nothing to announce — the same guard
+      // `BaseTable` applies to a truncated header cell.
+      const {container} = render(<Badge label="" />);
+      expect(container.firstElementChild).not.toHaveAttribute('title');
+    });
+  });
+
+  it('grows with its label only when the label renders something', () => {
+    const classOf = (label: ReactNode) =>
+      render(<Badge label={label} />).container.firstElementChild!.className;
+    const empty = classOf('');
+    const labelled = classOf('New');
+    expect(labelled).not.toBe(empty);
+    // React renders nothing for these, so the badge keeps its fixed height.
+    for (const [index, label] of [null, undefined, true, false, ''].entries()) {
+      expect(classOf(label), `nothing ${index}`).toBe(empty);
+    }
+    // These render (0 shows "0"); a container counts without looking inside.
+    for (const [index, label] of [
+      0,
+      'x',
+      [],
+      createElement(Fragment),
+    ].entries()) {
+      expect(classOf(label), `renders ${index}`).toBe(labelled);
+    }
+  });
+
   it('renders astryx-* class names for theme targeting', () => {
     const {container} = render(<Badge variant="success" label="Active" />);
     const root = container.firstElementChild!;
     expect(root.className).toContain('astryx-badge');
-    expect(root.className).toContain('success');
+    expect(root).toHaveAttribute('data-variant', 'success');
+  });
+});
+
+// jsdom cannot emulate forced colors, so this asserts the compiled rule the
+// status fill relies on (architecture:theme-tokens INV11): the fill becomes
+// Canvas, and a CanvasText boundary keeps its shape.
+describe('Badge forced colors', () => {
+  it('keeps a visible boundary on the status fill', () => {
+    render(<Badge variant="error" label="Failed" />);
+    const css = getForcedColorsRules();
+    expect(css).toContain('outline-style: solid;');
+    expect(css).toContain('outline-color: canvastext;');
   });
 });

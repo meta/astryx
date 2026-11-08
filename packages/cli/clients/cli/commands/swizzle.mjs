@@ -3,21 +3,21 @@
 /**
  * @file swizzle command — thin wrapper around api/swizzle.
  *
- * Copies a component's source into the consumer project for customization
- * (imports rewritten to the owner package's subpaths). All logic — owner
- * resolution, copy, import rewriting, StyleX detection, maintainer feedback —
- * lives in api/swizzle; this file only parses flags, prints, and prefixes
- * commands for the caller's package manager.
+ * Copies a component's source into the consumer project for customization,
+ * with the internal modules it needs. All logic — owner resolution, the copy,
+ * StyleX detection, maintainer feedback — lives in api/swizzle; this file only
+ * parses flags, prints, and prefixes commands for the caller's package manager.
  */
 
 import {jsonOut} from '../../../foundation/response/json.mjs';
-import {emit, section, list, text, WARN} from '../formatters/index.mjs';
-import {cliError} from '../lib/cli-error.mjs';
+import {emit, section, list, text, WARN, record} from '../formatters/index.mjs';
+import {cliError, rejectEmptyArgument} from '../lib/cli-error.mjs';
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
 import {swizzle as swizzleApi} from '../../../api/swizzle/swizzle.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
 import {doc as swizzleCommand} from './swizzle.doc.mjs';
 import {doc as swizzleFn} from '../../../api/swizzle/swizzle.doc.mjs';
+import {NO_RESULT_SET, resultSet} from '../../../foundation/debug/index.mjs';
 
 /**
  * @param {import('commander').Command} program
@@ -26,6 +26,9 @@ export function registerSwizzle(program) {
   defineCommand(program, swizzleCommand, {
     fn: swizzleFn,
     action: async (/** @type {string | undefined} */ component, /** @type {{output: string, package?: string, list?: boolean, overwrite?: boolean}} */ options) => {
+      if (!options.list) {
+        rejectEmptyArgument('component', component, 'astryx swizzle');
+      }
       const json = program.opts().json || false;
       const run = getCliInvocation();
 
@@ -41,15 +44,25 @@ export function registerSwizzle(program) {
         });
       } catch (e) {
         const err = /** @type {import('../../../api/error.mjs').AstryxError} */ (e);
-        cliError(err.message, {suggestions: err.suggestions, code: err.code});
-        return;
+        return cliError(err.message, {suggestions: err.suggestions, code: err.code});
       }
 
-      if (json) return jsonOut(result);
+      // `--list` answers with the components you could eject; ejecting one is
+      // a copy into the project, which is an effect with nothing to count.
+      const answered =
+        result.type === 'swizzle.list'
+          ? resultSet({count: result.data.length, resultKind: 'component'})
+          : NO_RESULT_SET;
+
+      if (json) {
+        jsonOut(result);
+        return answered;
+      }
 
       if (result.type === 'swizzle.list') {
         const components = result.data;
         emit(
+          record({package: result.package}),
           section('Available components'),
           list(components),
           text(`Usage: ${run} swizzle <component>`),
@@ -60,7 +73,7 @@ export function registerSwizzle(program) {
             ].join('\n'),
           ),
         );
-        return;
+        return answered;
       }
 
       const {package: ownerPackage, outputDir, filesCopied, usesStyleX, feedback} =
@@ -71,20 +84,57 @@ export function registerSwizzle(program) {
         text(`[ok] Copied ${filesCopied} files to ${outputDir}/`),
         text(
           [
-            `Relative imports have been rewritten to use ${ownerPackage}.`,
+            `What ${ownerPackage} exports is imported from ${ownerPackage}; the internal modules the component needs are copied beside it.`,
             'You can now customize the component source freely.',
           ].join('\n'),
         ),
       ];
+      // Files the copy wrote outside the component folder: the internal
+      // modules it needs, in the package's folder layout.
+      const shared = (result.data.files ?? []).filter(f => f.startsWith('../'));
+      if (shared.length > 0) {
+        out.push(
+          text(
+            `Copied beside it: ${shared.join(', ')} (in the package's folder layout; imported by relative path)`,
+          ),
+        );
+      }
 
-      // StyleX build requirement — swizzled StyleX source renders unstyled with
-      // no error unless the consumer's build runs a StyleX compiler.
+      // npm packages the copy imports, each range quoted so the list pastes
+      // safely after an install command.
+      const dependencies = Object.entries(result.data.dependencies ?? {});
+      if (dependencies.length > 0) {
+        out.push(
+          text(
+            `It imports these npm packages; install any your project lacks: ${dependencies
+              .map(([name, range]) => (range === '*' ? name : `${name}@"${range}"`))
+              .join(' ')}`,
+          ),
+        );
+      }
+
+      const {marker} = result.data;
+      if (marker) {
+        const folder = marker.path.replace(/\/?astryx-swizzle\.json$/, '') || '.';
+        out.push(
+          text(
+            marker.written
+              ? `Marked ${folder}/ with astryx-swizzle.json: with @astryxdesign/build's Babel, PostCSS and Vite integrations, or withAstryx() under webpack, every module under it compiles below your theme, so theme overrides reach the copy. Keep only swizzled copies there. Turbopack does not read the marker yet.`
+              : `Did not mark ${folder}/ with astryx-swizzle.json: it already holds ${(marker.found ?? []).join(', ')} and no astryx-swizzle.json. If it holds only swizzled copies, add ${marker.path} to mark it, so theme overrides reach them; keep the product's own components out of a marked folder.`,
+          ),
+        );
+      }
+
+      // StyleX build requirement — swizzled StyleX source throws on import
+      // ("Unexpected 'stylex.create' call at runtime") unless the consumer's
+      // build runs a StyleX compiler, so the page does not render at all.
       if (usesStyleX) {
         out.push(
           text(
             [
               `${WARN} These components use StyleX and require a StyleX compiler in your build.`,
-              '  Without one they render unstyled (no error). See setup per framework:',
+              `  Without one, importing them throws "Unexpected 'stylex.create' call at runtime"`,
+              '  and the page does not render. See setup per framework:',
               `  ${run} docs styling`,
               '  Next.js note: the StyleX Babel plugin disables SWC and breaks next/font -',
               '  use an SWC-based StyleX transform instead (covered in the guide).',
@@ -107,6 +157,7 @@ export function registerSwizzle(program) {
       }
 
       emit(...out);
+      return answered;
     },
   });
 }

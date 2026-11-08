@@ -20,8 +20,8 @@
  *   1. Create the page under the appropriate route group
  *   2. Add an entry to the appropriate category below
  *
- * Note: hrefs use trailing slashes because the sandbox is a static export
- * with `trailingSlash: true` in next.config.mjs.
+ * Note: hrefs use trailing slashes because the Vite build writes a physical
+ * index.html for each route; static hosts redirect /route to /route/.
  */
 
 import {templates as autoDiscoveredTemplates} from '../generated/templateRegistry';
@@ -152,6 +152,12 @@ export const categories: SandboxCategory[] = [
         description:
           'WCAG 2.5.8 AA touch-target sizes visualized on real components',
       },
+      {
+        name: 'Text Types',
+        href: '/pages/text-types/',
+        description:
+          'Every built-in Text type at the default size, on a bare page that scrolls',
+      },
     ],
   },
   {
@@ -172,6 +178,12 @@ export const categories: SandboxCategory[] = [
     slug: 'themes',
     description: 'Theme palette previews and design token references.',
     pages: [
+      {
+        name: 'Theme Family Artifacts',
+        href: '/pages/theme-family/',
+        description:
+          'One generated CSS/ESM family with attribute switching, nested descendants, sibling isolation, and cascade-order evidence',
+      },
       {
         name: 'Neutral Palette',
         href: '/pages/neutral-palette/',
@@ -208,6 +220,18 @@ export const categories: SandboxCategory[] = [
         description:
           'Generate and explore color palettes from an accent color or image',
       },
+      {
+        name: 'Palette Generator Lab',
+        href: '/pages/palette-generator/',
+        description:
+          'Compare experimental OKLCH and HCT-like ramps with profiles, anchors, custom stops, and separate dark-mode generation',
+      },
+      {
+        name: 'Mobile Spacing',
+        href: '/pages/mobile-spacing/',
+        description:
+          'Draft mobile semantic spacing preview with real component scale comparisons',
+      },
     ],
   },
   {
@@ -228,10 +252,33 @@ export const categories: SandboxCategory[] = [
         description: 'Compare highlight modes and scroll performance',
       },
       {
+        name: 'Markdown Perf',
+        href: '/pages/markdown-perf/',
+        description:
+          'Compare complete Markdown rendering with bursty streaming performance and animation',
+      },
+      {
+        name: 'DiffViewer Perf',
+        href: '/pages/diffviewer-perf/',
+        description:
+          'Render and scroll many files and lines; compare unified and split',
+      },
+      {
+        name: 'Perf Scenes',
+        href: '/pages/perf-scenes/',
+        description: 'Fixed performance scenes to mount and profile by hand',
+      },
+      {
         name: 'Table Lab',
         href: '/pages/table-lab/',
         description:
           'Test any combination of Table plugins with live scroll FPS, dropped-frame, and re-render metrics',
+      },
+      {
+        name: 'Motion Lab',
+        href: '/pages/motion-lab/',
+        description:
+          'Every motion proposal as a working before-and-after, with the durations, curves and springs tunable live',
       },
       {
         name: 'Foundations',

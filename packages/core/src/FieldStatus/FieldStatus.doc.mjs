@@ -1,11 +1,30 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/** @type {import('@astryxdesign/cli/authoring').ComponentAnatomyElement[]} */
+const anatomy = [
+  {
+    name: 'Message box',
+    required: true,
+    description: 'Painted container for the validation feedback.',
+  },
+  {
+    name: 'Detached icon',
+    required: false,
+    description: 'Leading status glyph shown only by the detached variant.',
+  },
+  {
+    name: 'Message text',
+    required: true,
+    description: 'Text describing the validation status.',
+  },
+];
+
 /** @type {import('@astryxdesign/cli/authoring').ComponentDoc} */
 export const docs = {
   name: 'FieldStatus',
   displayName: 'Field Status',
   group: 'Field',
-  category: 'Data Input',
+  category: 'Form Controls',
   isHiddenFromOverview: true,
   description:
     'Status message component for form field validation feedback. Messages are announced to screen readers through persistent live regions (assertive for errors, polite otherwise), so conditional mounting is safe.',
@@ -60,7 +79,13 @@ export const docs = {
         description:
           'Use FieldStatus for general alerts or page-level notices; use Banner or Toast instead.',
       },
+      {
+        guidance: true,
+        description:
+          "A field's status is announced when it first appears and when its message or type changes, not again when a repeated submit fails with the same errors. On such a repeated submit, with the errors unchanged, announce it once from the form with useAnnounce, for example announce(`${errors.length} errors. ${errors[0]}`, 'assertive'), and move focus to the first invalid field. On a first failed submit the fields announce their own errors, so the form adds no announcement.",
+      },
     ],
+    anatomy,
   },
 };
 
@@ -85,7 +110,13 @@ export const docsDense = {
         description:
           'Use FieldStatus for general alerts or page-level notices; use Banner or Toast instead.',
       },
+      {
+        guidance: true,
+        description:
+          'Status announces when it appears and on message/type change only. On a repeated submit with unchanged errors, the form announces once via useAnnounce (error count + first error) and focuses the first invalid field.',
+      },
     ],
+    anatomy,
   },
   propDescriptions: {
     type: 'error/warning/success status tone',

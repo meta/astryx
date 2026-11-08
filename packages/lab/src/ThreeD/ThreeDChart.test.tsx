@@ -249,3 +249,41 @@ describe('ThreeDChart keyboard camera', () => {
     expect(azimuth()).toBe(35);
   });
 });
+
+describe('ThreeDChart container sizing', () => {
+  it('renders no svg until the container reports a width', () => {
+    render(
+      <ThreeDChart data={data} xKey="x" yKey="y" zKey="z">
+        <CameraProbe />
+      </ThreeDChart>,
+    );
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+
+    reportWidth(600);
+
+    const svg = screen.getByRole('img');
+    expect(svg).toHaveAttribute('width', '600');
+    // Default height is 400.
+    expect(svg).toHaveAttribute('height', '400');
+  });
+
+  it('sizes the svg from the height prop', () => {
+    renderChart({height: 250});
+    const svg = screen.getByRole('img');
+    expect(svg).toHaveAttribute('width', '600');
+    expect(svg).toHaveAttribute('height', '250');
+  });
+});
+
+describe('use3D', () => {
+  it('throws when used outside <ThreeDChart>', () => {
+    function Probe() {
+      use3D();
+      return null;
+    }
+
+    expect(() => render(<Probe />)).toThrow(
+      '3D components must be used inside <ThreeDChart>',
+    );
+  });
+});
