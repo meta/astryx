@@ -406,13 +406,15 @@ out an anchored one), so a proof takes its traced watch before the window it
 counts. The trace's `longTasks` are the page's own: only a task the harness marked as its own read
 (`waitForAnimation` describing keyframes, `blockMainThread` without `during`)
 is in `devtoolsTasks` instead, and only when no page script ran inside it. A
-test's own `page.evaluate` stays a long task, whether it calls page code
-directly or sets it off. Each long task carries its wall time (`durationMs`)
+test's own `page.evaluate` stays the page's own task, long or stretched,
+whether it calls page code directly or sets it off. Each long task carries its wall time (`durationMs`)
 and the main thread's own run time (`threadMs`, from the trace's thread
-clock). A busy machine stretches the first but not the second, so a claim
-about the page's own work judges `threadMs`. A thread that waits (a
-synchronous request, `Atomics.wait`) gains wall time but no thread time, so a
-claim about a blocking wait judges `durationMs`.
+clock). A busy machine stretches the first but not the second, so a task is
+long only when its thread ran longer than 50 ms: the page's own work. A task
+only the wall clock stretched past 50 ms is in `stretchedTasks`, with both
+times. A thread that waits (a synchronous request, `Atomics.wait`) gains wall
+time but no thread time, so a claim about a blocking wait judges
+`stretchedTasks` too.
 
 **Storyboards.** Deterministic: frames come from seeking held animations or
 from stepping scripted input, never from wall-clock capture. The JSON trace
@@ -560,6 +562,17 @@ before the lift. A runner too loaded to dispatch in time stretches a
 gesture the same way, and the play fails with `TouchPacingError`. A play whose
 proof reads no release from the lift, such as a pinch's end, passes
 `releaseUnread`.
+
+A proof whose component decides on a threshold names it in `boundaries`:
+the release speed a pager pages from (`releasePxPerS`), or the hold after
+which it catches the content (`holdMs`). In WebKit the play then fails by
+name when the page read the release, or the first finger's hold from
+touch-down to lift, on the other side of the threshold from the script. A
+scrolling surface reads its release as Core's `scrollVelocity` does: pass
+`release: 'scroll'`. Each pacing error names the longest time the page drew no
+frame during the gesture. A page that drew nothing for 100 ms or more never
+received the gesture as scripted. To read a frame before the gesture, a judged
+play starts one frame later.
 
 A wheel gesture is a run of steps, and `wheel` waits for each step's round
 trip, so on a loaded runner awaited steps land as far apart as a round trip

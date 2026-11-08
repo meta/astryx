@@ -281,18 +281,151 @@ describe("a LayoutPanel's pane slides on collapse and open (component:Resizable 
     expect(reveals.every(r => r.animate.mock.calls.length === 1)).toBe(true);
   });
 
-  it('plays a drag that crosses the collapse threshold, plays nothing for a drag that reopens, and lands a running conceal then', () => {
+  it('plays the close a lift past the collapse threshold makes, plays nothing for a drag that reopens, and lands a running conceal then', () => {
     render(<PropsSplit />);
     fireEvent.pointerDown(grabZone(), {pointerId: 1, clientX: 300});
     fireEvent.pointerMove(grabZone(), {pointerId: 1, clientX: 110});
+    expect(propsRegion?.isCollapsed).toBe(false);
+    expect(reveals).toHaveLength(0);
+    fireEvent.pointerUp(grabZone(), {pointerId: 1, clientX: 110});
     expect(propsRegion?.isCollapsed).toBe(true);
     expect(reveals).toHaveLength(1);
     expect(reveals[0].animate).toHaveBeenCalledTimes(1);
+    fireEvent.pointerDown(grabZone(), {pointerId: 1, clientX: 110});
     fireEvent.pointerMove(grabZone(), {pointerId: 1, clientX: 320});
     expect(propsRegion?.isCollapsed).toBe(false);
     expect(reveals).toHaveLength(1);
     expect(reveals[0].cancel).toHaveBeenCalledTimes(1);
     fireEvent.pointerUp(grabZone(), {pointerId: 1, clientX: 320});
+  });
+
+  it('reads no layout while a drag moves inside the limits', () => {
+    render(<PropsSplit />);
+    // The role query reads computed styles, so it runs before the spies.
+    const zone = grabZone();
+    fireEvent.pointerDown(zone, {pointerId: 1, clientX: 300});
+    const widths = vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get');
+    const styles = vi.spyOn(window, 'getComputedStyle');
+    for (const clientX of [290, 280, 270, 260]) {
+      fireEvent.pointerMove(zone, {pointerId: 1, clientX});
+    }
+    expect(widths).not.toHaveBeenCalled();
+    expect(styles).not.toHaveBeenCalled();
+    widths.mockRestore();
+    styles.mockRestore();
+    fireEvent.pointerUp(zone, {pointerId: 1, clientX: 260});
+  });
+
+  it('holds a pane still sliding shut where it shows, and opens it at the finger once the finger passes the minimum', () => {
+    render(<PropsSplit />);
+    const zone = grabZone();
+    fireEvent.pointerDown(zone, {pointerId: 1, clientX: 300});
+    fireEvent.pointerMove(zone, {pointerId: 1, clientX: 110});
+    fireEvent.pointerUp(zone, {pointerId: 1, clientX: 110});
+    expect(propsRegion?.isCollapsed).toBe(true);
+    // At once, while it slides shut: the lift left the edge near 43 px, the
+    // 50 px minimum less the band. The finger holds it there, still shut.
+    fireEvent.pointerDown(zone, {pointerId: 2, clientX: 110});
+    fireEvent.pointerMove(zone, {pointerId: 2, clientX: 113});
+    expect(propsRegion?.isCollapsed).toBe(true);
+    fireEvent.pointerMove(zone, {pointerId: 2, clientX: 140});
+    // The finger passed the minimum 30 px from where it caught the edge.
+    expect(propsRegion?.isCollapsed).toBe(false);
+    expect(propsRegion?.size).toBeGreaterThan(65);
+    expect(propsRegion?.size).toBeLessThan(80);
+    fireEvent.pointerUp(zone, {pointerId: 2, clientX: 140});
+  });
+
+  it('opens a held closing pane to its minimum on a lift above the collapse threshold', () => {
+    render(<PropsSplit />);
+    const zone = grabZone();
+    fireEvent.pointerDown(zone, {pointerId: 1, clientX: 300});
+    fireEvent.pointerMove(zone, {pointerId: 1, clientX: 110});
+    fireEvent.pointerUp(zone, {pointerId: 1, clientX: 110});
+    fireEvent.pointerDown(zone, {pointerId: 2, clientX: 110});
+    fireEvent.pointerMove(zone, {pointerId: 2, clientX: 112});
+    fireEvent.pointerUp(zone, {pointerId: 2, clientX: 112});
+    expect(propsRegion?.isCollapsed).toBe(false);
+    expect(propsRegion?.size).toBe(50);
+  });
+
+  it('springs the drawn handle back by the next frame when a controlled owner keeps the pane open on a closing lift', async () => {
+    const keepsOpen = vi.fn();
+    // At its 50 px minimum already, so the lift restores no other size.
+    render(
+      <PropsSplit
+        config={{
+          defaultSize: 50,
+          isCollapsed: false,
+          onCollapseChange: keepsOpen,
+        }}
+      />,
+    );
+    const zone = grabZone();
+    fireEvent.pointerDown(zone, {pointerId: 1, clientX: 300});
+    // 190 px toward closed: past the minimum, where the handle bands, and
+    // under the collapse threshold.
+    fireEvent.pointerMove(zone, {pointerId: 1, clientX: 110});
+    const drawn = separator().style.translate;
+    expect(drawn).not.toBe('');
+    fireEvent.pointerUp(zone, {pointerId: 1, clientX: 110});
+    expect(keepsOpen).toHaveBeenCalledWith(true);
+    expect(propsRegion?.isCollapsed).toBe(false);
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(separator().style.translate).not.toBe(drawn);
+  });
+
+  it('keeps a held closing pane shut on a lift under the collapse threshold', () => {
+    render(<PropsSplit />);
+    const zone = grabZone();
+    fireEvent.pointerDown(zone, {pointerId: 1, clientX: 300});
+    fireEvent.pointerMove(zone, {pointerId: 1, clientX: 110});
+    fireEvent.pointerUp(zone, {pointerId: 1, clientX: 110});
+    fireEvent.pointerDown(zone, {pointerId: 2, clientX: 110});
+    // Down to about 13 px, under the 40 px threshold.
+    fireEvent.pointerMove(zone, {pointerId: 2, clientX: 80});
+    fireEvent.pointerUp(zone, {pointerId: 2, clientX: 80});
+    expect(propsRegion?.isCollapsed).toBe(true);
+  });
+
+  it('catches a pane sliding shut between snap points where it shows, and follows the finger to a snap', () => {
+    render(<PropsSplit config={{snaps: [50, 150, 300]}} />);
+    const zone = grabZone();
+    fireEvent.pointerDown(zone, {pointerId: 1, clientX: 300});
+    fireEvent.pointerMove(zone, {pointerId: 1, clientX: 110});
+    fireEvent.pointerUp(zone, {pointerId: 1, clientX: 110});
+    expect(propsRegion?.isCollapsed).toBe(true);
+    // The lift left the edge near 42 px. Mid-slide, the handle shows 133 px
+    // further out, so the pane shows about 175 px.
+    vi.spyOn(separator(), 'getBoundingClientRect').mockReturnValue(
+      DOMRect.fromRect({x: 133, y: 0, width: 0, height: 0}),
+    );
+    fireEvent.pointerDown(zone, {pointerId: 2, clientX: 110});
+    fireEvent.pointerMove(zone, {pointerId: 2, clientX: 120});
+    // The edge followed the finger 10 px from where it showed, between snaps.
+    expect(propsRegion?.size).toBeGreaterThan(180);
+    expect(propsRegion?.size).toBeLessThan(190);
+    // Past a snap point, the snaps hold again.
+    fireEvent.pointerMove(zone, {pointerId: 2, clientX: 245});
+    expect(propsRegion?.size).toBe(300);
+    fireEvent.pointerUp(zone, {pointerId: 2, clientX: 245});
+    expect(propsRegion?.size).toBe(300);
+  });
+
+  it('lands a caught pane on the snap nearest its edge when the finger lifts between snaps', () => {
+    render(<PropsSplit config={{snaps: [50, 150, 300]}} />);
+    const zone = grabZone();
+    fireEvent.pointerDown(zone, {pointerId: 1, clientX: 300});
+    fireEvent.pointerMove(zone, {pointerId: 1, clientX: 110});
+    fireEvent.pointerUp(zone, {pointerId: 1, clientX: 110});
+    vi.spyOn(separator(), 'getBoundingClientRect').mockReturnValue(
+      DOMRect.fromRect({x: 133, y: 0, width: 0, height: 0}),
+    );
+    fireEvent.pointerDown(zone, {pointerId: 2, clientX: 110});
+    fireEvent.pointerMove(zone, {pointerId: 2, clientX: 120});
+    fireEvent.pointerUp(zone, {pointerId: 2, clientX: 120});
+    expect(propsRegion?.isCollapsed).toBe(false);
+    expect(propsRegion?.size).toBe(150);
   });
 
   it('plays nothing for the first render or a resize that neither collapses nor opens', () => {
@@ -420,9 +553,12 @@ describe("a LayoutPanel's pane slides on collapse and open (component:Resizable 
     }
     fireEvent.pointerDown(grabZone(), {pointerId: 1, clientX: 300});
     fireEvent.pointerMove(grabZone(), {pointerId: 1, clientX: 100});
+    expect(propsRegion?.isCollapsed).toBe(false);
+    fireEvent.pointerUp(grabZone(), {pointerId: 1, clientX: 100});
     expect(propsRegion?.isCollapsed).toBe(true);
     expect(reveals).toHaveLength(7);
     expect(reveals[6].animate).toHaveBeenCalledTimes(1);
+    fireEvent.pointerDown(grabZone(), {pointerId: 1, clientX: 100});
     fireEvent.pointerMove(grabZone(), {pointerId: 1, clientX: 340});
     expect(propsRegion?.isCollapsed).toBe(false);
     expect(reveals).toHaveLength(7);
