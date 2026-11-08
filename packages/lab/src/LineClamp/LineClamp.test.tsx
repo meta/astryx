@@ -197,6 +197,51 @@ describe('LineClamp', () => {
       expect(link).not.toHaveAttribute('data-line-clamp-hidden');
     });
 
+    it('checks again when a web font loads and re-wraps the lines at the same box size', () => {
+      const fonts = new EventTarget();
+      Object.defineProperty(document, 'fonts', {
+        value: fonts,
+        configurable: true,
+      });
+      try {
+        const {rerender, unmount} = render(
+          <LineClamp maxLines={2} data-testid="clamp">
+            Some text <a href="/more">Read more</a>
+          </LineClamp>,
+        );
+        const container = screen.getByTestId('clamp');
+        const link = screen.getByText('Read more');
+        const rectMap = new Map([
+          [container, {top: 0, bottom: 40}],
+          [link, {top: 20, bottom: 36}],
+        ]);
+        mockRects(rectMap);
+        rerender(
+          <LineClamp maxLines={2} data-testid="clamp">
+            Some text <a href="/more">Read more</a>
+          </LineClamp>,
+        );
+        expect(link).not.toHaveAttribute('inert');
+
+        // The font re-wraps the text: the link moves past the edge, the box
+        // keeps its size, and nothing renders.
+        rectMap.set(link, {top: 40, bottom: 56});
+        act(() => {
+          fonts.dispatchEvent(new Event('loadingdone'));
+        });
+        expect(link).toHaveAttribute('inert');
+
+        rectMap.set(link, {top: 10, bottom: 26});
+        act(() => {
+          fonts.dispatchEvent(new Event('loadingdone'));
+        });
+        expect(link).not.toHaveAttribute('inert');
+        unmount();
+      } finally {
+        delete (document as {fonts?: unknown}).fonts;
+      }
+    });
+
     it('hides a descendant a child re-enables past the fold after mount', async () => {
       // Only the late link is placed past the fold; everything else sits
       // above it. Enabling it changes an attribute only: no text change, no

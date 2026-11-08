@@ -72,7 +72,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'A link, button, form control or element with a tabindex that falls past the visible lines (e.g. a trailing link) is automatically made inert (out of the tab order and the accessibility tree) while clipped, and made reachable again the moment it is no longer clipped, including when a child adds or re-enables one later or focus moves away from it. LineClamp never rewrites your own tabIndex or aria-hidden. The element that currently has focus is never hidden. No consumer action needed, but avoid relying on Tab reaching a link that only sometimes clips.',
+          'A link, button, form control or element with a tabindex that falls past the visible lines (e.g. a trailing link) is automatically made inert (out of the tab order and the accessibility tree) while clipped, and made reachable again once it is no longer clipped: LineClamp checks again on each render, when its box resizes, when a web font finishes loading, when a child adds or re-enables a focusable element, and when focus moves away from one. LineClamp never rewrites your own tabIndex or aria-hidden. The element that currently has focus is never hidden. No consumer action needed, but avoid relying on Tab reaching a link that only sometimes clips.',
       },
     ],
   },

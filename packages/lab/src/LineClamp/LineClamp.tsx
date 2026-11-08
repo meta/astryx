@@ -292,9 +292,10 @@ export function LineClamp({
   });
   const elementRef = useRef<HTMLElement>(null);
 
-  // A resize can move a descendant across the clip edge without a render, and
-  // a child can add or re-enable a focusable element past it, so the sync also
-  // runs from the shared observers. A callback ref attaches them with the root
+  // A resize can move a descendant across the clip edge without a render, a
+  // web font that loads late can re-wrap the lines at the same box size, and
+  // a child can add or re-enable a focusable element past the edge, so the
+  // sync also runs from the shared observers and on each font load. A callback ref attaches them with the root
   // and releases them when it goes, including when `as` replaces it.
   const observeRoot = useCallback((container: HTMLElement | null) => {
     if (container == null) {
@@ -318,12 +319,15 @@ export function LineClamp({
       },
     );
     const unobserveResize = observeResize(container, sync);
+    const fonts = container.ownerDocument.fonts;
+    fonts?.addEventListener?.('loadingdone', sync);
     return () => {
       // The shared observer disconnects when its last registration goes, and
       // a disconnect drops the records it holds. Hand a caller's queued
       // `inert` back first, while this registration still receives it.
       isReleased = true;
       releaseFlush();
+      fonts?.removeEventListener?.('loadingdone', sync);
       unobserveResize();
       unobserveMutations();
     };
