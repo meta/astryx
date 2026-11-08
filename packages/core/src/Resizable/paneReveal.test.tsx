@@ -316,6 +316,24 @@ describe("a LayoutPanel's pane slides on collapse and open (component:Resizable 
     fireEvent.pointerUp(zone, {pointerId: 1, clientX: 260});
   });
 
+  it('catches a pane still sliding shut where it shows: it opens, and its edge follows the finger', () => {
+    render(<PropsSplit />);
+    const zone = grabZone();
+    fireEvent.pointerDown(zone, {pointerId: 1, clientX: 300});
+    fireEvent.pointerMove(zone, {pointerId: 1, clientX: 110});
+    fireEvent.pointerUp(zone, {pointerId: 1, clientX: 110});
+    expect(propsRegion?.isCollapsed).toBe(true);
+    // At once, while it slides shut: the lift left the edge near 43 px, the
+    // 50 px minimum less the band. The finger catches it there.
+    fireEvent.pointerDown(zone, {pointerId: 2, clientX: 110});
+    expect(propsRegion?.isCollapsed).toBe(false);
+    fireEvent.pointerMove(zone, {pointerId: 2, clientX: 140});
+    // The edge followed the finger 30 px.
+    expect(propsRegion?.size).toBeGreaterThan(65);
+    expect(propsRegion?.size).toBeLessThan(80);
+    fireEvent.pointerUp(zone, {pointerId: 2, clientX: 140});
+  });
+
   it('plays nothing for the first render or a resize that neither collapses nor opens', () => {
     render(<PropsSplit config={{defaultIsCollapsed: true}} />);
     act(() => {
