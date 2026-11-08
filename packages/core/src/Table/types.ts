@@ -423,6 +423,51 @@ export type TableContextActions =
 // =============================================================================
 
 /**
+ * Immutable facts about the table that Table passes to row, cell and
+ * scroll-wrapper transforms.
+ */
+export interface TableRenderContext {
+  /** The branch Table renders: `data` rows from `data`, or caller `children`. */
+  readonly mode: 'data' | 'children';
+  /**
+   * The row model the plugins admit. `flat` unless a plugin declares another
+   * model, or has a body transform and declares none (`custom`).
+   */
+  readonly rowModel: 'flat' | 'tree' | 'grouped' | 'detail' | 'custom';
+  /** The number of product rows in the complete `data` input. */
+  readonly logicalRowCount: number;
+  /** The number of header rows: 1 when Table renders a header, else 0. */
+  readonly headerRowCount: number;
+  /** The scroll container around the `<table>`. Its reference is stable. */
+  readonly viewport: React.RefObject<HTMLDivElement | null>;
+}
+
+/**
+ * Immutable facts about one body row that Table passes to its transforms.
+ * Read its values during the transform, and copy what a returned callback
+ * needs: a row that does not re-render keeps its old context.
+ */
+export interface TableRowContext {
+  /** The row's key: its `idKey` value, or its index when there is no `idKey`. */
+  readonly key: string | number | undefined;
+  /** Whether the key is a usable identity. */
+  readonly identityStatus: 'valid' | 'missing' | 'invalid' | 'duplicate';
+  /** `product` for a row of a flat dataset; `unknown` for another row model. */
+  readonly kind: 'product' | 'synthetic' | 'unknown';
+  /**
+   * The zero-based position of the row in the complete `data` input. A row
+   * keeps this index when only some rows are mounted.
+   */
+  readonly logicalIndex: number;
+  /** The number of product rows in the complete `data` input. */
+  readonly logicalRowCount: number;
+  /** The number of header rows: 1 when Table renders a header, else 0. */
+  readonly headerRowCount: number;
+  /** The table's render context. */
+  readonly render: TableRenderContext;
+}
+
+/**
  * Table plugin — transforms render props at each structural level.
  * Plugins compose by sequential application (first plugin's output feeds next).
  *
@@ -450,6 +495,12 @@ export interface TablePlugin<
   T extends Record<string, unknown> = Record<string, unknown>,
 > {
   /**
+   * The row model this plugin's body transforms keep. Declare `'flat'` when
+   * they keep one product row per data item. A body transform without a
+   * declaration makes the table's row model `custom`.
+   */
+  readonly rowModel?: TableRenderContext['rowModel'];
+  /**
    * Transform the column definitions before rendering.
    * Runs before any element-level transforms. Use to filter, reorder,
    * or inject synthetic columns (e.g. a selection checkbox column).
@@ -471,14 +522,19 @@ export interface TablePlugin<
     columnIndex: number,
     columns: ReadonlyArray<TableColumn<T>>,
   ) => HeaderCellRenderProps;
-  /** Transform each body `<tr>` props */
+  /**
+   * Transform each body `<tr>` props. Read `context` values during the
+   * transform, not later in a callback it returns.
+   */
   transformBodyRow?: (
     props: BodyRowRenderProps,
     item: T,
     index: number,
+    context?: TableRowContext,
   ) => BodyRowRenderProps;
   /**
-   * Transform each body `<td>` props.
+   * Transform each body `<td>` props. Read `context` values during the
+   * transform, not later in a callback it returns.
    *
    * `columnIndex` and the full `columns` list are provided for plugins that
    * need to reason about column position (e.g. cumulative sticky offsets).
@@ -489,6 +545,7 @@ export interface TablePlugin<
     item: T,
     columnIndex: number,
     columns: ReadonlyArray<TableColumn<T>>,
+    context?: TableRowContext,
   ) => BodyCellRenderProps;
   /**
    * Transform the scroll-wrapper region — the `<div>` wrapping the `<table>`
@@ -498,6 +555,7 @@ export interface TablePlugin<
    */
   transformScrollWrapper?: (
     props: ScrollWrapperRenderProps,
+    context?: TableRenderContext,
   ) => ScrollWrapperRenderProps;
   /** Wrap the table output in context providers */
   transformTableContext?: (children: ReactNode) => ReactNode;

@@ -20,6 +20,7 @@ import {
 import {
   openStory,
   traceRendering,
+  waitForRest,
   withStorybook,
 } from '@astryxdesign/interaction-harness';
 
@@ -50,19 +51,10 @@ interface CloseRoute {
   readonly press?: (page: Page) => Locator;
 }
 
-async function frames(page: Page): Promise<void> {
-  await page.evaluate(
-    async () =>
-      new Promise(resolve =>
-        requestAnimationFrame(() => requestAnimationFrame(resolve)),
-      ),
-  );
-}
-
 // Opens and closes the layer CLOSES times. Each close, from the Escape press
 // or the pointer press until the layer is hidden, runs under the rendering
-// trace. Before it, the pointer rests on what it presses, so the trace holds
-// no hover change.
+// trace. Before it, the pointer rests on what it presses and the layer is at
+// rest. So the trace holds no hover change and no entrance frame.
 async function traceCloses(page: Page, route: CloseRoute): Promise<Closes> {
   const trigger = route.trigger(page);
   const shown = route.shown(page);
@@ -95,8 +87,11 @@ async function traceCloses(page: Page, route: CloseRoute): Promise<Closes> {
       }
       await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     }
-    // The open's own frames end before the close is traced.
-    await frames(page);
+    // A busy runner can start the entrance late. The close is traced once
+    // the entrance, on the layer's surface, is at rest.
+    await waitForRest(
+      shown.locator('xpath=ancestor-or-self::*[@popover][1]/*[1]'),
+    );
     const trace = await traceRendering(page, async () => {
       if (route.press == null) {
         await page.keyboard.press('Escape');
