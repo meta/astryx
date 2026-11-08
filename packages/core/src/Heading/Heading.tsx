@@ -19,7 +19,7 @@
  * - /packages/cli/assets/templates/blocks/components/Text/ (showcase blocks)
  */
 
-import {lazy, Suspense, useRef, type ReactNode} from 'react';
+import {useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {
   TextColor,
@@ -45,6 +45,11 @@ import {
   truncationTooltipStyles,
 } from '../Text/text.stylex';
 import {useTruncation} from '../Text/useTruncation';
+import {
+  TruncationTooltip,
+  useTruncationTooltipInterest,
+} from '../Text/TruncationTooltip';
+import {composeEventHandlers} from '../utils/composeEventHandlers';
 import {resolveStyleColor} from '../Text/Text';
 import type {LayerPlacement} from '../Layer';
 import {mergeProps} from '../utils/mergeProps';
@@ -52,10 +57,6 @@ import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import type {HeadingTypeMap} from './index';
-
-const LazyXDSTooltip = lazy(async () =>
-  import('../Tooltip/Tooltip').then(mod => ({default: mod.Tooltip})),
-);
 
 /**
  * Heading level (1-6). Determines both visual styling and semantic HTML element.
@@ -267,6 +268,8 @@ export function Heading({
     typeof hasTruncateTooltip === 'string' ? hasTruncateTooltip : 'above';
   const tooltipEnabled =
     maxLines > 0 && hasTruncateTooltip !== false && truncation.isTruncated;
+  // The tooltip mounts on the first hover, tap or focus, not with the text.
+  const tooltipInterest = useTruncationTooltipInterest(tooltipEnabled);
 
   // Ref for the heading element (used as tooltip anchor)
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -318,21 +321,34 @@ export function Heading({
           {...style, ...inlineStyle},
         )}
         {...ariaProps}
-        {...props}>
+        {...props}
+        onPointerEnter={composeEventHandlers(
+          tooltipInterest.onPointerEnter,
+          props.onPointerEnter,
+        )}
+        onPointerLeave={composeEventHandlers(
+          tooltipInterest.onPointerLeave,
+          props.onPointerLeave,
+        )}
+        onPointerDown={composeEventHandlers(
+          tooltipInterest.onPointerDown,
+          props.onPointerDown,
+        )}
+        onFocus={composeEventHandlers(tooltipInterest.onFocus, props.onFocus)}
+        onBlur={composeEventHandlers(tooltipInterest.onBlur, props.onBlur)}>
         {children}
       </Component>
-      {tooltipEnabled && (
-        <Suspense fallback={null}>
-          <LazyXDSTooltip
-            anchorRef={headingRef}
-            content={
-              <span {...stylex.props(truncationTooltipStyles.content)}>
-                {truncation.fullText}
-              </span>
-            }
-            placement={tooltipPlacement}
-          />
-        </Suspense>
+      {tooltipEnabled && tooltipInterest.isWanted && (
+        <TruncationTooltip
+          anchorRef={headingRef}
+          content={
+            <span {...stylex.props(truncationTooltipStyles.content)}>
+              {truncation.fullText}
+            </span>
+          }
+          placement={tooltipPlacement}
+          interest={tooltipInterest}
+        />
       )}
     </>
   );

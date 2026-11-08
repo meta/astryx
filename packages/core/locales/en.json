@@ -943,6 +943,10 @@
     "defaultMessage": "Maximum value",
     "description": "Accessible name of the upper thumb of a range Slider (two thumbs), announced together with the Slider's own label, for example \"Price range, Maximum value, 80\". Never shown on screen."
   },
+  "@astryx.tabBar.badgedItem": {
+    "defaultMessage": "{label}, {badge}",
+    "description": "Screen-reader name of a bottom tab bar item that shows a badge (\"Library, 3\"). {label} is the tab's visible name; {badge} is the badge's count or its own label (\"3 unread\"). Translators may reorder the two or change the separator."
+  },
   "@astryx.tabList.label": {
     "defaultMessage": "Tabs",
     "description": "Screen-reader-only fallback name for a horizontal tab bar. Plural noun; \"Tabs\" here = UI tab panels, not browser tabs or the Tab key."
@@ -1503,6 +1507,10 @@
     "defaultMessage": "Alt",
     "description": "Spoken name of the Alt modifier key in a keyboard shortcut's accessible name."
   },
+  "@astryx.kbd.key.altShort": {
+    "defaultMessage": "Alt",
+    "description": "Abbreviated visible label of the Alt keycap on non-Apple platforms (Apple platforms show the Option symbol). Localize to the keyboard's conventional short label."
+  },
   "@astryx.kbd.key.backspace": {
     "defaultMessage": "Backspace",
     "description": "Spoken name of the Backspace key in a keyboard shortcut's accessible name."
@@ -1551,6 +1559,10 @@
     "defaultMessage": "Shift",
     "description": "Spoken name of the Shift modifier key in a keyboard shortcut's accessible name."
   },
+  "@astryx.kbd.key.shiftShort": {
+    "defaultMessage": "Shift",
+    "description": "Abbreviated visible label of the Shift keycap on non-Apple platforms (Apple platforms show the Shift symbol). Localize to the keyboard's conventional short label."
+  },
   "@astryx.kbd.key.tab": {
     "defaultMessage": "Tab",
     "description": "Spoken name of the Tab key in a keyboard shortcut's accessible name."
@@ -1558,6 +1570,10 @@
   "@astryx.kbd.key.up": {
     "defaultMessage": "Up arrow",
     "description": "Spoken name of the up arrow key in a keyboard shortcut's accessible name."
+  },
+  "@astryx.kbd.key.windowsShort": {
+    "defaultMessage": "Win",
+    "description": "Abbreviated visible label of the Windows logo keycap, shown for the meta key on non-Apple platforms. Localize to the keyboard's conventional short label."
   },
   "@astryx.kbd.shortcut": {
     "defaultMessage": "{shortcut} + {key}",

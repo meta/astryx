@@ -7,9 +7,9 @@
  * @input The visual viewport, the window's input stream (focus, blur,
  *   resize, scroll and touch), and the layout viewport's height
  * @output The on-screen keyboard module: measureKeyboardHeight,
- *   isKeyboardMeasurable, subscribeKeyboardHeight, getKeyboardHeight,
- *   isTextEntryControl, findTextEntryControl, refuseFocusReveal and
- *   watchRevealPan
+ *   isKeyboardMeasurable, hasVirtualKeyboard, subscribeKeyboardHeight,
+ *   getKeyboardHeight, isTextEntryControl, findTextEntryControl,
+ *   refuseFocusReveal and watchRevealPan
  * @position Core's one source for the on-screen keyboard. It is internal to
  *   core and never exported from the package.
  *
@@ -17,13 +17,24 @@
  */
 
 import {armClickGuard} from '../utils/clickGuard';
+import {matchesMediaQuery} from '../utils/coarsePointer';
 import {subscribeInput} from '../utils/inputStream';
 import {isNode} from '../utils/nodeType';
 import {layoutViewportHeight} from '../utils/layoutViewport';
+import {PRESS_SLOP_PX} from '../utils/pressGesture';
 import {caretAt} from '../utils/selectionLock';
 
 // A shortfall smaller than this is rounding, not a keyboard.
 export const KEYBOARD_EPSILON = 1;
+// Android's Remove animations setting, which makes Chrome report a hide in
+// steps.
+const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+// How long a step of a hide waits for the next report. It is longer than
+// Gboard's whole hide (hideMs).
+const HIDE_STEP_WAIT_MS = 300;
+// How long a hide's steps wait in all, from the first. A toolbar's moves
+// while a lower keyboard stays up cannot hold the layout longer.
+const HIDE_STEP_LIMIT_MS = 1000;
 const NON_TEXT_INPUT_TYPES = new Set([
   'button',
   'checkbox',
@@ -113,19 +124,73 @@ function storeOf(win: Window): KeyboardStore {
   return store;
 }
 
+/**
+ * Whether `win` has the VirtualKeyboard API, as Chrome on Android does. The
+ * keyboard layout guide reads Chrome's profile there (keyboardProfileOf).
+ */
+export function hasVirtualKeyboard(win: Window): boolean {
+  return 'virtualKeyboard' in win.navigator;
+}
+
+// Whether a report of `height` is one step of a hide. Under Remove
+// animations, Chrome on Android reports a hide as several lower keyboards
+// that are still up, before the report of none.
+function isHideStep(win: Window, shown: number, height: number): boolean {
+  return (
+    height > KEYBOARD_EPSILON &&
+    height < shown - KEYBOARD_EPSILON &&
+    hasVirtualKeyboard(win) &&
+    matchesMediaQuery(win, REDUCED_MOTION_QUERY)
+  );
+}
+
 function attach(win: Window, store: KeyboardStore): () => void {
   const viewport = win.visualViewport;
   store.height = measureKeyboardHeight(win);
-  const onViewport = (event: Event) => {
-    store.height = measureKeyboardHeight(win);
-    const report: KeyboardHeightEvent = {
-      type: 'viewport',
-      height: store.height,
-      timeStamp: event.timeStamp,
-    };
+  // Set while a step of a hide waits. The store keeps the height it reported,
+  // so every reader lays out once, when the keyboard comes to rest.
+  let stepTimer: ReturnType<typeof setTimeout> | null = null;
+  let stepHeight = 0;
+  let stepLimit = 0;
+  const deliver = (height: number, timeStamp: number) => {
+    store.height = height;
+    const report: KeyboardHeightEvent = {type: 'viewport', height, timeStamp};
     for (const listener of [...store.listeners]) {
       listener(report);
     }
+  };
+  const onViewport = (event: Event) => {
+    const height = measureKeyboardHeight(win);
+    if (isHideStep(win, store.height, height)) {
+      // A pan reports the same step again, and leaves the wait as it is.
+      if (
+        stepTimer != null &&
+        Math.abs(height - stepHeight) < KEYBOARD_EPSILON
+      ) {
+        return;
+      }
+      const now = win.performance.now();
+      if (stepTimer == null) {
+        stepLimit = now + HIDE_STEP_LIMIT_MS;
+      } else {
+        clearTimeout(stepTimer);
+      }
+      stepHeight = height;
+      // The report of none, a report back up, or a quiet spell ends the wait.
+      stepTimer = setTimeout(
+        () => {
+          stepTimer = null;
+          deliver(measureKeyboardHeight(win), win.performance.now());
+        },
+        Math.min(HIDE_STEP_WAIT_MS, stepLimit - now),
+      );
+      return;
+    }
+    if (stepTimer != null) {
+      clearTimeout(stepTimer);
+      stepTimer = null;
+    }
+    deliver(height, event.timeStamp);
   };
   viewport?.addEventListener('resize', onViewport);
   viewport?.addEventListener('scroll', onViewport);
@@ -137,6 +202,10 @@ function attach(win: Window, store: KeyboardStore): () => void {
     }
   });
   return () => {
+    if (stepTimer != null) {
+      clearTimeout(stepTimer);
+      stepTimer = null;
+    }
     viewport?.removeEventListener('resize', onViewport);
     viewport?.removeEventListener('scroll', onViewport);
     stopResize();
@@ -540,10 +609,6 @@ export function watchRevealPan(
   };
 }
 
-// A touch that moves this far is the browser's to scroll, not a tap on a
-// field. Safari claims a touch for scrolling past 10 px.
-const TAP_SLOP_PX = 10;
-
 /** The caller's rules for claimTapFocus. */
 export interface ClaimTapFocusOptions {
   /** The control a touch on `target` would focus, when this caller claims it. */
@@ -601,7 +666,10 @@ export function claimTapFocus(
       start == null ||
       event.touches.length !== 1 ||
       touch == null ||
-      Math.hypot(touch.clientX - start.x, touch.clientY - start.y) > TAP_SLOP_PX
+      // Past the press slop, the touch is the browser's to scroll, not a tap
+      // on a field.
+      Math.hypot(touch.clientX - start.x, touch.clientY - start.y) >
+        PRESS_SLOP_PX
     ) {
       stopFollowing();
     }

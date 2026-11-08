@@ -76,7 +76,9 @@ async function holdEntrance(page: Page): Promise<void> {
         ?.getAnimations()
         .some(animation => animation.playState === 'running') ?? false,
   );
-  const held = await holdAnimations(page, openDialogs(page));
+  const held = await holdAnimations(page, openDialogs(page), {
+    judges: {target: openDialogs(page), property: 'opacity'},
+  });
   // Held: later transitions (an exit, the next open) keep their own timing.
   await page.evaluate(() =>
     document.getElementById('__slowEntrance')?.remove(),
