@@ -379,6 +379,11 @@ covers every slot and descendant-bleed combination, so this record does not clai
 exact region parity. Correcting the mismatch is runtime work with compatibility
 evidence.
 
+## Current-state impact
+
+- **BottomSheet corners.** BottomSheet publishes no corner: its grab-bar band
+  sits above the content, so no content child meets the sheet's corner.
+
 ## Change coupling
 
 - Changing a publisher's padding precedence, logical edges, or container vars
