@@ -511,8 +511,10 @@ export function createLiftFromTrigger(): LiftFromTrigger {
     restore(source, current.saved);
     current.placeholder?.remove();
     // The restored values apply before the source's own transitions return,
-    // so none of them animates.
-    void source.ownerDocument.defaultView?.getComputedStyle(source).width;
+    // so none of them animates. A style read, not a geometry one, so it lays
+    // nothing out.
+    void source.ownerDocument.defaultView?.getComputedStyle(source)
+      .transitionProperty;
     const [value, priority] = current.transition;
     if (value === '') {
       source.style.removeProperty('transition');
