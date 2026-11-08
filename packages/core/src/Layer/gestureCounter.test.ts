@@ -2,16 +2,25 @@
 
 /**
  * @file gestureCounter.test.ts
- * @input claimContextMenuPress with a stubbed layer box, stubbed pointer
- *   capture, and a layer inside an open shadow root
+ * @input claimPress and claimContextMenuPress with a stubbed layer box,
+ *   stubbed pointer capture, and a layer inside an open shadow root
  * @output The claim compares the pointer with the layer's box read once (no
  *   hit test or layout read per move), lets go over the layer, and ends when
- *   the layer closes while the button is still down
+ *   the layer closes while the button is still down. A primary press's claim
+ *   ends at its release and runs once per press and layer. A release target
+ *   holds the pointer while the pointer is over it, and no window listener
+ *   stays after the press. The context-menu claim takes only a press that
+ *   fired `contextmenu`
  * @position Unit test of packages/core/src/Layer/gestureCounter.ts
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {claimContextMenuPress, currentGesture} from './gestureCounter';
+import {
+  claimContextMenuPress,
+  claimPress,
+  currentGesture,
+  isPressInFlight,
+} from './gestureCounter';
 
 /** A pointer event of `type` for `pointerId`, which jsdom's events lack. */
 function pointerEvent(
@@ -167,6 +176,159 @@ describe('claimContextMenuPress', () => {
 
     // The claim has ended: a later move outside captures nothing.
     zone.dispatchEvent(pointerEvent('pointermove', 7, {x: 20, y: 20}));
+    expect(captured).toEqual([7]);
+  });
+});
+
+describe('claimPress', () => {
+  let captured: number[];
+  let released: number[];
+
+  beforeEach(() => {
+    captured = [];
+    released = [];
+    HTMLElement.prototype.setPointerCapture = (pointerId: number) => {
+      captured.push(pointerId);
+    };
+    HTMLElement.prototype.hasPointerCapture = () => true;
+    HTMLElement.prototype.releasePointerCapture = (pointerId: number) => {
+      released.push(pointerId);
+    };
+  });
+
+  afterEach(() => {
+    document.dispatchEvent(pointerEvent('pointerup', 7));
+    document.body.replaceChildren();
+    vi.restoreAllMocks();
+    delete (HTMLElement.prototype as Partial<HTMLElement>).setPointerCapture;
+    delete (HTMLElement.prototype as Partial<HTMLElement>).hasPointerCapture;
+    delete (HTMLElement.prototype as Partial<HTMLElement>)
+      .releasePointerCapture;
+  });
+
+  /** A trigger and a layer whose box spans 100 to 200 on both axes. */
+  function mountLayer() {
+    const trigger = document.createElement('button');
+    const layer = document.createElement('div');
+    document.body.append(trigger, layer);
+    vi.spyOn(layer, 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(100, 100, 100, 100),
+    );
+    // Reading the gesture installs its listeners before the press.
+    currentGesture();
+    return {trigger, layer};
+  }
+
+  it('captures a primary press outside the layer, lets go over it, and ends at the release', () => {
+    const {trigger, layer} = mountLayer();
+    trigger.dispatchEvent(pointerEvent('pointerdown', 7));
+    expect(isPressInFlight()).toBe(true);
+    claimPress(layer);
+    expect(captured).toEqual([7]);
+
+    layer.dispatchEvent(pointerEvent('pointermove', 7, {x: 150, y: 150}));
+    expect(released).toEqual([7]);
+    trigger.dispatchEvent(pointerEvent('pointermove', 7, {x: 20, y: 20}));
+    expect(captured).toEqual([7, 7]);
+
+    trigger.dispatchEvent(pointerEvent('pointerup', 7, {x: 20, y: 20}));
+    expect(isPressInFlight()).toBe(false);
+    // The claim ended with its press.
+    trigger.dispatchEvent(pointerEvent('pointermove', 7, {x: 20, y: 20}));
+    expect(captured).toEqual([7, 7]);
+  });
+
+  it('claims a press once for a layer', () => {
+    const {trigger, layer} = mountLayer();
+    trigger.dispatchEvent(pointerEvent('pointerdown', 7));
+    claimPress(layer);
+    claimPress(layer);
+    expect(captured).toEqual([7]);
+    // One claim follows the pointer, not two.
+    trigger.dispatchEvent(pointerEvent('pointermove', 7, {x: 20, y: 20}));
+    expect(captured).toEqual([7, 7]);
+  });
+
+  it('claims nothing when no press is down', () => {
+    const {trigger, layer} = mountLayer();
+    trigger.dispatchEvent(pointerEvent('pointerdown', 7));
+    trigger.dispatchEvent(pointerEvent('pointerup', 7));
+    claimPress(layer);
+    expect(captured).toEqual([]);
+  });
+
+  it('gives the pointer to the release target over it, lets go over the layer, and gives it to the layer outside both', () => {
+    const {trigger, layer} = mountLayer();
+    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(0, 0, 50, 20),
+    );
+    // One element holds the pointer at a time, as in a browser.
+    let holder: Element | null = null;
+    const holders: Element[] = [];
+    const take = (element: Element) => {
+      holder = element;
+      holders.push(element);
+    };
+    const letGo = (element: Element) => {
+      if (holder === element) {
+        holder = null;
+      }
+    };
+    HTMLElement.prototype.setPointerCapture = function (this: HTMLElement) {
+      take(this);
+    };
+    HTMLElement.prototype.hasPointerCapture = function (this: HTMLElement) {
+      return holder === this;
+    };
+    HTMLElement.prototype.releasePointerCapture = function (this: HTMLElement) {
+      letGo(this);
+    };
+    trigger.dispatchEvent(pointerEvent('pointerdown', 7));
+    claimPress(layer, {releaseTarget: trigger});
+    // The press began on the release target, so it holds the pointer.
+    expect(holders).toEqual([trigger]);
+
+    layer.dispatchEvent(pointerEvent('pointermove', 7, {x: 150, y: 150}));
+    expect(holder).toBeNull();
+    document.body.dispatchEvent(
+      pointerEvent('pointermove', 7, {x: 300, y: 300}),
+    );
+    expect(holder).toBe(layer);
+    trigger.dispatchEvent(pointerEvent('pointermove', 7, {x: 10, y: 10}));
+    expect(holder).toBe(trigger);
+    expect(holders).toEqual([trigger, layer, trigger]);
+  });
+
+  it('leaves the window listening as before once its press ends', () => {
+    const {trigger, layer} = mountLayer();
+    // Spies that pass through: each add and remove still reaches the window.
+    const add = vi.spyOn(window, 'addEventListener');
+    const remove = vi.spyOn(window, 'removeEventListener');
+    trigger.dispatchEvent(pointerEvent('pointerdown', 7));
+    claimPress(layer, {releaseTarget: trigger});
+    trigger.dispatchEvent(pointerEvent('pointermove', 7, {x: 300, y: 300}));
+    trigger.dispatchEvent(pointerEvent('pointerup', 7, {x: 300, y: 300}));
+    const listening = new Map<string, number>();
+    for (const [type] of add.mock.calls) {
+      listening.set(type, (listening.get(type) ?? 0) + 1);
+    }
+    for (const [type] of remove.mock.calls) {
+      listening.set(type, (listening.get(type) ?? 0) - 1);
+    }
+    // Every window listener the press and its claim added is gone.
+    expect(add).toHaveBeenCalled();
+    expect([...listening].filter(([, n]) => n !== 0)).toEqual([]);
+  });
+
+  it('claims a press for the context menu only once that press fired contextmenu', () => {
+    const {trigger, layer} = mountLayer();
+    trigger.dispatchEvent(pointerEvent('pointerdown', 7));
+    claimContextMenuPress(layer);
+    expect(captured).toEqual([]);
+    trigger.dispatchEvent(
+      new MouseEvent('contextmenu', {bubbles: true, composed: true}),
+    );
+    claimContextMenuPress(layer);
     expect(captured).toEqual([7]);
   });
 });
