@@ -50,7 +50,7 @@ export const reorder = {
      * scrolling: `isScrollEnabled` turns false.
      * @source measured: UIKit lab, iOS 26.2 sim iPhone 17 Pro, table reorder
      *   (isScrollEnabled false 148–149 ms after touch-down on the reorder
-     *   control), F4 batch 32b, Oct 23 2026
+     *   control), Oct 23 2026
      */
     delayMs: scroll.delaysContentTouchesMs,
     /**
@@ -59,7 +59,7 @@ export const reorder = {
      * the row does not move. The scroll view's pan begins at its hysteresis.
      * @source measured: UIKit lab, iOS 26.2 sim iPhone 17 Pro, table reorder
      *   (a 120 pt flick in 80 ms from the reorder control scrolled the table.
-     *   The row stayed), F4 batch 32b, Oct 23 2026
+     *   The row stayed), Oct 23 2026
      */
     allowableMovement: UIKIT_GESTURES.pan.hysteresis.value,
   },
@@ -68,8 +68,7 @@ export const reorder = {
      * Autoscroll is a timer: the offset moves by a whole number of points
      * every 20 ms (50 Hz), constant at a given depth.
      * @source measured: UIKit lab, iOS 26.2 sim iPhone 17 Pro, table reorder
-     *   autoscroll (contentOffset per tick), F4 batches 32b and 32c, Oct 23
-     *   2026
+     *   autoscroll (contentOffset per tick), Oct 23 2026
      */
     tickMs: 20,
     /**
@@ -80,15 +79,14 @@ export const reorder = {
      * centre on the edge there).
      * @source measured: UIKit lab, iOS 26.2 sim iPhone 17 Pro, table reorder
      *   autoscroll with 44 pt rows (bottom edge. The top edge agreed within a
-     *   point: 2 at 4 inside, 9 at 20 beyond), F4 batches 32b and 32c, Oct 23
-     *   2026
+     *   point: 2 at 4 inside, 9 at 20 beyond), Oct 23 2026
      */
     depths: [-3, 6, 8, 10, 12, 16, 20, 22],
     /**
      * Points per tick at each of `depths`: 100 pt/s at the start, 500 pt/s at
      * the deepest.
      * @source measured: UIKit lab, iOS 26.2 sim iPhone 17 Pro, table reorder
-     *   autoscroll with 44 pt rows, F4 batches 32b and 32c, Oct 23 2026
+     *   autoscroll with 44 pt rows, Oct 23 2026
      */
     stepsPt: [2, 2, 3, 3, 4, 6, 8, 10],
     /**

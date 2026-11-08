@@ -372,9 +372,9 @@ since only an exit may play a measured spring (`spec:AST-094` FR4).
 
 Subject "table T": a plain `UITableView` in editing mode with reorder controls
 only, 40 rows of 44 pt (rows 6 and 9 at 88 pt where noted), in the UIKit lab
-app. Measured so far (F4 batches 32, 32b, 32c): the claim, tracking, the
-crossing rule for a 44 pt row moving past 44 and 88 pt rows below its place
-and back, the slides, the drop, the autoscroll steps, Reduce Motion.
+app. Measured so far: the claim, tracking, the crossing rule for a 44 pt row
+moving past 44 and 88 pt rows below its place and back, the slides, the drop,
+the autoscroll steps, Reduce Motion.
 
 | ID     | Scene                          | Gesture                                                                                                      | Extract                                                                                                                           | Method |
 | ------ | ------------------------------ | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- | ------ |
