@@ -18,8 +18,8 @@
 import {useEffect} from 'react';
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
 
-// Enter on a focused link and a screen reader's activation both arrive as a
-// click, so one listener covers every activation path.
+// Enter on a focused link and a screen reader's activation arrive as a click.
+// A middle click arrives as auxclick.
 function preventLinkActivation(event: MouseEvent) {
   if (event.target instanceof Element && event.target.closest('a[href]')) {
     event.preventDefault();
@@ -37,6 +37,12 @@ function createLinkGuard(root: HTMLElement) {
       if (!guarded.has(link)) {
         guarded.add(link);
         link.setAttribute('tabindex', '-1');
+        // The link theme gives a disabled link the default cursor. Only the
+        // link ignores the pointer, so a wide table still scrolls.
+        link.setAttribute('aria-disabled', 'true');
+        if (link instanceof HTMLElement) {
+          link.style.pointerEvents = 'none';
+        }
       }
     }
   };
@@ -48,6 +54,10 @@ function createLinkGuard(root: HTMLElement) {
     release() {
       for (const link of guarded) {
         link.removeAttribute('tabindex');
+        link.removeAttribute('aria-disabled');
+        if (link instanceof HTMLElement) {
+          link.style.removeProperty('pointer-events');
+        }
       }
       guarded.clear();
       root.removeEventListener('click', preventLinkActivation, true);

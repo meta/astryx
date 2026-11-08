@@ -508,6 +508,7 @@ describe('RichTextEditor', () => {
     // An enabled editor's links are not tab stops; a disabled one adds none
     // (FR1), and activation never navigates (FR2).
     expect(link).toHaveAttribute('tabindex', '-1');
+    expect(link).toHaveAttribute('aria-disabled', 'true');
     expect(fireEvent.click(link as HTMLAnchorElement)).toBe(false);
   });
 
@@ -521,6 +522,7 @@ describe('RichTextEditor', () => {
     rerender(<RichTextEditor label="Notes" defaultValue={document} />);
     const link = screen.getByText('the guide').closest('a');
     expect(link).not.toHaveAttribute('tabindex');
+    expect(link).not.toHaveAttribute('aria-disabled');
   });
 
   it('keeps the dimmed treatment on a disabled editor', () => {

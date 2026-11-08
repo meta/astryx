@@ -176,11 +176,6 @@ const styles = stylex.create({
     // room for the 20px status icon and its gap.
     paddingInlineEnd: `calc(${spacingVars['--spacing-2']} + ${spacingVars['--spacing-6']})`,
   },
-  // A disabled editor shows no pointer affordance, so a link in it keeps the
-  // default cursor and reacts to no hover or press.
-  contentEditableDisabled: {
-    pointerEvents: 'none',
-  },
   contentEditable: {
     display: 'block',
     width: '100%',
@@ -1074,7 +1069,6 @@ function EditorContentEditable({
         : null),
     ...stylex.props(
       styles.contentEditable,
-      isDisabled && styles.contentEditableDisabled,
       dynamicStyles.contentEditableMinHeight(minHeight),
     ),
     ...rest,

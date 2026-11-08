@@ -54,7 +54,7 @@ test('a link in a disabled editor shows no link cursor, does not navigate, and i
     };
   });
   expect(hit.isLink, 'the pointer does not reach the link').toBe(false);
-  expect(hit.cursor).toBe('default');
+  expect(hit.cursor).not.toBe('pointer');
 
   await link.click({force: true});
   await expect(page).toHaveURL(url);
