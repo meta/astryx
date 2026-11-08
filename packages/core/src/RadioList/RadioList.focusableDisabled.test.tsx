@@ -402,34 +402,65 @@ describe('RadioList: disabled values are not submitted (spec:AST-085 FR3)', () =
     // `formdata` event.
   });
 
-  it('renders a disabled option natively disabled in server markup, so it can be neither checked nor submitted before hydration', () => {
+  it('puts no native disabled in server markup, so a disabled radio is focusable before hydration', () => {
+    const markup = renderToString(
+      <form>
+        <RadioList
+          label="Delivery"
+          htmlName="delivery"
+          value="standard"
+          onChange={() => {}}>
+          <RadioListItem label="Standard" value="standard" />
+          <RadioListItem label="Express" value="express" isDisabled />
+        </RadioList>
+        <RadioList
+          label="Gift wrap"
+          htmlName="wrap"
+          value="none"
+          onChange={() => {}}
+          isDisabled>
+          <RadioListItem label="None" value="none" />
+          <RadioListItem label="Paper" value="paper" />
+        </RadioList>
+      </form>,
+    );
+    const container = document.createElement('div');
+    container.innerHTML = markup;
+    const radios = container.querySelectorAll<HTMLInputElement>(
+      'input[type="radio"]',
+    );
+    expect(radios).toHaveLength(4);
+    for (const input of radios) {
+      expect(input).not.toHaveAttribute('disabled');
+    }
+    expect(radios[1]).toHaveAttribute('aria-disabled', 'true');
+    expect(radios[2]).toHaveAttribute('aria-disabled', 'true');
+    expect(radios[3]).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('keeps a wholly disabled group out of the form in server markup', () => {
     const container = document.createElement('div');
     container.innerHTML = renderToString(
       <form>
         <input name="order" defaultValue="1001" />
         <RadioList
-          label="Delivery"
-          htmlName="delivery"
-          value="express"
-          onChange={() => {}}>
-          <RadioListItem label="Standard" value="standard" />
-          <RadioListItem label="Express" value="express" isDisabled />
+          label="Gift wrap"
+          htmlName="wrap"
+          value="paper"
+          onChange={() => {}}
+          isDisabled>
+          <RadioListItem label="None" value="none" />
+          <RadioListItem label="Paper" value="paper" />
         </RadioList>
       </form>,
     );
-    const [standard, express] = container.querySelectorAll<HTMLInputElement>(
-      'input[type="radio"]',
-    );
-    expect(express.disabled).toBe(true);
-    expect(express.checked).toBe(true);
-    expect(standard.disabled).toBe(false);
-    // A natively disabled radio contributes nothing (spec:AST-085 FR3).
+    // A wholly disabled group submits nothing (spec:AST-085 FR3).
     expect([...new FormData(formOf(container)).entries()]).toEqual([
       ['order', '1001'],
     ]);
   });
 
-  it('turns a server-rendered disabled option focusable once hydrated', async () => {
+  it('keeps a server-rendered disabled option focusable once hydrated', async () => {
     const element = (
       <form>
         <RadioList
@@ -447,11 +478,10 @@ describe('RadioList: disabled values are not submitted (spec:AST-085 FR3)', () =
     document.body.appendChild(container);
     const express = () =>
       container.querySelectorAll<HTMLInputElement>('input[type="radio"]')[1];
-    expect(express().disabled).toBe(true);
     await act(async () => {
       hydrateRoot(container, element);
     });
-    expect(express().disabled).toBe(false);
+    expect(express()).not.toHaveAttribute('disabled');
     expect(express()).toHaveAttribute('aria-disabled', 'true');
     container.remove();
   });

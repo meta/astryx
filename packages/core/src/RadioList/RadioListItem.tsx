@@ -33,7 +33,6 @@ import {usePressFeedback} from '../hooks/usePressFeedback';
 import {useIndicator} from '../Indicator';
 import {Item, type ItemAlign} from '../Item';
 import {themeProps} from '../utils/themeProps';
-import {useIsHydrating} from '../hooks/useIsHydrating';
 
 // The touch press's paint, declared by the shared overlay styles on the
 // element the controller writes to (`pressedAlpha`) at the press's strength,
@@ -280,12 +279,6 @@ export function RadioListItem({
   const formContext = use(RadioListFormContext);
   const radioName = formContext?.radioName ?? context.name;
   const isDisabled = context.isDisabled || isItemDisabled;
-  // Until the component hydrates, nothing can refuse a check or keep a value
-  // out of the form, so a disabled radio renders native `disabled`: the
-  // browser can neither check it nor submit it (spec:AST-085 FR2, FR3). Once
-  // hydrated it becomes focusable, with `aria-disabled` alone (FR1).
-  const isHydrating = useIsHydrating();
-  const isNativelyDisabled = isDisabled && isHydrating;
   const isChecked = context.value === value;
   const radioRef = useRef<HTMLInputElement>(null);
   // Synchronizes the form owner's submitted entries (its `formdata` event): a
@@ -352,10 +345,10 @@ export function RadioListItem({
         name={radioName}
         value={value}
         checked={isChecked}
-        // A hydrated disabled radio stays focusable (spec:AST-085 FR1): native
-        // `disabled` only before hydration (above). A wholly disabled group leaves the form together, so it
-        // submits nothing and blocks no submit (FR3).
-        disabled={isNativelyDisabled || undefined}
+        // A disabled radio stays focusable (spec:AST-085 FR1), in server
+        // markup too, so it never takes native `disabled`. A wholly disabled
+        // group leaves the form together, so it submits nothing and blocks
+        // no submit (FR3), before hydration too.
         aria-disabled={isDisabled ? 'true' : undefined}
         form={formContext?.detachesFromForm ? '' : undefined}
         // A disabled radio is not required: a group whose options are all
