@@ -29,7 +29,7 @@ export const docs = {
       name: 'maxLength',
       type: 'number',
       description:
-        'The native `maxlength` attribute: the browser stops typing past this many characters. No truncation, counter or validation of its own, so a longer controlled value stays as set.',
+        "The native `maxlength` attribute: the browser stops typing past this many UTF-16 code units (an emoji can take two or more). No truncation, counter or validation of its own, so a longer controlled value stays as set. Unlike TextArea's `maxLength`, a soft counter, this limit blocks typing.",
     },
     {
       name: 'minLength',
