@@ -146,13 +146,14 @@ const charts = [];
 /** The props each chart was last drawn with in the page-wide draw. @type {any[]} */
 const pageCharts = [];
 /**
- * How often each chart rendered in the page-wide draw. A chart renders again
- * only when the component that made it renders again, after the first
- * commit: its effects changed its state, which a closure or context in the
- * chart may read, so the props alone cannot say the chart is the same.
- * @type {number[]}
+ * Whether a chart rendered again after the page-wide draw first committed. A
+ * chart renders again only when the component that made it renders again:
+ * its effects changed its state, which a closure in the chart may read, so
+ * the props alone cannot say the chart is the same. React's development
+ * double render under StrictMode runs before the commit, so it does not
+ * count.
  */
-const pageRenders = [];
+let renderedAfterCommit = false;
 
 /**
  * A chart's props as a string that two renders of the same chart share:
@@ -184,6 +185,8 @@ let createElement = null;
 let useContext = null;
 /** @type {any} */
 let useRef = null;
+/** @type {any} */
+let useLayoutEffect = null;
 /** Set inside a drawn chart, so a chart inside it is not wrapped again. @type {any} */
 let InChart = null;
 /**
@@ -211,10 +214,14 @@ let mode = 'aside';
     // Each chart drawn in the page notes the props it was last drawn with,
     // by its place in the page, to compare with the first render's.
     const place = useRef(/** @type {number | null} */ (null));
+    const committed = useRef(false);
+    useLayoutEffect(() => {
+      committed.current = true;
+    });
     if (mode === 'page' && !inside) {
       place.current ??= pageCharts.length;
       pageCharts[place.current] = props;
-      pageRenders[place.current] = (pageRenders[place.current] ?? 0) + 1;
+      if (committed.current) renderedAfterCommit = true;
     }
     const drawn = container
       ? createElement('div', {className: 'recharts-responsive-container'}, createElement(Chart, {...props, ...chartSize(props)}))
@@ -277,6 +284,11 @@ async function drawCharts(markup, Page) {
     await chartDocument();
     client = await jiti.import('react-dom/client');
     ({flushSync} = /** @type {any} */ (await jiti.import('react-dom')));
+    // recharts decided it runs on a server when it loaded for the server
+    // render. Now there is a document, so it measures text and lays out
+    // axis labels as in a browser.
+    const recharts = /** @type {any} */ (await jiti.import('recharts'));
+    if (recharts?.Global) recharts.Global.isSsr = false;
   } catch {
     // Without a document to draw in, every chart stays empty and is counted.
     return {markup: markup.replace(placeholder, ''), failed: charts.length, alone: /** @type {false} */ (false)};
@@ -321,7 +333,7 @@ async function drawCharts(markup, Page) {
     charts.some((chart, i) => sameKey(chart.props) !== sameKey(pageCharts[i]))
   ) {
     alone = 'changed';
-  } else if (pageRenders.some(count => count > 1)) {
+  } else if (renderedAfterCommit) {
     alone = 'rerendered';
   }
   if (alone) {
@@ -792,6 +804,7 @@ try {
     createElement = React.createElement;
     useContext = React.useContext;
     useRef = React.useRef;
+    useLayoutEffect = React.useLayoutEffect;
     InChart = React.createContext(false);
     server = await jiti.import('react-dom/server');
   } catch (e) {

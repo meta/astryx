@@ -153,6 +153,20 @@ function legendBox(el) {
 /** @param {number} width @param {number} height */
 const box = (width, height) => ({x: 0, y: 0, top: 0, left: 0, right: width, bottom: height, width, height});
 
+/** Font size of text that names none, as an axis tick's. */
+const TEXT_SIZE = 14;
+
+/**
+ * The box recharts' measurement span would measure: its text at its font
+ * size, about 0.6 em per character and 1.2 em high.
+ * @param {any} el
+ */
+function textBox(el) {
+  const fromStyle = el.style?.fontSize ?? /(?:^|;)\s*font-size\s*:\s*([^;]+)/.exec(el.getAttribute?.('style') ?? '')?.[1];
+  const size = Number.parseFloat(String(fromStyle ?? '')) || TEXT_SIZE;
+  return box(Math.round(String(el.textContent ?? '').length * size * 0.6), Math.round(size * 1.2));
+}
+
 /**
  * Give this thread the small document a chart draws in: no layout, no
  * motion, and no frames to wait for.
@@ -188,12 +202,14 @@ export async function chartDocument() {
   g.requestAnimationFrame = window.requestAnimationFrame;
   g.cancelAnimationFrame = window.cancelAnimationFrame;
   g.ResizeObserver = window.ResizeObserver;
-  // Nothing is laid out, so every box measures zero, except a legend's, which
-  // is estimated so the chart keeps room for it.
+  // Nothing is laid out, so every box measures zero, except a legend's and
+  // the span recharts measures text with, which are estimated: the chart
+  // keeps room for its legend, and lays out its axis labels as in a browser.
   Object.defineProperty(window.Element.prototype, 'getBoundingClientRect', {
     configurable: true,
     writable: true,
     value() {
+      if (this.getAttribute?.('id') === 'recharts_measurement_span') return textBox(this);
       return String(this.getAttribute?.('class') ?? '').includes('recharts-legend-wrapper') ? legendBox(this) : box(0, 0);
     },
   });

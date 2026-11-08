@@ -1620,6 +1620,71 @@ export default function Page() {
     expect(rc).toContain('recharts-legend-wrapper');
   }, 60_000);
 
+  it('lays out axis labels as a browser does: the last label stays inside, and crowded labels thin out', async () => {
+    const times = Array.from({length: 25}, (_, i) => `Apr ${1 + Math.floor((14 + i) / 24)} ${String((14 + i) % 24).padStart(2, '0')}:00`);
+    const cats = Array.from({length: 24}, (_, i) => `Category ${String(i + 1).padStart(2, '0')}`);
+    put(
+      'charts-axis.tsx',
+      `import {ResponsiveContainer, LineChart, Line, XAxis, BarChart, Bar} from 'recharts';
+const times = ${JSON.stringify(times)}.map((t, i) => ({t, v: i}));
+const cats = ${JSON.stringify(cats)}.map((c, i) => ({c, v: i}));
+export default function Page() {
+  return (
+    <div>
+      <ResponsiveContainer width="100%" height={300}>
+        <LineChart data={times}><XAxis dataKey="t" /><Line dataKey="v" /></LineChart>
+      </ResponsiveContainer>
+      <BarChart width={400} height={200} data={cats}><XAxis dataKey="c" /><Bar dataKey="v" /></BarChart>
+    </div>
+  );
+}
+`,
+    );
+    await render('charts-axis.tsx', {cwd: dir});
+    const html = fs.readFileSync(path.join(dir, 'charts-axis.html'), 'utf8');
+    const ticks = [...html.matchAll(/<text\b([^>]*class="recharts-text recharts-cartesian-axis-tick-value"[^>]*)>\s*<tspan[^>]*>([^<]*)/g)].map(m => ({
+      x: Number(/\bx="([\d.]+)"/.exec(m[1])?.[1]),
+      anchor: /text-anchor="(\w+)"/.exec(m[1])?.[1],
+      text: m[2],
+    }));
+    const timeTicks = ticks.filter(t => t.text.startsWith('Apr'));
+    const last = timeTicks[timeTicks.length - 1];
+    // The drawing is 750 wide; an 11-character label at 14 px is about 92 wide.
+    expect(last.anchor).toBe('middle');
+    expect(last.x + Math.round(last.text.length * 14 * 0.6) / 2).toBeLessThanOrEqual(750);
+    expect(timeTicks.length).toBeLessThan(25);
+    const catTicks = ticks.filter(t => t.text.startsWith('Category'));
+    expect(catTicks.length).toBeGreaterThan(1);
+    expect(catTicks.length).toBeLessThan(24);
+  }, 60_000);
+
+  it("keeps a StrictMode page's context in its charts", async () => {
+    put(
+      'charts-strict.tsx',
+      `import {StrictMode, createContext, useContext} from 'react';
+import {BarChart, Bar, XAxis} from 'recharts';
+${DATA}
+const Units = createContext('items');
+function Tick(props: any) {
+  return <text x={props.x} y={props.y + 12}>{props.payload.value} {useContext(Units)}</text>;
+}
+export default function Page() {
+  return (
+    <StrictMode>
+      <Units.Provider value="km">
+        <BarChart width={300} height={150} data={data}><XAxis dataKey="d" tick={<Tick />} /><Bar dataKey="v" /></BarChart>
+      </Units.Provider>
+    </StrictMode>
+  );
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('charts-strict.tsx', {cwd: dir}));
+    const html = fs.readFileSync(path.join(dir, 'charts-strict.html'), 'utf8');
+    expect(html).toContain('a km');
+    expect(result.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('chart-size');
+  }, 60_000);
+
   it('names a chart of fixed size it cannot draw', async () => {
     put(
       'charts-ns-fixed.tsx',
