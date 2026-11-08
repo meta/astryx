@@ -2,15 +2,18 @@
 
 /**
  * @file zoomMedia.ts
- * @input Nothing; data only
+ * @input The motion registry (motion/roles.ts)
  * @output Exports `zoomMedia`: UIScrollView zooming in a photo viewer. It
  *   holds the give past the zoom limits, and Photos' double tap, maximum
- *   zoom, page gap and drag to dismiss
+ *   zoom, page gap and drag to dismiss. `registerZoomMediaTable` makes the
+ *   dismissal's two springs motion roles
  * @position A domain of the UIKit constants table (motion/uikit). Lightbox's
  *   zoom stage reads it
  *
  * SYNC: When modified, update /packages/core/src/motion/MEASUREMENTS.md
  */
+
+import {registerMotionTable} from '../roles';
 
 /**
  * UIScrollView zooming as a photo viewer uses it, with Photos' double tap
@@ -151,3 +154,19 @@ export const zoomMedia = {
     dismissSizeSpring: {mass: 1, stiffness: 947.14, damping: 61.55},
   },
 } as const;
+
+/**
+ * Registers this table with the motion registry (motion/roles.ts). The
+ * dismissal's two springs are roles, so the exit plays at the tempo of the
+ * viewer's theme, as every other viewer motion does. At tempo 1 they play
+ * exactly their measured values. The table's other values play as measured.
+ * The module registers its own table at import (one idempotent in-memory
+ * write, no DOM).
+ */
+export function registerZoomMediaTable(): void {
+  registerMotionTable('zoomMedia', zoomMedia, {
+    roles: ['dismiss.dismissPositionSpring', 'dismiss.dismissSizeSpring'],
+  });
+}
+
+registerZoomMediaTable();

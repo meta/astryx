@@ -36,6 +36,16 @@ const TREE_CHANGE = [
 ];
 const FOCUS_RING =
   'packages/core/src/Table/__tests__/TableFocusRing.a11y.chromium.spec.ts';
+// Button is a shared primitive; ChatSendButton renders it.
+const GRAPH = {
+  primitives: ['core/Button', 'core/IconButton'],
+  importers: new Map([
+    [
+      'packages/core/src/Button/Button.tsx',
+      new Set(['packages/core/src/Chat/ChatSendButton.tsx']),
+    ],
+  ]),
+};
 const FOCUS_RING_SOURCE = `// Copyright (c) Meta Platforms, Inc. and affiliates.
 // @pr-a11y scope ^(packages/core/src/Table/|packages/core/src/utils/focusOutline|apps/storybook/stories/Table(Tree)?\\.stories)
 test('…', () => {});
@@ -54,6 +64,7 @@ describe('overlappingSpecs', () => {
           },
         ],
         TREE_CHANGE,
+        GRAPH,
       ),
     ).toEqual([
       {
@@ -72,13 +83,14 @@ describe('overlappingSpecs', () => {
       mainSource: FOCUS_RING_SOURCE,
       headSource: `${FOCUS_RING_SOURCE}// older\n`,
     };
-    expect(overlappingSpecs([changed], TREE_CHANGE)).toMatchObject([
+    expect(overlappingSpecs([changed], TREE_CHANGE, GRAPH)).toMatchObject([
       {path: FOCUS_RING, reason: 'changed-on-main'},
     ]);
     expect(
       overlappingSpecs(
         [{...changed, headSource: FOCUS_RING_SOURCE}],
         TREE_CHANGE,
+        GRAPH,
       ),
     ).toEqual([]);
   });
@@ -96,20 +108,64 @@ describe('overlappingSpecs', () => {
           },
         ],
         TREE_CHANGE,
+        GRAPH,
       ),
     ).toEqual([]);
   });
 
-  it('counts an audit spec by the folder that owns it', () => {
+  it("lists an audit main added that a shared primitive's change owes", () => {
+    const chat =
+      'packages/core/src/Chat/__tests__/ChatSendButtonAudit.a11y.chromium.spec.ts';
+    const added = {
+      path: chat,
+      status: 'added',
+      mainSource: '// @pr-a11y audit ChatSendButton\n',
+      headSource: null,
+    };
+    expect(
+      overlappingSpecs([added], ['packages/core/src/Button/Button.tsx'], GRAPH),
+    ).toEqual([
+      {path: chat, reason: 'added-on-main', scope: 'owed audit of core/Chat'},
+    ]);
+    // A test-only change to Button renders nothing, so it owes no audit.
+    expect(
+      overlappingSpecs(
+        [added],
+        ['packages/core/src/Button/Button.test.tsx'],
+        GRAPH,
+      ),
+    ).toEqual([]);
+  });
+
+  it("counts a component's own audit only for a change to its rendered source", () => {
     const audit =
       'packages/core/src/Table/__tests__/TableAudit.a11y.chromium.spec.ts';
+    const added = {
+      path: audit,
+      status: 'added',
+      mainSource: '// @pr-a11y audit Table\n',
+      headSource: null,
+    };
+    expect(overlappingSpecs([added], TREE_CHANGE, GRAPH)).toMatchObject([
+      {path: audit, scope: 'owed audit of core/Table'},
+    ]);
     expect(
-      selectingScope(audit, '// @pr-a11y audit Table\n', TREE_CHANGE),
-    ).toBe('owner packages/core/src/Table/');
+      overlappingSpecs(
+        [added],
+        [
+          'packages/core/src/Table/Table.doc.mjs',
+          'docs/specs/components/Table/Table.spec.md',
+        ],
+        GRAPH,
+      ),
+    ).toEqual([]);
     expect(
-      selectingScope(audit, '// @pr-a11y audit Table\n', [
-        'packages/core/src/Tabs/Tabs.tsx',
-      ]),
+      selectingScope(
+        audit,
+        '// @pr-a11y audit Table\n',
+        TREE_CHANGE,
+        new Set(),
+      ),
     ).toBeNull();
   });
 
@@ -135,6 +191,10 @@ describe('the command merge-guard runs', () => {
         fs.writeFileSync(path.join(dir, file), text);
       };
       write(TREE_CHANGE[0], 'export const a = 1;\n');
+      write(
+        '.github/a11y-shared-primitives.json',
+        JSON.stringify({primitives: GRAPH.primitives}),
+      );
       run('add', '-A');
       run('commit', '-qm', 'base');
       const base = run('rev-parse', 'HEAD');
@@ -174,6 +234,30 @@ describe('the command merge-guard runs', () => {
         ],
       });
       expect(VERSION).toBe(1);
+
+      // A routing line main cannot read makes the answer unknown: a non-zero
+      // exit, which merge-guard treats as overlap.
+      run('checkout', '-q', 'main');
+      write(FOCUS_RING, '// @pr-a11y nonsense\n');
+      run('commit', '-qam', 'main breaks the routing line');
+      const broken = run('rev-parse', 'HEAD');
+      expect(() =>
+        execFileSync(
+          process.execPath,
+          [
+            SCRIPT,
+            '--base',
+            base,
+            '--main',
+            broken,
+            '--head',
+            head,
+            '--paths-file',
+            paths,
+          ],
+          {cwd: dir, encoding: 'utf8', stdio: 'pipe'},
+        ),
+      ).toThrow();
     } finally {
       fs.rmSync(dir, {recursive: true, force: true});
     }

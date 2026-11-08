@@ -5,7 +5,7 @@
  * @file The browser accessibility specs main added or changed since a pull
  *   request's merge base that select the pull request's changes but are not at
  *   its head.
- * @input `--base` (the pull request's merge base), `--main`, `--head` and
+ * @input `--base` (`git merge-base <main> <head>`), `--main`, `--head` and
  *   `--paths-file` (the pull request's changed paths, one per line), run from
  *   a checkout of main.
  * @output JSON `{"version": 1, "specs": [{"path", "reason", "scope"}]}`, where
@@ -20,12 +20,13 @@ import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
 import {fileURLToPath} from 'node:url';
 
+import {planDependentAudits, readPrimitives} from './a11y-dependent-audits.mjs';
 import {
   componentFolderOf,
+  importerGraph,
   isRenderedSource,
   parseRouting,
   selectSpecs,
-  specOwners,
 } from './a11y-pr-contracts.mjs';
 import {isA11ySpecFile} from './lib/a11y-spec-files.mjs';
 
@@ -49,20 +50,20 @@ export function touchedComponents(changedPaths) {
 }
 
 /**
- * Why a spec selects these changed paths, or null. An `audit` spec counts by
- * the folder that owns it; every other mode by its own routing lines, as a
- * pull request's labelled run selects it.
+ * Why a spec selects these changed paths, or null. An `audit` spec counts when
+ * the change owes it, by the dependent-audit rule; every other mode by its own
+ * routing lines, as a pull request's labelled run selects it.
  * @param {string} file
  * @param {string} source the spec's source on main
  * @param {string[]} changedPaths
+ * @param {Set<string>} owedAudits the audit specs the change owes
  */
-export function selectingScope(file, source, changedPaths) {
+export function selectingScope(file, source, changedPaths, owedAudits) {
   const routing = parseRouting(source);
   if (routing.mode === 'audit') {
-    const prefix = specOwners(file).prefixes.find(owner =>
-      changedPaths.some(changed => changed.startsWith(owner)),
-    );
-    return prefix ? `owner ${prefix}` : null;
+    return owedAudits.has(file)
+      ? `owed audit of ${componentFolderOf(file)}`
+      : null;
   }
   const [selected] = selectSpecs({
     specs: [{file, routing}],
@@ -80,13 +81,35 @@ export function selectingScope(file, source, changedPaths) {
  *   headSource: string | null}[]} changedOnMain the spec files main added or
  *   changed since the merge base, with their source on main and at the head
  * @param {string[]} changedPaths the pull request's changed paths
+ * @param {{primitives: string[], importers: Map<string, Set<string>>}} graph
+ *   main's shared primitives and import graph, for the audits a change owes
  * @returns {{path: string, reason: string, scope: string}[]}
  */
-export function overlappingSpecs(changedOnMain, changedPaths) {
+export function overlappingSpecs(
+  changedOnMain,
+  changedPaths,
+  {primitives, importers},
+) {
+  const routings = changedOnMain.map(spec => ({
+    ...spec,
+    routing: parseRouting(spec.mainSource),
+  }));
+  const {owed} = planDependentAudits({
+    changed: changedPaths,
+    primitives,
+    specs: routings.map(({path, routing}) => ({
+      file: path,
+      mode: routing.mode,
+    })),
+    importers,
+    seconds: {},
+    attempt: 2,
+  });
+  const owedAudits = new Set(owed);
   const out = [];
-  for (const {path, status, mainSource, headSource} of changedOnMain) {
+  for (const {path, status, mainSource, headSource} of routings) {
     if (headSource === mainSource) continue;
-    const scope = selectingScope(path, mainSource, changedPaths);
+    const scope = selectingScope(path, mainSource, changedPaths, owedAudits);
     if (scope == null) continue;
     out.push({
       path,
@@ -126,7 +149,7 @@ function main() {
   const pathsFile = value('--paths-file');
   if (!base || !mainSha || !head || !pathsFile) {
     console.error(
-      'usage: a11y-scope-overlap.mjs --base <merge base> --main <main> --head <head> --paths-file <file>',
+      'usage: a11y-scope-overlap.mjs --base <git merge-base main head> --main <main> --head <head> --paths-file <file>',
     );
     process.exit(2);
   }
@@ -153,7 +176,11 @@ function main() {
       mainSource: sourceAt(mainSha, file) ?? '',
       headSource: sourceAt(head, file),
     }));
-  const specs = overlappingSpecs(changedOnMain, changedPaths);
+  const root = process.cwd();
+  const specs = overlappingSpecs(changedOnMain, changedPaths, {
+    primitives: readPrimitives(root),
+    importers: importerGraph(root),
+  });
   console.log(JSON.stringify({version: VERSION, specs}));
 }
 

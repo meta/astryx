@@ -85,6 +85,7 @@ import {
   holdAnimations,
   holdInputUntil,
   installInputLog,
+  type HeldInput,
   type InputRecord,
   type PlayOptions,
   installLongTaskLog,
@@ -6535,7 +6536,91 @@ test.describe('page freeze', () => {
     expect((error as Error).message).toMatch(
       /before its first frame after the thaw/,
     );
+    // After the thaw, resumed() still reads the first frame drawn unfrozen,
+    // and landed() still names the early input.
     await thawPage(page);
+    const resumeMs = await hold.resumed();
+    const again = await hold.landed().catch((caught: unknown) => caught);
+    expect(again).toBeInstanceOf(LiftPlacementError);
+    expect((again as LiftPlacementError).numbers.resumeMs).toBe(resumeMs);
+  });
+
+  test('a finger held down through a freeze lifts alone after the thaw, and its hold lands mid-travel on a stalled runner', async ({
+    page,
+  }) => {
+    await installPageFreeze(page);
+    await freezeFixture(page);
+    await installTimerGate(page);
+    const driver = await touchDriver(page);
+    // The page's own handlers: the touch-down starts a 400 ms travel, and the
+    // lift records how far it had run.
+    await page.evaluate(() => {
+      const box = document.getElementById('box')!;
+      addEventListener(
+        'pointerdown',
+        () => {
+          box.animate(
+            [{transform: 'translateX(0px)'}, {transform: 'translateX(400px)'}],
+            {duration: 400, easing: 'linear'},
+          );
+        },
+        {passive: true},
+      );
+      addEventListener(
+        'pointerup',
+        () => {
+          const w = window as unknown as {liftAt?: number | null};
+          w.liftAt ??= Number(box.getAnimations()[0]?.currentTime ?? null);
+        },
+        {passive: true},
+      );
+    });
+    // The finger goes down while the page is frozen, so the travel it starts
+    // is held at its start. Only the lift is left to send.
+    await freezePage(page);
+    const finger = await driver.press({x: 20, y: 60});
+    const hold = await holdInputUntil(page, {afterResumeMs: 150});
+    await thawPage(page);
+    // The runner stalls 40 ms in every 45 from here, as a loaded one does.
+    const stall = setInterval(() => {
+      const end = Date.now() + 40;
+      while (Date.now() < end) {
+        // the runner is busy
+      }
+    }, 45);
+    let held: HeldInput;
+    try {
+      await hold.resumed();
+      await finger.lift();
+      held = await hold.landed();
+    } finally {
+      clearInterval(stall);
+    }
+    expect(held.arrivedMs).toBeLessThan(held.intendedMs);
+    const liftAt = await page.evaluate(
+      () => (window as unknown as {liftAt?: number | null}).liftAt,
+    );
+    // The page handled the lift mid-travel: after the travel started, and
+    // before it ended.
+    expect(liftAt).toBeGreaterThan(0);
+    expect(liftAt).toBeLessThan(400);
+    // A lifted finger fails by name, and so does a second finger 0, a play or
+    // a tap while a finger is held.
+    await expect(finger.lift()).rejects.toThrow(/finger 0 was lifted/);
+    const again = await driver.press({x: 20, y: 60});
+    await expect(driver.press({x: 30, y: 60})).rejects.toThrow(
+      /finger 0 is already down/,
+    );
+    await expect(
+      driver.play([
+        {t: 0, fingers: [{id: 1, x: 30, y: 60}]},
+        {t: 30, fingers: []},
+      ]),
+    ).rejects.toThrow(/lift the 1 finger press holds down before a play/);
+    await expect(driver.tap({x: 30, y: 60})).rejects.toThrow(
+      /lift the 1 finger press holds down before a play or a tap/,
+    );
+    await again.lift();
   });
 
   test('a lift that reaches the page while it is frozen again after the thaw fails by name, and the page still answers', async ({
