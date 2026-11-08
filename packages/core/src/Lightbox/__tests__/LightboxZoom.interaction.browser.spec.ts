@@ -466,6 +466,7 @@ test("with zoom, a theme's button and Text colours reach neither the controls' i
 for (const [photo, fill] of [
   ['mid-grey', '#7f7f7f'],
   ['white', '#ffffff'],
+  ['black', '#000000'],
 ] as const) {
   test(`the caption keeps 4.5:1 on its backing, in its band and open, over a ${photo} photo`, async ({
     page,

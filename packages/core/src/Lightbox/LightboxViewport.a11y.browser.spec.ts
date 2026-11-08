@@ -245,6 +245,62 @@ for (const viewport of [
   });
 }
 
+test.describe('under a finger', () => {
+  test.use({hasTouch: true});
+
+  test(`"more" takes a finger's taps toward 44 px below it and beside it, never from the line above`, async ({
+    page,
+  }) => {
+    const dialog = await openCaptionGallery(page, {width: 402, height: 874});
+    expect(
+      await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
+    ).toBe(true);
+    const more = dialog.getByRole('button', {name: 'more'});
+    await expect(more).toBeVisible();
+    // The shared hit area writes the toggle's insets once it measures it.
+    await expect
+      .poll(async () =>
+        more.evaluate(
+          element =>
+            parseFloat(
+              element.style.getPropertyValue('--astryx-hit-inset-bottom'),
+            ) || 0,
+        ),
+      )
+      .toBeGreaterThan(0);
+    const facts = await more.evaluate(element => {
+      const box = element.getBoundingClientRect();
+      const inset = (side: string) =>
+        parseFloat(
+          element.style.getPropertyValue(`--astryx-hit-inset-${side}`) || '0',
+        );
+      const middle = box.left + box.width / 2;
+      const takes = (x: number, y: number) => {
+        const hit = element.ownerDocument.elementFromPoint(x, y);
+        return hit != null && element.contains(hit);
+      };
+      const right = inset('right');
+      const bottom = inset('bottom');
+      return {
+        top: inset('top'),
+        right,
+        bottom,
+        above: takes(middle, box.top - 4),
+        below: takes(middle, box.bottom + bottom / 2),
+        beside: takes(box.right + right / 2, box.top + box.height / 2),
+      };
+    });
+    // The line above is the caption's own text: a tap there is not "more".
+    expect(facts.above).toBe(false);
+    expect(facts.top).toBe(0);
+    // Below and beside, a tap within the grown target is "more".
+    expect(facts.bottom).toBeGreaterThan(0);
+    expect(facts.right).toBeGreaterThan(0);
+    expect(facts.below).toBe(true);
+    expect(facts.beside).toBe(true);
+  });
+});
+
 test(`the first frame that shows the clamped caption at open already ends it in "more"`, async ({
   page,
 }) => {
