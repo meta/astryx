@@ -186,7 +186,60 @@ describe('ChatLayout — self-scroll layout contract (#2573)', () => {
     );
     expect(dock).toHaveStyle({position: 'fixed'});
   });
+
+  it('makes room at the message area\u2019s end for a fixed dock\u2019s height, so the newest message rests above it', () => {
+    const rect = stubDockHeight(142);
+    const scrollRef = {current: document.documentElement};
+    render(
+      <ChatLayout
+        composer={<div>composer</div>}
+        data-testid="layout"
+        scrollRef={scrollRef}>
+        <div>msg</div>
+      </ChatLayout>,
+    );
+    const messageArea = screen.getByTestId('layout')
+      .firstElementChild as HTMLElement;
+    expect(endRoom(messageArea)).toBe(142);
+    rect.mockRestore();
+  });
+
+  it('adds no room for the dock in self-scroll mode, where the sticky dock is in flow', () => {
+    const rect = stubDockHeight(142);
+    render(
+      <ChatLayout composer={<div>composer</div>} data-testid="layout">
+        <div>msg</div>
+      </ChatLayout>,
+    );
+    const messageArea = screen.getByTestId('layout')
+      .firstElementChild as HTMLElement;
+    expect(endRoom(messageArea)).toBe(0);
+    rect.mockRestore();
+  });
 });
+
+// The dock: the layout root's last child. jsdom has no layout, so its height
+// is stubbed; every other element measures 0.
+function stubDockHeight(height: number) {
+  return vi
+    .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+    .mockImplementation(function (this: HTMLElement) {
+      const parent = this.parentElement;
+      const isDock =
+        parent?.getAttribute('data-testid') === 'layout' &&
+        parent.lastElementChild === this;
+      return new DOMRect(0, 0, 390, isDock ? height : 0);
+    });
+}
+
+// The room the message area's end padding adds to the density's own padding,
+// CSS px: the `+ Npx` of its functional style.
+function endRoom(element: HTMLElement): number {
+  const match = /--[\w-]+:\s*calc\([^;]*\+\s*(-?[\d.]+)px\)/.exec(
+    element.getAttribute('style') ?? '',
+  );
+  return match == null ? 0 : Number(match[1]);
+}
 
 // ---------------------------------------------------------------------------
 // First-fill scroll positioning
@@ -242,6 +295,37 @@ describe('ChatLayout — first-fill scroll positioning', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it('follows a fixed dock that grows, as a composer does with a second line', () => {
+    const rect = stubDockHeight(142);
+    const scrollRef = {current: document.documentElement};
+    render(
+      <ChatLayout
+        composer={<div>composer</div>}
+        data-testid="layout"
+        scrollRef={scrollRef}>
+        <div>msg</div>
+      </ChatLayout>,
+    );
+    const layout = screen.getByTestId('layout');
+    const messageArea = layout.firstElementChild as HTMLElement;
+    const dock = layout.lastElementChild as HTMLElement;
+    expect(endRoom(messageArea)).toBe(142);
+    const observation = activeObservations.find(o => o.element === dock);
+    act(() => {
+      observation?.callback(
+        [
+          {
+            target: dock,
+            borderBoxSize: [{blockSize: 166, inlineSize: 390}],
+          } as unknown as ResizeObserverEntry,
+        ],
+        {} as ResizeObserver,
+      );
+    });
+    expect(endRoom(messageArea)).toBe(166);
+    rect.mockRestore();
   });
 
   function setGeometry(el: HTMLElement, scrollHeight: number) {

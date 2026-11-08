@@ -126,9 +126,9 @@ export interface TopNavItemProps extends BaseProps<HTMLAnchorElement> {
   isSelected?: boolean;
   /**
    * Whether the nav item is disabled.
-   * A disabled link renders as a plain anchor without an href (and without
-   * target), so it cannot navigate and is removed from the tab order.
-   * A disabled action remains a focusable, non-operable button.
+   * A disabled link renders as an anchor without an href (and without
+   * target), so it cannot navigate; it keeps its Tab stop and is exposed as a
+   * disabled link. A disabled action stays a focusable, non-operable button.
    * @default false
    */
   isDisabled?: boolean;
@@ -208,18 +208,17 @@ export function TopNavItem({
     renderMode === 'drawer',
   );
 
-  // A disabled link renders as a plain <a> with no href: an href-less anchor
-  // is not focusable and exposes no link affordance, so programmatic focus +
-  // Enter, AT activation commands, and middle-click cannot navigate or fire
-  // the consumer onClick. The router LinkComponent is deliberately skipped —
-  // a disabled item performs no navigation, and custom router links may
-  // require a live href. target is omitted with the href. (Mirrors the
-  // disabled paths of Link and SideNavItem.)
   // A disabled item runs no caller handler except `onFocus` and `onBlur`, as a
   // natively disabled control runs none.
   const callerProps = withholdCallerHandlers(props, isDisabled);
 
   const isAction = href == null && onClick != null;
+  // A disabled link renders as an <a> with no href. Enter, assistive
+  // technology commands and a middle click cannot navigate or run the caller's
+  // onClick. The item keeps its Tab stop and the link role, so keyboard and
+  // screen-reader users still find it. It does not navigate, so it skips the
+  // router LinkComponent, which can require a live href. The target goes with
+  // the href.
   const Root = isDisabled && !isAction ? 'a' : LinkComponent;
   // Space activates on release, like a native button. The key-up handler
   // checks the node and the disabled state, so no other code resets the press.
@@ -296,8 +295,9 @@ export function TopNavItem({
         target={isDisabled ? undefined : target}
         aria-label={isIconOnly ? label : undefined}
         aria-current={isSelected ? 'page' : undefined}
+        role={isDisabled ? 'link' : undefined}
         aria-disabled={isDisabled || undefined}
-        tabIndex={isDisabled ? -1 : undefined}
+        tabIndex={isDisabled ? 0 : undefined}
         {...pressable}
         {...mergeProps(
           themeProps('top-nav-item', {
@@ -316,6 +316,7 @@ export function TopNavItem({
           style,
         )}
         {...callerProps}
+        {...(isDisabled && !isAction ? disabledInteractionProps() : null)}
         onClick={handleDrawerClick}
         {...actionKeyboardProps}
         {...disabledActionProps}>
@@ -337,8 +338,9 @@ export function TopNavItem({
       onClick={isDisabled ? preventDefaultClick : onClick}
       aria-label={isIconOnly ? label : undefined}
       aria-current={isSelected ? 'page' : undefined}
+      role={isDisabled ? 'link' : undefined}
       aria-disabled={isDisabled || undefined}
-      tabIndex={isDisabled ? -1 : undefined}
+      tabIndex={isDisabled ? 0 : undefined}
       {...pressable}
       {...mergeProps(
         themeProps('top-nav-item', {
@@ -356,6 +358,7 @@ export function TopNavItem({
         style,
       )}
       {...callerProps}
+      {...(isDisabled && !isAction ? disabledInteractionProps() : null)}
       {...actionKeyboardProps}
       {...disabledActionProps}>
       {icon}
