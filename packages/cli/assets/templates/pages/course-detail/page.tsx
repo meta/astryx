@@ -14,6 +14,9 @@
 // draw from @heroicons/react under the template's import names (each
 // mapped in template.doc.mjs); directional icons mirror under RTL;
 // sample media rides /template-assets placeholders.
+
+'use client';
+
 import React, {
   createContext,
   useCallback,
@@ -40,6 +43,9 @@ import {rtlStyles} from '@astryxdesign/core/utils';
 import {useMediaQuery} from '@astryxdesign/core/hooks';
 import {Collapsible, CollapsibleGroup} from '@astryxdesign/core/Collapsible';
 import {RadioList, RadioListItem} from '@astryxdesign/core/RadioList';
+import {Selector} from '@astryxdesign/core/Selector';
+import {Breadcrumbs, BreadcrumbItem} from '@astryxdesign/core/Breadcrumbs';
+import {Carousel} from '@astryxdesign/core/Carousel';
 import {
   ArrowRightIcon,
   BanknotesIcon,
@@ -47,7 +53,6 @@ import {
   BarsArrowUpIcon,
   ChartBarIcon,
   CheckIcon,
-  ChevronDownIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   ClockIcon,
@@ -313,13 +318,8 @@ const hoverStyles = `
 .cr7-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;border:0;}
 /* The rail's shelf: cards snap to the column's edge; the padding is room
    for a lifted card's shadow, the margins take it back out. */
-.cr7-shelf{display:flex;gap:16px;overflow-x:auto;scroll-snap-type:x mandatory;margin-inline:-24px;margin-bottom:-40px;margin-top:28px;padding-inline:24px;padding-bottom:48px;padding-top:12px;scrollbar-width:none;}
-.cr7-shelf::-webkit-scrollbar{display:none;}
-.cr7-shelf>*{scroll-snap-align:start;}
 /* the paging arrows: the design holds them off a phone entirely
    (the !important outweighs the StyleX display on the HStack wrapper) */
-.cr7-arrows{display:none !important;}
-@media(min-width:640px){.cr7-arrows{display:flex !important;}}
 /* ── Polish ──────────────────────────────────────────────────────────────
    The closing band's doors and hand (closing band): two 40px doors —
    the primary told apart by its fill, the other raised in white with a
@@ -578,7 +578,7 @@ dialog.cr12-sheet::backdrop{
    left the screen, visibility stepping with it so nothing of it ever
    draws below the screen's edge. */
 .cr13-reachbar{
-  position:fixed;inset-inline:0;bottom:0;z-index:40;
+  position:fixed;inset-inline:0;bottom:0;
   background:var(--color-background-card);
   border-top:1px solid var(--color-border);
   box-shadow:0 -6px 20px var(--color-shadow);
@@ -1046,7 +1046,7 @@ const COURSE = {
       price: 0,
       saves: 510,
       badge: 'Free preview',
-      image: '1750337684539-0c58aa348a8b',
+      image: '/template-assets/moody-working-horizontal-3.png',
     },
     {
       topic: 'Engineering',
@@ -1062,7 +1062,7 @@ const COURSE = {
       price: 129,
       saves: 5210,
       badge: 'Bestseller',
-      image: '1499673610122-01c7122c5dcb',
+      image: '/template-assets/colorful-working-horizontal-2.png',
     },
   ],
 };
@@ -1956,111 +1956,25 @@ function SelectField({
   value,
   options,
   onChange,
-  width,
-  menuLabel,
 }: {
   label: string;
   value: string;
   options: SelectOption[];
   onChange: (v: string) => void;
-  /** Fixed trigger width, for the rare context that wants one; the
-   *  reviews' pair leaves it off and takes the responsive w-full /
-   *  sm:w-48 the cr12-selcol class carries. */
-  width?: number;
-  menuLabel?: string;
 }) {
-  const current = options.find(o => o.value === value) ?? options[0];
   return (
-    <Popover
+    <Selector
       label={label}
-      className="cr7-pop"
-      placement="below"
-      alignment="start"
-      width={248}
-      style={{padding: 6}}
-      content={
-        <VStack gap={0.5} role="listbox" aria-label={label}>
-          {menuLabel && (
-            <Text
-              type="supporting"
-              color="secondary"
-              style={{padding: '6px 10px'}}>
-              {menuLabel}
-            </Text>
-          )}
-          {options.map(o => (
-            <button
-              key={o.value}
-              type="button"
-              role="option"
-              aria-selected={o.value === value}
-              disabled={o.disabled}
-              className="cr7-menurow"
-              onClick={() => onChange(o.value)}
-              style={
-                o.disabled
-                  ? {cursor: 'not-allowed', color: 'var(--color-text-disabled)'}
-                  : undefined
-              }>
-              {o.icon}
-              <span
-                style={{
-                  flex: '1 1 auto',
-                  minWidth: 0,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}>
-                {o.label}
-              </span>
-              {o.value === value ? (
-                <CheckIcon
-                  aria-hidden="true"
-                  style={{
-                    width: 16,
-                    height: 16,
-                    flexShrink: 0,
-                    color: 'var(--color-text-primary)',
-                  }}
-                />
-              ) : (
-                o.trailing
-              )}
-            </button>
-          ))}
-        </VStack>
-      }>
-      {trigger => (
-        <button
-          type="button"
-          {...trigger}
-          className="cr7-select"
-          style={width ? {width} : undefined}
-          aria-label={label}>
-          {current?.icon}
-          <span
-            style={{
-              flex: '1 1 auto',
-              minWidth: 0,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              textAlign: 'start',
-            }}>
-            {current?.label}
-          </span>
-          <ChevronDownIcon
-            aria-hidden="true"
-            style={{
-              width: 16,
-              height: 16,
-              flexShrink: 0,
-              color: 'var(--color-text-secondary)',
-            }}
-          />
-        </button>
-      )}
-    </Popover>
+      isLabelHidden
+      value={value}
+      onChange={onChange}
+      options={options.map(o => ({
+        value: o.value,
+        label: o.label,
+        icon: o.icon,
+        disabled: o.disabled,
+      }))}
+    />
   );
 }
 
@@ -2509,7 +2423,7 @@ function Poster() {
         label={`Preview ${COURSE.title}: ${CLIPS.length} free lessons`}
         onClick={() => preview.open(clip?.id)}
         padding={0}
-        style={{height: '100%'}}>
+        style={{height: '100%', isolation: 'isolate'}}>
         <div
           style={{
             position: 'relative',
@@ -2916,6 +2830,7 @@ function Syllabus() {
                   key={m.id}
                   style={{
                     position: 'relative',
+                    isolation: 'isolate',
                     display: isMobile ? 'block' : 'grid',
                     ...(isMobile
                       ? {
@@ -3057,7 +2972,7 @@ function Syllabus() {
                                 style={{
                                   width: isMobile ? 56 : 64,
                                   flexShrink: 0,
-                                  textAlign: 'right',
+                                  textAlign: 'end',
                                   fontSize: 14,
                                   fontVariantNumeric: 'tabular-nums',
                                   color: 'var(--color-text-secondary)',
@@ -3897,14 +3812,12 @@ function Reviews() {
             value={stars === null ? 'all' : String(stars)}
             options={starItems}
             onChange={v => setStars(v === 'all' ? null : Number(v))}
-            menuLabel="Rating"
           />
           <SelectField
             label="Sort the reviews"
             value={order}
             options={orderItems}
             onChange={v => setOrder(v as ReviewSort)}
-            menuLabel="Sort by"
           />
         </div>
       </div>
@@ -4209,61 +4122,9 @@ function Body({text, query}: {text: string; query: string}) {
  *  course cards the home shelf carries. */
 function RelatedRail() {
   const [favs, setFavs] = useState<Record<string, boolean>>({});
-  const shelf = useRef<HTMLUListElement>(null);
-  const firstCard = useRef<HTMLLIElement>(null);
-  const lastCard = useRef<HTMLLIElement>(null);
-  const [ends, setEnds] = useState({start: true, end: false});
   // The design's heading ladder steps: 36 from sm, 48 from lg.
   const sm = !useIsMobile(639);
   const lg = !useIsMobile(1023);
-
-  useEffect(() => {
-    const root = shelf.current;
-    const first = firstCard.current;
-    const last = lastCard.current;
-    if (
-      !root ||
-      !first ||
-      !last ||
-      typeof IntersectionObserver === 'undefined'
-    ) {
-      return;
-    }
-    // The ends read from the first and last cards' own visibility, never
-    // from layout on the scroll path: an entry fires when a card enters or
-    // leaves the shelf, whatever the reader's direction.
-    const io = new IntersectionObserver(
-      entries => {
-        for (const entry of entries) {
-          if (entry.target === first) {
-            setEnds(s => ({...s, start: entry.isIntersecting}));
-          }
-          if (entry.target === last) {
-            setEnds(s => ({...s, end: entry.isIntersecting}));
-          }
-        }
-      },
-      {root, threshold: 0.9},
-    );
-    io.observe(first);
-    io.observe(last);
-    return () => io.disconnect();
-  }, []);
-
-  const page = (dir: number) => {
-    const el = shelf.current;
-    if (!el) {
-      return;
-    }
-    // the design pages the row's whole width, and a reader who asked
-    // for stillness gets the jump, not the glide (the paging hook)
-    const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const rtl = getComputedStyle(el).direction === 'rtl';
-    el.scrollBy({
-      left: rtl ? -dir * el.clientWidth : dir * el.clientWidth,
-      behavior: still ? 'auto' : 'smooth',
-    });
-  };
 
   return (
     <section style={{width: '100%'}}>
@@ -4271,70 +4132,26 @@ function RelatedRail() {
         <Text as="h2" style={sectionHeadingStyle(sm, lg)}>
           Where to go <Highlight>after this one</Highlight>
         </Text>
-        {/* the design's two arrows at the heading's end — hidden below
-            sm exactly as the design hides them (related-rail.tsx:
-            "hidden shrink-0 gap-2 sm:flex"; a phone scrolls the rail
-            itself) */}
-        <HStack
-          gap={2}
-          className="cr7-arrows"
-          style={{flexShrink: 0, marginBottom: 6}}>
-          <button
-            type="button"
-            className="cr7-ringbtn"
-            style={{width: 40, paddingInline: 0}}
-            aria-label="Previous courses"
-            aria-controls="related-shelf"
-            disabled={ends.start}
-            onClick={() => page(-1)}>
-            <Icon icon={ChevronLeftIcon} size="md" xstyle={rtlStyles.mirror} />
-          </button>
-          <button
-            type="button"
-            className="cr7-ringbtn"
-            style={{width: 40, paddingInline: 0}}
-            aria-label="Next courses"
-            aria-controls="related-shelf"
-            disabled={ends.end}
-            onClick={() => page(1)}>
-            <Icon icon={ChevronRightIcon} size="md" xstyle={rtlStyles.mirror} />
-          </button>
-        </HStack>
       </HStack>
 
-      {/* The home shelf's rail and its reasons: the padding is room for a
-          lifted card's shadow, the margins take it back out of the layout,
-          and the snap holds to the column's edge. */}
-      <ul
-        id="related-shelf"
-        ref={shelf}
-        aria-label="Courses to take next"
-        className="cr7-shelf"
-        style={{listStyle: 'none'}}>
-        {COURSE.related.map((c, i) => (
-          <li
-            key={c.title}
-            ref={
-              i === 0
-                ? firstCard
-                : i === COURSE.related.length - 1
-                  ? lastCard
-                  : undefined
-            }
-            style={{
-              width: 272,
-              flexShrink: 0,
-              scrollSnapAlign: 'start',
-              display: 'flex',
-            }}>
+      {/* The core Carousel owns the paging: its buttons, its snap stops
+          and its ends need no layout reads and mirror under RTL. */}
+      <Carousel
+        label="Courses to take next"
+        gap={4}
+        hasSnap
+        hasEdgeFade={false}
+        padding={6}>
+        {COURSE.related.map(c => (
+          <div key={c.title} style={{width: 272, display: 'flex'}}>
             <CourseCard
               course={c}
               saved={!!favs[c.title]}
               onToggle={() => setFavs(f => ({...f, [c.title]: !f[c.title]}))}
             />
-          </li>
+          </div>
         ))}
-      </ul>
+      </Carousel>
     </section>
   );
 }
@@ -4355,7 +4172,7 @@ function CourseCard({
   onToggle: () => void;
 }) {
   return (
-    <article className="cr7-card" style={{width: '100%'}}>
+    <article className="cr7-card" style={{width: '100%', isolation: 'isolate'}}>
       {/* one press opens the course; labelled by the title alone, so a
           screen reader hears the course's name rather than every line */}
       <button
@@ -5146,6 +4963,7 @@ function SiteFooter() {
         marginTop: sm ? 160 : 128,
         borderTop: '1px solid var(--color-border)',
         width: '100%',
+        isolation: 'isolate',
       }}>
       <div
         style={{
@@ -5532,7 +5350,6 @@ export default function CourseDetailTemplate() {
             position: 'sticky',
             top: stickyTop,
             marginTop: 48,
-            zIndex: 1,
             width: '100%',
           }}>
           <EnrollPanel />
@@ -5588,68 +5405,53 @@ export default function CourseDetailTemplate() {
                     The design's own trail: a chevron between the steps,
                     the linked steps muted, the page itself last and
                     truncated (site/breadcrumb.tsx). */}
-                  <nav
-                    aria-label="Breadcrumb"
+                  <Breadcrumbs
+                    label="Breadcrumb"
+                    separator={
+                      <Icon
+                        icon={ChevronRightIcon}
+                        size="sm"
+                        xstyle={rtlStyles.mirror}
+                        style={{
+                          flexShrink: 0,
+                          color: 'var(--color-text-secondary)',
+                        }}
+                      />
+                    }
                     style={{
-                      display: 'flex',
-                      flexWrap: 'wrap',
-                      alignItems: 'center',
-                      columnGap: 6,
-                      rowGap: 4,
                       fontSize: 14,
                       marginBottom: isNarrow ? 24 : 32,
                       maxWidth: '100%',
                     }}>
-                    {[
-                      {label: 'Courses', href: '#', muted: true},
-                      {label: COURSE.topic, href: '#', muted: true},
-                      {label: COURSE.title, muted: false},
-                    ].map((c, i) => (
+                    <BreadcrumbItem href="#">
                       <span
-                        key={c.label}
                         style={{
-                          display: 'flex',
-                          minWidth: 0,
-                          alignItems: 'center',
-                          gap: 6,
+                          color: 'var(--color-text-secondary)',
+                          textDecorationLine: 'underline',
+                          textDecorationColor: 'transparent',
+                          textUnderlineOffset: 4,
                         }}>
-                        {i > 0 && (
-                          <Icon
-                            icon={ChevronRightIcon}
-                            size="sm"
-                            xstyle={rtlStyles.mirror}
-                            style={{
-                              flexShrink: 0,
-                              color: 'var(--color-text-secondary)',
-                            }}
-                          />
-                        )}
-                        {c.muted ? (
-                          <span
-                            style={{
-                              color: 'var(--color-text-secondary)',
-                              textDecorationLine: 'underline',
-                              textDecorationColor: 'transparent',
-                              textUnderlineOffset: 4,
-                            }}>
-                            {c.label}
-                          </span>
-                        ) : (
-                          <span
-                            aria-current="page"
-                            style={{
-                              minWidth: 0,
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                              color: 'var(--color-text-primary)',
-                            }}>
-                            {c.label}
-                          </span>
-                        )}
+                        Courses
                       </span>
-                    ))}
-                  </nav>
+                    </BreadcrumbItem>
+                    <BreadcrumbItem href="#">
+                      <span style={{color: 'var(--color-text-secondary)'}}>
+                        {COURSE.topic}
+                      </span>
+                    </BreadcrumbItem>
+                    <BreadcrumbItem>
+                      <span
+                        style={{
+                          minWidth: 0,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          color: 'var(--color-text-primary)',
+                        }}>
+                        {COURSE.title}
+                      </span>
+                    </BreadcrumbItem>
+                  </Breadcrumbs>
                   {isNarrow ? mobileBody : desktopBody}
                   {/* The reviews run the container's whole width under both
                     columns, as the design lays its own under the listing:
