@@ -2754,11 +2754,11 @@ jobs:
     # Frame evidence measures timing: four cores, one Playwright worker.
     # The leg count plans as many legs as keep each one's setup and proofs
     # within ten minutes, as the Chromium proofs' count does. The matrix is
-    # the ceiling; a leg with no share passes at once.
+    # the ceiling, six legs as for Chromium; a leg with no share passes at once.
     strategy:
       fail-fast: false
       matrix:
-        leg: [1, 2, 3, 4, 5]
+        leg: [1, 2, 3, 4, 5, 6]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # Playwright's own image for the version the lockfile resolves, with
