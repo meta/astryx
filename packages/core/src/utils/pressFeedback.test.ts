@@ -260,6 +260,22 @@ describe('the press reaches the surface the finger landed on', () => {
     expect(rows[2].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
   });
 
+  it('paints a pen press as it paints a finger press where the primary pointer is fine', () => {
+    expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
+    const label = rows[1].firstElementChild;
+    if (label == null) {
+      throw new Error('the row has no label to press');
+    }
+    press(label, 'pointerdown', 10, 10, 'pen');
+    // The control profile's onset, as a finger's: no paint before it.
+    vi.advanceTimersByTime(PRESS_ONSET_MS - 1);
+    expect(pressedRow()).toBe(-1);
+    vi.advanceTimersByTime(1);
+    expect(pressedRow()).toBe(1);
+    press(label, 'pointerup', 10, 10, 'pen');
+    expect(rows[1].getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+  });
+
   it('leaves a mouse press to `:active` where the primary pointer is fine', () => {
     // The test environment is a desktop: `(pointer: coarse)` does not match,
     // so the stylesheet keeps `:active` for the mouse and the controller
