@@ -99,13 +99,21 @@ const styles = stylex.create({
     flexDirection: 'column',
     width: '100%',
   },
+  // A collapsed rail row holds only its icon, so it keeps a fixed square.
   itemCollapsed: {
     justifyContent: 'center',
     width: sizeVars['--size-element-md'],
+    height: sizeVars['--size-element-md'],
     paddingInline: 0,
   },
-  itemCollapsedSm: {width: sizeVars['--size-element-sm']},
-  itemCollapsedLg: {width: sizeVars['--size-element-lg']},
+  itemCollapsedSm: {
+    width: sizeVars['--size-element-sm'],
+    height: sizeVars['--size-element-sm'],
+  },
+  itemCollapsedLg: {
+    width: sizeVars['--size-element-lg'],
+    height: sizeVars['--size-element-lg'],
+  },
   label: {
     flex: 1,
     minWidth: 0,
@@ -188,6 +196,11 @@ const styles = stylex.create({
     },
     transitionTimingFunction: easeVars['--ease-standard'],
     flexShrink: 0,
+  },
+  // Inside a whole-row toggle the chevron takes its 1em glyph's height, so
+  // the row's height comes from its label, not from the chevron's box.
+  expandChevronInRow: {
+    height: 'auto',
   },
   expandChevronExpanded: {
     transform: 'rotate(180deg)',
@@ -801,6 +814,7 @@ export function SideNavItem({
           color="inherit"
           xstyle={[
             styles.expandChevron,
+            styles.expandChevronInRow,
             !isItemCollapsed && styles.expandChevronExpanded,
           ]}
         />
