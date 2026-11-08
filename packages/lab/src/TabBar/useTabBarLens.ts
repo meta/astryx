@@ -172,8 +172,11 @@ function useAnimatorList(count: number) {
  * new resting place. On `lensTravel` from rest (a key, the app), or continuing
  * the settle a lift started. Every animation runs on the compositor; a finger's
  * moves retarget them, so the lens keeps moving through a busy main thread.
- * Under Reduce Motion the animator cross-fades instead of moving and a press
- * scales nothing. Each spring plays as measured, from the UIKit table.
+ * Under Reduce Motion a press scales nothing, and a selection change from a
+ * key or the app cross-fades instead of moving. Under a finger the lens is
+ * put where the finger is at once, as UIKit's is. Only its lifted look fades,
+ * since a travel would play as a dip, with frames that show no lens. Each
+ * spring plays as measured, from the UIKit table.
  *
  * Under a fine pointer nothing here runs. A press there is a plain button
  * press: its click chooses the tab, and TabBar's CSS slides the lens.
@@ -373,15 +376,19 @@ export function useTabBarLens({
     // this event (its animators attach to it with their curves running).
     // Under Reduce Motion nothing lifts or travels, so no copy mounts.
     motionRef.current += 1;
-    if (body.animator.reducedMotion({}) === 'off') {
+    const isReduced = body.animator.reducedMotion({}) !== 'off';
+    if (!isReduced) {
       flushSync(() => setIsCopyShown(true));
     }
     const at = performance.now();
-    body.animator.animate(
-      {x: chaseTarget(x, centers) - centers[selected]},
-      {spring: tabBar.lensTravel},
-      {at},
-    );
+    const travel = {x: chaseTarget(x, centers) - centers[selected]};
+    // Under Reduce Motion the lens is put under the finger at once, as
+    // UIKit's is. A travel would play as a dip, a frame with no lens.
+    if (isReduced) {
+      body.animator.set(travel);
+    } else {
+      body.animator.animate(travel, {spring: tabBar.lensTravel}, {at});
+    }
     lift(true, at, size);
     playCopy(at);
   };
@@ -401,8 +408,13 @@ export function useTabBarLens({
       return;
     }
     const at = performance.now();
+    const chase = {x: chaseTarget(x, press.centers) - press.centers[selected]};
+    if (body.animator.reducedMotion({}) !== 'off') {
+      body.animator.set(chase);
+      return;
+    }
     body.animator.animate(
-      {x: chaseTarget(x, press.centers) - press.centers[selected]},
+      chase,
       {spring: press.isDragging ? tabBar.lensTrack : tabBar.lensTravel},
       {at},
     );
@@ -439,11 +451,20 @@ export function useTabBarLens({
     }
     const target = chosen >= 0 ? chosen : selected;
     const at = performance.now();
-    body.animator.animate(
-      {x: isStale ? 0 : press.centers[target] - press.centers[selected]},
-      {spring: tabBar.lensSettle},
-      {at, touchRelease: true},
-    );
+    const settle = {
+      x: isStale ? 0 : press.centers[target] - press.centers[selected],
+    };
+    // Under Reduce Motion the lens is already under the finger: it settles
+    // in place, with no dip, and only its lifted look fades.
+    if (body.animator.reducedMotion({touchRelease: true}) !== 'off') {
+      body.animator.set(settle);
+    } else {
+      body.animator.animate(
+        settle,
+        {spring: tabBar.lensSettle},
+        {at, touchRelease: true},
+      );
+    }
     lift(false, at, press.size, true);
     playCopy(at);
     dropCopyAtRest();
@@ -467,11 +488,15 @@ export function useTabBarLens({
         // The app kept the old selection: the lens settles back.
         settleRef.current = null;
         const now = performance.now();
-        body.animator.animate(
-          {x: 0},
-          {spring: tabBar.lensSettle},
-          {at: now, touchRelease: true},
-        );
+        if (body.animator.reducedMotion({touchRelease: true}) !== 'off') {
+          body.animator.set({x: 0});
+        } else {
+          body.animator.animate(
+            {x: 0},
+            {spring: tabBar.lensSettle},
+            {at: now, touchRelease: true},
+          );
+        }
         playCopy(now);
         dropCopyAtRest();
       }

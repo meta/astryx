@@ -162,12 +162,19 @@ export function createPopoverSurfaceMotion(
   {
     requestFrame,
     cancelFrame,
+    entrance = null,
     ...animatorOptions
   }: Pick<AnimatorOptions, 'now'> & {
     /** Schedules the presentation's read (default: the window's animation frame). */
     requestFrame?: (callback: () => void) => number;
     /** Cancels a read that `requestFrame` scheduled. */
     cancelFrame?: (handle: number) => void;
+    /**
+     * The surface inside the layer, where the pointer presentation's CSS
+     * entrance runs. The touch presentation turns that entrance off there
+     * as on the element.
+     */
+    entrance?: HTMLElement | null;
   } = {},
 ): PopoverSurfaceMotion {
   const animator = createMotionEngine(element, animatorOptions);
@@ -217,6 +224,13 @@ export function createPopoverSurfaceMotion(
     exiting = null;
   };
 
+  // The CSS entrance belongs to the pointer presentation. This presentation
+  // plays its own growth instead.
+  const holdEntrance = () => {
+    element.style.setProperty('animation-name', 'none');
+    entrance?.style.setProperty('animation-name', 'none');
+  };
+
   const reset = () => {
     cancelPending();
     collapsed = null;
@@ -228,6 +242,7 @@ export function createPopoverSurfaceMotion(
     for (const property of MOTION_STYLE_PROPERTIES) {
       element.style.removeProperty(property);
     }
+    entrance?.style.removeProperty('animation-name');
   };
 
   const enter = (measure: () => PopoverSurfaceGeometry) => {
@@ -267,7 +282,7 @@ export function createPopoverSurfaceMotion(
       // no entrance for the frame to cancel.
       queueMicrotask(() => {
         if (pendingPresentFrame === frame) {
-          element.style.setProperty('animation-name', 'none');
+          holdEntrance();
         }
       });
     }
@@ -288,8 +303,7 @@ export function createPopoverSurfaceMotion(
     // The start frame goes first. The motion engine may read the element's
     // will-change as it sets it, before any write of ours.
     animator.set(frameOf(start, next.axis));
-    // The layer's own CSS entrance belongs to the pointer presentation.
-    element.style.setProperty('animation-name', 'none');
+    holdEntrance();
     element.style.setProperty(
       'transform-origin',
       `${next.originX}px ${next.originY}px`,
@@ -324,6 +338,7 @@ export function createPopoverSurfaceMotion(
       for (const property of MOTION_STYLE_PROPERTIES) {
         element.style.removeProperty(property);
       }
+      entrance?.style.removeProperty('animation-name');
       return;
     }
     const target = collapsed;
