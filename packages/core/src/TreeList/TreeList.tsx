@@ -60,9 +60,9 @@ import {
 
 /**
  * The clip a tree with no handle takes while it moves. Rows that glide up into
- * a shorter tree then show as they enter it. So they never paint over the
- * content after it, as in a table view that clips to its bounds. Only the
- * bottom edge clips, past the reach of a row's focus ring.
+ * a shorter tree show only inside it, so they never paint over the content
+ * after it. A table view clips to its bounds the same way. Only the bottom
+ * edge clips, past the reach of a row's focus ring.
  */
 const MOVING_CLIP = `inset(-100vmax -100vmax calc(-1 * (${focusVars['--focus-outline-width']} + ${focusVars['--focus-outline-offset']})) -100vmax)`;
 
