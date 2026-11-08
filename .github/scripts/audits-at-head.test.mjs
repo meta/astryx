@@ -107,13 +107,27 @@ describe('the audits-at-head dispatch', () => {
     }
   });
 
-  it("plans every owed audit with main's planner, as a later run does", () => {
+  it("plans every owed audit with main's planner, in the head merged into main", () => {
+    const steps = job('plan').steps.map(candidate => candidate.name);
+    // main's planner code is kept before the head's tree is merged in.
+    expect(steps.indexOf("Keep main's planner")).toBeLessThan(
+      steps.indexOf('Merge the head into main'),
+    );
+    expect(step('plan', 'Check out main').with.ref).toBeUndefined();
+    const merge = step('plan', 'Merge the head into main');
+    expect(merge.run).toContain(
+      'git fetch --quiet --no-tags origin "refs/pull/$PR/head"',
+    );
+    expect(merge.run).toContain(
+      'test "$(git rev-parse FETCH_HEAD)" = "$HEAD_SHA"',
+    );
+    expect(merge.run).toContain('merge --quiet --no-ff --no-edit "$HEAD_SHA"');
     const plan = step('plan', 'Plan every owed audit');
+    expect(plan.run).toContain(
+      'node "$RUNNER_TEMP/planner/.github/scripts/a11y-dependent-audits.mjs"',
+    );
     expect(plan.run).toContain('--attempt 2');
-    expect(plan.run).toContain('--changed "$RUNNER_TEMP/changed-files.txt"');
     expect(plan.env.ASTRYX_HEAD_SHA).toBe('${{ inputs.head }}');
-    const checkout = step('plan', 'Check out the planner');
-    expect(checkout.with.ref).toBeUndefined();
     expect(job('audits').strategy.matrix.leg).toEqual([1, 2, 3, 4, 5, 6]);
   });
 

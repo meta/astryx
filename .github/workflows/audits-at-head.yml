@@ -151,22 +151,45 @@ jobs:
       count: ${{ steps.plan.outputs.count || '0' }}
       shares: ${{ steps.plan.outputs.shares || '[]' }}
     steps:
-      - name: Check out the planner
+      - name: Check out main
         uses: actions/checkout@v7
         with:
+          fetch-depth: 0
           persist-credentials: false
+
+      # The planner's code comes from main, so the head cannot change what it
+      # owes or what the record says.
+      - name: Keep main's planner
+        run: |
+          mkdir -p "$RUNNER_TEMP/planner/.github" "$RUNNER_TEMP/planner/scripts"
+          cp -R .github/scripts "$RUNNER_TEMP/planner/.github/"
+          cp -R scripts/lib "$RUNNER_TEMP/planner/scripts/"
+
+      # The planner reads the tree a pull request's own run plans from: the
+      # head merged into main, with the audit specs and imports the head adds.
+      - name: Merge the head into main
+        env:
+          PR: ${{ inputs.pr }}
+          HEAD_SHA: ${{ inputs.head }}
+        run: |
+          git fetch --quiet --no-tags origin "refs/pull/$PR/head"
+          test "$(git rev-parse FETCH_HEAD)" = "$HEAD_SHA"
+          if ! git -c user.name=audits-at-head -c user.email=audits-at-head@users.noreply.github.com merge --quiet --no-ff --no-edit "$HEAD_SHA"; then
+            echo "::error::The head conflicts with main, so its owed audits are unknown. Update the branch."
+            exit 1
+          fi
 
       - name: Download the changed files
         uses: actions/download-artifact@v8
         with:
           name: audits-at-head-changed-files
-          path: ${{ runner.temp }}
+          path: ${{ runner.temp }}/changed
 
       - name: Plan every owed audit
         id: plan
         env:
           ASTRYX_HEAD_SHA: ${{ inputs.head }}
-        run: node .github/scripts/a11y-dependent-audits.mjs --changed "$RUNNER_TEMP/changed-files.txt" --attempt 2 --out "$RUNNER_TEMP/plan.json"
+        run: node "$RUNNER_TEMP/planner/.github/scripts/a11y-dependent-audits.mjs" --changed "$RUNNER_TEMP/changed/changed-files.txt" --attempt 2 --out "$RUNNER_TEMP/plan.json"
 
       - name: Upload the plan
         uses: actions/upload-artifact@v7
