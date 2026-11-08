@@ -127,6 +127,20 @@ function syncFocusableClipping(
     const isFocused =
       el.contains(document.activeElement) ||
       (focusTarget != null && el.contains(focusTarget));
+    // A candidate with no box has an all-zero rect, so the rect rule cannot
+    // judge it. `display: none` cannot show, so it stays inert until the edge
+    // observer sees it on a visible line. `display: contents` has no box of
+    // its own; its children are the candidates.
+    if (el.getClientRects().length === 0) {
+      if (getComputedStyle(el).display === 'contents') {
+        if (el.hasAttribute(HIDDEN_ATTRIBUTE)) {
+          restoreFromClip(el);
+        }
+      } else if (!isFocused) {
+        hideFromTabOrder(el);
+      }
+      continue;
+    }
     const isClipped =
       !isFocused && el.getBoundingClientRect().top >= containerBottom;
     if (isClipped) {
@@ -153,9 +167,7 @@ function observeEdgeCrossings(container: HTMLElement, onCross: () => void) {
   });
   const refresh = () => {
     observer.disconnect();
-    const candidates = container.querySelectorAll(
-      `${FOCUSABLE_SELECTOR}, [${HIDDEN_ATTRIBUTE}]`,
-    );
+    const candidates = container.querySelectorAll(CANDIDATE_SELECTOR);
     for (const el of candidates) {
       if (isOwnedBy(container, el)) {
         observer.observe(el);
@@ -168,9 +180,35 @@ function observeEdgeCrossings(container: HTMLElement, onCross: () => void) {
 
 const EDGE_THRESHOLDS = [0, 1e-6];
 
+const CANDIDATE_SELECTOR = `${FOCUSABLE_SELECTOR}, [${HIDDEN_ATTRIBUTE}]`;
+const BOX_ATTRIBUTES = new Set(['hidden', 'class', 'style']);
+
+function isBoxRecord(record: MutationRecord): boolean {
+  return BOX_ATTRIBUTES.has(record.attributeName ?? '');
+}
+
 /** A record that can change which descendants are focusable. */
 function changesFocusables(record: MutationRecord): boolean {
-  return record.type === 'childList' || record.attributeName !== 'inert';
+  return (
+    record.type === 'childList' ||
+    (record.attributeName !== 'inert' && !isBoxRecord(record))
+  );
+}
+
+/**
+ * A `hidden`, `class` or `style` change matters only on a candidate or an
+ * ancestor of one. Decorative animation inside the clamp runs no pass.
+ */
+function needsPass(record: MutationRecord): boolean {
+  if (!isBoxRecord(record)) {
+    return true;
+  }
+  const target = record.target;
+  return (
+    target instanceof Element &&
+    (target.matches(CANDIDATE_SELECTOR) ||
+      target.querySelector(CANDIDATE_SELECTOR) != null)
+  );
 }
 
 const MUTATION_OPTIONS: MutationObserverInit = {
@@ -365,6 +403,9 @@ export function LineClamp({
         }
         if (records.some(changesFocusables)) {
           edge.refresh();
+        }
+        if (!records.some(needsPass)) {
+          return;
         }
         if (isReleaseFlushing) {
           deferSync(sync);

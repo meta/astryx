@@ -96,6 +96,15 @@ describe('LineClamp', () => {
   // coincidental "clipped" reading (0 >= 0) regardless of scenario.
   describe('keeps a clipped focusable descendant out of the tab order (#4259)', () => {
     function mockRects(rects: Map<Element, {top: number; bottom: number}>) {
+      // A mapped element has a box; an unmapped one has none, as with
+      // `display: none`.
+      vi.spyOn(Element.prototype, 'getClientRects').mockImplementation(
+        function (this: Element) {
+          return (rects.has(this)
+            ? [this.getBoundingClientRect()]
+            : []) as unknown as DOMRectList;
+        },
+      );
       return vi
         .spyOn(Element.prototype, 'getBoundingClientRect')
         .mockImplementation(function (this: Element) {
@@ -327,10 +336,10 @@ describe('LineClamp', () => {
       );
       expect(link).toHaveAttribute('inert');
 
-      // A class change makes it `display: contents` on the first line: it
-      // has no box of its own, so its rect is empty at the top.
-      rectMap.set(link, {top: 0, bottom: 0});
-      link.className = 'shown';
+      // A style change makes it `display: contents` on the first line: it has
+      // no box of its own.
+      rectMap.delete(link);
+      link.style.display = 'contents';
       await waitFor(() => expect(link).not.toHaveAttribute('inert'));
     });
 
@@ -349,11 +358,6 @@ describe('LineClamp', () => {
           [container, {top: 0, bottom: 40}],
           [box, {top: 10, bottom: 10}], // 0×0, on the first line
         ]),
-      );
-      vi.spyOn(Element.prototype, 'getClientRects').mockImplementation(
-        function (this: Element) {
-          return [this.getBoundingClientRect()] as unknown as DOMRectList;
-        },
       );
       rerender(
         <LineClamp maxLines={2} data-testid="clamp">
@@ -380,7 +384,6 @@ describe('LineClamp', () => {
       mockRects(
         new Map([
           [container, {top: 0, bottom: 40}],
-          [wrap, {top: 0, bottom: 0}], // no box of its own
           [link, {top: 20, bottom: 36}],
         ]),
       );
@@ -394,6 +397,128 @@ describe('LineClamp', () => {
       );
       expect(wrap).not.toHaveAttribute('inert');
       expect(link).not.toHaveAttribute('inert');
+    });
+
+    it('keeps a link inert while a class on an ancestor outside the clamp hides it, and releases it once it shows on a visible line', () => {
+      const observers: Array<{
+        callback: IntersectionObserverCallback;
+        targets: Set<Element>;
+      }> = [];
+      class FakeIntersectionObserver {
+        targets = new Set<Element>();
+        constructor(public callback: IntersectionObserverCallback) {
+          observers.push(this);
+        }
+        observe(el: Element) {
+          this.targets.add(el);
+        }
+        unobserve(el: Element) {
+          this.targets.delete(el);
+        }
+        disconnect() {
+          this.targets.clear();
+        }
+        takeRecords() {
+          return [];
+        }
+      }
+      vi.stubGlobal('IntersectionObserver', FakeIntersectionObserver);
+      try {
+        const {rerender} = render(
+          <LineClamp maxLines={2} data-testid="clamp">
+            Some text <a href="/more">Read more</a>
+          </LineClamp>,
+        );
+        const container = screen.getByTestId('clamp');
+        const link = screen.getByText('Read more');
+        // An ancestor class outside the clamp hides the link: no box.
+        const rectMap = new Map([[container, {top: 0, bottom: 40}]]);
+        mockRects(rectMap);
+        rerender(
+          <LineClamp maxLines={2} data-testid="clamp">
+            Some text <a href="/more">Read more</a>
+          </LineClamp>,
+        );
+        expect(link).toHaveAttribute('inert');
+
+        // The class goes away and the link shows past the edge: still inert.
+        rectMap.set(link, {top: 40, bottom: 56});
+        act(() => {
+          for (const observer of observers) {
+            observer.callback([], observer as unknown as IntersectionObserver);
+          }
+        });
+        expect(link).toHaveAttribute('inert');
+
+        // It shows on a visible line: the edge observer releases it.
+        rectMap.set(link, {top: 10, bottom: 26});
+        act(() => {
+          for (const observer of observers) {
+            observer.callback([], observer as unknown as IntersectionObserver);
+          }
+        });
+        expect(link).not.toHaveAttribute('inert');
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it('leaves a display: contents link alone while the clamp is scrolled above the viewport', () => {
+      const {rerender} = render(
+        <LineClamp maxLines={2} data-testid="clamp">
+          <a href="/more" style={{display: 'contents'}}>
+            Read more
+          </a>
+        </LineClamp>,
+      );
+      const container = screen.getByTestId('clamp');
+      const link = screen.getByText('Read more');
+      mockRects(new Map([[container, {top: -200, bottom: -160}]]));
+      rerender(
+        <LineClamp maxLines={2} data-testid="clamp">
+          <a href="/more" style={{display: 'contents'}}>
+            Read more
+          </a>
+        </LineClamp>,
+      );
+      expect(link).not.toHaveAttribute('inert');
+    });
+
+    it('runs no pass for decorative style changes inside the clamp', async () => {
+      const {rerender} = render(
+        <LineClamp maxLines={2} data-testid="clamp">
+          <span data-testid="spark">*</span> Some text{' '}
+          <a href="/more">Read more</a>
+        </LineClamp>,
+      );
+      const container = screen.getByTestId('clamp');
+      const link = screen.getByText('Read more');
+      const spark = screen.getByTestId('spark');
+      const rects = mockRects(
+        new Map([
+          [container, {top: 0, bottom: 40}],
+          [link, {top: 20, bottom: 36}],
+        ]),
+      );
+      rerender(
+        <LineClamp maxLines={2} data-testid="clamp">
+          <span data-testid="spark">*</span> Some text{' '}
+          <a href="/more">Read more</a>
+        </LineClamp>,
+      );
+      // Let the records from the clamp's own setup arrive first.
+      await act(async () => {
+        await Promise.resolve();
+      });
+      rects.mockClear();
+      spark.style.opacity = '0.5';
+      spark.style.opacity = '0.6';
+      await act(async () => {
+        await Promise.resolve();
+      });
+      // The clipping pass reads every candidate's rect. Truncation
+      // measurement may read the clamp's own box, so only the link counts.
+      expect(rects.mock.contexts).not.toContain(link);
     });
 
     it('hides a descendant a child re-enables past the fold after mount', async () => {
