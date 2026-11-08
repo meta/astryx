@@ -185,7 +185,8 @@ export interface MonthPaneProps {
   inlineSize: number;
   selectedDate: PlainDate | null;
   focusedDate: PlainDate | null;
-  today: PlainDate;
+  /** Today, or `null` while it is not known yet (server render, hydration). */
+  today: PlainDate | null;
   isDateDisabled: (date: PlainDate) => boolean;
   weekStartsOn: DayOfWeek;
   onSelect: (value: ISODateString) => void;
@@ -275,7 +276,10 @@ export const MonthPane = memo(function MonthPane({
               !day.isOutside &&
               selectedDate != null &&
               plainDateIsEqual(day.date, selectedDate);
-            const isToday = !day.isOutside && plainDateIsEqual(day.date, today);
+            const isToday =
+              !day.isOutside &&
+              today != null &&
+              plainDateIsEqual(day.date, today);
 
             return (
               <div

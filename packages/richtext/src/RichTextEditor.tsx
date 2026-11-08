@@ -4,7 +4,7 @@
 
 /**
  * @file RichTextEditor.tsx
- * @input Uses React, useId, Lexical (lexical + @lexical/react, composed through
+ * @input Uses React, useId, a declared DOM boundary, Lexical (lexical + @lexical/react, composed through
  *   LexicalExtensionComposer), Field, VisuallyHidden, useInputStatusIcon,
  *   mergeProps, design tokens
  * @output Exports an accessibly labelled RichTextEditor component with a flush
@@ -79,6 +79,7 @@ import {TextSemanticsExtension} from './textSemantics';
 import {TableColumnFloorPlugin} from './TableColumnFloorPlugin';
 import {CodeBackspacePlugin} from './CodeBackspacePlugin';
 import {CodeBlockHeaderPlugin} from './CodeBlockHeaderPlugin';
+import {CodePastePlugin} from './CodePastePlugin';
 import {CodeSyntaxPlugin} from './CodeSyntaxPlugin';
 import {MarkdownExtensionsPlugin} from './MarkdownExtensionsPlugin';
 import type {RichTextMarkdownExtension} from './markdownExtensions';
@@ -106,6 +107,7 @@ import {
   type LexicalNode,
   type EditorThemeClasses,
 } from 'lexical';
+import {rendererManagedRootProps} from './privateAttributes/layerPortalBoundary.stylex';
 
 /**
  * Serialized state for an empty editor: a root containing a single empty
@@ -660,6 +662,7 @@ export const RichTextEditor = function RichTextEditor({
           }),
           stylex.props(
             inputWrapperStyles.base,
+            inputWrapperStyles.textField,
             styles.wrapper,
             // Only disabled is dimmed, matching TextArea: a read-only editor
             // keeps full-opacity text and stays keyboard-reachable.
@@ -687,7 +690,7 @@ export const RichTextEditor = function RichTextEditor({
               !!statusIcon && styles.editorBodyWithStatus,
               size === 'lg' && editorBodySizeStyles.lg,
             )}>
-            <div {...stylex.props(styles.editorRoot)}>
+            <div {...stylex.props(styles.editorRoot)} dir={rest.dir}>
               <RichTextPlugin
                 contentEditable={
                   <EditorContentEditable
@@ -728,6 +731,7 @@ export const RichTextEditor = function RichTextEditor({
               {/* Backspace at the very start of a code block makes it a
                   paragraph, instead of merging it into the block above. */}
               <CodeBackspacePlugin />
+              <CodePastePlugin />
               {markdownExtensions != null && markdownExtensions.length > 0 ? (
                 <MarkdownExtensionsPlugin
                   extensions={markdownExtensions}
@@ -1065,6 +1069,8 @@ function EditorContentEditable({
       dynamicStyles.contentEditableMinHeight(minHeight),
     ),
     ...rest,
+    // Lexical reconciles this DOM, so Layer keeps corrective portals out.
+    ...rendererManagedRootProps,
   };
   if (placeholderText) {
     return (

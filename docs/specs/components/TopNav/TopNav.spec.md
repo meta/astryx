@@ -14,6 +14,7 @@ verified_by:
   [
     packages/core/src/TopNav/TopNav.test.tsx,
     packages/core/src/TopNav/__tests__/TopNavMobileLongHeading.a11y.chromium.spec.ts,
+    packages/core/src/TopNav/__tests__/TopNavTextSize.interaction.browser.spec.ts,
     packages/core/src/AppShell/AppShell.test.tsx,
     apps/storybook/stories/TopNav.stories.tsx,
     apps/storybook/rtl-audit/targets.json,
@@ -38,7 +39,7 @@ system_specs: []
 | End-user impact         | Screen-reader users get a named navigation landmark; phone-width users keep the product heading, end controls, and, while auto toggles are on, a drawer toggle in view while the navigation items move into the drawer.                                           |
 | Builder impact          | None. Callers fill slots; `children` is accepted so nav items are not dropped.                                                                                                                                                                                    |
 | Compatibility/readiness | Records shipped behavior; no prop, default, target, or export changes. Two implementation gaps (see Current-state impact).                                                                                                                                        |
-| Review checks           | Reject dropping `children` when `startContent` is absent, dropping the three-column layout when `centerContent` is present, an unlabeled landmark, or a mobile bar that hides the toggle while drawer content exists and auto toggles are on (FR5).               |
+| Review checks           | Reject dropping `children` when `startContent` is absent, dropping the three-region layout when `centerContent` is present, an unlabeled landmark, or a mobile bar that hides the toggle while drawer content exists and auto toggles are on (FR5).               |
 | Governing rules         | `component:AppShell` FR9–FR10 select the render mode; MobileNav owns the drawer dialog; `architecture:component-theming-surface`.                                                                                                                                 |
 
 This table is a review projection; the body below is authoritative.
@@ -66,16 +67,15 @@ Consumer migration instructions belong in consumer docs and release notes.
   spread onto the `<nav>` after `role` and `aria-label`, so a caller `role` or
   `aria-label` replaces them. `architecture:public-component-api` INV5 keeps
   component-owned accessibility from being overwritten by accident.
-- **Wide end content shifts the center.** The end column sets no minimum width
-  of zero, so end content wider than its share widens that column and moves the
-  center content toward the start.
+- **Wide end content shifts the center.** End content wider than its share
+  widens the end region and moves the center content toward the start.
 
 ## Ownership boundary
 
 **Owns**
 
 - The navigation landmark and its default name (FR1, AR1).
-- Slot resolution and the flex and three-column layouts (FR2–FR4).
+- Slot resolution and the flex and three-region layouts (FR2–FR4).
 - The mobile-bar and drawer renderings of the bar itself (FR5, FR6).
 - The `<nav>`'s positioning and styling inputs (FR8, FR9).
 - The slot each descendant sits in, which TopNav menus read for popover
@@ -106,8 +106,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
 | FR1 | In `default` and `mobile-bar` modes TopNav renders one `<nav role="navigation">` named by `label`, or by the translated `@astryx.topNav.landmarkLabel` ("Top navigation") when `label` is omitted. It carries `top-nav`, the forwarded `ref`, and other DOM props; `mobile-bar` adds `data-mode="mobile-bar"`.                                                                        | Current source and tests |
 | FR2 | `startContent` wins over `children`; `children` render as start content only when `startContent` is `null` or `undefined`.                                                                                                                                                                                                                                                            | Current source and tests |
-| FR3 | Without `centerContent` the bar is a flex row: heading then start content at the inline start, end content pushed to the inline end.                                                                                                                                                                                                                                                  | Current source and tests |
-| FR4 | With `centerContent` the bar is a three-column grid (`1fr auto 1fr`) that centers the center content while the start and end regions each fit their equal share.                                                                                                                                                                                                                      | Current source and tests |
+| FR3 | Without `centerContent` the bar is a flex row: heading then start content at the inline start, end content pushed to the inline end. No region overlaps another; when the regions do not fit one row, the bar wraps and the end content moves to a second line, and a region wider than the whole bar wraps its own items (`spec:AST-102` FR4).                                       | Current source and tests |
+| FR4 | With `centerContent` the bar has three regions that center the center content while the start and end regions each fit their equal share of one row; when they do not fit one row, the bar wraps as FR3 describes.                                                                                                                                                                    | Current source and tests |
 | FR5 | `mobile-bar` mode renders the heading, then the end content and, when drawer content exists and auto toggles are on, the mobile nav toggle at the inline end. Start and center content do not render. The heading yields width first so end content and the toggle stay on screen. Drawer content exists when start or center content is present or AppShell passes side nav content. | Current source and tests |
 | FR6 | `drawer` mode renders a MobileNav whose header is `heading` and whose body is start then center content in a vertical list, a divider when items and side nav content are both present, then any side nav content AppShell passes. With neither, TopNav renders nothing.                                                                                                              | Current source and tests |
 | FR7 | In `default` mode TopNav tells start, center, and end descendants which slot they are in.                                                                                                                                                                                                                                                                                             | Current source           |
@@ -122,13 +122,13 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ### Representative states
 
-| State                             | Required invariant                                                       | Allowed variation   |
-| --------------------------------- | ------------------------------------------------------------------------ | ------------------- |
-| Heading and items, no center      | Flex row; end content at the inline end.                                 | Gaps and padding.   |
-| Center content present            | Three-column grid; center centered while each side fits its share (FR4). | Column content.     |
-| Mobile bar with a long heading    | With auto toggles on, toggle and end content stay inside the bar.        | Heading truncation. |
-| Mobile bar with no drawer content | No toggle.                                                               | —                   |
-| Drawer with items and side nav    | Items, divider, side nav content.                                        | Item modes.         |
+| State                             | Required invariant                                                   | Allowed variation   |
+| --------------------------------- | -------------------------------------------------------------------- | ------------------- |
+| Heading and items, no center      | Flex row; end content at the inline end.                             | Gaps and padding.   |
+| Center content present            | Three regions; center centered while each side fits its share (FR4). | Column content.     |
+| Mobile bar with a long heading    | With auto toggles on, toggle and end content stay inside the bar.    | Heading truncation. |
+| Mobile bar with no drawer content | No toggle.                                                           | —                   |
+| Drawer with items and side nav    | Items, divider, side nav content.                                    | Item modes.         |
 
 ### Transformation and precedence order
 
@@ -168,15 +168,16 @@ component's record names its own target.
 
 ## Verification map
 
-| Contract     | Verification                                                                                     | Representative states                           | Mutation or failure expectation                                             | Audit section                |
-| ------------ | ------------------------------------------------------------------------------------------------ | ----------------------------------------------- | --------------------------------------------------------------------------- | ---------------------------- |
-| FR1, AR1     | `TopNav.test.tsx` landmark tests                                                                 | Default and mobile-bar; default and custom name | A missing role or name fails.                                               | `audit:TopNav/accessibility` |
-| FR2–FR4, FR8 | `TopNav.test.tsx` slot tests                                                                     | Each slot; all slots; center without start/end  | A dropped slot, wrong precedence, or positioned nav fails.                  | `audit:TopNav/layout`        |
-| FR5, FR6     | `AppShell.test.tsx` mobile suites                                                                | Heading-only; items; items with side nav        | A missing toggle or duplicated items fails.                                 | `audit:TopNav/behavior`      |
-| AR2          | `TopNavMobileLongHeading.a11y.chromium.spec.ts`                                                  | Long heading at phone width                     | The toggle or close button leaves the viewport.                             | `audit:TopNav/accessibility` |
-| RTL relation | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `TopNav / Full example` | Heading and first navigation item; LTR and RTL  | A heading that is not at the inline start of the navigation items fails D2. | `audit:TopNav/i18n-rtl`      |
+| Contract      | Verification                                                                                      | Representative states                           | Mutation or failure expectation                                                                               | Audit section                |
+| ------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| FR1, AR1      | `TopNav.test.tsx` landmark tests                                                                  | Default and mobile-bar; default and custom name | A missing role or name fails.                                                                                 | `audit:TopNav/accessibility` |
+| FR2–FR4, FR8  | `TopNav.test.tsx` slot tests                                                                      | Each slot; all slots; center without start/end  | A dropped slot, wrong precedence, or positioned nav fails.                                                    | `audit:TopNav/layout`        |
+| FR3, FR4 wrap | `TopNavTextSize.interaction.browser.spec.ts` at 1280 px and 100%, 200% and 250% default font size | Full Example; Centered With Start Content       | A navigation item covered by another region, a page that scrolls sideways, or a changed layout at 100% fails. | `audit:TopNav/layout`        |
+| FR5, FR6      | `AppShell.test.tsx` mobile suites                                                                 | Heading-only; items; items with side nav        | A missing toggle or duplicated items fails.                                                                   | `audit:TopNav/behavior`      |
+| AR2           | `TopNavMobileLongHeading.a11y.chromium.spec.ts`                                                   | Long heading at phone width                     | The toggle or close button leaves the viewport.                                                               | `audit:TopNav/accessibility` |
+| RTL relation  | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `TopNav / Full example`  | Heading and first navigation item; LTR and RTL  | A heading that is not at the inline start of the navigation items fails D2.                                   | `audit:TopNav/i18n-rtl`      |
 
-Read from source, with no focused test yet: the mobile bar's part order (FR5); the drawer's `heading` header (FR6); other DOM props reaching the `<nav>` (FR1); the auto-toggle condition (FR5); rendering nothing in `drawer` mode with no content (FR6); the `top-nav` target and its `mode` state (FR1); the flex and grid layout geometry (FR3, FR4); that start and center content do not render in the mobile bar (FR5); the drawer's content order and divider (FR6); FR7; and FR9.
+Read from source, with no focused test yet: the mobile bar's part order (FR5); the drawer's `heading` header (FR6); other DOM props reaching the `<nav>` (FR1); the auto-toggle condition (FR5); rendering nothing in `drawer` mode with no content (FR6); the `top-nav` target and its `mode` state (FR1); the flex and three-region layout geometry at the default text size (FR3, FR4); that start and center content do not render in the mobile bar (FR5); the drawer's content order and divider (FR6); FR7; and FR9.
 
 ## Decision log
 

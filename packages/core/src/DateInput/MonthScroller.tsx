@@ -139,8 +139,11 @@ export interface MonthScrollerProps {
   onVisibleMonthChange: (monthIndex: number) => void;
   /** Currently selected date. */
   selectedDate: PlainDate | null;
-  /** Today, for the `aria-current` marker. */
-  today: PlainDate;
+  /**
+   * Today, for the `aria-current` marker; `null` while it is not known yet
+   * (server render, hydration).
+   */
+  today: PlainDate | null;
   /** Whether a date fails min/max or a custom constraint. */
   isDateDisabled: (date: PlainDate) => boolean;
   /** First column of the week. */
