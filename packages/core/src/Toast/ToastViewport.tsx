@@ -9,7 +9,7 @@
  *   text reset, the active modal outlet, the layer toast host registry and
  *   placement-derived motion variables
  * @output Exports the ToastViewport provider, stack, live announcement dispatch
- *   (its own persistent regions in the top layer, else useAnnounce),
+ *   (an open modal's containers when hosted in one, else the shared channel),
  *   focus handoff, safe-area-aware edge gutters, modal rehosting, and motion context
  * @position Core provider/imperative viewport for useToast()
  *
@@ -371,8 +371,6 @@ function ToastRow({
   );
 }
 ToastRow.displayName = 'ToastRow';
-
-/** How long a toast's text stays in a top-layer viewport's own live region. */
 
 /**
  * Container that renders and manages toast notifications. Place at the root

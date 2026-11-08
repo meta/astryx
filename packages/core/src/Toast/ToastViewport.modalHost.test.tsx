@@ -25,6 +25,7 @@ import {BottomSheet, BottomSheetSwitcher} from '../BottomSheet';
 import {Dialog} from '../Dialog';
 import {Drawer} from '../Drawer/Drawer';
 import {getActiveModalOutlet} from '../Layer/modalOutlet';
+import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import type {ToastDismissReason} from './types';
 
 // jsdom reports no window focus until an element is focused, but a test page
@@ -54,6 +55,9 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  // The page's shared live regions outlive a test; clear them so a count of
+  // announcements sees only this test's words.
+  __resetLiveRegionsForTest();
 });
 
 function ToastButton({label = 'Show toast'}: {label?: string}) {

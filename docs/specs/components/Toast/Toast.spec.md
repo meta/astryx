@@ -55,7 +55,7 @@ system_specs:
 | Behavior                | A stack of non-modal notification cards at one viewport corner. Each toast is announced once, can auto-hide (pausing while hovered, focused, touched, or the window is blurred), and dismisses by its button, a vertical swipe toward its edge, or code. F6 moves focus into the newest toast.                                                                                                                                                         |
 | End-user impact         | Users get brief notices without losing their place; screen-reader users hear each toast once; keyboard users reach toast controls with F6 and land somewhere sensible after dismissing; touch users swipe toasts away.                                                                                                                                                                                                                                 |
 | Builder impact          | None.                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| Compatibility/readiness | Records shipped behavior; no public change. Seventeen implementation gaps, listed under Current-state impact.                                                                                                                                                                                                                                                                                                                                          |
+| Compatibility/readiness | Records shipped behavior; no public change. Sixteen implementation gaps, listed under Current-state impact.                                                                                                                                                                                                                                                                                                                                            |
 | Review checks           | Reject a toast announced more than once per show, a dismissal that drops focus to the body, an auto-hide that runs while the user is reading or interacting, or a swipe as the only way to dismiss.                                                                                                                                                                                                                                                    |
 | Governing rules         | `spec:AST-086` FR1; `spec:AST-003` (modal rehosting); `spec:AST-094`; `spec:AST-100`; `spec:AST-059` FR6; `architecture:layer-runtime`; `design:bidirectionality`; `design:reduced-motion`.                                                                                                                                                                                                                                                            |
 
@@ -278,8 +278,9 @@ Read from source, with no focused test yet:
   0.01 ms transitions.
 - FR6: a set `toast.inset` edge replacing the provider's value at 0.
 - FR7: the default cap of 5, and `maxVisible={0}` showing every toast.
-- FR9: delivery through the viewport's own polite and assertive containers;
-  the announcement tests read the shared body-level channel.
+- FR9: delivery through an open modal's containers by a top-layer viewport
+  hosted in that modal; the modal-host test covers an in-place viewport
+  inside a Dialog, and the announcement tests read the shared channel.
 
 ## Decision log
 
