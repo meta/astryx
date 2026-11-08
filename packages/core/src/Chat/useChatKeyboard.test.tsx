@@ -423,6 +423,12 @@ describe('ChatLayout in a page that scrolls the document', () => {
       document.dispatchEvent(touch('touchend', [{x: 5, y: 50}]));
     });
   }
+  // The reader's scroll comes to rest.
+  function rest() {
+    act(() => {
+      document.dispatchEvent(new Event('scrollend'));
+    });
+  }
   function wheel() {
     act(() => {
       document.dispatchEvent(new Event('wheel'));
@@ -591,7 +597,13 @@ describe('ChatLayout in a page that scrolls the document', () => {
       wait(500);
       pan(i % 2 === 1 ? 10 : 0);
     }
-    expect(layoutLift(dockOf(container))).toBeGreaterThanOrEqual(290);
+    // The cap takes the cover the last pan left; the next pan moves only the
+    // dock's translate until the scroll rests.
+    expect(layoutLift(dockOf(container))).toBe(280);
+    expect(dockOf(container).style.translate).toBe('0px -10px');
+    rest();
+    expect(layoutLift(dockOf(container))).toBe(290);
+    expect(dockOf(container).style.translate).toBe('');
     expect(isDockLeftCovered(window)).toBe(false);
     report(window.innerHeight);
     expect(layoutLift(dockOf(container))).toBe(0);
@@ -756,15 +768,18 @@ describe('ChatLayout in a page that scrolls the document', () => {
       wait(500);
       pan(i % 2 === 1 ? 10 : 0);
     }
-    report(window.innerHeight - 290);
+    rest();
     expect(layoutLift(dockOf(container))).toBe(290);
     drag();
     pan(290);
+    expect(dockOf(container).style.translate).toBe('0px 290px');
+    rest();
     expect(layoutLift(dockOf(container))).toBe(0);
+    expect(dockOf(container).style.translate).toBe('');
     expect(isDockLeftCovered(window)).toBe(false);
   });
 
-  it('follows the cover the pan leaves once the reader scrolls after Firefox\u2019s own pan to the dock', () => {
+  it('follows the cover the pan leaves on the dock\u2019s translate once the reader scrolls after Firefox\u2019s own pan, and lays it out once at rest', () => {
     const {container} = renderDocumentLayout();
     report(window.innerHeight - 290);
     wait(108);
@@ -774,17 +789,56 @@ describe('ChatLayout in a page that scrolls the document', () => {
     act(() => {
       document.dispatchEvent(touch('touchstart', [{x: 5, y: 300}]));
     });
-    pan(200);
-    expect(layoutLift(dockOf(container))).toBe(90);
-    pan(100);
-    expect(layoutLift(dockOf(container))).toBe(190);
-    pan(0);
-    expect(layoutLift(dockOf(container))).toBe(290);
-    act(() => {
-      document.dispatchEvent(touch('touchend', [{x: 5, y: 500}]));
+    const root = document.documentElement;
+    const scrollTop = Object.getOwnPropertyDescriptor(
+      Element.prototype,
+      'scrollTop',
+    )!;
+    let scrollReads = 0;
+    Object.defineProperty(root, 'scrollTop', {
+      configurable: true,
+      get(this: Element) {
+        scrollReads += 1;
+        return scrollTop.get!.call(this) as number;
+      },
+      set(this: Element, value: number) {
+        scrollTop.set!.call(this, value);
+      },
     });
-    pan(150);
-    expect(layoutLift(dockOf(container))).toBe(140);
+    try {
+      const lifts: number[] = [];
+      const rooms: number[] = [];
+      for (const [panTo, translate] of [
+        [200, '0px -90px'],
+        [100, '0px -190px'],
+        [0, '0px -290px'],
+      ] as const) {
+        pan(panTo);
+        expect(dockOf(container).style.translate).toBe(translate);
+        lifts.push(layoutLift(dockOf(container)));
+        rooms.push(keyboardRoom(messagesOf()));
+      }
+      // While the reader scrolls, nothing is laid out and nothing is read.
+      expect(lifts).toEqual([0, 0, 0]);
+      expect(rooms).toEqual([0, 0, 0]);
+      expect(scrollReads).toBe(0);
+      act(() => {
+        document.dispatchEvent(touch('touchend', [{x: 5, y: 500}]));
+      });
+      expect(layoutLift(dockOf(container))).toBe(290);
+      expect(keyboardRoom(messagesOf())).toBe(290);
+      expect(dockOf(container).style.translate).toBe('');
+      // A fling's momentum follows on the translate too, and its end lays it
+      // out.
+      pan(150);
+      expect(dockOf(container).style.translate).toBe('0px 150px');
+      expect(layoutLift(dockOf(container))).toBe(290);
+      rest();
+      expect(layoutLift(dockOf(container))).toBe(140);
+      expect(dockOf(container).style.translate).toBe('');
+    } finally {
+      Reflect.deleteProperty(root, 'scrollTop');
+    }
     expect(isDockLeftCovered(window)).toBe(false);
   });
 
@@ -799,9 +853,13 @@ describe('ChatLayout in a page that scrolls the document', () => {
     });
     expect(layoutLift(dockOf(container))).toBe(0);
     pan(0);
+    expect(dockOf(container).style.translate).toBe('0px -337px');
+    rest();
     expect(layoutLift(dockOf(container))).toBe(337);
     pan(337);
+    rest();
     expect(layoutLift(dockOf(container))).toBe(0);
+    expect(dockOf(container).style.translate).toBe('');
     expect(isDockLeftCovered(window)).toBe(false);
   });
 
@@ -861,6 +919,29 @@ describe('ChatLayout in a page that scrolls the document', () => {
     }
   });
 
+  it('learns nothing from a composer show under a pinch zoom, whose pan is the reader\u2019s, and lifts the dock by the cover', () => {
+    const {container} = renderDocumentLayout();
+    viewport.scale = 2;
+    // At a 2x zoom, a 290 px cover of the layout viewport.
+    report((window.innerHeight - 290) / 2);
+    wait(700);
+    expect(isDockLeftCovered(window)).toBe(false);
+    expect(layoutLift(dockOf(container))).toBe(290);
+    report(window.innerHeight / 2);
+    viewport.scale = 1;
+    report(window.innerHeight);
+    expect(layoutLift(dockOf(container))).toBe(0);
+    // The next show at normal zoom is the browser's again: Safari pans to the
+    // dock, and the dock rises nothing.
+    report(window.innerHeight - 337);
+    wait(46);
+    pan(337);
+    wait(3000);
+    expect(layoutLift(dockOf(container))).toBe(0);
+    expect(isDockLeftCovered(window)).toBe(false);
+    expect(__focusTakeoverCallersForTest(document)).toBe(0);
+  });
+
   it('holds the lift through a caret reveal while typing: a pan with no touch or wheel never starts following the cover', () => {
     const {container} = renderDocumentLayout();
     const field = screen.getByRole('textbox', {name: 'Message'});
@@ -906,6 +987,8 @@ describe('ChatLayout in a page that scrolls the document', () => {
     report(window.innerHeight - 337);
     expect(layoutLift(dockOf(container))).toBe(337);
     pan(100);
+    expect(dockOf(container).style.translate).toBe('0px 100px');
+    rest();
     expect(layoutLift(dockOf(container))).toBe(237);
     wait(3000);
     expect(isDockLeftCovered(window)).toBe(false);

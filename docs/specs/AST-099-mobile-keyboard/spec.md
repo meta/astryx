@@ -110,12 +110,13 @@ app to turn on.
   While the browser's own reveal runs, the dock does not move (Gap 16). Then the
   dock rises by the part of the keyboard's cover that the visual viewport's pan
   leaves. A pan to the dock leaves none, so the dock rises nothing. After a
-  touch or a wheel, the dock follows that part as a scroll moves the pan. Where
-  the layout viewport's height follows the pan instead, as in Safari on iOS, the
-  dock does not move for the rest of that show (Gap 17). Once a show finds the
-  dock covered, the composer is a keyboard-aware surface there, as elsewhere.
-  FR9's
-  docked ride is the one exception: Core moves an app's docked bar as FR9 sets
+  touch or a wheel, the dock follows that part on its translate as a scroll
+  moves the pan. The layout takes the lift once, when the scroll comes to rest.
+  Where the layout viewport's height follows the pan instead, as in Safari on
+  iOS, the dock does not move for the rest of that show (Gap 17). Once a show
+  finds the dock covered, the composer is a keyboard-aware surface there, as
+  elsewhere. FR9's docked ride is the one exception: Core moves an app's
+  docked bar as FR9 sets
   out. How the value reaches styles is `architecture:react-component-runtime`
   INV11. Riding the keyboard's motion layers on top of that layout, so layout
   never depends on it; FR8 requires it where it applies. When surfaces ride it,
@@ -405,11 +406,11 @@ No covered field meets FR9 on `main`. Each gap below is open.
   covered keeps the composer covered until the wait ends. With a slow-device
   profile, that is about 0.75 s (731 to 755 ms). Only a pan of the visual
   viewport restarts the wait, and the wait ends at 3 s at most. Every later show
-  lifts the dock at once. A show with a touch or a wheel in the wait teaches
-  nothing. When its wait ends, its dock follows the part of the cover that the
-  pan leaves. On the iOS Simulator, Safari's pan arrived 0 to 400 ms after the
-  keyboard's report. A short cover once, at Firefox's first covered show, is
-  better than a lift and then a drop in a slow Safari.
+  lifts the dock at once. A show with a touch or a wheel in the wait, or under a
+  pinch zoom, teaches nothing. When its wait ends, its dock follows the part of
+  the cover that the pan leaves. On the iOS Simulator, Safari's pan arrived 0 to
+  400 ms after the keyboard's report. A short cover once, at Firefox's first
+  covered show, is better than a lift and then a drop in a slow Safari.
 - **Gap 17 — Safari on iOS on a slow scroll toward the top with the keyboard
   up.** In a page that scrolls the document, Safari on iOS unwinds its own pan
   as the reader scrolls toward the page's top with the keyboard up. Its layout

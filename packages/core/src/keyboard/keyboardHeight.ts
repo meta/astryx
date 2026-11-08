@@ -84,7 +84,8 @@ interface KeyboardMeasure {
 // and how far the keyboard covers the initial containing block. The last two
 // are null under a pinch zoom, whose pan is the reader's. Safari on iOS can
 // shrink the layout viewport to the visual viewport while it pans, but the
-// initial containing block keeps its height.
+// initial containing block keeps its height. layoutViewportHeight reads the
+// root's client height in the same batch, so that read adds no layout.
 function measureReport(win: Window): KeyboardMeasure {
   const viewport = win.visualViewport;
   if (viewport == null || !isKeyboardMeasurable(win)) {
@@ -737,11 +738,13 @@ function watchDock(
     );
   };
   // The wait's end decides the show. Only a clean wait that ends on its own
-  // teaches the page.
+  // teaches the page. Under a pinch zoom the pan is the reader's, so that show
+  // teaches nothing either.
   const settle = (atCap: boolean) => {
     clearTimers();
-    const revealed = isRevealed(getKeyboardPan(win), getKeyboardHeight(win));
-    if (inputSinceShow || atCap) {
+    const pan = getKeyboardPan(win);
+    const revealed = isRevealed(pan, getKeyboardHeight(win));
+    if (inputSinceShow || atCap || pan == null) {
       followDeficit();
     } else if (revealed) {
       show = 'revealed';

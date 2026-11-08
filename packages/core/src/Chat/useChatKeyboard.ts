@@ -4,9 +4,9 @@
 
 /**
  * @file useChatKeyboard.ts
- * @input React refs, the keyboard module's height, focus routes and layout
+ * @input React refs, the keyboard module's reports, focus routes and layout
  *   guide, the stream scroll's lock, the motion engine, the touch query and
- *   layout viewport height
+ *   layout viewport height. Also the input stream's touch ends and scroll ends
  * @output Exports useChatKeyboard: the lift for ChatLayout's dock and message
  *   area, and the refs for its dock, message area and composer region. It
  *   also tells whether a focus call in the composer skips the browser's reveal
@@ -51,6 +51,7 @@ import {
 import type {KeyboardTransition} from '../keyboard/keyboardModel';
 import {rideKeyboard} from '../keyboard/rideKeyboard';
 import {layoutViewportHeight} from '../utils/layoutViewport';
+import {subscribeInput} from '../utils/inputStream';
 import {
   useInteractionModalityTrackingFor,
   type InteractionModality,
@@ -229,6 +230,9 @@ export function useChatKeyboard({
   // (null: the transcript did not ride), until the layout takes them over.
   const dockTargetRef = useRef<number | null>(null);
   const messagesTargetRef = useRef<number | null>(null);
+  // Set while the dock's translate carries a change of the pan's cover that
+  // the layout has not taken yet.
+  const panPendingRef = useRef(false);
   // Whether the transcript followed its newest message, and where it was
   // scrolled, just before the layout's last change.
   const atEndRef = useRef(false);
@@ -282,12 +286,38 @@ export function useChatKeyboard({
         return;
       }
       const next = liftFor(getKeyboardHeight(win));
-      if (Math.abs(next - liftRef.current) < 0.5) {
+      const moves = Math.abs(next - liftRef.current) >= 0.5;
+      // The layout takes over the translate a followed pan left.
+      if (panPendingRef.current) {
+        panPendingRef.current = false;
+        dockTargetRef.current = moves ? liftRef.current - next : null;
+        if (!moves) {
+          dock.animator.set({y: 0});
+        }
+      }
+      if (!moves) {
         return;
       }
       atEndRef.current = isAtEnd();
       scrollBeforeRef.current = scrollRef.current?.scrollTop ?? 0;
       liftStore.set(next);
+    };
+    // While the dock follows the cover a pan leaves, a report moves only the
+    // dock's translate, from the keyboard module's numbers. The layout takes
+    // the lift once, when the reader's scroll comes to rest.
+    const followPan = (height: number) => {
+      const target = liftRef.current - liftFor(height);
+      if (Math.abs(target) < 0.5) {
+        if (panPendingRef.current) {
+          panPendingRef.current = false;
+          dockTargetRef.current = null;
+          dock.animator.set({y: 0});
+        }
+        return;
+      }
+      panPendingRef.current = true;
+      dockTargetRef.current = target;
+      dock.animator.set({y: target});
     };
 
     // The ride plays the curve the guide publishes with each transition: the
@@ -362,17 +392,38 @@ export function useChatKeyboard({
     // a pan changes the lift too.
     let reportedHeight = getKeyboardHeight(win);
     const unsubscribeHeight = subscribeKeyboardHeight(win, event => {
-      if (
-        event.type === 'viewport' &&
-        (event.height !== reportedHeight || leavesReveal)
-      ) {
-        reportedHeight = event.height;
+      if (event.type !== 'viewport') {
+        return;
+      }
+      const changed = event.height !== reportedHeight;
+      reportedHeight = event.height;
+      if (leavesReveal && event.height > 0 && followsDockDeficit(win)) {
+        followPan(event.height);
+      } else if (changed || leavesReveal) {
         commit();
       }
     });
+    // A scroll that comes to rest, or a lifted finger, hands a followed pan's
+    // lift to the layout.
+    const onRest = (event: Event) => {
+      const touches = (event as Partial<TouchEvent>).touches;
+      if (panPendingRef.current && !(touches != null && touches.length > 0)) {
+        commit();
+      }
+    };
+    const stopRest = leavesReveal
+      ? [
+          subscribeInput(win, 'touchend', onRest),
+          subscribeInput(win, 'touchcancel', onRest),
+          subscribeInput(win, 'scrollend', onRest),
+        ]
+      : [];
     // Mounted under a keyboard that is already up: take its place at once.
     commit();
     return () => {
+      for (const stop of stopRest) {
+        stop();
+      }
       unsubscribeHeight();
       unsubscribe?.();
       ridingRef.current = false;
