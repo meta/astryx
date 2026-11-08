@@ -33,8 +33,8 @@
  * ```
  *
  * Internal variables (`--layout-padding-inner-x`, `--container-padding-*`,
- * `--_section-padding-propagated`) are implementation details and must not be
- * referenced by themes. They also do not cross an overlay boundary — see
+ * `--container-corner-*`, `--_section-padding-propagated`) are implementation
+ * details and must not be referenced by themes. They also do not cross an overlay boundary — see
  * `overlayPaddingReset` in padding.stylex.ts.
  *
  * SYNC: When modified, update /packages/core/src/Layout/Layout.doc.mjs

@@ -85,7 +85,7 @@ export const docs = {
       name: 'isDisabled',
       type: 'boolean',
       description:
-        'Whether the editor is disabled: non-editable, dimmed, out of the tab order, and announced as disabled. Wins when isReadOnly is also set. Takes effect when changed after mount.',
+        'Whether the editor is disabled: non-editable, dimmed, out of the tab order, and announced as disabled. Its links do not navigate and are not tab stops. Wins when isReadOnly is also set. Takes effect when changed after mount.',
       default: 'false',
     },
     {
