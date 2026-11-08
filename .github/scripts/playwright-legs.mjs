@@ -64,6 +64,18 @@ export function planLegs(files, durations, legs) {
 }
 
 /**
+ * A note that the proofs need the last leg the matrix allows, with the room
+ * left before it is full; null while a whole leg of room remains, and null
+ * past the ceiling, which `legsFitMessage` reports.
+ */
+export function nearCeilingMessage({seconds, setupSeconds, maxSeconds, maxLegs}) {
+  const needed = legsNeeded({seconds, setupSeconds, maxSeconds});
+  if (needed !== maxLegs) return null;
+  const room = Math.round(maxLegs * (maxSeconds - setupSeconds) - seconds);
+  return `${Math.round(seconds)} s of proofs need ${needed} of the ${maxLegs} legs; ${room} s of room is left before the ceiling`;
+}
+
+/**
  * Why a suite's proofs do not fit its matrix, or null when they do: the leg
  * count the planner takes for `seconds` must be no more than `maxLegs`, and
  * every leg it plans, with its setup, within `maxSeconds` plus `slackSeconds`
