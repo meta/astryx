@@ -319,6 +319,42 @@ test('the tint clears from what it shows when the row drops, with no jump to cle
   await page.evaluate(() => window.__lift.dispose());
 });
 
+test('a drop while the tint rises turns it around with its velocity: it keeps rising a little before it clears (spec:AST-094 FR6)', async ({
+  page,
+}) => {
+  await open(page);
+  const tint = await page.evaluate(async () => {
+    const frame = async () =>
+      new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    const shown = () => {
+      const layer = document.querySelector('[data-lift]');
+      return layer == null
+        ? -1
+        : Number(getComputedStyle(layer, '::backdrop').opacity);
+    };
+    window.__lift.lift('row2', 0.8);
+    // WebKit shows the stylesheet's opacity until the rise's first frame.
+    let rising = -1;
+    for (let i = 0; i < 60 && !(rising > 0.1 && rising < 0.5); i++) {
+      await frame();
+      rising = shown();
+    }
+    window.__lift.drop();
+    const after: number[] = [];
+    for (let i = 0; i < 8; i++) {
+      await frame();
+      after.push(shown());
+    }
+    return {rising, after};
+  });
+  const detail = JSON.stringify(tint);
+  expect(tint.rising, detail).toBeGreaterThan(0.05);
+  expect(tint.rising, detail).toBeLessThan(0.6);
+  // Still moving up at the drop, it rises past where the drop found it.
+  expect(Math.max(...tint.after), detail).toBeGreaterThan(tint.rising + 0.03);
+  await page.evaluate(() => window.__lift.dispose());
+});
+
 test('every motion the lift plays, the menu’s growth and close included, is translate, scale, transform or opacity (spec:AST-094 FR5)', async ({
   page,
 }) => {
