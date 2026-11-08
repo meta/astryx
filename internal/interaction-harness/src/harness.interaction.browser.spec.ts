@@ -187,6 +187,41 @@ async function fixture(page: Page) {
   await page.goto('http://harness.test/');
 }
 
+/**
+ * Waits until a cast holds `min` frames. A cast sends a frame only when the
+ * screen changes, and a loaded runner sends fewer of them. Past `capMs`
+ * with fewer, the run is starved, and fails as such.
+ */
+async function waitForCastFrames(
+  cast: {frameCount(): number},
+  min: number,
+  during: string,
+  capMs = 5000,
+): Promise<void> {
+  const start = Date.now();
+  let frames = cast.frameCount();
+  let last = start;
+  let longestGapMs = 0;
+  while (frames < min) {
+    const now = Date.now();
+    longestGapMs = Math.max(longestGapMs, now - last);
+    if (now - start >= capMs) {
+      throw new FrameStarvationError({
+        during: `${during} (${now - start} ms)`,
+        frames,
+        min,
+        longestGapMs,
+      });
+    }
+    await new Promise(resolve => setTimeout(resolve, 10));
+    const count = cast.frameCount();
+    if (count > frames) {
+      frames = count;
+      last = Date.now();
+    }
+  }
+}
+
 test.describe('touch input', () => {
   test('the page receives trusted touches and pointers at the scripted positions and times', async ({
     page,
@@ -1512,11 +1547,36 @@ test.describe('frame evidence', () => {
   }) => {
     const lastFrame = async (html: string) => {
       await page.setContent(html);
+      // The cast sends a frame only when the screen changes, and a loaded
+      // runner can draw the new page late. So a dot fades in and out in the
+      // far corner, clear of every square read below. The cast starts once
+      // the page has drawn, so every frame it sends shows the page.
+      await page.evaluate(
+        () =>
+          new Promise<void>(resolve => {
+            const dot = document.createElement('div');
+            Object.assign(dot.style, {
+              position: 'fixed',
+              right: '0',
+              bottom: '0',
+              width: '4px',
+              height: '4px',
+              background: '#fff',
+            });
+            document.body.append(dot);
+            dot.animate([{opacity: 0}, {opacity: 1}], {
+              duration: 200,
+              direction: 'alternate',
+              iterations: Infinity,
+            });
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+          }),
+      );
       const cast = await startScreencast(page);
-      await page.waitForTimeout(200);
-      const castFrames = (await cast.stop()).slice(-1);
-      expect(castFrames).toHaveLength(1);
-      return castFrames;
+      await waitForCastFrames(cast, 1, 'the cast waited for the drawn page');
+      const last = (await cast.stop()).slice(-1);
+      expect(last).toHaveLength(1);
+      return last;
     };
     const read = async (
       castFrames: readonly CastFrame[],
@@ -6230,14 +6290,17 @@ test.describe('storyboards', {tag: '@storyboard'}, () => {
     const box = page.locator('#box');
     // JPEG frames (WebKit's are always JPEG) take the conversion path.
     const cast = await startScreencast(page, {format: 'jpeg'});
+    // The slide repeats until the cast holds the nine frames its window needs:
+    // a loaded runner presents fewer of them in any fixed time.
     await box.evaluate(el =>
       el.animate(
         [{transform: 'translateX(0px)'}, {transform: 'translateX(200px)'}],
-        {duration: 600},
+        {duration: 600, iterations: Infinity},
       ),
     );
-    await page.waitForTimeout(500);
+    await waitForCastFrames(cast, 9, 'the slide repeated');
     const presented = await cast.stop();
+    await box.evaluate(el => el.getAnimations().forEach(a => a.cancel()));
     expect(presented.length).toBeGreaterThan(8);
     // A window of the middle frames, zeroed on one of them.
     const zero = presented[2].t;
