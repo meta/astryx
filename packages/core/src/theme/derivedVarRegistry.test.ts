@@ -309,6 +309,17 @@ const PRIVATE_SYSTEM_VARS = new Set([
   // `break-word` fallback. scripts/text-overflow-wrap-anywhere.test.mjs
   // keeps every such container setting it.
   '--_astryx-text-overflow-wrap',
+  // List FR5 and the container-padding record's corner geometry: a bleeding
+  // List passes its first and last rows the container corner they take.
+  '--_list-corner-start-start',
+  '--_list-corner-start-end',
+  '--_list-corner-end-start',
+  '--_list-corner-end-end',
+  // The container-padding record's corner geometry: a rounded Card, Dialog,
+  // or BottomSheet hands its block-edge radius to the shared corner
+  // publication beside container().
+  '--_container-corner-block-start',
+  '--_container-corner-block-end',
   // AlertDialog FR6: the alert's exit timing, from the theme's exit tokens or
   // Reduce Motion's. The fade of its exit copy reads it.
   '--_alert-exit-duration',

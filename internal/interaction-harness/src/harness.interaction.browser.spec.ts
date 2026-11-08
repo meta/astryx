@@ -85,6 +85,7 @@ import {
   holdAnimations,
   holdInputUntil,
   installInputLog,
+  type HeldInput,
   type InputRecord,
   type PlayOptions,
   installLongTaskLog,
@@ -185,6 +186,41 @@ async function fixture(page: Page) {
     route.fulfill({contentType: 'text/html', body: FIXTURE}),
   );
   await page.goto('http://harness.test/');
+}
+
+/**
+ * Waits until a cast holds `min` frames. A cast sends a frame only when the
+ * screen changes, and a loaded runner sends fewer of them. Past `capMs`
+ * with fewer, the run is starved, and fails as such.
+ */
+async function waitForCastFrames(
+  cast: {frameCount(): number},
+  min: number,
+  during: string,
+  capMs = 5000,
+): Promise<void> {
+  const start = Date.now();
+  let frames = cast.frameCount();
+  let last = start;
+  let longestGapMs = 0;
+  while (frames < min) {
+    const now = Date.now();
+    longestGapMs = Math.max(longestGapMs, now - last);
+    if (now - start >= capMs) {
+      throw new FrameStarvationError({
+        during: `${during} (${now - start} ms)`,
+        frames,
+        min,
+        longestGapMs,
+      });
+    }
+    await new Promise(resolve => setTimeout(resolve, 10));
+    const count = cast.frameCount();
+    if (count > frames) {
+      frames = count;
+      last = Date.now();
+    }
+  }
 }
 
 test.describe('touch input', () => {
@@ -365,6 +401,35 @@ test.describe('touch input', () => {
     );
   });
 
+  test('a lift whose page pointerup listener holds its touchend reads at the pointerup, as the gesture host does: the paced flick passes', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'webkit',
+      'only WebKit stamps a touch when it arrives; Chromium carries the scripted times',
+    );
+    // The lift's pointerup listener holds the main thread 50 ms, as a busy
+    // app's can. WebKit stamps the touchend after it, but the gesture host
+    // reads the lift at the pointerup, paired with the moves.
+    await page.route('http://pointerup-stalling-page.test/', route =>
+      route.fulfill({
+        contentType: 'text/html',
+        body: '<!doctype html><body style="margin:0;height:3000px;touch-action:none"><script>addEventListener("pointerup",()=>{const end=performance.now()+50;while(performance.now()<end){}});</script>',
+      }),
+    );
+    await page.goto('http://pointerup-stalling-page.test/');
+    const driver = await touchDriver(page);
+    const played = await driver.play(
+      flick(
+        {x: 200, y: 400},
+        {velocity: {x: 0, y: -1500}, durationMs: 80, hz: 120},
+      ),
+      {pacing: 'spacing'},
+    );
+    expect(played.at(-1)?.release).toBeDefined();
+  });
+
   test("a page whose touch listener holds its main thread changes a paced flick's release itself: TouchPageStallError, never the runner's", async ({
     page,
     browserName,
@@ -402,14 +467,14 @@ test.describe('touch input', () => {
 
   /**
    * A flick up a page that takes every touch, its lift right after its last
-   * move. The page logs each move at its pointer event and the lift at its
-   * touch event, where Core's gesture host reads them.
+   * move. The page logs each move and the lift at its pointer event, where
+   * Core's gesture host and the play read them.
    */
   async function liftStallPage(page: Page) {
     await page.route('http://lift-stall.test/', route =>
       route.fulfill({
         contentType: 'text/html',
-        body: '<!doctype html><body style="margin:0;height:3000px;touch-action:none"><script>window.touches=[];for(const type of ["pointermove","touchend"])addEventListener(type,e=>touches.push([type,e.timeStamp]),{passive:true})</script>',
+        body: '<!doctype html><body style="margin:0;height:3000px;touch-action:none"><script>window.touches=[];for(const type of ["pointermove","pointerup"])addEventListener(type,e=>touches.push([type,e.timeStamp]),{passive:true})</script>',
       }),
     );
     await page.goto('http://lift-stall.test/');
@@ -430,7 +495,7 @@ test.describe('touch input', () => {
     const pageLiftGap = () =>
       page.evaluate(() => {
         const {touches} = window as unknown as {touches: [string, number][]};
-        const lift = touches.findIndex(([type]) => type === 'touchend');
+        const lift = touches.findIndex(([type]) => type === 'pointerup');
         return touches[lift][1] - touches[lift - 1][1];
       });
     return {driver: await touchDriver(page), script, slowRead, pageLiftGap};
@@ -456,6 +521,11 @@ test.describe('touch input', () => {
     const {numbers} = outcome as TouchLiftStallError;
     expect(numbers.gapMs).toBeGreaterThan(40);
     expect(numbers.scriptedGapMs).toBeLessThanOrEqual(40);
+    // Like every pacing error, it names the longest frame gap.
+    expect(numbers.frameGapMs).toEqual(expect.any(Number));
+    expect(String(outcome)).toMatch(
+      /; the page drew no frame for \d+ ms during the gesture\. /,
+    );
     // The error gives the gap the page itself read.
     const gap = await pageLiftGap();
     expect(gap).toBeGreaterThan(40);
@@ -589,6 +659,43 @@ test.describe('touch input', () => {
         `gap ${index} of ${stamps.length - 1}`,
       ).toBeGreaterThanOrEqual(scripted - ANSWER_SLACK_MS - 1);
     }
+  });
+
+  test("a tap the page holds past the component's catch time fails by name, with the time the page drew no frame, where the page stamps touches on arrival", async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'webkit',
+      'only WebKit stamps a touch when it arrives; Chromium carries the scripted times',
+    );
+    // The page's own touchstart listener holds its main thread for 120 ms, so
+    // WebKit hands it the lift late, and no frame is drawn meanwhile.
+    await page.route('http://touch-hold.test/', route =>
+      route.fulfill({
+        contentType: 'text/html',
+        body: '<!doctype html><body style="margin:0;height:3000px;touch-action:none"><script>addEventListener("touchstart",()=>{if(window.busy){const end=performance.now()+120;while(performance.now()<end){}}},{passive:true})</script>',
+      }),
+    );
+    await page.goto('http://touch-hold.test/');
+    const driver = await touchDriver(page);
+    const script = tap({x: 200, y: 300}, {holdMs: 40});
+    // On a free page, the 40 ms hold stays under the 85 ms bound.
+    await driver.play(script, {boundaries: {holdMs: 85}});
+    await page.evaluate(() => {
+      (window as unknown as {busy: boolean}).busy = true;
+    });
+    // Without a bound, a tap's hold is not judged.
+    await driver.play(script);
+    const outcome = await driver.play(script, {boundaries: {holdMs: 85}}).then(
+      () => 'resolved',
+      (error: unknown) => error,
+    );
+    expect(String(outcome)).toMatch(
+      /the page read a hold of \d+ ms where the script holds 40 ms, on the other side of the 85 ms the component decides on; the page drew no frame for (\d+) ms during the gesture/,
+    );
+    const gap = Number(/drew no frame for (\d+) ms/.exec(String(outcome))?.[1]);
+    expect(gap).toBeGreaterThan(100);
   });
 
   test('a Chromium play carries the scripted times, so a slow onEvent before its lift does not fail it', async ({
@@ -1441,11 +1548,36 @@ test.describe('frame evidence', () => {
   }) => {
     const lastFrame = async (html: string) => {
       await page.setContent(html);
+      // The cast sends a frame only when the screen changes, and a loaded
+      // runner can draw the new page late. So a dot fades in and out in the
+      // far corner, clear of every square read below. The cast starts once
+      // the page has drawn, so every frame it sends shows the page.
+      await page.evaluate(
+        () =>
+          new Promise<void>(resolve => {
+            const dot = document.createElement('div');
+            Object.assign(dot.style, {
+              position: 'fixed',
+              right: '0',
+              bottom: '0',
+              width: '4px',
+              height: '4px',
+              background: '#fff',
+            });
+            document.body.append(dot);
+            dot.animate([{opacity: 0}, {opacity: 1}], {
+              duration: 200,
+              direction: 'alternate',
+              iterations: Infinity,
+            });
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+          }),
+      );
       const cast = await startScreencast(page);
-      await page.waitForTimeout(200);
-      const castFrames = (await cast.stop()).slice(-1);
-      expect(castFrames).toHaveLength(1);
-      return castFrames;
+      await waitForCastFrames(cast, 1, 'the cast waited for the drawn page');
+      const last = (await cast.stop()).slice(-1);
+      expect(last).toHaveLength(1);
+      return last;
     };
     const read = async (
       castFrames: readonly CastFrame[],
@@ -2737,17 +2869,20 @@ test.describe('frame evidence', () => {
     const within = (w: {from: number; to: number}) => (t: {start: number}) =>
       t.start >= w.from - 20 && t.start < w.to;
     // The read itself is set apart. The rows' frames around it may be long
-    // tasks too, the page's own: they stay in longTasks.
+    // tasks too, the page's own: they stay with the page's tasks. A loaded
+    // machine can keep a 60 ms spin's thread under 50 ms, so the page's own
+    // tasks are its long and its stretched ones.
     expect(trace.devtoolsTasks.some(within(read))).toBe(true);
-    expect(
-      trace.longTasks.some(t => within(timer)(t) && t.durationMs >= 55),
-    ).toBe(true);
-    expect(
-      trace.longTasks.some(t => within(click)(t) && t.durationMs >= 55),
-    ).toBe(true);
-    expect(
-      trace.longTasks.some(t => within(direct)(t) && t.durationMs >= 55),
-    ).toBe(true);
+    const pageTasks = [...trace.longTasks, ...trace.stretchedTasks];
+    expect(pageTasks.some(t => within(timer)(t) && t.durationMs >= 55)).toBe(
+      true,
+    );
+    expect(pageTasks.some(t => within(click)(t) && t.durationMs >= 55)).toBe(
+      true,
+    );
+    expect(pageTasks.some(t => within(direct)(t) && t.durationMs >= 55)).toBe(
+      true,
+    );
     expect(trace.devtoolsTasks.filter(within(direct))).toEqual([]);
   });
 });
@@ -6156,14 +6291,17 @@ test.describe('storyboards', {tag: '@storyboard'}, () => {
     const box = page.locator('#box');
     // JPEG frames (WebKit's are always JPEG) take the conversion path.
     const cast = await startScreencast(page, {format: 'jpeg'});
+    // The slide repeats until the cast holds the nine frames its window needs:
+    // a loaded runner presents fewer of them in any fixed time.
     await box.evaluate(el =>
       el.animate(
         [{transform: 'translateX(0px)'}, {transform: 'translateX(200px)'}],
-        {duration: 600},
+        {duration: 600, iterations: Infinity},
       ),
     );
-    await page.waitForTimeout(500);
+    await waitForCastFrames(cast, 9, 'the slide repeated');
     const presented = await cast.stop();
+    await box.evaluate(el => el.getAnimations().forEach(a => a.cancel()));
     expect(presented.length).toBeGreaterThan(8);
     // A window of the middle frames, zeroed on one of them.
     const zero = presented[2].t;
@@ -6398,7 +6536,91 @@ test.describe('page freeze', () => {
     expect((error as Error).message).toMatch(
       /before its first frame after the thaw/,
     );
+    // After the thaw, resumed() still reads the first frame drawn unfrozen,
+    // and landed() still names the early input.
     await thawPage(page);
+    const resumeMs = await hold.resumed();
+    const again = await hold.landed().catch((caught: unknown) => caught);
+    expect(again).toBeInstanceOf(LiftPlacementError);
+    expect((again as LiftPlacementError).numbers.resumeMs).toBe(resumeMs);
+  });
+
+  test('a finger held down through a freeze lifts alone after the thaw, and its hold lands mid-travel on a stalled runner', async ({
+    page,
+  }) => {
+    await installPageFreeze(page);
+    await freezeFixture(page);
+    await installTimerGate(page);
+    const driver = await touchDriver(page);
+    // The page's own handlers: the touch-down starts a 400 ms travel, and the
+    // lift records how far it had run.
+    await page.evaluate(() => {
+      const box = document.getElementById('box')!;
+      addEventListener(
+        'pointerdown',
+        () => {
+          box.animate(
+            [{transform: 'translateX(0px)'}, {transform: 'translateX(400px)'}],
+            {duration: 400, easing: 'linear'},
+          );
+        },
+        {passive: true},
+      );
+      addEventListener(
+        'pointerup',
+        () => {
+          const w = window as unknown as {liftAt?: number | null};
+          w.liftAt ??= Number(box.getAnimations()[0]?.currentTime ?? null);
+        },
+        {passive: true},
+      );
+    });
+    // The finger goes down while the page is frozen, so the travel it starts
+    // is held at its start. Only the lift is left to send.
+    await freezePage(page);
+    const finger = await driver.press({x: 20, y: 60});
+    const hold = await holdInputUntil(page, {afterResumeMs: 150});
+    await thawPage(page);
+    // The runner stalls 40 ms in every 45 from here, as a loaded one does.
+    const stall = setInterval(() => {
+      const end = Date.now() + 40;
+      while (Date.now() < end) {
+        // the runner is busy
+      }
+    }, 45);
+    let held: HeldInput;
+    try {
+      await hold.resumed();
+      await finger.lift();
+      held = await hold.landed();
+    } finally {
+      clearInterval(stall);
+    }
+    expect(held.arrivedMs).toBeLessThan(held.intendedMs);
+    const liftAt = await page.evaluate(
+      () => (window as unknown as {liftAt?: number | null}).liftAt,
+    );
+    // The page handled the lift mid-travel: after the travel started, and
+    // before it ended.
+    expect(liftAt).toBeGreaterThan(0);
+    expect(liftAt).toBeLessThan(400);
+    // A lifted finger fails by name, and so does a second finger 0, a play or
+    // a tap while a finger is held.
+    await expect(finger.lift()).rejects.toThrow(/finger 0 was lifted/);
+    const again = await driver.press({x: 20, y: 60});
+    await expect(driver.press({x: 30, y: 60})).rejects.toThrow(
+      /finger 0 is already down/,
+    );
+    await expect(
+      driver.play([
+        {t: 0, fingers: [{id: 1, x: 30, y: 60}]},
+        {t: 30, fingers: []},
+      ]),
+    ).rejects.toThrow(/lift the 1 finger press holds down before a play/);
+    await expect(driver.tap({x: 30, y: 60})).rejects.toThrow(
+      /lift the 1 finger press holds down before a play or a tap/,
+    );
+    await again.lift();
   });
 
   test('a lift that reaches the page while it is frozen again after the thaw fails by name, and the page still answers', async ({
