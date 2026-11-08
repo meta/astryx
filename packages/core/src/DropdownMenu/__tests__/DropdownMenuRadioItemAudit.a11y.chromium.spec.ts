@@ -460,7 +460,7 @@ for (const item of cases) {
         checked.length === 1 && checked[0].startsWith(expectedChecked(item)),
       disabledRow:
         observed.rows[4]?.disabled === 'true' &&
-        observed.rows[4]?.tabIndex === null,
+        observed.rows[4]?.tabIndex === '-1',
       activeRow:
         active === undefined
           ? true
