@@ -122,12 +122,22 @@ function measureSelectedItem(
     anchorCenter - itemCenterInListbox - SELECTED_ITEM_OPTICAL_OFFSET;
   // The layer keeps a gutter from the viewport's block end. A list that
   // reaches into it overflows the layer's room, and the browser then takes a
-  // position fallback, which can flip the list off screen.
+  // position fallback, which can flip the list off screen. The gutter is the
+  // layer's far-edge margin. Before the overlay margin applies, the browser
+  // can already have flipped the layer above its anchor, which moves the
+  // gutter to the block-start margin, so read the larger of the two.
   const layer = countsLayerGutter
     ? listbox.closest<HTMLElement>('[popover]')
     : null;
-  const blockEndGutter =
-    layer == null ? 0 : parseFloat(getComputedStyle(layer).marginBlockEnd) || 0;
+  let blockEndGutter = 0;
+  if (layer != null) {
+    const layerStyle = getComputedStyle(layer);
+    blockEndGutter = Math.max(
+      0,
+      parseFloat(layerStyle.marginBlockStart) || 0,
+      parseFloat(layerStyle.marginBlockEnd) || 0,
+    );
+  }
   const viewportHeight = window.innerHeight;
   const maxTop = Math.max(0, viewportHeight - listboxHeight - blockEndGutter);
   const clampedTop = Math.min(Math.max(desiredTop, 0), maxTop);
