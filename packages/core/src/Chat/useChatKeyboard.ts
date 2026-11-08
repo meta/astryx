@@ -6,7 +6,7 @@
  * @file useChatKeyboard.ts
  * @input React refs, the keyboard module's height, focus routes and layout
  *   guide, the stream scroll's lock, the motion engine, the touch query and
- *   layout viewport height
+ *   layout viewport height. Also the input stream's touches and wheels
  * @output Exports useChatKeyboard: the lift for ChatLayout's dock and message
  *   area, and the refs for its dock, message area and composer region. It
  *   also tells whether a focus call in the composer skips the browser's reveal
@@ -46,6 +46,7 @@ import {
 import type {KeyboardTransition} from '../keyboard/keyboardModel';
 import {rideKeyboard} from '../keyboard/rideKeyboard';
 import {layoutViewportHeight} from '../utils/layoutViewport';
+import {subscribeInput} from '../utils/inputStream';
 import {useInteractionModalityTrackingFor} from '../utils/interactionModality';
 import {isCoarsePointer} from '../utils/coarsePointer';
 import {useTouchPresentation} from '../utils/touchPresentation';
@@ -207,6 +208,17 @@ export function useChatKeyboard({
     liftStore.get,
   );
   const liftRef = useRef(0);
+  // Whether this keyboard show is the one that found the dock covered, and
+  // whether a touch or a wheel came since its report. Only that show, with no
+  // input yet, can still meet a slow browser's own pan to the dock.
+  const classifyingShowRef = useRef(false);
+  const inputSinceReportRef = useRef(false);
+  // What this window's browser did at a keyboard show, for the effects below.
+  const revealVersion = useSyncExternalStore(
+    subscribeReveal,
+    readRevealVersion,
+    readRevealVersion,
+  );
   // Set while the guide's ride is under way: the layout waits for it. Each
   // ride's number, so only the latest one hands its translate back.
   const ridingRef = useRef(false);
@@ -232,14 +244,116 @@ export function useChatKeyboard({
     if (root == null || win == null) {
       return undefined;
     }
+    // Where the browser keeps focus and the composer's reveal, each keyboard
+    // show decides once whether the dock rises. A browser that pans the
+    // visual viewport to the fixed dock reveals it: the dock rises nothing,
+    // so a lift never adds to the pan. A dock still covered once the visual
+    // viewport has settled rises by the keyboard's cover, as elsewhere.
+    const unguidedDocument =
+      isDocumentScroller(scrollRef.current) &&
+      keyboardProfileOf(win) !== 'chromium';
+    const leavesReveal = leavesRevealToBrowser(win, scrollRef.current);
+    // The fingers down on the page. A pan under a finger is the reader's, not
+    // the browser's reveal.
+    let touchesDown = 0;
+    const onInput = (event: Event) => {
+      if (event.type !== 'wheel') {
+        touchesDown = (event as TouchEvent).touches?.length ?? 0;
+      }
+      if (event.type === 'touchstart' || event.type === 'wheel') {
+        inputSinceReportRef.current = true;
+      }
+    };
+    const stopInput = unguidedDocument
+      ? (['touchstart', 'touchend', 'touchcancel', 'wheel'] as const).map(
+          type => subscribeInput(win, type, onInput),
+        )
+      : [];
+    // A pan that reveals the fixed dock, with no finger down: with no lift,
+    // the dock would rest at or above the visual viewport's bottom.
+    const isRevealPan = (pan: number | null, inset: number) =>
+      pan != null && inset > 0 && touchesDown === 0 && pan >= inset - 1;
+    let reveal: 'none' | 'watching' | 'revealed' | 'covered' = 'none';
+    let revealFrame = 0;
+    let coveredAt = 0;
+    // The visual viewport's pan with no keyboard up: a show's pan is measured
+    // from it.
+    let restPan = 0;
+    // The visual viewport's pan, or null under a pinch zoom, whose pan is the
+    // reader's.
+    const panOf = () => {
+      const viewport = win.visualViewport;
+      return viewport != null && viewport.scale === 1
+        ? viewport.offsetTop
+        : null;
+    };
+    const stopWatching = () => {
+      if (revealFrame !== 0) {
+        win.cancelAnimationFrame(revealFrame);
+        revealFrame = 0;
+      }
+    };
+    const watchReveal = () => {
+      stopWatching();
+      const startPan = panOf();
+      if (startPan != null && startPan >= getKeyboardHeight(win) - 1) {
+        // Revealed at the report. Only a pan there shows what the browser
+        // does; a show that needed none teaches nothing.
+        reveal = 'revealed';
+        if (startPan > restPan + 0.5) {
+          learnReveal(win, true);
+        }
+        return;
+      }
+      reveal = 'watching';
+      const start = win.performance.now();
+      let height = win.visualViewport?.height;
+      let lastPan = startPan;
+      let stillFrames = 0;
+      const step = () => {
+        revealFrame = 0;
+        const pan = panOf();
+        const inset = getKeyboardHeight(win);
+        if (inset <= 0) {
+          reveal = 'none';
+          return;
+        }
+        // A pan that reveals the dock is the browser's reveal. A smaller one,
+        // or one under a finger, only restarts the count.
+        if (isRevealPan(pan, inset) && pan != null && pan > restPan + 0.5) {
+          reveal = 'revealed';
+          learnReveal(win, true);
+          return;
+        }
+        const nextHeight = win.visualViewport?.height;
+        const isStill = nextHeight === height && pan === lastPan;
+        stillFrames = isStill ? stillFrames + 1 : 0;
+        height = nextHeight;
+        lastPan = pan;
+        const settled = stillFrames >= REVEAL_SETTLE_FRAMES;
+        if (settled || win.performance.now() - start >= REVEAL_WAIT_CAP_MS) {
+          reveal = 'covered';
+          coveredAt = win.visualViewport?.offsetTop ?? 0;
+          commit();
+          // A dock still covered on a still visual viewport: this browser
+          // reveals no fixed dock. From the next render on, the layout keeps
+          // the composer above the keyboard itself, with no wait.
+          if (settled) {
+            classifyingShowRef.current = true;
+            learnReveal(win, false);
+          }
+          return;
+        }
+        revealFrame = win.requestAnimationFrame(step);
+      };
+      revealFrame = win.requestAnimationFrame(step);
+    };
     // A sticky dock rests at the root's bottom edge, which may sit above or
     // below the layout viewport's; a fixed dock rests at the viewport's.
     // While a keyboard is up the dock rises until it clears the keyboard's
-    // cover; without one it rests where the layout puts it. Where the browser
-    // reveals the composer itself, the dock rises nothing.
-    const leavesReveal = leavesRevealToBrowser(win, scrollRef.current);
+    // cover; without one it rests where the layout puts it.
     const liftFor = (inset: number) => {
-      if (inset <= 0 || leavesReveal) {
+      if (inset <= 0 || (leavesReveal && reveal !== 'covered')) {
         return 0;
       }
       // In layout px, as the root's rect is, under a pinch zoom too.
@@ -341,16 +455,67 @@ export function useChatKeyboard({
     // so a ride claims the change first.
     let reportedHeight = getKeyboardHeight(win);
     const unsubscribeHeight = subscribeKeyboardHeight(win, event => {
-      if (event.type === 'viewport' && event.height !== reportedHeight) {
+      if (event.type !== 'viewport') {
+        return;
+      }
+      if (event.height > 0 && reportedHeight <= 0) {
+        inputSinceReportRef.current = false;
+      } else if (event.height <= 0) {
+        classifyingShowRef.current = false;
+      }
+      if (leavesReveal) {
+        const viewport = win.visualViewport;
+        if (event.height <= 0) {
+          stopWatching();
+          reveal = 'none';
+          restPan = panOf() ?? 0;
+        } else if (reveal === 'none') {
+          watchReveal();
+        } else if (
+          reveal === 'covered' &&
+          viewport != null &&
+          viewport.scale === 1 &&
+          viewport.offsetTop > coveredAt + 0.5 &&
+          !inputSinceReportRef.current &&
+          isRevealPan(viewport.offsetTop, event.height)
+        ) {
+          // The browser panned to the dock after the wait: the lift goes, and
+          // it does not come back in this show.
+          reveal = 'revealed';
+          learnReveal(win, true);
+          commit();
+        }
+      } else if (
+        unguidedDocument &&
+        liftRef.current > 0 &&
+        classifyingShowRef.current &&
+        !inputSinceReportRef.current &&
+        isRevealPan(panOf(), event.height)
+      ) {
+        // A slow browser panned to the dock after the show that found it
+        // covered, before any input. The lift goes once, and the browser
+        // keeps the reveal. A pan after a touch or a wheel is the reader's.
+        learnReveal(win, true);
+      }
+      if (event.height !== reportedHeight) {
         reportedHeight = event.height;
         commit();
       }
     });
     // Mounted under a keyboard that is already up: take its place at once.
+    if (leavesReveal && reportedHeight > 0) {
+      watchReveal();
+    } else {
+      restPan = panOf() ?? 0;
+    }
     commit();
     return () => {
       unsubscribeHeight();
       unsubscribe?.();
+      stopWatching();
+      for (const stop of stopInput) {
+        stop();
+      }
       ridingRef.current = false;
     };
   }, [
@@ -361,6 +526,7 @@ export function useChatKeyboard({
     dock.animator,
     messages.animator,
     liftStore,
+    revealVersion,
   ]);
 
   // Synchronizes the dock's and the transcript's translates, and the
@@ -424,7 +590,7 @@ export function useChatKeyboard({
       claim: editableToClaim,
       deliver: deliverTap,
     });
-  }, [touchPresentation.isTouch, scrollRef]);
+  }, [touchPresentation.isTouch, scrollRef, revealVersion]);
 
   // A browser that reveals the composer itself pans the visual viewport after
   // the keyboard's report, while the composer still rides up. Chrome 124 on
@@ -452,7 +618,7 @@ export function useChatKeyboard({
       unsubscribe();
       pans.stop();
     };
-  }, [touchPresentation.isTouch, scrollRef]);
+  }, [touchPresentation.isTouch, scrollRef, revealVersion]);
 
   // Synchronizes the keyboard module's focus takeover, and the region's group
   // role, with the touch presentation. Every other move into the composer's
@@ -488,7 +654,7 @@ export function useChatKeyboard({
       stopTakeover();
       composer.removeAttribute('role');
     };
-  }, [touchPresentation.isTouch, readModality, scrollRef]);
+  }, [touchPresentation.isTouch, readModality, scrollRef, revealVersion]);
 
   // A focus call skips the browser's reveal only where ChatLayout keeps the
   // composer above the keyboard itself. The server has no keyboard profile.
@@ -498,7 +664,7 @@ export function useChatKeyboard({
     return win == null || !leavesRevealToBrowser(win, scroller);
   }, [scrollRef]);
   const isKeyboardSurface = useSyncExternalStore(
-    subscribeToNothing,
+    subscribeReveal,
     readKeyboardSurface,
     readKeyboardSurfaceOnServer,
   );
@@ -512,19 +678,74 @@ export function useChatKeyboard({
   };
 }
 
-// A browser's keyboard profile never changes while the page runs.
-const subscribeToNothing = () => () => {};
+// How long a keyboard show waits for the browser's own pan to the dock. The
+// visual viewport must stay still for these frames, with a cap in wall time.
+// A busy device draws fewer frames, so it waits longer. Safari on iOS pans up
+// to about 400 ms after the keyboard's report.
+const REVEAL_SETTLE_FRAMES = 40;
+const REVEAL_WAIT_CAP_MS = 3000;
+
 const readKeyboardSurfaceOnServer = () => true;
 
+// What each window's browser did with a fixed dock at a keyboard show. True:
+// it panned the visual viewport to reveal the dock. False: the dock stayed
+// covered. Unknown until the first show.
+const revealLearned = new WeakMap<Window, boolean>();
+const revealListeners = new Set<() => void>();
+let revealVersionNow = 0;
+function learnReveal(win: Window, pans: boolean): void {
+  if (revealLearned.get(win) === pans) {
+    return;
+  }
+  revealLearned.set(win, pans);
+  revealVersionNow += 1;
+  for (const listener of revealListeners) {
+    listener();
+  }
+}
+function subscribeReveal(listener: () => void): () => void {
+  revealListeners.add(listener);
+  return () => {
+    revealListeners.delete(listener);
+  };
+}
+const readRevealVersion = () => revealVersionNow;
+
+/** What `win`'s browser was found to do with a fixed dock (tests only). */
+export function __revealLearnedForTest(win: Window): boolean | undefined {
+  return revealLearned.get(win);
+}
+
+/** Forgets what `win`'s browser was found to do (tests only). */
+export function __resetRevealForTest(win: Window): void {
+  if (revealLearned.delete(win)) {
+    revealVersionNow += 1;
+    for (const listener of revealListeners) {
+      listener();
+    }
+  }
+}
+
+/** Records what `win`'s browser did with a fixed dock (tests only). */
+export const __learnRevealForTest = learnReveal;
+
+/** Whether ChatLayout leaves the composer's reveal to `win` (tests only). */
+export const __leavesRevealToBrowserForTest = leavesRevealToBrowser;
+
 /**
- * Whether the browser keeps the composer above the keyboard itself. That is a
- * page that scrolls the document, in a browser with no layout guide, such as
- * Safari on iOS. Safari pans the visual viewport to the fixed dock and keeps
- * the pan. A lift would add to that pan. So ChatLayout leaves focus, the
- * reveal and the dock's place to the browser there.
+ * Whether the browser keeps focus and the composer's reveal. That is a page
+ * that scrolls the document, in a browser with no layout guide. It holds
+ * until a keyboard show finds the fixed dock left covered. Safari on iOS pans
+ * the visual viewport to the dock, and a lift would add to that pan. Firefox
+ * for Android leaves it covered: from then on, the layout keeps the composer
+ * above the keyboard itself.
  */
 function leavesRevealToBrowser(win: Window, scroller: Element | null): boolean {
-  return isDocumentScroller(scroller) && keyboardProfileOf(win) !== 'chromium';
+  return (
+    isDocumentScroller(scroller) &&
+    keyboardProfileOf(win) !== 'chromium' &&
+    revealLearned.get(win) !== false
+  );
 }
 
 // The document's root and body both scroll the page.

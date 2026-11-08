@@ -18,7 +18,13 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {act, fireEvent, render, screen} from '@testing-library/react';
 import {ChatComposer} from './ChatComposer';
 import {ChatLayout} from './ChatLayout';
-import {editableToClaim} from './useChatKeyboard';
+import {
+  __leavesRevealToBrowserForTest,
+  __learnRevealForTest,
+  __resetRevealForTest,
+  __revealLearnedForTest,
+  editableToClaim,
+} from './useChatKeyboard';
 import {getKeyboardLayoutGuide} from '../keyboard/keyboardLayoutGuide';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 import {__focusTakeoverCallersForTest} from '../keyboard/keyboardHeight';
@@ -366,13 +372,59 @@ describe('ChatLayout in a page that scrolls the document', () => {
       configurable: true,
       value: viewport,
     });
+    __resetRevealForTest(window);
   });
 
   afterEach(() => {
     Reflect.deleteProperty(window, 'visualViewport');
     Reflect.deleteProperty(navigator, 'virtualKeyboard');
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    __resetRevealForTest(window);
   });
+
+  // Scripted animation frames: the wait for the browser's pan counts frames,
+  // so these cases run no clock.
+  let frames = new Map<number, FrameRequestCallback>();
+  function scriptFrames() {
+    frames = new Map();
+    let nextFrame = 1;
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => {
+      const id = nextFrame;
+      nextFrame += 1;
+      frames.set(id, callback);
+      return id;
+    });
+    vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(id => {
+      frames.delete(id);
+    });
+  }
+  function frame(count = 1) {
+    act(() => {
+      for (let i = 0; i < count; i += 1) {
+        const queued = [...frames.values()];
+        frames.clear();
+        for (const callback of queued) {
+          callback(performance.now());
+        }
+      }
+    });
+  }
+  // A finger down on the page, or none.
+  function touches(count: number) {
+    const event = new Event(count > 0 ? 'touchstart' : 'touchend');
+    Object.defineProperty(event, 'touches', {value: {length: count}});
+    act(() => {
+      document.dispatchEvent(event);
+    });
+  }
+  // The browser pans the visual viewport, as Safari's reveal of the dock does.
+  function pan(offsetTop: number) {
+    viewport.offsetTop = offsetTop;
+    act(() => {
+      viewport.dispatchEvent(new Event('scroll'));
+    });
+  }
 
   function renderDocumentLayout() {
     return render(
@@ -397,6 +449,229 @@ describe('ChatLayout in a page that scrolls the document', () => {
     await settle();
     expect(layoutLift(dockOf(container))).toBe(0);
     expect(keyboardRoom(messagesOf())).toBe(0);
+  });
+
+  it('lifts the fixed dock by the keyboard once the visual viewport settles with no pan, as in Firefox for Android', () => {
+    scriptFrames();
+    const {container} = renderDocumentLayout();
+    report(window.innerHeight - 290);
+    frame(10);
+    expect(layoutLift(dockOf(container))).toBe(0);
+    frame(40);
+    expect(layoutLift(dockOf(container))).toBe(290);
+    expect(keyboardRoom(messagesOf())).toBe(290);
+    expect(__revealLearnedForTest(window)).toBe(false);
+  });
+
+  it('lifts nothing when the visual viewport pans within the wait, as Safari on iOS does', () => {
+    scriptFrames();
+    const {container} = renderDocumentLayout();
+    report(window.innerHeight - 337);
+    frame(20);
+    pan(337);
+    frame(60);
+    expect(layoutLift(dockOf(container))).toBe(0);
+    expect(keyboardRoom(messagesOf())).toBe(0);
+    expect(__revealLearnedForTest(window)).toBe(true);
+    expect(__focusTakeoverCallersForTest(document)).toBe(0);
+  });
+
+  it('lifts nothing when the dock is already revealed at the report, and learns nothing from a show that needed no pan', () => {
+    scriptFrames();
+    viewport.offsetTop = 337;
+    const {container} = renderDocumentLayout();
+    report(window.innerHeight - 337);
+    frame(60);
+    expect(layoutLift(dockOf(container))).toBe(0);
+    expect(__revealLearnedForTest(window)).toBeUndefined();
+  });
+
+  it('drops the lift once when the browser pans after the wait, and keeps it off for that show', () => {
+    scriptFrames();
+    const {container} = renderDocumentLayout();
+    report(window.innerHeight - 290);
+    frame(45);
+    expect(layoutLift(dockOf(container))).toBe(290);
+    pan(290);
+    expect(layoutLift(dockOf(container))).toBe(0);
+    pan(0);
+    frame(45);
+    expect(layoutLift(dockOf(container))).toBe(0);
+  });
+
+  it('after a show that left the dock covered, keeps the composer above the keyboard itself: the takeover, and a lift with no wait', () => {
+    scriptFrames();
+    const {container} = renderDocumentLayout();
+    expect(__focusTakeoverCallersForTest(document)).toBe(0);
+    report(window.innerHeight - 290);
+    frame(45);
+    expect(__focusTakeoverCallersForTest(document)).toBe(1);
+    report(window.innerHeight);
+    expect(layoutLift(dockOf(container))).toBe(0);
+    report(window.innerHeight - 290);
+    expect(layoutLift(dockOf(container))).toBe(290);
+  });
+
+  it('keeps the lift when a finger pans the visual viewport with the keyboard up, as a reader\u2019s scroll in Firefox does', () => {
+    scriptFrames();
+    const {container} = renderDocumentLayout();
+    report(window.innerHeight - 290);
+    frame(45);
+    expect(layoutLift(dockOf(container))).toBe(290);
+    touches(1);
+    pan(156.4);
+    frame(5);
+    pan(290);
+    frame(5);
+    expect(layoutLift(dockOf(container))).toBe(290);
+    expect(__revealLearnedForTest(window)).toBe(false);
+  });
+
+  it('keeps the lift for a small pan with no finger down', () => {
+    scriptFrames();
+    const {container} = renderDocumentLayout();
+    report(window.innerHeight - 290);
+    frame(45);
+    pan(40);
+    frame(5);
+    expect(layoutLift(dockOf(container))).toBe(290);
+  });
+
+  it('drops the lift once for a slow browser whose pan to the dock comes after the settle, and leaves it the reveal', () => {
+    scriptFrames();
+    const {container} = renderDocumentLayout();
+    report(window.innerHeight - 337);
+    frame(45);
+    expect(layoutLift(dockOf(container))).toBe(337);
+    pan(337);
+    frame(2);
+    expect(layoutLift(dockOf(container))).toBe(0);
+    expect(__revealLearnedForTest(window)).toBe(true);
+    expect(__focusTakeoverCallersForTest(document)).toBe(0);
+  });
+
+  it('keeps the lift for a reveal-sized pan after a touch, as a reader\u2019s fling to the end', () => {
+    scriptFrames();
+    const {container} = renderDocumentLayout();
+    report(window.innerHeight - 290);
+    frame(45);
+    expect(layoutLift(dockOf(container))).toBe(290);
+    touches(1);
+    touches(0);
+    pan(290);
+    frame(2);
+    expect(layoutLift(dockOf(container))).toBe(290);
+    expect(__revealLearnedForTest(window)).toBe(false);
+  });
+
+  it('keeps the lift for a reveal-sized pan after a wheel', () => {
+    scriptFrames();
+    const {container} = renderDocumentLayout();
+    report(window.innerHeight - 290);
+    frame(45);
+    act(() => {
+      document.dispatchEvent(new Event('wheel'));
+    });
+    pan(290);
+    frame(2);
+    expect(layoutLift(dockOf(container))).toBe(290);
+  });
+
+  it('keeps the lift on a show that reached the cap when a touch came before the pan', () => {
+    scriptFrames();
+    let now = 1000;
+    vi.spyOn(performance, 'now').mockImplementation(() => now);
+    const {container} = renderDocumentLayout();
+    report(window.innerHeight - 290);
+    // The visual viewport never settles: the cap decides, and nothing is learned.
+    for (let i = 0; i < 31; i += 1) {
+      now += 100;
+      viewport.height = window.innerHeight - 290 - (i % 2);
+      frame();
+    }
+    expect(layoutLift(dockOf(container))).toBe(290);
+    expect(__revealLearnedForTest(window)).toBeUndefined();
+    touches(1);
+    touches(0);
+    pan(290);
+    frame(2);
+    expect(layoutLift(dockOf(container))).toBe(290);
+  });
+
+  it('never flips a page that learned the dock stays covered at a later show', () => {
+    scriptFrames();
+    const {container} = renderDocumentLayout();
+    report(window.innerHeight - 290);
+    frame(45);
+    report(window.innerHeight);
+    report(window.innerHeight - 290);
+    expect(layoutLift(dockOf(container))).toBe(290);
+    pan(290);
+    frame(2);
+    expect(layoutLift(dockOf(container))).toBe(290);
+    expect(__revealLearnedForTest(window)).toBe(false);
+  });
+
+  it('restarts the count, but decides nothing, for a pan during the wait that is smaller than the cover', () => {
+    scriptFrames();
+    const {container} = renderDocumentLayout();
+    report(window.innerHeight - 290);
+    frame(10);
+    pan(40);
+    frame(30);
+    expect(layoutLift(dockOf(container))).toBe(0);
+    frame(15);
+    expect(layoutLift(dockOf(container))).toBe(290);
+  });
+
+  it('after a show the browser panned to, keeps leaving the reveal to it', () => {
+    scriptFrames();
+    const {container} = renderDocumentLayout();
+    report(window.innerHeight - 337);
+    frame(5);
+    pan(337);
+    frame(2);
+    report(window.innerHeight);
+    pan(0);
+    report(window.innerHeight - 337);
+    frame(3);
+    pan(337);
+    frame(60);
+    expect(layoutLift(dockOf(container))).toBe(0);
+    expect(__focusTakeoverCallersForTest(document)).toBe(0);
+    expect(__revealLearnedForTest(window)).toBe(true);
+  });
+
+  it('learns per window: what one page found never changes another', () => {
+    const root = document.documentElement;
+    const first = {navigator: {}} as unknown as Window;
+    const second = {navigator: {}} as unknown as Window;
+    __learnRevealForTest(first, false);
+    expect(__leavesRevealToBrowserForTest(first, root)).toBe(false);
+    expect(__leavesRevealToBrowserForTest(second, root)).toBe(true);
+    __learnRevealForTest(second, true);
+    expect(__leavesRevealToBrowserForTest(second, root)).toBe(true);
+    expect(__revealLearnedForTest(first)).toBe(false);
+    __resetRevealForTest(first);
+    __resetRevealForTest(second);
+  });
+
+  it('counts frames, not time: a busy device that draws few frames waits longer, up to a cap', () => {
+    scriptFrames();
+    let now = 1000;
+    vi.spyOn(performance, 'now').mockImplementation(() => now);
+    const {container} = renderDocumentLayout();
+    report(window.innerHeight - 290);
+    for (let i = 0; i < 20; i += 1) {
+      now += 100;
+      frame();
+    }
+    expect(layoutLift(dockOf(container))).toBe(0);
+    for (let i = 0; i < 10; i += 1) {
+      now += 100;
+      frame();
+    }
+    expect(layoutLift(dockOf(container))).toBe(290);
   });
 
   it('leaves the composer\u2019s focus to Safari there: no focus takeover and no composer group', () => {
@@ -437,10 +712,16 @@ describe('ChatLayout in a page that scrolls the document', () => {
       value: {overlaysContent: false},
     });
     const {container} = renderDocumentLayout();
+    expect(
+      __leavesRevealToBrowserForTest(window, document.documentElement),
+    ).toBe(false);
     report(window.innerHeight - 300);
     await settle();
     expect(layoutLift(dockOf(container))).toBe(300);
     expect(keyboardRoom(messagesOf())).toBe(300);
+    // The reveal wait never runs where the layout guide rides the keyboard.
+    expect(__revealLearnedForTest(window)).toBeUndefined();
+    expect(__focusTakeoverCallersForTest(document)).toBe(1);
   });
 });
 
