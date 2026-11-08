@@ -32,6 +32,7 @@ import {
   withStorybook,
 } from '@astryxdesign/interaction-harness';
 
+import {paging} from '../../motion/uikit/paging';
 import {nearestStop} from '../snapPagingValue';
 
 const storybook = withStorybook(test);
@@ -139,7 +140,13 @@ async function swipe(
   const from = {x: box.x + box.width / 2 + (rtl ? -half : half), y};
   const to = {x: from.x + (rtl ? px : -px), y};
   const driver = await touchDriver(page);
-  await driver.play(drag(from, to, {durationMs: ms, restMs}));
+  // The paging reads a scrolling surface's release and pages from
+  // `advanceSpeed`. A release the page reads on the other side of it from
+  // the script fails by name, never as the paging's verdict.
+  await driver.play(drag(from, to, {durationMs: ms, restMs}), {
+    release: 'scroll',
+    boundaries: {releasePxPerS: paging.release.advanceSpeed},
+  });
 }
 
 for (const mode of ['paging', 'item'] as const) {
@@ -561,6 +568,10 @@ test('the scroll offset holds through a swipe, and the settle hands it on', asyn
   await expect.poll(async () => offset(scroller)).toBeCloseTo(stops[6], 0);
 });
 
+/** The fifth item's native snap alignment. */
+const fifthAlign = async (scroller: Locator) =>
+  scroller.evaluate(el => getComputedStyle(el.children[4]).scrollSnapAlign);
+
 /**
  * The partial last page with its row 1 px narrower. The fifth item's stop sits
  * 1.37 px before the row's end, within half its step of it.
@@ -577,12 +588,21 @@ async function openSplitEnd(page: Page, mode: Mode) {
       timeout: 5000,
     })
     .toBe(before + 1);
+  // The paging writes the skip in a frame after the resize. Ten frames are
+  // its budget.
+  const isSkipped = await scroller.evaluate(async el => {
+    const fifth = el.children[4];
+    for (let frame = 0; frame < 10; frame++) {
+      if (getComputedStyle(fifth).scrollSnapAlign === 'none') {
+        return true;
+      }
+      await new Promise(resolve => requestAnimationFrame(resolve));
+    }
+    return getComputedStyle(fifth).scrollSnapAlign === 'none';
+  });
+  expect(isSkipped, 'paging never wrote the skip').toBe(true);
   return scroller;
 }
-
-/** The fifth item's native snap alignment. */
-const fifthAlign = async (scroller: Locator) =>
-  scroller.evaluate(el => getComputedStyle(el.children[4]).scrollSnapAlign);
 
 /** Adds an eighth item to the row, a copy of its last. */
 async function addItem(scroller: Locator) {
