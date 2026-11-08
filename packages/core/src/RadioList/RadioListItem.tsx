@@ -291,8 +291,7 @@ export function RadioListItem({
   // Synchronizes the form owner's submitted entries (its `formdata` event): a
   // selected, individually disabled radio stays in the form, so the group
   // keeps one form owner, one Tab stop, and a satisfied `required`, but its
-  // value leaves the entry list, as a natively disabled radio's would
-  //.
+  // value leaves the entry list, as a natively disabled radio's would.
   const excludesValue = isItemDisabled && isChecked && !context.isDisabled;
   useEffect(() => {
     const form = radioRef.current?.form;

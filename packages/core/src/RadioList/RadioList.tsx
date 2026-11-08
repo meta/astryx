@@ -79,8 +79,8 @@ RadioListContext.displayName = 'RadioListContext';
 export interface RadioListFormContextValue {
   /**
    * Every radio leaves the form: the whole group is disabled, so nothing
-   * submits and a required group does not block the submit. Detaching all of them, never one, keeps the radios one native group
-   * with one Tab stop.
+   * submits and a required group does not block the submit. Detaching all of
+   * them, never one, keeps the radios one native group with one Tab stop.
    */
   detachesFromForm: boolean;
   /**

@@ -186,9 +186,9 @@ Consumer migration instructions belong in consumer docs and release notes.
   own prop targets; RadioList
   meets FR10.
 - `spec:AST-085` owns disabled focusability; RadioList meets its FR1, FR4,
-  FR5 and FR7, and its FR2 and FR3 once hydrated. Before hydration, an
-  individually disabled option can be checked, and submitted when checked
-  (`component:RadioListItem` FR6).
+  FR5 and FR7, and its FR2 and FR3 once hydrated. Before hydration, a
+  disabled option can be checked, and an individually disabled one submitted
+  when checked (`component:RadioListItem` FR6).
 - `component:RadioListItem` owns each option and reads the group through
   context.
 
@@ -206,9 +206,10 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Current-state impact
 
-- **Before hydration.** An individually disabled radio can be checked, and
-  submitted when checked, from server markup until hydration, against
-  `spec:AST-085` FR2 and FR3; a wholly disabled group submits nothing.
+- **Before hydration.** A disabled radio can be checked from server markup
+  until hydration, against `spec:AST-085` FR2. An individually disabled radio
+  is also submitted when checked, against FR3; a wholly disabled group submits
+  nothing.
 - **Consumer docs.** `RadioList.doc.mjs` anatomy lists Header, Children, and
   Label/Value parts; RadioList renders a group label, options, and a status
   message, and has no header.
