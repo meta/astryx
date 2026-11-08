@@ -28,6 +28,7 @@ const STORY = {
   handBuilt: 'core-resizable--panel-with-hand-built-props',
   controlled: 'core-resizable--sliding-controlled-panel',
   scrolled: 'core-resizable--sliding-scrolled-panel-fixture',
+  defaultMinimum: 'core-resizable--sliding-panel-at-default-minimum-fixture',
 } as const;
 
 /** How many evenly spaced moments of a motion are captured. */
@@ -680,6 +681,48 @@ test('the grow arrow opens a collapsed panel with a slide', async ({page}) => {
   expect(travelling(opening.frames)).toBeGreaterThanOrEqual(MOMENTS / 3);
   expectEdgeOnHandle(opening.frames);
   expect((await pane.boundingBox())?.width ?? 0).toBeGreaterThan(100);
+});
+
+test('a key step under the collapsed size slides the panel closed on the theme curve, as a collapse does, not on the release spring', async ({
+  page,
+}) => {
+  await openFixture(page, STORY.defaultMinimum);
+  await expectPresent(page);
+  const pane = page.getByTestId('sliding-panel');
+  const handle = page.getByRole('separator', {name: 'Resize panel'});
+  // A collapse from inside plays the theme's curve: the reference.
+  await page.getByRole('button', {name: 'Close panel'}).focus();
+  const collapse = await captureMotion(page, 'start', async () => {
+    await page.keyboard.press('Enter');
+  });
+  await handle.focus();
+  await captureMotion(page, 'start', async () => {
+    await page.keyboard.press('Enter');
+  });
+  // Down to the minimum, 50 px, in large steps: 150, 100, 50.
+  for (const width of [150, 100, 50]) {
+    await page.keyboard.press('Shift+ArrowLeft');
+    await expect
+      .poll(async () => (await pane.boundingBox())?.width ?? 0, {
+        message: `the pane steps to ${width} px`,
+        timeout: 2_000,
+      })
+      .toBeCloseTo(width, 0);
+  }
+  // One more step ends at 0, under the collapsed size (40 px).
+  const closing = await captureMotion(page, 'start', async () => {
+    await page.keyboard.press('Shift+ArrowLeft');
+  });
+  expectSlid(closing);
+  expect(closing.durationMs).toBeCloseTo(collapse.durationMs, -1);
+  expect(closing.durationMs).toBeLessThan(
+    settlingDuration(toSpring(springs.settle)) * 1000 - 100,
+  );
+  expect((await pane.boundingBox())?.width).toBeCloseTo(
+    await collapsedWidthOf(page),
+    0,
+  );
+  await expect(pane).toHaveAttribute('inert', '');
 });
 
 test('a lift past the threshold slides the panel closed on the settle spring, and a drag that reopens it follows the pointer with no slide', async ({
