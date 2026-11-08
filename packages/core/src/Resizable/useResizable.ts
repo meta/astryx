@@ -69,7 +69,10 @@ export interface ResizableRegionSizing {
   defaultSize?: ResizableSize | SizeValue;
   /** Whether this region can collapse to 0. @default false */
   collapsible?: boolean;
-  /** Size in px at which dragging triggers collapse. @default 40 */
+  /**
+   * Size in px under which a lift or a key step collapses the region.
+   * @default 40
+   */
   collapsedSize?: number;
   /** Pixel values to snap to during resize. */
   snaps?: number[];
@@ -101,7 +104,11 @@ export interface ResizableConfig {
   defaultIsCollapsed?: boolean;
   /** Controlled collapse state. Pair with `onCollapseChange`. */
   isCollapsed?: boolean;
-  /** Called when collapse state changes (via drag or programmatic). */
+  /**
+   * Called once per collapse state change. A lift or a key step closes the
+   * region, and a drag or a key reopens it. Enter, a double-click,
+   * `collapse()`, `expand()` and `resize()` report too.
+   */
   onCollapseChange?: (isCollapsed: boolean) => void;
 }
 
@@ -131,14 +138,19 @@ export interface UseResizableSingleOptions {
    */
   defaultIsCollapsed?: boolean;
   /**
-   * Controlled collapse state. When set, the caller owns collapse:
-   * `collapse()`, `expand()` and a drag past the collapse threshold report
-   * through `onCollapseChange` instead of changing state here.
+   * Controlled collapse state. When set, the caller owns collapse, and the
+   * hook reports instead of changing its state. `collapse()`, `expand()`, a
+   * lift or a key step past the collapse threshold, and a drag that reopens
+   * the region report through `onCollapseChange`.
    */
   isCollapsed?: boolean;
   /** Called when size changes during drag. */
   onSizeChange?: (size: number) => void;
-  /** Called when collapse state changes (via drag or programmatic). */
+  /**
+   * Called once per collapse state change. A lift or a key step closes the
+   * region, and a drag or a key reopens it. Enter, a double-click,
+   * `collapse()`, `expand()` and `resize()` report too.
+   */
   onCollapseChange?: (isCollapsed: boolean) => void;
 }
 
@@ -245,6 +257,12 @@ function useSingleResizable(config: UseResizableSingleConfig): ResizableRegion {
   const onResizeEnd = useCallback(() => {
     model()?.end();
   }, [model]);
+  const onResizeRelease = useCallback(
+    (velocity: number) => {
+      model()?.end(velocity);
+    },
+    [model],
+  );
   const onResizeCancel = useCallback(() => {
     model()?.cancel();
   }, [model]);
@@ -265,6 +283,7 @@ function useSingleResizable(config: UseResizableSingleConfig): ResizableRegion {
     _isResizableProps: true,
   };
   collapseControls.set(props, {collapse, expand});
+  releaseEnds.set(props, onResizeRelease);
   // The LayoutPanel that takes these props hands its pane to the region, and
   // the ResizeHandle that takes them says when a pointer drags it.
   registerPropsRegion(props, regionSlot);
@@ -337,6 +356,13 @@ type CollapseControls = {collapse: () => void; expand: () => void};
 const collapseControls = new WeakMap<ResizableProps, CollapseControls>();
 
 /**
+ * A drag's end with its release velocity, in px per second and signed like
+ * the move's delta. Kept off the exported `ResizableProps` for the same reason
+ * as the collapse controls; {@link endResizeAt} is internal.
+ */
+const releaseEnds = new WeakMap<ResizableProps, (velocity: number) => void>();
+
+/**
  * The maximum an unbounded region reports as `aria-valuemax`: a measured
  * extent that stands in for the missing configured maximum — the container's
  * content box on the active axis while a percentage bound already observes
@@ -377,6 +403,19 @@ export function getCollapseControls(
   props: ResizableProps,
 ): CollapseControls | undefined {
   return collapseControls.get(props);
+}
+
+/**
+ * Ends the drag `props` follows at a release `velocity`. A props object the
+ * hook did not return ends without one. Internal to the package.
+ */
+export function endResizeAt(props: ResizableProps, velocity: number): void {
+  const end = releaseEnds.get(props);
+  if (end == null) {
+    props._onResizeEnd();
+    return;
+  }
+  end(velocity);
 }
 
 /** Removed keys must fail even when a variable bypasses excess-property checks. */

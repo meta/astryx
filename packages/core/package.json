@@ -868,6 +868,11 @@
       "source": "./src/internal/scroll-anchoring.ts",
       "types": "./dist/internal/scroll-anchoring.d.ts",
       "default": "./dist/internal/scroll-anchoring.js"
+    },
+    "./internal/line-clamp": {
+      "source": "./src/internal/line-clamp.ts",
+      "types": "./dist/internal/line-clamp.d.ts",
+      "default": "./dist/internal/line-clamp.js"
     }
   },
   "files": [
@@ -908,7 +913,7 @@
     "test:watch": "vitest --root ../..",
     "lint": "eslint src",
     "typecheck:docs": "tsc --project tsconfig.docs.json",
-    "typecheck": "tsc --project tsconfig.json --noEmit && pnpm typecheck:docs"
+    "typecheck": "node ../../scripts/typecheck-sharded.mjs --project tsconfig.json --shards 3 && pnpm typecheck:docs"
   },
   "peerDependencies": {
     "@stylexjs/stylex": "^0.19.0",

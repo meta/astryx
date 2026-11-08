@@ -12,7 +12,7 @@ const anatomy = [
     name: 'Scroll region',
     required: true,
     description:
-      'Outer region that scrolls horizontally, enters the keyboard order, and contains overscroll only while the columns overflow.',
+      'Outer region that scrolls horizontally when columns overflow. Fixed-height virtualization also enables block scrolling; the region enters keyboard order while either applicable axis overflows.',
   },
   {
     name: 'Header section',
@@ -197,7 +197,7 @@ export const docs = {
       name: 'idKey',
       type: '(keyof T & string) | ((item: T) => string | number)',
       description:
-        'Row key for React reconciliation. Pass a property name string or a function. Falls back to row index if omitted.',
+        'Canonical row identity: a property name projects valid strings and finite numbers to strings; a function retains string/number type. Optional legacy tables fall back to index. Virtualization requires explicit unique valid keys.',
     },
     {
       name: 'density',
@@ -237,6 +237,12 @@ export const docs = {
       description:
         "How body cell text behaves when it exceeds the column width. 'wrap' lets text wrap and the row grow taller; 'truncate' clips with an ellipsis (default-rendered cells show a tooltip on hover when truncated). Header cells always truncate.",
       default: "'wrap'",
+    },
+    {
+      name: 'virtualization',
+      type: 'TableVirtualizationCapability',
+      description:
+        'Geometry-only capability from useTableRowsVirtualization({rowHeight, viewportHeight}), both positive finite CSS pixels. Pass complete flat data and an explicit idKey. Default text truncates; custom renderers, wrapping, structural plugins, incompatible offsets, invalid identity or unrepresentable geometry use full rendering. Logical row positions include the header.',
     },
     {
       name: 'plugins',

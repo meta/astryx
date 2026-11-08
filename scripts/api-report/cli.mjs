@@ -50,6 +50,27 @@ export const SURFACE_FILE = 'surface.json';
  * and `staleOwnRows`; a reader of version 2 accepts a missing `staleOwnRows`.
  */
 export const CHANGES_VERSION = 2;
+
+/**
+ * The object `api-changes.json` holds. Its readers are the pull request report
+ * and merge-guard.
+ * @param {ReturnType<typeof computeChanges>} changes
+ * @param {{haveSurface: boolean, baseRecord?: string}} base whether the merge
+ *   base's surface was found, and where it came from
+ */
+export function changesFile(changes, {haveSurface, baseRecord}) {
+  return {
+    version: CHANGES_VERSION,
+    // Where the merge base's surface came from: Main's record of that commit,
+    // a build of it in this run, or neither (committed reports).
+    baseRecord: haveSurface
+      ? baseRecord === 'build'
+        ? 'build'
+        : 'main'
+      : null,
+    packages: changes,
+  };
+}
 const REPO_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '../..',
@@ -304,17 +325,7 @@ async function main() {
     fs.writeFileSync(
       path.join(args.out, 'api-changes.json'),
       JSON.stringify(
-        {
-          version: CHANGES_VERSION,
-          // Where the merge base's surface came from: Main's record of that
-          // commit, a build of it in this run, or neither (committed reports).
-          baseRecord: haveSurface
-            ? args.baseRecord === 'build'
-              ? 'build'
-              : 'main'
-            : null,
-          packages: changes,
-        },
+        changesFile(changes, {haveSurface, baseRecord: args.baseRecord}),
         null,
         2,
       ) + '\n',
