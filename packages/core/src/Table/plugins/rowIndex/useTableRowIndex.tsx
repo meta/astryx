@@ -91,6 +91,22 @@ export function useTableRowIndex<T extends Record<string, unknown>>(
     // the index cell's renderer reads the position that its own transform
     // stored.
     const positions = new WeakMap<T, number>();
+    // One column object per plugin, so a Table re-render keeps its resolved
+    // columns and leaves unchanged rows alone.
+    const indexColumn: TableColumn<T> = {
+      key: INDEX_COLUMN_KEY,
+      header: label,
+      width: INDEX_COLUMN_WIDTH,
+      align: 'end',
+      resizable: false,
+      renderCell: (item: T) => {
+        const idx = lookup == null ? positions.get(item) : lookup(item);
+        if (idx == null) {
+          return null;
+        }
+        return <span {...stylex.props(styles.index)}>{idx + startFrom}</span>;
+      },
+    };
     return {
       rowModel: 'flat',
       transformBodyCell(props, column, item, _columnIndex, _columns, context) {
@@ -100,22 +116,6 @@ export function useTableRowIndex<T extends Record<string, unknown>>(
         return props;
       },
       transformColumns(columns) {
-        const indexColumn: TableColumn<T> = {
-          key: INDEX_COLUMN_KEY,
-          header: label,
-          width: INDEX_COLUMN_WIDTH,
-          align: 'end',
-          resizable: false,
-          renderCell: (item: T) => {
-            const idx = lookup == null ? positions.get(item) : lookup(item);
-            if (idx == null) {
-              return null;
-            }
-            return (
-              <span {...stylex.props(styles.index)}>{idx + startFrom}</span>
-            );
-          },
-        };
         return [indexColumn, ...columns];
       },
     };
