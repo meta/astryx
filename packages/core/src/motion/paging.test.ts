@@ -414,7 +414,11 @@ describe('solveAnimatedPageScroll: setContentOffset(_:animated:)', () => {
       expect(curve.duration).toBe(0.3);
       expect(curve.at(0.3)).toBe(distance);
       expect(curve.velocity(0.3)).toBe(0);
-      expect(curve.velocity(0)).toBe(0);
+      // From rest it starts on its curve's own slope.
+      expect(curve.velocity(0)).toBeCloseTo(
+        (curve.at(1e-6) - curve.at(0)) / 1e-6,
+        2,
+      );
     }
   });
 
