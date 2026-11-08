@@ -67,7 +67,7 @@ interface SelectedItemPlacement {
   offset: number;
   /** The anchor's bottom edge, viewport px. */
   anchorBottom: number;
-  /** The listbox's layout height, px. */
+  /** The layer's layout height, px: the listbox and the surface around it. */
   listboxHeight: number;
 }
 
@@ -98,10 +98,22 @@ function measureSelectedItem(
 
   const anchorRect = anchor.getBoundingClientRect();
 
+  // The clamp keeps the whole layer in the viewport: the listbox and the
+  // surface border around it. Measuring the listbox alone leaves the layer a
+  // border taller than the room, and the browser then flips it off screen.
   // offset* metrics intentionally exclude the popover's entry transform.
-  const listboxHeight = listbox.offsetHeight;
-  if (listboxHeight <= 0) {
+  const layer = listbox.closest<HTMLElement>('[popover]') ?? listbox;
+  const layerHeight = layer.offsetHeight;
+  if (layerHeight <= 0) {
     return null;
+  }
+  let listboxInset = 0;
+  for (
+    let node: HTMLElement | null = listbox;
+    node != null && node !== layer;
+    node = node.offsetParent as HTMLElement | null
+  ) {
+    listboxInset += node.offsetTop;
   }
 
   // Item center relative to listbox top. This remains stable even as the
@@ -114,22 +126,26 @@ function measureSelectedItem(
     targetItem.offsetHeight / 2;
   const anchorCenter = anchorRect.top + anchorRect.height / 2;
 
-  // Desired top aligns the selected item's center with the anchor center.
+  // Desired layer top aligns the selected item's center with the anchor
+  // center.
   const desiredTop =
-    anchorCenter - itemCenterInListbox - SELECTED_ITEM_OPTICAL_OFFSET;
+    anchorCenter -
+    itemCenterInListbox -
+    listboxInset -
+    SELECTED_ITEM_OPTICAL_OFFSET;
   const viewportHeight = window.innerHeight;
-  const maxTop = Math.max(0, viewportHeight - listboxHeight);
+  const maxTop = Math.max(0, viewportHeight - layerHeight);
   const clampedTop = Math.min(Math.max(desiredTop, 0), maxTop);
 
   // useLayer positions the popover below the outer anchor. Apply a negative
-  // block-start margin to the layer container so the listbox top moves from
+  // block-start margin to the layer container so the layer top moves from
   // anchorRect.bottom to clampedTop.
   const clampedOffset = Math.max(0, anchorRect.bottom - clampedTop);
 
   return {
     offset: clampedOffset,
     anchorBottom: anchorRect.bottom,
-    listboxHeight,
+    listboxHeight: layerHeight,
   };
 }
 

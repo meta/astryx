@@ -194,6 +194,7 @@ function mockSelectorRects({
   listboxLayoutHeight = listbox.height,
   selectedItemLayoutTop = selectedItem.top - listbox.top,
   selectedItemLayoutHeight = selectedItem.height,
+  layerLayoutHeight = listboxLayoutHeight,
   viewportHeight = 200,
 }: {
   anchor?: DOMRect;
@@ -203,6 +204,8 @@ function mockSelectorRects({
   listboxLayoutHeight?: number;
   selectedItemLayoutTop?: number;
   selectedItemLayoutHeight?: number;
+  /** The popover layer's layout height: the listbox plus its border. */
+  layerLayoutHeight?: number;
   viewportHeight?: number;
 } = {}) {
   const originalGetBoundingClientRect =
@@ -259,6 +262,9 @@ function mockSelectorRects({
       }
       if (this.id.endsWith('-item-1')) {
         return selectedItemLayoutHeight;
+      }
+      if (this.hasAttribute('popover')) {
+        return layerLayoutHeight;
       }
       return 0;
     },
@@ -638,6 +644,40 @@ describe('Selector', () => {
       });
       expect(popover?.getAttribute('style')).toContain(
         'margin-block-start: var(--_selector-overlay-margin)',
+      );
+    } finally {
+      restoreRects();
+    }
+  });
+
+  it('clamps the whole layer, border included, and keeps it out of the flip fallbacks', async () => {
+    // The layer is 2 px taller than the listbox: its surface border.
+    const restoreRects = mockSelectorRects({layerLayoutHeight: 122});
+    const user = userEvent.setup();
+    try {
+      render(
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Banana"
+          onChange={() => {}}
+        />,
+      );
+
+      await user.click(screen.getByRole('combobox'));
+      const popover = screen
+        .getByRole('listbox', {hidden: true})
+        .closest('[popover]');
+      // 2 px higher than the listbox alone would give (110 px), so the
+      // layer's bottom border stays in the 200 px viewport.
+      await waitFor(() => {
+        expect(popover?.getAttribute('style')).toContain(
+          '--_selector-overlay-margin: min(-112px,',
+        );
+      });
+      // A flip would mirror the measured margin to the other side.
+      expect(popover?.getAttribute('style')).toContain(
+        'position-try-fallbacks: none',
       );
     } finally {
       restoreRects();
