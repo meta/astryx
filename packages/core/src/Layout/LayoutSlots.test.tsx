@@ -116,6 +116,51 @@ describe('LayoutHeader', () => {
     expect(el.className).toContain('hdr-custom');
   });
 
+  it('exposes no role or name without a caller role', () => {
+    const {container} = render(<LayoutHeader>H</LayoutHeader>);
+    const header = container.querySelector('.astryx-layout-header');
+    expect(header).not.toHaveAttribute('role');
+    expect(header).not.toHaveAttribute('aria-label');
+  });
+
+  it('passes style, DOM, data, and event props to the root', () => {
+    const onClick = vi.fn();
+    render(
+      <LayoutHeader
+        style={{color: 'red'}}
+        id="page-header"
+        data-testid="header"
+        aria-describedby="hint"
+        onClick={onClick}>
+        H
+      </LayoutHeader>,
+    );
+    const header = screen.getByTestId('header');
+    expect(header).toHaveClass('astryx-layout-header');
+    expect(header.style.color).toBe('red');
+    expect(header).toHaveAttribute('id', 'page-header');
+    expect(header).toHaveAttribute('aria-describedby', 'hint');
+    fireEvent.click(screen.getByText('H'));
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps data-divider when a caller passes its own value', () => {
+    const {container, rerender} = render(
+      <LayoutHeader data-divider="false">H</LayoutHeader>,
+    );
+    const sel = '.astryx-layout-header';
+    expect(container.querySelector(sel)).not.toHaveAttribute('data-divider');
+    rerender(
+      <LayoutHeader hasDivider {...{'data-divider': undefined}}>
+        H
+      </LayoutHeader>,
+    );
+    expect(container.querySelector(sel)).toHaveAttribute(
+      'data-divider',
+      'true',
+    );
+  });
+
   it('renders children in an inner wrapper (padding owner), not directly on the root', () => {
     const {container} = render(<LayoutHeader>Inner</LayoutHeader>);
     const root = container.querySelector(
