@@ -15,7 +15,7 @@
 import {registerEnglishFallback} from '../i18n/englishFallback';
 import english from '../i18n/generated-english/Resizable/createResizable.generated';
 import {observeResize} from '../utils/sharedResizeObserver';
-import {devWarn} from '../utils/devWarning';
+import {createDevWarnings, devWarn} from '../utils/devWarning';
 import {project} from '../motion/projection';
 import {
   rubberBand,
@@ -186,8 +186,8 @@ function readWindowExtent(direction: ResizableDirection): number | null {
   return direction === 'vertical' ? window.innerHeight : window.innerWidth;
 }
 
-/** Starts as warned: the factory warns, and this first-render read does not. */
-const QUIET = {current: true};
+/** The factory warns. This first-render read does not. */
+const QUIET = null;
 
 /** How far a pull past a size bound can move the handle, in px. */
 const RUBBER_BAND_TRAVEL_PX = 8;
@@ -441,12 +441,7 @@ export function createResizableAs(
   const listeners = new Set<() => void>();
   const isReversed = (): boolean => opts.isReversed ?? false;
   const isDisabled = (): boolean => opts.isDisabled ?? false;
-  const didWarn = {
-    min: {current: false},
-    max: {current: false},
-    defaultSize: {current: false},
-    inverted: false,
-  };
+  const warn = createDevWarnings();
 
   let persistedKey = opts.autoSaveId;
   let persisted: PersistedResizableState | null = persistedKey
@@ -621,7 +616,7 @@ export function createResizableAs(
       DEFAULT_MIN,
       'minSize',
       RESIZABLE_SIZE_GUIDANCE,
-      didWarn.min,
+      warn,
       source,
     );
     const max = resolveBound(
@@ -631,7 +626,7 @@ export function createResizableAs(
       Infinity,
       'maxSize',
       RESIZABLE_SIZE_GUIDANCE,
-      didWarn.max,
+      warn,
       source,
     );
     // A basis-dependent default resolves ONCE into a pixel size; it is final
@@ -645,7 +640,7 @@ export function createResizableAs(
           DEFAULT_SIZE_FALLBACK,
           'defaultSize',
           RESIZABLE_SIZE_GUIDANCE,
-          didWarn.defaultSize,
+          warn,
           source,
         ),
         isFinal: isBasisMeasured,
@@ -683,12 +678,12 @@ export function createResizableAs(
       collapsible() &&
       (isControlled() ? Boolean(opts.isCollapsed) : uncontrolledIsCollapsed);
 
-    if (min > max && !didWarn.inverted) {
-      didWarn.inverted = true;
-      devWarn(
+    if (min > max) {
+      warn(
         source,
         `the resolved minimum (${min}px) is above the resolved maximum ` +
           `(${max}px). The maximum wins${isHook ? ', as it always has' : ''}.`,
+        'inverted',
       );
     }
 
