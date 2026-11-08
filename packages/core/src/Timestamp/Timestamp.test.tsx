@@ -985,6 +985,32 @@ describe('Timestamp', () => {
       ).not.toBeInTheDocument();
     });
 
+    it('keeps a caller aria-controls changed while the card is open', async () => {
+      const props = {
+        value: '2026-02-19T17:00:00Z',
+        format: 'date_time',
+        tooltipEntries: [{}],
+        'data-testid': 'ts',
+      } as const;
+      const {rerender} = render(<Timestamp {...props} aria-controls="first" />);
+      const time = screen.getByTestId('ts');
+      act(() => time.focus());
+      const card = await screen.findByRole('dialog', {hidden: true});
+      await waitFor(() => {
+        expect(time).toHaveAttribute('aria-controls', `first ${card.id}`);
+      });
+
+      rerender(<Timestamp {...props} aria-controls="second" />);
+      await waitFor(() => {
+        expect(time).toHaveAttribute('aria-controls', `second ${card.id}`);
+      });
+
+      act(() => time.blur());
+      await waitFor(() => {
+        expect(time).toHaveAttribute('aria-controls', 'second');
+      });
+    });
+
     it('keeps the default hover-card row in the viewer zone with timezoneID set', async () => {
       const user = userEvent.setup();
       const originalTZ = process.env.TZ;

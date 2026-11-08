@@ -230,6 +230,8 @@ export interface TimestampHoverCardProps {
   label: string;
   /** Persistent anchor, rendered outside the lazy boundary. */
   triggerRef: RefObject<HTMLTimeElement | null>;
+  /** The caller's own `aria-controls` on the time, which the card's id joins. */
+  triggerControls?: string;
 }
 
 function gridTemplateFor(
@@ -261,6 +263,7 @@ export default function TimestampHoverCard({
   lines,
   label,
   triggerRef,
+  triggerControls,
 }: TimestampHoverCardProps): ReactNode {
   const {positionRef, interactionRef, id, isOpen, show, renderHoverCard} =
     useHoverCard({placement: 'above', focusTrigger: 'always', label});
@@ -298,18 +301,19 @@ export default function TimestampHoverCard({
     if (!isOpen) {
       return;
     }
-    const previousControls = trigger.getAttribute('aria-controls');
-    trigger.setAttribute('aria-controls', mergeIds(previousControls, id) ?? '');
+    // The caller's prop, not a snapshot of the attribute, is the caller's
+    // value: a caller that changes it while the card is open keeps the change.
+    trigger.setAttribute('aria-controls', mergeIds(triggerControls, id) ?? '');
     // The time role supports neither aria-haspopup nor aria-expanded, so the
     // open card is named through aria-controls alone.
     return () => {
-      if (previousControls === null) {
+      if (triggerControls == null || triggerControls === '') {
         trigger.removeAttribute('aria-controls');
       } else {
-        trigger.setAttribute('aria-controls', previousControls);
+        trigger.setAttribute('aria-controls', triggerControls);
       }
     };
-  }, [triggerRef, id, isOpen]);
+  }, [triggerRef, triggerControls, id, isOpen]);
 
   // A label column is only reserved when some row is labelled; otherwise the
   // value sits flush at the card's leading edge. An action column is only

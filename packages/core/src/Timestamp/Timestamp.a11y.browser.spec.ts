@@ -57,10 +57,11 @@ for (const moveAway of [false, true]) {
         await expect(times.nth(1)).toBeFocused();
       }
       release();
-      expect(await original.evaluate(node => node.isConnected)).toBe(true);
       const activeTime = times.nth(moveAway ? 1 : 0);
       await expect(activeTime).toBeFocused();
       await expect(activeTime).toHaveAttribute('aria-controls', /.+/);
+      // The card has attached, and the time the reader focused survived it.
+      expect(await original.evaluate(node => node.isConnected)).toBe(true);
       if (moveAway) {
         await expect(times.first()).not.toHaveAttribute('aria-controls');
       }

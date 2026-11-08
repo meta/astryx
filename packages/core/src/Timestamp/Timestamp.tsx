@@ -505,6 +505,7 @@ export function Timestamp({
             lines={lines}
             label={t('@astryx.timestamp.detailsLabel')}
             triggerRef={timeRef}
+            triggerControls={rest['aria-controls']}
           />
         </Suspense>
       )}
