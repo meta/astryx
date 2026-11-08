@@ -209,6 +209,9 @@ const GESTURE_USERS = new Set([
   'Tokenizer',
   // Slider's thumb.
   'Slider',
+  // Resizable: its drag tracks the release velocity that the lift's close and
+  // the handle's spring-back start from.
+  'Resizable',
   // Switch: its press tracking and its drag, for every pointer.
   'Switch',
   // SegmentedControl: its press tracking and its drag, for every pointer.
