@@ -476,6 +476,153 @@ describe('swizzle — integration-owned components', () => {
     expect(out).toContain(`from '../Bar`);
   });
 
+  it("carries another Astryx package's internal module under a folder named after that package", async () => {
+    const core = buildFakeCore(project);
+    writeProjectPackageJson(project);
+    const {compDir} = buildIntegration(project, {
+      issuesUrl: 'https://example.com/meta/issues',
+    });
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(core, 'package.json'), 'utf-8'),
+    );
+    manifest.exports['.'] = {
+      source: './src/index.ts',
+      default: './dist/index.js',
+    };
+    manifest.exports['./internal/*'] = {
+      source: './src/internal/*.ts',
+      default: './dist/internal/*.js',
+    };
+    fs.writeFileSync(path.join(core, 'package.json'), JSON.stringify(manifest));
+    fs.mkdirSync(path.join(core, 'src', 'internal'), {recursive: true});
+    fs.mkdirSync(path.join(core, 'src', 'utils'), {recursive: true});
+    fs.writeFileSync(
+      path.join(core, 'src', 'index.ts'),
+      `export {publicName} from './utils/pub';\n`,
+    );
+    fs.writeFileSync(
+      path.join(core, 'src', 'utils', 'pub.ts'),
+      `export const publicName = 1;\n`,
+    );
+    fs.writeFileSync(
+      path.join(core, 'src', 'utils', 'priv.ts'),
+      `export const priv = 2;\n`,
+    );
+    fs.writeFileSync(
+      path.join(core, 'src', 'internal', 'touch.ts'),
+      `import {publicName} from '../utils/pub';\nimport {priv} from '../utils/priv';\nexport const touch = publicName + priv;\n`,
+    );
+    // A StyleX identity module Core exports under internal/.
+    fs.writeFileSync(
+      path.join(core, 'src', 'internal', 'press.stylex.ts'),
+      `export const pressScope = {};\n`,
+    );
+    manifest.exports['./internal/press.stylex'] = {
+      source: './src/internal/press.stylex.ts',
+      default: './dist/internal/press.stylex.js',
+    };
+    fs.writeFileSync(path.join(core, 'package.json'), JSON.stringify(manifest));
+    fs.writeFileSync(
+      path.join(project, 'node_modules', '@test', 'meta', 'package.json'),
+      JSON.stringify({
+        name: '@test/meta',
+        version: '1.2.3',
+        peerDependencies: {'@astryxdesign/core': '>=0.0.13'},
+      }),
+    );
+    fs.writeFileSync(
+      path.join(compDir, 'MetaAppShell.tsx'),
+      `import {touch} from '@astryxdesign/core/internal/touch';\nimport {pressScope} from '@astryxdesign/core/internal/press.stylex';\nexport function MetaAppShell() { return [touch, pressScope]; }\n`,
+    );
+
+    const result = await runCli(
+      ['--json', 'swizzle', 'MetaAppShell', '-f'],
+      project,
+    );
+    expect(result.code).toBe(0);
+    const env = JSON.parse(result.stdout);
+    const output = path.join(project, 'components', 'astryx');
+    const read = rel => fs.readFileSync(path.join(output, rel), 'utf-8');
+    expect(read('MetaAppShell/MetaAppShell.tsx')).toContain(
+      `from '../core/internal/touch'`,
+    );
+    // Its identity is its path, so the StyleX module keeps the package import.
+    expect(read('MetaAppShell/MetaAppShell.tsx')).toContain(
+      `from '@astryxdesign/core/internal/press.stylex'`,
+    );
+    expect(env.data.dependencies).toEqual({'@astryxdesign/core': '>=0.0.13'});
+    expect(read('core/internal/touch.ts')).toContain(
+      `import {publicName} from '@astryxdesign/core';`,
+    );
+    expect(read('core/internal/touch.ts')).toContain(`from '../utils/priv'`);
+    expect(read('core/utils/priv.ts')).toBe(`export const priv = 2;\n`);
+    expect(env.data.files).toEqual(
+      expect.arrayContaining([
+        '../core/internal/touch.ts',
+        '../core/utils/priv.ts',
+      ]),
+    );
+    for (const rel of env.data.files) {
+      expect(read(path.join('MetaAppShell', rel)), rel).not.toMatch(
+        /@astryxdesign\/core\/internal\/(?!press\.stylex)/,
+      );
+    }
+  });
+
+  it('refuses to replace a changed owner module carried from another package without --overwrite', async () => {
+    const core = buildFakeCore(project);
+    writeProjectPackageJson(project);
+    const {compDir} = buildIntegration(project, {
+      issuesUrl: 'https://example.com/meta/issues',
+    });
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(core, 'package.json'), 'utf-8'),
+    );
+    manifest.exports['./internal/*'] = {
+      source: './src/internal/*.ts',
+      default: './dist/internal/*.js',
+    };
+    fs.writeFileSync(path.join(core, 'package.json'), JSON.stringify(manifest));
+    fs.mkdirSync(path.join(core, 'src', 'internal'), {recursive: true});
+    fs.mkdirSync(path.join(core, 'src', 'privateAttributes'), {
+      recursive: true,
+    });
+    fs.writeFileSync(
+      path.join(core, 'src', 'privateAttributes', 'group.stylex.ts'),
+      `export const group = 1;\n`,
+    );
+    fs.writeFileSync(
+      path.join(core, 'src', 'internal', 'grouping.ts'),
+      `import {group} from '../privateAttributes/group.stylex';\nexport const grouping = group;\n`,
+    );
+    fs.writeFileSync(
+      path.join(compDir, 'MetaAppShell.tsx'),
+      `import {grouping} from '@astryxdesign/core/internal/grouping';\nexport function MetaAppShell() { return grouping; }\n`,
+    );
+
+    expect(
+      (await runCli(['--json', 'swizzle', 'MetaAppShell'], project)).code,
+    ).toBe(0);
+    const owner = path.join(
+      project,
+      'components',
+      'astryx',
+      'core',
+      'privateAttributes',
+      'group.stylex.ts',
+    );
+    fs.appendFileSync(owner, '// edited\n');
+    fs.rmSync(path.join(project, 'components', 'astryx', 'MetaAppShell'), {
+      recursive: true,
+      force: true,
+    });
+
+    const again = await runCli(['--json', 'swizzle', 'MetaAppShell'], project);
+    expect(again.code).not.toBe(0);
+    expect(JSON.parse(again.stdout).code).toBe('ERR_FILE_EXISTS');
+    expect(fs.readFileSync(owner, 'utf-8')).toContain('// edited');
+  });
+
   it('omits the feedback note when the integration ships no issuesUrl', async () => {
     buildFakeCore(project);
     writeProjectPackageJson(project);

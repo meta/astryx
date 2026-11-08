@@ -39,6 +39,7 @@ verified_by:
     packages/core/src/Layer/layerClickBoundary.test.tsx,
     packages/core/src/Layer/layerDismissalInvariants.test.tsx,
     packages/core/src/Layer/layerExitCopy.test.ts,
+    packages/core/src/Layer/presentationHold.test.tsx,
     packages/core/src/Layer/__tests__/layerExitCopy.interaction.browser.spec.ts,
     packages/core/src/Popover/Popover.test.tsx,
     packages/core/src/DropdownMenu/DropdownMenu.test.tsx,
@@ -493,10 +494,20 @@ layers use Layer rendering without joining Escape/platform dismissal.
 ## Boundaries and invariants
 
 - **INV1 — Corrective portals preserve locality.** A context layer stays inline
-  when safe and otherwise moves only outside the outermost unsafe ancestor.
+  when safe and otherwise moves only outside the outermost unsafe ancestor
+  (see INV19 for renderer-managed DOM).
 - **INV2 — Hosting and promotion are separate.** A React portal moves DOM. Native
   Popover or modal Dialog APIs control top-layer participation and modal
   boundaries.
+- **INV19 — A renderer never reconciles a layer's nodes.** A layer whose host
+  sits inside DOM a renderer manages (a declared managed root, such as
+  RichTextEditor's editable area) portals its surface outside that root, so the
+  renderer's reconciliation never meets foreign nodes; a layer nested in
+  another layer stays in that layer's root, which the renderer does not
+  reconcile, even when that root sits inside the managed root; an inline layer
+  that is safe in place never moves; the moved wrapper mirrors the host's
+  `dir`. The managed-root declaration is internal: not exported, not a prop.
+  (Owner decision, Nov 6 2026 (Cindy).)
 - **INV3 — Positioning modes do not leak.** Anchor mode owns logical placement,
   fallbacks, and the viewport inset; custom mode owns its geometry; fixed mode
   owns explicit coordinates.
@@ -650,11 +661,12 @@ migration, verification, and completion criteria for these gaps. This record mus
 be updated only as that work ships.
 
 INV14 and INV15 are not met yet, and `spec:AST-003` does not cover them. The
-runtime owns the shared exit copy (INV13, `placeLayerExitCopy`); no shared
-presentation hold, runtime backdrop tint or lift module exists, Dialog, Drawer,
-BottomSheet, Lightbox, MobileNav, ToastViewport, and Selector each build their
-own top-layer mounting, exit, or backdrop, and Popover builds its own
-presentation hold for its sheet presentation.
+runtime owns the shared exit copy (INV13, `placeLayerExitCopy`) and the shared
+presentation hold (`Layer/presentationHold.ts`), which Popover uses for its
+sheet and anchored presentations; no runtime backdrop tint or lift module
+exists, and Dialog, Drawer, BottomSheet, Lightbox, MobileNav, ToastViewport,
+and Selector each build their own top-layer mounting, exit, backdrop, or
+presentation hold.
 BottomSheet's own includes its sheet stack's mounting — the re-show that
 keeps a document's sheets in open order, a step dialog's modal present, and
 the non-modal sheet's popover host — alongside its scrim; the ordering rules
@@ -678,6 +690,15 @@ surface. Until the next minor, SelectableCard keeps it by calling the caller's
 inside a layer within the card, so before the layer's own handlers; the change
 is staged as `[breaking]` (`spec:AST-017` FR32) and `component:SelectableCard`
 `CLN-0026` removes that handler.
+
+Tooltip, HoverCard and ContextMenu's entrance layout is a performance gap. They
+play their entrance on the anchored layer itself. Tooltip and HoverCard's layer
+is their themed surface: it carries the theme class and the caller's `xstyle`,
+`className` and `style`. Chromium lays an anchored element out again each time
+its own style changes. On a page with work on every frame, each frame of their
+150 ms entrance therefore runs two to four layouts. A Tooltip entrance runs
+about 14 to 18 layouts. The other components that play `layerAnimations` play
+it on the surface inside the layer and run no layout while it plays.
 
 ## Change coupling
 
@@ -757,6 +778,8 @@ is staged as `[breaking]` (`spec:AST-017` FR32) and `component:SelectableCard`
   layer's keep-open `pointerup`, so the seam never stops the native event.
 - `Layer/layerExitCopy.ts` owns the exit copy a touch presentation's close plays
   on.
+- `Layer/presentationHold.ts` owns the presentation hold: a layer's chosen
+  presentation, held from the open until its close settles (INV14).
 - `Layer/layerStack.ts`, `Layer/useLayerDismissal.ts`, and
   `Layer/LayerDepthContext.tsx` own current registration, presence, ordering, and
   Escape/platform routing.
@@ -810,6 +833,7 @@ this current architecture record.
 | Invariant    | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                               |
 | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | INV1, INV2   | `useLayer.test.tsx` and `layerHost.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Invalid DOM, stale host, lost theme/writing context, or portal mistaken for top-layer promotion                                                                                                                                                                                                                                                                                                                              |
+| INV19        | `layerPortalBoundary.test.ts`, `RichTextEditor.portalHost.test.tsx`, and `LayerBoundary.a11y.browser.spec.ts`, `TooltipDecorator.a11y.browser.spec.ts` and `DecoratorPortal.a11y.browser.spec.ts` in Chromium and WebKit                                                                                                                                                                                                                                                                                                                                                                                  | A corrected layer whose host is inside an editor-managed root, and that has no nearer layer root, rendered inside that root; a nested layer moved out of its parent layer's root; a layer that is safe inline moved; a moved wrapper whose `dir` differs from its host's                                                                                                                                                     |
 | INV3–INV5    | `useLayer.test.tsx` and `anchorName.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | A mode leaks geometry, RTL resolves from the wrong context, fallback clips, or a sibling anchor is lost                                                                                                                                                                                                                                                                                                                      |
 | INV11        | `layerViewportInset.test.ts`, `useLayer.test.tsx`, and the `Core/Layer` viewport-inset stories under the story play guard at a desktop and a phone viewport; `BaseTypeahead.incremental.test.tsx` and the Typeahead incremental-results stories for the `spec:AST-092` FR6 exception                                                                                                                                                                                                                                                                                                                      | A second gutter definition, a `100%`-of-span cap, a layer narrower than its explicit size, a layer box wider than the viewport, a layer inside the gutter, or a layer that slides toward an off-screen anchor; for an open Typeahead popup, a later list for the same query that flips it to the other side or grows it past the room on its side, or a first list for a query that is capped to the span beside the trigger |
 | INV12        | The `Core/Layer` viewport-inset stories' first-frame comparison, and `useLayer.test.tsx`'s synchronous anchor read; for the check after a scroll stops, `useLayer.test.tsx`'s `scrollend` and 150 ms fallback cases (one check, in the first painted frame after the stop, with no read in the scroll handler) and the Tooltip suites' scroll-edge cases; a Chromium trace at 4× CPU of a wheel scroll that carries a Tooltip's trigger to the scroll edge counts the forced layouts per scroll before and after DEC-8: page scroll 27–42 → 5, a scrolling panel 7 → 5, the Slider value bubble 12–22 → 5 | A layer whose first painted rectangle differs from its settled one; a box check, a re-pick or a forced layout for a layer in a scroll frame or a scroll handler; a re-pick before the first painted frame after a scroll stops, or more than one per stop; a painted frame that shows a layer that keeps its anchor clear over its anchor                                                                                    |

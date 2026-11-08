@@ -54,7 +54,7 @@ export const doc = {
       name: 'topic',
       type: 'string',
       description:
-        "Doc topic to load (e.g. 'principles'), or a docs-tree route (e.g. 'cli/api/functions/search'). Omit to list all topics.",
+        "Doc topic to load (e.g. 'principles'), a docs-tree route (e.g. 'cli/api/functions/search'), or the name of one node of the docs tree: its own name (e.g. 'tokens-color'), or its route without the prefix its name repeats (e.g. 'tokens/color'), where exactly one node answers to it. Omit to list all topics.",
     },
     {
       name: 'section',
@@ -88,13 +88,13 @@ export const doc = {
       name: 'options.depth',
       type: "number | 'all'",
       description:
-        "How many levels below a docs-tree namespace to read: 0 for the namespace alone, 1 for its children (the default), 'all' for every level. Where a read stops, a child with docs below it carries childCount. A doc with nothing below it reads the same at any depth.",
+        "How many levels below a docs-tree namespace to read: 0 for the namespace alone, 1 for its children (the default), 'all' for every level. Where a read stops, a child with docs below it carries childCount. A doc with nothing below it reads the same at any depth. On the topic list, where each namespace otherwise lists alone, it names the docs below each one, as deep as asked; without it the list is unchanged.",
     },
     {
       name: 'options.detail',
       type: "'brief' | 'compact' | 'full'",
       description:
-        "How much of each doc below the named one a depth read returns: brief (the default) is its identity; compact and full add its text (a guide's sections, a namespace's or typed doc's content). Given alone, it reads one level down.",
+        "How much of each doc below the named one a depth read returns: brief (the default) is its identity; compact and full add its text (a guide's sections, a namespace's or typed doc's content). Given alone, it reads one level down. The topic list names each doc below a namespace by its identity whatever the detail.",
     },
     {
       name: 'options.cwd',
@@ -107,7 +107,7 @@ export const doc = {
     {
       type: 'docs.list',
       description:
-        "Every reference-doc topic in read order, as DocsListEntry[] ({topic, description, package, replaces?, replacedPackage?}), each readable with docs(topic). meta.namespaces lists the docs tree's top-level namespaces ({topic, description, package}), and meta.notLoaded each package whose docs did not load ({package, message}).",
+        "Every reference-doc topic in read order, as DocsListEntry[] ({topic, description, package, replaces?, replacedPackage?}), each readable with docs(topic). meta.namespaces lists the docs tree's top-level namespaces ({topic, description, package}); with depth, each also carries children, the docs below it as a namespace read names them ({topic, description, route, name, package, kind, title, summary, replaces?, replacedPackage?, stability?}), nested the same way to the depth asked for, and childCount where the depth stops on a doc with docs below it. meta.notLoaded names each package whose docs did not load ({package, message}).",
     },
     {
       type: 'docs.detail',
@@ -141,7 +141,7 @@ export const doc = {
     },
     {
       code: 'ERR_UNKNOWN_TOPIC',
-      when: 'the topic is not a string, or matches no topic and no docs-tree route',
+      when: 'the topic is not a string, or matches no topic, no docs-tree route, and no one node of the docs tree by its own name or by its route without the prefix its name repeats; a name more than one node answers to opens none of them, and the suggestions list them',
     },
     {
       code: 'ERR_UNKNOWN_SECTION',
