@@ -148,6 +148,17 @@ function animationLog(): void {
     },
     true,
   );
+  // A press can replace the touched element, as the selected look's icon is.
+  // The touch's pointerup still reaches the window; its touchend does not.
+  window.addEventListener(
+    'pointerup',
+    event => {
+      if (event.pointerType === 'touch') {
+        w.__tabBarLifted = now();
+      }
+    },
+    true,
+  );
 }
 
 /** When a finger last lifted on the page, on the document timeline (0: never). */
@@ -2057,6 +2068,150 @@ test.describe('with Reduce Motion (design:reduced-motion)', () => {
         .map(frame => Math.round(frame.t - down)),
       'ms after the touch of each frame whose Profile shows no selected look',
     ).toEqual([]);
+  });
+
+  test('on a touch screen a drag from a disabled tab onto an enabled one lifts the lens with that tab in its selected look', async ({
+    page,
+  }) => {
+    await page.emulateMedia({reducedMotion: 'reduce'});
+    const {driver} = await openBar(page, 'disabled-tab');
+    const browse = await itemCenter(page, 'Browse');
+    const profile = await itemCenter(page, 'Profile');
+    // Every frame from here: how lifted the lens is, by its glass (the clip's
+    // ::before). Also whether it holds the opaque selected copy, with
+    // Profile's at its centre. The lift is dated by the touch's pointerup,
+    // which reaches the window whatever the press replaced.
+    await page.evaluate(() => {
+      const w = window as unknown as {
+        __dragFrames: {
+          t: number;
+          glass: number;
+          copy: boolean;
+          atProfile: boolean;
+        }[];
+        __dragUp: number;
+      };
+      w.__dragFrames = [];
+      w.__dragUp = 0;
+      window.addEventListener(
+        'pointerup',
+        event => {
+          if (event.pointerType === 'touch') {
+            w.__dragUp = performance.now();
+          }
+        },
+        true,
+      );
+      const centre = (element: Element | null) => {
+        const box = element?.getBoundingClientRect();
+        return box == null ? NaN : box.left + box.width / 2;
+      };
+      const step = () => {
+        const copy = document.querySelector('[data-tab-bar-copy]');
+        const item = copy?.querySelector('[data-tab-bar-copy-item="profile"]');
+        const lens = document.querySelector('[data-tab-bar-lens-body]');
+        const clip = document.querySelector('[data-tab-bar-lens-clip]');
+        w.__dragFrames.push({
+          t: performance.now(),
+          glass:
+            clip == null
+              ? 0
+              : Number(getComputedStyle(clip, '::before').opacity),
+          copy: copy != null && Number(getComputedStyle(copy).opacity) >= 0.99,
+          atProfile: Math.abs(centre(item ?? null) - centre(lens)) < 1,
+        });
+        if (w.__dragFrames.length < 600) {
+          requestAnimationFrame(step);
+        }
+      };
+      requestAnimationFrame(step);
+    });
+    await driver.play(drag(browse, profile, {durationMs: 400, restMs: 300}));
+    await expect(tab(page, 'Profile')).toHaveAttribute('aria-selected', 'true');
+    const {frames, up} = await page.evaluate(() => {
+      const w = window as unknown as {
+        __dragFrames: {
+          t: number;
+          glass: number;
+          copy: boolean;
+          atProfile: boolean;
+        }[];
+        __dragUp: number;
+      };
+      return {frames: w.__dragFrames, up: w.__dragUp};
+    });
+    expect(up, 'no lift reached the page').toBeGreaterThan(0);
+    // The lens lifts once the finger leaves the disabled tab. Every frame it
+    // shows lifted before the finger lifts holds the opaque copy.
+    const isLifted = (frame: {t: number; glass: number}) =>
+      frame.t < up && frame.glass > 0.01;
+    expect(frames.some(isLifted), 'a frame whose lens is lifted').toBe(true);
+    const lifted = requireFrames(frames, {
+      min: 8,
+      during: 'the lifted drag',
+      where: isLifted,
+    });
+    expect(
+      lifted
+        .filter(frame => !frame.copy)
+        .map(frame => Math.round(up - frame.t)),
+      'ms before the lift of each lifted frame without the opaque copy',
+    ).toEqual([]);
+    // At the lift, Profile's selected look sits at the lens centre.
+    expect(
+      lifted[lifted.length - 1].atProfile,
+      'Profile at the lens at the lift',
+    ).toBe(true);
+  });
+
+  test('on a touch screen a finger on the selected tab’s icon, which the copy replaces, still drags the lens, and its lift chooses the tab under it', async ({
+    page,
+  }) => {
+    await page.emulateMedia({reducedMotion: 'reduce'});
+    const {driver} = await openBar(page);
+    // Home is selected, so its icon is the selected one. The copy's mount
+    // replaces it while the finger is on it.
+    const box = await tab(page, 'Home').locator('svg').first().boundingBox();
+    if (box == null) {
+      throw new Error('Home has no icon');
+    }
+    const start = {x: box.x + box.width / 2, y: box.y + box.height / 2};
+    const library = await itemCenter(page, 'Library');
+    await page.evaluate(() => {
+      const w = window as unknown as {
+        __swapTarget: EventTarget | null;
+        __swapAttached: boolean | null;
+      };
+      w.__swapTarget = null;
+      w.__swapAttached = null;
+      window.addEventListener(
+        'touchstart',
+        event => {
+          w.__swapTarget = event.target;
+        },
+        {capture: true, once: true},
+      );
+      window.addEventListener(
+        'pointerup',
+        event => {
+          if (event.pointerType === 'touch' && w.__swapTarget instanceof Node) {
+            w.__swapAttached = document.contains(w.__swapTarget);
+          }
+        },
+        true,
+      );
+    });
+    await driver.play(drag(start, library, {durationMs: 400, restMs: 300}));
+    // The lift chooses Library, so the press saw the finger's moves and its
+    // lift, after the element it landed on left the document.
+    await expect(tab(page, 'Library')).toHaveAttribute('aria-selected', 'true');
+    const attached = await page.evaluate(
+      () =>
+        (window as unknown as {__swapAttached: boolean | null}).__swapAttached,
+    );
+    expect(attached, 'the touched icon is in the document at the lift').toBe(
+      false,
+    );
   });
 
   test('a press neither lifts nor flexes, and a drag’s release cross-fades the settle', async ({

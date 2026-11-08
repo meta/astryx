@@ -449,9 +449,8 @@ export function useTabBarLens({
       press.isIgnored = false;
       if (press.hasLens && selected >= 0) {
         motionRef.current += 1;
-        if (body.animator.reducedMotion({}) === 'off') {
-          flushSync(() => setIsCopyShown(true));
-        }
+        // The copy mounts under Reduce Motion too, as at a press's start.
+        flushSync(() => setIsCopyShown(true));
         lift(true, performance.now(), press.size);
       }
     }
