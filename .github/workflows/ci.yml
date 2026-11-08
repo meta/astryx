@@ -4452,7 +4452,7 @@ jobs:
       pull-requests: read
     # owed, ran, deferred and complete are the record merge-guard reads: a
     # head merges only on a run whose complete is true. The same record is
-    # the a11y-dependent-audits-record artifact.
+    # the a11y-dependent-audits-record-<attempt> artifact.
     outputs:
       count: ${{ steps.plan.outputs.count || '0' }}
       shares: ${{ steps.plan.outputs.shares || '[]' }}
@@ -4521,7 +4521,8 @@ jobs:
         if: steps.plan.outcome == 'success'
         uses: actions/upload-artifact@v7
         with:
-          name: a11y-dependent-audits-record
+          # One record per attempt: merge-guard reads the latest attempt's.
+          name: a11y-dependent-audits-record-${{ github.run_attempt }}
           path: ${{ runner.temp }}/a11y-dependent-audits.json
           retention-days: 30"
 

@@ -265,7 +265,9 @@ describe('the dependent-audits jobs', () => {
       "${{ steps.plan.outputs.complete || 'true' }}",
     );
     const upload = step(planJob, 'Upload the dependent-audit record');
-    expect(upload.with.name).toBe('a11y-dependent-audits-record');
+    expect(upload.with.name).toBe(
+      'a11y-dependent-audits-record-${{ github.run_attempt }}',
+    );
     expect(upload.with.path).toBe(
       '${{ runner.temp }}/a11y-dependent-audits.json',
     );
