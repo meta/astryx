@@ -512,7 +512,9 @@ function createLayer(doc: Document, attribute: string): HTMLElement {
     color: 'inherit',
     overflow: 'visible',
     pointerEvents: 'auto',
-    touchAction: 'none',
+    // A one-finger pan scrolls nothing under the lift, but a pinch still
+    // zooms the page.
+    touchAction: 'pinch-zoom',
   });
   return layer;
 }
