@@ -46,6 +46,7 @@ function TruncatedCell({children}: {children: string}) {
       isEnabled={truncation.isTruncated}>
       <span
         ref={truncation.ref}
+        tabIndex={truncation.isTruncated ? 0 : undefined}
         style={{
           display: 'block',
           maxWidth: 120,
@@ -68,6 +69,7 @@ function ClampedCell({children}: {children: string}) {
       isEnabled={truncation.isTruncated}>
       <span
         ref={truncation.ref}
+        tabIndex={truncation.isTruncated ? 0 : undefined}
         style={{
           display: '-webkit-box',
           WebkitLineClamp: 2,
@@ -84,7 +86,7 @@ function ClampedCell({children}: {children: string}) {
 
 export default function UseTruncationHookUsage() {
   return (
-    <Table width={380}>
+    <Table>
       <TableHeader>
         <TableRow>
           <TableHeaderCell>Asset</TableHeaderCell>

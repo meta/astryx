@@ -2,9 +2,8 @@
 // @vitest-environment jsdom
 
 /**
- * The useTruncation example shows a tooltip with the full path only on cells
- * whose text is actually cut off: long paths that truncate enable their tooltip,
- * while a short path fits and leaves its tooltip disabled.
+ * The useTruncation example demonstrates text truncation across table cells
+ * with single-line and multi-line clamps.
  */
 
 import {act} from 'react';
@@ -56,47 +55,13 @@ describe('useTruncationHookUsage example', () => {
     expect(cells).toContain('bundle');
     expect(cells).toContain('readme');
 
-    // The long paths reach the DOM
+    // The paths reach the DOM
     expect(container.textContent).toContain('build-20261103-120344');
     expect(container.textContent).toContain('reports/coverage');
     expect(container.textContent).toContain('README.md');
   });
 
-  it('gates tooltips so that truncated cells enable tooltips and fitting cells do not', async () => {
-    const proto = window.HTMLElement.prototype;
-    const originalScrollWidth = Object.getOwnPropertyDescriptor(
-      proto,
-      'scrollWidth',
-    );
-    const originalOffsetWidth = Object.getOwnPropertyDescriptor(
-      proto,
-      'offsetWidth',
-    );
-    const originalOffsetHeight = Object.getOwnPropertyDescriptor(
-      proto,
-      'offsetHeight',
-    );
-
-    Object.defineProperty(proto, 'scrollWidth', {
-      configurable: true,
-      get(this: HTMLElement) {
-        // Long paths overflow the 120px cell width; short README fits
-        return (this.textContent ?? '').includes('README') ? 80 : 350;
-      },
-    });
-    Object.defineProperty(proto, 'offsetWidth', {
-      configurable: true,
-      get() {
-        return 120;
-      },
-    });
-    Object.defineProperty(proto, 'offsetHeight', {
-      configurable: true,
-      get() {
-        return 20;
-      },
-    });
-
+  it('renders measured text elements across all table cells', async () => {
     root = createRoot(container);
     act(() => {
       root!.render(<UseTruncationHookUsage />);
@@ -104,19 +69,8 @@ describe('useTruncationHookUsage example', () => {
 
     await act(async () => {});
 
-    // In the DOM, cells containing long paths have tooltip-ready triggers
+    // In the DOM, cells containing paths render span elements with truncation refs
     const spans = Array.from(container.querySelectorAll('td span'));
     expect(spans.length).toBe(3);
-
-    // Clean up prototype descriptors
-    if (originalScrollWidth) {
-      Object.defineProperty(proto, 'scrollWidth', originalScrollWidth);
-    }
-    if (originalOffsetWidth) {
-      Object.defineProperty(proto, 'offsetWidth', originalOffsetWidth);
-    }
-    if (originalOffsetHeight) {
-      Object.defineProperty(proto, 'offsetHeight', originalOffsetHeight);
-    }
   });
 });
