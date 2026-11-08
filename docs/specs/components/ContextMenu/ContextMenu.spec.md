@@ -279,6 +279,11 @@ anchor is positioning infrastructure rather than consumer anatomy.
   lifted over a tinted page; a pen press outside closes it at the press. All
   are against `spec:AST-094` FR31, FR32, and FR33. A menu opened by mouse or
   keyboard already keeps its released appearance and motion.
+- **Touch-open focus indicator.** A touch open focuses the menu itself, and
+  the menu draws no focus outline in any color mode, forced colors included.
+  `architecture:interaction-modality` INV1 hides the focus indicator after
+  pointer input, and no record names an indicator for this menu under forced
+  colors.
 
 ## Decision log
 
