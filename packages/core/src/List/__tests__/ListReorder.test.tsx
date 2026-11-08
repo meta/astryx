@@ -54,6 +54,7 @@ import {DRAG_SLOP} from '../../DateInput/usePointerDragScroll';
 import {useAnnounce} from '../../hooks/useAnnounce';
 import {LayerDepthProvider} from '../../Layer/LayerDepthContext';
 import {useLayerDismissal} from '../../Layer/useLayerDismissal';
+import {animatorFor} from '../../motion/animator';
 import {motionRole} from '../../motion/roles';
 import {getGestureHost} from '../../gestures/GestureHost';
 import {pointerQuery} from '../../gestures/__tests__/pointerQuery';
@@ -114,8 +115,11 @@ function stubPrimaryPointer(coarse: boolean) {
   restorePointer = pointerQuery(coarse).restore;
 }
 
-/** jsdom lays nothing out: 44 px rows from 300 px down the viewport. */
-function layOut(list: HTMLElement) {
+/**
+ * jsdom lays nothing out: 44 px rows from 300 px down the viewport. Each read
+ * of a row's layout top calls `onRead`.
+ */
+function layOut(list: HTMLElement, onRead?: () => void) {
   const place = (row: Element) => Array.from(list.children).indexOf(row);
   for (const row of Array.from(list.children)) {
     Object.defineProperty(row, 'offsetParent', {
@@ -124,7 +128,10 @@ function layOut(list: HTMLElement) {
     });
     Object.defineProperty(row, 'offsetTop', {
       configurable: true,
-      get: () => place(row) * 44,
+      get: () => {
+        onRead?.();
+        return place(row) * 44;
+      },
     });
     Object.defineProperty(row, 'offsetHeight', {configurable: true, value: 44});
     row.getBoundingClientRect = () =>
@@ -1421,6 +1428,81 @@ describe('List reorderable', () => {
     },
   );
 
+  it('writes no offset to a row a drop leaves at rest at 0, and leaves it no inline offset', () => {
+    stubPrimaryPointer(false);
+    render(<ReorderableRows initial={['A', 'B', 'C', 'D']} />);
+    const list = screen.getByRole('list');
+    layOut(list);
+    const d = list.querySelectorAll('li')[3];
+    // A glide that ended leaves this identity offset until its release runs.
+    d.style.setProperty('translate', 'none');
+    const set = vi.spyOn(animatorFor(d), 'set');
+    try {
+      const handle = handleOf('A');
+      mouseDrag(handle, 322, 322 + 70);
+      act(() => {
+        fireEvent.pointerUp(handle, {...MOUSE, clientY: 322 + 70});
+      });
+      expect(labels()).toEqual(['B', 'C', 'A', 'D']);
+      expect(set).not.toHaveBeenCalled();
+      expect(d.style.getPropertyValue('translate')).toBe('');
+    } finally {
+      set.mockRestore();
+    }
+  });
+
+  it("reads every row's layout before a drop's first glide, and the glide's spring once", () => {
+    stubPrimaryPointer(true);
+    const events: string[] = [];
+    const glide = vi
+      .spyOn(touchMotion, 'glide')
+      .mockImplementation(() => events.push('write'));
+    const follow = vi
+      .spyOn(touchMotion, 'follow')
+      .mockImplementation(() => events.push('write'));
+    const spring = vi.spyOn(touchMotion, 'glideBase');
+    try {
+      render(<ReorderableRows initial={['A', 'B', 'C', 'D']} />);
+      const list = screen.getByRole('list');
+      layOut(list, () => events.push('read'));
+      const handle = handleOf('A');
+      mouseDrag(handle, 322, 322 + 70);
+      events.length = 0;
+      act(() => {
+        fireEvent.pointerUp(handle, {...MOUSE, clientY: 322 + 70});
+      });
+      expect(labels()).toEqual(['B', 'C', 'A', 'D']);
+      expect(glide).toHaveBeenCalledTimes(1);
+      expect(follow).toHaveBeenCalledTimes(2);
+      expect(events.slice(events.indexOf('write'))).not.toContain('read');
+      expect(spring).toHaveBeenCalledTimes(1);
+    } finally {
+      glide.mockRestore();
+      follow.mockRestore();
+      spring.mockRestore();
+    }
+  });
+
+  it("reads a key move's glide spring once, however many rows slide", async () => {
+    stubPrimaryPointer(true);
+    const follow = vi.spyOn(touchMotion, 'follow');
+    const spring = vi.spyOn(touchMotion, 'glideBase');
+    try {
+      const user = userEvent.setup();
+      render(<ReorderableRows initial={['A', 'B', 'C', 'D']} />);
+      const list = screen.getByRole('list');
+      layOut(list);
+      handleOf('A').focus();
+      await user.keyboard(' {ArrowDown}');
+      await waitFor(() => expect(labels()).toEqual(['B', 'A', 'C', 'D']));
+      expect(follow).toHaveBeenCalledTimes(2);
+      expect(spring).toHaveBeenCalledTimes(1);
+    } finally {
+      follow.mockRestore();
+      spring.mockRestore();
+    }
+  });
+
   it("plays a committed move's glide on the shared settle role, springs.settle (spec:AST-105 FR4)", async () => {
     stubPrimaryPointer(true);
     const glide = vi.spyOn(touchMotion, 'glideBase');
@@ -1440,6 +1522,7 @@ describe('List reorderable', () => {
   it('sends a still-gliding row home on the shared settle role, keeping its velocity (spec:AST-094 FR4, FR6)', async () => {
     stubPrimaryPointer(true);
     const home = vi.spyOn(touchMotion, 'home');
+    const spring = vi.spyOn(touchMotion, 'glideBase');
     const user = userEvent.setup();
     render(<ReorderableRows initial={['A', 'B', 'C']} />);
     const list = screen.getByRole('list');
@@ -1453,7 +1536,11 @@ describe('List reorderable', () => {
     // the same role from where it is shown, at the speed it has.
     const handle = handleOf('A');
     mouseDrag(handle, 344, 344 + 30);
+    spring.mockClear();
     fireEvent.pointerCancel(handle, {...MOUSE, clientY: 344 + 30});
+    // Both rows of the move still glide, and the spring is read once.
+    expect(home).toHaveBeenCalledTimes(2);
+    expect(spring).toHaveBeenCalledTimes(1);
     const draggedRow = handle.closest('li');
     const calls = home.mock.calls.filter(([element]) => element === draggedRow);
     expect(calls.length).toBeGreaterThan(0);
@@ -1462,6 +1549,7 @@ describe('List reorderable', () => {
       expect(fromRest).toBe(false);
     }
     home.mockRestore();
+    spring.mockRestore();
   });
 
   it('puts its listeners on the list: none on a row or a handle', () => {

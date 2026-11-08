@@ -13,7 +13,8 @@
  *   row back. With Reduce Motion the drop takes its place without travel. A
  *   flush row's handle stays inside the list. A finger held on a handle
  *   refuses text selection on the list until it lifts. A drag that crosses
- *   rows forces no style or layout pass, and neither does the pick-up
+ *   rows forces no style or layout pass, and neither does the pick-up. A
+ *   drop measures the rows in one pass, before their glides start
  * @position Interaction evidence for List's reorder (List/listReorderEngine.tsx,
  *   List/ListReorderTouch.ts, List/ListReorderHandle.tsx) in the touch phone
  *   context
@@ -36,6 +37,7 @@ import {
 import {solveSpring, toSpring} from '../../motion/spring';
 import {reorder} from '../../motion/uikit/reorder';
 import {springs} from '../../motion/uikit/springs';
+import {describePasses, forcedPassesDuring, passesUnder} from './forcedPasses';
 
 const storybook = withStorybook(test);
 
@@ -390,6 +392,46 @@ test.describe('under a finger', () => {
     ).toEqual([]);
     // The drag did cross: Inbox lands three rows down.
     expect((await labels(page)).indexOf('Inbox')).toBe(3);
+  });
+
+  test('a drop measures the rows in one pass, before their glides start', async ({
+    page,
+    browser,
+    browserName,
+  }) => {
+    test.skip(browserName !== 'chromium', 'the layout trace is Chromium CDP');
+    const {at, rowHeight} = await handleOf(page, 'Inbox');
+    const driver = await touchDriver(page);
+    const {passes, events, rounds} = await forcedPassesDuring(
+      browser,
+      page,
+      async () => {
+        await driver.play(
+          holdThenDrag(
+            at,
+            {x: at.x, y: at.y + rowHeight * 3},
+            {holdMs: HOLD_MS, durationMs: 400, restMs: 120},
+          ),
+        );
+        await expect.poll(async () => (await labels(page))[0]).toBe('Sent');
+        // The commit's glides start before the next frame.
+        await page.evaluate(
+          async () =>
+            new Promise(resolve => {
+              requestAnimationFrame(() => requestAnimationFrame(resolve));
+            }),
+        );
+      },
+    );
+    // The trace saw the drop: the finger's lift, and the rendering after it.
+    expect(events.has('pointerup')).toBe(true);
+    expect(rounds).toBeGreaterThan(0);
+    // The drop's own reads, in the drop and in the commit that applies it,
+    // are one measurement pass at most.
+    expect(
+      passesUnder(passes, ['drop', 'commit']).length,
+      describePasses(passes),
+    ).toBeLessThanOrEqual(1);
   });
 
   test('a cancelled drag puts the row back and moves nothing', async ({

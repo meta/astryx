@@ -12,7 +12,8 @@
  *   A row held near a scroll edge scrolls the page, or the box the list
  *   scrolls in, and stops at the end. A wheel during a drag scrolls the
  *   page, and the preview and the drop stay under the pointer. Each scrolled
- *   frame reads the scroll offset once at most and forces no layout. The
+ *   frame reads the scroll offset once at most and forces no layout. A drop
+ *   measures the rows in one pass, before its writes, whatever their count. The
  *   preview and the insertion line run along a row set in from the list's
  *   start, in either direction. A checked radio in the dragged row stays
  *   checked through the drag
@@ -34,6 +35,7 @@ import {
   type PenPoint,
 } from '@astryxdesign/interaction-harness';
 import {reorder} from '../../motion/uikit/reorder';
+import {describePasses, forcedPassesDuring, passesUnder} from './forcedPasses';
 
 const storybook = withStorybook(test);
 
@@ -431,6 +433,49 @@ test('a wheel during a drag forces no layout, and reads the scroll offset once a
     expect(counts.frames).toBeGreaterThan(0);
     expect(counts.reads).toBeGreaterThan(0);
     expect(counts.reads).toBeLessThanOrEqual(counts.frames);
+  } finally {
+    await story.close();
+  }
+});
+
+test('a drop measures the rows in one pass, before its writes, whatever their count', async ({
+  browser,
+  browserName,
+}) => {
+  test.skip(browserName !== 'chromium', 'the layout trace is Chromium CDP');
+  const story = await openFinePointerStory(browser, LONG_STORY);
+  try {
+    const {page} = story;
+    const order = await labels(page);
+    expect(order.length).toBeGreaterThanOrEqual(20);
+    const {at, rowHeight} = await handleOf(page, order[3]);
+    await page.mouse.move(at.x, at.y);
+    await page.mouse.down();
+    await page.mouse.move(at.x, at.y + rowHeight * 4.5, {steps: 12});
+    await expect(page.locator('[data-astryx-reorder-preview]')).toHaveCount(1);
+    const {passes, events, rounds} = await forcedPassesDuring(
+      browser,
+      page,
+      async () => {
+        await page.mouse.up();
+        await expect.poll(async () => labels(page)).not.toEqual(order);
+        // The commit's rebase runs before the next frame.
+        await page.evaluate(
+          async () =>
+            new Promise(resolve => {
+              requestAnimationFrame(() => requestAnimationFrame(resolve));
+            }),
+        );
+      },
+    );
+    // The trace saw the drop: its release, and the page's rendering after it.
+    expect(events.has('pointerup')).toBe(true);
+    expect(rounds).toBeGreaterThan(0);
+    // The reorder's own reads, in the drop and in its commit, are one
+    // measurement pass at most. Moving the focused row makes React and the
+    // browser force passes of their own, outside the reorder.
+    const reorders = passesUnder(passes, ['drop', 'commit']);
+    expect(reorders.length, describePasses(passes)).toBeLessThanOrEqual(1);
   } finally {
     await story.close();
   }
