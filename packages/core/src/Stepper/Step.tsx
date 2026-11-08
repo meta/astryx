@@ -1624,9 +1624,11 @@ export function Step({
             className,
             style,
           )}
-          aria-current={isActive ? 'step' : undefined}
           data-testid={dataTestId}
-          {...rest}>
+          {...rest}
+          // The step state this component owns wins over a caller's
+          // `aria-current`: only the in-progress step carries it.
+          aria-current={isActive ? 'step' : undefined}>
           {hasButton ? (
             <button
               type="button"
@@ -1720,9 +1722,11 @@ export function Step({
           className,
           style,
         )}
-        aria-current={isActive ? 'step' : undefined}
         data-testid={dataTestId}
-        {...rest}>
+        {...rest}
+        // The step state this component owns wins over a caller's
+        // `aria-current`: only the in-progress step carries it.
+        aria-current={isActive ? 'step' : undefined}>
         {hasButton ? (
           <button
             type="button"
@@ -1769,9 +1773,11 @@ export function Step({
           className,
           style,
         )}
-        aria-current={isActive ? 'step' : undefined}
         data-testid={dataTestId}
-        {...rest}>
+        {...rest}
+        // The step state this component owns wins over a caller's
+        // `aria-current`: only the in-progress step carries it.
+        aria-current={isActive ? 'step' : undefined}>
         {/* 4px progress bar */}
         <div
           {...mergeProps(
@@ -1837,9 +1843,11 @@ export function Step({
         className,
         style,
       )}
-      aria-current={isActive ? 'step' : undefined}
       data-testid={dataTestId}
-      {...rest}>
+      {...rest}
+      // The step state this component owns wins over a caller's
+      // `aria-current`: only the in-progress step carries it.
+      aria-current={isActive ? 'step' : undefined}>
       {/* 4px progress bar segment for this step */}
       <div
         {...mergeProps(

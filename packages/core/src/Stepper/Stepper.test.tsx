@@ -57,6 +57,40 @@ describe('Stepper', () => {
     expect(screen.getByTestId('step-2')).not.toHaveAttribute('aria-current');
   });
 
+  it.each(['horizontal', 'vertical'] as const)(
+    'keeps aria-current on the in-progress step over a caller’s (%s)',
+    orientation => {
+      render(
+        <Stepper activeStep={1} orientation={orientation}>
+          <Step
+            step={0}
+            label="Step 1"
+            data-testid="step-0"
+            aria-current="page"
+          />
+          <Step
+            step={1}
+            label="Step 2"
+            data-testid="step-1"
+            aria-current="false"
+          />
+          <Step
+            step={2}
+            label="Step 3"
+            data-testid="step-2"
+            aria-current="true"
+          />
+        </Stepper>,
+      );
+      expect(screen.getByTestId('step-0')).not.toHaveAttribute('aria-current');
+      expect(screen.getByTestId('step-1')).toHaveAttribute(
+        'aria-current',
+        'step',
+      );
+      expect(screen.getByTestId('step-2')).not.toHaveAttribute('aria-current');
+    },
+  );
+
   it('renders descriptions when provided', () => {
     render(
       <Stepper activeStep={0}>
