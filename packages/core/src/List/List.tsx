@@ -91,8 +91,9 @@ export interface ListProps extends BaseProps<
    *   reach a little past it into the container's padding. Suits interactive
    *   rows in a container
    * - 'bleed': text sits on the heading's line, and dividers and backgrounds
-   *   reach the container's edges with square corners, like Table rows in a
-   *   Card
+   *   reach the container's edges, like Table rows in a Card. Rows are
+   *   square, except that the first or last row of a list that is a rounded
+   *   Card's or Dialog's first or last child takes its corner
    *
    * A row's first content is what lines up with the heading: its marker,
    * icon, or avatar when it has one, otherwise its label. 'outset' and
