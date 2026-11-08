@@ -34,7 +34,12 @@ test.skip(
   'Page.setFontSizes is a Chromium DevTools command',
 );
 
-test.use({viewport: {width: 1280, height: 800}});
+test.use({
+  viewport: {width: 1280, height: 800},
+  isMobile: false,
+  hasTouch: false,
+  deviceScaleFactor: 1,
+});
 
 /** Sets the browser's default font size, which rem-based text follows. */
 async function setDefaultFontSize(page: Page, px: number): Promise<void> {
@@ -87,8 +92,13 @@ async function readBar(page: Page) {
       overlaps,
       scrollWidth: document.documentElement.scrollWidth,
       viewportWidth: document.documentElement.clientWidth,
-      tops: new Set(boxes.map(box => Math.round((box.top + box.bottom) / 2)))
-        .size,
+      // One row: every control's own box shares a vertical band with the
+      // first one's.
+      oneRow: boxes
+        .map(({element}) => element.getBoundingClientRect())
+        .every(
+          (box, _, [first]) => box.top < first.bottom && box.bottom > first.top,
+        ),
     };
   });
 }
@@ -103,9 +113,9 @@ async function openStory(page: Page, story: string, px: number) {
 
 test('at the default text size the full bar keeps one row', async ({page}) => {
   await openStory(page, 'full-example', 16);
-  const {overlaps, tops} = await readBar(page);
+  const {overlaps, oneRow} = await readBar(page);
   expect(overlaps).toEqual([]);
-  expect(tops).toBe(1);
+  expect(oneRow).toBe(true);
 });
 
 for (const story of ['full-example', 'centered-with-start-content']) {

@@ -75,7 +75,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 **Owns**
 
 - The navigation landmark and its default name (FR1, AR1).
-- Slot resolution and the flex and three-column layouts (FR2–FR4).
+- Slot resolution and the flex and three-region layouts (FR2–FR4).
 - The mobile-bar and drawer renderings of the bar itself (FR5, FR6).
 - The `<nav>`'s positioning and styling inputs (FR8, FR9).
 - The slot each descendant sits in, which TopNav menus read for popover
@@ -177,7 +177,7 @@ component's record names its own target.
 | AR2           | `TopNavMobileLongHeading.a11y.chromium.spec.ts`                                                   | Long heading at phone width                     | The toggle or close button leaves the viewport.                                                               | `audit:TopNav/accessibility` |
 | RTL relation  | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `TopNav / Full example`  | Heading and first navigation item; LTR and RTL  | A heading that is not at the inline start of the navigation items fails D2.                                   | `audit:TopNav/i18n-rtl`      |
 
-Read from source, with no focused test yet: the mobile bar's part order (FR5); the drawer's `heading` header (FR6); other DOM props reaching the `<nav>` (FR1); the auto-toggle condition (FR5); rendering nothing in `drawer` mode with no content (FR6); the `top-nav` target and its `mode` state (FR1); the flex and grid layout geometry (FR3, FR4); that start and center content do not render in the mobile bar (FR5); the drawer's content order and divider (FR6); FR7; and FR9.
+Read from source, with no focused test yet: the mobile bar's part order (FR5); the drawer's `heading` header (FR6); other DOM props reaching the `<nav>` (FR1); the auto-toggle condition (FR5); rendering nothing in `drawer` mode with no content (FR6); the `top-nav` target and its `mode` state (FR1); the flex and three-region layout geometry at the default text size (FR3, FR4); that start and center content do not render in the mobile bar (FR5); the drawer's content order and divider (FR6); FR7; and FR9.
 
 ## Decision log
 

@@ -48,23 +48,21 @@ const styles = stylex.create({
     padding: spacingVars['--spacing-2'],
     boxSizing: 'border-box',
   },
-  // Both layouts wrap when their regions do not fit one row, as at a larger
-  // text size: the end region moves to a second line instead of covering the
-  // navigation items.
+  // The bar wraps when its regions do not fit one row. The end region then
+  // moves to a second line.
   baseFlex: {
     display: 'flex',
     flexWrap: 'wrap',
   },
-  // Three regions (used when centerContent is present). While they fit one
-  // row, the center takes its content width and the start and end regions
-  // share the rest equally, so the center sits at the bar's middle.
+  // While the regions fit one row, the start and end regions share the free
+  // width equally. This keeps the center at the bar's middle.
   baseThreeRegion: {
     display: 'flex',
     flexWrap: 'wrap',
   },
-  // A region keeps its items on one line, so the bar wraps before the region
-  // does; only a region wider than the whole bar wraps its own items.
-  // `fit-content` is the region's full row, capped at the bar's width.
+  // A region keeps its items on one line, so the bar wraps first. Only a
+  // region wider than the bar wraps its own items. `fit-content` is the
+  // region's full row, capped at the bar's width.
   leftSection: {
     display: 'flex',
     flexWrap: 'wrap',
