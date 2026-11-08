@@ -29,10 +29,11 @@ import {createMotionEngine, type Animator} from '../motion/animator';
 import {
   claimTapFocus,
   findTextEntryControl,
+  followsDockDeficit,
   getDockRevealVersion,
   getKeyboardHeight,
+  getKeyboardPan,
   isDockLeftCovered,
-  isDockShowCovered,
   isTextEntryControl,
   refuseFocusReveal,
   subscribeDockReveal,
@@ -249,12 +250,17 @@ export function useChatKeyboard({
     // below the layout viewport's; a fixed dock rests at the viewport's.
     // While a keyboard is up the dock rises until it clears the keyboard's
     // cover; without one it rests where the layout puts it. Where the browser
-    // keeps the reveal, the dock rises only at a show the keyboard module
-    // finds it covered.
+    // keeps the reveal, the keyboard module decides the fixed dock's lift. It
+    // is the part of the cover that the browser's pan leaves.
     const leavesReveal = leavesRevealToBrowser(win, scrollRef.current);
     const liftFor = (inset: number) => {
-      if (inset <= 0 || (leavesReveal && !isDockShowCovered(win))) {
+      if (inset <= 0) {
         return 0;
+      }
+      if (leavesReveal) {
+        return followsDockDeficit(win)
+          ? Math.max(0, inset - (getKeyboardPan(win) ?? 0))
+          : 0;
       }
       // In layout px, as the root's rect is, under a pinch zoom too.
       const viewportBottom = layoutViewportHeight(win);
@@ -352,10 +358,14 @@ export function useChatKeyboard({
         : undefined;
     // A height change the guide has no ride for, as for a resize or a
     // rotation, takes its lift at once. This listener comes after the guide's,
-    // so a ride claims the change first.
+    // so a ride claims the change first. Where the browser keeps the reveal,
+    // a pan changes the lift too.
     let reportedHeight = getKeyboardHeight(win);
     const unsubscribeHeight = subscribeKeyboardHeight(win, event => {
-      if (event.type === 'viewport' && event.height !== reportedHeight) {
+      if (
+        event.type === 'viewport' &&
+        (event.height !== reportedHeight || leavesReveal)
+      ) {
         reportedHeight = event.height;
         commit();
       }
@@ -444,9 +454,9 @@ export function useChatKeyboard({
   // A browser that reveals the composer itself pans the visual viewport after
   // the keyboard's report, while the composer still rides up. Chrome 124 on
   // Android pans by the keyboard's whole height. The keyboard module's
-  // reveal-pan watch puts the pan back, so the page does not move. In a page
-  // that scrolls the document with no layout guide, the watch also learns
-  // whether the browser reveals the fixed dock. If it does, it keeps that pan.
+  // reveal-pan watch puts the pan back, so the page does not move. With no
+  // layout guide, in a page that scrolls the document, the watch also decides
+  // at each show whether the browser pans to the dock. It keeps that pan.
   // Synchronizes the keyboard module's reports, under a finger only.
   useIsomorphicLayoutEffect(() => {
     const composer = composerRef.current;

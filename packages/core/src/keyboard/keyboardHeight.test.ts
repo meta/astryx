@@ -949,7 +949,7 @@ describe('the browser\u2019s own reveal pan (FR4)', () => {
     expect(runs[0]).toEqual([false, false, true, false, false]);
   });
 
-  it('with the dock option, shares one wheel subscription among its watches', () => {
+  it('with the dock option, listens for wheels through the shared input stream', () => {
     const add = vi.spyOn(window, 'addEventListener');
     const remove = vi.spyOn(window, 'removeEventListener');
     const first = watchRevealPan(window, {owns: () => true, dock: true});

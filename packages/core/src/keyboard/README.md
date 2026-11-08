@@ -72,16 +72,20 @@ that times motion with it. Everything here is internal to
   listener. `watchPans(win, owns)` (`keyboardTarget.ts`) runs that loop on
   each height the module reports: the keyboard targets and ChatLayout's
   composer watch with it. With `dock` (off by default), the watch also
-  decides once per keyboard show whether the browser pans the visual viewport
-  to a fixed dock in a page that scrolls the document. A pan to the dock
-  decides only its own show: no lift, and no pan is put back. A dock still
-  covered 0.7 s after the show's opening report rises. Only a pan restarts
-  that wait, up to 3 s; the height reports of the keyboard's slide do not.
-  With no touch or wheel in the wait, the page then learns that its browser
-  leaves the dock covered (`isDockLeftCovered(win)`), and every later show
-  lifts at once. A show with a touch or a wheel in the wait learns nothing. A
-  late pan to the dock after the lift, before any input, drops the lift and
-  forgets it. `getKeyboardPan(win)` gives the pan read with each report.
+  decides each keyboard show for a fixed dock in a page that scrolls the
+  document, while focus is in the dock. During the browser's own reveal, up to
+  a 0.7 s wait from the show's opening report, the dock does not move: a pan
+  to it decides only that show, and no pan is put back. Only a pan restarts the
+  wait, up to 3 s; the height reports of the keyboard's slide do not. A dock
+  still covered when a clean wait ends teaches the page that its browser leaves
+  it covered (`isDockLeftCovered(win)`), and every later show works as on main.
+  Otherwise, and after any touch or wheel once the reveal is over, the dock
+  follows the part of the cover the pan leaves (`followsDockDeficit(win)`). A
+  show for a field outside the dock follows it from the start. Where the layout
+  viewport's height follows the pan, as in Safari on iOS, the dock holds for the
+  rest of the show: the height and the pan then add up to the keyboard's cover
+  of the initial containing block, which each report carries.
+  `getKeyboardPan(win)` gives the pan read with each report.
 - **Keyboard targets (`keyboardTarget.ts`):** a target keeps the focused field
   inside it above the keyboard, and registers so a field inside moves nothing
   itself (`registerKeyboardTarget`, `isInsideKeyboardTarget`).

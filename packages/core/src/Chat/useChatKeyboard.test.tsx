@@ -440,9 +440,19 @@ describe('ChatLayout in a page that scrolls the document', () => {
   // A first keyboard show where the dock stays covered, then a hide. The page
   // then knows that its browser does not pan to the dock.
   function learnCovered() {
+    focusComposer();
     report(window.innerHeight - 290);
     wait(800);
     report(window.innerHeight);
+  }
+  // The keyboard comes up for the composer's text.
+  function focusComposer() {
+    const field = document.querySelector<HTMLElement>(
+      '[data-testid="layout"] textarea, [data-testid="layout"] [contenteditable="true"]',
+    );
+    act(() => {
+      field?.focus();
+    });
   }
 
   function renderDocumentLayout(
@@ -452,7 +462,7 @@ describe('ChatLayout in a page that scrolls the document', () => {
       </div>
     ),
   ) {
-    return render(
+    const result = render(
       <ChatLayout
         data-testid="layout"
         scrollRef={{current: document.documentElement}}
@@ -460,6 +470,8 @@ describe('ChatLayout in a page that scrolls the document', () => {
         <p>Hello</p>
       </ChatLayout>,
     );
+    focusComposer();
+    return result;
   }
 
   it('lifts the fixed dock nothing in Safari on iOS, whose reveal pans the visual viewport to it and keeps the pan', () => {
@@ -737,7 +749,7 @@ describe('ChatLayout in a page that scrolls the document', () => {
     expect(isDockLeftCovered(window)).toBe(false);
   });
 
-  it('keeps the lift at a show that reached the cap when a touch came before the pan', () => {
+  it('follows the cover the pan leaves after the cap, so a later pan to the dock takes the lift away', () => {
     const {container} = renderDocumentLayout();
     report(window.innerHeight - 290);
     for (let i = 1; i <= 6; i += 1) {
@@ -748,17 +760,180 @@ describe('ChatLayout in a page that scrolls the document', () => {
     expect(layoutLift(dockOf(container))).toBe(290);
     drag();
     pan(290);
+    expect(layoutLift(dockOf(container))).toBe(0);
+    expect(isDockLeftCovered(window)).toBe(false);
+  });
+
+  it('follows the cover the pan leaves once the reader scrolls after Firefox\u2019s own pan to the dock', () => {
+    const {container} = renderDocumentLayout();
+    report(window.innerHeight - 290);
+    wait(108);
+    pan(290);
+    expect(layoutLift(dockOf(container))).toBe(0);
+    // A drag up the page: the browser unwinds its pan as the page scrolls.
+    act(() => {
+      document.dispatchEvent(touch('touchstart', [{x: 5, y: 300}]));
+    });
+    pan(200);
+    expect(layoutLift(dockOf(container))).toBe(90);
+    pan(100);
+    expect(layoutLift(dockOf(container))).toBe(190);
+    pan(0);
     expect(layoutLift(dockOf(container))).toBe(290);
+    act(() => {
+      document.dispatchEvent(touch('touchend', [{x: 5, y: 500}]));
+    });
+    pan(150);
+    expect(layoutLift(dockOf(container))).toBe(140);
+    expect(isDockLeftCovered(window)).toBe(false);
+  });
+
+  it('adds no lift while Safari keeps its pan through a scroll, and fills the cover where Safari unwinds it near the top', () => {
+    const {container} = renderDocumentLayout();
+    report(window.innerHeight - 337);
+    wait(46);
+    pan(337);
+    drag();
+    act(() => {
+      viewport.dispatchEvent(new Event('scroll'));
+    });
+    expect(layoutLift(dockOf(container))).toBe(0);
+    pan(0);
+    expect(layoutLift(dockOf(container))).toBe(337);
+    pan(337);
+    expect(layoutLift(dockOf(container))).toBe(0);
+    expect(isDockLeftCovered(window)).toBe(false);
+  });
+
+  it('holds the dock where the layout viewport follows the pan, as in Safari on iOS, through a slow scroll to the top of the page', () => {
+    // The initial containing block keeps its height; the layout viewport
+    // shrinks to the visual viewport while Safari pans.
+    const block = 714;
+    const inner = Object.getOwnPropertyDescriptor(window, 'innerHeight');
+    const setInnerHeight = (value: number) => {
+      Object.defineProperty(window, 'innerHeight', {configurable: true, value});
+    };
+    Object.defineProperty(document.documentElement, 'clientHeight', {
+      configurable: true,
+      get: () => block,
+    });
+    try {
+      setInnerHeight(block);
+      const {container} = renderDocumentLayout();
+      // Safari's reveal: a pan by the keyboard's cover, and the layout
+      // viewport shrinks to the visual viewport, so nothing is covered.
+      viewport.height = 377;
+      viewport.offsetTop = 337;
+      setInnerHeight(377);
+      act(() => {
+        viewport.dispatchEvent(new Event('resize'));
+      });
+      expect(layoutLift(dockOf(container))).toBe(0);
+      // A slow drag toward the top: Safari unwinds its pan, and the layout
+      // viewport grows by the same steps, up to the page's top.
+      for (let pan = 327; pan >= 7; pan -= 10) {
+        viewport.offsetTop = pan;
+        setInnerHeight(block - pan);
+        act(() => {
+          viewport.dispatchEvent(new Event('scroll'));
+        });
+        if (pan === 327) {
+          drag();
+        }
+        expect(layoutLift(dockOf(container))).toBe(0);
+      }
+      viewport.offsetTop = 0;
+      setInnerHeight(block);
+      act(() => {
+        viewport.dispatchEvent(new Event('scroll'));
+      });
+      expect(layoutLift(dockOf(container))).toBe(0);
+      wait(3000);
+      expect(layoutLift(dockOf(container))).toBe(0);
+      expect(isDockLeftCovered(window)).toBe(false);
+    } finally {
+      Reflect.deleteProperty(document.documentElement, 'clientHeight');
+      if (inner != null) {
+        Object.defineProperty(window, 'innerHeight', inner);
+      } else {
+        Reflect.deleteProperty(window, 'innerHeight');
+      }
+    }
+  });
+
+  it('holds the lift through a caret reveal while typing: a pan with no touch or wheel never starts following the cover', () => {
+    const {container} = renderDocumentLayout();
+    const field = screen.getByRole('textbox', {name: 'Message'});
+    report(window.innerHeight - 337);
+    wait(20);
+    // In the browser's own reveal: a caret pan, then the pan to the dock.
+    pan(120);
+    pan(337);
+    expect(layoutLift(dockOf(container))).toBe(0);
+    // Typing raises key and input events, which are no touch or wheel.
+    act(() => {
+      field.dispatchEvent(
+        new KeyboardEvent('keydown', {key: 'a', bubbles: true}),
+      );
+      field.dispatchEvent(new Event('input', {bubbles: true}));
+    });
+    pan(317);
+    expect(layoutLift(dockOf(container))).toBe(0);
+    wait(3000);
+    expect(layoutLift(dockOf(container))).toBe(0);
+    expect(isDockLeftCovered(window)).toBe(false);
+  });
+
+  it('decides nothing at a show for a field outside the composer, and lifts the dock by the cover the pan leaves', () => {
+    const {container} = render(
+      <>
+        <input aria-label="Search" />
+        <ChatLayout
+          data-testid="layout"
+          scrollRef={{current: document.documentElement}}
+          composer={
+            <div data-testid="composer">
+              <textarea aria-label="Message" />
+            </div>
+          }>
+          <p>Hello</p>
+        </ChatLayout>
+      </>,
+    );
+    act(() => {
+      screen.getByRole('textbox', {name: 'Search'}).focus();
+    });
+    report(window.innerHeight - 337);
+    expect(layoutLift(dockOf(container))).toBe(337);
+    pan(100);
+    expect(layoutLift(dockOf(container))).toBe(237);
+    wait(3000);
+    expect(isDockLeftCovered(window)).toBe(false);
+    report(window.innerHeight);
+    pan(0);
+    expect(layoutLift(dockOf(container))).toBe(0);
+    // The composer's own show is the browser's again: Safari pans to the dock.
+    focusComposer();
+    report(window.innerHeight - 337);
+    wait(46);
+    pan(337);
+    wait(3000);
+    expect(layoutLift(dockOf(container))).toBe(0);
+    expect(isDockLeftCovered(window)).toBe(false);
+    expect(__focusTakeoverCallersForTest(document)).toBe(0);
   });
 
   it('leaves the composer\u2019s tap to the browser until a show finds the dock covered, then claims it', () => {
     renderDocumentLayout();
     const field = screen.getByRole('textbox', {name: 'Message'});
-    expect(tapText(field)).toBe(false);
     act(() => {
       field.blur();
     });
+    expect(tapText(field)).toBe(false);
     learnCovered();
+    act(() => {
+      field.blur();
+    });
     expect(tapText(field)).toBe(true);
   });
 

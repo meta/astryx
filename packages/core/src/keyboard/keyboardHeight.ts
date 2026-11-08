@@ -71,13 +71,36 @@ export function isKeyboardMeasurable(win: Window): boolean {
  * `isKeyboardMeasurable` is false.
  */
 export function measureKeyboardHeight(win: Window): number {
+  return measureReport(win).height;
+}
+
+interface KeyboardMeasure {
+  height: number;
+  pan: number | null;
+  cover: number | null;
+}
+
+// One read of the visual viewport: the keyboard's height, the viewport's pan
+// and how far the keyboard covers the initial containing block. The last two
+// are null under a pinch zoom, whose pan is the reader's. Safari on iOS can
+// shrink the layout viewport to the visual viewport while it pans, but the
+// initial containing block keeps its height.
+function measureReport(win: Window): KeyboardMeasure {
   const viewport = win.visualViewport;
   if (viewport == null || !isKeyboardMeasurable(win)) {
-    return 0;
+    return {height: 0, pan: null, cover: null};
   }
-  const height =
-    layoutViewportHeight(win) - viewport.height * (viewport.scale ?? 1);
-  return height > KEYBOARD_EPSILON ? Math.round(height * 100) / 100 : 0;
+  const scale = viewport.scale ?? 1;
+  const visualHeight = viewport.height;
+  const height = layoutViewportHeight(win) - visualHeight * scale;
+  const isUnzoomed = scale === 1;
+  return {
+    height: height > KEYBOARD_EPSILON ? Math.round(height * 100) / 100 : 0,
+    pan: isUnzoomed ? viewport.offsetTop : null,
+    cover: isUnzoomed
+      ? Math.max(0, win.document.documentElement.clientHeight - visualHeight)
+      : null,
+  };
 }
 
 /** A report from the keyboard module, in the order the window raised them. */
@@ -103,6 +126,8 @@ interface KeyboardStore {
   height: number;
   /** The visual viewport's pan at the last report (getKeyboardPan). */
   pan: number | null;
+  /** The keyboard's cover of the initial containing block at that report. */
+  cover: number | null;
   listeners: Set<(event: KeyboardHeightEvent) => void>;
   /** The subscribers that asked for focus moves too (the layout guide). */
   focusListeners: Set<(event: KeyboardHeightEvent) => void>;
@@ -118,6 +143,7 @@ function storeOf(win: Window): KeyboardStore {
     store = {
       height: 0,
       pan: null,
+      cover: null,
       listeners: new Set(),
       focusListeners: new Set(),
       detach: null,
@@ -150,23 +176,28 @@ function isHideStep(win: Window, shown: number, height: number): boolean {
 
 function attach(win: Window, store: KeyboardStore): () => void {
   const viewport = win.visualViewport;
-  store.height = measureKeyboardHeight(win);
-  store.pan = measurePan(win);
+  const first = measureReport(win);
+  store.height = first.height;
+  store.pan = first.pan;
+  store.cover = first.cover;
   // Set while a step of a hide waits. The store keeps the height it reported,
   // so every reader lays out once, when the keyboard comes to rest.
   let stepTimer: ReturnType<typeof setTimeout> | null = null;
   let stepHeight = 0;
   let stepLimit = 0;
-  const deliver = (height: number, timeStamp: number) => {
+  const deliver = (measure: KeyboardMeasure, timeStamp: number) => {
+    const {height} = measure;
     store.height = height;
-    store.pan = measurePan(win);
+    store.pan = measure.pan;
+    store.cover = measure.cover;
     const report: KeyboardHeightEvent = {type: 'viewport', height, timeStamp};
     for (const listener of [...store.listeners]) {
       listener(report);
     }
   };
   const onViewport = (event: Event) => {
-    const height = measureKeyboardHeight(win);
+    const measure = measureReport(win);
+    const {height} = measure;
     if (isHideStep(win, store.height, height)) {
       // A pan reports the same step again, and leaves the wait as it is.
       if (
@@ -186,7 +217,7 @@ function attach(win: Window, store: KeyboardStore): () => void {
       stepTimer = setTimeout(
         () => {
           stepTimer = null;
-          deliver(measureKeyboardHeight(win), win.performance.now());
+          deliver(measureReport(win), win.performance.now());
         },
         Math.min(HIDE_STEP_WAIT_MS, stepLimit - now),
       );
@@ -196,7 +227,7 @@ function attach(win: Window, store: KeyboardStore): () => void {
       clearTimeout(stepTimer);
       stepTimer = null;
     }
-    deliver(height, event.timeStamp);
+    deliver(measure, event.timeStamp);
   };
   viewport?.addEventListener('resize', onViewport);
   viewport?.addEventListener('scroll', onViewport);
@@ -555,42 +586,6 @@ function watchTouchStarts(doc: Document, onTouchStart: () => void): () => void {
   };
 }
 
-// One shared wheel subscription per document serves every dock watch in it,
-// as the touch subscription above serves the reveal-pan watches.
-const wheelWatches = new WeakMap<
-  Document,
-  {stop: () => void; watches: Set<() => void>}
->();
-
-function watchWheels(doc: Document, onWheel: () => void): () => void {
-  let shared = wheelWatches.get(doc);
-  if (shared == null) {
-    const view = doc.defaultView;
-    if (view == null) {
-      return () => {};
-    }
-    const watches = new Set<() => void>();
-    const stop = subscribeInput(view, 'wheel', () => {
-      for (const watch of [...watches]) {
-        watch();
-      }
-    });
-    shared = {stop, watches};
-    wheelWatches.set(doc, shared);
-  }
-  shared.watches.add(onWheel);
-  return () => {
-    const current = wheelWatches.get(doc);
-    if (current == null || !current.watches.delete(onWheel)) {
-      return;
-    }
-    if (current.watches.size === 0) {
-      current.stop();
-      wheelWatches.delete(doc);
-    }
-  };
-}
-
 // How long a dock's keyboard show waits for the browser's own pan to the
 // dock, from the show's opening report. Only a pan restarts the wait: the
 // height reports of the keyboard's slide do not. The cap ends a wait that pans
@@ -602,10 +597,11 @@ const DOCK_REVEAL_CAP_MS = 3000;
 // The windows whose browser left a fixed dock covered at a keyboard show with
 // no touch or wheel in the wait.
 const docksLeftCovered = new WeakSet<Window>();
-// The windows whose current show found the dock covered without learning it.
-// That is at the wait's cap, or after a touch or a wheel in the wait. Such a
-// show lifts the dock but teaches nothing.
-const coveredShows = new WeakSet<Window>();
+// The windows whose current show lifts the dock by the part of the cover the
+// visual viewport's pan leaves, and teaches nothing. That is a show for a
+// field outside the dock. It is also a show with a touch or a wheel once the
+// browser's own reveal is over.
+const deficitShows = new WeakSet<Window>();
 const dockRevealListeners = new Set<() => void>();
 let dockRevealVersion = 0;
 
@@ -637,12 +633,15 @@ export function isDockLeftCovered(win: Window): boolean {
   return docksLeftCovered.has(win);
 }
 
-/** Whether the fixed dock in `win` stays covered at this keyboard show. */
-export function isDockShowCovered(win: Window): boolean {
-  return docksLeftCovered.has(win) || coveredShows.has(win);
+/**
+ * Whether the fixed dock in `win` rises at this keyboard show by the part of
+ * the cover the visual viewport's pan leaves (getKeyboardPan).
+ */
+export function followsDockDeficit(win: Window): boolean {
+  return deficitShows.has(win);
 }
 
-/** Calls `listener` when isDockLeftCovered or isDockShowCovered changes. */
+/** Calls `listener` when isDockLeftCovered or followsDockDeficit changes. */
 export function subscribeDockReveal(listener: () => void): () => void {
   dockRevealListeners.add(listener);
   return () => {
@@ -663,22 +662,33 @@ export function getDockRevealVersion(): number {
  */
 export function __resetDockRevealForTest(win: Window): void {
   const known = docksLeftCovered.delete(win);
-  if (coveredShows.delete(win) || known) {
+  if (deficitShows.delete(win) || known) {
     notifyDockReveal();
   }
 }
 
-// The dock's watch: one decision per keyboard show. A pan to the dock decides
-// that show alone: no lift. A dock still covered when the wait ends rises.
-// With no touch or wheel in the wait, the page learns that its browser leaves
-// the dock covered. Only the show that learned it, before any input, still
-// meets a slow browser's pan: the lift then goes, and the page forgets it.
-function watchDock(win: Window): {
+// The dock's watch: one decision per keyboard show for the dock's field. A
+// pan to the dock decides that show alone: no lift. A dock still covered when
+// the wait ends rises. With no touch or wheel in the wait, the page learns that
+// its browser leaves the dock covered. Only the show that learned it, before
+// any input, still meets a slow browser's pan: the lift then goes, and the page
+// forgets it. After a touch or a wheel, once the browser's reveal is over, the
+// dock follows the part of the cover that the pan leaves. So a reader's scroll
+// that moves the pan keeps the dock on the keyboard.
+function watchDock(
+  win: Window,
+  owns: (focused: HTMLElement) => boolean,
+): {
   report: (height: number) => boolean;
   input: () => void;
   stop: () => void;
 } {
-  let show: 'none' | 'watching' | 'revealed' | 'covered' = 'none';
+  let show: 'none' | 'other' | 'watching' | 'revealed' | 'covered' | 'deficit' =
+    'none';
+  // Set once the show finds the layout viewport's height following the pan,
+  // as in Safari on iOS. The dock then holds for the rest of the show: a lift
+  // there makes the browser reveal the focused field again.
+  let layoutFollowsPan = false;
   let lastPan = getKeyboardPan(win);
   let coveredPan = 0;
   let isClassifying = false;
@@ -696,32 +706,50 @@ function watchDock(win: Window): {
       capTimer = null;
     }
   };
+  const ownsFocus = () => {
+    const focused = win.document.activeElement;
+    return focused instanceof HTMLElement && owns(focused);
+  };
   // With no lift, the dock rests at or above the visual viewport's bottom.
   const isRevealed = (pan: number | null, height: number): pan is number =>
     pan != null && pan >= height - 1;
   // A pan the browser made before any input of the show.
   const isRevealPan = (pan: number | null, height: number): pan is number =>
     !inputSinceShow && isRevealed(pan, height);
-  const cover = (learn: boolean) => {
+  const followDeficit = () => {
     clearTimers();
-    show = 'covered';
-    coveredPan = getKeyboardPan(win) ?? 0;
-    if (learn) {
-      isClassifying = true;
-      learnDockLeftCovered(win, true);
-    } else {
-      coveredShows.add(win);
+    show = 'deficit';
+    if (!layoutFollowsPan && !deficitShows.has(win)) {
+      deficitShows.add(win);
       notifyDockReveal();
     }
   };
-  // Where the dock rests when the wait ends decides the show. Only a clean
-  // wait that ends on its own teaches the page.
+  // The layout viewport shrinks as the pan grows: the height and the pan add
+  // up to the cover of the initial containing block.
+  const seesLayoutFollowPan = (height: number, pan: number | null) => {
+    const cover = stores.get(win)?.cover ?? null;
+    return (
+      pan != null &&
+      pan > 0.5 &&
+      cover != null &&
+      height < cover - 1 &&
+      Math.abs(height + pan - cover) <= 1.5
+    );
+  };
+  // The wait's end decides the show. Only a clean wait that ends on its own
+  // teaches the page.
   const settle = (atCap: boolean) => {
-    if (isRevealed(getKeyboardPan(win), getKeyboardHeight(win))) {
-      clearTimers();
+    clearTimers();
+    const revealed = isRevealed(getKeyboardPan(win), getKeyboardHeight(win));
+    if (inputSinceShow || atCap) {
+      followDeficit();
+    } else if (revealed) {
       show = 'revealed';
     } else {
-      cover(!atCap && !inputSinceShow);
+      show = 'covered';
+      coveredPan = getKeyboardPan(win) ?? 0;
+      isClassifying = true;
+      learnDockLeftCovered(win, true);
     }
   };
   const restartSettle = () => {
@@ -737,8 +765,11 @@ function watchDock(win: Window): {
   };
   const markInput = () => {
     inputSinceShow = true;
+    if (show === 'revealed') {
+      followDeficit();
+    }
   };
-  const stopWheels = watchWheels(win.document, markInput);
+  const stopWheels = subscribeInput(win, 'wheel', markInput);
   const report = (height: number): boolean => {
     const pan = getKeyboardPan(win);
     const panned =
@@ -750,16 +781,30 @@ function watchDock(win: Window): {
       clearTimers();
       show = 'none';
       isClassifying = false;
-      if (coveredShows.delete(win)) {
+      layoutFollowsPan = false;
+      if (deficitShows.delete(win)) {
         notifyDockReveal();
       }
       return !docksLeftCovered.has(win);
+    }
+    if (!layoutFollowsPan && seesLayoutFollowPan(height, pan)) {
+      layoutFollowsPan = true;
+      if (deficitShows.delete(win)) {
+        notifyDockReveal();
+      }
     }
     if (show === 'none') {
       inputSinceShow = false;
       if (docksLeftCovered.has(win)) {
         show = 'covered';
         return false;
+      }
+      // A field outside the dock: the browser reveals that field, and the
+      // dock follows what is left of the cover.
+      if (!ownsFocus()) {
+        followDeficit();
+        show = 'other';
+        return true;
       }
       if (isRevealed(pan, height)) {
         show = 'revealed';
@@ -784,20 +829,15 @@ function watchDock(win: Window): {
       }
       return true;
     }
-    if (show === 'covered' && (isClassifying || coveredShows.has(win))) {
+    if (show === 'covered' && isClassifying) {
       if (isRevealPan(pan, height) && pan > coveredPan + 0.5) {
         show = 'revealed';
         isClassifying = false;
-        const wasCoveredShow = coveredShows.delete(win);
-        if (docksLeftCovered.has(win)) {
-          learnDockLeftCovered(win, false);
-        } else if (wasCoveredShow) {
-          notifyDockReveal();
-        }
+        learnDockLeftCovered(win, false);
       }
       return true;
     }
-    return show === 'revealed';
+    return show !== 'covered';
   };
   return {
     report,
@@ -833,7 +873,7 @@ export function watchRevealPan(
   {owns, onTouch, dock = false}: WatchRevealPanOptions,
 ): RevealPanWatch {
   const doc = win.document;
-  const dockWatch = dock ? watchDock(win) : null;
+  const dockWatch = dock ? watchDock(win, owns) : null;
   let atReport: {x: number; y: number; top: number; scale: number} | null =
     null;
   let touchedSinceReport = false;
