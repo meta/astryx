@@ -63,8 +63,10 @@ interface Recorded {
 let clock = 1000;
 let recorded: Recorded[] = [];
 /** Callbacks waiting for the next animation frame (`requestFrame`). */
-let frameQueue: (() => void)[] = [];
-const requestFrame = (callback: () => void) => {
+let frameQueue: ((frame?: number) => void)[] = [];
+/** The last frame's timestamp: one of its own per frame, never reused. */
+let frameStamp = 0;
+const requestFrame = (callback: (frame?: number) => void) => {
   frameQueue.push(callback);
 };
 /**
@@ -240,8 +242,11 @@ async function commitFrame(
   }
   const frames = frameQueue;
   frameQueue = [];
+  // A browser gives every callback of one frame the same timestamp, and no
+  // other frame that timestamp.
+  frameStamp += 1;
   for (const callback of frames) {
-    callback();
+    callback(frameStamp);
   }
   await Promise.resolve();
   await Promise.resolve();
@@ -943,6 +948,85 @@ describe('a call from rest starts at the commit, as Core Animation does', () => 
       });
       await Promise.resolve();
       expect(started).toBe(false);
+    });
+
+    it('the calls from rest that one frame commits start at one time, however long the frame callbacks between them run', async () => {
+      const first = setup();
+      const second = setup();
+      first.animator.animate({x: 300}, {spring: springs.settle});
+      // A page's own frame callback runs 3 ms between the two animators'.
+      frameQueue.push(() => {
+        clock += 3;
+      });
+      second.animator.animate({x: 300}, {spring: springs.settle});
+      const [a, b] = live('translate');
+      clock = 1016;
+      await commitFrame(1016, {startUnread: true});
+      expect(a.startTime).toBe(1016);
+      expect(b.startTime).toBe(1016);
+    });
+
+    it('calls made in two tasks before one frame start together at that frame', async () => {
+      const first = setup();
+      const second = setup();
+      first.animator.animate({x: 300}, {spring: springs.settle});
+      frameQueue.push(() => {
+        clock += 3;
+      });
+      // The first task ends; the second call comes in a later task.
+      await Promise.resolve();
+      clock = 1005;
+      second.animator.animate({x: 300}, {spring: springs.settle});
+      const [a, b] = live('translate');
+      clock = 1016;
+      await commitFrame(1016, {startUnread: true});
+      expect(a.startTime).toBe(1016);
+      expect(b.startTime).toBe(1016);
+    });
+
+    it('a frame source that repeats a timestamp still reads each frame anew', async () => {
+      // Each frame gives its callbacks timestamp 0, as some test doubles do.
+      let queue: ((frame?: number) => void)[] = [];
+      const repeating = {
+        requestFrame: (callback: (frame?: number) => void) => {
+          queue.push(callback);
+        },
+      };
+      const runFrame = () => {
+        const frames = queue;
+        queue = [];
+        for (const callback of frames) {
+          callback(0);
+        }
+      };
+      const first = setup(repeating);
+      const second = setup(repeating);
+      first.animator.animate({x: 300}, {spring: springs.settle});
+      clock = 1016;
+      runFrame();
+      await vi.advanceTimersByTimeAsync(0);
+      clock = 1020;
+      second.animator.animate({x: 300}, {spring: springs.settle});
+      clock = 1033;
+      runFrame();
+      const [a, b] = live('translate');
+      expect(a.startTime).toBe(1016);
+      expect(b.startTime).toBe(1033);
+    });
+
+    it('a call first framed in a later frame takes the time that frame runs', async () => {
+      const first = setup();
+      const second = setup();
+      first.animator.animate({x: 300}, {spring: springs.settle});
+      clock = 1016;
+      await commitFrame(1016, {startUnread: true});
+      clock = 1020;
+      second.animator.animate({x: 300}, {spring: springs.settle});
+      const [a, b] = live('translate');
+      clock = 1033;
+      await commitFrame(1033, {startUnread: true});
+      expect(a.startTime).toBe(1016);
+      expect(b.startTime).toBe(1033);
     });
 
     it('a call whose first frame comes after a block keeps the start the browser gives it', async () => {
@@ -4261,6 +4345,112 @@ describe('pseudoElement: a dialog\u2019s ::backdrop', () => {
     animator.animate({opacity: 1}, {spring: springs.alertPresent});
     expect(rest.cancelled).toBe(true);
     expect(live('opacity')).toHaveLength(1);
+  });
+});
+
+describe('base: what a pseudo-element\u2019s stylesheet shows at rest', () => {
+  const clear = {
+    pseudoElement: '::after',
+    initial: {opacity: 0},
+    base: {opacity: 0},
+  } as const;
+
+  it('a value at its base leaves no holding animation, and any other value still holds', async () => {
+    const {animator} = setup(clear);
+    animator.set({opacity: 0});
+    expect(live('opacity')).toHaveLength(0);
+    animator.set({opacity: 0.5});
+    const [held] = live('opacity');
+    expect(held.keyframes.map(k => k.opacity)).toEqual(['0.5', '0.5']);
+
+    animator.animate({opacity: 0}, {spring: springs.alertDismiss});
+    expect(held.cancelled).toBe(true);
+    const [fade] = live('opacity');
+    await advance(Number(fade.options.duration) + 1000);
+    // Past the curve's end the stylesheet shows the base: nothing holds it.
+    expect(fade.cancelled).toBe(true);
+    expect(live('opacity')).toHaveLength(0);
+    expect(animator.get('opacity')).toBe(0);
+
+    animator.animate({opacity: 1}, {spring: springs.alertPresent});
+    const [rise] = live('opacity');
+    await advance(Number(rise.options.duration) + 1000);
+    // An end other than the base is held, as with no base.
+    const [rest] = live('opacity');
+    expect(rest.keyframes.map(k => k.opacity)).toEqual(['1', '1']);
+  });
+
+  it('a curve that settles to within the sampling tolerance of its base leaves no hold', async () => {
+    const {animator} = setup(clear);
+    // Seconds, as a curve's time is.
+    const settlingTo = (end: number) => ({
+      duration: 0.3,
+      at: (t: number) => 1 + (end - 1) * Math.min(1, t / 0.3),
+      velocity: () => 0,
+    });
+    animator.play({opacity: settlingTo(0.001)});
+    await advance(1300);
+    expect(live('opacity')).toHaveLength(0);
+    animator.play({opacity: settlingTo(0.01)});
+    await advance(1300);
+    const [held] = live('opacity');
+    expect(held.keyframes.map(k => k.opacity)).toEqual(['0.01', '0.01']);
+  });
+
+  it('a node replaced at rest holds nothing at its base', () => {
+    const {animator} = setup(clear);
+    animator.set({opacity: 0});
+    animator.attach(document.createElement('div'));
+    expect(live('opacity')).toHaveLength(0);
+    animator.set({opacity: 0.5});
+    animator.attach(document.createElement('div'));
+    const held = live('opacity');
+    expect(held).toHaveLength(1);
+    expect(held[0].keyframes.map(k => k.opacity)).toEqual(['0.5', '0.5']);
+  });
+
+  it('a Reduce Motion dip that lands on its base leaves no opacity animation', async () => {
+    const {animator} = setup({
+      reduced: true,
+      coarse: true,
+      pseudoElement: '::after',
+      base: {opacity: 1},
+    });
+    animator.set({opacity: 1});
+    expect(live('opacity')).toHaveLength(0);
+    animator.animate({x: 100}, {spring: springs.navigationPush});
+    await commitFrame(clock);
+    expect(live('opacity').length).toBeGreaterThan(0);
+    await advance(END_HOLD_MS + 5000);
+    expect(animator.get('x')).toBe(100);
+    expect(live('opacity')).toHaveLength(0);
+  });
+
+  it('in development, the first hold it drops warns once when the stylesheet shows another value', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    pseudoStylesheet = {opacity: '1'};
+    const {animator} = setup(clear);
+    animator.set({opacity: 0});
+    // The read waits for a later task.
+    expect(warn).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0][0])).toMatch(
+      /::after stylesheet shows opacity 1, not its declared base 0/,
+    );
+    animator.set({opacity: 0.5});
+    animator.set({opacity: 0});
+    await vi.advanceTimersByTimeAsync(1);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('a stylesheet that shows its base raises no warning', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    pseudoStylesheet = {opacity: '0'};
+    const {animator} = setup(clear);
+    animator.set({opacity: 0});
+    await vi.advanceTimersByTimeAsync(1);
+    expect(warn).not.toHaveBeenCalled();
   });
 });
 

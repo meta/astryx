@@ -57,6 +57,9 @@ const animatedLayout = useAnimatedLayout({containerRef: scrollRef});
 
 - **FR1 — One hook, one handle, one prop.** `useAnimatedLayout({containerRef})`
   returns an opaque `animatedLayout` handle with no public methods or fields.
+  The handle's type carries one optional phantom brand member typed `never`,
+  so a package handle and a swizzled copy's handle match (`spec:AST-110` FR3);
+  it is never present at runtime and offers nothing to read or set.
   An app passes it to a component whose size changes through that
   component's `animatedLayout` prop, or a hook's `animatedLayout` option where
   the component is a hook, and the component reports each change.

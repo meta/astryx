@@ -37,6 +37,7 @@ import {
   PARTIAL_LIFT_SKIP,
   PEN_SKIP,
   releaseAnimations,
+  requireFrames,
   sampleCurve,
   sampleRects,
   springStep,
@@ -1621,6 +1622,71 @@ test.describe('with Reduce Motion (design:reduced-motion)', () => {
     await expect(tab(page, 'Browse')).toHaveAttribute('aria-selected', 'true');
     assertOpacityOnly(await runningAnimations(page, since));
     await waitForRest(lensBody(page));
+    expect(Math.abs((await lensCenterX(page)) - to.x)).toBeLessThan(0.5);
+  });
+
+  test('on a touch screen a tap held 150 ms puts the lens on the touched tab at once: a lens on every frame, and no fade of its own', async ({
+    page,
+  }) => {
+    await page.emulateMedia({reducedMotion: 'reduce'});
+    const {driver} = await openBar(page);
+    const to = await itemCenter(page, 'Profile');
+    // Every frame from here: the lens's own opacity, and how many opacity
+    // animations run on the lens itself. Its glass and shadow are
+    // pseudo-elements, with animations of their own.
+    await lensBody(page).evaluate(body => {
+      const w = window as unknown as {
+        __lensFrames: {t: number; opacity: number; fades: number}[];
+        __lensDown: number;
+      };
+      w.__lensFrames = [];
+      w.__lensDown = 0;
+      window.addEventListener(
+        'touchstart',
+        () => {
+          w.__lensDown = performance.now();
+        },
+        {capture: true, once: true},
+      );
+      const step = () => {
+        w.__lensFrames.push({
+          t: performance.now(),
+          opacity: Number(getComputedStyle(body).opacity),
+          fades: body
+            .getAnimations()
+            .filter(animation =>
+              (animation.effect as KeyframeEffect)
+                .getKeyframes()
+                .some(frame => frame.opacity != null),
+            ).length,
+        });
+        if (w.__lensFrames.length < 600) {
+          requestAnimationFrame(step);
+        }
+      };
+      requestAnimationFrame(step);
+    });
+    await driver.play(tapScript(to, {holdMs: 150}));
+    await expect(tab(page, 'Profile')).toHaveAttribute('aria-selected', 'true');
+    await waitForRest(lensBody(page));
+    const {frames, down} = await page.evaluate(() => {
+      const w = window as unknown as {
+        __lensFrames: {t: number; opacity: number; fades: number}[];
+        __lensDown: number;
+      };
+      return {frames: w.__lensFrames, down: w.__lensDown};
+    });
+    expect(down, 'no touch reached the page').toBeGreaterThan(0);
+    // The tap's own window: its 150 ms hold and the 200 ms a settle takes.
+    const tap = requireFrames(frames, {
+      min: 12,
+      during: 'the tap and its settle',
+      where: frame => frame.t >= down && frame.t <= down + 350,
+    });
+    expect(
+      tap.filter(frame => frame.opacity < 0.9 || frame.fades > 0),
+      'a frame with the lens faded, or fading',
+    ).toEqual([]);
     expect(Math.abs((await lensCenterX(page)) - to.x)).toBeLessThan(0.5);
   });
 

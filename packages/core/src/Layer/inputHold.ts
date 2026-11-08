@@ -28,6 +28,7 @@ import {
   type MousePoint,
 } from '../utils/inputStream';
 import {isDocument, isElement, isHTMLElement, isNode} from '../utils/nodeType';
+import {realmValue, sharedKey} from '../utils/sharedRealm';
 
 /**
  * What a hold does. `'viewport'` and `'layer'` add one shield over the whole
@@ -84,10 +85,17 @@ interface PressHold {
   holds: (pointerId: number) => boolean;
 }
 
-const held = new WeakMap<Element, HeldLayer>();
-const heldDocuments = new WeakMap<Document, HeldDocument>();
-const pressHolds = new WeakMap<Document, PressHold>();
-const liveShields = new WeakSet<Node>();
+// Registered, so the gesture host sees the layer holds of a swizzled copy as
+// it does the package's.
+const {held, heldDocuments, pressHolds, liveShields} = realmValue(
+  sharedKey('layer/input-hold', 1),
+  () => ({
+    held: new WeakMap<Element, HeldLayer>(),
+    heldDocuments: new WeakMap<Document, HeldDocument>(),
+    pressHolds: new WeakMap<Document, PressHold>(),
+    liveShields: new WeakSet<Node>(),
+  }),
+);
 
 /** Whether the shared input stream last delivered a mouse's pointer event. */
 function isMouseLast(doc: Document | null): boolean {

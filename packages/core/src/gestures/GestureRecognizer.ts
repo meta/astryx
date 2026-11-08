@@ -559,6 +559,15 @@ export abstract class GestureRecognizer {
     return this.arena?.now() ?? 0;
   }
 
+  /**
+   * Takes this recognizer's touches from the view, as a claiming winner does
+   * under `cancelsTouchesInView`: the view's press ends and no click follows.
+   * The touches stay unclaimed, so the page still scrolls.
+   */
+  protected cancelTouchesInView(): void {
+    this.arena?.cancelTouchesInViewOf(this);
+  }
+
   // --- Arena hooks (internal) ----------------------------------------------
 
   /** @internal Whether this recognizer takes `touch` right now. */
