@@ -44,6 +44,13 @@ describe('liftFromTriggerScale', () => {
     );
   });
 
+  it('shrinks a source taller than the viewport less its top and bottom gutters', () => {
+    expect(liftFromTriggerScale(300, 900, VIEWPORT, RULE)).toBeCloseTo(
+      738 / 900,
+      10,
+    );
+  });
+
   it('leaves an empty source alone', () => {
     expect(liftFromTriggerScale(0, 0, VIEWPORT, RULE)).toBe(1);
   });
@@ -86,6 +93,16 @@ describe('liftFromTriggerRect', () => {
     );
     expect(bottom.y + bottom.height).toBeCloseTo(820, 10);
   });
+
+  it('keeps a source taller than the room between the gutters inside both', () => {
+    const tall = liftFromTriggerRect(
+      {x: 51, y: 0, width: 300, height: 900},
+      VIEWPORT,
+      RULE,
+    );
+    expect(tall.y).toBeCloseTo(82, 10);
+    expect(tall.y + tall.height).toBeCloseTo(820, 10);
+  });
 });
 
 describe('surfacePlacement', () => {
@@ -99,7 +116,12 @@ describe('surfacePlacement', () => {
   });
 
   it('goes above where it does not fit below', () => {
-    expect(surfacePlacement(middle, 400, VIEWPORT, 16).side).toBe('above');
+    const low = {...middle, y: 600};
+    expect(surfacePlacement(low, 400, VIEWPORT, 16).side).toBe('above');
+  });
+
+  it('reports that neither side fits when the surface is taller than the room above and below', () => {
+    expect(surfacePlacement(middle, 400, VIEWPORT, 16).side).toBe('none');
   });
 
   it('is flush with the edge the source is held against, and the sides swap in a right-to-left page', () => {
