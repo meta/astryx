@@ -86,6 +86,14 @@ const styles = stylex.create({
   columnsText: {
     gridTemplateColumns: 'minmax(0, 1fr)',
   },
+  // Linked lines wrap, so the text track keeps its longest word: a link is
+  // never clipped to nothing, and no hidden words grow the bar.
+  columnsWithLogoAndLinks: {
+    gridTemplateColumns: 'auto minmax(min-content, 1fr)',
+  },
+  columnsWithLinks: {
+    gridTemplateColumns: 'minmax(min-content, 1fr)',
+  },
   // The chevron box plus the gap before it. The track stops there, so a
   // crowded bar cannot cover the chevron.
   columnsWithLogoAndMenu: {
@@ -742,13 +750,16 @@ export function TopNavHeading({
 
   // Static heading with independent links (no menu)
   if (hasAnyHref && !isWholeHeadingLink) {
+    const linkColumns = isRenderable(logo)
+      ? styles.columnsWithLogoAndLinks
+      : styles.columnsWithLinks;
     return (
       <div
         ref={ref as React.Ref<HTMLDivElement>}
         data-testid={testId}
         {...mergeProps(
           themeProps('top-nav-heading'),
-          stylex.props(styles.root, rootColumns, xstyle),
+          stylex.props(styles.root, linkColumns, xstyle),
           className,
           style,
         )}

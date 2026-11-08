@@ -3,12 +3,13 @@
 
 /**
  * @file TopNavCrowdedHeading.a11y.chromium.spec.ts
- * @input The `Core/TopNav` FullExample and TitleOnly stories in a built
- *   Storybook, in real Chromium at narrow widths, with a long heading.
+ * @input The `Core/TopNav` FullExample, TitleOnly and IndependentHeadingLinks
+ *   stories in a built Storybook, in real Chromium at narrow widths.
  * @output Real-engine proof that a crowded start region truncates the
  *   heading's text first and keeps its logo whole and clear of the nav items,
  *   and that a long heading truncates inside its column instead of running
- *   under the end content (component:TopNavHeading FR1).
+ *   under the end content, and that independently linked lines keep their
+ *   words visible instead of clipping to nothing (component:TopNavHeading FR1).
  * @position Run with `pnpm test:a11y-contract`.
  */
 
@@ -108,3 +109,66 @@ test('a long heading truncates inside its column instead of running under the en
   expect(result.truncated).toBe(true);
   expect(result.pageScrolls).toBe(false);
 });
+
+for (const width of [1280, 560, 480]) {
+  test(`at ${width} px independently linked lines keep their words, and Tab lands on a visible link`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({width, height: 240});
+    await openStory(page, 'core-topnav--independent-heading-links');
+    const result = await page.evaluate(() => {
+      const heading = document.querySelector<HTMLElement>(
+        '.astryx-top-nav-heading',
+      );
+      const links = [
+        ...(heading?.querySelectorAll<HTMLAnchorElement>('a') ?? []),
+      ].filter(link => (link.textContent ?? '').trim() !== '');
+      const firstItem = [...document.querySelectorAll('a')].find(
+        link =>
+          heading?.contains(link) !== true &&
+          /Dashboard/.test(link.textContent ?? ''),
+      );
+      if (heading == null || links.length !== 2 || firstItem == null) {
+        throw new Error('the story has no linked heading lines or nav item');
+      }
+      return {
+        links: links.map(link => ({
+          width: link.getBoundingClientRect().width,
+          clipped:
+            link.scrollWidth > link.clientWidth + 1 ||
+            link.scrollHeight > link.clientHeight + 1,
+        })),
+        headingRight: Math.max(
+          ...links.map(link => link.getBoundingClientRect().right),
+        ),
+        firstItemLeft: firstItem.getBoundingClientRect().left,
+      };
+    });
+    for (const link of result.links) {
+      expect(link.width).toBeGreaterThan(0);
+      expect(link.clipped).toBe(false);
+    }
+    expect(result.headingRight).toBeLessThanOrEqual(result.firstItemLeft);
+
+    // Tab from the top of the page until the superheading link holds focus.
+    let focused = {text: '', width: 0, isFocusVisible: false};
+    for (
+      let step = 0;
+      step < 6 && focused.text !== 'Northwind workspace';
+      step++
+    ) {
+      await page.keyboard.press('Tab');
+      focused = await page.evaluate(() => {
+        const link = document.activeElement;
+        return {
+          text: link?.textContent?.trim() ?? '',
+          width: link?.getBoundingClientRect().width ?? 0,
+          isFocusVisible: link?.matches(':focus-visible') ?? false,
+        };
+      });
+    }
+    expect(focused.text).toBe('Northwind workspace');
+    expect(focused.width).toBeGreaterThan(0);
+    expect(focused.isFocusVisible).toBe(true);
+  });
+}
