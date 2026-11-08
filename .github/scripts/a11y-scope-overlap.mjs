@@ -1,0 +1,164 @@
+#!/usr/bin/env node
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+/**
+ * @file The browser accessibility specs main added or changed since a pull
+ *   request's merge base that select the pull request's changes but are not at
+ *   its head.
+ * @input `--base` (the pull request's merge base), `--main`, `--head` and
+ *   `--paths-file` (the pull request's changed paths, one per line), run from
+ *   a checkout of main.
+ * @output JSON `{"version": 1, "specs": [{"path", "reason", "scope"}]}`, where
+ *   `reason` is `added-on-main` or `changed-on-main` and `scope` names what
+ *   selects the spec; exit 0. Any other exit means the answer is unknown.
+ * @position merge-guard reads it: a spec listed here never ran on the pull
+ *   request's runs, which use the head's specs, so a non-empty list needs a
+ *   fresh ref (update the branch) before the merge, as a file overlap does.
+ */
+
+import {execFileSync} from 'node:child_process';
+import fs from 'node:fs';
+import {fileURLToPath} from 'node:url';
+
+import {
+  componentFolderOf,
+  isRenderedSource,
+  parseRouting,
+  selectSpecs,
+  specOwners,
+} from './a11y-pr-contracts.mjs';
+import {isA11ySpecFile} from './lib/a11y-spec-files.mjs';
+
+export const VERSION = 1;
+
+/**
+ * The components a pull request's changed paths touch: each changed source
+ * file's component folder, and the component its file is named for.
+ * @param {string[]} changedPaths
+ */
+export function touchedComponents(changedPaths) {
+  const components = new Set();
+  for (const file of changedPaths.filter(isRenderedSource)) {
+    const folder = componentFolderOf(file);
+    if (!folder) continue;
+    components.add(folder);
+    const named = /^([A-Z][A-Za-z0-9]*)\./.exec(file.split('/').pop() ?? '');
+    if (named) components.add(`${folder.split('/')[0]}/${named[1]}`);
+  }
+  return [...components];
+}
+
+/**
+ * Why a spec selects these changed paths, or null. An `audit` spec counts by
+ * the folder that owns it; every other mode by its own routing lines, as a
+ * pull request's labelled run selects it.
+ * @param {string} file
+ * @param {string} source the spec's source on main
+ * @param {string[]} changedPaths
+ */
+export function selectingScope(file, source, changedPaths) {
+  const routing = parseRouting(source);
+  if (routing.mode === 'audit') {
+    const prefix = specOwners(file).prefixes.find(owner =>
+      changedPaths.some(changed => changed.startsWith(owner)),
+    );
+    return prefix ? `owner ${prefix}` : null;
+  }
+  const [selected] = selectSpecs({
+    specs: [{file, routing}],
+    isPullRequest: true,
+    changedPaths,
+    components: touchedComponents(changedPaths),
+    title: '',
+  });
+  return selected?.reason ?? null;
+}
+
+/**
+ * The specs that need a fresh ref before the merge.
+ * @param {{path: string, status: 'added' | 'changed', mainSource: string,
+ *   headSource: string | null}[]} changedOnMain the spec files main added or
+ *   changed since the merge base, with their source on main and at the head
+ * @param {string[]} changedPaths the pull request's changed paths
+ * @returns {{path: string, reason: string, scope: string}[]}
+ */
+export function overlappingSpecs(changedOnMain, changedPaths) {
+  const out = [];
+  for (const {path, status, mainSource, headSource} of changedOnMain) {
+    if (headSource === mainSource) continue;
+    const scope = selectingScope(path, mainSource, changedPaths);
+    if (scope == null) continue;
+    out.push({
+      path,
+      reason: status === 'added' ? 'added-on-main' : 'changed-on-main',
+      scope,
+    });
+  }
+  return out.sort((a, b) => (a.path < b.path ? -1 : 1));
+}
+
+function git(args) {
+  return execFileSync('git', args, {
+    encoding: 'utf8',
+    maxBuffer: 1 << 28,
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+}
+
+/** A file's source at a commit, or null when the commit lacks it. */
+function sourceAt(sha, file) {
+  try {
+    return git(['show', `${sha}:${file}`]);
+  } catch {
+    return null;
+  }
+}
+
+function main() {
+  const argv = process.argv.slice(2);
+  const value = name => {
+    const at = argv.indexOf(name);
+    return at === -1 ? undefined : argv[at + 1];
+  };
+  const base = value('--base');
+  const mainSha = value('--main');
+  const head = value('--head');
+  const pathsFile = value('--paths-file');
+  if (!base || !mainSha || !head || !pathsFile) {
+    console.error(
+      'usage: a11y-scope-overlap.mjs --base <merge base> --main <main> --head <head> --paths-file <file>',
+    );
+    process.exit(2);
+  }
+  const changedPaths = fs
+    .readFileSync(pathsFile, 'utf8')
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean);
+  const changedOnMain = git([
+    'diff',
+    '--name-status',
+    '--no-renames',
+    base,
+    mainSha,
+  ])
+    .split('\n')
+    .map(line => line.split('\t'))
+    .filter(
+      ([status, file]) => file && /^[AM]$/.test(status) && isA11ySpecFile(file),
+    )
+    .map(([status, file]) => ({
+      path: file,
+      status: status === 'A' ? 'added' : 'changed',
+      mainSource: sourceAt(mainSha, file) ?? '',
+      headSource: sourceAt(head, file),
+    }));
+  const specs = overlappingSpecs(changedOnMain, changedPaths);
+  console.log(JSON.stringify({version: VERSION, specs}));
+}
+
+if (
+  process.argv[1] &&
+  fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)
+)
+  main();
