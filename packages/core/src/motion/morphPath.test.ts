@@ -21,6 +21,12 @@ import {
   type MorphPath,
   type MorphRect,
 } from './morphPath';
+import {
+  frameOf,
+  popoverCollapsedState,
+  popoverFrame,
+  type PopoverCollapsedState,
+} from '../Popover/popoverSurfaceFrame';
 import {progressCurve} from './progress';
 
 const SPRING = {response: 0.4, dampingRatio: 1};
@@ -148,65 +154,41 @@ describe('morphCurves', () => {
 
 // The models of the presentations that move onto the morph, as their pull
 // requests have them; each migration checks the morph against its live code.
+// Popover is on main, so its proofs read its live geometry.
 
-/** Popover (#8187, popoverSurfaceMotion.ts): popoverCollapsedState, popoverFrame. */
-const POPOVER = {collapsedScale: 0.01, collapsedLengthPx: 100};
-function popoverModel(surface: MorphRect, source: MorphRect) {
-  const gaps = {
-    below: surface.y - (source.y + source.height),
-    above: source.y - (surface.y + surface.height),
-    right: surface.x - (source.x + source.width),
-    left: source.x - (surface.x + surface.width),
-  };
-  let side: keyof typeof gaps = 'below';
-  for (const candidate of ['above', 'right', 'left'] as const) {
-    if (gaps[candidate] > gaps[side]) {
-      side = candidate;
-    }
-  }
-  const clamp = (v: number, min: number, max: number) =>
-    Math.min(Math.max(v, min), max);
-  const centerX = clamp(
-    source.x + source.width / 2 - surface.x,
-    0,
-    surface.width,
-  );
-  const centerY = clamp(
-    source.y + source.height / 2 - surface.y,
-    0,
-    surface.height,
-  );
-  const vertical = side === 'below' || side === 'above';
-  const fullLength = vertical ? surface.height : surface.width;
-  const axis: 'x' | 'y' = vertical ? 'y' : 'x';
-  const state = {
-    originX: vertical ? centerX : side === 'right' ? 0 : surface.width,
-    originY: vertical ? (side === 'below' ? 0 : surface.height) : centerY,
-    axis,
-    scale: POPOVER.collapsedScale,
-    length: Math.min(1, POPOVER.collapsedLengthPx / fullLength),
-  };
-  // A frame of (scale, length, opacity), scaled about the origin.
-  const frameRect = (scale: number, length: number): MorphRect => {
-    const along = scale * length;
-    const scaleX = state.axis === 'x' ? along : scale;
-    const scaleY = state.axis === 'y' ? along : scale;
-    return {
-      x: surface.x + state.originX * (1 - scaleX),
-      y: surface.y + state.originY * (1 - scaleY),
-      width: surface.width * scaleX,
-      height: surface.height * scaleY,
-    };
-  };
+/** Popover's live geometry, in the morph's rect form. */
+function popoverState(surface: MorphRect, source: MorphRect) {
+  const box = (rect: MorphRect) => ({
+    left: rect.x,
+    top: rect.y,
+    width: rect.width,
+    height: rect.height,
+  });
+  return popoverCollapsedState({surface: box(surface), source: box(source)});
+}
+
+/** The rect a Popover frame shows: its scale about its origin. */
+function popoverRect(
+  surface: MorphRect,
+  state: PopoverCollapsedState,
+  frame: {scaleX: number; scaleY: number},
+): MorphRect {
   return {
-    state,
-    rectAt: (p: number) =>
-      frameRect(
-        state.scale + (1 - state.scale) * p,
-        state.length + (1 - state.length) * p,
-      ),
-    frameRect,
+    x: surface.x + state.originX * (1 - frame.scaleX),
+    y: surface.y + state.originY * (1 - frame.scaleY),
+    width: surface.width * frame.scaleX,
+    height: surface.height * frame.scaleY,
   };
+}
+
+function popoverPath(surface: MorphRect, state: PopoverCollapsedState) {
+  return edgeGrowPath({
+    box: surface,
+    origin: {x: state.originX, y: state.originY},
+    axis: state.axis,
+    collapsedScale: state.scale,
+    collapsedLength: state.length,
+  });
 }
 
 /** DropdownMenu (#8080, menuSurfaceMotion.ts): menuCollapsedState, scaled per axis about its origin. */
@@ -323,56 +305,50 @@ describe('the presentations that move onto the morph are the same rect at every 
       above: {x: 41, y: -93, width: 320, height: 253},
       right: {x: 261, y: 100, width: 200, height: 160},
       left: {x: -59, y: 100, width: 200, height: 160},
+      overlapping: {x: 41, y: 100, width: 140, height: 200},
     };
+    // A popover that overlaps its source grows from below: from its top edge.
+    expect(popoverState(surfaces.overlapping, source)).toMatchObject({
+      axis: 'y',
+      originY: 0,
+    });
     for (const surface of Object.values(surfaces)) {
-      const model = popoverModel(surface, source);
-      const path = edgeGrowPath({
-        box: surface,
-        origin: {x: model.state.originX, y: model.state.originY},
-        axis: model.state.axis,
-        collapsedScale: model.state.scale,
-        collapsedLength: model.state.length,
-      });
+      const state = popoverState(surface, source);
+      const path = popoverPath(surface, state);
       for (const p of PROGRESSES) {
-        expectRect(path.rectAt(p), model.rectAt(p), 0.5);
-        expect(path.opacityAt!(p)).toBeCloseTo(p, 9);
+        const frame = popoverFrame(state, p);
+        expectRect(path.rectAt(p), popoverRect(surface, state, frame), 0.5);
+        expect(path.opacityAt!(p)).toBeCloseTo(frame.opacity, 9);
       }
     }
   });
 
   it('a popover (#8187) continues an interrupted motion in its own law: scale and length from the frame on screen', () => {
     const surface = {x: 41, y: 204, width: 320, height: 253};
-    const model = popoverModel(surface, {
+    const state = popoverState(surface, {
       x: 141,
       y: 160,
       width: 120,
       height: 44,
     });
-    const path = edgeGrowPath({
-      box: surface,
-      origin: {x: model.state.originX, y: model.state.originY},
-      axis: model.state.axis,
-      collapsedScale: model.state.scale,
-      collapsedLength: model.state.length,
-    });
+    const path = popoverPath(surface, state);
+    const rectOf = (scale: number, length: number) =>
+      popoverRect(
+        surface,
+        state,
+        frameOf({scale, length, opacity: 1}, state.axis),
+      );
     // Mid-dismissal: scale 0.4, length 0.6 (readState), opacity 0.5.
-    const onScreen = model.frameRect(0.4, 0.6);
+    const onScreen = rectOf(0.4, 0.6);
     const back = path.restartFrom!(onScreen, 0.5, 'rest');
     const away = path.restartFrom!(onScreen, 0.5, 'source');
     for (const p of [0, 0.25, 0.5, 0.75, 1, 1.05]) {
-      // #8187's surfaceCurves: each of scale, length and opacity on a line.
-      expectRect(
-        back.rectAt(p),
-        model.frameRect(0.4 + 0.6 * p, 0.6 + 0.4 * p),
-        0.5,
-      );
+      // Popover's curves: each of scale, length and opacity on a line.
+      expectRect(back.rectAt(p), rectOf(0.4 + 0.6 * p, 0.6 + 0.4 * p), 0.5);
       expect(back.opacityAt!(p)).toBeCloseTo(0.5 + 0.5 * p, 9);
       expectRect(
         away.rectAt(p),
-        model.frameRect(
-          0.4 + (model.state.scale - 0.4) * p,
-          0.6 + (model.state.length - 0.6) * p,
-        ),
+        rectOf(0.4 + (state.scale - 0.4) * p, 0.6 + (state.length - 0.6) * p),
         0.5,
       );
       expect(away.opacityAt!(p)).toBeCloseTo(0.5 - 0.5 * p, 9);
