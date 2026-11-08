@@ -104,10 +104,10 @@ const TEXT_ENTRY_INPUT_TYPES = new Set([
 ]);
 
 /**
- * Keys that type, or change typed text, in a text-entry field. An on-screen
- * keyboard sends `Unidentified` or `Process` for many keys, and `Enter` is
- * its Go key. Tab, Escape, arrows and the other named keys move focus or the
- * caret, so they are keyboard navigation.
+ * An on-screen keyboard sends `Unidentified` or `Process` for many keys, and
+ * `Enter` is its Go key. `Shift`, `CapsLock` and `Dead` only shape the next
+ * character. Other named keys move focus or the caret, so they are keyboard
+ * navigation.
  */
 const TEXT_ENTRY_NAMED_KEYS = new Set([
   'Backspace',
@@ -141,7 +141,6 @@ function isTextEntryTarget(target: EventTarget | undefined): boolean {
   }
 }
 
-/** Whether a key press types into a text-entry field. */
 function isTextEntryKey(event: KeyboardEvent): boolean {
   const target =
     typeof event.composedPath === 'function'
@@ -150,10 +149,11 @@ function isTextEntryKey(event: KeyboardEvent): boolean {
   if (!isTextEntryTarget(target ?? undefined)) {
     return false;
   }
+  const key = typeof event.key === 'string' ? event.key : '';
   return (
-    event.isComposing ||
-    event.key.length === 1 ||
-    TEXT_ENTRY_NAMED_KEYS.has(event.key)
+    event.isComposing === true ||
+    key.length === 1 ||
+    TEXT_ENTRY_NAMED_KEYS.has(key)
   );
 }
 

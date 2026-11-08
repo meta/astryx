@@ -458,6 +458,20 @@ describe('interactionModality', () => {
       expect(tracker.isTextEntrySincePointer()).toBe(false);
     });
 
+    it('reads a keydown without a key as navigation, without throwing', async () => {
+      const {tracker, field} = await trackIn(
+        document.implementation.createHTMLDocument(),
+      );
+      field.ownerDocument.dispatchEvent(new Event('pointerdown'));
+
+      expect(() =>
+        field.dispatchEvent(new Event('keydown', {bubbles: true})),
+      ).not.toThrow();
+
+      expect(tracker.getInteractionModality()).toBe('keyboard');
+      expect(tracker.isTextEntrySincePointer()).toBe(false);
+    });
+
     it('stays false after navigation until the next pointer press', async () => {
       const {tracker, field, press} = await trackIn(
         document.implementation.createHTMLDocument(),
