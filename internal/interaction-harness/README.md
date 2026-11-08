@@ -406,13 +406,15 @@ out an anchored one), so a proof takes its traced watch before the window it
 counts. The trace's `longTasks` are the page's own: only a task the harness marked as its own read
 (`waitForAnimation` describing keyframes, `blockMainThread` without `during`)
 is in `devtoolsTasks` instead, and only when no page script ran inside it. A
-test's own `page.evaluate` stays a long task, whether it calls page code
-directly or sets it off. Each long task carries its wall time (`durationMs`)
+test's own `page.evaluate` stays the page's own task, long or stretched,
+whether it calls page code directly or sets it off. Each long task carries its wall time (`durationMs`)
 and the main thread's own run time (`threadMs`, from the trace's thread
-clock). A busy machine stretches the first but not the second, so a claim
-about the page's own work judges `threadMs`. A thread that waits (a
-synchronous request, `Atomics.wait`) gains wall time but no thread time, so a
-claim about a blocking wait judges `durationMs`.
+clock). A busy machine stretches the first but not the second, so a task is
+long only when its thread ran longer than 50 ms: the page's own work. A task
+only the wall clock stretched past 50 ms is in `stretchedTasks`, with both
+times. A thread that waits (a synchronous request, `Atomics.wait`) gains wall
+time but no thread time, so a claim about a blocking wait judges
+`stretchedTasks` too.
 
 **Storyboards.** Deterministic: frames come from seeking held animations or
 from stepping scripted input, never from wall-clock capture. The JSON trace

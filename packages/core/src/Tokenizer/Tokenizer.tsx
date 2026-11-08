@@ -1492,6 +1492,7 @@ export function Tokenizer<T extends SearchableItem>({
         }),
         stylex.props(
           inputWrapperStyles.base,
+          inputWrapperStyles.textField,
           styles.wrapper,
           value.length > 0 && styles.wrapperWithTokens,
           isTruncated ? truncatedSizeStyles[size] : sizeStyle,
@@ -1719,6 +1720,7 @@ export function Tokenizer<T extends SearchableItem>({
             }),
             stylex.props(
               inputWrapperStyles.base,
+              inputWrapperStyles.textField,
               styles.wrapper,
               styles.sheetField,
               isDisabled && styles.sheetFieldDisabled,
@@ -1898,6 +1900,7 @@ export function Tokenizer<T extends SearchableItem>({
             }),
             stylex.props(
               inputWrapperStyles.base,
+              inputWrapperStyles.textField,
               styles.wrapper,
               value.length > 0 && styles.wrapperWithTokens,
               placeholderSizeStyle,
