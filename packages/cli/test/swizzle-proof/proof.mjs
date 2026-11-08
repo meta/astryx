@@ -30,17 +30,75 @@ export const COMPONENT_PACKAGES = ['core', 'lab', 'charts', 'richtext', 'vega'];
 
 /**
  * A change to one of these paths can change every copy, so it proves every
- * target: the swizzle copy, the module readers it uses, the StyleX build,
- * the proof itself, and the dependency set.
+ * target: the StyleX build, the proof itself, and a component package's
+ * manifest (its exports route the copy's imports). The swizzle copy and the
+ * CLI modules it reads count too ({@link swizzleModules}).
  */
 const TOOLCHAIN = [
-  /^packages\/cli\/api\/swizzle\//,
-  /^packages\/cli\/foundation\//,
   /^packages\/build\/src\//,
   /^packages\/cli\/test\/swizzle-proof\//,
-  /^pnpm-lock\.yaml$/,
-  /^package\.json$/,
+  /^packages\/(?:core|lab|charts|richtext|vega)\/package\.json$/,
 ];
+/** A dependency whose change can change every copy's build. */
+const TOOLCHAIN_DEPENDENCY =
+  /(?:^|[\s'"/])(?:vite|@vitejs\/plugin-react|@stylexjs\/[\w-]+|typescript|react|react-dom|@babel\/[\w-]+|@types\/react(?:-dom)?)@/;
+
+/**
+ * The CLI modules `astryx swizzle` runs: the swizzle API and every module it
+ * imports, by relative path, repository-relative.
+ */
+function swizzleModules() {
+  const start = path.join(REPO, 'packages/cli/api/swizzle');
+  const queue = fs
+    .readdirSync(start, {recursive: true})
+    .map(String)
+    .filter(f => /\.mjs$/.test(f) && !/\.test\.mjs$/.test(f))
+    .map(f => path.join(start, f));
+  const seen = new Set();
+  while (queue.length > 0) {
+    const file = queue.shift();
+    if (seen.has(file) || !fs.existsSync(file)) continue;
+    seen.add(file);
+    const code = fs.readFileSync(file, 'utf8');
+    for (const [, spec] of code.matchAll(
+      /(?:from|import)\s*\(?\s*['"](\.[^'"]+)['"]/g,
+    )) {
+      queue.push(path.resolve(path.dirname(file), spec));
+    }
+  }
+  return new Set([...seen].map(f => path.relative(REPO, f)));
+}
+
+/**
+ * The first changed path that can change every copy, or undefined. The
+ * lockfile and the root manifest count only when a changed line names a
+ * build dependency.
+ * @param {string[]} changed
+ * @param {string} base
+ */
+export function toolchainChange(changed, base) {
+  const swizzle = swizzleModules();
+  return changed.find(file => {
+    if (swizzle.has(file) || TOOLCHAIN.some(re => re.test(file))) return true;
+    if (file !== 'pnpm-lock.yaml' && file !== 'package.json') return false;
+    try {
+      const head = process.env.SWIZZLE_PROOF_HEAD;
+      const diff = execFileSync(
+        'git',
+        ['diff', '-U0', base, ...(head ? [head] : []), '--', file],
+        {cwd: REPO, encoding: 'utf8', maxBuffer: 256e6},
+      );
+      return diff
+        .split('\n')
+        .some(
+          line => /^[-+][^-+]/.test(line) && TOOLCHAIN_DEPENDENCY.test(line),
+        );
+    } catch {
+      // A diff git cannot read proves every target.
+      return true;
+    }
+  });
+}
 
 const SOURCE_FILE = /\.(?:ts|tsx|mts|js|mjs|jsx)$/;
 const NOT_SHIPPED =
@@ -308,8 +366,9 @@ export async function runSlice({
   all = false,
 }) {
   const start = Date.now();
-  const changed = all ? null : changedPaths();
-  const toolchain = changed?.find(file => TOOLCHAIN.some(re => re.test(file)));
+  const base = process.env.SWIZZLE_PROOF_BASE ?? 'HEAD^1';
+  const changed = all ? null : changedPaths(base);
+  const toolchain = changed && toolchainChange(changed, base);
   const relevant = (changed ?? []).filter(
     file =>
       COMPONENT_PACKAGES.some(short =>

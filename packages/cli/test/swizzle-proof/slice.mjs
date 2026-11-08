@@ -4,8 +4,8 @@
  * @file slice.mjs
  * @input A slice index and the slice count
  * @output One Vitest case that runs that slice of the swizzle proof
- *   (spec:AST-110 FR7). Report only for now: it prints each step's time and
- *   each failure, and does not fail on a proof failure.
+ *   (spec:AST-110 FR7). It prints each step's time, and fails with
+ *   each target's failure.
  * @position Shared by the swizzle-proof.<n>.test.mjs files, one per slice,
  *   so the test-node shards split the proof between them
  */
@@ -52,6 +52,10 @@ export function proveSlice(index, count) {
           );
         }
         expect(run.results.length).toBe(run.affected);
+        expect(
+          failures.map(r => `${r.key} [${r.failure.step}] ${r.failure.error}`),
+          'swizzle proof failures (spec:AST-110 FR7)',
+        ).toEqual([]);
       } finally {
         fs.rmSync(project, {recursive: true, force: true});
       }
