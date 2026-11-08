@@ -247,9 +247,10 @@ async function readFrameLog(page: Page): Promise<number[]> {
 
 /**
  * The timer task that decides the menu starts within a frame of its due
- * time. A later start that a frame gap over `FRAME_STARVATION_MS` covers
- * fails by name: the page was starved of frames. Any other late start fails
- * bare, because something on the page held the timer.
+ * time. A later start fails by name when the page was starved of frames.
+ * Then a gap over `FRAME_STARVATION_MS` held the due time, and the task ran
+ * within two frames of its end. Any other late start fails bare, because
+ * something on the page held the timer while frames ran.
  */
 function expectDecidedOnTime(
   frames: ReadonlyArray<number>,
@@ -262,9 +263,10 @@ function expectDecidedOnTime(
   }
   let longestGapMs = 0;
   for (let i = 1; i < frames.length; i++) {
-    const coversLateStart =
-      frames[i - 1] <= dueAt + FRAME_MS && frames[i] >= startedAt - FRAME_MS;
-    if (coversLateStart) {
+    const holdsDueTime = frames[i - 1] <= dueAt + FRAME_MS && frames[i] > dueAt;
+    // After a long task the browser may draw a frame before the late timer.
+    const ranAfterIt = startedAt - frames[i] <= 2 * FRAME_MS;
+    if (holdsDueTime && ranAfterIt) {
       longestGapMs = Math.max(longestGapMs, frames[i] - frames[i - 1]);
     }
   }
