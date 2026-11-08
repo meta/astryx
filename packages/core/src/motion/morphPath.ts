@@ -14,22 +14,6 @@
  *   lifted preview, a photo's zoom, a sub-menu's parent card); a rect morph
  *   plays it
  *
- * A path names the rect an element shows at each progress: 0 on its source,
- * 1 at rest, beyond either end on a spring's overshoot. The element stays
- * laid out in the path's `box`; `translate` and `scale` about
- * `transform-origin: 0 0` put it on the path's rect every frame, scaling each
- * axis to the rect (`'axes'`) or both by the rect's width (`'uniform'`, which
- * keeps the element's aspect), and a companion opacity follows a progress of
- * its own or the same one. Only `translate`, `scale` and `opacity` move, so
- * the motion runs on the compositor with no layout or paint per frame.
- *
- * Two laws cover the presentations: `lerpPath`, a straight line from one rect
- * to another (position and size move together), and `edgeGrowPath`, UIKit's
- * popover, which grows out of a point on its edge facing the source with its
- * length along the axis away from the source growing with its scale. A path
- * also says how an interrupted motion continues in its own law
- * (`restartFrom`), so a popover turning around keeps its edge growth.
- *
  * SYNC: When modified, update:
  * - /packages/core/src/motion/morphPath.test.ts
  * - /packages/core/src/motion/README.md

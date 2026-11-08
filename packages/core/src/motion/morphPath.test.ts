@@ -25,8 +25,10 @@ import {
   frameOf,
   popoverCollapsedState,
   popoverFrame,
+  PRESENTED,
   type PopoverCollapsedState,
 } from '../Popover/popoverSurfaceFrame';
+import {readState, surfaceCurves} from '../Popover/popoverSurfaceMotion';
 import {progressCurve} from './progress';
 
 const SPRING = {response: 0.4, dampingRatio: 1};
@@ -332,26 +334,39 @@ describe('the presentations that move onto the morph are the same rect at every 
       height: 44,
     });
     const path = popoverPath(surface, state);
-    const rectOf = (scale: number, length: number) =>
-      popoverRect(
-        surface,
-        state,
-        frameOf({scale, length, opacity: 1}, state.axis),
-      );
-    // Mid-dismissal: scale 0.4, length 0.6 (readState), opacity 0.5.
-    const onScreen = rectOf(0.4, 0.6);
+    // Mid-dismissal: scale 0.4, length 0.6, opacity 0.5 on screen.
+    const shown = frameOf({scale: 0.4, length: 0.6, opacity: 0.5}, state.axis);
+    const onScreen = popoverRect(surface, state, shown);
+    // Popover's own turn-around: it reads that frame back and plays on.
+    const from = readState(
+      {get: (property: string) => shown[property as keyof typeof shown]},
+      state.axis,
+    );
+    const linear: MotionCurve = {duration: 1, at: t => t, velocity: () => 1};
+    const toRest = surfaceCurves(from, PRESENTED, state.axis, linear);
+    const toSource = surfaceCurves(
+      from,
+      {scale: state.scale, length: state.length, opacity: 0},
+      state.axis,
+      linear,
+    );
     const back = path.restartFrom!(onScreen, 0.5, 'rest');
     const away = path.restartFrom!(onScreen, 0.5, 'source');
     for (const p of [0, 0.25, 0.5, 0.75, 1, 1.05]) {
-      // Popover's curves: each of scale, length and opacity on a line.
-      expectRect(back.rectAt(p), rectOf(0.4 + 0.6 * p, 0.6 + 0.4 * p), 0.5);
-      expect(back.opacityAt!(p)).toBeCloseTo(0.5 + 0.5 * p, 9);
-      expectRect(
-        away.rectAt(p),
-        rectOf(0.4 + (state.scale - 0.4) * p, 0.6 + (state.length - 0.6) * p),
-        0.5,
-      );
-      expect(away.opacityAt!(p)).toBeCloseTo(0.5 - 0.5 * p, 9);
+      for (const [morph, live] of [
+        [back, toRest],
+        [away, toSource],
+      ] as const) {
+        expectRect(
+          morph.rectAt(p),
+          popoverRect(surface, state, {
+            scaleX: live.scaleX.at(p),
+            scaleY: live.scaleY.at(p),
+          }),
+          0.5,
+        );
+        expect(morph.opacityAt!(p)).toBeCloseTo(live.opacity.at(p), 9);
+      }
     }
   });
 
