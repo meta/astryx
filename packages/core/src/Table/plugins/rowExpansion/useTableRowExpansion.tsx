@@ -68,6 +68,7 @@ import {
   type LayoutChange,
 } from '../../../motion/animatedLayout';
 import {
+  dividerOffset,
   GLIDING_ATTRIBUTE,
   glidingDividerStyles,
   markGlidingRows,
@@ -254,7 +255,11 @@ const expansionStyles = stylex.create({
       ':is([dir="rtl"] *)': 'scaleX(-1) rotate(0deg)',
     },
   },
-  expandedRow: {
+  // The wash goes on the panel's cell, not on its row. A row that paints its
+  // own box plays in under a clip that moves with its edge. On iOS that clip
+  // can trail the rows that glide below it. The cell slides in with the
+  // panel's content.
+  mutedPanel: {
     backgroundColor: colorVars['--color-background-muted'],
   },
   expandedCell: {
@@ -505,10 +510,12 @@ function PanelDividerModeWatch({
 function ExpansionPanelCell({
   colSpan,
   cellsRef,
+  isMuted,
   children,
 }: {
   colSpan: number;
   cellsRef: RefObject<Set<HTMLTableCellElement>>;
+  isMuted: boolean;
   children: ReactNode;
 }) {
   const ctx = useTableContext();
@@ -558,6 +565,7 @@ function ExpansionPanelCell({
       colSpan={colSpan}
       {...stylex.props(
         expansionStyles.expandedCell,
+        isMuted && expansionStyles.mutedPanel,
         panelIndentStyles[ctx?.density ?? 'balanced'],
         hasRowDividers && dividerStyles.panelCell,
         glidingDividerStyles.cell,
@@ -765,6 +773,7 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
       row: HTMLElement;
       panel: HTMLElement | null;
       entrance: Animation | null;
+      panelOffset: number | null;
       edges: Map<Element, BottomEdge>;
     }[] = [];
     for (const pending of pendings) {
@@ -784,6 +793,7 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
             ? next
             : null,
         entrance: null as Animation | null,
+        panelOffset: null as number | null,
         edges: new Map<Element, BottomEdge>(),
       };
       // Read where the glide reads the layout, before anything moves: the
@@ -804,6 +814,8 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
           const edge = rowEdge(record.panel);
           if (edge != null) {
             record.edges.set(record.panel, edge);
+            // Its entrance moves its cell: read where its line hangs first.
+            record.panelOffset = dividerOffset(record.panel, edge);
           }
           record.entrance = playLayoutChange(animatedLayout, record.panel);
         }
@@ -831,12 +843,12 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
     // one runs after it, before the frame paints, and only writes.
     queueMicrotask(() => {
       const stopped = Promise.all(
-        moved.map(async ({row, panel, entrance, edges}) =>
+        moved.map(async ({row, panel, entrance, panelOffset, edges}) =>
           markGlidingRows(
             row,
             edges,
             panel != null && entrance != null
-              ? {row: panel, animation: entrance}
+              ? {row: panel, animation: entrance, offset: panelOffset}
               : null,
             glideOf,
           ),
@@ -1099,12 +1111,12 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
               // Carries the marker so the panel cell's divider can ask whether
               // this row is the table's last, the same way TableCell does.
               tableRowMarker,
-              panelVariant === 'muted' && expansionStyles.expandedRow,
               glidingDividerStyles.row,
             )}>
             <ExpansionPanelCell
               colSpan={columnCountRef.current}
-              cellsRef={panelCellsRef}>
+              cellsRef={panelCellsRef}
+              isMuted={panelVariant === 'muted'}>
               {renderExpanded(item)}
             </ExpansionPanelCell>
           </tr>

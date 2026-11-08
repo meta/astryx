@@ -368,7 +368,7 @@ export interface DateTimeInputProps extends Omit<
   /**
    * The selected datetime in ISO 8601 format ("YYYY-MM-DDTHH:MM" or "YYYY-MM-DDTHH:MM:SS").
    */
-  value?: ISODateTimeString;
+  value?: ISODateTimeString | undefined;
 
   /**
    * Callback fired when the datetime changes.

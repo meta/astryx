@@ -21,31 +21,50 @@ import {
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
 import {
+  advanceFrozenPage,
   animationStoryboard,
+  armHold,
+  armInputRun,
   blockMainThread,
+  BusyWindowTooLateError,
   busyWindowProof,
   castStoryboard,
   CONTROL_RGB,
   countBetween,
   drag,
   flick,
+  FRAME_STARVATION_MS,
+  FrameStarvationError,
+  freezePageOn,
+  freezePageWhen,
   holdAnimations,
-  markElement,
+  installPageFreeze,
+  installTimerGate,
+  MARKER_RGB,
   openStory,
   releaseAnimations,
+  requireFrames,
   sampleCurve,
   sampleRects,
   startBusyControl,
   startScreencast,
+  thawPage,
+  toTouchEvents,
+  touchArrivalsFrom,
   touchDriver,
+  TouchPacingError,
+  touchPacingFault,
+  TouchPageStallError,
   touchStoryboard,
   traceRendering,
   trackMarker,
-  waitForAnimation,
   waitForRest,
+  watchAnimations,
   withStorybook,
   writeEvidence,
+  type BlockedWindow,
   type TouchDriver,
+  type TrackedFrame,
 } from '@astryxdesign/interaction-harness';
 
 const storybook = withStorybook(test);
@@ -174,10 +193,10 @@ interface BarFrame {
  * stack and the back button's effective opacities. The returned function
  * stops and returns them. A layer's x is its computed `translate`: the cards
  * and bars sit at the stack's leading edge, checked when the trace starts. So
- * a frame reads no layout. Under load, in a frame that comes a few
- * milliseconds late, WebKit evaluates two layers that animate on one clock
- * about a millisecond apart. This holds for boxes and translates alike.
- * `animating` says which frames an animation drives.
+ * a frame reads no layout. Under load, WebKit can evaluate two layers that
+ * share one clock at two times in one frame, as far apart as their reads.
+ * This holds for boxes and translates alike. So each card is read right
+ * before its bar. `animating` says which frames an animation drives.
  */
 async function traceBars(page: Page): Promise<() => Promise<BarFrame[]>> {
   await page.evaluate(() => {
@@ -200,15 +219,32 @@ async function traceBars(page: Page): Promise<() => Promise<BarFrame[]>> {
       const value = getComputedStyle(element).translate;
       return value === 'none' ? 0 : parseFloat(value);
     };
-    const read = (selector: string, attribute: string) => {
-      const out: Record<string, number> = {};
-      for (const element of document.querySelectorAll<HTMLElement>(selector)) {
-        const key = element.getAttribute(attribute);
-        if (key != null) {
-          out[key] = translateX(element);
+    const readLayers = () => {
+      const cards: Record<string, number> = {};
+      const bars: Record<string, number> = {};
+      for (const card of document.querySelectorAll(
+        '[data-navigation-screen]',
+      )) {
+        const key = card.getAttribute('data-navigation-screen');
+        if (key == null) {
+          continue;
+        }
+        cards[key] = translateX(card);
+        const keyBars = document.querySelectorAll(
+          `[data-navigation-bar="${CSS.escape(key)}"]`,
+        );
+        const bar = keyBars.item(keyBars.length - 1);
+        if (bar != null) {
+          bars[key] = translateX(bar);
         }
       }
-      return out;
+      for (const bar of document.querySelectorAll('[data-navigation-bar]')) {
+        const key = bar.getAttribute('data-navigation-bar');
+        if (key != null && !(key in cards)) {
+          bars[key] = translateX(bar);
+        }
+      }
+      return {cards, bars};
     };
     // A layer at rest sits at the stack's edge: its box is its translate.
     const left = stack?.getBoundingClientRect().left ?? 0;
@@ -230,8 +266,7 @@ async function traceBars(page: Page): Promise<() => Promise<BarFrame[]>> {
       const chevron = button?.firstElementChild ?? null;
       w.__bars.push({
         t: performance.now() - t0,
-        cards: read('[data-navigation-screen]', 'data-navigation-screen'),
-        bars: read('[data-navigation-bar]', 'data-navigation-bar'),
+        ...readLayers(),
         back:
           button == null || chevron == null
             ? null
@@ -298,6 +333,127 @@ const crit = (response: number, ms: number) => {
   return 1 - (1 + u) * Math.exp(-u);
 };
 
+/** One scene time of a push: where the incoming card and the cut stand. */
+interface CutSample {
+  /** The incoming card's leading edge, px. */
+  cardEdge: number;
+  /** How far the covered bar's cut is from that edge, px. */
+  gap: number;
+}
+
+/** The scene times `cutAcrossPush` reads, ms after the push starts. */
+const CUT_TIMES = [16, 50, 90, 130, 180, 240, 300, 380];
+
+/**
+ * Runs `push`, then reads the incoming card's leading edge and the covered
+ * bar's cut from their rendered boxes at each of `CUT_TIMES`. The scene
+ * freezes while the push runs, so nothing moves or retires. Each read moves
+ * every animation of the push to one scene time first. Mid-flight, WebKit can
+ * report one moving layer a frame late; at a held time it cannot. A freeze
+ * that lands late on a busy machine still reads the whole flight. The page
+ * needs `installPageFreeze` before it loads and `installTimerGate` after.
+ */
+async function cutAcrossPush(
+  page: Page,
+  push: () => Promise<void>,
+  {
+    covered,
+    incoming,
+    direction,
+  }: {covered: string; incoming: string; direction: 'ltr' | 'rtl'},
+): Promise<CutSample[]> {
+  // Armed before the push, so the scene freezes while it runs.
+  const frozen = freezePageWhen(
+    page,
+    key =>
+      document
+        .querySelector(`[data-navigation-screen="${key}"]`)
+        ?.getAnimations()
+        .some(animation => animation.playState === 'running') === true,
+    incoming,
+  );
+  await push();
+  await frozen;
+  try {
+    return await page.evaluate(
+      ([coveredKey, incomingKey, dir, times]) => {
+        const stack = document.querySelector(
+          '[data-testid="navigation-stack"]',
+        );
+        const cardElement = document.querySelector(
+          `[data-navigation-screen="${incomingKey}"]`,
+        );
+        const cutElement = document.querySelector(
+          `[data-navigation-bar="${coveredKey}"]`,
+        )?.firstElementChild;
+        if (stack == null || cardElement == null || cutElement == null) {
+          return [];
+        }
+        const runs = document.getAnimations().filter(animation => {
+          const target =
+            animation.effect instanceof KeyframeEffect
+              ? animation.effect.target
+              : null;
+          return (
+            target != null &&
+            stack.contains(target) &&
+            animation.startTime != null
+          );
+        });
+        // Read once: a held run's start follows its current time.
+        const starts = runs.map(animation => Number(animation.startTime));
+        const heldAt = runs.map(animation => animation.currentTime);
+        // Scene times count from the incoming card's own start, whatever
+        // else in the stack animates (a row's press feedback).
+        const cardRun = runs.findIndex(
+          animation =>
+            animation.effect instanceof KeyframeEffect &&
+            animation.effect.target === cardElement,
+        );
+        if (cardRun < 0) {
+          return [];
+        }
+        const origin = starts[cardRun];
+        const samples = times.map(t => {
+          runs.forEach((animation, index) => {
+            animation.currentTime = Math.max(0, origin + t - starts[index]);
+          });
+          const cardBox = cardElement.getBoundingClientRect();
+          const cutBox = cutElement.getBoundingClientRect();
+          // The cut's trailing edge meets the card's leading edge.
+          const cardEdge = dir === 'rtl' ? cardBox.right : cardBox.left;
+          const cutEdge = dir === 'rtl' ? cutBox.left : cutBox.right;
+          return {cardEdge, gap: Math.abs(cutEdge - cardEdge)};
+        });
+        // Back where the freeze held them, so the thaw plays on from there.
+        runs.forEach((animation, index) => {
+          animation.currentTime = heldAt[index];
+        });
+        return samples;
+      },
+      [covered, incoming, direction, CUT_TIMES] as const,
+    );
+  } finally {
+    await thawPage(page);
+  }
+}
+
+/**
+ * The samples span the flight, and at every one the cut stays on the card's
+ * leading edge.
+ */
+function expectCutOnCardEdge(samples: CutSample[], width: number) {
+  const trace = JSON.stringify(samples);
+  expect(samples.length, trace).toBeGreaterThanOrEqual(5);
+  const travel = Math.abs(
+    samples[0].cardEdge - samples[samples.length - 1].cardEdge,
+  );
+  expect(travel, trace).toBeGreaterThan(width * 0.5);
+  for (const sample of samples) {
+    expect(sample.gap, trace).toBeLessThan(2);
+  }
+}
+
 const rowCenter = async (page: Page, name: string) => {
   const box = await page.getByRole('button', {name}).first().boundingBox();
   if (box == null) {
@@ -306,15 +462,36 @@ const rowCenter = async (page: Page, name: string) => {
   return {x: box.x + box.width / 2, y: box.y + box.height / 2};
 };
 
+/** The events a touch play's page receives, pointer events included. */
+const TOUCH_INPUT_TYPES = [
+  'pointerdown',
+  'pointermove',
+  'pointerup',
+  'pointercancel',
+  'touchstart',
+  'touchmove',
+  'touchend',
+  'touchcancel',
+];
+
 test('a push follows UIKit’s push spring, the card underneath at 0.3 of its speed', async ({
   page,
 }, testInfo) => {
-  const {driver, width} = await openStack(page, 'settings');
-  await driver.tap(await rowCenter(page, 'General'));
+  const {driver, stack, width} = await openStack(page, 'settings');
   const top = card(page, 'screen-General');
   const under = card(page, 'root');
-  await waitForAnimation(top);
-  await holdAnimations(page);
+  // The push moves both cards at once: with a count of 2, the row's own
+  // release fade cannot trigger the hold alone.
+  const hold = await armHold(page, stack, {
+    judges: [
+      {target: top, property: 'translate'},
+      {target: under, property: 'translate'},
+    ],
+    count: 2,
+    newOnly: true,
+  });
+  await driver.tap(await rowCenter(page, 'General'));
+  await hold.held();
 
   const times = Array.from({length: 31}, (_, i) => i * 16.667);
   const samples: {t: number; top: number; under: number; analytic: number}[] =
@@ -381,11 +558,13 @@ test('a push’s bar: the new bar slides in with its screen, the covered one rid
   await page.waitForTimeout(900);
   const frames = await stop();
   const start = firstMove(frames, 'screen-General');
-  expect(start).toBeDefined();
-  const during = frames.filter(
-    f => f.t >= (start?.t ?? 0) && f.cards['screen-General'] > 0.5,
-  );
-  expect(during.length).toBeGreaterThan(5);
+  expect(start, 'the push started').toBeDefined();
+  const during = requireFrames(frames, {
+    min: 6,
+    during: 'the pushed screen slides in',
+    where: f =>
+      start != null && f.t >= start.t && f.cards['screen-General'] > 0.5,
+  });
   for (const f of during) {
     // UIKit's bar copy is part of its screen: it moves with the card (one
     // clock and spring). It stays within 1 % of the width, as engines sample
@@ -651,7 +830,9 @@ test('brought back past its start, the screen follows with resistance, then spri
   frames.push({t: last.t + steps * 16.7 + 4, fingers: []});
   await driver.play(frames);
   // The return, held where it runs and read every 2 ms from its start.
-  const heldAnimations = await holdAnimations(page, top);
+  const heldAnimations = await holdAnimations(page, top, {
+    judges: {target: top, property: 'translate'},
+  });
   const returnIndex = await top.evaluate(element =>
     (
       (window as unknown as {__harnessHeld?: Animation[]}).__harnessHeld ?? []
@@ -767,9 +948,39 @@ test('a flick from near the edge finishes the pop', async ({page}) => {
     standalone: true,
   });
   // ~60 px of travel at ~1200 px/s: p + 0.35·v is well past half.
-  await driver.play(flick({x: left + 6, y: 400}, {velocity: {x: 1200, y: 0}}));
+  const script = flick({x: left + 6, y: 400}, {velocity: {x: 1200, y: 0}});
+  const run = await armInputRun(page, TOUCH_INPUT_TYPES);
+  // The page reads the release from when the moves arrive: pace on spacing.
+  await driver.play(script, {pacing: 'spacing'});
   await waitForRest(card(page, 'screen-General'));
-  await expect.poll(topTitle).toBe('General');
+  try {
+    await expect.poll(topTitle).toBe('General');
+  } catch (error) {
+    // A starved runner delivers the moves late, so the page reads a release
+    // far from the script's. Past half of it, the run did not deliver the
+    // flick this test describes. It fails by name, as the page's when its own
+    // listeners held a move.
+    const record = await run.evaluate(recorded => {
+      recorded.stop();
+      return {
+        eventTypes: recorded.eventTypes.slice(),
+        pointerTypes: recorded.pointerTypes.slice(),
+        stamps: recorded.stamps.slice(),
+        handledAt: recorded.handledAt.slice(),
+      };
+    });
+    const fault = touchPacingFault(
+      toTouchEvents(script),
+      touchArrivalsFrom(record),
+      0.5,
+    );
+    if (fault != null) {
+      throw fault.heldByPage == null
+        ? new TouchPacingError(fault)
+        : new TouchPageStallError({...fault, heldByPage: fault.heldByPage});
+    }
+    throw error;
+  }
 });
 
 test('in a browser tab the leading screen edge stays the browser’s', async ({
@@ -818,6 +1029,49 @@ test('a sideways drag in the content pops (iOS 26’s full-width back swipe)', a
   await expect.poll(topTitle).toBe('General');
 });
 
+/**
+ * Marks screen `key`'s card as it mounts, with the chip `markElement` draws.
+ * The marker then paints in the push's first frame, before a block that the
+ * page starts a frame later.
+ */
+async function markScreenOnMount(page: Page, key: string, inset: number) {
+  await page.evaluate(
+    ({screen, offset, rgb}) => {
+      const selector = `[data-navigation-screen="${screen}"]`;
+      const observer = new MutationObserver(() => {
+        const element = document.querySelector<HTMLElement>(selector);
+        if (element == null) {
+          return;
+        }
+        observer.disconnect();
+        if (getComputedStyle(element).position === 'static') {
+          element.style.position = 'relative';
+        }
+        const chip = document.createElement('div');
+        chip.setAttribute('aria-hidden', 'true');
+        chip.style.cssText = `position:absolute;top:${offset}px;left:${offset}px;width:16px;height:16px;background:rgb(${rgb.join(',')});z-index:2147483647;pointer-events:none;`;
+        element.append(chip);
+      });
+      observer.observe(document.body, {childList: true, subtree: true});
+    },
+    {screen: key, offset: inset, rgb: [...MARKER_RGB]},
+  );
+}
+
+/**
+ * Blocks the main thread from inside a push from the root, for `ms`. Call it
+ * before the action and await it after. The page then waits from before the
+ * push, and blocks once the covered screen's bar has run a frame. That bar
+ * rides the push from its first frame, and nothing else animates in it. So
+ * the row's own release fade cannot start the block before the push.
+ */
+function blockDuringPush(page: Page, ms: number) {
+  return blockMainThread(page, ms, {
+    during: page.locator('[data-navigation-bar="root"]'),
+    minProgressMs: 16,
+  });
+}
+
 test('a push keeps advancing every frame while the main thread is blocked', async ({
   page,
   browserName,
@@ -831,16 +1085,14 @@ test('a push keeps advancing every frame while the main thread is blocked', asyn
   // The compositor's own pace on this machine, from the same screencast.
   await startBusyControl(page);
   const cast = await startScreencast(page);
-  await driver.tap(await rowCenter(page, 'General'));
+  const watch = await watchAnimations(top);
   // Below the bar, which overlays the screens.
-  await markElement(top, {inset: 60});
-  const [push] = await waitForAnimation(top, {minProgressMs: 16});
-  // The page blocks itself from inside the push, once it has run a frame. A
-  // block from the test's own round trip can start before the marker paints.
-  const block = await blockMainThread(page, 600, {
-    during: top,
-    minProgressMs: 16,
-  });
+  await markScreenOnMount(page, 'screen-General', 60);
+  const row = await rowCenter(page, 'General');
+  const blocked = blockDuringPush(page, 600);
+  await driver.tap(row);
+  const block = await blocked;
+  const [push] = await watch.started({minProgressMs: 16});
   await page.waitForTimeout(150);
   const castFrames = await cast.stop();
   const tracked = await trackMarker(page, castFrames);
@@ -880,7 +1132,131 @@ test('a push keeps advancing every frame while the main thread is blocked', asyn
   expect(proof.verdict.failures, proof.summary).toEqual([]);
 });
 
-test('the incoming bar covers the old title while the main thread is blocked', async ({
+// With a mouse the bars are opaque: the incoming one covers the old title.
+// Under a finger iOS 26's bars are clear (NavigationStackScrollEdge's proofs)
+// and the incoming screen cuts the old title instead (the next test).
+test('with a mouse, the incoming bar covers the old title while the main thread is blocked', async ({
+  browser,
+  browserName,
+}) => {
+  test.skip(
+    browserName !== 'chromium',
+    'screencast frame evidence is Chromium-only in Playwright (WebKit: the iOS simulator rig)',
+  );
+  const {context, page} = await newFinePage(browser);
+  try {
+    await openStack(page, 'settings', {pointer: 'mouse'});
+    expect(
+      await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
+    ).toBe(false);
+    // A marker at the trailing end of the root's title: the pushed screen's
+    // opaque bar slides over it on the compositor.
+    await page.locator('[data-navigation-bar="root"] h2').evaluate(title => {
+      const element = title as HTMLElement;
+      element.style.position = 'relative';
+      const chip = document.createElement('div');
+      chip.setAttribute('aria-hidden', 'true');
+      chip.style.cssText =
+        'position:absolute;top:4px;right:0;width:10px;height:10px;background:rgb(255,0,255);pointer-events:none;';
+      element.append(chip);
+    });
+    const cast = await startScreencast(page);
+    const row = await rowCenter(page, 'General');
+    // The block outlasts the push, whose spring is at rest by about 0.45 s.
+    const blocked = blockDuringPush(page, 900);
+    await page.mouse.click(row.x, row.y);
+    const block = await blocked;
+    await page.waitForTimeout(150);
+    const frames = await cast.stop();
+    const tracked = await trackMarker(page, frames);
+    const trace = JSON.stringify(
+      tracked.map(f => [Math.round(f.t - block.from), f.box?.x ?? null]),
+    );
+    const during = titleFramesInBlock(tracked, block);
+    // Seen while blocked, then covered before the block ends.
+    expect(
+      during.some(f => f.box != null),
+      trace,
+    ).toBe(true);
+    expect(during.at(-1)?.box ?? null, trace).toBeNull();
+  } finally {
+    await context.close();
+  }
+});
+
+/**
+ * The screencast frames inside the block, once the block has caught the
+ * title. A block cannot begin before the push's first frame, and a page that
+ * is starved of frames begins it late. When the push had already covered the
+ * title, the window holds nothing to judge, and the run fails by name. A
+ * frame by the block's start shows the title gone, or the block's first frame
+ * does, within `FRAME_STARVATION_MS`. A push that froze presents no frame that
+ * early, so it fails on the assertion. The numbers come from the frames.
+ */
+function titleFramesInBlock(
+  tracked: readonly TrackedFrame[],
+  block: BlockedWindow,
+): TrackedFrame[] {
+  const during = tracked.filter(f => f.t > block.from && f.t < block.to - 20);
+  const lastSeen = tracked.filter(f => f.box != null).at(-1);
+  const firstInBlock = tracked.find(f => f.t > block.from);
+  const goneAtStart =
+    lastSeen != null &&
+    lastSeen.t <= block.from &&
+    (tracked.some(
+      f => f.box == null && f.t > lastSeen.t && f.t <= block.from,
+    ) ||
+      (firstInBlock?.box === null &&
+        firstInBlock.t - block.from <= FRAME_STARVATION_MS));
+  if (!during.some(f => f.box != null) && lastSeen != null && goneAtStart) {
+    // The title rides the covered bar, so its first move is the push's
+    // first frame.
+    const restX = tracked.find(f => f.box != null)?.box?.x ?? 0;
+    const moved =
+      tracked.find(f => f.box == null || Math.abs(f.box.x - restX) >= 1) ??
+      lastSeen;
+    const pushBeforeBlockMs = block.from - moved.t;
+    const lastSeenBeforeBlockMs = block.from - lastSeen.t;
+    const pushFrame =
+      pushBeforeBlockMs >= 0
+        ? `${pushBeforeBlockMs.toFixed(0)} ms before`
+        : `${(-pushBeforeBlockMs).toFixed(0)} ms after`;
+    throw new BusyWindowTooLateError(
+      `the push's first frame came ${pushFrame} the block began, and the title was last seen ${lastSeenBeforeBlockMs.toFixed(0)} ms before it: the push had covered the title by the block's first frame, so the block holds nothing to judge`,
+      {pushBeforeBlockMs, lastSeenBeforeBlockMs},
+    );
+  }
+  return during;
+}
+
+/**
+ * How much of bar `key` its clip box shows inside the stack. It is a
+ * fraction of the stack's width, rounded to 0.01: 0 cut away, 1 whole.
+ */
+async function readCut(page: Page, key: string) {
+  return page.evaluate(k => {
+    const stack = document
+      .querySelector('[data-testid="navigation-stack"]')
+      ?.getBoundingClientRect();
+    const box = document
+      .querySelector(`[data-navigation-bar="${k}"]`)
+      ?.firstElementChild?.getBoundingClientRect();
+    if (stack == null || box == null) {
+      return {shown: -1};
+    }
+    const shown =
+      Math.max(
+        0,
+        Math.min(box.right, stack.right) - Math.max(box.left, stack.left),
+      ) / stack.width;
+    return {shown: Math.round(shown * 100) / 100};
+  }, key);
+}
+
+// Under a finger iOS 26's bars are clear, and the bar a card covers is cut
+// at that card's leading edge. So the incoming screen still hides the title
+// it slides over, even while the main thread is blocked.
+test('under a finger, the incoming screen cuts the old title while the main thread is blocked', async ({
   page,
   browserName,
 }) => {
@@ -889,8 +1265,9 @@ test('the incoming bar covers the old title while the main thread is blocked', a
     'screencast frame evidence is Chromium-only in Playwright (WebKit: the iOS simulator)',
   );
   const {driver} = await openStack(page, 'settings');
-  // A marker at the trailing end of the root's title: the pushed screen's
-  // opaque bar slides over it on the compositor.
+  expect(
+    await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
+  ).toBe(true);
   await page.locator('[data-navigation-bar="root"] h2').evaluate(title => {
     const element = title as HTMLElement;
     element.style.position = 'relative';
@@ -901,27 +1278,163 @@ test('the incoming bar covers the old title while the main thread is blocked', a
     element.append(chip);
   });
   const cast = await startScreencast(page);
-  await driver.tap(await rowCenter(page, 'General'));
-  // The page blocks itself from inside the push, once it has run a frame. A
-  // block after a further round trip can land after the bar has already
-  // covered the title.
-  const block = await blockMainThread(page, 900, {
-    during: page.getByTestId('navigation-stack'),
-    minProgressMs: 16,
-  });
+  const row = await rowCenter(page, 'General');
+  // The block outlasts the push, whose spring is at rest by about 0.45 s.
+  const blocked = blockDuringPush(page, 900);
+  await driver.tap(row);
+  const block = await blocked;
   await page.waitForTimeout(150);
   const frames = await cast.stop();
   const tracked = await trackMarker(page, frames);
   const trace = JSON.stringify(
     tracked.map(f => [Math.round(f.t - block.from), f.box?.x ?? null]),
   );
-  const during = tracked.filter(f => f.t > block.from && f.t < block.to - 20);
-  // Seen while blocked, then covered before the block ends.
+  const during = titleFramesInBlock(tracked, block);
+  // Seen while blocked, then cut before the block ends.
   expect(
     during.some(f => f.box != null),
     trace,
   ).toBe(true);
   expect(during.at(-1)?.box ?? null, trace).toBeNull();
+});
+
+test('under a finger the cut rides the incoming card’s leading edge', async ({
+  page,
+}) => {
+  // The page clock a freeze needs, installed before the story loads.
+  await installPageFreeze(page);
+  const {driver, width} = await openStack(page, 'settings');
+  await installTimerGate(page);
+  const row = await rowCenter(page, 'General');
+  // Through the push the root's bar shows only left of the incoming card:
+  // the cut and the card's edge move on one spring.
+  const samples = await cutAcrossPush(page, () => driver.tap(row), {
+    covered: 'root',
+    incoming: 'screen-General',
+    direction: 'ltr',
+  });
+  expectCutOnCardEdge(samples, width);
+  await waitForRest(card(page, 'screen-General'));
+  expect(await readCut(page, 'root')).toEqual({shown: 0});
+  expect(await readCut(page, 'screen-General')).toEqual({shown: 1});
+});
+
+test('under a finger in a right-to-left stack, the cut mirrors', async ({
+  page,
+}) => {
+  await installPageFreeze(page);
+  const {driver, width} = await openStack(page, 'settings');
+  await installTimerGate(page);
+  await page
+    .getByTestId('navigation-stack')
+    .evaluate(element => element.setAttribute('dir', 'rtl'));
+  const row = await rowCenter(page, 'General');
+  // The incoming card enters from the left: the root's bar shows only right
+  // of the card's leading edge.
+  const samples = await cutAcrossPush(page, () => driver.tap(row), {
+    covered: 'root',
+    incoming: 'screen-General',
+    direction: 'rtl',
+  });
+  expectCutOnCardEdge(samples, width);
+  await waitForRest(card(page, 'screen-General'));
+  expect(await readCut(page, 'root')).toEqual({shown: 0});
+  expect(await readCut(page, 'screen-General')).toEqual({shown: 1});
+});
+
+test('a pointer that turns fine after a push leaves the revealed bar whole', async ({
+  page,
+}) => {
+  // A tablet that picks up a trackpad. The push runs under a finger, which
+  // cuts the root's bar away. Then the pointer is fine and Back pops at once.
+  const {driver} = await openStack(page, 'settings');
+  await driver.tap(await rowCenter(page, 'General'));
+  await waitForRest(card(page, 'screen-General'));
+  expect(await readCut(page, 'root')).toEqual({shown: 0});
+  await page.evaluate(() => {
+    const matchMedia = window.matchMedia.bind(window);
+    window.matchMedia = (query: string) =>
+      query.replace(/\s/g, '') === '(pointer:coarse)'
+        ? matchMedia('(max-width: 0px)')
+        : matchMedia(query);
+  });
+  expect(
+    await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
+  ).toBe(false);
+  await page.locator('[data-navigation-back]').click();
+  await expect(card(page, 'screen-General')).toHaveCount(0);
+  await waitForRest(card(page, 'root'));
+  expect(await readCut(page, 'root')).toEqual({shown: 1});
+});
+
+test('a pointer that turns coarse while a screen is covered cuts the covered bar away', async ({
+  browser,
+  browserName,
+}) => {
+  test.skip(
+    browserName !== 'chromium',
+    'Only Chromium turns the primary pointer coarse mid-test (touch emulation).',
+  );
+  // A tablet that loses its mouse. The push runs under a mouse, so the root's
+  // bar stays whole under the opaque top bar. Then the pointer turns coarse:
+  // the bars clear, and the covered bar is cut away at once.
+  const {context, page} = await newFinePage(browser);
+  try {
+    await openStack(page, 'settings', {pointer: 'mouse'});
+    const row = await rowCenter(page, 'General');
+    await page.mouse.click(row.x, row.y);
+    await waitForRest(card(page, 'screen-General'));
+    // The root's bar is there and laid out, and whole at the parallax.
+    const title = page.locator('[data-navigation-bar="root"] h2');
+    expect((await title.boundingBox())?.width ?? 0).toBeGreaterThan(0);
+    expect((await readCut(page, 'root')).shown).toBeGreaterThan(0.5);
+    const cdp = await context.newCDPSession(page);
+    await cdp.send('Emulation.setTouchEmulationEnabled', {
+      enabled: true,
+      maxTouchPoints: 1,
+    });
+    await expect
+      .poll(() => page.evaluate(() => matchMedia('(pointer: coarse)').matches))
+      .toBe(true);
+    await expect.poll(() => readCut(page, 'root')).toEqual({shown: 0});
+    expect(await readCut(page, 'screen-General')).toEqual({shown: 1});
+  } finally {
+    await context.close();
+  }
+});
+
+test('under a finger, a pop that reveals a screen two levels down leaves its bar cut away', async ({
+  page,
+}) => {
+  // The story opens two screens deep, so the root's bar mounts under General
+  // only once the pop is over.
+  await openStack(page, 'pushed');
+  await page.locator('[data-navigation-back]').click();
+  await expect(card(page, 'screen-About')).toHaveCount(0);
+  await waitForRest(card(page, 'screen-General'));
+  // The root's bar is there and laid out, so its cut is a real reading.
+  await expect(page.locator('[data-navigation-bar="root"]')).toHaveCount(1);
+  const box = await page
+    .locator('[data-navigation-bar="root"] h2')
+    .boundingBox();
+  expect(box?.width ?? 0).toBeGreaterThan(0);
+  expect(await readCut(page, 'root')).toEqual({shown: 0});
+  expect(await readCut(page, 'screen-General')).toEqual({shown: 1});
+});
+
+test('under a finger, Back reveals the covered bar whole', async ({page}) => {
+  const {driver} = await openStack(page, 'settings');
+  await driver.tap(await rowCenter(page, 'General'));
+  await waitForRest(card(page, 'screen-General'));
+  expect(await readCut(page, 'root')).toEqual({shown: 0});
+  const back = await page.locator('[data-navigation-back]').boundingBox();
+  if (back == null) {
+    throw new Error('no back button');
+  }
+  await driver.tap({x: back.x + back.width / 2, y: back.y + back.height / 2});
+  await expect(card(page, 'screen-General')).toHaveCount(0);
+  await waitForRest(card(page, 'root'));
+  expect(await readCut(page, 'root')).toEqual({shown: 1});
 });
 
 test('under a mouse a drag across the content pops, as a finger’s does', async ({
@@ -977,13 +1490,14 @@ test.describe('the bars ride with their screens, as UIKit’s', () => {
     await page.locator('[data-navigation-back]').click();
     await page.waitForTimeout(900);
     const frames = await stop();
-    const moving = frames.filter(
-      f =>
+    const moving = requireFrames(frames, {
+      min: 6,
+      during: 'the popped screen and the revealed one move',
+      where: f =>
         f.cards['screen-General'] != null &&
         f.cards['screen-General'] > 0.5 &&
         f.cards.root < -0.5,
-    );
-    expect(moving.length).toBeGreaterThan(5);
+    });
     for (const f of moving) {
       expect(
         Math.abs(f.bars['screen-General'] - f.cards['screen-General']),
@@ -1040,25 +1554,53 @@ test.describe('the bars ride with their screens, as UIKit’s', () => {
     }
   });
 
-  test('each bar is opaque and stacks over the one it covers', async ({
+  test('with a mouse, each bar is opaque and stacks over the one it covers', async ({
+    browser,
+  }) => {
+    const {context, page} = await newFinePage(browser);
+    try {
+      await openStack(page, 'settings', {pointer: 'mouse'});
+      expect(
+        await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
+      ).toBe(false);
+      const row = await rowCenter(page, 'General');
+      await page.mouse.click(row.x, row.y);
+      await waitForRest(card(page, 'screen-General'));
+      const bars = await page.evaluate(() =>
+        [...document.querySelectorAll('[data-navigation-bar]')].map(bar => ({
+          key: bar.getAttribute('data-navigation-bar'),
+          // Each layer paints its opaque background on its own element.
+          background: getComputedStyle(
+            bar.querySelector('[data-navigation-bar-background]') ?? bar,
+          ).backgroundColor,
+        })),
+      );
+      expect(bars.map(bar => bar.key)).toEqual(['root', 'screen-General']);
+      for (const bar of bars) {
+        // An rgb() colour has no alpha; rgba(…, 0) would let the title show.
+        expect(bar.background, JSON.stringify(bar)).toMatch(/^rgb\(/);
+      }
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('under a finger each bar is clear, and the covered one cut away at rest', async ({
     page,
   }) => {
     const {driver} = await openStack(page, 'settings');
     await driver.tap(await rowCenter(page, 'General'));
     await waitForRest(card(page, 'screen-General'));
     const bars = await page.evaluate(() =>
-      [...document.querySelectorAll('[data-navigation-bar]')].map(bar => ({
-        key: bar.getAttribute('data-navigation-bar'),
-        // Each layer paints its opaque background on its first child.
-        background: getComputedStyle(bar.firstElementChild ?? bar)
-          .backgroundColor,
-      })),
+      [...document.querySelectorAll('[data-navigation-bar-background]')].map(
+        background => getComputedStyle(background).backgroundColor,
+      ),
     );
-    expect(bars.map(bar => bar.key)).toEqual(['root', 'screen-General']);
-    for (const bar of bars) {
-      // An rgb() colour has no alpha; rgba(…, 0) would let the title show.
-      expect(bar.background, JSON.stringify(bar)).toMatch(/^rgb\(/);
-    }
+    expect(bars).toEqual(['rgba(0, 0, 0, 0)', 'rgba(0, 0, 0, 0)']);
+    // iOS 26 cuts the covered screen's bar at the top card's leading edge.
+    // At rest nothing of it shows, and the top bar is whole.
+    expect(await readCut(page, 'root')).toEqual({shown: 0});
+    expect(await readCut(page, 'screen-General')).toEqual({shown: 1});
   });
 
   test('the covered bar’s dimming ends above the bar’s hairline', async ({
@@ -1067,13 +1609,16 @@ test.describe('the bars ride with their screens, as UIKit’s', () => {
     const {driver} = await openStack(page, 'settings');
     await driver.tap(await rowCenter(page, 'General'));
     await waitForRest(card(page, 'screen-General'));
-    // Each layer's dimming is its last child; the hairline is the bar's
-    // bottom pixel, which the layers' backgrounds leave uncovered.
+    // The hairline is the bar's bottom pixel, which the layers' backgrounds
+    // leave uncovered. Each layer's dimming sits in its cut row.
     const layers = await page.evaluate(() =>
       [...document.querySelectorAll('[data-navigation-bar]')].map(bar => ({
         key: bar.getAttribute('data-navigation-bar'),
         bottom: bar.getBoundingClientRect().bottom,
-        dimBottom: bar.lastElementChild?.getBoundingClientRect().bottom ?? NaN,
+        dimBottom:
+          bar
+            .querySelector('[data-navigation-bar-dim]')
+            ?.getBoundingClientRect().bottom ?? NaN,
       })),
     );
     expect(layers.map(layer => layer.key)).toEqual(['root', 'screen-General']);
@@ -1308,12 +1853,34 @@ test.describe('edge cases', () => {
     });
     await page.waitForTimeout(700);
     const frames = await stop();
-    const first = frames.find(f => f.cards['screen-About'] != null);
+    const firstAt = frames.findIndex(f => f.cards['screen-About'] != null);
+    const first = firstAt >= 0 ? frames[firstAt] : undefined;
     // A lone push starts the card off screen: so does one that interrupts.
+    // Its first frame shows that, unless the page drew none for a while as
+    // the push began: such a run fails by name.
+    const gapMs = firstAt > 0 ? frames[firstAt].t - frames[firstAt - 1].t : 0;
+    if (
+      firstAt >= 0 &&
+      (first?.cards['screen-About'] ?? 0) <= width * 0.5 &&
+      gapMs > FRAME_STARVATION_MS
+    ) {
+      throw new FrameStarvationError({
+        during: 'the interrupting push’s card was still off screen',
+        frames: 0,
+        min: 1,
+        longestGapMs: gapMs,
+      });
+    }
     expect(
       first?.cards['screen-About'] ?? 0,
       JSON.stringify(first),
     ).toBeGreaterThan(width * 0.5);
+    // Under a finger both end at rest. The screen below is cut away, so the
+    // root's bar is no longer rendered, and the top bar is whole.
+    await waitForRest(card(page, 'screen-About'));
+    expect(await page.locator('[data-navigation-bar="root"]').count()).toBe(0);
+    expect(await readCut(page, 'screen-General')).toEqual({shown: 0});
+    expect(await readCut(page, 'screen-About')).toEqual({shown: 1});
   });
 
   test('a sideways drag on a strip that can still scroll scrolls it instead of popping', async ({
@@ -1506,8 +2073,9 @@ test('a push does no Layout or Paint per frame', async ({
         requestAnimationFrame(waitForStart);
       });
     });
+    const watch = await watchAnimations(top);
     await row.evaluate(element => (element as HTMLElement).click());
-    [push] = await waitForAnimation(top);
+    [push] = await watch.started();
     await waitForRest(top);
   });
   const motion = await page.evaluate(
@@ -1598,18 +2166,25 @@ test.describe('with Reduce Motion', () => {
 
   test('a push cross-fades in place instead of sliding', async ({page}) => {
     await page.emulateMedia({reducedMotion: 'reduce'});
+    await installPageFreeze(page);
     const {driver} = await openStack(page, 'settings');
-    await driver.tap(await rowCenter(page, 'General'));
+    await installTimerGate(page);
     const top = card(page, 'screen-General');
-    await waitForAnimation(top);
+    // Frozen in the tap's own task, the fade starts held at its start. The
+    // scene then moves halfway into the 200 ms fade on its own clock.
+    await freezePageOn(page, 'touchend');
+    await driver.tap(await rowCenter(page, 'General'));
+    await advanceFrozenPage(page, 100);
     const midway = await top.evaluate(element => ({
       x: getComputedStyle(element).translate,
       opacity: Number(getComputedStyle(element).opacity),
     }));
+    await thawPage(page);
     await waitForRest(top);
-    // No travel: the incoming screen is already where it lands, fading in.
+    // No travel: the incoming screen is already where it lands, halfway
+    // faded in.
     expect(midway.x === 'none' || parseFloat(midway.x) === 0).toBe(true);
-    expect(midway.opacity).toBeLessThan(1);
+    expect(midway.opacity).toBeCloseTo(0.5, 1);
     expect(await translateX(top)).toBe(0);
   });
 });
@@ -1657,9 +2232,10 @@ test('a large title scrolls under the bar, which then shows the title; scrolling
 
 test('a pushed large title rides in with its screen', async ({page}) => {
   const {driver} = await openStack(page, 'large-title');
-  await driver.tap(await rowCenter(page, 'General'));
   const top = card(page, 'screen-General');
-  await waitForAnimation(top);
+  const watch = await watchAnimations(top);
+  await driver.tap(await rowCenter(page, 'General'));
+  await watch.started();
   await waitForRest(top);
   // The pushed screen here is inline; the root's large title stays with the
   // root card, under it and to the left.
@@ -1729,9 +2305,10 @@ test('a back swipe carries the large titles: each rides its own screen', async (
   page,
 }) => {
   const {driver, width, left} = await openStack(page, 'large-title');
-  await driver.tap(await rowCenter(page, 'General'));
   const top = card(page, 'screen-General');
-  await waitForAnimation(top);
+  const watch = await watchAnimations(top);
+  await driver.tap(await rowCenter(page, 'General'));
+  await watch.started();
   await waitForRest(top);
   await expect(
     page.getByRole('heading', {level: 1, name: 'Settings'}),
@@ -1890,10 +2467,11 @@ test('the bar title’s handover keeps running while the main thread is blocked'
   expect(box).not.toBeNull();
   await startBusyControl(page);
   const cast = await startScreencast(page);
+  const watch = await watchAnimations(barText);
   await card(page, 'root').evaluate(element =>
     (element.firstElementChild as HTMLElement).scrollTo({top: 300}),
   );
-  const [fade] = await waitForAnimation(barText, {minProgressMs: 16});
+  const [fade] = await watch.started({minProgressMs: 16});
   const block = await blockMainThread(page, 600, {
     during: barText,
     minProgressMs: 16,
@@ -1936,12 +2514,23 @@ test('the bar title’s handover keeps running while the main thread is blocked'
 });
 
 test('storyboard: a push', {tag: '@storyboard'}, async ({page}, testInfo) => {
-  const {driver, width} = await openStack(page, 'settings');
-  await driver.tap(await rowCenter(page, 'General'));
+  const {driver, stack, width} = await openStack(page, 'settings');
   const top = card(page, 'screen-General');
-  await waitForAnimation(top);
+  // The push moves both cards at once: with a count of 2, the row's own
+  // release fade cannot trigger the hold alone.
+  const hold = await armHold(page, stack, {
+    judges: [
+      {target: top, property: 'translate'},
+      {target: card(page, 'root'), property: 'translate'},
+    ],
+    count: 2,
+    newOnly: true,
+  });
+  await driver.tap(await rowCenter(page, 'General'));
+  const held = await hold.held();
   const viewport = page.viewportSize() ?? {width: 402, height: 714};
   const {storyboard} = await animationStoryboard(page, {
+    held,
     name: 'navigationstack-push',
     clip: {x: 0, y: 0, width: viewport.width, height: viewport.height},
     // The spring is at rest by ~0.45 s; the animator holds end states after.
