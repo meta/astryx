@@ -39,6 +39,7 @@ import {
 } from './resizeGesture';
 import {
   handOverPane,
+  regionOfProps,
   registerResizeHandle,
   resizablePaneFor,
   watchResizablePanes,
@@ -79,6 +80,10 @@ function resolveEffectiveSide(
 const styles = stylex.create({
   handle: {
     position: 'relative',
+    // The grab zone and the pill stay above the content beside the handle. A
+    // glide's translate makes the handle a stacking context, which traps
+    // their own z-index inside it.
+    zIndex: 2,
     flexShrink: 0,
     display: 'flex',
     alignItems: 'center',
@@ -491,7 +496,15 @@ export function ResizeHandle({
         isDisabled:
           configRef.current.isDisabled || resizableRef.current == null,
       }),
-      setIsDragging,
+      dragging => {
+        setIsDragging(dragging);
+        // The hook's region lets a pointer drag reopen its pane without a
+        // slide; a hand-built object has none.
+        const region = resizableRef.current;
+        if (region != null) {
+          regionOfProps(region)?.setPointerDragging(dragging);
+        }
+      },
     );
   });
 
@@ -564,6 +577,7 @@ export function ResizeHandle({
       heldPaneRef.current = handOverPane(
         heldPaneRef.current,
         null,
+        null,
         false,
         null,
       );
@@ -586,6 +600,7 @@ export function ResizeHandle({
     heldPaneRef.current = handOverPane(
       heldPaneRef.current,
       pane,
+      null,
       isRegionCollapsed,
       element,
     );
