@@ -55,6 +55,7 @@
  * @property {string} [extends]
  * @property {string} [parent]
  * @property {string} [to]
+ * @property {string} [from]
  */
 
 /**

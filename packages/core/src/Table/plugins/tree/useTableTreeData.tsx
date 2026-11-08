@@ -4,7 +4,7 @@
 
 /**
  * @file useTableTreeData.tsx
- * @input React, StyleX, Icon, Table types, theme tokens, i18n (useTranslator)
+ * @input React, StyleX, Icon, Table types, theme tokens, i18n (useComponentTranslator)
  * @output Exports useTableTreeData hook + config/meta types
  * @position Tree plugin; consumed by Table via plugins prop.
  *   Pairs with useTableTreeState (owns expansion state + flattening).
@@ -19,10 +19,9 @@
  *
  * Expansion state flows through an external store (TreeStore) so each
  * row's expander subscribes independently — a toggle re-renders only the
- * affected cells, not the whole body. Row ARIA (aria-level,
- * aria-expanded) is applied imperatively via a ref callback on each
- * <tr>, exactly like selection's row styling; each subscription
- * self-cleans when the row disconnects.
+ * affected cells, not the whole body. A ref callback on each <tr> sets its
+ * aria-level, as selection's row styling does. Each subscription ends when
+ * its row disconnects.
  *
  * When `hasExpandableRows` is false (flat data), every transform is a
  * pass-through: adopting the plugin ahead of hierarchical data is a
@@ -30,7 +29,6 @@
  */
 
 import {
-  createContext,
   use,
   useCallback,
   useEffect,
@@ -40,7 +38,13 @@ import {
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {colorVars, radiusVars, spacingVars} from '../../../theme/tokens.stylex';
+import {
+  colorVars,
+  focusVars,
+  radiusVars,
+  spacingVars,
+} from '../../../theme/tokens.stylex';
+import {focusOutlineProps} from '../../../utils/focusOutline.stylex';
 import {Icon} from '../../../Icon';
 import {mergeRefs} from '../../../utils';
 import {
@@ -53,7 +57,15 @@ import type {
   BodyRowRenderProps,
   HeaderCellRenderProps,
 } from '../../types';
-import {useTranslator} from '../../../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../../../i18n/useComponentTranslator';
+import english from '../../../i18n/generated-english/Table/plugins/tree/useTableTreeData.generated';
+import {createSharedContext} from '../../../utils/sharedContext';
+
+registerEnglishFallback(english);
+import {TableContext} from '../../TableContext';
 
 // =============================================================================
 // Types
@@ -81,6 +93,17 @@ export interface UseTableTreeDataConfig<T extends Record<string, unknown>> {
   getRowMeta: (item: T) => TableTreeRowMeta | undefined;
   /** Toggle a row's expansion. */
   onToggleItem: (item: T) => void;
+  /**
+   * Derive a human-readable row identity for the expander's accessible name.
+   * The plugin combines it with localized expand/collapse wording. Blank labels
+   * fall back to the generic row label.
+   *
+   * @example
+   * ```
+   * getRowLabel: item => item.name
+   * ```
+   */
+  getRowLabel?: (item: T) => string;
   /**
    * Whether any row in the dataset is expandable. When false the plugin is
    * a no-op: no expanders, no indent, no tree ARIA — flat data renders
@@ -155,41 +178,49 @@ function createTreeStore<T extends Record<string, unknown>>(
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const TreeStoreContext = createContext<TreeStore<any> | null>(null);
+const TreeStoreContext = createSharedContext<TreeStore<any> | null>(
+  'TreeStoreContext',
+  1,
+  null,
+);
 TreeStoreContext.displayName = 'TreeStoreContext';
 
-/** Indent token -> index, for the numeric row snapshot. */
+/** Indent token -> index, for the primitive row snapshot. */
 const INDENT_INDEX = {sm: 0, md: 1, lg: 2} as const;
 
 /**
- * Encode a row's tree meta as a primitive for useSyncExternalStore —
- * object snapshots would tear. The indent token participates so a
- * runtime `indent` change re-renders the affected cells.
+ * Encode a row's tree meta and optional accessible label as a primitive for
+ * useSyncExternalStore — object snapshots would tear. The numeric fast path is
+ * retained when getRowLabel is absent. When it is present, the derived label
+ * participates so config-only label changes re-render the affected cells.
  * Encoding: level * 16 + indentIndex * 4 + hasChildren * 2 + isExpanded;
  * -1 = no meta.
  */
-function encodeRowMeta<T extends Record<string, unknown>>(
+function getRowSnapshot<T extends Record<string, unknown>>(
   config: UseTableTreeDataConfig<T>,
   item: T,
-): number {
+): number | string {
   const meta = config.getRowMeta(item);
   if (!meta) {
     return -1;
   }
-  return (
+  const metaSnapshot =
     meta.level * 16 +
     INDENT_INDEX[config.indent ?? 'md'] * 4 +
     (meta.hasChildren ? 2 : 0) +
-    (meta.isExpanded ? 1 : 0)
-  );
+    (meta.isExpanded ? 1 : 0);
+  if (!config.getRowLabel) {
+    return metaSnapshot;
+  }
+  return `${metaSnapshot}\u0000${config.getRowLabel(item)?.trim() ?? ''}`;
 }
 
-function useRowMetaSnapshot<T extends Record<string, unknown>>(
+function useRowSnapshot<T extends Record<string, unknown>>(
   store: TreeStore<T>,
   item: T,
-): number {
+): number | string {
   const getSnapshot = useCallback(
-    () => encodeRowMeta(store.getConfig(), item),
+    () => getRowSnapshot(store.getConfig(), item),
     [store, item],
   );
 
@@ -200,21 +231,18 @@ function useRowMetaSnapshot<T extends Record<string, unknown>>(
 // Row ARIA (imperative, mirrors selection's row styling)
 // =============================================================================
 
+// aria-expanded is valid on a row only in a treegrid, so it stays on the
+// expander button. aria-level is also treegrid-only, but Chromium exposes it
+// as the row's depth, so rows keep it.
 function applyRowTreeAria(
   el: HTMLTableRowElement,
   meta: TableTreeRowMeta | undefined,
 ): void {
   if (!meta) {
     el.removeAttribute('aria-level');
-    el.removeAttribute('aria-expanded');
     return;
   }
   el.setAttribute('aria-level', String(meta.level + 1));
-  if (meta.hasChildren) {
-    el.setAttribute('aria-expanded', String(meta.isExpanded));
-  } else {
-    el.removeAttribute('aria-expanded');
-  }
 }
 
 // =============================================================================
@@ -237,6 +265,14 @@ const treeStyles = stylex.create({
   indent: (paddingInlineStart: string) => ({
     paddingInlineStart,
   }),
+  // A compact row is shorter than the ring around the 24px toggle, and the
+  // cell clips its overflow, so there the ring sits inside the toggle.
+  expanderFocusInset: {
+    outlineOffset: {
+      default: null,
+      ':focus-visible': `calc(-1 * ${focusVars['--focus-outline-width']})`,
+    },
+  },
   expanderButton: {
     display: 'inline-flex',
     alignItems: 'center',
@@ -318,24 +354,35 @@ const treeStyles = stylex.create({
 function TreeExpander({
   isExpanded,
   onToggle,
+  rowLabel,
 }: {
   isExpanded: boolean;
   onToggle: () => void;
+  rowLabel?: string;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
+  const isCompact = use(TableContext)?.density === 'compact';
+  const normalizedRowLabel = rowLabel?.trim();
+  const ariaLabel = normalizedRowLabel
+    ? isExpanded
+      ? t('@astryx.tableTree.collapseRowNamed', {label: normalizedRowLabel})
+      : t('@astryx.tableTree.expandRowNamed', {label: normalizedRowLabel})
+    : isExpanded
+      ? t('@astryx.tableTree.collapseRow')
+      : t('@astryx.tableTree.expandRow');
+
   return (
     <button
       type="button"
-      {...stylex.props(treeStyles.expanderButton)}
+      {...focusOutlineProps.focusVisible(
+        treeStyles.expanderButton,
+        isCompact && treeStyles.expanderFocusInset,
+      )}
       onClick={e => {
         e.stopPropagation();
         onToggle();
       }}
-      aria-label={
-        isExpanded
-          ? t('@astryx.tableTree.collapseRow')
-          : t('@astryx.tableTree.expandRow')
-      }
+      aria-label={ariaLabel}
       aria-expanded={isExpanded}>
       <Icon
         icon="chevronRight"
@@ -370,12 +417,16 @@ function TreeExpandAllToggle({
   onExpandAll: () => void;
   onCollapseAll: () => void;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
+  const isCompact = use(TableContext)?.density === 'compact';
   const allExpanded = isAllExpanded === true;
   return (
     <button
       type="button"
-      {...stylex.props(treeStyles.expanderButton)}
+      {...focusOutlineProps.focusVisible(
+        treeStyles.expanderButton,
+        isCompact && treeStyles.expanderFocusInset,
+      )}
       onClick={e => {
         e.stopPropagation();
         if (allExpanded) {
@@ -434,9 +485,9 @@ function TreeCellContentInner<T extends Record<string, unknown>>({
   item: T;
   children: ReactNode;
 }) {
-  // Subscribe to this row's structural meta so a toggle re-renders only
-  // the affected cells.
-  useRowMetaSnapshot(store, item);
+  // Subscribe to this row's structural meta and derived label so only affected
+  // cells re-render when either changes.
+  useRowSnapshot(store, item);
 
   const config = store.getConfig();
   const meta = config.getRowMeta(item);
@@ -457,6 +508,7 @@ function TreeCellContentInner<T extends Record<string, unknown>>({
         <TreeExpander
           isExpanded={meta.isExpanded}
           onToggle={() => store.getConfig().onToggleItem(item)}
+          rowLabel={config.getRowLabel?.(item)}
         />
       ) : (
         <span {...stylex.props(treeStyles.leafSpacer)} />

@@ -54,6 +54,12 @@ const styles = stylex.create({
     minWidth: 0,
     outline: `1px dashed ${colorVars['--color-border-emphasized']}`,
   },
+  auditHost: {
+    boxSizing: 'border-box',
+    inlineSize: '100%',
+    maxInlineSize: 720,
+    minInlineSize: 0,
+  },
 });
 
 const meta: Meta<typeof Grid> = {
@@ -172,20 +178,19 @@ export const ResponsiveAutoFit: Story = {
       <div {...stylex.props(styles.container)}>
         <Text type="supporting" xstyle={styles.sectionLabel}>
           {
-            'columns={{minWidth: 200}} with 2 items — cards stretch to fill (auto-fit)'
+            "columns={{minWidth: 200, repeat: 'fit'}} with 2 items — cards stretch to fill"
           }
         </Text>
-        <Grid columns={{minWidth: 200}} gap={4}>
+        <Grid columns={{minWidth: 200, repeat: 'fit'}} gap={4}>
           <GridItem>Item 1</GridItem>
           <GridItem>Item 2</GridItem>
         </Grid>
       </div>
       <div {...stylex.props(styles.container)}>
         <Text type="supporting" xstyle={styles.sectionLabel}>
-          
-          Same grid with 6 items; looks fine because items fill the tracks
+          Same auto-fit grid with 6 items; items fill the available tracks
         </Text>
-        <Grid columns={{minWidth: 200}} gap={4}>
+        <Grid columns={{minWidth: 200, repeat: 'fit'}} gap={4}>
           <GridItem>Item 1</GridItem>
           <GridItem>Item 2</GridItem>
           <GridItem>Item 3</GridItem>
@@ -492,11 +497,143 @@ export const DashboardLayout: Story = {
               Full-width Section
             </Text>
             <Text type="supporting" display="block">
-              This section spans the entire width of the grid
+              This section spans all explicit columns
             </Text>
           </Card>
         </GridSpan>
       </Grid>
     </Section>
   ),
+};
+
+/** Bounded browser fixture for the Grid and GridSpan public layout contract. */
+export const AuditMatrix: Story = {
+  parameters: {layout: 'padded'},
+  render: () => (
+    <div
+      data-testid="grid-audit-host"
+      {...stylex.props(styles.storyWrapper, styles.auditHost)}>
+      <Grid data-testid="grid-audit-fixed" columns={3} gap={2}>
+        <GridItem>One</GridItem>
+        <GridItem>Two</GridItem>
+        <GridItem>Three</GridItem>
+      </Grid>
+
+      <Grid
+        data-testid="grid-audit-responsive"
+        columns={{minWidth: 180, max: 3}}
+        gap={2}>
+        <GridItem>One</GridItem>
+        <GridItem>Two</GridItem>
+        <GridItem>Three</GridItem>
+      </Grid>
+
+      <Grid data-testid="grid-audit-fill" columns={{minWidth: 160}} gap={2}>
+        <GridItem>Fill one</GridItem>
+        <GridItem>Fill two</GridItem>
+      </Grid>
+
+      <Grid
+        data-testid="grid-audit-fit"
+        columns={{minWidth: 160, repeat: 'fit'}}
+        gap={2}>
+        <GridItem>Fit one</GridItem>
+        <GridItem>Fit two</GridItem>
+      </Grid>
+
+      <Grid data-testid="grid-audit-span-grid" columns={3} gap={2}>
+        <GridSpan data-testid="grid-audit-span" columns="full">
+          <GridItem>All explicit columns</GridItem>
+        </GridSpan>
+        <GridItem>One</GridItem>
+        <GridItem>Two</GridItem>
+        <GridItem>Three</GridItem>
+      </Grid>
+    </div>
+  ),
+  play: async ({canvasElement}) => {
+    const host = canvasElement.querySelector<HTMLElement>(
+      '[data-testid="grid-audit-host"]',
+    );
+    const fixed = canvasElement.querySelector<HTMLElement>(
+      '[data-testid="grid-audit-fixed"]',
+    );
+    const responsive = canvasElement.querySelector<HTMLElement>(
+      '[data-testid="grid-audit-responsive"]',
+    );
+    const fill = canvasElement.querySelector<HTMLElement>(
+      '[data-testid="grid-audit-fill"]',
+    );
+    const fit = canvasElement.querySelector<HTMLElement>(
+      '[data-testid="grid-audit-fit"]',
+    );
+    const spanGrid = canvasElement.querySelector<HTMLElement>(
+      '[data-testid="grid-audit-span-grid"]',
+    );
+    const span = canvasElement.querySelector<HTMLElement>(
+      '[data-testid="grid-audit-span"]',
+    );
+    if (!host || !fixed || !responsive || !fill || !fit || !spanGrid || !span) {
+      throw new Error('Expected the complete Grid audit fixture');
+    }
+
+    await expect(fixed).toHaveClass('astryx-grid');
+    await expect(span).toHaveClass('astryx-grid-span');
+    await expect(getComputedStyle(fixed).display).toBe('grid');
+
+    const direction = getComputedStyle(fixed).direction;
+    const fixedItems = Array.from(fixed.children) as HTMLElement[];
+    const fixedStarts = fixedItems.map(
+      item => item.getBoundingClientRect().left,
+    );
+    if (direction === 'rtl') {
+      await expect(fixedStarts[0]).toBeGreaterThan(fixedStarts[1]);
+      await expect(fixedStarts[1]).toBeGreaterThan(fixedStarts[2]);
+    } else {
+      await expect(fixedStarts[0]).toBeLessThan(fixedStarts[1]);
+      await expect(fixedStarts[1]).toBeLessThan(fixedStarts[2]);
+    }
+
+    const hostRight = host.getBoundingClientRect().right;
+    for (const grid of [fixed, responsive, fill, fit, spanGrid]) {
+      await expect(grid.getBoundingClientRect().right).toBeLessThanOrEqual(
+        hostRight + 0.5,
+      );
+    }
+    await expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth + 1);
+
+    const responsiveStyle = getComputedStyle(responsive);
+    const responsiveTracks = responsiveStyle.gridTemplateColumns
+      .split(' ')
+      .filter(Boolean).length;
+    const responsiveGap = Number.parseFloat(responsiveStyle.columnGap) || 0;
+    const expectedResponsiveTracks = Math.min(
+      3,
+      Math.max(
+        1,
+        Math.floor(
+          (responsive.clientWidth + responsiveGap) / (180 + responsiveGap),
+        ),
+      ),
+    );
+    await expect(responsiveTracks).toBe(expectedResponsiveTracks);
+    if (expectedResponsiveTracks === 3) {
+      const fillWidth = (
+        fill.firstElementChild as HTMLElement
+      ).getBoundingClientRect().width;
+      const fitWidth = (
+        fit.firstElementChild as HTMLElement
+      ).getBoundingClientRect().width;
+      await expect(fitWidth).toBeGreaterThan(fillWidth);
+    }
+
+    const gridRect = spanGrid.getBoundingClientRect();
+    const spanRect = span.getBoundingClientRect();
+    await expect(Math.abs(spanRect.left - gridRect.left)).toBeLessThanOrEqual(
+      0.5,
+    );
+    await expect(Math.abs(spanRect.right - gridRect.right)).toBeLessThanOrEqual(
+      0.5,
+    );
+  },
 };

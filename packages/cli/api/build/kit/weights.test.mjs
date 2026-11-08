@@ -125,6 +125,102 @@ describe('weighStart', () => {
     expect(start).toBe('fresh');
   });
 
+  describe('a template the tables do not list (cold start)', () => {
+    // A made-up family the tables have never seen, described only by its own
+    // descriptor, next to listed templates with descriptors of their own.
+    const catalog = [
+      {name: 'board', displayName: 'Kanban Board', keywords: ['kanban']},
+      {name: 'charts', displayName: 'Charts', category: 'Charts - Overview'},
+      {name: 'grid', displayName: 'Grid'},
+      {
+        name: 'gauge-fleet',
+        displayName: 'Fleet Gauges',
+        category: 'Gauges - Fleet',
+        keywords: ['gauges', 'fleet', 'meters'],
+      },
+    ];
+
+    it('starts from it when the idea names its own words', () => {
+      const ranked = [page('gauge-fleet', 9, 'Gauges'), ...RANKED];
+      const start = weighStart(
+        'fleet gauges with meters per kanban lane',
+        ranked,
+        ranked[0],
+        catalog,
+        {weights: WEIGHTS},
+      );
+      expect(start).toBe('gauge-fleet');
+    });
+
+    it('starts from it when the idea names its family first', () => {
+      const ranked = [page('gauge-fleet', 9, 'Gauges'), ...RANKED];
+      const start = weighStart(
+        'gauges page with a kanban board',
+        ranked,
+        ranked[0],
+        catalog,
+        {weights: WEIGHTS},
+      );
+      expect(start).toBe('gauge-fleet');
+    });
+
+    it("never counts a stopword from another template's keywords", () => {
+      // "side" in grid's "side by side" keyword is one of search's stopwords;
+      // it must not answer the idea's "sides", which is not.
+      const own = [
+        {name: 'board'},
+        {name: 'charts'},
+        {
+          name: 'grid',
+          displayName: 'Grid',
+          keywords: ['side by side', 'orders'],
+        },
+        {name: 'fold', displayName: 'Folding Rows'},
+      ];
+      const ranked = [page('fold', 9, 'Fold'), ...RANKED];
+      const start = weighStart(
+        'rows on two sides with orders on cards',
+        ranked,
+        ranked[0],
+        own,
+        {weights: WEIGHTS},
+      );
+      expect(start).toBe('fold');
+    });
+
+    it("never counts a stopword from the idea's words", () => {
+      // "basically" is one of search's stopwords and stems to "basic", the
+      // word of grid's category; it must not tip the count to grid.
+      const own = [
+        {name: 'board'},
+        {name: 'charts'},
+        {name: 'grid', displayName: 'Grid', category: 'Grid - Basic'},
+        {name: 'fold', displayName: 'Folding Rows'},
+      ];
+      const ranked = [page('fold', 9, 'Fold'), ...RANKED];
+      const start = weighStart(
+        'basically a grid of rows on cards',
+        ranked,
+        ranked[0],
+        own,
+        {weights: WEIGHTS},
+      );
+      expect(start).toBe('fold');
+    });
+
+    it('yields to the listed template whose own words the idea names more', () => {
+      const ranked = [page('gauge-fleet', 9, 'Gauges'), ...RANKED];
+      const start = weighStart(
+        'a kanban board with a fleet column',
+        ranked,
+        ranked[0],
+        catalog,
+        {weights: WEIGHTS},
+      );
+      expect(start).toBe('board');
+    });
+  });
+
   it("keeps the ranker's template for an idea that asks for a new page", () => {
     const start = weighStart('the existing page', RANKED, RANKED[0], CATALOG, {
       weights: WEIGHTS,

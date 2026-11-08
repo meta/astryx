@@ -39,6 +39,7 @@ export const AuthoredDocKindSchema = z.enum([
   'command',
   'enum',
   'namespace',
+  'icon-definition',
 ]);
 
 /**
@@ -59,6 +60,7 @@ export const AuthoredDocGraphFields = {
     .optional(),
   aliases: z.array(nonEmptyString).optional(),
   audience: z.enum(['public', 'internal']).optional(),
+  stability: z.literal('experimental').optional(),
 };
 
 const _AuthoredDocGraphSchema = z.object(AuthoredDocGraphFields).strict();
@@ -240,6 +242,10 @@ const ReferenceSectionSchema = z
     title: nonEmptyString,
     category: z.string().optional(),
     content: z.array(SectionContentBlockSchema),
+    // Where an extension adds this section to the topic it extends: before
+    // or after the section with this key. Ignored on any other section.
+    before: nonEmptyString.optional(),
+    after: nonEmptyString.optional(),
     previewType: z
       .enum([
         'swatch',
@@ -300,6 +306,17 @@ const BaseDocFields = {
   isHiddenFromOverview: z.boolean().optional(),
 };
 
+/**
+ * A deprecated component's replacement (`ComponentBaseDoc.deprecated`). Strict:
+ * the docsite and search read both fields, so a misspelled one fails to load.
+ */
+const ComponentDeprecationSchema = z
+  .object({
+    replacement: nonEmptyString,
+    description: nonEmptyString,
+  })
+  .strict();
+
 const ComponentBaseSchema = z
   .object({
     ...BaseDocFields,
@@ -308,6 +325,7 @@ const ComponentBaseSchema = z
     playground: z.unknown().optional(),
     examples: z.array(z.unknown()).optional(),
     replaces: z.string().min(1).optional(),
+    deprecated: ComponentDeprecationSchema.optional(),
   })
   .passthrough();
 
@@ -482,6 +500,7 @@ const SchemaFieldSchema =
           default: z.string().optional(),
           example: z.string().optional(),
           deprecated: z.string().optional(),
+          stability: z.literal('experimental').optional(),
           fields: z.array(SchemaFieldSchema).optional(),
         })
         .passthrough(),
@@ -574,6 +593,7 @@ export const CommandDocKindSchema = z
     exitCodes: z
       .array(z.object({code: z.number(), when: z.string()}).passthrough())
       .optional(),
+    outsideProject: z.enum(['same', 'refuse', 'own']).optional(),
     related: z.array(z.string()).optional(),
     notes: z.array(ReferenceContentBlockSchema).optional(),
   })
@@ -603,6 +623,7 @@ export const EnumDocKindSchema = z
           value: z.string().min(1, 'member value is required'),
           description: z.string(),
           deprecated: z.string().optional(),
+          stability: z.literal('experimental').optional(),
         })
         .passthrough(),
     ),
@@ -652,6 +673,7 @@ export const NamespaceDocKindSchema = z
               .object({
                 group: nonEmptyString,
                 kinds: z.array(AuthoredDocKindSchema).min(1).optional(),
+                packages: z.literal('all').optional(),
               })
               .strict(),
             into: nonEmptyString,
@@ -766,10 +788,12 @@ const LegacyReferenceDocSchema = LegacyBaseDocSchema.extend({
 
 const LegacySingleComponentDocSchema = LegacyBaseDocSchema.extend({
   props: z.array(PropSchema),
+  deprecated: ComponentDeprecationSchema.optional(),
 }).passthrough();
 
 const LegacyMultiComponentDocSchema = LegacyBaseDocSchema.extend({
   components: z.array(z.unknown()),
+  deprecated: ComponentDeprecationSchema.optional(),
 }).passthrough();
 
 const LegacyHookDocSchema = LegacyBaseDocSchema.extend({
@@ -781,6 +805,7 @@ const LegacySubComponentDocSchema = LegacyBaseDocSchema.extend({
   subComponentOf: z.string().min(1, 'subComponentOf is required'),
   description: z.string(),
   props: z.array(PropSchema),
+  deprecated: ComponentDeprecationSchema.optional(),
 }).passthrough();
 
 /** The permissive legacy union (sub-component, hook, multi, single, then reference). */

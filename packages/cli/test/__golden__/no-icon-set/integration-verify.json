@@ -1,0 +1,59 @@
+{
+  "apiVersion": 1,
+  "type": "integration.pack-check",
+  "data": {
+    "name": "@acme/widgets",
+    "version": "1.0.0",
+    "packable": true,
+    "tarball": {
+      "filename": "acme-widgets-1.0.0.tgz",
+      "fileCount": 3,
+      "size": "<gzip>",
+      "unpackedSize": 492
+    },
+    "inventory": {
+      "manifest": "astryx.integration.mjs",
+      "roots": [
+        {
+          "kind": "docs",
+          "path": "docs",
+          "expectedFiles": 1,
+          "missingFiles": [],
+          "complete": true
+        }
+      ],
+      "expectedFiles": 2,
+      "packedFiles": 2
+    },
+    "contributions": {
+      "local": {
+        "themes": [],
+        "components": [],
+        "templates": [],
+        "codemods": [],
+        "docs": [
+          "local-guide"
+        ],
+        "agentDocsAppend": []
+      },
+      "packed": {
+        "themes": [],
+        "components": [],
+        "templates": [],
+        "codemods": [],
+        "docs": [
+          "local-guide"
+        ],
+        "agentDocsAppend": []
+      }
+    },
+    "issues": []
+  },
+  "meta": {
+    "answeredBy": {
+      "cli": "<version>",
+      "core": "<version>",
+      "copy": "carried"
+    }
+  }
+}

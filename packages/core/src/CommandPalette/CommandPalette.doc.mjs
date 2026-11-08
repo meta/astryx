@@ -87,6 +87,8 @@ export const docs = {
     'modal',
     'dialog',
     'navigation',
+    'commandmenu',
+    'cmdk',
   ],
   description:
     'Root component. Manages open state, search, keyboard navigation, and composition slots.',
@@ -223,7 +225,10 @@ export const docs = {
       {className: 'astryx-command-palette-group'},
       {className: 'astryx-command-palette-group-heading'},
       {className: 'astryx-command-palette-input'},
-      {className: 'astryx-command-palette-item'},
+      {
+        className: 'astryx-command-palette-item',
+        states: ['highlighted', 'selected', 'disabled'],
+      },
       {className: 'astryx-command-palette-list'},
     ],
   },

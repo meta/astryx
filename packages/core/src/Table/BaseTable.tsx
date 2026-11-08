@@ -3,8 +3,9 @@
 'use client';
 /**
  * @file BaseTable.tsx
- * @input React, types.ts, columnUtils.ts
- * @output Exports BaseTable component
+ * @input React, types.ts, columnUtils.ts, tableRowContextUsage.ts
+ * @output Exports BaseTable component; passes a TableRowContext to body row
+ *   and cell transforms and a TableRenderContext to scroll-wrapper transforms
  * @position Core structural component; wrapped by Table.tsx
  *
  * SYNC: When modified, update these files to stay in sync:
@@ -14,7 +15,16 @@
  * - /packages/cli/assets/templates/blocks/components/Table/ (showcase blocks)
  */
 
-import {memo, useRef, type ReactElement, type ReactNode, type Ref} from 'react';
+import {
+  memo,
+  useId,
+  useMemo,
+  useRef,
+  type ReactElement,
+  type ReactNode,
+  type Ref,
+} from 'react';
+import {isRenderable} from '../utils/isRenderable';
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import type {
@@ -27,6 +37,8 @@ import type {
   BodyRowRenderProps,
   BodyCellRenderProps,
   ScrollWrapperRenderProps,
+  TableRenderContext,
+  TableRowContext,
   TableRowComponentProps,
   TableCellComponentProps,
   TableHeaderCellComponentProps,
@@ -43,11 +55,24 @@ import {TableHeaderCell} from './TableHeaderCell';
 import {TableHeader} from './TableHeader';
 import {TableBody} from './TableBody';
 import {mergeProps} from '../utils';
+import {useMergedRefs} from '../hooks/useMergedRefs';
+import {
+  readsRowCount,
+  readsRowIndex,
+  runPluginTransform,
+  trackRowContext,
+} from './tableRowContextUsage';
 import {devError} from '../utils/devWarning';
 import {EmptyState} from '../EmptyState';
 import {Text} from '../Text';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Table/BaseTable.generated';
+
+registerEnglishFallback(english);
 
 const styles = stylex.create({
   table: {
@@ -100,6 +125,58 @@ function applyPlugins<TPlugin, TProps, TArgs extends unknown[]>(
   }, initial);
 }
 
+/**
+ * Run a row-level pipeline. Each transform gets the row context as its last
+ * argument, tracked per plugin so row memoization knows what it reads.
+ */
+function applyRowPlugins<
+  T extends Record<string, unknown>,
+  TProps,
+  TArgs extends unknown[],
+>(
+  plugins: TablePlugin<T>[],
+  getter: (
+    plugin: TablePlugin<T>,
+  ) =>
+    | ((props: TProps, ...args: [...TArgs, TableRowContext?]) => TProps)
+    | undefined,
+  initial: TProps,
+  context: TableRowContext,
+  ...args: TArgs
+): TProps {
+  return applyPlugins(
+    plugins,
+    plugin => {
+      const transform = getter(plugin);
+      return transform == null
+        ? undefined
+        : (props: TProps, ...values: TArgs) =>
+            runPluginTransform(plugin, () =>
+              transform(props, ...values, trackRowContext(plugin, context)),
+            );
+    },
+    initial,
+    ...args,
+  );
+}
+
+/**
+ * The row model the plugins admit: the first non-flat declaration, `custom`
+ * for a body transform that declares no model, otherwise `flat`.
+ */
+function resolveRowModel<T extends Record<string, unknown>>(
+  plugins: ReadonlyArray<TablePlugin<T>>,
+): TableRenderContext['rowModel'] {
+  const modifier = plugins.find(
+    plugin =>
+      plugin.rowModel !== 'flat' &&
+      (plugin.rowModel != null ||
+        plugin.transformBodyRow != null ||
+        plugin.transformBodyCell != null),
+  );
+  return modifier == null ? 'flat' : (modifier.rowModel ?? 'custom');
+}
+
 // =============================================================================
 // Memoized Table Row Component
 // =============================================================================
@@ -135,6 +212,7 @@ interface TableRowProps<T extends Record<string, unknown>> {
   textOverflow: 'wrap' | 'truncate';
   RowComponent: React.ComponentType<TableRowComponentProps>;
   CellComponent: React.ComponentType<TableCellComponentProps>;
+  renderContext: TableRenderContext;
   /**
    * 1-based ARIA row index for this row's position in the full dataset.
    * `undefined` when the table hasn't opted into ARIA row indexing, in which
@@ -157,8 +235,22 @@ function TableRowInner<T extends Record<string, unknown>>({
   textOverflow,
   RowComponent,
   CellComponent,
+  renderContext,
   ariaRowIndex,
 }: TableRowProps<T>): ReactElement {
+  const context = useMemo<TableRowContext>(
+    () =>
+      Object.freeze({
+        key: rowKey,
+        identityStatus: 'valid',
+        kind: renderContext.rowModel === 'flat' ? 'product' : 'unknown',
+        logicalIndex: rowIndex,
+        logicalRowCount: renderContext.logicalRowCount,
+        headerRowCount: renderContext.headerRowCount,
+        render: renderContext,
+      }),
+    [rowKey, rowIndex, renderContext],
+  );
   // Build cells first
   const cells = columns.map((col, columnIndex) => {
     // Apply column alignment to body cells
@@ -173,10 +265,11 @@ function TableRowInner<T extends Record<string, unknown>>({
       columnIndex,
       columns: columns as ReadonlyArray<TableColumn<Record<string, unknown>>>,
     };
-    const cellRenderProps = applyPlugins(
+    const cellRenderProps = applyRowPlugins(
       plugins,
       p => p.transformBodyCell,
       initialBodyCellRenderProps,
+      context,
       col,
       item,
       columnIndex,
@@ -225,7 +318,7 @@ function TableRowInner<T extends Record<string, unknown>>({
   // Apply plugin transforms for row (with pre-rendered children).
   // Seed `aria-rowindex` (when the table opts into ARIA row indexing) as a
   // base htmlProp so plugins compose over it and can still override.
-  const rowRenderProps = applyPlugins(
+  const rowRenderProps = applyRowPlugins(
     plugins,
     p => p.transformBodyRow,
     {
@@ -233,6 +326,7 @@ function TableRowInner<T extends Record<string, unknown>>({
       xstyle: [],
       children: <>{cells}</>,
     } satisfies BodyRowRenderProps,
+    context,
     item,
     rowIndex,
   );
@@ -265,10 +359,12 @@ function TableRowInner<T extends Record<string, unknown>>({
  * Compares TableRowProps to determine if re-render is needed.
  * Shallow compares the item object and checks if columns/plugins references changed.
  *
- * Includes rowIndex in the comparison so that plugins using the index
- * (e.g. for row numbering or conditional formatting) get correct values
- * after insertions/deletions. This also future-proofs for tree grid
- * index paths where structural position matters.
+ * The row index reaches a row's output only through a plugin's
+ * `transformBodyRow`, or through a cell transform that reads the context's
+ * `logicalIndex`, so it is compared only for those plugins: a re-sort that
+ * moves rows then re-renders none of them unless a plugin can show the index
+ * (row numbering, conditional formatting). A changed row count re-renders
+ * rows only when a plugin has read a count.
  */
 function areRowPropsEqual<T extends Record<string, unknown>>(
   prevProps: TableRowProps<T>,
@@ -277,7 +373,25 @@ function areRowPropsEqual<T extends Record<string, unknown>>(
   if (prevProps.rowKey !== nextProps.rowKey) {
     return false;
   }
-  if (prevProps.rowIndex !== nextProps.rowIndex) {
+  if (
+    prevProps.rowIndex !== nextProps.rowIndex &&
+    nextProps.plugins.some(
+      plugin => plugin.transformBodyRow != null || readsRowIndex(plugin),
+    )
+  ) {
+    return false;
+  }
+  const prevRender = prevProps.renderContext;
+  const nextRender = nextProps.renderContext;
+  if (
+    prevRender !== nextRender &&
+    (prevRender.mode !== nextRender.mode ||
+      prevRender.rowModel !== nextRender.rowModel ||
+      prevRender.headerRowCount !== nextRender.headerRowCount ||
+      prevRender.viewport !== nextRender.viewport ||
+      (prevRender.logicalRowCount !== nextRender.logicalRowCount &&
+        nextProps.plugins.some(readsRowCount)))
+  ) {
     return false;
   }
   if (prevProps.ariaRowIndex !== nextProps.ariaRowIndex) {
@@ -357,7 +471,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
   ref,
   ...rest
 }: BaseTableProps<T> & {ref?: Ref<HTMLTableElement>}): ReactElement {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   // Use stable empty array when no plugins provided
   const plugins = pluginsProp ?? (EMPTY_PLUGINS as TablePlugin<T>[]);
 
@@ -402,6 +516,23 @@ function BaseTableInner<T extends Record<string, unknown>>({
   }
   const resolvedColumns = resolvedColumnsRef.current;
 
+  const mode = children ? 'children' : 'data';
+  const rowModel = resolveRowModel(plugins);
+  const logicalRowCount = data?.length ?? 0;
+  const headerRowCount = mode === 'data' && resolvedColumns.length > 0 ? 1 : 0;
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const renderContext = useMemo<TableRenderContext>(
+    () =>
+      Object.freeze({
+        mode,
+        rowModel,
+        logicalRowCount,
+        headerRowCount,
+        viewport: viewportRef,
+      }),
+    [mode, rowModel, logicalRowCount, headerRowCount],
+  );
+
   // Resolve all column widths in a single pass — produces per-column
   // inline styles and the aggregate table min-width.
   const resolvedWidths = resolveColumnWidths(resolvedColumns);
@@ -413,6 +544,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
   } satisfies TableRenderProps);
 
   // --- Plugin pipeline: header cells ---
+  const headerLabelIdBase = useId();
   const headerCells = resolvedColumns.map((col, columnIndex) => {
     const headerContent = col.header ?? col.key;
 
@@ -467,28 +599,54 @@ function BaseTableInner<T extends Record<string, unknown>>({
     const hasSlots =
       before != null || after != null || overlay != null || below != null;
 
-    const headerInner = hasSlots ? (
-      <>
-        {before}
-        {after != null ? (
-          <div {...stylex.props(styles.headerLabelRow)}>
-            {resolvedContent}
-            {after}
-          </div>
-        ) : (
-          resolvedContent
-        )}
-        {overlay}
-        {below}
-      </>
+    const labelRow = isRenderable(after) ? (
+      <div {...stylex.props(styles.headerLabelRow)}>
+        {resolvedContent}
+        {after}
+      </div>
     ) : (
       resolvedContent
     );
+
+    // The overlay is a control of its own. Keep its name and value out of the
+    // header's name.
+    const namesOwnHeader =
+      isRenderable(overlay) &&
+      mergedHtmlProps['aria-label'] == null &&
+      mergedHtmlProps['aria-labelledby'] == null;
+    const labelId = `${headerLabelIdBase}-label-${columnIndex}`;
+    const belowId = `${headerLabelIdBase}-below-${columnIndex}`;
+    const hasBelow = isRenderable(below);
+
+    const headerInner = !hasSlots ? (
+      resolvedContent
+    ) : namesOwnHeader ? (
+      <>
+        {/* Inline, so the cell's text-overflow still reaches the label. */}
+        <span id={labelId}>
+          {before}
+          {labelRow}
+        </span>
+        {overlay}
+        {hasBelow && <div id={belowId}>{below}</div>}
+      </>
+    ) : (
+      <>
+        {before}
+        {labelRow}
+        {overlay}
+        {below}
+      </>
+    );
+    const headerNameProps = namesOwnHeader
+      ? {'aria-labelledby': hasBelow ? `${labelId} ${belowId}` : labelId}
+      : {};
 
     return (
       <HeaderCellComponent
         key={col.key}
         {...mergedHtmlProps}
+        {...headerNameProps}
         {...headerTitleProp}
         contextMenuActions={cellRenderProps.contextMenuActions}
         xstyle={cellRenderProps.xstyle}>
@@ -578,6 +736,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
                       textOverflow={textOverflow}
                       RowComponent={RowComponent}
                       CellComponent={CellComponent}
+                      renderContext={renderContext}
                       ariaRowIndex={
                         ariaRowIndexingEnabled
                           ? firstRowAriaIndex + rowIndex
@@ -613,19 +772,28 @@ function BaseTableInner<T extends Record<string, unknown>>({
   // Before rendering the wrapper, run the plugin `transformScrollWrapper`
   // pipeline so plugins can attach a ref to the scroll container (scroll-aware
   // sticky shadows, virtualization) and inject before/after chrome.
-  if (ScrollWrapper) {
-    const scrollWrapperRenderProps = applyPlugins(
-      plugins,
-      p => p.transformScrollWrapper,
-      {
-        htmlProps: {},
-        xstyle: [],
-      } satisfies ScrollWrapperRenderProps,
-    );
-
+  const scrollWrapperRenderProps = ScrollWrapper
+    ? applyPlugins(
+        plugins,
+        p => p.transformScrollWrapper,
+        {
+          htmlProps: {},
+          xstyle: [],
+        } satisfies ScrollWrapperRenderProps,
+        renderContext,
+      )
+    : null;
+  const scrollWrapperRef = useMergedRefs(
+    viewportRef,
+    scrollWrapperRenderProps?.htmlProps.ref,
+  );
+  if (ScrollWrapper && scrollWrapperRenderProps) {
     tableElement = (
       <ScrollWrapper
-        htmlProps={scrollWrapperRenderProps.htmlProps}
+        htmlProps={{
+          ...scrollWrapperRenderProps.htmlProps,
+          ref: scrollWrapperRef,
+        }}
         xstyle={scrollWrapperRenderProps.xstyle}
         beforeTable={scrollWrapperRenderProps.beforeTable}
         afterTable={scrollWrapperRenderProps.afterTable}>

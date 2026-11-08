@@ -103,6 +103,7 @@ const configSchema = z
           })
           .strict()
           .optional(),
+        iconSet: z.string().min(1).optional(),
       })
       .strict()
       .optional(),

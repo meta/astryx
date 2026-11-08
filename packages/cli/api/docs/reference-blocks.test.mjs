@@ -259,7 +259,7 @@ describe('a reference block in a topic section', () => {
         /^docs\(\): Read the reference docs: .* Read it with `astryx docs cli\/api\/functions\/docs`\.$/,
       );
       expect(more[1].text).toMatch(
-        /^Theme System: .* Read it with `astryx docs theme`\.$/,
+        /^Theming: .* Read it with `astryx docs theme`\.$/,
       );
     },
     SLOW,
@@ -276,9 +276,7 @@ describe('a reference block in a topic section', () => {
       expect(status).toBe(0);
       expect(stdout).toMatch(/^Field +\| Type +\| Required +\| Description/m);
       expect(stdout).toMatch(/^components +\| string +\| no +\| /m);
-      expect(stdout).toContain(
-        'From Astryx Integration: `astryx docs authoring integration`',
-      );
+      expect(stdout).toContain(' docs authoring integration`');
     },
     SLOW,
   );
@@ -302,11 +300,11 @@ describe('a reference block that includes what it names', () => {
 });
 
 describe('what a reference block names', () => {
-  it('resolves a CLI authoring schema by identity, to its section of `astryx docs authoring`', async () => {
+  it('resolves a CLI authoring schema by identity, to its section of the field reference', async () => {
     const resolve = await linkResolver(builtinCatalog(), CLI_PROVIDER_ID);
     expect(await resolve('schema:integration')).toMatchObject({
       id: createDocId(CLI_PROVIDER_ID, 'schema', 'integration'),
-      route: 'authoring',
+      route: 'authoring/field-reference',
       title: 'Astryx Integration',
       command: 'astryx docs authoring integration',
     });

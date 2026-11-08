@@ -19,9 +19,10 @@ import type {AriaRole, ReactNode} from 'react';
 import type {BaseProps} from '../BaseProps';
 import {use} from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {layoutFooterMarker} from './layoutEdges.stylex';
 import {LayoutDividerContext} from './LayoutDividerContext';
 import {colorVars, spacingVars} from '../theme/tokens.stylex';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 import type {SizeValue, SpacingStep} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
 import {
@@ -161,6 +162,7 @@ export function LayoutFooter({
       {...mergeProps(
         themeProps('layout-footer'),
         stylex.props(
+          layoutFooterMarker,
           styles.footer,
           dynamicStyles.sizing(height ?? null),
 

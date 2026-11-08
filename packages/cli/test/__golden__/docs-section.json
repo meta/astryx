@@ -19,5 +19,12 @@
       "up": "astryx docs acme-guide --index",
       "previous": "astryx docs acme-guide start"
     }
+  },
+  "meta": {
+    "answeredBy": {
+      "cli": "<cli version>",
+      "core": "<cli version>",
+      "copy": "project"
+    }
   }
 }

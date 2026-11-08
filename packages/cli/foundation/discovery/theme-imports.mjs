@@ -19,6 +19,7 @@ import {moduleExportsName} from './module-exports.mjs';
 import {inspectPackageExport} from './package-exports.mjs';
 import {themeImportPackage} from './theme-discovery.mjs';
 import {isLocalThemeOwner, projectPath} from '../config/theme-state.mjs';
+import {formatCliCommand} from '../env/package-manager.mjs';
 
 export class ThemeImportError extends Error {}
 
@@ -59,7 +60,7 @@ function resolveLocalTheme(theme, cwd) {
       path.relative(cwd, path.join(theme.sourceDir, theme.entry)),
     );
     throw new ThemeImportError(
-      `Local theme "${theme.slug}" is not built. Run \`astryx theme build ${source}\` and try again. Missing: ${missing
+      `Local theme "${theme.slug}" is not built. Run \`${formatCliCommand(`theme build ${source}`, cwd)}\` and try again. Missing: ${missing
         .map(file => projectPath(path.relative(cwd, file)))
         .join(', ')}.`,
     );
@@ -68,8 +69,11 @@ function resolveLocalTheme(theme, cwd) {
     throw new ThemeImportError(
       `Local theme "${theme.slug}" built module ${projectPath(
         path.relative(cwd, moduleFile),
-      )} does not export "${theme.exportName}". Rebuild it with \`astryx theme build ${projectPath(
-        path.relative(cwd, path.join(theme.sourceDir, theme.entry)),
+      )} does not export "${theme.exportName}". Rebuild it with \`${formatCliCommand(
+        `theme build ${projectPath(
+          path.relative(cwd, path.join(theme.sourceDir, theme.entry)),
+        )}`,
+        cwd,
       )}\`.`,
     );
   }
@@ -130,7 +134,7 @@ function resolvePackageTheme(theme, cwd, ownerThemeCount) {
     findInstalledPackage(cwd, importPackage);
   if (!packageDir) {
     throw new ThemeImportError(
-      `Theme package "${importPackage}" is not installed. Run \`npm install ${importPackage}\` (or yarn/pnpm/bun), then run \`astryx theme add ${theme.slug}\`.`,
+      `Theme package "${importPackage}" is not installed. Run \`npm install ${importPackage}\` (or yarn/pnpm/bun), then run \`${formatCliCommand(`theme add ${theme.slug}`, cwd)}\`.`,
     );
   }
   const pkg = readPackage(path.join(packageDir, 'package.json'));

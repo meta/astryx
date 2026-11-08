@@ -37,6 +37,13 @@ export interface NamespaceAdoptionSource {
   group: string;
   /** Optional subset of authored kinds from the group. */
   kinds?: AuthoredDocKind[];
+  /**
+   * Experimental: `all` adopts the group's docs from every package, not
+   * only the namespace's own. Read only on the CLI's own namespaces marked
+   * `stability: 'experimental'` (the icon definitions).
+   * @experimental
+   */
+  packages?: 'all';
 }
 
 /**

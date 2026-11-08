@@ -1,9 +1,18 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {describe, it, expect, vi} from 'vitest';
+import {describe, it, expect, expectTypeOf, vi} from 'vitest';
 import type {IconRegistry} from '../Icon/globalIconRegistry';
-import type {DefinedTheme} from './defineTheme';
-import {defineTheme, generateThemeCSS, isDefinedTheme} from './defineTheme';
+import type {
+  DefinedTheme,
+  DefineThemeInput,
+  ResolvedDefinedTheme,
+} from './defineTheme';
+import {
+  defineTheme,
+  generateThemeCSS,
+  generateThemeRules,
+  isDefinedTheme,
+} from './defineTheme';
 import {resolveThemeToken} from './tokens';
 
 function generateThemeTestCSS(theme: Parameters<typeof generateThemeCSS>[0]) {
@@ -16,17 +25,296 @@ describe('defineTheme', () => {
     expect(theme.name).toBe('test');
   });
 
-  it('stores only specified token overrides', () => {
+  it('stores only authored token overrides while CSS scopes derived role defaults', () => {
     const theme = defineTheme({
       name: 'custom',
       tokens: {
-        '--color-accent': '#FF0000',
+        '--color-text-blue': '#CC0000',
       },
     });
-    // Override should be present
-    expect(theme.tokens['--color-accent']).toBe('#FF0000');
-    // Defaults should NOT be in tokens
+    expect(theme.tokens['--color-text-blue']).toBe('#CC0000');
+    expect(theme.tokens['--color-text-info']).toBeUndefined();
+    expect(generateThemeTestCSS(theme)).toContain(
+      '--color-text-info: var(--color-text-blue);',
+    );
+    // Unrelated defaults remain owned by StyleX rather than copied into every
+    // theme scope.
     expect(theme.tokens['--color-background-surface']).toBeUndefined();
+  });
+
+  it('keeps an explicit semantic role above its scoped default', () => {
+    const theme = defineTheme({
+      name: 'custom-info',
+      tokens: {
+        '--color-text-blue': '#FF0000',
+        '--color-text-info': '#0066CC',
+      },
+    });
+
+    expect(theme.tokens['--color-text-info']).toBe('#0066CC');
+  });
+
+  it('does not generate a status alias that would create a token cycle', () => {
+    const theme = defineTheme({
+      name: 'parent-role-reference',
+      tokens: {'--color-text-blue': 'var(--color-text-info)'},
+    });
+    const css = generateThemeRules(theme).join('\n');
+
+    expect(css).toContain('--color-text-blue: var(--color-text-info);');
+    expect(css).not.toContain('--color-text-info: var(--color-text-blue);');
+  });
+
+  it('checks the complete generated alias graph for cycles', () => {
+    const theme = defineTheme({
+      name: 'generated-role-cycle',
+      tokens: {
+        '--color-text-blue': 'var(--color-text-success)',
+        '--color-text-green': 'var(--color-text-info)',
+      },
+    });
+    const css = generateThemeRules(theme).join('\n');
+
+    // The first alias is safe; the second would close a loop through it.
+    expect(css).toContain('--color-text-info: var(--color-text-blue);');
+    expect(css).not.toContain('--color-text-success: var(--color-text-green);');
+  });
+
+  it('includes theme-local references in generated alias cycle checks', () => {
+    const css = generateThemeRules({
+      tokens: {'--color-text-blue': 'var(--local-info-loop)'},
+      localTokens: {'--local-info-loop': 'var(--color-text-info)'},
+    }).join('\n');
+
+    expect(css).not.toContain('--color-text-info: var(--color-text-blue);');
+  });
+
+  it.each([null, 16, false])(
+    'stringifies a legacy non-string status source without throwing (%s)',
+    value => {
+      const theme = defineTheme({
+        name: `legacy-status-source-${String(value)}`,
+        tokens: {'--color-text-blue': value as never},
+      });
+
+      expect(() => generateThemeRules(theme)).not.toThrow();
+      expect(generateThemeRules(theme).join('\n')).toContain(
+        `--color-text-blue: ${String(value)};`,
+      );
+    },
+  );
+
+  it('preserves JavaScript string coercion for legacy object token values', () => {
+    const value = {toString: () => '#123456'};
+    const theme = defineTheme({
+      name: 'legacy-object-status-source',
+      tokens: {'--color-text-blue': value as never},
+    });
+
+    expect(generateThemeRules(theme).join('\n')).toContain(
+      '--color-text-blue: #123456;',
+    );
+  });
+
+  it.each([
+    ['uppercase VAR()', 'VAR(--color-text-info)', undefined],
+    ['mixed-case var()', 'vAr(--color-text-info)', undefined],
+    ['escaped identifier', 'var(--\\63 olor-text-info)', undefined],
+    ['escaped function name', 'v\\61r(--color-text-info)', undefined],
+    ['escaped leading hyphens', 'var(\\2d\\2d color-text-info)', undefined],
+    [
+      'comment-separated identifier',
+      'var(/*ok*/ --color-text-info)',
+      undefined,
+    ],
+    [
+      'non-ASCII local token',
+      'var(--品牌)',
+      {'--品牌': 'var(--color-text-info)'},
+    ],
+  ])(
+    'recognizes %s while checking generated alias cycles',
+    (_, accent, localTokens) => {
+      const css = generateThemeRules({
+        tokens: {'--color-text-blue': accent},
+        localTokens,
+      }).join('\n');
+
+      expect(css).not.toContain('--color-text-info: var(--color-text-blue);');
+    },
+  );
+
+  it('canonicalizes escaped declaration keys while checking cycles', () => {
+    const css = generateThemeRules({
+      tokens: {'--color-text-blue': 'var(--\\62 rand)'},
+      localTokens: {'--\\62 rand': 'var(--color-text-info)'},
+    }).join('\n');
+
+    expect(css).not.toContain('--color-text-info: var(--color-text-blue);');
+  });
+
+  it('ignores var() text inside CSS comments', () => {
+    const css = generateThemeRules({
+      tokens: {'--color-text-blue': '#123456 /* var(--color-text-info) */'},
+    }).join('\n');
+
+    expect(css).toContain('--color-text-info: var(--color-text-blue);');
+  });
+
+  it.each([
+    ['escaped space', '--x\\ y'],
+    ['escaped backslash', '--x\\\\y'],
+  ])('canonicalizes an %s declaration key exactly once', (_, localToken) => {
+    const css = generateThemeRules({
+      tokens: {'--color-text-blue': `var(${localToken})`},
+      localTokens: {[localToken]: 'var(--color-text-info)'},
+    }).join('\n');
+
+    expect(css).not.toContain('--color-text-info: var(--color-text-blue);');
+  });
+
+  it.each([
+    ['CRLF-preprocessed escape', 'v\\61\r\nr(--color-text-info)', undefined],
+    ['surrogate escape', 'var(--\\d800)', {'--�': 'var(--color-text-info)'}],
+    ['NUL replacement', 'var(--\0)', {'--�': 'var(--color-text-info)'}],
+  ])('uses browser preprocessing for %s', (_, accent, localTokens) => {
+    const css = generateThemeRules({
+      tokens: {'--color-text-blue': accent},
+      localTokens,
+    }).join('\n');
+
+    expect(css).not.toContain('--color-text-info: var(--color-text-blue);');
+  });
+
+  it.each(['var (--color-text-info)', 'var/**/(--color-text-info)'])(
+    'does not treat non-function text as a reference: %s',
+    accent => {
+      const css = generateThemeRules({
+        tokens: {'--color-text-blue': accent},
+      }).join('\n');
+      expect(css).toContain('--color-text-info: var(--color-text-blue);');
+    },
+  );
+
+  it.each([
+    'var(--color-text-red, #var(--color-text-info))',
+    '1var(--color-text-info)',
+    '@var(--color-text-info)',
+  ])(
+    'does not create references inside non-function CSS tokens: %s',
+    accent => {
+      const css = generateThemeRules({
+        tokens: {
+          '--color-text-blue': accent,
+          '--color-text-red': '#123456',
+        },
+      }).join('\n');
+
+      expect(css).toContain('--color-text-info: var(--color-text-blue);');
+    },
+  );
+
+  it('does not let unquoted URL contents hide a following var() reference', () => {
+    const css = generateThemeRules({
+      tokens: {
+        '--color-text-blue': 'url(/*) var(--color-text-info) /* */',
+      },
+    }).join('\n');
+
+    expect(css).not.toContain('--color-text-info: var(--color-text-blue);');
+  });
+
+  it('ignores pre-existing unrelated legacy cycles', () => {
+    const css = generateThemeRules({
+      tokens: {
+        '--color-text-blue': '#123456',
+        '--color-background-body': 'var(--color-background-surface)',
+        '--color-background-surface': 'var(--color-background-body)',
+      },
+    }).join('\n');
+
+    expect(css).toContain('--color-text-info: var(--color-text-blue);');
+  });
+
+  it('handles long runs of adjacent comments without recursion', () => {
+    const comments = '/**/'.repeat(10_000);
+    expect(() =>
+      generateThemeRules({
+        tokens: {'--color-text-blue': `#123456 ${comments}`},
+      }),
+    ).not.toThrow();
+  });
+
+  it('handles a very wide reference list without argument spreading', () => {
+    const references = 'var(--wide-target) '.repeat(200_000);
+    expect(() =>
+      generateThemeRules({
+        tokens: {'--color-text-blue': references},
+        localTokens: {'--wide-target': '#123456'},
+      }),
+    ).not.toThrow();
+  });
+
+  it('checks a reconverging token graph in linear time', () => {
+    const localTokens: Record<string, string> = {};
+    for (let layer = 0; layer < 26; layer++) {
+      const next = layer + 1;
+      const value =
+        layer === 25
+          ? '#ffffff'
+          : `var(--layer-${next}-a, var(--layer-${next}-b))`;
+      localTokens[`--layer-${layer}-a`] = value;
+      localTokens[`--layer-${layer}-b`] = value;
+    }
+    const started = performance.now();
+    generateThemeRules({
+      tokens: {'--color-text-blue': 'var(--layer-0-a)'},
+      localTokens,
+    });
+
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
+  it('emits every source-derived status role without counting it as authored', () => {
+    const theme = defineTheme({
+      name: 'custom-status-sources',
+      tokens: {
+        '--color-text-blue': '#200001',
+        '--color-text-green': '#200002',
+        '--color-text-yellow': '#200003',
+        '--color-text-red': '#200004',
+      },
+    });
+    const css = generateThemeTestCSS(theme);
+
+    expect(theme.tokens['--color-text-info']).toBeUndefined();
+    for (const declaration of [
+      '--color-text-info: var(--color-text-blue);',
+      '--color-text-success: var(--color-text-green);',
+      '--color-text-warning: var(--color-text-yellow);',
+      '--color-text-error: var(--color-text-red);',
+      '--color-on-info-muted: var(--color-text-blue);',
+      '--color-on-success-muted: var(--color-text-green);',
+      '--color-on-warning-muted: var(--color-text-yellow);',
+      '--color-on-error-muted: var(--color-text-red);',
+    ]) {
+      expect(css).toContain(declaration);
+    }
+    for (const role of ['icon', 'border']) {
+      expect(css).toContain(`--color-${role}-info: var(--color-text-info);`);
+    }
+  });
+
+  it('derives the content on a status fill the theme sets (INV17)', () => {
+    const theme = defineTheme({
+      name: 'bright-error',
+      tokens: {'--color-error': '#FF0000'},
+    });
+    const css = generateThemeTestCSS(theme);
+    expect(css).toContain('--color-error: #FF0000;');
+    expect(css).toMatch(
+      /--color-on-error: light-dark\(#[0-9A-F]{6}, #[0-9A-F]{6}\)/,
+    );
   });
 
   it('converts [light, dark] tuples to light-dark()', () => {
@@ -212,6 +500,18 @@ describe('defineTheme', () => {
     const icons = {close: 'X'} as Partial<IconRegistry>;
     const theme = defineTheme({name: 'icons', icons});
     expect(theme.icons).toBe(icons);
+  });
+
+  it('reads function icon entries at md in the public icons view', () => {
+    const info = vi.fn(({size}: {size: string}) => `info-${size}`);
+    const theme = defineTheme({
+      name: 'fn-icons',
+      icons: {info, close: 'X', menu: null},
+    });
+
+    expect(theme.icons).toEqual({info: 'info-md', close: 'X', menu: null});
+    expect(info).toHaveBeenCalledTimes(1);
+    expect(info).toHaveBeenCalledWith({size: 'md'});
   });
 
   it('works with no tokens', () => {
@@ -464,10 +764,10 @@ describe('typography.scale', () => {
       name: 'combo',
       typography: {scale: {base: 16, ratio: 1.25}},
       tokens: {
-        '--color-accent': '#FF0000',
+        '--color-accent': '#CC0000',
       },
     });
-    expect(theme.tokens['--color-accent']).toBe('#FF0000');
+    expect(theme.tokens['--color-accent']).toBe('#CC0000');
     expect(theme.tokens['--text-heading-4-size']).toBe('var(--font-size-base)');
     expect(theme.tokens['--font-size-base']).toBe('1rem');
   });
@@ -604,10 +904,10 @@ describe('radius', () => {
       typography: {scale: {base: 16, ratio: 1.25}},
       radius: {base: 4, multiplier: 1},
       tokens: {
-        '--color-accent': '#FF0000',
+        '--color-accent': '#CC0000',
       },
     });
-    expect(theme.tokens['--color-accent']).toBe('#FF0000');
+    expect(theme.tokens['--color-accent']).toBe('#CC0000');
     expect(theme.tokens['--text-heading-4-size']).toBe('var(--font-size-base)');
     expect(theme.tokens['--radius-element']).toBe('8px');
   });
@@ -1265,6 +1565,32 @@ describe('defineTheme extends', () => {
     expect(child.tokens['--radius-container']).toBe('16px');
   });
 
+  it('inherits motion field by field: a field the child leaves unset keeps the base value (spec:AST-108 FR5)', () => {
+    const base = defineTheme({
+      name: 'base',
+      motion: {
+        fast: 100,
+        medium: 200,
+        slow: 400,
+        ratio: 0.75,
+        easing: 'cubic-bezier(0.2, 0, 0, 1)',
+      },
+    });
+    const child = defineTheme({
+      name: 'child',
+      extends: base,
+      motion: {fast: 120, medium: 240, ratio: 0.8},
+    });
+    // The fields the child sets regenerate their tokens.
+    expect(child.tokens['--duration-fast']).toBe('120ms');
+    expect(child.tokens['--duration-medium-min']).toBe('190ms');
+    // `slow` and `easing`, left unset, keep the base's tokens: the slow band
+    // stays at the base's ratio (400 × 0.75), not the child's.
+    expect(child.tokens['--duration-slow']).toBe('400ms');
+    expect(child.tokens['--duration-slow-min']).toBe('300ms');
+    expect(child.tokens['--ease-standard']).toBe('cubic-bezier(0.2, 0, 0, 1)');
+  });
+
   it('overrides base tokens with explicit tokens', () => {
     const base = defineTheme({
       name: 'base',
@@ -1344,6 +1670,197 @@ describe('defineTheme extends', () => {
     const base = defineTheme({name: 'base', icons: baseIcons});
     const child = defineTheme({name: 'child', extends: base});
     expect(child.icons?.close).toBe('X');
+  });
+
+  // spec:AST-087 FR2, FR3, FR18 — one theme-level list; a child that sets it
+  // replaces the inherited list, one that omits it inherits; entry functions
+  // receive `variant` typed as the theme's listed names.
+  describe('iconVariants', () => {
+    it('keeps the listed names on the defined theme', () => {
+      const list = ['outline', 'filled'];
+      const theme = defineTheme({name: 'variants', iconVariants: list});
+
+      expect(theme.iconVariants).toEqual(['outline', 'filled']);
+      list.push('bold');
+      expect(theme.iconVariants).toEqual(['outline', 'filled']);
+    });
+
+    it('has no list when no theme in the lineage sets one', () => {
+      const base = defineTheme({name: 'no-variants'});
+      const child = defineTheme({name: 'no-variants-child', extends: base});
+
+      expect(base.iconVariants).toBeUndefined();
+      expect('iconVariants' in base).toBe(false);
+      expect(child.iconVariants).toBeUndefined();
+    });
+
+    it('inherits the base list when a child omits it', () => {
+      const base = defineTheme({
+        name: 'variants-base',
+        iconVariants: ['outline', 'filled'],
+      });
+      const child = defineTheme({name: 'variants-inherit', extends: base});
+
+      expect(child.iconVariants).toEqual(['outline', 'filled']);
+    });
+
+    it('replaces the base list, without merging, when a child sets it', () => {
+      const base = defineTheme({
+        name: 'variants-base',
+        iconVariants: ['outline', 'filled'],
+      });
+      const child = defineTheme({
+        name: 'variants-replace',
+        extends: base,
+        iconVariants: ['bold'],
+      });
+      const emptied = defineTheme({
+        name: 'variants-empty',
+        extends: base,
+        iconVariants: [],
+      });
+
+      expect(child.iconVariants).toEqual(['bold']);
+      expect(emptied.iconVariants).toEqual([]);
+      expect(base.iconVariants).toEqual(['outline', 'filled']);
+    });
+
+    it('types entry functions by the listed names', () => {
+      const base = defineTheme({
+        name: 'variants-typed',
+        iconVariants: ['outline', 'filled'],
+        icons: {
+          info: ({size, variant}) => {
+            expectTypeOf(variant).toEqualTypeOf<
+              'outline' | 'filled' | undefined
+            >();
+            return `${size}-${variant ?? 'normal'}`;
+          },
+          close: ({variant}) =>
+            // @ts-expect-error — 'bold' is not a name this theme lists.
+            variant === 'bold' ? 'bold-close' : 'close',
+        },
+      });
+      expectTypeOf(base).toEqualTypeOf<
+        ResolvedDefinedTheme<'outline' | 'filled'>
+      >();
+
+      defineTheme({
+        name: 'variants-typed-inherit',
+        extends: base,
+        icons: {
+          info: ({variant}) => {
+            expectTypeOf(variant).toEqualTypeOf<
+              'outline' | 'filled' | undefined
+            >();
+            return null;
+          },
+        },
+      });
+
+      defineTheme({
+        name: 'variants-typed-replace',
+        extends: base,
+        iconVariants: ['bold'],
+        icons: {
+          info: ({variant}) => {
+            expectTypeOf(variant).toEqualTypeOf<'bold' | undefined>();
+            return null;
+          },
+          close: ({variant}) =>
+            // @ts-expect-error — the child replaced the list; 'filled' is gone.
+            variant === 'filled' ? 'filled-close' : 'close',
+        },
+      });
+
+      defineTheme({
+        name: 'variants-typed-none',
+        icons: {
+          info: ({variant}) => {
+            expectTypeOf(variant).toEqualTypeOf<undefined>();
+            return null;
+          },
+        },
+      });
+
+      const plainBase: DefinedTheme = base;
+      defineTheme({
+        name: 'variants-typed-plain-base',
+        extends: plainBase,
+        icons: {
+          info: ({variant}) => {
+            expectTypeOf(variant).toEqualTypeOf<string | undefined>();
+            return null;
+          },
+        },
+      });
+
+      expectTypeOf<DefinedTheme['iconVariants']>().toEqualTypeOf<
+        ReadonlyArray<string> | undefined
+      >();
+    });
+
+    it('keeps resolved themes with and without lists assignable to each other', () => {
+      const shared: DefineThemeInput = {name: 'variants-shared'};
+      const unlisted = defineTheme({name: 'variants-active'});
+      // Each annotation is the check: these assignments compiled before
+      // iconVariants existed and must keep compiling.
+      const fromShared: typeof unlisted = defineTheme(shared);
+      const fromListed: typeof unlisted = defineTheme({
+        name: 'variants-listed-active',
+        iconVariants: ['outline'],
+      });
+      const listed = defineTheme({
+        name: 'variants-listed',
+        iconVariants: ['outline', 'filled'],
+      });
+      const fromUnlisted: typeof listed = defineTheme({
+        name: 'variants-unlisted',
+      });
+      const resolved: ResolvedDefinedTheme = fromUnlisted;
+
+      expect(
+        [unlisted, fromShared, fromListed, listed, resolved].map(t => t.name),
+      ).toEqual([
+        'variants-active',
+        'variants-shared',
+        'variants-listed-active',
+        'variants-listed',
+        'variants-unlisted',
+      ]);
+    });
+
+    it('passes no variant to entry functions', () => {
+      const info = vi.fn(
+        ({size, variant}: {size: string; variant?: string}) =>
+          `${size}-${variant ?? 'normal'}`,
+      );
+      const theme = defineTheme({
+        name: 'variants-no-request',
+        iconVariants: ['outline', 'filled'],
+        icons: {info},
+      });
+
+      expect(theme.icons?.info).toBe('md-normal');
+      expect(info).toHaveBeenCalledWith({size: 'md'});
+    });
+  });
+
+  it('merges function icon entries by key and reads them at md', () => {
+    const base = defineTheme({
+      name: 'base',
+      icons: {close: ({size}) => `base-close-${size}`, menu: 'M'},
+    });
+    const child = defineTheme({
+      name: 'child',
+      extends: base,
+      icons: {menu: ({size}) => `child-menu-${size}`},
+    });
+
+    expect(child.icons).toEqual({
+      close: 'base-close-md',
+      menu: 'child-menu-md',
+    });
   });
 
   it('uses child name, not base name', () => {

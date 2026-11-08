@@ -53,14 +53,19 @@ const CODE_SPACE = `calc(${spacingVars['--spacing-3']})`;
 // Core CodeBlock's header (8px, a small control, 8px) overlaps the code's
 // 12px top padding by 8px, so its code starts 8px + control + 12px down.
 const CODE_HEADER_SPACE = `calc(${spacingVars['--spacing-2']} + ${sizeVars['--size-element-sm']} + ${spacingVars['--spacing-3']})`;
+// A block that names no language has no header: core CodeBlock puts its copy
+// button in a column of its own at the inline end (8px, a small control, 8px),
+// beside the code rather than over it, so the code ends that much earlier.
+const CODE_CORNER_SPACE = `calc(${spacingVars['--spacing-4']} + ${sizeVars['--size-element-sm']} + 2 * ${spacingVars['--spacing-2']})`;
 
 const editorTheme = stylex.create({
   // Lexical marks every top-level block `dir="auto"`, which picks each
   // block's direction from its first strong character: a Hebrew paragraph in
   // an English document flips to the right, an English one in an Arabic
-  // document to the left. Blocks take the direction of the surface around
-  // them instead, as core Markdown's do, and bidi inside a block still
-  // follows the Unicode algorithm (spec:AST-061 FR6).
+  // document to the left. Here blocks take the direction of the surface
+  // around them, and bidi inside a block still follows the Unicode
+  // algorithm. Core Markdown differs: it gives each block the direction of
+  // its own text.
   providerDirection: {
     direction: 'inherit',
   },
@@ -443,7 +448,14 @@ const editorTheme = stylex.create({
         CODE_HEADER_SPACE,
     },
     paddingBlockEnd: spacingVars['--spacing-3'],
-    paddingInline: spacingVars['--spacing-4'],
+    paddingInlineStart: spacingVars['--spacing-4'],
+    paddingInlineEnd: {
+      // Room for the corner copy button CodeBlockHeaderPlugin draws over a
+      // block that names no language, so no line runs under it.
+      default: CODE_CORNER_SPACE,
+      ':is([data-language]:not([data-language="plaintext"]))':
+        spacingVars['--spacing-4'],
+    },
     // Sized like core Markdown's code frame: as wide as its longest line, at
     // least the prose measure (or the whole width when that is narrower), and
     // never wider than the editor, where long lines wrap.

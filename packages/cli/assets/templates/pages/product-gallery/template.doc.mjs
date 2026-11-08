@@ -17,4 +17,5 @@ export const doc = {
   type: 'page',
   isReady: true,
   category: 'Gallery - Product',
+  icons: {ArrowRightIcon: 'arrowRight'},
 };

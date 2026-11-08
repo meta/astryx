@@ -10,7 +10,7 @@
  *   is a question only a layout engine can answer.
  */
 
-import {expect, test} from '@playwright/test';
+import {expect, test} from '@astryxdesign/a11y-spec/playwright';
 import {
   blockOverlap,
   finishEvidence,

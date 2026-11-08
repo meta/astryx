@@ -4,7 +4,6 @@ import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import {fileURLToPath} from 'node:url';
 import {Command} from 'commander';
 
 import {registerDoctor} from './doctor.mjs';
@@ -20,6 +19,7 @@ import {
   checkPackageManager,
 } from '../../../api/doctor/doctor.mjs';
 import {MIN_NODE_VERSION} from '../../../foundation/env/node-version.mjs';
+import {CLI_VERSION, linkThisCliAsProjectCli} from '../../../test-utils/release-fixtures.mjs';
 
 let tmpDir;
 let logCalls;
@@ -101,7 +101,7 @@ describe('doctor — individual checks', () => {
   });
 
   it('app themes: reports unmanaged state as one INFO check', async () => {
-    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app"}\n');
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app","dependencies":{"@astryxdesign/core":"*"}}\n');
     const result = await runChecks({cwd: tmpDir});
     const themeChecks = result.checks.filter(check =>
       check.id.startsWith('theme-'),
@@ -117,11 +117,8 @@ describe('doctor — individual checks', () => {
   });
 
   it('config: PASS when a valid astryx.config.mjs loads', async () => {
-    // Vitest intercepts dynamic import() through Vite's resolver, which can't
-    // serve a file written to an arbitrary tmp path at runtime. Write the
-    // fixture inside the package tree so Vite can resolve it, then clean up.
-    const fixtureDir = fs.mkdtempSync(
-      path.join(path.dirname(fileURLToPath(import.meta.url)), '__doctor_cfg_'),
+    const fixtureDir = fs.realpathSync(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-doctor-config-')),
     );
     const configPath = path.join(fixtureDir, 'astryx.config.mjs');
     try {
@@ -137,8 +134,8 @@ describe('doctor — individual checks', () => {
   });
 
   it('config: FAIL when astryx.config.mjs throws on import', async () => {
-    const fixtureDir = fs.mkdtempSync(
-      path.join(path.dirname(fileURLToPath(import.meta.url)), '__doctor_cfg_'),
+    const fixtureDir = fs.realpathSync(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-doctor-config-')),
     );
     const configPath = path.join(fixtureDir, 'astryx.config.mjs');
     try {
@@ -152,8 +149,8 @@ describe('doctor — individual checks', () => {
   });
 
   it('config: FAIL when default export is not an object', async () => {
-    const fixtureDir = fs.mkdtempSync(
-      path.join(path.dirname(fileURLToPath(import.meta.url)), '__doctor_cfg_'),
+    const fixtureDir = fs.realpathSync(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-doctor-config-')),
     );
     const configPath = path.join(fixtureDir, 'astryx.config.mjs');
     try {
@@ -176,15 +173,43 @@ describe('doctor — individual checks', () => {
   it('agent-docs: the fix names the scoped package when the project has no local CLI', () => {
     fs.writeFileSync(path.join(tmpDir, 'package-lock.json'), '{}');
     const res = checkAgentDocs({cwd: tmpDir});
-    expect(res.fix).toContain('`npx @astryxdesign/cli init --features agents`');
+    expect(res.fix).toContain(
+      `\`npx @astryxdesign/cli@${CLI_VERSION} init --features agents\``,
+    );
   });
 
   it('agent-docs: the fix keeps `npx astryx` when the project has a local CLI', () => {
     fs.writeFileSync(path.join(tmpDir, 'package-lock.json'), '{}');
     fs.mkdirSync(path.join(tmpDir, 'node_modules', '.bin'), {recursive: true});
     fs.writeFileSync(path.join(tmpDir, 'node_modules', '.bin', 'astryx'), '');
+    linkThisCliAsProjectCli(tmpDir);
     const res = checkAgentDocs({cwd: tmpDir});
     expect(res.fix).toContain('`npx astryx init --features agents`');
+  });
+
+  it('agent-docs: at the top of a home settings folder, the fix moves the project or edits by hand, never init', () => {
+    const saved = {HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE};
+    process.env.HOME = tmpDir;
+    process.env.USERPROFILE = tmpDir;
+    try {
+      const project = path.join(tmpDir, '.dotfiles');
+      fs.mkdirSync(project);
+      fs.writeFileSync(path.join(project, 'package.json'), '{"name":"dots"}');
+      for (const content of [null, '# Agents\nno markers here\n']) {
+        if (content != null) fs.writeFileSync(path.join(project, 'AGENTS.md'), content);
+        const res = checkAgentDocs({cwd: project});
+        expect(res.fix).toContain('Agent docs are not written into the home folder');
+        expect(res.fix).toContain(
+          'Move the project into a folder of its own, or edit the Astryx block in its agent file by hand.',
+        );
+        expect(res.fix).not.toContain('init --features agents');
+      }
+    } finally {
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
   });
 
   it('agent-docs: WARN when docs exist without XDS markers', () => {
@@ -217,6 +242,25 @@ describe('doctor — individual checks', () => {
     );
   });
 
+  it('agent-docs: PASS from a nested package, reading the root that declares Astryx', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      JSON.stringify({dependencies: {'@astryxdesign/core': '0.7.0'}}),
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'AGENTS.md'),
+      '<!-- ASTRYX:START -->\nstuff\n<!-- ASTRYX:END -->\n',
+    );
+    const functions = path.join(tmpDir, 'functions');
+    fs.mkdirSync(path.join(functions, 'src'), {recursive: true});
+    fs.writeFileSync(path.join(functions, 'package.json'), '{"name":"functions"}');
+
+    expect(checkAgentDocs({cwd: path.join(functions, 'src')})).toMatchObject({
+      status: 'pass',
+      message: `Astryx agent docs section present in ${path.join('..', '..', 'AGENTS.md')}.`,
+    });
+  });
+
   it('agent-docs: reads every file init can write, Hermes included', () => {
     fs.writeFileSync(
       path.join(tmpDir, 'HERMES.md'),
@@ -225,6 +269,27 @@ describe('doctor — individual checks', () => {
     expect(checkAgentDocs({cwd: tmpDir})).toMatchObject({
       status: 'pass',
       message: 'Astryx agent docs section present in HERMES.md.',
+    });
+  });
+
+  it('agent-docs: FAIL when GEMINI.md imports an AGENTS.md that holds no block', () => {
+    const geminiImport = '<!-- ASTRYX:START -->\n@./AGENTS.md\n<!-- ASTRYX:END -->\n';
+    fs.writeFileSync(path.join(tmpDir, 'GEMINI.md'), geminiImport);
+    expect(checkAgentDocs({cwd: tmpDir})).toMatchObject({
+      status: 'fail',
+      message: expect.stringMatching(/^GEMINI\.md imports AGENTS\.md, which holds no Astryx block/),
+      fix: expect.stringMatching(/init --features agents/),
+    });
+
+    // A copy elsewhere does not mend it: Codex and Gemini CLI still get none.
+    fs.writeFileSync(path.join(tmpDir, 'CLAUDE.md'), '<!-- ASTRYX:START -->\nstuff\n<!-- ASTRYX:END -->\n');
+    fs.writeFileSync(path.join(tmpDir, 'AGENTS.md'), '# Agents\n');
+    expect(checkAgentDocs({cwd: tmpDir}).status).toBe('fail');
+
+    fs.writeFileSync(path.join(tmpDir, 'AGENTS.md'), '<!-- ASTRYX:START -->\nstuff\n<!-- ASTRYX:END -->\n');
+    expect(checkAgentDocs({cwd: tmpDir})).toMatchObject({
+      status: 'pass',
+      message: 'Astryx agent docs section present in AGENTS.md, CLAUDE.md.',
     });
   });
 
@@ -301,7 +366,8 @@ describe('doctor — runChecks / report', () => {
     expect(total).toBe(report.checks.length);
   });
 
-  it('reports a FAIL for core when run in a bare directory', async () => {
+  it('reports a FAIL for core in a project that declares Core but installs none', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app","dependencies":{"@astryxdesign/core":"*"}}\n');
     const report = await runChecks({cwd: tmpDir});
     expect(find(report.checks, 'core-installed').status).toBe('fail');
     expect(report.summary.fail).toBeGreaterThan(0);
@@ -346,7 +412,8 @@ describe('doctor — command', () => {
     process.exitCode = prevExit;
   });
 
-  it('sets exit code 1 when a check FAILs (bare dir, no @astryxdesign/core)', async () => {
+  it('sets exit code 1 when a check FAILs (Core declared, not installed)', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app","dependencies":{"@astryxdesign/core":"*"}}\n');
     const prevCwd = process.cwd();
     const prevExit = process.exitCode;
     process.exitCode = undefined;

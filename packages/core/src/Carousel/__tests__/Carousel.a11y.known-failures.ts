@@ -9,19 +9,4 @@
 
 import type {KnownFailure} from '@astryxdesign/a11y-spec';
 
-export const CAROUSEL_KNOWN_FAILURES: ReadonlyArray<KnownFailure> = [
-  {
-    expectation: 'carousel.scroller.role-and-name',
-    binding: 'Carousel',
-    state: 'scroller-keyboard',
-    evidenceLayer: 'accessibility-tree',
-    failureEquals:
-      'the browser exposes the focusable scroll container with no role',
-    standardsReference:
-      'WCAG 2.2 4.1.2 Name, Role, Value; Astryx spec:AST-025 FR12 — a viewport that takes keyboard scrolling must provide an appropriate role and accessible name',
-    userImpact:
-      'A keyboard user who tabs onto the scroll container hears nothing about where they are or what the arrow keys will do; the named region around it is the only clue.',
-    reason:
-      'This test-only binding records the gap; naming the scroll container is a Carousel markup change that ships as its own spec-backed fix.',
-  },
-];
+export const CAROUSEL_KNOWN_FAILURES: ReadonlyArray<KnownFailure> = [];

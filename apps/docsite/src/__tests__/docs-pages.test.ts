@@ -6,9 +6,10 @@ import {
   namespaceCategory,
   namespacePage,
   sectionAnchors,
+  withCliCommands,
 } from '../../scripts/docs-pages.mjs';
 import {buildOutline} from '../components/docs/docOutline';
-import type {DocSection} from '../generated/docsRegistry';
+import {docTopics, type DocSection} from '../generated/docsRegistry';
 
 const section = (title: string, text = `${title} text.`) => ({
   title,
@@ -117,9 +118,9 @@ describe('a flat topic split into a docs-tree namespace', () => {
     const read = async () => ({
       type: 'docs.node',
       data: {
-        route: 'unorganized',
+        route: 'foundations',
         kind: 'namespace',
-        title: 'Unorganized',
+        title: 'Foundations',
         content: [],
         slots: [
           {
@@ -129,7 +130,7 @@ describe('a flat topic split into a docs-tree namespace', () => {
         ],
       },
     });
-    expect(await namespacePage(read, 'unorganized')).toBeNull();
+    expect(await namespacePage(read, 'foundations')).toBeNull();
   });
 });
 
@@ -266,6 +267,47 @@ describe('sectionAnchors', () => {
     ];
     expect(sectionAnchors(sections)).toEqual(
       buildOutline(sections as DocSection[]).sectionIds,
+    );
+  });
+});
+
+describe('CLI commands on docsite pages', () => {
+  it('prefixes commands in prose, lists, tables and shell code only', () => {
+    const show = (text: string, lang: string | null = null) =>
+      lang === 'tsx' ? text : text.replaceAll('`astryx', '`npx astryx');
+    const [shown] = withCliCommands(
+      [
+        {
+          title: 'Run it',
+          content: [
+            {type: 'prose', text: 'Run `astryx docs`.'},
+            {type: 'list', items: ['`astryx doctor`']},
+            {type: 'table', rows: [['Neutral', 'astryx theme add neutral']]},
+            {type: 'code', lang: 'tsx', code: '`astryx docs`'},
+          ],
+        },
+      ],
+      show,
+      'npx astryx',
+    );
+    expect(shown.content).toEqual([
+      {type: 'prose', text: 'Run `npx astryx docs`.'},
+      {type: 'list', items: ['`npx astryx doctor`']},
+      {type: 'table', rows: [['Neutral', 'npx astryx theme add neutral']]},
+      {type: 'code', lang: 'tsx', code: '`astryx docs`'},
+    ]);
+  });
+
+  it('shows the Authoring page a command that runs before any install', () => {
+    const page = docTopics.find(topic => topic.topic === 'authoring');
+    const section = page?.sections.find(
+      each => each.title === 'Verify the packed import',
+    );
+    expect(section?.content).toContainEqual(
+      expect.objectContaining({
+        type: 'code',
+        code: 'npx @astryxdesign/cli integration verify',
+      }),
     );
   });
 });

@@ -68,6 +68,10 @@ export interface HookDoc extends AuthoredDocGraphFields {
  * Translation overlay for hook documentation.
  */
 export interface HookTranslationDoc {
+  /** Optional exact name from the base doc. Ignored at render time. */
+  name?: string;
+  /** Optional translated displayName. Ignored at render time. */
+  displayName?: string;
   /** Compressed/translated description. */
   description?: string;
   /** Param descriptions keyed by param name. */

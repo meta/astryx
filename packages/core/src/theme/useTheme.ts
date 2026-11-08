@@ -10,6 +10,8 @@
  *
  * Provides synchronous access to theme token values resolved for the
  * current color mode — no DOM reads on the provider path, no double render.
+ * The returned `mode` is always 'light' | 'dark': 'system', and any value
+ * outside the union, resolves through the OS preference.
  * Without a reachable ThemeContext it consults `<html data-theme>` and
  * `<html data-astryx-theme>` (kept in sync by Theme) via shared, refcounted
  * MutationObservers before assuming OS preference/default tokens. Provider-path
@@ -21,19 +23,14 @@
  * - /packages/core/src/theme/index.ts
  */
 
-import {
-  createContext,
-  use,
-  useCallback,
-  useMemo,
-  useSyncExternalStore,
-} from 'react';
+import {use, useCallback, useMemo, useSyncExternalStore} from 'react';
 import type {ThemeMode} from './types';
 import type {DefinedTheme} from './defineTheme';
 import {resolveThemeTokens} from './tokens';
 import {getRegisteredTheme} from './themeRegistry';
 import {dataAttr} from '../naming';
 import {useMediaQuery} from '../hooks/useMediaQuery';
+import {createSharedContext} from '../utils/sharedContext';
 
 // =============================================================================
 // Context
@@ -55,7 +52,11 @@ export interface ThemeContextValue {
  * null when no provider is present.
  * @internal
  */
-export const ThemeContext = createContext<ThemeContextValue | null>(null);
+export const ThemeContext = createSharedContext<ThemeContextValue | null>(
+  'ThemeContext',
+  1,
+  null,
+);
 ThemeContext.displayName = 'ThemeContext';
 
 // =============================================================================
@@ -239,13 +240,19 @@ export function useThemeName(): string | null {
 
 /**
  * Return the nearest theme object, falling back to the registered root theme
- * only when no provider context is available.
+ * only when no provider context is available. With `enabled` false it reads
+ * nothing and subscribes to nothing, for a consumer that needs the theme only
+ * in some configurations.
  * @internal
  */
-export function useThemeDefinition(): DefinedTheme | undefined {
-  const ctx = use(ThemeContext);
+export function useThemeDefinition(enabled = true): DefinedTheme | undefined {
+  // `use` may be called conditionally, unlike the other hooks.
+  const ctx = enabled ? use(ThemeContext) : null;
   const hasCtx = ctx != null;
-  const rootThemeName = useRootThemeNameAttr(hasCtx);
+  const rootThemeName = useRootThemeNameAttr(hasCtx || !enabled);
+  if (!enabled) {
+    return undefined;
+  }
   return ctx?.theme ?? getRegisteredTheme(rootThemeName) ?? undefined;
 }
 
@@ -290,8 +297,11 @@ export function useTheme(): UseThemeReturn {
   const mode = ctx?.mode ?? rootAttrMode ?? 'system';
   const theme = ctx?.theme ?? getRegisteredTheme(rootThemeName);
 
+  // Anything outside light|dark (a stale persisted preference cast to
+  // ThemeMode, say) resolves like 'system', the way the root Theme's <html>
+  // sync already treats it, so the declared return type holds.
   const effectiveMode: 'light' | 'dark' =
-    mode === 'system' ? (prefersDark ? 'dark' : 'light') : mode;
+    mode === 'light' || mode === 'dark' ? mode : prefersDark ? 'dark' : 'light';
 
   // Build the full resolved map, memoized on theme + effective mode
   const tokens = useMemo(

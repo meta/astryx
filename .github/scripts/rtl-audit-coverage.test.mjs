@@ -9,18 +9,37 @@ import {JSDOM} from 'jsdom';
 import {describe, expect, it} from 'vitest';
 import componentPackages from '../../scripts/component-packages.cjs';
 import {
+  assertSelectorParses,
   AUDITED_PACKAGE_NAMES,
   AUDITED_STORY_PREFIXES,
+  bindDetectorValue,
   buildAuditedComponentRoster,
   buildComponentCoverage,
+  buildD1Target,
   buildStoryComponentRoutes,
   classifyDirectionalDecorationPair,
   classifyLogicalGroupedCorners,
   classifyLogicalInlinePair,
   collectDirectionalDecorations,
+  compareTargets,
+  d1GlyphKey,
+  d1PairKey,
   filterStoryRoutesByPackages,
+  finishFiniteAnimations,
+  firstUnsortedTarget,
+  glyphRendersOnBlockAxis,
+  gradeDirectionalPair,
+  gradePositionedPair,
+  ignoredStoryIdentities,
+  isUnchangedBlockAxisPair,
+  orderD1StoryCandidates,
+  resolveD1Applicability,
+  resolveFilterRoutes,
+  sortTargets,
   storyIdsForComponentFilters,
   unresolvedComponentFilters,
+  validateStoryRtlAuditParameters,
+  withD1CompletionIdentity,
 } from '../../apps/storybook/rtl-audit/rtl-audit-coverage.mjs';
 
 const {
@@ -113,6 +132,168 @@ describe('classifyDirectionalDecorationPair', () => {
         decoration('›', 'auto-bidi', MIRROR),
       ),
     ).toMatchObject({verdict: 'fail'});
+  });
+});
+
+describe('D1 story applicability', () => {
+  const defaultStory = {
+    id: 'lab-svgicon--default',
+    importPath: './stories/SVGIcon.stories.tsx',
+    sourceOrder: 10,
+  };
+  const registryFixture = {
+    id: 'lab-svgicon--default-registry-icons',
+    importPath: './stories/SVGIconRegistry.stories.tsx',
+    sourceOrder: 10,
+  };
+
+  it.each([
+    [registryFixture, defaultStory],
+    [defaultStory, registryFixture],
+  ])(
+    'selects the same representative when Storybook order changes',
+    (...stories) => {
+      expect(orderD1StoryCandidates(stories).map(story => story.id)).toEqual([
+        defaultStory.id,
+        registryFixture.id,
+      ]);
+    },
+  );
+
+  it('preserves source export order for stories in one file', () => {
+    const later = {
+      id: 'core-example--later',
+      importPath: './stories/Example.stories.tsx',
+      sourceOrder: 200,
+    };
+    const earlier = {...later, id: 'core-example--earlier', sourceOrder: 100};
+    expect(orderD1StoryCandidates([later, earlier])).toEqual([earlier, later]);
+  });
+
+  it('discloses exclusions ordered after the selected representative', () => {
+    const rationale =
+      'Reference glyphs preserve caller-supplied geometry as data.';
+    const resolved = resolveD1Applicability(
+      'lab/SVGIcon',
+      [registryFixture, defaultStory],
+      new Map([
+        [defaultStory.id, {}],
+        [registryFixture.id, {D1: {applicable: false, reason: rationale}}],
+      ]),
+    );
+
+    expect(resolved.selectedCandidate).toEqual(defaultStory);
+    expect(resolved.declaredExclusions).toEqual([
+      {
+        component: 'lab/SVGIcon',
+        storyId: registryFixture.id,
+        dimension: 'D1',
+        reason: rationale,
+      },
+    ]);
+  });
+
+  it('fails closed when one candidate has no resolved metadata', () => {
+    expect(() =>
+      resolveD1Applicability(
+        'lab/SVGIcon',
+        [defaultStory, registryFixture],
+        new Map([[defaultStory.id, {}]]),
+      ),
+    ).toThrow(
+      `${registryFixture.id} resolved rtlAudit metadata was not collected`,
+    );
+  });
+
+  it('keeps completion identity stable when metadata selects another candidate', () => {
+    const excludedFirst = {
+      ...registryFixture,
+      importPath: './stories/ASVGIconRegistry.stories.tsx',
+    };
+    const target = buildD1Target('lab/SVGIcon', [defaultStory, excludedFirst]);
+    const completed = withD1CompletionIdentity(
+      {
+        component: 'lab/SVGIcon',
+        storyId: defaultStory.id,
+        verdict: 'N-A',
+        skippedStories: [
+          {storyId: excludedFirst.id, reason: 'Reference fixture.'},
+        ],
+      },
+      target.id,
+    );
+
+    expect(target).toMatchObject({
+      comp: 'lab/SVGIcon',
+      id: excludedFirst.id,
+    });
+    expect(completed).toMatchObject({
+      component: 'lab/SVGIcon',
+      storyId: excludedFirst.id,
+      selectedStoryId: defaultStory.id,
+    });
+    expect(`${target.comp}::${target.id}`).toBe(
+      `${completed.component}::${completed.storyId}`,
+    );
+  });
+
+  it('keeps all-excluded completion identity non-null and deterministic', () => {
+    const target = buildD1Target('lab/SVGIcon', [
+      registryFixture,
+      defaultStory,
+    ]);
+    const completed = withD1CompletionIdentity(
+      {
+        component: 'lab/SVGIcon',
+        storyId: null,
+        verdict: 'N-A',
+        skippedStories: [
+          {storyId: defaultStory.id, reason: 'First fixture.'},
+          {storyId: registryFixture.id, reason: 'Second fixture.'},
+        ],
+      },
+      target.id,
+    );
+
+    expect(completed.storyId).toBe(defaultStory.id);
+    expect(completed).not.toHaveProperty('selectedStoryId');
+    expect(`${target.comp}::${target.id}`).toBe(
+      `${completed.component}::${completed.storyId}`,
+    );
+  });
+
+  it('requires a reason for a story-level D1 exclusion', () => {
+    expect(
+      validateStoryRtlAuditParameters(
+        {
+          D1: {
+            applicable: false,
+            reason: '  Reference glyphs preserve caller-supplied geometry.  ',
+          },
+        },
+        registryFixture.id,
+      ),
+    ).toEqual({
+      D1: {
+        applicable: false,
+        reason: 'Reference glyphs preserve caller-supplied geometry.',
+      },
+    });
+    expect(() =>
+      validateStoryRtlAuditParameters(
+        {D1: {applicable: false, reason: '  '}},
+        registryFixture.id,
+      ),
+    ).toThrow('needs a non-empty reason');
+  });
+
+  it('rejects mistyped dimensions instead of silently ignoring them', () => {
+    expect(() =>
+      validateStoryRtlAuditParameters(
+        {D7: {applicable: false, reason: 'Typo.'}},
+        registryFixture.id,
+      ),
+    ).toThrow('unknown dimension D7');
   });
 });
 
@@ -437,6 +618,87 @@ describe('buildAuditedComponentRoster', () => {
     ).toEqual(['core/chat']);
   });
 
+  it('leaves out a story identity that names no public component', () => {
+    const input = {
+      sourceComponents: ['core/Button', 'core/Table'],
+      storyComponents: [
+        'core/button',
+        'core/hooks-useclipboard',
+        'core/tablesortable',
+      ],
+    };
+    // A public component keeps its entry (the story spelling, as before).
+    expect(buildAuditedComponentRoster(input)).toEqual([
+      'core/button',
+      'core/Table',
+    ]);
+    expect(ignoredStoryIdentities(input)).toEqual([
+      {component: 'core/hooks-useclipboard', reason: 'no-public-component'},
+      {component: 'core/tablesortable', reason: 'no-public-component'},
+    ]);
+  });
+
+  it('keeps a documented component discovery misses, whatever its story is titled', () => {
+    // The caller passes Core's Theme and MediaTheme as package-qualified
+    // public components; a retitled or missing story cannot drop them.
+    const input = {
+      sourceComponents: [
+        'core/Button',
+        'core/Theme',
+        'core/MediaTheme',
+        'lab/CodeEditor',
+      ],
+      storyComponents: [
+        'core/button',
+        'core/appearance-theming',
+        'lab/codeeditor',
+        'lab/themes-codeeditortheme',
+      ],
+    };
+    expect(buildAuditedComponentRoster(input)).toEqual([
+      'core/button',
+      'core/Theme',
+      'core/MediaTheme',
+      'lab/codeeditor',
+    ]);
+    // Core's Theme no longer keeps a Lab story identity that ends in "theme".
+    expect(ignoredStoryIdentities(input)).toEqual([
+      {component: 'core/appearance-theming', reason: 'no-public-component'},
+      {component: 'lab/themes-codeeditortheme', reason: 'no-public-component'},
+    ]);
+  });
+
+  it('ignores nothing in a package whose public roster is empty', () => {
+    const input = {
+      sourceComponents: ['core/Button'],
+      storyComponents: ['core/button', 'lab/chart-interactions'],
+    };
+    expect(ignoredStoryIdentities(input)).toEqual([]);
+    expect(buildAuditedComponentRoster(input)).toEqual([
+      'core/button',
+      'lab/chart-interactions',
+    ]);
+  });
+
+  it('keeps a public component with no story as a roster entry', () => {
+    expect(
+      buildAuditedComponentRoster({
+        sourceComponents: ['core/Button', 'core/LayerProvider'],
+        storyComponents: ['core/button'],
+      }),
+    ).toEqual(['core/button', 'core/LayerProvider']);
+  });
+
+  it('keeps a story identity a filter names explicitly', () => {
+    const input = {
+      sourceComponents: ['core/ChatComposer'],
+      storyComponents: ['core/chat'],
+      filters: ['chat'],
+    };
+    expect(buildAuditedComponentRoster(input)).toEqual(['core/chat']);
+    expect(ignoredStoryIdentities(input)).toEqual([]);
+  });
+
   it('retains an unknown entry when neither source nor stories match', () => {
     expect(
       buildAuditedComponentRoster({
@@ -445,6 +707,25 @@ describe('buildAuditedComponentRoster', () => {
         filters: ['missing'],
       }),
     ).toEqual(['unknown/missing']);
+  });
+});
+
+describe('documented components outside component directories', () => {
+  it('routes a Core/Themes/Theme story to the documented Theme component', () => {
+    const routes = buildStoryComponentRoutes({
+      stories: [{id: 'core-themes-theme--default', title: 'Core/Themes/Theme'}],
+      publicComponentsByPackage: {core: ['Button', 'Theme']},
+    });
+    expect(routes.map(route => route.component)).toEqual(['core/Theme']);
+  });
+
+  it('finds Core Theme-family exports that live in a lowercase directory', () => {
+    const names =
+      componentPackages.documentedComponentsOutsideComponentDirectories(
+        new URL('../..', import.meta.url).pathname,
+        componentPackages.componentPackage('core'),
+      );
+    expect(names).toEqual(expect.arrayContaining(['MediaTheme', 'Theme']));
   });
 });
 
@@ -809,5 +1090,400 @@ describe('audited package and story routing', () => {
     expect(coverage.results.map(result => result.component)).toEqual(
       components,
     );
+  });
+});
+
+describe('finishFiniteAnimations', () => {
+  const animation = (endTime, {throws = false} = {}) => {
+    const record = {finished: false};
+    record.effect = {getComputedTiming: () => ({endTime})};
+    record.finish = () => {
+      if (throws) {
+        throw new Error('InvalidStateError');
+      }
+      record.finished = true;
+    };
+    return record;
+  };
+
+  it('finishes a running entrance transition and leaves infinite ones', () => {
+    const entrance = animation(300);
+    const spinner = animation(Infinity);
+    const doc = {getAnimations: () => [entrance, spinner]};
+    expect(finishFiniteAnimations(doc)).toBe(1);
+    expect(entrance.finished).toBe(true);
+    expect(spinner.finished).toBe(false);
+  });
+
+  it('skips an animation that cannot finish and continues', () => {
+    const stuck = animation(500, {throws: true});
+    const fade = animation(200);
+    const doc = {getAnimations: () => [stuck, fade]};
+    expect(finishFiniteAnimations(doc)).toBe(1);
+    expect(fade.finished).toBe(true);
+  });
+
+  it('does nothing in a document without the Web Animations API', () => {
+    expect(finishFiniteAnimations({})).toBe(0);
+  });
+});
+
+describe('gradePositionedPair', () => {
+  const ltr = (physical = null) => ({parentW: 1000, relCenterX: 200, physical});
+  const at = relCenterX => ({parentW: 1000, relCenterX});
+
+  it('requires an unmarked element to mirror about its parent center', () => {
+    expect(gradePositionedPair(ltr(), at(800), 3)).toMatchObject({
+      expectation: 'mirror',
+      pass: true,
+    });
+    expect(gradePositionedPair(ltr(), at(200), 3).pass).toBe(false);
+  });
+
+  it('requires a chart overlay to keep its physical position (DR5)', () => {
+    expect(gradePositionedPair(ltr('chart'), at(200), 3)).toMatchObject({
+      expectation: 'physical',
+      pass: true,
+    });
+  });
+
+  it('fails a mirrored chart tooltip', () => {
+    expect(gradePositionedPair(ltr('chart'), at(800), 3)).toMatchObject({
+      expectation: 'physical',
+      pass: false,
+    });
+  });
+
+  it('fails closed on an unknown physical kind', () => {
+    expect(gradePositionedPair(ltr('map'), at(200), 3)).toMatchObject({
+      expectation: 'invalid-marker',
+      pass: false,
+    });
+  });
+});
+
+describe('rtlAudit.D5 physical-region metadata', () => {
+  const within = '[aria-label="Quarterly performance chart"]';
+
+  it('admits a chart plot declaration', () => {
+    expect(
+      validateStoryRtlAuditParameters({D5: {physical: 'chart', within}}, 's'),
+    ).toEqual({D5: {physical: 'chart', within}});
+  });
+
+  it('rejects an unknown physical kind', () => {
+    expect(() =>
+      validateStoryRtlAuditParameters({D5: {physical: 'map', within}}, 's'),
+    ).toThrow(/D5.physical/);
+  });
+
+  it('rejects a declaration without a plot selector', () => {
+    expect(() =>
+      validateStoryRtlAuditParameters({D5: {physical: 'chart'}}, 's'),
+    ).toThrow(/D5.within/);
+    expect(() =>
+      validateStoryRtlAuditParameters(
+        {D5: {physical: 'chart', within: '  '}},
+        's',
+      ),
+    ).toThrow(/D5.within/);
+  });
+});
+
+describe('assertSelectorParses', () => {
+  const doc = {
+    querySelector(selector) {
+      if (selector.includes('[[')) {
+        throw new SyntaxError('not a valid selector');
+      }
+      return null;
+    },
+  };
+
+  it('accepts a selector the page can parse, matched or not', () => {
+    expect(() =>
+      assertSelectorParses(doc, '[aria-label="Plot"]'),
+    ).not.toThrow();
+  });
+
+  it('fails closed on a selector the page cannot parse', () => {
+    expect(() => assertSelectorParses(doc, '[[aria-label')).toThrow(
+      /rtlAudit.D5.within/,
+    );
+  });
+});
+
+describe('bindDetectorValue', () => {
+  it('binds a selector containing $ patterns verbatim', () => {
+    const physical = {physical: 'chart', within: "[data-plot='q$']"};
+    expect(bindDetectorValue('run(__P__)', '__P__', physical)).toBe(
+      `run(${JSON.stringify(physical)})`,
+    );
+    const tricky = {physical: 'chart', within: "[data-plot='$&$1$$']"};
+    expect(bindDetectorValue('run(__P__)', '__P__', tricky)).toBe(
+      `run(${JSON.stringify(tricky)})`,
+    );
+  });
+
+  it('binds null when no region is declared', () => {
+    expect(bindDetectorValue('run(__P__)', '__P__', null)).toBe('run(null)');
+  });
+});
+
+describe('glyphRendersOnBlockAxis', () => {
+  // CSS matrix(a, b, c, d) order: rotate(90deg) is [0, 1, -1, 0].
+  const identity = [1, 0, 0, 1];
+  const mirror = [-1, 0, 0, 1];
+  const quarterTurn = [0, 1, -1, 0];
+  const mirroredQuarterTurn = [0, 1, 1, 0]; // scaleX(-1) . rotate(90deg)
+  const negativeQuarterTurn = [0, -1, 1, 0]; // rotate(-90deg)
+
+  it('keeps an unrotated chevron on the inline axis, mirrored or not', () => {
+    expect(glyphRendersOnBlockAxis('right', identity)).toBe(false);
+    expect(glyphRendersOnBlockAxis('right', mirror)).toBe(false);
+    expect(glyphRendersOnBlockAxis('left', identity)).toBe(false);
+    expect(glyphRendersOnBlockAxis('left', mirror)).toBe(false);
+  });
+
+  it('puts a chevron turned a quarter either way on the block axis', () => {
+    expect(glyphRendersOnBlockAxis('right', quarterTurn)).toBe(true);
+    expect(glyphRendersOnBlockAxis('right', mirroredQuarterTurn)).toBe(true);
+    expect(glyphRendersOnBlockAxis('right', negativeQuarterTurn)).toBe(true);
+    expect(glyphRendersOnBlockAxis('left', quarterTurn)).toBe(true);
+  });
+
+  it('keeps a half-turned chevron on the inline axis', () => {
+    expect(glyphRendersOnBlockAxis('right', [-1, 0, 0, -1])).toBe(false);
+  });
+
+  it('ignores a glyph with no horizontal direction or no matrix', () => {
+    expect(glyphRendersOnBlockAxis(null, quarterTurn)).toBe(false);
+    expect(glyphRendersOnBlockAxis('right', undefined)).toBe(false);
+  });
+});
+
+describe('isUnchangedBlockAxisPair', () => {
+  const down = {dir: 'right', matrix: [0, 1, -1, 0]}; // rotate(90deg)
+  const up = {dir: 'right', matrix: [0, -1, 1, 0]}; // rotate(-90deg)
+  const mirroredDown = {dir: 'right', matrix: [0, 1, 1, 0]};
+  const right = {dir: 'right', matrix: [1, 0, 0, 1]};
+
+  it('leaves an expanded chevron that points down in both directions', () => {
+    expect(isUnchangedBlockAxisPair(down, down)).toBe(true);
+    expect(isUnchangedBlockAxisPair(down, mirroredDown)).toBe(true);
+  });
+
+  it('judges a chevron that points down in LTR and up in RTL', () => {
+    expect(isUnchangedBlockAxisPair(down, up)).toBe(false);
+  });
+
+  it('judges a pair that is horizontal on either side or missing', () => {
+    expect(isUnchangedBlockAxisPair(right, right)).toBe(false);
+    expect(isUnchangedBlockAxisPair(down, right)).toBe(false);
+    expect(isUnchangedBlockAxisPair(down, undefined)).toBe(false);
+  });
+});
+
+describe('d1GlyphKey', () => {
+  const path = 'm9 18 6-6-6-6';
+  const expanded = [0, 1, -1, 0]; // rotate(90deg): points down
+  const collapsed = [1, 0, 0, 1]; // points right, never mirrored
+
+  it('keeps an expanded and a collapsed copy of one chevron apart', () => {
+    expect(d1GlyphKey('right', path, expanded)).not.toBe(
+      d1GlyphKey('right', path, collapsed),
+    );
+  });
+
+  it('still merges repeated copies on the same axis', () => {
+    expect(d1GlyphKey('right', path, collapsed)).toBe(
+      d1GlyphKey('right', path, [1, 0, 0, 1]),
+    );
+  });
+
+  it('leaves the collapsed copy judged when it never mirrors', () => {
+    // The expanded copy is unjudged; the collapsed copy, kept separately,
+    // is still a pair D1 judges (and fails, since RTL equals LTR).
+    const down = {dir: 'right', matrix: expanded};
+    const right = {dir: 'right', matrix: collapsed};
+    expect(isUnchangedBlockAxisPair(down, down)).toBe(true);
+    expect(isUnchangedBlockAxisPair(right, right)).toBe(false);
+  });
+});
+
+describe('d1PairKey', () => {
+  const collapsed = {dir: 'right', aria: 'Toggle Docs', matrix: [1, 0, 0, 1]};
+  const expanded = {dir: 'right', aria: 'Toggle Docs', matrix: [0, 1, -1, 0]};
+
+  it('pairs a collapsed and an expanded chevron under one label apart', () => {
+    expect(d1PairKey(collapsed, 0)).not.toBe(d1PairKey(expanded, 1));
+  });
+
+  it('pairs the same labelled glyph across directions', () => {
+    const mirrored = {...collapsed, matrix: [-1, 0, 0, 1]};
+    expect(d1PairKey(collapsed, 0)).toBe(d1PairKey(mirrored, 3));
+  });
+
+  it('falls back to position for an unlabelled glyph', () => {
+    const bare = {dir: 'right', aria: '', matrix: [1, 0, 0, 1]};
+    expect(d1PairKey(bare, 2)).toBe('idx:2::inline');
+  });
+});
+
+describe('resolveFilterRoutes (filters resolve through the Storybook index)', () => {
+  // Core/Resizable's stories route to `core/resizable`, which no public
+  // component is called; ResizeHandle, the folder's export, has no title and
+  // its story file renders it. Core/Chat's stories route to `core/Chat`, also
+  // no public component, and Chat.stories.tsx never renders the scroll button.
+  const routes = [
+    {id: 'core-resizable--horizontal-split', component: 'core/resizable'},
+    {id: 'core-resizable--snap-points', component: 'core/resizable'},
+    {id: 'core-button--primary', component: 'core/Button'},
+    {id: 'core-chat--default', component: 'core/Chat'},
+  ];
+  const componentPaths = {
+    'core-resizable--horizontal-split':
+      '../../packages/core/src/Resizable/index.ts',
+    'core-resizable--snap-points': '../../packages/core/src/Resizable/index.ts',
+    'core-button--primary': '../../packages/core/src/Button/index.ts',
+    'core-chat--default': '../../packages/core/src/Chat/index.ts',
+  };
+  const owners = {
+    'core/resizehandle': {
+      component: 'core/ResizeHandle',
+      folder: 'packages/core/src/Resizable',
+    },
+    'core/chatlayoutscrollbutton': {
+      component: 'core/ChatLayoutScrollButton',
+      folder: 'packages/core/src/Chat',
+    },
+  };
+  const resolve = filters =>
+    resolveFilterRoutes({
+      routes,
+      filters,
+      knownComponents: [
+        'core/Button',
+        'core/ChatLayout',
+        'core/ChatLayoutScrollButton',
+        'core/ResizeHandle',
+      ],
+      componentPathOf: id => componentPaths[id],
+      ownerOf: filter => owners[filter] ?? null,
+      // Which story files use which component.
+      renders: (id, component) =>
+        id.startsWith('core-resizable--') && component === 'core/ResizeHandle',
+    });
+
+  it("audits a sub-component's stories under its own name (ResizeHandle → Core/Resizable)", () => {
+    const resolved = resolve(['core/resizehandle']);
+    expect(resolved.routes).toEqual([
+      {id: 'core-resizable--horizontal-split', component: 'core/ResizeHandle'},
+      {id: 'core-resizable--snap-points', component: 'core/ResizeHandle'},
+    ]);
+    expect(resolved.adopted).toEqual({
+      'core/ResizeHandle': [
+        'core-resizable--horizontal-split',
+        'core-resizable--snap-points',
+      ],
+    });
+  });
+
+  it('adopts only stories that render the component: ChatLayoutScrollButton adopts none of Core/Chat', () => {
+    const resolved = resolve(['core/chatlayoutscrollbutton']);
+    expect(resolved.routes).toEqual([]);
+    expect(resolved.adopted).toEqual({});
+  });
+
+  it('keeps a filter a story title names, unchanged', () => {
+    expect(resolve(['core/button']).routes).toEqual([
+      {id: 'core-button--primary', component: 'core/Button'},
+    ]);
+  });
+
+  it('selects nothing for a filter with no story, which stays a coverage gap', () => {
+    expect(resolve(['core/nosuchthing']).routes).toEqual([]);
+  });
+
+  it('keeps every route in a full run and adopts the same orphan stories there', () => {
+    const full = resolve([]);
+    // Every existing route stays, including the orphan route itself.
+    for (const route of routes) expect(full.routes).toContainEqual(route);
+    expect(full.adopted).toEqual({
+      'core/ResizeHandle': [
+        'core-resizable--horizontal-split',
+        'core-resizable--snap-points',
+      ],
+    });
+  });
+
+  it('agrees with a filtered run on ResizeHandle and ChatLayoutScrollButton', () => {
+    const owned = (result, component) =>
+      result.routes
+        .filter(route => route.component === component)
+        .map(route => route.id)
+        .sort();
+    const full = resolve([]);
+    expect(owned(full, 'core/ResizeHandle')).toEqual(
+      owned(resolve(['core/resizehandle']), 'core/ResizeHandle'),
+    );
+    // Core/Chat never renders the scroll button: no adoption in either run,
+    // so its verified-N/A record still stands.
+    expect(owned(full, 'core/ChatLayoutScrollButton')).toEqual([]);
+    expect(
+      owned(
+        resolve(['core/chatlayoutscrollbutton']),
+        'core/ChatLayoutScrollButton',
+      ),
+    ).toEqual([]);
+  });
+});
+
+describe('gradeDirectionalPair (D2 order, D3 scroll direction)', () => {
+  it('passes a relationship that holds in LTR and reverses in RTL', () => {
+    expect(gradeDirectionalPair(true, true)).toBe('pass');
+  });
+
+  it('fails a relationship that keeps its LTR physical order in RTL', () => {
+    expect(gradeDirectionalPair(true, false)).toBe('fail');
+  });
+
+  it('fails a relationship already wrong in LTR, or wrong in both', () => {
+    expect(gradeDirectionalPair(false, true)).toBe('fail');
+    expect(gradeDirectionalPair(false, false)).toBe('fail');
+  });
+});
+
+describe('curated target order (targets.json)', () => {
+  it('sorts by component, then story, case-insensitively and stably', () => {
+    const targets = [
+      {component: 'Table', storyId: 'core-table--b'},
+      {component: 'button', storyId: 'core-button--a'},
+      {component: 'Table', storyId: 'core-table--a', dims: ['D2']},
+      {component: 'Table', storyId: 'core-table--a', dims: []},
+    ];
+    expect(firstUnsortedTarget(targets)).toBe(1);
+    expect(sortTargets(targets)).toEqual([
+      targets[1],
+      targets[2],
+      targets[3],
+      targets[0],
+    ]);
+    expect(compareTargets(targets[2], targets[3])).toBe(0);
+  });
+
+  it('keeps apps/storybook/rtl-audit/targets.json sorted (fix: sort-targets.mjs --fix)', () => {
+    const targets = JSON.parse(
+      fs.readFileSync(
+        new URL('../../apps/storybook/rtl-audit/targets.json', import.meta.url),
+        'utf8',
+      ),
+    );
+    const index = firstUnsortedTarget(targets);
+    expect(
+      index === -1
+        ? null
+        : `${targets[index].component} / ${targets[index].storyId}`,
+    ).toBeNull();
   });
 });

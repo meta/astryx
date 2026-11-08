@@ -6,6 +6,8 @@ contracts, or component contracts.
 
 - [Pull request intents](pull-requests.md): choose one primary intent, use the
   matching template, and supply the right evidence without absorbing tagalongs.
+- [Pre-review](pull-requests.md#review-your-change-before-you-ask-for-review):
+  run `pnpm review:pre` and the checklist before you request review.
 - [API conventions](api-conventions.md): shape, propose, implement, and review a
   public component API.
 - [CLI conventions](cli-conventions.md): propose, implement, and review a change

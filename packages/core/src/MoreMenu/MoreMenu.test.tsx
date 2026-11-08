@@ -9,11 +9,16 @@
  * SYNC: When MoreMenu.tsx changes, update tests to match new behavior
  */
 
-import {describe, it, expect, vi, beforeEach} from 'vitest';
+import {createRef} from 'react';
+import {describe, it, expect, vi, beforeAll, beforeEach} from 'vitest';
 import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {MoreMenu} from './MoreMenu';
 import {DropdownMenu} from '../DropdownMenu/DropdownMenu';
+import {warmMenuBottomSheet} from '../DropdownMenu/__tests__/warmMenuBottomSheet';
+
+// DropdownMenu's touch sheet is loaded lazily; resolve it once up front.
+beforeAll(warmMenuBottomSheet, 20000);
 
 // Mock showPopover and hidePopover methods since they're not implemented in jsdom
 beforeEach(() => {
@@ -250,6 +255,16 @@ describe('MoreMenu', () => {
     );
 
     expect(handleEdit).not.toHaveBeenCalled();
+  });
+
+  it('forwards its ref to the bottom-sheet trigger', () => {
+    const ref = createRef<HTMLButtonElement>();
+    render(
+      <MoreMenu items={defaultItems} ref={ref} presentation="bottom-sheet" />,
+    );
+    expect(ref.current).toBe(
+      screen.getByRole('button', {name: 'More options'}),
+    );
   });
 
   it('supports forwardRef', () => {

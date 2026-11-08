@@ -44,7 +44,7 @@ export const doc = {
     },
     {
       name: 'options.type',
-      type: "'component' | 'hook' | 'doc' | 'template'",
+      type: "'component' | 'hook' | 'doc' | 'template' | 'theme'",
       description: 'Restrict the underlying search to a single domain.',
     },
     {
@@ -75,6 +75,10 @@ export const doc = {
     {
       code: 'ERR_CORE_NOT_FOUND',
       when: 'a query is given and @astryxdesign/core cannot be found from cwd',
+    },
+    {
+      code: 'ERR_VERSIONS_UNAVAILABLE',
+      when: 'a query is given outside a project, or in a project with nothing installed, and the Core of the release that answers is not beside it or cached, and cannot be installed into the per-user cache (offline, a registry without it, or an unwritable cache)',
     },
   ],
   examples: [

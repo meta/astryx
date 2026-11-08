@@ -15,5 +15,12 @@
       "default": "'calm'",
       "description": "Visual weight."
     }
-  ]
+  ],
+  "meta": {
+    "answeredBy": {
+      "cli": "<cli version>",
+      "core": "<cli version>",
+      "copy": "project"
+    }
+  }
 }

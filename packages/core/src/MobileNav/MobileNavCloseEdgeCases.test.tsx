@@ -26,7 +26,7 @@ import {
   beforeEach,
   afterEach,
 } from 'vitest';
-import {StrictMode} from 'react';
+import {StrictMode, useLayoutEffect} from 'react';
 import {render, screen, fireEvent, act} from '@testing-library/react';
 import {MobileNav} from './MobileNav';
 import {AppShell} from '../AppShell/AppShell';
@@ -136,6 +136,42 @@ describe('MobileNav close path edge cases', () => {
     }
   });
 
+  // A browser that does not hold a discrete `display` transition (WebKit)
+  // drops the dialog to `display: none` the moment the open styling goes, while
+  // it is still an open modal: nothing is visible, yet the page stays inert
+  // until the close timer fires. So the dialog's own open styling has to be
+  // held by the component, not left to that transition. jsdom applies no
+  // StyleX styles, so this reads the readable class names StyleX emits in
+  // tests: the `open` class (display) is held through the closing commit, the
+  // `backdropOpen` class is not, and the hold ends when the dialog closes.
+  it('keeps the dialog rendered until its delayed close has run', () => {
+    vi.useFakeTimers();
+    try {
+      const {rerender} = render(<Drawer isOpen />);
+      const dialog = screen.getByTestId('mobile-nav');
+      expect(dialog.className).toMatch(/styles\.open/);
+      expect(dialog.className).toMatch(/styles\.backdropOpen/);
+
+      act(() => {
+        rerender(<Drawer isOpen={false} />);
+      });
+      // Still an open modal, so still rendered; only the backdrop's open
+      // styling (the fade-out) has gone.
+      expect(dialog).toHaveAttribute('open');
+      expect(dialog.className).toMatch(/styles\.open/);
+      expect(dialog.className).not.toMatch(/styles\.backdropOpen/);
+
+      act(() => {
+        vi.advanceTimersByTime(300);
+      });
+      // Closed: the hold is released along with the dialog.
+      expect(dialog).not.toHaveAttribute('open');
+      expect(dialog.className).not.toMatch(/styles\.open/);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('closes the dialog when unmounted while fully open', () => {
     const {unmount} = render(<Drawer isOpen />);
     const dialog = screen.getByTestId('mobile-nav');
@@ -220,7 +256,7 @@ describe('MobileNav close path edge cases', () => {
     try {
       const {rerender} = render(<Drawer isOpen />);
       const dialog = screen.getByTestId('mobile-nav');
-      expect(document.documentElement.style.overflow).toBe('clip');
+      expect(document.documentElement.style.overflow).toBe('hidden');
 
       // Two acts on purpose: the close timer is armed by the effect that runs
       // when the first act flushes, so advancing inside that same act would
@@ -243,13 +279,92 @@ describe('MobileNav close path edge cases', () => {
     }
   });
 
+  it("hides <body>'s overflow instead of the root's on a page whose <body> sets its own overflow, and gives it back", () => {
+    // A common reset: `body { overflow-x: hidden }` with the root's overflow
+    // left visible. The viewport then takes <body>'s overflow. Hiding the
+    // root's overflow stops that propagation, and the page jumps to its top.
+    document.body.style.overflowX = 'hidden';
+    try {
+      const {unmount} = render(<Drawer isOpen />);
+
+      expect(document.body.style.overflow).toBe('hidden');
+      expect(document.documentElement.style.overflow).toBe('');
+
+      unmount();
+
+      expect(document.body.style.overflow).toBe('');
+      expect(document.body.style.overflowX).toBe('hidden');
+    } finally {
+      document.body.style.overflowX = '';
+    }
+  });
+
   it('restores documentElement overflow when unmounted while open', () => {
     const {unmount} = render(<Drawer isOpen />);
-    expect(document.documentElement.style.overflow).toBe('clip');
+    expect(document.documentElement.style.overflow).toBe('hidden');
 
     unmount();
 
     expect(document.documentElement.style.overflow).toBe('');
+  });
+
+  it('releases the page when the dialog closed natively before isOpen turned false', () => {
+    vi.useFakeTimers();
+    // A classic scrollbar, so the lock holds the gutter: jsdom does no layout.
+    const innerWidth = Object.getOwnPropertyDescriptor(window, 'innerWidth');
+    const css = Object.getOwnPropertyDescriptor(window, 'CSS');
+    Object.defineProperty(window, 'innerWidth', {
+      value: 1024,
+      configurable: true,
+      writable: true,
+    });
+    Object.defineProperty(document.documentElement, 'clientWidth', {
+      value: 1009,
+      configurable: true,
+    });
+    Object.defineProperty(window, 'CSS', {
+      value: {
+        supports: (property: string, value: string) =>
+          property === 'scrollbar-gutter' && value === 'stable',
+      },
+      configurable: true,
+      writable: true,
+    });
+    try {
+      const {rerender} = render(<Drawer isOpen />);
+      const dialog = screen.getByTestId<HTMLDialogElement>('mobile-nav');
+      // Whatever value the lock writes, the page is locked while open.
+      expect(document.documentElement.style.overflow).not.toBe('');
+      expect(document.documentElement.style.scrollbarGutter).toBe('stable');
+
+      // A `<form method="dialog">` submit or a close() through a ref closes
+      // the dialog before the app's state follows.
+      act(() => {
+        dialog.close();
+      });
+      act(() => {
+        rerender(<Drawer isOpen={false} />);
+      });
+      act(() => {
+        vi.advanceTimersByTime(2000);
+      });
+
+      expect(document.documentElement.style.overflow).toBe('');
+      expect(document.documentElement.style.scrollbarGutter).toBe('');
+    } finally {
+      vi.useRealTimers();
+      if (innerWidth) {
+        Object.defineProperty(window, 'innerWidth', innerWidth);
+      }
+      // @ts-expect-error -- drop the stub so jsdom's own value comes back
+      delete document.documentElement.clientWidth;
+      if (css) {
+        Object.defineProperty(window, 'CSS', css);
+      } else {
+        // @ts-expect-error -- jsdom has no CSS object of its own
+        delete window.CSS;
+      }
+    }
   });
 
   it('leaves no pending close timer behind after unmount', () => {
@@ -401,26 +516,148 @@ describe('MobileNav close path edge cases', () => {
   });
 
   it('closes the AppShell drawer when dismissed with Escape', () => {
-    render(<TestShell />);
-    fireEvent.click(screen.getByRole('button', {name: /open navigation/i}));
-    const dialog = screen.getAllByRole('dialog', {hidden: true})[0];
-    expect(dialog).toHaveAttribute('open');
+    // Fake timers: AppShell now defers hiding this drawer's Activity boundary
+    // (#5701) so MobileNav's own close effect gets a real chance to run —
+    // the dialog closes via its normal deferred setTimeout, not synchronously.
+    vi.useFakeTimers();
+    try {
+      render(<TestShell />);
+      act(() => {
+        fireEvent.click(screen.getByRole('button', {name: /open navigation/i}));
+      });
+      const dialog = screen.getAllByRole('dialog', {hidden: true})[0];
+      expect(dialog).toHaveAttribute('open');
 
-    fireEvent(dialog, new Event('cancel', {cancelable: true, bubbles: false}));
+      act(() => {
+        fireEvent(
+          dialog,
+          new Event('cancel', {cancelable: true, bubbles: false}),
+        );
+      });
+      act(() => {
+        vi.advanceTimersByTime(300);
+      });
 
-    expect(dialog).not.toHaveAttribute('open');
+      expect(dialog).not.toHaveAttribute('open');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('closes the AppShell drawer when the backdrop is clicked', () => {
-    render(<TestShell />);
-    fireEvent.click(screen.getByRole('button', {name: /open navigation/i}));
-    const dialog = screen.getAllByRole('dialog', {hidden: true})[0];
-    expect(dialog).toHaveAttribute('open');
+    vi.useFakeTimers();
+    try {
+      render(<TestShell />);
+      act(() => {
+        fireEvent.click(screen.getByRole('button', {name: /open navigation/i}));
+      });
+      const dialog = screen.getAllByRole('dialog', {hidden: true})[0];
+      expect(dialog).toHaveAttribute('open');
 
-    // A click landing on the dialog itself, not the drawer panel, is a
-    // backdrop dismiss.
-    fireEvent.click(dialog);
+      // A click landing on the dialog itself, not the drawer panel, is a
+      // backdrop dismiss.
+      act(() => {
+        fireEvent.click(dialog);
+      });
+      act(() => {
+        vi.advanceTimersByTime(300);
+      });
 
-    expect(dialog).not.toHaveAttribute('open');
+      expect(dialog).not.toHaveAttribute('open');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // #5701: AppShell mounts the drawer inside a React.Activity boundary that
+  // used to flip to mode="hidden" in the SAME commit as the close, which
+  // forced this file's own unmount-only safety-net effect to call
+  // dialog.close() synchronously — closing correctly, but skipping the
+  // slide-out transition entirely, because Activity's display:none landed
+  // before any transition could run. AppShell now defers that flip, so the
+  // dialog should still be open (and rendered) for a beat after closing,
+  // not synchronously cut off.
+  it('keeps the drawer open long enough for its close transition to run (#5701)', () => {
+    vi.useFakeTimers();
+    try {
+      render(<TestShell />);
+      act(() => {
+        fireEvent.click(screen.getByRole('button', {name: /open navigation/i}));
+      });
+      const dialog = screen.getAllByRole('dialog', {hidden: true})[0];
+      expect(dialog).toHaveAttribute('open');
+
+      act(() => {
+        fireEvent.click(
+          screen.getByRole('button', {name: /close navigation/i}),
+        );
+      });
+
+      // Immediately after closing, with no timers advanced: the old
+      // synchronous-hide bug closed the dialog on this exact tick. The fix
+      // means it must still be open here — Activity hasn't hidden the
+      // subtree yet, so MobileNav's own deferred close effect is still the
+      // one in control.
+      expect(dialog).toHaveAttribute('open');
+
+      // MobileNav's own close delay (capped at 250ms) runs first: about
+      // 260ms after the click the dialog has closed on its own timing while
+      // AppShell's Activity boundary (held for 250ms + 50ms) still shows the
+      // subtree. Hiding first would cut off that close (#5701).
+      act(() => {
+        vi.advanceTimersByTime(260);
+      });
+      expect(dialog).not.toHaveAttribute('open');
+      // Activity hides its subtree with an inline `display: none`; a closed
+      // dialog's own UA style does not count here.
+      expect(dialog.style.display).not.toBe('none');
+
+      // After the hold, Activity hides the subtree.
+      act(() => {
+        vi.advanceTimersByTime(60);
+      });
+      expect(dialog.style.display).toBe('none');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  // A controlled open must be visible in the commit that carries it. The
+  // Activity boundary only defers the CLOSE; if opening waited for an effect
+  // to copy the open state, the drawer would render hidden for one commit
+  // with `isOpen` already true.
+  it('shows a controlled open in the same commit, not one effect later', () => {
+    const commits: {isOpen: boolean; isHidden: boolean}[] = [];
+    function Probe({isOpen}: {isOpen: boolean}) {
+      useLayoutEffect(() => {
+        const drawer = document.querySelector('dialog');
+        commits.push({
+          isOpen,
+          isHidden:
+            drawer != null && getComputedStyle(drawer).display === 'none',
+        });
+      });
+      return null;
+    }
+    const shell = (isOpen: boolean) => (
+      <AppShell
+        sideNav={
+          <SideNav>
+            <SideNavSection title="Test" isHeaderHidden>
+              <SideNavItem label="Home" />
+            </SideNavSection>
+          </SideNav>
+        }
+        mobileNav={{breakpoint: 'md', isOpen, onOpenChange: () => {}}}>
+        <Probe isOpen={isOpen} />
+        <div>Content</div>
+      </AppShell>
+    );
+
+    const {rerender} = render(shell(false));
+    rerender(shell(true));
+
+    const openCommits = commits.filter(commit => commit.isOpen);
+    expect(openCommits.length).toBeGreaterThan(0);
+    expect(openCommits.every(commit => !commit.isHidden)).toBe(true);
   });
 });

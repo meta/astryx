@@ -266,6 +266,15 @@
   }
 
   /*
+   * Chromium draws the dropdown marker of a field with a `list` as a glyph
+   * set on the line-height the field inherits, so with any line-height above
+   * 1 the marker sits below the middle of the field.
+   */
+  :where([list])::-webkit-calendar-picker-indicator {
+    line-height: 1;
+  }
+
+  /*
    * Remove the inner padding and cancel buttons in search inputs
    * for Chrome and Safari.
    */

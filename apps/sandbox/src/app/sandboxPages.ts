@@ -152,6 +152,12 @@ export const categories: SandboxCategory[] = [
         description:
           'WCAG 2.5.8 AA touch-target sizes visualized on real components',
       },
+      {
+        name: 'Text Types',
+        href: '/pages/text-types/',
+        description:
+          'Every built-in Text type at the default size, on a bare page that scrolls',
+      },
     ],
   },
   {
@@ -256,6 +262,11 @@ export const categories: SandboxCategory[] = [
         href: '/pages/diffviewer-perf/',
         description:
           'Render and scroll many files and lines; compare unified and split',
+      },
+      {
+        name: 'Perf Scenes',
+        href: '/pages/perf-scenes/',
+        description: 'Fixed performance scenes to mount and profile by hand',
       },
       {
         name: 'Table Lab',

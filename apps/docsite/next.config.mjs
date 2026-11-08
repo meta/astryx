@@ -1,11 +1,13 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Configure the docsite's routes, response headers, and theme resolution.
+ * @file Configure docsite routes, response headers, theme resolution, and build
+ *   memory.
  * @input Next.js build configuration, the early playground cookie guard, and
  *   staged preview-only static exports.
  * @output Docsite routes plus Storybook and Sandbox at /storybook/ and /sandbox/.
- *   Client main-app chunks start with the preview's cookie compatibility guard.
+ *   Client main-app chunks start with the preview's cookie compatibility guard;
+ *   large Webpack builds run with isolated, memory-optimized compilation.
  * @position Next.js configuration for the existing Vercel docsite deployment.
  */
 
@@ -38,6 +40,41 @@ const stagesStaticApps =
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   cacheComponents: true,
+  // The custom Webpack hook below disables Next's default build worker. The
+  // canary docsite compiles the live workspace, so keep that compilation in a
+  // separate process and use Next's low-risk peak-memory optimization.
+  experimental: {
+    webpackBuildWorker: true,
+    webpackMemoryOptimizations: true,
+  },
+  // The search API (app/api/search) runs `astryx search` itself. The CLI stays
+  // an external module (see webpack below), so its code and dependencies are
+  // traced as installed; these are the files it reads from disk at run time:
+  // its docs and templates, and each documented package's docs and sources.
+  outputFileTracingIncludes: {
+    '/api/search': [
+      './astryx.config.mjs',
+      '../../packages/cli/package.json',
+      '../../packages/cli/{api,assets,authoring,clients,foundation,host}/**/*',
+      '../../packages/core/package.json',
+      '../../packages/core/src/**/*',
+      // Integrations resolve through the site's node_modules, so they are
+      // traced at that path.
+      './node_modules/@astryxdesign/{lab,charts,richtext,vega}/{package.json,astryx.integration.mjs}',
+      './node_modules/@astryxdesign/{lab,charts,richtext,vega}/{src,blocks,docs,dist}/**/*',
+    ],
+  },
+  // Packages the CLI imports for other commands but a search never loads
+  // (bundlers, compilers, browsers, test runners), and built output it never
+  // reads. Leaving them out keeps the search function small; the parity test
+  // and a traced-files-only build hold it to `astryx search`.
+  outputFileTracingExcludes: {
+    '/api/search': [
+      '../../node_modules/.pnpm/{esbuild,@esbuild+*,typescript,playwright,playwright-core,vite,rolldown,@rolldown+*,flow-parser,esprima,tsx,vitest,@vitest+*,chai,@testing-library+*}@*/**',
+      '../../packages/*/dist/**',
+      './src/**',
+    ],
+  },
   // Sandbox exports trailing-slash directories; Next's automatic slash
   // redirect runs before rewrites. Vercel deployments preserve those URLs;
   // local builds keep the docsite's existing canonical redirects.
@@ -120,6 +157,14 @@ const nextConfig = {
     ];
   },
   webpack: (config, {isServer, webpack}) => {
+    // The search API loads the CLI as installed, never bundled: the CLI reads
+    // its docs, templates and the installed packages from disk.
+    if (isServer) {
+      config.externals = [
+        ...[config.externals ?? []].flat(),
+        {'@astryxdesign/cli/api': 'module @astryxdesign/cli/api'},
+      ];
+    }
     // Webpack's CSS @import resolver doesn't follow package.json "exports".
     // Map each theme's /theme.css subpath to the actual dist file.
     const themesDir = resolve(import.meta.dirname, '../../packages/themes');

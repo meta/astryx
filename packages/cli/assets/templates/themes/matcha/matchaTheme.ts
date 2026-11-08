@@ -4,33 +4,38 @@
  * Matcha Theme
  *
  * An earthy green theme inspired by matcha tea and natural botanicals.
- * Core palette: #3E481D, #707E46, #C0CBA9, #F0F0E0, #FFFFFF
  * Uses Playwrite US Trad for headings and DM Sans for body text.
  */
 
 import {defineTheme, defineSyntaxTheme} from '@astryxdesign/core/theme';
 import {matchaIconRegistry} from './icons';
+import {matchaPaletteRefs} from './matchaPaletteRefs.generated';
+
+const {blue, cyan, green, neutral, orange, pink, purple, red, teal, yellow} =
+  matchaPaletteRefs;
+
+const withAlpha = (color: string, alpha: string): string => `${color}${alpha}`;
 
 /** Matcha syntax palette — earthy greens and warm tones. */
 const matchaSyntax = defineSyntaxTheme({
   name: 'astryx-matcha',
   tokens: {
-    keyword: ['#5a6b2a', '#a8bf6a'],
-    string: ['#2e6b4a', '#7bc49e'],
-    comment: ['#707E46', '#707E46'],
-    number: ['#8c6b30', '#d4b870'],
-    function: ['#3a5e8c', '#7ba8d4'],
-    type: ['#6b4a8c', '#b08ed4'],
-    variable: ['#3E481D', '#C0CBA9'],
-    operator: ['#707E46', '#94a468'],
-    constant: ['#8c6b30', '#d4b870'],
-    tag: ['#8c3a3a', '#d47a7a'],
-    attribute: ['#7c5e3a', '#c4a882'],
-    property: ['#3a7c6b', '#70c4b0'],
-    // #707E46/#5a6440 failed WCAG AA against the syntax background: 3.83:1
-    // light, 2.73:1 dark. #5386.
-    punctuation: ['#566a39', '#92af6a'], // 5.19:1 / 7.02:1
-    background: ['#F0F0E0', '#1a1c14'],
+    keyword: [neutral.light[30], neutral.dark[70]],
+    string: [teal.light[50], teal.dark[75]],
+    comment: [neutral.light[40], neutral.dark[40]],
+    number: [yellow.light[45], yellow.dark[75]],
+    function: [blue.light[50], blue.dark[70]],
+    type: [purple.light[50], purple.dark[70]],
+    variable: [neutral.light[20], neutral.dark[75]],
+    operator: [neutral.light[40], neutral.dark[60]],
+    constant: [yellow.light[45], yellow.dark[75]],
+    tag: [pink.light[30], pink.dark[65]],
+    attribute: [orange.light[30], yellow.dark[70]],
+    property: [teal.light[55], teal.dark[75]],
+    // Punctuation uses dedicated neutral stops that maintain WCAG AA against
+    // the syntax background in both modes (issue 5386).
+    punctuation: [neutral.light[30], neutral.dark[65]],
+    background: [neutral.light[95], neutral.dark[10]],
   },
 });
 
@@ -62,120 +67,189 @@ export const matchaTheme = defineTheme({
   tokens: {
     // =========================================================================
     // Colors — earthy matcha palette
-    // Core: #3E481D, #707E46, #C0CBA9, #F0F0E0, #FFFFFF
     // =========================================================================
 
     // Core semantic
-    '--color-accent': ['#3E481D', '#C0CBA9'],
-    '--color-accent-muted': ['#3E481D14', '#C0CBA920'],
-    '--color-neutral': ['#3E481D0F', '#C0CBA91A'],
-    '--color-background-surface': ['#FFFFFF', '#1a1c14'],
-    '--color-background-body': ['#F0F0E0', '#12140e'],
-    '--color-overlay': ['#3E481D80', '#3E481DCC'],
-    '--color-overlay-hover': ['#3E481D0D', '#C0CBA90D'],
-    '--color-overlay-pressed': ['#3E481D1A', '#C0CBA91A'],
-    '--color-background-muted': ['#F0F0E0', '#3E481D'],
+    '--color-accent': [neutral.light[20], neutral.dark[75]],
+    '--color-accent-muted': [
+      withAlpha(neutral.light[20], '14'),
+      withAlpha(neutral.dark[75], '20'),
+    ],
+    '--color-neutral': [
+      withAlpha(neutral.light[20], '0f'),
+      withAlpha(neutral.dark[75], '1a'),
+    ],
+    '--color-background-surface': [neutral.light[100], neutral.dark[10]],
+    '--color-background-body': [neutral.light[95], neutral.dark[5]],
+    '--color-overlay': [
+      withAlpha(neutral.light[20], '80'),
+      withAlpha(neutral.dark[20], 'cc'),
+    ],
+    '--color-overlay-hover': [
+      withAlpha(neutral.light[20], '0d'),
+      withAlpha(neutral.dark[75], '0d'),
+    ],
+    '--color-overlay-pressed': [
+      withAlpha(neutral.light[20], '1a'),
+      withAlpha(neutral.dark[75], '1a'),
+    ],
+    '--color-background-muted': [neutral.light[95], neutral.dark[20]],
 
     // Text
-    '--color-text-primary': ['#3E481D', '#C0CBA9'],
-    '--color-text-secondary': ['#707E46', '#94a468'],
-    '--color-text-disabled': ['#C0CBA9', '#5a6440'],
-    '--color-text-accent': ['#3E481D', '#C0CBA9'],
-    '--color-on-dark': '#FFFFFF',
-    '--color-on-light': '#3E481D',
-    '--color-on-accent': ['#FFFFFF', '#3E481D'],
-    '--color-on-success': ['#FFFFFF', '#3E481D'],
-    '--color-on-error': ['#FFFFFF', '#3E481D'],
-    '--color-on-warning': ['#3E481D', '#3E481D'],
+    '--color-text-primary': [neutral.light[20], neutral.dark[75]],
+    '--color-text-secondary': [neutral.light[40], neutral.dark[60]],
+    '--color-text-disabled': [neutral.light[75], neutral.dark[30]],
+    '--color-text-accent': [neutral.light[20], neutral.dark[75]],
+    '--color-on-dark': neutral.light[100],
+    '--color-on-light': neutral.light[20],
+    '--color-on-accent': [neutral.light[100], neutral.dark[20]],
+    '--color-on-success': neutral.dark[5],
+    '--color-on-error': neutral.dark[5],
+    '--color-on-warning': [neutral.light[20], neutral.dark[20]],
+
+    // Info is its own blue status, independent of the accent.
+    '--color-info': [blue.light[50], blue.dark[80]],
+    '--color-info-muted': 'var(--color-background-blue)',
+
+    '--color-text-info': [blue.light[35], blue.dark[75]],
+    '--color-text-success': [green.light[35], green.dark[75]],
+    '--color-text-warning': [yellow.light[45], yellow.dark[90]],
+    '--color-text-error': [red.light[35], red.dark[75]],
+    '--color-on-info-muted': [blue.light[35], blue.dark[75]],
+    '--color-on-success-muted': [green.light[35], green.dark[75]],
+    '--color-on-warning-muted': [yellow.light[45], yellow.dark[90]],
+    '--color-on-error-muted': [red.light[35], red.dark[75]],
 
     // Icon
-    '--color-icon-accent': ['#3E481D', '#C0CBA9'],
-    '--color-icon-primary': ['#3E481D', '#C0CBA9'],
-    '--color-icon-secondary': ['#707E46', '#94a468'],
-    '--color-icon-disabled': ['#C0CBA9', '#5a6440'],
+    '--color-icon-accent': [neutral.light[20], neutral.dark[75]],
+    '--color-icon-primary': [neutral.light[20], neutral.dark[75]],
+    '--color-icon-secondary': [neutral.light[40], neutral.dark[60]],
+    '--color-icon-disabled': [neutral.light[75], neutral.dark[30]],
 
     // Surface variants
-    '--color-background-card': ['#FFFFFF', '#1e2016'],
-    '--color-background-popover': ['#FFFFFF', '#3E481D'],
-    '--color-background-inverted': ['#3E481D', '#C0CBA9'],
+    '--color-background-card': [neutral.light[100], neutral.dark[15]],
+    '--color-background-popover': [neutral.light[100], neutral.dark[20]],
+    '--color-background-inverted': [neutral.light[20], neutral.dark[75]],
 
     // Status / Sentiment
-    '--color-success': ['#4D9900', '#6dbf2a'],
-    '--color-success-muted': ['#4D990020', '#6dbf2a20'],
-    '--color-error': ['#FD0000', '#ff5c5c'],
-    '--color-error-muted': ['#FD000020', '#ff5c5c20'],
-    '--color-warning': ['#FFB600', '#ffc940'],
-    '--color-warning-muted': ['#FFB60020', '#ffc94020'],
+    '--color-success': [green.light[50], green.dark[70]],
+    '--color-success-muted': [
+      withAlpha(green.light[50], '20'),
+      withAlpha(green.dark[70], '20'),
+    ],
+    '--color-error': [red.light[50], red.dark[70]],
+    '--color-error-muted': [
+      withAlpha(red.light[50], '20'),
+      withAlpha(red.dark[70], '20'),
+    ],
+    '--color-warning': [yellow.light[80], yellow.dark[85]],
+    '--color-warning-muted': [
+      withAlpha(yellow.light[80], '20'),
+      withAlpha(yellow.dark[85], '20'),
+    ],
 
     // Border
     // Softer sage borders (default + emphasized/card) in light mode.
-    '--color-border': ['#DCE3CE', '#C0CBA91A'],
-    '--color-border-emphasized': ['#B7C29E', '#5a6440'],
+    '--color-border': [neutral.light[85], withAlpha(neutral.dark[75], '1a')],
+    '--color-border-emphasized': [neutral.light[70], neutral.dark[30]],
 
     // Effects
-    '--color-skeleton': ['#C0CBA9', '#5a6440'],
-    '--color-shadow': ['#3E481D1A', '#0000004D'],
-    '--color-tint-hover': ['black', 'white'],
+    '--color-skeleton': [neutral.light[75], neutral.dark[30]],
+    '--color-shadow': [
+      withAlpha(neutral.light[20], '1a'),
+      withAlpha(neutral.dark[0], '4d'),
+    ],
+    '--color-tint-hover': [neutral.light[0], neutral.dark[100]],
 
     // Categorical — Blue
-    '--color-background-blue': ['#3a5e8c33', '#3a5e8c33'],
-    '--color-border-blue': ['#3a5e8c', '#7ba8d4'],
-    '--color-icon-blue': ['#3a5e8c', '#7ba8d4'],
-    '--color-text-blue': ['#2e4a6e', '#8dbce0'],
+    '--color-background-blue': [
+      withAlpha(blue.light[50], '33'),
+      withAlpha(blue.dark[50], '33'),
+    ],
+    '--color-border-blue': [blue.light[50], blue.dark[70]],
+    '--color-icon-blue': [blue.light[50], blue.dark[70]],
+    '--color-text-blue': [blue.light[35], blue.dark[75]],
 
     // Categorical — Cyan
-    '--color-background-cyan': ['#3a7c7c33', '#3a7c7c33'],
-    '--color-border-cyan': ['#3a7c7c', '#70c4c4'],
-    '--color-icon-cyan': ['#3a7c7c', '#70c4c4'],
-    '--color-text-cyan': ['#2e6060', '#82d4d4'],
+    '--color-background-cyan': [
+      withAlpha(cyan.light[50], '33'),
+      withAlpha(cyan.dark[50], '33'),
+    ],
+    '--color-border-cyan': [cyan.light[50], cyan.dark[70]],
+    '--color-icon-cyan': [cyan.light[50], cyan.dark[70]],
+    '--color-text-cyan': [cyan.light[35], cyan.dark[75]],
 
     // Categorical — Gray
-    '--color-background-gray': ['#707E4633', '#5a644033'],
-    '--color-border-gray': ['#707E46', '#707E46'],
-    '--color-icon-gray': ['#707E46', '#94a468'],
-    '--color-text-gray': ['#3E481D', '#C0CBA9'],
+    '--color-background-gray': [
+      withAlpha(neutral.light[40], '33'),
+      withAlpha(neutral.dark[30], '33'),
+    ],
+    '--color-border-gray': [neutral.light[40], neutral.dark[40]],
+    '--color-icon-gray': [neutral.light[40], neutral.dark[60]],
+    '--color-text-gray': [neutral.light[20], neutral.dark[75]],
 
     // Categorical — Green
-    '--color-background-green': ['#4D990033', '#6dbf2a33'],
-    '--color-border-green': ['#4D9900', '#6dbf2a'],
-    '--color-icon-green': ['#4D9900', '#6dbf2a'],
-    '--color-text-green': ['#3d7a00', '#80d43a'],
+    '--color-background-green': [
+      withAlpha(green.light[50], '33'),
+      withAlpha(green.dark[70], '33'),
+    ],
+    '--color-border-green': [green.light[50], green.dark[70]],
+    '--color-icon-green': [green.light[50], green.dark[70]],
+    '--color-text-green': [green.light[35], green.dark[75]],
 
     // Categorical — Orange
-    '--color-background-orange': ['#c4762033', '#d4903a33'],
-    '--color-border-orange': ['#c47620', '#d4903a'],
-    '--color-icon-orange': ['#c47620', '#d4903a'],
-    '--color-text-orange': ['#a06018', '#e0a04a'],
+    '--color-background-orange': [
+      withAlpha(orange.light[50], '33'),
+      withAlpha(orange.dark[70], '33'),
+    ],
+    '--color-border-orange': [orange.light[50], orange.dark[70]],
+    '--color-icon-orange': [orange.light[50], orange.dark[70]],
+    '--color-text-orange': [orange.light[35], orange.dark[75]],
 
     // Categorical — Pink
-    '--color-background-pink': ['#c44a7033', '#e07a9a33'],
-    '--color-border-pink': ['#c44a70', '#e07a9a'],
-    '--color-icon-pink': ['#c44a70', '#e07a9a'],
-    '--color-text-pink': ['#a03a5a', '#f08aaa'],
+    '--color-background-pink': [
+      withAlpha(pink.light[50], '33'),
+      withAlpha(pink.dark[70], '33'),
+    ],
+    '--color-border-pink': [pink.light[50], pink.dark[70]],
+    '--color-icon-pink': [pink.light[50], pink.dark[70]],
+    '--color-text-pink': [pink.light[35], pink.dark[75]],
 
     // Categorical — Purple
-    '--color-background-purple': ['#6b4a8c33', '#b08ed433'],
-    '--color-border-purple': ['#6b4a8c', '#b08ed4'],
-    '--color-icon-purple': ['#6b4a8c', '#b08ed4'],
-    '--color-text-purple': ['#553a70', '#c0a0e0'],
+    '--color-background-purple': [
+      withAlpha(purple.light[50], '33'),
+      withAlpha(purple.dark[70], '33'),
+    ],
+    '--color-border-purple': [purple.light[50], purple.dark[70]],
+    '--color-icon-purple': [purple.light[50], purple.dark[70]],
+    '--color-text-purple': [purple.light[35], purple.dark[75]],
 
     // Categorical — Red
-    '--color-background-red': ['#FD000033', '#ff5c5c33'],
-    '--color-border-red': ['#FD0000', '#ff5c5c'],
-    '--color-icon-red': ['#FD0000', '#ff5c5c'],
-    '--color-text-red': ['#cc0000', '#ff7a7a'],
+    '--color-background-red': [
+      withAlpha(red.light[50], '33'),
+      withAlpha(red.dark[70], '33'),
+    ],
+    '--color-border-red': [red.light[50], red.dark[70]],
+    '--color-icon-red': [red.light[50], red.dark[70]],
+    '--color-text-red': [red.light[35], red.dark[75]],
 
     // Categorical — Teal
-    '--color-background-teal': ['#2e6b5a33', '#5ab89833'],
-    '--color-border-teal': ['#2e6b5a', '#5ab898'],
-    '--color-icon-teal': ['#2e6b5a', '#5ab898'],
-    '--color-text-teal': ['#245546', '#6ccaaa'],
+    '--color-background-teal': [
+      withAlpha(teal.light[50], '33'),
+      withAlpha(teal.dark[70], '33'),
+    ],
+    '--color-border-teal': [teal.light[50], teal.dark[70]],
+    '--color-icon-teal': [teal.light[50], teal.dark[70]],
+    '--color-text-teal': [teal.light[35], teal.dark[75]],
 
     // Categorical — Yellow
-    '--color-background-yellow': ['#FFB60033', '#ffc94033'],
-    '--color-border-yellow': ['#FFB600', '#ffc940'],
-    '--color-icon-yellow': ['#FFB600', '#ffc940'],
-    '--color-text-yellow': ['#cc9200', '#ffd960'],
+    '--color-background-yellow': [
+      withAlpha(yellow.light[80], '33'),
+      withAlpha(yellow.dark[85], '33'),
+    ],
+    '--color-border-yellow': [yellow.light[80], yellow.dark[85]],
+    '--color-icon-yellow': [yellow.light[80], yellow.dark[85]],
+    '--color-text-yellow': [yellow.light[65], yellow.dark[90]],
 
     // =========================================================================
     // Spacing
@@ -216,14 +290,14 @@ export const matchaTheme = defineTheme({
     // =========================================================================
     // Shadows
     // =========================================================================
-    '--shadow-low': '0 2px 4px #3E481D0D, 0 4px 8px #3E481D1A',
-    '--shadow-med': '0 2px 4px #3E481D0D, 0 4px 12px #3E481D1A',
-    '--shadow-high': '0 4px 6px #3E481D1A, 0 12px 24px #3E481D26',
-    '--shadow-inset-hover': 'inset 0px 0px 0px 2px #3E481D30',
-    '--shadow-inset-selected': 'inset 0px 0px 0px 2px #3E481D50',
-    '--shadow-inset-success': 'inset 0px 0px 0px 2px #4D990050',
-    '--shadow-inset-warning': 'inset 0px 0px 0px 2px #FFB60050',
-    '--shadow-inset-error': 'inset 0px 0px 0px 2px #FD000050',
+    '--shadow-low': `0 2px 4px ${withAlpha(neutral.light[20], '0d')}, 0 4px 8px ${withAlpha(neutral.light[20], '1a')}`,
+    '--shadow-med': `0 2px 4px ${withAlpha(neutral.light[20], '0d')}, 0 4px 12px ${withAlpha(neutral.light[20], '1a')}`,
+    '--shadow-high': `0 4px 6px ${withAlpha(neutral.light[20], '1a')}, 0 12px 24px ${withAlpha(neutral.light[20], '26')}`,
+    '--shadow-inset-hover': `inset 0px 0px 0px 2px ${withAlpha(neutral.light[20], '30')}`,
+    '--shadow-inset-selected': `inset 0px 0px 0px 2px ${withAlpha(neutral.light[20], '50')}`,
+    '--shadow-inset-success': `inset 0px 0px 0px 2px ${withAlpha(green.light[50], '50')}`,
+    '--shadow-inset-warning': `inset 0px 0px 0px 2px ${withAlpha(yellow.light[80], '50')}`,
+    '--shadow-inset-error': `inset 0px 0px 0px 2px ${withAlpha(red.light[50], '50')}`,
   },
 
   components: {

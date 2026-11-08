@@ -33,6 +33,7 @@ export const doc = {
       cli: 'astryx theme list --package @acme/themes',
     },
   ],
+  outsideProject: 'same',
   exitCodes: [
     {code: 0, when: 'success'},
     {

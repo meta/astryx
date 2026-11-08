@@ -77,7 +77,7 @@
  * @property {boolean} data.directMatch True when the top page template is a confident direct match.
  * @property {BuildStart | null} data.start The page template to start from: the ranker's pick, else the app shell. Null only when the kit is narrowed to components or hooks (`type`), or when the project has no page template to offer.
  * @property {import('../search/search.type.mjs').SearchResultEntry[]} data.pages Closest page templates by search (≤3). Each entry's `command` carries `--skeleton` when `directMatch` is false, so it previews the layout; `start.command` is the scaffold.
- * @property {import('../search/search.type.mjs').SearchResultEntry[]} data.blocks Drop-in block patterns covering parts of the idea (≤5).
+ * @property {import('../search/search.type.mjs').SearchResultEntry[]} data.blocks Drop-in block patterns covering parts of the idea (≤5), best first. A block search returned keeps search's score and reason; any other block carries the block picker's relative score (100 for its best candidate, never below 1) and reason, so the two kinds of score are not comparable.
  * @property {import('../search/search.type.mjs').SearchResultEntry[]} data.domain Idea-specific components/hooks (≤6), excluding frame/foundation.
  * @property {string[]} data.frame Always-on page-shell component names. Every page template already uses them.
  * @property {string[]} data.foundation Always-on layout/typography/action component names. Every page template already uses them.

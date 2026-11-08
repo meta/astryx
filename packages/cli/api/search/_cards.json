@@ -1,0 +1,6098 @@
+{
+"AlertDialog":{
+"what":"A modal confirmation dialog for destructive or irreversible actions, requiring explicit user confirmation or cancellation before dismissing.",
+"synonyms":[
+"confirm dialog",
+"delete confirmation modal",
+"destructive action prompt",
+"confirmation popup",
+"are you sure dialog",
+"MUI Dialog confirm",
+"Chakra AlertDialog",
+"Ant Modal.confirm",
+"Radix AlertDialog",
+"warning modal"
+],
+"props":[
+"isOpen",
+"onOpenChange",
+"title",
+"description",
+"cancelLabel",
+"actionLabel",
+"actionVariant",
+"isActionLoading",
+"onAction",
+"width",
+"isInline"
+]
+},
+"AppShell":{
+"what":"Top-level application wrapper that composes header, side navigation, and scrollable main content into a responsive page shell with auto mobile drawer support.",
+"synonyms":[
+"app layout",
+"page shell",
+"dashboard layout",
+"admin layout",
+"shell with sidebar and topbar",
+"application frame",
+"responsive layout wrapper",
+"nav shell",
+"Ant Pro Layout",
+"Chakra layout",
+"root layout component",
+"site shell"
+],
+"props":[
+"variant",
+"banner",
+"children",
+"contentPadding",
+"height",
+"mobileNav",
+"sideNav",
+"topNav"
+]
+},
+"AspectRatio":{
+"what":"A container that enforces a fixed width/height ratio for its child (image, video, embed, placeholder), optionally clipping to a circle/ellipse and controlling how the child fills the box.",
+"synonyms":[
+"aspect ratio box",
+"responsive media container",
+"image crop container",
+"16:9 box",
+"square image wrapper",
+"ratio box",
+"Radix AspectRatio",
+"video embed wrapper",
+"thumbnail container",
+"object-fit wrapper",
+"circle avatar frame"
+],
+"props":[
+"ratio",
+"shape",
+"fit",
+"children",
+"xstyle",
+"className",
+"style"
+]
+},
+"Avatar":{
+"what":"A circular/rounded/square user representation showing a profile image, fallback image, or initials, with optional status indicator, tooltip, and link behavior.",
+"synonyms":[
+"user icon",
+"profile picture",
+"user photo",
+"initials badge",
+"profile avatar",
+"MUI Avatar",
+"Chakra Avatar",
+"Ant Avatar",
+"person icon with image",
+"user thumbnail",
+"status dot avatar",
+"team member icon"
+],
+"props":[
+"src",
+"fallbackSrc",
+"name",
+"alt",
+"size",
+"shape",
+"status",
+"tooltip",
+"href",
+"as",
+"onClick",
+"data-testid"
+]
+},
+"AvatarGroup":{
+"what":"Container that stacks multiple Avatar children into an overlapping facepile, optionally ending with an overflow '+N' indicator, and manages roving keyboard focus when avatars are interactive.",
+"synonyms":[
+"facepile",
+"avatar stack",
+"user group avatars",
+"overlapping avatars",
+"stacked profile pictures",
+"team members avatars",
+"Chakra AvatarGroup",
+"MUI AvatarGroup",
+"Ant Avatar.Group",
+"collaborator list",
+"participant avatars"
+],
+"props":[
+"children",
+"size",
+"shape",
+"aria-label",
+"data-testid",
+"xstyle",
+"className",
+"style",
+"ref"
+]
+},
+"AvatarGroupOverflow":{
+"what":"The '+N' overflow indicator slot placed as the last child of an AvatarGroup to show how many additional avatars aren't displayed, optionally clickable to reveal more.",
+"synonyms":[
+"plus N indicator",
+"more avatars button",
+"overflow count badge",
+"show more users",
+"remaining count chip",
+"MUI AvatarGroup max",
+"truncated avatar count"
+],
+"props":[
+"count",
+"onClick",
+"children",
+"ref",
+"xstyle",
+"className",
+"style"
+]
+},
+"AvatarStatusDot":{
+"what":"A size-aware status indicator dot (online/offline/busy etc.) rendered inside an Avatar's status slot, using distinct shapes per variant for colorblind-accessible status signaling.",
+"synonyms":[
+"online indicator",
+"presence dot",
+"status badge on avatar",
+"availability indicator",
+"busy/away/online dot",
+"Slack presence indicator",
+"Teams status dot",
+"user status indicator"
+],
+"props":[
+"variant",
+"label",
+"icon",
+"ref",
+"xstyle",
+"className",
+"style"
+]
+},
+"Badge":{
+"what":"A small inline label for showing status, counts, or categorical tags, with color variants and an optional icon.",
+"synonyms":[
+"tag",
+"chip",
+"pill",
+"status indicator",
+"label",
+"count badge",
+"tag pill",
+"MUI Chip",
+"Ant Tag",
+"Chakra Badge",
+"notification dot",
+"category tag",
+"status chip"
+],
+"props":[
+"variant",
+"label",
+"icon",
+"xstyle",
+"className",
+"style",
+"ref"
+]
+},
+"Banner":{
+"what":"A prominent status message block (info/warning/error/success) shown at the top of a page or form, optionally dismissable, with collapsible extra content, actions, and card or section styling.",
+"synonyms":[
+"alert",
+"notification bar",
+"callout",
+"message box",
+"status banner",
+"flash message",
+"MUI Alert",
+"Ant Alert",
+"Chakra Alert",
+"Bootstrap alert",
+"warning message",
+"error message",
+"dismissable notice",
+"page alert"
+],
+"props":[
+"status",
+"title",
+"description",
+"icon",
+"isDismissable",
+"onDismiss",
+"dismissLabel",
+"endContent",
+"container",
+"elevation",
+"collapsible",
+"children"
+]
+},
+"BaseTypeahead":{
+"what":"Headless combobox engine (input, search, keyboard nav, dropdown) with no wrapper styling, used internally to build styled typeahead/tokenizer components.",
+"synonyms":[
+"combobox core",
+"autocomplete engine",
+"headless autocomplete",
+"search input logic",
+"unstyled typeahead",
+"Radix Combobox primitive",
+"MUI useAutocomplete",
+"Downshift-like hook",
+"dropdown search base"
+],
+"props":[
+"searchSource",
+"value",
+"onChange",
+"renderItem",
+"placeholder",
+"hasEntriesOnFocus",
+"maxMenuItems",
+"menuWidth",
+"minQueryLength",
+"emptySearchText",
+"isDisabled",
+"anchorRef"
+]
+},
+"Blockquote":{
+"what":"A styled semantic blockquote element for quoted text, with an optional cite/attribution line, used for rendering quotations in content.",
+"synonyms":[
+"quote",
+"pull quote",
+"citation",
+"quoted text",
+"testimonial quote",
+"blockquote element",
+"attribution block"
+],
+"props":[
+"children",
+"cite",
+"xstyle",
+"className",
+"style",
+"ref"
+]
+},
+"BottomSheet":{
+"what":"A mobile-style panel that slides up from the bottom of the screen in a native dialog, used for focused flows or supplementary content on top of the page.",
+"synonyms":[
+"bottom sheet",
+"mobile drawer",
+"slide-up panel",
+"action sheet",
+"modal sheet",
+"drawer",
+"Chakra Drawer",
+"MUI SwipeableDrawer",
+"Ant Drawer",
+"Radix Dialog bottom variant",
+"swipeable panel",
+"half modal"
+],
+"props":[
+"isOpen",
+"onOpenChange",
+"label",
+"children",
+"padding",
+"height",
+"snapPoints",
+"hasScrim",
+"finalFocusRef",
+"purpose",
+"sheetId"
+]
+},
+"BottomSheetSwitcher":{
+"what":"A coordinator that manages multiple BottomSheet children as a single mutually-exclusive flow, animating handoff transitions between them inside one shared native dialog.",
+"synonyms":[
+"multi-step bottom sheet",
+"sheet flow",
+"wizard sheet",
+"stacked bottom sheets",
+"sheet stepper",
+"sheet router",
+"multi-page drawer",
+"sequential modal flow"
+],
+"props":[
+"activeSheet",
+"onActiveSheetChange",
+"hasScrim",
+"children",
+"onCancel"
+]
+},
+"BreadcrumbItem":{
+"what":"An individual link or current-page label within a Breadcrumbs trail, optionally acting as a dropdown-menu trigger instead of a plain link.",
+"synonyms":[
+"breadcrumb link",
+"crumb",
+"nav trail item",
+"path segment",
+"Ant Breadcrumb.Item",
+"MUI Breadcrumbs link",
+"Chakra BreadcrumbItem",
+"breadcrumb with dropdown",
+"navigation path item"
+],
+"props":[
+"href",
+"children",
+"onClick",
+"isCurrent",
+"startIcon",
+"menu",
+"menuSize",
+"as"
+]
+},
+"Breadcrumbs":{
+"what":"A navigation component that renders a trail of BreadcrumbItem links in semantic nav/ol markup to show the user's location in a hierarchy.",
+"synonyms":[
+"breadcrumb trail",
+"path navigation",
+"navigation trail",
+"crumb nav",
+"hierarchy nav",
+"MUI Breadcrumbs",
+"Ant Breadcrumb",
+"Chakra Breadcrumb",
+"page path",
+"location trail"
+],
+"props":[
+"children",
+"separator",
+"variant",
+"label",
+"ref"
+]
+},
+"Button":{
+"what":"The core clickable action control supporting variants, sizes, icons, loading/async states, and optional link rendering.",
+"synonyms":[
+"button",
+"CTA",
+"action button",
+"submit button",
+"icon button",
+"primary button",
+"MUI Button",
+"Chakra Button",
+"Ant Button",
+"Radix Button",
+"link button",
+"async button",
+"loading button"
+],
+"props":[
+"label",
+"variant",
+"size",
+"isDisabled",
+"isLoading",
+"isInterruptible",
+"clickAction",
+"onClick",
+"icon",
+"isIconOnly",
+"width",
+"elevation",
+"href",
+"endContent"
+]
+},
+"ButtonGroup":{
+"what":"A container that visually connects and groups multiple Button/IconButton children with shared borders, orientation, and roving-tabindex keyboard navigation.",
+"synonyms":[
+"button group",
+"segmented control",
+"toolbar",
+"connected buttons",
+"button bar",
+"MUI ButtonGroup",
+"Ant Button.Group",
+"Chakra ButtonGroup",
+"action group",
+"toggle group"
+],
+"props":[
+"children",
+"label",
+"orientation",
+"size",
+"elevation",
+"isDisabled",
+"data-testid",
+"ref"
+]
+},
+"Calendar":{
+"what":"A calendar component for picking a single date or a date range with month navigation, constraints, and keyboard/grid accessibility.",
+"synonyms":[
+"date picker",
+"range picker",
+"month view",
+"datepicker calendar",
+"date range selector",
+"MUI DateCalendar",
+"Ant Calendar/RangePicker",
+"Chakra date picker",
+"Radix calendar",
+"booking calendar",
+"scheduling calendar",
+"pick a date",
+"select date range"
+],
+"props":[
+"mode",
+"value",
+"defaultValue",
+"onChange",
+"numberOfMonths",
+"min",
+"max",
+"dateConstraints",
+"maxRangeSpan",
+"minRangeSpan",
+"focusDate",
+"onFocusDateChange",
+"hasOutsideDays",
+"hasWeekNumbers",
+"weekStartsOn"
+]
+},
+"Card":{
+"what":"A generic container surface with themed background, optional border, radius, elevation, padding, and sizing — used as the base building block for grouped content.",
+"synonyms":[
+"panel",
+"box",
+"surface",
+"container box",
+"MUI Card/Paper",
+"Chakra Box/Card",
+"Ant Card",
+"Bootstrap card",
+"content tile",
+"box with shadow",
+"rounded container",
+"tile component"
+],
+"props":[
+"width",
+"height",
+"maxWidth",
+"minHeight",
+"padding",
+"variant",
+"elevation",
+"children",
+"xstyle",
+"className"
+]
+},
+"Carousel":{
+"what":"A horizontal scrollable container with edge fade masks, optional prev/next nav buttons, snap scrolling, and wrap-around looping for sliding through a set of items.",
+"synonyms":[
+"image slider",
+"slideshow",
+"content slider",
+"horizontal scroller",
+"swiper",
+"scroll carousel",
+"gallery slider",
+"item carousel",
+"card carousel",
+"MUI/Ant/Bootstrap carousel",
+"Embla-like carousel",
+"slide viewer"
+],
+"props":[
+"children",
+"gap",
+"hasButtons",
+"hasEdgeFade",
+"hasLoop",
+"hasSnap",
+"padding",
+"handleRef",
+"aria-label",
+"ref"
+]
+},
+"Center":{
+"what":"A layout component that centers its children on one or both flex axes, with optional sizing and padding.",
+"synonyms":[
+"flex center",
+"centering container",
+"align center",
+"justify center",
+"centered box",
+"middle align",
+"centered wrapper",
+"AbsoluteCenter",
+"vertical horizontal center",
+"content centering"
+],
+"props":[
+"axis",
+"width",
+"height",
+"maxWidth",
+"minHeight",
+"padding",
+"paddingInline",
+"paddingInlineStart",
+"paddingInlineEnd",
+"paddingBlock",
+"isInline",
+"children"
+]
+},
+"ChatComposer":{
+"what":"A layout shell for building a chat message input box with slots for drawer, header, footer actions, send button, and status messages, used to compose/send chat messages.",
+"synonyms":[
+"message input box",
+"chat input",
+"prompt box",
+"AI chat textarea",
+"message composer",
+"send message bar",
+"chatbot input field",
+"text composer with send button",
+"LLM prompt input",
+"chat bottom bar"
+],
+"props":[
+"onSubmit",
+"onStop",
+"isStopShown",
+"value",
+"onChange",
+"placeholder",
+"isDisabled",
+"density",
+"elevation",
+"drawer",
+"headerActions",
+"headerContext",
+"input",
+"footerActions",
+"sendActions",
+"sendButton",
+"status",
+"statusPosition"
+]
+},
+"ChatComposerDrawer":{
+"what":"A collapsible drawer panel attached above a chat composer for showing attachments, context chips, or previews, with expand/collapse disclosure behavior.",
+"synonyms":[
+"collapsible panel",
+"attachment tray",
+"accordion drawer",
+"chat attachments area",
+"context chip tray",
+"disclosure panel",
+"expandable section",
+"composer accessory panel",
+"file preview tray",
+"collapsible toolbar",
+"chat input drawer",
+"summary bar toggle"
+],
+"props":[
+"children",
+"count",
+"label",
+"collapsedSummary",
+"isCollapsed",
+"defaultIsCollapsed",
+"onCollapsedChange",
+"xstyle",
+"className",
+"style",
+"data-testid",
+"ref"
+]
+},
+"ChatComposerInput":{
+"what":"A rich contentEditable input for chat composers supporting @ mentions/slash-command trigger menus, inline token chips, message history, paste/drop file handling, and Enter-to-submit.",
+"synonyms":[
+"chat input",
+"mention input",
+"rich text editor",
+"contenteditable input",
+"message box",
+"autocomplete input",
+"slash command input",
+"textarea with mentions",
+"composer field",
+"token input",
+"typeahead textbox",
+"message editor"
+],
+"props":[
+"value",
+"onChange",
+"placeholder",
+"maxRows",
+"triggers",
+"debounceMs",
+"hasHistory",
+"label",
+"isDisabled",
+"onPaste",
+"pasteAsToken",
+"onFiles",
+"onSubmit",
+"onKeyDown",
+"handleRef",
+"ref"
+]
+},
+"ChatDictationButton":{
+"what":"A microphone toggle button for voice input in a chat composer that shows volume-reactive equalizer bars while listening, driven by a useChatDictation/useSpeechRecognition hook.",
+"synonyms":[
+"voice input button",
+"mic button",
+"speech-to-text toggle",
+"dictation control",
+"audio waveform button",
+"microphone toggle",
+"voice recording button",
+"speech recognition button",
+"equalizer mic indicator"
+],
+"props":[
+"dictation",
+"size",
+"isHiddenWhenUnsupported",
+"label",
+"xstyle",
+"className",
+"style",
+"ref"
+]
+},
+"ChatLayout":{
+"what":"A full-page layout shell for chat interfaces that places messages in normal page flow and docks the composer to the bottom behind a frosted-glass surface, with built-in auto-scroll and a scroll-to-bottom button.",
+"synonyms":[
+"chat screen layout",
+"chat shell",
+"conversation layout",
+"message list with fixed input",
+"AI chat UI container",
+"messaging page wrapper",
+"chat window frame",
+"sticky composer layout",
+"chatbot layout",
+"stick to bottom scroll container"
+],
+"props":[
+"children",
+"composer",
+"emptyState",
+"scrollButton",
+"scrollRef",
+"density",
+"xstyle",
+"className",
+"ref"
+]
+},
+"ChatLayoutScrollButton":{
+"what":"A floating pill button, used inside ChatLayout's dock, that fades in/out to let users jump to the latest message and can expand to show a 'new messages' label.",
+"synonyms":[
+"scroll to bottom button",
+"jump to latest button",
+"new messages indicator",
+"scroll to newest",
+"chat scroll fab",
+"resume autoscroll button"
+],
+"props":[
+"isVisible",
+"label",
+"onClick",
+"ref",
+"xstyle",
+"className",
+"style"
+]
+},
+"ChatMessage":{
+"what":"A per-sender wrapper for a single chat message that handles avatar, name, alignment (left/right/center) and layout by sender role (assistant/user/system), used inside a ChatMessageList.",
+"synonyms":[
+"chat bubble row",
+"message item",
+"conversation turn",
+"chat row",
+"message container",
+"sender message block",
+"ChatItem",
+"MessageRow"
+],
+"props":[
+"sender",
+"children",
+"avatar",
+"name",
+"metadata",
+"density",
+"ref",
+"xstyle",
+"className",
+"style",
+"data-testid"
+]
+},
+"ChatMessageBubble":{
+"what":"A styled content container that renders the visual 'chat bubble' around a single message's content, auto-styling its background based on the sender read from the parent ChatMessage context.",
+"synonyms":[
+"chat bubble",
+"message bubble",
+"speech bubble",
+"conversation bubble",
+"message card",
+"im bubble",
+"text bubble",
+"chat balloon",
+"sender bubble",
+"assistant bubble",
+"user bubble"
+],
+"props":[
+"children",
+"variant",
+"name",
+"metadata",
+"group",
+"width",
+"xstyle",
+"className",
+"style",
+"data-testid",
+"ref"
+]
+},
+"ChatMessageList":{
+"what":"A presentational, scrollable-log container (role='log') that lays out ChatMessage children with density-based spacing, optional bottom alignment, empty state, and infinite-scroll-to-top loading.",
+"synonyms":[
+"chat history list",
+"message feed",
+"conversation list",
+"chat log",
+"message container",
+"infinite scroll list",
+"chat timeline",
+"message stream container",
+"chat body"
+],
+"props":[
+"children",
+"emptyState",
+"scrollToTopAction",
+"density",
+"gap",
+"align",
+"isStreaming",
+"xstyle",
+"className",
+"style",
+"data-testid",
+"ref"
+]
+},
+"ChatMessageMetadata":{
+"what":"A small composable row for displaying a chat message's timestamp, footer content, and delivery status (with icon and separators), used inside a ChatMessage/ChatMessageBubble.",
+"synonyms":[
+"message status",
+"read receipt",
+"delivery status",
+"sent/seen indicator",
+"chat timestamp row",
+"typing/sending indicator",
+"message footer",
+"seen status",
+"message info line"
+],
+"props":[
+"timestamp",
+"footer",
+"status",
+"xstyle",
+"className",
+"style",
+"ref"
+]
+},
+"ChatSendButton":{
+"what":"A circular send/stop toggle button for a chat composer that reads state from ChatComposerContext by default but can be used standalone.",
+"synonyms":[
+"send message button",
+"submit chat button",
+"stop generation button",
+"chat input action button",
+"arrow up button",
+"icon button send",
+"composer submit",
+"cancel response button",
+"stream stop toggle",
+"chat actions button",
+"round action button"
+],
+"props":[
+"isStopShown",
+"isDisabled",
+"onSend",
+"onStop",
+"sendIcon",
+"stopIcon",
+"size",
+"onClick",
+"xstyle",
+"className",
+"style",
+"ref"
+]
+},
+"ChatSystemMessage":{
+"what":"A centered, muted banner-style message for chat threads used for non-sender notices like date separators or status updates, not for user/assistant bubbles.",
+"synonyms":[
+"date separator",
+"chat divider",
+"status message",
+"system notice",
+"conversation started banner",
+"centered chat text",
+"timeline separator",
+"event message",
+"notification line",
+"chat status line"
+],
+"props":[
+"children",
+"variant",
+"icon",
+"xstyle",
+"className",
+"style",
+"ref"
+]
+},
+"ChatTokenizedText":{
+"what":"Renders a plain text string in a chat message bubble, replacing matched token values (e.g. @mentions) with inline Badge or custom rendered content, sharing token definitions with the composer input.",
+"synonyms":[
+"mention renderer",
+"tag highlighter",
+"token parser display",
+"chat text with mentions",
+"inline badge text",
+"rich text tokens",
+"@mention display",
+"variable highlighter",
+"placeholder renderer",
+"linkify-like text parser"
+],
+"props":[
+"children",
+"tokens",
+"xstyle",
+"className",
+"style",
+"ref"
+]
+},
+"ChatToolCalls":{
+"what":"A chat UI component that renders LLM tool/function call invocations, showing a single inline call or a collapsible summary/group for multiple calls with status icons, duration, and diff stats.",
+"synonyms":[
+"tool call display",
+"function call list",
+"AI agent action log",
+"LLM tool invocation UI",
+"collapsible tool call group",
+"chat function call badge",
+"agent steps viewer",
+"tool execution status",
+"chat action timeline",
+"AI SDK tool call renderer"
+],
+"props":[
+"calls",
+"label",
+"isExpanded",
+"defaultIsExpanded",
+"onExpandedChange",
+"name",
+"status",
+"target",
+"duration",
+"node",
+"additions",
+"deletions",
+"resultDetail"
+]
+},
+"CheckboxInput":{
+"what":"A single checkbox form control supporting checked/unchecked/indeterminate states, label, description, loading/async change, disabled reasons with tooltip, and status messaging; use for one boolean/tri-state field.",
+"synonyms":[
+"checkbox",
+"toggle box",
+"boolean input",
+"tri-state checkbox",
+"indeterminate checkbox",
+"MUI Checkbox",
+"Chakra Checkbox",
+"Ant Checkbox",
+"Radix Checkbox",
+"form checkbox field",
+"accept terms checkbox"
+],
+"props":[
+"label",
+"value",
+"onChange",
+"changeAction",
+"isDisabled",
+"isReadOnly",
+"isLoading",
+"isRequired",
+"isOptional",
+"status",
+"size",
+"disabledMessage"
+]
+},
+"CheckboxList":{
+"what":"A grouped, accessible checkbox field (role=group) for multi-value selection, composing Field (label/description/status) and List (density/dividers) with context for its CheckboxListItem children.",
+"synonyms":[
+"checkbox group",
+"multi-select checkboxes",
+"checkbox field set",
+"fieldset of checkboxes",
+"MUI FormGroup",
+"Ant Checkbox.Group",
+"Chakra CheckboxGroup",
+"list of checkboxes",
+"multi-value selector"
+],
+"props":[
+"label",
+"value",
+"onChange",
+"changeAction",
+"density",
+"hasDividers",
+"isDisabled",
+"isReadOnly",
+"disabledMessage",
+"status",
+"width",
+"children"
+]
+},
+"CheckboxListItem":{
+"what":"A checkbox row for use inside CheckboxList (collection mode) or standalone inside List, with label, description, and loading/disabled states.",
+"synonyms":[
+"checkbox list row",
+"checkbox option",
+"multi-select item",
+"checkbox row item",
+"list checkbox",
+"selectable row",
+"Ant Checkbox.Group item",
+"MUI ListItem with Checkbox",
+"checkbox menu item",
+"toggle list row"
+],
+"props":[
+"label",
+"aria-label",
+"value",
+"description",
+"endContent",
+"isDisabled",
+"isLoading",
+"isChecked",
+"onCheck",
+"align",
+"ref"
+]
+},
+"Citation":{
+"what":"An inline reference marker (numbered badge or labeled chip with source title/icon) that links out to a cited source, used for footnotes/references in text.",
+"synonyms":[
+"footnote",
+"reference badge",
+"source link",
+"superscript citation",
+"inline reference",
+"doc-noteref",
+"cite",
+"source chip",
+"numbered footnote marker",
+"link citation"
+],
+"props":[
+"source",
+"number",
+"variant",
+"ref",
+"xstyle",
+"className"
+]
+},
+"ClickableCard":{
+"what":"An interactive card (built on Card) that acts as a single navigation link or click/action target, with proper accessible role via a hidden button/anchor, safe to nest other interactive elements inside.",
+"synonyms":[
+"link card",
+"navigable card",
+"actionable card",
+"tappable card",
+"clickable tile",
+"card button",
+"MUI CardActionArea",
+"Chakra LinkBox/LinkOverlay",
+"Ant Card hoverable link",
+"whole card is a link",
+"card that navigates",
+"pressable card"
+],
+"props":[
+"label",
+"onClick",
+"href",
+"target",
+"isDisabled",
+"padding",
+"variant",
+"elevation",
+"width",
+"height",
+"maxWidth",
+"children"
+]
+},
+"Code":{
+"what":"Inline monospace code span used within text for short code snippets, variable names, or commands.",
+"synonyms":[
+"inline code",
+"code span",
+"monospace text",
+"code tag",
+"<code>",
+"kbd-like text",
+"inline snippet",
+"code highlight inline",
+"variable name styling"
+],
+"props":[
+"children",
+"color",
+"size",
+"ref",
+"xstyle",
+"className"
+]
+},
+"CodeBlock":{
+"what":"A read-only, syntax-highlighted code display block with optional line numbers, diff highlighting, collapsibility, and copy-to-clipboard, used to show code snippets in docs, chat, or IDE-like UIs.",
+"synonyms":[
+"syntax highlighter",
+"code snippet viewer",
+"code preview",
+"prism",
+"highlight.js wrapper",
+"pre code block",
+"diff viewer",
+"code sample",
+"markdown code fence renderer",
+"terminal output display",
+"source code viewer",
+"copyable code box",
+"shiki block"
+],
+"props":[
+"code",
+"language",
+"showLineNumbers",
+"highlightLines",
+"isWrapped",
+"title",
+"isCollapsible",
+"defaultIsOpen",
+"diff",
+"fileName",
+"xstyle",
+"data-testid"
+]
+},
+"Collapsible":{
+"what":"A primitive that renders a trigger and content region where clicking the trigger toggles visibility of the content, used for expandable sections like FAQs or settings panels.",
+"synonyms":[
+"accordion item",
+"disclosure",
+"expand/collapse panel",
+"details/summary",
+"toggle section",
+"show more",
+"expandable panel",
+"drop-down content area",
+"accordion panel",
+"collapsible section",
+"spoiler",
+"Chakra Accordion item",
+"MUI Accordion",
+"Radix Collapsible"
+],
+"props":[
+"trigger",
+"children",
+"defaultIsOpen",
+"isOpen",
+"isDisabled",
+"onOpenChange",
+"chevronPosition",
+"value",
+"xstyle",
+"data-testid"
+]
+},
+"CollapsibleGroup":{
+"what":"A context provider that coordinates open/close state across multiple Collapsible items, enabling accordion-style single or multiple-open behavior, optionally rendering dividers between items.",
+"synonyms":[
+"accordion",
+"accordion group",
+"faq list",
+"exclusive accordion",
+"single/multiple open accordion",
+"Radix Accordion root",
+"MUI Accordion group",
+"Chakra Accordion",
+"Ant Collapse",
+"controlled accordion state manager",
+"collapsible list coordinator"
+],
+"props":[
+"type",
+"defaultValue",
+"value",
+"onChange",
+"hasDividers",
+"density",
+"chevronPosition",
+"children"
+]
+},
+"CommandPalette":{
+"what":"A modal dialog shell (Cmd+K style) that searches/filters a list of commands or items via a pluggable searchSource and lets the user select one, with built-in keyboard navigation.",
+"synonyms":[
+"command palette",
+"cmd+k menu",
+"spotlight search",
+"quick open",
+"action search dialog",
+"omnibox",
+"search modal",
+"Ant command palette",
+"Chakra command menu",
+"Radix cmdk",
+"global search bar",
+"keyboard launcher",
+"fuzzy finder dialog"
+],
+"props":[
+"isOpen",
+"onOpenChange",
+"searchSource",
+"isInline",
+"input",
+"footer",
+"renderItem",
+"emptySearchText",
+"emptyBootstrapText",
+"value",
+"onValueChange",
+"label",
+"width",
+"maxHeight"
+]
+},
+"CommandPaletteEmpty":{
+"what":"The empty-state message shown inside CommandPalette's list area when there are no bootstrap items or no search results.",
+"synonyms":[
+"no results message",
+"empty search state",
+"no matches found",
+"empty list placeholder",
+"zero state",
+"no data found"
+],
+"props":[
+"children"
+]
+},
+"CommandPaletteFooter":{
+"what":"The footer row of a CommandPalette showing keyboard hint badges (arrows/enter/escape) or custom footer content.",
+"synonyms":[
+"keyboard shortcut hints",
+"footer hint bar",
+"kbd hints footer",
+"navigation legend",
+"command palette status bar"
+],
+"props":[
+"children"
+]
+},
+"CommandPaletteGroup":{
+"what":"A visual grouping container with a heading label used to organize related items inside a CommandPaletteList.",
+"synonyms":[
+"command palette section",
+"menu group heading",
+"grouped list section",
+"category label",
+"list group",
+"section header",
+"dropdown group",
+"Ant Menu.ItemGroup",
+"Chakra MenuGroup",
+"Radix CommandGroup",
+"listbox group"
+],
+"props":[
+"heading",
+"children",
+"ref",
+"xstyle",
+"className",
+"style"
+]
+},
+"CommandPaletteInput":{
+"what":"The search/query input field for a command palette, with a search icon, loading spinner, and keyboard navigation wiring; use as the first child inside CommandPalette.",
+"synonyms":[
+"search box",
+"command bar input",
+"search input with spinner",
+"combobox input",
+"quick search field",
+"spotlight search input",
+"Ant AutoComplete input",
+"Chakra InputGroup search",
+"Radix Command.Input",
+"filter input",
+"omnibox"
+],
+"props":[
+"value",
+"onValueChange",
+"placeholder",
+"label",
+"hasAutoFocus",
+"endContent",
+"onChange",
+"onKeyDown",
+"ref",
+"xstyle",
+"className",
+"aria-label"
+]
+},
+"CommandPaletteItem":{
+"what":"A single selectable, clickable option row inside a command palette list, supporting highlighted/selected/disabled states.",
+"synonyms":[
+"command option",
+"list option",
+"menu item",
+"palette result row",
+"selectable row",
+"option row",
+"Ant Menu.Item",
+"Radix Command.Item",
+"Chakra MenuItem",
+"listbox option",
+"search result item"
+],
+"props":[
+"value",
+"onSelect",
+"isHighlighted",
+"isSelected",
+"isDisabled",
+"children",
+"ref",
+"xstyle",
+"className",
+"id"
+]
+},
+"CommandPaletteList":{
+"what":"Scrollable results container (listbox) for a command palette, rendering item/group children with correct ARIA roles.",
+"synonyms":[
+"command palette results",
+"listbox container",
+"search results list",
+"cmdk list",
+"palette scroll area",
+"autocomplete list",
+"quick switcher list",
+"ant Select dropdown list",
+"MUI Autocomplete listbox",
+"spotlight results container"
+],
+"props":[
+"children",
+"label",
+"ref",
+"xstyle",
+"className",
+"style"
+]
+},
+"ComplexSelector":{
+"what":"A popover-based trigger/dropdown shell for building custom rich select controls (input, secondary, or ghost trigger styles) with fully custom popup content and an imperative open/close handle.",
+"synonyms":[
+"custom dropdown",
+"popover select",
+"combobox shell",
+"rich select",
+"dropdown field wrapper",
+"filter dropdown",
+"advanced selector",
+"MUI Popover select",
+"Radix Popover trigger",
+"Chakra Menu custom content",
+"field with custom panel"
+],
+"props":[
+"label",
+"value",
+"onChange",
+"changeAction",
+"children",
+"triggerLabel",
+"placeholder",
+"isLabelHidden",
+"description",
+"isOptional",
+"isRequired",
+"handleRef"
+]
+},
+"ContextMenu":{
+"what":"A right-click (or long-press) context menu positioned at the cursor, with data-driven items or compound menuContent and adaptive bottom-sheet presentation on touch.",
+"synonyms":[
+"right-click menu",
+"cursor menu",
+"secondary click menu",
+"long-press menu",
+"native context menu replacement",
+"Radix ContextMenu",
+"MUI Menu on right click",
+"Ant Dropdown trigger='contextMenu'",
+"popup menu",
+"rmb menu"
+],
+"props":[
+"items",
+"menuContent",
+"triggerAs",
+"triggerXstyle",
+"menuWidth",
+"size",
+"label",
+"isDisabled",
+"onOpenChange",
+"presentation",
+"children"
+]
+},
+"DateInput":{
+"what":"A labeled text input with a calendar popover (or native date picker on touch) for selecting a single date, used inside forms.",
+"synonyms":[
+"date picker",
+"date field",
+"calendar input",
+"MUI DatePicker",
+"Ant DatePicker",
+"Chakra date field",
+"pick a date",
+"birthday input",
+"form date selector",
+"native date input wrapper"
+],
+"props":[
+"label",
+"value",
+"onChange",
+"min",
+"max",
+"dateConstraints",
+"status",
+"size",
+"format",
+"hasClear",
+"numberOfMonths",
+"weekStartsOn",
+"isDisabled"
+]
+},
+"DateRangeInput":{
+"what":"A form control that opens a calendar popover for picking a start and end date together, with optional quick-select presets.",
+"synonyms":[
+"date range picker",
+"daterangepicker",
+"range calendar input",
+"from-to date field",
+"booking date range",
+"start end date selector",
+"calendar range field",
+"MUI DateRangePicker",
+"Ant RangePicker",
+"week range picker"
+],
+"props":[
+"value",
+"onChange",
+"label",
+"min",
+"max",
+"dateConstraints",
+"maxRangeSpan",
+"minRangeSpan",
+"presets",
+"hasClear",
+"placeholder",
+"size",
+"isDisabled",
+"status"
+]
+},
+"DateTimeInput":{
+"what":"A combined date and time entry field with native or custom segmented inputs and an optional calendar/time popover, for selecting a precise date-time value.",
+"synonyms":[
+"datetime picker",
+"date and time field",
+"timestamp input",
+"schedule picker",
+"appointment time input",
+"MUI DateTimePicker",
+"Ant DatePicker showTime",
+"calendar with time",
+"native datetime-local"
+],
+"props":[
+"value",
+"onChange",
+"label",
+"min",
+"max",
+"hasSeconds",
+"hourFormat",
+"presentation",
+"timeIncrement",
+"dateConstraints",
+"isDisabled",
+"size",
+"status"
+]
+},
+"Dialog":{
+"what":"A modal (or inline) dialog surface built on the native <dialog> element, used to show overlay content like forms, confirmations, or detail views that interrupt the current flow.",
+"synonyms":[
+"modal",
+"popup",
+"overlay",
+"lightbox",
+"MUI Dialog",
+"Chakra Modal",
+"Radix Dialog",
+"Ant Modal",
+"Bootstrap modal",
+"fullscreen modal",
+"confirmation modal",
+"sheet"
+],
+"props":[
+"isOpen",
+"onOpenChange",
+"variant",
+"purpose",
+"width",
+"maxHeight",
+"position",
+"padding",
+"triggerRef",
+"aria-label",
+"aria-labelledby",
+"children"
+]
+},
+"DialogHeader":{
+"what":"The header section for a Dialog, rendering an accessible auto-focused title, optional subtitle, and a close button, used inside Dialog/Layout composition.",
+"synonyms":[
+"modal header",
+"dialog title bar",
+"MUI DialogTitle",
+"Chakra ModalHeader",
+"Ant Modal title",
+"close button header",
+"panel header with close"
+],
+"props":[
+"title",
+"subtitle",
+"onOpenChange",
+"startContent",
+"endContent",
+"endContentEdgeCompensation",
+"hasDivider"
+]
+},
+"Divider":{
+"what":"A thin separator line (horizontal or vertical) used to visually divide sections of content, optionally with a centered label.",
+"synonyms":[
+"hr",
+"separator",
+"horizontal rule",
+"MUI Divider",
+"Chakra Divider",
+"Ant Divider",
+"Radix Separator",
+"Bootstrap hr",
+"section break",
+"line separator",
+"or divider"
+],
+"props":[
+"orientation",
+"label",
+"variant",
+"isFullBleed",
+"xstyle",
+"className"
+]
+},
+"Drawer":{
+"what":"A side-anchored overlay panel (inline start/end) built on native <dialog>, used for inspectors and detail views that float above page content without reflowing it, optionally with a scrim.",
+"synonyms":[
+"side panel",
+"slide-out panel",
+"off-canvas menu",
+"inspector panel",
+"detail panel",
+"side sheet",
+"MUI Drawer",
+"Chakra Drawer",
+"Ant Drawer",
+"Radix Dialog side",
+"sliding panel",
+"right panel",
+"overlay sidebar"
+],
+"props":[
+"isOpen",
+"onOpenChange",
+"label",
+"placement",
+"width",
+"hasScrim",
+"purpose",
+"padding",
+"experimental",
+"ref",
+"children"
+]
+},
+"DrawerHeader":{
+"what":"A header component for Drawer providing a title, optional subtitle, start/end content slots, and an optional close button, mirroring DialogHeader's API.",
+"synonyms":[
+"drawer title bar",
+"panel header",
+"side panel title",
+"modal header for drawer",
+"close button header",
+"DialogHeader equivalent"
+],
+"props":[
+"title",
+"subtitle",
+"onOpenChange",
+"startContent",
+"endContent",
+"endContentEdgeCompensation",
+"hasDivider",
+"ref"
+]
+},
+"DropdownMenu":{
+"what":"A trigger-activated menu component (button or custom trigger) showing a list of actions/options as a popover on desktop or a bottom sheet on mobile, supporting both data-driven items and composed JSX children, including submenus.",
+"synonyms":[
+"dropdown",
+"context menu",
+"action menu",
+"popover menu",
+"select menu",
+"menu button",
+"MUI Menu",
+"Chakra Menu",
+"Ant Dropdown",
+"Radix DropdownMenu",
+"kebab menu",
+"overflow menu",
+"nav menu",
+"combo menu"
+],
+"props":[
+"items",
+"children",
+"renderTrigger",
+"button",
+"isOpen",
+"onOpenChange",
+"placement",
+"align",
+"width",
+"header",
+"footer",
+"maxHeight"
+]
+},
+"DropdownMenuCheckboxItem":{
+"what":"A checkable row inside a DropdownMenu (role=menuitemcheckbox) used to toggle an independent boolean option without closing the menu by default.",
+"synonyms":[
+"menu checkbox item",
+"toggle menu item",
+"checkable dropdown row",
+"menuitemcheckbox",
+"select multiple menu option",
+"Ant Dropdown checkbox item",
+"Radix DropdownMenuCheckboxItem",
+"Chakra MenuItemOption checkbox",
+"boolean menu toggle",
+"multi-select dropdown row"
+],
+"props":[
+"label",
+"description",
+"icon",
+"value",
+"onChange",
+"isDisabled",
+"hasCloseOnSelect",
+"endContent",
+"ref",
+"xstyle",
+"className",
+"style"
+]
+},
+"DropdownMenuDivider":{
+"what":"A horizontal separator line used inside a DropdownMenu to visually split groups of menu items.",
+"synonyms":[
+"menu separator",
+"dropdown divider",
+"horizontal rule in menu",
+"menu section break",
+"Ant Dropdown Divider",
+"MUI MenuList Divider",
+"Radix DropdownMenuSeparator",
+"Chakra MenuDivider",
+"role=separator menu line"
+],
+"props":[
+"ref",
+"xstyle",
+"className",
+"style"
+]
+},
+"DropdownMenuGroup":{
+"what":"A titled, accessible grouping (role=group) of related rows inside a DropdownMenu, equivalent to the data API's section with a title.",
+"synonyms":[
+"menu section",
+"dropdown group with heading",
+"labeled menu group",
+"Ant Menu.ItemGroup",
+"MUI ListSubheader group",
+"Radix DropdownMenuGroup/Label",
+"Chakra MenuGroup",
+"categorized dropdown items",
+"sectioned menu"
+],
+"props":[
+"title",
+"children",
+"ref",
+"xstyle",
+"className",
+"style"
+]
+},
+"DropdownMenuItem":{
+"what":"An interactive, clickable row (role=\"menuitem\") used inside a DropdownMenu to trigger an action or navigate to a link.",
+"synonyms":[
+"menu item",
+"dropdown option",
+"action item",
+"menu row",
+"context menu item",
+"MUI MenuItem",
+"Chakra MenuItem",
+"Ant Dropdown item",
+"Radix DropdownMenu.Item",
+"clickable menu entry",
+"link menu item",
+"destructive menu action",
+"delete option",
+"menu button row"
+],
+"props":[
+"icon",
+"label",
+"description",
+"onClick",
+"href",
+"target",
+"rel",
+"isDisabled",
+"endContent",
+"hasCloseOnSelect",
+"variant",
+"ref"
+]
+},
+"DropdownMenuRadioGroup":{
+"what":"A container that groups DropdownMenuRadioItems into a single-select set (role=\"group\"), owning the selected value and onChange state.",
+"synonyms":[
+"radio group",
+"single-select menu group",
+"menu radio group",
+"exclusive selection group",
+"MUI RadioGroup in menu",
+"Radix DropdownMenu.RadioGroup",
+"sort-by group",
+"mutually exclusive options",
+"menu option set"
+],
+"props":[
+"value",
+"onChange",
+"label",
+"hasCloseOnSelect",
+"children"
+]
+},
+"DropdownMenuRadioItem":{
+"what":"A single selectable option (role=\"menuitemradio\") within a DropdownMenuRadioGroup, showing a radio indicator and checked state.",
+"synonyms":[
+"radio menu item",
+"menuitemradio",
+"single-select option",
+"sort option",
+"exclusive menu choice",
+"Radix DropdownMenu.RadioItem",
+"MUI radio menu item",
+"selectable row with radio button"
+],
+"props":[
+"value",
+"label",
+"description",
+"icon",
+"isDisabled",
+"endContent",
+"ref"
+]
+},
+"DropdownMenuSubMenu":{
+"what":"A dropdown/context-menu row that reveals a nested flyout (or drill-in view on touch) of its own menu items, for building multi-level navigation menus.",
+"synonyms":[
+"submenu",
+"nested menu",
+"flyout menu",
+"menu with submenu",
+"cascading menu",
+"Radix SubMenu",
+"MUI nested MenuItem",
+"Ant SubMenu",
+"context menu submenu",
+"hover submenu",
+"drill-in menu",
+"menu item with children"
+],
+"props":[
+"label",
+"icon",
+"description",
+"isDisabled",
+"hasSpinner",
+"menuWidth",
+"onOpenChange",
+"presentation",
+"data-testid",
+"menuDataTestId",
+"ref",
+"children"
+]
+},
+"EmptyState":{
+"what":"A placeholder UI shown when a content area (list, table, page) has no data, with an icon, title, description, and optional action buttons.",
+"synonyms":[
+"empty state",
+"no data placeholder",
+"zero state",
+"blank slate",
+"no results",
+"nothing to show",
+"MUI empty list",
+"Ant Empty",
+"Chakra EmptyState",
+"placeholder card",
+"no items found"
+],
+"props":[
+"title",
+"description",
+"icon",
+"actions",
+"headingLevel",
+"isCompact",
+"xstyle",
+"ref"
+]
+},
+"Field":{
+"what":"A form field wrapper that pairs an accessible label, optional description, and status/error message around any input or control.",
+"synonyms":[
+"form field",
+"form control wrapper",
+"labeled input",
+"FormControl",
+"MUI FormControl",
+"Chakra FormControl",
+"Ant Form.Item",
+"input with label and error",
+"field group",
+"label + input + validation message"
+],
+"props":[
+"label",
+"inputID",
+"description",
+"isLabelHidden",
+"isOptional",
+"isRequired",
+"isDisabled",
+"labelIcon",
+"status",
+"statusVariant",
+"labelTooltip",
+"width"
+]
+},
+"FieldLabel":{
+"what":"Renders the label and optional description block for a form field, handling required/optional indicators, icons, tooltips, disabled state, and sr-only hiding; used internally by Field, CheckboxInput, and Switch rather than directly by app code.",
+"synonyms":[
+"form label",
+"input label",
+"label with description",
+"field label group",
+"required indicator",
+"optional indicator",
+"label tooltip",
+"group label",
+"aria label for checkbox",
+"FormControl label",
+"Chakra FormLabel",
+"MUI InputLabel",
+"hidden accessible label",
+"label icon"
+],
+"props":[
+"label",
+"inputID",
+"labelID",
+"isGroupLabel",
+"isLabelHidden",
+"isDisabled",
+"isOptional",
+"isRequired",
+"labelIcon",
+"labelTooltip",
+"description",
+"descriptionID"
+]
+},
+"FieldStatus":{
+"what":"Displays a validation/status message (warning, error, success) below or attached to a form control, with icon and screen-reader announcement, used by Field, Switch, and CheckboxInput to show inline feedback.",
+"synonyms":[
+"form error message",
+"validation message",
+"helper text error",
+"field error text",
+"input status",
+"success/warning/error message",
+"FormHelperText",
+"Chakra FormErrorMessage",
+"MUI FormHelperText",
+"inline validation feedback",
+"status announcement",
+"attached vs detached status"
+],
+"props":[
+"type",
+"message",
+"variant",
+"id",
+"xstyle",
+"className"
+]
+},
+"FileInput":{
+"what":"A form control for selecting one or more files via a native file picker or drag-and-drop dropzone, with validation (type/size/count), loading state, and status messaging.",
+"synonyms":[
+"file upload",
+"upload input",
+"dropzone",
+"drag and drop upload",
+"attachment input",
+"file picker",
+"upload button",
+"multi-file upload",
+"image upload",
+"FileUploader",
+"Dropzone component",
+"choose file"
+],
+"props":[
+"value",
+"onChange",
+"changeAction",
+"accept",
+"isMultiple",
+"maxSize",
+"maxFiles",
+"isDisabled",
+"disabledMessage",
+"isLoading",
+"status",
+"mode"
+]
+},
+"FormLayout":{
+"what":"A container that arranges form fields with consistent spacing and direction (vertical, horizontal, or horizontal with labels), providing layout context to child fields.",
+"synonyms":[
+"form group",
+"form container",
+"field layout",
+"form grid",
+"label layout",
+"form stack",
+"horizontal form",
+"form wrapper",
+"field arrangement",
+"form fields container"
+],
+"props":[
+"children",
+"direction",
+"defaultOptionality",
+"xstyle",
+"className",
+"style",
+"ref"
+]
+},
+"Grid":{
+"what":"A CSS Grid-based layout container for arranging children into fixed or responsive columns with configurable gaps, alignment, and sizing.",
+"synonyms":[
+"grid layout",
+"css grid",
+"responsive grid",
+"column layout",
+"flex grid alternative",
+"masonry layout",
+"auto-fit grid",
+"auto-fill grid",
+"layout container",
+"grid container",
+"MUI Grid",
+"Chakra SimpleGrid",
+"Bootstrap row/col",
+"card grid",
+"gallery grid"
+],
+"props":[
+"columns",
+"width",
+"height",
+"maxWidth",
+"minHeight",
+"gap",
+"rowGap",
+"columnGap",
+"rowHeight",
+"align",
+"justify",
+"children"
+]
+},
+"GridSpan":{
+"what":"A grid item wrapper used as a direct child of Grid to make that item span multiple columns and/or rows.",
+"synonyms":[
+"grid item span",
+"col-span",
+"row-span",
+"spanning cell",
+"grid-column span",
+"grid-row span",
+"masonry item",
+"wide grid item",
+"full-width cell",
+"GridItem",
+"MUI Grid item",
+"colSpan rowSpan"
+],
+"props":[
+"columns",
+"rows",
+"children"
+]
+},
+"HStack":{
+"what":"A layout component that arranges its children in a horizontal row, as a convenience wrapper around Stack with direction set to horizontal; use it when you need flexbox-row style layout with consistent spacing and alignment.",
+"synonyms":[
+"horizontal stack",
+"row layout",
+"flex row",
+"HBox",
+"Flex direction row",
+"Row component",
+"inline layout",
+"horizontal flexbox",
+"side by side layout",
+"Chakra HStack",
+"MUI Stack direction row",
+"justify-content align-items row",
+"toolbar row layout",
+"horizontal list layout"
+],
+"props":[
+"gap",
+"hAlign",
+"vAlign",
+"justify",
+"align",
+"wrap",
+"children",
+"ref"
+]
+},
+"Heading":{
+"what":"A semantic heading element (h1–h6) with themed typography styling, used for page/section titles and display-scale headlines, supporting truncation with tooltip.",
+"synonyms":[
+"title",
+"h1-h6",
+"section title",
+"page title",
+"headline",
+"display text",
+"hero title",
+"typography heading",
+"Heading component Chakra/Ant",
+"text heading",
+"title component"
+],
+"props":[
+"level",
+"type",
+"weight",
+"accessibilityLevel",
+"color",
+"display",
+"maxLines",
+"hasTruncateTooltip",
+"wordBreak",
+"textWrap",
+"justify",
+"hasCapsize"
+]
+},
+"HoverCard":{
+"what":"A layer component that wraps a trigger element and shows floating content on hover, focus, or touch, like a tooltip with richer interactive content.",
+"synonyms":[
+"tooltip",
+"popover",
+"hover popover",
+"hover tooltip",
+"preview card",
+"MUI Popper",
+"Radix HoverCard",
+"Chakra Tooltip",
+"Ant Popover",
+"rich tooltip",
+"user card preview",
+"flyout on hover"
+],
+"props":[
+"children",
+"content",
+"placement",
+"alignment",
+"delay",
+"hideDelay",
+"focusTrigger",
+"touchTrigger",
+"isEnabled",
+"label",
+"onOpenChange",
+"isOpen"
+]
+},
+"Icon":{
+"what":"Renders a themed icon either from a semantic registry name or a passed-in SVG component, with consistent sizing, color, and accessibility handling.",
+"synonyms":[
+"svg icon",
+"icon component",
+"glyph",
+"symbol",
+"iconography",
+"MUI Icon",
+"Chakra Icon",
+"Ant Icon",
+"Radix Icon",
+"pictogram",
+"icon renderer"
+],
+"props":[
+"icon",
+"color",
+"size",
+"label",
+"xstyle",
+"className",
+"style"
+]
+},
+"IconButton":{
+"what":"A thin wrapper over Button for rendering an icon-only, square button with a required accessible label, used for compact actions like toolbar icons or close/settings buttons.",
+"synonyms":[
+"icon button",
+"icon-only button",
+"square button",
+"action icon",
+"glyph button",
+"toolbar button",
+"button with icon no text",
+"mini button",
+"circle button",
+"symbol button",
+"MUI IconButton",
+"Chakra IconButton",
+"Ant Button icon only",
+"Radix IconButton"
+],
+"props":[
+"icon",
+"label",
+"variant",
+"size",
+"isDisabled",
+"isLoading",
+"tooltip",
+"onClick",
+"clickAction",
+"elevation"
+]
+},
+"InputGroup":{
+"what":"Wraps an input with prefix/suffix addons (icons, text, buttons) into a visually connected control with a shared border, label, and status, used when you need something like a currency-prefixed text input or search box with a button.",
+"synonyms":[
+"input addon",
+"prefix suffix input",
+"input with icon",
+"combined input button",
+"Bootstrap InputGroup",
+"Chakra InputGroup",
+"Ant Input.Group",
+"currency input",
+"search input with button",
+"joined input controls",
+"input adornment",
+"compound input field"
+],
+"props":[
+"label",
+"children",
+"isLabelHidden",
+"description",
+"isDisabled",
+"isOptional",
+"isRequired",
+"size",
+"status",
+"labelTooltip",
+"data-testid"
+]
+},
+"InputGroupText":{
+"what":"A non-interactive text/icon addon rendered inside an InputGroup to label or annotate an adjacent input, like a prefix ('https://') or suffix ('.com').",
+"synonyms":[
+"input addon",
+"input prefix",
+"input suffix",
+"input group addon",
+"text addon",
+"input decorator",
+"prepend",
+"append",
+"input annotation",
+"static input label",
+"InputAddon",
+"InputLeftAddon",
+"InputRightAddon"
+],
+"props":[
+"children",
+"xstyle",
+"className",
+"style",
+"ref"
+]
+},
+"InternationalizationProvider":{
+"what":"A context provider that supplies a locale, message catalogs, and text-direction to all Astryx components in its subtree so they render localized strings.",
+"synonyms":[
+"i18n provider",
+"locale provider",
+"IntlProvider",
+"localization context",
+"translation provider",
+"language provider",
+"React Intl provider",
+"next-intl provider",
+"message catalog provider",
+"RTL/LTR locale setup",
+"set app language",
+"translate strings"
+],
+"props":[
+"locale",
+"messages",
+"overrides",
+"dir",
+"children"
+]
+},
+"Item":{
+"what":"A core list-row layout primitive for building rows/list items with label, description, start/end content slots, selection, links, and optional swipe actions.",
+"synonyms":[
+"list item",
+"list row",
+"menu item row",
+"row component",
+"ListItem",
+"MUI ListItem",
+"Ant List.Item",
+"Chakra ListItem",
+"table row",
+"option row",
+"cell row",
+"swipeable row"
+],
+"props":[
+"label",
+"description",
+"startContent",
+"endContent",
+"marker",
+"align",
+"density",
+"layout",
+"onClick",
+"href",
+"isSelected",
+"swipeActions"
+]
+},
+"Kbd":{
+"what":"Renders a styled keyboard shortcut indicator (like <kbd> elements) for displaying key combinations in UI such as tooltips, menus, or docs.",
+"synonyms":[
+"keyboard shortcut",
+"hotkey display",
+"key combo",
+"shortcut badge",
+"kbd tag",
+"command key",
+"accelerator key",
+"shortcut hint",
+"key chip",
+"shortcut label"
+],
+"props":[
+"keys",
+"xstyle",
+"className",
+"style",
+"ref"
+]
+},
+"Layout":{
+"what":"A five-slot (header, start, content, end, footer) layout primitive for arranging regions within a page or bounded container, with built-in padding collapse, scroll containment, and RTL support.",
+"synonyms":[
+"page layout",
+"app layout grid",
+"sidebar layout",
+"holy grail layout",
+"shell layout",
+"panel layout",
+"split pane layout",
+"header sidebar footer layout",
+"dashboard layout",
+"MUI Box/Grid layout",
+"Chakra Flex layout wrapper",
+"page frame",
+"layout shell",
+"two-pane layout",
+"layout region manager"
+],
+"props":[
+"header",
+"start",
+"content",
+"end",
+"footer",
+"children",
+"contentWidth",
+"height",
+"padding",
+"defaultHasDividers",
+"ref",
+"xstyle"
+]
+},
+"LayoutContent":{
+"what":"The scrollable main content slot for Layout, providing automatic scroll containment and context-aware padding for the primary body area.",
+"synonyms":[
+"main content area",
+"scrollable body",
+"content pane",
+"main panel",
+"body region",
+"layout body",
+"scroll container",
+"content viewport",
+"main landmark wrapper",
+"content slot"
+],
+"props":[
+"children",
+"padding",
+"isScrollable",
+"label",
+"role",
+"ref",
+"xstyle"
+]
+},
+"LayoutFooter":{
+"what":"The bottom bar/footer slot for Layout, used for action bars, pagination, or status bars with optional divider and padding control.",
+"synonyms":[
+"footer bar",
+"bottom bar",
+"action bar",
+"pagination bar",
+"status bar",
+"page footer",
+"toolbar footer",
+"sticky footer",
+"bottom toolbar",
+"dialog footer-like bar"
+],
+"props":[
+"children",
+"hasDivider",
+"height",
+"padding",
+"label",
+"role",
+"ref",
+"xstyle"
+]
+},
+"LayoutHeader":{
+"what":"A fixed-height header slot component for Layout, used for page titles, app bars, or toolbars at the top of a layout region.",
+"synonyms":[
+"app bar",
+"toolbar",
+"page header",
+"top bar",
+"navbar area",
+"layout top slot",
+"header region",
+"title bar",
+"banner section",
+"AppBar",
+"PageHeader",
+"header slot"
+],
+"props":[
+"children",
+"hasDivider",
+"height",
+"padding",
+"paddingBlockEnd",
+"label",
+"role",
+"xstyle",
+"className",
+"style",
+"ref"
+]
+},
+"LayoutPanel":{
+"what":"A fixed-width sidebar panel component for the start/end slots of Layout, used for navigation panels, settings sidebars, or detail/inspector panels.",
+"synonyms":[
+"sidebar",
+"side panel",
+"navigation drawer",
+"aside",
+"detail panel",
+"inspector panel",
+"left nav",
+"right rail",
+"Drawer",
+"SidePanel",
+"resizable sidebar",
+"complementary panel"
+],
+"props":[
+"children",
+"hasDivider",
+"padding",
+"isScrollable",
+"label",
+"role",
+"width",
+"resizable",
+"xstyle",
+"className",
+"style",
+"ref"
+]
+},
+"Lightbox":{
+"what":"A fullscreen modal overlay (built on native <dialog>) for viewing images or videos at full size, supporting single or gallery mode with navigation, zoom, and pan.",
+"synonyms":[
+"image viewer",
+"photo gallery modal",
+"image modal",
+"fullscreen preview",
+"media viewer",
+"image zoom popup",
+"carousel lightbox",
+"picture viewer",
+"video modal",
+"image overlay"
+],
+"props":[
+"isOpen",
+"onOpenChange",
+"media",
+"index",
+"defaultIndex",
+"onIndexChange",
+"hasZoom",
+"hasAutoPlay"
+]
+},
+"Link":{
+"what":"An inline or standalone navigation anchor styled with the design system's typography, supporting external-link indicators, disabled states, and custom routing components; use for text-based navigation links.",
+"synonyms":[
+"anchor",
+"a tag",
+"hyperlink",
+"nav link",
+"text link",
+"MUI Link",
+"Chakra Link",
+"Ant Typography.Link",
+"Radix Link",
+"router link",
+"external link icon",
+"inline link"
+],
+"props":[
+"href",
+"as",
+"label",
+"hasUnderline",
+"isDisabled",
+"isExternalLink",
+"newTabLabel",
+"target",
+"rel",
+"download",
+"color",
+"type",
+"tooltip",
+"isStandalone",
+"onClick"
+]
+},
+"LinkProvider":{
+"what":"A context provider that sets the default link component (e.g. Next.js Link, React Router Link) used by all Astryx components rendering links in its subtree.",
+"synonyms":[
+"router link provider",
+"custom link injection",
+"Next.js Link integration",
+"React Router Link integration",
+"polymorphic link component",
+"anchor override provider",
+"framework link adapter",
+"as prop for links globally"
+],
+"props":[
+"component",
+"children"
+]
+},
+"List":{
+"what":"A vertical container for rendering a collection of ListItem rows with configurable density, dividers, marker styles, and edge/padding treatment; use to group related items like settings rows or menu entries.",
+"synonyms":[
+"ul",
+"ol",
+"item list",
+"menu list",
+"MUI List",
+"Chakra List",
+"Ant List",
+"Radix List",
+"settings list",
+"bullet list",
+"numbered list",
+"vertical list container"
+],
+"props":[
+"children",
+"density",
+"hasDividers",
+"edge",
+"header",
+"listStyle",
+"start",
+"edgeCompensation"
+]
+},
+"ListItem":{
+"what":"A single row within a List, supporting label, description, start/end content, markers/checkboxes, click or link behavior, selection and disabled states; use as the child rows of a List.",
+"synonyms":[
+"list row",
+"menu item",
+"list entry",
+"MUI ListItem",
+"Chakra ListItem",
+"Ant List.Item",
+"settings row",
+"clickable row",
+"list cell",
+"task item row"
+],
+"props":[
+"label",
+"description",
+"startContent",
+"endContent",
+"onClick",
+"href",
+"target",
+"isDisabled",
+"isSelected",
+"interactiveRef",
+"swipeActions",
+"align"
+]
+},
+"Markdown":{
+"what":"Renders a markdown string as formatted rich content (headings, lists, tables, code blocks, links, citations) with optional streaming and plugin support; use for chat messages, docs, or any user-facing markdown text.",
+"synonyms":[
+"markdown renderer",
+"MDX viewer",
+"rich text renderer",
+"chat message content",
+"markdown to react",
+"streaming text renderer",
+"markdown parser component",
+"prose renderer",
+"markdown preview"
+],
+"props":[
+"children",
+"display",
+"density",
+"headingLevelStart",
+"isStreaming",
+"onLinkClick",
+"sources",
+"citationStyle",
+"contentWidth",
+"contentAlign",
+"components",
+"plugins"
+]
+},
+"MediaTheme":{
+"what":"A layout-neutral wrapper component that inverts semantic color tokens for children rendered on a surface of different luminance (e.g. dark background), used inside things like Toast or Overlay.",
+"synonyms":[
+"dark surface wrapper",
+"inverted theme context",
+"color scheme inversion",
+"on-dark/on-light content wrapper",
+"contrast surface adapter",
+"auto-detect dark background",
+"scrim text color fix",
+"theme invert",
+"contents wrapper for tokens"
+],
+"props":[
+"mode",
+"fallback",
+"children"
+]
+},
+"MetadataList":{
+"what":"A read-only labeled key-value list (definition list) for displaying metadata fields, with configurable columns, orientation, and show-more collapsing; use for detail pages, sidebars, or property panels.",
+"synonyms":[
+"description list",
+"key-value list",
+"property list",
+"details panel",
+"attribute list",
+"dl list",
+"field list",
+"summary list",
+"Ant Descriptions",
+"Chakra Stat group",
+"info grid"
+],
+"props":[
+"children",
+"columns",
+"label",
+"maxNumOfItems",
+"orientation",
+"title",
+"xstyle",
+"data-testid"
+]
+},
+"MetadataListItem":{
+"what":"A single label/value row or pair inside a MetadataList, rendered as dt/dd with optional icon; use to populate MetadataList with individual metadata entries.",
+"synonyms":[
+"description list item",
+"key-value pair",
+"field item",
+"dt dd pair",
+"metadata row",
+"property item",
+"attribute row"
+],
+"props":[
+"children",
+"icon",
+"label",
+"xstyle",
+"data-testid"
+]
+},
+"MobileNav":{
+"what":"A full-height slide-out drawer overlay for mobile navigation, rendered via native <dialog>, used as the mobile counterpart to SideNav when a responsive app shell needs a collapsible nav drawer.",
+"synonyms":[
+"mobile drawer",
+"hamburger menu",
+"slide-out nav",
+"off-canvas menu",
+"navigation drawer",
+"MUI Drawer",
+"Chakra Drawer",
+"Ant Drawer",
+"Radix Dialog nav",
+"responsive sidebar",
+"mobile menu panel"
+],
+"props":[
+"isOpen",
+"onClose",
+"children",
+"title",
+"side",
+"width",
+"triggerRef"
+]
+},
+"MoreMenu":{
+"what":"An overflow 'more options' button (three-dot icon trigger) that opens a dropdown menu of actions, used for secondary actions in toolbars, cards, lists, or nav items.",
+"synonyms":[
+"overflow menu",
+"kebab menu",
+"three dot menu",
+"context menu button",
+"more options",
+"action menu",
+"ellipsis menu",
+"MUI IconButton with Menu",
+"Chakra Menu",
+"Ant Dropdown",
+"Radix DropdownMenu trigger",
+"card actions menu",
+"row actions"
+],
+"props":[
+"items",
+"label",
+"variant",
+"size",
+"icon",
+"isDisabled",
+"placement",
+"alignment",
+"presentation",
+"isMenuOpen",
+"onOpenChange",
+"data-testid"
+]
+},
+"MultiSelector":{
+"what":"A multi-select combobox/dropdown field that lets users pick multiple options via checkboxes, shown as badges/chips in the trigger, with search, select-all, sections, and creatable options.",
+"synonyms":[
+"multi select",
+"tag input",
+"chip select",
+"checkbox dropdown",
+"multiple select combobox",
+"Ant Select mode multiple",
+"MUI Autocomplete multiple",
+"Chakra MultiSelect",
+"filter picker",
+"tags selector",
+"multi-choice dropdown"
+],
+"props":[
+"value",
+"onChange",
+"options",
+"label",
+"placeholder",
+"isSearchable",
+"isDisabled",
+"isLoading",
+"status",
+"hasCreate",
+"presentation",
+"variant"
+]
+},
+"NavIcon":{
+"what":"A small circular, accent-colored icon container used as a logo/brand mark inside TopNav or PageNav headers.",
+"synonyms":[
+"logo badge",
+"app icon circle",
+"avatar icon wrapper",
+"brand icon",
+"circular icon container",
+"nav logo",
+"icon avatar",
+"MUI Avatar with icon"
+],
+"props":[
+"icon",
+"xstyle",
+"className",
+"style",
+"ref"
+]
+},
+"NumberInput":{
+"what":"A labeled numeric text field with optional increment/decrement steppers, units, validation status, and icons, used for quantity, currency, and other numeric form inputs.",
+"synonyms":[
+"number field",
+"stepper input",
+"quantity input",
+"numeric textbox",
+"spinner input",
+"MUI TextField type number",
+"Chakra NumberInput",
+"Ant InputNumber",
+"Radix Number Field",
+"currency input",
+"amount input",
+"counter input"
+],
+"props":[
+"label",
+"value",
+"onChange",
+"placeholder",
+"isDisabled",
+"isReadOnly",
+"isRequired",
+"isOptional",
+"status",
+"statusVariant",
+"size",
+"startIcon",
+"disabledMessage",
+"hasClear"
+]
+},
+"Outline":{
+"what":"A scroll-spy table-of-contents navigation component that renders a list of document headings with an animated active indicator and keyboard navigation, used for in-page nav on long documentation/article pages.",
+"synonyms":[
+"table of contents",
+"TOC",
+"page navigation",
+"anchor nav",
+"scrollspy",
+"heading navigation",
+"sticky sidebar nav",
+"doc outline",
+"section nav",
+"jump links",
+"MUI TableOfContents"
+],
+"props":[
+"items",
+"activeId",
+"onActiveIdChange",
+"label",
+"density",
+"onNavigateStart",
+"onNavigateEnd",
+"offset",
+"scrollContainerRef",
+"hasScrollOnClick"
+]
+},
+"OverflowList":{
+"what":"A horizontal (or bounded multi-row) list layout that automatically hides items which don't fit in the available width and shows a customizable overflow indicator, used for toolbars, tag lists, and filter chips that need to collapse gracefully.",
+"synonyms":[
+"overflow menu",
+"responsive toolbar",
+"collapsing list",
+"+N more",
+"truncated tag list",
+"chip overflow",
+"adaptive navigation",
+"MUI useMediaQuery overflow",
+"Ant OverflowList",
+"responsive button group",
+"collapse items that don't fit"
+],
+"props":[
+"children",
+"gap",
+"minVisibleItems",
+"maxVisibleItems",
+"maxRows",
+"collapseFrom",
+"behavior",
+"overflowRenderer",
+"onOverflowChange"
+]
+},
+"Overlay":{
+"what":"A component that wraps media or content with a scrim overlay and shows additional content on top, like a hover caption on an image or card.",
+"synonyms":[
+"image overlay",
+"hover caption",
+"media scrim",
+"card overlay",
+"hover reveal",
+"image hover effect",
+"dark gradient overlay",
+"quick view overlay",
+"MUI ImageListItemBar",
+"hover content on image",
+"scrim layer",
+"video overlay controls"
+],
+"props":[
+"children",
+"content",
+"showOn",
+"isOpen",
+"scrim",
+"position",
+"align",
+"xstyle",
+"className",
+"style",
+"ref"
+]
+},
+"Pagination":{
+"what":"A standalone navigation control for paging through lists or tables of content, supporting page numbers, compact text, dots, or count display, with optional page size selection.",
+"synonyms":[
+"page navigation",
+"page numbers",
+"pager",
+"table pagination",
+"page size selector",
+"prev next buttons",
+"MUI Pagination",
+"Ant Pagination",
+"page controls",
+"cursor pagination",
+"infinite scroll alternative",
+"rows per page"
+],
+"props":[
+"page",
+"onChange",
+"changeAction",
+"totalItems",
+"totalPages",
+"hasMore",
+"pageSize",
+"pageSizeOptions",
+"onPageSizeChange",
+"variant",
+"hasFirstLast",
+"step",
+"siblingCount",
+"size",
+"isDisabled",
+"label"
+]
+},
+"Popover":{
+"what":"A click-triggered, anchored floating panel for showing interactive content (forms, menus, settings) next to a trigger button, with focus trapping and light dismiss.",
+"synonyms":[
+"dropdown panel",
+"click popup",
+"anchored dialog",
+"MUI Popover",
+"Radix Popover",
+"Chakra Popover",
+"floating panel",
+"dropdown menu container",
+"settings flyout",
+"filter panel",
+"contextual overlay",
+"button dropdown"
+],
+"props":[
+"children",
+"anchorRef",
+"content",
+"placement",
+"alignment",
+"isOpen",
+"onOpenChange",
+"isEnabled",
+"width",
+"padding",
+"label",
+"role",
+"isModal",
+"hasCloseButton",
+"hasAutoFocus",
+"hasLightDismiss",
+"hasEscapeDismiss"
+]
+},
+"PowerSearch":{
+"what":"A token-based structured search/filter bar where users pick fields and operators from a config to build composable filter tokens, for advanced search and filtering UIs like data tables or consoles.",
+"synonyms":[
+"faceted search",
+"filter bar",
+"query builder",
+"advanced filter input",
+"token search",
+"structured search",
+"attribute filter",
+"search with filters",
+"Jira-style search",
+"GitHub issue filter bar",
+"filter chips input",
+"search tokenizer"
+],
+"props":[
+"config",
+"filters",
+"onChange",
+"label",
+"isLabelHidden",
+"placeholder",
+"hasAutoFocus",
+"hasClear",
+"isReadOnly",
+"isDisabled",
+"disabledMessage",
+"startIcon"
+]
+},
+"ProgressBar":{
+"what":"A horizontal bar showing determinate or indeterminate progress toward completion, used for loading states, task progress, or scorecards/dashboards.",
+"synonyms":[
+"loading bar",
+"progress indicator",
+"linear progress",
+"percentage bar",
+"task completion bar",
+"upload progress",
+"step progress",
+"MUI LinearProgress",
+"Ant Progress",
+"Bootstrap progress bar",
+"goal tracker bar",
+"scorecard meter"
+],
+"props":[
+"value",
+"max",
+"label",
+"isLabelHidden",
+"hasValueLabel",
+"formatValueLabel",
+"variant",
+"isIndeterminate",
+"marks",
+"isDisabled"
+]
+},
+"RadioList":{
+"what":"An accessible group of radio buttons for selecting a single value from a list of mutually exclusive options, used in forms like payment, checkout, or wizard steps.",
+"synonyms":[
+"radio group",
+"radio button group",
+"single select list",
+"option group",
+"RadioGroup",
+"MUI RadioGroup",
+"Ant Radio.Group",
+"Chakra RadioGroup",
+"choice list",
+"exclusive selection",
+"form radio buttons"
+],
+"props":[
+"label",
+"value",
+"onChange",
+"orientation",
+"isDisabled",
+"disabledMessage",
+"isRequired",
+"isOptional",
+"status",
+"size",
+"htmlName",
+"children"
+]
+},
+"RadioListItem":{
+"what":"A single selectable row within a RadioList, combining a radio input with label, description, and optional start/end content; use it for one option in a radio group list.",
+"synonyms":[
+"radio row",
+"radio option",
+"radio group item",
+"list radio",
+"settings radio row",
+"Ant Radio.Button",
+"Chakra Radio",
+"MUI FormControlLabel Radio",
+"selectable list row",
+"single-select list item",
+"radio card row",
+"preference option row"
+],
+"props":[
+"label",
+"value",
+"aria-label",
+"description",
+"isDisabled",
+"startContent",
+"endContent",
+"align",
+"xstyle",
+"className",
+"style",
+"onClick"
+]
+},
+"ScrollableArea":{
+"what":"A native scroll viewport wrapper that manages axis, accessibility, sizing, overscroll, and content padding for scrollable regions; use it when you need an accessible, configurable scroll container around content.",
+"synonyms":[
+"scroll container",
+"scroll view",
+"overflow box",
+"scroll region",
+"MUI Box with overflow",
+"Chakra Box overflow auto",
+"custom scrollbar area",
+"scrollable panel",
+"viewport",
+"scroll pane",
+"ScrollArea (Radix)",
+"virtualized list container alternative"
+],
+"props":[
+"children",
+"axis",
+"label",
+"role",
+"overscroll",
+"width",
+"height",
+"maxWidth",
+"minHeight",
+"stickyContainment",
+"padding",
+"isFullBleed"
+]
+},
+"Section":{
+"what":"A background/visual container component used to create distinct, padded regions within a page or card, with configurable variant, sizing, padding, and dividers.",
+"synonyms":[
+"content section",
+"panel",
+"surface container",
+"box",
+"card section",
+"region",
+"block container",
+"background block",
+"Box",
+"Paper",
+"Container",
+"muted panel",
+"surface block"
+],
+"props":[
+"variant",
+"width",
+"height",
+"maxWidth",
+"minHeight",
+"children",
+"dividers",
+"padding",
+"paddingInline",
+"paddingInlineStart",
+"paddingInlineEnd",
+"paddingBlock"
+]
+},
+"SegmentedControl":{
+"what":"A single-selection radio-group styled as a row of connected buttons (segments), used for switching between a small set of mutually exclusive views or options.",
+"synonyms":[
+"segmented button group",
+"tab-like toggle switch",
+"iOS segmented control",
+"button group selector",
+"Ant Radio.Group buttonStyle",
+"MUI ToggleButtonGroup",
+"Chakra ButtonGroup radio",
+"view switcher",
+"toggle group",
+"pill tabs",
+"single-select button row"
+],
+"props":[
+"value",
+"onChange",
+"label",
+"size",
+"layout",
+"isDisabled",
+"disabledMessage",
+"children"
+]
+},
+"SegmentedControlItem":{
+"what":"A single radio-style segment button used inside a SegmentedControl to let users choose one of a small visible set.",
+"synonyms":[
+"segment",
+"tab item",
+"toggle button",
+"radio button group item",
+"segmented button",
+"view switcher option",
+"pill toggle",
+"button group item",
+"Chakra SegmentedControl item",
+"Ant Segmented option",
+"MUI ToggleButton",
+"Radix ToggleGroup item"
+],
+"props":[
+"value",
+"label",
+"isLabelHidden",
+"icon",
+"isDisabled",
+"ref",
+"onClick",
+"xstyle"
+]
+},
+"SelectableCard":{
+"what":"A Card-based interactive card with a hidden checkbox for toggling selection state (single/multi-select), showing an inset accent ring when selected.",
+"synonyms":[
+"selectable tile",
+"toggle card",
+"checkbox card",
+"selection card",
+"choice card",
+"option card",
+"card checkbox",
+"selectable panel",
+"multi-select card",
+"pickable card",
+"card radio",
+"selected state card",
+"Chakra selectable box",
+"Ant checkable card",
+"MUI selectable card"
+],
+"props":[
+"label",
+"isSelected",
+"onChange",
+"isDisabled",
+"children",
+"padding",
+"variant",
+"elevation",
+"width",
+"height",
+"maxWidth",
+"ref"
+]
+},
+"Selector":{
+"what":"A dropdown/combobox form control for selecting one or more options from a list, with trigger styles (input, secondary, ghost) and support for icons, search, and grouping.",
+"synonyms":[
+"select",
+"dropdown",
+"combobox",
+"picker",
+"autocomplete",
+"multi-select",
+"listbox",
+"menu select",
+"choice field",
+"Ant Select",
+"MUI Select",
+"Chakra Select",
+"Radix Select"
+],
+"props":[
+"label",
+"options",
+"value",
+"onChange",
+"placeholder",
+"multiple",
+"variant",
+"size",
+"disabled",
+"readOnly",
+"renderOption",
+"renderValue",
+"status",
+"clearable",
+"searchable"
+]
+},
+"SelectorOption":{
+"what":"A layout helper component used inside Selector's renderOption to render a custom option row with icon, label, description, and end content consistently styled.",
+"synonyms":[
+"option item",
+"list item renderer",
+"custom select option",
+"dropdown item template",
+"menu item layout",
+"select row"
+],
+"props":[
+"icon",
+"label",
+"description",
+"layout",
+"endContent",
+"xstyle",
+"className",
+"style"
+]
+},
+"SideNav":{
+"what":"A sidebar navigation container with sticky header/topContent, scrollable body, and sticky footer/footerIcons zones, optionally resizable and collapsible; use as the main app sidebar in a layout shell.",
+"synonyms":[
+"sidebar",
+"side navigation",
+"nav drawer",
+"app shell sidebar",
+"left nav panel",
+"resizable sidebar",
+"collapsible sidebar",
+"vertical nav",
+"navigation rail",
+"drawer navigation",
+"Ant Sider",
+"MUI Drawer",
+"Chakra sidebar",
+"Radix nav container"
+],
+"props":[
+"header",
+"topContent",
+"children",
+"footer",
+"footerIcons",
+"collapsible",
+"resizable",
+"handleRef",
+"xstyle",
+"className",
+"style",
+"data-testid"
+]
+},
+"SideNavCollapseButton":{
+"what":"A toggle button that collapses/expands a SideNav, reading collapse state from context by default or from an explicit controlled config when placed outside the SideNav.",
+"synonyms":[
+"collapse toggle",
+"sidebar toggle button",
+"expand/collapse chevron",
+"hamburger toggle alt",
+"sidenav shrink button",
+"drawer collapse control",
+"nav rail toggle"
+],
+"props":[
+"collapsible",
+"handleRef",
+"label",
+"size",
+"children",
+"onClick",
+"ref"
+]
+},
+"SideNavHeading":{
+"what":"A product/suite/account heading block for the SideNav header area, optionally linking to a page or opening a switcher menu popover (e.g. workspace/product switcher).",
+"synonyms":[
+"sidebar header",
+"brand/logo header",
+"workspace switcher",
+"account switcher trigger",
+"product switcher",
+"nav title block",
+"app name heading",
+"org picker"
+],
+"props":[
+"icon",
+"heading",
+"headingHref",
+"superheading",
+"superheadingHref",
+"subheading",
+"subheadingHref",
+"headerEndContent",
+"menu",
+"as",
+"xstyle",
+"className"
+]
+},
+"SideNavItem":{
+"what":"A single navigation row (link or button) used inside SideNav, supporting icons, selected state, nesting/children, row actions, and collapsed icon-only rail mode.",
+"synonyms":[
+"sidebar link",
+"nav list item",
+"drawer item",
+"sidebar menu item",
+"nested nav row",
+"rail item",
+"vertical nav link",
+"Ant Menu.Item",
+"Chakra NavItem",
+"MUI ListItemButton",
+"tree nav item",
+"sidebar entry"
+],
+"props":[
+"label",
+"icon",
+"href",
+"as",
+"isSelected",
+"isDisabled",
+"children",
+"actions",
+"endContent",
+"aria-label",
+"onClick",
+"isCollapsible"
+]
+},
+"SideNavSection":{
+"what":"A labeled grouping container for a set of SideNavItems inside a SideNav, with optional title, subtitle, and end content, and a hideable header.",
+"synonyms":[
+"sidebar group",
+"nav section header",
+"menu group",
+"sidebar category",
+"Ant Menu.ItemGroup",
+"Chakra AccordionSection",
+"sidebar group label",
+"navigation group"
+],
+"props":[
+"title",
+"subtitle",
+"children",
+"endContent",
+"isHeaderHidden",
+"xstyle"
+]
+},
+"Skeleton":{
+"what":"A pulsing placeholder block used to indicate loading content before the real UI renders, sizable with configurable width/height/radius and staggered animation.",
+"synonyms":[
+"loading placeholder",
+"shimmer",
+"loading state",
+"content placeholder",
+"MUI Skeleton",
+"Chakra Skeleton",
+"Ant Skeleton",
+"ghost element",
+"loading shimmer block"
+],
+"props":[
+"width",
+"height",
+"radius",
+"index",
+"className",
+"style",
+"data-testid"
+]
+},
+"Slider":{
+"what":"A draggable track-and-thumb control for selecting a numeric value or range within min/max bounds, used instead of a text input when the user should drag/slide to a value.",
+"synonyms":[
+"range input",
+"range slider",
+"dual thumb slider",
+"volume slider",
+"price range filter",
+"MUI Slider",
+"Chakra Slider",
+"Ant Slider",
+"Radix Slider",
+"drag to select value",
+"numeric range picker",
+"track with thumb"
+],
+"props":[
+"value",
+"onChange",
+"onChangeEnd",
+"min",
+"max",
+"step",
+"label",
+"isDisabled",
+"disabledMessage",
+"orientation",
+"marks",
+"valueDisplay",
+"formatValue",
+"status",
+"htmlName",
+"minStepsBetweenThumbs"
+]
+},
+"Spinner":{
+"what":"An animated circular loading indicator shown while content or an action is in progress, used inline or in a button/page to communicate indeterminate wait state.",
+"synonyms":[
+"loading spinner",
+"loader",
+"activity indicator",
+"progress ring",
+"MUI CircularProgress",
+"Chakra Spinner",
+"Ant Spin",
+"loading indicator",
+"busy indicator",
+"throbber"
+],
+"props":[
+"size",
+"shade",
+"label",
+"children"
+]
+},
+"Stack":{
+"what":"A polymorphic flex-layout component that arranges children horizontally or vertically with configurable gap, alignment, padding, sizing, and scrolling, replacing separate HStack/VStack usage.",
+"synonyms":[
+"flexbox layout",
+"flex container",
+"HStack",
+"VStack",
+"Box with flex",
+"layout wrapper",
+"row/column layout",
+"Chakra Stack",
+"MUI Stack",
+"Ant Space",
+"flex row",
+"flex column",
+"div with display flex"
+],
+"props":[
+"direction",
+"hAlign",
+"vAlign",
+"justify",
+"align",
+"gap",
+"padding",
+"paddingInline",
+"paddingBlock",
+"width",
+"height",
+"wrap",
+"isScrollable",
+"as"
+]
+},
+"StatusDot":{
+"what":"A small fixed-size colored dot used to indicate a status (online/offline, success/warning/error, etc.) next to a label or avatar.",
+"synonyms":[
+"status indicator",
+"presence dot",
+"online indicator",
+"badge dot",
+"notification dot",
+"Ant Badge status",
+"Chakra indicator",
+"severity dot",
+"health indicator",
+"traffic light dot"
+],
+"props":[
+"variant",
+"label",
+"isPulsing",
+"tooltip",
+"icon",
+"xstyle"
+]
+},
+"Step":{
+"what":"A single step item used inside a Stepper to represent one stage of a multi-step flow, showing an indicator, label, description, and optional content.",
+"synonyms":[
+"wizard step",
+"stepper item",
+"progress step",
+"step item",
+"step indicator",
+"stage",
+"wizard stage",
+"step node",
+"tab panel step",
+"checkout step",
+"form step",
+"step badge"
+],
+"props":[
+"step",
+"label",
+"description",
+"children",
+"status",
+"isDisabled",
+"isOptional",
+"endContent",
+"indicator",
+"density",
+"ref"
+]
+},
+"Stepper":{
+"what":"A container component that lays out a sequence of Step children (horizontal or vertical) with progress indicators and connectors, used for multi-step workflows like wizards and checkouts.",
+"synonyms":[
+"wizard",
+"step wizard",
+"progress stepper",
+"multi-step form",
+"step indicator bar",
+"checkout steps",
+"ordered steps list",
+"progress tracker",
+"MUI Stepper",
+"Ant Steps",
+"step sequence",
+"onboarding flow"
+],
+"props":[
+"activeStep",
+"children",
+"orientation",
+"onStepClick",
+"label",
+"density",
+"indicatorPosition",
+"horizontalOptions"
+]
+},
+"Switch":{
+"what":"A toggle control for switching a single setting on or off, used in forms, settings panels, and tables where an immediate binary choice is needed.",
+"synonyms":[
+"toggle",
+"toggle switch",
+"on/off switch",
+"boolean input",
+"Chakra Switch",
+"MUI Switch",
+"Ant Switch",
+"Radix Switch",
+"settings toggle",
+"feature flag toggle",
+"slide toggle"
+],
+"props":[
+"checked",
+"defaultChecked",
+"onChange",
+"label",
+"labelPosition",
+"size",
+"isDisabled",
+"status",
+"statusMessage",
+"isBusy",
+"isRequired",
+"tooltip"
+]
+},
+"Tab":{
+"what":"A single selectable tab item (button or link) used inside a TabList, for switching panels or navigating between sections.",
+"synonyms":[
+"tab item",
+"tab button",
+"navigation tab",
+"MUI Tab",
+"Ant Tabs.TabPane",
+"Chakra Tab",
+"Radix TabsTrigger",
+"Bootstrap Nav Item",
+"pill tab",
+"segmented control item",
+"tab link"
+],
+"props":[
+"value",
+"label",
+"isLabelHidden",
+"href",
+"panelId",
+"icon",
+"selectedIcon",
+"endContent",
+"as",
+"ref",
+"className",
+"style"
+]
+},
+"TabList":{
+"what":"A tab strip container that provides tab navigation context (selected value, size) to Tab/TabMenu children, handling roving-tabindex keyboard nav and horizontal overflow scrolling; use it to build primary navigation or content-switching tab bars.",
+"synonyms":[
+"tabs",
+"tab bar",
+"tab strip",
+"tab navigation",
+"Tabs (MUI)",
+"TabsList (Radix)",
+"Nav tabs (Bootstrap)",
+"segmented control",
+"page tabs",
+"view switcher",
+"horizontal tabs",
+"tabbed navigation"
+],
+"props":[
+"value",
+"onChange",
+"size",
+"layout",
+"hasDivider",
+"isFullBleed",
+"role",
+"overflow",
+"children"
+]
+},
+"TabMenu":{
+"what":"An overflow menu trigger rendered inside a TabList that opens a dropdown of additional tab options when there isn't room to show every tab, mirroring the selected-tab indicator styling.",
+"synonyms":[
+"more tabs dropdown",
+"overflow tab menu",
+"tab overflow",
+"more menu",
+"kebab tab menu",
+"additional tabs dropdown",
+"Tabs with overflow",
+"collapsed tabs menu"
+],
+"props":[
+"label",
+"options",
+"ref",
+"className",
+"style",
+"onClick"
+]
+},
+"Table":{
+"what":"A styled, data-driven table component for rendering rows/columns with configurable density, dividers, striping, and hover states; use it as the primary way to display tabular data.",
+"synonyms":[
+"data table",
+"grid",
+"datagrid",
+"MUI Table",
+"Ant Table",
+"Chakra Table",
+"Radix Table",
+"list view",
+"spreadsheet view",
+"rows and columns",
+"sortable table",
+"striped table",
+"responsive table",
+"table with scroll"
+],
+"props":[
+"data",
+"columns",
+"density",
+"dividers",
+"isStriped",
+"hasHover",
+"verticalAlign",
+"textOverflow",
+"plugins",
+"ref"
+]
+},
+"TableBody":{
+"what":"A thin styled wrapper around the native <tbody> element used when composing a Table manually in children mode.",
+"synonyms":[
+"tbody",
+"table body section",
+"table content wrapper",
+"MUI TableBody",
+"Ant Table.Body",
+"table rows container"
+],
+"props":[
+"children",
+"xstyle",
+"className",
+"style",
+"ref"
+]
+},
+"TableCell":{
+"what":"A <td> wrapper used inside TableRow for manual/children-mode tables, inheriting density, dividers, and alignment from the parent Table context, with optional right-click context menu support.",
+"synonyms":[
+"td",
+"table cell",
+"table data cell",
+"MUI TableCell",
+"Ant Table.Cell",
+"grid cell",
+"cell with context menu",
+"right-click cell"
+],
+"props":[
+"children",
+"xstyle",
+"scope",
+"headers",
+"colSpan",
+"rowSpan",
+"contextMenuActions",
+"ref",
+"className",
+"style"
+]
+},
+"TableFooter":{
+"what":"A layout wrapper rendering a <tfoot> element for grouping footer rows (e.g. totals/summary rows) within a Table.",
+"synonyms":[
+"tfoot",
+"table footer",
+"summary row",
+"totals row",
+"footer section",
+"table bottom",
+"table summary",
+"aggregate row"
+],
+"props":[
+"ref",
+"children",
+"xstyle",
+"className",
+"style"
+]
+},
+"TableHeader":{
+"what":"A layout wrapper rendering a <thead> element for grouping header rows within a Table.",
+"synonyms":[
+"thead",
+"table header section",
+"column header group",
+"header row wrapper",
+"table head"
+],
+"props":[
+"ref",
+"children",
+"xstyle",
+"className",
+"style"
+]
+},
+"TableHeaderCell":{
+"what":"A styled <th> cell component for use inside a Table's header row, inheriting density/divider/font styling from table context, with optional context-menu actions.",
+"synonyms":[
+"th",
+"column header cell",
+"table head cell",
+"header cell",
+"sortable column label",
+"column title cell",
+"table column heading"
+],
+"props":[
+"children",
+"xstyle",
+"ref",
+"className",
+"style",
+"scope",
+"contextMenuActions"
+]
+},
+"TableRow":{
+"what":"A table row wrapper (<tr>) used inside TableHeader/TableBody/TableFooter in children mode, inheriting striping/hover styling from Table context.",
+"synonyms":[
+"tr",
+"table row",
+"data row",
+"table line",
+"Tr",
+"MUI TableRow",
+"Ant Table row",
+"row component",
+"striped row",
+"hoverable row"
+],
+"props":[
+"children",
+"xstyle",
+"ref",
+"isHeaderRow",
+"className",
+"style"
+]
+},
+"TableSelectionToolbar":{
+"what":"A bulk-action toolbar that appears when table rows are selected, showing selected count and a clear-all button, built on top of Toolbar and useTableSelectionState.",
+"synonyms":[
+"bulk actions bar",
+"selection toolbar",
+"multi-select action bar",
+"row selection toolbar",
+"selected items bar",
+"Ant Table bulk actions",
+"MUI Toolbar selected",
+"clear selection button",
+"batch actions toolbar"
+],
+"props":[
+"selection",
+"label",
+"renderSelectionLabel",
+"clearLabel",
+"size",
+"variant",
+"endContent"
+]
+},
+"Text":{
+"what":"A semantic text primitive that renders type-based typography (body, label, supporting, code, display, etc.) with options for truncation, tooltip-on-truncate, color, weight, and alignment; use for any inline or block text content.",
+"synonyms":[
+"typography",
+"text component",
+"paragraph",
+"label text",
+"Typography (MUI)",
+"Text (Chakra)",
+"body copy",
+"truncated text",
+"ellipsis text",
+"line clamp",
+"span",
+"caption"
+],
+"props":[
+"type",
+"size",
+"color",
+"weight",
+"display",
+"maxLines",
+"hasTruncateTooltip",
+"wordBreak",
+"textWrap",
+"justify",
+"hasCapsize",
+"hasStrikethrough",
+"as"
+]
+},
+"TextArea":{
+"what":"A multi-line text input field for collecting longer-form user text, with label, status, icons, loading, and character counter support.",
+"synonyms":[
+"textarea",
+"multiline input",
+"text box",
+"comment box",
+"message field",
+"notes input",
+"long text input",
+"Chakra Textarea",
+"MUI multiline TextField",
+"Ant Design TextArea",
+"description field",
+"expanding input"
+],
+"props":[
+"label",
+"value",
+"onChange",
+"rows",
+"status",
+"statusVariant",
+"placeholder",
+"isDisabled",
+"isReadOnly",
+"isRequired",
+"maxLength",
+"startIcon"
+]
+},
+"TextInput":{
+"what":"A one-line text field for collecting user text/email/password values, with label, icons, status, clear button, and sizing.",
+"synonyms":[
+"text field",
+"input box",
+"form field",
+"search box",
+"email input",
+"password input",
+"MUI TextField",
+"Chakra Input",
+"Ant Input",
+"Radix TextField",
+"username field"
+],
+"props":[
+"label",
+"value",
+"onChange",
+"type",
+"size",
+"status",
+"statusVariant",
+"startIcon",
+"hasClear",
+"isDisabled",
+"isReadOnly",
+"placeholder"
+]
+},
+"Theme":{
+"what":"A provider component that applies a design-system theme (tokens, color-scheme, component overrides) to its subtree, created via defineTheme().",
+"synonyms":[
+"ThemeProvider",
+"color scheme provider",
+"dark mode provider",
+"design tokens provider",
+"MUI ThemeProvider",
+"Chakra ThemeProvider",
+"Ant ConfigProvider",
+"light/dark mode switch",
+"CSS variables provider",
+"brand theme wrapper"
+],
+"props":[
+"theme",
+"mode",
+"children"
+]
+},
+"Thumbnail":{
+"what":"A small square preview card for an image attachment, showing a loading skeleton, the image, or a placeholder, with an optional overlaid remove button.",
+"synonyms":[
+"image preview",
+"attachment preview",
+"file preview chip",
+"photo thumbnail",
+"upload preview",
+"avatar-like image card",
+"media tile",
+"image card with remove button"
+],
+"props":[
+"src",
+"alt",
+"label",
+"onRemove",
+"onClick",
+"isLoading",
+"isDisabled",
+"showRemoveOn"
+]
+},
+"TimeInput":{
+"what":"A labeled time-entry form field that lets users pick or type a time value (optionally with seconds), adapting between a typed text field and native/bottom-sheet pickers depending on pointer type.",
+"synonyms":[
+"time picker",
+"time field",
+"clock input",
+"hour minute picker",
+"MUI TimePicker",
+"Ant TimePicker",
+"Chakra time input",
+"duration selector",
+"schedule time field",
+"form time control"
+],
+"props":[
+"label",
+"value",
+"onChange",
+"min",
+"max",
+"hasSeconds",
+"hasClear",
+"hourFormat",
+"increment",
+"presentation",
+"status",
+"size",
+"isDisabled",
+"placeholder"
+]
+},
+"Timer":{
+"what":"A non-interactive, auto-updating display of elapsed time (stopwatch-style) since a given start time, without triggering React re-renders.",
+"synonyms":[
+"stopwatch",
+"elapsed time display",
+"countup timer",
+"duration counter",
+"live duration",
+"session timer",
+"running clock",
+"call duration",
+"uptime display"
+],
+"props":[
+"startTime",
+"format",
+"type",
+"size",
+"color",
+"weight"
+]
+},
+"Timestamp":{
+"what":"A component that renders a formatted date/time value as human-readable text (relative or absolute), with optional live updates and a hover card showing precise/multi-timezone details.",
+"synonyms":[
+"relative time",
+"time ago",
+"date display",
+"formatted date text",
+"created at label",
+"last updated text",
+"MUI/Ant date formatter",
+"humanized date",
+"'2 hours ago' text"
+],
+"props":[
+"value",
+"format",
+"autoThreshold",
+"hasTooltip",
+"tooltipEntries",
+"isTimezoneShown",
+"isLive",
+"type",
+"size",
+"color",
+"weight"
+]
+},
+"Toast":{
+"what":"A single notification surface rendered inside a ToastViewport that auto-dismisses, pauses on hover/focus/window-blur, and supports swipe-to-dismiss.",
+"synonyms":[
+"notification",
+"snackbar",
+"alert popup",
+"toast message",
+"banner notification",
+"temporary message",
+"MUI Snackbar",
+"Chakra Toast",
+"Ant message",
+"Radix Toast",
+"flash message",
+"status popup"
+],
+"props":[
+"type",
+"body",
+"endContent",
+"isAutoHide",
+"autoHideDuration",
+"isExiting",
+"onDismiss",
+"renderContent"
+]
+},
+"ToggleButton":{
+"what":"A controlled or group-integrated toggle button built on Button, for binary pressed/unpressed states like formatting controls, view switches, or favorite toggles.",
+"synonyms":[
+"toggle button",
+"pressed button",
+"active state button",
+"on/off button",
+"formatting toggle",
+"bold/italic button",
+"segmented control item",
+"radio-like button",
+"toolbar toggle",
+"MUI ToggleButton",
+"Chakra ToggleButton",
+"Radix Toggle",
+"Ant Button toggled"
+],
+"props":[
+"label",
+"isPressed",
+"onPressedChange",
+"pressedChangeAction",
+"icon",
+"pressedIcon",
+"isIconOnly",
+"size",
+"elevation",
+"isDisabled",
+"isLoading",
+"value"
+]
+},
+"ToggleButtonGroup":{
+"what":"A container that groups ToggleButton children to provide single-select or multi-select toggle behavior, like view-mode switchers or multi-select formatting toolbars.",
+"synonyms":[
+"toggle group",
+"segmented control",
+"button group",
+"tab-like selector",
+"exclusive selection buttons",
+"multi-select toolbar",
+"view switcher",
+"radio group of buttons",
+"MUI ToggleButtonGroup",
+"Radix ToggleGroup",
+"Ant Radio.Group buttons",
+"Chakra ButtonGroup toggle"
+],
+"props":[
+"type",
+"value",
+"onChange",
+"children",
+"label",
+"orientation",
+"size",
+"isDisabled",
+"xstyle"
+]
+},
+"Token":{
+"what":"A small chip/tag used to display an entity inline, optionally removable, clickable, or as a link, in colors indicating category/status.",
+"synonyms":[
+"chip",
+"tag",
+"pill",
+"badge with remove",
+"label chip",
+"MUI Chip",
+"Ant Tag",
+"Chakra Tag",
+"Radix Badge",
+"removable tag",
+"filter chip",
+"entity tag"
+],
+"props":[
+"label",
+"size",
+"color",
+"icon",
+"isDisabled",
+"onRemove",
+"onClick",
+"href",
+"description",
+"endContent",
+"isLabelHidden"
+]
+},
+"Tokenizer":{
+"what":"A multi-select typeahead input that lets users search and pick items, rendering each selection as a removable Token chip inside the field.",
+"synonyms":[
+"multi-select",
+"tag input",
+"chip input",
+"combobox multi-select",
+"people picker",
+"search and select",
+"MUI Autocomplete multiple",
+"Ant Select mode tags",
+"Chakra MultiSelect",
+"typeahead with tags",
+"token field"
+],
+"props":[
+"label",
+"searchSource",
+"value",
+"onChange",
+"renderItem",
+"renderToken",
+"maxEntries",
+"placeholder",
+"status",
+"size",
+"tokenOverflowBehavior",
+"hasCreate"
+]
+},
+"Toolbar":{
+"what":"A horizontal or vertical container with start/center/end content slots that lays out and arranges action controls (buttons, inputs, tabs) with built-in roving-tabindex keyboard navigation.",
+"synonyms":[
+"action bar",
+"button bar",
+"app bar",
+"header toolbar",
+"command bar",
+"nav toolbar",
+"menu bar",
+"MUI Toolbar",
+"Chakra ButtonGroup bar",
+"editor toolbar",
+"controls row",
+"icon button row"
+],
+"props":[
+"startContent",
+"centerContent",
+"endContent",
+"label",
+"size",
+"gap",
+"orientation",
+"variant",
+"dividers",
+"xstyle",
+"className",
+"ref"
+]
+},
+"Tooltip":{
+"what":"A hover/focus-triggered floating label that shows short informative text next to a trigger element, used to add non-interactive hints or descriptions to UI elements.",
+"synonyms":[
+"hint",
+"hover text",
+"title attribute replacement",
+"popover hint",
+"info bubble",
+"MUI Tooltip",
+"Chakra Tooltip",
+"Radix Tooltip",
+"Ant Tooltip",
+"help text on hover",
+"label on hover"
+],
+"props":[
+"children",
+"anchorRef",
+"content",
+"placement",
+"alignment",
+"delay",
+"hideDelay",
+"focusTrigger",
+"touchTrigger",
+"isEnabled",
+"isOpen",
+"onOpenChange"
+]
+},
+"TopNav":{
+"what":"The top-level application header/navigation bar with heading, start/center/end content slots, that adapts into a mobile bar or drawer (MobileNav) on small screens.",
+"synonyms":[
+"app bar",
+"header bar",
+"navbar",
+"top navigation",
+"page header",
+"MUI AppBar",
+"Chakra Navbar",
+"Bootstrap Navbar",
+"Ant Layout.Header",
+"site header",
+"masthead"
+],
+"props":[
+"heading",
+"startContent",
+"children",
+"centerContent",
+"endContent",
+"label",
+"xstyle",
+"className",
+"style",
+"ref"
+]
+},
+"TopNavHeading":{
+"what":"A product/suite/account heading slot for TopNav, showing logo, heading/superheading/subheading text, and an optional dropdown menu popover with smart link/trigger boundary logic.",
+"synonyms":[
+"nav brand",
+"app switcher header",
+"logo title block",
+"top nav logo area",
+"product switcher heading",
+"site title with dropdown",
+"navbar brand",
+"account menu header",
+"suite/product/account labels",
+"header title with chevron menu"
+],
+"props":[
+"logo",
+"logoLabel",
+"heading",
+"headingHref",
+"superheading",
+"superheadingHref",
+"subheading",
+"subheadingHref",
+"headerEndContent",
+"menu",
+"as",
+"ref"
+]
+},
+"TopNavItem":{
+"what":"A single horizontal navigation link/button for use in TopNav's startContent, supporting selected state, icon-only mode, and responsive drawer/mobile rendering.",
+"synonyms":[
+"nav link",
+"navbar item",
+"menu tab",
+"top navigation link",
+"nav button",
+"selected nav link",
+"icon nav button",
+"header link item",
+"primary nav item",
+"Tab-like nav link"
+],
+"props":[
+"label",
+"href",
+"target",
+"rel",
+"download",
+"referrerPolicy",
+"as",
+"isSelected",
+"isDisabled",
+"isIconOnly",
+"icon",
+"children",
+"size"
+]
+},
+"TopNavMegaMenu":{
+"what":"A TopNav navigation trigger that opens a full-width, hover/click-activated mega menu panel (with items + featured content slots), collapsing into a drill-down drawer section on mobile.",
+"synonyms":[
+"mega menu",
+"nav dropdown panel",
+"hover menu",
+"mega dropdown",
+"navbar flyout menu",
+"multi-column dropdown",
+"product menu panel",
+"Ant Design mega menu",
+"MUI nav popover menu",
+"top nav expandable section"
+],
+"props":[
+"label",
+"items",
+"featured",
+"delay",
+"hideDelay",
+"onOpenChange",
+"ref"
+]
+},
+"TopNavMegaMenuFeaturedCard":{
+"what":"A standard promotional card (image, title, description, CTA link) for the featured slot inside a TopNavMegaMenu.",
+"synonyms":[
+"mega menu featured card",
+"nav promo card",
+"callout card",
+"nav banner",
+"promotional tile",
+"spotlight card",
+"navigation CTA card",
+"featured content block",
+"mega dropdown promo"
+],
+"props":[
+"title",
+"description",
+"image",
+"imageAlt",
+"linkLabel",
+"linkHref",
+"children",
+"xstyle",
+"className",
+"style",
+"ref"
+]
+},
+"TopNavMegaMenuItem":{
+"what":"A single selectable entry (icon, title, description, link) inside a TopNavMegaMenu that automatically adapts its layout between desktop popover grid and mobile drawer.",
+"synonyms":[
+"mega menu list item",
+"nav dropdown item",
+"nav link item",
+"menu entry",
+"dropdown menu item",
+"grid menu item",
+"nav item with description",
+"flyout menu item"
+],
+"props":[
+"title",
+"description",
+"icon",
+"href",
+"onClick",
+"as",
+"ref",
+"tabIndex",
+"xstyle",
+"className",
+"style"
+]
+},
+"TopNavMenu":{
+"what":"A top-nav navigation trigger that shows a hover-activated popover menu of rich items (icon/title/description) on desktop and collapses into an expandable drawer section on mobile.",
+"synonyms":[
+"nav dropdown",
+"hover menu",
+"mega menu trigger",
+"top nav overflow menu",
+"navbar dropdown",
+"flyout menu",
+"mouseover menu",
+"navigation submenu",
+"accordion nav section"
+],
+"props":[
+"label",
+"items",
+"delay",
+"hideDelay",
+"ref",
+"xstyle",
+"className",
+"style",
+"onClick"
+]
+},
+"TreeList":{
+"what":"A hierarchical, data-driven tree view component for rendering nested/expandable lists (e.g. file trees, nav trees) with keyboard navigation and expand/collapse state.",
+"synonyms":[
+"file tree",
+"folder tree",
+"nested list",
+"directory tree",
+"tree view",
+"MUI TreeView",
+"Ant Tree",
+"Chakra Tree",
+"Radix tree",
+"sidebar tree navigation",
+"outline view",
+"collapsible nested list"
+],
+"props":[
+"items",
+"density",
+"variant",
+"header",
+"data-testid",
+"aria-label",
+"aria-labelledby",
+"xstyle",
+"className",
+"ref"
+]
+},
+"Typeahead":{
+"what":"Styled, accessible async-search combobox field (with label, status, icon, clear button) for selecting a single item from a search source.",
+"synonyms":[
+"autocomplete input",
+"search select",
+"async select",
+"combobox field",
+"MUI Autocomplete",
+"Ant Select with search",
+"Chakra Combobox",
+"tag search input",
+"remote search dropdown",
+"user/person picker"
+],
+"props":[
+"label",
+"searchSource",
+"value",
+"onChange",
+"placeholder",
+"status",
+"statusVariant",
+"startIcon",
+"isDisabled",
+"disabledMessage",
+"hasClear",
+"size"
+]
+},
+"TypeaheadItem":{
+"what":"Default presentational row (icon, label, description) used to render each result in a Typeahead/BaseTypeahead dropdown, and reusable for custom renderItem implementations.",
+"synonyms":[
+"autocomplete option row",
+"combobox list item",
+"search result row",
+"dropdown option",
+"MUI Autocomplete option",
+"list item renderer"
+],
+"props":[
+"item",
+"icon",
+"description",
+"isDisabled",
+"group"
+]
+},
+"VStack":{
+"what":"A convenience wrapper around Stack preset to vertical direction, for stacking items top-to-bottom.",
+"synonyms":[
+"vertical stack",
+"column layout",
+"flex column",
+"Chakra VStack",
+"stack top to bottom",
+"vertical flexbox"
+],
+"props":[
+"hAlign",
+"vAlign",
+"justify",
+"align",
+"gap",
+"padding",
+"width",
+"height",
+"wrap",
+"isScrollable",
+"as"
+]
+},
+"VisuallyHidden":{
+"what":"An accessibility primitive that renders content visible to screen readers but visually hidden, used for icon-only labels or aria-live announcement text.",
+"synonyms":[
+"sr-only",
+"screen-reader-only text",
+"visually-hidden span",
+"a11y hidden label",
+"Bootstrap sr-only",
+"Radix VisuallyHidden",
+"Chakra VisuallyHidden",
+"hidden accessible text",
+"offscreen text",
+"aria label wrapper"
+],
+"props":[
+"children",
+"as"
+]
+},
+"useAnnounce":{
+"what":"A hook returning an imperative function to announce messages to screen readers via persistent polite/assertive live regions.",
+"synonyms":[
+"aria-live announcer",
+"screen reader announcement",
+"live region hook",
+"status message announcer",
+"toast for screen readers",
+"Radix live announcer",
+"assertive/polite alert",
+"a11y notification hook",
+"speak to screen reader"
+],
+"props":[
+"message",
+"politeness"
+]
+},
+"useAppShellMobile":{
+"what":"Context hook exposing mobile nav drawer state (open/close/toggle) to components inside an AppShell layout, used for adapting UI on small screens.",
+"synonyms":[
+"mobile nav state",
+"drawer toggle",
+"responsive sidebar",
+"hamburger menu state",
+"useMobileNav",
+"mobile breakpoint hook",
+"sidebar drawer context",
+"AppShell mobile context"
+],
+"props":[
+"isMobile",
+"isMobileNavOpen",
+"mobileNavId",
+"toggleMobileNav",
+"openMobileNav",
+"closeMobileNav",
+"isMobileNavEnabled",
+"hasAutoToggle"
+]
+},
+"useClickableContainer":{
+"what":"A hook that makes an entire container (like a card) clickable/navigable via href while ensuring clicks on nested interactive elements (buttons, links) don't trigger the container's action.",
+"synonyms":[
+"clickable card",
+"whole card link",
+"card wrapper link",
+"selectable card",
+"nested interactive elements fix",
+"pressable container",
+"link overlay card",
+"row click navigation",
+"clickable div with buttons inside",
+"card click handler"
+],
+"props":[
+"containerRef",
+"interactiveRef",
+"onClick",
+"href",
+"target",
+"disabled",
+"onMouseUp"
+]
+},
+"useClipboard":{
+"what":"A hook that handles copy-to-clipboard logic — writing text, a transient 'copied' state with auto-reset, and a screen-reader announcement — for building copy buttons/icons.",
+"synonyms":[
+"copy to clipboard",
+"copy button",
+"copy icon toggle",
+"clipboard write hook",
+"copy confirmation",
+"copy code snippet",
+"copy-paste button",
+"clipboard API wrapper",
+"copied state indicator",
+"useCopyToClipboard"
+],
+"props":[
+"announce",
+"resetAfterMs",
+"copy",
+"isCopied"
+]
+},
+"useCollapsible":{
+"what":"A headless hook that manages open/closed state for collapsible UI (like accordions or expandable cards), supporting uncontrolled, controlled, and group-controlled modes.",
+"synonyms":[
+"useDisclosure",
+"useToggle",
+"useAccordionItem",
+"useExpandable",
+"collapse state hook",
+"accordion logic",
+"expand/collapse state",
+"useOpenState",
+"show/hide hook",
+"useAccordion",
+"CollapsibleGroupContext",
+"toggle open state"
+],
+"props":[
+"isCollapsible",
+"value",
+"defaultIsOpen",
+"isOpen",
+"onOpenChange",
+"isEnabled",
+"toggle"
+]
+},
+"useCollator":{
+"what":"Hook returning a locale-aware Intl.Collator (bound to the active i18n context) for correct string sorting/comparison.",
+"synonyms":[
+"locale-aware sort",
+"string comparison hook",
+"Intl.Collator wrapper",
+"localized sorting",
+"useLocale sort helper",
+"compare strings by locale",
+"alphabetical sort i18n",
+"numeric sort collation",
+"internationalized sorting"
+],
+"props":[
+"options"
+]
+},
+"useCombobox":{
+"what":"A hook providing keyboard navigation, highlighting, and selection logic for combobox/listbox UI patterns, used internally by Selector and CommandPalette (also exports useSelectedItemOffset for positioning a dropdown over its trigger).",
+"synonyms":[
+"select dropdown logic",
+"autocomplete keyboard nav",
+"listbox arrow key navigation",
+"dropdown highlight state",
+"ARIA combobox hook",
+"headless select hook",
+"Downshift alternative",
+"Radix combobox",
+"type-to-select dropdown",
+"menu keyboard handler"
+],
+"props":[
+"selectableItems",
+"value",
+"isDisabled",
+"isOpen",
+"hasSearch",
+"onOpen",
+"onClose",
+"onSelect",
+"onClear",
+"onSearchSeed",
+"listboxId"
+]
+},
+"useContainerReveal":{
+"what":"A headless CSS-only hook that reveals or conceals child content when a container is hovered or focused, used for things like row action buttons that appear on hover.",
+"synonyms":[
+"hover reveal",
+"show on hover",
+"hover actions",
+"useHover",
+"focus-within reveal",
+"row hover actions",
+"reveal on hover",
+"mouseenter show buttons",
+"hover-to-show",
+"useHoverVisibility",
+"conceal on hover",
+"peek on hover"
+],
+"props":[
+"isEnabled",
+"getContainerProps",
+"getContentRevealProps",
+"forceState",
+"hoverDelay",
+"isRevealInverted",
+"isLayoutPreserved",
+"forceVisibility"
+]
+},
+"useDevWarning":{
+"what":"A dev-only hook that fires a standardized 'Component: message' console warning once per mount when a given condition is true, used to surface guardrails/misuse from inside a component without causing re-renders.",
+"synonyms":[
+"dev warning hook",
+"console.warn once",
+"prop validation warning",
+"deprecation warning hook",
+"invariant warning",
+"devWarn hook",
+"mutually exclusive props warning",
+"render-safe warning",
+"guardrail hook",
+"development mode warning"
+],
+"props":[
+"component",
+"message",
+"condition"
+]
+},
+"useEntryAnimation":{
+"what":"A hook that returns a StyleX entry-animation style (slide/fade/scale) applied only when an element is dynamically mounted after initial page load, not on initial paint or hydration.",
+"synonyms":[
+"mount animation",
+"enter transition",
+"appear animation",
+"fade in hook",
+"slide in hook",
+"scale in animation",
+"conditional mount animation",
+"CSS keyframe entry effect",
+"transition on insert",
+"framer-motion alternative"
+],
+"props":[
+"preset"
+]
+},
+"useFocusTrap":{
+"what":"A hook that traps keyboard focus inside a container (modal/dialog/popover pattern), redirects escaped Tab focus back in, restores focus on close, and integrates with the shared layer-dismissal stack for Escape handling.",
+"synonyms":[
+"modal focus trap",
+"dialog focus lock",
+"focus-lock",
+"trap tab key",
+"ARIA dialog pattern",
+"inert background focus",
+"focus-trap-react alternative",
+"keep focus inside modal",
+"restore focus on close",
+"escape to close hook"
+],
+"props":[
+"isActive",
+"onEscape",
+"containerRef",
+"focusFirst"
+]
+},
+"useGridFocus":{
+"what":"A hook that implements WAI-ARIA grid keyboard navigation (arrow keys, Home/End, Page Up/Down, optional roving tabindex) over a container's cell elements, used e.g. by a Calendar's date grid.",
+"synonyms":[
+"grid keyboard navigation",
+"arrow key navigation",
+"roving tabindex grid",
+"date grid focus",
+"calendar keyboard nav",
+"WAI-ARIA grid pattern",
+"useArrowNavigation",
+"focus management hook",
+"spatial navigation",
+"grid cell focus",
+"keyboard accessible table",
+"focusCell",
+"focusFirst focusLast"
+],
+"props":[
+"columns",
+"cellSelector",
+"isCellFocusable",
+"getFocusTarget",
+"onNavigateBefore",
+"onNavigateAfter",
+"onPageUp",
+"onPageDown",
+"hasRovingTabIndex",
+"gridRef",
+"handleKeyDown",
+"handleFocus"
+]
+},
+"useHotkeys":{
+"what":"A hook that registers global window-level keyboard shortcuts (e.g. ⌘K, Escape) with platform-aware modifiers, used for app-wide keyboard shortcuts.",
+"synonyms":[
+"keyboard shortcuts",
+"global hotkey",
+"key bindings",
+"useKeyboardShortcut",
+"command+k shortcut",
+"mousetrap alternative",
+"react-hotkeys-hook equivalent",
+"keydown listener",
+"shortcut manager",
+"key combo handler",
+"accelerator keys",
+"cmd+k palette trigger"
+],
+"props":[
+"keys",
+"onPress",
+"allowInInputs",
+"isDisabled"
+]
+},
+"useHoverCard":{
+"what":"A hook that adds hover/focus-triggered popover ('hover card') behavior to a trigger element, showing rich content near it after a delay (e.g., a profile preview on hover).",
+"synonyms":[
+"hover popover",
+"hover preview card",
+"profile hover card",
+"rich tooltip",
+"peek card",
+"mouseover preview",
+"Radix HoverCard",
+"Ant Popover trigger on hover",
+"card on hover",
+"user preview popup",
+"link preview card"
+],
+"props":[
+"placement",
+"alignment",
+"delay",
+"hideDelay",
+"focusTrigger",
+"touchTrigger",
+"isEnabled",
+"label",
+"isOpen",
+"isDefaultOpen",
+"onShow",
+"onHide"
+]
+},
+"useImageMode":{
+"what":"A hook that analyzes an image's pixels via OffscreenCanvas to detect whether it is predominantly dark or light, useful for auto-choosing overlay text/theme color on top of images.",
+"synonyms":[
+"image luminance detection",
+"auto dark/light overlay",
+"dominant color brightness",
+"image contrast detection",
+"adaptive text color on image",
+"background image brightness",
+"APCA luminance hook",
+"photo darkness detection",
+"hero image text contrast",
+"MediaTheme auto mode"
+],
+"props":[
+"src",
+"region",
+"threshold",
+"fallback"
+]
+},
+"useImperativeAlertDialog":{
+"what":"A hook that provides an imperative show/hide API for an AlertDialog (confirmation dialog) so you don't need to manage open state manually, and gives back a JSX element to render.",
+"synonyms":[
+"imperative confirm dialog",
+"show confirmation popup",
+"useDisclosure",
+"useAlert",
+"programmatic dialog",
+"delete confirmation dialog",
+"window.confirm replacement",
+"async confirm modal",
+"Chakra useDisclosure",
+"MUI confirm dialog hook",
+"toast-like alert trigger"
+],
+"props":[
+"show",
+"hide",
+"isOpen",
+"element"
+]
+},
+"useImperativeDialog":{
+"what":"A hook that gives you an imperative show()/hide() API for a Dialog instead of manually managing open-state and content, use when you want to pop up a dialog on demand (e.g. from a button click) without controlled state boilerplate.",
+"synonyms":[
+"imperative modal",
+"useModal",
+"show dialog hook",
+"popup trigger hook",
+"confirm dialog hook",
+"dialog controller",
+"open modal programmatically",
+"toast-like dialog",
+"modal manager hook",
+"quick dialog"
+],
+"props":[
+"defaultOptions",
+"show",
+"hide",
+"isOpen",
+"element"
+]
+},
+"useIndicatorFocusRing":{
+"what":"A hook that imperatively paints a standard focus ring onto a themeable indicator element (e.g. a checkbox/radio's visual indicator) when its hidden native input is keyboard-focused, used when the focusable input is visually hidden and a third-party/themed indicator renders beside it.",
+"synonyms":[
+"custom checkbox focus ring",
+"radio focus outline",
+"focus-visible ring",
+"visually hidden input focus style",
+"themeable indicator focus",
+"keyboard focus outline",
+"custom control focus indicator",
+"accessible focus ring for styled checkbox",
+"focus ring on sibling element",
+"WCAG 2.4.7 focus visibility"
+],
+"props":[
+"containerRef",
+"isDisabled",
+"focusProps",
+"onFocus",
+"onBlur"
+]
+},
+"useInputContainer":{
+"what":"A hook for wiring click handlers on an input's wrapper div so clicking anywhere in the container (padding, icons) focuses or activates the real input/control inside, while not stealing focus from nested interactive elements like clear buttons.",
+"synonyms":[
+"click-to-focus wrapper",
+"input wrapper click delegation",
+"focus delegation container",
+"clickable input shell",
+"input group click handler",
+"field container click",
+"combobox click-to-open wrapper"
+],
+"props":[
+"containerRef",
+"inputRef",
+"disabled"
+]
+},
+"useInputStatusIcon":{
+"what":"A hook that renders the on-field status icon (warning/error/success) for bordered inputs like TextInput/TextArea/DateInput, adapting to the statusVariant (attached, detached, tooltip) and wiring up aria-describedby/tooltip accessibility.",
+"synonyms":[
+"input validation icon",
+"field status glyph",
+"error icon in input",
+"success/warning input icon",
+"inline field status indicator",
+"FieldStatus icon helper",
+"input error badge",
+"validation tooltip icon"
+],
+"props":[
+"status",
+"statusVariant",
+"isInGroup",
+"size"
+]
+},
+"useInteractiveRole":{
+"what":"A hook that decides whether a polymorphic component should render as a link, a button, or an inert element based on href, onClick, disabled state, and surrounding interactive context.",
+"synonyms":[
+"polymorphic element resolver",
+"as prop logic",
+"link vs button decision",
+"interactive element type",
+"render as anchor or button",
+"clickable role hook",
+"a11y role resolution",
+"context-based trigger role",
+"determine element tag",
+"useRole",
+"asChild logic",
+"Radix Slot alternative"
+],
+"props":[
+"href",
+"onClick",
+"isDisabled"
+]
+},
+"useKeyboardHint":{
+"what":"A hook that shows a temporary floating tooltip-like hint (e.g. '← → to navigate') anchored to the focused element when a composite roving-tabindex widget first receives keyboard focus, to teach sighted keyboard users the arrow-key interaction.",
+"synonyms":[
+"keyboard shortcut hint",
+"arrow key tooltip",
+"onboarding tooltip for keyboard nav",
+"navigation hint popover",
+"discoverability hint",
+"ephemeral keyboard hint",
+"composite widget hint badge",
+"toolbar keyboard affordance",
+"key hint popup",
+"Kbd hint overlay"
+],
+"props":[
+"orientation",
+"dismissAfterMs",
+"isEnabled",
+"hintElement",
+"onFocus",
+"onBlur",
+"onKeyDown"
+]
+},
+"useLayer":{
+"what":"A low-level positioning/overlay hook for building floating UI layers (tooltips, popovers, menus) anchored to a trigger element using CSS anchor positioning, or fixed-coordinate placement.",
+"synonyms":[
+"useFloating",
+"Popper.js",
+"anchor positioning hook",
+"overlay positioning",
+"popover hook",
+"floating element hook",
+"tooltip positioning engine",
+"CSS anchor positioning",
+"layer manager",
+"useOverlay",
+"useAnchor",
+"portal positioning"
+],
+"props":[
+"mode",
+"lightDismiss",
+"lazyMount",
+"onShow",
+"onHide",
+"placement",
+"alignment",
+"offset",
+"positioning",
+"role",
+"xstyle",
+"as"
+]
+},
+"useListFocus":{
+"what":"A hook that implements keyboard navigation (arrow keys, Home/End, Escape, optional roving tabindex) for a linear list of focusable items like a menu, toolbar, or button group.",
+"synonyms":[
+"roving tabindex",
+"arrow key navigation",
+"list keyboard nav",
+"menu keyboard navigation",
+"toolbar focus management",
+"WAI-ARIA menu pattern",
+"useFocusList",
+"keyboard accessible list",
+"linear navigation hook",
+"focus trap for lists",
+"button group navigation",
+"typeahead focus",
+"composite widget focus",
+"Radix roving focus",
+"MUI useListNavigation"
+],
+"props":[
+"itemSelector",
+"boundarySelector",
+"wrap",
+"onEscape",
+"orientation",
+"hasHomeEnd",
+"hasPaging",
+"hasRovingTabIndex",
+"hasCaretGuard",
+"listRef",
+"handleKeyDown",
+"handleFocus"
+]
+},
+"useLocale":{
+"what":"A hook that returns the active BCP 47 locale string from the i18n provider context, for use when feeding formatting helpers like date/number formatters or useCollator.",
+"synonyms":[
+"get current locale",
+"current language code",
+"i18n locale hook",
+"useIntl locale",
+"get language",
+"locale context",
+"BCP47 locale",
+"active locale",
+"useLocale hook",
+"formatting locale accessor"
+],
+"props":[]
+},
+"useLongPress":{
+"what":"A touch-interaction hook that detects a single-finger long-press gesture (with movement/time tolerance) and fires a callback, used for invoking context menus on touch devices.",
+"synonyms":[
+"long press detector",
+"press and hold",
+"touch hold gesture",
+"context menu on mobile",
+"onLongPress handler",
+"hold-to-trigger",
+"press delay hook",
+"touch gesture hook",
+"useGesture longpress",
+"iOS context menu workaround"
+],
+"props":[
+"onLongPress",
+"disabled",
+"delayMs",
+"moveCancelPx"
+]
+},
+"useMediaQuery":{
+"what":"SSR-safe hook that returns whether a CSS media query currently matches, for responsive breakpoint logic.",
+"synonyms":[
+"media query hook",
+"responsive hook",
+"breakpoint detection",
+"isMobile hook",
+"matchMedia hook",
+"window.matchMedia",
+"useBreakpoint",
+"responsive design hook",
+"viewport size hook",
+"check screen size",
+"prefers-reduced-motion check",
+"mobile detection"
+],
+"props":[
+"query",
+"serverDefault"
+]
+},
+"useMenuPress":{
+"what":"A low-level hook that implements the full press/gesture model for menu-like surfaces (menu root + trigger), handling pointer tracking, long-press opening, release-based activation, stray-click swallowing, and edge autoscroll.",
+"synonyms":[
+"menu interaction hook",
+"dropdown press handling",
+"pointer gesture for menus",
+"long press to open menu",
+"menu highlight on hover drag",
+"context menu press model",
+"release to activate row",
+"touch menu interaction",
+"Radix menu primitives",
+"menu gesture controller",
+"swallow stray click",
+"menu autoscroll on drag",
+"press and drag select menu item"
+],
+"props":[
+"menuRef",
+"triggerRef",
+"itemSelector",
+"onTriggerPress",
+"onHighlight",
+"onActivate",
+"onDismiss",
+"getScroller",
+"hitTest",
+"longPressDelayMs",
+"isEnabled"
+]
+},
+"useMergedRefs":{
+"what":"A hook that combines multiple React refs (up to six) into a single stable callback ref, useful when one DOM element needs to be referenced by both your component and a forwarded/external ref.",
+"synonyms":[
+"merge refs",
+"combine refs",
+"compose refs",
+"multiple refs one element",
+"forwardRef with local ref",
+"ref callback merge",
+"useComposedRefs",
+"mergeRefs",
+"share ref between parent and child",
+"combine forwarded ref with internal ref"
+],
+"props":[
+"refA",
+"refB",
+"refC",
+"refD",
+"refE",
+"refF"
+]
+},
+"useMultiCombobox":{
+"what":"A hook providing keyboard navigation, highlighting, and toggle logic for a multi-select combobox/dropdown where selecting an item does not close the popup.",
+"synonyms":[
+"multi-select dropdown logic",
+"checkbox dropdown keyboard nav",
+"tag picker combobox",
+"multiselect listbox hook",
+"Ant Design multi-select",
+"MUI Autocomplete multiple",
+"Chakra multi-select",
+"highlighted option navigation",
+"typeahead multiselect",
+"combobox with chips",
+"select-multiple keyboard handling",
+"dropdown toggle items"
+],
+"props":[
+"selectableItems",
+"isDisabled",
+"isOpen",
+"hasSearch",
+"onOpen",
+"onClose",
+"onToggle",
+"onClear",
+"hasValue",
+"listboxId",
+"isGrid",
+"rowHasAction",
+"onActivateAction"
+]
+},
+"useOverflow":{
+"what":"A hook that measures a hidden copy of a list to determine how many items fit in the visible container's width, enabling 'show N items + overflow indicator' patterns without flicker.",
+"synonyms":[
+"overflow list",
+"responsive toolbar",
+"collapse items into more menu",
+"+N more",
+"truncate items that don't fit",
+"wrap detection",
+"visible count calculation",
+"overflow menu hook",
+"resize observer list",
+"ant design overflow",
+"MUI useOverflow",
+"tag list truncation",
+"breadcrumb collapse",
+"horizontal scroll fit",
+"measure container width",
+"auto collapse nav items"
+],
+"props":[
+"gap",
+"minVisibleItems",
+"maxVisibleItems",
+"maxRows",
+"collapseFrom",
+"behavior",
+"containerRef",
+"measureRef",
+"visibleCount",
+"hasOverflow",
+"rows",
+"rowHeight"
+]
+},
+"usePopover":{
+"what":"A hook for building popover/dialog-like floating UI (e.g. date pickers, comboboxes) that combines anchored positioning, focus trapping, auto-focus, escape/light dismiss, and a hidden accessible close button.",
+"synonyms":[
+"popover hook",
+"floating dialog",
+"anchored popup",
+"combobox dropdown panel",
+"date picker popup",
+"MUI Popover",
+"Chakra Popover",
+"Radix Popover",
+"Ant Popover",
+"overlay with focus trap",
+"dismissible dropdown panel",
+"modal-less dialog",
+"trigger and content popup pattern"
+],
+"props":[
+"onShow",
+"onHide",
+"xstyle",
+"hasLightDismiss",
+"hasEscapeDismiss",
+"hasAutoFocus",
+"hasCloseButton",
+"closeButtonLabel",
+"dialogLabel",
+"role",
+"isModal",
+"hasSurface",
+"padding",
+"surfaceTarget"
+]
+},
+"usePressFeedback":{
+"what":"A tiny hook to mark any custom pressable element so it participates in the shared document-level touch press visual feedback system (pressed overlay/flash on touch, :active for mouse).",
+"synonyms":[
+"press state styling",
+"touch ripple feedback",
+"active state hook",
+"pressed background effect",
+"tap feedback",
+"MUI ripple",
+"button press animation",
+"custom pressable surface",
+"interaction overlay press",
+"press down visual effect"
+],
+"props":[]
+},
+"useResizable":{
+"what":"A hook that implements drag-to-resize behavior for one or more layout regions (e.g. sidebars/panels), with support for min/max sizes, collapsing, snapping, and persistence to localStorage.",
+"synonyms":[
+"resizable panel",
+"resizable sidebar",
+"drag handle resize",
+"split pane",
+"splitter",
+"resizable splitter",
+"collapsible sidebar",
+"panel group",
+"react-resizable-panels",
+"radix resizable",
+"drag to resize width",
+"persist panel size",
+"resize handle logic",
+"adjustable layout columns",
+"min max width drag"
+],
+"props":[
+"defaultSize",
+"minSize",
+"maxSize",
+"collapsible",
+"collapsedSize",
+"snaps",
+"shrinkOrder",
+"direction",
+"containerRef",
+"autoSaveId",
+"isCollapsed",
+"onSizeChange"
+]
+},
+"useScrollLock":{
+"what":"A hook that locks background page scrolling (e.g. while a modal/dialog is open) by pinning the body with position:fixed, working around iOS Safari limitations, and restores scroll position on unlock.",
+"synonyms":[
+"body scroll lock",
+"disable background scroll",
+"modal scroll lock",
+"prevent scroll behind dialog",
+"overscroll contain",
+"lock scroll on open",
+"no-scroll body",
+"radix scroll lock",
+"chakra useScrollLock",
+"freeze page scroll",
+"scrollbar gutter preservation",
+"dialog backdrop scroll prevention"
+],
+"props":[
+"isLocked"
+]
+},
+"useScrollOverflow":{
+"what":"A hook that attaches to a horizontally scrollable container and reports whether content overflows at the start/end edges, updating on scroll and resize, for use cases like fade edges or scroll buttons in carousels and tab lists.",
+"synonyms":[
+"scroll edge detection",
+"scroll fade mask",
+"overflow indicator hook",
+"carousel arrow visibility",
+"scroll shadow",
+"detect scrollable content",
+"scroll position tracker",
+"edge fade hook",
+"can scroll left right",
+"overflow-x detection"
+],
+"props":[
+"scrollRef",
+"overflowStart",
+"overflowEnd",
+"hasOverflow"
+]
+},
+"useScrollableArea":{
+"what":"A low-level behavior hook that adds logical (inline/block, writing-mode aware) scroll overflow state, native keyboard scroll delegation, and safe prop getters to caller-owned viewport/content elements, meant to power a ScrollableArea component or similar scroll-owning structures.",
+"synonyms":[
+"scroll container primitive",
+"scrollable region hook",
+"logical axis scrolling",
+"RTL-aware scroll",
+"keyboard scrollable div",
+"scroll area behavior hook",
+"ScrollArea headless hook",
+"overflow container with accessibility",
+"scroll owner registry",
+"custom scrollbar container logic"
+],
+"props":[
+"axis",
+"keyboardAccess",
+"overscroll",
+"stickyContainment",
+"getViewportProps",
+"getContentProps",
+"state"
+]
+},
+"useStreamingText":{
+"what":"Hook that smooths bursty streamed text (e.g. from an LLM) into a steady character-by-character reveal animation for display.",
+"synonyms":[
+"typewriter effect",
+"text streaming animation",
+"LLM token streaming display",
+"chat streaming text",
+"character reveal animation",
+"ChatGPT-style text typing",
+"progressive text reveal",
+"stream smoothing",
+"typing animation hook",
+"incremental text render"
+],
+"props":[
+"targetText",
+"isStreaming",
+"options.speed"
+]
+},
+"useTableColumnResize":{
+"what":"A Table plugin hook that enables drag-to-resize (and keyboard resize) of table columns, handling proportional vs pixel column widths, min/max clamping, and committing resized widths back to the consumer; use when a Table needs resizable columns.",
+"synonyms":[
+"resizable columns",
+"column resize handle",
+"drag column width",
+"table column resizing",
+"adjustable table columns",
+"resize table header",
+"column width plugin",
+"Ant Table resizable",
+"MUI DataGrid column resize"
+],
+"props":[
+"columnWidths",
+"onColumnResizeEnd",
+"minWidth",
+"maxWidth",
+"columns"
+]
+},
+"useTableColumnSettings":{
+"what":"A pure Table plugin hook that filters and reorders a table's columns based on a provided active-column-keys config, used alongside useTableColumnSettingsState to implement show/hide and reorder column settings UI.",
+"synonyms":[
+"column visibility toggle",
+"manage columns",
+"show/hide columns",
+"column chooser",
+"column picker",
+"table settings menu",
+"customize columns",
+"Ant Table column settings",
+"MUI DataGrid column visibility"
+],
+"props":[
+"activeColumnKeys",
+"columns",
+"isAlwaysVisible",
+"group",
+"label",
+"key"
+]
+},
+"useTableFilterState":{
+"what":"A hook that manages the filter-state object (map of column key to value) and an onFilterChange handler, meant to be paired with useTableFiltering so you don't write the setState boilerplate yourself.",
+"synonyms":[
+"table filter state hook",
+"controlled filter state",
+"filter value map",
+"useFilters",
+"filter state management",
+"table search state",
+"column filter state",
+"reset filters",
+"clearAll filters hook"
+],
+"props":[
+"initialState",
+"filters",
+"onFilterChange",
+"clearAll"
+]
+},
+"useTableFiltering":{
+"what":"A Table plugin hook that renders per-column filter controls (popover, inline, or inline-compact) driven by a PowerSearchConfig, resolving each column's filter field/operator into the right input (text, number, date, time, selector, multi-select, tokenizer), for use via the Table `plugins` prop.",
+"synonyms":[
+"column filters",
+"table header filters",
+"data table filtering UI",
+"filter popover",
+"inline filter row",
+"column search",
+"MUI DataGrid filter",
+"Ant Table filter dropdown",
+"filter by column",
+"toSearchFilters"
+],
+"props":[
+"filters",
+"onFilterChange",
+"variant",
+"searchConfig"
+]
+},
+"useTableGroupedRows":{
+"what":"A Table plugin hook that flattens grouped data into collapsible, full-width section-header rows (with chevron toggle and count) interleaved with the data rows, for use via the Table `plugins` and `idKey` props.",
+"synonyms":[
+"grouped table rows",
+"collapsible row groups",
+"section headers in table",
+"row grouping plugin",
+"Ant Table grouping",
+"MUI DataGrid row grouping",
+"accordion table sections",
+"group by column",
+"collapsible sections table"
+],
+"props":[
+"data",
+"groupBy",
+"collapsedGroups",
+"onToggleGroup",
+"renderGroupHeader",
+"getRowKey",
+"groupOrder"
+]
+},
+"useTablePagination":{
+"what":"A Table plugin hook that renders Pagination controls above and/or below a table, letting the consumer own page state while handling layout, alignment, and page-size selection.",
+"synonyms":[
+"table pagination",
+"paginated table",
+"page navigation for table",
+"data grid pagination",
+"pagination plugin",
+"MUI TablePagination",
+"AntD table pagination",
+"page size selector",
+"cursor pagination",
+"pages above below table",
+"pagination hook",
+"page controls for data table"
+],
+"props":[
+"page",
+"onPageChange",
+"totalItems",
+"totalPages",
+"hasMore",
+"pageSize",
+"onPageSizeChange",
+"pageSizeOptions",
+"variant",
+"size",
+"position",
+"align",
+"label"
+]
+},
+"useTableRowExpansion":{
+"what":"A Table plugin hook that adds a chevron toggle and a full-width detail panel beneath a row, for showing extra content without a hierarchical tree structure.",
+"synonyms":[
+"expandable table row",
+"row detail panel",
+"accordion table row",
+"master-detail table",
+"collapsible row",
+"AntD expandable rows",
+"MUI collapsible table row",
+"chevron expand row",
+"sub-row content",
+"expand/collapse row",
+"drill-down row",
+"row disclosure panel"
+],
+"props":[
+"expandedKeys",
+"onToggle",
+"getRowKey",
+"renderExpanded",
+"getIsItemExpandable",
+"panelVariant",
+"hasRowClickExpansion"
+]
+},
+"useTableRowIndex":{
+"what":"A Table plugin hook that prepends a right-aligned, monospaced row-number column reflecting the current sort/filter/pagination order.",
+"synonyms":[
+"row number column",
+"numbered table rows",
+"index column",
+"ordinal column",
+"line numbers in table",
+"auto-increment column",
+"rank column",
+"table row count display",
+"sequential numbering plugin",
+"# column"
+],
+"props":[
+"data",
+"getRowKey",
+"label",
+"startFrom"
+]
+},
+"useTableRowStatus":{
+"what":"A Table plugin hook that prepends a narrow gutter column showing a per-row status indicator (dot or icon) derived from row data, with tooltip and accessible label.",
+"synonyms":[
+"row status indicator",
+"table row badge",
+"status dot column",
+"row health icon",
+"table status column",
+"row flag indicator",
+"colored dot per row",
+"semantic row status",
+"error/warning/success row marker",
+"Ant Table status column",
+"row signifier"
+],
+"props":[
+"getStatus"
+]
+},
+"useTableSelection":{
+"what":"A Table plugin hook that adds a checkbox column for row selection and select-all, managing checkbox rendering, row highlighting, and aria-selected state via an external store for fine-grained updates.",
+"synonyms":[
+"table row selection",
+"select all checkbox",
+"checkbox column",
+"multi-select table rows",
+"row checkbox plugin",
+"bulk selection table",
+"MUI DataGrid checkbox selection",
+"Ant Table rowSelection",
+"selectable rows"
+],
+"props":[
+"getIsItemSelected",
+"onSelectItem",
+"onSelectAll",
+"getIsAllSelected",
+"getIsIndeterminate",
+"getIsItemSelectable",
+"getIsItemEnabled",
+"getRowLabel",
+"hasRowHighlight"
+]
+},
+"useTableSelectionState":{
+"what":"A state-management hook that computes selection config (selected/select-all/indeterminate logic, respecting disabled/non-selectable rows) for use with useTableSelection, given controlled selectedKeys state.",
+"synonyms":[
+"table selection state manager",
+"controlled row selection",
+"select-all logic helper",
+"selection set management",
+"bulk select state",
+"row selection reducer",
+"selected keys tracker"
+],
+"props":[
+"data",
+"idKey",
+"getIsItemSelectable",
+"getIsItemEnabled",
+"selectedKeys",
+"setSelectedKeys"
+]
+},
+"useTableSortable":{
+"what":"A headless Table plugin hook that adds clickable, sortable column headers with ascending/descending/unsorted cycling and optional multi-column sort via shift-click.",
+"synonyms":[
+"table sort",
+"sortable columns",
+"column sort header",
+"click to sort",
+"sort indicator arrows",
+"multi-sort table",
+"data grid sorting",
+"MUI DataGrid sorting",
+"AntD table sorter",
+"useSortBy",
+"sort plugin",
+"toggle sort direction"
+],
+"props":[
+"sort",
+"onSortChange",
+"allowUnsortedState",
+"isMultiSortEnabled"
+]
+},
+"useTableStickyColumns":{
+"what":"A headless Table plugin hook that pins specified columns to the start and/or end edge of a scrollable table, keeping them visible with shadow indicators while other columns scroll horizontally.",
+"synonyms":[
+"frozen columns",
+"pinned columns",
+"sticky columns",
+"fixed columns table",
+"lock column left right",
+"AntD fixed column",
+"MUI DataGrid pinned columns",
+"horizontal scroll table freeze"
+],
+"props":[
+"startKeys",
+"endKeys"
+]
+},
+"useTableTreeData":{
+"what":"A headless Table plugin hook that renders hierarchical/nested row data with expand/collapse chevrons, per-level indentation, and tree ARIA semantics inside a tree column.",
+"synonyms":[
+"tree table",
+"nested rows table",
+"expandable rows",
+"hierarchical data grid",
+"tree grid",
+"AntD tree table",
+"MUI TreeView table",
+"collapsible table rows",
+"parent child rows",
+"expand collapse table"
+],
+"props":[
+"getRowMeta",
+"onToggleItem",
+"hasExpandableRows",
+"isAllExpanded",
+"onExpandAll",
+"onCollapseAll",
+"hasExpandAllControl",
+"indent",
+"treeColumnKey",
+"hasRowClickExpansion"
+]
+},
+"useTableTreeState":{
+"what":"A state-management hook for hierarchical table data that owns the expanded/collapsed row set (controlled or uncontrolled), flattens nested rows into a visible-only array, and produces a ready-to-use config for the useTableTreeData plugin — use it when a Table needs to render tree/nested data with expand/collapse rows.",
+"synonyms":[
+"tree table",
+"nested table rows",
+"expand collapse table",
+"hierarchical data table",
+"row expander state",
+"table tree state hook",
+"parent child rows",
+"tree grid",
+"expand all collapse all",
+"nested rows flattening",
+"MUI TreeView table",
+"Ant Design Table expandable",
+"Chakra tree",
+"flatten nested data for table",
+"lazy loaded tree rows",
+"indeterminate expand state",
+"controlled expanded rows"
+],
+"props":[
+"data",
+"idKey",
+"childrenKey",
+"defaultExpandedIds",
+"expandedIds",
+"onExpandedIdsChange",
+"isItemExpandable",
+"sortSiblings",
+"indent",
+"treeColumnKey"
+]
+},
+"useTheme":{
+"what":"A hook that gives synchronous, non-CSS access to resolved design-token values (colors, spacing, etc.) and the current light/dark mode for use in canvas, SVG, or data-viz libraries, falling back to the root <html> theme attributes or OS preference when no Theme provider is present.",
+"synonyms":[
+"get theme tokens",
+"access design tokens in JS",
+"current color mode",
+"light dark mode hook",
+"theme context value",
+"resolve CSS variable to raw value",
+"useColorScheme",
+"useColorMode",
+"chart theme colors",
+"canvas SVG theme colors",
+"Chakra useTheme",
+"MUI useTheme"
+],
+"props":[
+"name",
+"mode",
+"token",
+"tokens"
+]
+},
+"useToast":{
+"what":"Imperative hook to show toast notifications from anywhere, working with or without a LayerProvider via a self-mounting fallback viewport.",
+"synonyms":[
+"toast",
+"notification",
+"snackbar",
+"alert message",
+"message popup",
+"useSnackbar",
+"notify",
+"showToast",
+"flash message",
+"status banner"
+],
+"props":[
+"body",
+"type",
+"delay",
+"hideDelay"
+]
+},
+"useTooltip":{
+"what":"Hook providing hover/focus/tap-triggered tooltip behavior with anchor positioning, built on useLayer, for short non-interactive hint text.",
+"synonyms":[
+"tooltip",
+"hover hint",
+"title attribute replacement",
+"popover hint",
+"useTooltip",
+"hover text",
+"info bubble",
+"label on hover",
+"Radix Tooltip",
+"MUI Tooltip"
+],
+"props":[
+"placement",
+"alignment",
+"delay",
+"hideDelay",
+"focusTrigger",
+"touchTrigger",
+"isEnabled",
+"isOpen",
+"isDefaultOpen",
+"onShow",
+"onHide"
+]
+},
+"useTranslator":{
+"what":"A hook that returns a stable translator function for translating strings outside of render, such as in event handlers or effects.",
+"synonyms":[
+"t function hook",
+"translate outside render",
+"useTranslation",
+"i18n translate hook",
+"get translator function",
+"imperative translate",
+"event handler translation",
+"useT",
+"localization function",
+"translate on click"
+],
+"props":[]
+},
+"useTreeFocus":{
+"what":"A hook implementing the WAI-ARIA tree keyboard navigation pattern (expand/collapse, parent/child movement, roving tabindex, typeahead) for a visible treeitem list like TreeList.",
+"synonyms":[
+"tree view keyboard navigation",
+"treeitem focus management",
+"expand/collapse keyboard nav",
+"file tree keyboard nav",
+"APG tree pattern",
+"MUI TreeView keyboard nav",
+"Ant Design Tree navigation",
+"Radix tree accessibility",
+"nested list navigation",
+"roving tabindex for tree",
+"hierarchical list focus",
+"useTreeNavigation"
+],
+"props":[
+"itemSelector",
+"isItemDisabled",
+"getLevel",
+"isExpanded",
+"isCollapsed",
+"getItemId",
+"onToggleExpand",
+"onActivate",
+"typeahead",
+"typeaheadResetMs",
+"onActiveChange",
+"hasRovingTabIndex"
+]
+},
+"useTypeahead":{
+"what":"A hook that adds press-a-letter-to-jump (type-to-focus) search to any list, menu, or grid by matching buffered keystrokes against item labels.",
+"synonyms":[
+"type ahead",
+"type to search",
+"keyboard first letter search",
+"select jump to letter",
+"combobox quick find",
+"list quick search",
+"menu letter navigation",
+"APG typeahead",
+"autocomplete by key press",
+"jump to item by typing"
+],
+"props":[
+"getItemLabels",
+"onMatch",
+"getCurrentIndex",
+"resetMs",
+"isDisabled",
+"onKeyDown",
+"reset"
+]
+}
+}

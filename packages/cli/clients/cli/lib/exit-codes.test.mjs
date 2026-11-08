@@ -9,7 +9,8 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {describe, it, expect} from 'vitest';
-import {program, JSON_SUPPORTED} from '../index.mjs';
+import {JSON_SUPPORTED} from '../index.mjs';
+import {program} from '../program.mjs';
 import {buildManifest} from './manifest.mjs';
 import {runCli} from '../../../test-utils/run-cli.mjs';
 
@@ -24,6 +25,10 @@ for (const file of fs.readdirSync(COMMANDS).sort()) {
 }
 
 const manifest = buildManifest(program, {jsonSupported: JSON_SUPPORTED, version: '0.0.0-test'});
+/** Hidden commands (a package-script hook): documented, never in the manifest. */
+const HIDDEN = new Set(
+  program.commands.filter((c) => /** @type {any} */ (c)._hidden).map((c) => c.name()),
+);
 /** @type {Map<string, any>} */
 const entries = new Map();
 const walk = (/** @type {any} */ c) => {
@@ -98,6 +103,7 @@ describe('command exit codes', () => {
 
   it('the manifest carries every command exit code', () => {
     for (const doc of commandDocs) {
+      if (HIDDEN.has(doc.name)) continue;
       expect(entries.get(doc.name)?.exitCodes, doc.name).toEqual(
         doc.exitCodes.map(({code, when}) => ({code, when})),
       );

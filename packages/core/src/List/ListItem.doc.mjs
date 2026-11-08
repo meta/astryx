@@ -104,8 +104,13 @@ export const docs = {
     {
       name: 'isSelected',
       type: 'boolean',
-      description: 'Selected state; sets aria-selected on the item.',
+      description: 'Selected state; marks the item as the current one with aria-current="true" (a list item cannot carry aria-selected).',
       default: 'false',
+    },
+    {
+      name: 'itemKey',
+      type: 'string | number',
+      description: "The row's item key, a string or a number from the data (the shape Table's idKey returns). It is the row's identity for the list's animated layout (List animatedLayout): with a handle, the list matches rows by it to animate inserts, removals and moves, and a row without one changes at once. Separate from React's key.",
     },
     {
       name: 'swipeActions',
@@ -196,8 +201,13 @@ export const docsZh = {
     {
       name: 'isSelected',
       type: 'boolean',
-      description: '选中状态；在项目上设置 aria-selected。',
+      description: '选中状态；在项目上设置 aria-current="true"，将其标为当前项（列表项不能使用 aria-selected）。',
       default: 'false',
+    },
+    {
+      name: 'itemKey',
+      type: 'string | number',
+      description: '行的项目键，取自数据的字符串或数字（与 Table 的 idKey 返回的形状相同）。它是列表动画布局（List animatedLayout）中该行的身份：传入句柄时，列表按它匹配各行，为插入、删除和移动添加动画；没有项目键的行会立即变化。与 React 的 key 相互独立。',
     },
     {
       name: 'swipeActions',
@@ -236,6 +246,7 @@ export const docsDense = {
       'Link target attribute, only when href provided. target="_blank" auto-adds noopener noreferrer.',
     rel: 'Link relationship tokens. noopener noreferrer are merged for target="_blank".',
     isDisabled: 'Disabled state; sets aria-disabled.',
-    isSelected: 'Selected state; sets aria-selected.',
+    isSelected: 'Selected state; sets aria-current="true".',
+    itemKey: "The row's identity for List animatedLayout; a row without one changes at once.",
   },
 };
