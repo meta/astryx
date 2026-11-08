@@ -1089,13 +1089,6 @@
     "FR8",
     "spec:AST-086"
   ],
-  "packages/core/src/Timestamp/Timestamp.tsx": [
-    "FR5",
-    "FR9",
-    "component:Timestamp",
-    "component:Timestamp",
-    "spec quote"
-  ],
   "packages/core/src/Toast/Toast.tsx": ["FR3"],
   "packages/core/src/Toast/ToastViewport.tsx": [
     "FR10",

@@ -291,22 +291,17 @@ export default function TimestampHoverCard({
     if (!trigger) {
       return;
     }
-    const previousHaspopup = trigger.getAttribute('aria-haspopup');
-    const previousControls = trigger.getAttribute('aria-controls');
-    trigger.setAttribute('aria-haspopup', 'dialog');
-    if (isOpen) {
-      trigger.setAttribute(
-        'aria-controls',
-        [previousControls, id].filter(Boolean).join(' '),
-      );
+    if (!isOpen) {
+      return;
     }
-    // <time> permits these global attributes, but not aria-expanded.
+    const previousControls = trigger.getAttribute('aria-controls');
+    trigger.setAttribute(
+      'aria-controls',
+      [previousControls, id].filter(Boolean).join(' '),
+    );
+    // The time role supports neither aria-haspopup nor aria-expanded, so the
+    // open card is named through aria-controls alone.
     return () => {
-      if (previousHaspopup === null) {
-        trigger.removeAttribute('aria-haspopup');
-      } else {
-        trigger.setAttribute('aria-haspopup', previousHaspopup);
-      }
       if (previousControls === null) {
         trigger.removeAttribute('aria-controls');
       } else {

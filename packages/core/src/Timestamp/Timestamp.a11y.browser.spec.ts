@@ -9,6 +9,7 @@
  * @position Browser regressions for Timestamp's lazy details attachment
  */
 
+import AxeBuilder from '@axe-core/playwright';
 import {expect, test} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
@@ -56,7 +57,6 @@ for (const moveAway of [false, true]) {
         await expect(times.nth(1)).toBeFocused();
       }
       release();
-      await expect(times.first()).toHaveAttribute('aria-haspopup', 'dialog');
       expect(await original.evaluate(node => node.isConnected)).toBe(true);
       const activeTime = times.nth(moveAway ? 1 : 0);
       await expect(activeTime).toBeFocused();
@@ -88,7 +88,7 @@ test('each timestamp owns the next copy-button tab stop', async ({page}) => {
     `${storybook.origin}/iframe.html?id=core-timestamp--relative-format&viewMode=story`,
   );
   const times = page.locator('#storybook-root time');
-  await expect(times.first()).toHaveAttribute('aria-haspopup', 'dialog');
+  await expect(times).toHaveCount(7);
   await page.keyboard.press('Tab');
   for (let index = 0; index < 2; index++) {
     await expect(times.nth(index)).toBeFocused();
@@ -101,4 +101,25 @@ test('each timestamp owns the next copy-button tab stop', async ({page}) => {
     await page.keyboard.press('Tab');
   }
   await expect(times.nth(2)).toBeFocused();
+});
+
+test('an open card passes axe, and the time carries no unsupported popup attribute', async ({
+  page,
+}) => {
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-timestamp--relative-format&viewMode=story`,
+  );
+  const time = page.locator('#storybook-root time').first();
+  await page.keyboard.press('Tab');
+  await expect(time).toBeFocused();
+  await expect(time).toHaveAttribute('aria-controls', /.+/);
+  await expect(time).not.toHaveAttribute('aria-haspopup');
+  await expect(time).not.toHaveAttribute('aria-expanded');
+  const results = await new AxeBuilder({page}).analyze();
+  expect(
+    results.violations.map(
+      violation =>
+        `${violation.id}: ${violation.nodes.map(node => node.target.join(' ')).join(', ')}`,
+    ),
+  ).toEqual([]);
 });

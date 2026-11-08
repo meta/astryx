@@ -837,7 +837,7 @@ describe('Timestamp', () => {
       ['auto', {format: 'auto'}],
       ['configured absolute', {format: 'date_time', tooltipEntries: [{}]}],
     ] as const)(
-      'advertises the %s details popup on the tab stop',
+      'names the %s details card from the tab stop only while it is open',
       async (_, props) => {
         render(
           <Timestamp
@@ -847,13 +847,16 @@ describe('Timestamp', () => {
           />,
         );
         const trigger = screen.getByTestId('ts');
-        await waitFor(() => {
-          expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
-        });
         expect(trigger).toHaveAttribute('tabindex', '0');
         expect(trigger).not.toHaveAttribute('aria-controls');
-        // A semantic <time> keeps the global popup attributes without an
-        // unsupported expanded state or a role that promises activation.
+        act(() => trigger.focus());
+        const card = await screen.findByRole('dialog', {hidden: true});
+        await waitFor(() => {
+          expect(trigger).toHaveAttribute('aria-controls', card.id);
+        });
+        // The time role supports neither aria-haspopup nor aria-expanded, and
+        // the time keeps its own role.
+        expect(trigger).not.toHaveAttribute('aria-haspopup');
         expect(trigger).not.toHaveAttribute('aria-expanded');
         expect(trigger).not.toHaveAttribute('role');
         expect(trigger.closest('.astryx-timestamp')).not.toHaveAttribute(
@@ -916,7 +919,7 @@ describe('Timestamp', () => {
         expect(el).not.toHaveAttribute('aria-controls');
       });
       expect(el).toHaveFocus();
-      expect(el).toHaveAttribute('aria-haspopup', 'dialog');
+      expect(el).not.toHaveAttribute('aria-haspopup');
     });
 
     it('keeps the ref, caller props, and text styling when a card is attached', async () => {
@@ -941,9 +944,6 @@ describe('Timestamp', () => {
           data-testid="ts"
         />,
       );
-      await waitFor(() => {
-        expect(ref.current).toHaveAttribute('aria-haspopup', 'dialog');
-      });
       const time = screen.getByTestId('ts');
       expect(ref.current).toBe(time);
       expect(time).toHaveAttribute('aria-label', 'Published');
