@@ -16,7 +16,13 @@
  * - /packages/cli/assets/templates/blocks/components/Hooks/useKeyboardHintHookUsage.tsx
  */
 
-import React, {useCallback, useEffect, useRef, type ReactNode} from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
   colorVars,
@@ -206,12 +212,17 @@ export function useKeyboardHint(
     }
   }, []);
 
+  // Registered on the layer stack only while the hint shows, so it registers
+  // after its anchor is set and ranks in the anchor's document.
+  const [isShowing, setIsShowing] = useState(false);
+
   const handleLayerShow = useCallback(() => {
     isVisibleRef.current = true;
   }, []);
 
   const handleLayerHide = useCallback(() => {
     isVisibleRef.current = false;
+    setIsShowing(false);
     clearDismissTimeout();
     layerAnchorRef.current(null);
   }, [clearDismissTimeout]);
@@ -241,6 +252,7 @@ export function useKeyboardHint(
 
       anchorRef.current = anchor;
       layerAnchorRef.current(anchor);
+      setIsShowing(true);
       layer.show();
 
       clearDismissTimeout();
@@ -253,12 +265,10 @@ export function useKeyboardHint(
     [clearDismissTimeout, dismiss, dismissAfterMs, isEnabled, layer],
   );
 
-  // Registered for the hook's lifetime: the hint shows and hides through refs,
-  // so presence is read at press time. A hidden hint is skipped and the press
-  // goes to the layer below. The anchor sits inside the group, so a hint in a
-  // dialog ranks above that dialog.
+  // Registered while the hint shows, in its anchor's document. The hint's
+  // host is a layer, so a hint in a dialog ranks above that dialog.
   useLayerDismissal({
-    isActive: true,
+    isActive: isShowing,
     isPresent: () => isVisibleRef.current,
     onDismiss: dismiss,
     getContainer: () => anchorRef.current,

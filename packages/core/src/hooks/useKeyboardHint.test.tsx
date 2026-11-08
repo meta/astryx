@@ -6,7 +6,13 @@
  * @output Unit tests for keyboard hint rendering
  */
 
-import {fireEvent, render, screen} from '@testing-library/react';
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react';
 import {createPortal} from 'react-dom';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import {useKeyboardHint, type KeyboardHintOrientation} from './useKeyboardHint';
@@ -205,6 +211,55 @@ describe('useKeyboardHint dismissal', () => {
     expect(hidePopover).toHaveBeenCalledTimes(1);
     expect(escape.defaultPrevented).toBe(true);
     expect(document.activeElement).toBe(first);
+  });
+
+  it('in a second document, Escape there closes the hint and an Escape in the page leaves it', () => {
+    // A same-origin iframe stands in for any second document a row renders
+    // into, Document Picture-in-Picture included.
+    const frame = document.createElement('iframe');
+    document.body.appendChild(frame);
+    const secondDocument = frame.contentDocument!;
+    // The frame's elements use the frame's own prototypes.
+    const frameElement = (frame.contentWindow as typeof window).HTMLElement;
+    const showPopover = vi.fn();
+    const hidePopover = vi.fn();
+    for (const Element of [HTMLElement, frameElement]) {
+      const matches = Element.prototype.matches;
+      vi.spyOn(Element.prototype, 'matches').mockImplementation(function (
+        this: HTMLElement,
+        selector: string,
+      ) {
+        return selector === ':focus-visible'
+          ? true
+          : matches.call(this, selector);
+      });
+      Element.prototype.showPopover = showPopover;
+      Element.prototype.hidePopover = hidePopover;
+    }
+    try {
+      render(createPortal(<Row />, secondDocument.body));
+      const first = within(secondDocument.body).getByRole('button', {
+        name: 'First',
+      });
+      first.focus();
+      fireEvent.focus(first);
+      expect(showPopover).toHaveBeenCalledTimes(1);
+
+      const pageEscape = new KeyboardEvent('keydown', {
+        key: 'Escape',
+        bubbles: true,
+        cancelable: true,
+      });
+      document.body.dispatchEvent(pageEscape);
+      expect(hidePopover).not.toHaveBeenCalled();
+      expect(pageEscape.defaultPrevented).toBe(false);
+
+      fireEvent.keyDown(first, {key: 'Escape'});
+      expect(hidePopover).toHaveBeenCalledTimes(1);
+    } finally {
+      cleanup();
+      frame.remove();
+    }
   });
 
   it('leaves Escape alone once the hint is gone', () => {
