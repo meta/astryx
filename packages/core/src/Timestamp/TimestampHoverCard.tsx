@@ -29,7 +29,6 @@
 import type {ReactNode, RefObject} from 'react';
 import {useCallback, useRef} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {mergeIds} from '../HoverCard/mergeIds';
 import {useHoverCard} from '../HoverCard/useHoverCard';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {IconButton} from '../IconButton/IconButton';
@@ -230,8 +229,11 @@ export interface TimestampHoverCardProps {
   label: string;
   /** Persistent anchor, rendered outside the lazy boundary. */
   triggerRef: RefObject<HTMLTimeElement | null>;
-  /** The caller's own `aria-controls` on the time, which the card's id joins. */
-  triggerControls?: string;
+  /**
+   * Reports the open card's id when it shows, and null when it hides, so the
+   * time can name it through `aria-controls`.
+   */
+  onCardOpenChange: (cardId: string | null) => void;
 }
 
 function gridTemplateFor(
@@ -263,10 +265,24 @@ export default function TimestampHoverCard({
   lines,
   label,
   triggerRef,
-  triggerControls,
+  onCardOpenChange,
 }: TimestampHoverCardProps): ReactNode {
-  const {positionRef, interactionRef, id, isOpen, show, renderHoverCard} =
-    useHoverCard({placement: 'above', focusTrigger: 'always', label});
+  const cardIdRef = useRef<string | null>(null);
+  const handleShow = useCallback(() => {
+    onCardOpenChange(cardIdRef.current);
+  }, [onCardOpenChange]);
+  const handleHide = useCallback(() => {
+    onCardOpenChange(null);
+  }, [onCardOpenChange]);
+  const {positionRef, interactionRef, id, show, renderHoverCard} = useHoverCard(
+    {
+      placement: 'above',
+      focusTrigger: 'always',
+      label,
+      onShow: handleShow,
+      onHide: handleHide,
+    },
+  );
 
   const didAttachRef = useRef(false);
   // Syncs the hover card's anchor and listeners with the <time> that
@@ -276,6 +292,7 @@ export default function TimestampHoverCard({
     if (!trigger) {
       return;
     }
+    cardIdRef.current = id;
     positionRef(trigger);
     interactionRef(trigger);
     // Focus can reach the time before this module loads. Open the card only
@@ -290,30 +307,7 @@ export default function TimestampHoverCard({
       positionRef(null);
       interactionRef(null);
     };
-  }, [triggerRef, positionRef, interactionRef, show]);
-
-  // Syncs the <time>'s aria-controls with the open card's id.
-  useIsomorphicLayoutEffect(() => {
-    const trigger = triggerRef.current;
-    if (!trigger) {
-      return;
-    }
-    if (!isOpen) {
-      return;
-    }
-    // The caller's prop, not a snapshot of the attribute, is the caller's
-    // value: a caller that changes it while the card is open keeps the change.
-    trigger.setAttribute('aria-controls', mergeIds(triggerControls, id) ?? '');
-    // The time role supports neither aria-haspopup nor aria-expanded, so the
-    // open card is named through aria-controls alone.
-    return () => {
-      if (triggerControls == null || triggerControls === '') {
-        trigger.removeAttribute('aria-controls');
-      } else {
-        trigger.setAttribute('aria-controls', triggerControls);
-      }
-    };
-  }, [triggerRef, triggerControls, id, isOpen]);
+  }, [triggerRef, positionRef, interactionRef, show, id]);
 
   // A label column is only reserved when some row is labelled; otherwise the
   // value sits flush at the card's leading edge. An action column is only

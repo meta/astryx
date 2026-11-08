@@ -35,6 +35,7 @@ import {useLocale} from '../i18n/useLocale';
 import {useCalendarSystem} from '../i18n/useCalendarSystem';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
+import {mergeIds} from '../HoverCard/mergeIds';
 import {formatInstant, formatZoneName} from './formatInstant';
 import {formatRelativeTime} from './formatRelativeTime';
 import {formatTooltipLines, resolveTimezoneID} from './tooltipEntries';
@@ -330,6 +331,8 @@ export function Timestamp({
     canReadClockOnClient,
     canReadClockOnServer,
   );
+  // The open card's id, which the card reports as it shows and hides.
+  const [openCardId, setOpenCardId] = useState<string | null>(null);
   const [now, setNow] = useState<Date | null>(() =>
     needsClock && canReadClock ? new Date() : null,
   );
@@ -481,7 +484,12 @@ export function Timestamp({
         : {})}
       // A bare <time> cannot take focus. Add the tab stop only while a card
       // is attached, so keyboard users can open it. A caller's tabIndex wins.
-      {...(showTooltip && rest.tabIndex == null ? {tabIndex: 0} : {})}>
+      {...(showTooltip && rest.tabIndex == null ? {tabIndex: 0} : {})}
+      // The time names the open card; a caller's own ids stay first. The time
+      // role supports neither aria-haspopup nor aria-expanded.
+      {...(showTooltip && openCardId != null
+        ? {'aria-controls': mergeIds(rest['aria-controls'], openCardId)}
+        : {})}>
       {displayText}
     </time>
   );
@@ -505,7 +513,7 @@ export function Timestamp({
             lines={lines}
             label={t('@astryx.timestamp.detailsLabel')}
             triggerRef={timeRef}
-            triggerControls={rest['aria-controls']}
+            onCardOpenChange={setOpenCardId}
           />
         </Suspense>
       )}
