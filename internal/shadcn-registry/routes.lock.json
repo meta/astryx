@@ -3942,6 +3942,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-table-rows-virtualization-fixed-height-rows",
+      "path": "examples/use-table-rows-virtualization/fixed-height-rows",
+      "aliases": []
+    },
+    {
       "name": "example-use-table-selection-state-table-selection-in-the-leading-mark",
       "path": "examples/use-table-selection-state/table-selection-in-the-leading-mark",
       "aliases": []
@@ -4334,6 +4339,11 @@
     {
       "name": "hook-use-table-row-status",
       "path": "hooks/use-table-row-status",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-table-rows-virtualization",
+      "path": "hooks/use-table-rows-virtualization",
       "aliases": []
     },
     {
