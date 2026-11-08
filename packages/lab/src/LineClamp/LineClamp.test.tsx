@@ -19,6 +19,8 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react';
+import {CheckboxInput} from '@astryxdesign/core/CheckboxInput';
+import {Switch} from '@astryxdesign/core/Switch';
 import {LineClamp} from './LineClamp';
 
 // jsdom has no layout engine, so content never actually overflows and
@@ -637,6 +639,48 @@ describe('LineClamp', () => {
       rerender(ui());
       expect(close).not.toHaveAttribute('inert');
     });
+
+    it.each([
+      ['CheckboxInput', 'past the last line', {top: 60, bottom: 84}, true],
+      ['CheckboxInput', 'on a visible line', {top: 10, bottom: 34}, false],
+      ['Switch', 'past the last line', {top: 60, bottom: 84}, true],
+      ['Switch', 'on a visible line', {top: 10, bottom: 34}, false],
+    ] as const)(
+      "judges a %s's positioned native input by its wrapper (%s)",
+      (kind, _where, rect, isInert) => {
+        const control = () =>
+          kind === 'CheckboxInput' ? (
+            <CheckboxInput label="Notify" value={false} onChange={() => {}} />
+          ) : (
+            <Switch label="Wifi" value={false} onChange={() => {}} />
+          );
+        const ui = () => (
+          <LineClamp maxLines={2} data-testid="clamp">
+            Some text {control()}
+          </LineClamp>
+        );
+        const {rerender} = render(ui());
+        const container = screen.getByTestId('clamp');
+        const input = container.querySelector('input')!;
+        const wrapper = input.parentElement!;
+        // The native input is placed against its own positioned wrapper,
+        // which sits in the clamp's flow.
+        Object.defineProperty(input, 'offsetParent', {value: wrapper});
+        mockRects(
+          new Map([
+            [container, {top: 0, bottom: 40}],
+            [wrapper, rect],
+            [input, rect],
+          ]),
+        );
+        rerender(ui());
+        if (isInert) {
+          expect(input).toHaveAttribute('inert');
+        } else {
+          expect(input).not.toHaveAttribute('inert');
+        }
+      },
+    );
 
     it('hides a descendant a child re-enables past the fold after mount', async () => {
       // Only the late link is placed past the fold; everything else sits

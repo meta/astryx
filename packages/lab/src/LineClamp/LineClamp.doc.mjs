@@ -72,7 +72,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          "LineClamp makes a focusable descendant inert only when both hold: (1) it is in the clamp's own flow, with no element between it and the clamp that is positioned absolute or fixed, is in the top layer (a popover or dialog), or is rendered elsewhere through a portal; and (2) its box lies wholly beyond the clamp's last visible line. Anything inside a positioned, top-layer or portaled subtree is never made inert, at any depth, whether or not it shows past the clamp. A control any part of which is visible stays reachable. LineClamp re-checks when its size, its content or its fonts change. Gap: an absolutely placed control that the clamp itself clips stays a tab stop; the author owns positioned content inside a clamp. Inert takes such a control out of the Tab order and the accessibility tree. LineClamp never rewrites your own tabIndex or aria-hidden, and the element that holds focus is never made inert.",
+          "LineClamp makes a focusable descendant inert only when both hold: (1) it is in the clamp's own flow. A positioned element is in that flow when its containing block is an element inside the clamp that is itself in the flow, as a control's own positioned wrapper is; the line test then applies to that containing block's box. A fixed element, an absolute element whose containing block is the clamp itself or lies outside it, a top-layer element (a popover or dialog), and anything rendered elsewhere through a portal each start a subtree that is never made inert, at any depth. (2) its box lies wholly beyond the clamp's last visible line. A control any part of which is visible stays reachable. LineClamp re-checks when its size, its content or its fonts change. Gap: an absolutely placed control that the clamp itself clips stays a tab stop; the author owns positioned content inside a clamp. Inert takes such a control out of the Tab order and the accessibility tree. LineClamp never rewrites your own tabIndex or aria-hidden, and the element that holds focus is never made inert.",
       },
     ],
   },
@@ -138,7 +138,7 @@ export const docsZh = {
       {
         guidance: true,
         description:
-          '只有同时满足以下两点时，LineClamp 才会把可聚焦的后代设为 inert：(1) 它在截断容器自己的文档流中，它与容器之间没有 absolute 或 fixed 定位的元素、没有位于顶层的元素（popover 或 dialog），也不是通过 portal 渲染到别处的；(2) 它的盒子完全位于最后一个可见行之外。定位、顶层或 portal 子树中的任何内容，无论层级多深、是否显示在容器之外，都不会被设为 inert。只要有一部分可见，控件就保持可达。LineClamp 会在尺寸、内容或字体变化时重新检查。已知缺口：被容器本身截断的绝对定位控件仍是一个 Tab 停靠点；容器内的定位内容由作者负责。LineClamp 不会改写你自己设置的 tabIndex 或 aria-hidden，持有焦点的元素也不会被设为 inert。',
+          '只有同时满足以下两点时，LineClamp 才会把可聚焦的后代设为 inert：(1) 它在截断容器自己的文档流中。若定位元素的包含块是容器内同样处于文档流中的元素（例如控件自己的定位包装元素），该定位元素也算在文档流中，此时按该包含块的盒子判断是否越过最后一行。fixed 元素、包含块是容器本身或位于容器之外的 absolute 元素、顶层元素（popover 或 dialog），以及通过 portal 渲染到别处的内容，各自开启一个无论多深都不会被设为 inert 的子树。(2) 它的盒子完全位于最后一个可见行之外。只要有一部分可见，控件就保持可达。LineClamp 会在尺寸、内容或字体变化时重新检查。已知缺口：被容器本身截断的绝对定位控件仍是一个 Tab 停靠点；容器内的定位内容由作者负责。LineClamp 不会改写你自己设置的 tabIndex 或 aria-hidden，持有焦点的元素也不会被设为 inert。',
       },
     ],
   },
@@ -169,7 +169,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          "Inert only for a focusable in the clamp's own flow (no absolute, fixed, top-layer or portal ancestor) whose box lies wholly past the last visible line; never inside a positioned, top-layer or portaled subtree; a partly visible control stays reachable; re-checked on size, content and font changes. Gap: an absolutely placed control the clamp clips stays a tab stop. Never the focused element, never your own tabIndex or aria-hidden.",
+          "Inert only for a focusable in the clamp's own flow whose box lies wholly past the last visible line (a positioned element placed against an in-flow containing block in the clamp, like a control's own wrapper, is in the flow and judged by that block's box); never inside a fixed, escaping absolute, top-layer or portaled subtree; a partly visible control stays reachable; re-checked on size, content and font changes. Gap: an absolutely placed control the clamp clips stays a tab stop. Never the focused element, never your own tabIndex or aria-hidden.",
       },
     ],
   },

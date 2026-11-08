@@ -127,7 +127,8 @@ function syncFocusableClipping(
     if (!isOwnedBy(container, el)) {
       continue;
     }
-    if (isInPositionedSubtree(container, el)) {
+    const box = flowBox(container, el);
+    if (box == null) {
       if (el.hasAttribute(HIDDEN_ATTRIBUTE)) {
         restoreFromClip(el);
       }
@@ -153,7 +154,7 @@ function syncFocusableClipping(
       continue;
     }
     const isClipped =
-      !isFocused && el.getBoundingClientRect().top >= containerBottom;
+      !isFocused && box.getBoundingClientRect().top >= containerBottom;
     if (isClipped) {
       hideFromTabOrder(el);
     } else if (el.hasAttribute('data-line-clamp-hidden')) {
@@ -163,23 +164,34 @@ function syncFocusableClipping(
 }
 
 /**
- * Whether `el` is, or sits inside, an `absolute` or `fixed` box below the
- * clamp. Such a subtree is out of the clamp's flow and is never made inert,
- * at any depth. A popover or dialog stops ownership in `isOwnedBy`, and a
- * portal renders outside the clamp, so neither reaches the pass.
+ * The box whose position decides whether `el` is cut off, or null when `el`
+ * starts or sits in a subtree that is never made inert. A `fixed` box, or an
+ * `absolute` box whose containing block is the clamp or lies outside it,
+ * starts such a subtree. An `absolute` box placed against a containing block
+ * in the clamp's flow (a control's own positioned wrapper) stays in the flow,
+ * and that containing block's box decides. A popover or dialog stops
+ * ownership in `isOwnedBy`, and a portal renders outside the clamp.
  */
-function isInPositionedSubtree(container: HTMLElement, el: Element): boolean {
+function flowBox(container: HTMLElement, el: Element): Element | null {
+  let box: Element = el;
   for (
     let node: Element | null = el;
     node != null && node !== container;
     node = node.parentElement
   ) {
     const {position} = getComputedStyle(node);
-    if (position === 'absolute' || position === 'fixed') {
-      return true;
+    if (position === 'fixed') {
+      return null;
+    }
+    if (position === 'absolute') {
+      const block = node instanceof HTMLElement ? node.offsetParent : null;
+      if (block == null || block === container || !container.contains(block)) {
+        return null;
+      }
+      box = block;
     }
   }
-  return false;
+  return box;
 }
 
 /**
