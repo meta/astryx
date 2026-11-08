@@ -10,8 +10,9 @@
  * @output Exports `RichTextEditorAutoLinkPlugin` and its props type, plus the
  *   default `DEFAULT_LINK_MATCHERS`.
  * @position @astryxdesign/richtext. Drop into RichTextEditor's `plugins` slot to
- *   auto-linkify URLs and emails as they are typed or pasted. Requires
- *   `AutoLinkNode` to be registered (it is, by default).
+ *   auto-linkify URLs and emails as they are typed or pasted, except inside
+ *   a code block. Requires `AutoLinkNode` to be registered (it is, by
+ *   default).
  *
  * SYNC: When modified, update:
  * - /packages/richtext/src/index.ts (exports / barrel)
@@ -27,10 +28,10 @@
  * uses the stock matcher shape (`createLinkMatcherWithRegExp` + `attributes`)
  * and new-tab defaults, so a consumer supplies a richer matcher set — an
  * application-specific identifier or ticket syntax, say — through the
- * `matchers` prop without changing the contract. An application needing a
- * hardened transform (expanded separators, code-block exclusion) substitutes
- * its own plugin in the same slot; astryx stays on the upstream
- * `AutoLinkPlugin`.
+ * `matchers` prop without changing the contract. Code blocks are excluded
+ * through the upstream plugin's `excludeParents`. An application needing a
+ * hardened transform (expanded separators, say) substitutes its own plugin in
+ * the same slot; astryx stays on the upstream `AutoLinkPlugin`.
  */
 
 import {
@@ -38,6 +39,8 @@ import {
   createLinkMatcherWithRegExp,
   type LinkMatcher,
 } from '@lexical/react/LexicalAutoLinkPlugin';
+import {$isCodeNode} from '@lexical/code';
+import type {ElementNode} from 'lexical';
 import {URL_MATCHER, EMAIL_MATCHER, sanitizeUrl} from './linkUtils';
 
 /**
@@ -104,11 +107,22 @@ export interface RichTextEditorAutoLinkPluginProps {
  * />
  * ```
  */
+// A code block holds only code, so text in one is never linked: neither a
+// typed or pasted URL nor one in an imported fence. A module constant keeps
+// the plugin from registering again on each render.
+const EXCLUDE_PARENTS: ((parent: ElementNode) => boolean)[] = [$isCodeNode];
+
 export function RichTextEditorAutoLinkPlugin({
   matchers = DEFAULT_LINK_MATCHERS,
   onChange,
 }: RichTextEditorAutoLinkPluginProps) {
-  return <AutoLinkPlugin matchers={matchers} onChange={onChange} />;
+  return (
+    <AutoLinkPlugin
+      matchers={matchers}
+      onChange={onChange}
+      excludeParents={EXCLUDE_PARENTS}
+    />
+  );
 }
 
 RichTextEditorAutoLinkPlugin.displayName = 'RichTextEditorAutoLinkPlugin';
