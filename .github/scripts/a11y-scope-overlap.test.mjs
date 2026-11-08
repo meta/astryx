@@ -19,6 +19,7 @@ import {describe, expect, it} from 'vitest';
 
 import {
   overlappingSpecs,
+  renders,
   selectingScope,
   touchedComponents,
   VERSION,
@@ -183,6 +184,51 @@ describe('overlappingSpecs', () => {
     expect(
       overlappingSpecs(changed, ['README.md'], {...GRAPH, labelled: true}),
     ).toEqual([{path: always, reason: 'changed-on-main', scope: 'always'}]);
+  });
+
+  it('leaves out every spec for a change to unit tests only', () => {
+    // A Layout spec whose scope names the Table folder, added on main.
+    const corners =
+      'packages/core/src/Layout/__tests__/ContainerCorners.a11y.chromium.spec.ts';
+    const added = {
+      path: corners,
+      status: 'added',
+      mainSource:
+        '// @pr-a11y scope ^(packages/core/src/(Layout|Table)/|apps/storybook/stories/ContainerCorners\\.stories)\n',
+      headSource: null,
+    };
+    expect(
+      overlappingSpecs(
+        [added],
+        [
+          'packages/core/src/Table/plugins/tree/useTableTreeData.test.tsx',
+          'packages/core/src/Table/__tests__/TableTree.a11y.chromium.spec.ts',
+        ],
+        GRAPH,
+      ),
+    ).toEqual([]);
+    expect(
+      overlappingSpecs([added], ['packages/core/src/Table/Table.tsx'], GRAPH),
+    ).toMatchObject([{path: corners, reason: 'added-on-main'}]);
+    expect(renders('packages/core/src/Table/Table.tsx')).toBe(true);
+    // A shared fixture under __tests__/ that stories import still counts.
+    const tableSpec =
+      'packages/core/src/Table/__tests__/Table.a11y.chromium.spec.ts';
+    expect(
+      overlappingSpecs(
+        [
+          {
+            path: tableSpec,
+            status: 'changed',
+            mainSource: '// @pr-a11y scope ^packages/core/src/Table/\n',
+            headSource: 'older\n',
+          },
+        ],
+        ['packages/core/src/Table/__tests__/Table.a11y.renders.tsx'],
+        GRAPH,
+      ),
+    ).toMatchObject([{path: tableSpec, reason: 'changed-on-main'}]);
+    expect(renders('apps/storybook/stories/Table.stories.tsx')).toBe(true);
   });
 
   it('reads the touched components from changed source, never from a record', () => {

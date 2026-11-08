@@ -3,6 +3,8 @@
 import {describe, it, expect} from 'vitest';
 import {act, render, screen, within} from '@testing-library/react';
 import {useState} from 'react';
+import {vi} from 'vitest';
+import {useTableRowsVirtualization} from '../virtualization/useTableRowsVirtualization';
 import {Table} from '../../Table';
 import type {TableColumn, TablePlugin} from '../../types';
 import {useTableRowIndex} from './useTableRowIndex';
@@ -81,6 +83,120 @@ describe('useTableRowIndex', () => {
     expect(within(rows[1]).getByText('1')).toBeInTheDocument();
     expect(within(rows[2]).getByText('Alice')).toBeInTheDocument();
     expect(within(rows[2]).getByText('2')).toBeInTheDocument();
+  });
+
+  it('falls back instead of clipping a measured windowed number without changing legacy column widths', () => {
+    const rows = Array.from({length: 20}, (_, index) => ({
+      id: String(index),
+      name: `Product ${index}`,
+    }));
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(320);
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(48);
+    const createRange = document.createRange.bind(document);
+    vi.spyOn(document, 'createRange').mockImplementation(() => {
+      const range = createRange();
+      Object.defineProperty(range, 'getBoundingClientRect', {
+        value: () => ({
+          width: 53,
+          height: 16,
+          top: 0,
+          bottom: 16,
+          left: 0,
+          right: 53,
+          x: 0,
+          y: 0,
+          toJSON() {
+            return {};
+          },
+        }),
+      });
+      return range;
+    });
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+      function (this: HTMLElement) {
+        return {
+          height: this.localName === 'tbody' ? rows.length * 56 : 0,
+          top: 0,
+          bottom: 0,
+          left: 0,
+          right: 0,
+          width: 0,
+          x: 0,
+          y: 0,
+          toJSON() {
+            return {};
+          },
+        };
+      },
+    );
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    function Fixture() {
+      const rowIndex = useTableRowIndex({data: rows});
+      const virtualization = useTableRowsVirtualization({
+        rowHeight: 56,
+        viewportHeight: 320,
+      });
+      return (
+        <Table
+          data={rows}
+          columns={columns}
+          idKey="id"
+          plugins={{rowIndex}}
+          virtualization={virtualization}
+        />
+      );
+    }
+    try {
+      const {container} = render(<Fixture />);
+      expect(container.querySelectorAll('tbody > tr')).toHaveLength(
+        rows.length,
+      );
+      expect(container.querySelector('[data-table-logical-index]')).toBeNull();
+      expect(screen.getByRole('columnheader', {name: '#'}).style.width).toBe(
+        '48px',
+      );
+      expect(warning).toHaveBeenCalledWith(
+        expect.stringContaining('row-number content exceeds'),
+      );
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+  it('numbers windowed rows from Table positions after same-array append without consulting a second key lookup', () => {
+    const rows: Row[] = data.map(item => ({...item}));
+    const getRowKey = vi.fn((item: Row) => item.id);
+    function Windowed() {
+      const rowIndex = useTableRowIndex({data: rows, getRowKey});
+      const virtualization = useTableRowsVirtualization({
+        rowHeight: 56,
+        viewportHeight: 320,
+      });
+      return (
+        <Table
+          data={rows}
+          columns={columns}
+          idKey="id"
+          virtualization={virtualization}
+          plugins={{rowIndex}}
+        />
+      );
+    }
+    const view = render(<Windowed />);
+    rows.push({id: 'd', name: 'Dora'});
+    view.rerender(<Windowed />);
+    const appended = screen
+      .getByText('Dora')
+      .closest('tr') as HTMLTableRowElement;
+    expect(appended).toHaveAttribute('aria-rowindex', '5');
+    expect(appended.cells[0]).toHaveTextContent('4');
+    expect(getRowKey).not.toHaveBeenCalled();
+    rows.reverse();
+    view.rerender(<Windowed />);
+    const reordered = screen
+      .getByText('Dora')
+      .closest('tr') as HTMLTableRowElement;
+    expect(reordered).toHaveAttribute('aria-rowindex', '2');
+    expect(reordered.cells[0]).toHaveTextContent('1');
   });
 
   it('prepends a header cell with the default label', () => {
