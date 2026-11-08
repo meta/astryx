@@ -521,22 +521,28 @@ describe('Lightbox', () => {
     });
 
     it('shows the last item as the current one for an index past the end', () => {
-      render(
-        <Lightbox
-          isOpen={true}
-          onOpenChange={() => {}}
-          media={media}
-          index={media.length + 2}
-        />,
-      );
-      const photo = screen.getByAltText('Image C');
-      expect(photo).not.toHaveAttribute('aria-hidden');
-      const page = photo.closest('[data-lightbox-page]')!;
-      expect(page).toHaveAttribute('data-current');
-      expect(page).not.toHaveAttribute('inert');
-      expect(
-        screen.getByText(`${media.length} / ${media.length}`),
-      ).toBeTruthy();
+      for (const props of [
+        {index: media.length + 2},
+        {defaultIndex: media.length + 2},
+      ]) {
+        const {unmount} = render(
+          <Lightbox
+            isOpen={true}
+            onOpenChange={() => {}}
+            media={media}
+            {...props}
+          />,
+        );
+        const photo = screen.getByAltText('Image C');
+        expect(photo).not.toHaveAttribute('aria-hidden');
+        const page = photo.closest('[data-lightbox-page]')!;
+        expect(page).toHaveAttribute('data-current');
+        expect(page).not.toHaveAttribute('inert');
+        expect(
+          screen.getByText(`${media.length} / ${media.length}`),
+        ).toBeTruthy();
+        unmount();
+      }
     });
 
     it('shows the first item as the current one for an index below 0', () => {
@@ -593,7 +599,7 @@ describe('Lightbox', () => {
       expect(pause).toHaveBeenCalledTimes(1);
     });
 
-    it('resumes a paged-away video where it stopped once the viewer pages back', () => {
+    it("keeps a paged-away video's element and time once the viewer pages back", () => {
       const items = [
         {src: '/clip.mp4', alt: 'A clip', type: 'video' as const},
         {src: '/b.jpg', alt: 'Image B'},
