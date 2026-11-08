@@ -37,6 +37,9 @@ import {Popover} from '@astryxdesign/core/Popover';
 import {Slider} from '@astryxdesign/core/Slider';
 import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 import {rtlStyles} from '@astryxdesign/core/utils';
+import {useMediaQuery} from '@astryxdesign/core/hooks';
+import {Collapsible, CollapsibleGroup} from '@astryxdesign/core/Collapsible';
+import {RadioList, RadioListItem} from '@astryxdesign/core/RadioList';
 import {
   ArrowRightIcon,
   BanknotesIcon,
@@ -123,7 +126,7 @@ function HugeIcon({
   size?: number;
   strokeWidth?: number;
   style?: CSSProperties;
-  'aria-hidden'?: boolean;
+  'aria-hidden'?: React.AriaAttributes['aria-hidden'];
 }) {
   return (
     <Glyph
@@ -185,7 +188,7 @@ const inkArt: CSSProperties = {
  *  and its menu rows, the ruled review grid, the FAQ slab and its rows, and
  *  the disclosures' easing. Token-carried colors and durations only. */
 const hoverStyles = `
-.cr4-row{display:flex;flex-direction:row;align-items:center;gap:var(--spacing-3);padding:var(--spacing-2) var(--spacing-3);border-radius:var(--radius-element);text-align:left;cursor:pointer;transition:background-color var(--duration-fast) var(--ease-standard),color var(--duration-fast) var(--ease-standard);}
+.cr4-row{display:flex;flex-direction:row;align-items:center;gap:var(--spacing-3);padding:var(--spacing-2) var(--spacing-3);border-radius:var(--radius-element);text-align:start;cursor:pointer;transition:background-color var(--duration-fast) var(--ease-standard),color var(--duration-fast) var(--ease-standard);}
 .cr4-row:hover{background-color:var(--color-background-wash);}
 .cr4-row:focus-visible{outline:var(--focus-outline-width) var(--focus-outline-style) var(--focus-outline-color);outline-offset:var(--focus-outline-offset);}
 .cr4-lift{transition:box-shadow var(--duration-fast) var(--ease-standard),transform var(--duration-fast) var(--ease-standard);}
@@ -200,7 +203,7 @@ const hoverStyles = `
    The design's search row: card ground, hairline ring that darkens under
    the pointer and doubles to the brand while it holds the caret. 40px tall,
    the page's control floor. */
-.cr7-field{display:flex;align-items:center;gap:10px;height:40px;flex:1 1 auto;min-width:0;border-radius:var(--radius-element);background:var(--color-background-card);box-shadow:inset 0 0 0 1px var(--color-border);padding-left:14px;padding-right:4px;transition:box-shadow var(--duration-fast) var(--ease-standard);cursor:text;}
+.cr7-field{display:flex;align-items:center;gap:10px;height:40px;flex:1 1 auto;min-width:0;border-radius:var(--radius-element);background:var(--color-background-card);box-shadow:inset 0 0 0 1px var(--color-border);padding-inline-start:14px;padding-inline-end:4px;transition:box-shadow var(--duration-fast) var(--ease-standard);cursor:text;}
 .cr7-field:hover{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--color-text-primary) 20%,transparent);}
 .cr7-field:focus-within{box-shadow:inset 0 0 0 2px var(--color-accent);}
 .cr7-field input{flex:1 1 auto;min-width:0;height:100%;background:transparent;border:none;outline:none;font:inherit;font-size:16px;color:var(--color-text-primary);}
@@ -220,7 +223,7 @@ const hoverStyles = `
 .cr7-select{display:inline-flex;align-items:center;gap:8px;height:40px;padding-inline:12px 10px;border-radius:var(--radius-element);background:var(--color-background-card);box-shadow:inset 0 0 0 1px var(--color-border);font-size:14px;color:var(--color-text-primary);transition:box-shadow var(--duration-fast) var(--ease-standard),background-color var(--duration-fast) var(--ease-standard);cursor:pointer;border:none;white-space:nowrap;}
 .cr7-select:hover{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--color-text-primary) 20%,transparent);}
 .cr7-select:focus-visible{outline:var(--focus-outline-width) var(--focus-outline-style) var(--focus-outline-color);outline-offset:var(--focus-outline-offset);}
-.cr7-menurow{display:flex;align-items:center;gap:8px;width:100%;height:36px;padding-inline:10px;border-radius:calc(var(--radius-container)*0.6);font-size:14px;color:var(--color-text-primary);text-align:left;cursor:pointer;background:transparent;border:none;transition:background-color var(--duration-fast) var(--ease-standard);}
+.cr7-menurow{display:flex;align-items:center;gap:8px;width:100%;height:36px;padding-inline:10px;border-radius:calc(var(--radius-container)*0.6);font-size:14px;color:var(--color-text-primary);text-align:start;cursor:pointer;background:transparent;border:none;transition:background-color var(--duration-fast) var(--ease-standard);}
 .cr7-menurow:hover{background:var(--color-background-wash);}
 .cr7-menurow:focus-visible{outline:var(--focus-outline-width) var(--focus-outline-style) var(--focus-outline-color);outline-offset:-2px;}
 /* The FAQ's open slab: three fifths of the chip's strength, mixed into the
@@ -238,23 +241,23 @@ const hoverStyles = `
    md the list is one column and a review runs the full measure, not a
    column 40px short of its heading.) */
 @media(min-width:768px){
-  .cr7-rv-l{padding-right:40px;}
-  .cr7-rv-r{padding-left:40px;}
+  .cr7-rv-l{padding-inline-end:40px;}
+  .cr7-rv-r{padding-inline-start:40px;}
 }
-@media(min-width:1280px){.cr7-rv-l{padding-right:48px}.cr7-rv-r{padding-left:48px}}
+@media(min-width:1280px){.cr7-rv-l{padding-inline-end:48px}.cr7-rv-r{padding-inline-start:48px}}
 @media(min-width:768px){
   .cr7-rv-b{border-bottom:0;padding-bottom:0;}
   .cr7-rv-t{padding-top:0;}
   .cr7-rv-rowb{border-bottom:1px solid var(--color-border);padding-bottom:40px;}
   .cr7-rv-rowt{padding-top:40px;}
-  .cr7-rv-mid{border-right:1px solid var(--color-border);}
+  .cr7-rv-mid{border-inline-end:1px solid var(--color-border);}
 }
 /* The review row's spread + six ruled score cells (the reviews: lg:flex,
    spread lg:w-72/xl:w-80, the cells lg:flex-1 lg:border-l). */
 .cr7-scorerow{display:flex;flex-direction:column;}
 @media(min-width:1024px){.cr7-scorerow{flex-direction:row;}}
 .cr7-spread{max-width:384px;flex:0 1 auto;}
-@media(min-width:1024px){.cr7-spread{width:288px;max-width:none;flex:0 0 auto;padding-right:40px;}}
+@media(min-width:1024px){.cr7-spread{width:288px;max-width:none;flex:0 0 auto;padding-inline-end:40px;}}
 @media(min-width:1280px){.cr7-spread{width:320px;}}
 /* The six score cells, on the design's own ladder (the reviews): a
    sideways-scrolling strip on a phone (edge-to-edge over the container's
@@ -262,12 +265,12 @@ const hoverStyles = `
    from sm, and only from lg the row beside the spread with its own left
    rule — below lg the strip/grid sits UNDER the spread with mt-8. */
 .cr7-scores{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));margin-top:32px;}
-.cr7-score{display:flex;flex-direction:column;min-width:0;border-left:1px solid var(--color-border);padding-left:16px;padding-right:8px;}
-.cr7-score:first-child{border-left:none;padding-left:0;}
+.cr7-score{display:flex;flex-direction:column;min-width:0;border-inline-start:1px solid var(--color-border);padding-inline-start:16px;padding-inline-end:8px;}
+.cr7-score:first-child{border-inline-start:none;padding-inline-start:0;}
 @media(min-width:1024px){
-  .cr7-scores{flex:1 1 0%;margin-top:0;border-left:1px solid var(--color-border);}
-  .cr7-score{padding-left:24px;}
-  .cr7-score:first-child{padding-left:24px;}
+  .cr7-scores{flex:1 1 0%;margin-top:0;border-inline-start:1px solid var(--color-border);}
+  .cr7-score{padding-inline-start:24px;}
+  .cr7-score:first-child{padding-inline-start:24px;}
 }
 @media(max-width:639px){
   .cr7-scores{display:flex;overflow-x:auto;margin-inline:-24px;padding-inline:24px;scrollbar-width:none;}
@@ -283,12 +286,10 @@ const hoverStyles = `
 .cr7-cta:focus-visible{outline:var(--focus-outline-width) var(--focus-outline-style) var(--focus-outline-color);outline-offset:var(--focus-outline-offset);}
 /* The FAQ's caps column: the whole row's width on a phone, its own 160px
    column from sm. */
-.cr7-faqcaps{grid-column:1 / -1;min-width:0;}
-@media(min-width:640px){.cr7-faqcaps{grid-column:1;}}
 /* The syllabus' six figures: two to a row on a phone, three from sm. */
 .cr7-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:32px;}
 @media(min-width:640px){.cr7-facts{grid-template-columns:repeat(3,minmax(0,1fr));}}
-.cr7-fact{display:flex;flex-direction:column;min-width:0;padding-right:16px;}
+.cr7-fact{display:flex;flex-direction:column;min-width:0;padding-inline-end:16px;}
 /* The syllabus toolbar and the reviews' one: the field and the controls on
    one line from sm, stacked under it on a phone. */
 .cr7-toolbar{display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--color-border);padding-top:32px;margin-top:32px;}
@@ -300,59 +301,16 @@ const hoverStyles = `
 .cr7-cols2{display:grid;grid-template-columns:minmax(0,1fr);gap:40px;}
 @media(min-width:640px){.cr7-cols2{grid-template-columns:repeat(2,minmax(0,1fr));gap:32px;}}
 @media(min-width:1024px) and (max-width:1279px){.cr7-cols2{grid-template-columns:minmax(0,1fr);gap:40px;}}
-/* The FAQ's rows: the group label's column holds the longest label on one
-   line; the open answer indents by it plus the gap. The design's margins
-   and rules step over the same 300ms ease-out as the disclosure. */
-.cr7-faqrow{position:relative;border-radius:var(--radius-container);transition:margin-block 300ms cubic-bezier(0,0,0.2,1),background-color 300ms cubic-bezier(0,0,0.2,1);}
-.cr7-faqrow::before{content:'';position:absolute;inset-inline:0;top:0;height:1px;background:var(--color-border);transition:opacity 150ms cubic-bezier(0.4,0,0.2,1);opacity:1;}
-.cr7-faqrow[data-open='true']{margin-block:12px;}
-.cr7-faqrow[data-open='true']::before,.cr7-faqrow[data-after-open='true']::before{opacity:0;}
-.cr7-faqrow[data-last='true']::after{content:'';position:absolute;inset-inline:0;bottom:0;height:1px;background:var(--color-border);transition:opacity 150ms cubic-bezier(0.4,0,0.2,1);opacity:1;}
-.cr7-faqrow[data-last='true'][data-open='true']::after{opacity:0;}
-.cr7-faqbtn{display:grid;width:100%;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto;column-gap:24px;row-gap:8px;align-items:center;padding:20px 16px;border-radius:var(--radius-container);text-align:left;background:transparent;border:none;cursor:pointer;transition:background-color var(--duration-fast) var(--ease-standard);}
-.cr7-faqbtn:hover{background:var(--color-background-wash);}
-.cr7-faqbtn:focus-visible{outline:var(--focus-outline-width) var(--focus-outline-style) var(--focus-outline-color);outline-offset:-2px;}
-@media(min-width:640px){.cr7-faqbtn{grid-template-columns:160px minmax(0,1fr) auto;grid-template-rows:auto;padding-block:24px;padding-inline:24px;}}
 .cr7-faqq{font-family:var(--font-family-heading);font-weight:525;letter-spacing:-0.05em;line-height:1.15;font-size:20px;color:var(--color-text-primary);}
 @media(min-width:640px){.cr7-faqq{font-size:24px;}}
 @media(min-width:1024px){.cr7-faqq{font-size:30px;}}
 .cr7-faqa{max-width:560px;padding:0 16px 32px 16px;font-size:16px;color:var(--color-text-primary);}
-@media(min-width:640px){.cr7-faqa{padding:0 24px 40px;margin-left:calc(160px + 24px);}}
+@media(min-width:640px){.cr7-faqa{padding:0 24px 40px;}}
 /* The FAQ section head: the eyebrow and heading over the foot line, beside
    it from lg. */
 .cr7-faqhead{display:flex;flex-direction:column;gap:24px;}
 @media(min-width:1024px){.cr7-faqhead{flex-direction:row;align-items:flex-end;justify-content:space-between;gap:64px;}}
-/* The design's arrow disc: an arrow pointing on, that turns down to the
-   answer as the row opens. */
-.cr7-faqdisc{display:flex;width:36px;height:36px;flex:0 0 auto;align-items:center;justify-content:center;border-radius:999px;transition:background-color var(--duration-fast) var(--ease-standard),color var(--duration-fast) var(--ease-standard);color:var(--color-text-primary);box-shadow:inset 0 0 0 1px var(--color-border);}
-.cr7-faqbtn:hover .cr7-faqdisc{background:var(--color-background-card);}
-.cr7-faqrow[data-open='true'] .cr7-faqdisc{background:var(--color-text-primary);color:var(--color-background-card);box-shadow:none;}
-.cr7-faqarrow{transition:transform 300ms cubic-bezier(0,0,0.2,1);}
-.cr7-faqrow[data-open='true'] .cr7-faqarrow{transform:rotate(90deg);}
 .cr7-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;border:0;}
-/* Directional icons mirror under RTL with plain CSS pairs: the idle mirror
-   rides the icon, and the open state composes the mirror ahead of the rotate
-   (a state-driven transform and the mirror never share one rule, per the
-   mirror's own sync note). */
-[dir='rtl'] .cr7-faqarrow{transform:scaleX(-1);}
-[dir='rtl'] .cr7-faqrow[data-open='true'] .cr7-faqarrow{transform:scaleX(-1) rotate(90deg);}
-/* Disclosed bodies — FAQ answers and syllabus module lists — eased open to
-   their own height, exactly as the design draws them: a grid whose rows
-   step 0fr → 1fr over 300ms ease-out (Tailwind's ease-out curve), the clip
-   overflowing hidden inside. The rows beneath slide rather than jump; the
-   body is inert while shut so a screen reader does not read what nobody
-   opened. */
-.cr7-disclosure{display:grid;grid-template-rows:0fr;transition:grid-template-rows 300ms cubic-bezier(0,0,0.2,1);}
-.cr7-disclosure[data-open='true']{grid-template-rows:1fr;}
-.cr7-clip{overflow:hidden;min-width:0;}
-@media(prefers-reduced-motion:reduce){.cr7-disclosure{transition:none;}}
-/* The design's module chevron turns over the same 300ms ease-out the
-   disclosure runs on. */
-.cr4-chev{transition:transform 300ms cubic-bezier(0,0,0.2,1);}
-/* The panel's start list: held to the panel's height, its own scroll under
-   the fixed price and buttons. */
-.cr7-startlist{flex:1 1 auto;min-height:0;overflow-y:auto;scrollbar-width:none;}
-.cr7-startlist::-webkit-scrollbar{display:none;}
 /* The rail's shelf: cards snap to the column's edge; the padding is room
    for a lifted card's shadow, the margins take it back out. */
 .cr7-shelf{display:flex;gap:16px;overflow-x:auto;scroll-snap-type:x mandatory;margin-inline:-24px;margin-bottom:-40px;margin-top:28px;padding-inline:24px;padding-bottom:48px;padding-top:12px;scrollbar-width:none;}
@@ -376,17 +334,17 @@ const hoverStyles = `
 /* the sparks: the large one over the heading's top-left, the small one in
    the strip between the risk line and the photograph */
 .cr11-spark{position:absolute;pointer-events:none;fill:var(--color-text-primary);}
-.cr11-spark--lg{width:32px;left:4%;top:12px;}
-.cr11-spark--sm{width:24px;bottom:16px;right:8%;transform:rotate(16deg);}
-@media(min-width:640px){.cr11-spark--lg{width:44px;left:5%;top:20px;}.cr11-spark--sm{width:28px;}}
-@media(min-width:1024px){.cr11-spark--lg{left:4%;top:6%;}.cr11-spark--sm{right:auto;left:17%;bottom:8%;}}
+.cr11-spark--lg{width:32px;inset-inline-start:4%;top:12px;}
+.cr11-spark--sm{width:24px;bottom:16px;inset-inline-end:8%;transform:rotate(16deg);}
+@media(min-width:640px){.cr11-spark--lg{width:44px;inset-inline-start:5%;top:20px;}.cr11-spark--sm{width:28px;}}
+@media(min-width:1024px){.cr11-spark--lg{inset-inline-start:4%;top:6%;}.cr11-spark--sm{inset-inline-end:auto;inset-inline-start:17%;bottom:8%;}}
 /* the squiggle over the photograph's edge from xl, the sprout off its top
    corner from lg — the hand's two wide-screen strokes */
 .cr11-squiggle{display:none;position:absolute;pointer-events:none;width:128px;color:var(--color-text-primary);z-index:1;}
-.cr11-sprout{display:none;position:absolute;pointer-events:none;width:64px;right:4px;top:8px;}
+.cr11-sprout{display:none;position:absolute;pointer-events:none;width:64px;inset-inline-end:4px;top:8px;}
 @media(min-width:1024px){.cr11-sprout{display:block;}}
 @media(min-width:1280px){
-  .cr11-squiggle{display:block;left:calc(100% - 110px);top:42%;}
+  .cr11-squiggle{display:block;inset-inline-start:calc(100% - 110px);top:42%;}
 }
 /* the photograph: the design's own crop ladder — the desk held in from
    the left edge on a phone, the chair's floor kept from sm */
@@ -406,17 +364,17 @@ const hoverStyles = `
 @media(min-width:1024px){
   .cr11-footgrid{grid-template-columns:1.15fr 1fr 1fr 1.25fr;}
   .cr11-footcell{padding-block:0;}
-  .cr11-footcell + .cr11-footcell{border-top:none;border-left:1px solid var(--color-border);}
+  .cr11-footcell + .cr11-footcell{border-top:none;border-inline-start:1px solid var(--color-border);}
   .cr11-footcell{padding-inline:40px;}
-  .cr11-footcell:first-child{padding-left:0;}
-  .cr11-footcell:last-child{padding-right:0;}
+  .cr11-footcell:first-child{padding-inline-start:0;}
+  .cr11-footcell:last-child{padding-inline-end:0;}
 }
 .cr11-footlink{background:transparent;border:none;padding:0;cursor:pointer;font:inherit;font-size:14px;color:var(--color-text-secondary);text-decoration-line:underline;text-decoration-color:transparent;text-underline-offset:4;transition:color var(--duration-fast) var(--ease-standard);}
 .cr11-footlink:hover{color:var(--color-text-primary);}
 .cr11-footlink:focus-visible{outline:var(--focus-outline-width) var(--focus-outline-style) var(--focus-outline-color);outline-offset:var(--focus-outline-offset);}
 /* the newsletter's inline field: card ground, hairline ring that darkens
    under the pointer, a 36px round submit in the brand fill */
-.cr11-newsrow{display:flex;height:44px;align-items:center;border-radius:var(--radius-element);background:var(--color-background-card);padding-left:16px;padding-right:4px;box-shadow:inset 0 0 0 1px var(--color-border);transition:box-shadow var(--duration-fast) var(--ease-standard);}
+.cr11-newsrow{display:flex;height:44px;align-items:center;border-radius:var(--radius-element);background:var(--color-background-card);padding-inline-start:16px;padding-inline-end:4px;box-shadow:inset 0 0 0 1px var(--color-border);transition:box-shadow var(--duration-fast) var(--ease-standard);}
 .cr11-newsrow:hover{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--color-text-primary) 20%,transparent);}
 .cr11-newsrow:focus-within{box-shadow:inset 0 0 0 2px var(--color-accent);}
 .cr11-newsinput{min-width:0;flex:1 1 auto;height:100%;background:transparent;border:none;outline:none;font:inherit;font-size:16px;color:var(--color-text-primary);}
@@ -435,7 +393,7 @@ const hoverStyles = `
    The poster (poster frame): the art leans in under the pointer and
    the dim doubles; the play disc steps up a size and its shadow lifts. */
 .cr9-plate{position:absolute;inset-inline:12px;bottom:12px;}
-@media(min-width:640px){.cr9-plate{inset-inline:auto;left:16px;bottom:16px;max-width:448px;}}
+@media(min-width:640px){.cr9-plate{inset-inline-start:16px;bottom:16px;max-width:448px;}}
 .cr9-poster-art{position:absolute;inset:0;display:block;transition:transform 700ms cubic-bezier(0,0,0.2,1);}
 .cr9-poster:hover .cr9-poster-art{transform:scale(1.03);}
 .cr9-poster-dim{position:absolute;inset:0;background:rgba(28,25,23,0.1);transition:background-color 300ms cubic-bezier(0.4,0,0.2,1);}
@@ -466,7 +424,7 @@ const hoverStyles = `
 .cr9-playergrid{display:grid;grid-template-columns:minmax(0,1fr);gap:24px;}
 @media(min-width:768px){.cr9-playergrid{grid-template-columns:minmax(0,1fr) 272px;}}
 /* A shelf row: the active clip holds the wash, the rest take it on hover. */
-.cr9-shelfrow{display:flex;width:100%;align-items:center;gap:12px;border-radius:calc(var(--radius-container)*0.4);padding:8px;text-align:left;background:transparent;border:none;cursor:pointer;transition:background-color var(--duration-fast) var(--ease-standard);}
+.cr9-shelfrow{display:flex;width:100%;align-items:center;gap:12px;border-radius:calc(var(--radius-container)*0.4);padding:8px;text-align:start;background:transparent;border:none;cursor:pointer;transition:background-color var(--duration-fast) var(--ease-standard);}
 .cr9-shelfrow:hover{background:var(--color-background-muted);}
 .cr9-shelfrow[aria-current='true']{background:var(--color-background-muted);}
 .cr9-shelfrow:focus-visible{outline:var(--focus-outline-width) var(--focus-outline-style) var(--focus-outline-color);outline-offset:-2px;}
@@ -513,11 +471,11 @@ const hoverStyles = `
 /* The captions and the lesson's title card, on the design's own ladder:
    12px from the frame's edges on a phone, 16px (title) / 40px (captions)
    from sm. */
-.cr12-titlecard{left:12px;top:12px;max-width:calc(100% - 24px);}
-.cr12-ccpos{left:16px;right:16px;bottom:16px;}
+.cr12-titlecard{inset-inline-start:12px;top:12px;max-width:calc(100% - 24px);}
+.cr12-ccpos{inset-inline:16px;bottom:16px;}
 @media(min-width:640px){
-  .cr12-titlecard{left:16px;top:16px;max-width:384px;}
-  .cr12-ccpos{left:40px;right:40px;}
+  .cr12-titlecard{inset-inline-start:16px;top:16px;max-width:384px;}
+  .cr12-ccpos{inset-inline:40px;}
 }
 /* The scrubber, as the design's Slider draws it: an 8px muted rail, the
    played part in the brand, and a 24px disc on the card's white lifted by
@@ -538,7 +496,7 @@ const hoverStyles = `
   .cr12-selcol{flex-direction:row;align-items:center;}
   .cr12-selcol .cr7-select{width:192px;}
 }
-@media(min-width:1024px){.cr12-selcol{margin-left:auto;}}
+@media(min-width:1024px){.cr12-selcol{margin-inline-start:auto;}}
 /* The instructor's two buttons, on the design's own recipe
    (instructor.tsx + follow-button.tsx): a 40px row of muted fill that
    darkens a rung under the pointer; Follow answering in the brand fill,
@@ -620,7 +578,7 @@ dialog.cr12-sheet::backdrop{
    left the screen, visibility stepping with it so nothing of it ever
    draws below the screen's edge. */
 .cr13-reachbar{
-  position:fixed;left:0;right:0;bottom:0;z-index:40;
+  position:fixed;inset-inline:0;bottom:0;z-index:40;
   background:var(--color-background-card);
   border-top:1px solid var(--color-border);
   box-shadow:0 -6px 20px var(--color-shadow);
@@ -656,35 +614,14 @@ dialog.cr12-sheet::backdrop{
   .cr9-poster:hover .cr9-poster-art,
   .cr9-poster:hover .cr9-poster-disc{transform:none;}
 }
-/* ── Polish ───────────────────────────────────────────────────────────────
-   The one edit this round carries: the weekly-pace slider as the design
-   draws it (the enroll panel + the slider's SliderSteps) — the track given
-   no fill of its own, drawn instead as one dash a step, the steps taken in
-   the brand and the rest a pale ink, so the week reads as a count; the 24px
-   white card-disc thumb stands on the seam between the last dash taken and
-   the next, lifted by the soft shadow and one rung higher under the pointer
-   (the design's group-hover). The dashes and the thumb ride the page's
-   own motion tokens, and the reduced-motion blanket above already covers
-   them — they sit in .cr13-root's subtree. */
-.cr14-segctrl{position:relative;height:24px;width:100%;display:flex;align-items:center;touch-action:none;cursor:pointer;}
-.cr14-segctrl:focus-visible{outline:var(--focus-outline-width) var(--focus-outline-style) var(--focus-outline-color);outline-offset:var(--focus-outline-offset);border-radius:var(--radius-element);}
-.cr14-dash{position:absolute;top:50%;height:6px;transform:translateY(-50%);border-radius:999px;background:color-mix(in srgb,var(--color-text-primary) 10%,transparent);transition:background-color var(--duration-fast) var(--ease-standard);}
-.cr14-dash.on{background:var(--color-accent);}
-.cr14-segthumb{position:absolute;top:50%;width:24px;height:24px;border-radius:999px;background:var(--color-background-card);box-shadow:var(--shadow-low);transform:translate(-50%,-50%);transition:box-shadow var(--duration-fast) var(--ease-standard);}
-.cr14-segctrl:hover .cr14-segthumb{box-shadow:var(--shadow-med);}
 `;
 
 // ─── Hook: below 768px the page switches to its phone composition ───────────
+// Core's useMediaQuery shares one listener per query across the page and
+// reads matchMedia during render, so the first paint already carries the
+// right composition.
 function useIsMobile(breakpoint = 768): boolean {
-  const [isMobile, setIsMobile] = useState(false);
-  useEffect(() => {
-    const mql = window.matchMedia(`(max-width: ${breakpoint}px)`);
-    setIsMobile(mql.matches);
-    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
-    mql.addEventListener('change', handler);
-    return () => mql.removeEventListener('change', handler);
-  }, [breakpoint]);
-  return isMobile;
+  return useMediaQuery(`(max-width: ${breakpoint}px)`);
 }
 
 // ─── Course data (domain-shaped sample content) ─────────────────────────────
@@ -844,12 +781,12 @@ const COURSE = {
   // is one, three credentials in the teacher's own words, and every course
   // they teach — so the figures on the card and the two courses in the
   // Also-taught-by band are computed from the same records a real
-  // catalogue would keep. Samples ride /template-assets slot names — the
-  // portrait for the name it sits beside, the thumbnails likewise slot-fed.
+  // catalogue would keep. The portrait is a shipped /template-assets
+  // fixture, named for the person it sits beside.
   instructor: {
     name: 'Dr. Maya Chen',
     trade: 'Applied AI lead · ex-research scientist',
-    portrait: 'maya-chen',
+    portrait: '/template-assets/DATA-Gabriela-Fernandez.png',
     credentials: {
       years: 'Twelve years in ML',
       work: 'From research labs to shipping product features used every day.',
@@ -876,7 +813,7 @@ const COURSE = {
         price: 99,
         rating: 4.9,
         learners: 15800,
-        image: 'evaluation-art',
+        image: '/template-assets/light-working-horizontal-2.png',
       },
       {
         id: 'prompts',
@@ -886,7 +823,7 @@ const COURSE = {
         price: 59,
         rating: 4.7,
         learners: 9400,
-        image: 'prompts-art',
+        image: '/template-assets/moody-working-horizontal-1.png',
       },
     ],
   },
@@ -900,7 +837,7 @@ const COURSE = {
     {
       id: 'r1',
       name: 'Maya T.',
-      face: 'reviewer-1',
+      face: '/template-assets/DATA-Ami-Pena.png',
       role: 'Analyst, logistics',
       stars: 5,
       weeks: 3,
@@ -921,7 +858,7 @@ const COURSE = {
     {
       id: 'r3',
       name: 'Priyanka S.',
-      face: 'reviewer-2',
+      face: '/template-assets/DATA-Daniela-Gimenez.png',
       role: 'Product analyst',
       stars: 4,
       weeks: 2,
@@ -932,7 +869,7 @@ const COURSE = {
     {
       id: 'r4',
       name: 'Carlos M.',
-      face: 'reviewer-3',
+      face: '/template-assets/DATA-Drew-Young.png',
       role: 'Finance associate',
       stars: 5,
       weeks: 9,
@@ -953,7 +890,7 @@ const COURSE = {
     {
       id: 'r6',
       name: 'Wei L.',
-      face: 'reviewer-4',
+      face: '/template-assets/DATA-Itai-Jordaan.png',
       role: 'Data engineer',
       stars: 5,
       weeks: 4,
@@ -984,7 +921,7 @@ const COURSE = {
     {
       id: 'r9',
       name: 'Amara N.',
-      face: 'reviewer-5',
+      face: '/template-assets/DATA-Jihoo-Song.png',
       role: 'Nurse, moving into data',
       stars: 5,
       weeks: 16,
@@ -1030,7 +967,7 @@ const COURSE = {
   ],
   // Where to go after this one: the same subject first, then the skills it
   // shares — the design's relatedTo order, as sample data. Photographs
-  // are placeholder stock (never shipped); the teachers' portraits are
+  // are shipped /template-assets fixtures; the teachers' portraits are
   // the design's own placeholder casts.
   related: [
     {
@@ -1038,7 +975,7 @@ const COURSE = {
       level: 'Advanced',
       title: 'Evaluation Engineering, End to End',
       teacher: 'Dr. Maya Chen',
-      portrait: 'maya-chen',
+      portrait: '/template-assets/DATA-Gabriela-Fernandez.png',
       school: 'Harbor School of Data',
       credential: 'Specialization',
       learners: 15800,
@@ -1046,14 +983,14 @@ const COURSE = {
       rating: 4.9,
       price: 99,
       saves: 1580,
-      image: 'evaluation-art',
+      image: '/template-assets/light-working-horizontal-2.png',
     },
     {
       topic: 'Engineering',
       level: 'Advanced',
       title: 'HTTP, and what a framework hides',
       teacher: 'Tomás Oliveira',
-      portrait: 'tomas-oliveira',
+      portrait: '/template-assets/DATA-Pablo-Morales.png',
       school: 'Rowan Engineering',
       credential: 'Course',
       learners: 12300,
@@ -1061,14 +998,14 @@ const COURSE = {
       rating: 4.5,
       price: 79,
       saves: 990,
-      image: 'http-art',
+      image: '/template-assets/colorful-working-horizontal-1.png',
     },
     {
       topic: 'Design',
       level: 'Advanced',
       title: 'Design systems in practice',
       teacher: 'Mara Lindqvist',
-      portrait: 'mara-lindqvist',
+      portrait: '/template-assets/DATA-Margot-Schroder.png',
       school: 'Meridian Lab',
       credential: 'Specialization',
       learners: 11050,
@@ -1077,14 +1014,14 @@ const COURSE = {
       price: 139,
       saves: 1180,
       badge: 'New',
-      image: 'design-systems-art',
+      image: '/template-assets/light-working-horizontal-3.png',
     },
     {
       topic: 'Data & AI',
       level: 'Beginner',
       title: 'Statistics without the proofs',
       teacher: 'Ibrahim Salah',
-      portrait: 'ibrahim-salah',
+      portrait: '/template-assets/DATA-Nam-Tran.png',
       school: 'Harbor School of Data',
       credential: 'Course',
       learners: 18900,
@@ -1093,14 +1030,14 @@ const COURSE = {
       price: 49,
       saves: 1440,
       badge: 'Bestseller',
-      image: 'statistics-art',
+      image: '/template-assets/moody-scene-horizontal-1.png',
     },
     {
       topic: 'Business',
       level: 'Beginner',
       title: 'Pricing what you build',
       teacher: 'Priya Raman',
-      portrait: 'priya-raman',
+      portrait: '/template-assets/DATA-Ana-Thomas.png',
       school: 'Northline Institute',
       credential: 'Guided Project',
       learners: 6720,
@@ -1116,7 +1053,7 @@ const COURSE = {
       level: 'Intermediate',
       title: 'Python beyond scripts',
       teacher: 'Tomás Oliveira',
-      portrait: 'tomas-oliveira',
+      portrait: '/template-assets/DATA-Pablo-Morales.png',
       school: 'Rowan Engineering',
       credential: 'Specialization',
       learners: 63700,
@@ -1167,11 +1104,8 @@ function ago(weeks: number) {
 }
 const hash = (s: string) => [...s].reduce((a, c) => a + c.charCodeAt(0), 0);
 
-// Sample media: slot-based placeholders under /template-assets/, the
-// gallery's own asset map, so the pair stays self-contained and nothing
-// hotlinks a third-party host.
-const face = (id: string) => `/template-assets/DATA-face-${id}.png`;
-const photo = (id: string) => `/template-assets/DATA-photo-${id}.png`;
+// Sample media: complete static fixture strings under /template-assets/, so
+// the copy step can find and ship every file, and nothing hotlinks a host.
 
 /** How the course's reviews spread across one to five stars, as whole
  *  percentages adding to 100 (the detail model spread): one family of shapes,
@@ -1255,23 +1189,23 @@ const dayLabel = (key: string) => longDate.format(at(key));
 const dateLabel = (key: string) => shortDate.format(at(key));
 type Start =
   | {kind: 'self'; key: 'self'}
-  | {kind: 'cohort'; key: string; starts: string; ends: string; left: number};
+  | {kind: 'cohort'; key: string; starts: string; ends: string; seats: number};
 function startsFor(today: string): Start[] {
   const h = hash(COURSE.title);
   const first = monday(today, 1);
   const runs = [
-    {starts: first, left: 0},
-    {starts: plusDays(first, 7), left: 3 + (h % 10)},
-    {starts: plusDays(first, 35), left: 14 + (h % 12)},
+    {starts: first, seats: 0},
+    {starts: plusDays(first, 7), seats: 3 + (h % 10)},
+    {starts: plusDays(first, 35), seats: 14 + (h % 12)},
   ];
   return [
     {kind: 'self', key: 'self'},
-    ...runs.map(({starts, left}) => ({
+    ...runs.map(({starts, seats}) => ({
       kind: 'cohort' as const,
       key: starts,
       starts,
       ends: plusDays(starts, COURSE.weeks * 7 - 3),
-      left,
+      seats,
     })),
   ];
 }
@@ -1778,7 +1712,7 @@ function Stars({value, size = 12}: {value: number; size?: number}) {
                   position: 'absolute',
                   top: 0,
                   bottom: 0,
-                  left: 0,
+                  insetInlineStart: 0,
                   width: `${fill * 100}%`,
                   overflow: 'hidden',
                 }}>
@@ -1863,8 +1797,8 @@ function CapsLabel({children}: {children: React.ReactNode}) {
           gap: 8,
           borderRadius: 'var(--radius-element)',
           background: 'var(--color-accent-muted)',
-          paddingLeft: 10,
-          paddingRight: 12,
+          paddingInlineStart: 10,
+          paddingInlineEnd: 12,
         }}>
         <span
           aria-hidden="true"
@@ -2111,7 +2045,7 @@ function SelectField({
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
-              textAlign: 'left',
+              textAlign: 'start',
             }}>
             {current?.label}
           </span>
@@ -2170,8 +2104,7 @@ function TopicChip({topic}: {topic: string}) {
         alignItems: 'center',
         gap: 6,
         borderRadius: 'var(--radius-element)',
-        paddingLeft: 10,
-        paddingRight: 10,
+        paddingInline: 10,
         paddingTop: 4,
         paddingBottom: 4,
         background: tint.lid,
@@ -2490,7 +2423,7 @@ function DetailsBlock() {
         {/* The teacher's face where there is one (the design's Avatar,
             size sm): the same portrait the instructor card wears. */}
         <img
-          src={face(COURSE.instructor.portrait)}
+          src={COURSE.instructor.portrait}
           alt=""
           width={44}
           height={44}
@@ -2596,12 +2529,11 @@ function Poster() {
           <span
             style={{
               position: 'absolute',
-              left: 16,
+              insetInlineStart: 16,
               top: 16,
               zIndex: 2,
               borderRadius: 'var(--radius-element)',
-              paddingLeft: 10,
-              paddingRight: 10,
+              paddingInline: 10,
               paddingTop: 4,
               paddingBottom: 4,
               background: 'var(--color-accent-muted)',
@@ -2619,9 +2551,9 @@ function Poster() {
             className="cr9-poster-disc"
             style={{
               position: 'absolute',
-              left: '50%',
+              insetInlineStart: '50%',
               top: '50%',
-              marginLeft: -36,
+              marginInlineStart: -36,
               marginTop: -36,
               zIndex: 2,
             }}>
@@ -2753,9 +2685,6 @@ function Syllabus() {
     .filter(Boolean)
     .join(' and ');
   const all = open.length === COURSE.modules.length;
-
-  const toggle = (id: string) =>
-    setOpen(o => (o.includes(id) ? o.filter(x => x !== id) : [...o, id]));
 
   // The course in six figures, each with the line that says what it holds
   // (the design computes these from the syllabus itself, so a rewritten
@@ -2927,170 +2856,126 @@ function Syllabus() {
           </HStack>
         </VStack>
       ) : (
-        <ol style={{margin: '24px 0 0', padding: 0, listStyle: 'none'}}>
-          {shown.map(({m, lessons}, k) => {
-            const isOpen = !!q || open.includes(m.id);
-            const last = k === shown.length - 1;
-            const moduleVideos = m.lessons.filter(l => !l.quiz && !l.project);
-            const time = moduleVideos.reduce((sum, l) => sum + l.minutes, 0);
-            const closer = m.lessons[m.lessons.length - 1];
-            const mi = COURSE.modules.indexOf(m);
-            // On a phone the number sits in front of the title; from sm the
-            // design's rail: each module's tile, and a line running down
-            // from it to the next, so the modules read as one course taken
-            // in order.
-            const head = (
-              <span style={{minWidth: 0, flex: '1 1 auto'}}>
-                <span
-                  style={{
-                    display: 'flex',
-                    gap: 8,
-                    fontSize: 16,
-                    fontWeight: 500,
-                  }}>
-                  {isMobile && (
-                    <span
-                      style={{
-                        flexShrink: 0,
-                        fontFamily: 'var(--font-family-heading)',
-                        fontVariantNumeric: 'tabular-nums',
-                        color: 'var(--color-text-secondary)',
-                      }}>
-                      {String(mi + 1).padStart(2, '0')}
+        <CollapsibleGroup
+          type="multiple"
+          value={q ? shown.map(x => x.m.id) : open}
+          onChange={v => {
+            if (!q) {
+              setOpen(Array.isArray(v) ? v : [v]);
+            }
+          }}>
+          <ol style={{margin: '24px 0 0', padding: 0, listStyle: 'none'}}>
+            {shown.map(({m, lessons}, k) => {
+              const last = k === shown.length - 1;
+              const moduleVideos = m.lessons.filter(l => !l.quiz && !l.project);
+              const time = moduleVideos.reduce((sum, l) => sum + l.minutes, 0);
+              const closer = m.lessons[m.lessons.length - 1];
+              const mi = COURSE.modules.indexOf(m);
+              // On a phone the number sits in front of the title; from sm the
+              // design's rail: each module's tile, and a line running down
+              // from it to the next, so the modules read as one course taken
+              // in order.
+              const head = (
+                <span style={{minWidth: 0, flex: '1 1 auto'}}>
+                  <span
+                    style={{
+                      display: 'flex',
+                      gap: 8,
+                      fontSize: 16,
+                      fontWeight: 500,
+                    }}>
+                    {isMobile && (
+                      <span
+                        style={{
+                          flexShrink: 0,
+                          fontFamily: 'var(--font-family-heading)',
+                          fontVariantNumeric: 'tabular-nums',
+                          color: 'var(--color-text-secondary)',
+                        }}>
+                        {String(mi + 1).padStart(2, '0')}
+                      </span>
+                    )}
+                    <span style={{minWidth: 0}}>
+                      <Marked text={m.title} query={q} />
                     </span>
-                  )}
-                  <span style={{minWidth: 0}}>
-                    <Marked text={m.title} query={q} />
+                  </span>
+                  <span
+                    style={{
+                      display: 'block',
+                      marginTop: 2,
+                      fontSize: 14,
+                      color: 'var(--color-text-secondary)',
+                    }}>
+                    {count(moduleVideos.length, 'lesson')} · {duration(time)}
+                    {closer?.quiz ? ' · quiz' : ' · project'}
                   </span>
                 </span>
-                <span
+              );
+              return (
+                <li
+                  key={m.id}
                   style={{
-                    display: 'block',
-                    marginTop: 2,
-                    fontSize: 14,
-                    color: 'var(--color-text-secondary)',
+                    position: 'relative',
+                    display: isMobile ? 'block' : 'grid',
+                    ...(isMobile
+                      ? {
+                          borderTop:
+                            k === 0
+                              ? undefined
+                              : '1px solid var(--color-border)',
+                          paddingTop: k === 0 ? 0 : 16,
+                          marginTop: k === 0 ? 0 : 16,
+                        }
+                      : {
+                          gridTemplateColumns: '48px minmax(0, 1fr)',
+                          columnGap: 20,
+                        }),
                   }}>
-                  {count(moduleVideos.length, 'lesson')} · {duration(time)}
-                  {closer?.quiz ? ' · quiz' : ' · project'}
-                </span>
-              </span>
-            );
-            return (
-              <li
-                key={m.id}
-                style={{
-                  position: 'relative',
-                  display: isMobile ? 'block' : 'grid',
-                  ...(isMobile
-                    ? {
-                        borderTop:
-                          k === 0 ? undefined : '1px solid var(--color-border)',
-                        paddingTop: k === 0 ? 0 : 16,
-                        marginTop: k === 0 ? 0 : 16,
-                      }
-                    : {
-                        gridTemplateColumns: '48px minmax(0, 1fr)',
-                        columnGap: 20,
-                      }),
-                }}>
-                {!isMobile && (
-                  <div
-                    style={{
-                      position: 'relative',
-                      display: 'flex',
-                      justifyContent: 'center',
-                    }}>
-                    <span
+                  {!isMobile && (
+                    <div
                       style={{
                         position: 'relative',
-                        zIndex: 1,
                         display: 'flex',
-                        width: 48,
-                        height: 48,
-                        alignItems: 'center',
                         justifyContent: 'center',
-                        borderRadius: 'calc(var(--radius-container) * 0.6)',
-                        background: 'var(--color-background-muted)',
-                        fontFamily: 'var(--font-family-heading)',
-                        fontSize: 16,
-                        fontVariantNumeric: 'tabular-nums',
                       }}>
-                      {String(mi + 1).padStart(2, '0')}
-                    </span>
-                    {!last && (
                       <span
-                        aria-hidden="true"
                         style={{
-                          position: 'absolute',
-                          top: 48,
-                          bottom: 0,
-                          width: 1,
-                          background: 'var(--color-border)',
-                        }}
-                      />
-                    )}
-                  </div>
-                )}
-
-                <div
-                  style={{
-                    minWidth: 0,
-                    ...(isMobile ? {} : {paddingBottom: last ? 0 : 16}),
-                  }}>
-                  {q ? (
-                    <div style={{padding: '6px 8px 6px 2px'}}>{head}</div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => toggle(m.id)}
-                      aria-expanded={isOpen}
-                      className="cr4-row"
-                      style={{
-                        width: '100%',
-                        paddingInline: isMobile ? '8px 4px' : '12px 8px',
-                        alignItems: 'center',
-                      }}>
-                      {head}
-                      <span
-                        aria-hidden="true"
-                        style={{
+                          position: 'relative',
+                          zIndex: 1,
                           display: 'flex',
-                          width: 36,
-                          height: 36,
-                          flexShrink: 0,
+                          width: 48,
+                          height: 48,
                           alignItems: 'center',
                           justifyContent: 'center',
-                          borderRadius: 999,
-                          boxShadow: 'inset 0 0 0 1px var(--color-border)',
-                          background: 'transparent',
-                          transition:
-                            'background-color var(--duration-fast) var(--ease-standard)',
+                          borderRadius: 'calc(var(--radius-container) * 0.6)',
+                          background: 'var(--color-background-muted)',
+                          fontFamily: 'var(--font-family-heading)',
+                          fontSize: 16,
+                          fontVariantNumeric: 'tabular-nums',
                         }}>
-                        <ChevronDownIcon
-                          className="cr4-chev"
+                        {String(mi + 1).padStart(2, '0')}
+                      </span>
+                      {!last && (
+                        <span
+                          aria-hidden="true"
                           style={{
-                            width: 16,
-                            height: 16,
-                            transform: isOpen ? 'rotate(180deg)' : 'none',
+                            position: 'absolute',
+                            top: 48,
+                            bottom: 0,
+                            width: 1,
+                            background: 'var(--color-border)',
                           }}
                         />
-                      </span>
-                    </button>
+                      )}
+                    </div>
                   )}
 
-                  {/* Eased open to its own height, as the design eases
-                      its module lists (grid-rows 0fr → 1fr, 300ms ease-out),
-                      and inert while shut, so a screen reader does not read
-                      the lessons of a module nobody opened. The clip is
-                      widened by the focus ring's reach and taken back by the
-                      margins, so it does not cut a previewable row's ring. */}
                   <div
-                    className="cr7-disclosure"
-                    data-open={isOpen}
-                    inert={!isOpen}>
-                    <div
-                      className="cr7-clip"
-                      style={{marginInline: -4, paddingInline: 4}}>
+                    style={{
+                      minWidth: 0,
+                      ...(isMobile ? {} : {paddingBottom: last ? 0 : 16}),
+                    }}>
+                    <Collapsible value={m.id} trigger={head}>
                       <ul
                         style={{
                           margin: '4px 0 8px',
@@ -3188,10 +3073,10 @@ function Syllabus() {
                             alignItems: 'center',
                             gap: 12,
                             borderRadius: 'calc(var(--radius-container) * 0.6)',
-                            padding: isMobile
-                              ? '8px 4px 8px 8px'
-                              : '8px 8px 8px 12px',
-                            textAlign: 'left',
+                            paddingBlock: 8,
+                            paddingInlineStart: isMobile ? 8 : 12,
+                            paddingInlineEnd: isMobile ? 4 : 8,
+                            textAlign: 'start',
                           };
                           return (
                             <li
@@ -3216,13 +3101,13 @@ function Syllabus() {
                           );
                         })}
                       </ul>
-                    </div>
+                    </Collapsible>
                   </div>
-                </div>
-              </li>
-            );
-          })}
-        </ol>
+                </li>
+              );
+            })}
+          </ol>
+        </CollapsibleGroup>
       )}
     </VStack>
   );
@@ -3349,7 +3234,7 @@ function Instructor() {
             centre on the circle at 45°. */}
         <span style={{position: 'relative', display: 'inline-block'}}>
           <img
-            src={face(t.portrait)}
+            src={t.portrait}
             alt=""
             width={80}
             height={80}
@@ -3417,8 +3302,8 @@ function Instructor() {
               size="fill"
               style={{
                 flexGrow: i === 1 ? 1.25 : 1,
-                paddingLeft: i === 0 ? 0 : 12,
-                borderLeft:
+                paddingInlineStart: i === 0 ? 0 : 12,
+                borderInlineStart:
                   i === 0 ? undefined : '1px solid var(--color-border)',
               }}>
               <VStack gap={0.5}>
@@ -3649,7 +3534,7 @@ function OtherCourse({
             display: 'block',
           }}>
           <img
-            src={photo(x.image)}
+            src={x.image}
             alt=""
             width={96}
             height={96}
@@ -4144,8 +4029,8 @@ function Tally({n}: {n: number}) {
   return (
     <span
       style={{
-        marginLeft: 'auto',
-        paddingLeft: 16,
+        marginInlineStart: 'auto',
+        paddingInlineStart: 16,
         fontVariantNumeric: 'tabular-nums',
         color: 'var(--color-text-secondary)',
         flexShrink: 0,
@@ -4179,7 +4064,7 @@ function ReviewItem({
             where they did not, as a real list mixes the two */}
         {r.face ? (
           <img
-            src={face(r.face)}
+            src={r.face}
             alt=""
             width={48}
             height={48}
@@ -4325,32 +4210,44 @@ function Body({text, query}: {text: string; query: string}) {
 function RelatedRail() {
   const [favs, setFavs] = useState<Record<string, boolean>>({});
   const shelf = useRef<HTMLUListElement>(null);
+  const firstCard = useRef<HTMLLIElement>(null);
+  const lastCard = useRef<HTMLLIElement>(null);
   const [ends, setEnds] = useState({start: true, end: false});
   // The design's heading ladder steps: 36 from sm, 48 from lg.
   const sm = !useIsMobile(639);
   const lg = !useIsMobile(1023);
 
   useEffect(() => {
-    const el = shelf.current;
-    if (!el) {
+    const root = shelf.current;
+    const first = firstCard.current;
+    const last = lastCard.current;
+    if (
+      !root ||
+      !first ||
+      !last ||
+      typeof IntersectionObserver === 'undefined'
+    ) {
       return;
     }
-    const read = () => {
-      // In RTL the scrollLeft axis runs from zero backwards, so the
-      // position is read as distance travelled: the start edge is where
-      // the axis begins for the reader, wherever it physically sits.
-      const max = el.scrollWidth - el.clientWidth - 1;
-      const rtl = getComputedStyle(el).direction === 'rtl';
-      const pos = rtl ? -el.scrollLeft : el.scrollLeft;
-      setEnds({start: pos <= 1, end: pos >= max});
-    };
-    read();
-    el.addEventListener('scroll', read, {passive: true});
-    window.addEventListener('resize', read);
-    return () => {
-      el.removeEventListener('scroll', read);
-      window.removeEventListener('resize', read);
-    };
+    // The ends read from the first and last cards' own visibility, never
+    // from layout on the scroll path: an entry fires when a card enters or
+    // leaves the shelf, whatever the reader's direction.
+    const io = new IntersectionObserver(
+      entries => {
+        for (const entry of entries) {
+          if (entry.target === first) {
+            setEnds(s => ({...s, start: entry.isIntersecting}));
+          }
+          if (entry.target === last) {
+            setEnds(s => ({...s, end: entry.isIntersecting}));
+          }
+        }
+      },
+      {root, threshold: 0.9},
+    );
+    io.observe(first);
+    io.observe(last);
+    return () => io.disconnect();
   }, []);
 
   const page = (dir: number) => {
@@ -4414,9 +4311,16 @@ function RelatedRail() {
         aria-label="Courses to take next"
         className="cr7-shelf"
         style={{listStyle: 'none'}}>
-        {COURSE.related.map(c => (
+        {COURSE.related.map((c, i) => (
           <li
             key={c.title}
+            ref={
+              i === 0
+                ? firstCard
+                : i === COURSE.related.length - 1
+                  ? lastCard
+                  : undefined
+            }
             style={{
               width: 272,
               flexShrink: 0,
@@ -4471,14 +4375,14 @@ function CourseCard({
           borderRadius: 'calc(var(--radius-container) - 8px)',
           background: 'var(--color-background-muted)',
         }}>
-        <img src={photo(c.image)} alt="" className="cr7-photo" loading="lazy" />
+        <img src={c.image} alt="" className="cr7-photo" loading="lazy" />
         {/* The badge is the brand's pale chip, mixed into white so nothing
             in the frame shows through behind its ink. */}
         {c.badge && (
           <span
             style={{
               position: 'absolute',
-              left: 12,
+              insetInlineStart: 12,
               top: 12,
               zIndex: 2,
               borderRadius: 'var(--radius-element)',
@@ -4503,7 +4407,7 @@ function CourseCard({
           onClick={() => {}}
           style={{
             position: 'absolute',
-            left: 12,
+            insetInlineStart: 12,
             bottom: 12,
             zIndex: 2,
             display: 'flex',
@@ -4514,8 +4418,8 @@ function CourseCard({
             borderRadius: 'var(--radius-element)',
             background: 'var(--color-background-card)',
             paddingBlock: 4,
-            paddingLeft: 4,
-            paddingRight: 12,
+            paddingInlineStart: 4,
+            paddingInlineEnd: 12,
             fontSize: 12,
             fontWeight: 500,
             boxShadow: 'var(--shadow-low)',
@@ -4526,7 +4430,7 @@ function CourseCard({
           }}>
           {c.portrait && (
             <img
-              src={face(c.portrait)}
+              src={c.portrait}
               alt=""
               width={24}
               height={24}
@@ -4669,202 +4573,6 @@ function CourseCard({
 
 // ─── Enroll panel (the design's EnrolPanel: sticky beside the syllabus ────
 //     + the phone's reach-bar) ────────────────────────────────────────────────
-/** One way to start, as the design's date rows are drawn. The
- *  self-paced row carries its finish date under it; a cohort row is one
- *  line, its first day in the ink that is read first and its last in the
- *  muted one, with the seats on the right. A full cohort keeps its row,
- *  sunk into the panel the way a disabled control is. */
-function StartRow({
-  start,
-  on,
-  onPick,
-  finish,
-}: {
-  start: Start;
-  on: boolean;
-  onPick: () => void;
-  finish?: string;
-}) {
-  const full = start.kind === 'cohort' && start.left === 0;
-  const few = start.kind === 'cohort' && start.left > 0 && start.left <= 10;
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={on}
-      aria-disabled={full || undefined}
-      onClick={full ? undefined : onPick}
-      style={{
-        display: 'flex',
-        width: '100%',
-        alignItems: 'center',
-        gap: 12,
-        borderRadius: 'calc(var(--radius-container) * 0.6)',
-        paddingInline: 20,
-        paddingBlock: 14,
-        textAlign: 'left',
-        cursor: full ? 'not-allowed' : 'pointer',
-        border: 'none',
-        transition:
-          'box-shadow var(--duration-fast) var(--ease-standard), background-color var(--duration-fast) var(--ease-standard)',
-        ...(full
-          ? {background: 'var(--color-background-muted)'}
-          : on
-            ? {
-                background: 'var(--color-background-card)',
-                boxShadow: 'inset 0 0 0 2px var(--color-accent)',
-              }
-            : {boxShadow: 'inset 0 0 0 1px var(--color-border)'}),
-      }}>
-      {start.kind === 'self' ? (
-        <span style={{minWidth: 0, flex: '1 1 auto'}}>
-          <span style={{display: 'block', fontSize: 14, fontWeight: 500}}>
-            Today, at your own pace
-          </span>
-          <span
-            style={{
-              display: 'block',
-              marginTop: 2,
-              fontSize: 14,
-              color: 'var(--color-text-secondary)',
-            }}>
-            Finish around {finish}
-          </span>
-        </span>
-      ) : (
-        <span style={{minWidth: 0, flex: '1 1 auto', fontSize: 14}}>
-          <VisuallyHidden>Cohort, </VisuallyHidden>
-          <span
-            style={
-              full ? {color: 'var(--color-text-secondary)'} : {fontWeight: 500}
-            }>
-            {dayLabel(start.starts)}
-          </span>
-          <span style={{color: 'var(--color-text-secondary)'}}>
-            {' '}
-            – {dateLabel(start.ends)}
-          </span>
-        </span>
-      )}
-      {start.kind === 'cohort' && (
-        <span
-          style={{
-            flexShrink: 0,
-            fontSize: 14,
-            fontVariantNumeric: 'tabular-nums',
-            color: full
-              ? 'var(--color-text-secondary)'
-              : few
-                ? 'var(--color-text-orange)'
-                : 'var(--color-text-secondary)',
-          }}>
-          {full ? 'Full' : `${start.left} left`}
-        </span>
-      )}
-    </button>
-  );
-}
-
-// ─── The segmented slider (round 14: the design's SliderSteps) ────────────
-// One dash a step, the steps taken in the brand and the rest a pale ink, so
-// the week reads as a count; the 24px white card-disc thumb stands on the
-// seam between the last one taken and the next — the dash the thumb stands
-// ON never counts itself taken. A press anywhere on the control lands the
-// thumb there and the drag follows the pointer; the arrows, Home and End
-// move it from the keyboard. (Drawn on the page's own tokens, cr14-*,
-// because the primitive's Slider draws a continuous rail and an accent
-// thumb — the segmented track with the white disc is the design's own.)
-function StepsSlider({
-  value,
-  min,
-  max,
-  onChange,
-  label,
-}: {
-  value: number;
-  min: number;
-  max: number;
-  onChange: (v: number) => void;
-  label: string;
-}) {
-  const n = Math.round(max - min);
-  const taken = Math.round(value - min);
-  const pct = ((value - min) / (max - min)) * 100;
-  const ref = useRef<HTMLDivElement>(null);
-
-  const setFromX = useCallback(
-    (x: number) => {
-      const rect = ref.current?.getBoundingClientRect();
-      if (!rect) {
-        return;
-      }
-      const ratio = Math.min(Math.max((x - rect.left) / rect.width, 0), 1);
-      onChange(Math.round(min + ratio * (max - min)));
-    },
-    [min, max, onChange],
-  );
-
-  return (
-    <div
-      ref={ref}
-      className="cr14-segctrl"
-      role="slider"
-      tabIndex={0}
-      aria-label={label}
-      aria-valuemin={min}
-      aria-valuemax={max}
-      aria-valuenow={value}
-      onPointerDown={(e: React.PointerEvent<HTMLDivElement>) => {
-        e.preventDefault();
-        e.currentTarget.focus();
-        setFromX(e.clientX);
-        const move = (ev: globalThis.PointerEvent) => setFromX(ev.clientX);
-        const up = () => {
-          window.removeEventListener('pointermove', move);
-          window.removeEventListener('pointerup', up);
-        };
-        window.addEventListener('pointermove', move);
-        window.addEventListener('pointerup', up);
-      }}
-      onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => {
-        if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
-          e.preventDefault();
-          onChange(Math.min(value + 1, max));
-        }
-        if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
-          e.preventDefault();
-          onChange(Math.max(value - 1, min));
-        }
-        if (e.key === 'Home') {
-          e.preventDefault();
-          onChange(min);
-        }
-        if (e.key === 'End') {
-          e.preventDefault();
-          onChange(max);
-        }
-      }}>
-      <span aria-hidden="true" style={{position: 'absolute', inset: 0}}>
-        {Array.from({length: n}, (_, i) => (
-          <span
-            key={i}
-            className={`cr14-dash${i < taken ? ' on' : ''}`}
-            style={{
-              left: `calc(${(i / n) * 100}% + 2px)`,
-              width: `calc(${100 / n}% - 4px)`,
-            }}
-          />
-        ))}
-      </span>
-      <span
-        className="cr14-segthumb"
-        style={{left: `${pct}%`}}
-        aria-hidden="true"
-      />
-    </div>
-  );
-}
-
 function EnrollPanel() {
   const isMobile = useIsMobile();
   // The panel is held to the screen's height less the header only from lg,
@@ -4883,10 +4591,11 @@ function EnrollPanel() {
   // screen, the bar keeps the price and the button in reach. The root runs
   // far below the screen, so the button counts as in view down the page and
   // only leaving past the top turns the bar on.
-  const [ctaEl, setCtaEl] = useState<HTMLDivElement | null>(null);
+  const ctaRef = useRef<HTMLDivElement>(null);
   const [away, setAway] = useState(false);
   useEffect(() => {
-    if (!ctaEl || typeof IntersectionObserver === 'undefined') {
+    const el = ctaRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') {
       return;
     }
     const io = new IntersectionObserver(
@@ -4895,9 +4604,9 @@ function EnrollPanel() {
         rootMargin: '0px 0px 10000px 0px',
       },
     );
-    io.observe(ctaEl);
+    io.observe(el);
     return () => io.disconnect();
-  }, [ctaEl]);
+  }, []);
 
   const self = starts.find(s => s.kind === 'self');
   const cohortRows = starts.filter(s => s.kind === 'cohort');
@@ -4967,7 +4676,7 @@ function EnrollPanel() {
             </p>
           )}
 
-          <div ref={setCtaEl} style={{marginTop: 20, width: '100%'}}>
+          <div ref={ctaRef} style={{marginTop: 20, width: '100%'}}>
             <button type="button" className="cr7-cta">
               {ctaLabel}
               <Icon icon={ArrowRightIcon} size="sm" xstyle={rtlStyles.mirror} />
@@ -4992,8 +4701,6 @@ function EnrollPanel() {
         </VStack>
 
         <div
-          role="radiogroup"
-          aria-label="When to start"
           style={{
             marginTop: 20,
             borderTop: '1px solid var(--color-border)',
@@ -5003,81 +4710,48 @@ function EnrollPanel() {
             flex: '1 1 auto',
             minHeight: 0,
             width: '100%',
+            overflowY: 'auto',
           }}>
-          <Caps>Start</Caps>
-          <div
-            className="cr7-startlist"
-            style={{
-              marginTop: 8,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 8,
-            }}>
-            <div>
-              {self && (
-                <StartRow
-                  start={self}
-                  on={start.kind === 'self'}
-                  onPick={() => setPicked('self')}
-                  finish={dayLabel(finish.key)}
-                />
-              )}
-              {/* The pace belongs to the self-paced row, so it opens under
-                  it and moves that row's finish date as it is dragged. */}
-              {start.kind === 'self' && (
-                <VStack gap={2} style={{padding: '16px 20px 4px'}}>
-                  <HStack
-                    vAlign="center"
-                    justify="between"
-                    gap={3}
-                    style={{width: '100%'}}>
-                    <Text type="supporting">Hours you have a week</Text>
-                    <Text
-                      type="body"
-                      style={{fontVariantNumeric: 'tabular-nums'}}>
-                      {pace} {pace === 1 ? 'hour' : 'hours'}
-                    </Text>
-                  </HStack>
-                  {/* ROUND 14: the design's SliderSteps — the segmented
-                      track with the white card-disc thumb (was the
-                      primitive's continuous rail and accent thumb). */}
-                  <StepsSlider
-                    value={pace}
-                    min={1}
-                    max={maxPace}
-                    onChange={(v: number) => setPace(v)}
-                    label="Hours you have a week"
-                  />
-                </VStack>
-              )}
-            </div>
-
-            {/* What every cohort shares is said once, over the rows, which
-                leaves each row its dates and its seats. */}
-            {cohortRows.length > 0 && (
-              <>
-                <span style={{display: 'block', marginTop: 20}}>
-                  <Caps>Cohorts · live Thursdays</Caps>
-                </span>
-                <div
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 8,
-                    marginTop: 8,
-                  }}>
-                  {cohortRows.map(s => (
-                    <StartRow
-                      key={s.key}
-                      start={s}
-                      on={start.kind === 'cohort' && start.key === s.key}
-                      onPick={() => setPicked(s.key)}
-                    />
-                  ))}
-                </div>
-              </>
+          <RadioList label="When to start" value={picked} onChange={setPicked}>
+            {self && (
+              <RadioListItem
+                value="self"
+                label="Today, at your own pace"
+                description={`Finish around ${dayLabel(finish.key)}`}
+              />
             )}
-          </div>
+            {cohortRows.map(s => (
+              <RadioListItem
+                key={s.key}
+                value={s.key}
+                label={`${dayLabel(s.starts)} – ${dateLabel(s.ends)}`}
+                description={
+                  s.seats === 0
+                    ? 'Full'
+                    : `${s.seats} seats left · live Thursdays`
+                }
+                isDisabled={s.seats === 0}
+              />
+            ))}
+          </RadioList>
+          {/* The pace belongs to the self-paced choice, so it opens under
+              the list and moves that choice's finish date as it is dragged. */}
+          {start.kind === 'self' && (
+            <VStack gap={2} style={{padding: '16px 20px 4px'}}>
+              <Slider
+                label="Hours you have a week"
+                value={pace}
+                onChange={(v: number) => setPace(v)}
+                min={1}
+                max={maxPace}
+                marks={[{value: 1}, {value: maxPace}]}
+                formatValue={(value: number) => `${value} h/week`}
+              />
+            </VStack>
+          )}
+          <Text type="supporting" color="secondary" style={{marginTop: 8}}>
+            Cohorts run live on Thursdays.
+          </Text>
         </div>
       </Card>
 
@@ -5132,7 +4806,7 @@ function EnrollPanel() {
  *  by its fill, the other raised in white — and the design's hand: two
  *  sparks on the copy half, the squiggle and the sprout taking the gap
  *  along the photograph's edge from lg and xl. */
-const CLOSING_PHOTO = '/template-assets/DATA-photo-closing-art.png';
+const CLOSING_PHOTO = '/template-assets/light-scene-horizontal-1.png';
 
 // The design's spark: tapered rays, each a little longer or shorter than a
 // compass would leave it (the design's own path).
@@ -5195,12 +4869,11 @@ function ClosingCta() {
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            paddingLeft: 24,
-            paddingRight: 24,
+            paddingInline: 24,
             paddingTop: 56,
             paddingBottom: 56,
             textAlign: 'center',
-            ...(sm ? {paddingLeft: 48, paddingRight: 48} : {}),
+            ...(sm ? {paddingInline: 48} : {}),
             ...(lg ? {paddingTop: 64, paddingBottom: 64} : {}),
           }}>
           {/* the design's hand: the large spark over the heading's
@@ -5301,7 +4974,7 @@ function ClosingCta() {
 
         {/* The photograph, inset from the band's edge by the band's own
             padding so it reads as a picture held in it — the design's
-            own closing desk scene, cropped per its own object-position
+            own closing photograph, cropped per its own object-position
             ladder. */}
         <div
           className="cr11-photo"
@@ -5419,9 +5092,8 @@ function NewsletterForm() {
 }
 
 /** The brand's mark, as the design signs its footer: the name cut to its
- *  first word, the point on the way set as the full point after it — the
- *  dot is the "point", riding the baseline in the brand hue with the chip's
- *  halo. */
+ *  first word, the full point after it riding the baseline in the brand hue
+ *  with the chip's halo. */
 function FooterLogo() {
   return (
     <span
@@ -5439,10 +5111,10 @@ function FooterLogo() {
       <span
         aria-hidden="true"
         style={{display: 'flex', alignItems: 'baseline'}}>
-        way
+        maya
         <span
           style={{
-            marginLeft: '0.06em',
+            marginInlineStart: '0.06em',
             width: '0.3em',
             height: '0.3em',
             flexShrink: 0,
@@ -5607,7 +5279,6 @@ function SiteFooter() {
  *  the page (a stack of closed rows reads as a list rather than as
  *  something that opens). */
 function FaqStepRows() {
-  const [open, setOpen] = useState(0);
   const items = COURSE.faqs;
   // The design's heading ladder steps: 36 from sm, 48 from lg.
   const sm = !useIsMobile(639);
@@ -5644,61 +5315,33 @@ function FaqStepRows() {
         </p>
       </div>
 
-      <ul style={{margin: '56px 0 0', padding: 0, listStyle: 'none'}}>
-        {items.map((f, i) => {
-          const on = open === i;
-          const afterOpen = i > 0 && open === i - 1;
-          const last = i === items.length - 1;
-          return (
-            <li
+      <div style={{marginTop: 56, width: '100%'}}>
+        <CollapsibleGroup type="single" defaultValue={items[0].q}>
+          {items.map((f, i) => (
+            <Collapsible
               key={f.q}
-              className={`cr7-faqrow${on ? ' cr7-tintslab' : ''}`}
-              data-open={on}
-              data-after-open={afterOpen}
-              data-last={last}>
-              <div style={{paddingBlock: 4}}>
-                <button
-                  type="button"
-                  onClick={() => setOpen(on ? -1 : i)}
-                  aria-expanded={on}
-                  className="cr7-faqbtn">
-                  <span className="cr7-faqcaps">
-                    <Caps
-                      style={{
-                        fontVariantNumeric: 'tabular-nums',
-                        color: on ? 'var(--color-text-primary)' : undefined,
-                      }}>
+              value={f.q}
+              trigger={
+                <span style={{display: 'block', minWidth: 0}}>
+                  <span style={{display: 'block'}}>
+                    <Caps style={{fontVariantNumeric: 'tabular-nums'}}>
                       {String(i + 1).padStart(2, '0')} · {f.group}
                     </Caps>
                   </span>
-                  <span className="cr7-faqq">{f.q}</span>
-                  {/* the design's disc: an arrow pointing on, that turns
-                      down to the answer as the row opens */}
-                  <span aria-hidden="true" className="cr7-faqdisc">
-                    <ArrowRightIcon
-                      className="cr7-faqarrow"
-                      style={{width: 16, height: 16}}
-                    />
+                  <span
+                    className="cr7-faqq"
+                    style={{display: 'block', marginTop: 4}}>
+                    {f.q}
                   </span>
-                </button>
-              </div>
-
-              {/* The answer eases open to its own height rather than
-                  appearing — the design's grid-rows 0fr → 1fr over 300ms
-                  ease-out, the clip overflowing hidden inside — and stays
-                  mounted and inert while shut, so a screen reader does not
-                  read six answers nobody opened. */}
-              <div className="cr7-disclosure" data-open={on} inert={!on}>
-                <div className="cr7-clip">
-                  <p className="cr7-faqa" style={{margin: 0}}>
-                    {f.a}
-                  </p>
-                </div>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+                </span>
+              }>
+              <p className="cr7-faqa" style={{margin: 0}}>
+                {f.a}
+              </p>
+            </Collapsible>
+          ))}
+        </CollapsibleGroup>
+      </div>
     </section>
   );
 }
