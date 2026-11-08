@@ -24,7 +24,7 @@ minimumReleaseAge: 10080
 minimumReleaseAgeExclude:
   - '@astryxdesign/*'
   - 'dompurify'
-  # Security release 2026-11-03 (next 16.4.5); remove on/after 2026-11-10.
+  # Security release 2026-11-03 (next 16.4.5); remove after 2026-11-10 18:00 UTC.
   - 'next'
   - '@next/*'
 

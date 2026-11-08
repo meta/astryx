@@ -1,9 +1,10 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, it, expect} from 'vitest';
-import {render, screen, within} from '@testing-library/react';
+import {act, render, screen, within} from '@testing-library/react';
+import {useState} from 'react';
 import {Table} from '../../Table';
-import type {TableColumn} from '../../types';
+import type {TableColumn, TablePlugin} from '../../types';
 import {useTableRowIndex} from './useTableRowIndex';
 
 interface Row extends Record<string, unknown> {
@@ -168,5 +169,35 @@ describe('useTableRowIndex', () => {
     const rows = screen.getAllByRole('row');
     expect(within(rows[1]).getByText('1')).toBeInTheDocument();
     expect(within(rows[2]).getByText('2')).toBeInTheDocument();
+  });
+
+  it('keeps unchanged rows from re-rendering when the parent re-renders', () => {
+    let cellTransforms = 0;
+    const audit: TablePlugin<Row> = {
+      rowModel: 'flat',
+      transformBodyCell(props) {
+        cellTransforms++;
+        return props;
+      },
+    };
+    let rerender: () => void = () => {};
+    function Parent() {
+      const [, setTick] = useState(0);
+      rerender = () => setTick(value => value + 1);
+      const rowIndex = useTableRowIndex<Row>();
+      return (
+        <Table
+          data={data}
+          columns={columns}
+          idKey="id"
+          plugins={{rowIndex, audit}}
+        />
+      );
+    }
+    render(<Parent />);
+    const afterMount = cellTransforms;
+    expect(afterMount).toBeGreaterThan(0);
+    act(() => rerender());
+    expect(cellTransforms).toBe(afterMount);
   });
 });

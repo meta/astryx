@@ -90,7 +90,10 @@ export interface CreateResizableOptions {
   snaps?: number[];
   /** Whether the region can collapse to 0. @default false */
   collapsible?: boolean;
-  /** Size in px under which a drag collapses the region. @default 40 */
+  /**
+   * Size in px under which a lift or a key step collapses the region.
+   * @default 40
+   */
   collapsedSize?: number;
   /**
    * The element a percentage is a share of, read as `containerRef.current`.
