@@ -181,7 +181,7 @@ export interface ResizableProps {
   _isCollapsed: boolean;
   _onResizeStart: () => void;
   _onResizeMove: (delta: number) => void;
-  _onResizeEnd: () => void;
+  _onResizeEnd: (velocity?: number) => void;
   /**
    * The gesture ended without completing — pointercancel, a lost pointer
    * capture, or a handle unmounted mid-drag. Separate from `_onResizeEnd`
@@ -242,9 +242,12 @@ function useSingleResizable(config: UseResizableSingleConfig): ResizableRegion {
     },
     [model],
   );
-  const onResizeEnd = useCallback(() => {
-    model()?.end();
-  }, [model]);
+  const onResizeEnd = useCallback(
+    (velocity?: number) => {
+      model()?.end(velocity);
+    },
+    [model],
+  );
   const onResizeCancel = useCallback(() => {
     model()?.cancel();
   }, [model]);

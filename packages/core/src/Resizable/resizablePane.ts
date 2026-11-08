@@ -13,9 +13,12 @@
 
 import {
   createAnimatedLayout,
-  reportLayoutEdge,
+  glideNextChange,
   type LayoutEdge,
+  reportLayoutEdge,
+  springGlide,
 } from '../motion/animatedLayout';
+import {springs} from '../motion/uikit/springs';
 import type {ResizableProps} from './useResizable';
 
 export type {LayoutEdge};
@@ -374,4 +377,19 @@ export function createPaneReveal(getRow: () => Element | null): PaneReveal {
     },
     land,
   };
+}
+
+/**
+ * The next slide in `row` plays the settle spring, not the theme's curve.
+ * It starts from a release `velocity` (px per second toward the end) over
+ * `distance` px.
+ */
+export function slideNextOnRelease(
+  row: Element,
+  velocity: number,
+  distance: number,
+): void {
+  if (distance > 0) {
+    glideNextChange(row, springGlide(springs.settle, velocity / distance));
+  }
 }
