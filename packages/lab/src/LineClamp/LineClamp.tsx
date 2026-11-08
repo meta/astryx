@@ -127,7 +127,7 @@ function syncFocusableClipping(
     if (!isOwnedBy(container, el)) {
       continue;
     }
-    if (escapesClip(container, el)) {
+    if (isInPositionedSubtree(container, el)) {
       if (el.hasAttribute(HIDDEN_ATTRIBUTE)) {
         restoreFromClip(el);
       }
@@ -163,23 +163,20 @@ function syncFocusableClipping(
 }
 
 /**
- * Whether `el` sits in an out-of-flow box that the clamp does not clip: an
- * `absolute` or `fixed` element whose containing block is outside the clamp,
- * such as a menu panel that opens below it.
+ * Whether `el` is, or sits inside, an `absolute` or `fixed` box below the
+ * clamp. Such a subtree is out of the clamp's flow and is never made inert,
+ * at any depth. A popover or dialog stops ownership in `isOwnedBy`, and a
+ * portal renders outside the clamp, so neither reaches the pass.
  */
-function escapesClip(container: HTMLElement, el: Element): boolean {
+function isInPositionedSubtree(container: HTMLElement, el: Element): boolean {
   for (
     let node: Element | null = el;
     node != null && node !== container;
     node = node.parentElement
   ) {
     const {position} = getComputedStyle(node);
-    if (position === 'fixed') {
+    if (position === 'absolute' || position === 'fixed') {
       return true;
-    }
-    if (position === 'absolute' && node instanceof HTMLElement) {
-      const block = node.offsetParent;
-      return block == null || !container.contains(block);
     }
   }
   return false;

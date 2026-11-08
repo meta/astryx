@@ -549,15 +549,20 @@ describe('LineClamp', () => {
       expect(button).not.toHaveAttribute('inert');
     });
 
-    it('leaves a menu panel positioned out of the clamp alone, but still hides one the clamp clips', () => {
+    it('never makes a control in a positioned subtree inert, at any depth', () => {
       const ui = () => (
         <LineClamp maxLines={2} data-testid="clamp">
           Some text
-          <span style={{position: 'absolute'}} data-testid="panel">
+          <span style={{position: 'absolute'}}>
             <a href="/share">Share</a>
+            <ul>
+              <li>
+                <a href="/report">Report</a>
+              </li>
+            </ul>
           </span>
-          <span style={{position: 'absolute'}} data-testid="inner">
-            <a href="/report">Report</a>
+          <span style={{position: 'fixed'}}>
+            <button type="button">Help</button>
           </span>
         </LineClamp>
       );
@@ -565,24 +570,72 @@ describe('LineClamp', () => {
       const container = screen.getByTestId('clamp');
       const share = screen.getByText('Share');
       const report = screen.getByText('Report');
-      // The first panel's containing block is outside the clamp; the second's
-      // is the clamp, so the clamp clips it.
-      Object.defineProperty(screen.getByTestId('panel'), 'offsetParent', {
-        value: document.body,
-      });
-      Object.defineProperty(screen.getByTestId('inner'), 'offsetParent', {
-        value: container,
-      });
+      const help = screen.getByText('Help');
       mockRects(
         new Map([
           [container, {top: 0, bottom: 40}],
           [share, {top: 60, bottom: 76}],
-          [report, {top: 60, bottom: 76}],
+          [report, {top: 80, bottom: 96}], // a submenu link, deeper in
+          [help, {top: 60, bottom: 76}],
         ]),
       );
       rerender(ui());
       expect(share).not.toHaveAttribute('inert');
-      expect(report).toHaveAttribute('inert');
+      expect(report).not.toHaveAttribute('inert');
+      expect(help).not.toHaveAttribute('inert');
+    });
+
+    it('keeps a partly visible link reachable', () => {
+      const {rerender} = render(
+        <LineClamp maxLines={2} data-testid="clamp">
+          Some text <a href="/more">Read more</a>
+        </LineClamp>,
+      );
+      const container = screen.getByTestId('clamp');
+      const link = screen.getByText('Read more');
+      mockRects(
+        new Map([
+          [container, {top: 0, bottom: 40}],
+          [link, {top: 30, bottom: 56}], // its first line is visible
+        ]),
+      );
+      rerender(
+        <LineClamp maxLines={2} data-testid="clamp">
+          Some text <a href="/more">Read more</a>
+        </LineClamp>,
+      );
+      expect(link).not.toHaveAttribute('inert');
+    });
+
+    it('leaves a positioned control inside an escaping panel alone', () => {
+      const ui = () => (
+        <LineClamp maxLines={2} data-testid="clamp">
+          Some text
+          <span style={{position: 'absolute'}} data-testid="panel">
+            <span style={{position: 'absolute'}} data-testid="close">
+              <button type="button">Close</button>
+            </span>
+          </span>
+        </LineClamp>
+      );
+      const {rerender} = render(ui());
+      const container = screen.getByTestId('clamp');
+      const panel = screen.getByTestId('panel');
+      const close = screen.getByText('Close');
+      // The Close button is placed against the panel, and the panel escapes
+      // the clamp: neither containing block is the clamp.
+      Object.defineProperty(panel, 'offsetParent', {value: document.body});
+      Object.defineProperty(screen.getByTestId('close'), 'offsetParent', {
+        value: panel,
+      });
+      mockRects(
+        new Map([
+          [container, {top: 0, bottom: 40}],
+          [close, {top: 60, bottom: 76}],
+        ]),
+      );
+      rerender(ui());
+      expect(close).not.toHaveAttribute('inert');
     });
 
     it('hides a descendant a child re-enables past the fold after mount', async () => {

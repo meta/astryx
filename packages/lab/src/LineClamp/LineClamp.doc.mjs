@@ -72,7 +72,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'A link, button, form control or element with a tabindex that falls past the visible lines (e.g. a trailing link) is automatically made inert (out of the tab order and the accessibility tree) while clipped, and made reachable again once it is no longer clipped: LineClamp checks again on each render, when its box resizes, when its lines re-wrap at the same size (for example after a web font loads), when a child adds or re-enables a focusable element, and when focus moves away from one. LineClamp never rewrites your own tabIndex or aria-hidden. The element that currently has focus is never hidden. No consumer action needed, but avoid relying on Tab reaching a link that only sometimes clips.',
+          "LineClamp makes a focusable descendant inert only when both hold: (1) it is in the clamp's own flow, with no element between it and the clamp that is positioned absolute or fixed, is in the top layer (a popover or dialog), or is rendered elsewhere through a portal; and (2) its box lies wholly beyond the clamp's last visible line. Anything inside a positioned, top-layer or portaled subtree is never made inert, at any depth, whether or not it shows past the clamp. A control any part of which is visible stays reachable. LineClamp re-checks when its size, its content or its fonts change. Gap: an absolutely placed control that the clamp itself clips stays a tab stop; the author owns positioned content inside a clamp. Inert takes such a control out of the Tab order and the accessibility tree. LineClamp never rewrites your own tabIndex or aria-hidden, and the element that holds focus is never made inert.",
       },
     ],
   },
@@ -138,7 +138,7 @@ export const docsZh = {
       {
         guidance: true,
         description:
-          '落在可见行之外的链接、按钮、表单控件或带 tabindex 的元素（例如一个尾部链接）会在被截断时自动设为 inert（移出 Tab 顺序和无障碍树），一旦不再被截断即恢复，子组件之后新增或重新启用的元素以及焦点移开后的元素同样适用；不会改写你自己设置的 tabIndex 或 aria-hidden；当前持有焦点的元素不会被隐藏。无需消费者处理，但应避免依赖 Tab 到达一个只是有时被截断的链接。',
+          '只有同时满足以下两点时，LineClamp 才会把可聚焦的后代设为 inert：(1) 它在截断容器自己的文档流中，它与容器之间没有 absolute 或 fixed 定位的元素、没有位于顶层的元素（popover 或 dialog），也不是通过 portal 渲染到别处的；(2) 它的盒子完全位于最后一个可见行之外。定位、顶层或 portal 子树中的任何内容，无论层级多深、是否显示在容器之外，都不会被设为 inert。只要有一部分可见，控件就保持可达。LineClamp 会在尺寸、内容或字体变化时重新检查。已知缺口：被容器本身截断的绝对定位控件仍是一个 Tab 停靠点；容器内的定位内容由作者负责。LineClamp 不会改写你自己设置的 tabIndex 或 aria-hidden，持有焦点的元素也不会被设为 inert。',
       },
     ],
   },
@@ -169,7 +169,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'A link, button, form control or tabindex element past the visible lines is made inert while clipped (never the focused one, never your own tabIndex or aria-hidden), restored once not clipped, including late additions and after focus moves away. No consumer action needed.',
+          "Inert only for a focusable in the clamp's own flow (no absolute, fixed, top-layer or portal ancestor) whose box lies wholly past the last visible line; never inside a positioned, top-layer or portaled subtree; a partly visible control stays reachable; re-checked on size, content and font changes. Gap: an absolutely placed control the clamp clips stays a tab stop. Never the focused element, never your own tabIndex or aria-hidden.",
       },
     ],
   },
