@@ -127,6 +127,12 @@ function syncFocusableClipping(
     if (!isOwnedBy(container, el)) {
       continue;
     }
+    if (escapesClip(container, el)) {
+      if (el.hasAttribute(HIDDEN_ATTRIBUTE)) {
+        restoreFromClip(el);
+      }
+      continue;
+    }
     // Never take the element that holds focus out of the tab order: focus
     // would be lost from under the reader.
     const isFocused =
@@ -154,6 +160,29 @@ function syncFocusableClipping(
       restoreFromClip(el);
     }
   }
+}
+
+/**
+ * Whether `el` sits in an out-of-flow box that the clamp does not clip: an
+ * `absolute` or `fixed` element whose containing block is outside the clamp,
+ * such as a menu panel that opens below it.
+ */
+function escapesClip(container: HTMLElement, el: Element): boolean {
+  for (
+    let node: Element | null = el;
+    node != null && node !== container;
+    node = node.parentElement
+  ) {
+    const {position} = getComputedStyle(node);
+    if (position === 'fixed') {
+      return true;
+    }
+    if (position === 'absolute' && node instanceof HTMLElement) {
+      const block = node.offsetParent;
+      return block == null || !container.contains(block);
+    }
+  }
+  return false;
 }
 
 /**

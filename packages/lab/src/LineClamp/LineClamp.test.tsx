@@ -549,6 +549,42 @@ describe('LineClamp', () => {
       expect(button).not.toHaveAttribute('inert');
     });
 
+    it('leaves a menu panel positioned out of the clamp alone, but still hides one the clamp clips', () => {
+      const ui = () => (
+        <LineClamp maxLines={2} data-testid="clamp">
+          Some text
+          <span style={{position: 'absolute'}} data-testid="panel">
+            <a href="/share">Share</a>
+          </span>
+          <span style={{position: 'absolute'}} data-testid="inner">
+            <a href="/report">Report</a>
+          </span>
+        </LineClamp>
+      );
+      const {rerender} = render(ui());
+      const container = screen.getByTestId('clamp');
+      const share = screen.getByText('Share');
+      const report = screen.getByText('Report');
+      // The first panel's containing block is outside the clamp; the second's
+      // is the clamp, so the clamp clips it.
+      Object.defineProperty(screen.getByTestId('panel'), 'offsetParent', {
+        value: document.body,
+      });
+      Object.defineProperty(screen.getByTestId('inner'), 'offsetParent', {
+        value: container,
+      });
+      mockRects(
+        new Map([
+          [container, {top: 0, bottom: 40}],
+          [share, {top: 60, bottom: 76}],
+          [report, {top: 60, bottom: 76}],
+        ]),
+      );
+      rerender(ui());
+      expect(share).not.toHaveAttribute('inert');
+      expect(report).toHaveAttribute('inert');
+    });
+
     it('hides a descendant a child re-enables past the fold after mount', async () => {
       // Only the late link is placed past the fold; everything else sits
       // above it. Enabling it changes an attribute only: no text change, no
