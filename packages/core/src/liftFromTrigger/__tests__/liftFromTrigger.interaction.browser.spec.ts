@@ -359,6 +359,47 @@ test('a drop while the tint rises turns it around with its velocity: it keeps ri
   await page.evaluate(() => window.__lift.dispose());
 });
 
+test('a drop puts the row back with no transition running, whatever transitions the row has: its own margin returns at once', async ({
+  page,
+}) => {
+  await open(page);
+  const running = await page.evaluate(async () => {
+    const frame = async () =>
+      new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    const row = document.getElementById('row2') as HTMLElement;
+    // The lift zeroes the row's margin; the drop puts it back.
+    row.style.marginLeft = '10px';
+    row.style.transition = 'margin-left 1s, translate 1s, scale 1s';
+    window.__lift.lift('row2', 0.2);
+    for (let i = 0; i < 30; i++) {
+      await frame();
+    }
+    window.__lift.drop();
+    let frames = 0;
+    for (; frames < 180 && window.__lift.isLifted(); frames++) {
+      await frame();
+    }
+    await frame();
+    return {
+      settled: !window.__lift.isLifted(),
+      frames,
+      transitions: row
+        .getAnimations()
+        .filter(animation => animation instanceof CSSTransition)
+        .map(animation => animation.transitionProperty),
+      transition: row.style.transition,
+    };
+  });
+  const detail = JSON.stringify(running);
+  expect(running.settled, detail).toBe(true);
+  // The row's own transitions are back, and none of them ran on the return.
+  expect(running.transition, detail).toBe(
+    'margin-left 1s, translate 1s, scale 1s',
+  );
+  expect(running.transitions, detail).toEqual([]);
+  await page.evaluate(() => window.__lift.dispose());
+});
+
 test('every motion the lift plays, the menu’s growth and close included, is translate, scale, transform or opacity (spec:AST-094 FR5)', async ({
   page,
 }) => {
