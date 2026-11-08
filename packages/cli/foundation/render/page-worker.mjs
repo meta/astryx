@@ -138,11 +138,12 @@ const isLocal = file =>
   !file.includes(NODE_MODULES) && (file === entry || file.startsWith(ROOT_PREFIX));
 
 /**
- * Babel plugin for a module the page loads from outside its own files and
- * outside `node_modules` (a sibling package's source, say): a bare import
- * that a path alias places loads from that file, as in the page's own files
- * and in TypeScript, before any installed copy. An import the aliases do not
- * place is left alone, so an installed package loads.
+ * Babel plugin: a bare import that a path alias places loads from that file,
+ * as in TypeScript, before any installed copy. An import the aliases do not
+ * place is left alone, so an installed package loads. It runs on the page's
+ * own files, before {@link pagePlugin}, and on every module the page loads
+ * from outside them and outside `node_modules` (a sibling package's source,
+ * say).
  */
 function aliasPlugin() {
   return () => {
@@ -179,20 +180,6 @@ function pagePlugin(filename) {
   const dir = path.dirname(filename);
   return (/** @type {any} */ {types: t}) => ({
     visitor: {
-      'ExportNamedDeclaration|ExportAllDeclaration'(/** @type {any} */ p) {
-        const spec = p.node.source?.value;
-        if (typeof spec !== 'string' || !isAliased(spec)) return;
-        const file = resolvePath(PATHS, spec);
-        if (file) p.node.source = t.stringLiteral(file);
-      },
-      CallExpression(/** @type {any} */ p) {
-        const arg = p.node.arguments?.[0];
-        const callee = p.node.callee;
-        const loads = callee?.type === 'Import' || (callee?.type === 'Identifier' && callee.name === 'require');
-        if (!loads || arg?.type !== 'StringLiteral' || !isAliased(arg.value)) return;
-        const file = resolvePath(PATHS, arg.value);
-        if (file) p.node.arguments[0] = t.stringLiteral(file);
-      },
       ImportDeclaration(/** @type {any} */ p) {
         const spec = /** @type {string} */ (p.node.source.value);
         const raw = spec.split('?')[0];
@@ -200,14 +187,6 @@ function pagePlugin(filename) {
         // (`@/styles/site.css`) resolves the way modules do.
         const bare =
           isAliased(raw) && (/\.(css|scss|sass|less|json)$/i.test(raw) || isAssetPath(raw)) ? resolveAlias(raw) : raw;
-        // A module imported through an alias loads from the file TypeScript
-        // would pick (first target that exists).
-        if (bare === raw && isAliased(raw)) {
-          const file = resolvePath(PATHS, raw);
-          if (file) p.node.source = t.stringLiteral(file);
-        }
-        // A JSON file loads from the target the alias led to, too.
-        if (bare !== raw && /\.json$/i.test(bare)) p.node.source = t.stringLiteral(bare);
         if (!bare.startsWith('.') && !path.isAbsolute(bare) && !isAliased(bare)) {
           packages.add(
             bare.startsWith('@')
@@ -522,6 +501,7 @@ const jiti = createJiti(entry, {
         generatorOpts: {retainLines: true},
         compact: false,
         plugins: [
+          aliasPlugin(),
           pagePlugin(filename),
           ...(source.includes('stylex')
             ? [
@@ -553,7 +533,14 @@ const jiti = createJiti(entry, {
         babelrc: false,
         configFile: false,
         sourceType: 'unambiguous',
-        parserOpts: {plugins: ts ? ['jsx', 'typescript'] : ['jsx']},
+        // The options jiti compiles these files with: JSX only in .jsx and
+        // .tsx files (so `<string>value` stays a type assertion), and legacy
+        // decorators.
+        parserOpts: {
+          plugins: /** @type {import('@babel/core').ParserOptions['plugins']} */ (
+            ts ? [...(/\.[cm]?tsx$/.test(filename) ? ['jsx'] : []), 'typescript', 'decorators-legacy'] : ['jsx']
+          ),
+        },
         generatorOpts: {retainLines: true},
         compact: false,
         plugins: [aliasPlugin()],

@@ -866,6 +866,25 @@ describe('render(): every write stays inside the current folder', () => {
     expect(fs.readFileSync(path.join(dir, 'expo/app/page.html'), 'utf8')).toContain('source-red');
   }, 60_000);
 
+  it('compiles a sibling module with the TypeScript it can hold: type assertions and decorators', async () => {
+    put('tsx-sib/app/tsconfig.json', JSON.stringify({compilerOptions: {baseUrl: '.', experimentalDecorators: true, paths: {'@scope/store': ['../store/src/index.ts']}}}));
+    put('tsx-sib/app/package.json', '{"name":"tsx-sib-app","private":true}');
+    put(
+      'tsx-sib/store/src/index.ts',
+      "const raw: unknown = 'asserted-label';\nexport const label = <string>raw;\nfunction tag(target: any) { target.tagged = 'decorated-store'; }\n@tag\nexport class Store { static tagged: string; }\n",
+    );
+    put('tsx-sib/store/src/other.ts', "const raw: unknown = 'relative-label';\nexport const other = <string>raw;\n");
+    put(
+      'tsx-sib/app/page.tsx',
+      "import {label, Store} from '@scope/store';\nimport {other} from '../store/src/other';\nexport default function Page() { return <p>{label} {(Store as any).tagged} {other}</p>; }\n",
+    );
+    await render('tsx-sib/app/page.tsx', {cwd: dir});
+    const html = fs.readFileSync(path.join(dir, 'tsx-sib/app/page.html'), 'utf8');
+    expect(html).toContain('asserted-label');
+    expect(html).toContain('decorated-store');
+    expect(html).toContain('relative-label');
+  }, 60_000);
+
   it('loads an installed package a prefix key names when the key places no file', async () => {
     put('pkgpre/tsconfig.json', JSON.stringify({compilerOptions: {baseUrl: '.', paths: {'@scope/*': ['./src/*']}}}));
     put('pkgpre/package.json', '{"name":"pkgpre","private":true}');
