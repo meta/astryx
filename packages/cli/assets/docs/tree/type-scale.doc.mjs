@@ -156,7 +156,7 @@ const denseTheme = defineTheme({
         },
         {
           type: 'prose',
-          text: 'Fixed-height controls such as `Button` and the text inputs keep their height, so their labels can overflow at the accessibility sizes.',
+          text: 'Fixed-height controls such as the text inputs keep their height, so their labels can overflow at the accessibility sizes. A labelled `Button` grows with its label.',
         },
       ],
     },
