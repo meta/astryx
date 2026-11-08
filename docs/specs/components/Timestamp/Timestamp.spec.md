@@ -173,7 +173,8 @@ Consumer migration instructions belong in consumer docs and release notes.
   The focusable `time` is the card's anchor and keeps focus while the card
   loads and attaches. While the card is open, the `time` names it through
   `aria-controls`; it carries no `aria-haspopup` or `aria-expanded`, which the
-  time role does not support.
+  time role does not support. Hover and focus on the `time` open the card;
+  empty layout space around it does not.
 - **AR4 — Copy feedback.** Copy buttons are named with their value, and a copy
   is announced politely.
 
