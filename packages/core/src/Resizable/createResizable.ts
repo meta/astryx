@@ -53,7 +53,9 @@ import {
   type PaneListener,
   type RegionPaneSlot,
   type ResizablePane,
+  isScriptMotion,
   shownSizeReader,
+  slideMotionsOf,
   slideNextOnRelease,
 } from './resizablePane';
 import {separatorAttributes} from './separatorAttributes';
@@ -406,6 +408,18 @@ export function createResizable(
  */
 export type ResizableWarningSource = 'createResizable' | 'useResizable';
 
+/** A slide a closing lift plays. */
+interface ClosingSlide {
+  /** The size laid out at the lift, where the slide starts. */
+  openSize: number;
+  /** When it started, on the page clock. */
+  startedAt: number;
+  /** The share still to go by ms since it started. */
+  remaining: (elapsedMs: number) => number;
+  /** Reads the size the pane shows from its handle's drawn middle. */
+  readShown: (() => number) | null;
+}
+
 /**
  * createResizable, with its development warnings in the words of `source`:
  * the package's own entry, for useResizable.
@@ -464,20 +478,18 @@ export function createResizableAs(
   // much overshoot the edge follows the finger 1:1.
   let caught = 0;
   let drawing: OvershootDrawing | null = null;
-  // A spring-back the pane's edge is playing: what it started from, when, and
-  // the share of it still to go by ms since then.
-  let springBack: {
-    from: number;
-    startedAt: number;
-    remaining: (elapsedMs: number) => number;
-  } | null = null;
-  // The slide a closing lift plays: its start size, its start time, and the
-  // share still to go by ms since then.
-  let closingSlide: {
-    from: number;
-    startedAt: number;
-    remaining: (elapsedMs: number) => number;
-    readShown: (() => number) | null;
+  // The drawn handle springs back to its limit after a lift.
+  let isSpringingBack = false;
+  // The slide a closing lift plays.
+  let closingSlide: ClosingSlide | null = null;
+  // A finger holds a pane that was sliding shut. The slide's motions are
+  // paused, and the finger moves them until it passes the minimum.
+  let held: {
+    slide: ClosingSlide;
+    motions: Animation[];
+    durationMs: number;
+    // The size the pane shows when the slide ends.
+    shutSize: number;
   } | null = null;
 
   let initialDefault: {px: number; isFinal: boolean} | null = null;
@@ -978,19 +990,19 @@ export function createResizableAs(
       // Only a pointer catches a slide or a spring-back; a key steps.
       const isPointer = regionSlot?.isPointerDragging() === true;
       const closing = derived.isCollapsed && isPointer ? closingShown() : 0;
+      const slide = closingSlide;
       closingSlide = null;
-      if (closing > 0) {
-        catchClosing(closing);
+      if (closing > 0 && slide != null) {
+        catchClosing(closing, slide);
         return;
       }
       // A finger catches a spring-back where it shows.
-      const shown =
-        springBack == null || !isPointer
-          ? isPointer
-            ? overshoot
-            : 0
-          : springBackShown(springBack);
-      springBack = null;
+      const shown = !isPointer
+        ? 0
+        : isSpringingBack
+          ? (drawing?.shown() ?? 0)
+          : overshoot;
+      isSpringingBack = false;
       overshoot = shown;
       caught = shown;
       drawing?.draw(shown);
@@ -1002,6 +1014,15 @@ export function createResizableAs(
       const previous = pointerSize;
       const raw = dragStartSize + delta;
       pointerSize = raw;
+      if (held != null) {
+        if (raw < derived.min) {
+          holdAt(raw);
+          return;
+        }
+        held = null;
+        reopenAt(raw);
+        return;
+      }
       if (
         isCarryingToSnap &&
         snaps().some(snap => (snap - previous) * (snap - raw) <= 0)
@@ -1044,6 +1065,11 @@ export function createResizableAs(
     // The lift decides a close: past the collapsed size, or released fast
     // enough to come to rest past it. Anything else springs back.
     end(velocity = 0) {
+      if (held != null) {
+        letGoOfHeldSlide(velocity);
+        endGesture();
+        return;
+      }
       const collapsedSize = opts.collapsedSize ?? DEFAULT_COLLAPSED_SIZE;
       const closes =
         collapsible() &&
@@ -1061,6 +1087,11 @@ export function createResizableAs(
     // A cancelled gesture is still over: the basis it held comes back, and
     // the size it reached is saved once, like a completed one.
     cancel() {
+      if (held != null) {
+        letGoOfHeldSlide(-Infinity);
+        endGesture();
+        return;
+      }
       if (isCarryingToSnap) {
         settleOnNearestSnap(0);
       } else {
@@ -1073,23 +1104,113 @@ export function createResizableAs(
   };
 
   /**
-   * A finger catches a pane that is still sliding shut: the pane opens at
-   * once, and its edge stays where it shows, under the finger.
+   * A finger catches a pane that is still sliding shut, where it shows. Past
+   * the minimum it opens there at once. Under it the slide stops, and the
+   * finger moves the slide. The pane's edge, the handle and the content stay
+   * together under the finger until it passes the minimum.
    */
-  function catchClosing(shownSize: number): void {
+  function catchClosing(shownSize: number, slide: ClosingSlide): void {
+    dragStartSize = shownSize;
+    pointerSize = shownSize;
+    if (shownSize >= derived.min) {
+      reopenAt(shownSize);
+      return;
+    }
+    const motions = pane == null ? [] : slideMotionsOf(pane);
+    for (const motion of motions) {
+      motion.pause();
+    }
+    const elapsed = Number(motions[0]?.currentTime ?? 0);
+    const share = slide.remaining(Number.isFinite(elapsed) ? elapsed : 0);
+    // The shown size moves with the share of the slide still to go. It runs
+    // from the size laid out at the lift down to the size it shuts to.
+    const shutSize =
+      share < 0.98 ? (shownSize - slide.openSize * share) / (1 - share) : 0;
+    held = {
+      slide,
+      motions,
+      durationMs: Number(motions[0]?.effect?.getComputedTiming().duration ?? 0),
+      shutSize,
+    };
+  }
+
+  /** The held slide shows `size`: its motions move to the time it shows it. */
+  function holdAt(size: number): void {
+    if (held == null) {
+      return;
+    }
+    const {slide, motions, durationMs, shutSize} = held;
+    const span = slide.openSize - shutSize;
+    const share =
+      span > 0 ? Math.min(1, Math.max(0, (size - shutSize) / span)) : 0;
+    // The share still to go falls over the slide's time.
+    let low = 0;
+    let high = durationMs;
+    while (high - low > 0.05) {
+      const mid = (low + high) / 2;
+      if (slide.remaining(mid) > share) {
+        low = mid;
+      } else {
+        high = mid;
+      }
+    }
+    for (const motion of motions) {
+      motion.currentTime = (low + high) / 2;
+    }
+  }
+
+  /**
+   * A lift while a finger holds a closing pane. Under the collapse threshold,
+   * or fast enough to come to rest under it, the slide plays on and shuts.
+   * Any other lift opens the pane to its minimum from where it shows.
+   */
+  function letGoOfHeldSlide(velocity: number): void {
+    const current = held;
+    held = null;
+    if (current == null) {
+      return;
+    }
+    const collapsedSize = opts.collapsedSize ?? DEFAULT_COLLAPSED_SIZE;
+    if (Math.min(pointerSize, project(pointerSize, velocity)) < collapsedSize) {
+      for (const motion of current.motions) {
+        motion.play();
+      }
+      const view = pane?.element.ownerDocument.defaultView;
+      const elapsed = Number(current.motions[0]?.currentTime ?? 0);
+      if (view != null && Number.isFinite(elapsed)) {
+        closingSlide = {
+          ...current.slide,
+          startedAt: view.performance.now() - elapsed,
+        };
+      }
+      return;
+    }
+    const row = pane?.element.parentElement;
+    if (row != null) {
+      slideNextOnRelease(row, velocity, Math.max(derived.min - pointerSize, 1));
+    }
     setCollapsed(false);
-    const clamped = clampSize(shownSize, derived.min, derived.max, []);
+    chosenSize = derived.min;
+    // The open plays: the paused slide reverses from what it shows.
+    commit();
+    opts.onCollapseChange?.(false);
+    opts.onSizeChange?.(derived.min);
+  }
+
+  /** The pane opens at once at `size`, under the pointer, with no slide. */
+  function reopenAt(size: number): void {
+    setCollapsed(false);
+    const clamped = clampSize(size, derived.min, derived.max, []);
     isCarryingToSnap = snaps().length > 0 && !snaps().includes(clamped);
     chosenSize = clamped;
+    sizeBeforeDrag = clamped;
+    caught = 0;
+    overshoot = pane == null ? 0 : overshootPast(size);
+    drawing?.draw(overshoot);
+    // Only a pointer reopens; the paused slide lands with what glides beside.
     isPointerReopening = true;
     commit();
     isPointerReopening = false;
-    overshoot = pane == null ? 0 : shownSize - derived.size;
-    caught = overshoot;
-    drawing?.draw(overshoot);
-    dragStartSize = shownSize;
-    pointerSize = shownSize;
-    sizeBeforeDrag = derived.size;
     opts.onCollapseChange?.(false);
     opts.onSizeChange?.(clamped);
   }
@@ -1101,7 +1222,7 @@ export function createResizableAs(
   function settleOnNearestSnap(velocity: number): void {
     isCarryingToSnap = false;
     const shown = derived.size + overshoot;
-    springBack = null;
+    isSpringingBack = false;
     overshoot = 0;
     drawing?.clear();
     const target = clampSize(shown, derived.min, derived.max, snaps());
@@ -1145,7 +1266,7 @@ export function createResizableAs(
    */
   function settleOvershoot(velocity: number): void {
     const from = overshoot;
-    springBack = null;
+    isSpringingBack = false;
     overshoot = 0;
     if (from === 0 || drawing == null || pane == null) {
       drawing?.clear();
@@ -1166,13 +1287,10 @@ export function createResizableAs(
       rubberBandInverse(from, dimension),
       dimension,
     );
-    const remaining = drawing.springBack(
+    isSpringingBack = drawing.springBack(
       resolveMotion(element, springs.settle),
-      -Math.sign(from) * velocity * slope,
+      velocity * slope,
     );
-    if (remaining != null) {
-      springBack = {from, startedAt: view.performance.now(), remaining};
-    }
   }
 
   /** The size a pane still sliding shut shows now; 0 once it is shut. */
@@ -1194,8 +1312,7 @@ export function createResizableAs(
                 motion =>
                   (motion.playState === 'running' ||
                     motion.playState === 'paused') &&
-                  !('transitionProperty' in motion) &&
-                  !('animationName' in motion),
+                  isScriptMotion(motion),
               )?.currentTime ?? Infinity,
           )
         : view.performance.now() - closingSlide.startedAt;
@@ -1204,15 +1321,7 @@ export function createResizableAs(
       return 0;
     }
     // The handle stays under the finger: the size is read from where it shows.
-    return closingSlide.readShown?.() ?? closingSlide.from * share;
-  }
-
-  /** How far past the bound a playing spring-back shows the edge now. */
-  function springBackShown(played: NonNullable<typeof springBack>): number {
-    const view = pane?.element.ownerDocument.defaultView;
-    const elapsed =
-      view == null ? Infinity : view.performance.now() - played.startedAt;
-    return played.from * played.remaining(elapsed);
+    return closingSlide.readShown?.() ?? closingSlide.openSize * share;
   }
 
   /**
@@ -1220,7 +1329,8 @@ export function createResizableAs(
    * settle spring from the release velocity.
    */
   function closeOnRelease(velocity: number): void {
-    springBack = null;
+    isSpringingBack = false;
+    const openSize = derived.size;
     const shown = derived.size + overshoot;
     // Measured while the edge still shows where the lift left it.
     const readShown = pane == null ? null : shownSizeReader(pane, shown);
@@ -1241,7 +1351,7 @@ export function createResizableAs(
       view.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
         ? null
         : {
-            from: shown,
+            openSize,
             startedAt: view.performance.now(),
             remaining,
             readShown,
@@ -1379,7 +1489,7 @@ export function createResizableAs(
       // A gesture a ResizeHandle drove through the region's model, rather
       // than the factory's own, ends the same way.
       endGesture();
-      springBack = null;
+      isSpringingBack = false;
       overshoot = 0;
       drawing?.clear();
       drawing = null;

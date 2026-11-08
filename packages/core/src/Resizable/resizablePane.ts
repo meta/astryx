@@ -14,10 +14,13 @@
 import {
   createAnimatedLayout,
   glideNextChange,
+  glideOf,
+  landLayoutGlide,
   type LayoutEdge,
   reportLayoutEdge,
   springGlide,
 } from '../motion/animatedLayout';
+import {animatorFor, type MotionHandle} from '../motion/animator';
 import {resolveMotion} from '../motion/resolveMotion';
 import type {SpringDescription} from '../motion/spring';
 import {springs} from '../motion/uikit/springs';
@@ -351,6 +354,11 @@ export function createPaneReveal(getRow: () => Element | null): PaneReveal {
     pending = null;
     played?.cancel();
     played = null;
+    // What glides beside the pane lands with it, so no motion plays over the
+    // layout that replaces it.
+    for (const child of getRow()?.children ?? []) {
+      landLayoutGlide(child);
+    }
   };
 
   return {
@@ -445,19 +453,51 @@ export function shownSizeReader(
   return () => Math.max(sign * (middle() - far) - offset, 0);
 }
 
+/** A motion a script plays: not a CSS transition or a CSS animation. */
+export function isScriptMotion(motion: Animation): boolean {
+  return !('transitionProperty' in motion) && !('animationName' in motion);
+}
+
+/**
+ * The motions a slide of `pane` plays now: what glides beside it, and its own
+ * edge's motion on the same clock. None once the slide lands.
+ */
+export function slideMotionsOf(pane: ResizablePane): Animation[] {
+  const element = pane.element;
+  const beside = [...(element.parentElement?.children ?? [])]
+    .filter(child => child !== element)
+    .map(glideOf)
+    .filter((motion): motion is Animation => motion != null);
+  const durationOf = (motion: Animation) =>
+    Number(motion.effect?.getComputedTiming().duration ?? 0);
+  const durationMs = beside.length > 0 ? durationOf(beside[0]) : null;
+  const own =
+    typeof element.getAnimations === 'function'
+      ? element
+          .getAnimations()
+          .filter(
+            motion =>
+              isScriptMotion(motion) &&
+              (durationMs == null ||
+                Math.abs(durationOf(motion) - durationMs) < 1),
+          )
+      : [];
+  return [...own, ...beside];
+}
+
 /** A pull past a limit, drawn on a pane a LayoutPanel renders. */
 export interface OvershootDrawing {
-  /** Draws the pane's edge `amount` px past its limit: positive past the maximum. */
+  /** Draws the handle `amount` px past its limit: positive past the maximum. */
   draw(amount: number): void;
   /**
-   * Springs the drawn edge back to the limit on the compositor, on `spring`
-   * from a release `velocity` (px per second toward the limit). Returns the
-   * share still to go by ms since it began, or null when nothing is drawn.
+   * Springs the drawn handle back to the limit on the handle's own animator,
+   * on `spring` from a release `velocity`. The velocity is the amount's own
+   * rate in px per second, positive past the maximum. Returns false when
+   * nothing is drawn.
    */
-  springBack(
-    spring: SpringDescription,
-    velocity: number,
-  ): ((elapsedMs: number) => number) | null;
+  springBack(spring: SpringDescription, velocity: number): boolean;
+  /** How far past its limit the handle shows now, a spring-back included. */
+  shown(): number;
   /** Drops the drawing at once. */
   clear(): void;
 }
@@ -472,11 +512,11 @@ export function createOvershootDrawing(pane: ResizablePane): OvershootDrawing {
   const element = pane.element;
   let geometry: {
     sign: number;
-    isInline: boolean;
+    axis: 'x' | 'y';
     handle: HTMLElement | null;
   } | null = null;
   let drawn = 0;
-  let running: Animation[] = [];
+  let springing: MotionHandle | null = null;
 
   const measure = () => {
     if (geometry != null) {
@@ -490,32 +530,19 @@ export function createOvershootDrawing(pane: ResizablePane): OvershootDrawing {
         'rtl';
     geometry = {
       sign: (edge.endsWith('end') ? 1 : -1) * (isRtl ? -1 : 1),
-      isInline,
+      axis: isInline ? 'x' : 'y',
       handle: resizeHandleBeside(element, null),
     };
     return geometry;
   };
-  const translateAt = (amount: number) => {
-    const {sign, isInline} = measure();
-    const offset = sign * amount;
-    return isInline ? `${offset}px 0` : `0 ${offset}px`;
-  };
-  const write = (amount: number) => {
+  const animator = () => {
     const handle = geometry?.handle;
-    if (handle != null) {
-      handle.style.translate = amount === 0 ? '' : translateAt(amount);
-    }
-  };
-  const stopRunning = () => {
-    for (const animation of running) {
-      animation.cancel();
-    }
-    running = [];
+    return handle == null ? null : animatorFor(handle);
   };
 
   return {
     draw(amount) {
-      const isAtRest = drawn === 0 && running.length === 0;
+      const isAtRest = drawn === 0 && springing == null;
       if (isAtRest && amount === 0) {
         return;
       }
@@ -523,44 +550,44 @@ export function createOvershootDrawing(pane: ResizablePane): OvershootDrawing {
         // A new overshoot measures once: the layout can change between pulls.
         geometry = null;
       }
-      stopRunning();
+      springing = null;
       drawn = amount;
-      measure();
-      write(amount);
+      const {sign, axis} = measure();
+      animator()?.set({[axis]: sign * amount});
     },
     springBack(spring, velocity) {
-      stopRunning();
-      const from = drawn;
-      const handle = geometry?.handle;
-      if (from === 0 || handle == null) {
-        return null;
+      const motion = animator();
+      if (drawn === 0 || motion == null || geometry == null) {
+        return false;
       }
-      const progress = springGlide(spring, velocity / Math.abs(from));
-      const count = Math.max(
-        2,
-        Math.ceil((progress.durationMs / 1000) * 60) + 1,
-      );
-      const frames = Array.from({length: count}, (_, index) => {
-        const offset = index / (count - 1);
-        const at = from * progress.remaining(offset * progress.durationMs);
-        return {offset, translate: translateAt(at)};
-      });
+      const {sign, axis} = geometry;
       drawn = 0;
-      // The drawing ends at rest: the motion plays over the cleared style.
-      write(0);
-      running = [
-        handle.animate(frames, {
-          duration: progress.durationMs,
-          easing: 'linear',
-        }),
-      ];
-      return elapsedMs =>
-        elapsedMs >= progress.durationMs ? 0 : progress.remaining(elapsedMs);
+      const played = motion.animate(
+        {[axis]: 0},
+        {spring, velocity: {[axis]: sign * velocity}},
+      );
+      springing = played;
+      void played.finished.then(() => {
+        if (springing === played) {
+          springing = null;
+        }
+      });
+      return true;
+    },
+    shown() {
+      const motion = animator();
+      if (springing == null || motion == null || geometry == null) {
+        return drawn;
+      }
+      return geometry.sign * motion.get(geometry.axis);
     },
     clear() {
-      stopRunning();
+      if (geometry != null && (drawn !== 0 || springing != null)) {
+        // Only the value: the drawing gives the handle no layer to keep.
+        animator()?.set({[geometry.axis]: 0}, {promote: false});
+      }
+      springing = null;
       drawn = 0;
-      write(0);
       geometry = null;
     },
   };
