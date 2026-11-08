@@ -58,6 +58,7 @@ import type {DropdownMenuItemProps} from './DropdownMenuItem';
 import {
   MENU_ITEM_ROLES,
   MENU_ITEM_SELECTOR,
+  MENU_ROW_SELECTOR,
   MENU_BOUNDARY_SELECTOR,
   activateMenuItem,
 } from './menuItemRoles';
@@ -71,7 +72,7 @@ import {
 } from './DropdownMenuContext';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useMergedRefs} from '../hooks/useMergedRefs';
-import {useListFocus} from '../hooks/useListFocus';
+import {useInternalListFocus} from '../hooks/useListFocus';
 import {useDropdownMenuPress} from '../hooks/useMenuPress';
 import type {MenuPressPointerType} from '../hooks/menuPressGesture';
 import {useTypeahead} from '../hooks/useTypeahead';
@@ -1113,6 +1114,9 @@ function DropdownMenuPopover({
     dialogLabel: hasRegions
       ? (menuLabel ?? t(DEFAULT_BUTTON_I18N_KEY))
       : undefined,
+    // The entrance runs on the surface: an anchored layer lays out again on
+    // each frame its own style animates.
+    xstyle: layerAnimations[placement],
   });
 
   const closeMenu = useCallback(() => {
@@ -1131,8 +1135,9 @@ function DropdownMenuPopover({
     focusItem,
     ownsEvent,
     getItems: getMenuItems,
-  } = useListFocus<HTMLDivElement>({
-    itemSelector: MENU_ITEM_SELECTOR,
+  } = useInternalListFocus<HTMLDivElement>({
+    itemSelector: MENU_ROW_SELECTOR,
+    reachesDisabledItems: true,
     boundarySelector: MENU_BOUNDARY_SELECTOR,
     // Menus wrap from the last row to the first and back, as macOS menus do;
     // a picker's list clamps instead.
@@ -1141,7 +1146,7 @@ function DropdownMenuPopover({
     onEscape: closeMenu,
   });
 
-  // Typeahead over the (enabled) menu items — jump to the next item whose
+  // Typeahead over the menu items, disabled ones included — jump to the next item whose
   // LABEL starts with the typed text, never its description, shortcut or
   // badge. Reuses the hook's scoped item collection so an inline submenu
   // flyout's items aren't swept in.
@@ -1220,9 +1225,14 @@ function DropdownMenuPopover({
       pressTouchModel === 'uikit'
         ? listRef.current?.closest('[popover]')
         : null;
+    // The entrance plays on the popover's surface, inside the layer.
     releaseEntranceRef.current =
-      layer == null ? null : holdEntranceInput(layer);
-  }, [listRef, pressTouchModel]);
+      layer == null
+        ? null
+        : holdEntranceInput(layer, {
+            entrance: popover.contentRef.current ?? layer,
+          });
+  }, [listRef, pressTouchModel, popover.contentRef]);
   holdEntranceRef.current = holdEntrance;
   // The layer runtime's input hold: an unmount during the entrance releases it.
   useEffect(
@@ -1787,7 +1797,6 @@ function DropdownMenuPopover({
             resolvedMaxHeight != null &&
               dynamicStyles.popoverViewportMaxBlockSize(resolvedMaxHeight),
             popoverXstyle,
-            layerAnimations[placement],
           ],
         },
       )}
