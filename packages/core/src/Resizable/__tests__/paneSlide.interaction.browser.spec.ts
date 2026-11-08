@@ -14,6 +14,8 @@
 
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {openStory, withStorybook} from '@astryxdesign/interaction-harness';
+import {settlingDuration, toSpring} from '../../motion/spring';
+import {springs} from '../../motion/uikit/springs';
 
 const storybook = withStorybook(test);
 
@@ -26,6 +28,7 @@ const STORY = {
   handBuilt: 'core-resizable--panel-with-hand-built-props',
   controlled: 'core-resizable--sliding-controlled-panel',
   scrolled: 'core-resizable--sliding-scrolled-panel-fixture',
+  defaultMinimum: 'core-resizable--sliding-panel-at-default-minimum-fixture',
 } as const;
 
 /** How many evenly spaced moments of a motion are captured. */
@@ -680,7 +683,49 @@ test('the grow arrow opens a collapsed panel with a slide', async ({page}) => {
   expect((await pane.boundingBox())?.width ?? 0).toBeGreaterThan(100);
 });
 
-test('a drag past the threshold slides the panel closed, and a drag that reopens it follows the pointer with no slide', async ({
+test('a key step under the collapsed size slides the panel closed on the theme curve, as a collapse does, not on the release spring', async ({
+  page,
+}) => {
+  await openFixture(page, STORY.defaultMinimum);
+  await expectPresent(page);
+  const pane = page.getByTestId('sliding-panel');
+  const handle = page.getByRole('separator', {name: 'Resize panel'});
+  // A collapse from inside plays the theme's curve: the reference.
+  await page.getByRole('button', {name: 'Close panel'}).focus();
+  const collapse = await captureMotion(page, 'start', async () => {
+    await page.keyboard.press('Enter');
+  });
+  await handle.focus();
+  await captureMotion(page, 'start', async () => {
+    await page.keyboard.press('Enter');
+  });
+  // Down to the minimum, 50 px, in large steps: 150, 100, 50.
+  for (const width of [150, 100, 50]) {
+    await page.keyboard.press('Shift+ArrowLeft');
+    await expect
+      .poll(async () => (await pane.boundingBox())?.width ?? 0, {
+        message: `the pane steps to ${width} px`,
+        timeout: 2_000,
+      })
+      .toBeCloseTo(width, 0);
+  }
+  // One more step ends at 0, under the collapsed size (40 px).
+  const closing = await captureMotion(page, 'start', async () => {
+    await page.keyboard.press('Shift+ArrowLeft');
+  });
+  expectSlid(closing);
+  expect(closing.durationMs).toBeCloseTo(collapse.durationMs, -1);
+  expect(closing.durationMs).toBeLessThan(
+    settlingDuration(toSpring(springs.settle)) * 1000 - 100,
+  );
+  expect((await pane.boundingBox())?.width).toBeCloseTo(
+    await collapsedWidthOf(page),
+    0,
+  );
+  await expect(pane).toHaveAttribute('inert', '');
+});
+
+test('a lift past the threshold slides the panel closed on the settle spring, and a drag that reopens it follows the pointer with no slide', async ({
   page,
 }) => {
   await openFixture(page, STORY.start);
@@ -694,12 +739,19 @@ test('a drag past the threshold slides the panel closed, and a drag that reopens
   const y = start.y + start.height / 2;
   await page.mouse.move(start.x + start.width / 2, y);
   await page.mouse.down();
-  expectSlid(
-    await captureMotion(page, 'start', async () => {
-      await page.mouse.move(start.x + start.width / 2 - 190, y, {steps: 4});
-    }),
+  await page.mouse.move(start.x + start.width / 2 - 190, y, {steps: 4});
+  // Still before the lift, so it releases with no velocity.
+  await page.waitForTimeout(200);
+  await expect(pane).not.toHaveAttribute('inert', '');
+  const closing = await captureMotion(page, 'start', async () => {
+    await page.mouse.up();
+  });
+  expectSlid(closing);
+  // It closes on the settle spring from the release velocity, here none.
+  expect(closing.durationMs).toBeCloseTo(
+    settlingDuration(toSpring(springs.settle)) * 1000,
+    -1,
   );
-  await page.mouse.up();
   expect((await pane.boundingBox())?.width).toBeCloseTo(
     await collapsedWidthOf(page),
     0,
@@ -722,6 +774,523 @@ test('a drag past the threshold slides the panel closed, and a drag that reopens
   expect(reopening.glides).toBe(false);
   expect((await pane.boundingBox())?.width ?? 0).toBeGreaterThan(100);
   await expect(pane).not.toHaveAttribute('inert', '');
+});
+
+/** Presses the handle where it shows and returns that point. */
+async function pressHandle(page: Page): Promise<{x: number; y: number}> {
+  const box = await page
+    .getByRole('separator', {name: 'Resize panel'})
+    .boundingBox();
+  if (box == null) {
+    throw new Error('the handle is not laid out');
+  }
+  const at = {x: box.x + box.width / 2, y: box.y + box.height / 2};
+  await page.mouse.move(at.x, at.y);
+  await page.mouse.down();
+  return at;
+}
+
+interface EdgeFrame {
+  laidOut: number;
+  buttonWidth: number;
+  drawnEdge: number;
+  handle: number;
+  contentStart: number;
+}
+
+/** Records the pane, its first button, its handle and the content each frame. */
+async function recordEdgeFrames(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const pane = document.querySelector<HTMLElement>(
+      '[data-testid="sliding-panel"]',
+    );
+    const content = document.querySelector('[data-testid="sliding-content"]');
+    const handle = document.querySelector(
+      '[role="separator"][aria-label="Resize panel"]',
+    );
+    const button = pane?.querySelector('button');
+    const frames: EdgeFrame[] = [];
+    (window as unknown as {edgeFrames: EdgeFrame[]}).edgeFrames = frames;
+    const step = () => {
+      if (pane == null || content == null || handle == null || button == null) {
+        return;
+      }
+      const handleBox = handle.getBoundingClientRect();
+      frames.push({
+        laidOut: pane.offsetWidth,
+        buttonWidth: button.offsetWidth,
+        drawnEdge: pane.getBoundingClientRect().right,
+        handle: handleBox.left + handleBox.width / 2,
+        contentStart: content.getBoundingClientRect().left,
+      });
+      if (frames.length < 2000) {
+        requestAnimationFrame(step);
+      }
+    };
+    requestAnimationFrame(step);
+  });
+}
+
+/**
+ * Waits until no motion runs in the story, then two more frames, so the
+ * frames end at rest. It waits on the motion, not on time.
+ */
+async function waitForSettledMotion(page: Page): Promise<void> {
+  await page.waitForFunction(() => {
+    const root = document.getElementById('storybook-root');
+    return document
+      .getAnimations()
+      .every(
+        animation =>
+          animation.playState !== 'running' ||
+          !(animation.effect instanceof KeyframeEffect) ||
+          !(animation.effect.target instanceof Node) ||
+          root?.contains(animation.effect.target) !== true,
+      );
+  });
+  await page.evaluate(
+    async () =>
+      new Promise(resolve =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      ),
+  );
+}
+
+async function edgeFrames(page: Page): Promise<EdgeFrame[]> {
+  return page.evaluate(
+    () => (window as unknown as {edgeFrames: EdgeFrame[]}).edgeFrames,
+  );
+}
+
+test('past the maximum the edge moves at most 8 px, the pane never reflows, and the edge springs back after the lift', async ({
+  page,
+}) => {
+  await openFixture(page, STORY.start);
+  await expectPresent(page);
+  const at = await pressHandle(page);
+  const rest = at.x + 120;
+  await recordEdgeFrames(page);
+  // 200 px plus 260 px of pull would be 460 px against a 320 px maximum.
+  await page.mouse.move(at.x + 260, at.y, {steps: 6});
+  await page.waitForTimeout(100);
+  await page.mouse.up();
+  await waitForSettledMotion(page);
+  const frames = await edgeFrames(page);
+  const past = frames.filter(frame => frame.laidOut === 320);
+  expect(past.length).toBeGreaterThan(2);
+  // The pane keeps its laid-out width and its button never reflows.
+  expect(new Set(past.map(frame => frame.buttonWidth)).size).toBe(1);
+  expect(Math.max(...frames.map(frame => frame.laidOut))).toBe(320);
+  // The edge stands past the limit by at most 8 px, then returns to it.
+  const furthest = Math.max(...past.map(frame => frame.handle));
+  expect(furthest).toBeGreaterThan(rest + 1);
+  expect(furthest).toBeLessThanOrEqual(rest + 8.5);
+  expect(frames.at(-1)?.handle).toBeCloseTo(rest, 0);
+  await expect(
+    page.getByRole('separator', {name: 'Resize panel'}),
+  ).toHaveAttribute('aria-valuenow', '320');
+});
+
+test('past the maximum the handle alone moves, over the content beside it: the pane and the content keep their places', async ({
+  page,
+}) => {
+  await openFixture(page, STORY.start);
+  await expectPresent(page);
+  const at = await pressHandle(page);
+  await recordEdgeFrames(page);
+  await page.mouse.move(at.x + 260, at.y, {steps: 6});
+  await page.waitForTimeout(100);
+  await page.mouse.up();
+  await waitForSettledMotion(page);
+  const frames = await edgeFrames(page);
+  const past = frames.filter(frame => frame.laidOut === 320);
+  expect(past.length).toBeGreaterThan(2);
+  const spread = (values: number[]) =>
+    Math.max(...values) - Math.min(...values);
+  // The pane's drawn edge and the content's start stay where they lie.
+  expect(spread(past.map(frame => frame.drawnEdge))).toBeLessThanOrEqual(0.5);
+  expect(spread(past.map(frame => frame.contentStart))).toBeLessThanOrEqual(
+    0.5,
+  );
+  // The handle passes over the content by at most 8 px.
+  const restHandle = past.at(-1)?.handle ?? 0;
+  const furthest = Math.max(...past.map(frame => frame.handle));
+  expect(furthest).toBeGreaterThan(restHandle + 1);
+  expect(furthest).toBeLessThanOrEqual(restHandle + 8.5);
+});
+
+test("a panel at the hook's size alone stops at the maximum, and nothing springs back after the lift", async ({
+  page,
+}) => {
+  await openFixture(page, 'core-resizable--horizontal-split');
+  const handle = page.getByRole('separator', {name: 'Resize sidebar'});
+  await expect(handle).toHaveAttribute('aria-valuenow', '250');
+  const start = await handle.boundingBox();
+  if (start == null) {
+    throw new Error('the handle is not laid out');
+  }
+  const at = {x: start.x + start.width / 2, y: start.y + start.height / 2};
+  await page.mouse.move(at.x, at.y);
+  await page.mouse.down();
+  // 250 px plus 400 px of pull would be 650 px against a 500 px maximum.
+  await page.mouse.move(at.x + 400, at.y, {steps: 6});
+  const pulled = await handle.boundingBox();
+  expect(Math.round((pulled?.x ?? 0) - start.x)).toBe(250);
+  await page.mouse.up();
+  const lifted = await handle.boundingBox();
+  expect(Math.round((lifted?.x ?? 0) - start.x)).toBe(250);
+  await expect(handle).toHaveAttribute('aria-valuenow', '500');
+});
+
+test('a spring-back past a limit lays out no frame: the edge glides back over the held pane', async ({
+  page,
+}) => {
+  await openFixture(page, STORY.start);
+  await expectPresent(page);
+  const at = await pressHandle(page);
+  await page.mouse.move(at.x + 260, at.y, {steps: 6});
+  // Each frame from here on: the pane's laid-out width and the handle's
+  // drawn middle.
+  await page.evaluate(() => {
+    const pane = document.querySelector<HTMLElement>(
+      '[data-testid="sliding-panel"]',
+    );
+    const handle = document.querySelector(
+      '[role="separator"][aria-label="Resize panel"]',
+    );
+    const trace: {laidOut: number; drawn: number}[] = [];
+    (window as unknown as {springTrace: typeof trace}).springTrace = trace;
+    const startedAt = performance.now();
+    const step = () => {
+      if (pane == null || handle == null) {
+        return;
+      }
+      const box = handle.getBoundingClientRect();
+      trace.push({laidOut: pane.offsetWidth, drawn: box.x + box.width / 2});
+      if (performance.now() - startedAt < 1200) {
+        requestAnimationFrame(step);
+      }
+    };
+    requestAnimationFrame(step);
+  });
+  await page.mouse.up();
+  await page.waitForTimeout(1300);
+  const trace = await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          springTrace: {laidOut: number; drawn: number}[];
+        }
+      ).springTrace,
+  );
+  // The pane keeps the width it was pulled to until it takes the maximum,
+  // once: no frame in between lays the row out.
+  const widths = [...new Set(trace.map(frame => frame.laidOut))];
+  expect(widths.length).toBeLessThanOrEqual(2);
+  expect(widths.at(-1)).toBe(320);
+  // The edge still passes through the places in between.
+  const first = trace[0]?.drawn ?? 0;
+  const last = trace.at(-1)?.drawn ?? 0;
+  const between = trace.filter(
+    frame => frame.drawn < first - 1 && frame.drawn > last + 1,
+  );
+  expect(between.length).toBeGreaterThanOrEqual(3);
+});
+
+for (const [label, waitMs] of [
+  ['at once', 0],
+  ['50 ms after', 50],
+  ['mid-settle', 120],
+] as const) {
+  test(`a re-grab ${label} the lift past the maximum moves the edge 1:1 from where it shows`, async ({
+    page,
+  }) => {
+    await openFixture(page, STORY.start);
+    await expectPresent(page);
+    const handle = page.getByRole('separator', {name: 'Resize panel'});
+    const at = await pressHandle(page);
+    // 200 px plus 260 px of pull would be 460 px against a 320 px maximum.
+    await page.mouse.move(at.x + 260, at.y, {steps: 6});
+    await page.mouse.up();
+    if (waitMs > 0) {
+      await page.waitForTimeout(waitMs);
+    }
+    const shown = await handle.boundingBox();
+    if (shown == null) {
+      throw new Error('the handle is not laid out');
+    }
+    const grab = {x: shown.x + shown.width / 2, y: at.y};
+    await page.mouse.move(grab.x, grab.y);
+    await page.mouse.down();
+    await page.mouse.move(grab.x - 40, grab.y, {steps: 4});
+    // The edge left from where it showed, past the maximum. It followed the
+    // finger 40 px back, so the pane is about 40 px under it. A spring-back
+    // from an outward release can carry the edge a few px past the band.
+    const now = Number(await handle.getAttribute('aria-valuenow'));
+    expect(now).toBeLessThan(295);
+    expect(now).toBeGreaterThan(270);
+    await page.mouse.up();
+  });
+}
+
+/** The handle's drawn middle, the pane's shown edge and the content's start. */
+async function shownParts(page: Page): Promise<{
+  handle: number;
+  paneEdge: number;
+  paneStart: number;
+  content: number;
+}> {
+  return page.evaluate(() => {
+    const pane = document.querySelector<HTMLElement>(
+      '[data-testid="sliding-panel"]',
+    );
+    const handle = document.querySelector(
+      '[role="separator"][aria-label="Resize panel"]',
+    );
+    const content = document.querySelector('[data-testid="sliding-content"]');
+    if (pane == null || handle == null || content == null) {
+      throw new Error('the sliding panel story did not render');
+    }
+    const box = pane.getBoundingClientRect();
+    // inset(top right bottom left): the clip on the edge facing the handle.
+    const insets = (
+      getComputedStyle(pane).clipPath.match(/-?[\d.]+(px|%)?/g) ?? []
+    ).map(value =>
+      value.endsWith('%')
+        ? (parseFloat(value) / 100) * box.width
+        : parseFloat(value),
+    );
+    const handleBox = handle.getBoundingClientRect();
+    return {
+      handle: handleBox.left + handleBox.width / 2,
+      paneEdge: box.right - (insets[1] ?? 0),
+      paneStart: box.left,
+      content: content.getBoundingClientRect().left,
+    };
+  });
+}
+
+/** The script motions still on the row's children: none once a slide lands. */
+async function rowMotions(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const row = document.querySelector(
+      '[data-testid="sliding-panel"]',
+    )?.parentElement;
+    return [...(row?.children ?? [])]
+      .flatMap(child => child.getAnimations())
+      .filter(
+        motion =>
+          !('transitionProperty' in motion) && !('animationName' in motion),
+      ).length;
+  });
+}
+
+/** Lifts past the threshold with no velocity and holds the close `atMs` in. */
+async function liftToCloseAndHold(
+  page: Page,
+  atMs: number,
+): Promise<{x: number; y: number}> {
+  const at = await pressHandle(page);
+  // 200 px less 190 px is 10 px: under the 40 px collapse threshold.
+  await page.mouse.move(at.x - 190, at.y, {steps: 4});
+  // Still before the lift, so it releases with no velocity.
+  await page.waitForTimeout(200);
+  await holdMotionAt(page, atMs, async () => {
+    await page.mouse.up();
+  });
+  return at;
+}
+
+test('a re-grab while the panel slides shut holds it where it shows, and the finger moves the slide, with no jump', async ({
+  page,
+}) => {
+  await openFixture(page, STORY.start);
+  await expectPresent(page);
+  const pane = page.getByTestId('sliding-panel');
+  const handle = page.getByRole('separator', {name: 'Resize panel'});
+  // Open, the pane overlaps its handle by its collapse spacing; while it
+  // slides it does not.
+  const open = await shownParts(page);
+  const at = await liftToCloseAndHold(page, 120);
+  await expect(pane).toHaveAttribute('inert', '');
+  const held = await shownParts(page);
+  // The size the handle stands at: the pane opens at 200 px.
+  const sizeAt = (handleX: number) => 200 + handleX - open.handle;
+  const heldSize = sizeAt(held.handle);
+  expect(heldSize).toBeLessThan(110);
+  await page.mouse.move(held.handle, at.y);
+  await page.mouse.down();
+  await page.mouse.move(held.handle + 10, at.y, {steps: 2});
+  // Nothing finished the held slide: the finger moved it 10 px.
+  const moved = await shownParts(page);
+  expect(Math.abs(moved.handle - (held.handle + 10))).toBeLessThan(1);
+  // The pane's shown edge and the content keep their places beside the handle.
+  expect(
+    Math.abs(moved.handle - moved.paneEdge - (held.handle - held.paneEdge)),
+  ).toBeLessThan(1);
+  expect(
+    Math.abs(moved.content - moved.handle - (held.content - held.handle)),
+  ).toBeLessThan(1);
+  await expect(pane).toHaveAttribute('inert', '');
+  // Past the 120 px minimum the pane opens at the finger's size, with no
+  // slide left to play over it.
+  const travel = 120 - heldSize + 20;
+  await page.mouse.move(held.handle + travel, at.y, {steps: 4});
+  await expect(pane).not.toHaveAttribute('inert', '');
+  const opened = await shownParts(page);
+  expect(Math.abs(opened.handle - (held.handle + travel))).toBeLessThan(1);
+  expect(
+    Math.abs(opened.handle - opened.paneEdge - (open.handle - open.paneEdge)),
+  ).toBeLessThan(1);
+  expect(
+    Math.abs(opened.content - opened.handle - (open.content - open.handle)),
+  ).toBeLessThan(1);
+  expect(
+    Math.abs(
+      Number(await handle.getAttribute('aria-valuenow')) - (heldSize + travel),
+    ),
+  ).toBeLessThan(1.5);
+  expect(await rowMotions(page)).toBe(0);
+  await page.mouse.up();
+});
+
+for (const side of ['start', 'end'] as const) {
+  test(`a closing lift slides the ${side} panel's handle shut from where it shows, never back toward open`, async ({
+    page,
+  }) => {
+    await openFixture(page, STORY[side]);
+    await expectPresent(page);
+    // Toward closed is left for a start panel and right for an end one.
+    const towardOpen = side === 'start' ? 1 : -1;
+    const at = await pressHandle(page);
+    // 190 px toward closed: past the minimum, where the handle bands, and
+    // under the 40 px collapse threshold.
+    await page.mouse.move(at.x - towardOpen * 190, at.y, {steps: 4});
+    // Still before the lift, so it releases with no velocity.
+    await page.waitForTimeout(250);
+    await recordEdgeFrames(page);
+    await page.waitForTimeout(50);
+    await page.mouse.up();
+    await waitForSettledMotion(page);
+    const frames = await page.evaluate(
+      () => (window as unknown as {edgeFrames: EdgeFrame[]}).edgeFrames,
+    );
+    expect(frames.length).toBeGreaterThan(10);
+    for (let index = 1; index < frames.length; index++) {
+      expect(
+        towardOpen * (frames[index].handle - frames[index - 1].handle),
+      ).toBeLessThan(0.5);
+    }
+  });
+}
+
+test('a lift while a re-grab holds the closing panel shuts it under the collapse threshold', async ({
+  page,
+}) => {
+  await openFixture(page, STORY.start);
+  await expectPresent(page);
+  const pane = page.getByTestId('sliding-panel');
+  const open = await shownParts(page);
+  const at = await liftToCloseAndHold(page, 120);
+  const held = await shownParts(page);
+  // The size the handle stands at: the pane opens at 200 px.
+  const heldSize = 200 + held.handle - open.handle;
+  await page.mouse.move(held.handle, at.y);
+  await page.mouse.down();
+  // Down to about 20 px, under the 40 px threshold.
+  await page.mouse.move(held.handle - (heldSize - 20), at.y, {steps: 3});
+  await page.mouse.up();
+  await waitForSettledMotion(page);
+  await expect(pane).toHaveAttribute('inert', '');
+  expect((await pane.boundingBox())?.width).toBeCloseTo(
+    await collapsedWidthOf(page),
+    0,
+  );
+});
+
+test('a lift while a re-grab holds the closing panel above the collapse threshold opens it to the minimum', async ({
+  page,
+}) => {
+  await openFixture(page, STORY.start);
+  await expectPresent(page);
+  const pane = page.getByTestId('sliding-panel');
+  const handle = page.getByRole('separator', {name: 'Resize panel'});
+  const open = await shownParts(page);
+  const at = await liftToCloseAndHold(page, 120);
+  const held = await shownParts(page);
+  await page.mouse.move(held.handle, at.y);
+  await page.mouse.down();
+  await page.mouse.move(held.handle + 5, at.y, {steps: 2});
+  await page.mouse.up();
+  await waitForSettledMotion(page);
+  await expect(pane).not.toHaveAttribute('inert', '');
+  await expect(handle).toHaveAttribute('aria-valuenow', '120');
+  const rest = await shownParts(page);
+  expect(
+    Math.abs(rest.handle - rest.paneEdge - (open.handle - open.paneEdge)),
+  ).toBeLessThan(1);
+  expect(
+    Math.abs(rest.content - rest.handle - (open.content - open.handle)),
+  ).toBeLessThan(1);
+  // No paused motion of the held slide is left to hold a stale transform.
+  expect(await rowMotions(page)).toBe(0);
+});
+
+test('an arrow key at the maximum moves nothing past it: no band, no spring-back', async ({
+  page,
+}) => {
+  await openFixture(page, STORY.start);
+  await expectPresent(page);
+  const handle = page.getByRole('separator', {name: 'Resize panel'});
+  await handle.focus();
+  await page.keyboard.press('End');
+  const max = await handle.getAttribute('aria-valuemax');
+  await expect(handle).toHaveAttribute('aria-valuenow', max ?? '');
+  await page.keyboard.press('ArrowRight');
+  // The handle carries no drawn offset and plays no motion of its own.
+  const drawn = await handle.evaluate(node => ({
+    translate: getComputedStyle(node).translate,
+    motions: node.getAnimations().length,
+  }));
+  expect(drawn).toEqual({translate: 'none', motions: 0});
+  await expect(handle).toHaveAttribute('aria-valuenow', max ?? '');
+});
+
+test('below the minimum the edge moves at most 8 px, the pane keeps its minimum, and a slow lift above the threshold springs the edge back', async ({
+  page,
+}) => {
+  await openFixture(page, STORY.start);
+  await expectPresent(page);
+  const pane = page.getByTestId('sliding-panel');
+  const at = await pressHandle(page);
+  const minimum = at.x - 80;
+  await recordEdgeFrames(page);
+  // 200 px less 130 px is 70 px: under the 120 px minimum, over the 40 px
+  // collapse threshold.
+  await page.mouse.move(at.x - 130, at.y, {steps: 6});
+  await page.waitForTimeout(200);
+  await page.mouse.up();
+  await waitForSettledMotion(page);
+  const frames = await edgeFrames(page);
+  expect(Math.min(...frames.map(frame => frame.laidOut))).toBe(120);
+  const nearest = Math.min(...frames.map(frame => frame.handle));
+  expect(nearest).toBeLessThan(minimum - 1);
+  expect(nearest).toBeGreaterThanOrEqual(minimum - 8.5);
+  expect(frames.at(-1)?.handle).toBeCloseTo(minimum, 0);
+  await expect(pane).not.toHaveAttribute('inert', '');
+});
+
+test('a flick toward closing from above the threshold closes on its lift', async ({
+  page,
+}) => {
+  await openFixture(page, STORY.start);
+  await expectPresent(page);
+  const pane = page.getByTestId('sliding-panel');
+  const at = await pressHandle(page);
+  // 110 px is over the threshold; the release velocity carries it past.
+  await page.mouse.move(at.x - 90, at.y, {steps: 3});
+  await page.mouse.up();
+  await expect(pane).toHaveAttribute('inert', '');
 });
 
 test('a press where the handle shows lands on it at every moment of a slide, on both sides', async ({

@@ -14,6 +14,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {isBuiltin} from 'node:module';
 import {packageOf} from '../../foundation/render/served-packages.mjs';
+import {resolveInstalledPackageDir} from '../../foundation/integrations/installed-package.mjs';
 import {parse} from '@babel/parser';
 import {
   inspectPackageExport,
@@ -390,6 +391,8 @@ function publicSurfaceOf(packageDir, srcRoot, originsOf) {
  *   file the copy holds (absolute source path), with the edits its imports need
  * @property {Map<string, Set<string>>} dependsOn file -> carried files its
  *   computed specifiers point at
+ * @property {Map<string, string>} otherPackages the source root of each other
+ *   Astryx package the copy carries modules from, with its package name
  * @property {Record<string, string>} dependencies each npm package the copied
  *   files import, other than the owner package and Node's built-in modules,
  *   with the range the owner package declares
@@ -430,19 +433,6 @@ export function planCopy({
   /** @param {string} file @param {string} name */
   const originOf = (file, name) => originsOf(file, 'type').get(name) ?? null;
   /**
-   * The subpaths that export a module's export: as a value when the import
-   * takes a value, since a type-only export is erased at runtime.
-   * @param {string} file
-   * @param {string} name
-   * @param {boolean} typeOnly
-   */
-  const exportersOf = (file, name, typeOnly) => {
-    const origin = originOf(file, name);
-    if (!origin) return [];
-    const kind = typeOnly ? 'type' : 'value';
-    return surface.byOrigin[kind].get(`${origin.file}#${origin.name}`) ?? [];
-  };
-  /**
    * The name a module exports one of its own bindings under, or null.
    * @param {{file: string, name: string}} origin
    */
@@ -454,7 +444,6 @@ export function planCopy({
   };
   /** @type {Map<string, string|null>} */
   const resolutions = new Map();
-  const surface = publicSurfaceOf(packageDir, srcRoot, originsOf);
   /** @type {CopyPlan['files']} */
   const files = new Map();
   /** @type {CopyPlan['dependsOn']} */
@@ -472,72 +461,161 @@ export function planCopy({
   };
   /** @param {string} file */
   const inComponent = file => file.startsWith(componentDir + path.sep);
+
+  /**
+   * @typedef {ReturnType<typeof makeContext>} PackageContext
+   */
+
+  /**
+   * How references inside one package's source are planned: its public
+   * surface and the subpaths a name or module is imported from.
+   * @param {{packageDir: string, srcRoot: string, ownerPackage: string}} pkg
+   */
+  function makeContext({packageDir, srcRoot, ownerPackage}) {
+    const surface = publicSurfaceOf(packageDir, srcRoot, originsOf);
+    /** @param {string} file */
+    const inSource = file => file.startsWith(srcRoot + path.sep);
+    /**
+     * The subpaths that export a module's export: as a value when the import
+     * takes a value, since a type-only export is erased at runtime.
+     * @param {string} file
+     * @param {string} name
+     * @param {boolean} typeOnly
+     */
+    const exportersOf = (file, name, typeOnly) => {
+      const origin = originOf(file, name);
+      if (!origin) return [];
+      const kind = typeOnly ? 'type' : 'value';
+      return surface.byOrigin[kind].get(`${origin.file}#${origin.name}`) ?? [];
+    };
+    /**
+     * The subpath that exports every name a module exports, with the same
+     * definition. An exactly exported file is its own subpath.
+     * @param {string} file
+     * @returns {string|null}
+     */
+    const subpathCoveringModule = file => {
+      const exact = surface.byFile.get(file);
+      if (exact) return exact;
+      const names = [...originsOf(file, 'type').keys()];
+      if (names.length === 0) return null;
+      const values = originsOf(file, 'value');
+      const options = names.map(name =>
+        exportersOf(file, name, !values.has(name))
+          .filter(o => o.name === name)
+          .map(o => o.subpath),
+      );
+      const common = options.reduce((acc, list) =>
+        acc.filter(s => list.includes(s)),
+      );
+      return STYLEX_FILE.test(file) ? null : pickSubpath(common, file);
+    };
+
+    /**
+     * The public subpath to take a name from. A StyleX module is imported by
+     * its own exported path, because the StyleX compiler resolves styles and
+     * variables from the real module; when that path is not exported, there is
+     * no public import.
+     * @param {string[]} subpaths subpaths that export the name
+     * @param {string} target the module the import names
+     * @param {string} [originFile] the module that defines the name
+     * @returns {string|null}
+     */
+    const choosePublic = (subpaths, target, originFile) => {
+      const exact = originFile ? surface.byFile.get(originFile) : undefined;
+      if (exact && subpaths.includes(exact)) return exact;
+      if (
+        STYLEX_FILE.test(target) ||
+        (originFile && STYLEX_FILE.test(originFile))
+      )
+        return null;
+      return pickSubpath(subpaths, target);
+    };
+
+    /**
+     * Prefer the subpath of the module's top folder, then the package root.
+     * @param {string[]} subpaths
+     * @param {string} file
+     * @returns {string|null}
+     */
+    const pickSubpath = (subpaths, file) => {
+      if (subpaths.length === 0) return null;
+      const top = `./${toPosix(path.relative(srcRoot, file)).split('/')[0]}`;
+      return (
+        subpaths.find(s => s === top) ??
+        subpaths.find(s => s === '.') ??
+        [...subpaths].sort((a, b) => a.length - b.length)[0]
+      );
+    };
+
+    /** @param {string} subpath */
+    const publicSpecifier = subpath =>
+      subpath === '.' ? ownerPackage : `${ownerPackage}/${subpath.slice(2)}`;
+
+    return {
+      packageDir,
+      srcRoot,
+      ownerPackage,
+      surface,
+      inSource,
+      exportersOf,
+      subpathCoveringModule,
+      choosePublic,
+      publicSpecifier,
+    };
+  }
+  const owner = makeContext({packageDir, srcRoot, ownerPackage});
+  /** @type {Map<string, PackageContext>} other packages' contexts, by source root */
+  const others = new Map();
   /** @param {string} file */
-  const inSource = file => file.startsWith(srcRoot + path.sep);
-
-  /**
-   * The subpath that exports every name a module exports, with the same
-   * definition. An exactly exported file is its own subpath.
-   * @param {string} file
-   * @returns {string|null}
-   */
-  const subpathCoveringModule = file => {
-    const exact = surface.byFile.get(file);
-    if (exact) return exact;
-    const names = [...originsOf(file, 'type').keys()];
-    if (names.length === 0) return null;
-    const values = originsOf(file, 'value');
-    const options = names.map(name =>
-      exportersOf(file, name, !values.has(name))
-        .filter(o => o.name === name)
-        .map(o => o.subpath),
-    );
-    const common = options.reduce((acc, list) =>
-      acc.filter(s => list.includes(s)),
-    );
-    return STYLEX_FILE.test(file) ? null : pickSubpath(common, file);
+  const contextOf = file => {
+    if (file.startsWith(srcRoot + path.sep)) return owner;
+    for (const [root, context] of others) {
+      if (file.startsWith(root + path.sep)) return context;
+    }
+    return owner;
   };
 
   /**
-   * The public subpath to take a name from. A StyleX module is imported by
-   * its own exported path, because the StyleX compiler resolves styles and
-   * variables from the real module; when that path is not exported, there is
-   * no public import.
-   * @param {string[]} subpaths subpaths that export the name
-   * @param {string} target the module the import names
-   * @param {string} [originFile] the module that defines the name
+   * The source module a bare import of another Astryx package's
+   * `./internal/*` path names, or null. That module is carried, and its
+   * package gets a context of its own.
+   * @param {string} file
+   * @param {string} specifier
    * @returns {string|null}
    */
-  const choosePublic = (subpaths, target, originFile) => {
-    const exact = originFile ? surface.byFile.get(originFile) : undefined;
-    if (exact && subpaths.includes(exact)) return exact;
-    if (
-      STYLEX_FILE.test(target) ||
-      (originFile && STYLEX_FILE.test(originFile))
-    )
+  const internalModuleOf = (file, specifier) => {
+    const name = packageOf(specifier);
+    const sub = specifier.slice(name.length + 1);
+    if (!name.startsWith('@astryxdesign/') || name === ownerPackage)
       return null;
-    return pickSubpath(subpaths, target);
+    if (!/^internal(\/|$)/.test(sub)) return null;
+    const installed = resolveInstalledPackageDir(name, path.dirname(file));
+    if (!installed) return null;
+    const dir = fs.realpathSync(installed.packageDir);
+    /** @type {{exports?: unknown}} */
+    let pkg;
+    try {
+      pkg = JSON.parse(
+        fs.readFileSync(path.join(dir, 'package.json'), 'utf-8'),
+      );
+    } catch {
+      return null;
+    }
+    const target = sourceExportTarget(pkg, dir, `./${sub}`);
+    // A StyleX module's identity is its path, so the copy keeps importing it
+    // by its exported path and agrees with the package on it.
+    if (!target || STYLEX_FILE.test(target)) return null;
+    const src = path.join(dir, 'src');
+    const root = target.startsWith(src + path.sep) ? src : dir;
+    if (!others.has(root)) {
+      others.set(
+        root,
+        makeContext({packageDir: dir, srcRoot: root, ownerPackage: name}),
+      );
+    }
+    return target;
   };
-
-  /**
-   * Prefer the subpath of the module's top folder, then the package root.
-   * @param {string[]} subpaths
-   * @param {string} file
-   * @returns {string|null}
-   */
-  const pickSubpath = (subpaths, file) => {
-    if (subpaths.length === 0) return null;
-    const top = `./${toPosix(path.relative(srcRoot, file)).split('/')[0]}`;
-    return (
-      subpaths.find(s => s === top) ??
-      subpaths.find(s => s === '.') ??
-      [...subpaths].sort((a, b) => a.length - b.length)[0]
-    );
-  };
-
-  /** @param {string} subpath */
-  const publicSpecifier = subpath =>
-    subpath === '.' ? ownerPackage : `${ownerPackage}/${subpath.slice(2)}`;
 
   /**
    * Carry a module in the copy.
@@ -560,8 +638,14 @@ export function planCopy({
     const edits = [];
     files.set(file, {code: parsed.code, edits});
     if (!CODE_FILE.test(file)) continue;
+    const context = contextOf(file);
     for (const ref of parsed.references) {
       if (!ref.source.startsWith('.')) {
+        const internal = internalModuleOf(file, ref.source);
+        if (internal) {
+          edits.push(sourceEdit(parsed.code, ref, carry(file, internal)));
+          continue;
+        }
         const builtin = ref.source.startsWith('node:') || isBuiltin(ref.source);
         const name = packageOf(ref.source);
         if (!builtin && name !== ownerPackage) packages.add(name);
@@ -576,44 +660,61 @@ export function planCopy({
         else edits.push(sourceEdit(parsed.code, ref, carry(file, target)));
         continue;
       }
-      if (!CODE_FILE.test(target) || !inSource(target)) {
+      if (!CODE_FILE.test(target) || !context.inSource(target)) {
         // An asset, such as `../../locales/en.json` or a stylesheet, that the
         // package exports by its own path is imported from the package.
-        const subpath = `./${toPosix(path.relative(packageDir, target))}`;
+        const subpath = `./${toPosix(path.relative(context.packageDir, target))}`;
         if (
-          subpathDeclaration(surface.exportsField, subpath).state === 'declared'
+          subpathDeclaration(context.surface.exportsField, subpath).state ===
+          'declared'
         ) {
+          if (context !== owner) packages.add(context.ownerPackage);
           edits.push(
-            sourceEdit(parsed.code, ref, `${ownerPackage}/${subpath.slice(2)}`),
+            sourceEdit(
+              parsed.code,
+              ref,
+              `${context.ownerPackage}/${subpath.slice(2)}`,
+            ),
           );
           continue;
         }
         // An unexported asset in the source is carried; one outside it is
         // left for the build to report.
-        if (!inSource(target)) continue;
+        if (!context.inSource(target)) continue;
         edits.push(sourceEdit(parsed.code, ref, carry(file, target)));
         continue;
       }
-      edits.push(planReference(file, parsed.code, ref, target));
+      edits.push(planReference(context, file, parsed.code, ref, target));
     }
   }
-  return {files, dependsOn, dependencies: declaredRanges(packageDir, packages)};
+  return {
+    files,
+    dependsOn,
+    dependencies: declaredRanges(packageDir, packages),
+    otherPackages: new Map(
+      [...others].map(([root, c]) => [root, c.ownerPackage]),
+    ),
+  };
 
   /**
    * Decide one reference that leaves the component folder.
+   * @param {PackageContext} context the package the importing file is in
    * @param {string} file
    * @param {string} code
    * @param {ModuleReference} ref
    * @param {string} target
    * @returns {PlannedEdit}
    */
-  function planReference(file, code, ref, target) {
+  function planReference(context, file, code, ref, target) {
+    // A carried module of another package imports that package's public names
+    // from it, so the copy depends on it.
+    if (context !== owner) packages.add(context.ownerPackage);
     if (ref.kind !== 'named' && ref.kind !== 'reexportNamed') {
-      const covering = subpathCoveringModule(target);
+      const covering = context.subpathCoveringModule(target);
       return sourceEdit(
         code,
         ref,
-        covering ? publicSpecifier(covering) : carry(file, target),
+        covering ? context.publicSpecifier(covering) : carry(file, target),
       );
     }
     /** @type {Array<{choice: SpecifierChoice, specs: ImportSpecifier[]}>} */
@@ -630,13 +731,20 @@ export function planCopy({
     };
     for (const spec of ref.specifiers) {
       if (spec.imported === '*') {
-        const covering = subpathCoveringModule(target);
-        add(covering ? publicSpecifier(covering) : carry(file, target), spec);
+        const covering = context.subpathCoveringModule(target);
+        add(
+          covering ? context.publicSpecifier(covering) : carry(file, target),
+          spec,
+        );
         continue;
       }
       const origin = originOf(target, spec.imported);
-      const publicOptions = exportersOf(target, spec.imported, spec.typeOnly);
-      const chosen = choosePublic(
+      const publicOptions = context.exportersOf(
+        target,
+        spec.imported,
+        spec.typeOnly,
+      );
+      const chosen = context.choosePublic(
         publicOptions.map(o => o.subpath),
         target,
         origin?.file,
@@ -645,7 +753,7 @@ export function planCopy({
         const exported = /** @type {{name: string}} */ (
           publicOptions.find(o => o.subpath === chosen)
         ).name;
-        add(publicSpecifier(chosen), {...spec, imported: exported});
+        add(context.publicSpecifier(chosen), {...spec, imported: exported});
       } else {
         // Take the name from the module that defines it, so the copy carries
         // that module and not a whole barrel. An origin names a binding, so
@@ -654,7 +762,7 @@ export function planCopy({
         const definingExport =
           origin &&
           origin.file !== target &&
-          inSource(origin.file) &&
+          context.inSource(origin.file) &&
           !parseModule(target).declares.has(spec.imported)
             ? exportNameOf(origin)
             : null;
