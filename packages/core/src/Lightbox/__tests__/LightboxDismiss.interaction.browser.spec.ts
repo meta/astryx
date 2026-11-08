@@ -20,6 +20,7 @@ import {
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
 import {
+  type ActiveAnimation,
   blockMainThread,
   type BusyRun,
   type BusyWindow,
@@ -36,8 +37,8 @@ import {
   startBusyControl,
   startScreencast,
   timeline,
-  touchDriver,
   type TouchDriver,
+  touchDriver,
   type TouchScript,
   touchStoryboard,
   trackBrightness,
@@ -47,6 +48,7 @@ import {
   withStorybook,
   writeEvidence,
 } from '@astryxdesign/interaction-harness';
+import {slowViewer} from './viewerTempo';
 
 const storybook = withStorybook(test);
 
@@ -306,6 +308,46 @@ test("a release moving down sends the photo on the dismissal's spring and closes
   expect(to).toBeGreaterThan(from + 200);
   await expect(v.dialog).toBeHidden();
 });
+
+test("the dismissal plays at the viewer's tempo", async ({page}) => {
+  // The same exit at tempo 1, to compare the paced one with.
+  const atTempo1 = await dismissCurves(page, await openViewer(page));
+  const v = await openViewer(page);
+  await slowViewer(page, DISMISS_TEMPO);
+  const paced = await dismissCurves(page, v);
+  // Released at rest, so each spring takes exactly that many times as long.
+  for (const part of ['move', 'fade'] as const) {
+    const ratio = paced[part] / atTempo1[part];
+    expect(ratio, part).toBeGreaterThan(DISMISS_TEMPO - 0.1);
+    expect(ratio, part).toBeLessThan(DISMISS_TEMPO + 0.1);
+  }
+});
+
+/** The tempo the dismissal's tempo case plays the viewer at. */
+const DISMISS_TEMPO = 2;
+
+/**
+ * Dismisses the photo with a slow drag held still before the lift. Returns
+ * how long the exit's curves run: the photo's move, on the position spring,
+ * and a control's fade, on the size spring.
+ */
+async function dismissCurves(
+  page: Page,
+  v: Viewer,
+): Promise<{move: number; fade: number}> {
+  const since = await page.evaluate(() => performance.now());
+  await v.driver.play(pullDown(v.centre, 110));
+  const latest = (runs: ReadonlyArray<ActiveAnimation>) =>
+    runs.reduce((a, b) => (b.from > a.from ? b : a));
+  const move = latest(await waitForAnimation(v.photo, {since}));
+  const fade = latest(
+    await waitForAnimation(v.dialog.locator('[data-lightbox-chrome]').first(), {
+      since,
+    }),
+  );
+  await expect(v.dialog).toBeHidden();
+  return {move: move.to - move.from, fade: fade.to - fade.from};
+}
 
 test('a pull flicked back up springs back on springs.settle', async ({
   page,
