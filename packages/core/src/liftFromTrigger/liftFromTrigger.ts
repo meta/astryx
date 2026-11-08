@@ -25,7 +25,6 @@ import {
   type Animator,
   type MotionHandle,
 } from '../motion/animator';
-import {progressCurve} from '../motion/progress';
 import {
   createRectMorph,
   lerpPath,
@@ -216,10 +215,11 @@ interface LiftState {
    * is. It follows the source frame for frame and fades on its own spring.
    */
   readonly shadow: HTMLElement;
-  shadowAnimation: Animation | null;
+  /** The shadow's rect morph, on the source's path and clock. */
+  readonly shadowMorph: RectMorph;
   /**
-   * Holds the source morph's clock at one instant (null lets it run), so the
-   * shadow reads the motion at the very moment the morph does.
+   * Holds the clock of both morphs at one instant (null lets it run), so the
+   * shadow starts each motion where the source does.
    */
   readonly holdClock: (at: number | null) => void;
   /** The layer's own waits and listeners, released with it. */
@@ -268,70 +268,6 @@ function restore(element: HTMLElement, saved: SavedStyle): void {
       element.style.setProperty(property, value, priority);
     }
   }
-}
-
-/**
- * Web Animation keyframes for a box laid out on `box`. It travels from
- * `from` to `to` on `travel`, starting at progress velocity `velocity`, as the
- * rect morph does. Its opacity goes from `fade[0]` to `fade[1]` on
- * `fadeSpring`. The keyframes sample both at 60 Hz until both settle. The
- * result is one compositor animation of `transform` and `opacity`, frame for
- * frame with the source's morph.
- */
-function shadowKeyframes(
-  box: MorphRect,
-  from: MorphRect,
-  to: MorphRect,
-  travel: SpringDescription | null,
-  fade: readonly [number, number],
-  fadeSpring: SpringDescription,
-  velocity = 0,
-): {keyframes: Keyframe[]; duration: number} {
-  const move = travel == null ? null : progressCurve(travel, {velocity});
-  const opacity = progressCurve(fadeSpring);
-  const seconds = Math.max(move?.duration ?? 0, opacity.duration, 1 / 60);
-  const steps = Math.max(2, Math.ceil(seconds * 60));
-  const keyframes: Keyframe[] = [];
-  for (let i = 0; i <= steps; i++) {
-    const t = (i / steps) * seconds;
-    const p = i === steps || move == null ? 1 : move.at(t);
-    const q = i === steps ? 1 : opacity.at(t);
-    const rect = {
-      x: from.x + (to.x - from.x) * p,
-      y: from.y + (to.y - from.y) * p,
-      width: from.width + (to.width - from.width) * p,
-    };
-    const scale = box.width > 0 ? rect.width / box.width : 1;
-    keyframes.push({
-      transform: `translate(${(rect.x - box.x).toFixed(3)}px, ${(rect.y - box.y).toFixed(3)}px) scale(${scale.toFixed(5)})`,
-      opacity: String(
-        Math.min(Math.max(fade[0] + (fade[1] - fade[0]) * q, 0), 1),
-      ),
-      offset: i / steps,
-    });
-  }
-  return {keyframes, duration: seconds * 1000};
-}
-
-/** Plays `keyframes` on `element`, or only their ends under Reduce Motion. */
-function playShadow(
-  element: HTMLElement,
-  {keyframes, duration}: {keyframes: Keyframe[]; duration: number},
-  reduced: ReturnType<typeof reducedMotionFade>,
-): Animation | null {
-  if (typeof element.animate !== 'function') {
-    return null;
-  }
-  return element.animate(
-    reduced == null
-      ? keyframes
-      : [keyframes[0], keyframes[keyframes.length - 1]],
-    {
-      duration: reduced?.duration ?? duration,
-      easing: reduced?.easing ?? 'linear',
-      fill: 'forwards',
-    },
-  );
 }
 
 /**
@@ -566,8 +502,7 @@ export function createLiftFromTrigger(): LiftFromTrigger {
     }
     current.isSourceLifted = false;
     const {source} = current;
-    current.shadowAnimation?.cancel();
-    current.shadowAnimation = null;
+    current.shadowMorph.dispose();
     current.morph.dispose();
     if (source.matches(':popover-open')) {
       source.hidePopover();
@@ -735,7 +670,6 @@ export function createLiftFromTrigger(): LiftFromTrigger {
     const direction = computed.direction === 'rtl' ? 'rtl' : 'ltr';
     const radius = shapeRadius(source);
     const motion = resolvedMotion(source, options.motion);
-    const reduced = reducedMotionFade(source);
     // The tint, the shadow and the layer runtime's gutter, with the inset an
     // app declares, resolved where the source is.
     const probed = probe(source, {
@@ -855,9 +789,9 @@ export function createLiftFromTrigger(): LiftFromTrigger {
     const holdClock = (at: number | null) => {
       heldAt = at;
     };
-    const morph = createRectMorph(source, {
-      now: () => heldAt ?? performance.now(),
-    });
+    const now = () => heldAt ?? performance.now();
+    const morph = createRectMorph(source, {now});
+    const shadowMorph = createRectMorph(shadowEl, {now});
     // The layer first: the source shows above its tint. The popover makes
     // its `::backdrop` new, so the tint starts clear in the same task.
     const tints = createMotionEngine(layer, {
@@ -873,40 +807,22 @@ export function createLiftFromTrigger(): LiftFromTrigger {
       {spring: motion.lift},
       {crossfadeAs: 'entrance'},
     );
+    // The shadow rises with the source, frame for frame: the same path,
+    // spring and clock. It fades in on its own spring. It is a box in the
+    // layer, because an animated `::backdrop` of the source would restyle and
+    // lay out the page on every frame.
+    shadowMorph.present(
+      lerpPath(from, lifted, {
+        box: sourceRect,
+        scale: 'uniform',
+        opacity: [0, 1],
+      }),
+      {spring: motion.lift},
+      {fade: {spring: motion.shadowIn}, crossfadeAs: 'entrance'},
+    );
     holdClock(null);
     // The tint: the layer's `::backdrop`, its color held there.
     const layerFill = holdBackdropColor(layer, tint);
-    // The shadow rises with the source. It follows the source's path on the
-    // lift's spring and fades in on its own spring, from the source's first
-    // frame. It is one compositor animation: an animated `::backdrop` of the
-    // source would restyle and lay out the page on every frame. Under Reduce
-    // Motion it fades in where the source lands.
-    const rise = playShadow(
-      shadowEl,
-      reduced == null
-        ? shadowKeyframes(
-            sourceRect,
-            from,
-            lifted,
-            motion.lift,
-            [0, 1],
-            motion.shadowIn,
-          )
-        : shadowKeyframes(
-            sourceRect,
-            lifted,
-            lifted,
-            null,
-            [0, 1],
-            motion.shadowIn,
-          ),
-      reduced,
-    );
-    void growing.started.then(at => {
-      if (rise != null && current.shadowAnimation === rise) {
-        rise.startTime = at;
-      }
-    });
     const current: LiftState = {
       generation,
       options,
@@ -923,7 +839,7 @@ export function createLiftFromTrigger(): LiftFromTrigger {
       growing,
       layerFill,
       shadow: shadowEl,
-      shadowAnimation: rise,
+      shadowMorph,
       holdClock,
       waits,
       untilPointersLift: async () => {},
@@ -1138,43 +1054,22 @@ export function createLiftFromTrigger(): LiftFromTrigger {
     // The tint clears from what it shows now, with its velocity.
     current.tint = current.tints.animate({opacity: 0}, {spring: motion.clear});
     // The source returns to its place from wherever it is now, with its
-    // velocity. Its shadow follows it back frame for frame, with the same
-    // start and velocity, and fades on its own spring. Under Reduce Motion
-    // both fade where they are.
-    // The shadow and the morph read one instant, and the morph's velocity
-    // there. That velocity comes from the rect the morph presents a
-    // millisecond before. The morph keeps its own clock, synced to its
-    // animations.
-    const at = performance.now();
-    current.holdClock(at - 1);
-    const before = current.morph.presentedRect() ?? lifted;
-    current.holdClock(at);
-    const presented = current.morph.presentedRect() ?? lifted;
-    const shadowEl = current.shadow;
-    const shownOpacity =
-      Number.parseFloat(
-        shadowEl.ownerDocument.defaultView?.getComputedStyle(shadowEl)
-          .opacity ?? '',
-      ) || 0;
-    current.shadowAnimation?.cancel();
-    const reducedFade = reducedMotionFade(source);
-    // That velocity as progress along the way back (from where it is drawn
-    // to the source's place), as the morph reads it.
-    const span = presented.width - sourceRect.width;
-    const widthVelocity = (presented.width - before.width) * 1000;
-    const backVelocity = Math.abs(span) > 1e-6 ? -widthVelocity / span : 0;
-    current.shadowAnimation = playShadow(
-      shadowEl,
-      shadowKeyframes(
-        sourceRect,
-        presented,
-        reducedFade == null ? sourceRect : presented,
-        reducedFade == null ? motion.drop : null,
-        [shownOpacity, 0],
-        motion.shadowOut,
-        backVelocity,
-      ),
-      reducedFade,
+    // velocity. Its shadow follows it back frame for frame: the same instant,
+    // path and spring. It fades on its own spring. Under Reduce Motion both
+    // fade where they are.
+    current.holdClock(performance.now());
+    current.shadowMorph.dismiss(
+      lerpPath(sourceRect, lifted, {
+        box: sourceRect,
+        scale: 'uniform',
+        opacity: [0, 1],
+      }),
+      {spring: motion.drop},
+      {
+        target: current.shadow,
+        fade: {spring: motion.shadowOut},
+        crossfadeAs: 'exit',
+      },
     );
     const returning = current.morph.dismiss(
       lerpPath(sourceRect, lifted, {box: sourceRect, scale: 'uniform'}),
