@@ -19,6 +19,12 @@
 
 import {levenshteinDistance} from './levenshtein.mjs';
 
+/**
+ * The score of a near name (nearNameSlips), less a little per slip: above any
+ * name that carries only some of the typed words, below one that carries all
+ * of them.
+ */
+const NEAR_NAME_SCORE = 19.6;
 /** The score a synonym match gets: an exact keyword's. */
 const SYNONYM_SCORE = 90;
 /** The score a name with exactly the typed words gets: an exact name's. */
@@ -59,17 +65,24 @@ export function nameWords(text) {
  * closer. Tiers, best first: the same words; every typed word present; some
  * typed word present; none. Within a tier, more of the typed words and more of
  * the candidate's own words matched rank higher, and a name that starts with
- * the typed name (or the reverse) gets a small lift.
+ * the typed name (or the reverse) gets a small lift. With `typos`, a near name
+ * (one or two slips from the typed name) ranks just below the names that
+ * carry every typed word.
  * @param {string[]} typed - {@link nameWords} of the typed name
  * @param {string} name
+ * @param {{typos?: boolean}} [options]
  * @returns {number}
  */
-function affinityOf(typed, name) {
+function affinityOf(typed, name, {typos = false} = {}) {
   const words = nameWords(name);
   if (typed.length === 0 || words.length === 0) return 0;
   const typedJoined = typed.join('');
   const joined = words.join('');
   if (joined === typedJoined) return 40;
+  if (typos) {
+    const slips = nearNameSlips(typedJoined, joined);
+    if (slips > 0) return NEAR_NAME_SCORE - slips * 0.2;
+  }
   const have = new Set(words);
   const want = new Set(typed);
   const covered = typed.filter(w => have.has(w)).length / typed.length;
@@ -81,20 +94,69 @@ function affinityOf(typed, name) {
 }
 
 /**
+ * How many slips separate a typed name from a candidate, both with their
+ * words joined, when it is a near name: an edit or two adjacent letters
+ * swapped count as one slip, one slip is allowed from five letters and two from
+ * eight. Zero when it is not a near name.
+ * @param {string} typed
+ * @param {string} name
+ * @returns {number}
+ */
+function nearNameSlips(typed, name) {
+  const shorter = Math.min(typed.length, name.length);
+  const cap = shorter >= 8 ? 2 : shorter >= 5 ? 1 : 0;
+  if (cap === 0 || Math.abs(typed.length - name.length) > cap) return 0;
+  const slips = slipsBetween(typed, name, cap);
+  return slips <= cap ? slips : 0;
+}
+
+/**
+ * The optimal-string-alignment distance between two strings, or `cap + 1` once
+ * it is past `cap`: an insertion, a deletion, a substitution or two adjacent
+ * letters swapped each cost one.
+ * @param {string} a
+ * @param {string} b
+ * @param {number} cap
+ * @returns {number}
+ */
+function slipsBetween(a, b, cap) {
+  let before = new Array(b.length + 1).fill(0);
+  let prev = Array.from({length: b.length + 1}, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    let rowMin = i;
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      let v = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+        v = Math.min(v, before[j - 2] + 1);
+      }
+      cur[j] = v;
+      rowMin = Math.min(rowMin, v);
+    }
+    if (rowMin > cap) return cap + 1;
+    before = prev;
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+/**
  * The items scored against the typed name, closest first; equal matches keep
  * their original order.
  * @template T
  * @param {string} typedName
  * @param {T[]} items
  * @param {(item: T) => Array<string | undefined>} namesOf
+ * @param {{typos?: boolean}} [options]
  * @returns {Array<{item: T, best: number}>}
  */
-function scoreByAffinity(typedName, items, namesOf) {
+function scoreByAffinity(typedName, items, namesOf, options = {}) {
   const typed = nameWords(typedName);
   const scored = items.map((item, index) => {
     let best = 0;
     for (const name of namesOf(item)) {
-      if (name) best = Math.max(best, affinityOf(typed, name));
+      if (name) best = Math.max(best, affinityOf(typed, name, options));
     }
     return {item, index, best};
   });
@@ -112,14 +174,46 @@ function scoreByAffinity(typedName, items, namesOf) {
  * when it carries some of them, the items that carry none are left out. When
  * no item carries one, nothing is left out. The list only ever gets shorter,
  * and its order does not change.
+ *
+ * With `typos`, a near name (one or two slips from the typed name, as
+ * `ButonGroup` or `ButtonGorup` for ButtonGroup) ranks just below the names
+ * that carry every typed word and above the rest. With `closest` too, near
+ * names stay in the list whatever the cut leaves out, and the list is never
+ * longer than it is without `typos`.
  * @template T
  * @param {string} typedName
  * @param {T[]} items
  * @param {(item: T) => Array<string | undefined>} namesOf
- * @param {{closest?: boolean}} [options]
+ * @param {{closest?: boolean, typos?: boolean}} [options]
  * @returns {T[]}
  */
 export function orderByAffinity(typedName, items, namesOf, options = {}) {
+  if (!options.typos) return orderByWords(typedName, items, namesOf, options);
+  const scored = scoreByAffinity(typedName, items, namesOf, {typos: true});
+  if (!options.closest) return scored.map(s => s.item);
+  const kept = new Set(orderByWords(typedName, items, namesOf, options));
+  return scored
+    .filter(s => kept.has(s.item) || isNearScore(s.best))
+    .slice(0, kept.size)
+    .map(s => s.item);
+}
+
+/**
+ * Whether a score is a near name's.
+ * @param {number} score
+ */
+const isNearScore = score => score < 20 && score > NEAR_NAME_SCORE - 1;
+
+/**
+ * {@link orderByAffinity} without `typos`.
+ * @template T
+ * @param {string} typedName
+ * @param {T[]} items
+ * @param {(item: T) => Array<string | undefined>} namesOf
+ * @param {{closest?: boolean}} options
+ * @returns {T[]}
+ */
+function orderByWords(typedName, items, namesOf, options) {
   const scored = scoreByAffinity(typedName, items, namesOf);
   if (!options.closest) return scored.map(s => s.item);
   // One-letter words (`a` in `a11y`, `use-a-theme`) say nothing about which

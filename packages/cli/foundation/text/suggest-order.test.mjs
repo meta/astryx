@@ -310,3 +310,39 @@ describe('orderRouteSuggestions', () => {
     );
   });
 });
+
+describe('orderByAffinity with typos', () => {
+  const items = [
+    {name: 'AvatarGroup'},
+    {name: 'AvatarGroupShowcase'},
+    {name: 'ButtonGroup'},
+    {name: 'HStackShowcase'},
+    {name: 'VStackShowcase'},
+  ];
+  /** @param {{name: string}[]} list */
+  const names = list => list.map(i => i.name);
+  /** @param {string} typed @param {boolean} typos */
+  const order = (typed, typos) =>
+    names(orderByAffinity(typed, items, i => [i.name], {closest: true, typos}));
+
+  it('puts a name one slip away first', () => {
+    expect(order('ButonGroup', false)[0]).toBe('AvatarGroup');
+    expect(order('ButonGroup', true)[0]).toBe('ButtonGroup');
+  });
+
+  it('counts two swapped letters as one slip', () => {
+    expect(order('ButtonGorup', true)[0]).toBe('ButtonGroup');
+  });
+
+  it('puts the name with fewer slips first', () => {
+    expect(order('VStxckShowcase', true)[0]).toBe('VStackShowcase');
+  });
+
+  it('never lists more than without typos', () => {
+    for (const typed of ['ButonGroup', 'VStxckShowcase', 'Group', 'zzz']) {
+      expect(order(typed, true).length).toBeLessThanOrEqual(
+        order(typed, false).length,
+      );
+    }
+  });
+});

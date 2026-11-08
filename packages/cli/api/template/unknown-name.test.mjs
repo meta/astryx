@@ -60,4 +60,18 @@ describe('unknown template suggestions', () => {
     },
     SLOW,
   );
+
+  it.each([
+    ['AppShellContentOnxy', 'AppShellContentOnly'],
+    ['AppShellCotnentOnly', 'AppShellContentOnly'],
+    ['ApsPhellShowcase', 'AppShellShowcase'],
+    ['ai-chat-ladning', 'ai-chat-landing'],
+    ['dasbhoard', 'dashboard'],
+  ])(
+    'puts the template a typo of %s slips from first',
+    async (typed, meant) => {
+      expect((await suggested(typed))[0]).toBe(meant);
+    },
+    SLOW,
+  );
 });
