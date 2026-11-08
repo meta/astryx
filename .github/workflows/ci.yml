@@ -4701,13 +4701,16 @@ jobs:
           fi
           node .github/scripts/a11y-dependent-audits.mjs "${changes[@]}" --out "$RUNNER_TEMP/a11y-dependent-audits.json" --attempt "$RUN_ATTEMPT"
 
+      # Every run of this job uploads its record. A run that planned audits
+      # but wrote no record fails here, not later at the merge.
       - name: Upload the dependent-audit record
-        if: steps.plan.outcome == 'success' || steps.scope.outputs.applies == 'false'
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           # One record per attempt: merge-guard reads the latest attempt's.
           name: a11y-dependent-audits-record-${{ github.run_attempt }}
           path: ${{ runner.temp }}/a11y-dependent-audits.json
+          if-no-files-found: error
           retention-days: 30
 
   # Each leg runs its share of the plan at the head that built the Storybook.

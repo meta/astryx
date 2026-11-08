@@ -296,9 +296,9 @@ describe('the dependent-audits jobs', () => {
     );
     expect(skip.run).toContain('> "$RUNNER_TEMP/a11y-dependent-audits.json"');
     const upload = step(planJob, 'Upload the dependent-audit record');
-    expect(upload.if).toBe(
-      "steps.plan.outcome == 'success' || steps.scope.outputs.applies == 'false'",
-    );
+    // Every run uploads a record, and a run without one fails in CI.
+    expect(upload.if).toBe('always()');
+    expect(upload.with['if-no-files-found']).toBe('error');
     expect(upload.with.name).toBe(
       'a11y-dependent-audits-record-${{ github.run_attempt }}',
     );
