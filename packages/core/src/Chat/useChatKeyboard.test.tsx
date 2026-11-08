@@ -406,6 +406,31 @@ describe('ChatLayout in a page that scrolls the document', () => {
     expect(region.getAttribute('role')).toBeNull();
   });
 
+  it('keeps the lift and the focus takeover for a scrollRef on an inner scroller, in Safari on iOS too', async () => {
+    const scroller = document.createElement('div');
+    document.body.append(scroller);
+    try {
+      const {container} = render(
+        <ChatLayout
+          data-testid="layout"
+          scrollRef={{current: scroller}}
+          composer={
+            <div data-testid="composer">
+              <textarea aria-label="Message" />
+            </div>
+          }>
+          <p>Hello</p>
+        </ChatLayout>,
+      );
+      expect(__focusTakeoverCallersForTest(document)).toBe(1);
+      report(window.innerHeight - 300);
+      await settle();
+      expect(layoutLift(dockOf(container))).toBe(300);
+    } finally {
+      scroller.remove();
+    }
+  });
+
   it('lifts the fixed dock by the keyboard with the VirtualKeyboard API, as in Chrome on Android', async () => {
     Object.defineProperty(navigator, 'virtualKeyboard', {
       configurable: true,

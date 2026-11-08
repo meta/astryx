@@ -18,7 +18,13 @@
  * SYNC: update Chat/ChatLayout.tsx, ChatLayout.doc.mjs and keyboard/README.md
  */
 
-import {useRef, useState, useSyncExternalStore, type RefObject} from 'react';
+import {
+  useCallback,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type RefObject,
+} from 'react';
 import {createMotionEngine, type Animator} from '../motion/animator';
 import {
   claimTapFocus,
@@ -231,7 +237,7 @@ export function useChatKeyboard({
     // While a keyboard is up the dock rises until it clears the keyboard's
     // cover; without one it rests where the layout puts it. Where the browser
     // reveals the composer itself, the dock rises nothing.
-    const leavesReveal = leavesRevealToBrowser(win, isSelfScrolling);
+    const leavesReveal = leavesRevealToBrowser(win, scrollRef.current);
     const liftFor = (inset: number) => {
       if (inset <= 0 || leavesReveal) {
         return 0;
@@ -410,7 +416,7 @@ export function useChatKeyboard({
       !touchPresentation.isTouch ||
       composer == null ||
       !followsKeyboard(win) ||
-      leavesRevealToBrowser(win, isSelfScrolling)
+      leavesRevealToBrowser(win, scrollRef.current)
     ) {
       return undefined;
     }
@@ -418,7 +424,7 @@ export function useChatKeyboard({
       claim: editableToClaim,
       deliver: deliverTap,
     });
-  }, [touchPresentation.isTouch, isSelfScrolling]);
+  }, [touchPresentation.isTouch, scrollRef]);
 
   // A browser that reveals the composer itself pans the visual viewport after
   // the keyboard's report, while the composer still rides up. Chrome 124 on
@@ -432,7 +438,7 @@ export function useChatKeyboard({
       !touchPresentation.isTouch ||
       composer == null ||
       !followsKeyboard(win) ||
-      leavesRevealToBrowser(win, isSelfScrolling)
+      leavesRevealToBrowser(win, scrollRef.current)
     ) {
       return undefined;
     }
@@ -446,7 +452,7 @@ export function useChatKeyboard({
       unsubscribe();
       pans.stop();
     };
-  }, [touchPresentation.isTouch, isSelfScrolling]);
+  }, [touchPresentation.isTouch, scrollRef]);
 
   // Synchronizes the keyboard module's focus takeover, and the region's group
   // role, with the touch presentation. Every other move into the composer's
@@ -462,7 +468,7 @@ export function useChatKeyboard({
       !touchPresentation.isTouch ||
       composer == null ||
       !followsKeyboard(win) ||
-      leavesRevealToBrowser(win, isSelfScrolling)
+      leavesRevealToBrowser(win, scrollRef.current)
     ) {
       return undefined;
     }
@@ -482,16 +488,20 @@ export function useChatKeyboard({
       stopTakeover();
       composer.removeAttribute('role');
     };
-  }, [touchPresentation.isTouch, readModality, isSelfScrolling]);
+  }, [touchPresentation.isTouch, readModality, scrollRef]);
 
   // A focus call skips the browser's reveal only where ChatLayout keeps the
   // composer above the keyboard itself. The server has no keyboard profile.
-  const hasLayoutGuide = useSyncExternalStore(
+  const readKeyboardSurface = useCallback(() => {
+    const scroller = scrollRef.current;
+    const win = scroller?.ownerDocument.defaultView;
+    return win == null || !leavesRevealToBrowser(win, scroller);
+  }, [scrollRef]);
+  const isKeyboardSurface = useSyncExternalStore(
     subscribeToNothing,
-    readLayoutGuide,
-    readNoLayoutGuide,
+    readKeyboardSurface,
+    readKeyboardSurfaceOnServer,
   );
-  const isKeyboardSurface = isSelfScrolling || hasLayoutGuide;
 
   return {
     lift,
@@ -504,8 +514,7 @@ export function useChatKeyboard({
 
 // A browser's keyboard profile never changes while the page runs.
 const subscribeToNothing = () => () => {};
-const readLayoutGuide = () => keyboardProfileOf(window) === 'chromium';
-const readNoLayoutGuide = () => false;
+const readKeyboardSurfaceOnServer = () => true;
 
 /**
  * Whether the browser keeps the composer above the keyboard itself. That is a
@@ -514,8 +523,21 @@ const readNoLayoutGuide = () => false;
  * the pan. A lift would add to that pan. So ChatLayout leaves focus, the
  * reveal and the dock's place to the browser there.
  */
-function leavesRevealToBrowser(win: Window, isSelfScrolling: boolean): boolean {
-  return !isSelfScrolling && keyboardProfileOf(win) !== 'chromium';
+function leavesRevealToBrowser(win: Window, scroller: Element | null): boolean {
+  return isDocumentScroller(scroller) && keyboardProfileOf(win) !== 'chromium';
+}
+
+// The document's root and body both scroll the page.
+function isDocumentScroller(scroller: Element | null): boolean {
+  if (scroller == null) {
+    return false;
+  }
+  const doc = scroller.ownerDocument;
+  return (
+    scroller === doc.scrollingElement ||
+    scroller === doc.documentElement ||
+    scroller === doc.body
+  );
 }
 
 /** A compositor animator for one element, bound through a stable callback ref. */
