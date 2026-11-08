@@ -56,7 +56,7 @@ type Step = 0 | 2 | 4 | 6;
 // The number of LayoutFooter regions each story renders, so a story that
 // stops rendering one fails instead of passing with nothing to check.
 const FOOTERS: Record<Story, number> = {
-  // Footer States has nine cases plus the outer footer of the nested case.
+  // Footer States has ten cases plus the outer footer of the nested case.
   'footer-states': 11,
   'basic-card': 1,
   'with-sidebar': 1,
