@@ -11,7 +11,9 @@
  * names, within at most three legs of about ten minutes each.
  */
 
+import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 import {describe, expect, it} from 'vitest';
@@ -27,6 +29,9 @@ import {
   planDependentAudits,
   PRIMITIVES_FILE,
   readPrimitives,
+  TOO_LARGE,
+  UNDECIDED,
+  undecidedMessage,
 } from './a11y-dependent-audits.mjs';
 import {
   fileSeconds,
@@ -233,27 +238,87 @@ describe("a component's source change runs its own audits", () => {
 });
 
 describe('an undecided scope', () => {
-  it('owes every audit, and a first run lists what does not fit', () => {
-    const all = plan([]);
-    expect(all.owed).toEqual([]);
-    const everything = planDependentAudits({
+  const everything = attempt =>
+    planDependentAudits({
       changed: [],
       primitives: readPrimitives(root),
       specs,
       importers,
       seconds,
+      attempt,
       everything: true,
     });
-    const audits = specs
+
+  it('owes every audit, runs what fits, and is never complete', () => {
+    const expected = specs
       .filter(({mode}) => mode === 'audit')
-      .map(({file}) => file);
-    expect([...everything.owed].sort()).toEqual([...audits].sort());
-    expect([...everything.files, ...everything.deferred].sort()).toEqual(
-      [...audits].sort(),
+      .map(({file}) => file)
+      .sort();
+    for (const attempt of [1, 2]) {
+      const plan = everything(attempt);
+      expect([...plan.owed].sort()).toEqual(expected);
+      expect([...plan.files, ...plan.deferred].sort()).toEqual(expected);
+      expect(plan.complete).toBe(false);
+      expect(plan.count).toBeLessThanOrEqual(MAX_LEGS);
+      expect(plan.longestMs).toBeLessThanOrEqual(
+        budgetFor(plan.files, seconds),
+      );
+    }
+  });
+
+  it('asks for a split only when GitHub truncated the file list', () => {
+    const plan = {deferred: ['a', 'b']};
+    const truncated = undecidedMessage(plan, true);
+    expect(truncated.annotation).toContain(
+      'diff too large to scope (>3,000 files); split the PR',
     );
-    expect(everything.longestMs).toBeLessThanOrEqual(
-      budgetFor(everything.files, seconds),
+    expect(truncated.summary).toContain(TOO_LARGE);
+    const unread = undecidedMessage(plan, false);
+    expect(unread.annotation).toContain(
+      'the changed files could not be read; re-run all jobs at this head',
     );
+    expect(unread.annotation).not.toContain('split the PR');
+    expect(unread.summary).toContain(UNDECIDED);
+  });
+
+  it('prints the message the scope calls for', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dependent-audits-'));
+    try {
+      const run = args =>
+        execFileSync(
+          process.execPath,
+          [
+            '.github/scripts/a11y-dependent-audits.mjs',
+            ...args,
+            '--out',
+            path.join(dir, 'record.json'),
+          ],
+          {
+            cwd: root,
+            encoding: 'utf8',
+            env: {...process.env, GITHUB_OUTPUT: '', GITHUB_STEP_SUMMARY: ''},
+          },
+        );
+      expect(run(['--all', '--truncated'])).toContain(
+        `::error title=Diff too large to scope::${TOO_LARGE}`,
+      );
+      expect(run(['--all'])).toContain(
+        `::error title=Scope not decided::${UNDECIDED}`,
+      );
+      const record = JSON.parse(
+        fs.readFileSync(path.join(dir, 'record.json'), 'utf8'),
+      );
+      expect(record.complete).toBe(false);
+      // The last run here had no --truncated: the record says why it is undecided.
+      expect(record.undecided).toBe('unreadable');
+      run(['--all', '--truncated']);
+      expect(
+        JSON.parse(fs.readFileSync(path.join(dir, 'record.json'), 'utf8'))
+          .undecided,
+      ).toBe('truncated');
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
   });
 });
 
@@ -272,6 +337,10 @@ describe('the dependent-audits jobs', () => {
     // An undecided scope (a truncated diff) owes every audit; a decided
     // scope without its list stops.
     expect(run.run).toContain('changes=(--all)');
+    // Only a truncated file list asks for a split.
+    expect(run.env.TRUNCATED).toBe('${{ steps.scope.outputs.truncated }}');
+    expect(run.run).toContain('elif [ "$TRUNCATED" = true ]; then');
+    expect(run.run).toContain('changes=(--all --truncated)');
     expect(step(planJob, 'Require the changed-file list').if).toContain(
       "steps.scope.outputs.decided != 'false'",
     );
