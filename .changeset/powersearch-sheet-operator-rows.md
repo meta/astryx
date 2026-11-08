@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] In PowerSearch's phone sheet, each operator choice in the value step is now a 44 px row, the same height and padding as the value choices below it. The operator choices were 24 px tall and 32 px apart, so they were small to tap and looked denser than the list under them. The desktop editor popover is unchanged.
+[fix] PowerSearch's phone sheet now edits operators and single or multiple choices with the standard RadioList and CheckboxList, at their usual spacing, instead of its own taller rows. The two lists in a value step no longer use different row sizes, and the extra space at the top and bottom of the choice list is gone. Adds a "Sheet presentation · realistic config" story that covers every value type. The desktop editor popover is unchanged.
 
 @cixzhang
