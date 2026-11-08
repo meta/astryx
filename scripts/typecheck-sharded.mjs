@@ -19,6 +19,8 @@ import {createRequire} from 'node:module';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
+import {splitByDuration} from './lib/duration-split.mjs';
+
 /** Tests, browser specs and their fixtures: everything a test program holds. */
 export function isTestFile(file) {
   return (
@@ -47,20 +49,21 @@ export function planPrograms(files, shards) {
     const folder = parts.length > 2 ? parts.slice(0, 2).join('/') : parts[0];
     byFolder.set(folder, [...(byFolder.get(folder) ?? []), file]);
   }
-  /** @type {string[][]} */
-  const groups = Array.from({length: Math.max(1, shards)}, () => []);
-  const largestFirst = [...byFolder].sort(
-    (a, b) => b[1].length - a[1].length || (a[0] < b[0] ? -1 : 1),
+  const legs = splitByDuration(
+    [...byFolder.keys()],
+    Math.max(1, shards),
+    folder => byFolder.get(folder)?.length ?? 0,
   );
-  for (const [, tests] of largestFirst) {
-    const smallest = groups.reduce((a, b) => (b.length < a.length ? b : a));
-    smallest.push(...tests);
-  }
   return [
     source,
-    ...groups
-      .filter(group => group.length > 0)
-      .map(group => [...new Set([...ambient, ...group.sort()])]),
+    ...legs
+      .filter(folders => folders.length > 0)
+      .map(folders => [
+        ...new Set([
+          ...ambient,
+          ...folders.flatMap(folder => byFolder.get(folder) ?? []).sort(),
+        ]),
+      ]),
   ];
 }
 
