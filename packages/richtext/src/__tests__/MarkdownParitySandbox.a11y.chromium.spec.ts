@@ -1852,13 +1852,37 @@ for (const viewport of [DESKTOP, PHONE]) {
         .locator('[data-parity-anchor]')
         .evaluate(element => ({...(element as HTMLElement).dataset}));
       expect(await axeViolations(page)).toEqual([]);
+      const editGeometry = await surfaceGeometry(page, edit);
+      // spec:AST-061 FR9: edit mode offsets the whole document by one constant
+      // amount, and every block keeps its top and height within 2px after it.
+      // A paragraph that gained or lost a line changes height by a line.
+      const readBlocks = readGeometry.blocks.filter(block => block.copy === 1);
+      const editBlocks = new Map(
+        editGeometry.blocks
+          .filter(block => block.copy === 1)
+          .map(block => [block.key, block]),
+      );
+      const pairs = readBlocks.flatMap(block => {
+        const edited = editBlocks.get(block.key);
+        return edited == null ? [] : [{block, edited}];
+      });
+      expect(pairs.length).toBeGreaterThan(0);
+      const offset = pairs[0].edited.top - pairs[0].block.top;
+      for (const {block, edited} of pairs) {
+        expect
+          .soft(Math.abs(edited.top - block.top - offset), `${block.key} top`)
+          .toBeLessThanOrEqual(2);
+        expect
+          .soft(Math.abs(edited.height - block.height), `${block.key} height`)
+          .toBeLessThanOrEqual(2);
+      }
       await capture(page, `${name}--edit`, {
         story: STORY.toggle,
         viewport,
         globals: `neutral ${colorMode} ltr`,
         mode: 'edit',
         anchor,
-        geometry: await surfaceGeometry(page, edit),
+        geometry: editGeometry,
       });
 
       // Back to read with the keyboard: the control is reachable without a pointer.

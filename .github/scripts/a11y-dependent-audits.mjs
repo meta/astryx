@@ -170,9 +170,9 @@ export function changedComponents(changed) {
  * @param {Record<string, number>} options.seconds
  * @param {number} [options.attempt] the run's attempt; 1 for its first run
  * @param {boolean} [options.everything] the changed files are unknown (a diff
- *   GitHub truncates) and everything is in scope: every audit and contract
- *   spec is owed, the run fits what it can, and the record is never complete,
- *   so the pull request does not merge until it is split
+ *   GitHub truncates, or a scope that could not be read) and everything is in
+ *   scope: every audit is owed, the run fits what it can, and the record is
+ *   never complete
  */
 export function planDependentAudits({
   changed,
@@ -228,22 +228,17 @@ export function planDependentAudits({
   return {...base, files, deferred, complete: deferred.length === 0, ...legs};
 }
 
-/** The modes a pull request's contracts and audits run. */
-const OWED_MODES = ['audit', 'scoped', 'release-only', 'always'];
-
 /**
- * An undecided scope's plan: every audit and contract spec is owed, audits
- * first; one run fits what it can and lists the rest; it is never complete.
+ * An undecided scope's plan: every audit is owed; one run fits what it can
+ * and lists the rest; it is never complete.
  * @param {{file: string, mode: string}[]} specs
  * @param {Record<string, number>} seconds
  */
 function planEverything(specs, seconds) {
-  const owed = OWED_MODES.flatMap(mode =>
-    specs
-      .filter(spec => spec.mode === mode)
-      .map(({file}) => file)
-      .sort(),
-  );
+  const owed = specs
+    .filter(spec => spec.mode === 'audit')
+    .map(({file}) => file)
+    .sort();
   /** @type {string[]} */
   const files = [];
   /** @type {string[]} */
@@ -267,6 +262,23 @@ function planEverything(specs, seconds) {
 }
 
 export const TOO_LARGE = 'diff too large to scope (>3,000 files); split the PR';
+export const UNDECIDED =
+  'the changed files could not be read; re-run all jobs at this head';
+
+/**
+ * What an undecided scope's run says: a truncated file list needs a split,
+ * any other undecided scope a re-run.
+ * @param {{deferred: string[]}} plan
+ * @param {boolean} truncated
+ */
+export function undecidedMessage(plan, truncated) {
+  const why = truncated ? TOO_LARGE : UNDECIDED;
+  const title = truncated ? 'Diff too large to scope' : 'Scope not decided';
+  return {
+    annotation: `::error title=${title}::${why}. ${plan.deferred.length} owed audit spec files do not run, so merge-guard does not merge this head.`,
+    summary: `${why}. Not run (${plan.deferred.length}):`,
+  };
+}
 
 function main() {
   const argv = process.argv.slice(2);
@@ -277,6 +289,7 @@ function main() {
   const root = process.cwd();
   const changedFile = value('--changed');
   const everything = argv.includes('--all');
+  const truncated = argv.includes('--truncated');
   const out = value('--out');
   const attempt = Number(value('--attempt') ?? '1');
   if (
@@ -333,9 +346,7 @@ function main() {
     );
     for (const file of plan.files) console.log(`  ${file}`);
     if (plan.everything) {
-      console.log(
-        `::error title=Diff too large to scope::${TOO_LARGE}. ${plan.deferred.length} owed spec files do not run, so merge-guard does not merge this head.`,
-      );
+      console.log(undecidedMessage(plan, truncated).annotation);
     } else if (plan.deferred.length > 0) {
       console.log(
         `::warning title=Audits not yet run::${plan.deferred.length} owed audit spec files do not fit three legs of ten minutes. Re-run all jobs at this head to run every owed audit; merge-guard merges only on a run that ran them all.`,
@@ -364,7 +375,7 @@ function main() {
       process.env.GITHUB_STEP_SUMMARY,
       `### Dependent audits\n\nRan (${plan.files.length}):\n\n${list(plan.files)}\n\n` +
         (plan.everything
-          ? `${TOO_LARGE}. Not run (${plan.deferred.length}):\n\n${list(plan.deferred)}\n`
+          ? `${undecidedMessage(plan, truncated).summary}\n\n${list(plan.deferred)}\n`
           : plan.deferred.length
             ? `Not yet run (${plan.deferred.length}); re-run all jobs at this head:\n\n${list(plan.deferred)}\n`
             : 'Every owed audit ran.\n'),

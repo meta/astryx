@@ -217,6 +217,82 @@ export interface TouchDriver {
   play(script: TouchScript, options?: PlayOptions): Promise<PlayedEvent[]>;
   /** A tap through the engine's tap path (WebKit synthesises click only from this). */
   tap(at: Point): Promise<void>;
+  /**
+   * Puts a finger down at `at` and keeps it there: only the touch-down is
+   * sent, as a play's first step. The finger moves and lifts through the
+   * handle, each call one event. Its timing is the caller's, so it is never
+   * judged for pacing. A lift that `holdInputUntil` places then races the
+   * hold alone, after the page is thawed.
+   */
+  press(at: Point, options?: {readonly id?: number}): Promise<HeldTouch>;
+}
+
+/** A finger that `TouchDriver.press` holds down. */
+export interface HeldTouch {
+  readonly id: number;
+  /** Moves the finger to `to`; every other finger held stays where it is. */
+  move(to: Point): Promise<void>;
+  /** Lifts the finger: only its touch-up is sent. */
+  lift(): Promise<void>;
+}
+
+/**
+ * The fingers a driver holds down between calls. `dispatch` sends one event
+ * with the finger that changed and every finger down after it.
+ */
+function heldFingers(
+  dispatch: (
+    type: TouchEventStep['type'],
+    changed: Finger,
+    down: readonly Finger[],
+  ) => Promise<void>,
+) {
+  const down = new Map<number, Finger>();
+  return {
+    get size() {
+      return down.size;
+    },
+    async press(at: Point, {id = 0}: {readonly id?: number} = {}) {
+      if (down.has(id)) {
+        throw new Error(`touchDriver: finger ${id} is already down`);
+      }
+      const finger = {id, x: at.x, y: at.y};
+      down.set(id, finger);
+      await dispatch('touchStart', finger, [...down.values()]);
+      let lifted = false;
+      const live = () => {
+        if (lifted) {
+          throw new Error(`touchDriver: finger ${id} was lifted`);
+        }
+      };
+      const held: HeldTouch = {
+        id,
+        async move(to) {
+          live();
+          const moved = {id, x: to.x, y: to.y};
+          down.set(id, moved);
+          await dispatch('touchMove', moved, [...down.values()]);
+        },
+        async lift() {
+          live();
+          lifted = true;
+          const last = down.get(id) ?? finger;
+          down.delete(id);
+          await dispatch('touchEnd', last, [...down.values()]);
+        },
+      };
+      return held;
+    },
+  };
+}
+
+/** A play or a tap cannot share the screen with fingers `press` holds down. */
+function assertNoneHeld(held: {readonly size: number}): void {
+  if (held.size > 0) {
+    throw new Error(
+      `touchDriver: lift the ${held.size} finger${held.size === 1 ? '' : 's'} press holds down before a play or a tap`,
+    );
+  }
 }
 
 /**
@@ -937,12 +1013,28 @@ async function chromiumDriver(page: Page): Promise<TouchDriver> {
       radiusY: 1,
       force: 1,
     }));
+  // A start or move lists every finger down. An end lists the finger that
+  // lifts while others stay down, and none for the last lift, as play does.
+  const held = heldFingers(async (type, changed, down) => {
+    await cdp.send('Input.dispatchTouchEvent', {
+      type,
+      touchPoints:
+        type !== 'touchEnd'
+          ? touchPoints(down)
+          : down.length > 0
+            ? touchPoints([changed])
+            : [],
+      timestamp: Date.now() / 1000,
+    });
+  });
   return {
     engine: 'chromium',
     scriptedTimestamps: true,
     drivesNativeGestures: true,
     partialLifts: true,
+    press: (at, options) => held.press(at, options),
     async play(script, options = {}) {
+      assertNoneHeld(held);
       // Stamps follow the wall clock the page's own clock is on: with real-time
       // pacing an event's stamp and its dispatch agree to ~0.1 ms.
       const base = Date.now();
@@ -970,6 +1062,7 @@ async function chromiumDriver(page: Page): Promise<TouchDriver> {
       );
     },
     async tap(at) {
+      assertNoneHeld(held);
       await page.touchscreen.tap(at.x, at.y);
     },
   };
@@ -1135,12 +1228,20 @@ async function webkitDriver(page: Page): Promise<TouchDriver> {
   // (an empty list releases nothing), a move every finger down.
   const points = (fingers: readonly Finger[]) =>
     fingers.map(f => ({x: Math.round(f.x), y: Math.round(f.y), id: f.id}));
+  const held = heldFingers(async (type, changed, down) => {
+    await session.send('Input.dispatchTouchEvent', {
+      type,
+      touchPoints: points(type === 'touchMove' ? down : [changed]),
+    });
+  });
   return {
     engine: 'webkit',
     scriptedTimestamps: false,
     drivesNativeGestures: false,
     partialLifts: false,
+    press: (at, options) => held.press(at, options),
     async play(script, options = {}) {
+      assertNoneHeld(held);
       return playSteps(
         script,
         options,
@@ -1157,6 +1258,7 @@ async function webkitDriver(page: Page): Promise<TouchDriver> {
       ).then(played => played.map(p => ({...p, timestamp: null})));
     },
     async tap(at) {
+      assertNoneHeld(held);
       await page.touchscreen.tap(Math.round(at.x), Math.round(at.y));
     },
   };

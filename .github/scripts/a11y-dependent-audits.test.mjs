@@ -11,7 +11,9 @@
  * names, within at most three legs of about ten minutes each.
  */
 
+import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 import {describe, expect, it} from 'vitest';
@@ -28,6 +30,8 @@ import {
   PRIMITIVES_FILE,
   readPrimitives,
   TOO_LARGE,
+  UNDECIDED,
+  undecidedMessage,
 } from './a11y-dependent-audits.mjs';
 import {
   fileSeconds,
@@ -245,17 +249,15 @@ describe('an undecided scope', () => {
       everything: true,
     });
 
-  it('owes every audit and contract, runs what fits, and is never complete', () => {
-    const owedModes = ['audit', 'scoped', 'release-only', 'always'];
+  it('owes every audit, runs what fits, and is never complete', () => {
     const expected = specs
-      .filter(({mode}) => owedModes.includes(mode))
+      .filter(({mode}) => mode === 'audit')
       .map(({file}) => file)
       .sort();
     for (const attempt of [1, 2]) {
       const plan = everything(attempt);
       expect([...plan.owed].sort()).toEqual(expected);
       expect([...plan.files, ...plan.deferred].sort()).toEqual(expected);
-      expect(plan.deferred.length).toBeGreaterThan(0);
       expect(plan.complete).toBe(false);
       expect(plan.count).toBeLessThanOrEqual(MAX_LEGS);
       expect(plan.longestMs).toBeLessThanOrEqual(
@@ -264,10 +266,52 @@ describe('an undecided scope', () => {
     }
   });
 
-  it('tells the author to split the pull request', () => {
-    expect(TOO_LARGE).toBe(
+  it('asks for a split only when GitHub truncated the file list', () => {
+    const plan = {deferred: ['a', 'b']};
+    const truncated = undecidedMessage(plan, true);
+    expect(truncated.annotation).toContain(
       'diff too large to scope (>3,000 files); split the PR',
     );
+    expect(truncated.summary).toContain(TOO_LARGE);
+    const unread = undecidedMessage(plan, false);
+    expect(unread.annotation).toContain(
+      'the changed files could not be read; re-run all jobs at this head',
+    );
+    expect(unread.annotation).not.toContain('split the PR');
+    expect(unread.summary).toContain(UNDECIDED);
+  });
+
+  it('prints the message the scope calls for', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dependent-audits-'));
+    try {
+      const run = args =>
+        execFileSync(
+          process.execPath,
+          [
+            '.github/scripts/a11y-dependent-audits.mjs',
+            ...args,
+            '--out',
+            path.join(dir, 'record.json'),
+          ],
+          {
+            cwd: root,
+            encoding: 'utf8',
+            env: {...process.env, GITHUB_OUTPUT: '', GITHUB_STEP_SUMMARY: ''},
+          },
+        );
+      expect(run(['--all', '--truncated'])).toContain(
+        `::error title=Diff too large to scope::${TOO_LARGE}`,
+      );
+      expect(run(['--all'])).toContain(
+        `::error title=Scope not decided::${UNDECIDED}`,
+      );
+      const record = JSON.parse(
+        fs.readFileSync(path.join(dir, 'record.json'), 'utf8'),
+      );
+      expect(record.complete).toBe(false);
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
   });
 });
 

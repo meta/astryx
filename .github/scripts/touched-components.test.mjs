@@ -759,9 +759,14 @@ describe('pr-component-a11y-contracts routing', () => {
       "steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == '' && steps.scope.outputs.decided == 'false'",
     );
     expect(every.run).toContain('git ls-files > "$RUNNER_TEMP/every-file.txt"');
+    // The changed-spec list reads only the scope's own list: every file
+    // counted as changed would make every spec a changed spec.
+    expect(
+      contractStep('Find the changed browser accessibility specs').env
+        .FILES_PATH,
+    ).toBe('${{ steps.scope.outputs.changed_files_path }}');
     for (const name of [
       'Decide the touched components',
-      'Find the changed browser accessibility specs',
       "Run the touched components' accessibility contracts",
     ]) {
       expect(contractStep(name).env.FILES_PATH, name).toBe(
@@ -945,6 +950,7 @@ describe('the audit of changed stories no other audit covers', () => {
     const os = await import('node:os');
     const path = await import('node:path');
     const {execFileSync} = await import('node:child_process');
+    const {fileURLToPath} = await import('node:url');
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'touched-stories-'));
     try {
       const run = files => {
@@ -955,7 +961,7 @@ describe('the audit of changed stories no other audit covers', () => {
         execFileSync(
           'node',
           [
-            new URL('./touched-components.mjs', import.meta.url).pathname,
+            fileURLToPath(new URL('./touched-components.mjs', import.meta.url)),
             'scope',
             '--analysis',
             path.join(dir, 'analysis.json'),
@@ -990,6 +996,7 @@ describe('the audit of changed stories no other audit covers', () => {
     const os = await import('node:os');
     const path = await import('node:path');
     const {execFileSync} = await import('node:child_process');
+    const {fileURLToPath} = await import('node:url');
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'touched-contracts-'));
     try {
       const owners = [
@@ -1014,7 +1021,7 @@ describe('the audit of changed stories no other audit covers', () => {
       execFileSync(
         'node',
         [
-          new URL('./touched-components.mjs', import.meta.url).pathname,
+          fileURLToPath(new URL('./touched-components.mjs', import.meta.url)),
           'scope',
           '--analysis',
           path.join(dir, 'analysis.json'),
