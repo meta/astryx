@@ -4,41 +4,43 @@
 
 The owner's goal: "The main goals are consistent timings and well-coordinated pieces." The rules serve it: springs for a component whose main interaction is a gesture, including the moves a tap starts inside it; curve tokens for a component whose main interaction is a tap, tap-to-expand included; the nearest-token mapping for a measured duration; one coordinated scale for springs and curves through `tempo`, each spring paired with a timing tier (`spec:AST-094` FR45); and no per-component exceptions and no platform-native option. The owner's guidance: "The guidance im thinking is: timing should be coordinated between spring and motion curve tokens, then use spring for gestures where velocity matters, use motion curves for taps presses and other non gesture motion." A component whose main interaction is a gesture plays springs for its motion, including moves a tap starts inside it (a tap on a sheet detent or a close button settles on the same spring), so its pieces stay coordinated. A component whose main interaction is a tap plays the theme's curve tokens (duration and easing, scaled by `tempo`), never a spring, since a tap carries no velocity; no character or option plays a platform-measured curve for it (owner decision, 2026-11-04). `spec:AST-094` FR45 lists which components each covers. Every motion role a registered table lists (`spec:AST-094` FR4, DEC-5): its kind, its default as the table measures it, and the record that names it. A role FR4 lists is named by FR4; any other role is one a component's own record measures, named by the current component records that carry its id. In a component whose main interaction is a tap, a role plays only for motion a gesture drives; in a gesture component, its roles also settle the moves a tap, a key or the program starts (`spec:AST-094` FR45). In a component whose main interaction is a tap, motion that a tap, a click, a hold, a key or the program starts plays the theme's duration and easing tokens, and an exit it starts plays the theme's exit duration and easing (`spec:AST-094` FR7), and a role measured for that motion stays as the native reference. Two approved motions keep their springs until their own records change: the animator's `animate` (`spec:AST-107` FR3) and `useDragToSnapPoints`'s `settleTo` (`spec:AST-107`). AST-105's glide, swap and edge reveal are tap-started layout motion and play the theme's curve tokens, except a gesture's release, which settles on its spring (`spec:AST-105` FR4). Reduce Motion substitutions and continuous busy loops (such as ProgressBar's indeterminate pulse, `component:ProgressBar` FR6) keep their named roles; they are neither gesture- nor interaction-started motion. Measured input timings, such as gesture thresholds, hold durations and flick speeds, are not motion roles.
 
-| Role                            | Kind     | Default                                                         | Named by                |
-| ------------------------------- | -------- | --------------------------------------------------------------- | ----------------------- |
-| `picker.tapSpin.durationMs`     | duration | 300 ms                                                          | `component:DateInput`   |
-| `progress.curves.fill`          | curve    | cubic-bezier(0, 0, 1, 1)                                        | `component:ProgressBar` |
-| `progress.fillTrackMs`          | duration | 1000 ms                                                         | `component:ProgressBar` |
-| `progress.reducedMotionPulseMs` | duration | 2000 ms                                                         | `component:ProgressBar` |
-| `segmented.selectionSpring`     | spring   | response 0.4 s, damping ratio 0.85                              | `spec:AST-094` FR4      |
-| `springs.contextMenuDismiss`    | spring   | response 0.35 s, damping ratio 0.85                             | `spec:AST-094` FR4      |
-| `springs.contextMenuLift`       | spring   | response 0.32 s, damping ratio 0.8                              | `spec:AST-094` FR4      |
-| `springs.contextMenuMorph`      | spring   | response 0.3 s, damping ratio 0.8                               | `spec:AST-094` FR4      |
-| `springs.directChange`          | spring   | response 0.5 s, damping ratio 0.825                             | `spec:AST-094` FR4      |
-| `springs.emphasis`              | spring   | duration 0.5 s, bounce 0.3                                      | `spec:AST-094` FR4      |
-| `springs.fingerTracking`        | spring   | response 0.15 s, damping ratio 0.86                             | `spec:AST-094` FR4      |
-| `springs.menuClose`             | spring   | response 0.35 s, damping ratio 0.85                             | `spec:AST-094` FR4      |
-| `springs.menuOpen`              | spring   | response 0.32 s, damping ratio 0.8                              | `spec:AST-094` FR4      |
-| `springs.quickChange`           | spring   | duration 0.5 s, bounce 0.15                                     | `spec:AST-094` FR4      |
-| `springs.settle`                | spring   | duration 0.5 s, bounce 0                                        | `spec:AST-094` FR4      |
-| `springs.sheetDismissSwipe`     | spring   | response 0.3441442326 s, damping ratio 0.8                      | `component:BottomSheet` |
-| `springs.sliderDrop`            | spring   | response 0.5 s, damping ratio 0.7                               | `component:Slider`      |
-| `springs.sliderLift`            | spring   | response 0.215 s, damping ratio 0.6                             | `component:Slider`      |
-| `springs.sliderRelease`         | spring   | response 0.4 s, damping ratio 1                                 | `component:Slider`      |
-| `springs.stateChange`           | spring   | response 0.55 s, damping ratio 1                                | `spec:AST-094` FR4      |
-| `springs.subMenuBack`           | spring   | response 0.4 s, damping ratio 1                                 | `spec:AST-094` FR4      |
-| `springs.subMenuOpen`           | spring   | response 0.4 s, damping ratio 0.85                              | `spec:AST-094` FR4      |
-| `springs.timedChange`           | spring   | duration 0.5 s, bounce 0                                        | `spec:AST-094` FR4      |
-| `springs.viewChange`            | spring   | mass 3, stiffness 1000, damping 500                             | `spec:AST-094` FR4      |
-| `switchControl.lift`            | spring   | response 0.23 s, damping ratio 0.55                             | `component:Switch`      |
-| `switchControl.minimumLiftMs`   | duration | 235 ms                                                          | `component:Switch`      |
-| `switchControl.settle`          | spring   | response 0.5 s, damping ratio 0.7                               | `component:Switch`      |
-| `switchControl.tracking`        | spring   | response 0.36 s, damping ratio 1                                | `component:Switch`      |
-| `switchControl.travel`          | spring   | response 0.3 s, damping ratio 1                                 | `component:Switch`      |
-| `switchControl.wellOff`         | spring   | mass 1, stiffness 246.74011002723395, damping 31.41592653589793 | `component:Switch`      |
-| `switchControl.wellOn`          | spring   | mass 1, stiffness 85.37720070146501, damping 18.47995678582231  | `component:Switch`      |
-| `timing.curves.entrance`        | curve    | cubic-bezier(0, 0, 0.58, 1)                                     | `spec:AST-094` FR4      |
-| `timing.curves.exit`            | curve    | cubic-bezier(0.42, 0, 1, 1)                                     | `spec:AST-094` FR4      |
-| `timing.curves.move`            | curve    | cubic-bezier(0.42, 0, 0.58, 1)                                  | `spec:AST-094` FR4      |
-| `timing.curves.viewChange`      | curve    | cubic-bezier(0.25, 0.1, 0.25, 1)                                | `spec:AST-094` FR4      |
-| `timing.stateChangeMs`          | duration | 250 ms                                                          | `spec:AST-094` FR4      |
+| Role                                      | Kind     | Default                                                         | Named by                |
+| ----------------------------------------- | -------- | --------------------------------------------------------------- | ----------------------- |
+| `picker.tapSpin.durationMs`               | duration | 300 ms                                                          | `component:DateInput`   |
+| `progress.curves.fill`                    | curve    | cubic-bezier(0, 0, 1, 1)                                        | `component:ProgressBar` |
+| `progress.fillTrackMs`                    | duration | 1000 ms                                                         | `component:ProgressBar` |
+| `progress.reducedMotionPulseMs`           | duration | 2000 ms                                                         | `component:ProgressBar` |
+| `segmented.selectionSpring`               | spring   | response 0.4 s, damping ratio 0.85                              | `spec:AST-094` FR4      |
+| `springs.contextMenuDismiss`              | spring   | response 0.35 s, damping ratio 0.85                             | `spec:AST-094` FR4      |
+| `springs.contextMenuLift`                 | spring   | response 0.32 s, damping ratio 0.8                              | `spec:AST-094` FR4      |
+| `springs.contextMenuMorph`                | spring   | response 0.3 s, damping ratio 0.8                               | `spec:AST-094` FR4      |
+| `springs.directChange`                    | spring   | response 0.5 s, damping ratio 0.825                             | `spec:AST-094` FR4      |
+| `springs.emphasis`                        | spring   | duration 0.5 s, bounce 0.3                                      | `spec:AST-094` FR4      |
+| `springs.fingerTracking`                  | spring   | response 0.15 s, damping ratio 0.86                             | `spec:AST-094` FR4      |
+| `springs.menuClose`                       | spring   | response 0.35 s, damping ratio 0.85                             | `spec:AST-094` FR4      |
+| `springs.menuOpen`                        | spring   | response 0.32 s, damping ratio 0.8                              | `spec:AST-094` FR4      |
+| `springs.quickChange`                     | spring   | duration 0.5 s, bounce 0.15                                     | `spec:AST-094` FR4      |
+| `springs.settle`                          | spring   | duration 0.5 s, bounce 0                                        | `spec:AST-094` FR4      |
+| `springs.sheetDismissSwipe`               | spring   | response 0.3441442326 s, damping ratio 0.8                      | `component:BottomSheet` |
+| `springs.sliderDrop`                      | spring   | response 0.5 s, damping ratio 0.7                               | `component:Slider`      |
+| `springs.sliderLift`                      | spring   | response 0.215 s, damping ratio 0.6                             | `component:Slider`      |
+| `springs.sliderRelease`                   | spring   | response 0.4 s, damping ratio 1                                 | `component:Slider`      |
+| `springs.stateChange`                     | spring   | response 0.55 s, damping ratio 1                                | `spec:AST-094` FR4      |
+| `springs.subMenuBack`                     | spring   | response 0.4 s, damping ratio 1                                 | `spec:AST-094` FR4      |
+| `springs.subMenuOpen`                     | spring   | response 0.4 s, damping ratio 0.85                              | `spec:AST-094` FR4      |
+| `springs.timedChange`                     | spring   | duration 0.5 s, bounce 0                                        | `spec:AST-094` FR4      |
+| `springs.viewChange`                      | spring   | mass 3, stiffness 1000, damping 500                             | `spec:AST-094` FR4      |
+| `switchControl.lift`                      | spring   | response 0.23 s, damping ratio 0.55                             | `component:Switch`      |
+| `switchControl.minimumLiftMs`             | duration | 235 ms                                                          | `component:Switch`      |
+| `switchControl.settle`                    | spring   | response 0.5 s, damping ratio 0.7                               | `component:Switch`      |
+| `switchControl.tracking`                  | spring   | response 0.36 s, damping ratio 1                                | `component:Switch`      |
+| `switchControl.travel`                    | spring   | response 0.3 s, damping ratio 1                                 | `component:Switch`      |
+| `switchControl.wellOff`                   | spring   | mass 1, stiffness 246.74011002723395, damping 31.41592653589793 | `component:Switch`      |
+| `switchControl.wellOn`                    | spring   | mass 1, stiffness 85.37720070146501, damping 18.47995678582231  | `component:Switch`      |
+| `timing.curves.entrance`                  | curve    | cubic-bezier(0, 0, 0.58, 1)                                     | `spec:AST-094` FR4      |
+| `timing.curves.exit`                      | curve    | cubic-bezier(0.42, 0, 1, 1)                                     | `spec:AST-094` FR4      |
+| `timing.curves.move`                      | curve    | cubic-bezier(0.42, 0, 0.58, 1)                                  | `spec:AST-094` FR4      |
+| `timing.curves.viewChange`                | curve    | cubic-bezier(0.25, 0.1, 0.25, 1)                                | `spec:AST-094` FR4      |
+| `timing.stateChangeMs`                    | duration | 250 ms                                                          | `spec:AST-094` FR4      |
+| `zoomMedia.dismiss.dismissPositionSpring` | spring   | mass 1, stiffness 918.09, damping 60.6                          | `component:Lightbox`    |
+| `zoomMedia.dismiss.dismissSizeSpring`     | spring   | mass 1, stiffness 947.14, damping 61.55                         | `component:Lightbox`    |

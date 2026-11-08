@@ -14,6 +14,7 @@ verified_by:
   [
     packages/core/src/DateInput/MonthScrollerSettle.test.tsx,
     packages/core/src/DateInput/DateInput.test.tsx,
+    packages/core/src/DateInput/TouchDateToday.ssr.test.tsx,
     packages/core/src/DateInput/DateInput.fr10.test.tsx,
     packages/core/src/DateInput/DateInput.calendar.test.tsx,
     packages/core/src/DateInput/DateInput.calendarPresentation.test.tsx,
@@ -47,6 +48,7 @@ architecture:
 contributing: []
 system_specs:
   [
+    spec:AST-013/FR9,
     spec:AST-013/FR12,
     spec:AST-020/FR15,
     spec:AST-043,

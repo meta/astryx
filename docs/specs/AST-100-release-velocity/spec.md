@@ -115,6 +115,12 @@ means for them.
   (FR3).
 - A component that later reads gesture velocity, such as paging, a wheel
   picker, a navigation pop, or interactive dismiss, reads it from the tracker.
+- **Sparse move streams.** The filter weighs the interval from touch-down to the
+  first move like any other, as UIKit does. For a touch-down and three moves,
+  that interval carries 0.6 of a scrolling surface's release. A stream whose
+  first move comes late, with later moves on cadence, reads lower. Engines that
+  stamp that move differently can read one flick on either side of a component's
+  threshold.
 
 ## Verification
 
@@ -125,6 +131,10 @@ means for them.
 | FR3      | Component tests at each threshold                                                                                                     | a flick just under and just over a component's threshold; the same velocity across two components                                   | Two components of the same kind reading different velocities for the same flick, or a threshold other than `spec:AST-107`'s `flickThreshold` reachable from public API |
 | FR4      | Unit tests with handler delay and per-pointer streams, plus real-browser pointer-event streams in Safari on iOS and Chrome on Android | delayed handlers with fixed event timestamps; touch, pen, and mouse streams                                                         | Velocity that changes with handler delay or pointer type                                                                                                               |
 | FR5      | Component tests in both directions                                                                                                    | a flick toward the inline end in left-to-right and right-to-left                                                                    | A flick toward the inline end treated as the opposite action in right-to-left                                                                                          |
+
+A three-move flick whose first move comes late is informational in WebKit, not a
+required row. WebKit's injected touches carry their arrival time, so its release
+can fall on either side of a component's threshold.
 
 ## Decision log
 
@@ -144,6 +154,16 @@ with each component as internal tuning, so components keep their feel without
 a second estimator.
 
 Rejected: a fixed time window, which reads quick flicks much faster than iOS; iOS's blend with no stillness reset, which flings after a rest; and several selectable estimators or per-component filters, which reintroduce the disagreement this record removes.
+
+### DEC-2 — Release velocity stays cadence-dependent
+
+**Reference:** `spec:AST-100/DEC-2`
+**Decider:** Specs consistency ruling, 2026-11-08, applying DEC-1
+
+Coalesced samples and time-weighted intervals would make release speed
+independent of how many moves an engine delivers, but they read quick flicks
+faster than iOS, which DEC-1's reason rejects; the filter stays as DEC-1 records
+it, and the engine split is the Sparse move streams gap.
 
 ## Open questions
 

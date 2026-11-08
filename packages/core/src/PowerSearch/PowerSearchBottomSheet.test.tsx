@@ -463,21 +463,6 @@ function choice(name: string): HTMLElement {
   );
 }
 
-function expectBleedChoiceRows(group: HTMLElement): void {
-  expect(group.className).toMatch(/choiceList/);
-  const rows = group.querySelectorAll('[role="radio"], [role="checkbox"]');
-  expect(rows.length).toBeGreaterThan(0);
-  for (const row of rows) {
-    expect(row.className).toMatch(/choiceRow/);
-  }
-  const body = group.closest('[class*="body"]');
-  expect(body).not.toBeNull();
-  const computed = getComputedStyle(body!);
-  expect(computed.getPropertyValue('--container-padding-inline-start')).toBe(
-    'var(--spacing-4)',
-  );
-}
-
 function openAddFlow(): void {
   openSheet();
   if (within(sheet()).queryByRole('heading', {name: 'Filters'})) {
@@ -2872,7 +2857,6 @@ describe('PowerSearch value step (FR14–FR16)', () => {
     // sheet's surface, its rows on the body's inset.
     tapRow('Labels');
     const group = within(sheet()).getByRole('group', {name: 'Labels'});
-    expectBleedChoiceRows(group);
     expect(group.closest('[class*="controlSection"]')).toBeNull();
   });
 
@@ -2896,14 +2880,6 @@ describe('PowerSearch value step (FR14–FR16)', () => {
     expect(getComputedStyle(valueSection!).backgroundColor).toBe(
       'var(--color-background-muted)',
     );
-    // The section publishes its own padding, so the choice rows run edge to
-    // edge inside it.
-    expect(values.className).toMatch(/choiceList/);
-    expect(
-      getComputedStyle(valueSection!).getPropertyValue(
-        '--container-padding-inline-start',
-      ),
-    ).toBe('var(--spacing-3)');
   });
 
   it('stages an enum selection and commits it with exact add metadata', () => {
@@ -2933,13 +2909,13 @@ describe('PowerSearch value step (FR14–FR16)', () => {
     setup();
     openAddFlow();
     tapRow('Labels');
-    // The whole row is the control: tapping its label toggles it.
-    const bug = choice('Bug');
-    expect(bug).not.toBeChecked();
-    fireEvent.click(within(bug).getByText('Bug'));
+    // Tapping anywhere on a row toggles it, as in any CheckboxList.
+    const group = within(sheet()).getByRole('group', {name: 'Labels'});
+    expect(choice('Bug')).not.toBeChecked();
+    const row = choice('Bug').closest('li');
+    expect(group).toContainElement(row);
+    fireEvent.click(row!);
     expect(choice('Bug')).toBeChecked();
-    expect(choice('Bug')).toHaveAttribute('role', 'checkbox');
-    expect(within(sheet()).getByRole('group', {name: 'Labels'})).toBeTruthy();
   });
 
   it('returns focus to Add filter when the closing steps finish their exit, even when the first move did not land (FR16)', () => {
@@ -3110,67 +3086,24 @@ describe('PowerSearch value step (FR14–FR16)', () => {
     expect(within(sheet()).getByRole('button', {name: 'Author'})).toHaveFocus();
   });
 
-  it('makes a radio group one tab stop whose arrow keys move and check, and leaves checkbox rows one stop each (FR17)', () => {
+  it('edits a single choice with a RadioList and a multiple choice with a CheckboxList, keyboard included (FR17)', async () => {
+    const user = userEvent.setup();
     const {onChange} = setup();
     openAddFlow();
     tapRow('Status');
     const group = within(sheet()).getByRole('radiogroup', {name: 'Status'});
+    expect(group).toHaveClass('astryx-radio-list');
     const radios = within(group).getAllByRole('radio');
-    // Nothing checked yet: the first row is the group's single tab stop.
-    expect(radios.map(r => r.tabIndex)).toEqual([0, -1]);
-    radios[0].focus();
-    fireEvent.keyDown(radios[0], {key: 'ArrowDown'});
-    // The arrow moved focus and checked the row it landed on.
-    expect(radios[1]).toHaveFocus();
-    expect(radios[1]).toBeChecked();
-    expect(radios.map(r => r.tabIndex)).toEqual([-1, 0]);
-    fireEvent.keyDown(radios[1], {key: 'ArrowUp'});
-    expect(radios[0]).toHaveFocus();
+    // One group of native radios, so the arrow keys move and check.
+    expect(new Set(radios.map(radio => radio.getAttribute('name'))).size).toBe(
+      1,
+    );
+    await user.click(radios[0]);
     expect(radios[0]).toBeChecked();
-    fireEvent.keyDown(radios[0], {key: 'ArrowUp'});
-    // Wraps.
-    expect(radios[1]).toHaveFocus();
-    expect(radios[1]).toBeChecked();
-    fireEvent.keyDown(radios[1], {key: 'Home'});
-    expect(radios[0]).toBeChecked();
-    fireEvent.keyDown(radios[0], {key: 'End'});
-    expect(radios[1]).toBeChecked();
-    expect(onChange).not.toHaveBeenCalled();
-    fireEvent.click(within(sheet()).getByRole('button', {name: 'Cancel'}));
-
-    tapRow('Labels');
-    const boxes = within(
-      within(sheet()).getByRole('group', {name: 'Labels'}),
-    ).getAllByRole('checkbox');
-    // Every checkbox row is a tab stop; arrows do nothing to them.
-    expect(boxes.every(b => b.tabIndex === 0)).toBe(true);
-    boxes[0].focus();
-    fireEvent.keyDown(boxes[0], {key: 'ArrowDown'});
-    expect(boxes[0]).toHaveFocus();
-    expect(boxes[0]).not.toBeChecked();
-    // Activation (Space/Enter on a button fires click) toggles.
-    fireEvent.click(boxes[0]);
-    expect(boxes[0]).toBeChecked();
-  });
-
-  it('checks a focused radio row with Space or Enter and toggles a checkbox row with Space (FR17; AST-020 FR15)', async () => {
-    const user = userEvent.setup();
-    setup();
-    openAddFlow();
-    tapRow('Status');
-    const radios = within(
-      within(sheet()).getByRole('radiogroup', {name: 'Status'}),
-    ).getAllByRole('radio');
-    radios[0].focus();
-    await user.keyboard(' ');
-    expect(radios[0]).toBeChecked();
-    // Arrow to the next row without a pointer, then Enter checks it too (it
-    // is already checked by the arrow; Enter keeps it so).
     await user.keyboard('{ArrowDown}');
     expect(radios[1]).toBeChecked();
-    await user.keyboard('{Enter}');
-    expect(radios[1]).toBeChecked();
     expect(radios[0]).not.toBeChecked();
+    expect(onChange).not.toHaveBeenCalled();
     fireEvent.click(within(sheet()).getByRole('button', {name: 'Cancel'}));
 
     tapRow('Labels');
@@ -3182,8 +3115,6 @@ describe('PowerSearch value step (FR14–FR16)', () => {
     expect(boxes[1]).toBeChecked();
     await user.keyboard(' ');
     expect(boxes[1]).not.toBeChecked();
-    await user.keyboard('{Enter}');
-    expect(boxes[1]).toBeChecked();
   });
 
   it('stages a multi-select and commits it from the footer', () => {

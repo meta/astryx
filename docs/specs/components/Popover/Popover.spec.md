@@ -77,6 +77,12 @@ rung, so a caller whose content owns its own edges can ask for a flush surface.
 
 - The input hold starts on the first frame after the open; a touch landing
   within that frame reaches the page.
+- Popover has no viewport-rectangle anchor: it anchors to its trigger or to
+  a button through `anchorRef`. A panel whose control moved into a More menu
+  anchors to the More trigger through a `usePopover` composition whose
+  `triggerRef` receives that trigger, so the trigger keeps its menu-button
+  attributes (`component:MoreMenu` AR1). This is revisited once the headless
+  context menu's `open(at)` (`spec:AST-107` FR8) ships.
 
 ## Ownership boundary
 
@@ -456,7 +462,8 @@ light-dismisses: a tap outside it or a swipe down closes it, whatever
 `hasLightDismiss` says, so a finger always has a way out. Its fallback close
 stays hidden, as in an anchored popover. Everything else follows Popover's
 existing props. The sheet of DEC-6 is a modal BottomSheet at the sheet's tall
-height and inset by Popover's `padding`; `xstyle`, `className` and `style`
+height and inset by Popover's `padding`, below the grab bar's band at the top
+(`component:BottomSheet`, Content area inset); `xstyle`, `className` and `style`
 style its panel, and `placement`, `alignment` and `width` do not apply. The
 surface is chosen when the popover opens and stays until it closes, and the
 trigger's expanded state and controlled element follow whichever surface is

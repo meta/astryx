@@ -181,6 +181,7 @@ describe('per-job scope step', () => {
         'spec_only',
         'tooling_only',
         'touches',
+        'truncated',
         'vitest_full_suite',
       ].sort(),
     );
@@ -379,11 +380,15 @@ describe('per-job scope step', () => {
         missingBase: ['scripts/component-packages.cjs'],
       },
     ],
-  ])('puts everything in scope when %s', async (_, options) => {
+  ])('puts everything in scope when %s', async (name, options) => {
     const {outputs, messages} = await decide({
       ...options,
       inputs: {paths: INTERACTION_PATHS},
     });
+    // Only a truncated file list is one a re-run cannot decide.
+    expect(outputs.truncated).toBe(
+      name === 'GitHub truncates the file list' ? 'true' : 'false',
+    );
     expect(outputs).toMatchObject({
       spec_only: 'false',
       docsite_only: 'false',
@@ -832,5 +837,44 @@ describe('the temporary policy folder', () => {
     );
     expect(result.listed).toBe(true);
     expect(left).toEqual([]);
+  });
+});
+
+describe('the contract job on a pull request GitHub truncates', () => {
+  it('lists every file and runs, never fails, on an undecided scope', async () => {
+    const ci = yaml.parse(
+      fs.readFileSync(
+        path.join(import.meta.dirname, '../workflows/ci.yml'),
+        'utf8',
+      ),
+    );
+    const job = ci.jobs['pr-component-a11y-contracts'];
+    const scopeStep = job.steps.find(step => step.id === 'scope');
+    const {outputs} = await decide({
+      files: Array.from({length: 3001}, (_, i) => ({
+        filename: `packages/core/src/Button/file${i}.tsx`,
+        status: 'modified',
+      })),
+      inputs: scopeStep.with,
+    });
+    expect(outputs).toMatchObject({applies: 'true', decided: 'false'});
+    expect(outputs.changed_files_path ?? '').toBe('');
+    // The workflow's own conditions, read against these outputs.
+    const holds = condition =>
+      Function(
+        'outputs',
+        `return (${condition
+          .replace(
+            /steps\.scope\.outputs\.(\w+)/g,
+            (_, key) => `(outputs.${key} ?? '')`,
+          )
+          .replace(/ == /g, ' === ')
+          .replace(/ != /g, ' !== ')});`,
+      )(outputs);
+    const step = name => job.steps.find(candidate => candidate.name === name);
+    expect(holds(step('Require the changed-file list').if)).toBe(false);
+    expect(holds(step('List every file when the scope is undecided').if)).toBe(
+      true,
+    );
   });
 });
