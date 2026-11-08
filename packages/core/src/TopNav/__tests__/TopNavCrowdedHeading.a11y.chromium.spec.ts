@@ -92,7 +92,7 @@ test('a long heading truncates inside its column instead of running under the en
         el.textContent === 'Simple App',
     );
     const signIn = [...document.querySelectorAll('button')].find(button =>
-      /Sign in/.test(button.textContent ?? ''),
+      (button.textContent ?? '').includes('Sign in'),
     );
     if (heading == null || text == null || signIn == null) {
       throw new Error('the story has no heading text or Sign in button');
@@ -126,7 +126,7 @@ for (const width of [1280, 560, 480]) {
       const firstItem = [...document.querySelectorAll('a')].find(
         link =>
           heading?.contains(link) !== true &&
-          /Dashboard/.test(link.textContent ?? ''),
+          (link.textContent ?? '').includes('Dashboard'),
       );
       if (heading == null || links.length !== 2 || firstItem == null) {
         throw new Error('the story has no linked heading lines or nav item');
