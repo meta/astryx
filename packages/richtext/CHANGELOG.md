@@ -1,5 +1,40 @@
 # @astryxdesign/richtext
 
+# 0.7.11
+
+#### Fixes
+
+- In `RichTextEditor`, Backspace at the very start of a code block turns it into a paragraph holding its lines, with the caret at its start. It used to merge the code into the block above, so a heading above took the code in, and the Markdown read back as a longer heading and a stray paragraph. A code block with nothing above it, which already became a paragraph, now keeps its lines when its Markdown is read back. (#8581)
+- RichText: an image in Markdown, inline (`![alt](url)`) or by reference (`![alt][ref]`), comes back exactly as written after you edit the text around it; a shortcut reference image (`![alt]`) followed directly by a link is written in its collapsed form (`![alt][]`), so the link stays a link. Before, an edit in an image's paragraph could escape its brackets (`!\[\](…)`), so other Markdown readers saw text instead of an image. RichText has no image node: an image shows as its Markdown source, one token that Backspace deletes whole and autolinking leaves alone. A caret placed inside it moves to its edge, so typing adds text beside the image instead of replacing it. Copying it, or splitting or joining its paragraph, keeps the source. (#10356)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+- @emilyhorsman
+- @ernestt
+
+---
+
+# 0.7.10
+
+---
+
+# 0.7.9
+
+#### Fixes
+
+- RichTextExtensionNode is constructible with no arguments, as a registered node class must be. A Yjs collaboration binding builds one instance of every registered node class, with no arguments, to read its default properties, so creating a binding over an editor with this package's default nodes threw `TypeError: Cannot read properties of undefined (reading 'display')` before any document was loaded. Its `facts` now default to the same empty values the class already reads for damaged stored state, so a no-argument node reports an empty inline extension instead of throwing. A node built with facts is unchanged.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @potatowagon
+
+---
+
 # 0.7.8
 
 #### New Features

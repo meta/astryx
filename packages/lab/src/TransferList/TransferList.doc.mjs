@@ -326,6 +326,13 @@ export const docs = {
           default: 'false',
         },
         {
+          name: 'isDisabled',
+          type: 'boolean',
+          description:
+            'Disables every transfer, reorder, Clear, Add all and search control. The row controls and the search field stay focusable.',
+          default: 'false',
+        },
+        {
           name: 'searchLabel',
           type: 'string',
           description: 'Accessible label for the shared search field.',
@@ -751,6 +758,8 @@ export const docsDense = {
         selectedLabel: 'Selected-list heading and name.',
         availableLabel: 'Available-list heading and name.',
         hasSearch: 'Shared list filter; default false.',
+        isDisabled:
+          'Disable every control; rows and search stay focusable; default false.',
         searchLabel: 'Accessible search label.',
         searchPlaceholder: 'Search placeholder.',
         isReorderable: 'Enable pointer and keyboard ordering; default true.',

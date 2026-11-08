@@ -34,9 +34,9 @@ import {useLocale} from '../i18n/useLocale';
 import {useCalendarSystem} from '../i18n/useCalendarSystem';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
-import {formatInstant} from './formatInstant';
+import {formatInstant, formatZoneName} from './formatInstant';
 import {formatRelativeTime} from './formatRelativeTime';
-import {formatTooltipLines} from './tooltipEntries';
+import {formatTooltipLines, resolveTimezoneID} from './tooltipEntries';
 import type {
   TimestampTooltipEntry,
   TimestampTooltipLine,
@@ -99,6 +99,17 @@ export interface TimestampProps extends BaseProps<HTMLTimeElement> {
    */
   format?: TimestampFormat;
   /**
+   * IANA time zone the absolute formats render in, such as `'UTC'` or
+   * `'America/Los_Angeles'`. Omit (or pass `'local'`) for the viewer's own
+   * zone. An explicit zone renders identically on the server and the client,
+   * so it is the way to show an absolute time without a hydration mismatch;
+   * without it the server markup depends on the server's zone. Relative
+   * formats name no instant, so their visible text ignores it. Configured
+   * `tooltipEntries` rows still follow it. An unknown identifier warns once
+   * in development and falls back to the viewer's zone.
+   */
+  timezoneID?: string;
+  /**
    * Threshold in seconds for 'auto' format to switch from relative to date_time.
    * @default 604800 (7 days)
    */
@@ -120,6 +131,10 @@ export interface TimestampProps extends BaseProps<HTMLTimeElement> {
    * the buttons align across rows; that column is only present when some row
    * is copyable. With no entries the card shows a single default row with the
    * full absolute time in the viewer's own zone, which is copyable.
+   *
+   * An entry without its own `timezoneID` follows the Timestamp's
+   * `timezoneID` when set, else the viewer's zone; `'local'` always means
+   * the viewer's zone.
    *
    * Configuring entries also attaches the surface to absolute formats, which
    * otherwise have no hover card at all. `hasTooltip={false}` still suppresses
@@ -280,6 +295,7 @@ function isRelativeFormat(
 export function Timestamp({
   value,
   format = 'auto',
+  timezoneID: timezoneIDProp,
   autoThreshold = DEFAULT_AUTO_THRESHOLD,
   hasTooltip = true,
   tooltipEntries,
@@ -346,9 +362,10 @@ export function Timestamp({
         : 'date_time'
       : format;
 
-  // Format the display text in the viewer's own zone; only the tooltip names
-  // others. The one exception is the pre-hydration placeholder, written in
-  // UTC with its label so every zone produces the same markup.
+  // Absolute text uses `timezoneID`, else the viewer's zone. A named zone makes
+  // the text the same on the server and the client. It does not reach the UTC
+  // placeholder, the default card row or the relative name.
+  const timezoneID = resolveTimezoneID(timezoneIDProp, 'timezoneID');
   const displayText = !isValidDate
     ? ''
     : effectiveFormat === 'relative'
@@ -360,24 +377,26 @@ export function Timestamp({
               date,
               effectiveFormat,
               locale,
-              // The placeholder before hydration is Gregorian and in UTC, with
-              // its zone. The server and the client then write the same text,
-              // with or without Temporal.
+              // The pre-hydration placeholder is Gregorian and in UTC, with its zone,
+              // whatever `timezoneID` pins. The server and the client then write the
+              // same text, with or without Temporal.
               isClockPending
                 ? {timeZone: 'UTC', isTimezoneShown: true}
-                : {isTimezoneShown, calendar},
+                : {timeZone: timezoneID, isTimezoneShown, calendar},
             )
           : '';
 
   // Full absolute text for the tooltip (visible — keeps the compact timezone
   // abbreviation) and for the AT-facing aria-label, which spells the timezone
   // out in full: abbreviations like "PST" or "GMT+2" are unexpanded
-  // abbreviations to a screen-reader user (WCAG 3.1.4).
+  // abbreviations to a screen-reader user (WCAG 3.1.4). Both stay in the
+  // viewer's zone: the default hover-card row and the relative accessible name.
   const fullAbsoluteText = isValidDate
-    ? formatInstant(date, 'full', locale, {calendar})
+    ? formatInstant(date, 'full', locale, {timeZone: undefined, calendar})
     : '';
   const ariaLabelText = isValidDate
     ? formatInstant(date, 'full', locale, {
+        timeZone: undefined,
         timeZoneNameStyle: 'long',
         calendar,
       })
@@ -428,8 +447,14 @@ export function Timestamp({
   // full absolute time, itself copyable, just like a configured entry.
   const lines: ReadonlyArray<TimestampTooltipLine> =
     entries === undefined
-      ? [{value: fullAbsoluteText, isCopyable: true}]
-      : formatTooltipLines(date, entries, locale, calendar);
+      ? [
+          {
+            value: fullAbsoluteText,
+            zoneName: isValidDate ? formatZoneName(date, locale) : '',
+            isCopyable: true,
+          },
+        ]
+      : formatTooltipLines(date, entries, locale, calendar, timezoneID);
 
   const timestampProps = mergeProps(
     themeProps('timestamp', {format: effectiveFormat}),

@@ -502,8 +502,9 @@ describe('InputGroup', () => {
         screen.getByRole('group').getAttribute('aria-labelledby') ?? '',
       );
     expect(label()).toHaveTextContent('Optional');
-    const tooltipTrigger = label()?.querySelector('.astryx-icon');
-    expect(tooltipTrigger).not.toBeNull();
+    // The info button follows the label element, outside it.
+    const tooltipTrigger = label()?.nextElementSibling;
+    expect(tooltipTrigger?.tagName).toBe('BUTTON');
     expect(
       document.getElementById(
         tooltipTrigger?.getAttribute('aria-describedby') ?? '',

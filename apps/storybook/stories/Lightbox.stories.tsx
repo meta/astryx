@@ -104,6 +104,111 @@ export const WithZoom: Story = {
   },
 };
 
+/** Zoom on a photo with a caption, which sits under the fitted photo. */
+export const ZoomWithCaption: Story = {
+  render: () => {
+    const [isOpen, setIsOpen] = useState(false);
+    return (
+      <>
+        <button onClick={() => setIsOpen(true)}>Open zoom with caption</button>
+        <Lightbox
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          media={{
+            src: SAMPLE_IMAGE,
+            alt: 'Forest path',
+            caption: 'A winding path through the forest',
+          }}
+          hasZoom
+        />
+      </>
+    );
+  },
+};
+
+/**
+ * A gallery a phone can page through. Drag or flick between photos, with
+ * Photos' 40 pt gap. Pinch or double-tap a photo to zoom, and drag a zoomed
+ * photo to its edge before the next drag pages.
+ */
+export const GalleryWithZoom: Story = {
+  render: () => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [index, setIndex] = useState(0);
+    return (
+      <>
+        <button onClick={() => setIsOpen(true)}>Open gallery with zoom</button>
+        <Lightbox
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          media={GALLERY_MEDIA}
+          index={index}
+          onIndexChange={setIndex}
+          hasZoom
+        />
+      </>
+    );
+  },
+};
+
+/**
+ * A gallery whose captions differ in length: the photo keeps one box
+ * whichever pages, and so whichever captions, are rendered.
+ */
+export const GalleryWithCaptions: Story = {
+  render: () => {
+    const [isOpen, setIsOpen] = useState(false);
+    return (
+      <>
+        <button onClick={() => setIsOpen(true)}>
+          Open gallery with captions
+        </button>
+        <Lightbox
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          media={[
+            {
+              ...GALLERY_MEDIA[0],
+              caption:
+                'A winding path through the forest, past the old mill and down to the river, where the trail turns back toward the village',
+            },
+            GALLERY_MEDIA[1],
+            GALLERY_MEDIA[3],
+            {...GALLERY_MEDIA[2], caption: 'Golden hour'},
+          ]}
+          hasZoom
+        />
+      </>
+    );
+  },
+};
+
+/**
+ * A controlled gallery whose parent keeps its index, paging only with its own
+ * buttons, say while a change is confirmed. A swipe returns to the photo the
+ * parent shows.
+ */
+export const GalleryKeepsIndex: Story = {
+  render: () => {
+    const [isOpen, setIsOpen] = useState(false);
+    return (
+      <>
+        <button onClick={() => setIsOpen(true)}>
+          Open gallery that keeps its photo
+        </button>
+        <Lightbox
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          media={GALLERY_MEDIA}
+          index={0}
+          onIndexChange={() => {}}
+          hasZoom
+        />
+      </>
+    );
+  },
+};
+
 export const WithCaption: Story = {
   render: () => {
     const [isOpen, setIsOpen] = useState(false);
@@ -119,6 +224,34 @@ export const WithCaption: Story = {
             caption:
               'A beautiful forest path winding through tall trees on a misty morning',
           }}
+        />
+      </>
+    );
+  },
+};
+
+/**
+ * A gallery with a video between two photos. A drag on the video's frame
+ * pages, and a drag that starts on its controls stays the video's.
+ */
+export const GalleryWithVideo: Story = {
+  render: () => {
+    const [isOpen, setIsOpen] = useState(false);
+    return (
+      <>
+        <button onClick={() => setIsOpen(true)}>Open gallery with video</button>
+        <Lightbox
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          media={[
+            GALLERY_MEDIA[0],
+            {
+              src: 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.webm',
+              alt: 'Flower blooming',
+              type: 'video',
+            },
+            GALLERY_MEDIA[1],
+          ]}
         />
       </>
     );

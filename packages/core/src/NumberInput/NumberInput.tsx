@@ -1194,6 +1194,7 @@ export function NumberInput({
         }),
         stylex.props(
           inputWrapperStyles.base,
+          inputWrapperStyles.textField,
           styles.wrapper,
           hasNumberSteppers && styles.wrapperWithNumberSteppers,
           sizeStyles[size],

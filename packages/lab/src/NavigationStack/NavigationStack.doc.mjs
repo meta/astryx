@@ -25,7 +25,7 @@ export const docs = {
       name: 'NavigationStack',
       displayName: 'Navigation Stack',
       description:
-        "The navigator. You own the path: pass the entries pushed on the root screen and update them in onPathChange. The stack renders the root screen and one screen per entry, the top one last, keeps covered screens and their scroll positions alive, and makes them inert. The bar shows the top screen's title, its end content and a round Back button with a chevron, named by the screen it returns to. A push moves focus to the new screen's title; a pop returns it to the control that pushed the screen.",
+        "The navigator. You own the path: pass the entries pushed on the root screen and update them in onPathChange. The stack renders the root screen and one screen per entry, the top one last, keeps covered screens and their scroll positions alive, and makes them inert. The bar shows the top screen's title, its end content and a round Back button with a chevron, named by the screen it returns to. A push moves focus to the new screen's title; a pop returns it to the control that pushed the screen. Under a finger the bar paints no background and no hairline, as iOS 26's does. Once a screen's content has moved 10px under the bar, a veil of the body colour fades in at the top of that screen. Each screen keeps its own veil through a push, a pop or a back swipe. With a mouse the bar keeps its surface and hairline.",
       props: [
         {
           name: 'root',

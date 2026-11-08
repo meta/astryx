@@ -7,17 +7,18 @@
  * @output A finger's scroll reads true until the scroller's scrollend; a
  *   scroll with no finger down reads false; the page's own scroll through
  *   the document; the watch follows the ref's node and ends on unmount, and
- *   lets go of a node it stops following
+ *   lets go of a node it stops following; onEnd runs once per finger scroll
+ *   on each end path, for each watcher, and never on unmount
  * @position Unit tests of packages/core/src/gestures/useFingerScroll.ts
  */
 
 import {render} from '@testing-library/react';
 import {useRef} from 'react';
-import {afterEach, beforeEach, describe, expect, it} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {isFingerScroll} from '../fingerScroll';
 import {getGestureHost} from '../GestureHost';
 import {useFingerScroll} from '../useFingerScroll';
-import {coarsePrimaryPointer} from './pointerQuery';
+import {coarsePrimaryPointer, pointerQuery} from './pointerQuery';
 
 function touch(type: string, target: Element, down: boolean): void {
   const event = new Event(type, {bubbles: true, cancelable: true});
@@ -27,7 +28,7 @@ function touch(type: string, target: Element, down: boolean): void {
   target.dispatchEvent(event);
 }
 
-let read: () => boolean = () => false;
+let read: (at?: number) => boolean = () => false;
 
 function List({other = false}: {other?: boolean}) {
   const ref = useRef<HTMLDivElement>(null);
@@ -68,6 +69,39 @@ const followed: {current: Element | null} = {current: null};
 
 function Follower() {
   read = useFingerScroll(followed);
+  return null;
+}
+
+/** A list that counts its finger scrolls' ends, and what it read then. */
+const ends: {count: number; readAtEnd: boolean[]} = {count: 0, readAtEnd: []};
+
+function EndingList({watchers = 1}: {watchers?: number}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const onEnd = () => {
+    ends.count += 1;
+    ends.readAtEnd.push(read());
+  };
+  read = useFingerScroll(ref, {onEnd});
+  // The second watcher renders after the list, so the list's ref is set
+  // when its attachment runs.
+  return (
+    <>
+      <div ref={ref} data-testid="list">
+        <p data-testid="row">row</p>
+      </div>
+      {watchers > 1 && <SecondWatcher scroller={ref} onEnd={onEnd} />}
+    </>
+  );
+}
+
+function SecondWatcher({
+  scroller,
+  onEnd,
+}: {
+  scroller: {current: Element | null};
+  onEnd: () => void;
+}) {
+  useFingerScroll(scroller, {onEnd});
   return null;
 }
 
@@ -112,6 +146,67 @@ describe('useFingerScroll', () => {
     expect(read()).toBe(true);
     list.dispatchEvent(new Event('scrollend'));
     expect(read()).toBe(false);
+  });
+
+  it("reads a time inside a finger's scroll as the finger's after it ends, and a program scroll right after as the program's", () => {
+    const now = vi.spyOn(window.performance, 'now').mockReturnValue(100);
+    try {
+      const {getByTestId} = render(<List />);
+      const list = getByTestId('list');
+      const row = getByTestId('row');
+      touch('touchstart', row, true);
+      now.mockReturnValue(120);
+      list.dispatchEvent(new Event('scroll'));
+      now.mockReturnValue(150);
+      touch('touchend', row, false);
+      now.mockReturnValue(200);
+      list.dispatchEvent(new Event('scrollend'));
+      expect(read()).toBe(false);
+      expect(read(99)).toBe(false);
+      expect(read(130)).toBe(true);
+      expect(read(200)).toBe(true);
+      // The program scrolls right after: the observer records it later.
+      now.mockReturnValue(210);
+      list.dispatchEvent(new Event('scroll'));
+      expect(read()).toBe(false);
+      expect(read(216)).toBe(false);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it("keeps a scroll that ended under the resting finger the finger's at any time up to the lift", () => {
+    const now = vi.spyOn(window.performance, 'now').mockReturnValue(100);
+    try {
+      const {getByTestId} = render(<List />);
+      const list = getByTestId('list');
+      const row = getByTestId('row');
+      touch('touchstart', row, true);
+      now.mockReturnValue(110);
+      list.dispatchEvent(new Event('scroll'));
+      now.mockReturnValue(120);
+      list.dispatchEvent(new Event('scrollend'));
+      expect(read(115)).toBe(true);
+      now.mockReturnValue(300);
+      touch('touchend', row, false);
+      expect(read()).toBe(false);
+      expect(read(250)).toBe(true);
+      expect(read(301)).toBe(false);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it("reads a scroll the program drives with no finger as the program's at any time", () => {
+    const now = vi.spyOn(window.performance, 'now').mockReturnValue(100);
+    try {
+      const {getByTestId} = render(<List />);
+      getByTestId('list').dispatchEvent(new Event('scroll'));
+      expect(read(100)).toBe(false);
+      expect(read(50)).toBe(false);
+    } finally {
+      now.mockRestore();
+    }
   });
 
   it("reads a recognizer's own scroll as the program's, even with a finger resting inside", () => {
@@ -183,5 +278,103 @@ describe('useFingerScroll', () => {
       first.element.remove();
       second.element.remove();
     }
+  });
+
+  describe('onEnd', () => {
+    beforeEach(() => {
+      ends.count = 0;
+      ends.readAtEnd = [];
+    });
+
+    it("runs once at the scroller's scrollend after the lift, with the reader already false", () => {
+      const {getByTestId} = render(<EndingList />);
+      const list = getByTestId('list');
+      fingerScroll(list, getByTestId('row'));
+      touch('touchend', getByTestId('row'), false);
+      list.dispatchEvent(new Event('scroll'));
+      expect(ends.count).toBe(0);
+      list.dispatchEvent(new Event('scrollend'));
+      expect(ends.count).toBe(1);
+      expect(ends.readAtEnd).toEqual([false]);
+      list.dispatchEvent(new Event('scrollend'));
+      expect(ends.count).toBe(1);
+    });
+
+    it('runs at the lift when the scroll ended under a resting finger', () => {
+      const {getByTestId} = render(<EndingList />);
+      const list = getByTestId('list');
+      fingerScroll(list, getByTestId('row'));
+      list.dispatchEvent(new Event('scrollend'));
+      expect(ends.count).toBe(0);
+      touch('touchend', getByTestId('row'), false);
+      expect(ends.count).toBe(1);
+    });
+
+    it('runs after the quiet fallback where the browser fires no scrollend', () => {
+      // A browser with no scrollend (mobile Safari before 26): take jsdom's
+      // handler slot away for this test.
+      let owner: object | null = window;
+      while (owner != null && !Object.hasOwn(owner, 'onscrollend')) {
+        owner = Object.getPrototypeOf(owner) as object | null;
+      }
+      const slot =
+        owner == null
+          ? undefined
+          : Object.getOwnPropertyDescriptor(owner, 'onscrollend');
+      if (owner != null) {
+        delete (owner as Record<string, unknown>).onscrollend;
+      }
+      vi.useFakeTimers();
+      try {
+        expect('onscrollend' in window).toBe(false);
+        const {getByTestId} = render(<EndingList />);
+        const list = getByTestId('list');
+        fingerScroll(list, getByTestId('row'));
+        touch('touchend', getByTestId('row'), false);
+        vi.advanceTimersByTime(149);
+        expect(ends.count).toBe(0);
+        vi.advanceTimersByTime(1);
+        expect(ends.count).toBe(1);
+        expect(ends.readAtEnd).toEqual([false]);
+      } finally {
+        vi.useRealTimers();
+        if (owner != null && slot != null) {
+          Object.defineProperty(owner, 'onscrollend', slot);
+        }
+      }
+    });
+
+    it('runs when the primary pointer stops being coarse mid-scroll', () => {
+      restorePointer();
+      const pointer = pointerQuery(true);
+      restorePointer = pointer.restore;
+      const {getByTestId} = render(<EndingList />);
+      fingerScroll(getByTestId('list'), getByTestId('row'));
+      pointer.set(false);
+      expect(ends.count).toBe(1);
+      expect(ends.readAtEnd).toEqual([false]);
+      touch('touchend', getByTestId('row'), false);
+    });
+
+    it('gives two watchers of one scroller one call each per finger scroll', () => {
+      const {getByTestId} = render(<EndingList watchers={2} />);
+      const list = getByTestId('list');
+      fingerScroll(list, getByTestId('row'));
+      lift(list, getByTestId('row'));
+      expect(ends.count).toBe(2);
+      fingerScroll(list, getByTestId('row'));
+      lift(list, getByTestId('row'));
+      expect(ends.count).toBe(4);
+    });
+
+    it('does not run on unmount, even mid-scroll', () => {
+      const {getByTestId, unmount} = render(<EndingList />);
+      const row = getByTestId('row');
+      fingerScroll(getByTestId('list'), row);
+      unmount();
+      expect(ends.count).toBe(0);
+      touch('touchend', row, false);
+      expect(ends.count).toBe(0);
+    });
   });
 });
