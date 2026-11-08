@@ -640,6 +640,12 @@ describe('useTableColumnResize', () => {
         expect(handle).toHaveAttribute('aria-valuetext', `${now} pixels`);
       }
     });
+
+    it('says a fractional width as a whole number of pixels', () => {
+      render(<ResizeTable columnWidths={{name: 202.656}} />);
+      const handle = getResizeHandles()[0];
+      expect(handle).toHaveAttribute('aria-valuetext', '203 pixels');
+    });
   });
 
   // ===========================================================================

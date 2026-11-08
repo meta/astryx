@@ -2,7 +2,8 @@
 
 /**
  * @file windowExtent.ts
- * @input The window's innerWidth and innerHeight, and its resize events
+ * @input The window's innerWidth and innerHeight, and the shared resize
+ *   observer on the root element
  * @output readWindowExtent, standInMaximum, and a shared window-width store
  *   (subscribeToWindowWidth, readWindowWidth, readNoWindowWidth) for
  *   useSyncExternalStore
@@ -10,6 +11,8 @@
  *   entry. Resizable and Table's column resize read it for the maximum an
  *   unbounded separator announces.
  */
+
+import {observeResize} from './sharedResizeObserver';
 
 /** The window's extent along an axis, or null where there is no window. */
 export function readWindowExtent(
@@ -34,15 +37,16 @@ export function standInMaximum(
   return extent == null ? undefined : Math.max(extent, value, min);
 }
 
-// The window's width, as the shared `resize` listener last read it. A render
-// reads this value, never `innerWidth`: after a commit's DOM writes, that
-// read forces a layout. Every subscriber shares one listener. With none, the
-// value is null, because nothing keeps it current.
+// The window's width, as the shared resize observer on the root element last
+// reported it. A render reads this value, never `innerWidth`: after a
+// commit's DOM writes, that read forces a layout. Every subscriber shares one
+// observation. With none, the value is null, because nothing keeps it current.
 let windowWidth: number | null = null;
 const windowWidthListeners = new Set<() => void>();
-let isListening = false;
+let stopObserving: (() => void) | null = null;
 
-function handleWindowResize(): void {
+// The observer reports after layout, so reading the width here forces none.
+function handleRootResize(): void {
   windowWidth = window.innerWidth;
   for (const listener of windowWidthListeners) {
     listener();
@@ -52,18 +56,14 @@ function handleWindowResize(): void {
 /** Subscribes to the window's width, for `useSyncExternalStore`. */
 export function subscribeToWindowWidth(onChange: () => void): () => void {
   windowWidthListeners.add(onChange);
-  if (!isListening) {
-    window.addEventListener('resize', handleWindowResize);
-    isListening = true;
-    // A resize between the first render and this listener has no event left
-    // to deliver, so read the width now.
-    windowWidth = window.innerWidth;
-  }
+  // The observation reports once at once, so a resize between the first
+  // render and this subscription still reaches the store.
+  stopObserving ??= observeResize(document.documentElement, handleRootResize);
   return () => {
     windowWidthListeners.delete(onChange);
     if (windowWidthListeners.size === 0) {
-      window.removeEventListener('resize', handleWindowResize);
-      isListening = false;
+      stopObserving?.();
+      stopObserving = null;
       windowWidth = null;
     }
   };

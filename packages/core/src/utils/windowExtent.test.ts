@@ -3,8 +3,8 @@
 /**
  * @file windowExtent.test.ts
  * @input The shared window-width store and the stand-in maximum
- * @output One resize listener for every subscriber, a stored width that
- *   follows resizes, and a maximum never below the value or the minimum
+ * @output One root observation for every subscriber, a stored width that
+ *   follows it, and a maximum never below the value or the minimum
  * @position Colocated verification for utils/windowExtent
  */
 
@@ -20,22 +20,22 @@ afterEach(() => {
 });
 
 describe('windowExtent', () => {
-  it('shares one resize listener, and reads innerWidth only on a resize', () => {
+  it('listens to no window resize event, and reads innerWidth once per observation report', () => {
     const add = vi.spyOn(window, 'addEventListener');
+    const width = vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(640);
     const stops = [vi.fn(), vi.fn(), vi.fn()].map(listener =>
       subscribeToWindowWidth(listener),
     );
     expect(add.mock.calls.filter(([type]) => type === 'resize')).toHaveLength(
-      1,
+      0,
     );
-    const width = vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(640);
-    // Reads between resizes come from the store.
-    readWindowWidth();
-    readWindowWidth();
-    expect(width).not.toHaveBeenCalled();
-    window.dispatchEvent(new Event('resize'));
+    // The shared observation reports once when it starts; every subscriber
+    // shares that one report.
     expect(width).toHaveBeenCalledTimes(1);
     expect(readWindowWidth()).toBe(640);
+    window.dispatchEvent(new Event('resize'));
+    readWindowWidth();
+    expect(width).toHaveBeenCalledTimes(1);
     for (const stop of stops) {
       stop();
     }

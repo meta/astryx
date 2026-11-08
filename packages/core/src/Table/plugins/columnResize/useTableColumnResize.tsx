@@ -799,7 +799,7 @@ function ResizeHandle({
     ? standInMaximum(windowExtent, valueNow, minWidth)
     : maxWidth;
   const valueText = isUnbounded
-    ? t('@astryx.table.columnResize.widthValue', {width: valueNow})
+    ? t('@astryx.table.columnResize.widthValue', {width: Math.round(valueNow)})
     : undefined;
 
   return (
