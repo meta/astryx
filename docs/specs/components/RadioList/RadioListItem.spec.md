@@ -203,6 +203,9 @@ No design record beyond `design:user-states` governs RadioListItem.
 
 ## Current-state impact
 
+- **Before hydration.** An individually disabled radio can be checked, and
+  submitted when checked, from server markup until hydration, against
+  `spec:AST-085` FR2 and FR3; a wholly disabled group submits nothing.
 - **Two focus indicators (FR7).** Keyboard focus paints both Item's row outline
   and the radio indicator ring, against `architecture:interaction-modality`
   INV3.

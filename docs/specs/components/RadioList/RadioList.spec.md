@@ -206,6 +206,9 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Current-state impact
 
+- **Before hydration.** An individually disabled radio can be checked, and
+  submitted when checked, from server markup until hydration, against
+  `spec:AST-085` FR2 and FR3; a wholly disabled group submits nothing.
 - **Consumer docs.** `RadioList.doc.mjs` anatomy lists Header, Children, and
   Label/Value parts; RadioList renders a group label, options, and a status
   message, and has no header.
