@@ -34,6 +34,17 @@ import {isA11ySpecFile} from './lib/a11y-spec-files.mjs';
 export const VERSION = 1;
 
 /**
+ * Whether a changed path can change what a browser spec sees: a unit test
+ * (`*.test.*`) or a spec file (`*.spec.*`) renders nothing in the Storybook
+ * build the specs read. Shared fixtures under `__tests__/` that stories import
+ * still count.
+ * @param {string} file
+ */
+export function renders(file) {
+  return !/\.(?:test|spec)\.[^/]+$/.test(file);
+}
+
+/**
  * The components a pull request's changed paths touch: each changed source
  * file's component folder, and the component its file is named for.
  * @param {string[]} changedPaths
@@ -100,9 +111,10 @@ export function selectingScope(
  */
 export function overlappingSpecs(
   changedOnMain,
-  changedPaths,
+  allChangedPaths,
   {primitives, importers, labelled = false},
 ) {
+  const changedPaths = allChangedPaths.filter(renders);
   const routings = changedOnMain.map(spec => ({
     ...spec,
     routing: parseRouting(spec.mainSource),

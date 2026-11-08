@@ -135,7 +135,7 @@
     "jscodeshift": "^17.4.0",
     "linkedom": "^0.18.15",
     "node-diff3": "3.2.1",
-    "postcss": "^8.5.32",
+    "postcss": "^8.5.23",
     "postcss-selector-parser": "^7.1.6",
     "recast": "0.23.21",
     "zod": "^4.6.7"

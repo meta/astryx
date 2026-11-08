@@ -70,6 +70,11 @@ export interface UseTableWindowOptions<T> {
 }
 export interface TableWindowResult {
   segments: ListWindowSegment[];
+  /**
+   * Measured column widths, by column index, that fit the last logical row
+   * position in each logical-position column. Empty when not windowed.
+   */
+  logicalPositionWidths: ReadonlyMap<number, number>;
   isWindowed: boolean;
   isFixedHeight: boolean;
   onRowFocus: (key: string | number, focusTarget?: HTMLElement) => void;
@@ -100,6 +105,7 @@ interface ValidationState {
   logicalPositionColumns: ReadonlySet<number>;
   checkedRows: WeakSet<HTMLTableRowElement>;
   layoutRevision: number | undefined;
+  isPositionWidthMeasured: boolean;
   totalHeight: number;
 }
 interface Violation {
@@ -115,6 +121,103 @@ const EMPTY_GEOMETRY: TableWindowGeometry = Object.freeze({
   isMeasured: false,
 });
 const EMPTY_LOGICAL_POSITION_COLUMNS: ReadonlySet<number> = new Set();
+const EMPTY_POSITION_WIDTHS: ReadonlyMap<number, number> = new Map();
+
+function areWidthsEqual(
+  a: ReadonlyMap<number, number>,
+  b: ReadonlyMap<number, number>,
+): boolean {
+  if (a.size !== b.size) {
+    return false;
+  }
+  for (const [index, width] of a) {
+    const other = b.get(index);
+    if (other === undefined || Math.abs(other - width) > 0.5) {
+      return false;
+    }
+  }
+  return true;
+}
+
+let textContext: OffscreenCanvasRenderingContext2D | null | undefined;
+
+/** Canvas text metrics: no layout read and no DOM write. */
+function measureText(font: string, text: string): number | undefined {
+  if (textContext === undefined) {
+    textContext =
+      typeof OffscreenCanvas === 'undefined'
+        ? null
+        : new OffscreenCanvas(1, 1).getContext('2d');
+  }
+  if (textContext == null) {
+    return undefined;
+  }
+  textContext.font = font;
+  return textContext.measureText(text).width;
+}
+
+function readPixels(value: string): number {
+  return Number.parseFloat(value) || 0;
+}
+
+/**
+ * The column width that fits `text` in a logical-position cell, at the cell's
+ * own font, padding and density. It reads computed styles and canvas text
+ * metrics only, so it adds no layout read and no DOM write. Undefined when it
+ * cannot be measured.
+ */
+function measureLogicalPositionWidth(
+  cell: HTMLTableCellElement,
+  text: string,
+): number | undefined {
+  const view = cell.ownerDocument.defaultView;
+  if (view == null) {
+    return undefined;
+  }
+  const walker = cell.ownerDocument.createTreeWalker(
+    cell,
+    view.NodeFilter.SHOW_TEXT,
+  );
+  let host: HTMLElement | null = null;
+  for (let node = walker.nextNode(); node != null; node = walker.nextNode()) {
+    if (node.textContent?.trim()) {
+      host = node.parentElement;
+      break;
+    }
+  }
+  if (host == null) {
+    return undefined;
+  }
+  const style = view.getComputedStyle(host);
+  if (style.fontSize === '' || style.fontFamily === '') {
+    return undefined;
+  }
+  const font = [style.fontStyle, style.fontWeight, style.fontSize]
+    .filter(part => part !== '')
+    .concat(style.fontFamily)
+    .join(' ');
+  const textWidth = measureText(font, text);
+  if (textWidth === undefined || !(textWidth > 0)) {
+    return undefined;
+  }
+  const spacing =
+    style.letterSpacing === 'normal' ? 0 : readPixels(style.letterSpacing);
+  // Padding and borders between the text and the column edge.
+  let chrome = 0;
+  for (
+    let element: HTMLElement | null = host;
+    element != null && cell.contains(element);
+    element = element.parentElement
+  ) {
+    const box = element === host ? style : view.getComputedStyle(element);
+    chrome +=
+      readPixels(box.paddingLeft) +
+      readPixels(box.paddingRight) +
+      readPixels(box.borderLeftWidth) +
+      readPixels(box.borderRightWidth);
+  }
+  return Math.ceil(textWidth + spacing * text.length + chrome + 1);
+}
 const getEmptyGeometry = () => EMPTY_GEOMETRY;
 const subscribeToNothing = () => () => {};
 
@@ -264,6 +367,7 @@ export function useTableWindow<T>({
   const [focusedKey, setFocusedKey] = useState<string | number | undefined>();
   const [tracking, setTracking] = useState<WindowTracking | undefined>();
   const focusNoteRef = useRef<FocusWithin | null>(null);
+  const [positionWidths, setPositionWidths] = useState(EMPTY_POSITION_WIDTHS);
   const validationRef = useRef<ValidationState | null>(null);
   useDevWarningPerMessage(
     'Table',
@@ -478,14 +582,44 @@ export function useTableWindow<T>({
         logicalPositionColumns,
         checkedRows: new WeakSet(),
         layoutRevision: undefined,
+        isPositionWidthMeasured: false,
         totalHeight: Number.NaN,
       };
       validationRef.current = state;
     }
+    const isLayoutChanged = state.layoutRevision !== layoutRevision;
+    // Size logical-position columns for the last position before its row
+    // mounts. A new width re-renders the table and returns before this pass
+    // records anything, so the next pass runs every check below.
+    if (
+      (isLayoutChanged || !state.isPositionWidthMeasured) &&
+      logicalPositionColumns.size > 0
+    ) {
+      const row = Array.from(body.current.rows).find(
+        candidate => candidate.getAttribute('aria-hidden') !== 'true',
+      );
+      if (row) {
+        state.isPositionWidthMeasured = true;
+        const next = new Map<number, number>();
+        for (const index of logicalPositionColumns) {
+          const cell = row.cells[index];
+          const width =
+            cell == null
+              ? undefined
+              : measureLogicalPositionWidth(cell, String(data.length));
+          if (width !== undefined) {
+            next.set(index, width);
+          }
+        }
+        if (!areWidthsEqual(positionWidths, next)) {
+          setPositionWidths(next);
+          return;
+        }
+      }
+    }
     // A size, font, or outer class or style change can clip rows that passed
     // before, so every mounted row is read again. A mounted row is a content
     // invalidation only, and reads only the new rows.
-    const isLayoutChanged = state.layoutRevision !== layoutRevision;
     if (isLayoutChanged) {
       state.checkedRows = new WeakSet();
     }
@@ -514,19 +648,24 @@ export function useTableWindow<T>({
     totalHeight,
     revision,
     layoutRevision,
+    positionWidths,
     body,
     viewport,
     table,
   ]);
 
+  const logicalPositionWidths = isWindowed
+    ? positionWidths
+    : EMPTY_POSITION_WIDTHS;
   return useMemo(
     () => ({
       segments,
+      logicalPositionWidths,
       isWindowed,
       isFixedHeight: isWindowed,
       onRowFocus,
       onRowBlur,
     }),
-    [segments, isWindowed, onRowFocus, onRowBlur],
+    [segments, logicalPositionWidths, isWindowed, onRowFocus, onRowBlur],
   );
 }
