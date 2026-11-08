@@ -16,7 +16,7 @@
  *   BottomSheet/__tests__/BottomSheetToastOutlet.a11y.chromium.spec.ts).
  */
 
-import {useState, type ReactNode} from 'react';
+import {useLayoutEffect, useRef, useState, type ReactNode} from 'react';
 import {describe, it, expect, vi, afterEach, beforeEach} from 'vitest';
 import {act, fireEvent, render, screen} from '@testing-library/react';
 import {ToastViewport} from './ToastViewport';
@@ -86,6 +86,28 @@ function DialogFixture({
       </Dialog>
     </>
   );
+}
+
+/**
+ * Calls `onClosingCommit` in the layout phase of the commit in which `isOpen`
+ * turns false. That is after every layout cleanup and before the browser can
+ * paint.
+ */
+function ClosingCommitProbe({
+  isOpen,
+  onClosingCommit,
+}: {
+  isOpen: boolean;
+  onClosingCommit: () => void;
+}) {
+  const wasOpenRef = useRef(false);
+  useLayoutEffect(() => {
+    if (wasOpenRef.current && !isOpen) {
+      onClosingCommit();
+    }
+    wasOpenRef.current = isOpen;
+  }, [isOpen, onClosingCommit]);
+  return null;
 }
 
 function NonModalSheetFixture({label}: {label: string}) {
@@ -1046,4 +1068,151 @@ describe('ToastViewport above a BottomSheetSwitcher flow', () => {
     expect(getViewport().closest('dialog')).toBeNull();
     expect(container.contains(getViewport())).toBe(true);
   });
+});
+
+describe('ToastViewport leaves each kind of modal before the paint', () => {
+  type ModalKind = 'Dialog' | 'Drawer' | 'BottomSheet' | 'BottomSheetSwitcher';
+
+  /** A modal of `kind` named "Edit", with a button inside that closes it. */
+  function EditModal({
+    kind,
+    isOpen,
+    onClose,
+  }: {
+    kind: ModalKind;
+    isOpen: boolean;
+    onClose: () => void;
+  }) {
+    const close = (
+      <button type="button" onClick={onClose}>
+        Close Edit
+      </button>
+    );
+    switch (kind) {
+      case 'Dialog':
+        return (
+          <Dialog isOpen={isOpen} onOpenChange={onClose} aria-label="Edit">
+            {close}
+          </Dialog>
+        );
+      case 'Drawer':
+        return (
+          <Drawer isOpen={isOpen} onOpenChange={onClose} label="Edit">
+            {close}
+          </Drawer>
+        );
+      case 'BottomSheet':
+        return (
+          <BottomSheet isOpen={isOpen} onOpenChange={onClose} label="Edit">
+            {close}
+          </BottomSheet>
+        );
+      case 'BottomSheetSwitcher':
+        return (
+          <BottomSheetSwitcher
+            activeSheet={isOpen ? 'edit' : null}
+            onActiveSheetChange={onClose}>
+            <BottomSheet sheetId="edit" label="Edit">
+              {close}
+            </BottomSheet>
+          </BottomSheetSwitcher>
+        );
+    }
+  }
+
+  /**
+   * A modal with a probe after it. The probe calls `onEndingCommit` in the
+   * layout phase of the commit that closes or unmounts the modal. That is
+   * after the modal's ref cleanups and layout cleanups, and before the browser
+   * can paint.
+   */
+  function EndingCommitFixture({
+    kind,
+    onEndingCommit,
+  }: {
+    kind: ModalKind;
+    onEndingCommit: () => void;
+  }) {
+    const [isOpen, setIsOpen] = useState(false);
+    const [isMounted, setIsMounted] = useState(true);
+    return (
+      <>
+        <button type="button" onClick={() => setIsOpen(true)}>
+          Open Edit
+        </button>
+        <button type="button" onClick={() => setIsMounted(false)}>
+          Unmount Edit
+        </button>
+        {isMounted ? (
+          <EditModal
+            kind={kind}
+            isOpen={isOpen}
+            onClose={() => setIsOpen(false)}
+          />
+        ) : null}
+        <ClosingCommitProbe
+          isOpen={isMounted && isOpen}
+          onClosingCommit={onEndingCommit}
+        />
+      </>
+    );
+  }
+
+  /** Where the viewport is: in a dialog, and in the document. */
+  function viewportPlace() {
+    const viewport = getViewport();
+    return {
+      isInDialog: viewport.closest('dialog') != null,
+      isInDocument: viewport.isConnected,
+    };
+  }
+
+  function renderOpen(kind: ModalKind) {
+    const places: ReturnType<typeof viewportPlace>[] = [];
+    const result = render(
+      <ToastViewport>
+        <ToastButton />
+        <EndingCommitFixture
+          kind={kind}
+          onEndingCommit={() => places.push(viewportPlace())}
+        />
+      </ToastViewport>,
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Show toast'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Open Edit'}));
+    expect(getDialog('Edit').contains(getViewport())).toBe(true);
+    return {...result, places};
+  }
+
+  const kinds: ModalKind[] = [
+    'Dialog',
+    'Drawer',
+    'BottomSheet',
+    'BottomSheetSwitcher',
+  ];
+
+  it.each(kinds)(
+    'returns to its place in the commit that closes a %s',
+    kind => {
+      // The closing commit can stop displaying the dialog. After a close
+      // outside a click, the browser can paint before passive effects run. A
+      // viewport still inside the dialog then paints nothing.
+      const {container, places} = renderOpen(kind);
+      fireEvent.click(screen.getByRole('button', {name: 'Close Edit'}));
+      expect(places).toEqual([{isInDialog: false, isInDocument: true}]);
+      expect(container.contains(getViewport())).toBe(true);
+    },
+  );
+
+  it.each(kinds)(
+    'returns to its place in the commit that unmounts an open %s, while still in the document',
+    kind => {
+      const {container, places} = renderOpen(kind);
+      const toast = screen.getByText('Saved');
+      fireEvent.click(screen.getByRole('button', {name: 'Unmount Edit'}));
+      expect(places).toEqual([{isInDialog: false, isInDocument: true}]);
+      expect(container.contains(getViewport())).toBe(true);
+      expect(screen.getByText('Saved')).toBe(toast);
+    },
+  );
 });
