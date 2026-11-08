@@ -2686,6 +2686,12 @@ jobs:
           }
           echo "chromium=$(legs "$CHROMIUM_OUTCOME" "$CHROMIUM_COUNT")" >> "$GITHUB_OUTPUT"
           echo "webkit=$(legs "$WEBKIT_OUTCOME" "$WEBKIT_COUNT")" >> "$GITHUB_OUTPUT"
+          for lane in "Chromium:$CHROMIUM_OUTCOME" "WebKit:$WEBKIT_OUTCOME"; do
+            case "${lane#*:}" in
+              success | skipped) ;;
+              *) echo "::warning title=Leg count fell back to six::The ${lane%%:*} leg count failed, so its lane starts six legs that each decide for themselves." ;;
+            esac
+          done
           cat "$GITHUB_OUTPUT"
 
   pr-interaction:

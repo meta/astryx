@@ -322,6 +322,17 @@ describe('the interaction leg count job in ci.yml', () => {
     });
   });
 
+  it('checks out and keeps the planner exactly as each lane does', () => {
+    // A file the lanes' planner needs but this job did not copy would fail
+    // its count and send every run back to six legs.
+    for (const lane of lanes) {
+      const job = ci.jobs[lane.id];
+      expect(counter.steps[0]).toEqual(job.steps[0]);
+      const keep = "Keep the leg planner from the workflow's commit";
+      expect(step(counter, keep).run).toBe(step(job, keep).run);
+    }
+  });
+
   for (const lane of lanes) {
     it(`counts the ${lane.key} lane the way its legs do`, () => {
       const job = ci.jobs[lane.id];
