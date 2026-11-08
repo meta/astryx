@@ -4652,9 +4652,17 @@ jobs:
           outside-pull-request: skip
           component-audit: 'true'
 
+      # Out of scope the run still writes its record, so merge-guard reads
+      # "nothing owed" rather than a missing record.
       - name: Skip the dependent audits outside their scope
         if: steps.scope.outputs.applies != 'true'
-        run: echo "No package source changed; no dependent audit to run."
+        env:
+          ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          echo "No package source changed; no dependent audit to run."
+          printf '{"head": "%s", "attempt": %s, "owed": [], "ran": [], "deferred": [], "complete": true}\n' \
+            "$ASTRYX_HEAD_SHA" "$RUN_ATTEMPT" > "$RUNNER_TEMP/a11y-dependent-audits.json"
 
       # The planner, the primitive list, the import graph and the recorded
       # times all come from the merge commit.
@@ -4694,7 +4702,7 @@ jobs:
           node .github/scripts/a11y-dependent-audits.mjs "${changes[@]}" --out "$RUNNER_TEMP/a11y-dependent-audits.json" --attempt "$RUN_ATTEMPT"
 
       - name: Upload the dependent-audit record
-        if: steps.plan.outcome == 'success'
+        if: steps.plan.outcome == 'success' || steps.scope.outputs.applies == 'false'
         uses: actions/upload-artifact@v7
         with:
           # One record per attempt: merge-guard reads the latest attempt's.
