@@ -280,7 +280,8 @@ for (const item of cases) {
       await page.mouse.down();
     } else if (item.interaction === 'disabled-hover') {
       // The disabled trigger is inert: a click, Enter, Space and the open key
-      // open no flyout and pick nothing (the `counters` check).
+      // leave it collapsed (the `rowStates` check) and pick nothing (the
+      // `counters` check).
       const archive = row(menu, 'Archive');
       const box = await archive.boundingBox();
       if (box == null) {
@@ -620,6 +621,7 @@ for (const item of cases) {
         item.interaction === 'drill-in' ||
         (findRow('Archive')?.disabled === 'true' &&
           findRow('Archive')?.tabIndex === '-1' &&
+          findRow('Archive')?.expanded === 'false' &&
           findRow('Export')?.spinnerHidden === true &&
           findRow('Share')?.haspopup === 'menu'),
       indicatorMirror:
