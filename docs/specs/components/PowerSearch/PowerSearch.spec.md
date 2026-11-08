@@ -404,11 +404,12 @@ FR10–FR21 govern. FR25 governs a date-only value in both, and FR26 a date-and-
   (FR17); the operator step is a `component:RadioList` named "Operator"; the
   content search is a searchbox named "Search" controlling the suggestion list;
   the field-list search is a textbox named "Search filters"; every sheet action
-  has a hit area at least 44 px tall, and the trailing remove action and the
-  header's Add filter keep their medium visible size, their hit area meeting
-  that minimum. The choice lists — the operator and value RadioList and
-  CheckboxList — follow the standard list density and its shared touch band,
-  as they do everywhere else (owner decision, cixzhang, 2026-11-07).
+  except the choice lists has a hit area at least 44 px tall, and the trailing
+  remove action and the header's Add filter keep their medium visible size,
+  their hit area meeting that minimum. The choice lists — the operator and
+  value RadioList and CheckboxList — follow the standard list density and its
+  shared touch band instead, as they do everywhere else (owner decision,
+  cixzhang, 2026-11-07).
 - **AR6 — Announcements and focus.** While a sheet is open, every announcement
   the flow makes — `Added {label}` for a committed suggestion or an
   `empty`-valued field row, `Removed {label}` for a filter removed by its row's

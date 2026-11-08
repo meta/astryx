@@ -638,11 +638,9 @@ interface ChoiceItem {
 }
 
 /**
- * Closed vocabularies render as the system's lists instead of the popover
- * presentation's Selector or Tokenizer: a dropdown layer inside a sheet
- * stacks a second overlay on a surface the person is already inside. A single
- * choice is a RadioList, `enum_list` a CheckboxList, each named by the field
- * label, with the lists' own spacing and keyboard behavior.
+ * Closed vocabularies render as lists, not as a dropdown. A dropdown layer
+ * inside a sheet stacks a second overlay on a surface the person is already
+ * inside.
  */
 function ChoiceRows(
   props: {
