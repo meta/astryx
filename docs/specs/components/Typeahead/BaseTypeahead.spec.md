@@ -352,6 +352,18 @@ later without a break. Not included: a controlled `isOpen`, and an
 example part styling or theme targets); they are out of scope now (Cindy:
 "49A we may add menu styling overrides").
 
+### DEC-2 — No `controlRef` on TextInput
+
+**Decider:** `cixzhang`, `2026-11-06`
+
+TextInput does not expose a ref to its bordered control box for anchoring a
+Popover: that route handles none of the necessary accessibility for that
+experience (combobox role, active option, keyboard model, result
+announcements). A custom typeahead uses BaseTypeahead with `anchorRef` and
+the `menu` config.
+
+Rejected: a `controlRef` on TextInput.
+
 ## Open questions
 
 - **OQ1 — How should the released public props type remove package-internal
