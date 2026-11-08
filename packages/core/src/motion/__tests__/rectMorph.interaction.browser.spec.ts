@@ -25,7 +25,7 @@ import {
   traceRendering,
   trackMarker,
 } from '@astryxdesign/interaction-harness';
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {build} from 'esbuild';
 // The page's `Motion` global (the bundle) is declared beside the animator's
 // proofs, in animator.interaction.browser.spec.ts.

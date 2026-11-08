@@ -107,8 +107,8 @@ const INLINE_PROPERTIES = ['translate', 'scale', 'transform-origin'] as const;
 
 /**
  * How a present or a dismissal is timed: a duration (ms) and easing, or a
- * spring. The timing follows the component's motion record (`spec:AST-094`
- * FR45); the morph has no rule of its own about which input plays which.
+ * spring. The timing follows the component's motion record. The morph has no
+ * rule of its own about which input plays which.
  * Either starts at the velocity it is given (`RectMorphPlayOptions.velocity`),
  * so a new target keeps the current velocity.
  */
