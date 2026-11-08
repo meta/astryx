@@ -60,8 +60,8 @@ async function readButtons(page: Page) {
   );
 }
 
-// Butter pads its buttons inline only, so its labelled buttons keep their
-// element heights too.
+// Each theme's labelled buttons keep exactly their element heights at the
+// default text size, block padding included.
 for (const theme of ['neutral', 'butter']) {
   test(`at the default text size each size keeps its element height: ${theme}`, async ({
     page,
@@ -69,9 +69,17 @@ for (const theme of ['neutral', 'butter']) {
     await openStory(page, 'size-variants', theme);
     const fits = await page.evaluate(() =>
       [...document.querySelectorAll<HTMLElement>('#storybook-root button')].map(
-        button =>
-          Math.round(button.getBoundingClientRect().height) ===
-          Math.round(parseFloat(getComputedStyle(button).minHeight)),
+        button => {
+          const probe = document.createElement('div');
+          probe.style.height = `var(--size-element-${button.dataset.size})`;
+          button.parentElement?.append(probe);
+          const expected = probe.getBoundingClientRect().height;
+          probe.remove();
+          return (
+            expected > 0 &&
+            Math.abs(button.getBoundingClientRect().height - expected) < 0.5
+          );
+        },
       ),
     );
     expect(fits).toEqual([true, true, true]);
