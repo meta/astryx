@@ -499,6 +499,13 @@ const styles = stylex.create({
     maxWidth: '600px',
     flexShrink: 0,
   },
+  // A single photo's caption sits on the caption's backing too, so it keeps
+  // 4.5:1 over any page behind the viewer. The backing reaches below its
+  // last line as far as above its first.
+  captionSingle: {
+    paddingBlockEnd: spacingVars['--spacing-2'],
+    backgroundColor: CAPTION_BACKING,
+  },
   closeButton: {
     position: 'absolute',
     top: spacingVars['--spacing-3'],
@@ -1858,7 +1865,7 @@ export function Lightbox({
                       id={captionId}
                       as="div"
                       type="body"
-                      xstyle={styles.caption}>
+                      xstyle={[styles.caption, styles.captionSingle]}>
                       {currentItem.caption}
                     </Text>
                   )}

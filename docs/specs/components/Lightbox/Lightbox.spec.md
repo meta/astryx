@@ -88,9 +88,6 @@ the requirement it misses and the person it affects.
   browser that places controls elsewhere pages from them.
 - **Tab containment (FR4).** Tab from the viewer's last control can move focus
   to the browser's own interface.
-- **Single photo's caption contrast (FR17).** A single photo's caption has no
-  backing. Its white text over the backdrop measures 4.00:1 over a white
-  page, under FR17's 4.5:1, so a low-vision reader can lose it there.
 - **Zoom reset key (AR3).** `0` does not return a zoomed photo to its fitted
   size.
 - **Zoom announcement (AR4).** A zoom change announces "zoomed in" or "zoomed
