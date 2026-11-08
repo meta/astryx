@@ -5,13 +5,18 @@
 /**
  * @file Lightbox.tsx
  * @input Uses React, native dialog, StyleX, IconButton, theme tokens, layerTextReset, layerStructureReset,
- *   isRtlElement (gallery arrow keys follow the rendered direction)
+ *   and isRtlElement (gallery arrow keys follow the rendered direction). The
+ *   zoom uses useZoomCore and useZoomStage, and a gallery pages with usePager
  * @output Exports Lightbox component, LightboxProps, LightboxMedia
  * @position Core implementation; consumed by index.ts
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Lightbox/Lightbox.doc.mjs (props table, features, implementation notes)
  * - /packages/core/src/Lightbox/Lightbox.test.tsx (tests for new/changed behavior)
+ * - /packages/core/src/Lightbox/useZoomCore.ts (the zoom stage for every pointer)
+ * - /packages/core/src/Lightbox/useZoomStage.ts (the gestures, for every pointer)
+ * - /packages/core/src/Lightbox/__tests__/LightboxZoom.interaction.browser.spec.ts (touch zoom proofs)
+ * - /packages/core/src/Lightbox/__tests__/LightboxPaging.interaction.browser.spec.ts (gallery paging proofs)
  * - /packages/core/src/Lightbox/index.ts (exports if types change)
  * - /packages/core/src/Layer/useLayerDismissal.ts (dismissal stack)
  * - /apps/storybook/stories/Lightbox.stories.tsx (storybook stories)
@@ -25,15 +30,26 @@ import {
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+  type ComponentProps,
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {colorVars, spacingVars, typeScaleVars} from '../theme/tokens.stylex';
+import type {StyleXStyles} from '@stylexjs/stylex';
+import {
+  colorVars,
+  focusVars,
+  radiusVars,
+  spacingVars,
+  typeScaleVars,
+} from '../theme/tokens.stylex';
 import {Icon} from '../Icon';
 import {IconButton} from '../IconButton';
 import {useAnnounce} from '../hooks/useAnnounce';
 import {useScrollLock} from '../hooks/useScrollLock';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {useAttachment} from '../hooks/useAttachment';
+import {observeResize} from '../utils/sharedResizeObserver';
 import {mergeProps, rtlStyles} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
@@ -50,6 +66,14 @@ import {useFocusRegionContainment} from '../hooks/useFocusTrap';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {isRtlElement} from '../hooks/isRtlElement';
+import {useZoomCore} from './useZoomCore';
+import {usePager} from '../hooks/usePager';
+import {TapGestureRecognizer} from '../gestures/TapGestureRecognizer';
+import type {GestureTouch} from '../gestures/types';
+import {useGestureRecognizer} from '../gestures/useGestureRecognizer';
+import {zoomMedia} from '../motion/uikit/zoomMedia';
+import {useZoomStage} from './useZoomStage';
+import {useTouchPresentation} from '../utils/touchPresentation';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -109,12 +133,17 @@ export interface LightboxProps extends BaseProps<HTMLDialogElement> {
    */
   defaultIndex?: number;
   /**
-   * Callback when the gallery index changes via prev/next navigation.
+   * Callback when the gallery index changes: the previous and next buttons,
+   * the arrow keys or a swipe.
    */
   onIndexChange?: (index: number) => void;
   /**
-   * Enable zoom on double-click, or Enter/Space/`+`/`-` via keyboard
-   * (images only). When zoomed, drag or use arrow keys to pan.
+   * Enable zoom (images only). A pinch or a ctrl-wheel zooms about the
+   * fingers or the pointer. A double tap fills the viewer and a double-click
+   * zooms 2×, about that point, and the next goes back. Enter, Space, `+` and
+   * `-` zoom 2× about the centre and back. When zoomed, drag or scroll a
+   * trackpad to pan, or use the arrow keys. On a phone or a tablet, the pan
+   * has momentum. The gestures work for every pointer.
    * @default false
    */
   hasZoom?: boolean;
@@ -128,6 +157,9 @@ export interface LightboxProps extends BaseProps<HTMLDialogElement> {
 // =============================================================================
 // Styles
 // =============================================================================
+
+/** Set on the stage while a mouse or a pen hovers over the fitted photo. */
+const OVER_PHOTO_ATTRIBUTE = 'data-lightbox-over-photo';
 
 const styles = stylex.create({
   dialog: {
@@ -169,6 +201,28 @@ const styles = stylex.create({
     maxHeight: '100%',
     overflow: 'hidden',
   },
+  // A zoomable photo's stage fills the viewer for every pointer, as a photo
+  // viewer's zooming scroll view does. A zoomed photo uses the whole screen,
+  // and a pinch can start anywhere around it. Only a zoom target does this:
+  // around any other item, a tap on the dark area still closes the viewer.
+  mediaGroupZoom: {
+    alignSelf: 'stretch',
+    flexGrow: 1,
+    minHeight: 0,
+  },
+  imageWrapperFill: {
+    alignSelf: 'stretch',
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+  },
+  // The filling stage's group clips, so its focus ring sits inside its edge.
+  imageWrapperFocusInset: {
+    outlineOffset: {
+      default: '0',
+      ':focus-visible': `calc(-1 * ${focusVars['--focus-outline-width']})`,
+    },
+  },
   imageWrapper: {
     display: 'flex',
     alignItems: 'center',
@@ -178,22 +232,94 @@ const styles = stylex.create({
     userSelect: 'none',
     minHeight: 0,
   },
+  // The stage's own pinch, pan and double tap take every touch on it,
+  // whatever the primary pointer. Only the stage does: the controls and
+  // caption leave pinch-zoom to the page. It fills the viewer (mediaGroupZoom,
+  // imageWrapperFill).
+  imageWrapperZoomTarget: {
+    touchAction: 'none',
+  },
+  // In a gallery the photo rows take the stage's touches, for every pointer
+  // (as imageWrapperZoomTarget). A descendant cannot allow what an ancestor's
+  // `touch-action` rules out. So the track allows only the page's pinch-zoom,
+  // and a pinch on a caption still zooms the page. The pager's pan manages the
+  // stage's own `touch-action`.
+  trackZoomTarget: {
+    touchAction: 'pinch-zoom',
+  },
+  // A zoomable page's photo box fills the page above its caption, as a
+  // single item's stage does.
+  pageMediaZoomTarget: {
+    touchAction: 'none',
+    alignSelf: 'stretch',
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+  },
+  // A gallery's stage is the pager's viewport: it fills the viewer on every
+  // presentation, so its pages have a size of their own.
+  mediaGroupGallery: {
+    alignSelf: 'stretch',
+    flexGrow: 1,
+    minHeight: 0,
+  },
+  imageWrapperGallery: {
+    alignSelf: 'stretch',
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+    position: 'relative',
+  },
+  // The pages stack in the track's one cell, each offset by its relative
+  // inset.
+  track: {
+    position: 'absolute',
+    inset: 0,
+    display: 'grid',
+    gridTemplateColumns: '100%',
+    gridTemplateRows: '100%',
+  },
+  // One page per item, the stage's size, at index × (width + gap). A page
+  // lays out its photo and caption as a single item does: the caption right
+  // under the photo, and the pair centred. Each page has its own layer.
+  // Through a busy main thread, Mobile Safari moves the track but cannot
+  // paint what it had not painted. So a page that slides in must be painted
+  // whole before it moves.
+  page: {
+    position: 'relative',
+    gridArea: '1 / 1',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 0,
+    minWidth: 0,
+    willChange: 'transform',
+  },
+  // A page's photo box: the zoom stage of the current page.
+  pageMedia: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    minHeight: 0,
+    minWidth: 0,
+    maxWidth: '100%',
+  },
+  // A fitted photo's zoom-in cursor shows only over the photo, where the
+  // stage sets OVER_PHOTO_ATTRIBUTE. Beside it, a click closes the viewer.
   imageWrapperZoomable: {
     cursor: {
-      default: 'zoom-in',
-      '@media (hover: hover)': 'zoom-in',
+      default: 'default',
+      ':is([data-lightbox-over-photo])': 'zoom-in',
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
   },
   imageWrapperZoomed: {
     cursor: {
       default: 'grab',
-      ':is(:disabled,[aria-disabled="true"])': 'default',
-    },
-  },
-  imageWrapperDragging: {
-    cursor: {
-      default: 'grabbing',
+      // ZOOM_DRAGGING_ATTRIBUTE, set by the stage while a drag moves the photo.
+      ':is([data-zoom-dragging])': 'grabbing',
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
   },
@@ -202,15 +328,9 @@ const styles = stylex.create({
     maxHeight: '100%',
     objectFit: 'contain',
     pointerEvents: 'none',
-    transitionProperty: 'transform',
-    transitionDuration: {
-      default: '200ms',
-      '@media (prefers-reduced-motion: reduce)': '0ms',
-    },
-    transitionTimingFunction: 'ease-out',
-  },
-  imageDragging: {
-    transitionProperty: 'none',
+    // The zoom stage scales the photo about its top-left corner and moves it
+    // with the individual `scale` and `translate` properties.
+    transformOrigin: '0 0',
   },
   video: {
     maxWidth: '100%',
@@ -238,11 +358,10 @@ const styles = stylex.create({
   navButton: {
     position: 'absolute',
     top: '50%',
-    // The individual `translate` property, not `transform`: this style now
-    // lands on the Button root, and a `transform` here replaces the Button's
-    // own transform rules — measured: the `scale(0.98)` press feedback stops
-    // firing. `translate` composes with them, reproducing exactly what the
-    // removed wrapper element did (wrapper translated, button scaled).
+    // The individual `translate` property, not `transform`. This style lands
+    // on the Button root, or on its backing with zoom. A `transform` on the
+    // Button root would replace its own transform rules: measured, the
+    // `scale(0.98)` press feedback stops firing. `translate` composes with them.
     translate: '0 -50%',
     zIndex: 1,
   },
@@ -264,11 +383,27 @@ const styles = stylex.create({
   controlButton: {
     color: colorVars['--color-on-dark'],
   },
+  // With zoom a photo can lie under the controls. Lightbox's own translucent
+  // backing keeps them readable over any photo: 3:1 for the buttons, 4.5:1
+  // for the counter's text. A theme restyles the buttons, not the backing.
+  controlBacking: {
+    display: 'inline-flex',
+    backgroundColor: `color-mix(in srgb, ${colorVars['--color-on-light']} 75%, transparent)`,
+    borderRadius: radiusVars['--radius-full'],
+  },
+  controlIcon: {
+    color: colorVars['--color-on-dark'],
+  },
+  counterBacking: {
+    backgroundColor: `color-mix(in srgb, ${colorVars['--color-on-light']} 75%, transparent)`,
+    borderRadius: radiusVars['--radius-full'],
+    paddingInline: spacingVars['--spacing-2'],
+  },
 });
 
-const dynamicStyles = stylex.create({
-  imageTransform: (transform: string) => ({
-    transform,
+const pageStyles = stylex.create({
+  position: (index: number) => ({
+    insetInlineStart: `calc(${index} * (100% + ${zoomMedia.viewer.pageGap}px))`,
   }),
 });
 
@@ -286,16 +421,24 @@ const KEYBOARD_PAN_OFFSETS: Record<string, [number, number]> = {
   ArrowDown: [0, -KEYBOARD_PAN_STEP],
 };
 
+/** The height of a video's native controls, px: no browser reports it. */
+const VIDEO_CONTROLS_BAND = 48;
+
 /**
  * A fullscreen overlay for viewing images at full resolution.
  *
- * Supports single image and gallery modes. In gallery mode, provides
- * prev/next navigation via buttons and arrow keys; the arrow keys follow
- * the writing direction (in RTL, ArrowLeft goes to the next item, like the
- * Next button on the left). Optionally supports
- * zoom (double-click, Enter/Space on the image, or `+`/`-` to toggle 2x)
- * and pan (drag or arrow keys when zoomed; arrows navigate the gallery
- * when not zoomed).
+ * Supports single image and gallery modes. In gallery mode, it provides
+ * prev/next navigation via buttons and arrow keys. The arrow keys follow the
+ * writing direction: in RTL, ArrowLeft goes to the next item, like the Next
+ * button on the left.
+ *
+ * Optionally supports zoom like a photo viewer. A pinch or a ctrl-wheel zooms
+ * about the fingers or the pointer, gives past the limits and springs back. A
+ * double tap or a double-click zooms in at that point and back. Enter or
+ * Space on the image, and `+` or `-` from the keyboard, zoom too. When zoomed,
+ * a drag or a trackpad's scroll pans. On a phone or a tablet, the pan has
+ * momentum and a rubber band at the edges. The arrow keys pan a zoomed photo
+ * and navigate the gallery otherwise.
  *
  * Uses the native `<dialog>` element with `showModal()` for focus
  * trapping and top-layer placement. Dismiss via Escape, close button,
@@ -347,12 +490,15 @@ export function Lightbox({
   useFocusRegionContainment(dialogRef, isOpen);
   const containerRef = useRef<HTMLDivElement>(null);
   const imageWrapperRef = useRef<HTMLDivElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+  // A gallery's zoom stage: the current page's photo box.
+  const pageMediaRef = useRef<HTMLDivElement>(null);
   const triggerElementRef = useRef<Element | null>(null);
 
   // Index state (controlled + uncontrolled)
   const isControlled = controlledIndex !== undefined;
   const [uncontrolledIndex, setUncontrolledIndex] = useState(defaultIndex);
-  const index = isControlled ? controlledIndex : uncontrolledIndex;
+  const requestedIndex = isControlled ? controlledIndex : uncontrolledIndex;
 
   const setIndex = useCallback(
     (value: number) => {
@@ -364,11 +510,10 @@ export function Lightbox({
     [isControlled, onIndexChange, setUncontrolledIndex],
   );
 
-  // Zoom/pan state
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({x: 0, y: 0});
-  const [isDragging, setIsDragging] = useState(false);
-  const dragStartRef = useRef({x: 0, y: 0, panX: 0, panY: 0});
+  // Whether the photo is zoomed: a discrete state for aria-pressed and the
+  // cursor. The zoom and pan themselves live outside React (useZoomCore,
+  // useZoomStage).
+  const [isZoomed, setIsZoomed] = useState(false);
 
   // Resolve current media item
   const mediaArray = useMemo(
@@ -376,10 +521,11 @@ export function Lightbox({
     [media],
   );
   const isGallery = mediaArray.length > 1;
-  const currentItem =
-    mediaArray.length > 0
-      ? mediaArray[Math.min(index, mediaArray.length - 1)]
-      : null;
+  // The item shown, current in every respect (its page, the counter, the
+  // pager, the announcement): an index past either end shows the nearest
+  // item. A NaN index stays NaN (the viewed-item check below).
+  const index = Math.max(0, Math.min(requestedIndex, mediaArray.length - 1));
+  const currentItem = mediaArray.length > 0 ? mediaArray[index] : null;
   const currentType = currentItem?.type ?? 'image';
   const isVideo = currentType === 'video';
   const canPrev = isGallery && index > 0;
@@ -389,7 +535,7 @@ export function Lightbox({
   useScrollLock(isOpen);
 
   // A new media item starts unzoomed. Adjusted during render, so the new item
-  // never paints at the previous item's zoom and pan.
+  // never paints as zoomed; the stage resets the photo before it paints.
   const currentSrc = currentItem?.src;
   const [viewedItem, setViewedItem] = useState({index, src: currentSrc});
   // Object.is, matching the dependency comparison of the effect this replaces:
@@ -399,8 +545,7 @@ export function Lightbox({
     !Object.is(viewedItem.src, currentSrc)
   ) {
     setViewedItem({index, src: currentSrc});
-    setZoom(1);
-    setPan({x: 0, y: 0});
+    setIsZoomed(false);
   }
 
   // Announce gallery navigation to screen readers. Moving between images only
@@ -421,7 +566,7 @@ export function Lightbox({
     if (!indexChanged || !isOpen || !wasOpen) {
       return;
     }
-    const item = mediaArray[Math.min(index, mediaArray.length - 1)];
+    const item = mediaArray[index];
     const position = {index: index + 1, total: mediaArray.length};
     announce(
       item?.alt
@@ -429,6 +574,30 @@ export function Lightbox({
         : t('@astryx.lightbox.imagePosition', position),
     );
   }, [index, isOpen, announce, mediaArray, t]);
+
+  // A video left on another page stops: the pager keeps the neighbours
+  // mounted, and a playing one would go on, with its sound, off screen. With
+  // `hasAutoPlay`, the video paged to plays again, as a newly shown one does.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (container == null) {
+      return;
+    }
+    for (const video of container.querySelectorAll<HTMLVideoElement>(
+      '[data-lightbox-page]:not([data-current]) video',
+    )) {
+      if (!video.paused) {
+        video.pause();
+      }
+    }
+    const current = container.querySelector<HTMLVideoElement>(
+      '[data-lightbox-page][data-current] video',
+    );
+    if (hasAutoPlay && current != null && current.paused) {
+      // A browser can refuse playback without a user's gesture.
+      void current.play()?.catch(() => {});
+    }
+  }, [index, hasAutoPlay]);
 
   // Open/close dialog. The dialog renders only with an item, so a viewer
   // opened before its first item arrives opens when that item does.
@@ -504,26 +673,349 @@ export function Lightbox({
     [handleClose, shouldDismissOnCloseRequest],
   );
 
-  // Backdrop click. The layout container fills the whole transparent dialog,
-  // so clicks on the visual backdrop (the dark area around the media) land on
-  // the container, never on the dialog element itself — treat both as the
-  // backdrop. A pan drag that ends over the backdrop still fires a click on
-  // the common ancestor; ignore it so releasing a drag doesn't dismiss.
+  // The last press's pointer type, which the browser's `dblclick` does not
+  // carry. A finger's double tap is the stage's own. A mouse's or a pen's is
+  // the browser's `dblclick`.
+  const pointerTypeRef = useRef('');
+  // Where the last press on the media started, which a click does not carry.
+  const pressPointRef = useRef<{x: number; y: number} | null>(null);
+  // Without zoom, a click on the dark area lands on the container or the
+  // dialog, and both close. A finger's tap on a gallery's stage, or on the
+  // zoom stage beside the photo, closes on the stage's own tap. So does its
+  // tap on the media group's strip below a single photo's stage. A mouse's or
+  // a pen's click closes only outside the media (`isClickOutsideMedia`). A
+  // zoomed drag sets `didDragRef`, so its click is ignored. The next press
+  // clears the flag, and a finger's only on the stage.
   const didDragRef = useRef(false);
+  const mediaGroupRef = useRef<HTMLDivElement | null>(null);
+  const captionRef = useRef<HTMLDivElement | null>(null);
+  // Whether a mouse's or a pen's click on the media closes the viewer. It
+  // does when its press or its release lands outside the media: a single
+  // item's, or a gallery's current page's. The media runs from the fitted
+  // photo's top to the caption's bottom. It is as wide as the photo's
+  // natural width or the caption, up to the viewer's. While zoomed, the
+  // photo's shown box is media too.
+  const isClickOutsideMedia = useCallback((e: ReactMouseEvent<HTMLElement>) => {
+    const viewer = imageWrapperRef.current;
+    const page = viewer?.querySelector('[data-current]') ?? viewer;
+    const media = page?.querySelector('img') ?? page?.querySelector('video');
+    // The photo's own box, which centres it: the stage, or a page's.
+    const box = media?.parentElement;
+    const group = mediaGroupRef.current;
+    if (
+      e.detail === 0 ||
+      pointerTypeRef.current === 'touch' ||
+      viewer == null ||
+      page == null ||
+      media == null ||
+      box == null ||
+      group == null ||
+      !(e.target instanceof Node) ||
+      !group.contains(e.target)
+    ) {
+      return false;
+    }
+    const space = (box.clientHeight - media.offsetHeight) / 2;
+    const boxRect = box.getBoundingClientRect();
+    const top = boxRect.top + space;
+    let bottom = top + media.offsetHeight;
+    const caption =
+      page === viewer
+        ? captionRef.current
+        : page.querySelector<HTMLElement>('[data-lightbox-caption]');
+    if (caption != null) {
+      // The caption's place under the fitted photo, also while zoomed.
+      const lift = caption.style.translate === '' ? space : 0;
+      bottom = Math.max(bottom, caption.getBoundingClientRect().bottom - lift);
+    }
+    const natural =
+      media instanceof HTMLImageElement ? media.naturalWidth : media.videoWidth;
+    const width = Math.min(
+      viewer.clientWidth,
+      Math.max(natural, caption?.offsetWidth ?? 0),
+    );
+    const middle = boxRect.left + box.clientWidth / 2;
+    const shown = media.getBoundingClientRect();
+    const isOutside = ({x, y}: {x: number; y: number}) =>
+      (y < top || y > bottom || Math.abs(x - middle) > width / 2) &&
+      !(
+        x >= shown.left &&
+        x <= shown.right &&
+        y >= shown.top &&
+        y <= shown.bottom
+      );
+    const press = pressPointRef.current;
+    return (
+      isOutside({x: e.clientX, y: e.clientY}) ||
+      (press != null && isOutside(press))
+    );
+  }, []);
   const handleBackdropClick = useCallback(
     (e: ReactMouseEvent<HTMLDialogElement>) => {
       if (didDragRef.current) {
         didDragRef.current = false;
         return;
       }
-      if (e.target === e.currentTarget || e.target === containerRef.current) {
+      const isMediaClose =
+        pointerTypeRef.current === 'touch'
+          ? hasZoom && !isVideo && e.target === mediaGroupRef.current
+          : (isGallery || (hasZoom && !isVideo)) && isClickOutsideMedia(e);
+      if (
+        e.target === e.currentTarget ||
+        e.target === containerRef.current ||
+        isMediaClose
+      ) {
         handleClose();
       }
     },
-    [handleClose],
+    [handleClose, hasZoom, isVideo, isGallery, isClickOutsideMedia],
   );
 
-  // Gallery navigation
+  const isZoomTarget = hasZoom && !isVideo;
+  const onDragStart = () => {
+    didDragRef.current = true;
+  };
+  // With zoom the stage fills the viewer, so a caption would sit at the
+  // viewer's bottom. It moves up by the stage's space below the fitted
+  // photo, so it sits under the photo as it does without zoom. The stage
+  // already leaves the caption its height. A photo shown larger than it fits
+  // fills the stage, from a gesture's first move until a settle back lands.
+  // Meanwhile the caption goes back to its own place below the stage.
+  const isShownAtFitRef = useRef(true);
+  const placeCaption = useCallback(() => {
+    // The stage's space below its fitted photo: the photo's laid-out height,
+    // not its zoomed box.
+    const place = (
+      caption: HTMLElement | null,
+      stageElement: HTMLElement | null,
+      isAtFit: boolean,
+    ) => {
+      const photo = stageElement?.querySelector('img');
+      if (caption == null) {
+        return;
+      }
+      const below =
+        isZoomTarget && isAtFit && stageElement != null && photo != null
+          ? (stageElement.clientHeight - photo.offsetHeight) / 2
+          : 0;
+      caption.style.translate = below > 0 ? `0 ${-below}px` : '';
+    };
+    place(captionRef.current, imageWrapperRef.current, isShownAtFitRef.current);
+    // A gallery's pages, each with its own caption under its own photo. Only
+    // the current one can be zoomed.
+    for (const page of trackRef.current?.querySelectorAll<HTMLElement>(
+      ':scope > [data-lightbox-page]',
+    ) ?? []) {
+      place(
+        page.querySelector<HTMLElement>(':scope > [data-lightbox-caption]'),
+        page.querySelector<HTMLElement>(':scope > [data-lightbox-page-media]'),
+        !page.hasAttribute('data-current') || isShownAtFitRef.current,
+      );
+    }
+  }, [isZoomTarget]);
+  useAttachment(
+    imageWrapperRef,
+    element => observeResize(element, placeCaption),
+    placeCaption,
+  );
+  // Places the caption for the new item's layout before it paints.
+  useIsomorphicLayoutEffect(() => {
+    placeCaption();
+  }, [placeCaption, viewedItem]);
+
+  // The zoom stage takes the keyboard's zoom and pan and every pointer's
+  // gestures. Past a limit, a pinch or a pan gives way and returns.
+  const zoom = useZoomCore({
+    stageRef: isGallery ? pageMediaRef : imageWrapperRef,
+    surfaceRef: isGallery ? trackRef : imageWrapperRef,
+    isEnabled: isOpen && isZoomTarget,
+    itemKey: viewedItem,
+    // Zoom changes are silent to assistive tech, since only the transform
+    // changes. Announce them in the polite live region.
+    onZoomedChange: next => {
+      setIsZoomed(next);
+      announce(
+        next ? t('@astryx.lightbox.zoomedIn') : t('@astryx.lightbox.zoomedOut'),
+      );
+    },
+    onFitChange: isAtFit => {
+      isShownAtFitRef.current = isAtFit;
+      placeCaption();
+    },
+  });
+  const {isTouch} = useTouchPresentation();
+  const startsOnCaption = (touch: GestureTouch | undefined) => {
+    const target = touch?.target;
+    return (
+      target instanceof Element &&
+      target.closest('[data-lightbox-caption]') != null
+    );
+  };
+  const stage = useZoomStage(zoom, {
+    stageRef: isGallery ? pageMediaRef : imageWrapperRef,
+    surfaceRef: isGallery ? trackRef : imageWrapperRef,
+    isEnabled: isOpen && isZoomTarget,
+    // A gallery's stage shares its surface with the page around it. A tap
+    // there closes, as on the backdrop, unless it lands on the caption.
+    onTapOutside: ({x, y}) => {
+      const caption = trackRef.current
+        ?.querySelector('[data-current] [data-lightbox-caption]')
+        ?.getBoundingClientRect();
+      if (
+        caption != null &&
+        x >= caption.left &&
+        x <= caption.right &&
+        y >= caption.top &&
+        y <= caption.bottom
+      ) {
+        return;
+      }
+      handleClose();
+    },
+    onDragStart,
+    isTouchPresentation: isTouch,
+    // Only a gallery's touch pager takes a drag past a zoomed photo's edge.
+    hasOuterPager: isGallery && isTouch,
+    // A pinch whose first finger lands on a gallery's caption is the page's.
+    shouldBeginPinch: recognizer =>
+      !startsOnCaption(recognizer.trackedTouches[0]),
+  });
+  // Whether a mouse or a pen hovers over the fitted photo, for its cursor. The
+  // stage fills the viewer, so the photo's box is read, not the event target.
+  // The attribute is written on the stage, so hovering renders nothing.
+  const markPointerOverPhoto = (e: ReactPointerEvent<HTMLElement>) => {
+    if (e.pointerType === 'touch' || e.buttons !== 0) {
+      return;
+    }
+    const photo =
+      e.currentTarget.querySelector('[data-current] img') ??
+      e.currentTarget.querySelector('img');
+    const r = photo?.getBoundingClientRect();
+    e.currentTarget.toggleAttribute(
+      OVER_PHOTO_ATTRIBUTE,
+      r != null &&
+        e.clientX >= r.left &&
+        e.clientX <= r.right &&
+        e.clientY >= r.top &&
+        e.clientY <= r.bottom,
+    );
+  };
+  // A gallery pages like Photos, on a UIKit paging scroll view's release. A
+  // drag or a flick moves one page at most, with Photos' 40 pt gap. A zoomed
+  // photo keeps the drag until its edge, then the pager takes the next one.
+  // As in Photos, the photo left behind returns to the fitted size once the
+  // pager rests.
+  // A controlled parent can refuse a swipe by keeping its index. The pager
+  // then goes back to the photo the parent shows.
+  // A video's native controls are taken as a band at its bottom edge, since
+  // browsers expose no control geometry. A drag that starts there stays the
+  // video's, as a scrubber's or a volume slider's drag.
+  const startsOnVideoControls = (touch: GestureTouch | undefined) => {
+    const video = trackRef.current?.querySelector(
+      '[data-current] video[controls]',
+    );
+    if (touch == null || video == null) {
+      return false;
+    }
+    const box = video.getBoundingClientRect();
+    return (
+      touch.startX >= box.left &&
+      touch.startX <= box.right &&
+      touch.startY <= box.bottom &&
+      touch.startY >= box.bottom - VIDEO_CONTROLS_BAND
+    );
+  };
+  usePager({
+    viewportRef: imageWrapperRef,
+    trackRef,
+    count: mediaArray.length,
+    gap: zoomMedia.viewer.pageGap,
+    index,
+    // The drag paging is part of the touch presentation. Under a fine pointer
+    // the buttons and the arrow keys page, and the page keeps its scroll.
+    isPanEnabled: isOpen && isGallery && isTouch,
+    // Under the touch presentation a change of `index` slides the pager, and
+    // a refused drag springs back. Under a fine pointer it moves the pager at
+    // once, so a refused button shows nothing.
+    isControlledChangeAnimated: isTouch,
+    // In the touch presentation every pointer pages. A drag that starts on a
+    // video's controls stays the video's.
+    panOptions: {
+      allowedPointerTypes: ['touch', 'pen', 'mouse'],
+      maximumNumberOfTouches: 1,
+      shouldBegin: pan => !startsOnVideoControls(pan.trackedTouches[0]),
+    },
+    shouldBeginPan: direction => !stage.isZoomed() || stage.isAtEdge(direction),
+    onIndexChange: (next, reason) => {
+      if (reason === 'drag') {
+        setIndex(next);
+      }
+    },
+    // The pager names the page it rests on. Its report can come before the
+    // render that marks that page current, so the page, not the mark, decides.
+    onSettle: settled => {
+      for (const page of trackRef.current?.querySelectorAll<HTMLElement>(
+        ':scope > [data-lightbox-page]',
+      ) ?? []) {
+        const img = page.querySelector<HTMLElement>('img');
+        if (img != null && page.dataset.lightboxPage !== String(settled)) {
+          img.style.translate = '';
+          img.style.scale = '';
+        }
+      }
+    },
+  });
+
+  // Whether a point is on the current page's media group: its photo or video
+  // and its caption, as one box. The photo takes no pointer events, so a
+  // press on it lands on its box. An element with no size yet (a photo still
+  // loading) adds nothing to the box.
+  const isOnCurrentMedia = (x: number, y: number) => {
+    const page = imageWrapperRef.current?.querySelector('[data-current]');
+    const boxes = [
+      page?.querySelector('img'),
+      page?.querySelector('video'),
+      page?.querySelector('[data-lightbox-caption]'),
+    ]
+      .map(element => element?.getBoundingClientRect())
+      .filter((r): r is DOMRect => r != null && r.width > 0 && r.height > 0);
+    return (
+      boxes.length > 0 &&
+      x >= Math.min(...boxes.map(r => r.left)) &&
+      x <= Math.max(...boxes.map(r => r.right)) &&
+      y >= Math.min(...boxes.map(r => r.top)) &&
+      y <= Math.max(...boxes.map(r => r.bottom))
+    );
+  };
+  // Without zoom, a gallery's stage fills the viewer. So a finger's tap on it
+  // beside the media closes the viewer, as a click on the backdrop does. A
+  // press that moves past the tap's movement limit is no tap. A mouse's or a
+  // pen's click closes it only outside the media (`isClickOutsideMedia`).
+  // With zoom, the stage's own tap closes it.
+  useGestureRecognizer(
+    imageWrapperRef,
+    () =>
+      new TapGestureRecognizer({
+        name: 'lightbox-backdrop-tap',
+        allowedPointerTypes: ['touch'],
+      }),
+    tap => {
+      if (tap.state !== 'ended') {
+        return;
+      }
+      const {x, y} = tap.location();
+      if (!isOnCurrentMedia(x, y)) {
+        handleClose();
+      }
+    },
+    {isEnabled: isOpen && isGallery && !isZoomTarget, manageStyle: false},
+  );
+
+  // Gallery navigation. The buttons and the arrow keys ask for the new item.
+  // Under the touch presentation the pager then slides there, as a paging
+  // scroll view's `setContentOffset` does. Under a fine pointer it moves at
+  // once.
+
   const goToPrev = useCallback(() => {
     if (canPrev) {
       setIndex(index - 1);
@@ -536,30 +1028,6 @@ export function Lightbox({
     }
   }, [canNext, index, setIndex]);
 
-  // Zoom: double-click, Enter/Space on the image, or +/- keys toggle 1x ↔ 2x.
-  // Zoom changes are silent to assistive tech (only the transform changes), so
-  // mirror them in the polite live region, including a hint that arrow keys
-  // pan while zoomed.
-  const applyZoom = useCallback(
-    (next: number) => {
-      if (!hasZoom || isVideo || next === zoom) {
-        return;
-      }
-      setZoom(next);
-      setPan({x: 0, y: 0});
-      announce(
-        next > 1
-          ? t('@astryx.lightbox.zoomedIn')
-          : t('@astryx.lightbox.zoomedOut'),
-      );
-    },
-    [hasZoom, isVideo, zoom, announce, t],
-  );
-
-  const handleDoubleClick = useCallback(() => {
-    applyZoom(zoom === 1 ? 2 : 1);
-  }, [applyZoom, zoom]);
-
   // Keyboard navigation. While zoomed, arrows pan the image (matching common
   // lightbox conventions); when not zoomed they navigate the gallery.
   //
@@ -570,21 +1038,21 @@ export function Lightbox({
   // its right.
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (hasZoom && !isVideo) {
+      if (isZoomTarget) {
         if (e.key === '+' || e.key === '=') {
           e.preventDefault();
-          applyZoom(2);
+          stage.zoomIn();
           return;
         }
         if (e.key === '-') {
           e.preventDefault();
-          applyZoom(1);
+          stage.zoomOut();
           return;
         }
-        if (zoom > 1 && KEYBOARD_PAN_OFFSETS[e.key] !== undefined) {
+        if (stage.isZoomed() && KEYBOARD_PAN_OFFSETS[e.key] !== undefined) {
           e.preventDefault();
           const [dx, dy] = KEYBOARD_PAN_OFFSETS[e.key];
-          setPan(prev => ({x: prev.x + dx, y: prev.y + dy}));
+          stage.panBy(dx, dy);
           return;
         }
       }
@@ -599,7 +1067,7 @@ export function Lightbox({
         }
       }
     },
-    [hasZoom, isVideo, zoom, applyZoom, goToPrev, goToNext],
+    [isZoomTarget, stage, goToPrev, goToNext],
   );
 
   // Enter/Space on the focused image wrapper (role="button") toggles zoom.
@@ -607,67 +1075,90 @@ export function Lightbox({
     (e: React.KeyboardEvent<HTMLDivElement>) => {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        handleDoubleClick();
+        stage.toggle();
       }
     },
-    [handleDoubleClick],
+    [stage],
   );
-
-  // Pan: mouse drag when zoomed
-  const handlePointerDown = useCallback(
-    (e: ReactMouseEvent<HTMLDivElement>) => {
-      if (zoom <= 1 || !hasZoom) {
-        return;
-      }
-      setIsDragging(true);
-      didDragRef.current = false;
-      dragStartRef.current = {
-        x: e.clientX,
-        y: e.clientY,
-        panX: pan.x,
-        panY: pan.y,
-      };
-    },
-    [zoom, hasZoom, pan],
-  );
-
-  useEffect(() => {
-    if (!isDragging) {
-      return;
-    }
-
-    const handlePointerMove = (e: PointerEvent) => {
-      didDragRef.current = true;
-      const dx = e.clientX - dragStartRef.current.x;
-      const dy = e.clientY - dragStartRef.current.y;
-      setPan({
-        x: dragStartRef.current.panX + dx,
-        y: dragStartRef.current.panY + dy,
-      });
-    };
-
-    const handlePointerUp = () => {
-      setIsDragging(false);
-    };
-
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', handlePointerUp);
-    return () => {
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerup', handlePointerUp);
-    };
-  }, [isDragging]);
-
-  const isZoomed = zoom > 1;
-  const isZoomTarget = hasZoom && !isVideo;
-  const imageTransform =
-    zoom === 1
-      ? null
-      : `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`;
 
   if (!currentItem) {
     return null;
   }
+
+  // A control of the viewer. With zoom it sits on Lightbox's own backing,
+  // which takes the control's place. Its icon keeps the on-dark colour. So a
+  // theme's restyling of the button can't remove its contrast.
+  const control = (
+    place: StyleXStyles,
+    {
+      icon,
+      label,
+      isDisabled,
+      onClick,
+      isMirrored = false,
+    }: {
+      icon: ComponentProps<typeof Icon>['icon'];
+      label: string;
+      isDisabled?: boolean;
+      onClick: () => void;
+      isMirrored?: boolean;
+    },
+  ) => {
+    const button = (
+      <IconButton
+        icon={
+          <Icon
+            icon={icon}
+            size="sm"
+            color="inherit"
+            xstyle={[
+              isMirrored && rtlStyles.mirror,
+              hasZoom && styles.controlIcon,
+            ]}
+          />
+        }
+        label={label}
+        variant="ghost"
+        isDisabled={isDisabled}
+        onClick={onClick}
+        xstyle={[!hasZoom && place, styles.controlButton]}
+      />
+    );
+    return hasZoom ? (
+      <span {...stylex.props(place, styles.controlBacking)}>{button}</span>
+    ) : (
+      button
+    );
+  };
+
+  const renderMedia = (
+    {src, alt, type: kind = 'image'}: LightboxMedia,
+    isCurrent: boolean,
+  ) =>
+    kind === 'video' ? (
+      <video
+        src={src}
+        aria-label={alt}
+        controls
+        autoPlay={isCurrent && hasAutoPlay}
+        preload={isCurrent ? 'auto' : 'metadata'}
+        {...stylex.props(styles.video)}
+      />
+    ) : (
+      <img
+        ref={isCurrent ? stage.contentRef : undefined}
+        onLoad={placeCaption}
+        src={src}
+        alt={isCurrent ? alt : ''}
+        aria-hidden={isCurrent ? undefined : true}
+        draggable={false}
+        {...stylex.props(styles.image)}
+      />
+    );
+  // The current item and its neighbours; the pager shows one at rest.
+  const pageIndexes = isGallery
+    ? [index - 1, index, index + 1].filter(i => i >= 0 && i < mediaArray.length)
+    : [];
 
   return (
     <dialog
@@ -703,43 +1194,48 @@ export function Lightbox({
       <LayerDepthProvider>
         <ModalAnnounceProvider dialogRef={dialogRef} isOpen={isOpen}>
           <LayerContentBoundary>
-            <div ref={containerRef} {...stylex.props(styles.container)}>
-              {/* Close button */}
-              <IconButton
-                icon={<Icon icon="close" size="sm" color="inherit" />}
-                label={t('@astryx.lightbox.close')}
-                variant="ghost"
-                onClick={handleClose}
-                xstyle={[styles.closeButton, styles.controlButton]}
-              />
+            <div
+              ref={containerRef}
+              {...stylex.props(styles.container)}
+              // Every press in the viewer records where and how it began. A
+              // mouse's or a pen's press clears a zoomed drag's flag anywhere.
+              // A finger's press clears it only on the stage.
+              onPointerDown={e => {
+                pointerTypeRef.current = e.pointerType;
+                pressPointRef.current = {x: e.clientX, y: e.clientY};
+                const isOnStage =
+                  e.target instanceof Node &&
+                  imageWrapperRef.current?.contains(e.target) === true;
+                if (e.pointerType !== 'touch' || isOnStage) {
+                  didDragRef.current = false;
+                }
+              }}>
+              {control(styles.closeButton, {
+                icon: 'close',
+                label: t('@astryx.lightbox.close'),
+                onClick: handleClose,
+              })}
 
               {/* Gallery nav: prev — stays mounted and is disabled at the start of
             the range so pressing/arrowing to the boundary doesn't unmount the
             focused control and drop focus to <body>. */}
-              {isGallery && (
-                <IconButton
-                  icon={
-                    <Icon
-                      icon="chevronLeft"
-                      size="sm"
-                      color="inherit"
-                      xstyle={rtlStyles.mirror}
-                    />
-                  }
-                  label={t('@astryx.lightbox.previous')}
-                  variant="ghost"
-                  isDisabled={!canPrev}
-                  onClick={goToPrev}
-                  xstyle={[
-                    styles.navButton,
-                    styles.navPrev,
-                    styles.controlButton,
-                  ]}
-                />
-              )}
+              {isGallery &&
+                control([styles.navButton, styles.navPrev], {
+                  icon: 'chevronLeft',
+                  label: t('@astryx.lightbox.previous'),
+                  isDisabled: !canPrev,
+                  onClick: goToPrev,
+                  isMirrored: true,
+                })}
 
               {/* Media + caption group (centered together) */}
-              <div {...stylex.props(styles.mediaGroup)}>
+              <div
+                ref={mediaGroupRef}
+                {...stylex.props(
+                  styles.mediaGroup,
+                  isZoomTarget && !isGallery && styles.mediaGroupZoom,
+                  isGallery && styles.mediaGroupGallery,
+                )}>
                 <div
                   ref={imageWrapperRef}
                   // The wrapper is a keyboard-operable zoom toggle when zoom is
@@ -752,42 +1248,81 @@ export function Lightbox({
                   }
                   {...stylex.props(
                     styles.imageWrapper,
+                    isGallery && styles.imageWrapperGallery,
+                    isZoomTarget && !isGallery && styles.imageWrapperZoomTarget,
+                    isZoomTarget && !isGallery && styles.imageWrapperFill,
                     isZoomTarget && focusOutlineStyles.focusVisible,
-                    !isVideo &&
-                      hasZoom &&
-                      !isZoomed &&
-                      styles.imageWrapperZoomable,
-                    !isVideo && isZoomed && styles.imageWrapperZoomed,
-                    !isVideo && isDragging && styles.imageWrapperDragging,
+                    isZoomTarget && styles.imageWrapperFocusInset,
+                    isZoomTarget && !isZoomed && styles.imageWrapperZoomable,
+                    isZoomTarget && isZoomed && styles.imageWrapperZoomed,
                   )}
-                  onDoubleClick={isVideo ? undefined : handleDoubleClick}
                   onKeyDown={isZoomTarget ? handleImageKeyDown : undefined}
-                  onPointerDown={isVideo ? undefined : handlePointerDown}>
-                  {isVideo ? (
-                    <video
-                      src={currentItem.src}
-                      aria-label={currentItem.alt}
-                      controls
-                      autoPlay={hasAutoPlay}
-                      {...stylex.props(styles.video)}
-                    />
-                  ) : (
-                    <img
-                      src={currentItem.src}
-                      alt={currentItem.alt}
-                      draggable={false}
+                  onPointerMove={
+                    isZoomTarget ? markPointerOverPhoto : undefined
+                  }
+                  onPointerLeave={
+                    isZoomTarget
+                      ? e =>
+                          e.currentTarget.removeAttribute(OVER_PHOTO_ATTRIBUTE)
+                      : undefined
+                  }
+                  onDoubleClick={
+                    isZoomTarget
+                      ? e => {
+                          // A finger's double tap is the stage's own.
+                          if (pointerTypeRef.current !== 'touch') {
+                            stage.doubleClickAt(e.clientX, e.clientY);
+                          }
+                        }
+                      : undefined
+                  }>
+                  {isGallery ? (
+                    <div
+                      ref={trackRef}
                       {...stylex.props(
-                        styles.image,
-                        isDragging && styles.imageDragging,
-                        imageTransform != null &&
-                          dynamicStyles.imageTransform(imageTransform),
-                      )}
-                    />
+                        styles.track,
+                        isZoomTarget && styles.trackZoomTarget,
+                      )}>
+                      {pageIndexes.map(i => (
+                        <div
+                          key={i}
+                          data-lightbox-page={i}
+                          data-current={i === index ? '' : undefined}
+                          // Only the current page is on screen at rest: the
+                          // others stay out of the tab order and the
+                          // accessibility tree.
+                          inert={i !== index ? true : undefined}
+                          aria-hidden={i !== index ? true : undefined}
+                          {...stylex.props(
+                            styles.page,
+                            pageStyles.position(i),
+                          )}>
+                          <div
+                            ref={i === index ? pageMediaRef : undefined}
+                            data-lightbox-page-media=""
+                            {...stylex.props(
+                              styles.pageMedia,
+                              isZoomTarget && styles.pageMediaZoomTarget,
+                            )}>
+                            {renderMedia(mediaArray[i], i === index)}
+                          </div>
+                          {isRenderable(mediaArray[i].caption) && (
+                            <div
+                              data-lightbox-caption=""
+                              {...stylex.props(styles.caption)}>
+                              {mediaArray[i].caption}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    renderMedia(currentItem, true)
                   )}
                 </div>
 
-                {isRenderable(currentItem.caption) && (
-                  <div {...stylex.props(styles.caption)}>
+                {!isGallery && isRenderable(currentItem.caption) && (
+                  <div ref={captionRef} {...stylex.props(styles.caption)}>
                     {currentItem.caption}
                   </div>
                 )}
@@ -795,31 +1330,22 @@ export function Lightbox({
 
               {/* Gallery nav: next — see "prev" above; stays mounted and disabled at
             the end of the range instead of unmounting. */}
-              {isGallery && (
-                <IconButton
-                  icon={
-                    <Icon
-                      icon="chevronRight"
-                      size="sm"
-                      color="inherit"
-                      xstyle={rtlStyles.mirror}
-                    />
-                  }
-                  label={t('@astryx.lightbox.next')}
-                  variant="ghost"
-                  isDisabled={!canNext}
-                  onClick={goToNext}
-                  xstyle={[
-                    styles.navButton,
-                    styles.navNext,
-                    styles.controlButton,
-                  ]}
-                />
-              )}
+              {isGallery &&
+                control([styles.navButton, styles.navNext], {
+                  icon: 'chevronRight',
+                  label: t('@astryx.lightbox.next'),
+                  isDisabled: !canNext,
+                  onClick: goToNext,
+                  isMirrored: true,
+                })}
 
               {/* Gallery counter */}
               {isGallery && mediaArray.length > 1 && (
-                <div {...stylex.props(styles.counter)}>
+                <div
+                  {...stylex.props(
+                    styles.counter,
+                    hasZoom && styles.counterBacking,
+                  )}>
                   {index + 1} / {mediaArray.length}
                 </div>
               )}

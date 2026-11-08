@@ -616,6 +616,32 @@ function summarize(result) {
 // ─── Command ─────────────────────────────────────────────────────────────────
 
 /**
+ * Every namespace of the list and, where a `--depth` read carried them, the
+ * docs below it, in reading order and in one flat list: each row's `topic` is
+ * the route that opens it, so the depth of a row never changes how a reader
+ * uses it, and each names the package that owns it.
+ * @param {Array<import('../../../api/docs/docs.type.mjs').DocsListNamespace | import('../../../api/docs/docs.type.mjs').DocsListChild>} rows
+ * @returns {Array<{topic: string, description: string, package: string}>}
+ */
+function flattenNamespaces(rows) {
+  return rows.flatMap(row => [
+    {
+      topic: row.topic,
+      // An experimental doc is marked here as it is wherever else it is
+      // listed, so a reader cannot take a row of this list for a stable doc.
+      description:
+        'stability' in row &&
+        row.stability === 'experimental' &&
+        !/^experimental\b/iu.test(row.description)
+          ? `[experimental] ${row.description}`
+          : row.description,
+      package: row.package,
+    },
+    ...flattenNamespaces(row.children ?? []),
+  ]);
+}
+
+/**
  * @param {import('commander').Command} program
  */
 export function registerDocs(program) {
@@ -703,8 +729,10 @@ export function registerDocs(program) {
           // The text view mirrors the JSON list, with the docs tree's
           // namespaces (`meta.namespaces`) first under their own heading: that
           // is where the CLI's own docs start, and a namespace reads
-          // differently from a topic.
-          const namespaces = result.meta?.namespaces ?? [];
+          // differently from a topic. With --depth each branch is flattened
+          // into the same list, so every line is a route a reader can pass
+          // straight back to `docs`.
+          const namespaces = flattenNamespaces(result.meta?.namespaces ?? []);
           const topics = result.data;
           emit(
             ...(namespaces.length > 0

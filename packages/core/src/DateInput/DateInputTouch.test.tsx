@@ -49,6 +49,8 @@ import {
   monthIndexOf,
   fromMonthIndex,
   clampIndex,
+  createMonthModel,
+  dateInMonth,
   rowAtScrollOffset,
   scrollOffsetForRow,
   paneWindow,
@@ -130,6 +132,15 @@ function stubMedia({
       dispatchEvent: () => false,
     };
   });
+}
+
+/**
+ * A touchscreen laptop with the sheet pinned (`presentation="bottom-sheet"`).
+ * Its primary pointer is fine, so the sheet's wheels are the scrolling
+ * columns. A finger can still turn them.
+ */
+function stubTouchscreenLaptop(): void {
+  stubMedia({pointer: 'fine', anyPointer: 'coarse', width: 1280});
 }
 
 function setViewport(kind: 'mobile' | 'desktop'): void {
@@ -1035,10 +1046,62 @@ describe('DateInput — calendar surface', () => {
     for (const name of ['Previous month', 'Next month']) {
       // Still mounted, so the header cannot reflow...
       expect(arrow(name)).toBeInTheDocument();
-      expect(arrow(name)).toBeDisabled();
+      expect(arrow(name)).toHaveAttribute('aria-disabled', 'true');
       // ...but gone from the accessibility tree, and so unreachable.
       expect(screen.queryByRole('button', {name})).toBeNull();
     }
+  });
+
+  it('moves focus to the other arrow when the focused arrow reaches the end of the range and hides', () => {
+    renderAndOpen(
+      <Controlled initial="2026-03-10" min="2026-02-01" max="2026-04-30" />,
+    );
+    const previous = screen.getByRole('button', {name: 'Previous month'});
+    act(() => previous.focus());
+    fireEvent.click(previous);
+    // February is the first month: the arrow hides, and focus stays in the
+    // sheet, on the other arrow.
+    expect(screen.getByRole('button', {name: 'Next month'})).toHaveFocus();
+
+    const next = screen.getByRole('button', {name: 'Next month'});
+    fireEvent.click(next);
+    fireEvent.click(next);
+    // April is the last month.
+    expect(screen.getByRole('button', {name: 'Previous month'})).toHaveFocus();
+  });
+
+  it('moves focus to the other arrow when a swipe reaches the end of the range while an arrow holds focus', async () => {
+    await withLayout(async () => {
+      render(
+        <Controlled initial="2026-03-10" min="2026-01-01" max="2026-04-30" />,
+      );
+      fireEvent.click(field());
+      const previous = screen.getByRole('button', {name: 'Previous month'});
+      act(() => previous.focus());
+      fireEvent.click(previous);
+      // February: the arrow is still shown, and keeps focus.
+      expect(
+        screen.getByRole('button', {name: 'Previous month'}),
+      ).toHaveFocus();
+      const scroller = document.querySelector<HTMLElement>(
+        '[data-scroller="months"]',
+      )!;
+      // A finger takes the scroller from the steer, then swipes to January,
+      // the first month: Previous month hides.
+      const touchStart = new Event('touchstart', {bubbles: true});
+      const point = {identifier: 1, clientX: 100, clientY: 100};
+      Object.defineProperties(touchStart, {
+        touches: {value: [point]},
+        targetTouches: {value: [point]},
+        changedTouches: {value: [point]},
+      });
+      scroller.dispatchEvent(touchStart);
+      scroller.scrollLeft = 0;
+      fireEvent.scroll(scroller);
+      await waitFor(() =>
+        expect(screen.getByRole('button', {name: 'Next month'})).toHaveFocus(),
+      );
+    });
   });
 
   it('shows both arrows when there is somewhere to go in each direction', () => {
@@ -1745,6 +1808,165 @@ describe('DateInput — month/year wheels', () => {
       within(screen.getByRole('listbox', {name: 'Year'})).getByText('2025'),
     );
     expect(title()).toHaveTextContent('March 2025');
+  });
+
+  /**
+   * UIDatePicker's inline calendar: turning the month or year wheel changes
+   * the date, keeping its day (datePicker.calendar.monthYearWheels
+   * .changesDate), clamped to the month and the bounds.
+   */
+  it('with a mouse the scrolling wheels move only the calendar, not the date', () => {
+    stubTouchscreenLaptop();
+    expect(matchMedia('(pointer: coarse)').matches).toBe(false);
+    const onChange = vi.fn();
+    renderAndOpen(
+      <Controlled
+        initial="2026-03-21"
+        {...ONE_YEAR}
+        presentation="bottom-sheet"
+        onChange={onChange}
+      />,
+    );
+    openWheels();
+    fireEvent.click(
+      within(screen.getByRole('listbox', {name: 'Month'})).getByText('May'),
+    );
+    expect(onChange).not.toHaveBeenCalled();
+    expect(field()).toHaveValue('March 21, 2026');
+  });
+
+  it('under a finger: keeps a date a custom constraint refuses, while the calendar moves', () => {
+    const onChange = vi.fn();
+    renderAndOpen(
+      <Controlled
+        initial="2026-03-21"
+        {...ONE_YEAR}
+        // May 21, 2026 is refused; the wheels must not choose it.
+        dateConstraints={[
+          date => !(date.getMonth() === 4 && date.getDate() === 21),
+        ]}
+        onChange={onChange}
+      />,
+    );
+    openWheels();
+    fireEvent.click(
+      within(screen.getByRole('listbox', {name: 'Month'})).getByText('May'),
+    );
+    expect(onChange).not.toHaveBeenCalled();
+    expect(field()).toHaveValue('March 21, 2026');
+    expect(title()).toHaveTextContent('May 2026');
+  });
+
+  it('under a finger: moves the chosen date with the wheels, keeping its day', () => {
+    const onChange = vi.fn();
+    renderAndOpen(
+      <Controlled initial="2026-03-21" {...ONE_YEAR} onChange={onChange} />,
+    );
+    openWheels();
+    fireEvent.click(
+      within(screen.getByRole('listbox', {name: 'Month'})).getByText('May'),
+    );
+    expect(onChange).toHaveBeenLastCalledWith('2026-05-21');
+    expect(field()).toHaveValue('May 21, 2026');
+  });
+
+  it('under a finger: a date the wheels move runs changeAction after onChange, shows at once, and is busy (family:input-fields FR6)', async () => {
+    const calls: string[] = [];
+    let resolve: () => void = () => {};
+    const changeAction = vi.fn(async (value: string | undefined) => {
+      calls.push(`changeAction ${value}`);
+      return new Promise<void>(done => {
+        resolve = done;
+      });
+    });
+    renderAndOpen(
+      <DateInput
+        nativePicker="never"
+        label="Ship date"
+        value="2026-03-21"
+        {...ONE_YEAR}
+        onChange={value => calls.push(`onChange ${value}`)}
+        changeAction={changeAction}
+      />,
+    );
+    openWheels();
+    fireEvent.click(
+      within(screen.getByRole('listbox', {name: 'Month'})).getByText('May'),
+    );
+    await waitFor(() => {
+      expect(calls).toEqual(['onChange 2026-05-21', 'changeAction 2026-05-21']);
+    });
+    // Optimistic: the moved date shows while the Action runs, the field busy.
+    expect(field()).toHaveValue('May 21, 2026');
+    expect(document.querySelector('[aria-busy="true"]')).not.toBeNull();
+    await act(async () => {
+      resolve();
+    });
+  });
+
+  it('under a finger: clamps a day the new month lacks to its last day', () => {
+    const onChange = vi.fn();
+    renderAndOpen(
+      <Controlled initial="2026-03-31" {...ONE_YEAR} onChange={onChange} />,
+    );
+    openWheels();
+    fireEvent.click(
+      within(screen.getByRole('listbox', {name: 'Month'})).getByText('April'),
+    );
+    expect(onChange).toHaveBeenLastCalledWith('2026-04-30');
+  });
+
+  it('under a finger: takes a year change past the range on to its nearest reachable month, date and month wheel too', async () => {
+    const onChange = vi.fn();
+    renderAndOpen(
+      <Controlled
+        initial="2026-03-21"
+        min="2025-06-01"
+        max="2026-12-31"
+        onChange={onChange}
+      />,
+    );
+    openWheels();
+    fireEvent.click(
+      within(screen.getByRole('listbox', {name: 'Year'})).getByText('2025'),
+    );
+    // March 2025 is before the range: June 2025, the first reachable month.
+    expect(title()).toHaveTextContent('June 2025');
+    expect(onChange).toHaveBeenLastCalledWith('2025-06-21');
+    const months = screen.getByRole('listbox', {name: 'Month'});
+    await waitFor(() =>
+      expect(
+        document.getElementById(months.getAttribute('aria-activedescendant')!),
+      ).toHaveTextContent('June'),
+    );
+  });
+
+  it('under a finger: opening the wheels on a date outside the range changes nothing until a wheel moves', () => {
+    // An untouched value is never changed by opening: the wheels show the
+    // calendar's month, inside the range, and nothing commits.
+    const onChange = vi.fn();
+    renderAndOpen(
+      <Controlled
+        initial="2025-12-15"
+        min="2026-01-01"
+        max="2026-12-31"
+        onChange={onChange}
+      />,
+    );
+    openWheels();
+    expect(onChange).not.toHaveBeenCalled();
+    expect(field()).toHaveValue('December 15, 2025');
+  });
+
+  it('only moves the calendar when no date is chosen', () => {
+    const onChange = vi.fn();
+    renderAndOpen(<Controlled {...ONE_YEAR} onChange={onChange} />);
+    openWheels();
+    fireEvent.click(
+      within(screen.getByRole('listbox', {name: 'Month'})).getByText('May'),
+    );
+    expect(title()).toHaveTextContent('May 2026');
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it('is a single tab stop driven by the arrow keys', () => {
@@ -2486,6 +2708,41 @@ describe('monthGeometry', () => {
     expect(monthIndexOf({year: 2026, month: 3, day: 1})).toBe(
       monthIndexOf({year: 2026, month: 3, day: 31}),
     );
+  });
+
+  it('moves a date to another month keeping its day, within the month and the bounds', () => {
+    const d = (year: number, month: number, day: number) => ({
+      year,
+      month,
+      day,
+    });
+    const gregory = createMonthModel('gregory');
+    expect(
+      dateInMonth(gregory, d(2026, 10, 15), toMonthIndex(2026, 5)),
+    ).toEqual(d(2026, 5, 15));
+    expect(dateInMonth(gregory, d(2026, 1, 31), toMonthIndex(2026, 2))).toEqual(
+      d(2026, 2, 28),
+    );
+    expect(dateInMonth(gregory, d(2024, 1, 31), toMonthIndex(2024, 2))).toEqual(
+      d(2024, 2, 29),
+    );
+    expect(
+      dateInMonth(
+        gregory,
+        d(2026, 6, 10),
+        toMonthIndex(2026, 5),
+        d(2026, 5, 20),
+      ),
+    ).toEqual(d(2026, 5, 20));
+    expect(
+      dateInMonth(
+        gregory,
+        d(2026, 6, 25),
+        toMonthIndex(2026, 7),
+        null,
+        d(2026, 7, 4),
+      ),
+    ).toEqual(d(2026, 7, 4));
   });
 
   it('clamps to the reachable range', () => {

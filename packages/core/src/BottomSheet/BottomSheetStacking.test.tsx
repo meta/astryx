@@ -281,20 +281,33 @@ function fireCancel(dialog: Element): Event {
 }
 
 // Drive a pointer drag on a grab handle. jsdom PointerEvents don't carry
-// clientY, so dispatch plain events with the coords the handlers read.
+// clientY, so dispatch plain events with the coords the handlers read. Each
+// event comes 16 ms after the one before, so the release velocity follows
+// the events' own timestamps.
+let dragTime = 0;
+
 function drag(handle: HTMLElement, points: {y: number}[]) {
+  const fire = (
+    type: 'pointerdown' | 'pointermove' | 'pointerup',
+    y: number,
+  ) => {
+    dragTime += 16;
+    const event = new Event(type, {bubbles: true, cancelable: true});
+    Object.defineProperties(event, {
+      button: {value: 0},
+      clientY: {value: y},
+      isPrimary: {value: true},
+      pointerId: {value: 1},
+      timeStamp: {value: dragTime},
+    });
+    fireEvent(handle, event);
+  };
   const [down, ...rest] = points;
-  fireEvent.pointerDown(handle, {
-    pointerId: 1,
-    clientY: down.y,
-    button: 0,
-    isPrimary: true,
-  });
+  fire('pointerdown', down.y);
   for (const point of rest) {
-    fireEvent.pointerMove(handle, {pointerId: 1, clientY: point.y});
+    fire('pointermove', point.y);
   }
-  const last = points[points.length - 1];
-  fireEvent.pointerUp(handle, {pointerId: 1, clientY: last.y});
+  fire('pointerup', points[points.length - 1].y);
 }
 
 function classes(element: Element): string {

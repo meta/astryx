@@ -32,8 +32,11 @@ import {
   touchArrivalsFrom,
   TOUCH_STILLNESS_MS,
   touchPacingFault,
+  touchPlayError,
+  TouchLiftStallError,
   TouchPacingError,
   TouchPageStallError,
+  liftStallError,
   type TouchArrival,
   type TouchPacing,
 } from './touch';
@@ -357,18 +360,66 @@ describe("the release a paced play's page reads, as Core's velocity tracker read
 });
 
 describe('touchArrivalsFrom', () => {
-  it('gives each step one arrival: the earliest stamp of its pointer and touch events, and the latest handling', () => {
+  it('gives each step one arrival: a move at its pointer event, a touch-down and a lift at their touch events, and the latest handling', () => {
     expect(
       touchArrivalsFrom({
-        eventTypes: ['pointerdown', 'touchstart', 'pointermove', 'touchmove'],
-        pointerTypes: ['touch', '', 'touch', ''],
-        stamps: [23, 24, 39, 100],
-        handledAt: [23, 24, 100, 100],
+        eventTypes: [
+          'pointerdown',
+          'touchstart',
+          'pointermove',
+          'touchmove',
+          'pointerup',
+          'touchend',
+        ],
+        pointerTypes: ['touch', '', 'touch', '', 'touch', ''],
+        stamps: [23, 24, 39, 100, 116, 140],
+        handledAt: [23, 24, 100, 100, 140, 140],
       }),
     ).toEqual([
-      {stamp: 23, handledAt: 24},
-      {stamp: 39, handledAt: 100},
+      {stamp: 24, firstStamp: 23, handledAt: 24},
+      {stamp: 39, firstStamp: 39, handledAt: 100},
+      {stamp: 140, firstStamp: 116, handledAt: 140},
     ]);
+  });
+
+  it("reads a lift at its touchend, which the page's pointerup listener held: the page's rest", () => {
+    // How WebKit recorded a Carousel flick on a loaded runner. The pointerup
+    // came 4 ms after the last move. Its listeners finished 49 ms later, when
+    // WebKit stamped the touchend, and the gesture host reads the lift there.
+    const record = {
+      eventTypes: [
+        'pointerdown',
+        'touchstart',
+        ...[0, 1, 2, 3, 4].flatMap(() => ['pointermove', 'touchmove']),
+        'pointerup',
+        'touchend',
+      ],
+      pointerTypes: [
+        'touch',
+        '',
+        ...[0, 1, 2, 3, 4].flatMap(() => ['touch', '']),
+        'touch',
+        '',
+      ],
+      stamps: [
+        3097, 3099, 3116, 3121, 3146, 3149, 3180, 3185, 3246, 3255, 3294, 3295,
+        3298, 3347,
+      ],
+      handledAt: [
+        3099, 3102, 3121, 3121, 3149, 3150, 3185, 3185, 3255, 3255, 3295, 3295,
+        3347, 3355,
+      ],
+    };
+    const arrivals = touchArrivalsFrom(record);
+    expect(arrivals.at(-1)).toEqual({
+      stamp: 3347,
+      firstStamp: 3298,
+      handledAt: 3355,
+    });
+    const fault = touchPacingFault(FLICK, arrivals);
+    expect(fault?.kind).toBe('rest');
+    // The lift's own pointerup listener held its touchend 49 ms.
+    expect(fault?.heldByPage).toEqual({gapMs: 53, handlingMs: 49});
   });
 
   it("leaves a mouse's pointer event out of a touch step", () => {
@@ -379,7 +430,7 @@ describe('touchArrivalsFrom', () => {
         stamps: [5, 39, 39],
         handledAt: [90, 40, 40],
       }),
-    ).toEqual([{stamp: 39, handledAt: 40}]);
+    ).toEqual([{stamp: 39, firstStamp: 39, handledAt: 40}]);
   });
 
   it("reads a page whose pointer listener held each move as the page's rest, which the touch events alone hide", () => {
@@ -453,10 +504,80 @@ describe('the pacing errors', () => {
     });
     expect(error.name).toBe('TouchPageStallError');
     expect(error.message).toMatch(
-      /the page's own touch and pointer listeners took 30 ms to handle an event, so the next reached it 46 ms later/,
+      /the page's own touch and pointer listeners took 30 ms of page wall time to handle an event, so the next reached it 46 ms later/,
     );
     expect(error.message).toMatch(
-      /the page changed the release, not the runner/,
+      /On a starved runner that time includes the page's wait for a CPU: judge a page stall from a run with CI's CPU limits/,
     );
+    expect(error.message).not.toMatch(/not the runner/);
+  });
+});
+
+describe('liftStallError', () => {
+  // The flick's last move is its step 5; its lift, step 6, comes 16 ms later.
+  const onEventAt5 = (ms: number) => [0, 0, 0, 0, 0, ms, 0];
+  const lateLift = at([0, 16, 32, 48, 64, 80, 200]);
+
+  it('names the lift stall when onEvent alone carries the gap past the stillness interval, however much later a loaded runner made the lift', () => {
+    const fault = touchPacingFault(FLICK, lateLift);
+    if (fault?.kind !== 'rest') {
+      throw new Error('expected the page to read a rest');
+    }
+    // onEvent ran 70 ms of the 120 ms gap; the runner stretched the rest.
+    const error = liftStallError(FLICK, lateLift, fault, onEventAt5(70));
+    expect(error).toBeInstanceOf(TouchLiftStallError);
+    expect(error?.numbers).toMatchObject({
+      scriptedGapMs: 16,
+      gapMs: 120,
+      onEventMs: 70,
+    });
+  });
+
+  it('leaves a lift that onEvent cannot carry past the interval to the pacing errors', () => {
+    const fault = touchPacingFault(FLICK, lateLift);
+    if (fault == null) {
+      throw new Error('expected a fault');
+    }
+    const below = TOUCH_STILLNESS_MS - 16;
+    expect(liftStallError(FLICK, lateLift, fault, onEventAt5(5))).toBeNull();
+    expect(
+      liftStallError(FLICK, lateLift, fault, onEventAt5(below)),
+    ).toBeNull();
+    expect(
+      liftStallError(FLICK, lateLift, fault, onEventAt5(below + 1)),
+    ).toBeInstanceOf(TouchLiftStallError);
+  });
+});
+
+describe('touchPlayError', () => {
+  // The lift reaches the page 120 ms after the last move, step 5, where the
+  // script spaces 16 ms: the page reads a resting finger.
+  const lateLift = at([0, 16, 32, 48, 64, 80, 200]);
+  const heldLift = lateLift.map((a, i) =>
+    i === 5 ? {...a, handledAt: a.stamp + 110} : a,
+  );
+  const quick = [0, 0, 0, 0, 0, 0, 0];
+  const slowAt5 = [0, 0, 0, 0, 0, 70, 0];
+  const errorFor = (arrivals: TouchArrival[], onEventMs: number[]) => {
+    const fault = touchPacingFault(FLICK, arrivals);
+    if (fault?.kind !== 'rest') {
+      throw new Error('expected the page to read a rest');
+    }
+    return touchPlayError(FLICK, arrivals, fault, onEventMs);
+  };
+
+  it("names the runner's dispatch stall when onEvent is quick and the page's listeners did not hold the lift", () => {
+    const error = errorFor(lateLift, quick);
+    expect(error).toBeInstanceOf(TouchPacingError);
+    expect((error as TouchPacingError).fault.heldByPage).toBeNull();
+  });
+
+  it("names the page's stall when its listeners held the lift and onEvent is quick", () => {
+    expect(errorFor(heldLift, quick)).toBeInstanceOf(TouchPageStallError);
+  });
+
+  it('names the lift stall first when onEvent alone carries the gap past the stillness interval', () => {
+    expect(errorFor(lateLift, slowAt5)).toBeInstanceOf(TouchLiftStallError);
+    expect(errorFor(heldLift, slowAt5)).toBeInstanceOf(TouchLiftStallError);
   });
 });

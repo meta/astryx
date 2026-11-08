@@ -4,9 +4,10 @@
  * @file wheelPhysics.test.ts
  * @input wheelPhysics.ts and per-frame offsets recorded from a UIPickerView,
  *   with the release velocity UIKit handed its delegate
- * @output Proves the Wheel's curves reproduce UIKit's measured picker: the
- *   projected target, the coast onto the row, the coast into an end, the
- *   snap, the rubber band, the tap spin and the ticks
+ * @output Proves the Wheel's curves reproduce UIKit's measured picker. They
+ *   cover the projected target, the coast onto the row, the coast into an
+ *   end and the snap. They also cover the rubber band, a turn from rest and
+ *   the ticks
  * @position Unit coverage for DateInput/wheelPhysics.ts
  *
  * The recordings are of a 216 pt UIPickerView column of 60 rows, 32 pt each.
@@ -16,17 +17,16 @@
  */
 
 import {describe, expect, it} from 'vitest';
-import {picker} from '../motion/uikit/picker';
-import {timing} from '../motion/uikit/timing';
+import {springs} from '../motion/uikit/springs';
 import {
   MAX_PLAN_SECONDS,
+  bounceCurve,
   coastCurve,
   dragOffset,
   planRelease,
   projectRelease,
   reachesRow,
   snapCurve,
-  spinCurve,
   tickTimes,
   type WheelLayout,
 } from './wheelPhysics';
@@ -326,25 +326,20 @@ describe('past an end', () => {
   });
 });
 
-describe('the tap spin', () => {
-  it('turns onto the row on Core Animation’s ease-in-ease-out in 0.3 s', () => {
-    const curve = spinCurve(
-      0,
-      64,
-      picker.tapSpin.durationMs / 1000,
-      timing.curves.move,
-    );
-    expect(curve.duration).toBe(0.3);
-    // UIKit, a tap two rows below the band: 6.8, 25.1, 50.2, 75.4 and 93.7 % of
-    // the way at 50 ms steps. The recording starts a few ms early.
-    const measured = [0.068, 0.251, 0.502, 0.754, 0.937];
-    measured.forEach((fraction, i) => {
-      expect(
-        Math.abs(curve.value((i + 1) * 0.05) / 64 - fraction),
-      ).toBeLessThan(0.025);
-    });
-    expect(curve.value(0.3)).toBe(64);
-    expect(curve.velocity(0.15)).toBeGreaterThan(0);
+describe('a turn from rest', () => {
+  it('springs onto the row on the settle spring, from rest, without overshoot', () => {
+    // A tap, a key or the program turns the wheel on `springs.settle`, from
+    // rest.
+    const curve = bounceCurve(0, 0, 64, 1, springs.settle);
+    expect(curve.velocity(0)).toBe(0);
+    expect(curve.value(curve.duration)).toBe(64);
+    let last = 0;
+    for (let t = 0; t <= curve.duration; t += 1 / 120) {
+      const value = curve.value(t);
+      expect(value).toBeGreaterThanOrEqual(last - 1e-9);
+      expect(value).toBeLessThanOrEqual(64 + 1e-9);
+      last = value;
+    }
   });
 });
 

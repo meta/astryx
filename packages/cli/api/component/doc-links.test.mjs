@@ -13,11 +13,19 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
-import {component} from './component.mjs';
-import {CORE_PACKAGE, linkComponentResponse} from './_adapter.mjs';
-import {docs} from '../docs/docs.mjs';
-import {search} from '../search/search.mjs';
-import {runCli} from '../../test-utils/run-cli.mjs';
+import {requireNatively} from '../../test-utils/native-require.mjs';
+
+const require = requireNatively(import.meta.url);
+/** @type {typeof import('./component.mjs')} */
+const {component} = require('./component.mjs');
+/** @type {typeof import('./_adapter.mjs')} */
+const {CORE_PACKAGE, linkComponentResponse} = require('./_adapter.mjs');
+/** @type {typeof import('../docs/docs.mjs')} */
+const {docs} = require('../docs/docs.mjs');
+/** @type {typeof import('../search/search.mjs')} */
+const {search} = require('../search/search.mjs');
+/** @type {typeof import('../../test-utils/run-cli.mjs')} */
+const {runCli} = require('../../test-utils/run-cli.mjs');
 
 const SLOW = 60_000;
 

@@ -278,7 +278,7 @@ export interface DateInputProps extends Omit<
   /**
    * The selected date in ISO format (YYYY-MM-DD).
    */
-  value?: ISODateString;
+  value?: ISODateString | undefined;
 
   /**
    * Callback fired when the date changes.
@@ -880,6 +880,7 @@ function PointerDateField({
         }),
         stylex.props(
           inputWrapperStyles.base,
+          inputWrapperStyles.textField,
           sizeStyles[size],
           // Disabled paint belongs to the disabled state only; a busy field
           // keeps its ordinary paint and shows the Spinner (spec:AST-085

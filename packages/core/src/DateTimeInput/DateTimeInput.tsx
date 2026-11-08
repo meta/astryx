@@ -368,7 +368,7 @@ export interface DateTimeInputProps extends Omit<
   /**
    * The selected datetime in ISO 8601 format ("YYYY-MM-DDTHH:MM" or "YYYY-MM-DDTHH:MM:SS").
    */
-  value?: ISODateTimeString;
+  value?: ISODateTimeString | undefined;
 
   /**
    * Callback fired when the datetime changes.
@@ -1712,6 +1712,7 @@ function PointerDateTimeField({
             }),
             stylex.props(
               inputWrapperStyles.base,
+              inputWrapperStyles.textField,
               sizeStyles[size],
               styles.dateWrapper,
               isEffectivelyDisabled && inputWrapperStyles.disabled,
@@ -1866,6 +1867,7 @@ function PointerDateTimeField({
             }),
             stylex.props(
               inputWrapperStyles.base,
+              inputWrapperStyles.textField,
               sizeStyles[size],
               styles.timeWrapper,
               isEffectivelyDisabled && inputWrapperStyles.disabled,

@@ -126,20 +126,6 @@ export const docs = {
         default: '1',
         private: true,
       },
-      {
-        name: '--_toast-start-opacity',
-        description:
-          'Private starting opacity of the entry; ToastViewport sets it to 1 once the entrance starts',
-        default: '0',
-        private: true,
-      },
-      {
-        name: '--_toast-start-slide',
-        description:
-          'Private starting offset of the entry; ToastViewport sets it to 0px once the entrance starts',
-        default: 'var(--_toast-slide-y)',
-        private: true,
-      },
     ],
   },
 
