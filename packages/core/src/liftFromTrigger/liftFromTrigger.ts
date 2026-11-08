@@ -156,11 +156,11 @@ export interface LiftFromTriggerOptions {
   /** A finger lifted on the backdrop where it went down. */
   readonly onBackdropTap?: () => void;
   /**
-   * Marks the lift's elements: the layer, its placeholder
-   * (`<attribute>-placeholder`) and a surface's exit copy
-   * (`<attribute>-exit`).
+   * Marks the lift's elements, a private attribute the caller owns: the
+   * layer, its placeholder (`<attribute>-placeholder`) and a surface's exit
+   * copy (`<attribute>-exit`).
    */
-  readonly attribute?: string;
+  readonly attribute: string;
 }
 
 /** Where a lift landed. */
@@ -221,7 +221,7 @@ export interface LiftCopyOptions {
   readonly host: HTMLElement;
   /** The picture for a source that shows none. */
   readonly src?: string;
-  /** Marks the copy. @default 'data-astryx-lift-copy' */
+  /** Marks the copy, when given: a private attribute the caller owns. */
   readonly attribute?: string;
 }
 
@@ -816,7 +816,7 @@ export function createLiftFromTrigger(): LiftFromTrigger {
     if (typeof source.showPopover !== 'function' || !source.isConnected) {
       return null;
     }
-    const attribute = options.attribute ?? 'data-astryx-lift';
+    const {attribute} = options;
     const doc = source.ownerDocument;
     const view = doc.defaultView;
     const computed = view?.getComputedStyle(source);
@@ -1411,7 +1411,7 @@ function pictureOf(source: HTMLElement): string {
  */
 export function liftCopy(
   source: HTMLElement,
-  {host, src, attribute = 'data-astryx-lift-copy'}: LiftCopyOptions,
+  {host, src, attribute}: LiftCopyOptions,
 ): LiftedCopy | null {
   if (!source.isConnected || !host.isConnected) {
     return null;
@@ -1438,7 +1438,9 @@ export function liftCopy(
   copy.alt = '';
   copy.setAttribute('aria-hidden', 'true');
   copy.setAttribute('inert', '');
-  copy.setAttribute(attribute, '');
+  if (attribute != null) {
+    copy.setAttribute(attribute, '');
+  }
   Object.assign(copy.style, {
     position: 'absolute',
     left: `${left}px`,

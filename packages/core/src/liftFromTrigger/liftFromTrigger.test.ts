@@ -451,7 +451,6 @@ describe('liftCopy', () => {
     expect(element.src).toBe('https://example.test/a-thumb.jpg');
     expect(element.alt).toBe('');
     expect(element.getAttribute('aria-hidden')).toBe('true');
-    expect(element.hasAttribute('data-astryx-lift-copy')).toBe(true);
     expect([
       element.style.position,
       element.style.left,
@@ -526,7 +525,6 @@ describe('liftCopy', () => {
     const {host, thumb} = renderGrid();
     const copy = liftCopy(thumb, {host, attribute: 'data-lightbox-portal'});
     expect(copy?.element.hasAttribute('data-lightbox-portal')).toBe(true);
-    expect(copy?.element.hasAttribute('data-astryx-lift-copy')).toBe(false);
     copy?.drop();
   });
 
