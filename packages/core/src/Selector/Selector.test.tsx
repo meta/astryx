@@ -194,7 +194,6 @@ function mockSelectorRects({
   listboxLayoutHeight = listbox.height,
   selectedItemLayoutTop = selectedItem.top - listbox.top,
   selectedItemLayoutHeight = selectedItem.height,
-  layerLayoutHeight = listboxLayoutHeight,
   viewportHeight = 200,
 }: {
   anchor?: DOMRect;
@@ -204,8 +203,6 @@ function mockSelectorRects({
   listboxLayoutHeight?: number;
   selectedItemLayoutTop?: number;
   selectedItemLayoutHeight?: number;
-  /** The popover layer's layout height: the listbox plus its border. */
-  layerLayoutHeight?: number;
   viewportHeight?: number;
 } = {}) {
   const originalGetBoundingClientRect =
@@ -262,9 +259,6 @@ function mockSelectorRects({
       }
       if (this.id.endsWith('-item-1')) {
         return selectedItemLayoutHeight;
-      }
-      if (this.hasAttribute('popover')) {
-        return layerLayoutHeight;
       }
       return 0;
     },
@@ -650,9 +644,19 @@ describe('Selector', () => {
     }
   });
 
-  it('clamps the whole layer, border included, and keeps it out of the flip fallbacks', async () => {
-    // The layer is 2 px taller than the listbox: its surface border.
-    const restoreRects = mockSelectorRects({layerLayoutHeight: 122});
+  it("keeps the overlay out of the layer's block-end viewport gutter", async () => {
+    const restoreRects = mockSelectorRects();
+    // The layer keeps a 16 px gutter from the viewport's block end.
+    const realGetComputedStyle = window.getComputedStyle.bind(window);
+    const styleSpy = vi
+      .spyOn(window, 'getComputedStyle')
+      .mockImplementation((element, pseudo) => {
+        const style = realGetComputedStyle(element, pseudo);
+        if (element instanceof HTMLElement && element.hasAttribute('popover')) {
+          Object.defineProperty(style, 'marginBlockEnd', {value: '16px'});
+        }
+        return style;
+      });
     const user = userEvent.setup();
     try {
       render(
@@ -668,18 +672,15 @@ describe('Selector', () => {
       const popover = screen
         .getByRole('listbox', {hidden: true})
         .closest('[popover]');
-      // 2 px higher than the listbox alone would give (110 px), so the
-      // layer's bottom border stays in the 200 px viewport.
+      // 16 px higher than without the gutter (110 px), so the list ends at
+      // the gutter in the 200 px viewport.
       await waitFor(() => {
         expect(popover?.getAttribute('style')).toContain(
-          '--_selector-overlay-margin: min(-112px,',
+          '--_selector-overlay-margin: min(-126px,',
         );
       });
-      // A flip would mirror the measured margin to the other side.
-      expect(popover?.getAttribute('style')).toContain(
-        'position-try-fallbacks: none',
-      );
     } finally {
+      styleSpy.mockRestore();
       restoreRects();
     }
   });

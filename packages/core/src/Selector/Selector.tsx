@@ -1482,10 +1482,6 @@ export function Selector<T extends SelectorOptionType>(
       : {
           ...overlayMarginProperty,
           marginBlockStart: `var(${OVERLAY_MARGIN_PROPERTY})`,
-          // The measured margin already keeps the overlay in the viewport. A
-          // flip would mirror that margin to the other side and put the menu
-          // off screen.
-          positionTryFallbacks: 'none',
         };
 
   // Clear the current value. Shared by the clear button and the keyboard

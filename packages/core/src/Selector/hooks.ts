@@ -67,8 +67,10 @@ interface SelectedItemPlacement {
   offset: number;
   /** The anchor's bottom edge, viewport px. */
   anchorBottom: number;
-  /** The layer's layout height, px: the listbox and the surface around it. */
+  /** The listbox's layout height, px. */
   listboxHeight: number;
+  /** The layer's block-end viewport gutter, px, when the clamp counts it. */
+  blockEndGutter: number;
 }
 
 /**
@@ -81,6 +83,7 @@ function measureSelectedItem(
   anchor: HTMLElement | null,
   listboxId: string,
   selectedItemIndex: number,
+  {countsLayerGutter = false}: {countsLayerGutter?: boolean} = {},
 ): SelectedItemPlacement | null {
   if (listbox == null || anchor == null) {
     return null;
@@ -98,22 +101,10 @@ function measureSelectedItem(
 
   const anchorRect = anchor.getBoundingClientRect();
 
-  // The clamp keeps the whole layer in the viewport: the listbox and the
-  // surface border around it. Measuring the listbox alone leaves the layer a
-  // border taller than the room, and the browser then flips it off screen.
   // offset* metrics intentionally exclude the popover's entry transform.
-  const layer = listbox.closest<HTMLElement>('[popover]') ?? listbox;
-  const layerHeight = layer.offsetHeight;
-  if (layerHeight <= 0) {
+  const listboxHeight = listbox.offsetHeight;
+  if (listboxHeight <= 0) {
     return null;
-  }
-  let listboxInset = 0;
-  for (
-    let node: HTMLElement | null = listbox;
-    node != null && node !== layer;
-    node = node.offsetParent as HTMLElement | null
-  ) {
-    listboxInset += node.offsetTop;
   }
 
   // Item center relative to listbox top. This remains stable even as the
@@ -126,26 +117,31 @@ function measureSelectedItem(
     targetItem.offsetHeight / 2;
   const anchorCenter = anchorRect.top + anchorRect.height / 2;
 
-  // Desired layer top aligns the selected item's center with the anchor
-  // center.
+  // Desired top aligns the selected item's center with the anchor center.
   const desiredTop =
-    anchorCenter -
-    itemCenterInListbox -
-    listboxInset -
-    SELECTED_ITEM_OPTICAL_OFFSET;
+    anchorCenter - itemCenterInListbox - SELECTED_ITEM_OPTICAL_OFFSET;
+  // The layer keeps a gutter from the viewport's block end. A list that
+  // reaches into it overflows the layer's room, and the browser then takes a
+  // position fallback, which can flip the list off screen.
+  const layer = countsLayerGutter
+    ? listbox.closest<HTMLElement>('[popover]')
+    : null;
+  const blockEndGutter =
+    layer == null ? 0 : parseFloat(getComputedStyle(layer).marginBlockEnd) || 0;
   const viewportHeight = window.innerHeight;
-  const maxTop = Math.max(0, viewportHeight - layerHeight);
+  const maxTop = Math.max(0, viewportHeight - listboxHeight - blockEndGutter);
   const clampedTop = Math.min(Math.max(desiredTop, 0), maxTop);
 
   // useLayer positions the popover below the outer anchor. Apply a negative
-  // block-start margin to the layer container so the layer top moves from
+  // block-start margin to the layer container so the listbox top moves from
   // anchorRect.bottom to clampedTop.
   const clampedOffset = Math.max(0, anchorRect.bottom - clampedTop);
 
   return {
     offset: clampedOffset,
     anchorBottom: anchorRect.bottom,
-    listboxHeight: layerHeight,
+    listboxHeight,
+    blockEndGutter,
   };
 }
 
@@ -234,15 +230,20 @@ export function useSelectedItemOverlayMargin({
           anchorRef.current,
           listboxId,
           selectedItemIndex,
+          {countsLayerGutter: true},
         )
       : null;
     let margin: string | undefined;
     if (placement != null) {
-      const {offset, anchorBottom, listboxHeight} = placement;
+      const {offset, anchorBottom, listboxHeight, blockEndGutter} = placement;
       // The room below the anchor for the list, in the keyboard inset's
       // layout px. With no keyboard the inset falls back to the room itself.
       // The keyboard term is then 0, and the measured shift stands.
-      const room = layoutViewportHeight(window) - listboxHeight - anchorBottom;
+      const room =
+        layoutViewportHeight(window) -
+        listboxHeight -
+        blockEndGutter -
+        anchorBottom;
       margin = `min(${-offset}px, max(${-anchorBottom}px, calc(${room}px - var(${LAYER_KEYBOARD_INSET_PROPERTY}, ${room}px))))`;
     }
     // eslint-disable-next-line @eslint-react/set-state-in-effect -- selector popover position is derived from DOM layout
