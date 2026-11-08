@@ -353,10 +353,7 @@ const styles = stylex.create({
    * honours.
    */
   resetButton: {
-    minBlockSize: {
-      default: sizeVars['--size-element-sm'],
-      '@media (pointer: coarse)': TOUCH_TARGET,
-    },
+    minBlockSize: {default: null, '@media (pointer: coarse)': TOUCH_TARGET},
   },
   /**
    * The month and year, and the toggle into the wheels. Leading, so it reads
