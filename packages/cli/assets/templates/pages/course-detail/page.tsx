@@ -13,7 +13,7 @@
 // carry every value the set has, gaps ride scoped styles. The glyphs
 // draw from @heroicons/react under the template's import names (each
 // mapped in template.doc.mjs); directional icons mirror under RTL;
-// sample media rides /template-assets placeholders.
+// sample media rides the shipped fixture images.
 
 'use client';
 
@@ -781,8 +781,8 @@ const COURSE = {
   // is one, three credentials in the teacher's own words, and every course
   // they teach — so the figures on the card and the two courses in the
   // Also-taught-by band are computed from the same records a real
-  // catalogue would keep. The portrait is a shipped /template-assets
-  // fixture, named for the person it sits beside.
+  // catalogue would keep. The portrait is a shipped fixture image,
+  // named for the person it sits beside.
   instructor: {
     name: 'Dr. Maya Chen',
     trade: 'Applied AI lead · ex-research scientist',
@@ -967,7 +967,7 @@ const COURSE = {
   ],
   // Where to go after this one: the same subject first, then the skills it
   // shares — the design's relatedTo order, as sample data. Photographs
-  // are shipped /template-assets fixtures; the teachers' portraits are
+  // are shipped fixture images; the teachers' portraits are
   // the design's own placeholder casts.
   related: [
     {
@@ -1104,8 +1104,8 @@ function ago(weeks: number) {
 }
 const hash = (s: string) => [...s].reduce((a, c) => a + c.charCodeAt(0), 0);
 
-// Sample media: complete static fixture strings under /template-assets/, so
-// the copy step can find and ship every file, and nothing hotlinks a host.
+// Sample media: complete static fixture paths, so the copy step can find
+// and ship every file, and nothing hotlinks a host.
 
 /** How the course's reviews spread across one to five stars, as whole
  *  percentages adding to 100 (the detail model spread): one family of shapes,
@@ -4137,7 +4137,7 @@ function RelatedRail() {
       {/* The core Carousel owns the paging: its buttons, its snap stops
           and its ends need no layout reads and mirror under RTL. */}
       <Carousel
-        label="Courses to take next"
+        aria-label="Courses to take next"
         gap={4}
         hasSnap
         hasEdgeFade={false}
@@ -4395,21 +4395,20 @@ function EnrollPanel() {
   // The panel is held to the screen's height less the header only from lg,
   // where it rides beside the syllabus (the design's own gate).
   const tall = !useIsMobile(1023);
-  const today = localToday();
-  const starts = startsFor(today);
-  const [picked, setPicked] = useState<string>('self');
+  const {today, starts, picked, setPicked, pace, setPace, setAway} =
+    useEnrollment();
   const maxPace = Math.max(12, COURSE.hours * 2);
-  const [pace, setPace] = useState(COURSE.hours);
   const start = starts.find(s => s.key === picked) ?? starts[0];
   const finish = finishAt(today, pace);
   const paid = COURSE.price > 0;
 
   // The design's reach-bar: once the CTA has scrolled away above the
-  // screen, the bar keeps the price and the button in reach. The root runs
+  // screen, the bar keeps the price and the button in reach. The bar
+  // itself mounts once at the page's end (its own component, below the
+  // provider), so the panel only reports the CTA's reach. The root runs
   // far below the screen, so the button counts as in view down the page and
   // only leaving past the top turns the bar on.
   const ctaRef = useRef<HTMLDivElement>(null);
-  const [away, setAway] = useState(false);
   useEffect(() => {
     const el = ctaRef.current;
     if (!el || typeof IntersectionObserver === 'undefined') {
@@ -4423,196 +4422,251 @@ function EnrollPanel() {
     );
     io.observe(el);
     return () => io.disconnect();
-  }, []);
+  }, [setAway]);
 
   const self = starts.find(s => s.kind === 'self');
   const cohortRows = starts.filter(s => s.kind === 'cohort');
   const ctaLabel = paid ? `Enroll for ${fmt(COURSE.price)}` : 'Enroll for free';
 
   return (
-    <>
-      {/* Beside the syllabus the panel is held to the screen's height, less
-          the header above it and a margin below, so on a short laptop its
-          foot is never under the screen's edge: the price and the buttons
-          stay whole, and the ways to start scroll inside it instead. */}
-      <Card
-        variant="transparent"
-        padding={isMobile ? 5 : 6}
-        style={{
-          width: '100%',
-          background: 'var(--color-background-card)',
-          boxShadow: 'var(--shadow-low)',
-          borderRadius: 'var(--radius-container)',
-          display: 'flex',
-          flexDirection: 'column',
-          ...(tall
-            ? {maxHeight: 'calc(100dvh - 112px)', overflow: 'hidden'}
-            : null),
-        }}>
-        <VStack gap={0} style={{flexShrink: 0}}>
-          <p
+    // Beside the syllabus the panel is held to the screen's height, less
+    // the header above it and a margin below, so on a short laptop its
+    // foot is never under the screen's edge: the price and the buttons
+    // stay whole, and the ways to start scroll inside it instead.
+    <Card
+      variant="transparent"
+      padding={isMobile ? 5 : 6}
+      style={{
+        width: '100%',
+        background: 'var(--color-background-card)',
+        boxShadow: 'var(--shadow-low)',
+        borderRadius: 'var(--radius-container)',
+        display: 'flex',
+        flexDirection: 'column',
+        ...(tall
+          ? {maxHeight: 'calc(100dvh - 112px)', overflow: 'hidden'}
+          : null),
+      }}>
+      <VStack gap={0} style={{flexShrink: 0}}>
+        <p
+          style={{
+            margin: 0,
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'baseline',
+            columnGap: 12,
+            rowGap: 4,
+          }}>
+          <span
             style={{
-              margin: 0,
-              display: 'flex',
-              flexWrap: 'wrap',
-              alignItems: 'baseline',
-              columnGap: 12,
-              rowGap: 4,
+              fontFamily: 'var(--font-family-heading)',
+              fontSize: 36,
+              fontWeight: 525,
+              letterSpacing: '-0.05em',
+              fontVariantNumeric: 'tabular-nums',
             }}>
-            <span
-              style={{
-                fontFamily: 'var(--font-family-heading)',
-                fontSize: 36,
-                fontWeight: 525,
-                letterSpacing: '-0.05em',
-                fontVariantNumeric: 'tabular-nums',
-              }}>
-              {priceLabel(COURSE.price)}
-            </span>
-            <span style={{fontSize: 14, color: 'var(--color-text-secondary)'}}>
-              {paid ? 'once, yours to keep' : 'tutor included'}
-            </span>
-          </p>
-          {paid && (
-            <p
-              style={{
-                margin: '4px 0 0',
-                fontSize: 14,
-                color: 'var(--color-text-secondary)',
-              }}>
-              Or in{' '}
-              <span
-                style={{
-                  textDecorationLine: 'underline',
-                  textUnderlineOffset: 4,
-                  color: 'inherit',
-                }}>
-                {COURSE.tier.name}
-              </span>{' '}
-              for ${COURSE.tier.monthly} a month
-            </p>
-          )}
-
-          <div ref={ctaRef} style={{marginTop: 20, width: '100%'}}>
-            <button type="button" className="cr7-cta">
-              {ctaLabel}
-              <Icon icon={ArrowRightIcon} size="sm" xstyle={rtlStyles.mirror} />
-            </button>
-          </div>
-          <button
-            type="button"
-            className="cr7-ringbtn"
-            style={{marginTop: 10, width: '100%'}}>
-            <PlaySolid aria-hidden="true" style={{width: 14, height: 14}} />
-            {paid ? 'Start lesson one free' : 'Start lesson one'}
-          </button>
+            {priceLabel(COURSE.price)}
+          </span>
+          <span style={{fontSize: 14, color: 'var(--color-text-secondary)'}}>
+            {paid ? 'once, yours to keep' : 'tutor included'}
+          </span>
+        </p>
+        {paid && (
           <p
             style={{
-              margin: '12px 0 0',
-              textAlign: 'center',
+              margin: '4px 0 0',
               fontSize: 14,
               color: 'var(--color-text-secondary)',
             }}>
-            {paid ? 'Your money back within 30 days' : 'No card, now or later'}
+            Or in{' '}
+            <span
+              style={{
+                textDecorationLine: 'underline',
+                textUnderlineOffset: 4,
+                color: 'inherit',
+              }}>
+              {COURSE.tier.name}
+            </span>{' '}
+            for ${COURSE.tier.monthly} a month
           </p>
-        </VStack>
+        )}
 
-        <div
-          style={{
-            marginTop: 20,
-            borderTop: '1px solid var(--color-border)',
-            paddingTop: 20,
-            display: 'flex',
-            flexDirection: 'column',
-            flex: '1 1 auto',
-            minHeight: 0,
-            width: '100%',
-            overflowY: 'auto',
-          }}>
-          <RadioList label="When to start" value={picked} onChange={setPicked}>
-            {self && (
-              <RadioListItem
-                value="self"
-                label="Today, at your own pace"
-                description={`Finish around ${dayLabel(finish.key)}`}
-              />
-            )}
-            {cohortRows.map(s => (
-              <RadioListItem
-                key={s.key}
-                value={s.key}
-                label={`${dayLabel(s.starts)} – ${dateLabel(s.ends)}`}
-                description={
-                  s.seats === 0
-                    ? 'Full'
-                    : `${s.seats} seats left · live Thursdays`
-                }
-                isDisabled={s.seats === 0}
-              />
-            ))}
-          </RadioList>
-          {/* The pace belongs to the self-paced choice, so it opens under
-              the list and moves that choice's finish date as it is dragged. */}
-          {start.kind === 'self' && (
-            <VStack gap={2} style={{padding: '16px 20px 4px'}}>
-              <Slider
-                label="Hours you have a week"
-                value={pace}
-                onChange={(v: number) => setPace(v)}
-                min={1}
-                max={maxPace}
-                marks={[{value: 1}, {value: maxPace}]}
-                formatValue={(value: number) => `${value} h/week`}
-              />
-            </VStack>
-          )}
-          <Text type="supporting" color="secondary" style={{marginTop: 8}}>
-            Cohorts run live on Thursdays.
-          </Text>
-        </div>
-      </Card>
-
-      {/* The phone's bar: the price and the same button, once the panel's
-          own button has scrolled off the top. Solid rather than frosted —
-          the header already spends the page's blur. Mounted once below lg
-          (the design's lg:hidden) and slid on over 300ms ease-out,
-          visibility held with it so nothing of it draws below the edge. */}
-      <div
-        className="cr13-reachbar"
-        data-away={away || undefined}
-        aria-hidden={!away}
-        inert={!away}>
-        <HStack
-          gap={3}
-          vAlign="center"
-          justify="between"
-          style={{width: '100%', maxWidth: 576, marginInline: 'auto'}}>
-          <StackItem size="fill">
-            <VStack gap={0.5}>
-              <Text
-                type="body"
-                weight="semibold"
-                style={{
-                  fontFamily: 'var(--font-family-heading)',
-                  fontSize: 24,
-                  letterSpacing: '-0.025em',
-                  fontVariantNumeric: 'tabular-nums',
-                }}>
-                {priceLabel(COURSE.price)}
-              </Text>
-              <Text type="supporting" color="secondary">
-                {start.kind === 'self'
-                  ? 'Start today, at your pace'
-                  : `Cohort from ${dateLabel(start.starts)}`}
-              </Text>
-            </VStack>
-          </StackItem>
-          <button type="button" className="cr13-reachcta">
-            {paid ? 'Enroll' : 'Enroll free'}
+        <div ref={ctaRef} style={{marginTop: 20, width: '100%'}}>
+          <button type="button" className="cr7-cta">
+            {ctaLabel}
+            <Icon icon={ArrowRightIcon} size="sm" xstyle={rtlStyles.mirror} />
           </button>
-        </HStack>
+        </div>
+        <button
+          type="button"
+          className="cr7-ringbtn"
+          style={{marginTop: 10, width: '100%'}}>
+          <PlaySolid aria-hidden="true" style={{width: 14, height: 14}} />
+          {paid ? 'Start lesson one free' : 'Start lesson one'}
+        </button>
+        <p
+          style={{
+            margin: '12px 0 0',
+            textAlign: 'center',
+            fontSize: 14,
+            color: 'var(--color-text-secondary)',
+          }}>
+          {paid ? 'Your money back within 30 days' : 'No card, now or later'}
+        </p>
+      </VStack>
+
+      <div
+        style={{
+          marginTop: 20,
+          borderTop: '1px solid var(--color-border)',
+          paddingTop: 20,
+          display: 'flex',
+          flexDirection: 'column',
+          flex: '1 1 auto',
+          minHeight: 0,
+          width: '100%',
+          overflowY: 'auto',
+        }}>
+        <RadioList label="When to start" value={picked} onChange={setPicked}>
+          {self && (
+            <RadioListItem
+              value="self"
+              label="Today, at your own pace"
+              description={`Finish around ${dayLabel(finish.key)}`}
+            />
+          )}
+          {cohortRows.map(s => (
+            <RadioListItem
+              key={s.key}
+              value={s.key}
+              label={`${dayLabel(s.starts)} – ${dateLabel(s.ends)}`}
+              description={
+                s.seats === 0
+                  ? 'Full'
+                  : `${s.seats} seats left · live Thursdays`
+              }
+              isDisabled={s.seats === 0}
+            />
+          ))}
+        </RadioList>
+        {/* The pace belongs to the self-paced choice, so it opens under
+              the list and moves that choice's finish date as it is dragged. */}
+        {start.kind === 'self' && (
+          <VStack gap={2} style={{padding: '16px 20px 4px'}}>
+            <Slider
+              label="Hours you have a week"
+              value={pace}
+              onChange={(v: number) => setPace(v)}
+              min={1}
+              max={maxPace}
+              marks={[{value: 1}, {value: maxPace}]}
+              formatValue={(value: number) => `${value} h/week`}
+            />
+          </VStack>
+        )}
+        <Text type="supporting" color="secondary" style={{marginTop: 8}}>
+          Cohorts run live on Thursdays.
+        </Text>
       </div>
-    </>
+    </Card>
+  );
+}
+
+// ─── The phone's reach bar (one mount, after the footer) ─────────────
+/** What the reader picked and where the panel's button went: the
+ *  provider sits above whichever composition renders the panel, and the
+ *  bar mounts once as the page's last child — after the footer — where
+ *  tree order paints it above the page without a number (AST-027 FR2:
+ *  the surface owns its order, never a page-wide rank). */
+type Enrollment = {
+  today: string;
+  starts: Start[];
+  picked: string;
+  setPicked: (value: string) => void;
+  pace: number;
+  setPace: (value: number) => void;
+  away: boolean;
+  setAway: (value: boolean) => void;
+};
+const EnrollmentContext = createContext<Enrollment | null>(null);
+
+function EnrollmentProvider({children}: {children: ReactNode}) {
+  const today = localToday();
+  const starts = startsFor(today);
+  const [picked, setPicked] = useState<string>('self');
+  const [pace, setPace] = useState(COURSE.hours);
+  const [away, setAway] = useState(false);
+  return (
+    <EnrollmentContext.Provider
+      value={{
+        today,
+        starts,
+        picked,
+        setPicked,
+        pace,
+        setPace,
+        away,
+        setAway,
+      }}>
+      {children}
+    </EnrollmentContext.Provider>
+  );
+}
+
+function useEnrollment(): Enrollment {
+  const enrollment = useContext(EnrollmentContext);
+  if (!enrollment) {
+    throw new Error('EnrollmentContext is missing its provider');
+  }
+  return enrollment;
+}
+
+/** The phone's reach bar as the design draws it: the price and the same
+ *  action, once the panel's own button has scrolled off the screen.
+ *  Solid rather than frosted — the header already spends the page's blur.
+ *  The bar hides from lg (the design's lg:hidden), reads the reader's
+ *  pick for its date line, and slides on over 300ms ease-out, visibility
+ *  held with it so nothing of it draws below the edge. */
+function ReachBar() {
+  const {starts, picked, away} = useEnrollment();
+  const start = starts.find(s => s.key === picked) ?? starts[0];
+  const paid = COURSE.price > 0;
+  return (
+    <div
+      className="cr13-reachbar"
+      data-away={away || undefined}
+      aria-hidden={!away}
+      inert={!away}>
+      <HStack
+        gap={3}
+        vAlign="center"
+        justify="between"
+        style={{width: '100%', maxWidth: 576, marginInline: 'auto'}}>
+        <StackItem size="fill">
+          <VStack gap={0.5}>
+            <Text
+              type="body"
+              weight="semibold"
+              style={{
+                fontFamily: 'var(--font-family-heading)',
+                fontSize: 24,
+                letterSpacing: '-0.025em',
+                fontVariantNumeric: 'tabular-nums',
+              }}>
+              {priceLabel(COURSE.price)}
+            </Text>
+            <Text type="supporting" color="secondary">
+              {start.kind === 'self'
+                ? 'Start today, at your pace'
+                : `Cohort from ${dateLabel(start.starts)}`}
+            </Text>
+          </VStack>
+        </StackItem>
+        <button type="button" className="cr13-reachcta">
+          {paid ? 'Enroll' : 'Enroll free'}
+        </button>
+      </HStack>
+    </div>
   );
 }
 
@@ -4669,6 +4723,7 @@ function ClosingCta() {
       <div
         style={{
           display: 'grid',
+          isolation: 'isolate',
           overflow: 'hidden',
           borderRadius: 'var(--radius-container)',
           // the design's bg-accent is its wash (hsl(30 8% 96.5%)), not
@@ -5377,107 +5432,110 @@ export default function CourseDetailTemplate() {
     // html:has(.cr13-root) smooth-anchor rule; the player's dialog renders
     // inside it, so its buttons inherit the tokens too.
     <div className="cr13-root" style={{display: 'contents'}}>
-      <PreviewProvider>
-        {/* height="auto": the page scrolls the WINDOW, as the design's
+      <EnrollmentProvider>
+        <PreviewProvider>
+          {/* height="auto": the page scrolls the WINDOW, as the design's
           does — "fill" would make the content an internal scroll box, and
           position: sticky never rides relative to the window through one
           (the documented reason the design's panel rides beside the
           syllabus). */}
-        <Layout
-          height="auto"
-          contentWidth={1280}
-          content={
-            // isScrollable={false}: the content must NOT become its own scroll
-            // box — position: sticky never rides relative to the window through
-            // an overflow:auto ancestor, and the design's panel rides beside
-            // the syllabus down the window's own scroll.
-            <LayoutContent padding={isTiny ? 6 : 8} isScrollable={false}>
-              <style>{hoverStyles}</style>
-              {/* The design's main rhythm (gap-32 → sm:gap-40) parts its
+          <Layout
+            height="auto"
+            contentWidth={1280}
+            content={
+              // isScrollable={false}: the content must NOT become its own scroll
+              // box — position: sticky never rides relative to the window through
+              // an overflow:auto ancestor, and the design's panel rides beside
+              // the syllabus down the window's own scroll.
+              <LayoutContent padding={isTiny ? 6 : 8} isScrollable={false}>
+                <style>{hoverStyles}</style>
+                {/* The design's main rhythm (gap-32 → sm:gap-40) parts its
                 sections — the course page, the related rail, the FAQ, the
                 closing band — while the course section's own parts (the
                 breadcrumb, the grid, the reviews) sit on the block rhythm
                 inside it. */}
-              <VStack gap={10} style={{gap: isTiny ? 128 : 160}}>
-                <VStack gap={0}>
-                  {/* The breadcrumb over the grid, parted by the design's
+                <VStack gap={10} style={{gap: isTiny ? 128 : 160}}>
+                  <VStack gap={0}>
+                    {/* The breadcrumb over the grid, parted by the design's
                     mt-6 → lg:mt-8 (24/32px), inside the course section.
                     The design's own trail: a chevron between the steps,
                     the linked steps muted, the page itself last and
                     truncated (site/breadcrumb.tsx). */}
-                  <Breadcrumbs
-                    label="Breadcrumb"
-                    separator={
-                      <Icon
-                        icon={ChevronRightIcon}
-                        size="sm"
-                        xstyle={rtlStyles.mirror}
-                        style={{
-                          flexShrink: 0,
-                          color: 'var(--color-text-secondary)',
-                        }}
-                      />
-                    }
-                    style={{
-                      fontSize: 14,
-                      marginBottom: isNarrow ? 24 : 32,
-                      maxWidth: '100%',
-                    }}>
-                    <BreadcrumbItem href="#">
-                      <span
-                        style={{
-                          color: 'var(--color-text-secondary)',
-                          textDecorationLine: 'underline',
-                          textDecorationColor: 'transparent',
-                          textUnderlineOffset: 4,
-                        }}>
-                        Courses
-                      </span>
-                    </BreadcrumbItem>
-                    <BreadcrumbItem href="#">
-                      <span style={{color: 'var(--color-text-secondary)'}}>
-                        {COURSE.topic}
-                      </span>
-                    </BreadcrumbItem>
-                    <BreadcrumbItem>
-                      <span
-                        style={{
-                          minWidth: 0,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          color: 'var(--color-text-primary)',
-                        }}>
-                        {COURSE.title}
-                      </span>
-                    </BreadcrumbItem>
-                  </Breadcrumbs>
-                  {isNarrow ? mobileBody : desktopBody}
-                  {/* The reviews run the container's whole width under both
+                    <Breadcrumbs
+                      label="Breadcrumb"
+                      separator={
+                        <Icon
+                          icon={ChevronRightIcon}
+                          size="sm"
+                          xstyle={rtlStyles.mirror}
+                          style={{
+                            flexShrink: 0,
+                            color: 'var(--color-text-secondary)',
+                          }}
+                        />
+                      }
+                      style={{
+                        fontSize: 14,
+                        marginBottom: isNarrow ? 24 : 32,
+                        maxWidth: '100%',
+                      }}>
+                      <BreadcrumbItem href="#">
+                        <span
+                          style={{
+                            color: 'var(--color-text-secondary)',
+                            textDecorationLine: 'underline',
+                            textDecorationColor: 'transparent',
+                            textUnderlineOffset: 4,
+                          }}>
+                          Courses
+                        </span>
+                      </BreadcrumbItem>
+                      <BreadcrumbItem href="#">
+                        <span style={{color: 'var(--color-text-secondary)'}}>
+                          {COURSE.topic}
+                        </span>
+                      </BreadcrumbItem>
+                      <BreadcrumbItem>
+                        <span
+                          style={{
+                            minWidth: 0,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            color: 'var(--color-text-primary)',
+                          }}>
+                          {COURSE.title}
+                        </span>
+                      </BreadcrumbItem>
+                    </Breadcrumbs>
+                    {isNarrow ? mobileBody : desktopBody}
+                    {/* The reviews run the container's whole width under both
                     columns, as the design lays its own under the listing:
                     the panel stops riding at the teacher, the scores take a
                     cell each across the page, and the list runs two abreast
                     with rules between. The rating is the heading. */}
-                  <Block
-                    id="reviews"
-                    title={reviewsHeadingRow}
-                    narrow={isNarrow}
-                    rhythm={rhythm}>
-                    <Reviews />
-                  </Block>
+                    <Block
+                      id="reviews"
+                      title={reviewsHeadingRow}
+                      narrow={isNarrow}
+                      rhythm={rhythm}>
+                      <Reviews />
+                    </Block>
+                  </VStack>
+                  <RelatedRail />
+                  <FaqStepRows />
+                  <ClosingCta />
                 </VStack>
-                <RelatedRail />
-                <FaqStepRows />
-                <ClosingCta />
-              </VStack>
-              {/* the footer, outside main's rhythm as the design keeps it
+                {/* the footer, outside main's rhythm as the design keeps it
                 (a hairline across the page is what says the page has
                 stopped) */}
-              <SiteFooter />
-            </LayoutContent>
-          }
-        />
-      </PreviewProvider>
+                <SiteFooter />
+              </LayoutContent>
+            }
+          />
+        </PreviewProvider>
+        <ReachBar />
+      </EnrollmentProvider>
     </div>
   );
 }
