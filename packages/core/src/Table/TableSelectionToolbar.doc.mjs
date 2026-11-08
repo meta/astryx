@@ -141,9 +141,9 @@ const selectionPlugin = useTableSelection({
           variant="ghost"
           onClick={() => {
             if (isAllMatching) {
-              setPicked(
-                new Set(pageRows.filter(isSelected).map(row => row.id)),
-              );
+              // Every row on this page, so the label stays true and the
+              // focused button stays mounted.
+              setPicked(new Set(pageRows.map(row => row.id)));
               setExcluded(new Set());
             }
             setIsAllMatching(!isAllMatching);

@@ -682,9 +682,9 @@ function SelectAllMatchingExample() {
                     selection.isAllMatching
                       ? {
                           isAllMatching: false,
-                          picked: new Set(
-                            rows.filter(isSelected).map(row => row.id),
-                          ),
+                          // Every row on this page, so the label stays true
+                          // and the focused button stays mounted.
+                          picked: new Set(rows.map(row => row.id)),
                           excluded: new Set(),
                         }
                       : {
@@ -748,6 +748,21 @@ export const SelectAllMatching: Story = {
     await expect(
       canvas.getByText('All 248 matching selected'),
     ).toBeInTheDocument();
+
+    // With a row unticked, "Select only this page" selects the whole page
+    // and keeps focus on the button.
+    await userEvent.click(canvas.getByLabelText('Select Record 2'));
+    await expect(
+      canvas.getByText('247 of 248 matching selected'),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      canvas.getByRole('button', {name: 'Select only this page'}),
+    );
+    await expect(canvas.getByText('5 selected')).toBeInTheDocument();
+    await expect(
+      canvas.getByRole('button', {name: 'Select all 248 matching'}),
+    ).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
 
     await userEvent.click(canvas.getByLabelText('Select Record 2'));
     await expect(
