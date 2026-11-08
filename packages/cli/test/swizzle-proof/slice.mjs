@@ -33,6 +33,7 @@ export function proveSlice(index, count) {
           notRendered,
           project,
           all: process.env.SWIZZLE_PROOF_ALL === '1',
+          browser: process.env.SWIZZLE_PROOF_BROWSER === '1',
         });
         const failures = run.results.filter(r => r.failure);
         console.log(
