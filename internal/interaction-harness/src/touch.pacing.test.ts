@@ -15,12 +15,15 @@
  *   interval after the last move reads as rest, a fault unless the script rests
  *   too. A throw where the script rests is a fault, and so are fewer than two
  *   moves. A gap the page's own listeners held is the page's; a late send is
- *   the runner's.
+ *   the runner's. A scrolling surface's release also reads the interval
+ *   before them. A release or a hold on the other side of a play's boundary
+ *   from the script's is a fault. Each pacing error names the longest time
+ *   the page drew no frame.
  * @position Node unit tests beside the harness's browser self-tests.
  *
  * SYNC: When modified, update touch.ts (pacedDeadline, touchPacingFault,
- *   TouchPacingError, TouchPageStallError, TOUCH_STILLNESS_MS,
- *   TOUCH_RELEASE_NEWEST_WEIGHT).
+ *   TouchPacingError, TouchPageStallError, TouchLiftStallError,
+ *   TOUCH_STILLNESS_MS, TOUCH_RELEASE_NEWEST_WEIGHT).
  */
 
 import {describe, expect, it} from 'vitest';
@@ -37,6 +40,8 @@ import {
   TouchPacingError,
   TouchPageStallError,
   liftStallError,
+  longestFrameGap,
+  readHold,
   type TouchArrival,
   type TouchPacing,
 } from './touch';
@@ -579,5 +584,93 @@ describe('touchPlayError', () => {
   it('names the lift stall first when onEvent alone carries the gap past the stillness interval', () => {
     expect(errorFor(lateLift, slowAt5)).toBeInstanceOf(TouchLiftStallError);
     expect(errorFor(heldLift, slowAt5)).toBeInstanceOf(TouchLiftStallError);
+  });
+});
+
+describe('boundaries, the scroll release and frame evidence', () => {
+  // The third move reaches the page 20 ms late; the moves after it keep the
+  // script's 16 ms.
+  const lateThird = at([0, 16, 32, 68, 84, 100, 116]);
+
+  it("reads a scrolling surface's release from the interval before the pan's two", () => {
+    expect(readRelease(FLICK, lateThird)?.pagePxPerS).toBeCloseTo(1000, 6);
+    // 0.25 x 1,000 + 0.75 x (0.2 x 1,000 + 0.8 x 444.4).
+    expect(readRelease(FLICK, lateThird, 'scroll')?.pagePxPerS).toBeCloseTo(
+      666.67,
+      1,
+    );
+    expect(readRelease(FLICK, lateThird, 'scroll')?.scriptPxPerS).toBeCloseTo(
+      1000,
+      6,
+    );
+  });
+
+  it('fails a release on the other side of the boundary from the script, and only then', () => {
+    const fault = touchPacingFault(FLICK, lateThird, undefined, {
+      release: 'scroll',
+      boundaries: {releasePxPerS: 800},
+    });
+    expect(fault?.kind).toBe('boundary');
+    expect(fault?.threshold).toBe(800);
+    expect(new TouchPacingError(fault!).message).toMatch(
+      /the page read a release of 667 px\/s where the script throws 1000 px\/s, on the other side of the 800 px\/s the component decides on \(gaps 36, 16, 16, 16 ms where the script spaces 16, 16, 16, 16 ms\)/,
+    );
+    // The pan's release reads the script's, and 667 px/s is past 600.
+    expect(
+      touchPacingFault(FLICK, lateThird, undefined, {
+        boundaries: {releasePxPerS: 800},
+      }),
+    ).toBeNull();
+    expect(
+      touchPacingFault(FLICK, lateThird, undefined, {
+        release: 'scroll',
+        boundaries: {releasePxPerS: 600},
+      }),
+    ).toBeNull();
+  });
+
+  it('fails a hold on the other side of the boundary from the script, and only then', () => {
+    const finger = {id: 0, x: 100, y: 50};
+    const tap: TouchEventStep[] = [
+      {t: 0, type: 'touchStart', fingers: [finger], changed: [finger]},
+      {t: 40, type: 'touchEnd', fingers: [], changed: [finger]},
+    ];
+    expect(readHold(tap, at([0, 97]))).toEqual({page: 97, script: 40});
+    const fault = touchPacingFault(tap, at([0, 97]), undefined, {
+      boundaries: {holdMs: 85},
+    });
+    expect(fault?.kind).toBe('hold');
+    expect(new TouchPacingError(fault!).message).toMatch(
+      /the page read a hold of 97 ms where the script holds 40 ms, on the other side of the 85 ms the component decides on/,
+    );
+    expect(
+      touchPacingFault(tap, at([0, 60]), undefined, {boundaries: {holdMs: 85}}),
+    ).toBeNull();
+    const long = tap.map((step, i) => (i === 1 ? {...step, t: 150} : step));
+    expect(
+      touchPacingFault(long, at([0, 140]), undefined, {
+        boundaries: {holdMs: 85},
+      }),
+    ).toBeNull();
+  });
+
+  it('names the longest time the page drew no frame during the gesture', () => {
+    const frames = [0, 16, 33, 50, 226, 243];
+    expect(longestFrameGap(frames, at([20, 36, 52, 230]))).toBe(176);
+    expect(longestFrameGap([], at([20, 230]))).toBeNull();
+    // No frame before the gesture: the gap runs from its first touch.
+    expect(longestFrameGap([381, 397, 408, 424], at([261, 420]))).toBe(120);
+    const fault = touchPacingFault(FLICK, lateThird, undefined, {
+      release: 'scroll',
+      boundaries: {releasePxPerS: 800},
+    });
+    expect(new TouchPacingError({...fault!, frameGapMs: 176}).message).toMatch(
+      /; the page drew no frame for 176 ms during the gesture: /,
+    );
+    const lift = {scriptedGapMs: 16, gapMs: 120, onEventMs: 104};
+    expect(new TouchLiftStallError({...lift, frameGapMs: 176}).message).toMatch(
+      /back; the page drew no frame for 176 ms during the gesture\. /,
+    );
+    expect(new TouchLiftStallError(lift).message).not.toMatch(/drew no frame/);
   });
 });
