@@ -458,9 +458,10 @@ for (const item of cases) {
       rows: observed.rows.length === 5,
       checked:
         checked.length === 1 && checked[0].startsWith(expectedChecked(item)),
+      // A disabled row stays in the roving order, so the arrow keys reach it.
       disabledRow:
         observed.rows[4]?.disabled === 'true' &&
-        observed.rows[4]?.tabIndex === null,
+        observed.rows[4]?.tabIndex === '-1',
       activeRow:
         active === undefined
           ? true

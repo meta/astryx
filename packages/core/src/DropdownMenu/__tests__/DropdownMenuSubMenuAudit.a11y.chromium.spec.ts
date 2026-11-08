@@ -607,7 +607,7 @@ for (const item of cases) {
         item.interaction === 'select' ||
         item.interaction === 'drill-in' ||
         (findRow('Archive')?.disabled === 'true' &&
-          findRow('Archive')?.tabIndex === null &&
+          findRow('Archive')?.tabIndex === '-1' &&
           findRow('Export')?.spinnerHidden === true &&
           findRow('Share')?.haspopup === 'menu'),
       indicatorMirror:
