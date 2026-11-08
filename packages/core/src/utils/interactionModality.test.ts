@@ -447,6 +447,43 @@ describe('interactionModality', () => {
       },
     );
 
+    it.each(['date', 'time', 'month', 'week'])(
+      'stays true while a key types into a %s field',
+      async type => {
+        const {tracker, field, press} = await trackIn(
+          document.implementation.createHTMLDocument(),
+        );
+        field.type = type;
+        field.ownerDocument.dispatchEvent(new Event('pointerdown'));
+
+        press(field, '1');
+
+        expect(tracker.isTextEntrySincePointer()).toBe(true);
+      },
+    );
+
+    it.each([
+      ['read-only', (field: HTMLInputElement) => (field.readOnly = true)],
+      ['disabled', (field: HTMLInputElement) => (field.disabled = true)],
+      [
+        'inputmode="none"',
+        (field: HTMLInputElement) => field.setAttribute('inputmode', 'none'),
+      ],
+    ])(
+      'turns false for a character key in a field that is %s, which brings up no keyboard',
+      async (_, setUp) => {
+        const {tracker, field, press} = await trackIn(
+          document.implementation.createHTMLDocument(),
+        );
+        setUp(field);
+        field.ownerDocument.dispatchEvent(new Event('pointerdown'));
+
+        press(field, 'a');
+
+        expect(tracker.isTextEntrySincePointer()).toBe(false);
+      },
+    );
+
     it('turns false for a character key outside a text field', async () => {
       const {tracker, button, press} = await trackIn(
         document.implementation.createHTMLDocument(),

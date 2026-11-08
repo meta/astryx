@@ -33,6 +33,7 @@ import {
   type RefCallback,
   type RefObject,
 } from 'react';
+import {isTextEntryControl} from '../keyboard/keyboardHeight';
 
 export type InteractionModality = 'keyboard' | 'pointer';
 
@@ -92,17 +93,6 @@ function getStore(targetDocument: Document): InteractionModalityStore {
   return store;
 }
 
-/** Input types whose keys type text rather than pick a value. */
-const TEXT_ENTRY_INPUT_TYPES = new Set([
-  'email',
-  'number',
-  'password',
-  'search',
-  'tel',
-  'text',
-  'url',
-]);
-
 /**
  * An on-screen keyboard sends `Unidentified` or `Process` for many keys, and
  * `Enter` is its Go key. `Shift`, `CapsLock` and `Dead` only shape the next
@@ -120,33 +110,12 @@ const TEXT_ENTRY_NAMED_KEYS = new Set([
   'Unidentified',
 ]);
 
-function isTextEntryTarget(target: EventTarget | undefined): boolean {
-  if (target == null || (target as Node).nodeType !== 1) {
-    return false;
-  }
-  const element = target as HTMLElement;
-  switch (element.tagName) {
-    case 'TEXTAREA':
-      return true;
-    case 'INPUT':
-      return TEXT_ENTRY_INPUT_TYPES.has((element as HTMLInputElement).type);
-    default: {
-      if (element.isContentEditable === true) {
-        return true;
-      }
-      // jsdom does not implement `isContentEditable`.
-      const attribute = element.getAttribute('contenteditable');
-      return attribute != null && attribute !== 'false';
-    }
-  }
-}
-
 function isTextEntryKey(event: KeyboardEvent): boolean {
   const target =
     typeof event.composedPath === 'function'
       ? event.composedPath()[0]
       : event.target;
-  if (!isTextEntryTarget(target ?? undefined)) {
+  if (!isTextEntryControl(target instanceof Element ? target : null)) {
     return false;
   }
   const key = typeof event.key === 'string' ? event.key : '';
