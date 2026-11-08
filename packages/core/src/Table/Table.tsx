@@ -214,7 +214,12 @@ function TableScrollWrapper({
     keyboardAccess: {owner: 'content'},
     overscroll: 'contain',
   });
-  const {ref, ...restHtmlProps} = htmlProps ?? {};
+  const {
+    ref,
+    className: pluginClassName,
+    style: pluginStyle,
+    ...restHtmlProps
+  } = htmlProps ?? {};
   const viewportProps = getViewportProps<HTMLDivElement>({
     role: 'group',
     'aria-label': label,
@@ -237,6 +242,9 @@ function TableScrollWrapper({
         scrollWrapperStyles.focusRingInset,
         ...(pluginStyles ?? []),
       ),
+      // A plugin's class and style compose with the wrapper's own.
+      pluginClassName,
+      pluginStyle,
     ),
   });
 
