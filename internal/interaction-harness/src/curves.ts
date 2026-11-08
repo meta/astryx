@@ -24,6 +24,7 @@
  */
 
 import type {Locator, Page} from '@playwright/test';
+import {defineAnimatedProperties} from './animated-properties';
 import {defineCurveEnd} from './curve-end';
 import {FRAME_STARVATION_MS, FrameStarvationError} from './frames';
 import {parseTransform, type TimedValue, type Transform2D} from './math';
@@ -497,10 +498,11 @@ async function installRecorder(page: Page): Promise<void> {
  */
 async function installCurveEnd(page: Page): Promise<void> {
   await installRecorder(page);
-  // The hold, installed with the curve end it reads: one round trip installs
-  // both, so a hold sent from the test costs no extra one.
+  // The hold is installed with the curve end it reads and the property match
+  // of its judged motions. One round trip installs all three, so a hold sent
+  // from the test costs no extra one.
   await page.evaluate(
-    `(${defineCurveEnd.toString()})();(${defineHold.toString()})();`,
+    `(${defineCurveEnd.toString()})();(${defineHold.toString()})();(${defineAnimatedProperties.toString()})();`,
   );
 }
 
@@ -987,61 +989,11 @@ async function expectJudgedMotionsHeld(
     ([armed, elements, wanted]) => {
       const w = window as unknown as {
         __harnessTook?: Record<number, Animation[]>;
+        __harnessAnimatedProperties: (animation: Animation) => string[];
+        __harnessAnimates: (animation: Animation, property: string) => boolean;
       };
       const animations = w.__harnessTook?.[armed] ?? [];
       delete w.__harnessTook?.[armed];
-      // `getKeyframes()` names a property in camel case, except a custom
-      // property.
-      const keyframeName = (property: string) =>
-        property.startsWith('--')
-          ? property
-          : property.replace(/-([a-z])/g, (_, letter: string) =>
-              letter.toUpperCase(),
-            );
-      // Chromium's `getKeyframes()` leaves out a custom property that a CSS
-      // animation animates. The `@keyframes` rule of that name lists it. The
-      // rule can sit inside a grouping rule (`@layer`, `@media`).
-      const keyframesRules = (rules: readonly CSSRule[]): CSSKeyframesRule[] =>
-        rules.flatMap(rule =>
-          rule instanceof CSSKeyframesRule
-            ? [rule]
-            : rule instanceof CSSGroupingRule
-              ? keyframesRules([...rule.cssRules])
-              : [],
-        );
-      const ruleProperties = (name: string) =>
-        [...document.styleSheets, ...document.adoptedStyleSheets].flatMap(
-          sheet => {
-            let rules: CSSRule[] = [];
-            try {
-              rules = [...sheet.cssRules];
-            } catch {
-              // A cross-origin sheet does not expose its rules.
-            }
-            return keyframesRules(rules)
-              .filter(rule => rule.name === name)
-              .flatMap(rule =>
-                [...rule.cssRules].flatMap(keyframe => [
-                  ...(keyframe as CSSKeyframeRule).style,
-                ]),
-              );
-          },
-        );
-      const properties = (animation: Animation) => [
-        ...new Set([
-          ...((animation.effect as KeyframeEffect | null)?.getKeyframes() ?? [])
-            .flatMap(keyframe => Object.keys(keyframe))
-            .filter(
-              name =>
-                !['offset', 'computedOffset', 'easing', 'composite'].includes(
-                  name,
-                ),
-            ),
-          ...(animation instanceof CSSAnimation
-            ? ruleProperties(animation.animationName).map(keyframeName)
-            : []),
-        ]),
-      ];
       const describe = (animation: Animation) => {
         const effect = animation.effect as KeyframeEffect | null;
         const target = effect?.target ?? null;
@@ -1053,7 +1005,7 @@ async function expectJudgedMotionsHeld(
               (target.classList.length
                 ? `.${[...target.classList].slice(0, 2).join('.')}`
                 : '');
-        return `${name}${effect?.pseudoElement ?? ''} ${properties(animation).join(' ')}`;
+        return `${name}${effect?.pseudoElement ?? ''} ${w.__harnessAnimatedProperties(animation).join(' ')}`;
       };
       return {
         missing: wanted.flatMap((motion, index) =>
@@ -1063,7 +1015,7 @@ async function expectJudgedMotionsHeld(
               effect != null &&
               effect.target === elements[index] &&
               (effect.pseudoElement ?? null) === motion.pseudoElement &&
-              properties(animation).includes(keyframeName(motion.property))
+              w.__harnessAnimates(animation, motion.property)
             );
           })
             ? []

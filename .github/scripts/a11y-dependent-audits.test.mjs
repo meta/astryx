@@ -309,6 +309,13 @@ describe('an undecided scope', () => {
         fs.readFileSync(path.join(dir, 'record.json'), 'utf8'),
       );
       expect(record.complete).toBe(false);
+      // The last run here had no --truncated: the record says why it is undecided.
+      expect(record.undecided).toBe('unreadable');
+      run(['--all', '--truncated']);
+      expect(
+        JSON.parse(fs.readFileSync(path.join(dir, 'record.json'), 'utf8'))
+          .undecided,
+      ).toBe('truncated');
     } finally {
       fs.rmSync(dir, {recursive: true, force: true});
     }

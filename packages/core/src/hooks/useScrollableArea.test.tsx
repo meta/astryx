@@ -22,6 +22,7 @@ import {
   getRegisteredScrollOwnerState,
 } from './scrollOwnerRegistry';
 import {getLogicalAxisMapping} from './scrollGeometry';
+import {subscribeScrollGeometry} from './scrollGeometrySubscriptions';
 
 const testStyles = stylex.create({
   viewport: {borderWidth: 1, borderStyle: 'solid'},
@@ -199,6 +200,28 @@ describe('useScrollableArea', () => {
       pending.forEach(callback => callback(performance.now()));
     });
   }
+
+  it('reports a change below the content root as content only and an outer change as layout', async () => {
+    render(<Fixture />);
+    const viewport = screen.getByTestId('viewport');
+    makeMeasurable(viewport);
+    flushFrame();
+    const calls: [boolean, boolean][] = [];
+    const stop = subscribeScrollGeometry(viewport, (isContent, isLayout) =>
+      calls.push([isContent, isLayout]),
+    );
+    await act(async () => {
+      screen.getByTestId('descendant').append(document.createElement('b'));
+    });
+    flushFrame();
+    expect(calls.at(-1)).toEqual([true, false]);
+    await act(async () => {
+      viewport.parentElement?.setAttribute('class', 'resized');
+    });
+    flushFrame();
+    expect(calls.at(-1)).toEqual([true, true]);
+    stop();
+  });
 
   it('starts inactive and fitting without creating a tab stop', () => {
     render(<Fixture />);

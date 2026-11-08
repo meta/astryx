@@ -6032,6 +6032,192 @@ test.describe('storyboards', {tag: '@storyboard'}, () => {
     ).rejects.toThrow(/pass `during` too/);
   });
 
+  test('blockMainThread with during waits a frame for an animation rebuilt on its old clock, and names the animation it caught', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    // When each of the page's frames ran, page ms.
+    await page.evaluate(() => {
+      const w = window as unknown as {frameTimes: number[]};
+      w.frameTimes = [];
+      const count = () => {
+        w.frameTimes.push(performance.now());
+        requestAnimationFrame(count);
+      };
+      requestAnimationFrame(count);
+    });
+    const blocking = blockMainThread(page, 100, {during: box, timeout: 3_000});
+    await page.waitForTimeout(100);
+    // A travel rebuilt 200 ms into its curve, between two frames: the page
+    // first sees it running and not pending.
+    const rebuilt = await box.evaluate(
+      el =>
+        new Promise<{framesBefore: number; startTime: number}>(resolve => {
+          setTimeout(() => {
+            const run = el.animate(
+              [{translate: '0 0'}, {translate: '200px 0'}],
+              {duration: 1_000, easing: 'linear'},
+            );
+            run.startTime = Number(document.timeline.currentTime) - 200;
+            resolve({
+              framesBefore: (window as unknown as {frameTimes: number[]})
+                .frameTimes.length,
+              startTime: Number(run.startTime),
+            });
+          }, 0);
+        }),
+    );
+    const held = await blocking;
+    // Frames that ran after the travel was built and up to the block. WebKit
+    // reads its clock to the millisecond, so a frame can share the block's
+    // start time. That frame still ran before the block, which no frame
+    // interrupts.
+    const framesBefore = await page.evaluate(
+      ([first, from]) =>
+        (window as unknown as {frameTimes: number[]}).frameTimes
+          .slice(first)
+          .filter(t => t <= from - performance.timeOrigin).length,
+      [rebuilt.framesBefore, held.from] as const,
+    );
+    // The frame that first saw it, and the frame after, ran before the block.
+    expect(framesBefore).toBeGreaterThanOrEqual(2);
+    // The window names that animation: its start, and its curve's end.
+    const timeOrigin = await page.evaluate(() => performance.timeOrigin);
+    const caught = held.animation;
+    expect(caught).toBeDefined();
+    expect(caught?.from).toBeCloseTo(timeOrigin + rebuilt.startTime, 3);
+    expect((caught?.to ?? 0) - (caught?.from ?? 0)).toBeCloseTo(1_000, 3);
+  });
+
+  test('blockMainThread with during and a property starts on an animation of that property, not on an earlier one of another', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    const blocking = blockMainThread(page, 100, {
+      during: box,
+      property: 'translate',
+      minProgressMs: 50,
+      timeout: 3_000,
+    });
+    await page.waitForTimeout(100);
+    // A press scale starts first, and the travel 300 ms after it.
+    const travelStartedAt = await box.evaluate(async el => {
+      el.animate([{scale: '1'}, {scale: '0.9'}], {
+        duration: 1_000,
+        fill: 'forwards',
+      });
+      await new Promise(resolve => setTimeout(resolve, 300));
+      el.animate([{translate: '0 0'}, {translate: '200px 0'}], {
+        duration: 1_000,
+      });
+      return performance.timeOrigin + performance.now();
+    });
+    const held = await blocking;
+    // The block began once the travel had run 50 ms, never on the scale.
+    expect(held.from).toBeGreaterThanOrEqual(travelStartedAt + 50);
+    // A property picks an animation of `during`, so it needs one.
+    await expect(
+      blockMainThread(page, 100, {property: 'translate'}),
+    ).rejects.toThrow(/pass `during` too/);
+  });
+
+  test('blockMainThread with during takes a property as CSS names it, a custom property too, and offset names no animation', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    const colour = blockMainThread(page, 50, {
+      during: box,
+      property: 'background-color',
+      minProgressMs: 50,
+      timeout: 3_000,
+    });
+    await box.evaluate(el => {
+      el.animate(
+        [
+          {backgroundColor: 'rgb(255, 0, 0)'},
+          {backgroundColor: 'rgb(0, 0, 255)'},
+        ],
+        {duration: 1_000},
+      );
+    });
+    // The block waits for 50 ms of the colour by the colour's own clock,
+    // whether it watches before the animation starts or after.
+    const heldColour = await colour;
+    expect(heldColour.animation).toBeDefined();
+    expect(heldColour.from).toBeGreaterThanOrEqual(
+      (heldColour.animation?.from ?? Infinity) + 50,
+    );
+    // A custom property keeps its CSS name in the keyframes.
+    const press = blockMainThread(page, 50, {
+      during: box,
+      property: '--press-strength',
+      minProgressMs: 50,
+      timeout: 3_000,
+    });
+    await box.evaluate(el => {
+      el.animate([{'--press-strength': '0'}, {'--press-strength': '1'}], {
+        duration: 1_000,
+      });
+    });
+    const heldPress = await press;
+    expect(heldPress.animation).toBeDefined();
+    expect(heldPress.from).toBeGreaterThanOrEqual(
+      (heldPress.animation?.from ?? Infinity) + 50,
+    );
+    // Every keyframe names its offset, but no animation sets it. A long scale
+    // runs for the whole wait.
+    await box.evaluate(el => {
+      el.animate([{scale: '1'}, {scale: '0.9'}], {duration: 5_000});
+    });
+    await expect(
+      blockMainThread(page, 50, {
+        during: box,
+        property: 'offset',
+        timeout: 500,
+      }),
+    ).rejects.toThrow(/no animation started/);
+  });
+
+  test('blockMainThread with during names an animation rebuilt at every frame, which it never holds, at its timeout', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    // Each frame replaces the travel with a new one on the same clock, as an
+    // animator that rebuilds its run while it follows.
+    await box.evaluate(el => {
+      const w = window as unknown as {stopRebuilding?: boolean};
+      let start: number | null = null;
+      const rebuild = () => {
+        if (w.stopRebuilding === true) {
+          return;
+        }
+        for (const animation of el.getAnimations()) {
+          animation.cancel();
+        }
+        const run = el.animate([{translate: '0 0'}, {translate: '200px 0'}], {
+          duration: 5_000,
+        });
+        start ??= Number(document.timeline.currentTime);
+        run.startTime = start;
+        requestAnimationFrame(rebuild);
+      };
+      requestAnimationFrame(rebuild);
+    });
+    await expect(
+      blockMainThread(page, 100, {during: box, timeout: 600}),
+    ).rejects.toThrow(/no animation of `during` ran on two frames in a row/);
+    await box.evaluate(el => {
+      (window as unknown as {stopRebuilding?: boolean}).stopRebuilding = true;
+      for (const animation of el.getAnimations()) {
+        animation.cancel();
+      }
+    });
+  });
+
   test('blockMainThread with during names a late block when the run it saw held ends before the wait times out', async ({
     page,
   }) => {
@@ -6971,6 +7157,34 @@ test.describe('page freeze', () => {
     // The page's own clock trails the real one by the 600 ms frozen span.
     expect(blocked.from).toBeGreaterThan(before - 50);
     expect(blocked.to).toBeLessThan(after + 50);
+  });
+
+  test('after a thaw, blockMainThread with during stamps the animation it caught on the real clock', async ({
+    page,
+  }) => {
+    await installPageFreeze(page);
+    await freezeFixture(page);
+    await installTimerGate(page);
+    await freezePage(page);
+    // The frozen span itself, which the page's clock then trails by.
+    await page.waitForTimeout(1_000);
+    await thawPage(page);
+    const box = page.locator('#box');
+    // The block catches the animation a frame or two after it starts, whether
+    // it watches before the animation starts or after.
+    const blocking = blockMainThread(page, 50, {during: box, timeout: 3_000});
+    await box.evaluate(el => {
+      el.animate([{translate: '0 0'}, {translate: '200px 0'}], {
+        duration: 1_000,
+      });
+    });
+    const held = await blocking;
+    // The page's own clock trails the real one by the 1 s frozen span. The
+    // block starts a frame or two after the animation, on either clock.
+    expect(held.animation).toBeDefined();
+    const sinceStart = held.from - (held.animation?.from ?? 0);
+    expect(sinceStart).toBeGreaterThanOrEqual(0);
+    expect(sinceStart).toBeLessThan(500);
   });
 
   test('after a thaw, waitForAnimation and sampleRects stamp on the real clock', async ({
