@@ -23,7 +23,7 @@ import {flushSync} from 'react-dom';
 import {renderToString} from 'react-dom/server';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {render, renderHook, act, waitFor} from '@testing-library/react';
-import {useResizable} from './useResizable';
+import {endResizeAt, useResizable} from './useResizable';
 import type {
   ResizableProps,
   ResizableRegion,
@@ -463,7 +463,7 @@ describe('useResizable live collapse state', () => {
     act(() => result.current.props._onResizeStart());
     act(() => result.current.props._onResizeMove(-100));
     // 1,500 px/s toward closing projects about 750 px further.
-    act(() => result.current.props._onResizeEnd(-1500));
+    act(() => endResizeAt(result.current.props, -1500));
 
     expect(onCollapseChange).toHaveBeenCalledExactlyOnceWith(true);
     expect(result.current.isCollapsed).toBe(true);
@@ -476,7 +476,7 @@ describe('useResizable live collapse state', () => {
 
     act(() => result.current.props._onResizeStart());
     act(() => result.current.props._onResizeMove(-130));
-    act(() => result.current.props._onResizeEnd(0));
+    act(() => endResizeAt(result.current.props, 0));
 
     expect(result.current.isCollapsed).toBe(false);
     expect(result.current.size).toBe(BASE_CONFIG.minSize);

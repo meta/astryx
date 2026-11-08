@@ -181,7 +181,7 @@ export interface ResizableProps {
   _isCollapsed: boolean;
   _onResizeStart: () => void;
   _onResizeMove: (delta: number) => void;
-  _onResizeEnd: (velocity?: number) => void;
+  _onResizeEnd: () => void;
   /**
    * The gesture ended without completing — pointercancel, a lost pointer
    * capture, or a handle unmounted mid-drag. Separate from `_onResizeEnd`
@@ -242,8 +242,11 @@ function useSingleResizable(config: UseResizableSingleConfig): ResizableRegion {
     },
     [model],
   );
-  const onResizeEnd = useCallback(
-    (velocity?: number) => {
+  const onResizeEnd = useCallback(() => {
+    model()?.end();
+  }, [model]);
+  const onResizeRelease = useCallback(
+    (velocity: number) => {
       model()?.end(velocity);
     },
     [model],
@@ -268,6 +271,7 @@ function useSingleResizable(config: UseResizableSingleConfig): ResizableRegion {
     _isResizableProps: true,
   };
   collapseControls.set(props, {collapse, expand});
+  releaseEnds.set(props, onResizeRelease);
   // The LayoutPanel that takes these props hands its pane to the region, and
   // the ResizeHandle that takes them says when a pointer drags it.
   registerPropsRegion(props, regionSlot);
@@ -340,6 +344,13 @@ type CollapseControls = {collapse: () => void; expand: () => void};
 const collapseControls = new WeakMap<ResizableProps, CollapseControls>();
 
 /**
+ * A drag's end with its release velocity, in px per second and signed like
+ * the move's delta. Kept off the exported `ResizableProps` for the same reason
+ * as the collapse controls; {@link endResizeAt} is internal.
+ */
+const releaseEnds = new WeakMap<ResizableProps, (velocity: number) => void>();
+
+/**
  * The maximum an unbounded region reports as `aria-valuemax`: a measured
  * extent that stands in for the missing configured maximum — the container's
  * content box on the active axis while a percentage bound already observes
@@ -380,6 +391,19 @@ export function getCollapseControls(
   props: ResizableProps,
 ): CollapseControls | undefined {
   return collapseControls.get(props);
+}
+
+/**
+ * Ends the drag `props` follows at a release `velocity`. A props object the
+ * hook did not return ends without one. Internal to the package.
+ */
+export function endResizeAt(props: ResizableProps, velocity: number): void {
+  const end = releaseEnds.get(props);
+  if (end == null) {
+    props._onResizeEnd();
+    return;
+  }
+  end(velocity);
 }
 
 /** Removed keys must fail even when a variable bypasses excess-property checks. */
