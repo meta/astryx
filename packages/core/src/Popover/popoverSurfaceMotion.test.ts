@@ -257,7 +257,10 @@ describe('createPopoverSurfaceMotion', () => {
     vi.unstubAllGlobals();
   });
 
-  const create = (reducedMotion = false, {scheduled = true} = {}) => {
+  const create = (
+    reducedMotion = false,
+    {scheduled = true, entrance = false} = {},
+  ) => {
     const host = document.createElement('section');
     document.body.appendChild(host);
     const element = document.createElement('div');
@@ -278,6 +281,10 @@ describe('createPopoverSurfaceMotion', () => {
     // The touch presentation runs under a coarse pointer, where Reduce
     // Motion cross-fades.
     stubMedia(reducedMotion, true);
+    // The surface, where the pointer presentation's CSS entrance runs.
+    const surface = entrance
+      ? element.querySelector<HTMLElement>('[role="dialog"]')
+      : null;
     const motion = createPopoverSurfaceMotion(
       element,
       scheduled
@@ -289,8 +296,9 @@ describe('createPopoverSurfaceMotion', () => {
               return lastFrame;
             },
             cancelFrame: handle => frames.delete(handle),
+            entrance: surface,
           }
-        : {now: () => clock},
+        : {now: () => clock, entrance: surface},
     );
     return {element, motion};
   };
@@ -715,6 +723,25 @@ describe('createPopoverSurfaceMotion', () => {
     motion.exit();
     expect(recorded).toHaveLength(0);
     expect(copyOf(element)).toBeNull();
+  });
+
+  it('turns the CSS entrance off on the surface too, and gives it back where it gives the layer\u2019s back', async () => {
+    const {element, motion} = create(false, {entrance: true});
+    const surface = element.querySelector<HTMLElement>('[role="dialog"]')!;
+    motion.enter(() => GEOMETRY);
+    await Promise.resolve();
+    expect(surface.style.getPropertyValue('animation-name')).toBe('none');
+    frame();
+    expect(surface.style.getPropertyValue('animation-name')).toBe('none');
+    motion.reset();
+    expect(surface.style.getPropertyValue('animation-name')).toBe('');
+    // A close after the opening task ends, before the frame.
+    motion.enter(() => GEOMETRY);
+    await Promise.resolve();
+    expect(surface.style.getPropertyValue('animation-name')).toBe('none');
+    motion.exit();
+    frame();
+    expect(surface.style.getPropertyValue('animation-name')).toBe('');
   });
 
   it('reset leaves the element as the component styles it', () => {

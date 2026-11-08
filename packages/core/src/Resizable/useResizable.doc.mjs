@@ -56,7 +56,7 @@ export const docs = {
       name: 'collapsible',
       type: 'boolean',
       description:
-        'Whether dragging below the collapsed threshold collapses the region to zero.',
+        'Whether a drag lifted below the collapsed threshold collapses the region to zero.',
       default: 'false',
     },
     {
@@ -179,7 +179,7 @@ export const docsDense = {
     containerRef: 'the element a percentage is a share of.',
     direction: 'which axis to resize along.',
     collapsible:
-      'whether dragging below collapsed threshold collapses region to zero.',
+      'whether a drag lifted below collapsed threshold collapses region to zero.',
     snaps: 'px values to snap to during drag.',
     autoSaveId:
       'key for localStorage persistence of size + collapse state across sessions.',

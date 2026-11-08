@@ -82,6 +82,7 @@
  */
 
 import {LATE_START_MS} from './frameBlock';
+import {sharedKey} from '../utils/sharedRealm';
 import {
   inertCopy,
   isCopyable,
@@ -91,6 +92,12 @@ import {
   wrapText,
 } from './transientCopy';
 import {readThemeTiming, readThemeTokenText} from './themeTiming';
+import {
+  settlingDuration,
+  solveSpring,
+  toSpring,
+  type SpringDescription,
+} from './spring';
 import {themeReducesMotion} from '../privateAttributes/reducedMotion.stylex';
 import {reducedMotionCrossFade} from './uikit/timing';
 import {
@@ -122,7 +129,7 @@ type LayoutMotion =
   | {readonly kind: 'instant'};
 
 /** The move curve as remaining distance (1 → 0) over its duration. */
-interface GlideProgress {
+export interface GlideProgress {
   readonly durationMs: number;
   /** The move curve's CSS text, as read where the area is. */
   readonly easing: string;
@@ -160,6 +167,63 @@ function glideProgress(area: Element): GlideProgress | null {
   };
 }
 
+// A glide a gesture's release asks for, for the changes in one area.
+const releaseGlides = new WeakMap<Element, GlideProgress>();
+
+/**
+ * Times the changes `area` and what it holds play in the next frame by
+ * `progress`, not the theme's move curve. A release settles on its spring.
+ * Reduce Motion still wins.
+ */
+export function glideNextChange(area: Element, progress: GlideProgress): void {
+  releaseGlides.set(area, progress);
+  const view = area.ownerDocument.defaultView;
+  view?.requestAnimationFrame(() => {
+    view.requestAnimationFrame(() => releaseGlides.delete(area));
+  });
+}
+
+/**
+ * `spring` from rest toward the end, released at `velocity` (fractions of
+ * the move per second, toward the end), as a glide's progress.
+ */
+export function springGlide(
+  spring: SpringDescription,
+  velocity: number,
+): GlideProgress {
+  const physics = toSpring(spring);
+  const curve = solveSpring(physics, {from: 0, to: 1, velocity});
+  const durationMs =
+    settlingDuration(physics, {initialVelocity: velocity}) * 1000;
+  const remaining = (t: number) =>
+    t >= durationMs ? 0 : 1 - curve.value(t / 1000);
+  return {durationMs, easing: linearEasing(durationMs, remaining), remaining};
+}
+
+/** A move's remaining fraction over time as CSS `linear()` easing text. */
+function linearEasing(
+  durationMs: number,
+  remaining: (t: number) => number,
+): string {
+  const count = sampleCount(durationMs);
+  const stops: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const done = 1 - remaining((i / (count - 1)) * durationMs);
+    stops.push(String(Math.round(done * 10000) / 10000));
+  }
+  return `linear(${stops.join(', ')})`;
+}
+
+function releaseGlideFor(area: Element): GlideProgress | undefined {
+  for (let at: Element | null = area; at != null; at = at.parentElement) {
+    const progress = releaseGlides.get(at);
+    if (progress != null) {
+      return progress;
+    }
+  }
+  return undefined;
+}
+
 /** The motion a change in `area` plays now. */
 function layoutMotion(area: Element): LayoutMotion {
   if (
@@ -179,7 +243,7 @@ function layoutMotion(area: Element): LayoutMotion {
       easing: `cubic-bezier(${x1}, ${y1}, ${x2}, ${y2})`,
     };
   }
-  const progress = glideProgress(area);
+  const progress = releaseGlideFor(area) ?? glideProgress(area);
   return progress == null ? {kind: 'instant'} : {kind: 'glide', progress};
 }
 
@@ -722,15 +786,26 @@ export function glideOf(element: Element): Animation | null {
 // Handles
 // ---------------------------------------------------------------------------
 
-const AREA = Symbol('astryx.animatedLayout.area');
+// A registered key, so a swizzled copy of this module reads a package handle.
+const AREA = sharedKey('animated-layout/area', 1);
 
 /**
- * The opaque handle `useAnimatedLayout` returns (`spec:AST-105` FR1): no
- * public members. A component that receives it reports its size changes to
- * the handle's container, the area the glide stays inside.
+ * The opaque handle `useAnimatedLayout` returns. A component that receives it
+ * reports its size changes to the handle's container, the area the glide
+ * stays inside.
  */
 export interface AnimatedLayout {
-  readonly [AREA]: () => Element | null;
+  /**
+   * A brand that is never present, so the handle types of the package and a
+   * swizzled copy match.
+   */
+  readonly '@astryxdesign/core/animated-layout/v1'?: never;
+}
+
+/** The container a handle reads, or null for a value that is not a handle. */
+function readArea(handle: AnimatedLayout): Element | null {
+  const read = (handle as {readonly [AREA]?: unknown})[AREA];
+  return typeof read === 'function' ? (read as () => Element | null)() : null;
 }
 
 /** A handle over `area` (the container element, read when a change runs). */
@@ -738,13 +813,11 @@ export function createAnimatedLayout(
   area: () => Element | null,
 ): AnimatedLayout {
   // Not enumerable and frozen: the handle shows no fields to a caller.
-  return Object.freeze(
-    Object.defineProperty({}, AREA, {value: area}),
-  ) as AnimatedLayout;
+  return Object.freeze(Object.defineProperty({}, AREA, {value: area}));
 }
 
 function areaOf(handle: AnimatedLayout, element: Element): Element | null {
-  const area = handle[AREA]();
+  const area = readArea(handle);
   return area != null && area !== element && area.contains(element)
     ? area
     : null;
@@ -2982,7 +3055,7 @@ export function playLayoutFrames(
   handle: AnimatedLayout | null | undefined,
   parts: LayoutSwapMotion['incoming'],
 ): () => void {
-  const area = handle?.[AREA]() ?? null;
+  const area = handle == null ? null : readArea(handle);
   const motion = area == null ? null : layoutMotion(area);
   if (area == null || motion == null || motion.kind === 'instant') {
     return () => {};
@@ -3345,11 +3418,55 @@ const HOLD_PROPERTIES = {
 } as const;
 
 /**
+ * The inside of an element as it was laid out: its padding along an axis, its
+ * overflow and its scroll offset. A size change can change them in the same
+ * commit, as a LayoutPanel at width 0 drops its padding and stops scrolling.
+ */
+interface LaidOutInside {
+  /** Its padding at the axis's start and end. */
+  readonly gutters: readonly [string, string];
+  /** Its overflow across and down. */
+  readonly overflow: readonly [string, string];
+  /** Its scroll offset across and down. */
+  readonly scroll: readonly [number, number];
+}
+
+function insideOf(
+  element: HTMLElement,
+  axis: 'inline' | 'block',
+): LaidOutInside {
+  const style = getComputedStyle(element);
+  return {
+    gutters: [
+      style.getPropertyValue(`padding-${axis}-start`),
+      style.getPropertyValue(`padding-${axis}-end`),
+    ],
+    overflow: [
+      style.getPropertyValue('overflow-x'),
+      style.getPropertyValue('overflow-y'),
+    ],
+    scroll: [element.scrollLeft, element.scrollTop],
+  };
+}
+
+function restoreScroll(element: HTMLElement, inside: LaidOutInside): void {
+  const [across, down] = inside.scroll;
+  if (element.scrollLeft !== across) {
+    element.scrollLeft = across;
+  }
+  if (element.scrollTop !== down) {
+    element.scrollTop = down;
+  }
+}
+
+/**
  * Holds `element` at `extent` own px along `edge`'s axis while it conceals to
  * `keep`, freeing the difference by the margin on that edge's side, so what
- * lies beyond the edge stays where the new size puts it. Returns what puts
- * back every value it set, or null when no margin frees it (the content on
- * that side did not stay put), having set nothing.
+ * lies beyond the edge stays where the new size puts it. Its padding,
+ * overflow and scroll offset stay as `inside` measured them, so nothing in it
+ * moves while it is clipped. Returns what puts back every value it set.
+ * When no margin frees it, as the content on that side did not stay put, it
+ * sets nothing and returns null.
  */
 function holdExtent(
   element: HTMLElement,
@@ -3357,10 +3474,21 @@ function holdExtent(
   edge: LayoutEdge,
   extent: number,
   keep: number,
+  inside: LaidOutInside,
 ): (() => void) | null {
   const axis = edge.startsWith('inline') ? 'inline' : 'block';
   const margin = `margin-${edge}`;
-  const properties = [...HOLD_PROPERTIES[axis], margin];
+  const insideProperties = [
+    [`padding-${axis}-start`, inside.gutters[0]],
+    [`padding-${axis}-end`, inside.gutters[1]],
+    ['overflow-x', inside.overflow[0]],
+    ['overflow-y', inside.overflow[1]],
+  ] as const;
+  const properties = [
+    ...HOLD_PROPERTIES[axis],
+    margin,
+    ...insideProperties.map(([property]) => property),
+  ];
   const prior = properties.map(
     property =>
       [
@@ -3391,6 +3519,11 @@ function holdExtent(
   element.style.setProperty('flex-basis', 'auto', 'important');
   element.style.setProperty('flex-grow', '0', 'important');
   element.style.setProperty('flex-shrink', '0', 'important');
+  for (const [property, value] of insideProperties) {
+    if (value !== '') {
+      element.style.setProperty(property, value, 'important');
+    }
+  }
   element.style.setProperty(margin, `${keep - extent}px`, 'important');
   if (beyond != null && before != null) {
     // One correction from the measured result (a gap, the element's own
@@ -3416,6 +3549,7 @@ function holdExtent(
       return null;
     }
   }
+  restoreScroll(element, inside);
   return restore;
 }
 
@@ -3429,7 +3563,9 @@ function holdExtent(
  * the extent the element showed. A smaller one conceals: the element is held
  * at the extent it was laid out at, the difference freed by the margin on
  * that edge's side so the content beyond it stays where the new size puts it,
- * and clipped down to its new extent; the hold goes when the motion ends. The
+ * and clipped down to its new extent; the hold goes when the motion ends.
+ * Its padding, overflow and scroll offset stay as laid out while it is held,
+ * so nothing inside it jumps when the new size changes them. The
  * moving edge rides the glide of the content on that side, frame by frame,
  * and a change made while it runs starts from the extent it shows. It slides:
  * nothing fades. Under Reduce Motion with a coarse primary pointer a reveal
@@ -3446,7 +3582,13 @@ export function reportLayoutEdge(
    * What the element showed, its laid-out extent and its box, before the
    * change.
    */
-  let measured: {shown: number; box: number; rect: DOMRect} | null = null;
+  let measured: {
+    shown: number;
+    box: number;
+    rect: DOMRect;
+    inside: LaidOutInside;
+  } | null = null;
+  const axis = edge.startsWith('inline') ? 'inline' : 'block';
   const release = (element: HTMLElement | null) => {
     if (element == null) {
       return;
@@ -3462,12 +3604,15 @@ export function reportLayoutEdge(
         const running = resizeReveals.get(element);
         const elapsed = Number(running?.animation?.currentTime);
         const rect = element.getBoundingClientRect();
+        // A running conceal holds the inside as it was laid out.
+        const inside = insideOf(element, axis);
         measured =
           running == null
             ? {
                 shown: extentOf(element, edge),
                 box: extentOf(element, edge),
                 rect,
+                inside,
               }
             : {
                 shown: running.shownAt(
@@ -3475,6 +3620,7 @@ export function reportLayoutEdge(
                 ),
                 box: running.box,
                 rect,
+                inside,
               };
         running?.release();
       }
@@ -3488,6 +3634,8 @@ export function reportLayoutEdge(
       if (handle == null || element == null || before == null) {
         return;
       }
+      // A conceal released to reverse can drop the scroll offset.
+      restoreScroll(element, before.inside);
       const area = areaOf(handle, element);
       if (area == null) {
         return;
@@ -3528,7 +3676,7 @@ export function reportLayoutEdge(
       // the one it was laid out at, held while it runs.
       const box = isConceal ? Math.max(before.box, before.shown) : after;
       const restore = isConceal
-        ? holdExtent(element, area, edge, box, after)
+        ? holdExtent(element, area, edge, box, after, before.inside)
         : () => {};
       if (restore == null) {
         return;

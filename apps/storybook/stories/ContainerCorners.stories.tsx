@@ -210,7 +210,10 @@ export const BleedListInCard: Story = {
   ),
 };
 
-/** A table at the top of a bottom sheet reaches the sheet's top corners. */
+/**
+ * A table at the top of a bottom sheet starts below the grab bar's band, so it
+ * reaches no corner and stays square.
+ */
 export const TableInBottomSheet: Story = {
   render: () => {
     const [isOpen, setIsOpen] = useState(true);

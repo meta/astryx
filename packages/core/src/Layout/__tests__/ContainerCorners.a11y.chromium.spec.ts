@@ -285,19 +285,13 @@ test.describe('Container corners (Chromium)', () => {
     }
   });
 
-  test('a table at the top of a bottom sheet takes its top corners, inside the sheet border', async ({
+  test('a table at the top of a bottom sheet stays square below the grab bar', async ({
     page,
   }) => {
     await mount(page, 'table-in-bottom-sheet', BOTTOM_SHEET_TABLE_REGION);
-    const {radius, border} = await clippingHost(
-      page,
-      BOTTOM_SHEET_TABLE_REGION,
-    );
-    expect(radius).toBeGreaterThan(0);
-    const inner = `${radius - border}px`;
     expect(await radii(page, BOTTOM_SHEET_TABLE_REGION)).toEqual([
-      inner,
-      inner,
+      '0px',
+      '0px',
       '0px',
       '0px',
     ]);

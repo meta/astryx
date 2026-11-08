@@ -4,7 +4,8 @@
  * @file build's tree end to end, offline: the network and subprocesses throw,
  * and build still answers. The block picker changes only the kit's blocks:
  * the start, its alternatives, and every other field stay build's own, the
- * block count is build's own, and the blocks it names are pinned per phrase.
+ * block count is build's own, the blocks follow the picker's own ranking, and
+ * each phrase pins the components it must get blocks from.
  */
 
 import * as fs from 'node:fs';
@@ -100,6 +101,10 @@ const {build} = require('./build.mjs');
 const {buildKit} = require('./kit/kit.mjs');
 /** @type {typeof import('./_adapter.mjs')} */
 const {loadBlockPicker, withListingCache} = require('./_adapter.mjs');
+/** @type {typeof import('./kit/signals.mjs')} */
+const {kitSignals} = require('./kit/signals.mjs');
+/** @type {typeof import('./blocks/blocks.mjs')} */
+const {pickBlocks} = require('./blocks/blocks.mjs');
 
 const REPO = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -107,66 +112,18 @@ const REPO = path.resolve(
 );
 
 /**
- * Hand-written phrases and the blocks the picker names for each. The rest of
- * the answer carries search results, which change whenever the docs do, so it
- * is compared with build's own kit rather than pinned.
+ * Hand-written phrases and the components each must get blocks from. Which
+ * blocks the picker names moves whenever the block catalog grows, so the test
+ * reads the picker's own ranking for the order and pins only the components.
  * @type {[string, string[]][]}
  */
 const PINNED = [
-  [
-    'analytics dashboard with a KPI row and a sortable table',
-    [
-      'TableSortableTable',
-      'TableGridDividersTable',
-      'TableGroupedRowsTable',
-      'TableShowcase',
-      'TableLeadingMarkSelection',
-    ],
-  ],
-  [
-    'settings page with notification toggles and a save bar',
-    [
-      'SwitchShowcase',
-      'SwitchSettingsPanel',
-      'ToggleButtonShowcase',
-      'ToggleButtonStates',
-      'SwitchWithDescription',
-    ],
-  ],
-  [
-    'empty state for a question bank with an import button',
-    [
-      'EmptyStateContainer',
-      'EmptyStateShowcase',
-      'EmptyStateCompact',
-      'EmptyStateActions',
-      'CommandPaletteEmptyShowcase',
-    ],
-  ],
-  [
-    'login form with single sign-on buttons',
-    [
-      'ButtonWithIcon',
-      'CardWithInnerLayout',
-      'ButtonVariants',
-      'FormLayoutShowcase',
-      'FileInputBasic',
-    ],
-  ],
-  [
-    'calendar for booking appointments',
-    [
-      'CalendarSingle',
-      'CalendarShowcase',
-      'CalendarConstraints',
-      'CalendarRangeWithValue',
-      'CalendarTwoMonths',
-    ],
-  ],
-  [
-    'kanban board for sprint tasks with a filter bar',
-    ['ToolbarTableFilter', 'PowerSearchShowcase'],
-  ],
+  ['analytics dashboard with a KPI row and a sortable table', ['Table']],
+  ['settings page with notification toggles and a save bar', ['Switch']],
+  ['empty state for a question bank with an import button', ['EmptyState']],
+  ['login form with single sign-on buttons', ['Button', 'FormLayout']],
+  ['calendar for booking appointments', ['Calendar']],
+  ['kanban board for sprint tasks with a filter bar', ['Toolbar']],
 ];
 
 /** @type {typeof globalThis.fetch} */
@@ -265,7 +222,7 @@ describe('build tree', () => {
     expect(loadBlockPicker()).not.toBeNull();
   });
 
-  for (const [phrase, blocks] of PINNED) {
+  for (const [phrase, components] of PINNED) {
     it(`answers "${phrase}" offline with the picker's blocks`, async () => {
       const answer = await build(phrase, {cwd: REPO});
       const own = await withListingCache(() => buildKit(phrase, {cwd: REPO}));
@@ -290,7 +247,30 @@ describe('build tree', () => {
         const mine = own.data.blocks.find(o => o.name === b.name);
         if (mine) expect(mine).toEqual(b);
       }
-      expect(answer.data.blocks.map(b => b.name)).toEqual(blocks);
+      // Build names the blocks the picker ranks, in its order, whatever blocks
+      // the catalog holds.
+      const signals = await withListingCache(() =>
+        kitSignals(phrase, {cwd: REPO}),
+      );
+      const picker = loadBlockPicker();
+      if (!picker) throw new Error('expected the block picker');
+      expect(answer.data.blocks.map(b => b.name)).toEqual(
+        pickBlocks(phrase, signals, picker).names,
+      );
+      // Each component the request names gets at least one of its own blocks:
+      // a block belongs to the longest component name it starts with, as the
+      // picker reads it.
+      const byLength = signals.components
+        .map(c => c.name)
+        .sort((a, b) => b.length - a.length);
+      const componentOf = (/** @type {string} */ name) =>
+        byLength.find(c => name.startsWith(c));
+      for (const component of components) {
+        expect(
+          answer.data.blocks.some(b => componentOf(b.name) === component),
+          component,
+        ).toBe(true);
+      }
       // Never longer than build's own answer for the same request.
       expect(Buffer.byteLength(JSON.stringify(answer))).toBeLessThanOrEqual(
         Buffer.byteLength(JSON.stringify(own)),

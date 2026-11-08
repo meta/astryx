@@ -152,14 +152,16 @@ export function getMarkdownHelperOwnership(
     : {pluginName, hasRenderer, sourceUnchanged};
 }
 
-declare const markdownTransformNode: unique symbol;
-
 export interface MarkdownTransform<Node extends MarkdownExtensionNode = never> {
   (
     document: MarkdownAstRoot<MarkdownExtensionNode>,
     context: MarkdownTransformContext,
   ): MarkdownAstRoot<MarkdownExtensionNode>;
-  readonly [markdownTransformNode]?: Node;
+  /**
+   * A type-only member that carries the node type; it is never present. Its
+   * shared key lets a swizzled copy's transform type match the package's.
+   */
+  readonly '@astryxdesign/core/markdown-transform-node/v1'?: Node;
 }
 
 const markdownTransformClaim = Symbol('MarkdownTransformClaim');
@@ -268,15 +270,17 @@ export type MarkdownPluginDefinition<
   | MarkdownSyntaxPluginDefinition<Name, Node>
   | MarkdownTransformPluginDefinition<Name, Node>;
 
-declare const markdownPluginNode: unique symbol;
-
 /** Opaque, covariant entry safe to store in heterogeneous plugin lists. */
 export interface MarkdownPluginEntry<
   Node extends MarkdownExtensionNode = MarkdownExtensionNode,
 > {
   readonly name: string;
   readonly apiVersion: 1;
-  readonly [markdownPluginNode]: Node;
+  /**
+   * A type-only member that carries the node type; it is never present. Its
+   * shared key lets a swizzled copy's entry type match the package's.
+   */
+  readonly '@astryxdesign/core/markdown-plugin-node/v1': Node;
 }
 
 export type MarkdownNodeOf<Entry> =

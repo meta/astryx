@@ -166,6 +166,31 @@ describe('a PowerSearch filter token', () => {
     );
   });
 
+  it('names a token whose field the config lacks by its field key', async () => {
+    const user = userEvent.setup();
+    render(
+      <PowerSearch
+        config={config}
+        filters={[{...openFilter, field: 'priority'}]}
+        onChange={() => {}}
+      />,
+    );
+
+    const token = screen
+      .getAllByRole('button', {name: 'priority'})
+      .find(button => button.getAttribute('aria-haspopup') === 'dialog');
+    expect(token).toBeDefined();
+    expect(token).toHaveTextContent(/^priority$/);
+    expect(
+      screen.getByRole('button', {name: 'Remove priority'}),
+    ).toBeInTheDocument();
+    await user.click(token!);
+
+    expect(
+      await screen.findByRole('dialog', {name: 'priority', hidden: true}),
+    ).toBeInTheDocument();
+  });
+
   it('keeps the plain popover for a token from a components override', async () => {
     const user = userEvent.setup();
     function CustomToken({onClick}: PowerSearchTokenProps) {
@@ -230,6 +255,60 @@ describe('a PowerSearch filter token', () => {
       />,
     );
     expect(document.querySelector('[aria-haspopup]')).toBeNull();
+  });
+
+  it("joins the field and operator in the locale's order", () => {
+    render(
+      <InternationalizationProvider
+        locale="ja"
+        messages={{
+          ja: {
+            '@astryx.powersearch.token.fieldOperator': {
+              defaultMessage: '{operator}（{field}）',
+            },
+          },
+        }}>
+        <PowerSearch
+          config={config}
+          filters={[openFilter]}
+          onChange={() => {}}
+        />
+      </InternationalizationProvider>,
+    );
+    expect(screen.getByText('is（Status）')).toBeInTheDocument();
+  });
+
+  it("names the token, its editor and its pill by one text in the locale's order", async () => {
+    const user = userEvent.setup();
+    render(
+      <InternationalizationProvider
+        locale="ja"
+        messages={{
+          ja: {
+            '@astryx.powersearch.token.labelValue': {
+              defaultMessage: '{value}（{label}）',
+            },
+          },
+        }}>
+        <PowerSearch
+          config={config}
+          filters={[openFilter]}
+          onChange={() => {}}
+        />
+      </InternationalizationProvider>,
+    );
+    const token = screen.getByRole('button', {name: 'Open（Status: is）'});
+    // The pill shows the same text it is named by.
+    expect(token).toHaveTextContent(/^Open（Status: is）$/);
+
+    await user.click(token);
+
+    expect(
+      await screen.findByRole('dialog', {
+        name: 'Open（Status: is）',
+        hidden: true,
+      }),
+    ).toBeInTheDocument();
   });
 
   it('keeps a verb-last locale order in the remove button name', () => {

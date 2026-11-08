@@ -12,8 +12,7 @@
 import * as stylex from '@stylexjs/stylex';
 
 /**
- * Corner publication for a rounded padding publisher (Card, Dialog,
- * BottomSheet). The host sets `--_container-corner-block-start` and
+ * Corner publication for a rounded padding publisher (Card, Dialog). The host sets `--_container-corner-block-start` and
  * `--_container-corner-block-end` to the radius at each block edge.
  *
  * A corner goes only to the host's first or last child when that child reads
