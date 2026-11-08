@@ -27,13 +27,15 @@ import {keyboard as ANDROID_KEYBOARD} from '../../motion/android/keyboard';
 import {
   animationStoryboard,
   compareCurve,
-  countBetween,
   curveOf,
   holdAnimations,
   type HeldAnimation,
   openStory,
   releaseAnimations,
+  type RenderingEvent,
+  type RenderingTrace,
   sampleCurve,
+  type TracedTask,
   timeline,
   touchDriver,
   traceRendering,
@@ -46,6 +48,149 @@ const storybook = withStorybook(test);
 // The cover Mobile Safari reports on an iPhone 17 Pro (keyboard, accessory
 // bar and the floating address bar over a 714 px layout viewport).
 const COVER = 337;
+// How often Chrome's caret blinks, ms.
+const CARET_BLINK_MS = 500;
+// One frame at 60 Hz, ms.
+const FRAME_MS = 1000 / 60;
+
+// The shortest steady part that can judge the rise, ms.
+const MIN_STEADY_MS = 2 * FRAME_MS;
+
+/** `PRE class='a b'` reads as `PRE.a`. */
+const shortNode = (node: string) =>
+  node.replace(/ class='([^' ]*)[^']*'/, '.$1');
+
+/**
+ * Whether `e` could only move the ride. It restyles two elements at most, as
+ * many as the ride moves, lays out nothing, and paints only the root layer and
+ * the code block. The count does not tell which elements those are.
+ */
+function ridesOnly(e: RenderingEvent): boolean {
+  return (
+    e.name !== 'Layout' &&
+    (e.name !== 'UpdateLayoutTree' || (e.elements ?? Infinity) <= 2) &&
+    (e.name !== 'Paint' ||
+      e.node === '#document' ||
+      (e.node?.startsWith("PRE class='astryx-code-block") ?? false))
+  );
+}
+
+interface RideStart {
+  /** The report's own layout, which starts the commit frame. */
+  readonly layout: RenderingEvent;
+  /** The frame of each rendering event from that layout on. */
+  readonly frameOf: ReadonlyMap<RenderingEvent, number>;
+  /** How many frames start the ride: the commit, then its start restyles. */
+  readonly frames: number;
+  /** The time of the last event in those frames, epoch ms. */
+  readonly end: number;
+}
+
+/**
+ * The frames that start the ride. The report's layout starts the commit
+ * frame, which starts the ride. Then each ridden element can take one restyle
+ * frame to start, at most two here: the dock and the transcript. Such a frame
+ * only moves the ride, and it comes within three frames of the frame before
+ * it. A starved main thread runs all of them late.
+ */
+function rideStart(trace: RenderingTrace, reported: number): RideStart | null {
+  const layout = trace.events.find(e => e.t >= reported && e.name === 'Layout');
+  if (layout == null) {
+    return null;
+  }
+  // A frame paints once. Its restyle and layout come before its PrePaint, and
+  // its paints after it.
+  const frameOf = new Map<RenderingEvent, number>();
+  let prePaints = 0;
+  const after = trace.events
+    .filter(e => e.t >= layout.t)
+    .sort((x, y) => x.t - y.t);
+  for (const e of after) {
+    const before = ['UpdateLayoutTree', 'Layout', 'PrePaint'].includes(e.name);
+    frameOf.set(e, before ? prePaints : Math.max(0, prePaints - 1));
+    if (e.name === 'PrePaint') {
+      prePaints += 1;
+    }
+  }
+  const eventsOf = (frame: number) =>
+    after.filter(e => frameOf.get(e) === frame);
+  let frames = 1;
+  let end = eventsOf(0).at(-1)?.t ?? layout.t;
+  for (const frame of [1, 2]) {
+    const events = eventsOf(frame);
+    const first = events.at(0);
+    if (
+      first == null ||
+      first.t - end > 3 * FRAME_MS ||
+      !events.every(ridesOnly)
+    ) {
+      break;
+    }
+    frames += 1;
+    end = events.at(-1)?.t ?? end;
+  }
+  return {layout, frameOf, frames, end};
+}
+
+/**
+ * The page's task that holds `t`, long or stretched. A starved task ran its
+ * main thread 50 ms or less, so the trace keeps it with the stretched tasks.
+ */
+function taskAt(trace: RenderingTrace, t: number): TracedTask | undefined {
+  return [...trace.longTasks, ...trace.stretchedTasks].find(
+    task => task.start <= t && task.start + task.durationMs >= t,
+  );
+}
+
+/**
+ * The evidence that a starved main thread moved the ride's start where the
+ * window cannot place it, or null. The report's layout comes more than two
+ * frames late, and its task had the main thread for half its wall time or
+ * less. Then the window holds only start restyles too late to place. Or it
+ * holds nothing, and the start leaves less than two frames of it.
+ */
+function starvation(
+  start: RideStart,
+  task: TracedTask | undefined,
+  counted: ReadonlyArray<RenderingEvent>,
+  judged: number,
+  reported: number,
+): Record<string, unknown> | null {
+  const {layout} = start;
+  if (layout.t - reported <= 2 * FRAME_MS) {
+    return null;
+  }
+  if (task == null || task.threadMs > task.durationMs / 2) {
+    return null;
+  }
+  const lateRestyle = (frame: number) =>
+    (frame === 1 || frame === 2) &&
+    [...start.frameOf]
+      .filter(([, f]) => f === frame)
+      .every(([e]) => ridesOnly(e));
+  const late =
+    counted.length > 0 &&
+    counted.every(e => lateRestyle(start.frameOf.get(e) ?? -1));
+  const unjudged = counted.length === 0 && judged < MIN_STEADY_MS;
+  if (!late && !unjudged) {
+    return null;
+  }
+  const at = (t: number) => Math.round(t - reported);
+  return {
+    layoutMs: at(layout.t),
+    reportTask: {
+      wallMs: Math.round(task.durationMs),
+      threadMs: Math.round(task.threadMs),
+    },
+    startFrames: start.frames,
+    startEndMs: at(start.end),
+    steadyLeftMs: Math.round(judged),
+    window: counted.map(
+      e =>
+        `${e.name}${e.node == null ? '' : ` ${shortNode(e.node)}`}@${at(e.t)}`,
+    ),
+  };
+}
 
 /**
  * Replaces `window.visualViewport` before the page loads with one the test
@@ -551,20 +696,6 @@ test.describe('Chrome on Android (spec:AST-099 FR8)', () => {
 
   test('the rise does no Layout or Paint per frame', async ({page}) => {
     const {editable} = await openChat(page, {android: true});
-    await editable.focus();
-    // Focus starts the composer's own feedback, a short box-shadow transition
-    // that paints every frame. It is no part of the ride, so it ends before
-    // the trace, and the window counts the ride alone.
-    await page.evaluate(async () => {
-      const transitions = document
-        .getAnimations()
-        .filter(animation => animation instanceof CSSTransition);
-      await Promise.all(
-        transitions.map(async transition =>
-          transition.finished.catch(() => undefined),
-        ),
-      );
-    });
     // Records each ride the motion engine starts on the dock, when it starts
     // and when it is cancelled. Reading an animation's times reads no layout.
     // The engine sets the start in the task that makes the ride, so a
@@ -606,20 +737,46 @@ test.describe('Chrome on Android (spec:AST-099 FR8)', () => {
     // No polling inside the trace: reading a sticky element's presented style
     // from the test forces a layout every frame by itself.
     let reported = 0;
+    let focusedFor = 0;
     const trace = await traceRendering(page, async () => {
-      reported = await page.evaluate(async cover => {
-        const from = performance.timeOrigin + performance.now();
-        (window as unknown as {__keyboard: (c: number) => void}).__keyboard(
-          cover,
-        );
-        await new Promise(resolve => setTimeout(resolve, 400));
-        return from;
-      }, COVER);
+      ({reported, focusedFor} = await editable.evaluate(
+        async (element, cover) => {
+          // As on a phone, focus brings up the keyboard. Under a fine pointer,
+          // focus starts the composer's own feedback, a short box-shadow
+          // transition that paints every frame. The report waits for it to
+          // end. Under a coarse pointer, as here, the focus look shows at once
+          // and the wait ends at once.
+          const focusedAt = performance.timeOrigin + performance.now();
+          (element as HTMLElement).focus();
+          await Promise.all(
+            document
+              .getAnimations()
+              .filter(animation => animation instanceof CSSTransition)
+              .map(async transition =>
+                transition.finished.catch(() => undefined),
+              ),
+          );
+          const from = performance.timeOrigin + performance.now();
+          (window as unknown as {__keyboard: (c: number) => void}).__keyboard(
+            cover,
+          );
+          await new Promise(resolve => setTimeout(resolve, 400));
+          return {reported: from, focusedFor: from - focusedAt};
+        },
+        COVER,
+      ));
     });
     // The steady part of Gboard's slide, 125–220 ms after the report. Its start
-    // lays out once and paints in its first two frames. From about 230 ms, its
-    // end paints twice and hands the layers back with one layout.
+    // lays out once and paints in its first frames. From about 230 ms, its end
+    // paints twice and hands the layers back with one layout.
     const steady = {from: reported + 125, to: reported + 220};
+    // The caret blinks every 500 ms from the focus, Chrome's interval, and
+    // each blink is a main-thread frame. A report soon after the focus keeps
+    // the first blink after the window.
+    expect(
+      focusedFor,
+      'the caret\u2019s first blink could fall in the window',
+    ).toBeLessThan(CARET_BLINK_MS - (steady.to - reported));
     // A ride runs through that window: it starts before the window, its slide
     // ends after it, and nothing cancels it sooner. So no rendering in the
     // window means the dock rode without it, not that nothing moved.
@@ -639,11 +796,56 @@ test.describe('Chrome on Android (spec:AST-099 FR8)', () => {
         (cancelled == null || cancelled >= steady.to),
     );
     expect(riding, JSON.stringify({reported, rides})).toBe(true);
-    const during = countBetween(trace, steady.from, steady.to);
-    // On failure, every rendering event of the rise and the long tasks, in ms
-    // after the report.
+    const start = rideStart(trace, reported);
+    if (start == null) {
+      throw new Error('the report laid nothing out, so no ride started');
+    }
+    // The ride's own start frames do not count when a starved main thread
+    // runs them late, into the window. The report's task then had the main
+    // thread for half its wall time or less. A start the page itself delays
+    // into the window fails, by name.
+    const reportTask = taskAt(trace, start.layout.t);
+    const isStarved =
+      reportTask != null && reportTask.threadMs <= reportTask.durationMs / 2;
+    expect(
+      start.end >= steady.from && !isStarved
+        ? {
+            startEndMs: Math.round(start.end - reported),
+            reportTask:
+              reportTask == null
+                ? null
+                : {
+                    wallMs: Math.round(reportTask.durationMs),
+                    threadMs: Math.round(reportTask.threadMs),
+                  },
+          }
+        : null,
+      'the ride\u2019s start reached the window without a starved thread',
+    ).toBeNull();
+    const counted = trace.events.filter(
+      e =>
+        e.t >= steady.from &&
+        e.t <= steady.to &&
+        (!isStarved || (start.frameOf.get(e) ?? start.frames) >= start.frames),
+    );
+    const judged = steady.to - Math.max(steady.from, start.end);
+    expect(
+      starvation(start, reportTask, counted, judged, reported),
+      'the main thread was starved, so the ride\u2019s start reached the window',
+    ).toBeNull();
+    const during: Record<string, number> = {};
+    for (const e of counted) {
+      during[e.name] = (during[e.name] ?? 0) + 1;
+    }
+    // On failure, every rendering event of the rise and the long and
+    // stretched tasks, in ms after the report.
     const detail = JSON.stringify({
       during,
+      start: {
+        frames: start.frames,
+        layoutMs: Math.round(start.layout.t - reported),
+        endMs: Math.round(start.end - reported),
+      },
       events: trace.events
         .filter(e => e.t >= reported - 20 && e.t <= reported + 400)
         .map(e => `${e.name}@${Math.round(e.t - reported)}`),
@@ -651,9 +853,17 @@ test.describe('Chrome on Android (spec:AST-099 FR8)', () => {
         task =>
           `${Math.round(task.start - reported)}+${Math.round(task.durationMs)}`,
       ),
+      stretchedTasks: trace.stretchedTasks.map(
+        task =>
+          `${Math.round(task.start - reported)}+${Math.round(task.durationMs)}`,
+      ),
     });
     expect(during.Layout ?? 0, detail).toBe(0);
     expect(during.Paint ?? 0, detail).toBe(0);
+    expect(
+      judged,
+      'the ride\u2019s start left no steady part to judge',
+    ).toBeGreaterThanOrEqual(MIN_STEADY_MS);
   });
 
   test(
