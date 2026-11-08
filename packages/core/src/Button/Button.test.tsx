@@ -839,9 +839,7 @@ describe('Button', () => {
     // A caller's height decides a labelled button's height, as before the
     // button grew with its label: no minimum holds it at the element size.
     it("keeps a caller's height on a labelled button", () => {
-      render(
-        <Button label="More" size="sm" xstyle={callerStyles.short} />,
-      );
+      render(<Button label="More" size="sm" xstyle={callerStyles.short} />);
       const button = screen.getByRole('button', {name: 'More'});
       const computed = getComputedStyle(button);
       expect(computed.height).toBe('20px');
@@ -853,7 +851,7 @@ describe('Button', () => {
       const computed = getComputedStyle(
         screen.getByRole('button', {name: 'Save'}),
       );
-      expect(computed.paddingBlock || computed.paddingTop).not.toBe('0px');
+      expect(computed.paddingBlock).toBe('var(--spacing-2)');
       expect(['', '0px', 'auto']).toContain(computed.minHeight);
     });
   });

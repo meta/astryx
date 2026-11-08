@@ -270,10 +270,9 @@ const dynamicStyles = stylex.create({
   width: (width: SizeValue | null) => ({width}),
 });
 
-// The height is the element size, or one label line (`1lh`) when that is
-// taller. At the default text size the line is shorter, so the height is the
-// element size and a caller's height still replaces it. A larger text size
-// makes the line taller, and the button grows with its label.
+// At the default text size one label line is shorter than the element size,
+// so a caller's height still replaces this one. A larger text size makes the
+// line taller, and the button grows with its label.
 const sizeStyles = stylex.create({
   sm: {height: `max(${sizeVars['--size-element-sm']}, 1lh)`},
   md: {height: `max(${sizeVars['--size-element-md']}, 1lh)`},
