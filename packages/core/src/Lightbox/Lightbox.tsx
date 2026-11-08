@@ -521,10 +521,8 @@ export function Lightbox({
     [media],
   );
   const isGallery = mediaArray.length > 1;
-  // The item shown, current in every respect (its page, the counter, the
-  // pager, the announcement): the nearest item to the requested index. A
-  // fraction rounds to the nearest item, NaN shows the first item, and an
-  // index past either end shows the item at that end.
+  // The item shown is current in every respect: its page, the counter, the
+  // pager and the announcement.
   const wholeIndex = Number.isNaN(requestedIndex)
     ? 0
     : Math.round(requestedIndex);
@@ -542,7 +540,6 @@ export function Lightbox({
   // never paints as zoomed; the stage resets the photo before it paints.
   const currentSrc = currentItem?.src;
   const [viewedItem, setViewedItem] = useState({index, src: currentSrc});
-  // Object.is, matching the dependency comparison of the effect this replaces.
   if (
     !Object.is(viewedItem.index, index) ||
     !Object.is(viewedItem.src, currentSrc)
