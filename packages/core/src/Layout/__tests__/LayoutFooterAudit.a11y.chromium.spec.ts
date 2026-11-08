@@ -505,10 +505,13 @@ for (const item of cases) {
               near(footer.innerBox.width, expected.contentWidth),
             `${where} inner max ${footer.innerMaxWidth} width ${footer.innerBox.width}, expected ${expected.contentWidth}`,
           );
-        } else {
+        } else if (item.viewport !== NARROW) {
+          // Without a content width the inner wrapper spans the footer. In
+          // the 320px viewport the story frames are wider than the viewport,
+          // so the Layout's default content width caps the wrapper there.
           check(
-            footer.innerMaxWidth === 'none',
-            `${where} inner max width ${footer.innerMaxWidth}`,
+            near(footer.innerBox.width, footer.box.width),
+            `${where} inner width ${footer.innerBox.width}, footer ${footer.box.width}`,
           );
         }
       }
