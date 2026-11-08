@@ -221,14 +221,31 @@ const styles = stylex.create({
   },
   // 'bleed': the row fills the list, which reaches the container's padding
   // edge (List.tsx); its text sits on the container's padding line, never
-  // closer to the row's edge than its own inset. Square corners: the row
-  // meets the container's straight sides.
+  // closer to the row's edge than its own inset. Square corners where the row
+  // meets the container's straight sides; the first and last rows take the
+  // corners the list publishes for a rounded container's corner.
   edgeBleed: {
     paddingInlineStart:
       'max(var(--container-padding-inline-start, 0px), var(--_item-inset-inline))',
     paddingInlineEnd:
       'max(var(--container-padding-inline-end, 0px), var(--_item-inset-inline))',
     borderRadius: 0,
+    borderStartStartRadius: {
+      default: null,
+      ':first-child': 'var(--_list-corner-start-start, 0px)',
+    },
+    borderStartEndRadius: {
+      default: null,
+      ':first-child': 'var(--_list-corner-start-end, 0px)',
+    },
+    borderEndStartRadius: {
+      default: null,
+      ':last-child': 'var(--_list-corner-end-start, 0px)',
+    },
+    borderEndEndRadius: {
+      default: null,
+      ':last-child': 'var(--_list-corner-end-end, 0px)',
+    },
   },
   // Under a finger, the row's touch band rises above the rows after it. A
   // later row is positioned with no z-index, so it would paint and hit-test
