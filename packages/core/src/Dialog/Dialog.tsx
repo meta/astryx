@@ -67,7 +67,8 @@ import {
   shadowVars,
   spacingVars,
 } from '../theme/tokens.stylex';
-import {container, containerCornerStyles} from '../Layout/container.stylex';
+import {container} from '../Layout/container.stylex';
+import {containerCornerStyles} from '../Layout/containerCorners.stylex';
 import type {SpacingToken} from '../Layout/container.stylex';
 import {
   paddingStyles,

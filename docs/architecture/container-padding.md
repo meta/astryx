@@ -12,6 +12,7 @@ owners: [cixzhang, imdreamrunner]
 applies_to:
   [
     packages/core/src/Layout/container.stylex.ts,
+    packages/core/src/Layout/containerCorners.stylex.ts,
     packages/core/src/Layout/padding.stylex.ts,
     packages/core/src/Layout/edgeCompensation.stylex.ts,
     packages/core/src/Card/,
@@ -412,8 +413,9 @@ evidence, not part of this documentation stack.
 ## Owning code
 
 - `packages/core/src/Layout/container.stylex.ts` — lowers container theme and
-  explicit padding into internal geometry, and holds the one corner
-  publication rounded hosts share.
+  explicit padding into internal geometry.
+- `packages/core/src/Layout/containerCorners.stylex.ts` — holds the one corner
+  publication rounded hosts share; the package does not export it.
 - `packages/core/src/Layout/padding.stylex.ts` — owns public spacing-step maps,
   logical-edge setters, Section propagation, and the overlay reset.
 - `packages/core/src/Layout/edgeCompensation.stylex.ts` — owns the container-side
