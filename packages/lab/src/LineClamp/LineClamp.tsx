@@ -172,6 +172,27 @@ function syncFocusableClipping(
  * and that containing block's box decides. A popover or dialog stops
  * ownership in `isOwnedBy`, and a portal renders outside the clamp.
  */
+function containingBlock(node: Element): Element | null {
+  if (node instanceof HTMLElement && node.offsetParent != null) {
+    return node.offsetParent;
+  }
+  // A node with no box (for example under `display: none`) has no
+  // `offsetParent`, so find its containing block from computed style.
+  if (node.getClientRects().length > 0) {
+    return null;
+  }
+  for (
+    let ancestor = node.parentElement;
+    ancestor != null;
+    ancestor = ancestor.parentElement
+  ) {
+    if (getComputedStyle(ancestor).position !== 'static') {
+      return ancestor;
+    }
+  }
+  return null;
+}
+
 function flowBox(container: HTMLElement, el: Element): Element | null {
   let box: Element = el;
   for (
@@ -184,7 +205,7 @@ function flowBox(container: HTMLElement, el: Element): Element | null {
       return null;
     }
     if (position === 'absolute') {
-      const block = node instanceof HTMLElement ? node.offsetParent : null;
+      const block = containingBlock(node);
       if (block == null || block === container || !container.contains(block)) {
         return null;
       }

@@ -682,6 +682,30 @@ describe('LineClamp', () => {
       },
     );
 
+    it('keeps a hidden CheckboxInput inert when a change outside the clamp shows it past the edge', () => {
+      const ui = () => (
+        <LineClamp maxLines={2} data-testid="clamp">
+          Some text{' '}
+          <CheckboxInput label="Notify" value={false} onChange={() => {}} />
+        </LineClamp>
+      );
+      const {rerender} = render(ui());
+      const container = screen.getByTestId('clamp');
+      const input = container.querySelector('input')!;
+      const wrapper = input.parentElement!;
+      // An ancestor outside the clamp hides it: no box, no offsetParent.
+      const rectMap = new Map([[container, {top: 0, bottom: 40}]]);
+      mockRects(rectMap);
+      rerender(ui());
+      expect(input).toHaveAttribute('inert');
+
+      // The outside change shows it past the edge, and no pass runs.
+      rectMap.set(wrapper, {top: 60, bottom: 84});
+      rectMap.set(input, {top: 60, bottom: 84});
+      Object.defineProperty(input, 'offsetParent', {value: wrapper});
+      expect(input).toHaveAttribute('inert');
+    });
+
     it('hides a descendant a child re-enables past the fold after mount', async () => {
       // Only the late link is placed past the fold; everything else sits
       // above it. Enabling it changes an attribute only: no text change, no
