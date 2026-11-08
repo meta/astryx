@@ -339,6 +339,85 @@ function translatesOf(
   return points.length > 0 ? points : null;
 }
 
+/** How near its place a glide is drawn, px, to count as there. */
+const SETTLED_PX = 0.5;
+
+/**
+ * The keyframe offset from which `points` stay within SETTLED_PX of the
+ * element's place, scaled by its ancestors, or null when only the last does.
+ */
+function settledFrom(
+  points: ReadonlyArray<{at: number; x: number; y: number}>,
+  scale: {readonly x: number; readonly y: number},
+): number | null {
+  let from: number | null = null;
+  for (let index = points.length - 1; index >= 0; index -= 1) {
+    const {at, x, y} = points[index];
+    if (
+      Math.abs(x * scale.x) > SETTLED_PX ||
+      Math.abs(y * scale.y) > SETTLED_PX
+    ) {
+      break;
+    }
+    from = at;
+  }
+  return from == null || from >= 1 ? null : from;
+}
+
+interface Settling {
+  readonly element: Element;
+  readonly animation: Animation;
+  /** The glide's own time it settles at, ms. */
+  readonly at: number;
+  readonly resolve: () => void;
+}
+
+/** Each window's glides that have not settled yet, read once a frame. */
+const settling = new WeakMap<Window, Set<Settling>>();
+
+/**
+ * Calls `entry.resolve` in the first frame whose glide time reaches
+ * `entry.at`. One frame loop per window runs while any glide waits; it reads
+ * each glide's time and nothing else. Returns the stop.
+ */
+function watchSettle(view: Window, entry: Settling): () => void {
+  if (typeof view.requestAnimationFrame !== 'function') {
+    return () => {};
+  }
+  let waiting = settling.get(view);
+  if (waiting == null) {
+    const entries = new Set<Settling>();
+    waiting = entries;
+    settling.set(view, entries);
+    const frame = () => {
+      for (const next of entries) {
+        const time =
+          next.animation.currentTime ??
+          (next.animation.startTime == null
+            ? null
+            : view.performance.now() - Number(next.animation.startTime));
+        if (!next.element.isConnected) {
+          entries.delete(next);
+        } else if (time != null && Number(time) >= next.at) {
+          entries.delete(next);
+          next.resolve();
+        }
+      }
+      if (entries.size === 0) {
+        settling.delete(view);
+        return;
+      }
+      view.requestAnimationFrame(frame);
+    };
+    view.requestAnimationFrame(frame);
+  }
+  const entries = waiting;
+  entries.add(entry);
+  return () => {
+    entries.delete(entry);
+  };
+}
+
 /**
  * Reports `element` to the presented hit-test registry while its `translate`
  * glide runs. iOS WebKit hit-tests the element where the glide started. So
@@ -396,6 +475,25 @@ function presentGlide(
   let isRemoved = false;
   const glide = {};
   presentedGlides.set(element, glide);
+  // WebKit can draw a glide's last frame with the transform it last resolved
+  // (presentation.ts), from its start or a later style write. One resolve
+  // once the glide is drawn within half a pixel of its place makes that frame
+  // its place.
+  const settle = settledFrom(points, scale);
+  const stopSettle =
+    settle == null
+      ? () => {}
+      : watchSettle(view, {
+          element,
+          animation,
+          at: settle * durationMs,
+          resolve: () => {
+            if (!isEnded && presentedGlides.get(element) === glide) {
+              writePresentedResolve(styled);
+              hitTested = drawnAt(now());
+            }
+          },
+        });
   const unregister = registerPresentedOffset(element, {
     // At its end the engine hit-tests the element at its layout again.
     offset: (time = now()) => {
@@ -419,6 +517,7 @@ function presentGlide(
         return;
       }
       isRemoved = true;
+      stopSettle();
       glideReports.delete(report);
       unregister();
       if (presentedGlides.get(element) === glide) {
@@ -433,6 +532,7 @@ function presentGlide(
       return;
     }
     isEnded = true;
+    stopSettle();
     endedReports.push(report);
     // This module's own timer: a closed frame's timer never fires. The glides
     // of one change end in one frame, so the first task removes them all.

@@ -6,7 +6,8 @@
  *   Element.animate and stubbed layout rectangles (jsdom lays nothing out)
  * @output Checks that a running translate glide reports its element to the
  *   presented hit-test registry. The cases cover its offset from where iOS
- *   WebKit hit-tests it, a touch-down's resolve and its end. A change's
+ *   WebKit hit-tests it, a touch-down's resolve and its end. A glide resolves
+ *   once more as it settles, and a cancelled or removed one never does. A change's
  *   glides cost one notice as they start and one as they end, even after a
  *   glide in a removed frame ended. A fade or an inert element reports
  *   nothing, and a glide whose element left its document loses its report
@@ -351,6 +352,123 @@ describe('a glide in the presented hit-test registry (motion/presentation.ts)', 
     // Booleans: a matcher would print the closed frame's element.
     expect(presentedElements().includes(a)).toBe(false);
     expect(presentedElements().includes(b)).toBe(false);
+  });
+
+  /** Frames the page asks for, run on demand. */
+  function holdFrames() {
+    const queued: FrameRequestCallback[] = [];
+    const spy = vi
+      .spyOn(window, 'requestAnimationFrame')
+      .mockImplementation(callback => {
+        queued.push(callback);
+        return queued.length;
+      });
+    return {
+      run: () => {
+        for (const callback of queued.splice(0)) {
+          callback(window.performance.now());
+        }
+      },
+      pending: () => queued.length,
+      restore: () => spy.mockRestore(),
+    };
+  }
+
+  /** The glide's time from which it is drawn within 0.5 px of its place, ms. */
+  const settleTime = (glide: Played) => {
+    const ys = glide.keyframes.map(frame =>
+      Math.abs(translateOf({...glide, keyframes: [frame]}).y),
+    );
+    let from = ys.length - 1;
+    while (from > 0 && ys[from - 1] <= 0.5) {
+      from -= 1;
+    }
+    const offset = glide.keyframes[from].offset ?? from / (ys.length - 1);
+    return offset * Number(glide.options.duration);
+  };
+
+  /** A glide on row a, its frames held, and its time a test can set. */
+  async function settlingGlide() {
+    // Two real frames first: a loop an earlier test left ends, so this
+    // glide's loop starts on the held frames.
+    await new Promise<void>(resolve => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    });
+    const frames = holdFrames();
+    const {area, changed, phase} = setUp(
+      '<div id="area"><div id="changed"></div><div id="a"></div></div>',
+    );
+    const a = document.getElementById('a') as HTMLElement;
+    placeAt(a, {before: [0, 0, 400, 40], after: [0, 80, 400, 40]}, phase);
+    await runChange(
+      createAnimatedLayout(() => area),
+      changed,
+      phase,
+    );
+    const glide = played.find(p => p.element === a) as Played;
+    const timing = glide.animation as {currentTime: number};
+    const settles = settleTime(glide);
+    const written = () => a.style.getPropertyValue('--astryx-presented');
+    return {a, frames, glide, timing, settles, written};
+  }
+
+  it('resolves once more in the first frame its glide is drawn within half a pixel of its place, so WebKit draws its last frame there', async () => {
+    const {frames, glide, timing, settles, written} = await settlingGlide();
+    try {
+      expect(settles).toBeGreaterThan(0);
+      expect(settles).toBeLessThan(Number(glide.options.duration));
+      // Short of that keyframe: no write, and the frame loop keeps reading.
+      timing.currentTime = settles - 1;
+      frames.run();
+      expect(written()).toBe('');
+      expect(frames.pending()).toBeGreaterThan(0);
+      // The frame that reaches it writes once, and the loop stops.
+      timing.currentTime = settles;
+      frames.run();
+      const write = written();
+      expect(write).not.toBe('');
+      timing.currentTime = settles + 50;
+      frames.run();
+      frames.run();
+      expect(written()).toBe(write);
+      expect(frames.pending()).toBe(0);
+    } finally {
+      frames.restore();
+    }
+  });
+
+  it('writes nothing for a glide cancelled before it settles, and stops reading its time', async () => {
+    const {frames, glide, timing, settles, written} = await settlingGlide();
+    try {
+      timing.currentTime = settles - 1;
+      frames.run();
+      glide.cancelled?.();
+      frames.run();
+      frames.run();
+      expect(frames.pending()).toBe(0);
+      // Its time passing later writes nothing.
+      timing.currentTime = settles + 10;
+      frames.run();
+      expect(written()).toBe('');
+    } finally {
+      frames.restore();
+    }
+  });
+
+  it('writes nothing for a glide whose element leaves the document before it settles', async () => {
+    const {a, frames, timing, settles, written} = await settlingGlide();
+    try {
+      timing.currentTime = settles - 1;
+      frames.run();
+      a.remove();
+      timing.currentTime = settles + 10;
+      frames.run();
+      frames.run();
+      expect(written()).toBe('');
+      expect(frames.pending()).toBe(0);
+    } finally {
+      frames.restore();
+    }
   });
 
   it('removes the report of a glide whose element left the document before it ended', async () => {

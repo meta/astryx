@@ -239,6 +239,14 @@ Out of coverage, each taking its final place at once:
   handles, on an element mid-glide, still goes to what was at that spot before
   the glide, until the glide ends (glides last at most the theme's move
   duration).
+- Each glide reported there also makes the engine resolve its transform once
+  more, in the first frame it is drawn within half a pixel of its place.
+  WebKit can draw a glide's last frame, and every frame of a long task over
+  its end, at the transform it last resolved; that frame now shows its place.
+  Implementation gap: a long task that starts before that frame still shows
+  where the glide was when the engine last resolved it, and a glide whose
+  curve reaches its place only at its end (a linear move curve) gets no such
+  resolve.
 
 ## Verification
 

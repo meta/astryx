@@ -22,12 +22,14 @@ import {
   animationStoryboard,
   armHold,
   blockMainThread,
+  markElement,
   busyWindowProof,
   MARKER_RGB,
   openStory,
   releaseAnimations,
   requireFrames,
   seekAnimations,
+  startBusyControl,
   startCompositorTrace,
   startScreencast,
   touchDriver,
@@ -411,6 +413,9 @@ async function seekThroughGlide(
  */
 const RECORDED_GLIDE_MS = 1200;
 
+/** How long the page is held past a glide's end, ms. */
+const TAIL_BLOCK_MS = 500;
+
 /** Sets the glide's duration where the tree reads it, as a theme does. */
 const lengthenGlide = async (page: Page, ms: number) =>
   page
@@ -608,6 +613,54 @@ test('collapse under a finger: the group fades out as the rows below glide up, w
   }
   await releaseAnimations(page, {finish: true});
   await expect(group).toHaveCount(0);
+});
+
+test('collapse under a finger: a long task over the end of the glide draws the rows below at their place, not where they were', async ({
+  page,
+}) => {
+  await open(page);
+  await tapToggle(page);
+  await expect(parts(page).child).toBeVisible();
+  await treeAtRest(page);
+  await lengthenGlide(page, RECORDED_GLIDE_MS);
+  const {below} = parts(page);
+  // The compositor's own box keeps frames coming while the page is held.
+  const control = await startBusyControl(page);
+  const unmark = await markElement(below);
+  const cast = await startScreencast(page);
+  await expect
+    .poll(() => cast.frameCount(), {
+      message: 'the screencast delivers frames',
+      timeout: 5000,
+    })
+    .toBeGreaterThan(0);
+  // The page holds its main thread from nine tenths of the glide to past its
+  // end, like a long task as a collapse ends.
+  const blocked = blockMainThread(page, TAIL_BLOCK_MS, {
+    during: below,
+    minProgressMs: RECORDED_GLIDE_MS * 0.9,
+  });
+  await tapToggle(page);
+  const block = await blocked;
+  await treeAtRest(page);
+  const frames = await cast.stop();
+  await unmark();
+  await control.remove();
+  // The chip sits 8 px into the row. The glide ends at most a tenth of it
+  // after the block begins; each frame two frames past that is judged.
+  const place = ((await below.boundingBox())?.y ?? 0) + 8;
+  const ended = block.from + RECORDED_GLIDE_MS * 0.1 + 34;
+  const held = requireFrames(await trackMarker(page, frames), {
+    min: 3,
+    during: 'the page is held past the end of the glide',
+    where: frame => frame.t > ended && frame.t < block.to && frame.box != null,
+  });
+  for (const frame of held) {
+    expect(
+      Math.abs((frame.box?.y ?? 0) - place),
+      JSON.stringify({place, frame: [frame.t - block.from, frame.box?.y]}),
+    ).toBeLessThanOrEqual(1);
+  }
 });
 
 test('collapse under a finger: no row of the tree paints past its bottom edge onto the content after it', async ({
