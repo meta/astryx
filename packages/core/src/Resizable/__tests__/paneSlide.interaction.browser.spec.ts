@@ -747,26 +747,129 @@ async function pressHandle(page: Page): Promise<{x: number; y: number}> {
   return at;
 }
 
-async function paneWidth(page: Page): Promise<number> {
-  return (await page.getByTestId('sliding-panel').boundingBox())?.width ?? 0;
+interface EdgeFrame {
+  laidOut: number;
+  buttonWidth: number;
+  drawnEdge: number;
+  handle: number;
+  contentStart: number;
 }
 
-test('past the maximum the edge follows with resistance, and springs back after the lift', async ({
+/** Records the pane, its first button, its handle and the content each frame. */
+async function recordEdgeFrames(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const pane = document.querySelector<HTMLElement>(
+      '[data-testid="sliding-panel"]',
+    );
+    const content = document.querySelector('[data-testid="sliding-content"]');
+    const handle = document.querySelector(
+      '[role="separator"][aria-label="Resize panel"]',
+    );
+    const button = pane?.querySelector('button');
+    const frames: EdgeFrame[] = [];
+    (window as unknown as {edgeFrames: EdgeFrame[]}).edgeFrames = frames;
+    const step = () => {
+      if (pane == null || content == null || handle == null || button == null) {
+        return;
+      }
+      const handleBox = handle.getBoundingClientRect();
+      frames.push({
+        laidOut: pane.offsetWidth,
+        buttonWidth: button.offsetWidth,
+        drawnEdge: pane.getBoundingClientRect().right,
+        handle: handleBox.left + handleBox.width / 2,
+        contentStart: content.getBoundingClientRect().left,
+      });
+      if (frames.length < 2000) {
+        requestAnimationFrame(step);
+      }
+    };
+    requestAnimationFrame(step);
+  });
+}
+
+/**
+ * Waits until no motion runs in the story, then two more frames, so the
+ * frames end at rest. It waits on the motion, not on time.
+ */
+async function waitForSettledMotion(page: Page): Promise<void> {
+  await page.waitForFunction(() => {
+    const root = document.getElementById('storybook-root');
+    return document
+      .getAnimations()
+      .every(
+        animation =>
+          animation.playState !== 'running' ||
+          !(animation.effect instanceof KeyframeEffect) ||
+          !(animation.effect.target instanceof Node) ||
+          root?.contains(animation.effect.target) !== true,
+      );
+  });
+  await page.evaluate(
+    async () =>
+      new Promise(resolve =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      ),
+  );
+}
+
+async function edgeFrames(page: Page): Promise<EdgeFrame[]> {
+  return page.evaluate(
+    () => (window as unknown as {edgeFrames: EdgeFrame[]}).edgeFrames,
+  );
+}
+
+test('past the maximum the edge moves at most 8 px, the pane never reflows, and the edge springs back after the lift', async ({
   page,
 }) => {
   await openFixture(page, STORY.start);
   await expectPresent(page);
   const at = await pressHandle(page);
+  const rest = at.x + 120;
+  await recordEdgeFrames(page);
   // 200 px plus 260 px of pull would be 460 px against a 320 px maximum.
   await page.mouse.move(at.x + 260, at.y, {steps: 6});
-  const pulled = await paneWidth(page);
-  expect(pulled).toBeGreaterThan(330);
-  expect(pulled).toBeLessThan(450);
+  await page.waitForTimeout(100);
   await page.mouse.up();
-  await expect.poll(async () => Math.round(await paneWidth(page))).toBe(320);
+  await waitForSettledMotion(page);
+  const frames = await edgeFrames(page);
+  const past = frames.filter(frame => frame.laidOut === 320);
+  expect(past.length).toBeGreaterThan(2);
+  // The pane keeps its laid-out width and its button never reflows.
+  expect(new Set(past.map(frame => frame.buttonWidth)).size).toBe(1);
+  expect(Math.max(...frames.map(frame => frame.laidOut))).toBe(320);
+  // The edge stands past the limit by at most 8 px, then returns to it.
+  const furthest = Math.max(...past.map(frame => frame.handle));
+  expect(furthest).toBeGreaterThan(rest + 1);
+  expect(furthest).toBeLessThanOrEqual(rest + 8.5);
+  expect(frames.at(-1)?.handle).toBeCloseTo(rest, 0);
   await expect(
     page.getByRole('separator', {name: 'Resize panel'}),
   ).toHaveAttribute('aria-valuenow', '320');
+});
+
+test('the content beside a stretched pane never overlaps it while the edge springs back', async ({
+  page,
+}) => {
+  await openFixture(page, STORY.start);
+  await expectPresent(page);
+  const at = await pressHandle(page);
+  await recordEdgeFrames(page);
+  await page.mouse.move(at.x + 260, at.y, {steps: 6});
+  await page.waitForTimeout(100);
+  await page.mouse.up();
+  await waitForSettledMotion(page);
+  const frames = await edgeFrames(page);
+  // At rest the pane already reaches under the content's own spacing; no
+  // frame may reach further than that.
+  const [rest] = frames;
+  const restGap = rest.contentStart - rest.drawnEdge;
+  for (const frame of frames) {
+    // Within a pixel: the stretch and the glide round apart by a fraction.
+    expect(frame.contentStart - frame.drawnEdge).toBeGreaterThanOrEqual(
+      restGap - 1,
+    );
+  }
 });
 
 test("a panel at the hook's size alone stops at the maximum, and nothing springs back after the lift", async ({
@@ -847,22 +950,27 @@ test('a spring-back past a limit lays out no frame: the edge glides back over th
   expect(between.length).toBeGreaterThanOrEqual(3);
 });
 
-test('below the minimum the pane resists, and a slow lift above the threshold springs it back to the minimum', async ({
+test('below the minimum the edge moves at most 8 px, the pane keeps its minimum, and a slow lift above the threshold springs the edge back', async ({
   page,
 }) => {
   await openFixture(page, STORY.start);
   await expectPresent(page);
   const pane = page.getByTestId('sliding-panel');
   const at = await pressHandle(page);
+  const minimum = at.x - 80;
+  await recordEdgeFrames(page);
   // 200 px less 130 px is 70 px: under the 120 px minimum, over the 40 px
   // collapse threshold.
   await page.mouse.move(at.x - 130, at.y, {steps: 6});
   await page.waitForTimeout(200);
-  const pulled = await paneWidth(page);
-  expect(pulled).toBeLessThan(115);
-  expect(pulled).toBeGreaterThan(70);
   await page.mouse.up();
-  await expect.poll(async () => Math.round(await paneWidth(page))).toBe(120);
+  await waitForSettledMotion(page);
+  const frames = await edgeFrames(page);
+  expect(Math.min(...frames.map(frame => frame.laidOut))).toBe(120);
+  const nearest = Math.min(...frames.map(frame => frame.handle));
+  expect(nearest).toBeLessThan(minimum - 1);
+  expect(nearest).toBeGreaterThanOrEqual(minimum - 8.5);
+  expect(frames.at(-1)?.handle).toBeCloseTo(minimum, 0);
   await expect(pane).not.toHaveAttribute('inert', '');
 });
 
