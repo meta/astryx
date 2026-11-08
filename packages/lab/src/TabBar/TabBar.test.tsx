@@ -338,3 +338,56 @@ describe('TabBar', () => {
     expect(screen.queryByText('stray')).toBeNull();
   });
 });
+
+describe('TabBar disabled tab', () => {
+  function Disabled({onChange}: {onChange?: (value: string) => void}) {
+    const [value, setValue] = useState('home');
+    return (
+      <TabBar
+        value={value}
+        onChange={next => {
+          setValue(next);
+          onChange?.(next);
+        }}
+        label="Sections">
+        <TabBarItem value="home" label="Home" icon={<Glyph name="home" />} />
+        <TabBarItem
+          value="browse"
+          label="Browse"
+          icon={<Glyph name="browse" />}
+          aria-disabled
+        />
+        <TabBarItem
+          value="profile"
+          label="Profile"
+          icon={<Glyph name="profile" />}
+        />
+      </TabBar>
+    );
+  }
+
+  it('is marked disabled and ignores a click', () => {
+    const onChange = vi.fn();
+    render(<Disabled onChange={onChange} />);
+    const browse = screen.getByRole('tab', {name: 'Browse'});
+    expect(browse).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(browse);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(browse).toHaveAttribute('aria-selected', 'false');
+  });
+
+  it('is skipped by the arrow keys', () => {
+    render(<Disabled />);
+    const home = screen.getByRole('tab', {name: 'Home'});
+    home.focus();
+    fireEvent.keyDown(home, {key: 'ArrowRight'});
+    expect(screen.getByRole('tab', {name: 'Profile'})).toHaveFocus();
+  });
+
+  it('keeps the other tabs choosable', () => {
+    const onChange = vi.fn();
+    render(<Disabled onChange={onChange} />);
+    fireEvent.click(screen.getByRole('tab', {name: 'Profile'}));
+    expect(onChange).toHaveBeenCalledWith('profile');
+  });
+});
