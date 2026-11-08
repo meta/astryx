@@ -4,7 +4,7 @@
 
 /**
  * @file useLayer.tsx
- * @input Uses React hooks, Popover API (its `beforetoggle`/`toggle` events through the popoverOperations ledger), CSS anchor positioning, shared text/provider boundaries
+ * @input Uses React hooks, Popover API (its `beforetoggle`/`toggle` events through the popoverOperations ledger), CSS anchor positioning, owned DOM boundaries, shared text/provider boundaries
  * @output Exports the public useLayer hook plus internal trigger helpers.
  * @position Core layer utility; used by useHoverCard, useTooltip, etc.
  *
@@ -42,7 +42,6 @@ import {settledBox} from './settledBox';
 import {layerInsetProperties} from './layerInset';
 import {
   LAYER_CLEARANCE_PROPERTY,
-  LAYER_SCROLLS_ATTRIBUTE,
   ensureSlideRules,
   anchorClearAlignment,
   getAnchorClearFallbacks,
@@ -84,6 +83,13 @@ const styles = stylex.create({
     '--_layer-keyboard-overflow': overflow,
     '--_layer-keyboard-inset-block-end': inset,
   }),
+  // A layer that keeps its anchor clear scrolls only once its content
+  // overflows the box it was given. A layer that fits has no scroll range, so
+  // a wheel over it scrolls the page. Nothing contains the scroll, so a tall
+  // layer chains to the page at its end.
+  scrollsOnOverflow: {
+    overflowY: 'auto',
+  },
   // Base reset for all layers
   base: {
     marginBlockStart: 0,
@@ -594,198 +600,19 @@ function failsAnchor(layer: HTMLElement, anchor: HTMLElement): boolean {
  * option of its one combined fallback list keeps it clear of its anchor, and
  * the engine picks one. Where the box still covers the anchor or, while the
  * anchor is in view, leaves the viewport on the block axis, the layer is
- * placed afresh (`placeAfresh`) from that list. Then it scrolls only if its
- * content overflows the box it was given (FR3). The runtime calls this in the
+ * placed afresh (`placeAfresh`) from that list. The runtime calls this in the
  * same task as every show and remount, and while the layer is open whenever
  * its size, its content's size, its anchor's size or the viewport changes;
  * each of those reads lands before the next frame paints. It also runs once
  * in the first frame painted after a scroll of the anchor stops
  * (`observeScrollStop`), because during a scroll the browser does not choose
- * an option again. A same-size anchor that moves on screen, in layout or
- * because something scrolled, is reported after paint by the anchor-move
- * observer. That call does not check the box and never places the layer
- * afresh, so the layer never jumps to another side mid-scroll.
+ * an option again. Nothing watches an anchor that moves without resizing, so
+ * the layer never jumps to another side mid-scroll.
  */
-function keepAnchorClear(
-  layer: HTMLElement,
-  anchor: HTMLElement | null,
-  cause: 'change' | 'move' = 'change',
-): void {
-  if (cause === 'change' && anchor && failsAnchor(layer, anchor)) {
+function keepAnchorClear(layer: HTMLElement, anchor: HTMLElement | null): void {
+  if (anchor && failsAnchor(layer, anchor)) {
     placeAfresh(layer);
   }
-  // A layer that fits has no scroll range and stays a plain box, so a wheel
-  // over it still scrolls the page.
-  layer.toggleAttribute(
-    LAYER_SCROLLS_ATTRIBUTE,
-    layer.scrollHeight > layer.clientHeight + 1,
-  );
-}
-
-/** An element's box in client px, as a rect read or an observer reports it. */
-interface ClientBox {
-  readonly top: number;
-  readonly left: number;
-  readonly right: number;
-  readonly bottom: number;
-  readonly width: number;
-  readonly height: number;
-}
-
-/** The viewport's size in client px, without its scrollbars. */
-interface ViewportSize {
-  readonly width: number;
-  readonly height: number;
-}
-
-/**
- * Call `onMove` when an element moves on screen without changing size: in
- * layout (a sibling above it grows, a margin changes) or because something
- * scrolled. ResizeObserver sees only size. The element is observed by an
- * IntersectionObserver whose root is the viewport shrunk, through
- * `rootMargin`, to the element's own rectangle (the layout-shift technique of
- * `@floating-ui/dom`'s `observeMove`), so any move changes the intersection
- * ratio and fires the callback, which calls `onMove` and re-arms on the new
- * rectangle. Intersection callbacks run after the frame that moved the
- * element has painted, so the caller corrects that move in the next frame.
- * The element's box and the viewport are read once, when observing starts.
- * Each re-arm takes them from the report itself (its target box and its root
- * box), so following a move reads no layout.
- *
- * A fresh observer's first report can already differ from its threshold: the
- * element is partly outside the viewport, or it kept moving between the
- * rectangle the observer was armed on and its first check, as it does every
- * frame of a smooth scroll. Any such report calls `onMove` and re-arms, at the
- * reported ratio, or at once on the element's new rectangle when the report
- * is 0 and the element moved, so a move that spans many frames is followed
- * frame by frame. A report of 0 for an element that has not moved means a
- * scrolled container clips it wholly; re-arming then would report 0 again
- * every frame. Instead a second IntersectionObserver, rooted at the viewport
- * with a threshold of 0 (it counts every ancestor's overflow clip), waits for
- * the element to come back into view, then calls `onMove` and re-arms. Nothing
- * runs on a timer. Returns the function that stops observing.
- */
-function observeMove(element: HTMLElement, onMove: () => void): () => void {
-  const doc = element.ownerDocument;
-  if (typeof IntersectionObserver === 'undefined') {
-    return () => {};
-  }
-  const root = doc.documentElement;
-  let observer: IntersectionObserver | null = null;
-  let visibility: IntersectionObserver | null = null;
-  const stop = () => {
-    observer?.disconnect();
-    observer = null;
-    visibility?.disconnect();
-    visibility = null;
-  };
-  const moved = (threshold: number, box: ClientBox, viewport: ViewportSize) => {
-    onMove();
-    arm(threshold, box, viewport);
-  };
-  const arm = (threshold: number, rect: ClientBox, viewport: ViewportSize) => {
-    stop();
-    if (rect.width === 0 || rect.height === 0) {
-      return;
-    }
-    const top = Math.floor(rect.top);
-    const left = Math.floor(rect.left);
-    const right = Math.floor(viewport.width - rect.right);
-    const bottom = Math.floor(viewport.height - rect.bottom);
-    const hasMoved = (now: ClientBox) =>
-      now.top !== rect.top ||
-      now.left !== rect.left ||
-      now.width !== rect.width ||
-      now.height !== rect.height;
-    // A report's root box is the viewport, here shrunk by the root margin.
-    // If the report has no root box, read the viewport's size.
-    const viewportOf = (
-      rootBounds: DOMRectReadOnly | null,
-      marginRight: number,
-      marginBottom: number,
-    ): ViewportSize =>
-      rootBounds == null
-        ? {width: root.clientWidth, height: root.clientHeight}
-        : {
-            width: rootBounds.right + marginRight,
-            height: rootBounds.bottom + marginBottom,
-          };
-    // Clipped by a scrolled container: wait, without a timer, for the
-    // element to come back into view. A first report that already finds it
-    // in view only counts if it has moved, so a clip the move observer and
-    // this one judge differently cannot re-arm every frame.
-    const awaitVisible = () => {
-      let isFirstVisible = true;
-      visibility = new IntersectionObserver(
-        entries => {
-          const entry = entries[entries.length - 1];
-          const firstVisible = isFirstVisible;
-          isFirstVisible = false;
-          if (
-            entry?.isIntersecting &&
-            (!firstVisible || hasMoved(entry.boundingClientRect))
-          ) {
-            moved(
-              1,
-              entry.boundingClientRect,
-              viewportOf(entry.rootBounds, 0, 0),
-            );
-          }
-        },
-        {root: doc, threshold: 0},
-      );
-      visibility.observe(element);
-    };
-    let isFirst = true;
-    observer = new IntersectionObserver(
-      entries => {
-        const entry = entries[entries.length - 1];
-        if (entry == null) {
-          return;
-        }
-        const ratio = entry.intersectionRatio;
-        const box = entry.boundingClientRect;
-        const first = isFirst;
-        isFirst = false;
-        const followMove = (nextThreshold: number) =>
-          moved(
-            nextThreshold,
-            box,
-            viewportOf(entry.rootBounds, right, bottom),
-          );
-        if (ratio === threshold) {
-          // Still over its own rectangle, but a move smaller than the
-          // rounding of the root margin can leave the ratio at 1.
-          if (ratio === 1 && hasMoved(box)) {
-            followMove(1);
-          }
-          return;
-        }
-        if (!first || ratio > 0) {
-          followMove(first ? ratio : 1);
-          return;
-        }
-        if (hasMoved(box)) {
-          followMove(1);
-          return;
-        }
-        if (visibility === null) {
-          awaitVisible();
-        }
-      },
-      {
-        root: doc,
-        rootMargin: `${-top}px ${-right}px ${-bottom}px ${-left}px`,
-        threshold,
-      },
-    );
-    observer.observe(element);
-  };
-  arm(1, element.getBoundingClientRect(), {
-    width: root.clientWidth,
-    height: root.clientHeight,
-  });
-  return stop;
 }
 
 /**
@@ -903,18 +730,13 @@ function observeScrollStop(
 
 /**
  * Watch an open layer that keeps its anchor clear, and its anchor, for every
- * change that can re-settle the layer over the anchor or give it a scroll
- * range (spec:AST-059 FR4, FR8): the layer, its content or the anchor
- * resizing (ResizeObserver, before paint), the viewport resizing (before
- * paint), a scroll of the anchor stopping (`observeScrollStop`, in the first
- * frame painted after it), and the anchor moving on screen without resizing,
- * in layout or by a scroll (`observeMove`, reported after paint). Each calls
- * `keepAnchorClear` for this layer and anchor while `isCurrent` says they
- * are still the live pair. A move is handled in the next animation frame, not
- * in the task that reports it, and only updates whether the layer scrolls: it
- * never checks the box and never places the layer afresh. Reports in one
- * frame share one call. Returns the function that removes every observer and
- * listener it added.
+ * change that can re-settle the layer over the anchor (spec:AST-059 FR4, FR8):
+ * the layer, its content or the anchor resizing (ResizeObserver, before
+ * paint), the viewport resizing (before paint), and a scroll of the anchor
+ * stopping (`observeScrollStop`, in the first frame painted after it). Each
+ * calls `keepAnchorClear` for this layer and anchor while `isCurrent` says
+ * they are still the live pair. Returns the function that removes every
+ * observer and listener it added.
  */
 function observeAnchorClearance(
   layer: HTMLElement,
@@ -925,46 +747,26 @@ function observeAnchorClearance(
   if (!view) {
     return () => {};
   }
-  const reread = (cause: 'change' | 'move' = 'change') => {
+  const reread = () => {
     if (isCurrent()) {
-      keepAnchorClear(layer, anchor, cause);
+      keepAnchorClear(layer, anchor);
     }
   };
-  const rereadAfterChange = () => reread('change');
   let observer: ResizeObserver | null = null;
   if (typeof ResizeObserver !== 'undefined') {
-    observer = new ResizeObserver(rereadAfterChange);
+    observer = new ResizeObserver(reread);
     observer.observe(layer);
     for (const child of Array.from(layer.children)) {
       observer.observe(child);
     }
     observer.observe(anchor);
   }
-  let moveFrame: number | null = null;
-  const stopObservingMove = observeMove(anchor, () => {
-    if (moveFrame !== null) {
-      return;
-    }
-    moveFrame = view.requestAnimationFrame(() => {
-      moveFrame = null;
-      reread('move');
-    });
-  });
-  view.addEventListener('resize', rereadAfterChange);
-  const stopObservingScrollStop = observeScrollStop(
-    view,
-    anchor,
-    rereadAfterChange,
-  );
+  view.addEventListener('resize', reread);
+  const stopObservingScrollStop = observeScrollStop(view, anchor, reread);
   return () => {
     observer?.disconnect();
-    stopObservingMove();
     stopObservingScrollStop();
-    if (moveFrame !== null) {
-      view.cancelAnimationFrame(moveFrame);
-      moveFrame = null;
-    }
-    view.removeEventListener('resize', rereadAfterChange);
+    view.removeEventListener('resize', reread);
   };
 }
 
@@ -1583,7 +1385,6 @@ function useLayerImplementation(
       // before the writes of the show, so the read lays nothing out.
       const closeTransitionHolds = closeTransitionKeepsShown(popover);
       const closedAnimations = animationNames(popover);
-      popover.removeAttribute(LAYER_SCROLLS_ATTRIBUTE);
       applyDeferredWritingContext(popover);
       // The trigger takes the layer's anchor name in the task that shows the
       // layer, so the layer's first frame is placed against it.
@@ -2117,6 +1918,7 @@ function useLayerImplementation(
           keyboardCap == null ? 'visible' : 'auto',
           keyboardInset == null ? 'initial' : `${keyboardInset}px`,
         ),
+        keepsAnchorClear && styles.scrollsOnOverflow,
         viewportStyles,
         offsetStyle,
         xstyle,

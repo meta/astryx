@@ -149,6 +149,8 @@ interface Receipt {
     role: string | null;
     accessibleName: string | null;
     disabled: boolean;
+    nativeDisabled: boolean;
+    tabIndex: number;
     size: string | null;
     variant: string | null;
   };
@@ -547,7 +549,11 @@ async function readSensors(page: Page, interaction: Interaction) {
       role:
         element?.getAttribute('role') ?? element?.tagName.toLowerCase() ?? null,
       accessibleName: element?.getAttribute('aria-label') ?? null,
+      // A disabled Button stays focusable: it exposes aria-disabled, not the
+      // native disabled attribute.
       disabled: element?.getAttribute('aria-disabled') === 'true',
+      nativeDisabled: element?.disabled ?? false,
+      tabIndex: element?.tabIndex ?? -1,
       size: element?.getAttribute('data-size') ?? null,
       variant: element?.getAttribute('data-variant') ?? null,
       direction: style?.direction ?? '',
@@ -735,7 +741,7 @@ async function capture(
     parseRgb(actual.pressedOverlayToken),
   );
   const representation = fixture.disabled
-    ? 'Disabled: aria-disabled, muted and non-interactive'
+    ? 'Disabled: aria-disabled, still focusable, muted and non-interactive'
     : interaction === 'hover'
       ? 'Hovered: overlay style'
       : interaction === 'focus-visible'
@@ -803,6 +809,8 @@ async function capture(
   check(actual.role === 'button', 'native button role drifted');
   check(actual.accessibleName === fixture.name, 'accessible name drifted');
   check(actual.disabled === fixture.disabled, 'disabled state drifted');
+  check(!actual.nativeDisabled, 'the button renders native disabled');
+  check(actual.tabIndex >= 0, 'the button left the tab order');
   check(actual.size === fixture.size, 'size attribute drifted');
   check(
     actual.variant === (fixture.state === 'stop' ? 'secondary' : 'primary'),
@@ -901,6 +909,8 @@ async function capture(
       role: actual.role,
       accessibleName: actual.accessibleName,
       disabled: actual.disabled,
+      nativeDisabled: actual.nativeDisabled,
+      tabIndex: actual.tabIndex,
       size: actual.size,
       variant: actual.variant,
     },

@@ -18,7 +18,9 @@ import {
   castStep,
   CONTROL_RGB,
   flick,
+  FRAME_STARVATION_MS,
   frames,
+  FrameStarvationError,
   MARKER_RGB,
   openStory,
   startScreencast,
@@ -405,12 +407,37 @@ test.describe('with a finger', () => {
       throw new Error('the thumb has no box');
     }
     const at = {x: box.x + box.width / 2, y: box.y + box.height / 2};
+    // The page's own frames, recorded through the cast. A cast sends no frame
+    // while the screen is still, so only these frames show a starved page.
+    await page.evaluate(() => {
+      const record = {on: true, frames: [] as number[]};
+      (window as unknown as {__pageFrames: typeof record}).__pageFrames =
+        record;
+      const frame = () => {
+        if (!record.on) {
+          return;
+        }
+        record.frames.push(performance.timeOrigin + performance.now());
+        requestAnimationFrame(frame);
+      };
+      requestAnimationFrame(frame);
+    });
     const cast = await startScreencast(page);
     await frames(page, 4);
-    await driver.play(flick(at, {velocity: {x: 300, y: 0}, durationMs: 300}));
+    const played = await driver.play(
+      flick(at, {velocity: {x: 300, y: 0}, durationMs: 300}),
+    );
     await waitForRest(thumb);
+    const restAt = Date.now();
     await frames(page, 6);
     const shot = await cast.stop();
+    const pageFrames = await page.evaluate(() => {
+      const record = (
+        window as unknown as {__pageFrames: {on: boolean; frames: number[]}}
+      ).__pageFrames;
+      record.on = false;
+      return record.frames;
+    });
     const thumbs = await trackMarker(page, shot);
     const tooltips = await trackMarker(page, shot, {rgb: CONTROL_RGB});
     const pairs = thumbs.flatMap((frame, index) => {
@@ -419,6 +446,31 @@ test.describe('with a finger', () => {
         ? [frame.box.x + frame.box.width / 2 - (other.x + other.width / 2)]
         : [];
     });
+    // A starved page draws too few frames to show every frame. Then a gap
+    // over FRAME_STARVATION_MS in its own frames, from the touch to the rest,
+    // names the failure. The touch and the rest bound the gaps, so a page that
+    // drew no frame between them shows one long gap. A short cast from a page
+    // that drew every frame fails on the count.
+    if (pairs.length <= 30) {
+      const from = played[0].dispatchedAt;
+      const edges = [
+        from,
+        ...pageFrames.filter(t => t > from && t < restAt),
+        restAt,
+      ];
+      const longestGapMs = Math.max(
+        ...edges.slice(1).map((t, index) => t - edges[index]),
+      );
+      if (longestGapMs > FRAME_STARVATION_MS) {
+        throw new FrameStarvationError({
+          during:
+            'the thumb and its value tooltip moved through a drag and its coast',
+          frames: pairs.length,
+          min: 31,
+          longestGapMs,
+        });
+      }
+    }
     expect(pairs.length).toBeGreaterThan(30);
     // One step of the cast's position grid: 1 px in Chromium's PNG cast,
     // 2 px in WebKit's JPEG cast.
