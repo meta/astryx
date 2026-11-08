@@ -94,6 +94,12 @@ export const categories: SandboxCategory[] = [
           'Interactive mobile interaction prototypes (bottom sheets, action sheets, drawers) for the component migration table',
       },
       {
+        name: 'AlertDialog Cases',
+        href: '/pages/alert-dialog-cases/',
+        description:
+          'An alert over a toast and a dialog closed after a save, on a page that scrolls with the document, to check on a phone',
+      },
+      {
         name: 'TextArea Counter',
         href: '/pages/textarea-counter/',
         description:

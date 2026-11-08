@@ -109,6 +109,10 @@ describe('Sandbox static export contract', () => {
     expect(canHydrate('/pages/shell-lab/', '')).toBe(true);
     expect(canHydrate('/pages/perf-scenes/', '?scene=table')).toBe(false);
     expect(canHydrate('/pages/perf-scenes/', '')).toBe(true);
+    expect(
+      canHydrate('/pages/alert-dialog-cases/', '?case=alert-over-a-toast'),
+    ).toBe(false);
+    expect(canHydrate('/pages/alert-dialog-cases/', '')).toBe(true);
   });
 
   it('does not turn unknown URLs, dynamic segments or traversal into a 200 fallback', () => {

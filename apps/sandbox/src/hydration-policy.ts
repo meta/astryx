@@ -5,13 +5,14 @@
  * @input Route and URL search string.
  * @output Whether React can safely hydrate instead of client-rendering.
  * @position Prevents mismatches for iframe themes and for pages whose first
- *   render reads URL controls (Shell Lab, Perf Scenes).
+ *   render reads URL controls (Shell Lab, Perf Scenes, AlertDialog Cases).
  */
 
 /** Pages whose first render reads the query string. */
 const QUERY_RENDERED_PAGES = new Set([
   '/pages/shell-lab/',
   '/pages/perf-scenes/',
+  '/pages/alert-dialog-cases/',
 ]);
 
 export function canHydrate(route: string | undefined, search: string): boolean {
