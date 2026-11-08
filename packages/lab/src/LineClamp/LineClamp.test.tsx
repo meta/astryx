@@ -275,6 +275,39 @@ describe('LineClamp', () => {
       }
     });
 
+    it('keeps a focusable with no layout box inert, so showing it past the edge exposes nothing', () => {
+      const {rerender} = render(
+        <LineClamp maxLines={2} data-testid="clamp">
+          Some text{' '}
+          <a href="/more" hidden>
+            Read more
+          </a>
+        </LineClamp>,
+      );
+      const container = screen.getByTestId('clamp');
+      const link = screen.getByText('Read more');
+      const rectMap = new Map([
+        [container, {top: 0, bottom: 40}],
+        [link, {top: 0, bottom: 0}], // `hidden`: no layout box
+      ]);
+      mockRects(rectMap);
+      rerender(
+        <LineClamp maxLines={2} data-testid="clamp">
+          Some text{' '}
+          <a href="/more" hidden>
+            Read more
+          </a>
+        </LineClamp>,
+      );
+      expect(link).toHaveAttribute('inert');
+
+      // A child shows it past the edge. `hidden` is not a watched
+      // attribute, so no pass runs, and the link must already be inert.
+      rectMap.set(link, {top: 40, bottom: 56});
+      link.removeAttribute('hidden');
+      expect(link).toHaveAttribute('inert');
+    });
+
     it('hides a descendant a child re-enables past the fold after mount', async () => {
       // Only the late link is placed past the fold; everything else sits
       // above it. Enabling it changes an attribute only: no text change, no

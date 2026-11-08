@@ -127,8 +127,12 @@ function syncFocusableClipping(
     const isFocused =
       el.contains(document.activeElement) ||
       (focusTarget != null && el.contains(focusTarget));
-    const isClipped =
-      !isFocused && el.getBoundingClientRect().top >= containerBottom;
+    // A candidate with no layout box (for example `hidden`) counts as
+    // clipped. A child can show it past the edge with no watched change,
+    // and the edge observer reports it only when it becomes visible.
+    const rect = el.getBoundingClientRect();
+    const hasNoBox = rect.width === 0 && rect.height === 0;
+    const isClipped = !isFocused && (hasNoBox || rect.top >= containerBottom);
     if (isClipped) {
       hideFromTabOrder(el);
     } else if (el.hasAttribute('data-line-clamp-hidden')) {
