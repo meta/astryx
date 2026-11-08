@@ -2751,13 +2751,18 @@ test.describe('spec:AST-105 FR9 (the edge reveal)', () => {
       expect(Math.abs(bottom - result.openBottom)).toBeLessThan(1);
     }
     reportSkew(shown, browserName);
-    // The held reads judge the curves. These prove the page drew both.
+    // The held reads judge the curves. These prove the page drew both. Each
+    // phase is judged on its own reads, so a gap in the other phase cannot
+    // name it starved.
     for (const phase of ['opening', 'closing']) {
-      requireFrames(result.frames, {
-        min: 5,
-        during: `the ${phase === 'opening' ? 'reveal' : 'conceal'} plays`,
-        where: f => f.phase === phase && f.shown > 0.5,
-      });
+      requireFrames(
+        result.frames.filter(f => f.phase.startsWith(phase)),
+        {
+          min: 5,
+          during: `the ${phase === 'opening' ? 'reveal' : 'conceal'} plays`,
+          where: f => f.phase === phase && f.shown > 0.5,
+        },
+      );
     }
   });
 
