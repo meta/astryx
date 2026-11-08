@@ -14,7 +14,7 @@
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {createMotionAnimator} from './animator';
+import {createMotionEngine} from './animator';
 import {cubicBezier} from './bezier';
 import {progressCurve, timedProgressCurve} from './progress';
 import {
@@ -326,7 +326,7 @@ describe('createRectMorph', () => {
     const element = document.createElement('div');
     document.body.appendChild(element);
     stubMedia(false, true);
-    const stage = createMotionAnimator(element, {
+    const stage = createMotionEngine(element, {
       now: () => clock,
       requestFrame,
     });
@@ -355,7 +355,7 @@ describe('createRectMorph', () => {
     const element = document.createElement('div');
     document.body.appendChild(element);
     stubMedia(false, true);
-    const stage = createMotionAnimator(element, {
+    const stage = createMotionEngine(element, {
       now: () => clock,
       requestFrame,
     });

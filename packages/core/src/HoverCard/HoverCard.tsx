@@ -23,9 +23,11 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react';
+import {isRenderable} from '../utils/isRenderable';
 import {observeMutations} from '../utils/sharedMutationObserver';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import * as stylex from '@stylexjs/stylex';
+import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {
   useHoverCard,
   type HoverCardFocusTrigger,
@@ -201,7 +203,8 @@ export interface HoverCardProps extends Pick<
   /**
    * Whether to show hover indication (dashed underline) on a text trigger.
    * An element trigger keeps its own styling, so this has no effect on it.
-   * - `'auto'`: Show when children is a single string or number
+   * - `'auto'`: Show when children is text: strings and numbers, such as
+   *   `Edited {when}`, with holes such as `false` and `null` ignored
    * - `true`: Show on a text trigger
    * - `false`: Never show
    *
@@ -212,8 +215,7 @@ export interface HoverCardProps extends Pick<
   /**
    * Controlled open state. When provided, overrides the hover trigger:
    * - `true`: force-show the hover card (hover/focus hide is suppressed)
-   * - `false`: hide the hover card and keep hover from opening it; focus on
-   *   the trigger still opens it
+   * - `false`: hide the hover card and keep hover and focus from opening it
    * - `undefined`: uncontrolled — hover/focus triggers manage visibility
    *
    * A controlled hover card still takes Escape when it is the top-most layer,
@@ -235,7 +237,26 @@ export interface HoverCardProps extends Pick<
  * Check if children are text-only (no React elements)
  */
 function isTextOnly(children: ReactNode): boolean {
-  return typeof children === 'string' || typeof children === 'number';
+  if (typeof children === 'string' || typeof children === 'number') {
+    return true;
+  }
+  // Text written around an expression, such as `Edited {when}`, reaches React
+  // as several strings. Holes that render nothing do not change that; one
+  // element does.
+  if (!Array.isArray(children)) {
+    return false;
+  }
+  let hasText = false;
+  for (const child of children.flat(Infinity) as ReactNode[]) {
+    if (!isRenderable(child)) {
+      continue;
+    }
+    if (typeof child !== 'string' && typeof child !== 'number') {
+      return false;
+    }
+    hasText = true;
+  }
+  return hasText;
 }
 
 /**
@@ -462,7 +483,9 @@ export function HoverCard({
           // No aria-expanded: this wrapper is a role-less <span>, and
           // aria-expanded is invalid on it (see EXPANDABLE_ROLES above).
           aria-describedby={label ? undefined : hoverCard.describedBy}
-          {...stylex.props(
+          // The span is a tab stop Astryx adds: it draws the shared ring,
+          // which a theme restyles through the focus-outline tokens.
+          {...focusOutlineProps.focusVisible(
             styles.wrapperInline,
             showHoverIndication && styles.hoverIndication,
           )}>

@@ -8,7 +8,7 @@
  *   (global `Motion`), and the type of that global
  */
 
-export {createMotionAnimator} from '../animator';
+export {createMotionEngine} from '../animator';
 export {progressCurve} from '../progress';
 export {createRectMorph, edgeGrowPath, lerpPath} from '../rectMorph';
 export {solveSpring, toSpring} from '../spring';

@@ -20,6 +20,7 @@ import {execFileSync} from 'node:child_process';
 import http from 'node:http';
 
 import {afterAll, beforeAll, describe, it, expect} from 'vitest';
+import {createRepository} from './lib/git-fixture.mjs';
 
 import {
   AUDIT_PROMPT,
@@ -952,28 +953,15 @@ const scorecard = (over = {}) => ({
 function makeWiki(seedLedger) {
   const root = fs.mkdtempSync(path.join(TEMP_ROOT, 'score-ledger-wiki-'));
   const bare = path.join(root, 'wiki.git');
-  const seed = path.join(root, 'seed');
   const clone = path.join(root, 'clone');
 
-  git(root, 'init', '--bare', '--initial-branch=master', bare);
-  git(root, 'clone', bare, seed);
-  identify(seed);
-  fs.writeFileSync(
-    path.join(seed, 'component-scores.json'),
-    `${JSON.stringify(seedLedger, null, 2)}\n`,
-  );
-  git(seed, 'add', '-A');
-  git(seed, 'commit', '-m', 'seed');
-  git(seed, 'push', 'origin', 'master');
-
-  git(root, 'clone', '--depth', '1', `file://${bare}`, clone);
-  identify(clone);
+  const ledger = `${JSON.stringify(seedLedger, null, 2)}\n`;
+  const seed = {ref: 'refs/heads/master', message: 'seed', files: {'component-scores.json': ledger}};
+  createRepository(bare, [seed], {bare: true, branch: 'master'});
+  // The clone's own config names who commits there.
+  const identity = ['-c', 'user.name=Ledger Test', '-c', 'user.email=ledger-test@example.com'];
+  git(root, 'clone', ...identity, '--depth', '1', `file://${bare}`, clone);
   return {root, bare, clone, ledger: path.join(clone, 'component-scores.json')};
-}
-
-function identify(dir) {
-  git(dir, 'config', 'user.name', 'Ledger Test');
-  git(dir, 'config', 'user.email', 'ledger-test@example.com');
 }
 
 const readLedger = file => JSON.parse(fs.readFileSync(file, 'utf8'));

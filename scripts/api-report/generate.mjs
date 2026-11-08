@@ -566,9 +566,31 @@ export async function generateReport(opts) {
           ]);
         } else if (type.getCallSignatures().length) {
           const hook = /^use[A-Z]/.test(name);
-          groups[hook ? 'Hooks' : 'Functions'].push(
-            sigLines(type, `${hook ? 'hook' : 'function'} ${name}${m}`),
-          );
+          const head = `${hook ? 'hook' : 'function'} ${name}`;
+          const sigs = type.getCallSignatures();
+          const overloads = sigs.map(sig => sig.getDeclaration());
+          if (
+            sigs.length > 1 &&
+            overloads.every(d => d && ts.isFunctionDeclaration(d))
+          ) {
+            // Each overload carries its own tags, as a component's do. The
+            // row carries a tag only when every overload has it.
+            const tags = overloads.map(d => marks(d, name));
+            const shared = tags[0]
+              .split(' ')
+              .filter(
+                t => t && tags.every(each => each.split(' ').includes(t)),
+              );
+            rowTags = shared.length ? ` ${shared.join(' ')}` : '';
+            groups[hook ? 'Hooks' : 'Functions'].push([
+              `${head}${rowTags}`,
+              ...sigs.map((sig, i) => `  overload ${oneSig(sig)}${tags[i]}`),
+            ]);
+          } else {
+            groups[hook ? 'Hooks' : 'Functions'].push(
+              sigLines(type, `${head}${m}`),
+            );
+          }
         } else {
           const full = checker.typeToString(type, undefined, TF);
           const named = decl?.type && ts.isTypeReferenceNode(decl.type);

@@ -20,6 +20,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {CLI_ROOT} from '../fs/paths.mjs';
+import {listDir} from '../fs/listing-cache.mjs';
 import {loadCliSelfDocs} from '../discovery/cli-self-docs.mjs';
 import {astryxIconDefinitions} from '../discovery/icon-definition-discovery.mjs';
 import {routeSegment} from '../discovery/docs-section-key.mjs';
@@ -812,8 +813,7 @@ function adoptionsFor(doc, declared, routeOf) {
  */
 export function treeDocFiles(dir = TREE_DOCS_DIR) {
   if (!fs.existsSync(dir)) return [];
-  return fs
-    .readdirSync(dir)
+  return listDir(dir)
     .filter(file => /^[\w-]+\.doc\.mjs$/u.test(file))
     .sort(byText)
     .map(file => path.join(dir, file));

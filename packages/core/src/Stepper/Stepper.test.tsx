@@ -1519,6 +1519,46 @@ describe('Stepper', () => {
       },
     );
 
+    it('measures the list only while it is mounted and horizontal', () => {
+      const observed = new Set<Element>();
+      class ResizeObserverStub {
+        observe(element: Element) {
+          observed.add(element);
+        }
+        unobserve(element: Element) {
+          observed.delete(element);
+        }
+        disconnect() {
+          observed.clear();
+        }
+      }
+      vi.stubGlobal('ResizeObserver', ResizeObserverStub);
+      const stepper = (orientation: 'horizontal' | 'vertical') => (
+        <Stepper activeStep={0} orientation={orientation}>
+          <Step step={0} label="Account" />
+          <Step step={1} label="Review" />
+        </Stepper>
+      );
+      try {
+        const view = render(stepper('horizontal'));
+        const horizontalList = screen.getByRole('list');
+        expect(observed.has(horizontalList)).toBe(true);
+
+        view.rerender(stepper('vertical'));
+        expect(observed.has(horizontalList)).toBe(false);
+        expect(observed.has(screen.getByRole('list'))).toBe(false);
+
+        view.rerender(stepper('horizontal'));
+        const list = screen.getByRole('list');
+        expect(observed.has(list)).toBe(true);
+
+        view.unmount();
+        expect(observed.has(list)).toBe(false);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
     it('stops the controls at both ends of the sequence', () => {
       const onStepClick = vi.fn();
       // Disabled the Astryx way: aria-disabled, so the control keeps its place

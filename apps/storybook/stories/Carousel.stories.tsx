@@ -5,6 +5,7 @@ import type {Meta, StoryObj} from '@storybook/react';
 import * as stylex from '@stylexjs/stylex';
 import {Carousel} from '@astryxdesign/core/Carousel';
 import type {CarouselHandle} from '@astryxdesign/core/Carousel';
+import {useSnapPaging} from '@astryxdesign/core/SnapPaging';
 import {Thumbnail} from '@astryxdesign/core/Thumbnail';
 import {Card} from '@astryxdesign/core/Card';
 import {Button} from '@astryxdesign/core/Button';
@@ -52,6 +53,27 @@ const styles = stylex.create({
     height: 80,
     borderRadius: radiusVars['--radius-element'],
     flexShrink: 0,
+  },
+  pagingFrame: {
+    width: 300,
+  },
+  pagingItem: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 120,
+    borderRadius: radiusVars['--radius-element'],
+    backgroundColor: colorVars['--color-background-muted'],
+    color: colorVars['--color-text-primary'],
+    fontFamily: typographyVars['--font-family-body'],
+    fontSize: 24,
+    fontWeight: 600,
+  },
+  oneUp: {
+    width: 300,
+  },
+  threeUp: {
+    width: `calc((300px - 2 * ${spacingVars['--spacing-2']}) / 3)`,
   },
   label: {
     fontSize: 12,
@@ -465,6 +487,90 @@ export const SingleItem: Story = {
           label={IMAGES[0].label}
         />
       </Carousel>
+    </div>
+  ),
+};
+
+type PagingMode = 'snap' | 'paging' | 'item';
+
+/**
+ * A 300 px carousel of numbered items, snapping natively (`snap`) or with snap
+ * paging: one view per flick (`paging`) or one item (`item`).
+ */
+function PagingCarousel({
+  layout,
+  count,
+  mode,
+}: {
+  layout: '1-up' | '3-up';
+  count: number;
+  mode: PagingMode;
+}) {
+  // One value: Carousel keeps the value it first attached, and a new `pages`
+  // applies from the next flick.
+  const paging = useSnapPaging({pages: mode === 'item' ? 'item' : 'view'});
+  const hasSnap = mode === 'snap' ? true : paging;
+  return (
+    <div {...stylex.props(styles.pagingFrame)}>
+      <Carousel
+        gap={layout === '1-up' ? 0 : 2}
+        hasSnap={hasSnap}
+        aria-label="Numbered items">
+        {Array.from({length: count}, (_, i) => (
+          <div
+            key={i}
+            data-item={i}
+            {...stylex.props(
+              styles.pagingItem,
+              layout === '1-up' ? styles.oneUp : styles.threeUp,
+            )}>
+            {i + 1}
+          </div>
+        ))}
+      </Carousel>
+    </div>
+  );
+}
+
+const pagingArgTypes = {
+  mode: {
+    control: {type: 'select' as const},
+    options: ['snap', 'paging', 'item'],
+    description:
+      'hasSnap (native snap), hasSnap={useSnapPaging()} (one view per flick) or hasSnap={useSnapPaging({pages: "item"})}',
+  },
+};
+
+type PagingStory = StoryObj<{mode: PagingMode}>;
+
+export const SnapPagingOneUp: PagingStory = {
+  name: 'Snap Paging: One Item per View',
+  argTypes: pagingArgTypes,
+  args: {mode: 'paging'},
+  render: ({mode}) => <PagingCarousel layout="1-up" count={5} mode={mode} />,
+};
+
+export const SnapPagingThreeUp: PagingStory = {
+  name: 'Snap Paging: Three Items per View',
+  argTypes: pagingArgTypes,
+  args: {mode: 'paging'},
+  render: ({mode}) => <PagingCarousel layout="3-up" count={9} mode={mode} />,
+};
+
+export const SnapPagingPartialLastPage: PagingStory = {
+  name: 'Snap Paging: Partial Last Page',
+  argTypes: pagingArgTypes,
+  args: {mode: 'paging'},
+  render: ({mode}) => <PagingCarousel layout="3-up" count={7} mode={mode} />,
+};
+
+export const SnapPagingRightToLeft: PagingStory = {
+  name: 'Snap Paging: Right to Left',
+  argTypes: pagingArgTypes,
+  args: {mode: 'paging'},
+  render: ({mode}) => (
+    <div dir="rtl">
+      <PagingCarousel layout="3-up" count={9} mode={mode} />
     </div>
   ),
 };

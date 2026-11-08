@@ -30,7 +30,7 @@
  * - /packages/cli/assets/templates/blocks/components/Icon/ (showcase blocks)
  */
 
-import React, {type ComponentType, type SVGProps} from 'react';
+import React, {useCallback, type ComponentType, type SVGProps} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
@@ -39,6 +39,7 @@ import {resolveIcon} from './globalIconRegistry';
 import type {IconName, NamespacedIconName} from './globalIconRegistry';
 import type {IconVariant} from './index';
 import {mergeProps} from '../utils/mergeProps';
+import {mergeRefs} from '../utils/mergeRefs';
 import {themeProps} from '../utils/themeProps';
 import {useIconSize} from './IconDefaultSizeContext';
 import {iconSizeStyles, type IconSize} from './IconSize.stylex';
@@ -177,9 +178,9 @@ export interface IconProps extends Omit<
   'ref' | 'color'
 > {
   /**
-   * Ref to the rendered SVG element when `icon` is an icon component. A
-   * semantic or namespaced name renders inside an internal wrapper, and the
-   * ref is not attached.
+   * Ref to the rendered SVG element. For a semantic or namespaced name it is
+   * the `<svg>` inside Icon's wrapper, or `null` when the resolved glyph has
+   * no `<svg>`.
    */
   ref?: React.Ref<SVGSVGElement>;
   /**
@@ -335,6 +336,7 @@ export function Icon({
         className={className}
         style={style}
         xstyle={xstyle}
+        svgRef={ref}
         spanProps={props}
       />
     );
@@ -394,6 +396,7 @@ function IconFromRegistry({
   className,
   style,
   xstyle,
+  svgRef,
   spanProps,
 }: {
   name: IconName | NamespacedIconName;
@@ -404,10 +407,21 @@ function IconFromRegistry({
   className?: string;
   style?: React.CSSProperties;
   xstyle?: StyleXStyles;
+  svgRef?: React.Ref<SVGSVGElement>;
   spanProps?: Omit<SVGProps<SVGSVGElement>, 'ref' | 'color'>;
 }) {
   const themeName = useThemeName();
   const resolvedIcon = resolveIcon(name, themeName, {size, variant});
+  // The glyph can change while the span stays. Attach the ref again when it
+  // does.
+  const attachSvgRef = useCallback(
+    (span: HTMLSpanElement | null) =>
+      svgRef == null
+        ? undefined
+        : mergeRefs(svgRef)(span?.querySelector('svg') ?? null),
+    // eslint-disable-next-line @eslint-react/exhaustive-deps -- resolveIcon's inputs: a new glyph gets a new attach, and a function entry's new element each render does not.
+    [svgRef, name, themeName, size, variant],
+  );
 
   if (resolvedIcon == null) {
     return null;
@@ -423,6 +437,7 @@ function IconFromRegistry({
 
   return (
     <span
+      ref={svgRef == null ? undefined : attachSvgRef}
       // Derived a11y — decorative (aria-hidden) by default, or a meaningful
       // image (role="img" + aria-label) when `label` is set. Placed BEFORE the
       // prop spread so consumers can still override it with explicit

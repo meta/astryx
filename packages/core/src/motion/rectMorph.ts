@@ -20,7 +20,7 @@
  */
 
 import {
-  createMotionAnimator,
+  createMotionEngine,
   type AnimateOptions,
   type Animator,
   type AnimatorOptions,
@@ -229,7 +229,7 @@ export function createRectMorph(
   }: Pick<AnimatorOptions, 'now' | 'requestFrame'> & {animator?: Animator} = {},
 ): RectMorph {
   const now = options.now ?? defaultNow;
-  const animator = given ?? createMotionAnimator(element, options);
+  const animator = given ?? createMotionEngine(element, options);
   /** The box the element's transform is relative to, once it has one. */
   let box: MorphRect | null = null;
   let presenting: MotionHandle | null = null;
@@ -429,7 +429,7 @@ export function createRectMorph(
     }
     const closing = onElement
       ? animator
-      : (continuing?.animator ?? createMotionAnimator(target, options));
+      : (continuing?.animator ?? createMotionEngine(target, options));
     target.style.setProperty('transform-origin', '0px 0px');
     // The copy starts as the element shows now, whatever its clone kept.
     closing.set(startValues(back, opacity));

@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {createRef, StrictMode, useLayoutEffect} from 'react';
+import {createRef, StrictMode, useLayoutEffect, useState} from 'react';
 import {describe, it, expect, vi, afterEach, beforeEach} from 'vitest';
 import {render, screen, fireEvent, waitFor, act} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -274,6 +274,49 @@ describe('ChatComposerInput', () => {
       textbox.textContent = 'hello';
       fireEvent.input(textbox);
       expect(onChange).toHaveBeenCalledWith('hello');
+    });
+
+    it('reports an imperative insertToken through onChange once, as typing does (FR1)', () => {
+      const onChange = vi.fn();
+      const handleRef = createRef<ChatComposerInputHandle>();
+      render(<ChatComposerInput onChange={onChange} handleRef={handleRef} />);
+      const textbox = screen.getByRole('textbox');
+      textbox.focus();
+      act(() => {
+        handleRef.current!.insertToken({value: '@sam', label: 'Sam'});
+      });
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange).toHaveBeenLastCalledWith(handleRef.current!.getValue());
+      expect(onChange.mock.lastCall?.[0]).toContain('@sam');
+    });
+
+    it('enables Send and sends the token after an imperative insertToken in a controlled composer (FR1)', () => {
+      const onSubmit = vi.fn();
+      const handleRef = createRef<ChatComposerInputHandle>();
+      function Host() {
+        const [value, setValue] = useState('');
+        return (
+          <ChatComposer
+            value={value}
+            onChange={setValue}
+            onSubmit={onSubmit}
+            input={<ChatComposerInput handleRef={handleRef} />}
+          />
+        );
+      }
+      render(<Host />);
+      expect(screen.getByRole('button', {name: 'Send'})).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      );
+      screen.getByRole('textbox').focus();
+      act(() => {
+        handleRef.current!.insertToken({value: '@sam', label: 'Sam'});
+      });
+      const send = screen.getByRole('button', {name: 'Send'});
+      expect(send).not.toHaveAttribute('aria-disabled');
+      fireEvent.click(send);
+      expect(onSubmit.mock.lastCall?.[0]).toContain('@sam');
     });
 
     it('calls onSubmit on Enter', () => {
@@ -837,7 +880,8 @@ describe('ChatComposerInput', () => {
     });
 
     it('paste inserts a token chip for long pastes after a focus() with no selection range', () => {
-      render(<ChatComposerInput />);
+      const onChange = vi.fn();
+      render(<ChatComposerInput onChange={onChange} />);
       const textbox = screen.getByRole('textbox');
 
       textbox.focus();
@@ -853,6 +897,7 @@ describe('ChatComposerInput', () => {
       });
 
       expect(textbox.querySelector('[data-astryx-token]')).toBeInTheDocument();
+      expect(onChange).toHaveBeenCalledTimes(1);
     });
 
     it('imperative insertToken works after a focus() with no selection range', () => {

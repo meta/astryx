@@ -17,7 +17,12 @@
  * DevTools protocol.
  */
 
-import {expect, test, type CDPSession, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type CDPSession,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {openStory, withStorybook} from '@astryxdesign/interaction-harness';
 
 const storybook = withStorybook(test);

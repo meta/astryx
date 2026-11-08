@@ -78,7 +78,7 @@ export const docs = {
   },
   relatedHooks: ['useAnimatedLayout'],
   importPath: '@astryxdesign/core/hooks',
-  category: 'interaction',
+  category: 'motion & gestures',
 };
 
 /** @type {import('@astryxdesign/cli/authoring').HookTranslationDoc} */

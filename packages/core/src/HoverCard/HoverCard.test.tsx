@@ -458,6 +458,24 @@ describe('HoverCard', () => {
     });
   });
 
+  it('does not open on trigger focus while controlled closed', () => {
+    const onOpenChange = vi.fn();
+    render(
+      <HoverCard
+        isOpen={false}
+        onOpenChange={onOpenChange}
+        content={<span>Card content</span>}>
+        <button type="button">Trigger</button>
+      </HoverCard>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Trigger'});
+
+    // Hover is already refused; keyboard focus must be refused the same way.
+    fireEvent.focusIn(trigger);
+    expect(screen.queryByText('Card content')).toBeNull();
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
+
   it('does not render content initially', () => {
     const {container} = render(
       <HoverCard content={<span>Card content</span>}>
@@ -856,6 +874,91 @@ describe('HoverCard', () => {
       await waitFor(() => {
         expect(onOpenChange).toHaveBeenCalledWith(false);
       });
+    });
+  });
+
+  describe('text written around an expression', () => {
+    it('wraps several text children in one focusable trigger', async () => {
+      const when = '2 hours ago';
+      const onOpenChange = vi.fn();
+      render(
+        <HoverCard
+          content={<span>Edited by Kai</span>}
+          onOpenChange={onOpenChange}
+          delay={0}>
+          Edited {when}
+        </HoverCard>,
+      );
+      const trigger = screen.getByText('Edited 2 hours ago');
+      expect(trigger.tagName).toBe('SPAN');
+      expect(trigger).toHaveAttribute('tabindex', '0');
+      expect(trigger).toHaveAttribute('aria-describedby');
+      fireEvent.mouseEnter(trigger);
+      await waitFor(() => expect(onOpenChange).toHaveBeenLastCalledWith(true));
+    });
+
+    it('ignores holes that render nothing', () => {
+      const isDraft = false;
+      render(
+        <HoverCard label="History" content={<span>Card</span>}>
+          Edited {isDraft && 'draft'} {null}today
+        </HoverCard>,
+      );
+      expect(screen.getByText(/Edited/)).toHaveAttribute(
+        'aria-haspopup',
+        'dialog',
+      );
+    });
+
+    // The auto hover cue (FR8) is a class on the text trigger; a single
+    // string's trigger is the reference.
+    function cueClassOf(
+      children: ComponentProps<typeof HoverCard>['children'],
+    ) {
+      const {unmount} = render(
+        <HoverCard content={<span>Card</span>}>{children}</HoverCard>,
+      );
+      const className = (
+        document.querySelector('span[tabindex="0"]') as HTMLElement
+      ).className;
+      unmount();
+      return className;
+    }
+
+    it('gives several text children the same hover cue as one string', () => {
+      const when = 'today';
+      const single = cueClassOf('Edited today');
+      // JSX passes `Edited {when}` as this array.
+      expect(cueClassOf(['Edited ', when])).toBe(single);
+      const {unmount} = render(
+        <HoverCard content={<span>Card</span>} hasHoverIndication={false}>
+          Edited today
+        </HoverCard>,
+      );
+      expect(
+        (document.querySelector('span[tabindex="0"]') as HTMLElement).className,
+      ).not.toBe(single);
+      unmount();
+    });
+
+    it('keeps the hover cue when holes render nothing', () => {
+      const isDraft = false;
+      const single = cueClassOf('Edited today');
+      expect(cueClassOf(['Edited ', isDraft && 'draft', null, 'today'])).toBe(
+        single,
+      );
+    });
+
+    it('still attaches to the first element when one is present', () => {
+      render(
+        <HoverCard label="History" content={<span>Card</span>}>
+          Edited <time dateTime="2026-11-02">today</time>
+        </HoverCard>,
+      );
+      expect(screen.getByText('today')).toHaveAttribute(
+        'aria-haspopup',
+        'dialog',
+      );
     });
   });
 
@@ -1302,6 +1405,32 @@ describe('HoverCard', () => {
       await waitFor(() => {
         expect(onOpenChange).toHaveBeenCalledWith(true);
       });
+    });
+
+    it('stays open when a pen that lands and stays down past the hover delay lifts', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <HoverCard
+          content={<span>Card content</span>}
+          onOpenChange={onOpenChange}
+          delay={0}>
+          Ruby Cheung
+        </HoverCard>,
+      );
+
+      const trigger = screen.getByText('Ruby Cheung');
+      // A pen in range hovers like a mouse: its arrival starts the hover show.
+      fireEvent.pointerEnter(trigger, {pointerType: 'pen'});
+      fireEvent.mouseEnter(trigger);
+      fireEvent.pointerDown(trigger, {pointerType: 'pen'});
+      // The pen stays down past the hover delay, then lifts.
+      await new Promise(resolve => setTimeout(resolve, 50));
+      fireEvent.pointerUp(trigger, {pointerType: 'pen'});
+      fireEvent.click(trigger);
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(true);
+      });
+      expect(onOpenChange).not.toHaveBeenCalledWith(false);
     });
 
     it('stays shut on a tap when the trigger performs an action', async () => {
@@ -1768,6 +1897,38 @@ describe('HoverCard timing, hold, and controlled state', () => {
     advance(500);
     expect(trigger).toHaveFocus();
     expect(onOpenChange).not.toHaveBeenCalledWith(true);
+  });
+
+  it('after the caller closes a focused card and lets go of isOpen, the next trigger focus opens it', () => {
+    const {trigger, onOpenChange, rerender} = renderCard({isOpen: true});
+    const action = screen.getByText('Card action');
+    act(() => {
+      action.focus();
+    });
+    const card = (isOpen: boolean | undefined) => (
+      <HoverCard
+        content={<button type="button">Card action</button>}
+        onOpenChange={onOpenChange}
+        isOpen={isOpen}>
+        <button type="button">Trigger</button>
+      </HoverCard>
+    );
+    rerender(card(false));
+    advance(500);
+    expect(trigger).toHaveFocus();
+
+    // The refocus that the close made used up the re-show guard, so the
+    // first focus after the caller lets go opens the card.
+    rerender(card(undefined));
+    act(() => {
+      trigger.blur();
+    });
+    onOpenChange.mockClear();
+    act(() => {
+      trigger.focus();
+    });
+    advance(500);
+    expect(onOpenChange).toHaveBeenCalledWith(true);
   });
 
   it('applies xstyle to the themed card surface', () => {
