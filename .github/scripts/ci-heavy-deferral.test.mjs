@@ -50,6 +50,7 @@ const HEAVY = [
   'run-labels',
   'test-build',
   'build-storybook',
+  'interaction-legs',
   'pr-interaction',
   'pr-interaction-webkit',
 ];
