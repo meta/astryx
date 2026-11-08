@@ -113,10 +113,9 @@ the person's device.
 - Defects under FR3 and FR4:
   - On iOS and iPadOS, text ignores Dynamic Type in every theme.
   - Controls hold fixed heights, such as 40 px elements, `component:Badge`
-    FR1's block size, `component:Button` FR4's and `component:Token` FR1's
-    element sizes, and InputGroup's row height in `family:input-fields`, so a
-    larger label can overflow; those records treat their sizes as minimums
-    under FR4.
+    FR1's block size, `component:Token` FR1's element size, and InputGroup's
+    row height in `family:input-fields`, so a larger label can overflow; those
+    records treat their sizes as minimums under FR4.
   - Whether Chrome on Android carries the system font scale to Astryx text is
     unverified until the emulator check FR3 names.
 

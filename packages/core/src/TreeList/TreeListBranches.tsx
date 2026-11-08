@@ -40,6 +40,9 @@ const styles = stylex.create({
   // and let pointer input fall through to the row underneath.
   container: {
     height: '100%',
+    // From the row wrapper's top edge, so a line spans the gap padding above
+    // the row too.
+    insetBlockStart: 0,
     position: 'absolute',
     width: GUIDE_COLUMN_WIDTH,
     zIndex: 1,
@@ -54,12 +57,12 @@ const styles = stylex.create({
     width: LINE_WIDTH,
     backgroundColor: colorVars['--color-border-emphasized'],
   },
-  // Guide segment spanning the full <li>. The row box's inter-row gap now lives
-  // INSIDE the <li> (as `padding-block` on the row wrapper), so `height: 100%`
-  // already covers it — the segment only needs the original `1px` to bridge the
-  // hairline into the next contiguous sibling so the connector reads as one
-  // continuous line. Independent of `--tree-list-row-gap`: the gap is absorbed
-  // by the <li> height, not added on top here.
+  // Guide segment spanning its row wrapper. The row box's inter-row gap lives
+  // inside the row wrapper, as its `padding-block`. So `height: 100%` already
+  // covers it. The segment adds only the original `1px`, which bridges the
+  // hairline into the next sibling, so the connector reads as one line.
+  // Independent of `--tree-list-row-gap`: the gap is absorbed by the row
+  // wrapper's height, not added on top here.
   verticalFull: {
     height: 'calc(100% + 1px)',
   },
@@ -90,7 +93,8 @@ interface TreeListBranchesProps {
 
 /**
  * Renders vertical lines showing parent-child relationships in the tree.
- * Positioned in a full-height container to span the entire item including children.
+ * Each line spans its own row. An expanded row's children draw the lines
+ * beside them, so the lines show and hide with its group.
  *
  * The line element carries the stable `astryx-tree-list-guide` theme target so a
  * theme can recolor or hide the connectors via `defineTheme` (e.g.
@@ -104,14 +108,16 @@ export function TreeListBranches({
 }: TreeListBranchesProps) {
   return (
     <>
-      {ancestorsIsLast.map((ancestorIsLast, level) => {
+      {ancestorsIsLast.map((_, level) => {
         const branchOffset = `calc(${GUIDE_COLUMN_START} + ${level} * ${LEVEL_INDENT})`;
+        // A column holds the connector of the ancestor one level deeper, so
+        // its line runs past this row while that ancestor has a sibling
+        // below. The current item's own connector column (nestedLevel - 1)
+        // is rendered below with its terminus or continuation style.
+        const continues =
+          level < nestedLevel - 1 && !ancestorsIsLast[level + 1];
         return (
-          // Skip the level that the current-item connector occupies
-          // (nestedLevel - 1), since that position is rendered below
-          // with the correct terminus/continuation style.
-          !ancestorIsLast &&
-          level !== nestedLevel - 1 && (
+          continues && (
             <div
               // eslint-disable-next-line @eslint-react/no-array-index-key -- tree branch levels are fixed positional connectors
               key={level}
