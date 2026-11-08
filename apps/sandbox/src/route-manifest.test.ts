@@ -110,6 +110,8 @@ describe('Sandbox static export contract', () => {
     );
     expect(canHydrate('/pages/component-scores/', '?filter=all')).toBe(true);
     expect(canHydrate('/pages/shell-lab/', '')).toBe(true);
+    expect(canHydrate('/pages/chat-layout/', '?case=docked')).toBe(false);
+    expect(canHydrate('/pages/chat-layout/', '')).toBe(true);
     expect(canHydrate('/pages/perf-scenes/', '?scene=table')).toBe(false);
     expect(canHydrate('/pages/perf-scenes/', '')).toBe(true);
   });

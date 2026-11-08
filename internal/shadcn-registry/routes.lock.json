@@ -603,6 +603,11 @@
       "aliases": []
     },
     {
+      "name": "component-lab-dialog-hero-header",
+      "path": "components/lab/dialog-hero-header",
+      "aliases": []
+    },
+    {
       "name": "component-lab-diff-viewer",
       "path": "components/lab/diff-viewer",
       "aliases": []
@@ -3912,6 +3917,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-table-column-settings-state-column-visibility-picker",
+      "path": "examples/use-table-column-settings-state/column-visibility-picker",
+      "aliases": []
+    },
+    {
       "name": "example-use-table-grouped-rows-collapsible-groups",
       "path": "examples/use-table-grouped-rows/collapsible-groups",
       "aliases": []
@@ -4289,6 +4299,11 @@
     {
       "name": "hook-use-table-column-settings",
       "path": "hooks/use-table-column-settings",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-table-column-settings-state",
+      "path": "hooks/use-table-column-settings-state",
       "aliases": []
     },
     {
