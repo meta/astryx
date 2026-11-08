@@ -239,14 +239,18 @@ Out of coverage, each taking its final place at once:
   handles, on an element mid-glide, still goes to what was at that spot before
   the glide, until the glide ends (glides last at most the theme's move
   duration).
-- Each glide reported there also makes the engine resolve its transform once
-  more, in the first frame it is drawn within half a pixel of its place.
-  WebKit can draw a glide's last frame, and every frame of a long task over
-  its end, at the transform it last resolved; that frame now shows its place.
-  Implementation gap: a long task that starts before that frame still shows
-  where the glide was when the engine last resolved it, and a glide whose
-  curve reaches its place only at its end (a linear move curve) gets no such
-  resolve.
+- Each motion of a change also makes the engine resolve its element once
+  more, in the first frame the motion is drawn near its end: within half a
+  pixel or half a degree, or 0.005 of an opacity. WebKit can draw a compositor
+  animation's last frame, and every frame of a long task over its end, with
+  the values it last resolved; that frame shows the motion's end. It covers
+  the glides, an exit and its parts, a reveal's parts and an indicator's
+  transition. Implementation gap: a long task that starts before that frame
+  still shows the values from the last resolve, and a motion near its end
+  only at its last keyframe (a linear curve, or a long move on a steep curve)
+  gets no such resolve. Review condition: re-measure on each WebKit release,
+  and remove these resolves once WebKit draws an ended compositor animation
+  at its final values.
 
 ## Verification
 

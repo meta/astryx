@@ -6,8 +6,9 @@
  *   Element.animate and stubbed layout rectangles (jsdom lays nothing out)
  * @output Checks that a running translate glide reports its element to the
  *   presented hit-test registry. The cases cover its offset from where iOS
- *   WebKit hit-tests it, a touch-down's resolve and its end. A glide resolves
- *   once more as it settles, and a cancelled or removed one never does. A change's
+ *   WebKit hit-tests it, a touch-down's resolve and its end. Each motion
+ *   resolves once more as it settles: a glide, an inert element's and an
+ *   indicator's transition. A cancelled or removed one never does. A change's
  *   glides cost one notice as they start and one as they end, even after a
  *   glide in a removed frame ended. A fade or an inert element reports
  *   nothing, and a glide whose element left its document loses its report
@@ -17,6 +18,7 @@
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
+  applyLayoutChangeTransition,
   createAnimatedLayout,
   playLayoutChange,
   reportLayoutChange,
@@ -357,6 +359,7 @@ describe('a glide in the presented hit-test registry (motion/presentation.ts)', 
   /** Frames the page asks for, run on demand. */
   function holdFrames() {
     const queued: FrameRequestCallback[] = [];
+    const realFrame = window.requestAnimationFrame.bind(window);
     const spy = vi
       .spyOn(window, 'requestAnimationFrame')
       .mockImplementation(callback => {
@@ -370,7 +373,31 @@ describe('a glide in the presented hit-test registry (motion/presentation.ts)', 
         }
       },
       pending: () => queued.length,
-      restore: () => spy.mockRestore(),
+      /** Waits for `count` real frames; a page that draws none fails by name. */
+      real: async (count: number) =>
+        new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(() => {
+            reject(new Error(`holdFrames: ${count} real frames did not come`));
+          }, 5000);
+          let left = count;
+          const tick = () => {
+            left -= 1;
+            if (left > 0) {
+              realFrame(tick);
+              return;
+            }
+            clearTimeout(timer);
+            resolve();
+          };
+          realFrame(tick);
+        }),
+      /** Hands frames still asked for back to the real clock, so no loop dies. */
+      restore: () => {
+        spy.mockRestore();
+        for (const callback of queued.splice(0)) {
+          realFrame(callback);
+        }
+      },
     };
   }
 
@@ -388,7 +415,7 @@ describe('a glide in the presented hit-test registry (motion/presentation.ts)', 
   };
 
   /** A glide on row a, its frames held, and its time a test can set. */
-  async function settlingGlide() {
+  async function settlingGlide(rowHtml = '<div id="a"></div>') {
     // Two real frames first: a loop an earlier test left ends, so this
     // glide's loop starts on the held frames.
     await new Promise<void>(resolve => {
@@ -396,7 +423,7 @@ describe('a glide in the presented hit-test registry (motion/presentation.ts)', 
     });
     const frames = holdFrames();
     const {area, changed, phase} = setUp(
-      '<div id="area"><div id="changed"></div><div id="a"></div></div>',
+      `<div id="area"><div id="changed"></div>${rowHtml}</div>`,
     );
     const a = document.getElementById('a') as HTMLElement;
     placeAt(a, {before: [0, 0, 400, 40], after: [0, 80, 400, 40]}, phase);
@@ -406,6 +433,12 @@ describe('a glide in the presented hit-test registry (motion/presentation.ts)', 
       phase,
     );
     const glide = played.find(p => p.element === a) as Played;
+    // The change's other motions end, so only this glide waits for a frame.
+    for (const entry of played) {
+      if (entry !== glide) {
+        entry.finish?.();
+      }
+    }
     const timing = glide.animation as {currentTime: number};
     const settles = settleTime(glide);
     const written = () => a.style.getPropertyValue('--astryx-presented');
@@ -446,8 +479,11 @@ describe('a glide in the presented hit-test registry (motion/presentation.ts)', 
       frames.run();
       frames.run();
       expect(frames.pending()).toBe(0);
-      // Its time passing later writes nothing.
+      // Its time passing later writes nothing, from the held frames or from
+      // a real frame loop, which three real frames let run.
       timing.currentTime = settles + 10;
+      frames.run();
+      await frames.real(3);
       frames.run();
       expect(written()).toBe('');
     } finally {
@@ -467,6 +503,74 @@ describe('a glide in the presented hit-test registry (motion/presentation.ts)', 
       expect(written()).toBe('');
       expect(frames.pending()).toBe(0);
     } finally {
+      frames.restore();
+    }
+  });
+
+  it("resolves an inert element's glide too, which reports nothing, and clears the write at its end", async () => {
+    const {a, frames, glide, timing, settles, written} = await settlingGlide(
+      '<div id="a" inert></div>',
+    );
+    try {
+      expect(presentedElements().includes(a)).toBe(false);
+      timing.currentTime = settles;
+      frames.run();
+      expect(written()).not.toBe('');
+      glide.finish?.();
+      expect(written()).toBe('');
+      frames.run();
+      expect(frames.pending()).toBe(0);
+    } finally {
+      frames.restore();
+    }
+  });
+
+  it("resolves an indicator's transition once as it settles, read from the page's clock alone, and clears it at its end", async () => {
+    await new Promise<void>(resolve => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    });
+    const frames = holdFrames();
+    let start = 0;
+    let elapsed = 0;
+    const clock = vi
+      .spyOn(window.performance, 'now')
+      .mockImplementation(() => start + elapsed);
+    try {
+      const {area} = setUp(
+        '<div id="area"><div id="changed"></div><span id="chevron"></span></div>',
+      );
+      const chevron = document.getElementById('chevron') as HTMLElement;
+      const layout = createAnimatedLayout(() => area);
+      applyLayoutChangeTransition(layout, chevron);
+      const duration = Number.parseFloat(chevron.style.transitionDuration);
+      expect(duration).toBeGreaterThan(0);
+      // A start from which the end time, less the start, rounds short of the
+      // duration, as a coarsened clock can land. A frame at the end ends it.
+      start = 1000.1;
+      for (let tries = 0; start + duration - start >= duration; tries += 1) {
+        expect(tries).toBeLessThan(1000);
+        start += 0.1;
+      }
+      applyLayoutChangeTransition(layout, chevron);
+      const written = () =>
+        chevron.style.getPropertyValue('--astryx-presented');
+      // Before its curve comes within reach of its end: no write.
+      elapsed = duration / 4;
+      frames.run();
+      expect(written()).toBe('');
+      // Past its settle point: one write, and the loop keeps reading.
+      elapsed = duration * 0.95;
+      frames.run();
+      expect(written()).not.toBe('');
+      expect(frames.pending()).toBeGreaterThan(0);
+      // In the frame at its end, the write goes and the loop stops.
+      elapsed = duration;
+      frames.run();
+      expect(written()).toBe('');
+      frames.run();
+      expect(frames.pending()).toBe(0);
+    } finally {
+      clock.mockRestore();
       frames.restore();
     }
   });
