@@ -730,10 +730,8 @@
     "family:action-groups"
   ],
   "packages/core/src/NavMenu/NavHeadingMenuItem.tsx": [
-    "FR1",
     "FR2",
     "FR4",
-    "spec:AST-085",
     "spec:AST-085",
     "spec:AST-085"
   ],
