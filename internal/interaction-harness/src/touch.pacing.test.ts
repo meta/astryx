@@ -32,8 +32,11 @@ import {
   touchArrivalsFrom,
   TOUCH_STILLNESS_MS,
   touchPacingFault,
+  touchPlayError,
+  TouchLiftStallError,
   TouchPacingError,
   TouchPageStallError,
+  liftStallError,
   type TouchArrival,
   type TouchPacing,
 } from './touch';
@@ -507,5 +510,74 @@ describe('the pacing errors', () => {
       /On a starved runner that time includes the page's wait for a CPU: judge a page stall from a run with CI's CPU limits/,
     );
     expect(error.message).not.toMatch(/not the runner/);
+  });
+});
+
+describe('liftStallError', () => {
+  // The flick's last move is its step 5; its lift, step 6, comes 16 ms later.
+  const onEventAt5 = (ms: number) => [0, 0, 0, 0, 0, ms, 0];
+  const lateLift = at([0, 16, 32, 48, 64, 80, 200]);
+
+  it('names the lift stall when onEvent alone carries the gap past the stillness interval, however much later a loaded runner made the lift', () => {
+    const fault = touchPacingFault(FLICK, lateLift);
+    if (fault?.kind !== 'rest') {
+      throw new Error('expected the page to read a rest');
+    }
+    // onEvent ran 70 ms of the 120 ms gap; the runner stretched the rest.
+    const error = liftStallError(FLICK, lateLift, fault, onEventAt5(70));
+    expect(error).toBeInstanceOf(TouchLiftStallError);
+    expect(error?.numbers).toMatchObject({
+      scriptedGapMs: 16,
+      gapMs: 120,
+      onEventMs: 70,
+    });
+  });
+
+  it('leaves a lift that onEvent cannot carry past the interval to the pacing errors', () => {
+    const fault = touchPacingFault(FLICK, lateLift);
+    if (fault == null) {
+      throw new Error('expected a fault');
+    }
+    const below = TOUCH_STILLNESS_MS - 16;
+    expect(liftStallError(FLICK, lateLift, fault, onEventAt5(5))).toBeNull();
+    expect(
+      liftStallError(FLICK, lateLift, fault, onEventAt5(below)),
+    ).toBeNull();
+    expect(
+      liftStallError(FLICK, lateLift, fault, onEventAt5(below + 1)),
+    ).toBeInstanceOf(TouchLiftStallError);
+  });
+});
+
+describe('touchPlayError', () => {
+  // The lift reaches the page 120 ms after the last move, step 5, where the
+  // script spaces 16 ms: the page reads a resting finger.
+  const lateLift = at([0, 16, 32, 48, 64, 80, 200]);
+  const heldLift = lateLift.map((a, i) =>
+    i === 5 ? {...a, handledAt: a.stamp + 110} : a,
+  );
+  const quick = [0, 0, 0, 0, 0, 0, 0];
+  const slowAt5 = [0, 0, 0, 0, 0, 70, 0];
+  const errorFor = (arrivals: TouchArrival[], onEventMs: number[]) => {
+    const fault = touchPacingFault(FLICK, arrivals);
+    if (fault?.kind !== 'rest') {
+      throw new Error('expected the page to read a rest');
+    }
+    return touchPlayError(FLICK, arrivals, fault, onEventMs);
+  };
+
+  it("names the runner's dispatch stall when onEvent is quick and the page's listeners did not hold the lift", () => {
+    const error = errorFor(lateLift, quick);
+    expect(error).toBeInstanceOf(TouchPacingError);
+    expect((error as TouchPacingError).fault.heldByPage).toBeNull();
+  });
+
+  it("names the page's stall when its listeners held the lift and onEvent is quick", () => {
+    expect(errorFor(heldLift, quick)).toBeInstanceOf(TouchPageStallError);
+  });
+
+  it('names the lift stall first when onEvent alone carries the gap past the stillness interval', () => {
+    expect(errorFor(lateLift, slowAt5)).toBeInstanceOf(TouchLiftStallError);
+    expect(errorFor(heldLift, slowAt5)).toBeInstanceOf(TouchLiftStallError);
   });
 });
