@@ -6,7 +6,8 @@
  * @output The swizzle proof (spec:AST-110 FR7): for each target it ejects
  *   the copy into a clean project, checks its imports and files,
  *   type-checks it, bundles it with the StyleX compiler, and renders it once
- *   on the server. It also decides which targets a change affects.
+ *   on the server, and on request in Chromium. It also decides which targets
+ *   a change affects.
  * @position Shared by the swizzle proof tests; no Vitest import
  */
 
