@@ -203,8 +203,10 @@ const FREEZE_SCRIPT = `(() => {
       holds += 1;
       const held = {id: holds, types, afterMs, resumeAt: null, intended: null, arrivedAt: null, releasedAt: null, stalledMs: null, type: null, outcome: null};
       inputHold = held;
+      // It marks the first frame drawn unfrozen even after an input came
+      // early, so resumed() still answers and landed() names the input.
       const tick = time => {
-        if (inputHold !== held || held.outcome != null) return;
+        if (inputHold !== held || held.resumeAt != null) return;
         if (state.frozenAt != null) { nativeFrame(tick); return; }
         held.resumeAt = now(time);
         held.intended = held.resumeAt + afterMs;
