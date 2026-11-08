@@ -73,6 +73,12 @@ export interface TabBarItemProps {
    * same id on the panel element.
    */
   panelId?: string;
+  /**
+   * Disables the tab, as on Core's Tab: it stays focusable, dimmed, and is
+   * never chosen. A tap, a click or a key on it, or a lift over it, selects
+   * nothing, and the arrow keys skip it.
+   */
+  'aria-disabled'?: boolean | 'true' | 'false';
 }
 
 export interface TabBarProps extends Omit<
@@ -118,6 +124,11 @@ function readItems(children: ReactNode): TabBarItemProps[] {
       ? [(child as ReactElement<TabBarItemProps>).props]
       : [],
   );
+}
+
+function isDisabledItem(item: TabBarItemProps | undefined): boolean {
+  const disabled = item?.['aria-disabled'];
+  return disabled === true || disabled === 'true';
 }
 
 function hasBadge(badge: string | number | undefined): boolean {
@@ -398,6 +409,9 @@ const styles = stylex.create({
   itemSelectedLook: {
     color: colorVars['--color-accent'],
   },
+  itemDisabled: {
+    color: colorVars['--color-text-disabled'],
+  },
   badges: {
     position: 'absolute',
     inset: 0,
@@ -544,6 +558,9 @@ export function TabBar({
   });
   const choose = useCallback(
     (item: TabBarItemProps) => {
+      if (isDisabledItem(item)) {
+        return;
+      }
       if (item.value === value) {
         onReselect?.(item.value);
       } else {
@@ -558,6 +575,7 @@ export function TabBar({
     selectedIndex,
     isTouch,
     onLift: index => choose(items[index]),
+    isDisabled: index => isDisabledItem(items[index]),
   });
   const mergedCapsuleRef = useMergedRefs(capsuleRef, listRef, lens.capsule);
 
@@ -593,6 +611,7 @@ export function TabBar({
         )}>
         {items.map((item, index) => {
           const isSelected = index === selectedIndex;
+          const isDisabled = isDisabledItem(item);
           const {start, width, itemStart} = column(index, count);
           return (
             <button
@@ -601,6 +620,7 @@ export function TabBar({
               role="tab"
               id={`${baseId}-tab-${index}`}
               aria-selected={isSelected}
+              aria-disabled={isDisabled || undefined}
               aria-controls={item.panelId}
               tabIndex={
                 isSelected || (selectedIndex < 0 && index === 0) ? 0 : -1
@@ -632,11 +652,14 @@ export function TabBar({
                   // At rest the tab draws its selected look; while the lens
                   // slides, the copy inside it does.
                   isSelected && !lens.isCopyShown && styles.itemSelectedLook,
+                  isDisabled && styles.itemDisabled,
                   styles.box(itemStart, ITEM_TOP, itemSize, ITEM_HEIGHT),
                 )}>
                 <ItemFace
                   item={item}
-                  isSelectedLook={isSelected && !lens.isCopyShown}
+                  isSelectedLook={
+                    isSelected && !isDisabled && !lens.isCopyShown
+                  }
                 />
               </span>
             </button>
@@ -687,8 +710,13 @@ export function TabBar({
                               itemSize,
                               ITEM_HEIGHT,
                             ),
+                            isDisabledItem(item) && styles.itemDisabled,
                           )}>
-                          <ItemFace item={item} isSelectedLook isCopy />
+                          <ItemFace
+                            item={item}
+                            isSelectedLook={!isDisabledItem(item)}
+                            isCopy
+                          />
                         </span>
                       ))}
                     </div>

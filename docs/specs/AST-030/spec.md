@@ -885,10 +885,11 @@ across two workflows and two visible gates.
 Runtime cost (long tasks, forced layouts, interaction latency, what an unmount
 leaves behind) shows only in a real browser and drifts in small steps, so one
 nightly measurement of fixed scenes on `main`, compared with its own recent
-median, finds a regression within two days and names its commit range. A
-standard runner's speed varies by about a fifth from one machine to the next,
-more than the threshold, so a regression counts only when two recorded runs in a
-row show it. It belongs to no surface's test owner: it reads composites across
+median, finds a regression within two days and names its commit range.
+Standard runners differ in CPU model, and a timing metric can double from one
+model to another, so timing compares only runs on the same model (FR18). On one
+model a runner's speed still varies by about a fifth, more than the threshold,
+so a regression counts only when two recorded runs in a row show it. It belongs to no surface's test owner: it reads composites across
 components, it judges a trend rather than a pass or fail, and it reports no
 required context, so FR11's rule against new lanes inside a surface does not
 reach it. The history travels between recorded runs as a workflow artifact, so
