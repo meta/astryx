@@ -807,18 +807,15 @@ function DateRangeEditor({
     }
   }, []);
 
-  // A sheet opens no popover over itself, so the range is picked on an
-  // inline calendar on the sheet's surface, one month wide.
+  // A sheet opens no popover over itself.
   if (presentation === 'bottom-sheet') {
     return (
       // A disabled editor takes no input: the calendar has no disabled state.
       <div inert={isDisabled === true}>
         <Calendar
           mode="range"
-          aria-label={t('@astryx.powersearch.valueEditor.dateRange')}
           value={currentValue}
           onChange={handleChange}
-          focusDate={currentValue?.start}
         />
       </div>
     );
