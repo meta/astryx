@@ -787,13 +787,36 @@ test.describe('Chrome on Android (spec:AST-099 FR8)', () => {
     if (start == null) {
       throw new Error('the report laid nothing out, so no ride started');
     }
-    // The ride's own start frames do not count, also when a starved main
-    // thread runs them late, into the window.
+    // The ride's own start frames do not count when a starved main thread
+    // runs them late, into the window. The report's task then had the main
+    // thread for half its wall time or less. A start the page itself delays
+    // into the window fails, by name.
+    const reportTask = trace.longTasks.find(
+      t =>
+        t.start <= start.layout.t && t.start + t.durationMs >= start.layout.t,
+    );
+    const isStarved =
+      reportTask != null && reportTask.threadMs <= reportTask.durationMs / 2;
+    expect(
+      start.end >= steady.from && !isStarved
+        ? {
+            startEndMs: Math.round(start.end - reported),
+            reportTask:
+              reportTask == null
+                ? null
+                : {
+                    wallMs: Math.round(reportTask.durationMs),
+                    threadMs: Math.round(reportTask.threadMs),
+                  },
+          }
+        : null,
+      'the ride\u2019s start reached the window without a starved thread',
+    ).toBeNull();
     const counted = trace.events.filter(
       e =>
         e.t >= steady.from &&
         e.t <= steady.to &&
-        (start.frameOf.get(e) ?? start.frames) >= start.frames,
+        (!isStarved || (start.frameOf.get(e) ?? start.frames) >= start.frames),
     );
     const judged = steady.to - Math.max(steady.from, start.end);
     expect(
