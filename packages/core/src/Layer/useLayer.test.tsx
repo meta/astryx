@@ -3104,19 +3104,26 @@ describe('a light-dismiss layer opened by a context-menu press', () => {
     pressDown(zone, 7);
     fireEvent.contextMenu(zone);
     const layer = container.querySelector('[popover]') as HTMLElement;
-    let under: Element = layer;
-    document.elementFromPoint = () => under;
+    vi.spyOn(layer, 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(100, 100, 100, 100),
+    );
+    let at = {x: 150, y: 150};
     const move = (pointerId: number) =>
       fireEvent(
         layer,
-        Object.assign(new MouseEvent('pointermove', {bubbles: true}), {
-          pointerId,
-        }),
+        Object.assign(
+          new MouseEvent('pointermove', {
+            bubbles: true,
+            clientX: at.x,
+            clientY: at.y,
+          }),
+          {pointerId},
+        ),
       );
 
     move(7);
     expect(released).toEqual([7]);
-    under = zone;
+    at = {x: 20, y: 20};
     move(7);
     expect(captured).toHaveLength(2);
     // Another pointer's move leaves the claim alone.
@@ -3135,7 +3142,6 @@ describe('a light-dismiss layer opened by a context-menu press', () => {
     delete (HTMLElement.prototype as Partial<HTMLElement>).hasPointerCapture;
     delete (HTMLElement.prototype as Partial<HTMLElement>)
       .releasePointerCapture;
-    delete (document as Partial<Document>).elementFromPoint;
   });
 
   it('captures nothing for a context menu from the keyboard, which has no press', () => {

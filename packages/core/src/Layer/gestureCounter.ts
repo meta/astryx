@@ -88,8 +88,8 @@ export function currentGestureHasClicked(): boolean {
  * of the press that opened the popover. While the pointer is outside the
  * layer, the layer captures it, so a release there lands on the layer. Over
  * the layer the capture lets go, so hover works and a release there is inside
- * anyway. The claim ends at that press's release; a later press dismisses as
- * usual.
+ * anyway. The claim ends at that press's release, or when the layer closes; a
+ * later press dismisses as usual.
  */
 export function claimContextMenuPress(layer: HTMLElement): void {
   listen();
@@ -111,31 +111,67 @@ export function claimContextMenuPress(layer: HTMLElement): void {
     }
   };
   holdCapture(true);
-  // Hit testing ignores the capture, so it finds what is under the pointer.
-  // It runs in the layer's own tree: in an open shadow root the document
-  // would answer with the shadow host.
-  const root = layer.getRootNode() as Document | ShadowRoot;
-  const scope =
-    root !== layer.ownerDocument && typeof root.elementFromPoint === 'function'
-      ? root
-      : layer.ownerDocument;
+  // The layer's box, and the box of each layer open inside it (a sub-menu),
+  // are read once and again only after a scroll, a resize or a toggle inside
+  // the layer, so a move of the pointer reads no layout.
+  let boxes: DOMRect[] | null = null;
+  const readBoxes = (): DOMRect[] => {
+    let nested: HTMLElement[] = [];
+    try {
+      nested = [...layer.querySelectorAll<HTMLElement>(':popover-open')];
+    } catch {
+      // An engine without `:popover-open` has no nested popover to read.
+    }
+    return [layer, ...nested].map(el => el.getBoundingClientRect());
+  };
+  const isOverLayer = (x: number, y: number): boolean => {
+    boxes ??= readBoxes();
+    return boxes.some(
+      box => x >= box.left && x < box.right && y >= box.top && y < box.bottom,
+    );
+  };
+  const invalidate = () => {
+    boxes = null;
+  };
   const followPointer = (event: PointerEvent) => {
     if (event.pointerId === pointerId) {
-      const under = scope.elementFromPoint(event.clientX, event.clientY);
-      holdCapture(under == null || !layer.contains(under));
+      holdCapture(!isOverLayer(event.clientX, event.clientY));
     }
   };
   const unsubscribes: (() => void)[] = [];
+  const stop = () => {
+    for (const unsubscribe of unsubscribes) {
+      unsubscribe();
+    }
+    unsubscribes.length = 0;
+  };
   const endClaim = (event: PointerEvent) => {
     if (event.pointerId === pointerId) {
-      for (const unsubscribe of unsubscribes) {
-        unsubscribe();
-      }
+      stop();
     }
   };
+  // A layer that closes while the button is still down lets the pointer go,
+  // so the page under it hovers again.
+  const onToggle = (event: Event) => {
+    if (
+      event.target === layer &&
+      (event as Event & {newState?: string}).newState === 'closed'
+    ) {
+      holdCapture(false);
+      stop();
+      return;
+    }
+    invalidate();
+  };
+  layer.addEventListener('toggle', onToggle, true);
+  view.addEventListener('scroll', invalidate, true);
+  view.addEventListener('resize', invalidate);
   unsubscribes.push(
     subscribeInput(view, 'pointermove', followPointer),
     subscribeInput(view, 'pointerup', endClaim),
     subscribeInput(view, 'pointercancel', endClaim),
+    () => layer.removeEventListener('toggle', onToggle, true),
+    () => view.removeEventListener('scroll', invalidate, true),
+    () => view.removeEventListener('resize', invalidate),
   );
 }
