@@ -14,6 +14,7 @@
  */
 
 import {useRef, useMemo, useCallback, useEffect, type ReactNode} from 'react';
+import {useIsomorphicLayoutEffect} from '../../../hooks/useIsomorphicLayoutEffect';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars} from '../../../theme/tokens.stylex';
 import type {
@@ -787,7 +788,11 @@ export function useTableColumnResize<T extends Record<string, unknown>>(
   config: UseTableColumnResizeConfig,
 ): TablePlugin<T> {
   const configRef = useRef(config);
-  configRef.current = config;
+  // Syncs configRef with the committed render. A render that React discards,
+  // as a suspended transition does, must not leave its config behind.
+  useIsomorphicLayoutEffect(() => {
+    configRef.current = config;
+  });
 
   const dragStateRef = useRef<DragState | null>(null);
   const isDraggingRef = useRef(false);
@@ -865,7 +870,7 @@ export function useTableColumnResize<T extends Record<string, unknown>>(
     }
   }, []);
 
-  // Clean up observer on unmount
+  // Releases the table resize observer on unmount.
   useEffect(() => {
     return () => {
       unobserveTableRef.current?.();
@@ -934,6 +939,7 @@ export function useTableColumnResize<T extends Record<string, unknown>>(
     };
   }, []);
 
+  // Releases the resize gate on unmount.
   useEffect(() => {
     return () => {
       gateCleanupRef.current?.();

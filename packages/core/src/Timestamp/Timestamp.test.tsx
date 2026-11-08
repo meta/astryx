@@ -1,5 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import 'temporal-polyfill/full/global';
 import {
   describe,
   it,
@@ -7,9 +8,18 @@ import {
   vi,
   beforeAll,
   beforeEach,
+  afterAll,
   afterEach,
+  onTestFinished,
 } from 'vitest';
-import {render, screen, act, waitFor, fireEvent} from '@testing-library/react';
+import {
+  render,
+  screen,
+  act,
+  waitFor,
+  fireEvent,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Profiler} from 'react';
 import {hydrateRoot, type Root} from 'react-dom/client';
@@ -19,6 +29,14 @@ import {formatInstant} from './formatInstant';
 import {formatTooltipLines} from './tooltipEntries';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import {InternationalizationProvider} from '../i18n';
+import type {CalendarSystem} from '../utils/calendarSystem';
+import {withChineseTemporalAheadOfIntl} from '../__tests__/temporalAheadOfIntl';
+import {__resetDevWarnings} from '../utils/devWarning';
+import type {ComponentIconMap} from '../Icon/index';
+import {defineTheme} from '../theme/defineTheme';
+import {Theme} from '../theme/Theme';
+
+let slotThemeCount = 0;
 
 async function openTimestampHoverCard(): Promise<HTMLElement> {
   const timestamp = document.querySelector('time');
@@ -36,6 +54,15 @@ async function openTimestampHoverCard(): Promise<HTMLElement> {
   });
 
   return screen.getByRole('dialog', {hidden: true});
+}
+
+/** The long name of a zone at an instant, as Intl spells it in en-US. */
+function longZoneName(timeZone?: string, at: Date = new Date()): string {
+  return (
+    new Intl.DateTimeFormat('en-US', {timeZoneName: 'long', timeZone})
+      .formatToParts(at)
+      .find(part => part.type === 'timeZoneName')?.value ?? ''
+  );
 }
 
 describe('Timestamp', () => {
@@ -850,6 +877,38 @@ describe('Timestamp', () => {
       expect(normalize(card.textContent ?? '')).toContain(normalize(expected));
     });
 
+    it('keeps the default hover-card row in the viewer zone with timezoneID set', async () => {
+      const user = userEvent.setup();
+      const originalTZ = process.env.TZ;
+      process.env.TZ = 'UTC';
+      try {
+        render(
+          <Timestamp
+            value={new Date('2026-03-25T10:00:00Z').getTime() / 1000}
+            format="relative"
+            timezoneID="Asia/Tokyo"
+            data-testid="ts"
+          />,
+        );
+        const el = screen.getByTestId('ts');
+        await user.tab();
+        expect(el).toHaveFocus();
+        await waitFor(() => {
+          expect(HTMLElement.prototype.showPopover).toHaveBeenCalled();
+        });
+        const card = screen.getByRole('dialog', {hidden: true});
+        // FR7: the default row reads the viewer's zone, not the pinned one.
+        expect(card.textContent).toContain('10:00:00');
+        expect(card.textContent).not.toContain('19:00:00');
+      } finally {
+        if (originalTZ === undefined) {
+          delete process.env.TZ;
+        } else {
+          process.env.TZ = originalTZ;
+        }
+      }
+    });
+
     it('does not add a tab stop when the hover card is disabled', () => {
       render(
         <Timestamp
@@ -940,7 +999,12 @@ describe('Timestamp', () => {
       // aria-label spells the timezone out in full (WCAG 3.1.4), so the two
       // strings intentionally differ — compare the row against an
       // independently formatted short-form string.
-      expect(card.querySelectorAll('dd')).toHaveLength(1);
+      // Without labels the card is still a description list: the value is
+      // named by its long time-zone name, which is visually hidden.
+      expect(card.querySelectorAll('dl > div > dd')).toHaveLength(1);
+      expect(card.querySelector('dl > div > dt')?.textContent).toBe(
+        longZoneName(),
+      );
       expect(card.querySelectorAll('button')).toHaveLength(1);
 
       const normalize = (s: string) => s.replace(/\s+/g, ' ');
@@ -962,7 +1026,7 @@ describe('Timestamp', () => {
     it("copies the default absolute row's value", async () => {
       render(<Timestamp value={Date.now() / 1000 - 3600} format="relative" />);
       const card = await openTimestampHoverCard();
-      const rowValue = card.querySelector('dd')?.textContent ?? '';
+      const rowValue = card.querySelector('dd > span')?.textContent ?? '';
       expect(rowValue).toBeTruthy();
       fireEvent.click(card.querySelector('button')!);
       expect(navigator.clipboard.writeText).toHaveBeenCalledWith(rowValue);
@@ -999,6 +1063,80 @@ describe('Timestamp', () => {
           }),
         ).toBeInTheDocument(),
       );
+    });
+
+    describe('copy icon slot', () => {
+      // Label each shared icon's artwork, so a test reads which name rendered.
+      const icons = {
+        copy: <span data-icon="copy" />,
+        check: <span data-icon="check" />,
+        clock: <span data-icon="clock" />,
+        checkDouble: <span data-icon="checkDouble" />,
+      };
+
+      async function renderCard(componentIcons?: ComponentIconMap<never>) {
+        const theme = defineTheme({
+          name: `timestamp-copy-slot-${slotThemeCount++}`,
+          icons,
+          componentIcons,
+        });
+        render(
+          <Theme theme={theme}>
+            <Timestamp value={Date.now() / 1000 - 3600} format="relative" />
+          </Theme>,
+        );
+        const card = await openTimestampHoverCard();
+        return card.querySelector('button')!;
+      }
+
+      const glyph = (button: HTMLElement) =>
+        button.querySelector('[data-icon]')?.getAttribute('data-icon') ?? null;
+
+      async function copy(button: HTMLElement) {
+        fireEvent.click(button);
+        await waitFor(() => expect(button).toHaveAccessibleName('Copied'));
+      }
+
+      it('draws copy, then check while copied, when the theme maps nothing', async () => {
+        const button = await renderCard();
+        expect(glyph(button)).toBe('copy');
+        await copy(button);
+        expect(glyph(button)).toBe('check');
+      });
+
+      it('passes `copied` to a slot function and draws the name it returns', async () => {
+        const slot = vi.fn(({copied}: {copied: boolean}) => ({
+          icon: copied ? ('checkDouble' as const) : ('clock' as const),
+        }));
+        const button = await renderCard({'timestamp-copy': slot});
+
+        expect(glyph(button)).toBe('clock');
+        expect(slot).toHaveBeenLastCalledWith({copied: false});
+        await copy(button);
+        expect(glyph(button)).toBe('checkDouble');
+        expect(slot).toHaveBeenLastCalledWith({copied: true});
+      });
+
+      it('hides only the glyph for null; the button keeps its name and copy action', async () => {
+        const button = await renderCard({'timestamp-copy': null});
+
+        expect(button.querySelector('.astryx-icon')).toBeNull();
+        expect(button).toHaveClass('astryx-timestamp-copy-button');
+        expect(button.getAttribute('aria-label')).toMatch(/^Copy /);
+        await copy(button);
+        expect(navigator.clipboard.writeText).toHaveBeenCalled();
+      });
+
+      it('changes only the icon size for a size request, not the button', async () => {
+        const button = await renderCard({'timestamp-copy': {size: 'lg'}});
+
+        expect(button.querySelector('.astryx-icon')).toHaveAttribute(
+          'data-size',
+          'lg',
+        );
+        expect(glyph(button)).toBe('copy');
+        expect(button).toHaveAttribute('data-size', 'sm');
+      });
     });
   });
 
@@ -1329,10 +1467,37 @@ describe('Timestamp', () => {
       );
       const card = await openTimestampHoverCard();
       // An unlabeled entry still emits its label cell, so the grid stays
-      // aligned and the <dl> stays valid markup.
+      // aligned; its zone's long name, visually hidden, names its value.
       expect(card.querySelectorAll('dt')).toHaveLength(3);
       expect(card.querySelectorAll('dd')).toHaveLength(3);
-      expect(card.querySelectorAll('dt')[1].textContent).toBe('');
+      expect(card.querySelectorAll('dt')[1].textContent).toBe(
+        longZoneName('Asia/Tokyo', new Date(VALUE)),
+      );
+    });
+
+    it('keeps a copyable labelled card a valid description list', async () => {
+      render(
+        <Timestamp
+          value={VALUE}
+          format="relative"
+          tooltipEntries={[
+            {timezoneID: 'UTC', label: 'UTC', isCopyable: true},
+            {timezoneID: 'Asia/Tokyo', label: 'Tokyo'},
+          ]}
+        />,
+      );
+      const card = await openTimestampHoverCard();
+      const list = card.querySelector('dl')!;
+      // Each group holds only its dt and dd (WCAG 2.2 1.3.1); the copy
+      // button sits inside the value.
+      for (const group of Array.from(list.children)) {
+        expect(group.tagName).toBe('DIV');
+        expect(Array.from(group.children, el => el.tagName)).toEqual([
+          'DT',
+          'DD',
+        ]);
+      }
+      expect(list.querySelectorAll('dd button')).toHaveLength(1);
     });
 
     it('gives the tab stop back when entries are removed', () => {
@@ -1529,6 +1694,16 @@ describe('Timestamp server rendering', () => {
     vi.useRealTimers();
   });
 
+  const originalTZ = process.env.TZ;
+
+  afterEach(() => {
+    if (originalTZ === undefined) {
+      delete process.env.TZ;
+    } else {
+      process.env.TZ = originalTZ;
+    }
+  });
+
   it.each(['date', 'date_time', 'time', 'unix_seconds'] as const)(
     'never reads the current time for the absolute %s format',
     format => {
@@ -1583,16 +1758,6 @@ describe('Timestamp server rendering', () => {
   });
 
   describe('across time zones', () => {
-    const originalTZ = process.env.TZ;
-
-    afterEach(() => {
-      if (originalTZ === undefined) {
-        delete process.env.TZ;
-      } else {
-        process.env.TZ = originalTZ;
-      }
-    });
-
     it('writes the same server markup whatever the server time zone', () => {
       const element = (
         <Timestamp value="2026-03-25T10:00:00Z" format="relative" />
@@ -1654,6 +1819,455 @@ describe('Timestamp server rendering', () => {
       expect(errors).not.toHaveBeenCalled();
     } finally {
       errors.mockRestore();
+      act(() => root?.unmount());
+      host.remove();
+    }
+  });
+
+  it('renders an explicit time zone identically whatever the host zone', () => {
+    // Oct 15 in UTC, Oct 14 in Los Angeles: without the prop the host zone
+    // decides which day renders.
+    const element = (
+      <Timestamp
+        value={1665792474000}
+        format="date"
+        timezoneID="UTC"
+        hasTooltip={false}
+      />
+    );
+    process.env.TZ = 'UTC';
+    const utc = renderToString(element);
+    expect(utc).toContain('Oct 15, 2022');
+    process.env.TZ = 'America/Los_Angeles';
+    expect(renderToString(element)).toBe(utc);
+    process.env.TZ = 'Asia/Tokyo';
+    expect(renderToString(element)).toBe(utc);
+  });
+
+  it('shifts the reading into the named zone', () => {
+    process.env.TZ = 'UTC';
+    const {rerender} = render(
+      <Timestamp
+        value={1665792474000}
+        format="date"
+        timezoneID="America/Los_Angeles"
+        hasTooltip={false}
+      />,
+    );
+    expect(screen.getByText('Oct 14, 2022')).toBeInTheDocument();
+    rerender(
+      <Timestamp
+        value={1665792474000}
+        format="date"
+        timezoneID="Asia/Tokyo"
+        hasTooltip={false}
+      />,
+    );
+    expect(screen.getByText('Oct 15, 2022')).toBeInTheDocument();
+  });
+
+  it('hydrates explicit-zone server markup from another host zone without a mismatch', () => {
+    const element = (
+      <Timestamp
+        value={1665792474000}
+        format="date_time"
+        timezoneID="UTC"
+        hasTooltip={false}
+      />
+    );
+    process.env.TZ = 'UTC';
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    host.innerHTML = renderToString(element);
+
+    process.env.TZ = 'America/Los_Angeles';
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let root: Root | undefined;
+    try {
+      act(() => {
+        root = hydrateRoot(host, element, {
+          onRecoverableError: error => {
+            throw error;
+          },
+        });
+      });
+      expect(host.textContent).toContain('Oct 15, 2022');
+      expect(errors).not.toHaveBeenCalled();
+    } finally {
+      errors.mockRestore();
+      act(() => root?.unmount());
+      host.remove();
+    }
+  });
+
+  it('keeps the UTC-labelled placeholder for a relative format with timezoneID', () => {
+    // FR3/ORD1: while the clock is pending the server placeholder is UTC
+    // with its label, whatever `timezoneID` pins.
+    const element = (
+      <Timestamp
+        value={new Date('2026-03-25T10:00:00Z').getTime() / 1000}
+        format="relative"
+        timezoneID="America/Los_Angeles"
+        hasTooltip={false}
+      />
+    );
+    process.env.TZ = 'America/Los_Angeles';
+    const html = renderToString(element);
+    expect(html).toContain('UTC');
+    expect(html).not.toContain('PDT');
+  });
+
+  it('ignores timezoneID in the relative accessible name', () => {
+    const value = Date.now() / 1000 - 3600;
+    const {rerender} = render(
+      <Timestamp
+        value={value}
+        format="relative"
+        hasTooltip={false}
+        data-testid="ts"
+      />,
+    );
+    const viewerLabel = screen.getByTestId('ts').getAttribute('aria-label');
+    rerender(
+      <Timestamp
+        value={value}
+        format="relative"
+        timezoneID="Asia/Tokyo"
+        hasTooltip={false}
+        data-testid="ts"
+      />,
+    );
+    expect(screen.getByTestId('ts').getAttribute('aria-label')).toBe(
+      viewerLabel,
+    );
+  });
+
+  it('falls back to the viewer zone on an unknown time zone', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      process.env.TZ = 'UTC';
+      render(
+        <Timestamp
+          value={1665792474000}
+          format="date"
+          timezoneID="Never/Whence"
+          hasTooltip={false}
+        />,
+      );
+      expect(screen.getByText('Oct 15, 2022')).toBeInTheDocument();
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('Never/Whence'),
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});
+
+describe('Timestamp calendar systems', () => {
+  const INSTANT = new Date('2026-10-30T12:00:00Z');
+  const VALUE = INSTANT.toISOString();
+
+  // Independent option bags: the date-bearing formats as Intl spells them.
+  const DATE_OPTIONS = {
+    full: {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      second: '2-digit',
+      timeZoneName: 'short',
+    },
+    date: {year: 'numeric', month: 'short', day: 'numeric'},
+    date_long: {year: 'numeric', month: 'long', day: 'numeric'},
+    date_weekday: {
+      weekday: 'short',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    },
+    date_time: {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    },
+  } as const satisfies Record<string, Intl.DateTimeFormatOptions>;
+  const DATE_FORMATS = Object.keys(
+    DATE_OPTIONS,
+  ) as (keyof typeof DATE_OPTIONS)[];
+  const CALENDAR_LOCALES = [
+    {calendar: 'persian', locale: 'en', year: '1405'},
+    {calendar: 'persian', locale: 'fa', year: '۱۴۰۵'},
+    {calendar: 'hebrew', locale: 'en', year: '5787'},
+    {calendar: 'hebrew', locale: 'he', year: '5787'},
+    {calendar: 'buddhist', locale: 'en', year: '2569'},
+    {calendar: 'buddhist', locale: 'th', year: '2569'},
+  ] as const;
+
+  afterEach(() => {
+    __resetDevWarnings();
+    vi.restoreAllMocks();
+  });
+
+  describe.each(CALENDAR_LOCALES)(
+    'formatInstant in $calendar under $locale',
+    ({calendar, locale, year}) => {
+      it.each(DATE_FORMATS)('writes %s in the calendar', format => {
+        const value = formatInstant(INSTANT, format, locale, {
+          timeZone: 'UTC',
+          calendar,
+        });
+        expect(value).toBe(
+          new Intl.DateTimeFormat(locale, {
+            ...DATE_OPTIONS[format],
+            timeZone: 'UTC',
+            calendar,
+          }).format(INSTANT),
+        );
+        expect(value).toContain(year);
+        expect(value).not.toContain('2026');
+      });
+
+      it.each([
+        'time',
+        'system_date',
+        'system_date_time',
+        'system_time',
+        'unix_seconds',
+      ] as const)('keeps %s unchanged', format => {
+        expect(
+          formatInstant(INSTANT, format, locale, {timeZone: 'UTC', calendar}),
+        ).toBe(formatInstant(INSTANT, format, locale, {timeZone: 'UTC'}));
+      });
+    },
+  );
+
+  it.each(DATE_FORMATS)('defaults %s to the Gregorian calendar', format => {
+    expect(formatInstant(INSTANT, format, 'fa', {timeZone: 'UTC'})).toBe(
+      formatInstant(INSTANT, format, 'fa', {
+        timeZone: 'UTC',
+        calendar: 'gregory',
+      }),
+    );
+    expect(formatInstant(INSTANT, format, 'en', {timeZone: 'UTC'})).toContain(
+      '2026',
+    );
+  });
+
+  it('keeps the system formats Gregorian ISO in every calendar', () => {
+    expect(
+      formatInstant(INSTANT, 'system_date_time', 'fa', {
+        timeZone: 'UTC',
+        calendar: 'persian',
+      }),
+    ).toBe('2026-10-30 12:00:00');
+  });
+
+  function renderTimestamp(
+    provider: {locale: string; calendar?: CalendarSystem},
+    format: 'date_long' | 'date_time' | 'system_date' | 'relative',
+  ) {
+    return render(
+      <InternationalizationProvider {...provider}>
+        <Timestamp
+          value={VALUE}
+          format={format}
+          hasTooltip={false}
+          data-testid="ts"
+        />
+      </InternationalizationProvider>,
+    );
+  }
+
+  it.each(CALENDAR_LOCALES)(
+    'renders date_long in the provider calendar $calendar under $locale',
+    ({calendar, locale, year}) => {
+      renderTimestamp({locale, calendar}, 'date_long');
+      const text = screen.getByTestId('ts').textContent;
+      expect(text).toBe(
+        formatInstant(INSTANT, 'date_long', locale, {calendar}),
+      );
+      expect(text).toContain(year);
+    },
+  );
+
+  it('keeps the time of day of date_time in the provider calendar', () => {
+    renderTimestamp({locale: 'en', calendar: 'persian'}, 'date_time');
+    const text = screen.getByTestId('ts').textContent ?? '';
+    expect(text).toBe(
+      formatInstant(INSTANT, 'date_time', 'en', {calendar: 'persian'}),
+    );
+    expect(text).toContain('Aban');
+    expect(text).toMatch(/\d:\d\d/);
+  });
+
+  it('keeps system_date Gregorian ISO under a provider calendar', () => {
+    renderTimestamp({locale: 'fa', calendar: 'persian'}, 'system_date');
+    expect(screen.getByTestId('ts').textContent).toBe(
+      formatInstant(INSTANT, 'system_date', 'fa'),
+    );
+    expect(screen.getByTestId('ts').textContent).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('names relative output with the full date in the provider calendar', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(INSTANT.getTime() + 2 * 3600 * 1000));
+    try {
+      renderTimestamp({locale: 'en', calendar: 'hebrew'}, 'relative');
+      const name = screen.getByTestId('ts').getAttribute('aria-label') ?? '';
+      expect(name).toBe(
+        formatInstant(INSTANT, 'full', 'en', {
+          calendar: 'hebrew',
+          timeZoneNameStyle: 'long',
+        }),
+      );
+      expect(name).toContain('5787');
+      expect(screen.getByTestId('ts').textContent).toBe('2 hours ago');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps Gregorian dates for a -u-ca- keyword in the provider locale', () => {
+    renderTimestamp({locale: 'th-TH-u-ca-buddhist'}, 'date_long');
+    const ts = screen.getByTestId('ts');
+    expect(ts).toHaveTextContent('2026');
+    expect(ts).not.toHaveTextContent('2569');
+  });
+
+  it('keeps Gregorian dates when the locale names no calendar', () => {
+    renderTimestamp({locale: 'fa-IR'}, 'date_long');
+    expect(screen.getByTestId('ts').textContent).toBe(
+      formatInstant(INSTANT, 'date_long', 'fa-IR'),
+    );
+  });
+
+  it('writes tooltip rows in the provider calendar', async () => {
+    await import('./TimestampHoverCard');
+    const originalShowPopover = HTMLElement.prototype.showPopover;
+    HTMLElement.prototype.showPopover = vi.fn();
+    onTestFinished(() => {
+      HTMLElement.prototype.showPopover = originalShowPopover;
+    });
+    render(
+      <InternationalizationProvider locale="en" calendar="persian">
+        <Timestamp
+          value={VALUE}
+          format="date"
+          tooltipEntries={[
+            {timezoneID: 'UTC', label: 'UTC'},
+            {timezoneID: 'UTC', format: 'system_date_time', label: 'ISO'},
+          ]}
+          data-testid="ts"
+        />
+      </InternationalizationProvider>,
+    );
+    const card = await openTimestampHoverCard();
+    expect(
+      within(card).getByText(
+        formatInstant(INSTANT, 'full', 'en', {
+          timeZone: 'UTC',
+          calendar: 'persian',
+        }),
+      ),
+    ).toBeInTheDocument();
+    expect(within(card).getByText('2026-10-30 12:00:00')).toBeInTheDocument();
+  });
+
+  describe('without Temporal', () => {
+    const globals = globalThis as {Temporal?: unknown};
+    let savedTemporal: unknown;
+
+    beforeAll(() => {
+      savedTemporal = globals.Temporal;
+      delete globals.Temporal;
+    });
+
+    afterAll(() => {
+      globals.Temporal = savedTemporal;
+    });
+
+    it('shows Gregorian dates for a calendar that needs Temporal', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      renderTimestamp({locale: 'en', calendar: 'persian'}, 'date_long');
+      expect(screen.getByTestId('ts').textContent).toBe(
+        formatInstant(INSTANT, 'date_long', 'en'),
+      );
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('needs a Temporal that supports it'),
+      );
+    });
+
+    it('still shows the buddhist calendar, which needs no Temporal', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      renderTimestamp({locale: 'en', calendar: 'buddhist'}, 'date_long');
+      expect(screen.getByTestId('ts')).toHaveTextContent('2569');
+      expect(warn).not.toHaveBeenCalled();
+    });
+  });
+
+  it.each(['date', 'date_long', 'date_weekday', 'date_time', 'full'] as const)(
+    'writes %s in the `chinese` calendar on the day that Calendar shows',
+    format => {
+      const value = withChineseTemporalAheadOfIntl(() =>
+        formatInstant(new Date('2027-02-06T12:00:00Z'), format, 'en', {
+          timeZone: 'UTC',
+          calendar: 'chinese',
+        }),
+      );
+      // Intl alone names the 30th day of the Twelfth Month of 2026.
+      expect(value).toMatch(/\b(Mo1|First Month) 1, 2027/);
+    },
+  );
+
+  it.each(['date_time', 'full'] as const)(
+    'writes %s in `iso8601` as in `gregory`',
+    format => {
+      expect(
+        formatInstant(INSTANT, format, 'en', {
+          timeZone: 'UTC',
+          calendar: 'iso8601',
+        }),
+      ).toBe(formatInstant(INSTANT, format, 'en', {timeZone: 'UTC'}));
+    },
+  );
+
+  it('hydrates a clock format rendered on a server without Temporal', () => {
+    const value = Date.now() / 1000 - 7200;
+    const element = (
+      <InternationalizationProvider locale="en" calendar="persian">
+        <Timestamp value={value} format="relative" hasTooltip={false} />
+      </InternationalizationProvider>
+    );
+    const globals = globalThis as {Temporal?: unknown};
+    const savedTemporal = globals.Temporal;
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const host = document.createElement('div');
+    delete globals.Temporal;
+    try {
+      host.innerHTML = renderToString(element);
+    } finally {
+      globals.Temporal = savedTemporal;
+    }
+    document.body.appendChild(host);
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const recovered: unknown[] = [];
+    let root: Root | undefined;
+    try {
+      act(() => {
+        root = hydrateRoot(host, element, {
+          onRecoverableError: error => recovered.push(error),
+        });
+      });
+      expect(host.textContent).toBe('2 hours ago');
+      expect(recovered).toEqual([]);
+      expect(errors).not.toHaveBeenCalled();
+    } finally {
+      errors.mockRestore();
+      warn.mockRestore();
       act(() => root?.unmount());
       host.remove();
     }

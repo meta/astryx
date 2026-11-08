@@ -72,7 +72,8 @@ browsers receive a usable reduced fallback, not equivalent behavior.
 - **FR4 — Passive dependents never shield owners.** An unpinned Tooltip is
   passive. It does not win or block dismissal and disappears as a consequence
   when its associated owner or trigger interaction closes. A Tooltip that a
-  press pinned open (`component:Tooltip` FR9) is an active owner: it takes
+  press pinned open through `useTooltip`'s `show()` (`component:Tooltip` FR9,
+  FR12), as a press on `component:InfoTip` does, is an active owner: it takes
   Escape first and closes, and the owner beneath it stays open for that press
   (DEC-6).
 - **FR5 — Associations are explicit.** Every active or blocking owner records an
@@ -339,8 +340,8 @@ implement the missing browser systems.
 **Reference:** `spec:AST-003/DEC-6`
 **Decider:** `cixzhang`, `2026-10-31`
 
-A Tooltip that a press pinned open is something the person asked
-to keep, so it is an active owner and Escape closes it before the owner beneath
+A Tooltip that the person's press pinned open through `useTooltip`'s
+`show()`, as a press on InfoTip does, is something the person asked to keep, so it is an active owner and Escape closes it before the owner beneath
 it. A Tooltip that only previews on hover or focus stays passive.
 
 Rejected: keeping every Tooltip passive, which lets Escape close a Dialog behind

@@ -43,7 +43,10 @@ jobs:
   # `main` itself could straddle a merge, shard different file lists, and skip
   # a file in every leg.
   main-commit:
-    runs-on: ubuntu-slim
+    # Its admission wait may outlast a slim job's fifteen-minute cap, so it
+    # runs on a standard runner (spec:AST-030 DEC-16).
+    runs-on: ubuntu-latest
+    timeout-minutes: 130
     permissions:
       # actions: read lets the admission step count CI's live jobs.
       actions: read
@@ -109,12 +112,16 @@ jobs:
       - name: Wait for room under the CI ceiling
         uses: ./.ci-admission/.github/actions/ci-admission
         continue-on-error: true
-        timeout-minutes: 16
+        timeout-minutes: 125
         with:
           # A push runs only the fast checks (main-commit, sync-exports,
           # typecheck, test); a dispatched unit run holds every leg.
           peak: ${{ github.event_name == 'push' && 4 || 14 }}
           main: true
+          # It waits for room, up to its own job's limit, looking about every
+          # four minutes, and never yields to a pull-request run.
+          max-wait-minutes: 120
+          max-looks: 30
 
   # Verify package.json exports match the source tree.
   # Fails if exports are stale — run `node scripts/sync-exports.js` locally to fix.

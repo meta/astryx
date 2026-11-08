@@ -23,15 +23,17 @@ import type {GestureTouch} from '../gestures/types';
 import {isRtlElement} from '../hooks/isRtlElement';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {
-  createMotionAnimator,
+  createMotionEngine,
   type Animator,
   type MotionCurve,
 } from '../motion/animator';
 import {solveSpring, toSpring, type SpringDescription} from '../motion/spring';
 import {UIKIT_GESTURES} from '../motion/uikit/gestures';
 import {registerSwitchTable, switchControl} from '../motion/uikit/switch';
+import {resolveMotion} from '../motion/resolveMotion';
 import {useTouchPresentation} from '../utils/touchPresentation';
 import {awaitBrowserClick, clickForLift} from '../utils/browserClickWait';
+import {lockPressedRow} from '../utils/boxHold';
 import {armClickGuard} from '../utils/clickGuard';
 import {
   commitOnRelease,
@@ -192,8 +194,9 @@ interface Drag {
  *   fade already heads to swaps nothing: the track holds its previous fill
  *   inline until the fade lands. WebKit plays a curve built in a held frame
  *   only once the long task ends, so a swap there stepped the colour back.
- *   The layer is composited from the start (`will-change`, Switch.tsx), or
- *   iOS Safari runs its fade on the main thread.
+ *   The animator promotes the layer in the task that starts its fade, as
+ *   iOS Safari needs, and demotes it after the fade rests. At rest no part
+ *   of the switch holds a compositing layer.
  * - Under reduced motion nothing travels or springs: a change plays the
  *   animator's Reduce Motion cross-fade. A dragging finger still moves the
  *   thumb: that is direct manipulation.
@@ -282,19 +285,24 @@ export class SwitchTouchController {
       return;
     }
     registerSwitchTable();
-    this.thumb = createMotionAnimator(elements.thumb);
+    this.thumb = createMotionEngine(elements.thumb);
     // The layer rests clear (its class's opacity 0) while the visuals show
-    // the value; from here its opacity is the animator's.
-    this.fade = createMotionAnimator(elements.track, {
+    // the value; from here its opacity is the animator's. The stylesheet
+    // shows that rest (`base`), so no animation holds it there. These writes
+    // promote nothing: a page of switches holds no compositing layer until
+    // one moves.
+    this.fade = createMotionEngine(elements.track, {
       pseudoElement: '::after',
       initial: {opacity: 0},
+      base: {opacity: 0},
     });
-    this.fade.set({opacity: 0});
-    this.shadow = createMotionAnimator(elements.thumb, {
+    this.fade.set({opacity: 0}, {promote: false});
+    this.shadow = createMotionEngine(elements.thumb, {
       pseudoElement: '::after',
       initial: {opacity: 0},
+      base: {opacity: 0},
     });
-    this.shadow.set({opacity: 0});
+    this.shadow.set({opacity: 0}, {promote: false});
     this.paintFade();
     this.detachers = this.attachPassive(host, elements);
   }
@@ -316,6 +324,8 @@ export class SwitchTouchController {
       getBounds: () => surface.getBoundingClientRect(),
       isEnabled: () => this.isInteractive,
       isBraking: () => host.isScrollBraking(surface),
+      // A held finger selects no text beside the switch.
+      selectionLock: lockPressedRow,
       // A held switch opens no menu (UISwitch shows none).
       holdsContextMenu: () => this.pressTime != null,
       onControlEvent: (event, touch) => this.onControlEvent(event, touch),
@@ -377,7 +387,7 @@ export class SwitchTouchController {
   setGeometry(geometry: SwitchTouchGeometry): void {
     this.geometry = geometry;
     this.measureGeometry();
-    this.thumb?.set({x: 0, scaleX: 1, scaleY: 1});
+    this.thumb?.set({x: 0, scaleX: 1, scaleY: 1}, {promote: false});
   }
 
   /**
@@ -431,12 +441,14 @@ export class SwitchTouchController {
     const time = now();
     // The thumb's CSS rest moved with the value: shift it back by as much,
     // so nothing moves on screen. A spring keeps its target through the shift
-    // and is sent to the new rest below. A reduced-motion dip shifts whole,
-    // its end included, and keeps going.
+    // and is sent to the new rest below. A spring already heading for the new
+    // rest moves whole instead, keeping its start time and velocity. A
+    // reduced-motion dip shifts whole, its end included, and keeps going.
     const springs = thumb.reducedMotion() === 'off';
-    thumb.rebase({
-      x: this.direction * (this.rest(previous) - this.rest(isOn)),
-    });
+    thumb.rebase(
+      {x: this.direction * (this.rest(previous) - this.rest(isOn))},
+      springs ? {towards: {x: this.toX(this.rest(isOn))}} : {},
+    );
     // Each state has its own thumb size, the circle a mouse sees. The box the
     // CSS now renders is the new value's. Its scale takes the old size over
     // and grows or shrinks it from there.
@@ -891,9 +903,16 @@ export class SwitchTouchController {
       return;
     }
     this.liftTime = null;
-    const lift = switchControl.lift;
-    const settle = switchControl.settle;
-    this.settleAt = settleTime(time, liftTime);
+    // The lift played these roles at the thumb's tempo, so the settle and the
+    // minimum lift take that tempo too.
+    const element = this.thumb?.element;
+    const lift = resolveMotion(element, switchControl.lift);
+    const settle = resolveMotion(element, switchControl.settle);
+    this.settleAt = settleTime(
+      time,
+      liftTime,
+      resolveMotion(element, switchControl, 'minimumLiftMs'),
+    );
     const hold = (this.settleAt - time) / 1000;
     const play = (
       animator: Animator | null,
@@ -962,8 +981,8 @@ export class SwitchTouchController {
           rest: held ? keep : 1,
           holdSeconds: held ? 0 : hold,
           threshold: 1e-4,
-          lift: switchControl.lift,
-          settle: switchControl.settle,
+          lift: resolveMotion(thumb.element, switchControl.lift),
+          settle: resolveMotion(thumb.element, switchControl.settle),
         }),
       });
     }

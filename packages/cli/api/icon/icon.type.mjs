@@ -183,7 +183,7 @@
  * @property {string} from - The module the icon is exported from: a package, a package subpath, or a relative path in this package.
  * @property {string} [set] - The set to edit, when the package ships several.
  * @property {string} [definition] - The icon definition to map the icon to.
- * @property {string} [newDefinition] - Add the set's own definition with this name and map the icon to it.
+ * @property {string} [newDefinition] - Add the set's own definition with this name (camelCase, or kebab-case written as camelCase) and map the icon to it.
  * @property {string} [description] - With `newDefinition`: what the icon is for.
  * @property {string[]} [words] - With `newDefinition`: words people search for.
  * @property {boolean} [useDefault] - The module's default export is the icon.
@@ -249,6 +249,7 @@
  * @property {string} data.id - The id the icon would get.
  * @property {IconDefinitionMatch[]} data.matches - At most 10, best first.
  * @property {string | null} data.newDefinition - The command that adds the set's own definition, when no match fits.
+ * @property {string} [data.variant] - When the set already has an icon for the export's glyph from another export of the library: the command that adds this export as that icon's variant.
  */
 
 /**
@@ -293,7 +294,7 @@
  * @property {string} [from] - A module whose every icon component the set wraps: a package, a package subpath, or a ./ path in the package.
  * @property {string[] | string} [exclude] - With `from`: export names that are not icons; a string is split on commas.
  * @property {string[] | string} [variants] - The variants the set supplies, such as `outline,solid`; a string is split on commas.
- * @property {string} [defaultVariant] - With `variants`: the variant each icon's own export draws; the first variant when absent.
+ * @property {string} [defaultVariant] - With `variants`: the variant each icon's own export draws; when absent, the look the icons' exports draw in a library whose names encode looks; otherwise the set's current default, else, on a set without icons, the first variant. A set with icons changes it only with `from`, and only in a library whose names encode looks.
  * @property {string} [displayName] - The descriptor's display name; the set name in title case when absent.
  * @property {string} [description] - The descriptor's one-line description; `<Display name> icons.` when absent.
  */
@@ -324,6 +325,9 @@
  * @property {string} [from]
  * @property {number} [icons] - With `from`: how many icons it wrote.
  * @property {boolean} [refreshed] - With `from` on an existing set: the set was refreshed, not created.
+ * @property {boolean} [updated] - Without `from` on an existing set: its variants, default variant, display name, or description were updated in place, not created.
+ * @property {Array<{id: string, from: string, to: string}>} [moved] - On a refresh from a package root: the icons that read one file of that package (`from`) and now import from the root (`to`); each keeps its id, export, `map` entries, variants, and words.
+ * @property {{library: string, path: string}} [licenseNoticeMissing] - With `from`: the wrapped library (`name@version`) ships no license file to copy and the set has none. `path` is where to add a NOTICE file that names the library and its license; the CLI never writes it.
  * @property {Array<{from: string, to: string}>} [renamed] - On a refresh: the icons whose id this release's id rule changes, matched by the export the library still has; each keeps its `map` entries, variants, and words.
  * @property {Array<{definition: string, icon: string}>} [mapped] - With `from`: the `map` entries an icon with the definition's exact name gives (on a refresh, every such entry, kept or new); check each.
  * @property {Array<{definition: string, icon: string, word: string}>} [suggestions] - With `from`: for each unmapped Astryx definition, up to three icons it might map to, best first: the definition's name in another spelling or as another name of an icon, ids that start with it, an id or another name that is one of its words, then two-word ids that are a one-word word sized, shaped, or numbered (`grid-2x2`); never a negated form, the opposite direction, or an icon already mapped. `word` is the name or word that matched. Never written.

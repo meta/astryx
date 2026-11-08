@@ -10,6 +10,7 @@
  * SYNC: When Icon.tsx changes, update tests to match new behavior
  */
 
+import {createRef} from 'react';
 import {describe, it, expect, vi} from 'vitest';
 import {render, screen} from '@testing-library/react';
 import * as stylex from '@stylexjs/stylex';
@@ -191,10 +192,103 @@ describe('Icon', () => {
     }
   });
 
-  it('forwards ref correctly', () => {
-    const ref = vi.fn();
-    render(<Icon icon={TestIcon} ref={ref} />);
-    expect(ref).toHaveBeenCalledWith(expect.any(SVGSVGElement));
+  describe('ref reaches the rendered svg for every name', () => {
+    it('an icon component', () => {
+      const ref = vi.fn();
+      render(<Icon icon={TestIcon} ref={ref} />);
+      expect(ref).toHaveBeenCalledWith(expect.any(SVGSVGElement));
+    });
+
+    it('a semantic name', () => {
+      const ref = createRef<SVGSVGElement>();
+      render(<Icon icon="close" ref={ref} data-testid="icon" />);
+      expect(ref.current).toBeInstanceOf(SVGSVGElement);
+      expect(screen.getByTestId('icon')).toContainElement(ref.current);
+    });
+
+    it('a namespaced key', () => {
+      resetIcons();
+      resetThemes();
+      registerIcons({
+        'numberInput:stepperDown': <svg data-testid="stepper-svg" />,
+      });
+      const ref = vi.fn();
+      render(<Icon icon="numberInput:stepperDown" ref={ref} />);
+      expect(ref).toHaveBeenCalledWith(screen.getByTestId('stepper-svg'));
+    });
+
+    it('a name whose theme entry renders text, not an svg, leaves the ref null', () => {
+      resetIcons();
+      resetThemes();
+      registerIcons({'numberInput:stepperDown': 'text-glyph'});
+      const ref = createRef<SVGSVGElement>();
+      render(<Icon icon="numberInput:stepperDown" ref={ref} />);
+      expect(ref.current).toBeNull();
+    });
+
+    it('moves to the new svg when the name changes', () => {
+      resetIcons();
+      resetThemes();
+      function DownGlyph() {
+        return <svg data-testid="down-svg" />;
+      }
+      function UpGlyph() {
+        return <svg data-testid="up-svg" />;
+      }
+      registerIcons({
+        'numberInput:stepperDown': <DownGlyph />,
+        'numberInput:stepperUp': <UpGlyph />,
+      });
+      const ref = createRef<SVGSVGElement>();
+      const {rerender} = render(
+        <Icon icon="numberInput:stepperDown" ref={ref} />,
+      );
+      const down = screen.getByTestId('down-svg');
+      expect(ref.current).toBe(down);
+      rerender(<Icon icon="numberInput:stepperUp" ref={ref} />);
+      expect(ref.current).toBe(screen.getByTestId('up-svg'));
+      expect(ref.current).not.toBe(down);
+    });
+
+    it('attaches a stable callback ref once for a function entry, across rerenders', () => {
+      resetIcons();
+      resetThemes();
+      registerIcons({
+        'numberInput:stepperDown': () => <svg data-testid="fn-svg" />,
+      });
+      const ref = vi.fn();
+      const {rerender} = render(
+        <Icon icon="numberInput:stepperDown" ref={ref} />,
+      );
+      rerender(<Icon icon="numberInput:stepperDown" ref={ref} />);
+      rerender(<Icon icon="numberInput:stepperDown" ref={ref} />);
+      expect(ref).toHaveBeenCalledTimes(1);
+      expect(ref).toHaveBeenCalledWith(screen.getByTestId('fn-svg'));
+    });
+
+    it('becomes null when the name changes to a text glyph', () => {
+      resetIcons();
+      resetThemes();
+      registerIcons({
+        'numberInput:stepperDown': <svg data-testid="down-svg" />,
+        'numberInput:stepperUp': 'text-glyph',
+      });
+      const ref = createRef<SVGSVGElement>();
+      const {rerender} = render(
+        <Icon icon="numberInput:stepperDown" ref={ref} />,
+      );
+      expect(ref.current).toBe(screen.getByTestId('down-svg'));
+      rerender(<Icon icon="numberInput:stepperUp" ref={ref} />);
+      expect(ref.current).toBeNull();
+    });
+
+    it('clears the ref when a named icon unmounts', () => {
+      const ref = createRef<SVGSVGElement>();
+      const {unmount} = render(<Icon icon="close" ref={ref} />);
+      expect(ref.current).toBeInstanceOf(SVGSVGElement);
+      unmount();
+      expect(ref.current).toBeNull();
+    });
   });
 
   it('passes additional SVG props', () => {

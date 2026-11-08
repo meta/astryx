@@ -25,6 +25,9 @@ import {createRequire} from 'node:module';
 import {pathToFileURL} from 'node:url';
 import * as fs from 'node:fs';
 import {createJiti} from 'jiti';
+import {findPresentFiles} from './present-files.mjs';
+
+export {findPresentFiles};
 
 /** @type {ReturnType<typeof createJiti> | undefined} */
 let jitiInstance;
@@ -275,18 +278,6 @@ async function importModule(file, fresh) {
   return await import(url.href);
 }
 
-/**
- * Return the conventional files (by basename, in the given precedence order)
- * that exist directly in `dir`, as absolute paths. Never throws.
- * @param {string} dir
- * @param {string[]} basenames precedence-ordered
- * @returns {string[]} absolute paths of present files, in basenames order
- */
-export function findPresentFiles(dir, basenames) {
-  return basenames
-    .filter(name => fs.existsSync(path.join(dir, name)))
-    .map(name => path.join(dir, name));
-}
 
 /**
  * Import a user-authored module, take its default export, and validate it

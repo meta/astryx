@@ -9,22 +9,32 @@
 
 import fs from 'node:fs';
 import {createRequire} from 'node:module';
-import os from 'node:os';
 import path from 'node:path';
-import {afterEach, describe, expect, it} from 'vitest';
+import {fileURLToPath} from 'node:url';
+import {afterEach, describe, expect, it, vi} from 'vitest';
 
 const require = createRequire(import.meta.url);
 const {
   bundleImport,
+  bundleImportsByEntry,
   classNamesIn,
   measureComponentImport,
   packageStylesheetPath,
   rulesForClasses,
 } = require('./component-size.js');
 
+// Fixture trees live under the repository's `node_modules/.cache`, not the
+// system temp directory. esbuild reads the listing of every directory above
+// each file it bundles. On a shared machine the temp directory can hold
+// hundreds of thousands of entries, which cost more than the builds.
+const FIXTURES = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../../../node_modules/.cache/astryx-component-size',
+);
 const roots = [];
 function tree(files) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-size-'));
+  fs.mkdirSync(FIXTURES, {recursive: true});
+  const root = fs.mkdtempSync(path.join(FIXTURES, 'tree-'));
   roots.push(root);
   for (const [file, content] of Object.entries(files)) {
     fs.mkdirSync(path.dirname(path.join(root, file)), {recursive: true});
@@ -63,6 +73,29 @@ describe('component import size', () => {
       'xhelp22',
       'xsheet7',
     ]);
+  });
+
+  it('bundles several imports in one build, each with at least what its own build loads eagerly', () => {
+    const root = tree({
+      'dist/Card/index.js':
+        "import {forCard} from '../shared/helper.js';\nexport const Card = () => 'xcard1 ' + forCard();\n",
+      'dist/Menu/index.js':
+        "import {forMenu} from '../shared/helper.js';\nexport const Menu = () => 'xmenu1 ' + forMenu() + import('./Touch.js');\n",
+      'dist/Menu/Touch.js': "export const touch = 'LAZY_TOUCH_CODE';\n",
+      'dist/shared/helper.js':
+        "export const forCard = () => 'xhelp22';\nexport const forMenu = () => 'xhelp33';\n",
+    });
+    const card = path.join(root, 'dist/Card/index.js');
+    const menu = path.join(root, 'dist/Menu/index.js');
+    const texts = bundleImportsByEntry([card, menu]);
+    for (const entry of [card, menu]) {
+      const shared = classNamesIn(texts.get(entry));
+      for (const name of classNamesIn(bundleImport(entry))) {
+        expect(shared.has(name), name).toBe(true);
+      }
+    }
+    expect(texts.get(card)).not.toContain('xmenu1');
+    expect(texts.get(menu)).not.toContain('LAZY_TOUCH_CODE');
   });
 
   it('keeps only the rules whose selectors name a referenced class, with their at-rules', () => {
@@ -122,6 +155,28 @@ describe('component import size', () => {
     expect(js).toContain('import(');
   });
 
+  it("measures the import's own chunk when an import() target's chunk comes first", () => {
+    // Each import() target is an entry point too. With eight of them, one
+    // target's chunk comes before the import's own in esbuild's outputs.
+    const files = {
+      'dist/Menu/index.js': [
+        "export function Menu() { return 'MENU_OWN_CODE'; }",
+        ...Array.from(
+          {length: 8},
+          (_, i) => `export const load${i} = () => import('./Lazy${i}.js');`,
+        ),
+      ].join('\n'),
+    };
+    for (let i = 0; i < 8; i += 1) {
+      files[`dist/Menu/Lazy${i}.js`] =
+        `export const lazy = 'LAZY_${i}_CODE';\n`;
+    }
+    const root = tree(files);
+    const js = bundleImport(path.join(root, 'dist/Menu/index.js'));
+    expect(js).toContain('MENU_OWN_CODE');
+    expect(js).not.toMatch(/LAZY_\d_CODE/);
+  });
+
   it('counts CSS a lazily loaded module references, since it ships in the stylesheet', () => {
     const root = tree({
       'dist/Menu/index.js':
@@ -170,6 +225,26 @@ describe('component import size', () => {
     expect(rulesForClasses(css, new Set(['xspin2']))).toBe(
       '@layer astryx-base{.xspin2{animation-name:xrot1}@keyframes xrot1{from{opacity:0}to{opacity:1}}}',
     );
+  });
+
+  it('writes no file to measure an import', () => {
+    const root = tree({
+      'dist/Card/index.js': "export const Card = () => 'xcard1';\n",
+    });
+    const temps = vi.spyOn(fs, 'mkdtempSync');
+    const writes = vi.spyOn(fs, 'writeFileSync');
+    try {
+      const size = measureComponentImport(
+        path.join(root, 'dist/Card/index.js'),
+        '.xcard1{color:red}',
+      );
+      expect(size.importGzipBytes).toBeGreaterThan(0);
+      expect(temps).not.toHaveBeenCalled();
+      expect(writes).not.toHaveBeenCalled();
+    } finally {
+      temps.mockRestore();
+      writes.mockRestore();
+    }
   });
 
   it('measures gzip JavaScript and CSS, and null for a missing entry', () => {

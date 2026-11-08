@@ -11,7 +11,10 @@ import {
   ownerForA11yStory,
 } from './a11y-story-identity.js';
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+const ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../../..',
+);
 const baseline = JSON.parse(
   fs.readFileSync(path.join(ROOT, '.github/a11y-baseline.json'), 'utf8'),
 );
@@ -24,34 +27,14 @@ const EXPECTED_MIGRATIONS = [
     'a11y-button-pattern--clickable-card-disabled',
   ],
   [
-    'CheckboxList::Disabled With Message',
-    'core/CheckboxListItem',
-    'a11y-checkbox-pattern--list-item-group-disabled-with-message',
-  ],
-  [
     'SelectableCard::Disabled',
     'core/SelectableCard',
     'a11y-checkbox-pattern--card-disabled',
   ],
   [
-    'RadioList::Disabled With Message',
-    'core/RadioList',
-    'a11y-radio-group-pattern--radio-list-group-disabled-with-message',
-  ],
-  [
     'ProgressBar::Disabled',
     'core/ProgressBar',
     'a11y-progressbar--progress-bar-disabled',
-  ],
-  [
-    'RadioList::Disabled',
-    'core/RadioListItem',
-    'a11y-radio-group-pattern--radio-list-option-group-disabled',
-  ],
-  [
-    'RadioList::Disabled With Message',
-    'core/RadioListItem',
-    'a11y-radio-group-pattern--radio-list-option-disabled-with-message',
   ],
 ];
 
@@ -115,7 +98,7 @@ describe('a11y story identity migration', () => {
     }
   });
 
-  it('contains only the seven proven legacy migrations', () => {
+  it('contains only the three proven legacy migrations', () => {
     expect(Object.keys(LEGACY_BASELINE_STORY_MIGRATIONS).sort()).toEqual(
       EXPECTED_MIGRATIONS.map(([, , storyId]) => storyId).sort(),
     );

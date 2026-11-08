@@ -19,7 +19,8 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {afterAll, beforeAll, describe, it, expect} from 'vitest';
-import {program, JSON_SUPPORTED} from '../index.mjs';
+import {JSON_SUPPORTED} from '../index.mjs';
+import {program} from '../program.mjs';
 import {buildManifest} from './manifest.mjs';
 import {runCli} from '../../../test-utils/run-cli.mjs';
 

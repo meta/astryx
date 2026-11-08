@@ -17,7 +17,11 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {GestureHost} from '../gestures/GestureHost';
 import {PanGestureRecognizer} from '../gestures/PanGestureRecognizer';
 import {ManualClock} from '../gestures/__tests__/harness';
-import {createMotionAnimator, type Animator} from '../motion/animator';
+import {
+  createMotionEngine,
+  END_HOLD_MS,
+  type Animator,
+} from '../motion/animator';
 import {solveAnimatedPageScroll, solvePaging} from '../motion/paging';
 import type * as motionResolution from '../motion/resolveMotion';
 import {resolveMotion} from '../motion/resolveMotion';
@@ -211,10 +215,11 @@ function mouse(
   x: number,
   y: number,
   time: number,
+  pointerType: 'mouse' | 'pen' = 'mouse',
 ): Event {
   const event = new Event(type, {bubbles: true, cancelable: true});
   const fields: Record<string, unknown> = {
-    pointerType: 'mouse',
+    pointerType,
     pointerId: 1,
     isPrimary: true,
     button: 0,
@@ -228,6 +233,17 @@ function mouse(
   }
   target.dispatchEvent(event);
   return event;
+}
+
+/** A pen's pointer event, as `mouse` sends a mouse's. */
+function pen(
+  type: 'pointerdown' | 'pointermove' | 'pointerup',
+  target: EventTarget,
+  x: number,
+  y: number,
+  time: number,
+): Event {
+  return mouse(type, target, x, y, time, 'pen');
 }
 
 /**
@@ -305,7 +321,7 @@ function setup(options: Partial<PagerOptions> = {}, rtl = false): Fixture {
     value: WIDTH,
     configurable: true,
   });
-  const animator = createMotionAnimator(track, {
+  const animator = createMotionEngine(track, {
     now: () => now,
     requestFrame: callback => {
       frameQueue.push(callback);
@@ -494,6 +510,44 @@ describe('createPager', () => {
     expect(f.x()).toBe(-2 * WIDTH);
     expect(f.calls).toEqual(['index:2:drag', 'settle:2:1']);
   });
+
+  // The settle plays at the tempo of the theme the track is in: from rest it
+  // keeps its shape and takes tempo times as long. At tempo 1 it is UIKit's
+  // measured settle.
+  it.each([1, 3])(
+    "a release's settle plays at the theme's tempo %s",
+    async tempo => {
+      const style = document.createElement('style');
+      style.textContent = `[data-tempo] { --_astryx-motion-tempo: ${tempo}; }`;
+      document.head.append(style);
+      try {
+        const f = setup({defaultIndex: 1});
+        f.track.setAttribute('data-tempo', '');
+        // A silent hold of 100 ms before the lift: the settle starts at rest.
+        await drag(f, {from: 300, dx: -250, step: 4, dt: 8, hold: 100});
+        expect(f.pager.index).toBe(2);
+        const position = -f.x();
+        const measured = solvePaging({
+          from: position,
+          velocity: 0,
+          to: 2 * WIDTH,
+        });
+        await advance(16, f.clock);
+        await advance(100, f.clock);
+        // 116 ms in, it shows where the measured settle is at 116 ÷ tempo ms.
+        expect(-f.x()).toBeCloseTo(measured.at(0.116 / tempo), 0);
+        // The animation holds its end for END_HOLD_MS after the curve.
+        const played = recorded.filter(animation => !animation.cancelled);
+        expect(
+          Number(played.at(-1)?.options.duration) - END_HOLD_MS,
+        ).toBeCloseTo(measured.duration * 1000 * tempo, 6);
+        await settle(f);
+        expect(f.x()).toBe(-2 * WIDTH);
+      } finally {
+        style.remove();
+      }
+    },
+  );
 
   // A sample at the finger's last place is not motion (spec:AST-100's one
   // filter). A finger that keeps reporting while it stands still keeps its
@@ -836,23 +890,178 @@ describe('createPager', () => {
     touch('touchend', f.page, 289, 100, now + 40);
   });
 
-  it(`a still finger catches a settle ${paging.catchStopMs} ms after it lands, and the lift settles on the nearest page`, async () => {
-    const f = setup({defaultIndex: 1});
-    f.pager.goTo(2);
-    await advance(0, f.clock);
-    await advance(60, f.clock);
+  it(`a still finger catches a release settle ${paging.catchStopMs} ms after it lands, and the lift settles on the nearest page`, async () => {
+    const f = setup({defaultIndex: 0});
+    await drag(f, {from: 300, dx: -80});
+    await advance(16, f.clock);
     touch('touchstart', f.page, 300, 100, now);
     await advance(40, f.clock);
     // Still moving 40 ms after the touch.
     expect(f.pager.isSettling).toBe(true);
     await advance(paging.catchStopMs, f.clock);
+    // The catch's deadline is on the gesture clock.
+    f.clock.runDue(now);
     expect(f.pager.isSettling).toBe(false);
     const held = -f.x();
     await advance(100, f.clock);
     expect(-f.x()).toBe(held);
     touch('touchend', f.page, 300, 100, now);
     await settle(f);
-    expect(f.x()).toBe(-2 * WIDTH);
+    expect(-f.x()).toBeCloseTo(Math.round(held / WIDTH) * WIDTH, 6);
+  });
+
+  // UIKit's animated `setContentOffset` stops at the touch, and its content
+  // still takes the tap.
+  it('a finger that lands on a goTo move stops it at the touch, the content keeps the tap, and the lift settles on the nearest page', async () => {
+    const f = setup({defaultIndex: 1});
+    f.pager.goTo(2);
+    await advance(0, f.clock);
+    await advance(60, f.clock);
+    touch('touchstart', f.page, 300, 100, now);
+    expect(f.pager.isSettling).toBe(false);
+    const held = -f.x();
+    await advance(40, f.clock);
+    expect(-f.x()).toBe(held);
+    const end = touch('touchend', f.page, 300, 100, now);
+    expect(end.defaultPrevented).toBe(false);
+    await settle(f);
+    expect(-f.x()).toBeCloseTo(Math.round(held / WIDTH) * WIDTH, 6);
+  });
+
+  it('a pen that lands on a goTo move stops it at the touch too', async () => {
+    const f = setup({defaultIndex: 1});
+    f.pager.goTo(2);
+    await advance(0, f.clock);
+    await advance(60, f.clock);
+    pen('pointerdown', f.page, 300, 100, now);
+    expect(f.pager.isSettling).toBe(false);
+    pen('pointerup', f.page, 300, 100, now + 40);
+  });
+
+  it('a finger held past the catch delay catches a release settle when a busy page delivers its touch and lift together', async () => {
+    const f = setup({defaultIndex: 0});
+    await drag(f, {from: 300, dx: -80});
+    await advance(16, f.clock);
+    // Nearer page 0 at the touch, so a catch settles back there.
+    expect(-f.x()).toBeLessThan(WIDTH / 2);
+    // One task delivers both events, with no timer turn between them. Their
+    // own times say the finger stayed down 150 ms.
+    touch('touchstart', f.page, 300, 100, now);
+    touch('touchend', f.page, 300, 100, now + 150);
+    await settle(f);
+    expect(f.x()).toBeCloseTo(0, 6);
+  });
+
+  it('a 40 ms tap that a busy page delivers with its lift lets a release settle run on', async () => {
+    const f = setup({defaultIndex: 0});
+    await drag(f, {from: 300, dx: -80});
+    await advance(16, f.clock);
+    touch('touchstart', f.page, 300, 100, now);
+    touch('touchend', f.page, 300, 100, now + 40);
+    await settle(f);
+    expect(f.x()).toBe(-WIDTH);
+  });
+
+  // spec:AST-094 FR6: the touch that stops a scroll view never reaches its
+  // content (UIKit).
+  describe('a finger that lands on a release settle', () => {
+    async function releaseSettle(): Promise<Fixture> {
+      const f = setup({defaultIndex: 0});
+      await drag(f, {from: 300, dx: -120});
+      await advance(16, f.clock);
+      expect(f.pager.isSettling).toBe(true);
+      return f;
+    }
+    function countClicks(target: EventTarget): () => number {
+      let clicks = 0;
+      target.addEventListener('click', () => (clicks += 1));
+      return () => clicks;
+    }
+    function click(target: EventTarget): void {
+      target.dispatchEvent(
+        // A pointer's click: the click guard lets a `detail` 0 click pass.
+        new MouseEvent('click', {bubbles: true, cancelable: true, detail: 1}),
+      );
+    }
+
+    it('takes a 40 ms tap from the content: no click, and the settle runs on', async () => {
+      const f = await releaseSettle();
+      const clicks = countClicks(f.page);
+      touch('touchstart', f.page, 300, 100, now);
+      await advance(40, f.clock);
+      const end = touch('touchend', f.page, 300, 100, now);
+      click(f.page);
+      expect(end.defaultPrevented).toBe(true);
+      expect(clicks()).toBe(0);
+      expect(f.pager.isSettling).toBe(true);
+    });
+
+    it('takes a 150 ms hold from the content too', async () => {
+      const f = await releaseSettle();
+      const clicks = countClicks(f.page);
+      touch('touchstart', f.page, 300, 100, now);
+      await advance(150, f.clock);
+      const end = touch('touchend', f.page, 300, 100, now);
+      click(f.page);
+      expect(end.defaultPrevented).toBe(true);
+      expect(clicks()).toBe(0);
+    });
+
+    it('leaves a mouse click alone (spec:AST-017 FR59)', async () => {
+      const f = await releaseSettle();
+      stubMedia(false, false);
+      const clicks = countClicks(f.page);
+      mouse('pointerdown', f.page, 300, 100, now);
+      await advance(40, f.clock);
+      mouse('pointerup', f.page, 300, 100, now);
+      click(f.page);
+      expect(clicks()).toBe(1);
+    });
+
+    it('is not a rule for a resting track or a goTo move: their taps click', async () => {
+      const rest = setup({defaultIndex: 0});
+      const restClicks = countClicks(rest.page);
+      touch('touchstart', rest.page, 300, 100, now);
+      await advance(40, rest.clock);
+      const restEnd = touch('touchend', rest.page, 300, 100, now);
+      click(rest.page);
+      expect(restEnd.defaultPrevented).toBe(false);
+      expect(restClicks()).toBe(1);
+      rest.pager.dispose();
+      document.body.innerHTML = '';
+
+      const moving = setup({defaultIndex: 0});
+      moving.pager.goTo(2);
+      await advance(0, moving.clock);
+      await advance(60, moving.clock);
+      const movingClicks = countClicks(moving.page);
+      touch('touchstart', moving.page, 300, 100, now);
+      await advance(40, moving.clock);
+      const movingEnd = touch('touchend', moving.page, 300, 100, now);
+      click(moving.page);
+      expect(movingEnd.defaultPrevented).toBe(false);
+      expect(movingClicks()).toBe(1);
+    });
+  });
+
+  it('goTo with an offset ends there as a settle, and a still finger that catches it settles on the nearest page', async () => {
+    const f = setup({defaultIndex: 0});
+    f.pager.goTo(2, {offset: 2.4 * WIDTH});
+    await advance(0, f.clock);
+    const curve = solveAnimatedPageScroll({from: 0, to: 2.4 * WIDTH});
+    await advance(150, f.clock);
+    expect(-f.x()).toBeCloseTo(curve.at(0.15), 0);
+    await settle(f);
+    expect(-f.x()).toBeCloseTo(2.4 * WIDTH, 0);
+    expect(f.calls).toEqual(['index:2:goTo', 'settle:2:0']);
+    f.pager.goTo(4, {offset: 3.6 * WIDTH});
+    await advance(60, f.clock);
+    touch('touchstart', f.page, 300, 100, now);
+    expect(f.pager.isSettling).toBe(false);
+    await advance(40, f.clock);
+    touch('touchend', f.page, 300, 100, now);
+    await settle(f);
+    expect(-f.x() / WIDTH).toBe(Math.round(-f.x() / WIDTH));
   });
 
   it('loops: past the last page goes forward to a virtual page, wrapped for callbacks', async () => {
@@ -963,9 +1172,10 @@ describe('createPager', () => {
     try {
       pager.goTo(2);
       await advance(0, f.clock);
-      await advance(60, f.clock);
+      await advance(60 + paging.catchStopMs + 40, f.clock);
+      expect(pager.isSettling).toBe(true);
+      // A finger stops a goTo move at the touch.
       touch('touchstart', f.page, 300, 100, now);
-      await advance(paging.catchStopMs + 40, f.clock);
       expect(pager.isSettling).toBe(false);
       const held = f.x();
       calls.length = 0;
@@ -990,6 +1200,138 @@ describe('createPager', () => {
       expect(calls.filter(call => call.startsWith('settle:'))).toEqual([
         'settle:2:1',
       ]);
+    } finally {
+      pager.dispose();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('a resize during a settle back to the page it left ends the settle with its callback', async () => {
+    let onResize: ResizeObserverCallback | null = null;
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(callback: ResizeObserverCallback) {
+          onResize = callback;
+        }
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
+    vi.resetModules();
+    const fresh = await import('./usePager');
+    const f = setup({defaultIndex: 0});
+    f.pager.dispose();
+    const calls: string[] = [];
+    const pager = fresh.createPager(
+      {
+        count: 5,
+        defaultIndex: 1,
+        onSettle: (i, previous) => calls.push(`settle:${i}:${previous}`),
+      },
+      {
+        host: f.host,
+        animator: f.animator,
+        requestFrame: callback => {
+          frameQueue.push(callback);
+        },
+      },
+    );
+    pager.attach(f.viewport, f.track);
+    try {
+      // A short, slow drag: the settle returns to page 1.
+      await drag(f, {from: 300, dx: -40, hold: 150});
+      await advance(16, f.clock);
+      expect(pager.isSettling).toBe(true);
+      Object.defineProperty(f.viewport, 'clientWidth', {
+        value: 300,
+        configurable: true,
+      });
+      expect(onResize).not.toBeNull();
+      onResize!(
+        [{target: f.viewport} as unknown as ResizeObserverEntry],
+        {} as ResizeObserver,
+      );
+      await advance(16, f.clock);
+      expect(pager.isSettling).toBe(false);
+      expect(f.x()).toBe(-300);
+      expect(calls).toEqual(['settle:1:1']);
+    } finally {
+      pager.dispose();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  // The shared resize observer is one per module. So this case loads a fresh
+  // pager module after it installs its ResizeObserver.
+  it('a resize during a drag renumbers the pages, and the release still moves one page from where the drag began', async () => {
+    let onResize: ResizeObserverCallback | null = null;
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(callback: ResizeObserverCallback) {
+          onResize = callback;
+        }
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
+    vi.resetModules();
+    const fresh = await import('./usePager');
+    const f = setup({defaultIndex: 0});
+    f.pager.dispose();
+    // Three views of a nine-item row. A narrower view gives five.
+    let pages = [0, 308, 616];
+    const calls: string[] = [];
+    const pager = fresh.createPager(
+      {
+        count: 3,
+        pages: 'children',
+        measurePages: () => pages,
+        defaultIndex: 2,
+        onSettle: (i, previous) => calls.push(`settle:${i}:${previous}`),
+      },
+      {
+        host: f.host,
+        animator: f.animator,
+        requestFrame: callback => {
+          frameQueue.push(callback);
+        },
+      },
+    );
+    pager.attach(f.viewport, f.track);
+    try {
+      expect(f.x()).toBe(-616);
+      touch('touchstart', f.page, 300, 100, now);
+      // An 88 px drag toward the end, well past half the next page.
+      for (let i = 1; i <= 22; i++) {
+        await advance(8, f.clock);
+        touch('touchmove', f.page, 300 - 4 * i, 100, now);
+        if (i === 6) {
+          pages = [0, 205.3, 410.7, 616, 716];
+          Object.defineProperty(f.viewport, 'clientWidth', {
+            value: 200,
+            configurable: true,
+          });
+          expect(onResize).not.toBeNull();
+          onResize!(
+            [{target: f.viewport} as unknown as ResizeObserverEntry],
+            {} as ResizeObserver,
+          );
+        }
+      }
+      // A still finger before the lift: the release has no speed.
+      await advance(120, f.clock);
+      touch('touchend', f.page, 212, 100, now);
+      for (let i = 0; i < 80 && pager.isSettling; i++) {
+        await advance(16, f.clock);
+      }
+      await advance(16, f.clock);
+      // The drag began on the page at 616, and the page at 716 is the next one.
+      expect(f.x()).toBe(-716);
+      expect(calls).toEqual(['settle:4:2']);
     } finally {
       pager.dispose();
       vi.unstubAllGlobals();
@@ -1259,7 +1601,7 @@ describe('createPager', () => {
   // (DR3). The drag itself follows the pointer.
   function reducedPager(f: Fixture, defaultIndex: number, coarse: boolean) {
     stubMedia(true, coarse);
-    const reduced = createMotionAnimator(f.track, {
+    const reduced = createMotionEngine(f.track, {
       now: () => now,
       requestFrame: callback => {
         frameQueue.push(callback);
@@ -1928,7 +2270,7 @@ function setupChildren(
     value: WIDTH,
     configurable: true,
   });
-  const animator = createMotionAnimator(track, {
+  const animator = createMotionEngine(track, {
     now: () => now,
     requestFrame: callback => {
       frameQueue.push(callback);
@@ -2211,8 +2553,10 @@ describe('review fixes', () => {
     mouse('pointerdown', f.page, 200, 100, now);
     await advance(16, f.clock);
     expect(refuses()).toBe(false);
-    // The catch stops the settle after UIKit's catch delay, as a finger's.
+    // A mouse waits out UIKit's catch delay, even on a goTo move.
+    expect(f.pager.isSettling).toBe(true);
     await advance(120, f.clock);
+    f.clock.runDue(now);
     expect(f.pager.isSettling).toBe(false);
     expect(refuses()).toBe(false);
     mouse('pointerup', f.page, 200, 100, now);
@@ -2423,6 +2767,8 @@ describe('pre-review fixes', () => {
     f.pager.setPanEnabled(false);
     touch('touchstart', f.page, 200, 100, now);
     await advance(paging.catchStopMs + 30, f.clock);
+    // The catch's deadline is on the gesture clock.
+    f.clock.runDue(now);
     expect(f.pager.isSettling).toBe(true);
     touch('touchend', f.page, 200, 100, now);
     await settle(f);
@@ -2461,7 +2807,7 @@ describe('pre-review fixes', () => {
       configurable: true,
     });
     const host = {attach: () => () => {}} as unknown as GestureHost;
-    const animator = createMotionAnimator(track, {
+    const animator = createMotionEngine(track, {
       now: () => now,
       requestFrame: callback => {
         frameQueue.push(callback);
@@ -2482,6 +2828,7 @@ describe('usePager (React)', () => {
     defaultIndex?: number;
     viewportKey?: string;
     isPanEnabled?: boolean;
+    isControlledChangeAnimated?: boolean;
     onIndexChange?: (index: number) => void;
     onSettle?: (index: number, previous: number) => void;
     onPager?: (pager: Pager) => void;
@@ -2495,6 +2842,7 @@ describe('usePager (React)', () => {
       index: props.index,
       defaultIndex: props.defaultIndex,
       isPanEnabled: props.isPanEnabled,
+      isControlledChangeAnimated: props.isControlledChangeAnimated,
       onIndexChange: props.onIndexChange,
       onSettle: props.onSettle,
     });
@@ -2731,6 +3079,84 @@ describe('usePager (React)', () => {
     expect(onIndexChange).toHaveBeenCalledTimes(1);
     expect(onIndexChange).toHaveBeenCalledWith(3, 'goTo');
     expect(box.pager?.index).toBe(2);
+    view.unmount();
+  });
+
+  // Off, a new controlled index moves the pager at once. A drag the owner
+  // refuses still springs back over frames, as any released drag does.
+  it('with isControlledChangeAnimated off, a drag the owner refuses springs back animated', async () => {
+    const runFrames = handFrames();
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(
+      WIDTH,
+    );
+    const box: {pager: Pager | null} = {pager: null};
+    const onIndexChange = vi.fn();
+    const view = render(
+      createElement(Paged, {
+        index: 0,
+        isControlledChangeAnimated: false,
+        onIndexChange,
+        onPager: p => {
+          box.pager = p;
+        },
+      }),
+    );
+    const pager = box.pager;
+    if (pager == null) {
+      throw new Error('no pager');
+    }
+    const goTo = vi.spyOn(pager, 'goTo');
+    const track = view.getByTestId('viewport').firstElementChild as Element;
+    // Past half a page: the release pages, and the owner keeps page 0.
+    heldDrag(track);
+    now += 8;
+    vi.advanceTimersByTime(8);
+    touch('touchend', track, 60, 100, now);
+    // The release reports its page once its settle runs, a few frames on.
+    for (let i = 0; i < 6; i++) {
+      await act(async () => {
+        for (const animation of recorded) {
+          if (animation.startTime == null && !animation.cancelled) {
+            animation.commit(now);
+          }
+        }
+        runFrames(1);
+        await Promise.resolve();
+        await Promise.resolve();
+        now += 16;
+        await vi.advanceTimersByTimeAsync(16);
+      });
+    }
+    expect(onIndexChange).toHaveBeenCalledWith(1, 'drag');
+    expect(goTo).toHaveBeenCalledWith(0, {
+      reason: 'controlled',
+      animated: true,
+    });
+    view.unmount();
+  });
+
+  it('with isControlledChangeAnimated off, a new controlled index moves the pager at once', () => {
+    const box: {pager: Pager | null} = {pager: null};
+    const props = {
+      isControlledChangeAnimated: false,
+      onPager: (p: Pager) => {
+        box.pager = p;
+      },
+    };
+    const view = render(createElement(Paged, {...props, index: 2}));
+    const pager = box.pager;
+    if (pager == null) {
+      throw new Error('no pager');
+    }
+    const goTo = vi.spyOn(pager, 'goTo');
+    act(() => {
+      view.rerender(createElement(Paged, {...props, index: 4}));
+    });
+    expect(goTo).toHaveBeenCalledWith(4, {
+      reason: 'controlled',
+      animated: false,
+    });
+    expect(pager.index).toBe(4);
     view.unmount();
   });
 

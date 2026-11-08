@@ -45,6 +45,8 @@ export function useBusyAnnouncement(
   // Or how to take back its write inside a modal, wherever the modal moves
   // it, until it settles.
   const modalMessageRef = useRef<WithdrawAnnouncement | null>(null);
+  // Syncs the live region with `isBusy`. When it becomes true, the busy message
+  // is announced one frame later.
   useEffect(() => {
     if (!isBusy) {
       hasAnnouncedRef.current = false;

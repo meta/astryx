@@ -11,7 +11,7 @@
  * @position Runs in pr-a11y when FileInput, Tooltip or this spec changes.
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,

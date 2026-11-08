@@ -8,7 +8,7 @@
  *   EmptyState, AlertDialog, Icon, Spinner, Text, useBusyAnnouncement, and
  *   the i18n translator
  * @output Exports TokenizerBottomSheet — the touch surface of
- *   `Tokenizer experimental.presentation="bottom-sheet"`: one tall modal sheet
+ *   `Tokenizer presentation="bottom-sheet"`: one tall modal sheet
  *   with a search row on top, stable-order checkbox rows, progressive
  *   long-list rendering, an optional create row, and a confirmed Clear all
  * @position Internal presentation surface of Tokenizer. Loaded on demand by
@@ -354,10 +354,10 @@ function TokenizerSheetContent<T extends SearchableItem>({
   // has an entrance animation and no exit, so a close is its unmount; the
   // close handler commits that unmount at once and then places focus itself,
   // now that the modal is gone and the sheet's content can take focus again
-  // (`architecture:react-component-runtime` INV2): on the search field
-  // after a confirmed clear — the clear is spent, and the search field is
-  // where the next selection starts (FR24, `spec:AST-085` FR4) — and back on
-  // Clear all after a cancel. A confirmed clear is announced there too — a
+  // (`architecture:react-component-runtime` INV2). After a clear, Clear all
+  // is aria-disabled but stays focusable, so it keeps focus (FR24,
+  // `spec:AST-085` FR4). Focus on the search field opens the on-screen
+  // keyboard over the cleared rows. A confirmed clear is announced too — a
   // change the person hears about, as an add or a remove is
   // (`component:Tokenizer` AR6) — after the confirmation's dialog has gone,
   // so the sheet is the modal on top and the words are delivered inside it
@@ -372,11 +372,9 @@ function TokenizerSheetContent<T extends SearchableItem>({
   const closeClearConfirmation = (confirmed: boolean) => {
     // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the confirmation must be gone before focus moves into the sheet and the words are routed into it
     flushSync(() => setIsClearConfirmationOpen(false));
+    clearAllRef.current?.focus();
     if (confirmed) {
-      searchRef.current?.focus();
       announce(t('@astryx.tokenizer.allRemoved'));
-    } else {
-      clearAllRef.current?.focus();
     }
   };
   // Keep editing: the confirmation is gone, and focus returns to the search
@@ -614,16 +612,14 @@ function TokenizerSheetContent<T extends SearchableItem>({
   // `action` is declared on `SearchableItem` for the grid-adopting hosts; the
   // sheet rows have not adopted it, so a row renders the item without the
   // control and says so (`spec:AST-058` FR9), as the inline panel does.
-  useEffect(() => {
-    if (results.some(item => item.action != null)) {
-      warnOnce(
-        'tokenizer-sheet:item-action',
-        'Tokenizer',
-        'A result carries `action`, which the bottom-sheet rows do not render ' +
-          'yet; the item is shown without it.',
-      );
-    }
-  }, [results]);
+  if (results.some(item => item.action != null)) {
+    warnOnce(
+      'tokenizer-sheet:item-action',
+      'Tokenizer',
+      'A result carries `action`, which the bottom-sheet rows do not render ' +
+        'yet; the item is shown without it.',
+    );
+  }
 
   // The pending Spinner below stays named, as the inline field's does
   // (`family:input-fields` FR7), but is not a live region; the sheet announces
@@ -1002,11 +998,9 @@ function TokenizerSheetContent<T extends SearchableItem>({
           variant="secondary"
           size="lg"
           isDisabled={draftValue.length === 0}
-          // With a tooltip, Button's disabled mode is `aria-disabled`: the
-          // action keeps its focus order and says why it does nothing
-          // (`spec:AST-085` FR1), instead of leaving the tab order as a
-          // natively disabled button does — a confirmed Clear all returns
-          // focus here before the search field takes it (FR24).
+          // With a tooltip, Button uses aria-disabled, so Clear all stays
+          // focusable after a clear and says why it does nothing
+          // (`spec:AST-085` FR1; FR24).
           tooltip={
             draftValue.length === 0
               ? t('@astryx.tokenizer.nothingToClear')

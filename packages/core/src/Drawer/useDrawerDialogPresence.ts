@@ -5,7 +5,7 @@
 /**
  * @file useDrawerDialogPresence.ts
  * @input Controlled open state, modal mode, dialog ref, and rendered-state setter
- * @output Coordinates native top-layer presence, exit timing, focus restoration, and unmount cleanup
+ * @output Coordinates native top-layer presence, the touch entrance's input hold, exit timing, focus restoration, and unmount cleanup
  * @position Drawer-internal hook; consumed only by Drawer.tsx
  *
  * The drawer has two independent notions of presence:
@@ -21,6 +21,7 @@
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Drawer/Drawer.test.tsx
+ * - /packages/core/src/Drawer/__tests__/DrawerTouchEntrance.interaction.browser.spec.ts
  * - /.github/scripts/modal-close-visibility.js
  */
 
@@ -32,6 +33,7 @@ import {
   type SetStateAction,
 } from 'react';
 import {flushSync} from 'react-dom';
+import {holdEntranceInput} from '../Layer/holdEntranceInput';
 import {notifyTopLayerEntry} from '../Layer/modalOutlet';
 import {runPopoverOperation} from '../Layer/popoverOperations';
 
@@ -131,6 +133,8 @@ export function useDrawerDialogPresence({
   // Element focused when the drawer opened — restored on close.
   const triggerElementRef = useRef<HTMLElement | null>(null);
 
+  // Syncs the drawer's native host with `isOpen`. It shows or hides the
+  // top-layer host, keeps the opener, waits for the exit, and returns focus.
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) {
@@ -147,7 +151,12 @@ export function useDrawerDialogPresence({
         // contract as Dialog).
         dialog.querySelector<HTMLElement>('[data-autofocus]')?.focus();
       }
-      return;
+      // Under a coarse primary pointer, a tap or a drag during the slide-in
+      // reaches nothing. A non-modal drawer holds only its panel, so its page
+      // stays live. Keys and assistive technology stay live. The hold ends
+      // with the slide-in, or with this effect's cleanup on a close or
+      // unmount.
+      return holdEntranceInput(dialog, {isModal}) ?? undefined;
     }
 
     if (!isDrawerHostOpen(dialog, isModal)) {

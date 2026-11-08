@@ -5,6 +5,7 @@ import {createRef} from 'react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {MonthScroller, type MonthScrollerHandle} from './MonthScroller';
 import {SCROLL_QUIET_MS} from './useScrollSettle';
+import {createMonthModel} from './monthGeometry';
 
 class FakeResizeObserver {
   constructor(private callback: ResizeObserverCallback) {}
@@ -52,6 +53,7 @@ describe('MonthScroller settle', () => {
     const handleRef = createRef<MonthScrollerHandle>();
     const view = render(
       <MonthScroller
+        monthModel={createMonthModel('gregory')}
         handleRef={handleRef}
         minMonthIndex={0}
         maxMonthIndex={23}

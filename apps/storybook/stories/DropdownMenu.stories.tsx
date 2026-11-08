@@ -14,6 +14,7 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSubMenu,
+  type DropdownMenuProps,
 } from '@astryxdesign/core/DropdownMenu';
 import {Button} from '@astryxdesign/core/Button';
 import {RadioList, RadioListItem} from '@astryxdesign/core/RadioList';
@@ -81,6 +82,8 @@ const meta: Meta<typeof DropdownMenu> = {
 
 export default meta;
 type Story = StoryObj<typeof DropdownMenu>;
+// Story args the tooltip regression spec drives through the URL.
+type StoryArgs = Omit<DropdownMenuProps, 'items' | 'children'>;
 
 const readinessStyles = stylex.create({
   viewportStoryCanvas: {
@@ -159,9 +162,10 @@ const PROJECT_DESTINATIONS = [
 
 // Basic usage
 export const Default: Story = {
-  render: () => (
+  render: (args: StoryArgs) => (
     <DropdownMenu
       button={{label: 'Actions'}}
+      {...args}
       items={[
         {label: 'Edit', onClick: () => console.log('Edit clicked')},
         {label: 'Duplicate', onClick: () => console.log('Duplicate clicked')},
@@ -561,8 +565,8 @@ export const NoChevron: Story = {
 
 // Compound-component mode — JSX children with interactive items
 export const CompoundBasic: Story = {
-  render: () => (
-    <DropdownMenu button={{label: 'Actions'}}>
+  render: ({presentation: _, ...args}: StoryArgs) => (
+    <DropdownMenu button={{label: 'Actions'}} {...args}>
       <DropdownMenuItem
         icon={PencilIcon}
         label="Edit"
