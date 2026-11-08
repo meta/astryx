@@ -10,7 +10,7 @@
  * @position Rendered by the Chat Layout page.
  */
 
-import {useCallback, useEffect, useRef, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {AtSymbolIcon, PaperClipIcon} from '@heroicons/react/24/outline';
 import {Button} from '@astryxdesign/core/Button';
 import {Card} from '@astryxdesign/core/Card';
@@ -77,13 +77,19 @@ const REPLY =
 const STREAM_STEP = 6;
 const STREAM_INTERVAL_MS = 50;
 
+/** The reply the streaming case opens on, which streams in. */
+const OPENING_REPLY_ID = 999;
+
 function seedFor(chatCase: ChatLayoutCase): Message[] {
   // The long case repeats the conversation, so the transcript is several
   // screens tall on a phone.
   const turns = chatCase === 'long' ? 3 : 1;
-  return Array.from({length: turns}, () => CONVERSATION)
+  const seed: Message[] = Array.from({length: turns}, () => CONVERSATION)
     .flat()
     .map((message, index) => ({...message, id: index + 1}));
+  return chatCase === 'streaming'
+    ? [...seed, {id: OPENING_REPLY_ID, sender: 'assistant', text: ''}]
+    : seed;
 }
 
 export function ChatLayoutCaseView({chatCase}: {chatCase: ChatLayoutCase}) {
@@ -92,35 +98,31 @@ export function ChatLayoutCaseView({chatCase}: {chatCase: ChatLayoutCase}) {
   const documentRef = useRef<HTMLElement | null>(
     typeof document === 'undefined' ? null : document.documentElement,
   );
+  // The streaming case opens on a reply that streams in, and streams one
+  // after each sent message.
   const [messages, setMessages] = useState(() => seedFor(chatCase));
-  const [streamingId, setStreamingId] = useState<number | null>(null);
+  const [streamingId, setStreamingId] = useState<number | null>(
+    chatCase === 'streaming' ? OPENING_REPLY_ID : null,
+  );
   // Ids for the messages added after the page opens, above every seeded id.
   const nextId = useRef(1000);
-  const hasOpeningReply = useRef(false);
+  // A reply that has all its text no longer streams.
+  const streamed = messages.find(message => message.id === streamingId);
+  const activeId =
+    streamed != null && streamed.text.length < REPLY.length
+      ? streamingId
+      : null;
 
-  const startReply = useCallback(() => {
-    const id = nextId.current++;
-    setMessages(previous => [...previous, {id, sender: 'assistant', text: ''}]);
-    setStreamingId(id);
-  }, []);
-
-  // The streaming case streams one reply as the page opens, and one after
-  // each sent message.
+  // Synchronizes the streamed reply's text with a timer, as a model's tokens
+  // would arrive.
   useEffect(() => {
-    if (chatCase === 'streaming' && !hasOpeningReply.current) {
-      hasOpeningReply.current = true;
-      startReply();
-    }
-  }, [chatCase, startReply]);
-
-  useEffect(() => {
-    if (streamingId == null) {
+    if (activeId == null) {
       return undefined;
     }
     const timer = setInterval(() => {
       setMessages(previous =>
         previous.map(message =>
-          message.id === streamingId
+          message.id === activeId
             ? {
                 ...message,
                 text: REPLY.slice(0, message.text.length + STREAM_STEP),
@@ -130,23 +132,20 @@ export function ChatLayoutCaseView({chatCase}: {chatCase: ChatLayoutCase}) {
       );
     }, STREAM_INTERVAL_MS);
     return () => clearInterval(timer);
-  }, [streamingId]);
-
-  const isReplyDone = messages.some(
-    message =>
-      message.id === streamingId && message.text.length >= REPLY.length,
-  );
-  useEffect(() => {
-    if (isReplyDone) {
-      setStreamingId(null);
-    }
-  }, [isReplyDone]);
+  }, [activeId]);
 
   const send = (text: string) => {
-    const id = nextId.current++;
-    setMessages(previous => [...previous, {id, sender: 'user', text}]);
-    if (chatCase === 'streaming') {
-      startReply();
+    const userId = nextId.current++;
+    const replyId = chatCase === 'streaming' ? nextId.current++ : null;
+    setMessages(previous => [
+      ...previous,
+      {id: userId, sender: 'user', text},
+      ...(replyId == null
+        ? []
+        : [{id: replyId, sender: 'assistant' as const, text: ''}]),
+    ]);
+    if (replyId != null) {
+      setStreamingId(replyId);
     }
   };
 
@@ -180,7 +179,7 @@ export function ChatLayoutCaseView({chatCase}: {chatCase: ChatLayoutCase}) {
         />
       }>
       <ChatMessageList>
-        <ChatSystemMessage variant="divider">{info.label}</ChatSystemMessage>
+        <ChatSystemMessage>{info.label}</ChatSystemMessage>
         {messages.map(message =>
           message.sender === 'user' ? (
             <ChatMessage key={message.id} sender="user">
@@ -188,7 +187,9 @@ export function ChatLayoutCaseView({chatCase}: {chatCase: ChatLayoutCase}) {
             </ChatMessage>
           ) : (
             <ChatMessage key={message.id} sender="assistant">
-              <Markdown density="compact">{message.text}</Markdown>
+              <Markdown density="compact" isStreaming={message.id === activeId}>
+                {message.text}
+              </Markdown>
             </ChatMessage>
           ),
         )}
