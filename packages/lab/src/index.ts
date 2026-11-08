@@ -94,12 +94,22 @@ export {
   type TransferListSelectorProps,
 } from './TransferList';
 
+// LineClamp — clamp arbitrary content to N lines (facebook/astryx#4180)
+export {LineClamp, type LineClampProps} from './LineClamp';
+
 // Chat — experimental reasoning display
 export {
   ChatReasoning,
   type ChatReasoningProps,
 } from './ChatReasoning/ChatReasoning';
 export * from './Chat';
+
+// DialogHeroHeader — hero-style Dialog header (meta/astryx#4182)
+export {
+  DialogHeroHeader,
+  type DialogHeroHeaderProps,
+  type DialogHeroHeaderMediaMode,
+} from './DialogHeroHeader';
 
 // Tour — guided product-tour / NUX walkthrough (meta/astryx#4239)
 export {

@@ -14,7 +14,12 @@
  *   repeated cell, row or region does not create one observer per instance.
  */
 
-type MutationCallback = () => void;
+/**
+ * Called once per batch with the records that reached the registration: those
+ * whose target is its element or, with `subtree`, one of its descendants.
+ * A caller that needs only to know that something changed ignores them.
+ */
+type MutationCallback = (records: ReadonlyArray<MutationRecord>) => void;
 
 const CONTENT_OPTIONS: MutationObserverInit = {
   characterData: true,
@@ -41,6 +46,7 @@ function optionsKey(options: MutationObserverInit): string {
     options.attributeFilter == null
       ? null
       : [...options.attributeFilter].sort(),
+    options.attributeOldValue === true,
     options.characterData === true,
     options.childList === true,
     options.subtree === true,
@@ -54,23 +60,30 @@ function createSharedObserver(options: MutationObserverInit): SharedObserver {
     // One call per callback per batch, however many records it received.
     // With `subtree`, a record's target can be any descendant, so walk up to
     // the observed roots; without it, the target is the observed node.
-    const pending = new Set<MutationCallback>();
+    const pending = new Map<MutationCallback, MutationRecord[]>();
     for (const record of records) {
+      const due = new Set<MutationCallback>();
       if (!isSubtree) {
-        callbacks
-          .get(record.target)
-          ?.forEach(callback => pending.add(callback));
-        continue;
+        callbacks.get(record.target)?.forEach(callback => due.add(callback));
+      } else {
+        for (
+          let node: Node | null = record.target;
+          node;
+          node = node.parentNode
+        ) {
+          callbacks.get(node)?.forEach(callback => due.add(callback));
+        }
       }
-      for (
-        let node: Node | null = record.target;
-        node;
-        node = node.parentNode
-      ) {
-        callbacks.get(node)?.forEach(callback => pending.add(callback));
-      }
+      due.forEach(callback => {
+        const received = pending.get(callback);
+        if (received) {
+          received.push(record);
+        } else {
+          pending.set(callback, [record]);
+        }
+      });
     }
-    pending.forEach(callback => callback());
+    pending.forEach((received, callback) => callback(received));
   };
   return {observer: new MutationObserver(deliver), callbacks, deliver};
 }
