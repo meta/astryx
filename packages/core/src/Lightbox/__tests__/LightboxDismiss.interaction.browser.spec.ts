@@ -21,7 +21,8 @@ import {
 } from '@astryxdesign/a11y-spec/playwright';
 import {
   blockMainThread,
-  busyWindowProof,
+  type BusyRun,
+  type BusyWindow,
   compareCurve,
   CONTROL_RGB,
   curveOf,
@@ -29,6 +30,7 @@ import {
   frames,
   holdAnimations,
   openStory,
+  pooledBusyProof,
   releaseAnimations,
   sampleCurve,
   startBusyControl,
@@ -38,13 +40,13 @@ import {
   type TouchDriver,
   type TouchScript,
   touchStoryboard,
+  trackBrightness,
   trackMarker,
   waitForAnimation,
   waitForRest,
   withStorybook,
   writeEvidence,
 } from '@astryxdesign/interaction-harness';
-import {regionSignal, signalFrames} from './screenSignal';
 
 const storybook = withStorybook(test);
 
@@ -412,65 +414,118 @@ test('a gallery photo dismisses with a drag down', async ({page}) => {
 test('the dismissal keeps changing the screen every frame while the main thread is blocked', async ({
   page,
 }, testInfo) => {
-  const v = await openViewer(page);
-  // Where the photo starts. As it leaves and the backdrop fades behind it,
-  // those pixels change every frame the dismissal runs. The photo itself
-  // leaves the screen within a few frames.
-  const box = await v.photo.boundingBox();
-  if (box == null) {
-    throw new Error('no photo');
+  // The dismissal runs for about a fifth of a second. A blocked WebKit
+  // presents a frame only every 100 to 300 ms, so one run can hold too few
+  // frames to judge. The proof plays it several times and judges the runs
+  // pooled: each run on its own frames, the frame floor over all of them.
+  const runs: BusyRun[] = [];
+  const windows: BusyWindow[] = [];
+  const closed: boolean[] = [];
+  let closest = Number.POSITIVE_INFINITY;
+  for (let run = 0; run < DISMISS_RUNS; run += 1) {
+    const v = await openViewer(page);
+    const box = await v.photo.boundingBox();
+    if (box == null) {
+      throw new Error('no photo');
+    }
+    // A flat point of the backdrop above the photo. The dismissal fades the
+    // backdrop there every frame it runs, and nothing else paints there.
+    const probe = {x: box.x + box.width / 2, y: box.y - 40};
+    // A compositor-only control animation in the same window: what the
+    // compositor presented while the main thread spun, on this machine.
+    await startBusyControl(page);
+    const cast = await startScreencast(page);
+    await v.driver.play(pullDown(v.centre, 60));
+    // Blocked inside the page once the dismissal runs on the compositor.
+    const block = await blockMainThread(page, 400, {
+      during: v.photo,
+      minProgressMs: 16,
+    });
+    // A few frames after the block, so the screencast holds its end.
+    await frames(page, 6);
+    const castFrames = await cast.stop();
+    const tracked = await trackBrightness(page, castFrames, {
+      ...probe,
+      size: 8,
+    });
+    const final = tracked.at(-1)?.box?.x ?? 0;
+    const settled =
+      tracked.find(
+        f =>
+          f.t >= block.from && f.box != null && Math.abs(f.box.x - final) <= 1,
+      )?.t ?? block.to;
+    const window = {
+      from: block.from + 20,
+      to: Math.min(block.to, settled) - 1,
+    };
+    const shown = tracked.filter(f => f.t >= window.from && f.t <= window.to);
+    for (let i = 1; i < shown.length; i += 1) {
+      closest = Math.min(closest, shown[i].t - shown[i - 1].t);
+    }
+    runs.push({
+      tracked,
+      control: await trackMarker(page, castFrames, {rgb: CONTROL_RGB}),
+      window,
+    });
+    windows.push(window);
+    closed.push(
+      await v.dialog.waitFor({state: 'hidden', timeout: 2000}).then(
+        () => true,
+        () => false,
+      ),
+    );
   }
-  // A compositor-only control animation in the same window: what the
-  // compositor presented while the main thread spun, on this machine.
-  await startBusyControl(page);
-  const cast = await startScreencast(page);
-  await v.driver.play(pullDown(v.centre, 60));
-  // Blocked inside the page once the dismissal runs on the compositor.
-  const block = await blockMainThread(page, 400, {
-    during: v.photo,
-    minProgressMs: 16,
-  });
-  // A few frames after the block, so the screencast holds its end.
-  await frames(page, 6);
-  const castFrames = await cast.stop();
-  const signal = await regionSignal(page, castFrames, box);
-  const final = signal.at(-1)?.value ?? 0;
-  const settled =
-    signal.find(c => c.t >= block.from && Math.abs(c.value - final) <= 1)?.t ??
-    block.to;
-  const window = {from: block.from + 20, to: Math.min(block.to, settled) - 1};
-  const control = await trackMarker(page, castFrames, {rgb: CONTROL_RGB});
-  // A change of the region's mean brightness by more than 0.05 counts, as
-  // the signal's own judgment did. The region ends one even colour, in whole
-  // 8-bit steps. So judging stops where the fade's step between the closest
-  // two frames shown falls below one level. A shown level is rounded, so
-  // half a level is added.
-  const shown = signal.filter(c => c.t >= window.from && c.t <= window.to);
-  const frameMs = Math.min(...shown.slice(1).map((c, i) => c.t - shown[i].t));
-  const proof = busyWindowProof(signalFrames(signal, 5), window, {
-    axis: 'y',
-    settledWithin: (wholeStepsUntil(frameMs) + 0.5) * 5,
-    control,
+  // A change of the backdrop's brightness counts, in 8-bit levels. So
+  // judging stops where the fade's step between the closest two frames shown
+  // falls below one level. A shown level is rounded, so half a level is added.
+  const proof = pooledBusyProof(runs, {
+    axis: 'x',
+    settledWithin: wholeStepsUntil(closest) + 0.5,
+    // A run whose control moved on fewer than two frames is too little to
+    // judge. At least two of the four runs must be judged.
+    minRunFrames: 2,
+    minJudgedRuns: 2,
   });
   await writeEvidence(
     'busy-main-thread/lightbox-dismiss',
     {
       [`${testInfo.project.name}.json`]: JSON.stringify(
-        {block, window, proof, signal, control},
+        {windows, proof},
         null,
         1,
       ),
     },
     testInfo,
   );
-  expect(window.to - window.from).toBeGreaterThan(100);
   // Judged against the control. A two-core runner's software compositor and
   // the screencast share the core the block spins on. So every compositor
   // animation presents fewer frames there, the control's too. The screen
   // keeps changing with the control, and a main-thread fade would not.
   expect(proof.verdict.failures).toEqual([]);
-  await expect(v.dialog).toBeHidden();
+  // Each judged run shows the backdrop at a new level on at least one of its
+  // own frames, not an excused one. So runs of one frame cannot add up to the
+  // floor.
+  proof.judged.forEach((judged, i) => {
+    const read = proof.runs[i]?.control;
+    if (judged) {
+      expect(
+        (read?.movedWith ?? 0) - (read?.belowStep ?? 0),
+        `run ${i + 1} shows a new backdrop level`,
+      ).toBeGreaterThanOrEqual(1);
+    }
+  });
+  // The cutoff above comes from two frames a run showed, not a default.
+  expect(closest, 'a run shows two frames in its window').toBeLessThan(
+    Number.POSITIVE_INFINITY,
+  );
+  for (const window of windows) {
+    expect(window.to - window.from).toBeGreaterThan(100);
+  }
+  expect(closed).toEqual(windows.map(() => true));
 });
+
+/** How many dismissals the busy proof plays and judges pooled. */
+const DISMISS_RUNS = 4;
 
 test('under Reduce Motion the dismissal fades the photo out in place', async ({
   page,
