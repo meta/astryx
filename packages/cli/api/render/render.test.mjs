@@ -704,6 +704,283 @@ describe('render(): every write stays inside the current folder', () => {
     }
   }, 90_000);
 
+  it('resolves tsconfig paths by TypeScript rules: exact keys, a star anywhere, targets in order', async () => {
+    put(
+      'tsp/tsconfig.json',
+      JSON.stringify({
+        compilerOptions: {
+          baseUrl: '.',
+          paths: {
+            '@lib': ['./libsrc/index.ts'],
+            '@lib/*': ['./libsrc/*'],
+            '~*': ['./missing/*', './other/*'],
+            'theme-*-x': ['./themes/*.ts'],
+          },
+        },
+      }),
+    );
+    put('tsp/package.json', '{"name":"tsp","private":true}');
+    put('tsp/libsrc/index.ts', "export const Lib = 'lib-index';\n");
+    put('tsp/libsrc/button.tsx', "export const Button = () => <b>lib-button</b>;\n");
+    put('tsp/other/util.ts', "export const util = 'second-target';\n");
+    put('tsp/themes/blue.ts', "export const theme = 'mid-star';\n");
+    put(
+      'tsp/page.tsx',
+      [
+        "import {Lib} from '@lib';",
+        "import {Button} from '@lib/button';",
+        "import {util} from '~util';",
+        "import {theme} from 'theme-blue-x';",
+        'export default function Page() { return <p>{Lib} {util} {theme} <Button /></p>; }',
+        '',
+      ].join('\n'),
+    );
+    await render('tsp/page.tsx', {cwd: dir});
+    const html = fs.readFileSync(path.join(dir, 'tsp/page.html'), 'utf8');
+    for (const text of ['lib-index', 'lib-button', 'second-target', 'mid-star']) expect(html).toContain(text);
+  }, 60_000);
+
+  it('loads a JSON file through any key shape, from the first target that has it, and gives it back', async () => {
+    put('jsonp/tsconfig.json', JSON.stringify({compilerOptions: {baseUrl: '.', paths: {'~*': ['./lib/data/*'], 'cfg-*': ['./lib/missing/*', './lib/more/*']}}}));
+    put('jsonp/package.json', '{"name":"jsonp","private":true}');
+    put('jsonp/lib/data/cfg.json', '{"label":"first-target-json"}\n');
+    put('jsonp/lib/more/extra.json', '{"label":"later-target-json"}\n');
+    put(
+      'jsonp/page.tsx',
+      "import cfg from '~cfg.json';\nimport extra from 'cfg-extra.json';\nexport default function Page() { return <p>{cfg.label} {extra.label}</p>; }\n",
+    );
+    const r = /** @type {any} */ (await render('jsonp/page.tsx', {cwd: dir}));
+    expect(r.data.files).toEqual(expect.arrayContaining(['page.tsx', 'lib/data/cfg.json', 'lib/more/extra.json']));
+    const html = fs.readFileSync(path.join(dir, 'jsonp/page.html'), 'utf8');
+    expect(html).toContain('first-target-json');
+    expect(html).toContain('later-target-json');
+    // Back into a project with the same paths: each file goes where its alias points.
+    fs.mkdirSync(path.join(dir, 'jsonp-to'), {recursive: true});
+    put('jsonp-to/tsconfig.json', fs.readFileSync(path.join(dir, 'jsonp/tsconfig.json'), 'utf8'));
+    put('jsonp-to/package.json', '{"name":"jsonp-to","private":true}');
+    fs.copyFileSync(path.join(dir, 'jsonp/page.html'), path.join(dir, 'jsonp-to/page.html'));
+    const back = /** @type {any} */ (await render('page.html', {cwd: path.join(dir, 'jsonp-to'), reverse: true, out: 'lib/app/page.tsx'}));
+    // The file sent from the later target goes back under that target.
+    expect(back.data.files).toEqual(expect.arrayContaining(['lib/data/cfg.json', 'lib/more/extra.json']));
+  }, 60_000);
+
+  it.each([
+    ['folder names that end alike', ['./lib/app/*', './lib/webapp/*'], 'lib/webapp/Top.tsx', 'lib/webapp/Top.tsx'],
+    ['targets that share their last folder', ['./lib/ui/src/*', './lib/icons/src/*'], 'lib/icons/src/Top.tsx', 'lib/icons/src/Top.tsx'],
+    // Every embedded path is relative to the folder that holds them all, so
+    // a page inside the later target names no target folder: the first wins.
+    ['a page inside the later target', ['./lib/missing/*', './lib/src/*'], 'lib/src/Top.tsx', 'lib/missing/Top.tsx', 'lib/src/pages/page.tsx'],
+  ])('gives back an aliased module by whole folder names: %s', async (name, targets, sentFrom, comesBack, pageAt = 'page.tsx') => {
+    const base = `segments-${String(name).replace(/\W+/g, '-')}`;
+    const paths = {compilerOptions: {baseUrl: '.', paths: {'@/*': targets}}};
+    put(`${base}/tsconfig.json`, JSON.stringify(paths));
+    put(`${base}/package.json`, '{"name":"segments","private":true}');
+    put(`${base}/${sentFrom}`, "export const Top = () => <i>segment-top</i>;\n");
+    put(`${base}/${pageAt}`, "import {Top} from '@/Top';\nexport default function Page() { return <p><Top /></p>; }\n");
+    await render(`${base}/${pageAt}`, {cwd: dir});
+    const html = `${base}/${pageAt.replace(/\.tsx$/, '.html')}`;
+    fs.mkdirSync(path.join(dir, `${base}-to`), {recursive: true});
+    put(`${base}-to/tsconfig.json`, JSON.stringify(paths));
+    put(`${base}-to/package.json`, '{"name":"segments-to","private":true}');
+    fs.copyFileSync(path.join(dir, html), path.join(dir, `${base}-to/page.html`));
+    const back = /** @type {any} */ (await render('page.html', {cwd: path.join(dir, `${base}-to`), reverse: true, out: 'lib/zz/page.tsx'}));
+    expect(back.data.files).toContain(comesBack);
+  }, 60_000);
+
+  it('gives back a folder an exact key names under the target it was sent from', async () => {
+    const paths = {compilerOptions: {baseUrl: '.', paths: {'@cfg': ['./lib/a/settings', './lib/b/settings']}}};
+    put('exactdir/tsconfig.json', JSON.stringify(paths));
+    put('exactdir/package.json', '{"name":"exactdir","private":true}');
+    put('exactdir/lib/b/settings/index.ts', "export const setting = 'from-b';\n");
+    put('exactdir/page.tsx', "import {setting} from '@cfg';\nexport default function Page() { return <p>{setting}</p>; }\n");
+    await render('exactdir/page.tsx', {cwd: dir});
+    expect(fs.readFileSync(path.join(dir, 'exactdir/page.html'), 'utf8')).toContain('from-b');
+    fs.mkdirSync(path.join(dir, 'exactdir-to'), {recursive: true});
+    put('exactdir-to/tsconfig.json', JSON.stringify(paths));
+    put('exactdir-to/package.json', '{"name":"exactdir-to","private":true}');
+    fs.copyFileSync(path.join(dir, 'exactdir/page.html'), path.join(dir, 'exactdir-to/page.html'));
+    const back = /** @type {any} */ (await render('page.html', {cwd: path.join(dir, 'exactdir-to'), reverse: true, out: 'lib/zz/page.tsx'}));
+    expect(back.data.files).toContain('lib/b/settings/index.ts');
+    expect(back.data.files).not.toContain('lib/a/settings/index.ts');
+  }, 60_000);
+
+  it('resolves path aliases in modules outside the project folder, through every key and target', async () => {
+    put(
+      'sib/app/tsconfig.json',
+      JSON.stringify({
+        compilerOptions: {
+          baseUrl: '.',
+          paths: {
+            '@scope/ui': ['../ui/src/index.tsx'],
+            '@scope/tokens': ['../tokens/src/index.ts'],
+            '@lib/*': ['../missing/*', '../lib/*'],
+          },
+        },
+      }),
+    );
+    put('sib/app/package.json', '{"name":"sib-app","private":true}');
+    put('sib/tokens/src/index.ts', "export const accent = 'token-accent';\n");
+    put('sib/lib/util.ts', "export const util = 'later-target-util';\n");
+    put(
+      'sib/ui/src/index.tsx',
+      "import {accent} from '@scope/tokens';\nimport {util} from '@lib/util';\nexport const Badge = () => <b>{accent} {util}</b>;\n",
+    );
+    put('sib/app/page.tsx', "import {Badge} from '@scope/ui';\nexport default function Page() { return <p><Badge /></p>; }\n");
+    await render('sib/app/page.tsx', {cwd: dir});
+    const html = fs.readFileSync(path.join(dir, 'sib/app/page.html'), 'utf8');
+    expect(html).toContain('token-accent');
+    expect(html).toContain('later-target-util');
+  }, 60_000);
+
+  it('gives the page and a sibling package one copy of a package the aliases place, even when a built copy is linked', async () => {
+    const paths = {compilerOptions: {baseUrl: '.', paths: {'@scope/ui': ['../ui/src/index.tsx'], '@scope/tokens': ['../tokens/src/index.ts']}}};
+    put('mono/app/tsconfig.json', JSON.stringify(paths));
+    put('mono/app/package.json', '{"name":"mono-app","private":true}');
+    put('mono/tokens/package.json', '{"name":"@scope/tokens","main":"dist/index.js"}');
+    put('mono/tokens/src/index.ts', "import {createContext} from 'react';\nexport const Theme = createContext('default-theme');\n");
+    put('mono/tokens/dist/index.js', "const {createContext} = require('react');\nexports.Theme = createContext('built-copy');\n");
+    // The built package, linked into the sibling's node_modules as a workspace would.
+    fs.mkdirSync(path.join(dir, 'mono/ui/node_modules/@scope'), {recursive: true});
+    fs.symlinkSync(path.join(dir, 'mono/tokens'), path.join(dir, 'mono/ui/node_modules/@scope/tokens'), 'dir');
+    put('mono/ui/src/index.tsx', "import {useContext} from 'react';\nimport {Theme} from '@scope/tokens';\nexport const Badge = () => <b>{useContext(Theme)}</b>;\n");
+    put(
+      'mono/app/page.tsx',
+      "import {Theme} from '@scope/tokens';\nimport {Badge} from '@scope/ui';\nexport default function Page() { return <Theme.Provider value=\"page-theme\"><Badge /></Theme.Provider>; }\n",
+    );
+    await render('mono/app/page.tsx', {cwd: dir});
+    const html = fs.readFileSync(path.join(dir, 'mono/app/page.html'), 'utf8');
+    expect(html).toContain('page-theme');
+  }, 60_000);
+
+  it('places an aliased subpath that a linked package does not export', async () => {
+    put('expo/app/tsconfig.json', JSON.stringify({compilerOptions: {baseUrl: '.', paths: {'@scope/ui': ['../ui/src/index.tsx'], '@scope/tokens/*': ['../tokens/src/*']}}}));
+    put('expo/app/package.json', '{"name":"expo-app","private":true}');
+    put('expo/tokens/package.json', '{"name":"@scope/tokens","exports":{".":"./dist/index.js"}}');
+    put('expo/tokens/dist/index.js', "exports.red = 'built-red';\n");
+    put('expo/tokens/src/colors.ts', "export const red = 'source-red';\n");
+    fs.mkdirSync(path.join(dir, 'expo/ui/node_modules/@scope'), {recursive: true});
+    fs.symlinkSync(path.join(dir, 'expo/tokens'), path.join(dir, 'expo/ui/node_modules/@scope/tokens'), 'dir');
+    put('expo/ui/src/index.tsx', "import {red} from '@scope/tokens/colors';\nexport const Swatch = () => <i>{red}</i>;\n");
+    put('expo/app/page.tsx', "import {Swatch} from '@scope/ui';\nexport default function Page() { return <p><Swatch /></p>; }\n");
+    await render('expo/app/page.tsx', {cwd: dir});
+    expect(fs.readFileSync(path.join(dir, 'expo/app/page.html'), 'utf8')).toContain('source-red');
+  }, 60_000);
+
+  it('compiles a sibling module with the TypeScript it can hold: type assertions and decorators', async () => {
+    put('tsx-sib/app/tsconfig.json', JSON.stringify({compilerOptions: {baseUrl: '.', experimentalDecorators: true, paths: {'@scope/store': ['../store/src/index.ts']}}}));
+    put('tsx-sib/app/package.json', '{"name":"tsx-sib-app","private":true}');
+    put(
+      'tsx-sib/store/src/index.ts',
+      "const raw: unknown = 'asserted-label';\nexport const label = <string>raw;\nfunction tag(target: any) { target.tagged = 'decorated-store'; }\n@tag\nexport class Store { static tagged: string; }\n",
+    );
+    put('tsx-sib/store/src/other.ts', "const raw: unknown = 'relative-label';\nexport const other = <string>raw;\n");
+    put(
+      'tsx-sib/app/page.tsx',
+      "import {label, Store} from '@scope/store';\nimport {other} from '../store/src/other';\nexport default function Page() { return <p>{label} {(Store as any).tagged} {other}</p>; }\n",
+    );
+    await render('tsx-sib/app/page.tsx', {cwd: dir});
+    const html = fs.readFileSync(path.join(dir, 'tsx-sib/app/page.html'), 'utf8');
+    expect(html).toContain('asserted-label');
+    expect(html).toContain('decorated-store');
+    expect(html).toContain('relative-label');
+  }, 60_000);
+
+  it('loads an installed package a prefix key names when the key places no file', async () => {
+    put('pkgpre/tsconfig.json', JSON.stringify({compilerOptions: {baseUrl: '.', paths: {'@scope/*': ['./src/*']}}}));
+    put('pkgpre/package.json', '{"name":"pkgpre","private":true}');
+    put('pkgpre/node_modules/@scope/realpkg/package.json', '{"name":"@scope/realpkg","main":"index.js"}');
+    put('pkgpre/node_modules/@scope/realpkg/index.js', "exports.real = 'installed-package';\n");
+    put('pkgpre/src/local.ts', "export {real} from '@scope/realpkg';\n");
+    put('pkgpre/page.tsx', "import {real} from '@scope/realpkg';\nimport {real as again} from './src/local';\nexport default function Page() { return <p>{real} {again}</p>; }\n");
+    await render('pkgpre/page.tsx', {cwd: dir});
+    expect(fs.readFileSync(path.join(dir, 'pkgpre/page.html'), 'utf8')).toContain('installed-package installed-package');
+  }, 60_000);
+
+  it('gives back a nested aliased module under the target it was sent from', async () => {
+    const paths = {compilerOptions: {baseUrl: '.', paths: {'@/*': ['./lib/missing/*', './lib/src/*']}}};
+    put('nested/tsconfig.json', JSON.stringify(paths));
+    put('nested/package.json', '{"name":"nested","private":true}');
+    put('nested/lib/src/c/Header.tsx', "export const Header = () => <b>nested-header</b>;\n");
+    put('nested/lib/src/Top.tsx', "export const Top = () => <i>top-level</i>;\n");
+    put('nested/page.tsx', "import {Header} from '@/c/Header';\nimport {Top} from '@/Top';\nexport default function Page() { return <p><Header /><Top /></p>; }\n");
+    await render('nested/page.tsx', {cwd: dir});
+    expect(fs.readFileSync(path.join(dir, 'nested/page.html'), 'utf8')).toContain('nested-header');
+    fs.mkdirSync(path.join(dir, 'nested-to'), {recursive: true});
+    put('nested-to/tsconfig.json', JSON.stringify(paths));
+    put('nested-to/package.json', '{"name":"nested-to","private":true}');
+    fs.copyFileSync(path.join(dir, 'nested/page.html'), path.join(dir, 'nested-to/page.html'));
+    const back = /** @type {any} */ (await render('page.html', {cwd: path.join(dir, 'nested-to'), reverse: true, out: 'lib/app/page.tsx'}));
+    expect(back.data.files).toEqual(expect.arrayContaining(['lib/src/c/Header.tsx', 'lib/src/Top.tsx']));
+    expect(back.data.files).not.toEqual(expect.arrayContaining(['lib/missing/c/Header.tsx']));
+  }, 60_000);
+
+  it('names a package a catch-all key cannot place as not installed, and renders a page whose package stylesheet is missing with a warning', async () => {
+    put('catchall2/tsconfig.json', JSON.stringify({compilerOptions: {baseUrl: '.', paths: {'*': ['./types/*']}}}));
+    put('catchall2/package.json', '{"name":"catchall2","private":true}');
+    put('catchall2/dep.tsx', "import x from 'not-a-real-package-xyz';\nexport default () => <p>{String(x)}</p>;\n");
+    expect(await codeOf(() => render('catchall2/dep.tsx', {cwd: dir}))).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+    put('catchall2/sheet.tsx', "import 'not-a-real-package-xyz/style.css';\nexport default () => <p>styled</p>;\n");
+    const r = /** @type {any} */ (await render('catchall2/sheet.tsx', {cwd: dir}));
+    expect(r.data.warnings.map((/** @type {any} */ w) => w.code)).toContain('missing-asset');
+  }, 60_000);
+
+  it('leaves relative and package imports alone under a catch-all paths key', async () => {
+    put('catchall/tsconfig.json', JSON.stringify({compilerOptions: {baseUrl: '.', paths: {'*': ['./types/*']}}}));
+    put('catchall/package.json', '{"name":"catchall","private":true}');
+    // A decoy at baseUrl that `./Header` must not load.
+    put('catchall/Header.tsx', "export const Header = () => <b>decoy</b>;\n");
+    put('catchall/src/Header.tsx', "export const Header = () => <b>local-header</b>;\n");
+    put('catchall/src/styles.css', '.c { color: red; }\n');
+    put('catchall/src/logo.png', PNG);
+    put(
+      'catchall/src/page.tsx',
+      [
+        "import './styles.css';",
+        "import '@astryxdesign/core/astryx.css';",
+        "import logo from './logo.png';",
+        "import {Header} from './Header';",
+        'export default function Page() { return <p className="c"><img src={logo} alt="" /><Header /></p>; }',
+        '',
+      ].join('\n'),
+    );
+    const r = /** @type {any} */ (await render('catchall/src/page.tsx', {cwd: dir}));
+    const html = fs.readFileSync(path.join(dir, 'catchall/src/page.html'), 'utf8');
+    expect(html).toContain('local-header');
+    expect(html).not.toContain('decoy');
+    expect(html).toContain('color: red');
+    expect(html).toContain('data:image/png;base64,');
+    expect(r.data.stylesheets).toEqual(expect.arrayContaining(['@astryxdesign/core/astryx.css']));
+  }, 60_000);
+
+  it('gives back a file reached through a target with text before its star', async () => {
+    put('starseg/tsconfig.json', JSON.stringify({compilerOptions: {baseUrl: '.', paths: {'@icon/*': ['./icons/icon-*']}}}));
+    put('starseg/package.json', '{"name":"starseg","private":true}');
+    put('starseg/icons/icon-home.tsx', "export const Home = () => <i>home-icon</i>;\n");
+    put('starseg/page.tsx', "import {Home} from '@icon/home';\nexport default function Page() { return <p><Home /></p>; }\n");
+    await render('starseg/page.tsx', {cwd: dir});
+    fs.mkdirSync(path.join(dir, 'starseg-to'), {recursive: true});
+    put('starseg-to/tsconfig.json', JSON.stringify({compilerOptions: {baseUrl: '.', paths: {'@icon/*': ['./icons/icon-*']}}}));
+    put('starseg-to/package.json', '{"name":"starseg-to","private":true}');
+    fs.copyFileSync(path.join(dir, 'starseg/page.html'), path.join(dir, 'starseg-to/page.html'));
+    const cwd = path.join(dir, 'starseg-to');
+    const back = /** @type {any} */ (await render('page.html', {cwd, reverse: true, out: 'icons/app/page.tsx'}));
+    expect(back.data.files).toEqual(expect.arrayContaining(['icons/icon-home.tsx']));
+  }, 60_000);
+
+  it('refuses a rendered file whose source block was stripped, in its own words', async () => {
+    put('stripped-own.html', '<!doctype html><html><head><meta name="generator" content="Astryx 0.7.5"></head><body><p>Hello</p></body></html>');
+    /** @type {any} */
+    let error;
+    try {
+      await render('stripped-own.html', {cwd: dir, reverse: true});
+    } catch (e) {
+      error = e;
+    }
+    expect(error?.code).toBe('ERR_RENDER_SOURCE_DAMAGED');
+    expect(error.message).toContain('rendered by Astryx');
+    expect(error.message).not.toContain('not an Astryx page');
+  });
+
   it('refuses a carried "image" whose bytes are not one', async () => {
     const {sourceBlock} = await import('../../foundation/render/source-block.mjs');
     put('fake-img.html', `<body><p class="astryx-text">x</p>${sourceBlock('page.tsx', [{path: 'page.tsx', bytes: Buffer.from('export default () => null;\n')}, {path: 'hook.png', bytes: Buffer.from('process.exit(1)\n')}])}</body>`);
