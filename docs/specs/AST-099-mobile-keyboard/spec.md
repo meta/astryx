@@ -100,7 +100,12 @@ app to turn on.
   component applies it on its own element, such as a bottom offset, a padding,
   or a maximum height, so layout is correct with no animation running: the chat
   composer, a search field placed at the bottom, and tab bar search position
-  from it, and a fully expanded sheet extends its own scroll range by it. FR9's
+  from it, and a fully expanded sheet extends its own scroll range by it. In a
+  page that scrolls the document, in a browser without the VirtualKeyboard API,
+  ChatLayout lifts its dock by nothing. It leaves focus and the reveal to the
+  browser there: the composer is not a keyboard-aware surface (FR4). Safari on
+  iOS pans the visual viewport to the fixed dock and keeps the pan, which places
+  the composer above the keyboard. FR9's
   docked ride is the one exception: Core moves an app's docked bar as FR9 sets
   out. How the value reaches styles is `architecture:react-component-runtime`
   INV11. Riding the keyboard's motion layers on top of that layout, so layout

@@ -348,6 +348,77 @@ describe('ChatLayout and the software keyboard', () => {
   });
 });
 
+describe('ChatLayout in a page that scrolls the document', () => {
+  beforeEach(() => {
+    // A phone: its primary pointer is a coarse finger.
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query === '(pointer: coarse)',
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+    viewport = Object.assign(new EventTarget(), {
+      height: window.innerHeight,
+      offsetTop: 0,
+      scale: 1,
+    });
+    Object.defineProperty(window, 'visualViewport', {
+      configurable: true,
+      value: viewport,
+    });
+  });
+
+  afterEach(() => {
+    Reflect.deleteProperty(window, 'visualViewport');
+    Reflect.deleteProperty(navigator, 'virtualKeyboard');
+    vi.unstubAllGlobals();
+  });
+
+  function renderDocumentLayout() {
+    return render(
+      <ChatLayout
+        data-testid="layout"
+        scrollRef={{current: document.documentElement}}
+        composer={
+          <div data-testid="composer">
+            <textarea aria-label="Message" />
+          </div>
+        }>
+        <p>Hello</p>
+      </ChatLayout>,
+    );
+  }
+
+  it('lifts the fixed dock nothing in Safari on iOS, whose reveal pans the visual viewport to it and keeps the pan', async () => {
+    const {container} = renderDocumentLayout();
+    // Safari's reveal: the keyboard's report comes with a pan by its height.
+    viewport.offsetTop = 300;
+    report(window.innerHeight - 300);
+    await settle();
+    expect(layoutLift(dockOf(container))).toBe(0);
+    expect(keyboardRoom(messagesOf())).toBe(0);
+  });
+
+  it('leaves the composer\u2019s focus to Safari there: no focus takeover and no composer group', () => {
+    renderDocumentLayout();
+    const region = screen.getByTestId('composer').parentElement!.parentElement!;
+    expect(__focusTakeoverCallersForTest(document)).toBe(0);
+    expect(region.getAttribute('role')).toBeNull();
+  });
+
+  it('lifts the fixed dock by the keyboard with the VirtualKeyboard API, as in Chrome on Android', async () => {
+    Object.defineProperty(navigator, 'virtualKeyboard', {
+      configurable: true,
+      value: {overlaysContent: false},
+    });
+    const {container} = renderDocumentLayout();
+    report(window.innerHeight - 300);
+    await settle();
+    expect(layoutLift(dockOf(container))).toBe(300);
+    expect(keyboardRoom(messagesOf())).toBe(300);
+  });
+});
+
 describe('focus moves into the composer (spec:AST-099 FR4)', () => {
   // The primary pointer `matchMedia` reports: a touch screen's coarse finger,
   // or a desktop's fine mouse.

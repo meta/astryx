@@ -8,7 +8,8 @@
  *   guide, the stream scroll's lock, the motion engine, the touch query and
  *   layout viewport height
  * @output Exports useChatKeyboard: the lift for ChatLayout's dock and message
- *   area, and the refs for its dock, message area and composer region
+ *   area, and the refs for its dock, message area and composer region. It
+ *   also tells whether a focus call in the composer skips the browser's reveal
  * @position ChatLayout's keyboard behavior (Chat/ChatLayout.tsx); internal
  *
  * The composer sits on the keyboard, as in Messages on iOS. Where the layout
@@ -80,6 +81,11 @@ export interface UseChatKeyboardResult {
    * focus on it.
    */
   composerRef: RefObject<HTMLDivElement | null>;
+  /**
+   * Whether a focus call in the composer skips the browser's reveal: false
+   * where the browser keeps the composer above the keyboard itself.
+   */
+  isKeyboardSurface: boolean;
 }
 
 // The lift the layout shows: a store the ride's end and keyboard reports
@@ -223,9 +229,11 @@ export function useChatKeyboard({
     // A sticky dock rests at the root's bottom edge, which may sit above or
     // below the layout viewport's; a fixed dock rests at the viewport's.
     // While a keyboard is up the dock rises until it clears the keyboard's
-    // cover; without one it rests where the layout puts it.
+    // cover; without one it rests where the layout puts it. Where the browser
+    // reveals the composer itself, the dock rises nothing.
+    const leavesReveal = leavesRevealToBrowser(win, isSelfScrolling);
     const liftFor = (inset: number) => {
-      if (inset <= 0) {
+      if (inset <= 0 || leavesReveal) {
         return 0;
       }
       // In layout px, as the root's rect is, under a pinch zoom too.
@@ -401,7 +409,8 @@ export function useChatKeyboard({
     if (
       !touchPresentation.isTouch ||
       composer == null ||
-      !followsKeyboard(win)
+      !followsKeyboard(win) ||
+      leavesRevealToBrowser(win, isSelfScrolling)
     ) {
       return undefined;
     }
@@ -409,7 +418,7 @@ export function useChatKeyboard({
       claim: editableToClaim,
       deliver: deliverTap,
     });
-  }, [touchPresentation.isTouch]);
+  }, [touchPresentation.isTouch, isSelfScrolling]);
 
   // A browser that reveals the composer itself pans the visual viewport after
   // the keyboard's report, while the composer still rides up. Chrome 124 on
@@ -422,7 +431,8 @@ export function useChatKeyboard({
     if (
       !touchPresentation.isTouch ||
       composer == null ||
-      !followsKeyboard(win)
+      !followsKeyboard(win) ||
+      leavesRevealToBrowser(win, isSelfScrolling)
     ) {
       return undefined;
     }
@@ -436,7 +446,7 @@ export function useChatKeyboard({
       unsubscribe();
       pans.stop();
     };
-  }, [touchPresentation.isTouch]);
+  }, [touchPresentation.isTouch, isSelfScrolling]);
 
   // Synchronizes the keyboard module's focus takeover, and the region's group
   // role, with the touch presentation. Every other move into the composer's
@@ -451,7 +461,8 @@ export function useChatKeyboard({
     if (
       !touchPresentation.isTouch ||
       composer == null ||
-      !followsKeyboard(win)
+      !followsKeyboard(win) ||
+      leavesRevealToBrowser(win, isSelfScrolling)
     ) {
       return undefined;
     }
@@ -471,14 +482,40 @@ export function useChatKeyboard({
       stopTakeover();
       composer.removeAttribute('role');
     };
-  }, [touchPresentation.isTouch, readModality]);
+  }, [touchPresentation.isTouch, readModality, isSelfScrolling]);
+
+  // A focus call skips the browser's reveal only where ChatLayout keeps the
+  // composer above the keyboard itself. The server has no keyboard profile.
+  const hasLayoutGuide = useSyncExternalStore(
+    subscribeToNothing,
+    readLayoutGuide,
+    readNoLayoutGuide,
+  );
+  const isKeyboardSurface = isSelfScrolling || hasLayoutGuide;
 
   return {
     lift,
     dockRef: dock.ref,
     messagesRef: messages.ref,
     composerRef,
+    isKeyboardSurface,
   };
+}
+
+// A browser's keyboard profile never changes while the page runs.
+const subscribeToNothing = () => () => {};
+const readLayoutGuide = () => keyboardProfileOf(window) === 'chromium';
+const readNoLayoutGuide = () => false;
+
+/**
+ * Whether the browser keeps the composer above the keyboard itself. That is a
+ * page that scrolls the document, in a browser with no layout guide, such as
+ * Safari on iOS. Safari pans the visual viewport to the fixed dock and keeps
+ * the pan. A lift would add to that pan. So ChatLayout leaves focus, the
+ * reveal and the dock's place to the browser there.
+ */
+function leavesRevealToBrowser(win: Window, isSelfScrolling: boolean): boolean {
+  return !isSelfScrolling && keyboardProfileOf(win) !== 'chromium';
 }
 
 /** A compositor animator for one element, bound through a stable callback ref. */
