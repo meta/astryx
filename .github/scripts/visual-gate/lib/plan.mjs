@@ -22,8 +22,9 @@
  *
  *   surface — one representative story per Core component, plus explicit
  *     visual-baseline / visual-theme-matrix stories, in Neutral light and dark.
- *   probe — the smallest story set that renders every theming target, in the
- *     generated Probe fixture light and dark.
+ *   probe — a small story set that renders every theming target, in the
+ *     generated Probe fixture light and dark. It keeps the stories the
+ *     accepted baseline already holds while they still render a target.
  *
  * `theme-matrix` remains available for focused theme evidence, but it does not
  * own permanent baseline keys. `full` widens `surface` to every story for an
@@ -774,10 +775,13 @@ export function buildPlan({
  * verifies all of them at once. Without observations there is nothing to aim
  * at — the probe tier needs the scout.
  *
- * Between stories that would cover the same number of targets, the cover keeps
- * a story the accepted baseline already holds, then takes the smallest story
- * id. So the choice does not move when an unrelated story is added or the
- * story index changes order, and a baseline sync does not chase it.
+ * The cover starts from the accepted baseline: it keeps each story the
+ * baseline already holds probe shots for while that story still renders a
+ * target no kept story covers, widest first. Only the targets left after that
+ * get a greedy fill. So a newly added story, or one whose rendering changed,
+ * moves the plan only when a target is gained or lost, and a baseline sync
+ * does not chase it. Between stories that cover the same number of targets,
+ * the cover keeps a baselined story, then takes the smallest story id.
  *
  * @param {object} options
  * @param {ReturnType<typeof readStoryIndex>} options.stories
@@ -796,26 +800,32 @@ function probeShots({stories, targets, observations, probeTheme, baselineStories
     if (rendered.length > 0) byStory.set(story, new Set(rendered));
   }
 
-  // Greedy set cover: fewest stories that between them render every target.
   const planned = [];
   const uncovered = new Set(wanted);
-  while (uncovered.size > 0) {
-    let best = null;
-    let bestCount = 0;
-    for (const [story, rendered] of byStory) {
-      const count = [...rendered].filter(key => uncovered.has(key)).length;
-      if (count > bestCount || (count > 0 && count === bestCount && keepsTie(story, best, baselineStories))) {
-        best = story;
-        bestCount = count;
+  /** @param {(story: {id: string}) => boolean} eligible */
+  const cover = eligible => {
+    while (uncovered.size > 0) {
+      let best = null;
+      let bestCount = 0;
+      for (const [story, rendered] of byStory) {
+        if (!eligible(story)) continue;
+        const count = [...rendered].filter(key => uncovered.has(key)).length;
+        if (count > bestCount || (count > 0 && count === bestCount && keepsTie(story, best, baselineStories))) {
+          best = story;
+          bestCount = count;
+        }
       }
+      if (!best) return;
+      for (const key of byStory.get(best)) uncovered.delete(key);
+      for (const mode of MODES) {
+        planned.push({shot: {...toShotBase(best), theme: probeTheme, mode}, reason: 'probe'});
+      }
+      byStory.delete(best);
     }
-    if (!best) break;
-    for (const key of byStory.get(best)) uncovered.delete(key);
-    for (const mode of MODES) {
-      planned.push({shot: {...toShotBase(best), theme: probeTheme, mode}, reason: 'probe'});
-    }
-    byStory.delete(best);
-  }
+  };
+  // Keep the baseline's stories first, then a greedy set cover for the rest.
+  cover(story => baselineStories.has(story.id));
+  cover(() => true);
   return planned;
 }
 

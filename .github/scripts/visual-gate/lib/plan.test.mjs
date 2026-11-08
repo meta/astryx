@@ -350,6 +350,73 @@ describe('buildPlan', () => {
     ]);
   });
 
+  describe('the probe cover keeps the baseline it already has', () => {
+    const target = key => ({key, className: `astryx-${key}`, component: 'Badge', props: [], states: []});
+    const four = ['a', 'b', 'c', 'd'].map(target);
+    const badge = (id, name) => story({id, title: 'Core/Badge', name, component: 'Badge'});
+    const first = badge('core-badge--first', 'First');
+    const second = badge('core-badge--second', 'Second');
+    const wider = badge('core-badge--wider', 'Wider');
+    const coverOf = ({stories: list, observations, baselineStories}) => [
+      ...new Set(
+        buildPlan({
+          stories: list,
+          targets: four,
+          themeOverrides: {},
+          observations,
+          defaultTheme: 'neutral',
+          tiers: ['probe'],
+          probeTheme: 'probe',
+          baselineStories,
+        }).map(shot => shot.storyId),
+      ),
+    ].sort();
+
+    it('keeps the baselined stories when a wider story arrives that they still cover', () => {
+      // The baseline covers a+b and c+d. A new story renders a, b and c: the
+      // greedy cover alone would take it first and move the plan.
+      const observations = {
+        'core-badge--first': {a: ['base'], b: ['base']},
+        'core-badge--second': {c: ['base'], d: ['base']},
+        'core-badge--wider': {a: ['base'], b: ['base'], c: ['base']},
+      };
+      expect(
+        coverOf({
+          stories: [first, second, wider],
+          observations,
+          baselineStories: new Set(['core-badge--first', 'core-badge--second']),
+        }),
+      ).toEqual(['core-badge--first', 'core-badge--second']);
+    });
+
+    it('drops a baselined story that renders no target and fills what it lost', () => {
+      const observations = {
+        'core-badge--first': {},
+        'core-badge--second': {c: ['base'], d: ['base']},
+        'core-badge--wider': {a: ['base'], b: ['base'], c: ['base']},
+      };
+      expect(
+        coverOf({
+          stories: [first, second, wider],
+          observations,
+          baselineStories: new Set(['core-badge--first', 'core-badge--second']),
+        }),
+      ).toEqual(['core-badge--second', 'core-badge--wider']);
+    });
+
+    it('takes the widest story first when there is no baseline', () => {
+      const observations = {
+        'core-badge--first': {a: ['base'], b: ['base']},
+        'core-badge--second': {c: ['base'], d: ['base']},
+        'core-badge--wider': {a: ['base'], b: ['base'], c: ['base']},
+      };
+      expect(coverOf({stories: [first, second, wider], observations})).toEqual([
+        'core-badge--second',
+        'core-badge--wider',
+      ]);
+    });
+  });
+
   describe('the probe cover between stories that tie', () => {
     const badgeTarget = [{key: 'badge', className: 'astryx-badge', component: 'Badge', props: [], states: []}];
     const solid = story({id: 'core-badge--solid', title: 'Core/Badge', name: 'Solid', component: 'Badge'});
@@ -397,7 +464,7 @@ describe('buildPlan', () => {
       expect(probeBaselineStories({}, 'probe')).toEqual(new Set());
     });
 
-    it('still prefers the story that covers more targets over a baselined one', () => {
+    it('keeps a baselined story that still renders a target, and adds a wider story only for the targets left', () => {
       const wide = story({id: 'core-badge--wide', title: 'Core/Badge', name: 'Wide', component: 'Badge'});
       const keys = buildPlan({
         stories: [solid, wide],
@@ -409,7 +476,12 @@ describe('buildPlan', () => {
         probeTheme: 'probe',
         baselineStories: new Set(['core-badge--solid']),
       }).map(shot => shot.key);
-      expect(keys).toEqual(['core-badge--wide__probe-dark', 'core-badge--wide__probe-light']);
+      expect(keys).toEqual([
+        'core-badge--solid__probe-dark',
+        'core-badge--solid__probe-light',
+        'core-badge--wide__probe-dark',
+        'core-badge--wide__probe-light',
+      ]);
     });
   });
 
