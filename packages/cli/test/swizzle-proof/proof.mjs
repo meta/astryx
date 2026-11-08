@@ -125,13 +125,18 @@ export function workspacePackages() {
 /**
  * The paths a change touches, relative to the repository, or null when git
  * cannot tell. On a pull request's merge commit the base is its first
- * parent.
+ * parent. A pull request run checks out that parent, so null there means
+ * git failed, and the slice proves every target.
  * @param {string} [base]
  * @returns {string[]|null}
  */
 export function changedPaths(
   base = process.env.SWIZZLE_PROOF_BASE ?? 'HEAD^1',
 ) {
+  // A replayed change names its paths directly.
+  if (process.env.SWIZZLE_PROOF_CHANGED) {
+    return process.env.SWIZZLE_PROOF_CHANGED.split(',').filter(Boolean);
+  }
   try {
     const head = process.env.SWIZZLE_PROOF_HEAD;
     const out = execFileSync(
@@ -285,8 +290,32 @@ async function eject(targets, project, copies, fail) {
 }
 
 /**
- * The source files a copy depends on: each module it carries, and the module
- * that defines each public name it imports.
+ * The source folder a copy's component files come from: the one folder in
+ * the package's source that holds every one of them, or null.
+ * @param {{name: string}} t
+ * @param {{dir: string, files: string[]}} copy
+ * @param {string} src
+ */
+function componentSourceDir(t, copy, src) {
+  const own = copy.files
+    .filter(f => f.startsWith(copy.dir + path.sep))
+    .map(f => path.relative(copy.dir, f));
+  if (own.length === 0) return null;
+  const all = fs.readdirSync(src, {recursive: true}).map(String);
+  const candidates = all
+    .filter(f => f === own[0] || f.endsWith(path.sep + own[0]))
+    .map(f => path.join(src, f.slice(0, f.length - own[0].length)));
+  const matches = candidates.filter(dir =>
+    own.every(r => fs.existsSync(path.join(dir, r))),
+  );
+  return matches.length === 1 ? path.resolve(matches[0]) : null;
+}
+
+/**
+ * The source files a copy depends on: each module it carries, the entry
+ * module of each package export it imports from, and the module that
+ * defines each public name it imports. Null when the copy's component folder
+ * matches no single source folder.
  * @param {{name: string, pkg: string}} t
  * @param {{outBase: string, files: string[]}} copy
  * @param {Map<string, {dir: string, manifest: any}>} packages
@@ -295,20 +324,31 @@ async function eject(targets, project, copies, fail) {
 function sourcesOf(t, copy, packages, memo) {
   const srcOf = name => path.join(packages.get(name).dir, 'src');
   const own = t.pkg.replace('@astryxdesign/', '');
+  const componentSource = componentSourceDir(t, copy, srcOf(t.pkg));
+  // A copy whose component folder cannot be matched to one source folder
+  // depends on everything (fail closed).
+  if (componentSource == null) return null;
   /** @type {Set<string>} */
   const sources = new Set();
   const named =
     /import\s+(?:type\s+)?(\{[^}]*\}|\*\s+as\s+\w+|\w+)?\s*(?:,\s*(\{[^}]*\}))?\s*from\s*['"](@astryxdesign\/[^'"]+)['"]/g;
   for (const file of copy.files) {
-    const rel = path.relative(copy.outBase, file);
-    const [first, ...rest] = rel.split(path.sep);
-    // A module from another package sits under a folder named after it.
-    const other = COMPONENT_PACKAGES.includes(first) && first !== own;
-    sources.add(
-      other
-        ? path.join(srcOf(`@astryxdesign/${first}`), ...rest)
-        : path.join(srcOf(t.pkg), rel),
-    );
+    // Swizzle writes the component's own files under its output folder,
+    // whatever folder they come from; helpers keep their path in the
+    // package's source, and a module from another package sits under a
+    // folder named after that package.
+    if (file.startsWith(copy.dir + path.sep)) {
+      sources.add(path.join(componentSource, path.relative(copy.dir, file)));
+    } else {
+      const rel = path.relative(copy.outBase, file);
+      const [first, ...rest] = rel.split(path.sep);
+      const other = COMPONENT_PACKAGES.includes(first) && first !== own;
+      sources.add(
+        other
+          ? path.join(srcOf(`@astryxdesign/${first}`), ...rest)
+          : path.join(srcOf(t.pkg), rel),
+      );
+    }
     if (!/\.tsx?$/.test(file)) continue;
     for (const [, head, tail, spec] of fs
       .readFileSync(file, 'utf8')
@@ -322,11 +362,10 @@ function sourcesOf(t, copy, packages, memo) {
         sub.length ? `./${sub.join('/')}` : '.',
       );
       if (!target) continue;
+      // The export's entry module routes the import as the manifest does.
+      sources.add(target);
       const list = [head, tail].filter(x => x && x.startsWith('{'));
-      if (list.length === 0) {
-        sources.add(target);
-        continue;
-      }
+      if (list.length === 0) continue;
       if (!memo.has(target)) {
         let origins;
         try {
@@ -375,6 +414,24 @@ export async function runSlice({
         file.startsWith(`packages/${short}/src/`),
       ) && !NOT_SHIPPED.test(file),
   );
+  // Main's full unit run checks out one commit, so it has no base to diff.
+  // The proof runs before merge (spec:AST-110 FR7); the release check proves
+  // every target again, so this post-merge run proves none.
+  if (
+    changed == null &&
+    !all &&
+    process.env.GITHUB_EVENT_NAME &&
+    process.env.GITHUB_EVENT_NAME !== 'pull_request'
+  ) {
+    return {
+      offered: null,
+      affected: 0,
+      reason: `a ${process.env.GITHUB_EVENT_NAME} run without a base commit; pull requests and the release check prove the copies`,
+      results: [],
+      timings: {},
+      totalMs: Date.now() - start,
+    };
+  }
   if (changed && !toolchain && relevant.length === 0) {
     return {
       offered: null,
@@ -417,8 +474,11 @@ export async function runSlice({
     affected = slice.filter(t => {
       // A target that did not eject is proven, so its failure shows.
       if (!ejected.has(t.key)) return true;
-      for (const file of sourcesOf(t, ejected.get(t.key), packages, memo)) {
-        if (changedFiles.has(file)) return true;
+      const sources = sourcesOf(t, ejected.get(t.key), packages, memo);
+      if (sources == null) return true;
+      for (const file of sources) {
+        // A source that does not exist means the mapping is wrong: prove it.
+        if (changedFiles.has(file) || !fs.existsSync(file)) return true;
       }
       return false;
     });
