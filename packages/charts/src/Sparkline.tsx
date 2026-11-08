@@ -5,11 +5,6 @@
  * @input A value list plus fill, color, and size options
  * @output Compact label-free trend graphic — Chart root with one line/area mark
  * @position Composed component; delegates scales and layout to Chart
- *
- * @example
- * ```
- * <Sparkline data={[4, 7, 5, 9, 6, 11]} title="Requests over the last hour" />
- * ```
  */
 
 'use client';
@@ -54,6 +49,11 @@ export interface SparklineProps extends BaseProps<HTMLDivElement> {
  * line — optionally with an area fill — inside a `Chart` with a tight
  * margin so it fits inline in tables, metric tiles, and list rows.
  * Give it a `title` so assistive technology announces what the trend shows.
+ *
+ * @example
+ * ```
+ * <Sparkline data={[4, 7, 5, 9, 6, 11]} title="Requests over the last hour" />
+ * ```
  */
 export function Sparkline({
   data,

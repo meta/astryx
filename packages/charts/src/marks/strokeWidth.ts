@@ -3,7 +3,7 @@
 /**
  * @file strokeWidth.ts
  * @input A mark's optional strokeWidth option
- * @output The width the mark strokes: the option clamped at zero, else 2
+ * @output The stroke width a line or area mark draws
  * @position Shared stroke-width rule for the charts mark builders
  */
 
