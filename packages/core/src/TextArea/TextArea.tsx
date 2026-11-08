@@ -626,6 +626,7 @@ export function TextArea({
           }),
           stylex.props(
             inputWrapperStyles.base,
+            inputWrapperStyles.textField,
             styles.wrapper,
             isDisabled && inputWrapperStyles.disabled,
             isDisabled && inputDisabledFocusStyles.ring,
