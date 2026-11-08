@@ -35,6 +35,7 @@ import {
   type RenderingEvent,
   type RenderingTrace,
   sampleCurve,
+  type TracedTask,
   timeline,
   touchDriver,
   traceRendering,
@@ -132,6 +133,16 @@ function rideStart(trace: RenderingTrace, reported: number): RideStart | null {
 }
 
 /**
+ * The page's task that holds `t`, long or stretched. A starved task ran its
+ * main thread 50 ms or less, so the trace keeps it with the stretched tasks.
+ */
+function taskAt(trace: RenderingTrace, t: number): TracedTask | undefined {
+  return [...trace.longTasks, ...trace.stretchedTasks].find(
+    task => task.start <= t && task.start + task.durationMs >= t,
+  );
+}
+
+/**
  * The evidence that a starved main thread moved the ride's start where the
  * window cannot place it, or null. The report's layout comes more than two
  * frames late, and its task had the main thread for half its wall time or
@@ -139,8 +150,8 @@ function rideStart(trace: RenderingTrace, reported: number): RideStart | null {
  * holds nothing, and the start leaves less than two frames of it.
  */
 function starvation(
-  trace: RenderingTrace,
   start: RideStart,
+  task: TracedTask | undefined,
   counted: ReadonlyArray<RenderingEvent>,
   judged: number,
   reported: number,
@@ -149,9 +160,6 @@ function starvation(
   if (layout.t - reported <= 2 * FRAME_MS) {
     return null;
   }
-  const task = trace.longTasks.find(
-    t => t.start <= layout.t && t.start + t.durationMs >= layout.t,
-  );
   if (task == null || task.threadMs > task.durationMs / 2) {
     return null;
   }
@@ -733,9 +741,11 @@ test.describe('Chrome on Android (spec:AST-099 FR8)', () => {
     const trace = await traceRendering(page, async () => {
       ({reported, focusedFor} = await editable.evaluate(
         async (element, cover) => {
-          // As on a phone, focus brings up the keyboard. Focus starts the
-          // composer's own feedback, a short box-shadow transition that paints
-          // every frame. The report waits for it to end.
+          // As on a phone, focus brings up the keyboard. Under a fine pointer,
+          // focus starts the composer's own feedback, a short box-shadow
+          // transition that paints every frame. The report waits for it to
+          // end. Under a coarse pointer, as here, the focus look shows at once
+          // and the wait ends at once.
           const focusedAt = performance.timeOrigin + performance.now();
           (element as HTMLElement).focus();
           await Promise.all(
@@ -794,10 +804,7 @@ test.describe('Chrome on Android (spec:AST-099 FR8)', () => {
     // runs them late, into the window. The report's task then had the main
     // thread for half its wall time or less. A start the page itself delays
     // into the window fails, by name.
-    const reportTask = trace.longTasks.find(
-      t =>
-        t.start <= start.layout.t && t.start + t.durationMs >= start.layout.t,
-    );
+    const reportTask = taskAt(trace, start.layout.t);
     const isStarved =
       reportTask != null && reportTask.threadMs <= reportTask.durationMs / 2;
     expect(
@@ -823,15 +830,15 @@ test.describe('Chrome on Android (spec:AST-099 FR8)', () => {
     );
     const judged = steady.to - Math.max(steady.from, start.end);
     expect(
-      starvation(trace, start, counted, judged, reported),
+      starvation(start, reportTask, counted, judged, reported),
       'the main thread was starved, so the ride\u2019s start reached the window',
     ).toBeNull();
     const during: Record<string, number> = {};
     for (const e of counted) {
       during[e.name] = (during[e.name] ?? 0) + 1;
     }
-    // On failure, every rendering event of the rise and the long tasks, in ms
-    // after the report.
+    // On failure, every rendering event of the rise and the long and
+    // stretched tasks, in ms after the report.
     const detail = JSON.stringify({
       during,
       start: {
@@ -843,6 +850,10 @@ test.describe('Chrome on Android (spec:AST-099 FR8)', () => {
         .filter(e => e.t >= reported - 20 && e.t <= reported + 400)
         .map(e => `${e.name}@${Math.round(e.t - reported)}`),
       longTasks: trace.longTasks.map(
+        task =>
+          `${Math.round(task.start - reported)}+${Math.round(task.durationMs)}`,
+      ),
+      stretchedTasks: trace.stretchedTasks.map(
         task =>
           `${Math.round(task.start - reported)}+${Math.round(task.durationMs)}`,
       ),
