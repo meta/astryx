@@ -81,6 +81,7 @@ const KEY_DISPLAY = new Map<string, string>([
 
 const APPLE_MODIFIER_DISPLAY = new Map<string, string>([
   ['mod', '\u2318'], // ⌘
+  ['meta', '\u2318'], // ⌘ — the Command key
   ['ctrl', '\u2303'], // ⌃
   ['alt', '\u2325'], // ⌥
   ['shift', '\u21E7'], // ⇧
@@ -157,8 +158,8 @@ export interface KbdProps extends BaseProps<HTMLSpanElement> {
   /**
    * Keyboard shortcut string. Use "+" to separate keys.
    * Special keys: mod, ctrl, alt and shift (Apple symbols on Apple platforms,
-   * short text such as "Ctrl" elsewhere and before hydration), meta ("Win"
-   * text elsewhere and before hydration), enter, backspace, escape, tab, up, down, left, and right.
+   * short text such as "Ctrl" elsewhere and before hydration), meta (⌘ on
+   * Apple platforms, "Win" text elsewhere and before hydration), enter, backspace, escape, tab, up, down, left, and right.
    * Aliases: "esc" for "escape" and "return" for "enter".
    * Use "plus" to render a literal "+" key (e.g. "shift+plus").
    *

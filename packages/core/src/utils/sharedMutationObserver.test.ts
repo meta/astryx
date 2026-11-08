@@ -56,6 +56,67 @@ describe('observeContent', () => {
   });
 });
 
+describe('observeMutations records', () => {
+  it('hands a registration the records that reached its element', async () => {
+    const element = document.createElement('div');
+    const child = document.createElement('span');
+    element.append(child);
+    const callback = vi.fn();
+    const unsubscribe = observeMutations(
+      element,
+      {
+        attributes: true,
+        attributeFilter: ['inert'],
+        attributeOldValue: true,
+        subtree: true,
+      },
+      callback,
+    );
+
+    child.setAttribute('inert', '');
+    child.setAttribute('inert', '');
+    await flush();
+
+    expect(callback).toHaveBeenCalledTimes(1);
+    const records = callback.mock.calls[0][0] as MutationRecord[];
+    expect(records.map(record => record.oldValue)).toEqual([null, '']);
+    expect(records.every(record => record.target === child)).toBe(true);
+    unsubscribe();
+  });
+
+  it('keeps a registration that asks for old values apart from one that does not', async () => {
+    const element = document.createElement('div');
+    const withOld = vi.fn();
+    const withoutOld = vi.fn();
+    const unsubscribeWith = observeMutations(
+      element,
+      {attributes: true, attributeOldValue: true},
+      withOld,
+    );
+    const other = document.createElement('div');
+    const unsubscribeWithout = observeMutations(
+      other,
+      {attributes: true},
+      withoutOld,
+    );
+
+    element.setAttribute('dir', 'rtl');
+    element.setAttribute('dir', 'ltr');
+    other.setAttribute('dir', 'rtl');
+    other.setAttribute('dir', 'ltr');
+    await flush();
+
+    expect(
+      (withOld.mock.calls[0][0] as MutationRecord[]).map(r => r.oldValue),
+    ).toEqual([null, 'rtl']);
+    expect(
+      (withoutOld.mock.calls[0][0] as MutationRecord[]).map(r => r.oldValue),
+    ).toEqual([null, null]);
+    unsubscribeWith();
+    unsubscribeWithout();
+  });
+});
+
 describe('observeMutations', () => {
   it('shares one observer across registrations with the same options', async () => {
     const Native = globalThis.MutationObserver;
