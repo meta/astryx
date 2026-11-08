@@ -484,10 +484,19 @@ const styles = stylex.create({
     borderRadius: radiusVars['--radius-container'],
     backgroundColor: colorVars['--color-background-muted'],
   },
-  // The operator radios put their indicator at the row's end, as the choice
-  // rows do.
+  // The operator radios are choice rows too: the indicator at the row's end,
+  // and the choice row's height and padding, so each one is a 44 px target
+  // and both lists in the step share one density.
   trailingControlRow: {
     flexDirection: 'row-reverse',
+    minHeight: 44,
+    paddingBlock: spacingVars['--spacing-3'],
+    paddingInlineStart: 'var(--container-padding-inline-start, 0px)',
+    paddingInlineEnd: 'var(--container-padding-inline-end, 0px)',
+  },
+  // The operator group's rows sit flush, as the choice rows do.
+  operatorChoiceList: {
+    gap: 0,
   },
   // The built-in nested editor's sub-filter rows collapse from one line to
   // wrapped lines under a container query on the popover's own container;
@@ -2103,6 +2112,7 @@ export function PowerSearchBottomSheet({
     <RadioList
       label={t('@astryx.powersearch.editor.operator')}
       isLabelHidden
+      controlXstyle={[styles.choiceList, styles.operatorChoiceList]}
       value={draft.operator ?? ''}
       onChange={operatorKey => {
         const operator = draftOperators.find(
