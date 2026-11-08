@@ -143,7 +143,7 @@ export interface TooltipProps {
 
   /**
    * Controlled open state. When provided, overrides hover/focus triggers:
-   * - `true`: force-show the tooltip (hover/focus hide is suppressed)
+   * - `true`: force-show the tooltip
    * - `false`: force-hide the tooltip
    * - `undefined`: uncontrolled — hover/focus triggers manage visibility
    *
@@ -151,6 +151,10 @@ export interface TooltipProps {
    * answers by calling `onOpenChange(false)` without hiding itself — closing is
    * your update's decision, exactly as for a controlled Dialog. Ignore the call
    * and the tip stays, and so does the press: nothing underneath dismisses.
+   *
+   * A pointer or focus leave that would hide a held-open tooltip calls
+   * `onOpenChange(false)` the same way, so `isOpen={open}` with
+   * `onOpenChange={setOpen}` closes when the pointer leaves.
    *
    * The same holds in reverse: held closed, a hover that would open it after
    * `delay`, or focus that would open it, calls `onOpenChange(true)` once and

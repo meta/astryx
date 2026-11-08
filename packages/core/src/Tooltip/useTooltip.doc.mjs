@@ -58,7 +58,7 @@ export const docs = {
       name: 'isOpen',
       type: 'boolean',
       description:
-        'Controlled open state. true force-shows, false force-hides, undefined lets hover/focus manage visibility.',
+        'Controlled open state. true force-shows, and a leave that would hide it calls onHide; false force-hides, and a hover or focus that would show it calls onShow once; undefined lets hover/focus manage visibility.',
     },
     {
       name: 'isDefaultOpen',
@@ -69,12 +69,14 @@ export const docs = {
     {
       name: 'onShow',
       type: '() => void',
-      description: 'Callback fired when the tooltip becomes visible.',
+      description:
+        'Callback fired when the tooltip becomes visible. Under isOpen={false}, it reports a hover or focus that would show the tooltip.',
     },
     {
       name: 'onHide',
       type: '() => void',
-      description: 'Callback fired when the tooltip is hidden.',
+      description:
+        'Callback fired when the tooltip is hidden. Under isOpen={true}, it reports Escape and a leave that would hide the tooltip.',
     },
   ],
   returns: [
