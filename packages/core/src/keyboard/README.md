@@ -73,13 +73,15 @@ that times motion with it. Everything here is internal to
   each height the module reports: the keyboard targets and ChatLayout's
   composer watch with it. With `dock` (off by default), the watch also
   decides once per keyboard show whether the browser pans the visual viewport
-  to a fixed dock in a page that scrolls the document. A pan marks a browser
-  that reveals the dock: no pan is put back. A dock still covered 0.7 s after
-  the show's opening report marks one that does not. Only a pan restarts that
-  wait, up to 3 s; the height reports of the keyboard's slide do not.
-  `getDockReveal(win)` keeps that per window, and `getKeyboardPan(win)` gives
-  the pan read with each report. Only a touch or a wheel since the show's
-  opening report closes the late-pan check; no later report reopens it.
+  to a fixed dock in a page that scrolls the document. A pan to the dock
+  decides only its own show: no lift, and no pan is put back. A dock still
+  covered 0.7 s after the show's opening report rises. Only a pan restarts
+  that wait, up to 3 s; the height reports of the keyboard's slide do not.
+  With no touch or wheel in the wait, the page then learns that its browser
+  leaves the dock covered (`isDockLeftCovered(win)`), and every later show
+  lifts at once. A show with a touch or a wheel in the wait learns nothing. A
+  late pan to the dock after the lift, before any input, drops the lift and
+  forgets it. `getKeyboardPan(win)` gives the pan read with each report.
 - **Keyboard targets (`keyboardTarget.ts`):** a target keeps the focused field
   inside it above the keyboard, and registers so a field inside moves nothing
   itself (`registerKeyboardTarget`, `isInsideKeyboardTarget`).

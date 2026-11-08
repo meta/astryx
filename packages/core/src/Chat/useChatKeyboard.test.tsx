@@ -29,7 +29,7 @@ import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 import {
   __focusTakeoverCallersForTest,
   __resetDockRevealForTest,
-  getDockReveal,
+  isDockLeftCovered,
 } from '../keyboard/keyboardHeight';
 
 // jsdom dates events on the epoch clock, but a browser dates them on
@@ -437,8 +437,8 @@ describe('ChatLayout in a page that scrolls the document', () => {
     });
     return end.defaultPrevented;
   }
-  // A first keyboard show the dock stays covered at, then the keyboard goes:
-  // the page has learned that its browser does not pan to the dock.
+  // A first keyboard show where the dock stays covered, then a hide. The page
+  // then knows that its browser does not pan to the dock.
   function learnCovered() {
     report(window.innerHeight - 290);
     wait(800);
@@ -470,7 +470,7 @@ describe('ChatLayout in a page that scrolls the document', () => {
     wait(3000);
     expect(layoutLift(dockOf(container))).toBe(0);
     expect(keyboardRoom(messagesOf())).toBe(0);
-    expect(getDockReveal(window)).toBe(true);
+    expect(isDockLeftCovered(window)).toBe(false);
   });
 
   it('lifts nothing while the browser may still pan, then lifts by the cover 0.7 s after the keyboard\u2019s report, as in Firefox for Android', () => {
@@ -481,7 +481,7 @@ describe('ChatLayout in a page that scrolls the document', () => {
     wait(50);
     expect(layoutLift(dockOf(container))).toBe(290);
     expect(keyboardRoom(messagesOf())).toBe(290);
-    expect(getDockReveal(window)).toBe(false);
+    expect(isDockLeftCovered(window)).toBe(true);
   });
 
   it('keeps the 0.7 s wait through the height reports of the keyboard\u2019s slide, then follows the keyboard\u2019s height', () => {
@@ -517,8 +517,50 @@ describe('ChatLayout in a page that scrolls the document', () => {
     pan(337);
     wait(3000);
     expect(layoutLift(dockOf(container))).toBe(0);
-    expect(getDockReveal(window)).toBe(true);
+    expect(isDockLeftCovered(window)).toBe(false);
     expect(__focusTakeoverCallersForTest(document)).toBe(0);
+  });
+
+  it('lets a pan to the dock decide only its show, as Firefox\u2019s at 108 ms: the next show it leaves covered rises at 0.7 s and teaches the page, and the one after rises at once', () => {
+    const {container} = renderDocumentLayout();
+    report(window.innerHeight - 290);
+    wait(108);
+    pan(290);
+    wait(3000);
+    expect(layoutLift(dockOf(container))).toBe(0);
+    expect(isDockLeftCovered(window)).toBe(false);
+    expect(__focusTakeoverCallersForTest(document)).toBe(0);
+    report(window.innerHeight);
+    pan(0);
+    report(window.innerHeight - 290);
+    wait(699);
+    expect(layoutLift(dockOf(container))).toBe(0);
+    wait(1);
+    expect(layoutLift(dockOf(container))).toBe(290);
+    expect(isDockLeftCovered(window)).toBe(true);
+    report(window.innerHeight);
+    report(window.innerHeight - 290);
+    expect(layoutLift(dockOf(container))).toBe(290);
+  });
+
+  it('never lifts and never learns in Safari, which pans to the dock at every show', () => {
+    const {container} = renderDocumentLayout();
+    for (const panAt of [46, 0, 384]) {
+      if (panAt === 0) {
+        viewport.offsetTop = 337;
+        report(window.innerHeight - 337);
+      } else {
+        report(window.innerHeight - 337);
+        wait(panAt);
+        pan(337);
+      }
+      wait(3000);
+      expect(layoutLift(dockOf(container))).toBe(0);
+      expect(isDockLeftCovered(window)).toBe(false);
+      expect(__focusTakeoverCallersForTest(document)).toBe(0);
+      report(window.innerHeight);
+      pan(0);
+    }
   });
 
   it('lifts nothing, and learns nothing, when the dock is revealed at the report with no pan', () => {
@@ -527,7 +569,7 @@ describe('ChatLayout in a page that scrolls the document', () => {
     report(window.innerHeight - 337);
     wait(3000);
     expect(layoutLift(dockOf(container))).toBe(0);
-    expect(getDockReveal(window)).toBeUndefined();
+    expect(isDockLeftCovered(window)).toBe(false);
   });
 
   it('lifts at the 3 s cap when pans keep restarting the wait, and learns nothing from that show', () => {
@@ -538,7 +580,7 @@ describe('ChatLayout in a page that scrolls the document', () => {
       pan(i % 2 === 1 ? 10 : 0);
     }
     expect(layoutLift(dockOf(container))).toBeGreaterThanOrEqual(290);
-    expect(getDockReveal(window)).toBeUndefined();
+    expect(isDockLeftCovered(window)).toBe(false);
     report(window.innerHeight);
     expect(layoutLift(dockOf(container))).toBe(0);
   });
@@ -565,7 +607,7 @@ describe('ChatLayout in a page that scrolls the document', () => {
     wait(3000);
     expect(layoutLift(dockOf(container))).toBe(0);
     expect(__focusTakeoverCallersForTest(document)).toBe(0);
-    expect(getDockReveal(window)).toBe(true);
+    expect(isDockLeftCovered(window)).toBe(false);
   });
 
   it('drops the lift once for a slow browser whose pan to the dock comes after the wait, with no input since the show opened', () => {
@@ -575,7 +617,7 @@ describe('ChatLayout in a page that scrolls the document', () => {
     expect(layoutLift(dockOf(container))).toBe(337);
     pan(337);
     expect(layoutLift(dockOf(container))).toBe(0);
-    expect(getDockReveal(window)).toBe(true);
+    expect(isDockLeftCovered(window)).toBe(false);
     expect(__focusTakeoverCallersForTest(document)).toBe(0);
   });
 
@@ -586,7 +628,7 @@ describe('ChatLayout in a page that scrolls the document', () => {
     drag();
     pan(290);
     expect(layoutLift(dockOf(container))).toBe(290);
-    expect(getDockReveal(window)).toBe(false);
+    expect(isDockLeftCovered(window)).toBe(true);
   });
 
   it('keeps the lift for a reveal-sized pan after a wheel', () => {
@@ -608,7 +650,58 @@ describe('ChatLayout in a page that scrolls the document', () => {
     report(window.innerHeight - 280);
     pan(280);
     expect(layoutLift(dockOf(container))).toBe(280);
-    expect(getDockReveal(window)).toBe(false);
+    expect(isDockLeftCovered(window)).toBe(true);
+  });
+
+  it('learns nothing from a show with a touch in the wait, as a second tap before Safari\u2019s pan, and keeps that pan', () => {
+    const {container} = renderDocumentLayout();
+    report(window.innerHeight - 337);
+    wait(20);
+    drag();
+    wait(26);
+    pan(337);
+    wait(3000);
+    expect(layoutLift(dockOf(container))).toBe(0);
+    expect(isDockLeftCovered(window)).toBe(false);
+    report(window.innerHeight);
+    pan(0);
+    // The next show decides by its own pan, and learns nothing either.
+    report(window.innerHeight - 337);
+    wait(46);
+    pan(337);
+    expect(isDockLeftCovered(window)).toBe(false);
+    expect(layoutLift(dockOf(container))).toBe(0);
+  });
+
+  it('keeps Safari\u2019s pan that came before a later tap', () => {
+    const {container} = renderDocumentLayout();
+    report(window.innerHeight - 337);
+    wait(46);
+    pan(337);
+    wait(254);
+    drag();
+    wait(3000);
+    expect(layoutLift(dockOf(container))).toBe(0);
+    expect(isDockLeftCovered(window)).toBe(false);
+  });
+
+  it('lifts a dock still covered at the wait\u2019s end after a touch in the wait, and learns nothing from that show', () => {
+    const {container} = renderDocumentLayout();
+    report(window.innerHeight - 290);
+    wait(100);
+    drag();
+    wait(599);
+    expect(layoutLift(dockOf(container))).toBe(0);
+    wait(1);
+    expect(layoutLift(dockOf(container))).toBe(290);
+    expect(isDockLeftCovered(window)).toBe(false);
+    report(window.innerHeight);
+    expect(layoutLift(dockOf(container))).toBe(0);
+    // The next show, with no input, learns that the dock stays covered.
+    report(window.innerHeight - 290);
+    wait(700);
+    expect(isDockLeftCovered(window)).toBe(true);
+    expect(layoutLift(dockOf(container))).toBe(290);
   });
 
   it('keeps the lift for a pan smaller than the cover', () => {
@@ -625,7 +718,7 @@ describe('ChatLayout in a page that scrolls the document', () => {
     report(window.innerHeight - 290);
     pan(290);
     expect(layoutLift(dockOf(container))).toBe(290);
-    expect(getDockReveal(window)).toBe(false);
+    expect(isDockLeftCovered(window)).toBe(true);
   });
 
   it('keeps the lift at a show that reached the cap when a touch came before the pan', () => {
@@ -717,8 +810,8 @@ describe('ChatLayout in a page that scrolls the document', () => {
     try {
       renderDocumentLayout();
       learnCovered();
-      expect(getDockReveal(window)).toBe(false);
-      expect(getDockReveal(frame.contentWindow!)).toBeUndefined();
+      expect(isDockLeftCovered(window)).toBe(true);
+      expect(isDockLeftCovered(frame.contentWindow!)).toBe(false);
     } finally {
       frame.remove();
     }
@@ -750,7 +843,7 @@ describe('ChatLayout in a page that scrolls the document', () => {
       expect(__focusTakeoverCallersForTest(document)).toBe(1);
       report(window.innerHeight - 300);
       expect(layoutLift(dockOf(container))).toBe(300);
-      expect(getDockReveal(window)).toBeUndefined();
+      expect(isDockLeftCovered(window)).toBe(false);
     } finally {
       scroller.remove();
     }
@@ -768,7 +861,7 @@ describe('ChatLayout in a page that scrolls the document', () => {
     expect(layoutLift(dockOf(container))).toBe(300);
     expect(keyboardRoom(messagesOf())).toBe(300);
     pan(300);
-    expect(getDockReveal(window)).toBeUndefined();
+    expect(isDockLeftCovered(window)).toBe(false);
     expect(__focusTakeoverCallersForTest(document)).toBe(1);
   });
 });

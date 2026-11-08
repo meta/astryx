@@ -10,7 +10,7 @@
  *   isKeyboardMeasurable, hasVirtualKeyboard, subscribeKeyboardHeight,
  *   getKeyboardHeight, getKeyboardPan, isTextEntryControl,
  *   findTextEntryControl, refuseFocusReveal and watchRevealPan. It also keeps
- *   what a window's browser does with a fixed dock (getDockReveal)
+ *   whether a window's browser leaves a fixed dock covered (isDockLeftCovered)
  * @position Core's one source for the on-screen keyboard. It is internal to
  *   core and never exported from the package.
  *
@@ -490,7 +490,7 @@ export interface WatchRevealPanOptions {
   /**
    * The field sits in a fixed dock of a page that scrolls the document. Each
    * keyboard show then decides once whether the browser pans the visual
-   * viewport to the dock (getDockReveal). Off by default.
+   * viewport to the dock (isDockLeftCovered). Off by default.
    * @default false
    */
   dock?: boolean;
@@ -599,11 +599,12 @@ function watchWheels(doc: Document, onWheel: () => void): () => void {
 const DOCK_REVEAL_SETTLE_MS = 700;
 const DOCK_REVEAL_CAP_MS = 3000;
 
-// What each window's browser did with a fixed dock at a keyboard show. True:
-// it panned the visual viewport to the dock. False: the dock stayed covered.
-const dockReveals = new WeakMap<Window, boolean>();
-// The windows whose current show found the dock covered at the wait's cap.
-// Such a show lifts the dock but teaches nothing.
+// The windows whose browser left a fixed dock covered at a keyboard show with
+// no touch or wheel in the wait.
+const docksLeftCovered = new WeakSet<Window>();
+// The windows whose current show found the dock covered without learning it.
+// That is at the wait's cap, or after a touch or a wheel in the wait. Such a
+// show lifts the dock but teaches nothing.
 const coveredShows = new WeakSet<Window>();
 const dockRevealListeners = new Set<() => void>();
 let dockRevealVersion = 0;
@@ -615,28 +616,33 @@ function notifyDockReveal(): void {
   }
 }
 
-function learnDockReveal(win: Window, pans: boolean): void {
-  if (dockReveals.get(win) !== pans) {
-    dockReveals.set(win, pans);
+function learnDockLeftCovered(win: Window, covered: boolean): void {
+  if (docksLeftCovered.has(win) !== covered) {
+    if (covered) {
+      docksLeftCovered.add(win);
+    } else {
+      docksLeftCovered.delete(win);
+    }
     notifyDockReveal();
   }
 }
 
 /**
- * What `win`'s browser was found to do with a fixed dock at a keyboard show.
- * True: it pans the visual viewport to the dock. False: it leaves the dock
- * covered. Undefined until a reveal-pan watch with `dock` decides it.
+ * Whether `win`'s browser was found to leave a fixed dock covered at a
+ * keyboard show. A pan to the dock decides only its own show and teaches
+ * nothing. A browser can pan at one show and not at the next. A late pan to
+ * the dock after the lift, before any input, forgets it.
  */
-export function getDockReveal(win: Window): boolean | undefined {
-  return dockReveals.get(win);
+export function isDockLeftCovered(win: Window): boolean {
+  return docksLeftCovered.has(win);
 }
 
 /** Whether the fixed dock in `win` stays covered at this keyboard show. */
 export function isDockShowCovered(win: Window): boolean {
-  return dockReveals.get(win) === false || coveredShows.has(win);
+  return docksLeftCovered.has(win) || coveredShows.has(win);
 }
 
-/** Calls `listener` when getDockReveal or isDockShowCovered changes. */
+/** Calls `listener` when isDockLeftCovered or isDockShowCovered changes. */
 export function subscribeDockReveal(listener: () => void): () => void {
   dockRevealListeners.add(listener);
   return () => {
@@ -656,24 +662,23 @@ export function getDockRevealVersion(): number {
  * @internal
  */
 export function __resetDockRevealForTest(win: Window): void {
-  const known = dockReveals.delete(win);
+  const known = docksLeftCovered.delete(win);
   if (coveredShows.delete(win) || known) {
     notifyDockReveal();
   }
 }
 
-// The dock's watch: one decision per keyboard show. A pan to the dock marks
-// a browser that reveals it. A dock still covered when the wait ends marks
-// one that does not, and the dock rises. Only the show that
-// learned that, with no touch or wheel since its opening report, still meets
-// a slow browser's pan: the lift then goes.
+// The dock's watch: one decision per keyboard show. A pan to the dock decides
+// that show alone: no lift. A dock still covered when the wait ends rises.
+// With no touch or wheel in the wait, the page learns that its browser leaves
+// the dock covered. Only the show that learned it, before any input, still
+// meets a slow browser's pan: the lift then goes, and the page forgets it.
 function watchDock(win: Window): {
   report: (height: number) => boolean;
   input: () => void;
   stop: () => void;
 } {
   let show: 'none' | 'watching' | 'revealed' | 'covered' = 'none';
-  let restPan = getKeyboardPan(win) ?? 0;
   let lastPan = getKeyboardPan(win);
   let coveredPan = 0;
   let isClassifying = false;
@@ -691,20 +696,31 @@ function watchDock(win: Window): {
       capTimer = null;
     }
   };
-  // A pan that reveals the dock before any input: with no lift, the dock
-  // would rest at or above the visual viewport's bottom.
+  // With no lift, the dock rests at or above the visual viewport's bottom.
+  const isRevealed = (pan: number | null, height: number): pan is number =>
+    pan != null && pan >= height - 1;
+  // A pan the browser made before any input of the show.
   const isRevealPan = (pan: number | null, height: number): pan is number =>
-    pan != null && !inputSinceShow && pan >= height - 1;
+    !inputSinceShow && isRevealed(pan, height);
   const cover = (learn: boolean) => {
     clearTimers();
     show = 'covered';
     coveredPan = getKeyboardPan(win) ?? 0;
     if (learn) {
       isClassifying = true;
-      learnDockReveal(win, false);
+      learnDockLeftCovered(win, true);
     } else {
       coveredShows.add(win);
       notifyDockReveal();
+    }
+  };
+  // Where the dock rests when the wait ends decides the show.
+  const settle = () => {
+    if (isRevealed(getKeyboardPan(win), getKeyboardHeight(win))) {
+      clearTimers();
+      show = 'revealed';
+    } else {
+      cover(!inputSinceShow);
     }
   };
   const restartSettle = () => {
@@ -714,7 +730,7 @@ function watchDock(win: Window): {
     settleTimer = setTimeout(() => {
       settleTimer = null;
       if (show === 'watching') {
-        cover(true);
+        settle();
       }
     }, DOCK_REVEAL_SETTLE_MS);
   };
@@ -733,25 +749,19 @@ function watchDock(win: Window): {
       clearTimers();
       show = 'none';
       isClassifying = false;
-      restPan = pan ?? 0;
       if (coveredShows.delete(win)) {
         notifyDockReveal();
       }
-      return dockReveals.get(win) !== false;
+      return !docksLeftCovered.has(win);
     }
     if (show === 'none') {
       inputSinceShow = false;
-      if (dockReveals.get(win) === false) {
+      if (docksLeftCovered.has(win)) {
         show = 'covered';
         return false;
       }
-      if (pan != null && pan >= height - 1) {
-        // Revealed at the report. Only a pan there shows what the browser
-        // does; a show that needed none teaches nothing.
+      if (isRevealed(pan, height)) {
         show = 'revealed';
-        if (pan > restPan + 0.5) {
-          learnDockReveal(win, true);
-        }
         return true;
       }
       show = 'watching';
@@ -765,10 +775,9 @@ function watchDock(win: Window): {
       return true;
     }
     if (show === 'watching') {
-      if (isRevealPan(pan, height) && pan > restPan + 0.5) {
+      if (isRevealPan(pan, height)) {
         clearTimers();
         show = 'revealed';
-        learnDockReveal(win, true);
       } else if (panned) {
         restartSettle();
       }
@@ -778,8 +787,12 @@ function watchDock(win: Window): {
       if (isRevealPan(pan, height) && pan > coveredPan + 0.5) {
         show = 'revealed';
         isClassifying = false;
-        coveredShows.delete(win);
-        learnDockReveal(win, true);
+        const wasCoveredShow = coveredShows.delete(win);
+        if (docksLeftCovered.has(win)) {
+          learnDockLeftCovered(win, false);
+        } else if (wasCoveredShow) {
+          notifyDockReveal();
+        }
       }
       return true;
     }

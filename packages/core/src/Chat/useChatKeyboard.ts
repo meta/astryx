@@ -29,9 +29,9 @@ import {createMotionEngine, type Animator} from '../motion/animator';
 import {
   claimTapFocus,
   findTextEntryControl,
-  getDockReveal,
   getDockRevealVersion,
   getKeyboardHeight,
+  isDockLeftCovered,
   isDockShowCovered,
   isTextEntryControl,
   refuseFocusReveal,
@@ -543,11 +543,11 @@ function isUnguidedDocument(win: Window, scroller: Element | null): boolean {
  * that scrolls the document, in a browser with no layout guide. It holds
  * until a keyboard show finds the fixed dock left covered. Safari on iOS pans
  * the visual viewport to the dock, and a lift would add to that pan. Firefox
- * for Android leaves it covered: from then on, the layout keeps the composer
- * above the keyboard itself.
+ * for Android can leave it covered: from then on, the layout keeps the
+ * composer above the keyboard itself.
  */
 function leavesRevealToBrowser(win: Window, scroller: Element | null): boolean {
-  return isUnguidedDocument(win, scroller) && getDockReveal(win) !== false;
+  return isUnguidedDocument(win, scroller) && !isDockLeftCovered(win);
 }
 
 // The document's root and body both scroll the page.
