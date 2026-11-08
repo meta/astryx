@@ -31,6 +31,7 @@ import {
   type TableSelection,
 } from '@lexical/table';
 import {$dfs, $findMatchingParent} from '@lexical/utils';
+import {$startsInCodeBlock} from './CodePastePlugin';
 import {
   $createParagraphNode,
   $createTabNode,
@@ -191,8 +192,11 @@ export function TablePastePlugin(): null {
       editor.registerCommand(
         SELECTION_INSERT_CLIPBOARD_NODES_COMMAND,
         ({nodes, selection}, dispatchEditor) => {
+          // A paste into a code block, even one in a cell, belongs to
+          // CodePastePlugin, which adds plain code lines.
           if (
             dispatchEditor !== editor ||
+            $startsInCodeBlock(selection) ||
             !nodes.some(node =>
               $dfs(node).some(({node: inner}) => $isTableNode(inner)),
             )
