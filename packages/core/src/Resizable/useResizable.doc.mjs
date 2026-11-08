@@ -56,7 +56,7 @@ export const docs = {
       name: 'collapsible',
       type: 'boolean',
       description:
-        'Whether a drag lifted below the collapsed threshold collapses the region to zero.',
+        'Whether a lift or a key step below the collapsed threshold collapses the region to zero.',
       default: 'false',
     },
     {
