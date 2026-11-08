@@ -279,7 +279,19 @@ for (const item of cases) {
       await expect(flyout).toBeVisible();
       await page.mouse.down();
     } else if (item.interaction === 'disabled-hover') {
-      await row(menu, 'Archive').hover();
+      // The disabled trigger is inert: a click, Enter, Space and the open key
+      // open no flyout and pick nothing (the `counters` check).
+      const archive = row(menu, 'Archive');
+      const box = await archive.boundingBox();
+      if (box == null) {
+        throw new Error('the disabled row has no box');
+      }
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+      await archive.focus();
+      await page.keyboard.press('Enter');
+      await page.keyboard.press(' ');
+      await page.keyboard.press(openKey);
+      await archive.hover();
       await page.waitForTimeout(600);
     } else if (item.interaction === 'drill-in') {
       await subject.click();
