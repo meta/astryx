@@ -29,9 +29,13 @@ test.afterAll(async () => {
   await storybook?.close();
 });
 
-async function openStory(page: Page, story: string): Promise<void> {
+async function openStory(
+  page: Page,
+  story: string,
+  theme = 'neutral',
+): Promise<void> {
   await page.goto(
-    `${storybook.origin}/iframe.html?id=core-button--${story}&viewMode=story`,
+    `${storybook.origin}/iframe.html?id=core-button--${story}&viewMode=story&globals=astryxTheme:${theme}`,
   );
   await page.locator('#storybook-root button').first().waitFor();
 }
@@ -56,19 +60,23 @@ async function readButtons(page: Page) {
   );
 }
 
-test('at the default text size each size keeps its element height', async ({
-  page,
-}) => {
-  await openStory(page, 'size-variants');
-  const fits = await page.evaluate(() =>
-    [...document.querySelectorAll<HTMLElement>('#storybook-root button')].map(
-      button =>
-        Math.round(button.getBoundingClientRect().height) ===
-        Math.round(parseFloat(getComputedStyle(button).minHeight)),
-    ),
-  );
-  expect(fits).toEqual([true, true, true]);
-});
+// Butter pads its buttons inline only, so its labelled buttons keep their
+// element heights too.
+for (const theme of ['neutral', 'butter']) {
+  test(`at the default text size each size keeps its element height: ${theme}`, async ({
+    page,
+  }) => {
+    await openStory(page, 'size-variants', theme);
+    const fits = await page.evaluate(() =>
+      [...document.querySelectorAll<HTMLElement>('#storybook-root button')].map(
+        button =>
+          Math.round(button.getBoundingClientRect().height) ===
+          Math.round(parseFloat(getComputedStyle(button).minHeight)),
+      ),
+    );
+    expect(fits).toEqual([true, true, true]);
+  });
+}
 
 for (const story of ['primary', 'size-variants', 'icon-with-text']) {
   test(`a label larger than the element size grows its button: ${story}`, async ({
