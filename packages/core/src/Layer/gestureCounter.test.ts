@@ -88,6 +88,21 @@ describe('claimContextMenuPress', () => {
     });
   }
 
+  it('keeps no pointerup listener at rest, only while a press is down', () => {
+    const zone = document.createElement('div');
+    document.body.append(zone);
+    currentGesture();
+    const added = vi.spyOn(window, 'addEventListener');
+    const removed = vi.spyOn(window, 'removeEventListener');
+    const types = (spy: typeof added | typeof removed) =>
+      spy.mock.calls.map(([type]) => type);
+
+    zone.dispatchEvent(pointerEvent('pointerdown', 9));
+    expect(types(added)).toContain('pointerup');
+    zone.dispatchEvent(pointerEvent('pointerup', 9));
+    expect(types(removed)).toContain('pointerup');
+  });
+
   it('lets go over the layer and holds outside it, reading the layer box once', () => {
     const zone = document.createElement('div');
     const layer = document.createElement('div');

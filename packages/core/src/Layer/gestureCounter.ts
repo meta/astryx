@@ -31,13 +31,33 @@ function advance() {
   gesture += 1;
 }
 
+let unsubscribePress: (() => void) | null = null;
+
+// The page listens for a press's end and its context menu only while a press
+// is down, so at rest it keeps no pointerup listener of its own.
 function startPress(event: PointerEvent) {
   advance();
   pressPointerId = event.pointerId;
+  const view = event.view ?? document.defaultView;
+  if (unsubscribePress != null || view == null) {
+    return;
+  }
+  const unsubscribes = [
+    subscribeInput(view, 'pointerup', endPress, {first: true}),
+    subscribeInput(view, 'pointercancel', endPress, {first: true}),
+    subscribeInput(view, 'contextmenu', markContextMenu, {first: true}),
+  ];
+  unsubscribePress = () => {
+    for (const unsubscribe of unsubscribes) {
+      unsubscribe();
+    }
+  };
 }
 
 function endPress() {
   pressPointerId = null;
+  unsubscribePress?.();
+  unsubscribePress = null;
 }
 
 function markContextMenu() {
@@ -57,9 +77,6 @@ function listen() {
   const view = document.defaultView;
   if (view != null) {
     subscribeInput(view, 'pointerdown', startPress, {first: true});
-    subscribeInput(view, 'pointerup', endPress, {first: true});
-    subscribeInput(view, 'pointercancel', endPress, {first: true});
-    subscribeInput(view, 'contextmenu', markContextMenu, {first: true});
   }
   document.addEventListener('keydown', advance, true);
   // Capture phase observes the click even when a consumer stops propagation.
