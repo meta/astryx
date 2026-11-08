@@ -197,14 +197,39 @@ describe('LineClamp', () => {
       expect(link).not.toHaveAttribute('data-line-clamp-hidden');
     });
 
-    it('checks again when a web font loads and re-wraps the lines at the same box size', () => {
-      const fonts = new EventTarget();
-      Object.defineProperty(document, 'fonts', {
-        value: fonts,
-        configurable: true,
-      });
+    it('checks again when a link crosses the clip edge with no resize, mutation, render or font event', () => {
+      const observers: Array<{
+        callback: IntersectionObserverCallback;
+        targets: Set<Element>;
+      }> = [];
+      class FakeIntersectionObserver {
+        targets = new Set<Element>();
+        constructor(public callback: IntersectionObserverCallback) {
+          observers.push(this);
+        }
+        observe(el: Element) {
+          this.targets.add(el);
+        }
+        unobserve(el: Element) {
+          this.targets.delete(el);
+        }
+        disconnect() {
+          this.targets.clear();
+        }
+        takeRecords() {
+          return [];
+        }
+      }
+      vi.stubGlobal('IntersectionObserver', FakeIntersectionObserver);
+      const crossEdge = (link: Element) => {
+        for (const observer of observers) {
+          if (observer.targets.has(link)) {
+            observer.callback([], observer as unknown as IntersectionObserver);
+          }
+        }
+      };
       try {
-        const {rerender, unmount} = render(
+        const {rerender} = render(
           <LineClamp maxLines={2} data-testid="clamp">
             Some text <a href="/more">Read more</a>
           </LineClamp>,
@@ -223,22 +248,17 @@ describe('LineClamp', () => {
         );
         expect(link).not.toHaveAttribute('inert');
 
-        // The font re-wraps the text: the link moves past the edge, the box
-        // keeps its size, and nothing renders.
+        // The lines re-wrap at the same box size: the link moves past the
+        // edge, and only the edge observer reports it.
         rectMap.set(link, {top: 40, bottom: 56});
-        act(() => {
-          fonts.dispatchEvent(new Event('loadingdone'));
-        });
+        act(() => crossEdge(link));
         expect(link).toHaveAttribute('inert');
 
         rectMap.set(link, {top: 10, bottom: 26});
-        act(() => {
-          fonts.dispatchEvent(new Event('loadingdone'));
-        });
+        act(() => crossEdge(link));
         expect(link).not.toHaveAttribute('inert');
-        unmount();
       } finally {
-        delete (document as {fonts?: unknown}).fonts;
+        vi.unstubAllGlobals();
       }
     });
 

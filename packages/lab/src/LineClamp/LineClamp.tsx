@@ -137,6 +137,37 @@ function syncFocusableClipping(
   }
 }
 
+/**
+ * Lines can re-wrap at the same box size with no render, mutation or resize,
+ * for example when a web font loads or an ancestor changes font. An
+ * IntersectionObserver rooted at the clamp reports each managed focusable
+ * that crosses the clip edge, whatever moved it.
+ */
+function observeEdgeCrossings(container: HTMLElement, onCross: () => void) {
+  if (typeof IntersectionObserver === 'undefined') {
+    return {refresh: () => {}, disconnect: () => {}};
+  }
+  const observer = new IntersectionObserver(onCross, {root: container});
+  const refresh = () => {
+    observer.disconnect();
+    const candidates = container.querySelectorAll(
+      `${FOCUSABLE_SELECTOR}, [${HIDDEN_ATTRIBUTE}]`,
+    );
+    for (const el of candidates) {
+      if (isOwnedBy(container, el)) {
+        observer.observe(el);
+      }
+    }
+  };
+  refresh();
+  return {refresh, disconnect: () => observer.disconnect()};
+}
+
+/** A record that can change which descendants are focusable. */
+function changesFocusables(record: MutationRecord): boolean {
+  return record.type === 'childList' || record.attributeName !== 'inert';
+}
+
 const MUTATION_OPTIONS: MutationObserverInit = {
   childList: true,
   subtree: true,
@@ -292,17 +323,22 @@ export function LineClamp({
   });
   const elementRef = useRef<HTMLElement>(null);
 
-  // A resize can move a descendant across the clip edge without a render, a
-  // web font that loads late can re-wrap the lines at the same box size, and
-  // a child can add or re-enable a focusable element past the edge, so the
-  // sync also runs from the shared observers and on each font load. A callback ref attaches them with the root
-  // and releases them when it goes, including when `as` replaces it.
+  // A resize, a re-wrap of the lines or a child's new focusable can move a
+  // descendant across the edge without a render. The shared observers and
+  // the edge observer run the sync for those. A callback ref attaches them
+  // with the root and releases them when it goes, including when `as`
+  // replaces it.
   const observeRoot = useCallback((container: HTMLElement | null) => {
     if (container == null) {
       return;
     }
     const sync = () => syncFocusableClipping(container);
     let isReleased = false;
+    const edge = observeEdgeCrossings(container, () => {
+      if (!isReleased) {
+        sync();
+      }
+    });
     const unobserveMutations = observeMutations(
       container,
       MUTATION_OPTIONS,
@@ -310,6 +346,9 @@ export function LineClamp({
         handBackCallerInert(container, records);
         if (isReleased) {
           return;
+        }
+        if (records.some(changesFocusables)) {
+          edge.refresh();
         }
         if (isReleaseFlushing) {
           deferSync(sync);
@@ -319,15 +358,13 @@ export function LineClamp({
       },
     );
     const unobserveResize = observeResize(container, sync);
-    const fonts = container.ownerDocument.fonts;
-    fonts?.addEventListener?.('loadingdone', sync);
     return () => {
       // The shared observer disconnects when its last registration goes, and
       // a disconnect drops the records it holds. Hand a caller's queued
       // `inert` back first, while this registration still receives it.
       isReleased = true;
       releaseFlush();
-      fonts?.removeEventListener?.('loadingdone', sync);
+      edge.disconnect();
       unobserveResize();
       unobserveMutations();
     };
