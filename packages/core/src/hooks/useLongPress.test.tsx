@@ -1,7 +1,14 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
-import {renderHook, act} from '@testing-library/react';
+import {
+  renderHook,
+  act,
+  render,
+  screen,
+  fireEvent,
+} from '@testing-library/react';
+import {Suspense, startTransition, use, useState} from 'react';
 import {useLongPress} from './useLongPress';
 
 // Minimal React.TouchEvent stand-in carrying only what the hook reads.
@@ -175,6 +182,23 @@ describe('useLongPress', () => {
     expect(onLongPress).not.toHaveBeenCalled();
   });
 
+  it('uses the options of the latest commit', () => {
+    const first = vi.fn();
+    const latest = vi.fn();
+    const {result, rerender} = renderHook(
+      (props: {disabled: boolean; onLongPress: () => void}) =>
+        useLongPress(props),
+      {initialProps: {disabled: true, onLongPress: first}},
+    );
+    rerender({disabled: false, onLongPress: latest});
+    act(() => {
+      result.current.start({x: 0, y: 0});
+      vi.advanceTimersByTime(500);
+    });
+    expect(first).not.toHaveBeenCalled();
+    expect(latest).toHaveBeenCalledTimes(1);
+  });
+
   it('cancels the pending timer on unmount', () => {
     const onLongPress = vi.fn();
     const {result, unmount} = renderHook(() => useLongPress({onLongPress}));
@@ -204,6 +228,49 @@ describe('useLongPress', () => {
       vi.advanceTimersByTime(600);
     });
     // The public moveCancelPx (10 px) stands: the press was cancelled.
+    expect(onLongPress).not.toHaveBeenCalled();
+  });
+});
+
+describe('useLongPress options', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('keeps the committed options while a transition to new ones suspends', async () => {
+    const onLongPress = vi.fn();
+    const never = new Promise<void>(() => {});
+    let enable = () => {};
+    function Target({disabled}: {disabled: boolean}) {
+      const handlers = useLongPress({onLongPress, disabled});
+      if (!disabled) {
+        use(never);
+      }
+      return <div data-testid="target" {...handlers} />;
+    }
+    function Host() {
+      const [disabled, setDisabled] = useState(true);
+      enable = () => startTransition(() => setDisabled(false));
+      return (
+        <Suspense fallback={<div>loading</div>}>
+          <Target disabled={disabled} />
+        </Suspense>
+      );
+    }
+    render(<Host />);
+    await act(async () => {
+      enable();
+    });
+    // The transition suspended, so the disabled target is still on screen.
+    const target = screen.getByTestId('target');
+    act(() => {
+      fireEvent.touchStart(target, {touches: [{clientX: 0, clientY: 0}]});
+      vi.advanceTimersByTime(1000);
+    });
     expect(onLongPress).not.toHaveBeenCalled();
   });
 });

@@ -5,7 +5,7 @@
 /**
  * @file scrollLockTouchGuard.ts
  * @input The node under a finger and the pan's direction, while a scroll lock
- *   holds the page
+ *   holds the page; the native-scroll probe's edge test (gestures/nativeScroll)
  * @output isPanAbsorbedBeforePage and isPageZoomedIn, for the page hold
  * @position Internal hook utility; gestures/pageHold calls it for
  *   useScrollLock.
@@ -19,34 +19,8 @@
 // element, whose containing block is the viewport, so its untaken pans go to
 // the page.
 
+import {canElementScroll} from '../gestures/nativeScroll';
 import {parentAcrossShadow} from '../utils/flatTree';
-import {isRtlElement} from './isRtlElement';
-
-const SCROLLABLE = new Set(['auto', 'scroll']);
-
-/** Overflow at or below this many px is a box that fits, not a scroller. */
-const EDGE_TOLERANCE = 1;
-
-function canMoveY(element: Element, dy: number, range: number): boolean {
-  // A finger moving down drags the content down: scrollTop decreases.
-  return dy > 0
-    ? element.scrollTop > EDGE_TOLERANCE - 0.5
-    : element.scrollTop < range - EDGE_TOLERANCE + 0.5;
-}
-
-function canMoveX(
-  element: Element,
-  dx: number,
-  range: number,
-  isRtl: boolean,
-): boolean {
-  const min = isRtl ? -range : 0;
-  const max = isRtl ? 0 : range;
-  // A finger moving right drags the content right: scrollLeft decreases.
-  return dx > 0
-    ? element.scrollLeft > min + EDGE_TOLERANCE - 0.5
-    : element.scrollLeft < max - EDGE_TOLERANCE + 0.5;
-}
 
 /**
  * Whether `element` itself takes a pan. It does when it can still scroll that
@@ -59,22 +33,15 @@ function takesPan(
   dx: number,
   dy: number,
 ): boolean {
-  if (!SCROLLABLE.has(isVertical ? style.overflowY : style.overflowX)) {
-    return false;
-  }
-  const range = isVertical
-    ? element.scrollHeight - element.clientHeight
-    : element.scrollWidth - element.clientWidth;
-  // Content that fits has nothing to scroll. The pan goes on to the next
-  // scroller in the chain, and at last to the page.
-  if (range <= EDGE_TOLERANCE) {
-    return false;
-  }
-  const canMove = isVertical
-    ? canMoveY(element, dy, range)
-    : canMoveX(element, dx, range, isRtlElement(element as HTMLElement));
-  if (canMove) {
+  const x = isVertical ? 0 : dx;
+  const y = isVertical ? dy : 0;
+  if (canElementScroll(element, x, y)) {
     return true;
+  }
+  // A scroller at its edge can still move the other way. A box that does not
+  // scroll, or whose content fits, cannot. Its pan goes on along the chain.
+  if (!canElementScroll(element, -x, -y)) {
+    return false;
   }
   const behavior = isVertical
     ? style.overscrollBehaviorY

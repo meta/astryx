@@ -27,6 +27,7 @@ import {isRenderable} from '../utils/isRenderable';
 import {observeMutations} from '../utils/sharedMutationObserver';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import * as stylex from '@stylexjs/stylex';
+import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {
   useHoverCard,
   type HoverCardFocusTrigger,
@@ -214,8 +215,7 @@ export interface HoverCardProps extends Pick<
   /**
    * Controlled open state. When provided, overrides the hover trigger:
    * - `true`: force-show the hover card (hover/focus hide is suppressed)
-   * - `false`: hide the hover card and keep hover from opening it; focus on
-   *   the trigger still opens it
+   * - `false`: hide the hover card and keep hover and focus from opening it
    * - `undefined`: uncontrolled — hover/focus triggers manage visibility
    *
    * A controlled hover card still takes Escape when it is the top-most layer,
@@ -483,7 +483,9 @@ export function HoverCard({
           // No aria-expanded: this wrapper is a role-less <span>, and
           // aria-expanded is invalid on it (see EXPANDABLE_ROLES above).
           aria-describedby={label ? undefined : hoverCard.describedBy}
-          {...stylex.props(
+          // The span is a tab stop Astryx adds: it draws the shared ring,
+          // which a theme restyles through the focus-outline tokens.
+          {...focusOutlineProps.focusVisible(
             styles.wrapperInline,
             showHoverIndication && styles.hoverIndication,
           )}>

@@ -281,24 +281,16 @@ function familyAt(name, catalog, order) {
 }
 
 /**
- * Where an idea starts, by the blended weights.
+ * The blend's score for every candidate: the app shell and every ready,
+ * non-shell template, the table's first, then any the table does not list.
  * @param {string} idea
- * @param {import('./rank.mjs').RankedPage[]} ranked the ranker's output for the idea
- * @param {import('./rank.mjs').RankedPage | null} pick the ranker's own start
- * @param {DescribedTemplate[]} catalog the project's ready page templates
- * @param {{weights?: WeightsFile | null, newPage?: boolean}} [options]
- *   `newPage`: the idea asks for a new page (rank.mjs `asksForNewPage`)
- * @returns {string | null | undefined} a template id, null for the app shell,
- *   undefined without weights
+ * @param {import('./rank.mjs').RankedPage[]} ranked
+ * @param {import('./rank.mjs').RankedPage | null} pick
+ * @param {DescribedTemplate[]} catalog
+ * @param {WeightsFile} weights
+ * @returns {{cands: string[], scores: number[], position: Map<string, number>}}
  */
-export function weighStart(
-  idea,
-  ranked,
-  pick,
-  catalog,
-  {weights = null, newPage = false} = {},
-) {
-  if (!weights) return undefined;
+function blend(idea, ranked, pick, catalog, weights) {
   const ready = new Set(catalog.map(t => t.name));
   const shellIds = new Set(
     ranked.filter(r => r.family === SHELL_FAMILY).map(r => r.name),
@@ -335,6 +327,50 @@ export function weighStart(
     for (const f of feats) for (const x of f[i]) s += x * weights.blend[j++];
     return s + (c === SHELL ? 1 : 0) * weights.blend[j];
   });
+  return {cands, scores, position};
+}
+
+/**
+ * Every ready, non-shell template in the blend's own order, best first: the
+ * order the page start is chosen from, so the alternatives build names beside
+ * the start come from the same ranking. Null without weights.
+ * @param {string} idea
+ * @param {import('./rank.mjs').RankedPage[]} ranked
+ * @param {import('./rank.mjs').RankedPage | null} pick
+ * @param {DescribedTemplate[]} catalog
+ * @param {WeightsFile | null} weights
+ * @returns {string[] | null}
+ */
+export function blendOrder(idea, ranked, pick, catalog, weights) {
+  if (!weights) return null;
+  const {cands, scores} = blend(idea, ranked, pick, catalog, weights);
+  return cands
+    .map((c, i) => ({c, s: scores[i], i}))
+    .filter(x => x.c !== SHELL)
+    .sort((x, y) => y.s - x.s || x.i - y.i)
+    .map(x => x.c);
+}
+
+/**
+ * Where an idea starts, by the blended weights.
+ * @param {string} idea
+ * @param {import('./rank.mjs').RankedPage[]} ranked the ranker's output for the idea
+ * @param {import('./rank.mjs').RankedPage | null} pick the ranker's own start
+ * @param {DescribedTemplate[]} catalog the project's ready page templates
+ * @param {{weights?: WeightsFile | null, newPage?: boolean}} [options]
+ *   `newPage`: the idea asks for a new page (rank.mjs `asksForNewPage`)
+ * @returns {string | null | undefined} a template id, null for the app shell,
+ *   undefined without weights
+ */
+export function weighStart(
+  idea,
+  ranked,
+  pick,
+  catalog,
+  {weights = null, newPage = false} = {},
+) {
+  if (!weights) return undefined;
+  const {cands, scores, position} = blend(idea, ranked, pick, catalog, weights);
   /** @param {(c: string) => boolean} ok */
   const best = ok => {
     let at = -1;

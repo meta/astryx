@@ -13,7 +13,7 @@
  *   component proof does
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {openStory, withStorybook} from './story';
 import {countBetween, traceRendering} from './trace';
 

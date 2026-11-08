@@ -308,6 +308,65 @@ describe('MobileNav close path edge cases', () => {
     expect(document.documentElement.style.overflow).toBe('');
   });
 
+  it('releases the page when the dialog closed natively before isOpen turned false', () => {
+    vi.useFakeTimers();
+    // A classic scrollbar, so the lock holds the gutter: jsdom does no layout.
+    const innerWidth = Object.getOwnPropertyDescriptor(window, 'innerWidth');
+    const css = Object.getOwnPropertyDescriptor(window, 'CSS');
+    Object.defineProperty(window, 'innerWidth', {
+      value: 1024,
+      configurable: true,
+      writable: true,
+    });
+    Object.defineProperty(document.documentElement, 'clientWidth', {
+      value: 1009,
+      configurable: true,
+    });
+    Object.defineProperty(window, 'CSS', {
+      value: {
+        supports: (property: string, value: string) =>
+          property === 'scrollbar-gutter' && value === 'stable',
+      },
+      configurable: true,
+      writable: true,
+    });
+    try {
+      const {rerender} = render(<Drawer isOpen />);
+      const dialog = screen.getByTestId<HTMLDialogElement>('mobile-nav');
+      // Whatever value the lock writes, the page is locked while open.
+      expect(document.documentElement.style.overflow).not.toBe('');
+      expect(document.documentElement.style.scrollbarGutter).toBe('stable');
+
+      // A `<form method="dialog">` submit or a close() through a ref closes
+      // the dialog before the app's state follows.
+      act(() => {
+        dialog.close();
+      });
+      act(() => {
+        rerender(<Drawer isOpen={false} />);
+      });
+      act(() => {
+        vi.advanceTimersByTime(2000);
+      });
+
+      expect(document.documentElement.style.overflow).toBe('');
+      expect(document.documentElement.style.scrollbarGutter).toBe('');
+    } finally {
+      vi.useRealTimers();
+      if (innerWidth) {
+        Object.defineProperty(window, 'innerWidth', innerWidth);
+      }
+      // @ts-expect-error -- drop the stub so jsdom's own value comes back
+      delete document.documentElement.clientWidth;
+      if (css) {
+        Object.defineProperty(window, 'CSS', css);
+      } else {
+        // @ts-expect-error -- jsdom has no CSS object of its own
+        delete window.CSS;
+      }
+    }
+  });
+
   it('leaves no pending close timer behind after unmount', () => {
     vi.useFakeTimers();
     try {

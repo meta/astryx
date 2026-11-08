@@ -33,6 +33,7 @@
 
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {useMediaQuery} from '../hooks/useMediaQuery';
+import {setScrollAnchoringOff} from '../privateAttributes/scrollAnchoring.stylex';
 
 // =============================================================================
 // Types
@@ -128,26 +129,27 @@ export interface UseChatStreamScrollReturn {
 
 const SIXTY_FPS_MS = 1000 / 60;
 
-// While following, the hook owns the container's position, so the browser's
-// scroll anchoring must not move it. The rule rides on an attribute rather
-// than the element's inline style: a consumer's own `overflow-anchor` is never
-// read, written or restored — it simply applies again once the attribute is
-// gone. `!important` so an inline `auto` cannot switch anchoring back on under
-// a following container; an inline `!important` still wins, deliberately.
-const FOLLOWING_ATTR = 'data-astryx-chat-following';
-const FOLLOWING_STYLE_ATTR = 'data-astryx-chat-following-style';
+// The scrollers whose hook follows the newest message now, kept in step with
+// each hook's lock.
+const following = new WeakSet<Element>();
 
-function ensureFollowingStyle(): void {
-  if (
-    typeof document === 'undefined' ||
-    document.head.querySelector(`[${FOLLOWING_STYLE_ATTR}]`)
-  ) {
-    return;
+/**
+ * Whether the stream scroll on `scroller` follows its newest message now, as
+ * its lock says. Internal to Chat.
+ */
+export function isFollowingNewest(scroller: Element): boolean {
+  return following.has(scroller);
+}
+
+// The lock's marks on the scroller: anchoring off while the hook follows, and
+// the state `isFollowingNewest` reads.
+function markFollowing(el: Element, locked: boolean): void {
+  setScrollAnchoringOff(el, locked);
+  if (locked) {
+    following.add(el);
+  } else {
+    following.delete(el);
   }
-  const style = document.createElement('style');
-  style.setAttribute(FOLLOWING_STYLE_ATTR, '');
-  style.textContent = `[${FOLLOWING_ATTR}]{overflow-anchor:none !important}`;
-  document.head.appendChild(style);
 }
 
 export function useChatStreamScroll({
@@ -187,7 +189,10 @@ export function useChatStreamScroll({
     (locked: boolean) => {
       lockedRef.current = locked;
       setIsLocked(locked);
-      scrollRef.current?.toggleAttribute(FOLLOWING_ATTR, locked);
+      const el = scrollRef.current;
+      if (el != null) {
+        markFollowing(el, locked);
+      }
     },
     [scrollRef],
   );
@@ -358,6 +363,8 @@ export function useChatStreamScroll({
 
   // --- Event listeners ---
 
+  // Syncs scroll and scrollend listeners on the stream container with
+  // `enabled`.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el || !enabled) {
@@ -365,8 +372,7 @@ export function useChatStreamScroll({
     }
 
     lastScrollTopRef.current = el.scrollTop;
-    ensureFollowingStyle();
-    el.toggleAttribute(FOLLOWING_ATTR, lockedRef.current);
+    markFollowing(el, lockedRef.current);
 
     const onScroll = () => {
       const {scrollTop, scrollHeight, offsetHeight} = el;
@@ -412,7 +418,7 @@ export function useChatStreamScroll({
     return () => {
       el.removeEventListener('scroll', onScroll);
       el.removeEventListener('scrollend', onScrollEnd);
-      el.removeAttribute(FOLLOWING_ATTR);
+      markFollowing(el, false);
     };
   }, [scrollRef, enabled, lockThreshold, buttonThreshold, setLocked]);
 

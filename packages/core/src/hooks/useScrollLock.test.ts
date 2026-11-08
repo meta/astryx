@@ -307,6 +307,15 @@ describe('useScrollLock', () => {
       expect(pan(row, 200, 300)).toBe(false);
     });
 
+    it('lets a pan through on a scroller whose overflow is `overlay`, as the browser scrolls it', () => {
+      const list = scroller(400, 100);
+      list.style.overflowY = 'overlay';
+      renderHook(() => useScrollLock(true));
+
+      expect(pan(list, 300, 200)).toBe(false);
+      expect(pan(list, 200, 300)).toBe(false);
+    });
+
     it('cancels a pan on a scroller whose content fits', () => {
       const body = scroller(0, 0);
       renderHook(() => useScrollLock(true));

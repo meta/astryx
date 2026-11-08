@@ -655,6 +655,60 @@ describe('TopNavItem', () => {
       expect(handleClick).not.toHaveBeenCalled();
     });
 
+    it.each([
+      ['default', null],
+      ['drawer', 'drawer' as const],
+    ])(
+      'does not run a disabled item’s caller handlers (%s mode)',
+      (_name, mode) => {
+        const onPointerDown = vi.fn();
+        const onMouseDown = vi.fn();
+        const onKeyDown = vi.fn();
+        const item = (
+          <TopNavItem
+            label="Home"
+            href="/home"
+            isDisabled
+            onPointerDown={onPointerDown}
+            onMouseDown={onMouseDown}
+            onKeyDown={onKeyDown}
+          />
+        );
+        render(
+          mode ? (
+            <TopNavRenderContext value={mode}>{item}</TopNavRenderContext>
+          ) : (
+            item
+          ),
+        );
+        const anchor = screen.getByText('Home').closest('a') as HTMLElement;
+        fireEvent.pointerDown(anchor);
+        fireEvent.mouseDown(anchor);
+        fireEvent.keyDown(anchor, {key: 'x'});
+        expect(onPointerDown).not.toHaveBeenCalled();
+        expect(onMouseDown).not.toHaveBeenCalled();
+        expect(onKeyDown).not.toHaveBeenCalled();
+      },
+    );
+
+    it('still runs an enabled item’s caller handlers', () => {
+      const onPointerDown = vi.fn();
+      const onKeyDown = vi.fn();
+      render(
+        <TopNavItem
+          label="Home"
+          href="/home"
+          onPointerDown={onPointerDown}
+          onKeyDown={onKeyDown}
+        />,
+      );
+      const anchor = screen.getByText('Home').closest('a') as HTMLElement;
+      fireEvent.pointerDown(anchor);
+      fireEvent.keyDown(anchor, {key: 'x'});
+      expect(onPointerDown).toHaveBeenCalledTimes(1);
+      expect(onKeyDown).toHaveBeenCalledTimes(1);
+    });
+
     it('keeps href and click behavior for enabled items (default mode)', async () => {
       const user = userEvent.setup();
       const handleClick = vi.fn();

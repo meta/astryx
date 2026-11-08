@@ -34,5 +34,6 @@
   "HoverCard": {
     "stories": ["core-hovercard--open-states"],
     "readySelector": "[role=\"dialog\"]"
-  }
+  },
+  "InputGroupText": {"components": ["InputGroupText", "InputGroup"]}
 }

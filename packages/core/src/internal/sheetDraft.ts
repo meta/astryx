@@ -4,8 +4,8 @@
  * @input A sheet's selection at open, its draft, and the last edit made
  * @output SheetDraftChange, hasSameSelection, nameSheetDraftChange — the
  *   rules a touch sheet's Save and dismissal share
- * @position Core-internal, shared by the Tokenizer sheet and the Lab sheets
- *   through `internal/touch-sheet`; not a public export
+ * @position Core-internal. The Tokenizer sheet uses it, and PowerSearch's
+ *   list-value step renders that sheet. Not a public export.
  *
  * A touch sheet edits a draft and reports it once, on Save, with one change:
  * the last edit that still holds, else the nearest net add or remove. A

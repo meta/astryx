@@ -63,6 +63,8 @@ export function useMenuOverflow(
     );
   }, [menuRef]);
 
+  // Syncs the overflow measurement with the open menu. It measures, then
+  // observes resize, DOM changes and window resize.
   useIsomorphicLayoutEffect(() => {
     if (!isOpen) {
       return;
@@ -98,6 +100,7 @@ export function useMenuOverflow(
     };
   }, [isOpen, measureOverflow, menuRef]);
 
+  // Measures overflow again after the content changes while the menu is open.
   useIsomorphicLayoutEffect(() => {
     if (isOpen) {
       measureOverflow();
