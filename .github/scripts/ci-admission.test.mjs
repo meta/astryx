@@ -212,6 +212,7 @@ describe('where runs wait', () => {
     expect(guarded.sort()).toEqual([
       'a11y-dependent-audits-plan',
       'docsite-build',
+      'interaction-legs',
       'pr-a11y-dependent-audits',
       'pr-component-a11y-contracts',
       'pr-interaction',

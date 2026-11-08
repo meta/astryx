@@ -6,7 +6,8 @@
  * @file Lightbox.tsx
  * @input Uses React, native dialog, StyleX, IconButton, theme tokens, layerTextReset, layerStructureReset,
  *   and isRtlElement (gallery arrow keys follow the rendered direction). The
- *   zoom uses useZoomCore and useZoomStage, and a gallery pages with usePager
+ *   zoom uses useZoomCore and useZoomStage, a gallery pages with usePager,
+ *   and the drag to dismiss fades the backdrop and controls on the animator
  * @output Exports Lightbox component, LightboxProps, LightboxMedia
  * @position Core implementation; consumed by index.ts
  *
@@ -28,6 +29,7 @@ import {
   useEffect,
   useId,
   useMemo,
+  useReducer,
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
@@ -76,6 +78,8 @@ import {usePager} from '../hooks/usePager';
 import {TapGestureRecognizer} from '../gestures/TapGestureRecognizer';
 import type {GestureTouch} from '../gestures/types';
 import {useGestureRecognizer} from '../gestures/useGestureRecognizer';
+import {resolveMotion} from '../motion/resolveMotion';
+import {springs} from '../motion/uikit/springs';
 import {zoomMedia} from '../motion/uikit/zoomMedia';
 import {useZoomStage} from './useZoomStage';
 import {useTouchPresentation} from '../utils/touchPresentation';
@@ -93,11 +97,13 @@ import {
   returnFocusForLastInput,
   type FocusWithin,
 } from '../utils/focusReturn';
+import {animatorFor, type Animator} from '../motion/animator';
+import {dismissBackdropAlpha, dismissChromeAlpha} from './zoomStage';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {MediaTheme} from '../theme/MediaTheme';
 import {Text} from '../Text/Text';
 import {useHeldTruncation} from '../Text/useTruncation';
-import {Button} from '../Button/Button';
+import {Link} from '../Link/Link';
 
 registerEnglishFallback(english);
 /**
@@ -200,9 +206,13 @@ const styles = stylex.create({
     backgroundColor: 'transparent',
     overflow: 'hidden',
     outline: 'none',
+    // The backdrop is the theme's overlay colour over a 2 px blur. A drag to
+    // dismiss and its release remove the blur through
+    // `--_lightbox-backdrop-filter`. A full-viewport blur repainted every
+    // frame of the fade drops frames.
     '::backdrop': {
       backgroundColor: colorVars['--color-overlay'],
-      backdropFilter: 'blur(2px)',
+      backdropFilter: 'var(--_lightbox-backdrop-filter, blur(2px))',
     },
   },
   container: {
@@ -225,7 +235,9 @@ const styles = stylex.create({
     minHeight: 0,
     maxWidth: '100%',
     maxHeight: '100%',
-    overflow: 'hidden',
+    // ZOOM_DISMISSING_ATTRIBUTE on the stage inside: a photo dragged to
+    // dismiss draws outside the box that hugs it.
+    overflow: {default: 'hidden', ':has([data-zoom-dismissing])': 'visible'},
   },
   // The zoom button's box clips, so its focus ring sits inside its edge.
   zoomButtonFocusInset: {
@@ -243,10 +255,17 @@ const styles = stylex.create({
     flexShrink: 1,
     flexBasis: 0,
     position: 'relative',
-    overflow: 'hidden',
+    // ZOOM_DISMISSING_ATTRIBUTE on the current page's photo box: a photo
+    // dragged to dismiss draws outside the stage.
+    overflow: {default: 'hidden', ':has([data-zoom-dismissing])': 'visible'},
     cursor: 'default',
     userSelect: 'none',
     minHeight: 0,
+  },
+  // In the touch presentation, a photo without zoom leaves pinch-zoom to the
+  // page but takes one-finger drags. A drag down dismisses it.
+  imageWrapperDismissTarget: {
+    touchAction: 'pinch-zoom',
   },
   // The photo rows take the stage's own pinch, pan and double tap, for every
   // pointer. A descendant cannot allow what an ancestor's `touch-action` rules
@@ -301,7 +320,11 @@ const styles = stylex.create({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
+    // ZOOM_DISMISSING_ATTRIBUTE: a photo dragged to dismiss draws outside its
+    // box, above its caption band and below the controls. The drag fades the
+    // band, which makes it a stacking context painted after the box.
+    overflow: {default: 'hidden', ':is([data-zoom-dismissing])': 'visible'},
+    zIndex: {default: null, ':is([data-zoom-dismissing])': 1},
   },
   // A gallery's caption band, under every page's photo. It is two caption
   // lines tall whatever the caption, so the photo area stays the same. Its
@@ -389,20 +412,18 @@ const styles = stylex.create({
     blockSize: '1lh',
     marginInlineStart: spacingVars['--spacing-1'],
   }),
-  // The caption's Button over its place: the caption's last line, inside the
-  // Text's inline padding. It is one caption line tall, so its fill stays on
-  // its own line. Under a coarse pointer, the shared hit area writes how far
-  // the toggle may grow toward 44 px on each side, short of any neighbour.
-  // This layer takes taps out to there, except upward into the line above.
-  // Its sides are physical, as the page's rects.
+  // The caption's link over its place: the caption's last line, inside the
+  // Text's inline padding. It takes the caption's font and line height, so
+  // it sits on that line as its text does. Under a coarse pointer, the shared
+  // hit area writes how far the toggle may grow toward 44 px on each side,
+  // short of any neighbour. This layer takes taps out to there, except upward
+  // into the line above. Its sides are physical, as the page's rects.
   // SYNC: `caption`'s paddingInline.
   // SYNC: /packages/core/src/utils/hitArea.ts (HIT_INSET_PROPERTIES)
   captionToggle: {
     position: 'absolute',
     insetInlineEnd: spacingVars['--spacing-3'],
     insetBlockEnd: 0,
-    blockSize: '1lh',
-    paddingBlock: 0,
     '::after': {
       content: '""',
       position: 'absolute',
@@ -501,11 +522,30 @@ const styles = stylex.create({
   navNext: {
     insetInlineEnd: spacingVars['--spacing-3'],
   },
+  // The counter takes its own clicks in the click-through layer, so a click
+  // on it leaves the viewer open.
   counter: {
     position: 'absolute',
     top: spacingVars['--spacing-3'],
     insetInlineStart: spacingVars['--spacing-3'],
     zIndex: 1,
+    pointerEvents: 'auto',
+  },
+  controlButton: {
+    pointerEvents: 'auto',
+  },
+  // The controls sit in layers over the viewer that pass clicks through. A
+  // drag to dismiss fades the layers, which carry no transition of their own,
+  // since a Button's opacity transition would trail the finger.
+  // They sit above the stage, even a photo dragged to dismiss. While a fade
+  // writes their opacity, each is a stacking context. The track's positioned
+  // pages, later in tree order, would otherwise cover them and take the taps
+  // meant for the controls.
+  chromeLayer: {
+    position: 'absolute',
+    inset: 0,
+    zIndex: 2,
+    pointerEvents: 'none',
   },
   // With zoom a photo can lie under the controls. Lightbox's own translucent
   // backing keeps them readable over any photo: 3:1 for the buttons, 4.5:1
@@ -758,6 +798,31 @@ export function Lightbox({
       void current.play()?.catch(() => {});
     }
   }, [index, hasAutoPlay]);
+
+  // The backdrop, the controls and the pages a dismissal faded, to restore
+  // exactly those. A page faded as a neighbour may be the current one when
+  // the viewer opens again.
+  const fadedRef = useRef<Animator[]>([]);
+  // Set when a dismissal has asked the caller to close; the next render
+  // (one more is asked for) reads the caller's answer.
+  const dismissalAnsweredRef = useRef(false);
+  const [, renderAfterDismissal] = useReducer((n: number) => n + 1, 0);
+
+  // Drag to dismiss, as in Photos. The backdrop fades with the drag's travel,
+  // and the controls and the neighbouring photos fade faster. A dismissal
+  // fades them out on its spring and closes once the photo has left.
+  // The backdrop's blur comes off while the backdrop moves and comes back
+  // once it rests, through the dialog's '::backdrop' style. Each move counts:
+  // a release's end restores it only if nothing has moved the backdrop since.
+  const backdropMovesRef = useRef(0);
+  const setBackdropMoving = useCallback((moving: boolean) => {
+    const dialog = dialogRef.current;
+    if (moving) {
+      dialog?.style.setProperty('--_lightbox-backdrop-filter', 'none');
+    } else {
+      dialog?.style.removeProperty('--_lightbox-backdrop-filter');
+    }
+  }, []);
 
   // Open/close dialog. The dialog renders only with an item, so a viewer
   // opened before its first item arrives opens when that item does.
@@ -1111,6 +1176,34 @@ export function Lightbox({
   );
 
   const isZoomTarget = hasZoom && !isVideo;
+
+  const dismissFades = useCallback((): {
+    backdrop: Animator | null;
+    chrome: Animator[];
+  } => {
+    const dialog = dialogRef.current;
+    const container = containerRef.current;
+    if (dialog == null || container == null) {
+      return {backdrop: null, chrome: []};
+    }
+    // A caption in a band fades as the band, which carries its backing.
+    const chrome: HTMLElement[] = [];
+    for (const element of container.querySelectorAll<HTMLElement>(
+      '[data-lightbox-chrome], [data-lightbox-page]:not([data-current]), [data-lightbox-caption-band], [data-lightbox-caption]',
+    )) {
+      if (
+        element.parentElement?.closest(
+          '[data-lightbox-page]:not([data-current]), [data-lightbox-caption-band]',
+        ) == null
+      ) {
+        chrome.push(element);
+      }
+    }
+    return {
+      backdrop: animatorFor(dialog, {pseudoElement: '::backdrop'}),
+      chrome: chrome.map(element => animatorFor(element)),
+    };
+  }, []);
   const onDragStart = () => {
     didDragRef.current = true;
   };
@@ -1142,6 +1235,7 @@ export function Lightbox({
     stageRef: pageMediaRef,
     surfaceRef: trackRef,
     isEnabled: isOpen && isZoomTarget,
+    itemKey: viewedItem,
     // The stage shares its surface with the page around it. A tap there
     // closes, as on the backdrop, unless it lands on the caption.
     onTapOutside: ({x, y}) => {
@@ -1166,6 +1260,87 @@ export function Lightbox({
     // A pinch whose first finger lands on a caption is the page's.
     shouldBeginPinch: recognizer =>
       !startsOnCaption(recognizer.trackedTouches[0]),
+    dismiss: {
+      // Part of the touch presentation, which applies under a coarse primary
+      // pointer. Where it is fine, a drag leaves the photo in place. A video
+      // keeps its own controls' drags.
+      isEnabled: isOpen && !isVideo && isTouch,
+      onDrag: travel => {
+        const {backdrop, chrome} = dismissFades();
+        fadedRef.current = backdrop == null ? chrome : [backdrop, ...chrome];
+        backdropMovesRef.current += 1;
+        setBackdropMoving(true);
+        backdrop?.set({opacity: dismissBackdropAlpha(travel)});
+        const opacity = dismissChromeAlpha(travel);
+        for (const animator of chrome) {
+          animator.set({opacity});
+        }
+      },
+      onRelease: (dismisses, touch) => {
+        const {backdrop, chrome} = dismissFades();
+        fadedRef.current = backdrop == null ? chrome : [backdrop, ...chrome];
+        // They keep pace with the photo: the dismissal's measured spring, or
+        // on a cancel the shared settle spring, read where the stage is.
+        const spring = dismisses
+          ? zoomMedia.dismiss.dismissSizeSpring
+          : resolveMotion(pageMediaRef.current, springs.settle);
+        const opacity = dismisses ? 0 : 1;
+        const move = (backdropMovesRef.current += 1);
+        setBackdropMoving(true);
+        const backdropMotion = backdrop?.animate(
+          {opacity},
+          {spring},
+          {touchRelease: touch},
+        );
+        for (const animator of chrome) {
+          animator.animate({opacity}, {spring}, {touchRelease: touch});
+        }
+        // Back at rest: the blur returns, unless the backdrop moved again.
+        void backdropMotion?.finished.then(() => {
+          if (!dismisses && backdropMovesRef.current === move) {
+            setBackdropMoving(false);
+          }
+        });
+      },
+      onDismissed: () => {
+        handleClose();
+        // A caller may keep the viewer open, since the close is its call. The
+        // render after its answer brings the photo, the backdrop and the
+        // controls back, so no open dialog stays invisible.
+        dismissalAnsweredRef.current = true;
+        renderAfterDismissal();
+      },
+    },
+  });
+
+  // Restore the photo, the backdrop and the controls only when the viewer
+  // opens or a dismissal is answered. Each write promotes a layer, and
+  // releasing it later repaints during a gesture.
+  const restoreAfterDismissal = useCallback(() => {
+    stage.reset();
+    backdropMovesRef.current += 1;
+    setBackdropMoving(false);
+    const faded = fadedRef.current;
+    fadedRef.current = [];
+    for (const animator of faded) {
+      animator.set({opacity: 1});
+    }
+  }, [stage, setBackdropMoving]);
+  // Effect: syncs the photo's and the controls' animations with an opening
+  // viewer, so it opens at rest with the backdrop's blur back.
+  useIsomorphicLayoutEffect(() => {
+    if (isOpen) {
+      restoreAfterDismissal();
+    }
+  }, [isOpen, restoreAfterDismissal]);
+  useIsomorphicLayoutEffect(() => {
+    if (!dismissalAnsweredRef.current) {
+      return;
+    }
+    dismissalAnsweredRef.current = false;
+    if (isOpen) {
+      restoreAfterDismissal();
+    }
   });
   // Whether a mouse or a pen hovers over the fitted photo, for its cursor. The
   // stage fills the viewer, so the photo's box is read, not the event target.
@@ -1449,7 +1624,7 @@ export function Lightbox({
         variant="ghost"
         isDisabled={isDisabled}
         onClick={onClick}
-        xstyle={!hasZoom && place}
+        xstyle={[!hasZoom && place, styles.controlButton]}
       />
     );
     return hasZoom ? (
@@ -1557,27 +1732,34 @@ export function Lightbox({
                     didDragRef.current = false;
                   }
                 }}>
-                {control(styles.closeButton, {
-                  icon: 'close',
-                  label: t('@astryx.lightbox.close'),
-                  onClick: handleClose,
-                  buttonRef: closeButtonRef,
-                })}
-
-                {/* Gallery nav: prev — stays mounted and is disabled at the start of
-            the range so pressing/arrowing to the boundary doesn't unmount the
-            focused control and drop focus to <body>. */}
-                {isGallery &&
-                  control([styles.navButton, styles.navPrev], {
-                    icon: 'chevronLeft',
-                    label: t('@astryx.lightbox.previous'),
-                    isDisabled: !canPrev,
-                    onClick: goToPrev,
-                    isMirrored: true,
+                <div
+                  data-lightbox-chrome=""
+                  {...stylex.props(styles.chromeLayer)}>
+                  {control(styles.closeButton, {
+                    icon: 'close',
+                    label: t('@astryx.lightbox.close'),
+                    onClick: handleClose,
+                    buttonRef: closeButtonRef,
                   })}
 
+                  {/* Gallery nav: prev — stays mounted and is disabled at the start of
+                the range so pressing/arrowing to the boundary doesn't unmount the
+                focused control and drop focus to <body>. */}
+                  {isGallery &&
+                    control([styles.navButton, styles.navPrev], {
+                      icon: 'chevronLeft',
+                      label: t('@astryx.lightbox.previous'),
+                      isDisabled: !canPrev,
+                      onClick: goToPrev,
+                      isMirrored: true,
+                    })}
+                </div>
+
                 {/* The stage: a track of pages, each a photo and its caption */}
-                <div ref={mediaGroupRef} {...stylex.props(styles.mediaGroup)}>
+                <div
+                  ref={mediaGroupRef}
+                  data-lightbox-media=""
+                  {...stylex.props(styles.mediaGroup)}>
                   <div
                     ref={imageWrapperRef}
                     data-lightbox-viewport=""
@@ -1612,6 +1794,10 @@ export function Lightbox({
                       {...stylex.props(
                         styles.track,
                         isZoomTarget && styles.trackZoomTarget,
+                        isTouch &&
+                          !isZoomTarget &&
+                          !isVideo &&
+                          styles.imageWrapperDismissTarget,
                       )}>
                       {pageIndexes.map(i => (
                         <div
@@ -1646,6 +1832,7 @@ export function Lightbox({
                           </div>
                           {hasCaptionBand && (
                             <div
+                              data-lightbox-caption-band=""
                               {...stylex.props(
                                 styles.captionBand,
                                 !isRenderable(mediaArray[i].caption) &&
@@ -1725,16 +1912,14 @@ export function Lightbox({
                                       // until the caption needs it. So a
                                       // measurement only shows or hides it,
                                       // and adds no element.
-                                      <Button
+                                      <Link
                                         ref={captionToggleRef}
                                         hidden={!hasCaptionToggle}
-                                        variant="ghost"
-                                        size="sm"
-                                        label={
-                                          isCaptionOpen
-                                            ? t('@astryx.lightbox.captionLess')
-                                            : t('@astryx.lightbox.captionMore')
-                                        }
+                                        type="inherit"
+                                        // On the media surface a link's
+                                        // colour is close to the caption's.
+                                        // The underline sets it apart.
+                                        hasUnderline
                                         aria-expanded={isCaptionOpen}
                                         aria-controls={fullCaptionId}
                                         onClick={() =>
@@ -1746,8 +1931,11 @@ export function Lightbox({
                                           styles.captionToggle,
                                           !hasCaptionToggle &&
                                             styles.captionToggleHidden,
-                                        ]}
-                                      />
+                                        ]}>
+                                        {isCaptionOpen
+                                          ? t('@astryx.lightbox.captionLess')
+                                          : t('@astryx.lightbox.captionMore')}
+                                      </Link>
                                     )}
                                   </div>
                                 </div>
@@ -1760,31 +1948,35 @@ export function Lightbox({
                   </div>
                 </div>
 
-                {/* Gallery nav: next — see "prev" above; stays mounted and disabled at
-            the end of the range instead of unmounting. */}
-                {isGallery &&
-                  control([styles.navButton, styles.navNext], {
-                    icon: 'chevronRight',
-                    label: t('@astryx.lightbox.next'),
-                    isDisabled: !canNext,
-                    onClick: goToNext,
-                    isMirrored: true,
-                  })}
+                <div
+                  data-lightbox-chrome=""
+                  {...stylex.props(styles.chromeLayer)}>
+                  {/* Gallery nav: next — see "prev" above; stays mounted and disabled at
+              the end of the range instead of unmounting. */}
+                  {isGallery &&
+                    control([styles.navButton, styles.navNext], {
+                      icon: 'chevronRight',
+                      label: t('@astryx.lightbox.next'),
+                      isDisabled: !canNext,
+                      onClick: goToNext,
+                      isMirrored: true,
+                    })}
 
-                {/* Gallery counter */}
-                {isGallery && mediaArray.length > 1 && (
-                  <Text
-                    as="div"
-                    type="body"
-                    color={hasZoom ? 'inherit' : undefined}
-                    xstyle={[
-                      styles.counter,
-                      hasZoom && styles.counterBacking,
-                      hasZoom && styles.counterOnDark,
-                    ]}>
-                    {index + 1} / {mediaArray.length}
-                  </Text>
-                )}
+                  {/* Gallery counter */}
+                  {isGallery && mediaArray.length > 1 && (
+                    <Text
+                      as="div"
+                      type="body"
+                      color={hasZoom ? 'inherit' : undefined}
+                      xstyle={[
+                        styles.counter,
+                        hasZoom && styles.counterBacking,
+                        hasZoom && styles.counterOnDark,
+                      ]}>
+                      {index + 1} / {mediaArray.length}
+                    </Text>
+                  )}
+                </div>
               </div>
             </MediaTheme>
           </LayerContentBoundary>
