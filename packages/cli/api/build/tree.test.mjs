@@ -4,7 +4,8 @@
  * @file build's tree end to end, offline: the network and subprocesses throw,
  * and build still answers. The block picker changes only the kit's blocks:
  * the start, its alternatives, and every other field stay build's own, the
- * block count is build's own, and the blocks it names are pinned per phrase.
+ * block count is build's own, the blocks follow the picker's own ranking, and
+ * each phrase pins the components it must get blocks from.
  */
 
 import * as fs from 'node:fs';
@@ -256,10 +257,17 @@ describe('build tree', () => {
       expect(answer.data.blocks.map(b => b.name)).toEqual(
         pickBlocks(phrase, signals, picker).names,
       );
-      // Each component the request names gets at least one block.
+      // Each component the request names gets at least one of its own blocks:
+      // a block belongs to the longest component name it starts with, as the
+      // picker reads it.
+      const byLength = signals.components
+        .map(c => c.name)
+        .sort((a, b) => b.length - a.length);
+      const componentOf = (/** @type {string} */ name) =>
+        byLength.find(c => name.startsWith(c));
       for (const component of components) {
         expect(
-          answer.data.blocks.some(b => b.name.startsWith(component)),
+          answer.data.blocks.some(b => componentOf(b.name) === component),
           component,
         ).toBe(true);
       }
