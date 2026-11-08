@@ -781,7 +781,9 @@ export function buildPlan({
  * baseline already holds probe shots for while that story still renders a
  * target no kept story covers, widest first. Only the targets left after that
  * get a greedy fill, and then each story the rest of the plan already covers
- * is dropped, narrowest first. The plan is a fixed point: fed back as the
+ * is dropped, narrowest first. A visual-theme-matrix story plans its probe
+ * shots anyway, so its targets count as covered from the start. The plan is a
+ * fixed point: fed back as the
  * baseline, it plans the same stories, so a baseline sync settles in one step
  * and the plan moves again only when a target is gained or lost. Between
  * stories that cover the same number of targets, the smaller story id wins.
@@ -797,18 +799,27 @@ function probeShots({stories, targets, observations, probeTheme, baselineStories
   if (!observations) return [];
 
   const wanted = new Set(targets.map(target => target.key));
+  // A visual-theme-matrix story always plans its probe shots (probe:opt-in),
+  // so the targets it renders are covered before the cover starts, and it is
+  // never picked or dropped here.
+  const optIn = new Set(
+    stories
+      .filter(story => (story.tags ?? []).includes(VISUAL_THEME_MATRIX_TAG))
+      .map(story => story.id),
+  );
   const byStory = new Map();
   const renders = new Map();
   for (const story of stories) {
     const rendered = Object.keys(observations[story.id] ?? {}).filter(key => wanted.has(key));
     if (rendered.length > 0) {
-      byStory.set(story, new Set(rendered));
       renders.set(story.id, new Set(rendered));
+      if (!optIn.has(story.id)) byStory.set(story, new Set(rendered));
     }
   }
 
   const planned = [];
   const uncovered = new Set(wanted);
+  for (const id of optIn) for (const key of renders.get(id) ?? []) uncovered.delete(key);
   /** @param {(story: {id: string}) => boolean} eligible */
   const cover = eligible => {
     while (uncovered.size > 0) {
@@ -840,8 +851,10 @@ function probeShots({stories, targets, observations, probeTheme, baselineStories
   for (;;) {
     const redundant = kept
       .filter(id =>
-        rendersOf(id).every(key =>
-          kept.some(other => other !== id && renders.get(other)?.has(key)),
+        rendersOf(id).every(
+          key =>
+            kept.some(other => other !== id && renders.get(other)?.has(key)) ||
+            [...optIn].some(other => renders.get(other)?.has(key)),
         ),
       )
       .sort(

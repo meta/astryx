@@ -387,6 +387,20 @@ describe('buildPlan', () => {
         },
         baselineStories: new Set(['core-badge--first', 'core-badge--second']),
       },
+      'a baselined cover and a story newly tagged into the theme matrix': {
+        stories: [
+          badge('core-badge--first', 'First'),
+          badge('core-badge--second', 'Second'),
+          {...badge('core-badge--matrix', 'Matrix'), tags: ['visual-theme-matrix']},
+        ],
+        targets: ['a', 'b', 'c'].map(target),
+        observations: {
+          'core-badge--first': {a: ['base'], b: ['base']},
+          'core-badge--second': {c: ['base']},
+          'core-badge--matrix': {a: ['base'], b: ['base'], c: ['base']},
+        },
+        baselineStories: new Set(['core-badge--first', 'core-badge--second']),
+      },
       'no baseline': {
         stories: ['first', 'second', 'wider'].map(name => badge(`core-badge--${name}`, name)),
         targets: ['a', 'b', 'c', 'd'].map(target),
