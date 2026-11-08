@@ -56,7 +56,8 @@ type Step = 0 | 2 | 4 | 6;
 // The number of LayoutFooter regions each story renders, so a story that
 // stops rendering one fails instead of passing with nothing to check.
 const FOOTERS: Record<Story, number> = {
-  'footer-states': 9,
+  // Footer States has nine cases plus the outer footer of the nested case.
+  'footer-states': 11,
   'basic-card': 1,
   'with-sidebar': 1,
   'no-dividers': 1,
@@ -65,8 +66,9 @@ const FOOTERS: Record<Story, number> = {
 
 type FooterExpectation = {
   // The padding the inner wrapper applies on each edge, as a spacing step:
-  // 6 is the Layout's `padding={6}`, 4 the inner inset.
-  insets: Record<Edge, Step>;
+  // 6 is the Layout's `padding={6}`, 4 the inner inset. Not asserted when
+  // absent.
+  insets?: Record<Edge, Step>;
   hasDivider: boolean;
   // The block-end padding of the content above, as a spacing step: 0 when it
   // collapses against a footer without a divider.
@@ -104,6 +106,9 @@ const CASES: Record<string, FooterExpectation> = {
     contentBlockEnd: 4,
     contentWidth: 240,
   },
+  // The outer footer has no divider, but the collapse stops at the nested
+  // Layout: the nested content keeps its spacing above its divided footer.
+  nested: {hasDivider: true, contentBlockEnd: 4},
   // The caller's `data-divider="false"` must not replace the reflected value:
   // no line, no attribute, and the content above still collapses.
   'caller-attribute': {
@@ -474,11 +479,14 @@ for (const item of cases) {
         if (expected == null) {
           return;
         }
-        for (const edge of EDGES) {
-          check(
-            near(footer.applied[edge], stepPx(expected.insets[edge])),
-            `${where} ${edge} applies ${footer.applied[edge]}, expected ${stepPx(expected.insets[edge])} (step ${expected.insets[edge]})`,
-          );
+        const insets = expected.insets;
+        if (insets != null) {
+          for (const edge of EDGES) {
+            check(
+              near(footer.applied[edge], stepPx(insets[edge])),
+              `${where} ${edge} applies ${footer.applied[edge]}, expected ${stepPx(insets[edge])} (step ${insets[edge]})`,
+            );
+          }
         }
         check(
           (footer.dataDivider === 'true') === expected.hasDivider,

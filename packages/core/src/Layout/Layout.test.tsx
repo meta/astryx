@@ -289,8 +289,8 @@ describe('Layout', () => {
         />,
       );
       expect(
-        container.querySelector('.astryx-layout-footer[data-divider]'),
-      ).toBeNull();
+        container.querySelector('.astryx-layout-footer'),
+      ).not.toHaveAttribute('data-divider');
     });
 
     it('stops the footer default at a layer boundary', () => {

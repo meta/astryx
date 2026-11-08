@@ -1870,8 +1870,9 @@ export const ContentInsets: Story = {
  * LayoutFooter in each configuration, in plain frames with no padding
  * container: the inner inset is spacing step 4, and `padding={6}` sets the
  * Layout-edge inset. Each case names its footer with `data-footer-case`. The
- * caller-attribute case passes its own `data-divider`, which must not replace
- * the value the footer reflects.
+ * nested case puts a Layout with a divided footer above an outer footer
+ * without a divider. The caller-attribute case passes its own `data-divider`,
+ * which must not replace the value the footer reflects.
  */
 export const FooterStates: Story = {
   name: 'Footer States',
@@ -1952,7 +1953,7 @@ export const FooterStates: Story = {
       },
       {
         id: 'padding-2',
-        label: 'Footer padding=2',
+        label: 'hasDivider, footer padding=2',
         layout: (
           <Layout
             padding={6}
@@ -1967,7 +1968,7 @@ export const FooterStates: Story = {
       },
       {
         id: 'full-bleed',
-        label: 'Footer padding=0',
+        label: 'hasDivider, footer padding=0',
         layout: (
           <Layout
             padding={6}
@@ -1985,7 +1986,7 @@ export const FooterStates: Story = {
       },
       {
         id: 'height',
-        label: 'height=72 below overflowing content',
+        label: 'hasDivider, height=72 below overflowing content',
         layout: (
           <Layout
             padding={6}
@@ -2000,7 +2001,7 @@ export const FooterStates: Story = {
       },
       {
         id: 'content-width',
-        label: 'Layout contentWidth=240',
+        label: 'hasDivider, Layout contentWidth=240',
         layout: (
           <Layout
             padding={6}
@@ -2011,6 +2012,28 @@ export const FooterStates: Story = {
                 {footerText}
               </LayoutFooter>
             }
+          />
+        ),
+      },
+      {
+        id: 'nested',
+        label: 'Nested Layout above an outer footer without divider',
+        layout: (
+          <Layout
+            padding={6}
+            content={
+              <LayoutContent padding={0}>
+                <Layout
+                  content={<LayoutContent>{body}</LayoutContent>}
+                  footer={
+                    <LayoutFooter hasDivider data-footer-case="nested">
+                      {footerText}
+                    </LayoutFooter>
+                  }
+                />
+              </LayoutContent>
+            }
+            footer={<LayoutFooter>{footerText}</LayoutFooter>}
           />
         ),
       },
