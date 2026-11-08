@@ -87,10 +87,11 @@ async function traceCloses(page: Page, route: CloseRoute): Promise<Closes> {
       }
       await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     }
-    // An anchored layer lays out on every frame of its entrance, and a busy
-    // runner can start the entrance late. The close is traced once the layer
-    // is at rest.
-    await waitForRest(shown.locator('xpath=ancestor-or-self::*[@popover][1]'));
+    // A busy runner can start the entrance late. The close is traced once
+    // the entrance, on the layer's surface, is at rest.
+    await waitForRest(
+      shown.locator('xpath=ancestor-or-self::*[@popover][1]/*[1]'),
+    );
     const trace = await traceRendering(page, async () => {
       if (route.press == null) {
         await page.keyboard.press('Escape');

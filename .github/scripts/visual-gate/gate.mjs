@@ -53,6 +53,7 @@ import {
   emptyVisualPlanMessage,
   exceedsPrVisualShotLimit,
   existingComponentBaselinePlan,
+  probeBaselineStories,
   readStoryIndex,
   readThemeCatalog,
   resolvePrVisualTotalShotLimit,
@@ -330,6 +331,7 @@ async function plan({scoutOnly = false} = {}) {
     matrixThemes,
     themeStories,
     probeTheme: config.probeTheme,
+    baselineStories: probeBaselineStories(baselineManifest, config.probeTheme),
   });
   if (tiers.includes('component')) {
     shots = existingComponentBaselinePlan(shots, baselineManifest);
